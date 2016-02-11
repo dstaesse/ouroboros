@@ -1,0 +1,118 @@
+﻿1. Communication
+
+There are 2 ways that will be used to communicate: The mailing list
+(ouroboros@freelists.org) will be used for almost everything except
+for day-to-day chat. For that we will use the channel #ouroboros-rina
+on Freenode (IRC chat). Use whatever name you desire.
+
+2. Coding guidelines
+
+The Ouroboros stack is written in C and has the GPL license. It uses
+autotools as the build system. The coding guidelines of the Ouroboros
+stack are the same as those of the Linux kernel
+(https://www.kernel.org/doc/Documentation/CodingStyle) with the
+following exceptions:
+
+- Soft tabs are to be used instead of hard tabs
+
+- A space is to be inserted between a pointer and its object name. Example:
+
+int * a;
+instead of
+int *a;
+
+3. Development workflow
+
+Git is used as a version tooling for the code. Releases are identified
+through a git tag by a number MAJOR.MICRO. Incrementing MAJOR is used
+to indicate a big step ahead in terms of features; it is discussed
+when new features are planned. Incrementing MICRO is done when
+APIs/ABIs are not necessarily compatible.
+
+3.1. Repository structure
+
+The main git repository can be found at:
+https://bitbucket.org/ouroboros-rina/stack
+
+It contains the following branches:
+
+- master: Contains the most stable versions of the stack.
+
+- testing: Contains tested version but may still contain bugs.
+
+- be: Contains untested but compiling code. 
+
+All new contributions are integrated into ‘be’ from forks of the main
+git repository. Once a version of ‘be’ is tested enough, it is merged
+into ‘testing’. When a ‘testing’ version is considered stable enough,
+it is merged into ‘master’. Users should ALWAYS use master.
+
+3.2. Contributions
+
+There are 3 ways to provide contributions:
+
+- bitbucket pull-requests: via bitbucket UI
+
+- git email pull-requests: via mailing list (ouroboros@freelists.org)
+
+- git email patch: via mailing list (ouroboros@freelists.org)
+
+New development is ALWAYS done against the ‘be’ branch of the main git
+repository. Contributions are always made using your real name and
+real e-mail address.
+
+3.3 Commit messages
+
+A commit message should follow these 9 simple rules (adjusted from
+http://chris.beams.io/posts/git-commit/):
+
+- Separate subject from body with a blank line
+
+- Limit the subject line to 50 characters
+
+- Capitalize the subject line
+
+- Do not end the subject line with a period
+
+- Use the imperative mood in the subject line
+
+- Precede the subject line by indicating the component where changes
+were made
+
+- Wrap the body at 72 characters
+
+- Use the body to explain what and why vs. how
+
+- If the commit addresses a bug, reference it in the body
+
+3.4 Bugs
+
+Bugs are reported through the bitbucket issue tracker
+(https://bitbucket.org/ouroboros-rina/stack/issues?status=new&status=open). The
+process of reporting a bug is the following:
+
+a. Report the bug on the issue tracker
+
+b. Sync with the HEAD of the most stable branch where the bug is
+present
+
+c. Provide a bug fix
+
+d. Request a pull request to that branch
+
+e. The bugfix will be merged upwards into the less stable branches
+
+Note that step a is always required. Steps b-e may be performed by
+someone else.
+
+4. New features
+
+New features can be always be requested through the mailing list. They
+will be taken into account when a next version of the prototype is
+discussed. A next version is discussed through a conference call,
+after which the agreed upon features are added to the issue
+tracker. Version 1.0 of Ouroboros will contain minimal functionality
+to have a RINA implementation. Pull requests containing non discussed
+features will be automatically rejected and will revoke you the rights
+to perform new pull requests.
+
