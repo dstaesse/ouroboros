@@ -1,0 +1,328 @@
+﻿1.  Introduction
+
+This document describes the high-level software architecture of the
+Ouroboros prototype, an implementation of the Recursive InterNetwork
+Architecture (RINA). The high-level architecture described is for an
+implementation in user-space of an Operating System. It identifies the
+different software components and delineates their interactions and
+interfaces. The main focus of Ouroboros is portability, to allow the
+prototype to be deployed on different platforms and in widely varying
+environments.
+
+This document will assume the reader is familiar with RINA
+terminology. Please see the reference model for a more in-depth
+description of RINA.
+
+2.  The Ouroboros Framework
+
+The framework consists of a library, that implements the Recursive
+InterNetwork Architecture.  Applications can make use of the library
+for networking. This is shown in Figure 1. The library offers an API
+to applications so they can make use of the functionality. Apart from
+the library, 2 types of daemon are provided:
+
+- The IPC Resource Manager Daemon, responsible for instantiating new
+IPC Processes, destroying them etc. It is the local management system
+in the processing system that handles IPC requests.
+
+- IPC Process Daemon(s), a daemon that is the instantiation of an IPC
+Process on the processing system.
+
+The library can run the daemons as threads instead of processes if
+needed, for instance when it is deployed on Android, iOS, as a web
+app, ... Multithreading will be supported, so that the daemons can
+spawn as many threads as needed for them to function correctly. The
+high-level architecture is devised in such a way that it tries to
+minimize the multitasking switches.
+
+  +-------------------------+        +-------------------------------+
+  |      Applications       |        | Shell scripts, config files,  |
+  |                         |        | Python scripts, ...           |
+  +-------------------------+        +-------------------------------+
+           | Function calls                   | Function calls
+           v                                  v
+  +-------------------------------------------------------------------+
+  |                       Ouroboros Library                           |
+  +-------------------------------------------------------------------+
+  Function calls ^  | Sockets     |  |     Function calls ^  | Sockets                
+                 |  v             |  |                    |  v
+  +-------------------------+     |  |    +-------------------------+
+  |    IPC Process Daemon   |     |  |    |  IPC Resource Manager   |
+  |                         |     |  |    |         Daemon          |
+  +-------------------------+     |  |    +-------------------------+
+                   Function calls |  | Sockets   
+                                  |  v
+                       +-------------------------+
+                       |      DIF Allocator      |
+                       |         Daemon          |
+                       +-------------------------+
+
+                       Figure 1: Ouroboros library
+
+3. Software components convention
+
+A component in the rest of this document adheres to the conventions
+described in the next paragraph. The aim of this section is to remove
+unnecessary detail from other sections and also to provide a unified
+convention for all the different components. Exceptions to these rules
+are allowed, if explicitly indicated.
+
+typedef uint32_t module_id_t
+
+The module_id_t represents a generic identifier mapped to an integer.
+As a return value, module_id_t should be interpreted as follows:
+
+- value >= 0 Represents a positive answer. The value is opaque for the
+  callee while it has an internal meaning for the caller. The caller
+  uses the id for requesting services (operations) to the caller, the
+  callee may use the id for lookups into its internal data structures.
+  
+- value < 0: Represents an error condition
+
+To further clarify , each component has the following lifecycle:
+
+a. Creation: The caller asks for a creation of a new instance of the
+ component. The callee returns a generic identifier
+ 
+b. Operation(s): The caller asks for an operation. The identifier
+ given during creation is always passed along as input parameter. If
+ the operation was successful, zero is returned. In case of an error,
+ the component returns a negative value. The negative value can be
+ passed to ouroboros_strerror to get a human readable version of the
+ error. The error codes are library global, in the case that the
+ library gets migrated in other libraries, they should coincide with
+ errno.
+ 
+c. Destruction: The caller explicitly asks the callee to release all
+ resources related to the component created in step a). The identifier
+ is passed along as input parameter to identify the correct instance.
+
+4.  Ouroboros Libraries
+
+The Ouroboros library is internally split into different smaller
+libraries. They are the following:
+
+- libouroboros-dev: allows applications to allocate flows to other
+  applications, read/write to these flows, deallocate them and to
+  register and unregister themselves in DIFs.
+
+- libouroboros-cdap: this library implements the Common Distributed
+  Application Protocol, RINA’s application protocol.
+
+- libouroboros-irm: this library exposes the IRM API to allow network
+  administrators to build their own network.
+
+- libouroboros-ipcp: this library allows the IRM to create, destroy,
+  configure IPC Processes.
+
+- libouroboros-da: Allows the IRM to resolve a DAF name to a DAP
+  member and how to reach it through an N-1 DIF..
+
+- libouroboros-common: contains the files that are shared by all other
+  libraries. An example is the file with error codes described in the
+  previous section
+
+- libouroboros-utils: contains all the other files not contained in
+  the other libraries. Examples are the implementations of the data
+  structures described in the previous section
+
+When any of the operations is called, the caller is blocked until it
+the operation has been executed. Since some operations may involve
+sending messages to other processes, proper timeouts will be enforced
+on the operations to avoid blocking processes endlessly.
+
+* libouroboros-common *
+
+This library provides the definitions shared between all other
+libraries. Other framework components such as the IRM and IPCP daemons
+may also use this library and common functionalities between these
+daemons may also be contained within this library.
+
+* libouroboros-dev *
+
+This library provides the RINA IPC API to applications. This is the
+native RINA IPC API that allows application processes to
+register/unregister themselves with DIFs, allocate flows with a
+certain Quality of Service and read/write to them and deallocate them
+when they are no longer necessary.
+
+In the case of a server, one can first request all the available DIFs
+in the processing system. Next, one would register the Application
+Process in selected DIFs. Wildcarding is allowed, for instance * would
+mean any DIF, home.* all home DIFs etc. Upon registration a file
+descriptor is returned. This file descriptor is used for incoming
+flows, upon calling flow_accept with this file descriptor the name of
+the requesting application is provided together with a new file
+descriptor in case of a new flow. The server can then choose to accept
+or deny this new flow by calling flow_alloc_resp. If the flow is
+accepted, the file descriptor can then be read from and written to
+with flow_read and flow_write. To deallocate the flow, flow_dealloc
+can be called.
+
+In the case of a client, one can first request all the available QoS
+cubes that are available for communicating with a server. Optionally,
+one can pass a minimum QoS that is required for the flow. With this
+QoS, flow_alloc can be called to allocate flow. One can also just
+provide a minimum QoS in the flow_alloc call and just accept what the
+network gives you. A file descriptor is provided with which one should
+call flow_alloc_res. If this operation returns a positive value, the
+flow is accepted and one can call flow_read and flow_write. To
+deallocate the flow, flow_dealloc can be called.
+
+* libouroboros-cdap *
+
+This library provides the Common Distributed Application Protocol
+(CDAP) and Common Application Connection Establishment Phase
+(CACEP). CDAP is RINA’s stateless application protocol that allows two
+applications to communicate by using atomic operations: create,
+delete, start, stop, write, read. CACEP is RINA’s authentication
+protocol used when setting up communication between two Application
+Entities (AEs). CACEP/CDAP will have to agree on an abstract syntax
+(protocol version) and a specific encoding to use (concrete
+syntax). The library allows for new CDAP instances to be created by
+passing the flow it can use and a structure with callback
+operations. From then on, the flow can only be written and read from
+by the CDAP instance. To send CDAP messages, once can call any of the
+operations by passing the newly created instance together with the
+appropriate parameters. Upon receipt of a reply to the message sent,
+the corresponding callback operation is called.
+
+* libouroboros-irm *
+
+The IPC Resource Manager allows a network administrator to setup a
+RINA network. The IRM exposes an API so that commands can be given
+from a config file reader, scripts or even a full blown DMS. It allows
+the creation and destruction of IPCPs, it allows to bootstrap or
+enroll IPCPs, and to register and unregister IPCPs in certain DIFs and
+to query their RIB. It is also possible to request all the IPCPs
+currently in the processing system as well as all the possible IPCP
+types.
+
+* libouroboros-ipcp *
+
+The IRM can instantiate, destroy, configure IPC Processes. A new IPC
+Process is created by specifying a name and a type (normal IPCP, shim
+IPCP). If it is the first IPCP in the DIF, it can be bootstrapped by
+providing the required DIF info. If it is not the first IPCP in the
+DIF, it has to enroll with an existing member by calling
+ipcp_enroll. After the new IPCP is configured in one of the two
+described ways, it can be registered and unregistered with the
+required N-1 DIFs. Its RIB can also be queried.
+
+* libouroboros-da *
+
+The DIF allocator allows to resolve a DAF to an distributed
+application process and find a DIF through which it is reachable, or
+if a DIF is not yet available to instantiate a new DIF. In the first
+phase of the implementation only the first case will be supported. In
+the case of a DIF, for enrollment this means that an existing member
+can be resolved by providing a DIF name and that N-1 DIFs can be given
+through which the existing member is reachable.
+
+* libouroboros-utils *
+
+This library contains all the other functionalities not contained in
+the other libraries. This includes implementations of data structures
+such as lists, hashmaps, sets, .... It also includes a logging
+system. As well as wrappers around memory allocation/deallocation
+functions.
+
+5.  IPC Resource Manager
+
+The IRM implements the API provided in libouroboros-irm by opening a
+POSIX local IPC socket that listens to messages sent by the
+libouroboros-irm library. It is a daemon that has 2 functions:
+
+- It acts as a broker between the IPC Processes and applications and
+  checks the validity of requests..
+
+- It allows network administrators to construct their RINA network. It
+  holds a directed acyclic graph with all the IPCPs in the system. It
+  is responsible for correctly cleaning up the IPCPs upon shutdown of
+  the network stack.
+
+6.  IPC Process Daemon
+
+A new IPCP will open a POSIX local IPC socket to listen to messages
+from libouroboros-ipcp and the IRM when its functions are
+called. Every type of IPC Process, whether it is a shim IPCP or a
+normal IPCP, has to provide a factory to instantiate a new IPCP of its
+type. Internally, a normal IPC Process consists of different
+components in order to provide IPC to its user. This section provides
+a short description of every component together with their API.
+
+* Flow Manager *
+
+The flow manager is the component that manages a flow’s
+lifecycle. This is the allocation, deallocation and monitoring of
+every flow. The flow monitor will:
+
+- Find the IPCP in the DIF through which the requested application is
+  available.
+
+- Map the requested QoS to policies
+
+- Negotiate the flow’s characteristics with the destination IPCP,
+  perform access control, ...
+
+- Instantiate an FRCT instance associated with the flow
+
+- Maintain the negotiated QoS of the flow
+
+- Deallocate the flow when requested
+
+* Enrollment *
+
+Enrollment allows an IPCP to join a DIF. If the IPCP is the first IPCP
+in the DIF it is just locally bootstrapped. If it is not, it will
+allocate a flow to an IPCP of the DIF and exchange static and dynamic
+information. An address is also assigned during enrollment. The
+prototype will allow assigning addresses from a flat and a topological
+addressing scheme. After enrollment, the IPCP will be informed about
+its neighbors and will also allocate a flow to them.
+
+* Resource Information Base *
+
+The Resource Information Base is the local view the IPCP has of the
+DIF. It is a partially replicated distributed database. It has a
+certain model that is the same for every IPCP in Ouroboros.  RIB
+Provider The RIB can only be accessed through the RIB provider. Apart
+from providing this access, the RIB provider has a
+publisher/subscriber mechanism. Subscribers can subscribe to certain
+events happening in the DIF and publishers can publish these events.
+
+* Flow and Retransmission Control Task *
+
+The flow and retransmission control task, originally known as the
+Error and Flow Control Protocol, provides the flow with flow control
+and (if needed) retransmission control. It consists of two parts: Data
+Transfer (DT) and Data Transfer Control (DTC). DT is for instance
+concerned with concatenation, multiplexing, reassembly, ... DTC provides
+flow control and retransmission control. DT and DTC communicate with
+each other through a shared state vector.
+
+* Relaying and Multiplexing Task *
+
+The relaying and multiplexing task has a scheduler to allow scheduling
+SDUs for different QoS-cubes. It also checks whether or not an
+incoming PDU was intended for this IPCP. If it is not, it forwards it
+through an N-1 port-id by consulting the PDU Forwarding Function.
+
+* PDU Forwarding Function *
+
+This task implements the policy to be used by the RMT to forward
+PDUs. In the first phase, a link state routing policy will be
+provided, implemented by a PDU Forwarding Table (PFT) and a PDU
+Forwarding Table Generator (PFTG). In later iterations, a routing
+policy based on geometric routing will be added.
+
+7.  DIF Allocator
+
+The DIF allocator implements the API provided in libouroboros-da by
+opening a POSIX local IPC socket that listens to messages sent by the
+IRM. It is a daemon that has 2 functions:
+
+- Resolving a DAF name to a DAP
+
+- Providing an N-1 DIF over which a DAP is reachable
+
