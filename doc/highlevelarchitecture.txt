@@ -44,13 +44,13 @@ minimize the multitasking switches.
   +-------------------------------------------------------------------+
   |                       Ouroboros Library                           |
   +-------------------------------------------------------------------+
-  Function calls ^  | Sockets     |  |     Function calls ^  | Sockets                
+  Function calls ^  | Sockets     |  |     Function calls ^  | Sockets
                  |  v             |  |                    |  v
   +-------------------------+     |  |    +-------------------------+
   |    IPC Process Daemon   |     |  |    |  IPC Resource Manager   |
   |                         |     |  |    |         Daemon          |
   +-------------------------+     |  |    +-------------------------+
-                   Function calls |  | Sockets   
+                   Function calls |  | Sockets
                                   |  v
                        +-------------------------+
                        |      DIF Allocator      |
@@ -76,14 +76,14 @@ As a return value, module_id_t should be interpreted as follows:
   callee while it has an internal meaning for the caller. The caller
   uses the id for requesting services (operations) to the caller, the
   callee may use the id for lookups into its internal data structures.
-  
+
 - value < 0: Represents an error condition
 
 To further clarify , each component has the following lifecycle:
 
 a. Creation: The caller asks for a creation of a new instance of the
  component. The callee returns a generic identifier
- 
+
 b. Operation(s): The caller asks for an operation. The identifier
  given during creation is always passed along as input parameter. If
  the operation was successful, zero is returned. In case of an error,
@@ -92,7 +92,7 @@ b. Operation(s): The caller asks for an operation. The identifier
  error. The error codes are library global, in the case that the
  library gets migrated in other libraries, they should coincide with
  errno.
- 
+
 c. Destruction: The caller explicitly asks the callee to release all
  resources related to the component created in step a). The identifier
  is passed along as input parameter to identify the correct instance.
@@ -325,4 +325,3 @@ IRM. It is a daemon that has 2 functions:
 - Resolving a DAF name to a DAP
 
 - Providing an N-1 DIF over which a DAP is reachable
-

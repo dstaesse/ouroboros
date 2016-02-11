@@ -40,7 +40,7 @@ It contains the following branches:
 
 - testing: Contains tested version but may still contain bugs.
 
-- be: Contains untested but compiling code. 
+- be: Contains untested but compiling code.
 
 All new contributions are integrated into ‘be’ from forks of the main
 git repository. Once a version of ‘be’ is tested enough, it is merged
@@ -115,4 +115,3 @@ tracker. Version 1.0 of Ouroboros will contain minimal functionality
 to have a RINA implementation. Pull requests containing non discussed
 features will be automatically rejected and will revoke you the rights
 to perform new pull requests.
-
