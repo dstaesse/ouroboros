@@ -1,8 +1,10 @@
-#include <stdio.h>
+#define OUROBOROS_PREFIX "ipcp"
+
+#include <ouroboros/logs.h>
 
 int main()
 {
-        printf("Test of the IPCP\n");
+        LOG_DBG("Test of the IPCP");
 
         return 0;
 }

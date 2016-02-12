@@ -1,8 +1,10 @@
-#include <stdio.h>
+#define OUROBOROS_PREFIX "da"
+
+#include <ouroboros/logs.h>
 
 int main()
 {
-        printf("Test of the DA\n");
+        LOG_DBG("Test of the DA");
 
         return 0;
 }
