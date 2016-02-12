@@ -1,7 +1,10 @@
 /*
+ * Ouroboros - Copyright (C) 2016
+ *
  * Logging facilities
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Francesco Salvestrini <f.salvestrini@nextworks.it>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
