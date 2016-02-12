@@ -9,9 +9,8 @@ interfaces. The main focus of Ouroboros is portability, to allow the
 prototype to be deployed on different platforms and in widely varying
 environments.
 
-This document will assume the reader is familiar with RINA
-terminology. Please see the reference model for a more in-depth
-description of RINA.
+This document will assume the reader is familiar with RINA terminology.
+Please see the reference model for a more in-depth description of RINA.
 
 2.  The Ouroboros Framework
 
@@ -293,13 +292,13 @@ events happening in the DIF and publishers can publish these events.
 
 * Flow and Retransmission Control Task *
 
-The flow and retransmission control task, originally known as the
-Error and Flow Control Protocol, provides the flow with flow control
-and (if needed) retransmission control. It consists of two parts: Data
-Transfer (DT) and Data Transfer Control (DTC). DT is for instance
-concerned with concatenation, multiplexing, reassembly, ... DTC provides
-flow control and retransmission control. DT and DTC communicate with
-each other through a shared state vector.
+The Flow and Retransmission Control Task (FRCT), originally known as
+the Error and Flow Control Protocol (EFCP), provides the flow with
+flow control and (if needed) retransmission control. It manages the
+shared state between two protocol machines: the Data Transfer Protocol
+(DTP) AE and the Data Transfer Control Protocol (DTCP) AE.  DTP is for
+instance concerned with concatenation, multiplexing, reassembly,...
+DTCP provides flow control and retransmission control.
 
 * Relaying and Multiplexing Task *
 
