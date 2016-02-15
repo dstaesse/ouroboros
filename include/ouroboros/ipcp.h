@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Common definitions
+ * The API for the IRM to instruct IPCPs
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,37 +20,24 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_COMMON_H
-#define OUROBOROS_COMMON_H
+#ifndef OUROBOROS_IPCP_H
+#define OUROBOROS_IPCP_H
 
-#include <stdint.h>
+#include "common.h"
 
-typedef uint32_t port_id_t;
+int ipcp_create(rina_name_t name,
+                char * ipcp_type);
+int ipcp_destroy(int instance);
 
-/* FIXME: To be moved into a separate file */
-typedef struct {
-        char * data;
-        size_t size;
-} buffer_t;
+int ipcp_reg(int instance,
+             char ** difs);
+int ipcp_unreg(int instance,
+               char ** difs);
 
-typedef struct {
-        char * ap_name;
-        int api_id;
-        char * ae_name;
-        int aei_id;
-} rina_name_t;
-
-/* FIXME: To be extended to have all QoS params */
-struct qos_spec {
-        char * name;
-        char * dif_name;
-        double delay;
-        double jitter;
-};
-
-/* FIXME: What should be configurable in the DIF? */
-struct dif_info {
-        int cep_id_size;
-};
+int ipcp_bootstrap(int instance,
+                   struct dif_info info);
+int ipcp_enroll(int instance,
+                char * dif_name,
+                rina_name_t member);
 
 #endif

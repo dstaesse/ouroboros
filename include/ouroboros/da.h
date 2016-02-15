@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Common definitions
+ * The API to consult the DIF Allocator
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,37 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_COMMON_H
-#define OUROBOROS_COMMON_H
+#ifndef OUROBOROS_DA_H
+#define OUROBOROS_DA_H
 
-#include <stdint.h>
+#include "common.h"
 
-typedef uint32_t port_id_t;
-
-/* FIXME: To be moved into a separate file */
-typedef struct {
-        char * data;
-        size_t size;
-} buffer_t;
-
-typedef struct {
-        char * ap_name;
-        int api_id;
-        char * ae_name;
-        int aei_id;
-} rina_name_t;
-
-/* FIXME: To be extended to have all QoS params */
-struct qos_spec {
-        char * name;
-        char * dif_name;
-        double delay;
-        double jitter;
-};
-
-/* FIXME: What should be configurable in the DIF? */
-struct dif_info {
-        int cep_id_size;
-};
+rina_name_t da_resolve_daf(char * daf_name);
+char **     da_resolve_dap(rina_name_t * name);
 
 #endif
