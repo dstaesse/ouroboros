@@ -35,9 +35,9 @@ typedef struct {
 
 typedef struct {
         char * ap_name;
-        int ap_id;
+        int api_id;
         char * ae_name;
-        int ae_id;
+        int aei_id;
 } rina_name_t;
 
 /* FIXME: To be extended to have all QoS params */
@@ -46,6 +46,11 @@ struct qos_spec {
         char * dif_name;
         double delay;
         double jitter;
+};
+
+/* FIXME: What should be configurable in the DIF? */
+struct dif_info {
+        int cep_id_size;
 };
 
 #endif
