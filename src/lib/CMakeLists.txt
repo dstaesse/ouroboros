@@ -6,6 +6,7 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(SOURCE_FILES
         # Add source files here
+        bitmap.c
         cdap.c
 )
 
