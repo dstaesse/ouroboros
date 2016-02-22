@@ -24,6 +24,8 @@
 #define OUROBOROS_COMMON_H
 
 #include <stdint.h>
+#include <unistd.h>
+#include <stdbool.h>
 
 typedef uint32_t port_id_t;
 
