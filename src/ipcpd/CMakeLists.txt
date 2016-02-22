@@ -9,8 +9,8 @@ set(SOURCE_FILES
         main.c
 )
 
-add_executable (ipcp ${SOURCE_FILES})
+add_executable (ipcpd ${SOURCE_FILES})
 
-target_link_libraries (ipcp LINK_PUBLIC ouroboros)
+target_link_libraries (ipcpd LINK_PUBLIC ouroboros)
 
-install(TARGETS ipcp RUNTIME DESTINATION ${CMAKE_INSTALL_FULL_BINDIR})
+install(TARGETS ipcpd RUNTIME DESTINATION ${CMAKE_INSTALL_FULL_BINDIR})

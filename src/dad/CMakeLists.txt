@@ -9,8 +9,8 @@ set(SOURCE_FILES
         main.c
 )
 
-add_executable (da ${SOURCE_FILES})
+add_executable (dad ${SOURCE_FILES})
 
-target_link_libraries (da LINK_PUBLIC ouroboros)
+target_link_libraries (dad LINK_PUBLIC ouroboros)
 
-install(TARGETS da RUNTIME DESTINATION ${CMAKE_INSTALL_FULL_BINDIR})
+install(TARGETS dad RUNTIME DESTINATION ${CMAKE_INSTALL_FULL_BINDIR})
