@@ -46,11 +46,13 @@ add_subdirectory(include)
 add_subdirectory(src)
 add_subdirectory(tests)
 
+# We may have to move this to the subdirs
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-   MACRO_ADD_COMPILE_FLAGS(ipcp -DCONFIG_OUROBOROS_DEBUG)
+   MACRO_ADD_COMPILE_FLAGS(ipcpd -DCONFIG_OUROBOROS_DEBUG)
+   MACRO_ADD_COMPILE_FLAGS(irmd -DCONFIG_OUROBOROS_DEBUG)
+   MACRO_ADD_COMPILE_FLAGS(dad -DCONFIG_OUROBOROS_DEBUG)
    MACRO_ADD_COMPILE_FLAGS(irm -DCONFIG_OUROBOROS_DEBUG)
-   MACRO_ADD_COMPILE_FLAGS(da -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 include(FeatureSummary)

@@ -1,4 +1,5 @@
-add_subdirectory(ipcp)
-add_subdirectory(irm)
-add_subdirectory(da)
+add_subdirectory(ipcpd)
+add_subdirectory(irmd)
+add_subdirectory(dad)
 add_subdirectory(lib)
+add_subdirectory(tools)
