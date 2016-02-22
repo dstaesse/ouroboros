@@ -8,6 +8,7 @@ set(SOURCE_FILES
         # Add source files here
         bitmap.c
         cdap.c
+        du_buff.c
 )
 
 add_library(ouroboros SHARED ${SOURCE_FILES})
