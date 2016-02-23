@@ -43,6 +43,8 @@
 #define LOG_DBG(FMT,   ARGS...) do { } while (0)
 #endif
 
+#define LOG_DBGF(FMT,  ARGS...) LOG_DBG("%s: " FMT, __FUNCTION__, ##ARGS)
+
 #define LOG_MISSING LOG_ERR("Missing code in %s:%d",__FILE__, __LINE__)
 
 #endif
