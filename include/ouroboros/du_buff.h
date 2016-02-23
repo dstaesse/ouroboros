@@ -24,19 +24,10 @@
 #ifndef OUROBOROS_DU_BUFF_H
 #define OUROBOROS_DU_BUFF_H
 
-#include <stdint.h>
-#include <unistd.h>
-#include <stdbool.h>
-
+#include "common.h"
 #include "list.h"
 
-/*FIXME: to be defined inside du_buff_t */
-
-struct buffer {
-        uint8_t        * data;
-        size_t           size;
-        struct list_head list;
-} buffer;
+struct buffer;
 
 typedef struct {
         struct buffer  * buffer;
@@ -51,7 +42,7 @@ void        du_buff_destroy(du_buff_t * dub);
 
 int         du_buff_init(du_buff_t * dub,
                          size_t      start,
-                         uint8_t *   data,
+                         uint8_t   * data,
                          size_t      len);
 
 uint8_t   * du_buff_data_ptr_start(du_buff_t * dub);

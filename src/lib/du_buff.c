@@ -30,10 +30,16 @@
 
 #include "ouroboros/logs.h"
 
-void buffer_destroy (struct buffer * buf)
+struct buffer {
+        uint8_t        * data;
+        size_t           size;
+        struct list_head list;
+} buffer;
+
+void buffer_destroy(struct buffer * buf)
 {
         if (buf == NULL) {
-                LOG_DBG("buffer_destroy: Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return;
         }
 
@@ -51,7 +57,7 @@ void buffer_destroy_list(struct buffer * buf)
         struct list_head * n;
 
         if (buf == NULL) {
-                LOG_DBG("buffer_destroy_list: Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return;
         }
 
@@ -72,15 +78,15 @@ struct buffer * buffer_create (size_t size)
                 struct buffer * buf;
                 size_t sz = remaining < page_size ? remaining : page_size;
 
-                buf = (struct buffer *)malloc(sizeof(struct buffer));
+                buf = (struct buffer *) malloc(sizeof(struct buffer));
                 if (buf == NULL) {
-                        LOG_WARN("buffer_create: could not allocate struct.");
+                        LOG_WARN("Could not allocate struct.");
                         return NULL;
                 }
 
-                buf->data=(uint8_t *)malloc(sz);
+                buf->data = (uint8_t *) malloc(sz);
                 if (buf->data == NULL) {
-                        LOG_WARN("buffer_create: allocate memblock failed.");
+                        LOG_WARN("Could not allocate memory block.");
                         buffer_destroy_list(head);
                         return NULL;
                 }
@@ -107,7 +113,7 @@ struct buffer * buffer_seek(const struct buffer * head, size_t pos)
         size_t cur_buf_end     = 0;
 
         if (head = NULL) {
-                LOG_DBG("buffer_seek: Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return NULL;
         }
 
@@ -133,7 +139,7 @@ uint8_t * buffer_seek_pos(const struct buffer * head, size_t pos)
         size_t cur_buf_end     = 0;
 
         if (head = NULL) {
-                LOG_DBG("buffer_seek_pos: Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return NULL;
         }
 
@@ -165,7 +171,7 @@ int buffer_copy_data(struct buffer * head,
         uint8_t          * copy_pos  = NULL;
 
         if (head == NULL || src == NULL) {
-                LOG_DBG("buffer_copy_data: Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return -EINVAL;
         }
 
@@ -173,7 +179,7 @@ int buffer_copy_data(struct buffer * head,
         buf_end   = buffer_seek(head, pos + len);
 
         if (buf_start == NULL || buf_end == NULL) {
-                LOG_DBG("buffer_copy_data: Index out of bounds %d, %d",
+                LOG_DBGF("Index out of bounds %d, %d",
                         pos,
                         pos+len);
                 return -EINVAL;
@@ -208,7 +214,7 @@ du_buff_t * du_buff_create(size_t size)
         du_buff_t * dub = (du_buff_t *)malloc(sizeof(du_buff_t));
 
         if (dub == NULL) {
-                LOG_DBG("create: Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return NULL;
         }
 
@@ -230,7 +236,7 @@ du_buff_t * du_buff_create(size_t size)
 void du_buff_destroy(du_buff_t * dub)
 {
         if (dub == NULL) {
-                LOG_DBG("destroy: Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return;
         }
         buffer_destroy_list(dub->buffer);
@@ -246,12 +252,12 @@ int du_buff_init(du_buff_t * dub,
                  size_t      len)
 {
         if (dub == NULL || data == NULL) {
-                LOG_DBG("init: Bogus input, bugging out.");
+                LOG_DBG("Bogus input, bugging out.");
                 return -EINVAL;
         }
 
         if (start + len > dub->size) {
-                LOG_DBG("init: Index out of bounds %d", start);
+                LOG_DBGF("Index out of bounds %d", start);
                 return -EINVAL;
         }
 
@@ -265,7 +271,7 @@ int du_buff_init(du_buff_t * dub,
 uint8_t * du_buff_data_ptr_start(du_buff_t * dub)
 {
         if (dub == NULL) {
-                LOG_DBG("data_ptr_start: Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return NULL;
         }
         return buffer_seek_pos(dub->buffer, dub->du_start);
@@ -274,7 +280,7 @@ uint8_t * du_buff_data_ptr_start(du_buff_t * dub)
 uint8_t * du_buff_data_ptr_end(du_buff_t * dub)
 {
         if (dub == NULL) {
-                LOG_DBG("data_ptr_end: Bogus input, bugging out.");
+                LOG_DBG("Bogus input, bugging out.");
                 return NULL;
         }
         return buffer_seek_pos(dub->buffer, dub->du_end);
@@ -282,8 +288,13 @@ uint8_t * du_buff_data_ptr_end(du_buff_t * dub)
 
 int du_buff_head_alloc(du_buff_t * dub, size_t size)
 {
+        if (dub == NULL) {
+                LOG_DBGF("Bogus input, bugging out.");
+                return -EINVAL;
+        }
+
         if (dub->du_start - size < 0) {
-                LOG_WARN("head_alloc: failed to allocate PCI headspace");
+                LOG_WARN("Failed to allocate PCI headspace");
                 return -1;
         }
 
@@ -293,8 +304,13 @@ int du_buff_head_alloc(du_buff_t * dub, size_t size)
 }
 int du_buff_tail_alloc(du_buff_t * dub, size_t size)
 {
+        if (dub == NULL) {
+                LOG_DBGF("Bogus input, bugging out.");
+                return -EINVAL;
+        }
+
         if (dub->du_end + size >= dub->size) {
-                LOG_WARN("tail_alloc: failed to allocate PCI tailspace");
+                LOG_WARN("Failed to allocate PCI tailspace");
                 return -1;
         }
 
@@ -306,8 +322,13 @@ int du_buff_tail_alloc(du_buff_t * dub, size_t size)
 
 int du_buff_head_release(du_buff_t * dub, size_t size)
 {
+        if (dub == NULL) {
+                LOG_DBGF("Bogus input, bugging out.");
+                return -EINVAL;
+        }
+
         if (size > dub->du_end - dub->du_start) {
-                LOG_WARN("head_release: tried to release beyond sdu boundary");
+                LOG_WARN("Tried to release beyond sdu boundary");
                 return -1;
         }
 
@@ -320,8 +341,13 @@ int du_buff_head_release(du_buff_t * dub, size_t size)
 
 int du_buff_tail_release(du_buff_t * dub, size_t size)
 {
+        if (dub == NULL) {
+                LOG_DBGF("Bogus input, bugging out.");
+                return -EINVAL;
+        }
+
         if (size > dub->du_end - dub->du_start) {
-                LOG_WARN("tail_release: tried to release beyond sdu boundary");
+                LOG_WARN("Tried to release beyond sdu boundary");
                 return -1;
         }
 
