@@ -116,11 +116,10 @@ struct buffer * buffer_create (size_t size)
 struct buffer * buffer_seek(const struct buffer * head, size_t pos)
 {
         struct list_head * ptr = NULL;
-        struct buffer    * hit = NULL;
         size_t cur_buf_start   = 0;
         size_t cur_buf_end     = 0;
 
-        if (head = NULL) {
+        if (head == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
                 return NULL;
         }
@@ -142,11 +141,10 @@ struct buffer * buffer_seek(const struct buffer * head, size_t pos)
 uint8_t * buffer_seek_pos(const struct buffer * head, size_t pos)
 {
         struct list_head * ptr = NULL;
-        struct buffer    * hit = NULL;
         size_t cur_buf_start   = 0;
         size_t cur_buf_end     = 0;
 
-        if (head = NULL) {
+        if (head == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
                 return NULL;
         }
@@ -273,7 +271,6 @@ int du_buff_init(du_buff_t * dub,
         dub->du_end = start + len;
 
         return buffer_copy_data(dub->buffer, start, data, len);
-
 }
 
 uint8_t * du_buff_data_ptr_start(du_buff_t * dub)
