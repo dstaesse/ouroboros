@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.0.0)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
-project(ouroboros)
+project(ouroboros C)
 
 include(GitVersionGen)
 GIT_VERSION_GEN()
@@ -30,10 +30,11 @@ message(STATUS "Package install prefix:     ${CMAKE_INSTALL_PREFIX}")
 include(FindPkgConfig)
 
 include(CompilerUtils)
-test_and_set_cxx_compiler_flag_global(-Wall)
-test_and_set_cxx_compiler_flag_global(-Werror)
-test_and_set_cxx_compiler_flag_global(-Wundef)
-test_and_set_cxx_compiler_flag_global(-fmax-errors=1)
+test_and_set_c_compiler_flag_global(-std=c89)
+test_and_set_c_compiler_flag_global(-Wall)
+test_and_set_c_compiler_flag_global(-Werror)
+test_and_set_c_compiler_flag_global(-Wundef)
+test_and_set_c_compiler_flag_global(-fmax-errors=1)
 
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.pc.in"
@@ -46,7 +47,7 @@ add_subdirectory(include)
 add_subdirectory(src)
 add_subdirectory(tests)
 
-# We may have to move this to the subdirs
+# FIXME: We may have to move this to the subdirs
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
    MACRO_ADD_COMPILE_FLAGS(ipcpd -DCONFIG_OUROBOROS_DEBUG)
@@ -55,8 +56,8 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
    MACRO_ADD_COMPILE_FLAGS(irm -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-include(FeatureSummary)
-print_enabled_features()
+#include(FeatureSummary)
+#print_enabled_features()
 
 # Uninstall target
 configure_file(

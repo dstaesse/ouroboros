@@ -187,7 +187,7 @@ int rbmp_release(struct rbmp * b,
 
         rid = id - b->offset;
 
-        bitmap_clear(b->bitmap, id);
+        bitmap_clear(b->bitmap, rid);
 
         return 0;
 }
