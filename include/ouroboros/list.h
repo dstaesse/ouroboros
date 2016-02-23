@@ -55,7 +55,7 @@ struct list_head {
  * This is only for internal list manipulation where we know
  * the prev/next entries already!
  */
-static inline void __list_add(struct list_head * new,
+static void __list_add(struct list_head * new,
 			      struct list_head * prev,
 			      struct list_head * next)
 {
@@ -100,7 +100,7 @@ void list_add_tail(struct list_head * new,
  * This is only for internal list manipulation where we know
  * the prev/next entries already!
  */
-static inline void __list_del(struct list_head * prev,
+static void __list_del(struct list_head * prev,
                               struct list_head * next)
 {
 	next->prev = prev;
@@ -163,7 +163,7 @@ int list_empty(struct list_head * head)
 	return head->next == head;
 }
 
-static inline void __list_splice(struct list_head *list,
+static void __list_splice(struct list_head *list,
 				 struct list_head *head)
 {
 	struct list_head *first = list->next;
