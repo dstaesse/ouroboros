@@ -34,7 +34,15 @@ struct buffer {
         uint8_t        * data;
         size_t           size;
         struct list_head list;
-} buffer;
+};
+
+struct du_buff {
+        struct buffer  * buffer;
+        size_t           size;
+        size_t           du_start;
+        size_t           du_end;
+        struct list_head list;
+};
 
 void buffer_destroy(struct buffer * buf)
 {

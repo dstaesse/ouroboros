@@ -27,15 +27,9 @@
 #include "common.h"
 #include "list.h"
 
-struct buffer;
+struct du_buff;
 
-typedef struct {
-        struct buffer  * buffer;
-        size_t           size;
-        size_t           du_start;
-        size_t           du_end;
-        struct list_head list;
-} du_buff_t;
+typedef struct du_buff du_buff_t;
 
 du_buff_t * du_buff_create(size_t size);
 void        du_buff_destroy(du_buff_t * dub);
