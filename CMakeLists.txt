@@ -27,12 +27,10 @@ message(STATUS "Package URL is:             ${PACKAGE_URL}")
 message(STATUS "Package bug-report address: ${PACKAGE_BUGREPORT}")
 message(STATUS "Package install prefix:     ${CMAKE_INSTALL_PREFIX}")
 
-# Enable C89 standard
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c89")
-
 include(FindPkgConfig)
 
 include(CompilerUtils)
+test_and_set_c_compiler_flag_global(-std=c89)
 test_and_set_c_compiler_flag_global(-Wall)
 test_and_set_c_compiler_flag_global(-Werror)
 test_and_set_c_compiler_flag_global(-Wundef)
@@ -58,8 +56,8 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
    MACRO_ADD_COMPILE_FLAGS(irm -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-include(FeatureSummary)
-print_enabled_features()
+#include(FeatureSummary)
+#print_enabled_features()
 
 # Uninstall target
 configure_file(
