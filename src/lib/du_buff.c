@@ -190,9 +190,7 @@ int buffer_copy_data(struct buffer * head,
         buf_end   = buffer_seek(head, pos + len);
 
         if (buf_start == NULL || buf_end == NULL) {
-                LOG_DBGF("Index out of bounds %d, %d",
-                         (int) pos,
-                         (int) (pos+len));
+                LOG_DBGF("Index out of bounds %llu, %llu", pos, pos+len);
                 return -EINVAL;
         }
 
@@ -273,7 +271,7 @@ int du_buff_init(du_buff_t * dub,
         }
 
         if (start + len > dub->size) {
-                LOG_DBGF("Index out of bounds %d.", (int) start);
+                LOG_DBGF("Index out of bounds %llu.", start);
                 return -EINVAL;
         }
 
