@@ -263,8 +263,6 @@ int du_buff_init(du_buff_t * dub,
                  uint8_t *   data,
                  size_t      len)
 {
-        int ret = -EINVAL;
-
         if (dub == NULL || data == NULL) {
                 LOG_DBG("Bogus input, bugging out.");
                 return -EINVAL;
@@ -278,37 +276,7 @@ int du_buff_init(du_buff_t * dub,
         dub->du_start = start;
         dub->du_end = start + len;
 
-        ret = buffer_copy_data(dub->buffer, start, data, len);
-
-        return ret;
-}
-
-uint8_t * du_buff_data_ptr_start(du_buff_t * dub)
-{
-        uint8_t * ret = NULL;
-
-        if (dub == NULL) {
-                LOG_DBGF("Bogus input, bugging out.");
-                return NULL;
-        }
-
-        ret = buffer_seek_pos(dub->buffer, dub->du_start);
-
-        return ret;
-}
-
-uint8_t * du_buff_data_ptr_end(du_buff_t * dub)
-{
-        uint8_t * ret = NULL;
-
-        if (dub == NULL) {
-                LOG_DBG("Bogus input, bugging out.");
-                return NULL;
-        }
-
-        ret = buffer_seek_pos(dub->buffer, dub->du_end);
-
-        return ret;
+        return buffer_copy_data(dub->buffer, start, data, len);
 }
 
 int du_buff_head_alloc(du_buff_t * dub, size_t size)
@@ -327,6 +295,7 @@ int du_buff_head_alloc(du_buff_t * dub, size_t size)
 
         return 0;
 }
+
 int du_buff_tail_alloc(du_buff_t * dub, size_t size)
 {
         if (dub == NULL) {
