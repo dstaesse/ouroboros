@@ -59,17 +59,17 @@ void buffer_destroy(struct buffer * buf)
 }
 
 
-void buffer_destroy_list(struct buffer * buf)
+void buffer_destroy_list(struct buffer * head)
 {
         struct list_head * ptr;
         struct list_head * n;
 
-        if (buf == NULL) {
+        if (head == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
                 return;
         }
 
-        list_for_each_safe(ptr, n, &(buf->list)) {
+        list_for_each_safe(ptr, n, &(head->list)) {
                 struct buffer * tmp = list_entry(ptr, struct buffer, list);
                 list_del(ptr);
                 buffer_destroy(tmp);
@@ -78,9 +78,15 @@ void buffer_destroy_list(struct buffer * buf)
 
 struct buffer * buffer_create (size_t size)
 {
-        struct buffer * head      = NULL;
+        struct buffer * head = NULL;
         size_t          remaining = size;
         const size_t    page_size = sysconf(_SC_PAGESIZE);
+
+        head = (struct buffer *) malloc(sizeof(struct buffer));
+        head->size=0;
+        head->data=NULL;
+
+        INIT_LIST_HEAD(&(head->list));
 
         while (remaining > 0) {
                 struct buffer * buf;
@@ -98,14 +104,9 @@ struct buffer * buffer_create (size_t size)
                         buffer_destroy_list(head);
                         return NULL;
                 }
-
                 buf->size = sz;
-                INIT_LIST_HEAD(&(buf->list));
 
-                if (head == NULL)
-                        head = buf;
-                else
-                        list_add_tail(&(buf->list), &(head->list));
+                list_add_tail(&(buf->list), &(head->list));
 
                 remaining -= buf->size;
         }
@@ -127,8 +128,12 @@ struct buffer * buffer_seek(const struct buffer * head, size_t pos)
         list_for_each(ptr, &(head->list)) {
                 struct buffer * tmp = list_entry(ptr, struct buffer, list);
 
-                cur_buf_end = cur_buf_start + tmp->size;
+                if (tmp == NULL) {
+                        LOG_WARN("Could not iterate over elements %p", head);
+                        return NULL;
+                }
 
+                cur_buf_end = cur_buf_start + tmp->size;
                 if (cur_buf_end > pos)
                         return tmp;
 
@@ -185,9 +190,7 @@ int buffer_copy_data(struct buffer * head,
         buf_end   = buffer_seek(head, pos + len);
 
         if (buf_start == NULL || buf_end == NULL) {
-                LOG_DBGF("Index out of bounds %d, %d",
-                        pos,
-                        pos+len);
+                LOG_DBGF("Index out of bounds %llu, %llu", pos, pos + len);
                 return -EINVAL;
         }
 
@@ -200,9 +203,12 @@ int buffer_copy_data(struct buffer * head,
 
         copy_pos = (uint8_t *)src;
         bytes_remaining = len;
-        list_for_each(ptr, &(buf_start->list)) {
+        list_for_each(ptr, &(head->list)) {
                 struct buffer * tmp = list_entry(ptr, struct buffer, list);
-                space_in_buf = tmp->data + tmp->size - ptr_start;
+                if (tmp != buf_start)
+                        continue;
+
+                space_in_buf = (tmp->data + tmp->size) - ptr_start;
                 if (space_in_buf >= bytes_remaining) {
                         memcpy(ptr_start, copy_pos, bytes_remaining);
                         return 0;
@@ -263,7 +269,7 @@ int du_buff_init(du_buff_t * dub,
         }
 
         if (start + len > dub->size) {
-                LOG_DBGF("Index out of bounds %d", start);
+                LOG_DBGF("Index out of bounds %llu.", start);
                 return -EINVAL;
         }
 
@@ -271,24 +277,6 @@ int du_buff_init(du_buff_t * dub,
         dub->du_end = start + len;
 
         return buffer_copy_data(dub->buffer, start, data, len);
-}
-
-uint8_t * du_buff_data_ptr_start(du_buff_t * dub)
-{
-        if (dub == NULL) {
-                LOG_DBGF("Bogus input, bugging out.");
-                return NULL;
-        }
-        return buffer_seek_pos(dub->buffer, dub->du_start);
-}
-
-uint8_t * du_buff_data_ptr_end(du_buff_t * dub)
-{
-        if (dub == NULL) {
-                LOG_DBG("Bogus input, bugging out.");
-                return NULL;
-        }
-        return buffer_seek_pos(dub->buffer, dub->du_end);
 }
 
 int du_buff_head_alloc(du_buff_t * dub, size_t size)
@@ -307,6 +295,7 @@ int du_buff_head_alloc(du_buff_t * dub, size_t size)
 
         return 0;
 }
+
 int du_buff_tail_alloc(du_buff_t * dub, size_t size)
 {
         if (dub == NULL) {
@@ -322,7 +311,6 @@ int du_buff_tail_alloc(du_buff_t * dub, size_t size)
         dub->du_end += size;
 
         return 0;
-
 }
 
 int du_buff_head_release(du_buff_t * dub, size_t size)

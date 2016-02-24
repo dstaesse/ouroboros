@@ -39,9 +39,6 @@ int         du_buff_init(du_buff_t * dub,
                          uint8_t   * data,
                          size_t      len);
 
-uint8_t   * du_buff_data_ptr_start(du_buff_t * dub);
-uint8_t   * du_buff_data_ptr_end(du_buff_t * dub);
-
 int         du_buff_head_alloc(du_buff_t * dub, size_t size);
 int         du_buff_tail_alloc(du_buff_t * dub, size_t size);
 int         du_buff_head_release(du_buff_t * dub, size_t size);
