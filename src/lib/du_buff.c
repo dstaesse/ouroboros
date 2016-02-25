@@ -251,10 +251,10 @@ du_buff_t * du_buff_create(size_t size)
                 return NULL;
         }
 
-        dub->buffer   = NULL;
-        dub->size     = size;
+        dub->buffer  = NULL;
+        dub->size    = size;
         dub->du_head = 0;
-        dub->du_tail   = 0;
+        dub->du_tail = 0;
 
         return dub;
 }
