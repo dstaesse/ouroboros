@@ -28,6 +28,10 @@
 
 #define OUROBOROS_PREFIX "du_buff"
 
+#ifndef DU_BUFF_BLOCKSIZE
+#define DU_BUFF_BLOCKSIZE sysconf(_SC_PAGESIZE)
+#endif
+
 #include "ouroboros/logs.h"
 
 struct buffer {
@@ -41,7 +45,6 @@ struct du_buff {
         size_t           size;
         size_t           du_start;
         size_t           du_end;
-        struct list_head list;
 };
 
 void buffer_destroy(struct buffer * buf)
@@ -51,10 +54,7 @@ void buffer_destroy(struct buffer * buf)
                 return;
         }
 
-        list_del(&(buf->list));
-
-        free (&(buf->data));
-
+        free (buf->data);
         free (buf);
 }
 
@@ -76,11 +76,13 @@ void buffer_destroy_list(struct buffer * head)
         }
 }
 
-struct buffer * buffer_create (size_t size)
+struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
 {
         struct buffer * head = NULL;
         size_t          remaining = size;
-        const size_t    page_size = sysconf(_SC_PAGESIZE);
+        const size_t    page_size = DU_BUFF_BLOCKSIZE;
+        size_t          ts = size - (headspace + len);
+        bool            head_block = true;
 
         head = (struct buffer *) malloc(sizeof(struct buffer));
         head->size=0;
@@ -90,7 +92,21 @@ struct buffer * buffer_create (size_t size)
 
         while (remaining > 0) {
                 struct buffer * buf;
-                size_t sz = remaining < page_size ? remaining : page_size;
+
+                size_t sz;
+
+                if (size > DU_BUFF_BLOCKSIZE && head_block) {
+                        sz = headspace;
+                        head_block=false;
+                } else if (size > DU_BUFF_BLOCKSIZE
+                           && remaining - ts <= DU_BUFF_BLOCKSIZE
+                           && remaining != ts) {
+                        sz = remaining - ts;
+                } else if (size > DU_BUFF_BLOCKSIZE && remaining == ts) {
+                        sz = ts;
+                } else {
+                        sz = remaining < page_size ? remaining : page_size;
+                }
 
                 buf = (struct buffer *) malloc(sizeof(struct buffer));
                 if (buf == NULL) {
@@ -98,12 +114,17 @@ struct buffer * buffer_create (size_t size)
                         return NULL;
                 }
 
-                buf->data = (uint8_t *) malloc(sz);
-                if (buf->data == NULL) {
-                        LOG_WARN("Could not allocate memory block.");
-                        buffer_destroy_list(head);
-                        return NULL;
+                if (sz > 0) {
+                        buf->data = (uint8_t *) malloc(sz);
+                        if (buf->data == NULL) {
+                                LOG_WARN("Could not allocate memory block.");
+                                buffer_destroy_list(head);
+                                return NULL;
+                        }
+                } else {
+                        buf->data = NULL;
                 }
+
                 buf->size = sz;
 
                 list_add_tail(&(buf->list), &(head->list));
@@ -127,11 +148,6 @@ struct buffer * buffer_seek(const struct buffer * head, size_t pos)
 
         list_for_each(ptr, &(head->list)) {
                 struct buffer * tmp = list_entry(ptr, struct buffer, list);
-
-                if (tmp == NULL) {
-                        LOG_WARN("Could not iterate over elements %p", head);
-                        return NULL;
-                }
 
                 cur_buf_end = cur_buf_start + tmp->size;
                 if (cur_buf_end > pos)
@@ -186,11 +202,16 @@ int buffer_copy_data(struct buffer * head,
                 return -EINVAL;
         }
 
+        if (len == 0) {
+                LOG_DBGF("Nothing to copy.");
+                return 0;
+        }
+
         buf_start = buffer_seek(head, pos);
-        buf_end   = buffer_seek(head, pos + len);
+        buf_end   = buffer_seek(head, pos + len - 1);
 
         if (buf_start == NULL || buf_end == NULL) {
-                LOG_DBGF("Index out of bounds %llu, %llu", pos, pos + len);
+                LOG_DBGF("Index out of bounds %lu, %lu", pos, pos + len);
                 return -EINVAL;
         }
 
@@ -230,17 +251,10 @@ du_buff_t * du_buff_create(size_t size)
                 return NULL;
         }
 
-        dub->buffer = buffer_create(size);
-        if (dub->buffer == NULL) {
-                free (dub);
-                return NULL;
-        }
-
+        dub->buffer   = NULL;
         dub->size     = size;
         dub->du_start = 0;
         dub->du_end   = 0;
-
-        INIT_LIST_HEAD(&(dub->list));
 
         return dub;
 }
@@ -253,8 +267,6 @@ void du_buff_destroy(du_buff_t * dub)
         }
         buffer_destroy_list(dub->buffer);
 
-        list_del(&(dub->list));
-
         free (dub);
 }
 
@@ -264,14 +276,23 @@ int du_buff_init(du_buff_t * dub,
                  size_t      len)
 {
         if (dub == NULL || data == NULL) {
-                LOG_DBG("Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
+                return -EINVAL;
+        }
+
+        if (start >= dub->size) {
+                LOG_DBGF("Index out of bounds %lu.", start);
                 return -EINVAL;
         }
 
         if (start + len > dub->size) {
-                LOG_DBGF("Index out of bounds %llu.", start);
+                LOG_DBGF("Buffer too small for data %lu.", start);
                 return -EINVAL;
         }
+
+        dub->buffer = buffer_create(dub->size, start, len);
+        if (dub->buffer == NULL)
+                return -ENOMEM;
 
         dub->du_start = start;
         dub->du_end = start + len;
@@ -288,7 +309,7 @@ int du_buff_head_alloc(du_buff_t * dub, size_t size)
 
         if (dub->du_start - size < 0) {
                 LOG_WARN("Failed to allocate PCI headspace");
-                return -1;
+                return -ENOBUFS;
         }
 
         dub->du_start -= size;
@@ -305,7 +326,7 @@ int du_buff_tail_alloc(du_buff_t * dub, size_t size)
 
         if (dub->du_end + size >= dub->size) {
                 LOG_WARN("Failed to allocate PCI tailspace");
-                return -1;
+                return -ENOBUFS;
         }
 
         dub->du_end += size;
@@ -322,7 +343,7 @@ int du_buff_head_release(du_buff_t * dub, size_t size)
 
         if (size > dub->du_end - dub->du_start) {
                 LOG_WARN("Tried to release beyond sdu boundary");
-                return -1;
+                return -EOVERFLOW;
         }
 
         dub->du_start += size;
@@ -341,7 +362,7 @@ int du_buff_tail_release(du_buff_t * dub, size_t size)
 
         if (size > dub->du_end - dub->du_start) {
                 LOG_WARN("Tried to release beyond sdu boundary");
-                return -1;
+                return -EOVERFLOW;
         }
 
         dub->du_end -= size;
