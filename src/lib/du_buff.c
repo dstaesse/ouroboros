@@ -28,7 +28,7 @@
 
 #define OUROBOROS_PREFIX "du_buff"
 
-#ifndef DU_BUFF_BLOCKIZE
+#ifndef DU_BUFF_BLOCKSIZE
 #define DU_BUFF_BLOCKSIZE sysconf(_SC_PAGESIZE)
 #endif
 
