@@ -54,9 +54,8 @@ void buffer_destroy(struct buffer * buf)
                 return;
         }
 
-        free (&(buf->data));
-
-        /* free (buf); */
+        free (buf->data);
+        free (buf);
 }
 
 
@@ -83,7 +82,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
         size_t          remaining = size;
         const size_t    page_size = DU_BUFF_BLOCKSIZE;
         size_t          ts = size - (headspace + len);
-        bool            head_block = true;;
+        bool            head_block = true;
 
         head = (struct buffer *) malloc(sizeof(struct buffer));
         head->size=0;
@@ -97,11 +96,8 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
                 size_t sz;
 
                 if (size > DU_BUFF_BLOCKSIZE && head_block) {
-                        LOG_DBGF("SDU size %lu exceeds DU_BUFF_BLOCKSIZE %lu .",
-                                 size, DU_BUFF_BLOCKSIZE);
                         sz = headspace;
                         head_block=false;
-
                 } else if (size > DU_BUFF_BLOCKSIZE
                            && remaining - ts <= DU_BUFF_BLOCKSIZE
                            && remaining != ts) {
@@ -128,6 +124,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
                 } else {
                         buf->data = NULL;
                 }
+
                 buf->size = sz;
 
                 list_add_tail(&(buf->list), &(head->list));
@@ -151,11 +148,6 @@ struct buffer * buffer_seek(const struct buffer * head, size_t pos)
 
         list_for_each(ptr, &(head->list)) {
                 struct buffer * tmp = list_entry(ptr, struct buffer, list);
-
-                if (tmp == NULL) {
-                        LOG_DBGF("Could not iterate over elements %p", head);
-                        return NULL;
-                }
 
                 cur_buf_end = cur_buf_start + tmp->size;
                 if (cur_buf_end > pos)
@@ -208,6 +200,11 @@ int buffer_copy_data(struct buffer * head,
         if (head == NULL || src == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
                 return -EINVAL;
+        }
+
+        if (len == 0) {
+                LOG_DBGF("Nothing to copy.");
+                return 0;
         }
 
         buf_start = buffer_seek(head, pos);
@@ -279,20 +276,23 @@ int du_buff_init(du_buff_t * dub,
                  size_t      len)
 {
         if (dub == NULL || data == NULL) {
-                LOG_DBG("Bogus input, bugging out.");
+                LOG_DBGF("Bogus input, bugging out.");
                 return -EINVAL;
         }
 
-        if (start + len > dub->size) {
+        if (start >= dub->size) {
                 LOG_DBGF("Index out of bounds %lu.", start);
                 return -EINVAL;
         }
 
-        dub->buffer = buffer_create(dub->size, start, len);
-        if (dub->buffer == NULL) {
-                free (dub);
-                return -ENOMEM;
+        if (start + len > dub->size) {
+                LOG_DBGF("Buffer too small for data %lu.", start);
+                return -EINVAL;
         }
+
+        dub->buffer = buffer_create(dub->size, start, len);
+        if (dub->buffer == NULL)
+                return -ENOMEM;
 
         dub->du_start = start;
         dub->du_end = start + len;
