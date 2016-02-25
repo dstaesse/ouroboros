@@ -31,7 +31,8 @@ int irm_create_ipcp(rina_name_t name,
                     char * ipcp_type)
 {
         int sockfd;
-        struct irm_msg_sock msg;
+        struct irm_msg msg;
+        buffer_t * buf;
 
         if (!ipcp_type)
                 return -1;
@@ -41,10 +42,15 @@ int irm_create_ipcp(rina_name_t name,
                 return -1;
 
         msg.code = IRM_CREATE_IPCP;
-        msg.irm_msg.create_ipcp.name = name;
-        msg.irm_msg.create_ipcp.ipcp_type = ipcp_type;
+        msg.msgs.create_ipcp.name = &name;
+        msg.msgs.create_ipcp.ipcp_type = ipcp_type;
 
-        write(sockfd, &msg, sizeof(msg));
+        buf = serialize_irm_msg(&msg);
+        if (!buf)
+                return -1;
+
+        write(sockfd, buf->data, buf->size);
+
         close(sockfd);
 
         return 0;

@@ -32,6 +32,8 @@ int main () {
         rina_name_t name;
         name.ap_name = ap_name;
         name.api_id = 1;
+        name.ae_name = "";
+        name.aei_id = 0;
 
         if (irm_create_ipcp(name, ipcp_type)) {
                 LOG_ERR("Failed to create IPCP");

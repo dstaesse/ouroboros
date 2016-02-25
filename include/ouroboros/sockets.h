@@ -32,15 +32,18 @@ enum irm_msg_code {
         IRM_LIST_IPCPS
 };
 
-struct irm_msg_sock {
+struct irm_msg {
         enum irm_msg_code code;
         union {
                 struct {
-                        rina_name_t name;
+                        rina_name_t * name;
                         char * ipcp_type;
                 } create_ipcp;
-        } irm_msg;
+        } msgs;
 };
 
-int client_socket_open(char * file_name);
-int server_socket_open(char * file_name);
+int              client_socket_open(char * file_name);
+int              server_socket_open(char * file_name);
+
+buffer_t *       serialize_irm_msg(struct irm_msg * msg);
+struct irm_msg * deserialize_irm_msg(buffer_t * data);

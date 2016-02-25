@@ -28,22 +28,44 @@
 #include <ouroboros/irm.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <stdlib.h>
 
 #define BUF_SIZE 256
+
+
+static void create_ipcp(rina_name_t * name,
+                        char * ipcp_type)
+{
+        LOG_DBG("AP name is %s", name->ap_name);
+        LOG_DBG("AP instance id is %d", name->api_id);
+        LOG_DBG("AE name is %s", name->ae_name);
+        LOG_DBG("AE instance id is %d", name->aei_id);
+
+        LOG_DBG("IPCP type is %s", ipcp_type);
+
+        LOG_MISSING;
+}
 
 int main()
 {
         int sockfd;
+        uint8_t * buf;
 
         sockfd = server_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0)
                 return -1;
 
+        buf = malloc(sizeof(buf) * BUF_SIZE);
+        if (!buf) {
+                LOG_ERR("Cannot allocate memory");
+                return -1;
+        }
+
         while (true) {
-                int     cli_sockfd;
-                struct irm_msg_sock msg;
+                int cli_sockfd;
+                struct irm_msg * msg;
                 ssize_t count;
-                char    buf[BUF_SIZE];
+                buffer_t buffer;
 
                 cli_sockfd = accept(sockfd, 0, 0);
                 if (cli_sockfd < 0) {
@@ -52,12 +74,28 @@ int main()
 
                 count = read(cli_sockfd, buf, BUF_SIZE);
                 if (count) {
-                        msg = (struct struct irm_msg_sock) buf;
-                        LOG_INFO("Got message code %d", buf.code);
+                        buffer.size = count;
+                        buffer.data = buf;
+                        msg = deserialize_irm_msg(&buffer);
+                        if (!msg)
+                                continue;
+
+                        LOG_DBG("Got message code %d", msg->code);
+                        switch (msg->code) {
+                        case IRM_CREATE_IPCP:
+                                create_ipcp(msg->msgs.create_ipcp.name,
+                                            msg->msgs.create_ipcp.ipcp_type);
+                                break;
+                        default:
+                                LOG_ERR("Don't know that message code");
+                                break;
+                        }
                 }
 
                 close(cli_sockfd);
         }
+
+        free(buf);
 
         return 0;
 }

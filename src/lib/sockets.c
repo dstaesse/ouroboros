@@ -29,6 +29,9 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <malloc.h>
+
+#define BUFFER_SIZE 256
 
 int client_socket_open(char * file_name)
 {
@@ -91,4 +94,194 @@ int server_socket_open(char * file_name)
         }
 
         return sockfd;
+}
+
+static int serialized_string_len(uint8_t * data)
+{
+        uint8_t * seek = data;
+
+        while (*seek != '\0')
+                seek++;
+
+        return seek - data + 1;
+}
+
+static void ser_copy_value(size_t flen,
+                           void * dst,
+                           void * src,
+                           int * offset)
+{
+        memcpy(dst + *offset, src, flen);
+        *offset += flen;
+}
+
+static void deser_copy_value(size_t flen,
+                             void * dst,
+                             void * src,
+                             int * offset)
+{
+        memcpy(dst, src + *offset, flen);
+        *offset += flen;
+}
+
+static void deser_copy_string(uint8_t * data,
+                              char ** dst,
+                              int * offset)
+{
+        size_t flen;
+
+        flen = serialized_string_len(data + *offset);
+        *dst = malloc(flen + 1);
+        deser_copy_value(flen, *dst, data, offset);
+}
+
+static void deser_copy_int(uint8_t * data,
+                           int * dst,
+                           int * offset)
+{
+        *dst = 0;
+        deser_copy_value(sizeof(int), dst, data, offset);
+}
+
+static void deser_copy_enum(uint8_t * data,
+                            enum irm_msg_code * dst,
+                            int * offset)
+{
+        *dst = 0;
+        deser_copy_value(sizeof(enum irm_msg_code), dst, data, offset);
+}
+
+buffer_t * serialize_irm_msg(struct irm_msg * msg)
+{
+        buffer_t * buf;
+        uint8_t * data;
+        int offset = 0;
+        int i;
+        char buffer[BUFFER_SIZE];
+
+        buf = malloc(sizeof(buf));
+        buf->data = malloc(BUFFER_SIZE);
+        data = buf->data;
+
+        ser_copy_value(sizeof(enum irm_msg_code),
+                       data,
+                       &msg->code,
+                       &offset);
+
+        switch (msg->code) {
+        case IRM_CREATE_IPCP:
+                if (!msg->msgs.create_ipcp.name ||
+                    !msg->msgs.create_ipcp.name->ap_name ||
+                    !msg->msgs.create_ipcp.name->ae_name ||
+                    !msg->msgs.create_ipcp.ipcp_type) {
+                        LOG_ERR("Null pointer passed");
+                        free(buf->data);
+                        free(buf);
+                        return NULL;
+                }
+
+                ser_copy_value(strlen(msg->msgs.create_ipcp.name->ap_name) + 1,
+                               data,
+                               msg->msgs.create_ipcp.name->ap_name,
+                               &offset);
+
+                ser_copy_value(sizeof(int),
+                               data,
+                               &msg->msgs.create_ipcp.name->api_id,
+                               &offset);
+
+                ser_copy_value(strlen(msg->msgs.create_ipcp.name->ae_name) + 1,
+                               data,
+                               msg->msgs.create_ipcp.name->ae_name,
+                               &offset);
+
+                ser_copy_value(sizeof(int),
+                               data,
+                               &msg->msgs.create_ipcp.name->aei_id,
+                               &offset);
+
+                ser_copy_value(strlen(msg->msgs.create_ipcp.ipcp_type) + 1,
+                               data,
+                               msg->msgs.create_ipcp.ipcp_type,
+                               &offset);
+                break;
+        default:
+                LOG_ERR("Don't know that code");
+                free(buf->data);
+                free(buf);
+                return NULL;
+        }
+
+        buf->size = offset;
+
+        for (i = 0; i < buf->size; i++) {
+                if (i > 0) sprintf(buffer + strlen(buffer), ":");
+                sprintf(buffer + strlen(buffer), "%02X", data[i]);
+        }
+        LOG_DBGF("Serialized buffer to %s", buffer);
+
+        return buf;
+}
+
+struct irm_msg * deserialize_irm_msg(buffer_t * data)
+{
+        struct irm_msg * msg;
+        char buffer[BUFFER_SIZE];
+        int i;
+        int offset = 0;
+
+        if (!data || !data->data) {
+                LOG_ERR("Got a null pointer");
+                return NULL;
+        }
+
+        memset(buffer, 0, sizeof(buffer));
+        for (i = 0; i < data->size; i++) {
+                if (i > 0) sprintf(buffer + strlen(buffer), ":");
+                sprintf(buffer + strlen(buffer), "%02X", data->data[i]);
+        }
+        LOG_DBGF("Got buffer %s", buffer);
+
+        msg = malloc(sizeof(msg));
+        if (!msg) {
+                LOG_ERR("Failed to allocate memory");
+                return NULL;
+        }
+
+        deser_copy_enum(data->data,
+                        &msg->code,
+                        &offset);
+
+        switch (msg->code) {
+        case IRM_CREATE_IPCP:
+                msg->msgs.create_ipcp.name =
+                        malloc(sizeof(msg->msgs.create_ipcp.name));
+
+                deser_copy_string(data->data,
+                                  &msg->msgs.create_ipcp.name->ap_name,
+                                  &offset);
+
+                deser_copy_int(data->data,
+                               &msg->msgs.create_ipcp.name->api_id,
+                               &offset);
+
+                deser_copy_string(data->data,
+                                  &msg->msgs.create_ipcp.name->ae_name,
+                                  &offset);
+
+                deser_copy_int(data->data,
+                               &msg->msgs.create_ipcp.name->aei_id,
+                               &offset);
+
+                deser_copy_string(data->data,
+                                  &msg->msgs.create_ipcp.ipcp_type,
+                                  &offset);
+                break;
+        default:
+                LOG_ERR("Don't know that code");
+                free(msg);
+                return NULL;
+        }
+
+        return msg;
 }
