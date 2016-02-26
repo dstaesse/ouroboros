@@ -25,13 +25,13 @@
 #include <malloc.h>
 #include <errno.h>
 
-#define head_size(a, b) a.addr_size * 2 +     \
+#define HEAD_SIZE(a, b) a.addr_size * 2 +     \
          a.cep_id_size * 2 +        \
          a.pdu_length_size +        \
          a.seqno_size +             \
          a.qos_id_size +            \
          b.ttl_size
-#define tail_size(b) b.chk_size
+#define TAIL_SIZE(b) b.chk_size
 
 
 struct pci {
@@ -41,7 +41,8 @@ struct pci {
         uint8_t * dst_cep_id;
         uint8_t * src_cep_id;
         uint8_t * pdu_length;
-        uint8_t * ttl;        uint8_t * seqno;
+        uint8_t * ttl;
+        uint8_t * seqno;
         uint8_t * qos_id;
 
         uint8_t * chk;
@@ -53,9 +54,9 @@ struct pci {
 
 };
 
-pci_t * pci_create(du_buff_t                 * dub,
-                   const struct ipcp_dtp_const dtpc,
-                   const struct ipcp_dup_const dupc)
+pci_t * pci_create(du_buff_t                   * dub,
+                   const struct ipcp_dtp_const * dtpc,
+                   const struct ipcp_dup_const * dupc)
 {
 
         if (dub == NULL) {
@@ -69,34 +70,26 @@ pci_t * pci_create(du_buff_t                 * dub,
                 return NULL;
 
         p->dub = dub;
-/*
-        p->dtpc = malloc( sizeof *(p->dtpc));
-        if (p->dtpc == NULL)
-                return NULL;
 
-        p->dupc = malloc( sizeof *(p->dupc));
-        if (p->dupc == NULL)
-                return NULL;
-*/
-        p->dtpc = dtpc;
-        p->dupc = dupc;
+        p->dtpc = *dtpc;
+        p->dupc = *dupc;
 
-        p->dst_addr = NULL;
-        p->src_addr =NULL;
+        p->dst_addr   = NULL;
+        p->src_addr   = NULL;
         p->dst_cep_id = NULL;
         p->src_cep_id = NULL;
         p->pdu_length = NULL;
-        p->ttl = NULL;
-        p->seqno = NULL;
-        p->qos_id = NULL;
-        p->chk = NULL;
+        p->ttl        = NULL;
+        p->seqno      = NULL;
+        p->qos_id     = NULL;
+        p->chk        = NULL;
 
         return p;
 }
 
 void pci_destroy(pci_t * pci)
 {
-        free (pci);
+        free(pci);
 }
 
 int pci_init(pci_t                 * pci)
@@ -107,8 +100,8 @@ int pci_init(pci_t                 * pci)
         }
 
         uint8_t * pci_head = du_buff_head_alloc(pci->dub,
-                                                head_size(pci->dtpc,pci->dupc));
-        uint8_t * pci_tail = du_buff_tail_alloc(pci->dub, tail_size(pci->dupc));
+                                                HEAD_SIZE(pci->dtpc,pci->dupc));
+        uint8_t * pci_tail = du_buff_tail_alloc(pci->dub, TAIL_SIZE(pci->dupc));
 
         if (pci_head == NULL) {
                 LOG_DBG("Failed to allocate space for PCI at head.");
@@ -142,6 +135,6 @@ void pci_release(pci_t * pci)
         if (pci->dub == NULL)
                 return;
 
-        du_buff_head_release(pci->dub, head_size(pci->dtpc, pci->dupc));
-        du_buff_tail_release(pci->dub, tail_size(pci->dupc));
+        du_buff_head_release(pci->dub, HEAD_SIZE(pci->dtpc, pci->dupc));
+        du_buff_tail_release(pci->dub, TAIL_SIZE(pci->dupc));
 }

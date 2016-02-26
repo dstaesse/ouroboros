@@ -67,6 +67,8 @@ struct dif_info {
         /* values, octets */
         uint32_t min_pdu_size;
         uint32_t max_pdu_size;
+
+        struct dt_const dtc;
 };
 
 #endif /* OUROBOROS_COMMON_H */

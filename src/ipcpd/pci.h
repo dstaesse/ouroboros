@@ -35,8 +35,8 @@ struct pci;
 typedef struct pci pci_t;
 
 pci_t * pci_create(du_buff_t                   * dub,
-                   const struct ipcp_dtp_const dtpc,
-                   const struct ipcp_dup_const dupc);
+                   const struct ipcp_dtp_const * dtpc,
+                   const struct ipcp_dup_const * dupc);
 void    pci_destroy(pci_t * pci);
 
 int     pci_init(pci_t * pci);
