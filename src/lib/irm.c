@@ -46,13 +46,17 @@ int irm_create_ipcp(rina_name_t name,
         msg.msgs.create_ipcp.ipcp_type = ipcp_type;
 
         buf = serialize_irm_msg(&msg);
-        if (buf == NULL)
+        if (buf == NULL) {
+                close(sockfd);
                 return -1;
+        }
 
-        write(sockfd, buf->data, buf->size);
+        if (write(sockfd, buf->data, buf->size) == -1) {
+                close(sockfd);
+                return -1;
+        }
 
         close(sockfd);
-
         return 0;
 }
 
