@@ -30,9 +30,8 @@
 
 typedef uint32_t port_id_t;
 
-/* FIXME: To be moved into a separate file */
 typedef struct {
-        char * data;
+        uint8_t * data;
         size_t size;
 } buffer_t;
 

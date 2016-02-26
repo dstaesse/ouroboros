@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * A tool to instruct the IRM
+ * The sockets layer to communicate between daemons
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,26 +20,35 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "irm"
+#ifndef OUROBOROS_SOCKETS_H
+#define OUROBOROS_SOCKETS_H
 
-#include <ouroboros/logs.h>
-#include <ouroboros/common.h>
-#include <ouroboros/irm.h>
+#define IRM_SOCK_PATH "/tmp/irm_sock"
 
-int main () {
-        char * ap_name = "test";
-        char * ipcp_type = "normal-ipcp";
-        rina_name_t name;
-        name.ap_name = ap_name;
-        name.api_id = 1;
-        name.ae_name = "";
-        name.aei_id = 0;
+enum irm_msg_code {
+        IRM_CREATE_IPCP,
+        IRM_DESTROY_IPCP,
+        IRM_BOOTSTRAP_IPCP,
+        IRM_ENROLL_IPCP,
+        IRM_REG_IPCP,
+        IRM_UNREG_IPCP,
+        IRM_LIST_IPCPS
+};
 
-        if (irm_create_ipcp(name, ipcp_type)) {
-                LOG_ERR("Failed to create IPCP");
-                return -1;
-        }
+struct irm_msg {
+        enum irm_msg_code code;
+        union {
+                struct {
+                        rina_name_t * name;
+                        char * ipcp_type;
+                } create_ipcp;
+        } msgs;
+};
 
+int              client_socket_open(char * file_name);
+int              server_socket_open(char * file_name);
 
-        return 0;
-}
+buffer_t *       serialize_irm_msg(struct irm_msg * msg);
+struct irm_msg * deserialize_irm_msg(buffer_t * data);
+
+#endif
