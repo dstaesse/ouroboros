@@ -23,10 +23,23 @@
 #define OUROBOROS_PREFIX "irm"
 
 #include <ouroboros/logs.h>
+#include <ouroboros/common.h>
+#include <ouroboros/irm.h>
 
 int main () {
+        char * ap_name = "test";
+        char * ipcp_type = "normal-ipcp";
+        rina_name_t name;
+        name.ap_name = ap_name;
+        name.api_id = 1;
+        name.ae_name = "";
+        name.aei_id = 0;
 
-        LOG_DBG("Test of the IRM tool");
+        if (irm_create_ipcp(name, ipcp_type)) {
+                LOG_ERR("Failed to create IPCP");
+                return -1;
+        }
+
 
         return 0;
 }

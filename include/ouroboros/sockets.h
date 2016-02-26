@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Common definitions
+ * The sockets layer to communicate between daemons
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,39 +20,35 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_COMMON_H
-#define OUROBOROS_COMMON_H
+#ifndef OUROBOROS_SOCKETS_H
+#define OUROBOROS_SOCKETS_H
 
-#include <stdint.h>
-#include <unistd.h>
-#include <stdbool.h>
-#include <errno.h>
+#define IRM_SOCK_PATH "/tmp/irm_sock"
 
-typedef uint32_t port_id_t;
-
-typedef struct {
-        uint8_t * data;
-        size_t size;
-} buffer_t;
-
-typedef struct {
-        char * ap_name;
-        int api_id;
-        char * ae_name;
-        int aei_id;
-} rina_name_t;
-
-/* FIXME: To be extended to have all QoS params */
-struct qos_spec {
-        char * name;
-        char * dif_name;
-        double delay;
-        double jitter;
+enum irm_msg_code {
+        IRM_CREATE_IPCP,
+        IRM_DESTROY_IPCP,
+        IRM_BOOTSTRAP_IPCP,
+        IRM_ENROLL_IPCP,
+        IRM_REG_IPCP,
+        IRM_UNREG_IPCP,
+        IRM_LIST_IPCPS
 };
 
-/* FIXME: What should be configurable in the DIF? */
-struct dif_info {
-        int cep_id_size;
+struct irm_msg {
+        enum irm_msg_code code;
+        union {
+                struct {
+                        rina_name_t * name;
+                        char * ipcp_type;
+                } create_ipcp;
+        } msgs;
 };
+
+int              client_socket_open(char * file_name);
+int              server_socket_open(char * file_name);
+
+buffer_t *       serialize_irm_msg(struct irm_msg * msg);
+struct irm_msg * deserialize_irm_msg(buffer_t * data);
 
 #endif
