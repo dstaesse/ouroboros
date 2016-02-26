@@ -7,6 +7,7 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 set(SOURCE_FILES
         # Add source files here
         main.c
+        pci.c
 )
 
 add_executable (ipcpd ${SOURCE_FILES})

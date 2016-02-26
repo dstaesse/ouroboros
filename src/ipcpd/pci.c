@@ -21,78 +21,127 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-struct pci {
-        uint8_t * src_addr;
-        uint8_t * dst_addr;
-        uint8_t * pdu_length;
-        uint8_t * qos_id;
-        uint8_t * seqnr;
-        uint8_t * pad_h;
-        uint8_t * pad_t;
+#include "pci.h"
+#include <malloc.h>
+#include <errno.h>
 
-        uint8_t   head_sz;
-        uint8_t   tail_sz;
+#define head_size(a, b) a.addr_size * 2 +     \
+         a.cep_id_size * 2 +        \
+         a.pdu_length_size +        \
+         a.seqno_size +             \
+         a.qos_id_size +            \
+         b.ttl_size
+#define tail_size(b) b.chk_size
+
+
+struct pci {
+        /* head */
+        uint8_t * dst_addr;
+        uint8_t * src_addr;
+        uint8_t * dst_cep_id;
+        uint8_t * src_cep_id;
+        uint8_t * pdu_length;
+        uint8_t * ttl;        uint8_t * seqno;
+        uint8_t * qos_id;
+
+        uint8_t * chk;
+
+        du_buff_t * dub;
+
+        struct ipcp_dtp_const dtpc;
+        struct ipcp_dup_const dupc;
 
 };
 
-pci_t * pci_create(struct dtp_const * dtc)
+pci_t * pci_create(du_buff_t                 * dub,
+                   const struct ipcp_dtp_const dtpc,
+                   const struct ipcp_dup_const dupc)
 {
-        int i          = 0;
 
-        if (dtc == NULL)
+        if (dub == NULL) {
+                LOG_DBGF("Bogus input. Bugging out.");
                 return NULL;
+        }
 
-        struct pci * p = malloc(sizeof pci);
+        struct pci * p = malloc(sizeof *p);
 
         if (p == NULL)
-                return NULL:
+                return NULL;
 
-        p->src_addr =NULL;
+        p->dub = dub;
+/*
+        p->dtpc = malloc( sizeof *(p->dtpc));
+        if (p->dtpc == NULL)
+                return NULL;
+
+        p->dupc = malloc( sizeof *(p->dupc));
+        if (p->dupc == NULL)
+                return NULL;
+*/
+        p->dtpc = dtpc;
+        p->dupc = dupc;
+
         p->dst_addr = NULL;
+        p->src_addr =NULL;
+        p->dst_cep_id = NULL;
+        p->src_cep_id = NULL;
         p->pdu_length = NULL;
+        p->ttl = NULL;
+        p->seqno = NULL;
         p->qos_id = NULL;
-        p->seqnr = NULL;
-        p->pad_h = NULL;
-        p->pad_t = NULL;
-
-        head_sz = 0;
-        tail_sz = 0;
+        p->chk = NULL;
 
         return p;
-}
-
-/* policy... one could reorder the data fields
-   exercise left to the idiot that cares */
-int * pci_init(pci_t            * pci,
-               d_buff_t         * dub,
-               struct dtp_const * dtc,
-               struct dup_const * dupc)
-{
-        uint8_t * pci_head;
-        uint8_t * pci_tail;
-
-        /* nastiness ahead, all members are uint8_t's */
-        uint8_t * n = (uint8_t *) dtc;
-        for (i=0; i < sizeof *dtc; ++i)
-                n[i] & 0x80 ? tail_sz += n[i] & 0x80:
-                        head_sz += n[i];
-        head_sz += n[0] & 0x80 ? n[0] : 0; /* dst_addr */
-
-        n = (uint8_t *) dupc;
-        for (i=0; i < sizeof *dupc; ++i)
-                n[i] & 0x80 ? tail_sz += n[i] & 0x80 :
-                        head_sz += n[i];
-        tail_sz += n[0] & 0x80 ? n[0] : 0; /* dst_addr */
-
-        /* end of nastiness */
-
-        pci_head = du_buff_head_alloc(dub, head_sz);
-        pci_tail = du_buff_tail_alloc(dub, tail_sz);
-
-        LOG_MISSING();
 }
 
 void pci_destroy(pci_t * pci)
 {
         free (pci);
+}
+
+int pci_init(pci_t                 * pci)
+{
+        if (pci == NULL) {
+                LOG_DBGF("Bogus input. Bugging out.");
+                return -EINVAL;
+        }
+
+        uint8_t * pci_head = du_buff_head_alloc(pci->dub,
+                                                head_size(pci->dtpc,pci->dupc));
+        uint8_t * pci_tail = du_buff_tail_alloc(pci->dub, tail_size(pci->dupc));
+
+        if (pci_head == NULL) {
+                LOG_DBG("Failed to allocate space for PCI at head.");
+                return -ENOBUFS;
+        }
+
+        if (pci_tail == NULL) {
+                LOG_DBG("Failed to allocate space for PCI at tail.");
+                return -ENOBUFS;
+        }
+
+        pci->dst_addr   = pci_head;
+        pci->src_addr   = (pci_head += pci->dtpc.addr_size);
+        pci->dst_cep_id = (pci_head += pci->dtpc.addr_size);
+        pci->src_cep_id = (pci_head += pci->dtpc.cep_id_size);
+        pci->pdu_length = (pci_head += pci->dtpc.cep_id_size);
+        pci->ttl        = (pci_head += pci->dtpc.pdu_length_size);
+        pci->seqno      = (pci_head += pci->dupc.ttl_size);
+        pci->qos_id     = (pci_head += pci->dtpc.seqno_size);
+
+        pci->chk        = (pci_tail);
+
+        return 0;
+}
+
+void pci_release(pci_t * pci)
+{
+        if (pci == NULL)
+                return;
+
+        if (pci->dub == NULL)
+                return;
+
+        du_buff_head_release(pci->dub, head_size(pci->dtpc, pci->dupc));
+        du_buff_tail_release(pci->dub, tail_size(pci->dupc));
 }

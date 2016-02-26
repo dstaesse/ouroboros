@@ -23,23 +23,23 @@
 
 #ifndef OUROBOROS_IPCP_PCI_H
 #define OUROBOROS_IPCP_PCI_H
-#endif
 
-#include "ouroboros/common.h"
+#define OUROBOROS_PREFIX "ipcp/pci"
+
 #include "ouroboros/du_buff.h"
+#include "ouroboros/logs.h"
+#include "dt_const.h"
 
 struct pci;
 
 typedef struct pci pci_t;
 
-pci_t * pci_create(struct dtp_const * dtc);
+pci_t * pci_create(du_buff_t                   * dub,
+                   const struct ipcp_dtp_const dtpc,
+                   const struct ipcp_dup_const dupc);
 void    pci_destroy(pci_t * pci);
 
-int     pci_init(pci_t            * pci,
-                 du_buff_t        * dub,
-                 struct dtp_const * dtc,
-                 struct dup_const * dupc);
-
-int    pci_release(du_buff_t dub);
+int     pci_init(pci_t * pci);
+void    pci_release(pci_t * pci);
 
 #endif /* OUROBOROS_IPCP_PCI_H */
