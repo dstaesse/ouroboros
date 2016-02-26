@@ -79,7 +79,7 @@ int server_socket_open(char * file_name)
         }
 
         serv_addr.sun_family = AF_UNIX;
-        sprintf(serv_addr.sun_path, file_name);
+        sprintf(serv_addr.sun_path, "%s", file_name);
 
         if (bind(sockfd,
                  (struct sockaddr *) &serv_addr,
