@@ -23,9 +23,9 @@ int *a;
 
 - Don't explicitly cast malloc, but do
 
-your * = malloc (sizeof (*your) * len);
+ptr = malloc (sizeof(*ptr) * len);
 or
-your * = malloc (sizeof *your * len);
+ptr = malloc (sizeof *ptr * len);
 
 - When checking for invalid pointers use
 
