@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#ifndef OUROBOROS_SOCKETS_H
+#define OUROBOROS_SOCKETS_H
+
 #define IRM_SOCK_PATH "/tmp/irm_sock"
 
 enum irm_msg_code {
@@ -47,3 +50,5 @@ int              server_socket_open(char * file_name);
 
 buffer_t *       serialize_irm_msg(struct irm_msg * msg);
 struct irm_msg * deserialize_irm_msg(buffer_t * data);
+
+#endif

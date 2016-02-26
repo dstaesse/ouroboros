@@ -34,7 +34,7 @@ int irm_create_ipcp(rina_name_t name,
         struct irm_msg msg;
         buffer_t * buf;
 
-        if (!ipcp_type)
+        if (ipcp_type == NULL)
                 return -1;
 
         sockfd = client_socket_open(IRM_SOCK_PATH);
@@ -46,7 +46,7 @@ int irm_create_ipcp(rina_name_t name,
         msg.msgs.create_ipcp.ipcp_type = ipcp_type;
 
         buf = serialize_irm_msg(&msg);
-        if (!buf)
+        if (buf == NULL)
                 return -1;
 
         write(sockfd, buf->data, buf->size);

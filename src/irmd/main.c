@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #define BUF_SIZE 256
 
@@ -55,10 +56,10 @@ int main()
         if (sockfd < 0)
                 return -1;
 
-        buf = malloc(sizeof(buf) * BUF_SIZE);
-        if (!buf) {
+        buf = malloc(sizeof(*buf) * BUF_SIZE);
+        if (buf == NULL) {
                 LOG_ERR("Cannot allocate memory");
-                return -1;
+                return -ENOMEM;
         }
 
         while (true) {
@@ -70,6 +71,7 @@ int main()
                 cli_sockfd = accept(sockfd, 0, 0);
                 if (cli_sockfd < 0) {
                         LOG_ERR("Cannot accept new connection");
+                        continue;
                 }
 
                 count = read(cli_sockfd, buf, BUF_SIZE);
@@ -77,7 +79,7 @@ int main()
                         buffer.size = count;
                         buffer.data = buf;
                         msg = deserialize_irm_msg(&buffer);
-                        if (!msg)
+                        if (msg == NULL)
                                 continue;
 
                         LOG_DBG("Got message code %d", msg->code);

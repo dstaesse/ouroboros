@@ -103,7 +103,7 @@ static int serialized_string_len(uint8_t * data)
         while (*seek != '\0')
                 seek++;
 
-        return seek - data + 1;
+        return (seek - data) + 1;
 }
 
 static void ser_copy_value(size_t flen,
@@ -124,15 +124,18 @@ static void deser_copy_value(size_t flen,
         *offset += flen;
 }
 
-static void deser_copy_string(uint8_t * data,
-                              char ** dst,
-                              int * offset)
+static int deser_copy_string(uint8_t * data,
+                             char ** dst,
+                             int * offset)
 {
         size_t flen;
 
         flen = serialized_string_len(data + *offset);
-        *dst = malloc(flen + 1);
+        *dst = malloc(sizeof(**dst) * (flen + 1));
+        if (*dst == NULL)
+                return -1;
         deser_copy_value(flen, *dst, data, offset);
+        return 0;
 }
 
 static void deser_copy_int(uint8_t * data,
@@ -159,8 +162,16 @@ buffer_t * serialize_irm_msg(struct irm_msg * msg)
         int i;
         char buffer[BUFFER_SIZE];
 
-        buf = malloc(sizeof(buf));
+        buf = malloc(sizeof(*buf));
+        if (buf == NULL)
+                return NULL;
+
         buf->data = malloc(BUFFER_SIZE);
+        if (buf->data == NULL) {
+                free(buf);
+                return NULL;
+        }
+
         data = buf->data;
 
         ser_copy_value(sizeof(enum irm_msg_code),
@@ -230,7 +241,8 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
         int i;
         int offset = 0;
 
-        if (!data || !data->data) {
+        if (data == NULL ||
+            data->data == NULL) {
                 LOG_ERR("Got a null pointer");
                 return NULL;
         }
@@ -242,8 +254,8 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
         }
         LOG_DBGF("Got buffer %s", buffer);
 
-        msg = malloc(sizeof(msg));
-        if (!msg) {
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL) {
                 LOG_ERR("Failed to allocate memory");
                 return NULL;
         }
@@ -255,27 +267,47 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
         switch (msg->code) {
         case IRM_CREATE_IPCP:
                 msg->msgs.create_ipcp.name =
-                        malloc(sizeof(msg->msgs.create_ipcp.name));
+                        malloc(sizeof(*(msg->msgs.create_ipcp.name)));
+                if (!msg->msgs.create_ipcp.name) {
+                        LOG_ERR("Failed to alloc memory");
+                        free(msg);
+                        return NULL;
+                }
 
-                deser_copy_string(data->data,
-                                  &msg->msgs.create_ipcp.name->ap_name,
-                                  &offset);
+                if (deser_copy_string(data->data,
+                                      &msg->msgs.create_ipcp.name->ap_name,
+                                      &offset)) {
+                        free(msg->msgs.create_ipcp.name);
+                        free(msg);
+                        return NULL;
+                }
 
                 deser_copy_int(data->data,
                                &msg->msgs.create_ipcp.name->api_id,
                                &offset);
 
-                deser_copy_string(data->data,
-                                  &msg->msgs.create_ipcp.name->ae_name,
-                                  &offset);
+                if (deser_copy_string(data->data,
+                                      &msg->msgs.create_ipcp.name->ae_name,
+                                      &offset)) {
+                        free(msg->msgs.create_ipcp.name->ap_name);
+                        free(msg->msgs.create_ipcp.name);
+                        free(msg);
+                        return NULL;
+                }
 
                 deser_copy_int(data->data,
                                &msg->msgs.create_ipcp.name->aei_id,
                                &offset);
 
-                deser_copy_string(data->data,
-                                  &msg->msgs.create_ipcp.ipcp_type,
-                                  &offset);
+                if (deser_copy_string(data->data,
+                                      &msg->msgs.create_ipcp.ipcp_type,
+                                      &offset)) {
+                        free(msg->msgs.create_ipcp.name->ae_name);
+                        free(msg->msgs.create_ipcp.name->ap_name);
+                        free(msg->msgs.create_ipcp.name);
+                        free(msg);
+                        return NULL;
+                }
                 break;
         default:
                 LOG_ERR("Don't know that code");
