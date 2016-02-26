@@ -34,7 +34,7 @@ test_and_set_c_compiler_flag_global(-std=c89)
 test_and_set_c_compiler_flag_global(-Wall)
 test_and_set_c_compiler_flag_global(-Werror)
 test_and_set_c_compiler_flag_global(-Wundef)
-test_and_set_c_compiler_flag_global(-fmax-errors=1)
+test_and_set_c_compiler_flag_global(-fmax-errors=5)
 
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.pc.in"
