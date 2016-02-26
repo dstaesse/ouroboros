@@ -47,39 +47,27 @@ typedef struct {
 struct qos_spec {
         uint32_t delay;
         uint32_t jitter;
-
 };
 
-struct dtp_const {
-        /* pci field lengths, bits */
-        /* most significant bit indicates head (0) or tail (1) */
-        uint8_t addr_sz;
-        uint8_t cep_id_sz;
-        uint8_t pdu_length_sz;
-        /* not sure about port_id_sz... port_id's are not
-           part of dtp and should not go on the wire */
-        /* uint8_t port_id_sz; */
-        uint8_t qos_id_sz;
-        uint8_t seqnr_sz;
-        /* uint8_t ctrl_sqnum_sz;  is this crap in the spec?? */
+struct dt_const {
+        /* constants for dtp */
+        uint8_t addr_size;
+        uint8_t cep_id_size;
+        uint8_t pdu_length_size;
+        uint8_t qos_id_size;
+        uint8_t seqno_size;
+        /* uint8_t ctrl_sqnum_sz;  is this in the spec?? */
 
-        /* one will need this for hardware alignment */
-        uint8_t pad_head_sz;
-        uint8_t pad_tail_sz;
-};
-
-struct dup_const {
-        /* pci field lengths, bits */
-        /* most significant bit indicates head (0) or tail (1) */
-        uint8_t ttl_sz;
-        uint8_t chk_sz;
+        /* constants for dup */
+        uint8_t ttl_size;
+        uint8_t chk_size;
 };
 
 /* FIXME: What should be configurable in the DIF? */
 struct dif_info {
         /* values, octets */
-        uint32_t min_pdu_sz;
-        uint32_t max_pdu_sz;
+        uint32_t min_pdu_size;
+        uint32_t max_pdu_size;
 };
 
-#endif
+#endif /* OUROBOROS_COMMON_H */
