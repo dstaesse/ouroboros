@@ -50,7 +50,7 @@ struct qos_spec {
 };
 
 struct dt_const {
-        /* constants for dtp */
+        /* dt field sizes in bits */
         uint8_t addr_size;
         uint8_t cep_id_size;
         uint8_t pdu_length_size;
