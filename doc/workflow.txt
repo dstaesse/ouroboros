@@ -21,13 +21,21 @@ int * a;
 instead of
 int *a;
 
-- don't explicitly cast malloc, but do
+- Don't explicitly cast malloc, but do
 
 your * = malloc (sizeof *your * len);
 
-- when checking for invalid pointers use
+or
 
-if (ptr == NULL), instead of if (!ptr)
+your * = malloc (sizeof (*your) * len);
+
+- When checking for invalid pointers use
+
+if (ptr == NULL)
+
+instead of
+
+if (!ptr)
 
 3. Development workflow
 
