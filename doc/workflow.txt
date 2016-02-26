@@ -23,18 +23,14 @@ int *a;
 
 - Don't explicitly cast malloc, but do
 
-your * = malloc (sizeof *your * len);
-
-or
-
 your * = malloc (sizeof (*your) * len);
+or
+your * = malloc (sizeof *your * len);
 
 - When checking for invalid pointers use
 
 if (ptr == NULL)
-
 instead of
-
 if (!ptr)
 
 3. Development workflow
