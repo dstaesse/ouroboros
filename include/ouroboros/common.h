@@ -50,7 +50,7 @@ struct qos_spec {
 };
 
 struct dt_const {
-        /* dt field sizes in bits */
+        /* dt field sizes in octets */
         uint8_t addr_size;
         uint8_t cep_id_size;
         uint8_t pdu_length_size;
