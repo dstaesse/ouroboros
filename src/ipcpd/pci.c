@@ -25,13 +25,13 @@
 #include <malloc.h>
 #include <errno.h>
 
-#define HEAD_SIZE(a, b) a.addr_size * 2 +     \
-         a.cep_id_size * 2 +        \
-         a.pdu_length_size +        \
-         a.seqno_size +             \
-         a.qos_id_size +            \
-         b.ttl_size
-#define TAIL_SIZE(b) b.chk_size
+#define PCI_HEAD_SIZE(a, b) a.addr_size * 2 +  \
+        a.cep_id_size * 2 +                    \
+        a.pdu_length_size +                    \
+        b.ttl_size +                           \
+        a.seqno_size +                         \
+        a.qos_id_size
+#define PCI_TAIL_SIZE(b) b.chk_size
 
 
 struct pci {
@@ -58,13 +58,14 @@ pci_t * pci_create(du_buff_t                   * dub,
                    const struct ipcp_dtp_const * dtpc,
                    const struct ipcp_dup_const * dupc)
 {
+        struct pci * p;
 
         if (dub == NULL) {
                 LOG_DBGF("Bogus input. Bugging out.");
                 return NULL;
         }
 
-        struct pci * p = malloc(sizeof *p);
+        p = malloc(sizeof *p);
 
         if (p == NULL)
                 return NULL;
@@ -99,9 +100,10 @@ int pci_init(pci_t                 * pci)
                 return -EINVAL;
         }
 
-        uint8_t * pci_head = du_buff_head_alloc(pci->dub,
-                                                HEAD_SIZE(pci->dtpc,pci->dupc));
-        uint8_t * pci_tail = du_buff_tail_alloc(pci->dub, TAIL_SIZE(pci->dupc));
+        uint8_t * pci_head = du_buff_head_alloc(pci->dub, PCI_HEAD_SIZE(
+                                                        pci->dtpc,pci->dupc));
+        uint8_t * pci_tail = du_buff_tail_alloc(pci->dub, PCI_TAIL_SIZE(
+                                                        pci->dupc));
 
         if (pci_head == NULL) {
                 LOG_DBG("Failed to allocate space for PCI at head.");
@@ -135,6 +137,6 @@ void pci_release(pci_t * pci)
         if (pci->dub == NULL)
                 return;
 
-        du_buff_head_release(pci->dub, HEAD_SIZE(pci->dtpc, pci->dupc));
-        du_buff_tail_release(pci->dub, TAIL_SIZE(pci->dupc));
+        du_buff_head_release(pci->dub, PCI_HEAD_SIZE(pci->dtpc, pci->dupc));
+        du_buff_tail_release(pci->dub, PCI_TAIL_SIZE(pci->dupc));
 }
