@@ -43,8 +43,8 @@ struct buffer {
 struct du_buff {
         struct buffer  * buffer;
         size_t           size;
-        size_t           du_start;
-        size_t           du_end;
+        size_t           du_head;
+        size_t           du_tail;
 };
 
 void buffer_destroy(struct buffer * buf)
@@ -251,10 +251,10 @@ du_buff_t * du_buff_create(size_t size)
                 return NULL;
         }
 
-        dub->buffer   = NULL;
-        dub->size     = size;
-        dub->du_start = 0;
-        dub->du_end   = 0;
+        dub->buffer  = NULL;
+        dub->size    = size;
+        dub->du_head = 0;
+        dub->du_tail = 0;
 
         return dub;
 }
@@ -294,44 +294,44 @@ int du_buff_init(du_buff_t * dub,
         if (dub->buffer == NULL)
                 return -ENOMEM;
 
-        dub->du_start = start;
-        dub->du_end = start + len;
+        dub->du_head = start;
+        dub->du_tail = start + len;
 
         return buffer_copy_data(dub->buffer, start, data, len);
 }
 
-int du_buff_head_alloc(du_buff_t * dub, size_t size)
+uint8_t * du_buff_head_alloc(du_buff_t * dub, size_t size)
 {
         if (dub == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
-                return -EINVAL;
+                return NULL;
         }
 
-        if (dub->du_start - size < 0) {
+        if (dub->du_head - size < 0) {
                 LOG_WARN("Failed to allocate PCI headspace");
-                return -ENOBUFS;
+                return NULL;
         }
 
-        dub->du_start -= size;
+        dub->du_head -= size;
 
-        return 0;
+        return (buffer_seek_pos(dub->buffer, dub->du_head));
 }
 
-int du_buff_tail_alloc(du_buff_t * dub, size_t size)
+uint8_t * du_buff_tail_alloc(du_buff_t * dub, size_t size)
 {
         if (dub == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
-                return -EINVAL;
+                return NULL;
         }
 
-        if (dub->du_end + size >= dub->size) {
+        if (dub->du_tail + size >= dub->size) {
                 LOG_WARN("Failed to allocate PCI tailspace");
-                return -ENOBUFS;
+                return NULL;
         }
 
-        dub->du_end += size;
+        dub->du_tail += size;
 
-        return 0;
+        return (buffer_seek_pos(dub->buffer, dub->du_tail));
 }
 
 int du_buff_head_release(du_buff_t * dub, size_t size)
@@ -341,12 +341,12 @@ int du_buff_head_release(du_buff_t * dub, size_t size)
                 return -EINVAL;
         }
 
-        if (size > dub->du_end - dub->du_start) {
+        if (size > dub->du_tail - dub->du_head) {
                 LOG_WARN("Tried to release beyond sdu boundary");
                 return -EOVERFLOW;
         }
 
-        dub->du_start += size;
+        dub->du_head += size;
 
         /* FIXME: copy some random crap to the buffer for security */
 
@@ -360,12 +360,12 @@ int du_buff_tail_release(du_buff_t * dub, size_t size)
                 return -EINVAL;
         }
 
-        if (size > dub->du_end - dub->du_start) {
+        if (size > dub->du_tail - dub->du_head) {
                 LOG_WARN("Tried to release beyond sdu boundary");
                 return -EOVERFLOW;
         }
 
-        dub->du_end -= size;
+        dub->du_tail -= size;
 
         /* FIXME: copy some random crap to the buffer for security */
 
