@@ -21,6 +21,18 @@ int * a;
 instead of
 int *a;
 
+- Don't explicitly cast malloc, but do
+
+ptr = malloc (sizeof(*ptr) * len);
+or
+ptr = malloc (sizeof *ptr * len);
+
+- When checking for invalid pointers use
+
+if (ptr == NULL)
+instead of
+if (!ptr)
+
 3. Development workflow
 
 Git is used as a version tooling for the code. Releases are identified

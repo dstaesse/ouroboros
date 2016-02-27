@@ -84,7 +84,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
         size_t          ts = size - (headspace + len);
         bool            head_block = true;
 
-        head = (struct buffer *) malloc(sizeof(struct buffer));
+        head = malloc(sizeof *head);
         head->size=0;
         head->data=NULL;
 
@@ -108,14 +108,14 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
                         sz = remaining < page_size ? remaining : page_size;
                 }
 
-                buf = (struct buffer *) malloc(sizeof(struct buffer));
+                buf = malloc(sizeof *buf);
                 if (buf == NULL) {
                         LOG_WARN("Could not allocate struct.");
                         return NULL;
                 }
 
                 if (sz > 0) {
-                        buf->data = (uint8_t *) malloc(sz);
+                        buf->data = malloc(sz);
                         if (buf->data == NULL) {
                                 LOG_WARN("Could not allocate memory block.");
                                 buffer_destroy_list(head);
