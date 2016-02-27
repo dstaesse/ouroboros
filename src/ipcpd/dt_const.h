@@ -1,9 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Common definitions
+ * Data Transfer Constants for the IPCP
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,55 +21,24 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_COMMON_H
-#define OUROBOROS_COMMON_H
+#ifndef IPCP_DT_CONST_H
+#define IPCP_DT_CONST_H
 
-#include <stdint.h>
-#include <unistd.h>
-#include <stdbool.h>
-#include <errno.h>
+#include "ouroboros/common.h"
 
-typedef uint32_t port_id_t;
-
-typedef struct {
-        uint8_t * data;
-        size_t size;
-} buffer_t;
-
-typedef struct {
-        char * ap_name;
-        int    api_id;
-        char * ae_name;
-        int    aei_id;
-} rina_name_t;
-
-/* FIXME: To be extended to have all QoS params */
-struct qos_spec {
-        uint32_t delay;
-        uint32_t jitter;
-};
-
-struct dt_const {
-        /* dt field sizes in octets */
+struct ipcp_dtp_const {
+        /* sizes in octets */
         uint8_t addr_size;
         uint8_t cep_id_size;
         uint8_t pdu_length_size;
-        uint8_t qos_id_size;
         uint8_t seqno_size;
+        uint8_t qos_id_size;
         /* uint8_t ctrl_sqnum_sz;  is this in the spec?? */
+};
 
-        /* constants for dup */
+struct ipcp_dup_const {
         uint8_t ttl_size;
         uint8_t chk_size;
 };
 
-/* FIXME: What should be configurable in the DIF? */
-struct dif_info {
-        /* values, octets */
-        uint32_t min_pdu_size;
-        uint32_t max_pdu_size;
-
-        struct dt_const dtc;
-};
-
-#endif /* OUROBOROS_COMMON_H */
+#endif /* IPCP_DT_CONST_H */
