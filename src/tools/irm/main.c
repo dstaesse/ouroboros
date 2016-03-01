@@ -34,9 +34,37 @@ int main () {
         name.api_id = 1;
         name.ae_name = "";
         name.aei_id = 0;
+        struct dif_info info;
+        char * dif_name = "wienerschnitzel";
+        size_t difs_size = 1;
 
         if (irm_create_ipcp(name, ipcp_type)) {
                 LOG_ERR("Failed to create IPCP");
+                return -1;
+        }
+
+        if (irm_destroy_ipcp(name)) {
+                LOG_ERR("Failed to destroy IPCP");
+                return -1;
+        }
+
+        if (irm_bootstrap_ipcp(name, info)) {
+                LOG_ERR("Failed to bootstrap IPCP");
+                return -1;
+        }
+
+        if (irm_enroll_ipcp(name, dif_name)) {
+                LOG_ERR("Failed to enroll IPCP");
+                return -1;
+        }
+
+        if (irm_reg_ipcp(name, &dif_name, difs_size)) {
+                LOG_ERR("Failed to register IPCP");
+                return -1;
+        }
+
+        if (irm_unreg_ipcp(name, &dif_name, difs_size)) {
+                LOG_ERR("Failed to unregister IPCP");
                 return -1;
         }
 
