@@ -42,9 +42,10 @@ typedef struct {
         int    aei_id;
 } rina_name_t;
 
-/* FIXME: To be extended to have all QoS params */
+/* FIXME: may need revision */
 struct qos_spec {
         char * qos_name;
+        char * dif_name;
 
         uint32_t delay;
         uint32_t jitter;
@@ -53,13 +54,9 @@ struct qos_spec {
 /* FIXME: What should be configurable in the DIF? */
 struct dif_config {
         /* general data */
-        char * dif_name;
-
         qos_spec * qosspecs;
 
-        /* FIXME: this might not be the way to go */
-        char ** policies;
-        /* char * policy_set? */
+        /* TODO: efficient policies */
 
         /* dt field sizes in octets */
         uint8_t addr_size;
