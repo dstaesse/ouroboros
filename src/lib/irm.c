@@ -27,81 +27,133 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
 
-int irm_create_ipcp(rina_name_t name,
-                    char * ipcp_type)
+static int send_irm_msg(struct irm_msg * msg)
 {
-        int sockfd;
-        struct irm_msg msg;
-        buffer_t * buf;
+       int sockfd;
+       buffer_t * buf;
 
-        if (ipcp_type == NULL)
+       sockfd = client_socket_open(IRM_SOCK_PATH);
+       if (sockfd < 0)
+               return -1;
+
+       buf = serialize_irm_msg(msg);
+       if (buf == NULL) {
+               close(sockfd);
                 return -1;
+       }
 
-        sockfd = client_socket_open(IRM_SOCK_PATH);
-        if (sockfd < 0)
-                return -1;
-
-        msg.code = IRM_CREATE_IPCP;
-        msg.msgs.create_ipcp.name = &name;
-        msg.msgs.create_ipcp.ipcp_type = ipcp_type;
-
-        buf = serialize_irm_msg(&msg);
-        if (buf == NULL) {
-                close(sockfd);
-                return -1;
-        }
-
-        if (write(sockfd, buf->data, buf->size) == -1) {
-                close(sockfd);
-                return -1;
-        }
+       if (write(sockfd, buf->data, buf->size) == -1) {
+               close(sockfd);
+               return -1;
+       }
 
         close(sockfd);
         return 0;
 }
 
-int irm_destroy_ipcp(int ipcp_id)
+int irm_create_ipcp(rina_name_t name,
+                    char * ipcp_type)
 {
+        struct irm_msg msg;
+
+        if (ipcp_type == NULL)
+                return -1;
+
+        msg.code = IRM_CREATE_IPCP;
+        msg.name = &name;
+        msg.ipcp_type = ipcp_type;
+
+        if (send_irm_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
 
         return 0;
 }
 
-int irm_bootstrap_ipcp(int ipcp_id,
+int irm_destroy_ipcp(rina_name_t name)
+{
+        struct irm_msg msg;
+
+        msg.code = IRM_DESTROY_IPCP;
+        msg.name = &name;
+
+        if (send_irm_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
+}
+
+int irm_bootstrap_ipcp(rina_name_t name,
                        struct dif_info info)
 {
+        struct irm_msg msg;
+
+        msg.code = IRM_BOOTSTRAP_IPCP;
+        msg.name = &name;
+        msg.info = &info;
+
+        if (send_irm_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
 
         return 0;
 }
 
-int irm_enroll_ipcp(int ipcp_id,
+int irm_enroll_ipcp(rina_name_t name,
                     char * dif_name)
 {
+        struct irm_msg msg;
+
+        msg.code = IRM_ENROLL_IPCP;
+        msg.name = &name;
+        msg.dif_name = dif_name;
+
+        if (send_irm_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
 
         return 0;
 }
 
-int irm_reg_ipcp(int ipcp_id,
-                 char ** difs)
+int irm_reg_ipcp(rina_name_t name,
+                 char ** difs,
+                 size_t difs_size)
 {
+        struct irm_msg msg;
+
+        msg.code = IRM_REG_IPCP;
+        msg.name = &name;
+        msg.difs = difs;
+        msg.difs_size = difs_size;
+
+        if (send_irm_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
 
         return 0;
 }
 
-int irm_unreg_ipcp(int ipcp_id,
-                   char ** difs)
+int irm_unreg_ipcp(rina_name_t name,
+                   char ** difs,
+                   size_t difs_size)
 {
+        struct irm_msg msg;
 
-        return 0;
-}
+        msg.code = IRM_UNREG_IPCP;
+        msg.name = &name;
+        msg.difs = difs;
+        msg.difs_size = difs_size;
 
-char ** irm_list_ipcps()
-{
-
-        return 0;
-}
-
-char ** irm_list_ipcp_types()
-{
+        if (send_irm_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
 
         return 0;
 }
