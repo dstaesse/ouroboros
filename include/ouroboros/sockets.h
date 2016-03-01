@@ -24,6 +24,7 @@
 #define OUROBOROS_SOCKETS_H
 
 #define IRM_SOCK_PATH "/tmp/irm_sock"
+#define IRM_MSG_BUF_SIZE 256
 
 enum irm_msg_code {
         IRM_CREATE_IPCP,
@@ -31,18 +32,17 @@ enum irm_msg_code {
         IRM_BOOTSTRAP_IPCP,
         IRM_ENROLL_IPCP,
         IRM_REG_IPCP,
-        IRM_UNREG_IPCP,
-        IRM_LIST_IPCPS
+        IRM_UNREG_IPCP
 };
 
 struct irm_msg {
         enum irm_msg_code code;
-        union {
-                struct {
-                        rina_name_t * name;
-                        char * ipcp_type;
-                } create_ipcp;
-        } msgs;
+        rina_name_t * name;
+        char * ipcp_type;
+        struct dif_info * info;
+        char * dif_name;
+        char ** difs;
+        size_t difs_size;
 };
 
 int              client_socket_open(char * file_name);

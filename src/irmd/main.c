@@ -31,9 +31,6 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#define BUF_SIZE 256
-
-
 static void create_ipcp(rina_name_t * name,
                         char * ipcp_type)
 {
@@ -47,6 +44,37 @@ static void create_ipcp(rina_name_t * name,
         LOG_MISSING;
 }
 
+static void destroy_ipcp(rina_name_t * name)
+{
+         LOG_MISSING;
+}
+
+static void bootstrap_ipcp(rina_name_t * name,
+                           struct dif_info * info)
+{
+         LOG_MISSING;
+}
+
+static void enroll_ipcp(rina_name_t * name,
+                        char * dif_name)
+{
+        LOG_MISSING;
+}
+
+static void reg_ipcp(rina_name_t * name,
+                     char ** difs,
+                     size_t difs_size)
+{
+        LOG_MISSING;
+}
+
+static void unreg_ipcp(rina_name_t * name,
+                       char ** difs,
+                       size_t difs_size)
+{
+        LOG_MISSING;
+}
+
 int main()
 {
         int sockfd;
@@ -56,7 +84,7 @@ int main()
         if (sockfd < 0)
                 return -1;
 
-        buf = malloc(sizeof(*buf) * BUF_SIZE);
+        buf = malloc(sizeof(*buf) * IRM_MSG_BUF_SIZE);
         if (buf == NULL) {
                 LOG_ERR("Cannot allocate memory");
                 return -ENOMEM;
@@ -74,7 +102,7 @@ int main()
                         continue;
                 }
 
-                count = read(cli_sockfd, buf, BUF_SIZE);
+                count = read(cli_sockfd, buf, IRM_MSG_BUF_SIZE);
                 if (count) {
                         buffer.size = count;
                         buffer.data = buf;
@@ -85,8 +113,28 @@ int main()
                         LOG_DBG("Got message code %d", msg->code);
                         switch (msg->code) {
                         case IRM_CREATE_IPCP:
-                                create_ipcp(msg->msgs.create_ipcp.name,
-                                            msg->msgs.create_ipcp.ipcp_type);
+                                create_ipcp(msg->name, msg->ipcp_type);
+                                break;
+                        case IRM_DESTROY_IPCP:
+                                destroy_ipcp(msg->name);
+                                break;
+                        case IRM_BOOTSTRAP_IPCP:
+                                bootstrap_ipcp(msg->name,
+                                               msg->info);
+                                break;
+                        case IRM_ENROLL_IPCP:
+                                enroll_ipcp(msg->name,
+                                            msg->dif_name);
+                                break;
+                        case IRM_REG_IPCP:
+                                reg_ipcp(msg->name,
+                                         msg->difs,
+                                         msg->difs_size);
+                                break;
+                        case IRM_UNREG_IPCP:
+                                unreg_ipcp(msg->name,
+                                           msg->difs,
+                                           msg->difs_size);
                                 break;
                         default:
                                 LOG_ERR("Don't know that message code");

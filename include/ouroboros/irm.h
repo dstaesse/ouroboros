@@ -27,19 +27,18 @@
 
 int     irm_create_ipcp(rina_name_t name,
                         char * ipcp_type);
-int     irm_destroy_ipcp(int ipcp_id);
+int     irm_destroy_ipcp(rina_name_t name);
 
-int     irm_bootstrap_ipcp(int ipcp_id,
+int     irm_bootstrap_ipcp(rina_name_t name,
                            struct dif_info info);
-int     irm_enroll_ipcp(int ipcp_id,
+int     irm_enroll_ipcp(rina_name_t name,
                         char * dif_name);
 
-int     irm_reg_ipcp(int ipcp_id,
-                     char ** difs);
-int     irm_unreg_ipcp(int ipcp_id,
-                       char ** difs);
-
-char ** irm_list_ipcps();
-char ** irm_list_ipcp_types();
+int     irm_reg_ipcp(rina_name_t name,
+                     char ** difs,
+                     size_t difs_size);
+int     irm_unreg_ipcp(rina_name_t name,
+                       char ** difs,
+                       size_t difs_size);
 
 #endif
