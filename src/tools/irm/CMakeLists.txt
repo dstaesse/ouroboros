@@ -6,7 +6,14 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(SOURCE_FILES
         # Add source files here
-        main.c
+        irm.c
+        irm_create_ipcp.c
+        irm_destroy_ipcp.c
+        irm_bootstrap_ipcp.c
+        irm_enroll_ipcp.c
+        irm_register_ipcp.c
+        irm_unregister_ipcp.c
+        irm_utils.c
 )
 
 add_executable (irm ${SOURCE_FILES})
