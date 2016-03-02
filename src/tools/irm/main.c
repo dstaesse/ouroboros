@@ -20,13 +20,25 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "irm"
-
-#include <ouroboros/logs.h>
 #include <ouroboros/common.h>
 #include <ouroboros/irm.h>
+#include <stdio.h>
 
-int main () {
+int main (int argc, char ** argv) {
+
+        char * operation;
+
+        if (argc < 2) {
+                printf("Usage: irm [OPERATION]\n\n"
+                       "where OPERATION = {create_ipcp destroy_ipcp \n"
+                       "                   bootstrap_ipcp enroll_ipcp\n"
+                       "                   register_ipcp unregister_ipcp}\n");
+                return 0;
+        }
+
+        operation = argv[1];
+        printf("Operation is %s\n", operation);
+
         char * ap_name = "test";
         char * ipcp_type = "normal-ipcp";
         rina_name_t name;
@@ -39,32 +51,26 @@ int main () {
         size_t difs_size = 1;
 
         if (irm_create_ipcp(name, ipcp_type)) {
-                LOG_ERR("Failed to create IPCP");
                 return -1;
         }
 
         if (irm_destroy_ipcp(name)) {
-                LOG_ERR("Failed to destroy IPCP");
                 return -1;
         }
 
         if (irm_bootstrap_ipcp(name, info)) {
-                LOG_ERR("Failed to bootstrap IPCP");
                 return -1;
         }
 
         if (irm_enroll_ipcp(name, dif_name)) {
-                LOG_ERR("Failed to enroll IPCP");
                 return -1;
         }
 
         if (irm_reg_ipcp(name, &dif_name, difs_size)) {
-                LOG_ERR("Failed to register IPCP");
                 return -1;
         }
 
         if (irm_unreg_ipcp(name, &dif_name, difs_size)) {
-                LOG_ERR("Failed to unregister IPCP");
                 return -1;
         }
 
