@@ -78,17 +78,11 @@ static void unreg_ipcp(rina_name_t * name,
 int main()
 {
         int sockfd;
-        uint8_t * buf;
+        uint8_t buf[IRM_MSG_BUF_SIZE];
 
         sockfd = server_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0)
                 return -1;
-
-        buf = malloc(sizeof(*buf) * IRM_MSG_BUF_SIZE);
-        if (buf == NULL) {
-                LOG_ERR("Cannot allocate memory");
-                return -ENOMEM;
-        }
 
         while (true) {
                 int cli_sockfd;
@@ -140,12 +134,11 @@ int main()
                                 LOG_ERR("Don't know that message code");
                                 break;
                         }
+                        free(msg);
                 }
 
                 close(cli_sockfd);
         }
-
-        free(buf);
 
         return 0;
 }

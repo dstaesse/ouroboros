@@ -26,6 +26,7 @@
 #include <ouroboros/common.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
+#include <stdlib.h>
 
 static int send_irm_msg(struct irm_msg * msg)
 {
@@ -47,8 +48,11 @@ static int send_irm_msg(struct irm_msg * msg)
                return -1;
        }
 
-        close(sockfd);
-        return 0;
+       free(buf->data);
+       free(buf);
+
+       close(sockfd);
+       return 0;
 }
 
 int irm_create_ipcp(rina_name_t name,
