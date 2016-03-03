@@ -32,7 +32,7 @@ typedef uint32_t port_id_t;
 
 typedef struct {
         uint8_t * data;
-        size_t size;
+        size_t    size;
 } buffer_t;
 
 typedef struct {
@@ -42,33 +42,37 @@ typedef struct {
         int    aei_id;
 } rina_name_t;
 
-/* FIXME: To be extended to have all QoS params */
+/* FIXME: may need revision */
 struct qos_spec {
+        char * qos_name;
+        char * dif_name;
+
         uint32_t delay;
         uint32_t jitter;
 };
 
-struct dt_const {
+/* FIXME: What should be configurable in the DIF? */
+struct dif_config {
+        /* general data */
+        qos_spec * qosspecs;
+
+        /* TODO: efficient policies */
+
         /* dt field sizes in octets */
         uint8_t addr_size;
         uint8_t cep_id_size;
         uint8_t pdu_length_size;
         uint8_t qos_id_size;
         uint8_t seqno_size;
-        /* uint8_t ctrl_sqnum_sz;  is this in the spec?? */
 
         /* constants for dup */
         uint8_t ttl_size;
         uint8_t chk_size;
-};
 
-/* FIXME: What should be configurable in the DIF? */
-struct dif_info {
         /* values, octets */
         uint32_t min_pdu_size;
         uint32_t max_pdu_size;
 
-        struct dt_const dtc;
 };
 
 #endif /* OUROBOROS_COMMON_H */
