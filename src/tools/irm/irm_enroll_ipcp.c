@@ -21,12 +21,51 @@
  */
 
 #include <stdio.h>
+#include <ouroboros/irm.h>
+#include <ouroboros/common.h>
 
 #include "irm_ops.h"
+#include "irm_utils.h"
+
+static void usage()
+{
+        printf("Usage: irm enroll_ipcp\n"
+               "           ap <application process name>\n"
+               "           [api <application process instance>]\n"
+               "           [ae <application entity name]\n"
+               "           [aei <application entity instance>]\n"
+               "           dif <dif to enroll in>\n");
+}
 
 int do_enroll_ipcp(int argc, char ** argv)
 {
-        printf("Nothing here in %s\n", __FUNCTION__);
+        rina_name_t name;
+        char * dif_name = NULL;
 
-        return -1;
+        name.ap_name = NULL;
+        name.api_id = 0;
+        name.ae_name = "";
+        name.aei_id = 0;
+
+        while (argc > 0) {
+                if (!parse_name(argv, &name)) {
+                        if (matches(*argv, "dif") == 0) {
+                                dif_name = *(argv + 1);
+                        } else {
+                                printf("\"%s\" is unknown, try \"irm "
+                                       "enroll_ipcp\".\n", *argv);
+                                return -1;
+                        }
+                }
+
+                argc -= 2;
+                argv += 2;
+        }
+
+        if (dif_name == NULL || name.ap_name == NULL) {
+                usage();
+                return -1;
+        }
+
+        return irm_enroll_ipcp(name, dif_name);
 }

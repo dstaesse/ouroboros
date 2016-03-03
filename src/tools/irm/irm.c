@@ -33,8 +33,7 @@ static void usage()
         printf("Usage: irm [OPERATION]\n\n"
                "where OPERATION = {create_ipcp destroy_ipcp \n"
                "                   bootstrap_ipcp enroll_ipcp\n"
-               "                   register_ipcp unregister_ipcp\n"
-               "                   help}\n");
+               "                   register_ipcp unregister_ipcp\n");
 }
 
 static int do_help(int argc, char **argv)
@@ -65,10 +64,11 @@ static int do_cmd(const char * argv0,
 
         for (c = cmds; c->cmd; ++c) {
                 if (matches(argv0, c->cmd) == 0)
-                        return -(c->func(argc-1, argv+1));
+                        return c->func(argc - 1, argv + 1);
         }
 
         fprintf(stderr, "\"%s\" is unknown, try \"irm help\".\n", argv0);
+
         return -1;
 }
 
@@ -80,5 +80,5 @@ int main (int argc, char ** argv) {
                 return 0;
         }
 
-        return do_cmd(argv[1], argc-1, argv+1);
+        return do_cmd(argv[1], argc - 1, argv + 1);
 }

@@ -22,6 +22,7 @@
 
 #include <stdio.h>
 #include <ouroboros/irm.h>
+#include <ouroboros/common.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -41,43 +42,33 @@ static void usage()
 
 int do_create_ipcp(int argc, char ** argv)
 {
-        char * ap_name = NULL;
-        int api_id = 0;
-        char * ae_name = "";
-        int aei_id = 0;
         rina_name_t name;
         char * ipcp_type = NULL;
 
+        name.ap_name = NULL;
+        name.api_id = 0;
+        name.ae_name = "";
+        name.aei_id = 0;
+
         while (argc > 0) {
-                if (matches(*argv, "ap") == 0) {
-                        ap_name = *(argv + 1);
-                } else if (matches(*argv, "api") == 0) {
-                        api_id = atoi(*(argv + 1));
-                } else if (matches(*argv, "ae") == 0) {
-                        ae_name = *(argv + 1);
-                } else if (matches(*argv, "aei") == 0) {
-                        aei_id = atoi(*(argv + 1));
-                } else if (matches(*argv, "type") == 0) {
-                        ipcp_type = *(argv + 1);
-                } else {
-                        printf("\"%s\" is unknown, try \"irm "
-                               "create_ipcp\".\n", *argv);
-                        return -1;
+                if (!parse_name(argv, &name)) {
+                        if (matches(*argv, "type") == 0) {
+                                ipcp_type = *(argv + 1);
+                        } else {
+                                printf("\"%s\" is unknown, try \"irm "
+                                       "create_ipcp\".\n", *argv);
+                                return -1;
+                        }
                 }
 
                 argc -= 2;
-                argv += 2;;
+                argv += 2;
         }
 
-        if (ipcp_type == NULL || ap_name == NULL) {
+        if (ipcp_type == NULL || name.ap_name == NULL) {
                 usage();
                 return -1;
         }
-
-        name.ap_name = ap_name;
-        name.api_id = api_id;
-        name.ae_name = ae_name;
-        name.aei_id = aei_id;
 
         return irm_create_ipcp(name, ipcp_type);
 }

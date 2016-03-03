@@ -21,6 +21,11 @@
  */
 
 #include <string.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <ouroboros/common.h>
+
+#include "irm_utils.h"
 
 int matches(const char * cmd, const char * pattern)
 {
@@ -30,4 +35,24 @@ int matches(const char * cmd, const char * pattern)
                 return -1;
 
         return memcmp(pattern, cmd, len);
+}
+
+
+bool parse_name(char ** argv,
+                rina_name_t * name)
+{
+        bool found = true;
+
+        if (matches(*argv, "ap") == 0)
+                name->ap_name = *(argv + 1);
+        else if (matches(*argv, "api") == 0)
+                name->api_id = atoi(*(argv + 1));
+        else if (matches(*argv, "ae") == 0)
+                name->ae_name = *(argv + 1);
+        else if (matches(*argv, "aei") == 0)
+                name->aei_id = atoi(*(argv + 1));
+        else
+                found = false;
+
+        return found;
 }

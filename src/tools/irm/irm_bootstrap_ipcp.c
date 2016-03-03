@@ -21,12 +21,48 @@
  */
 
 #include <stdio.h>
+#include <ouroboros/irm.h>
+#include <ouroboros/common.h>
 
 #include "irm_ops.h"
+#include "irm_utils.h"
+
+static void usage()
+{
+        /* FIXME: Add dif_info stuff */
+        printf("Usage: irm bootstrap_ipcp\n"
+               "           ap <application process name>\n"
+               "           [api <application process instance>]\n"
+               "           [ae <application entity name]\n"
+               "           [aei <application entity instance>]\n");
+}
+
 
 int do_bootstrap_ipcp(int argc, char ** argv)
 {
-        printf("Nothing here in %s\n", __FUNCTION__);
+        rina_name_t name;
+        struct dif_info info;
 
-        return -1;
+        name.ap_name = NULL;
+        name.api_id = 0;
+        name.ae_name = "";
+        name.aei_id = 0;
+
+        while (argc > 0) {
+                if (!parse_name(argv, &name)) {
+                        printf("\"%s\" is unknown, try \"irm "
+                               "enroll_ipcp\".\n", *argv);
+                        return -1;
+                }
+
+                argc -= 2;
+                argv += 2;
+        }
+
+        if (name.ap_name == NULL) {
+                usage();
+                return -1;
+        }
+
+        return irm_bootstrap_ipcp(name, info);
 }

@@ -21,12 +21,64 @@
  */
 
 #include <stdio.h>
+#include <ouroboros/irm.h>
+#include <ouroboros/common.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 #include "irm_ops.h"
+#include "irm_utils.h"
+
+#define MAX_DIFS 128
+
+static void usage()
+{
+        printf("Usage: irm register_ipcp\n"
+               "           ap <application process name>\n"
+               "           [api <application process instance>]\n"
+               "           [ae <application entity name]\n"
+               "           [aei <application entity instance>]\n"
+               "           dif <dif name to register with>\n"
+               "           [dif <dif name to register with>]\n"
+               "           [... (maximum %d difs)]\n", MAX_DIFS);
+}
+
 
 int do_register_ipcp(int argc, char ** argv)
 {
-        printf("Nothing here in %s\n", __FUNCTION__);
+        rina_name_t name;
+        char * difs[MAX_DIFS];
+        size_t difs_size = 0;
 
-        return -1;
+        name.ap_name = NULL;
+        name.api_id = 0;
+        name.ae_name = "";
+        name.aei_id = 0;
+
+        while (argc > 0) {
+                if (!parse_name(argv, &name)) {
+                        if (matches(*argv, "dif") == 0) {
+                                difs[difs_size++] = *(argv + 1);
+                                if (difs_size > MAX_DIFS) {
+                                        printf("Too many difs specified\n");
+                                        return -1;
+                                }
+                        } else {
+                                printf("\"%s\" is unknown, try \"irm "
+                                       "register_ipcp\".\n", *argv);
+                                return -1;
+                        }
+                }
+
+                argc -= 2;
+                argv += 2;
+        }
+
+        if (difs_size == 0 || name.ap_name == NULL) {
+                usage();
+                return -1;
+        }
+
+        return irm_reg_ipcp(name, difs, difs_size);
 }
