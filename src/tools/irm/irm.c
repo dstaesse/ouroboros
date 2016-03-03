@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * A tool to instruct the IRM
+ * A tool to instruct the IRM daemon
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
