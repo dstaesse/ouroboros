@@ -48,7 +48,7 @@ int client_socket_open(char * file_name)
         if (connect(sockfd,
                     (struct sockaddr *) &serv_addr,
                     sizeof(serv_addr))) {
-                LOG_ERR("Failed to connect to server");
+                LOG_ERR("Failed to connect to daemon");
                 return -1;
         }
 
