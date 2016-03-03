@@ -50,7 +50,7 @@ static void destroy_ipcp(rina_name_t * name)
 }
 
 static void bootstrap_ipcp(rina_name_t * name,
-                           struct dif_info * info)
+                           struct dif_config * conf)
 {
          LOG_MISSING;
 }
@@ -114,7 +114,7 @@ int main()
                                 break;
                         case IRM_BOOTSTRAP_IPCP:
                                 bootstrap_ipcp(msg->name,
-                                               msg->info);
+                                               msg->conf);
                                 break;
                         case IRM_ENROLL_IPCP:
                                 enroll_ipcp(msg->name,

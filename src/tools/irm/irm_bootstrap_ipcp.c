@@ -29,7 +29,7 @@
 
 static void usage()
 {
-        /* FIXME: Add dif_info stuff */
+        /* FIXME: Add dif_config stuff */
         printf("Usage: irm bootstrap_ipcp\n"
                "           ap <application process name>\n"
                "           [api <application process instance>]\n"
@@ -41,7 +41,7 @@ static void usage()
 int do_bootstrap_ipcp(int argc, char ** argv)
 {
         rina_name_t name;
-        struct dif_info info;
+        struct dif_config conf;
 
         name.ap_name = NULL;
         name.api_id = 0;
@@ -64,5 +64,5 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 return -1;
         }
 
-        return irm_bootstrap_ipcp(name, info);
+        return irm_bootstrap_ipcp(name, conf);
 }

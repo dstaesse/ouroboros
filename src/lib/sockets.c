@@ -223,7 +223,7 @@ buffer_t * serialize_irm_msg(struct irm_msg * msg)
         case IRM_DESTROY_IPCP:
                 break;
         case IRM_BOOTSTRAP_IPCP:
-                /* FIXME: Fields missing, need to define dif_info properly */
+                /* FIXME: Fields missing, need to define dif_conf properly */
                 break;
         case IRM_ENROLL_IPCP:
                 if (msg->dif_name == NULL) {

@@ -39,7 +39,7 @@ struct irm_msg {
         enum irm_msg_code code;
         rina_name_t * name;
         char * ipcp_type;
-        struct dif_info * info;
+        struct dif_config * conf;
         char * dif_name;
         char ** difs;
         size_t difs_size;

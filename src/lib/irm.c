@@ -91,13 +91,13 @@ int irm_destroy_ipcp(rina_name_t name)
 }
 
 int irm_bootstrap_ipcp(rina_name_t name,
-                       struct dif_info info)
+                       struct dif_config conf)
 {
         struct irm_msg msg;
 
         msg.code = IRM_BOOTSTRAP_IPCP;
         msg.name = &name;
-        msg.info = &info;
+        msg.conf = &conf;
 
         if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
