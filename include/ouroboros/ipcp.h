@@ -35,7 +35,7 @@ int ipcp_unreg(int instance,
                char ** difs);
 
 int ipcp_bootstrap(int instance,
-                   struct dif_info info);
+                   struct dif_conf conf);
 int ipcp_enroll(int instance,
                 char * dif_name,
                 rina_name_t member);

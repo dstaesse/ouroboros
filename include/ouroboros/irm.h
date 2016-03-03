@@ -30,7 +30,7 @@ int     irm_create_ipcp(rina_name_t name,
 int     irm_destroy_ipcp(rina_name_t name);
 
 int     irm_bootstrap_ipcp(rina_name_t name,
-                           struct dif_info info);
+                           struct dif_config conf);
 int     irm_enroll_ipcp(rina_name_t name,
                         char * dif_name);
 
