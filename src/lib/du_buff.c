@@ -85,6 +85,9 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
         bool            head_block = true;
 
         head = malloc(sizeof *head);
+        if (head == NULL)
+                return NULL;
+
         head->size=0;
         head->data=NULL;
 
@@ -111,6 +114,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
                 buf = malloc(sizeof *buf);
                 if (buf == NULL) {
                         LOG_WARN("Could not allocate struct.");
+                        free(head);
                         return NULL;
                 }
 
@@ -119,6 +123,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
                         if (buf->data == NULL) {
                                 LOG_WARN("Could not allocate memory block.");
                                 buffer_destroy_list(head);
+                                free(head);
                                 return NULL;
                         }
                 } else {
