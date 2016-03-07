@@ -18,4 +18,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
    MACRO_ADD_COMPILE_FLAGS(dad -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS dad RUNTIME DESTINATION ${CMAKE_INSTALL_FULL_BINDIR})
+install(TARGETS dad RUNTIME DESTINATION bin)
+
+# Enable once dad has tests
+# add_subdirectory(tests)

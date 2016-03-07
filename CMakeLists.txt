@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.8.12.2)
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-#set(CMAKE_VERBOSE_MAKEFILE ON)
 
 project(ouroboros C)
 
@@ -41,14 +40,13 @@ configure_file(
   "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
   @ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
-  DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}/pkgconfig")
+  DESTINATION "lib/pkgconfig")
+
+enable_testing()
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 add_subdirectory(include)
 add_subdirectory(src)
-add_subdirectory(tests)
-
-#include(FeatureSummary)
-#print_enabled_features()
 
 # Uninstall target
 configure_file(
@@ -60,11 +58,15 @@ add_custom_target(uninstall
   COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/cmake/cmake_uninstall.cmake)
 
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PACKAGE_DESCRIPTION}")
-set(CPACK_PACKAGE_VENDOR              "Unknown")
 set(CPACK_PACKAGE_DESCRIPTION_FILE    "${CMAKE_CURRENT_SOURCE_DIR}/README")
 set(CPACK_RESOURCE_FILE_LICENSE       "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_VERSION_MAJOR       "${PACKAGE_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR       "${PACKAGE_VERSION_MINOR}")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY   "CMake ${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}")
+set(CPACK_GENERATOR                   "TGZ")
+set(CPACK_SOURCE_GENERATOR            "TGZ")
 
 include(CPack)
+
+#include(FeatureSummary)
+#print_enabled_features()

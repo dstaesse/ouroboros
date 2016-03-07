@@ -32,4 +32,4 @@ cd $DEBUGDIR
 
 cmake -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Debug ../..
 
-make
+make && make check

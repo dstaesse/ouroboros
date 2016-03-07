@@ -19,4 +19,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
    MACRO_ADD_COMPILE_FLAGS(ipcpd -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS ipcpd RUNTIME DESTINATION ${CMAKE_INSTALL_FULL_BINDIR})
+install(TARGETS ipcpd RUNTIME DESTINATION bin)
+
+# Enable once ipcpd has tests
+# add_subdirectory(tests)

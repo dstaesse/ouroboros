@@ -1,6 +1,16 @@
-file(GLOB_RECURSE HEADER_FILES *.h)
+set(HEADER_FILES
+        bitmap.h
+        cdap.h
+        common.h
+        da.h
+        dev.h
+        du_buff.h
+        ipcp.h
+        irm.h
+        list.h
+        logs.h
+        sockets.h
+)
 
 install(FILES ${HEADER_FILES}
-  DESTINATION ${CMAKE_INSTALL_FULL_INCLUDEDIR}/ouroboros)
-
-add_custom_target(qtcreator-workaround SOURCES ${HEADER_FILES})
+  DESTINATION include/ouroboros)
