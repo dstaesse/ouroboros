@@ -15,4 +15,11 @@ set(SOURCE_FILES
 
 add_library(ouroboros SHARED ${SOURCE_FILES})
 
-install(TARGETS ouroboros LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
+include(MacroAddCompileFlags)
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+   MACRO_ADD_COMPILE_FLAGS(ouroboros -DCONFIG_OUROBOROS_DEBUG)
+endif (CMAKE_BUILD_TYPE MATCHES Debug)
+
+install(TARGETS ouroboros LIBRARY DESTINATION lib)
+
+add_subdirectory(tests)
