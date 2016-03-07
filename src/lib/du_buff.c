@@ -29,7 +29,7 @@
 #define OUROBOROS_PREFIX "du_buff"
 
 #ifndef DU_BUFF_BLOCKSIZE
-#define DU_BUFF_BLOCKSIZE sysconf(_SC_PAGESIZE)
+#define DU_BUFF_BLOCKSIZE 1 << 16
 #endif
 
 #include "ouroboros/logs.h"
@@ -57,7 +57,6 @@ void buffer_destroy(struct buffer * buf)
         free (buf->data);
         free (buf);
 }
-
 
 void buffer_destroy_list(struct buffer * head)
 {
@@ -88,8 +87,8 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
         if (head == NULL)
                 return NULL;
 
-        head->size=0;
-        head->data=NULL;
+        head->size = 0;
+        head->data = NULL;
 
         INIT_LIST_HEAD(&(head->list));
 
@@ -100,7 +99,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
 
                 if (size > DU_BUFF_BLOCKSIZE && head_block) {
                         sz = headspace;
-                        head_block=false;
+                        head_block = false;
                 } else if (size > DU_BUFF_BLOCKSIZE
                            && remaining - ts <= DU_BUFF_BLOCKSIZE
                            && remaining != ts) {
@@ -277,7 +276,7 @@ void du_buff_destroy(du_buff_t * dub)
 
 int du_buff_init(du_buff_t * dub,
                  size_t      start,
-                 uint8_t *   data,
+                 uint8_t   * data,
                  size_t      len)
 {
         if (dub == NULL || data == NULL) {
@@ -313,7 +312,7 @@ uint8_t * du_buff_head_alloc(du_buff_t * dub, size_t size)
         }
 
         if (dub->du_head - size < 0) {
-                LOG_WARN("Failed to allocate PCI headspace");
+                LOG_WARN("Failed to allocate PCI headspace.");
                 return NULL;
         }
 
@@ -330,7 +329,7 @@ uint8_t * du_buff_tail_alloc(du_buff_t * dub, size_t size)
         }
 
         if (dub->du_tail + size >= dub->size) {
-                LOG_WARN("Failed to allocate PCI tailspace");
+                LOG_WARN("Failed to allocate PCI tailspace.");
                 return NULL;
         }
 
@@ -347,7 +346,7 @@ int du_buff_head_release(du_buff_t * dub, size_t size)
         }
 
         if (size > dub->du_tail - dub->du_head) {
-                LOG_WARN("Tried to release beyond sdu boundary");
+                LOG_WARN("Tried to release beyond sdu boundary.");
                 return -EOVERFLOW;
         }
 
@@ -366,7 +365,7 @@ int du_buff_tail_release(du_buff_t * dub, size_t size)
         }
 
         if (size > dub->du_tail - dub->du_head) {
-                LOG_WARN("Tried to release beyond sdu boundary");
+                LOG_WARN("Tried to release beyond sdu boundary.");
                 return -EOVERFLOW;
         }
 
