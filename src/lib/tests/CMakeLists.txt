@@ -3,7 +3,7 @@ get_filename_component(src_folder "${tmp}" NAME)
 
 create_test_sourcelist(${src_folder}_tests test_suite.c
                        # Add new tests here
-                       linked_list.c
+                       du_buff_test.c
 )
 
 add_executable(${src_folder}_test EXCLUDE_FROM_ALL ${${src_folder}_tests})
