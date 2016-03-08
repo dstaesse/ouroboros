@@ -20,12 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "../du_buff.c"
+#include "du_buff.c"
 
 #define TEST_BUFF_SIZE 16 * DU_BUFF_BLOCKSIZE
 #define MAX(a,b) a > b ? a : b
 
-int du_buff(int argc, char ** argv)
+int du_buff_test(int argc, char ** argv)
 {
         int i, j, k;
         int i_inc, j_inc, k_inc;
