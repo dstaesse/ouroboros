@@ -29,7 +29,7 @@
 #define OUROBOROS_PREFIX "du_buff"
 
 #ifndef DU_BUFF_BLOCKSIZE
-#define DU_BUFF_BLOCKSIZE 1 << 16
+#define DU_BUFF_BLOCKSIZE (1 << 16)
 #endif
 
 #include "ouroboros/logs.h"
