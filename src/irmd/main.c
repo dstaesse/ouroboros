@@ -26,53 +26,79 @@
 #include <ouroboros/common.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/irm.h>
+#include <ouroboros/ipcp.h>
+#include <ouroboros/da.h>
+
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <stdlib.h>
 #include <errno.h>
 
-static void create_ipcp(rina_name_t * name,
+struct irm {
+
+};
+
+static void create_ipcp(rina_name_t name,
                         char * ipcp_type)
 {
-        LOG_DBG("AP name is %s", name->ap_name);
-        LOG_DBG("AP instance id is %d", name->api_id);
-        LOG_DBG("AE name is %s", name->ae_name);
-        LOG_DBG("AE instance id is %d", name->aei_id);
+        struct ipcp * instance = NULL;
 
-        LOG_DBG("IPCP type is %s", ipcp_type);
-
-        LOG_MISSING;
+        instance = ipcp_create(name, ipcp_type);
+        if (instance == NULL)
+                LOG_ERR("Failed to create IPCP");
 }
 
-static void destroy_ipcp(rina_name_t * name)
+static void destroy_ipcp(rina_name_t name)
 {
-         LOG_MISSING;
+        struct ipcp * instance = NULL;
+
+        if (ipcp_destroy(instance))
+                LOG_ERR("Could not destroy IPCP");
 }
 
-static void bootstrap_ipcp(rina_name_t * name,
-                           struct dif_config * conf)
+static void bootstrap_ipcp(rina_name_t name,
+                           struct dif_config conf)
 {
-         LOG_MISSING;
+        struct ipcp * instance = NULL;
+
+        if (ipcp_bootstrap(instance, conf))
+                LOG_ERR("Could not bootstrap IPCP");
 }
 
-static void enroll_ipcp(rina_name_t * name,
+static void enroll_ipcp(rina_name_t name,
                         char * dif_name)
 {
-        LOG_MISSING;
+        struct ipcp * instance = NULL;
+        rina_name_t * member;
+
+        member = da_resolve_daf(dif_name);
+        if (member == NULL) {
+                LOG_ERR("Could not find a member of that DIF");
+                return;
+        }
+
+        if (ipcp_enroll(instance, dif_name, *member))
+                LOG_ERR("Could not enroll IPCP");
 }
 
-static void reg_ipcp(rina_name_t * name,
+static void reg_ipcp(rina_name_t name,
                      char ** difs,
                      size_t difs_size)
 {
-        LOG_MISSING;
+        struct ipcp * instance = NULL;
+
+        if (ipcp_reg(instance, difs, difs_size))
+                LOG_ERR("Could not register IPCP to N-1 DIF(s)");
 }
 
-static void unreg_ipcp(rina_name_t * name,
+static void unreg_ipcp(rina_name_t name,
                        char ** difs,
                        size_t difs_size)
 {
-        LOG_MISSING;
+        struct ipcp * instance = NULL;
+
+        if (ipcp_unreg(instance, difs, difs_size))
+                LOG_ERR("Could not unregister IPCP from N-1 DIF(s)");
 }
 
 int main()
@@ -104,29 +130,28 @@ int main()
                         if (msg == NULL)
                                 continue;
 
-                        LOG_DBG("Got message code %d", msg->code);
                         switch (msg->code) {
                         case IRM_CREATE_IPCP:
-                                create_ipcp(msg->name, msg->ipcp_type);
+                                create_ipcp(*(msg->name), msg->ipcp_type);
                                 break;
                         case IRM_DESTROY_IPCP:
-                                destroy_ipcp(msg->name);
+                                destroy_ipcp(*(msg->name));
                                 break;
                         case IRM_BOOTSTRAP_IPCP:
-                                bootstrap_ipcp(msg->name,
-                                               msg->conf);
+                                bootstrap_ipcp(*(msg->name),
+                                               *(msg->conf));
                                 break;
                         case IRM_ENROLL_IPCP:
-                                enroll_ipcp(msg->name,
+                                enroll_ipcp(*(msg->name),
                                             msg->dif_name);
                                 break;
                         case IRM_REG_IPCP:
-                                reg_ipcp(msg->name,
+                                reg_ipcp(*(msg->name),
                                          msg->difs,
                                          msg->difs_size);
                                 break;
                         case IRM_UNREG_IPCP:
-                                unreg_ipcp(msg->name,
+                                unreg_ipcp(*(msg->name),
                                            msg->difs,
                                            msg->difs_size);
                                 break;

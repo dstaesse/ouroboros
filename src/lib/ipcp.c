@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * The API to consult the DIF Allocator
+ * The API to instruct IPCPs
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,12 +20,44 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_DA_H
-#define OUROBOROS_DA_H
+#include <ouroboros/ipcp.h>
 
-#include "common.h"
+struct ipcp {};
 
-rina_name_t * da_resolve_daf(char * daf_name);
-char **       da_resolve_dap(rina_name_t * name);
+struct ipcp * ipcp_create(rina_name_t name,
+                          char * ipcp_type)
+{
+        return NULL;
+}
 
-#endif
+int ipcp_destroy(struct ipcp * instance)
+{
+        return -1;
+}
+
+int ipcp_reg(struct ipcp * instance,
+             char ** difs,
+             size_t difs_size)
+{
+        return -1;
+}
+
+int ipcp_unreg(struct ipcp * instance,
+               char ** difs,
+               size_t difs_size)
+{
+        return -1;
+}
+
+int ipcp_bootstrap(struct ipcp * instance,
+                   struct dif_config conf)
+{
+        return -1;
+}
+
+int ipcp_enroll(struct ipcp * instance,
+                char * dif_name,
+                rina_name_t member)
+{
+        return -1;
+}

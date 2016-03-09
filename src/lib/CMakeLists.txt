@@ -8,7 +8,9 @@ set(SOURCE_FILES
         # Add source files here
         bitmap.c
         cdap.c
+        da.c
         du_buff.c
+        ipcp.c
         irm.c
         sockets.c
 )

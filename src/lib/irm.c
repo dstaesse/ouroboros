@@ -40,7 +40,7 @@ static int send_irm_msg(struct irm_msg * msg)
        buf = serialize_irm_msg(msg);
        if (buf == NULL) {
                close(sockfd);
-                return -1;
+               return -1;
        }
 
        if (write(sockfd, buf->data, buf->size) == -1) {

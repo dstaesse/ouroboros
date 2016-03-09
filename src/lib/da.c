@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * The API to consult the DIF Allocator
+ * The API to instruct the DIF Allocator
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,12 +20,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_DA_H
-#define OUROBOROS_DA_H
+#include <ouroboros/da.h>
 
-#include "common.h"
+rina_name_t * da_resolve_daf(char * daf_name)
+{
+        return NULL;
+}
 
-rina_name_t * da_resolve_daf(char * daf_name);
-char **       da_resolve_dap(rina_name_t * name);
-
-#endif
+char ** da_resolve_dap(rina_name_t * name)
+{
+        return NULL;
+}

@@ -25,18 +25,22 @@
 
 #include "common.h"
 
-int ipcp_create(rina_name_t name,
-                char * ipcp_type);
-int ipcp_destroy(int instance);
+struct ipcp;
 
-int ipcp_reg(int instance,
-             char ** difs);
-int ipcp_unreg(int instance,
-               char ** difs);
+struct ipcp * ipcp_create(rina_name_t name,
+                          char * ipcp_type);
+int ipcp_destroy(struct ipcp * instance);
 
-int ipcp_bootstrap(int instance,
-                   struct dif_conf conf);
-int ipcp_enroll(int instance,
+int ipcp_reg(struct ipcp * instance,
+             char ** difs,
+             size_t difs_size);
+int ipcp_unreg(struct ipcp * instance,
+               char ** difs,
+               size_t difs_size);
+
+int ipcp_bootstrap(struct ipcp * instance,
+                   struct dif_config conf);
+int ipcp_enroll(struct ipcp * instance,
                 char * dif_name,
                 rina_name_t member);
 
