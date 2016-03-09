@@ -21,7 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define OUROBOROS_PREFIX "bitmap"
+
 #include <ouroboros/bitmap.h>
+#include <ouroboros/logs.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,8 +39,6 @@
 
 #define BITS_TO_LONGS(nr) \
         DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
-
-#define BITS_IN_BITMAP ((2 << BITS_PER_BYTE) * sizeof(size_t))
 
 static unsigned long find_next_zero_bit(const unsigned long * addr,
                                         unsigned long nbits)
@@ -59,7 +60,7 @@ static unsigned long find_next_zero_bit(const unsigned long * addr,
 
         /* Find the free bit in the word */
         mask = 1UL;
-        while (!(tmp ^ mask)) {
+        while (!(tmp & mask)) {
                 pos++;
                 mask = 1UL << pos;
         }
@@ -78,31 +79,30 @@ static void bitmap_clear(unsigned long * map,
                          unsigned int start)
 {
         unsigned long * p = map + BIT_WORD(start);
-        unsigned long mask = ~(1UL << (start % (BITS_PER_LONG - 1)));
+        unsigned long mask = ~(1UL << (start % (BITS_PER_LONG)));
 
         *p &= mask;
 }
-
 
 static void bitmap_set(unsigned long * map,
                        unsigned int start)
 {
         unsigned long * p = map + BIT_WORD(start);
-        unsigned long mask = 1UL << (start % (BITS_PER_LONG - 1));
+        unsigned long mask = 1UL << (start % (BITS_PER_LONG));
 
         *p |= mask;
 }
 
-struct rbmp {
+struct bmp {
         ssize_t offset;
         size_t  size;
 
-        unsigned long bitmap[BITS_TO_LONGS(BITS_IN_BITMAP)];
+        unsigned long * bitmap;
 };
 
-struct rbmp * rbmp_create(size_t bits, ssize_t offset)
+struct bmp * bmp_create(size_t bits, ssize_t offset)
 {
-        struct rbmp * tmp;
+        struct bmp * tmp;
 
         if (bits == 0)
                 return NULL;
@@ -111,32 +111,41 @@ struct rbmp * rbmp_create(size_t bits, ssize_t offset)
         if (!tmp)
                 return NULL;
 
+        tmp->bitmap = malloc(BITS_TO_LONGS(bits) * sizeof(*(tmp->bitmap)));
+        if (!tmp->bitmap)
+                return NULL;
+
         tmp->size = bits;
         tmp->offset = offset;
-        bitmap_zero(tmp->bitmap, BITS_IN_BITMAP);
+        bitmap_zero(tmp->bitmap, bits);
 
         return tmp;
 }
 
-
-int rbmp_destroy(struct rbmp * b)
+int bmp_destroy(struct bmp * b)
 {
-        if (!b)
+        if (b == NULL)
                 return -1;
 
+        if (b->bitmap == NULL) {
+                free(b);
+                return -1;
+        }
+
+        free(b->bitmap);
         free(b);
 
         return 0;
 }
 
-static ssize_t bad_id(struct rbmp * b)
+static ssize_t bad_id(struct bmp * b)
 {
         assert(b);
 
         return b->offset - 1;
 }
 
-ssize_t rbmp_allocate(struct rbmp * b)
+ssize_t bmp_allocate(struct bmp * b)
 {
         ssize_t id;
 
@@ -144,9 +153,9 @@ ssize_t rbmp_allocate(struct rbmp * b)
                 return bad_id(b);
 
         id = (ssize_t) find_next_zero_bit(b->bitmap,
-                                          BITS_IN_BITMAP);
+                                          b->size);
 
-        if (id == BITS_IN_BITMAP)
+        if (id >= b->size)
                 return bad_id(b);
 
         bitmap_set(b->bitmap, id);
@@ -154,8 +163,8 @@ ssize_t rbmp_allocate(struct rbmp * b)
         return id + b->offset;
 }
 
-static bool is_id_ok(struct rbmp * b,
-                     ssize_t id)
+static bool is_id_valid(struct bmp * b,
+                        ssize_t id)
 {
         assert(b);
 
@@ -165,24 +174,24 @@ static bool is_id_ok(struct rbmp * b,
         return true;
 }
 
-bool rbmp_is_id_ok(struct rbmp * b,
-                   ssize_t id)
+bool bmp_is_id_valid(struct bmp * b,
+                     ssize_t id)
 {
         if (!b)
                 return false;
 
-        return is_id_ok(b, id);
+        return is_id_valid(b, id);
 }
 
-int rbmp_release(struct rbmp * b,
-                 ssize_t       id)
+int bmp_release(struct bmp * b,
+                ssize_t id)
 {
         ssize_t rid;
 
         if (!b)
                 return -1;
 
-        if (!is_id_ok(b, id))
+        if (!is_id_valid(b, id))
                 return -1;
 
         rid = id - b->offset;
