@@ -3,6 +3,7 @@ get_filename_component(src_folder "${tmp}" NAME)
 
 create_test_sourcelist(${src_folder}_tests test_suite.c
                        # Add new tests here
+                       bitmap_test.c
                        du_buff_test.c
 )
 
