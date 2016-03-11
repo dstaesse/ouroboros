@@ -70,7 +70,6 @@ static void create_ipcp(struct irm * instance,
 {
         int pid;
         struct name_to_pid_entry * tmp;
-        rina_name_t * ipcp_name = NULL;
 
         pid = ipcp_create(name, ipcp_type);
         if (pid == 0) {
@@ -85,7 +84,7 @@ static void create_ipcp(struct irm * instance,
         INIT_LIST_HEAD(&tmp->next);
 
         tmp->pid = pid;
-        tmp->name = name_dup(ipcp_name);
+        tmp->name = name_dup(&name);
         if (tmp->name == NULL) {
                 free(tmp);
                 return;
