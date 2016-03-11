@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * RINA bitmap implementation - wraps around bitmap from Linux kernel
+ * Bitmap implementation
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *    Francesco Salvestrini <f.salvestrini@nextworks.it>
@@ -28,14 +28,14 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-struct rbmp;
+struct bmp;
 
-struct rbmp * rbmp_create(size_t bits, ssize_t offset);
-int           rbmp_destroy(struct rbmp * b);
+struct bmp * bmp_create(size_t bits, ssize_t offset);
+int          bmp_destroy(struct bmp * b);
 
-ssize_t       rbmp_allocate(struct rbmp * instance);
-int           rbmp_release(struct rbmp * instance,
-                           ssize_t       id);
-bool          rbmp_is_id_ok(struct rbmp * b, ssize_t id);
+ssize_t      bmp_allocate(struct bmp * instance);
+int          bmp_release(struct bmp * instance,
+                         ssize_t      id);
+bool         bmp_is_id_valid(struct bmp * b, ssize_t id);
 
 #endif
