@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * The API to consult the DIF Allocator
+ * The API to instruct IPCPs
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,18 +20,45 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_DA_H
-#define OUROBOROS_DA_H
+#include <ouroboros/ipcp.h>
 
-#include "common.h"
-#include "rina_name.h"
+int ipcp_create(rina_name_t name,
+                char * ipcp_type)
+{
+        /* zero means failure */
+        return 0;
+}
 
-rina_name_t * da_resolve_daf(char * daf_name);
-/*
- * n_1_difs is an out parameter
- * The amount of n_1_difs is returned
- */
-ssize_t       da_resolve_dap(rina_name_t * name,
-                             char ** n_1_difs);
+int ipcp_destroy(int pid)
+{
+        return -1;
+}
 
-#endif
+int ipcp_reg(int pid,
+             char ** difs,
+             size_t difs_size)
+{
+        return -1;
+}
+
+int ipcp_unreg(int pid,
+               char ** difs,
+               size_t difs_size)
+{
+        return -1;
+}
+
+int ipcp_bootstrap(int pid,
+                   struct dif_config conf)
+{
+        return -1;
+}
+
+int ipcp_enroll(int pid,
+                char * dif_name,
+                rina_name_t member,
+                char ** n_1_difs,
+                ssize_t n_1_difs_size)
+{
+        return -1;
+}

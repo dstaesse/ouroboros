@@ -24,20 +24,28 @@
 #define OUROBOROS_IPCP_H
 
 #include "common.h"
+#include "rina_name.h"
 
+struct ipcp;
+
+/* Returns the process id */
 int ipcp_create(rina_name_t name,
                 char * ipcp_type);
-int ipcp_destroy(int instance);
+int ipcp_destroy(int pid);
 
-int ipcp_reg(int instance,
-             char ** difs);
-int ipcp_unreg(int instance,
-               char ** difs);
+int ipcp_reg(int pid,
+             char ** difs,
+             size_t difs_size);
+int ipcp_unreg(int pid,
+               char ** difs,
+               size_t difs_size);
 
-int ipcp_bootstrap(int instance,
-                   struct dif_conf conf);
-int ipcp_enroll(int instance,
+int ipcp_bootstrap(int pid,
+                   struct dif_config conf);
+int ipcp_enroll(int pid,
                 char * dif_name,
-                rina_name_t member);
+                rina_name_t member,
+                char ** n_1_difs,
+                ssize_t n_1_difs_size);
 
 #endif

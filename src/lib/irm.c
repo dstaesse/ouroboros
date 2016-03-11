@@ -40,7 +40,7 @@ static int send_irm_msg(struct irm_msg * msg)
        buf = serialize_irm_msg(msg);
        if (buf == NULL) {
                close(sockfd);
-                return -1;
+               return -1;
        }
 
        if (write(sockfd, buf->data, buf->size) == -1) {
@@ -63,6 +63,11 @@ int irm_create_ipcp(rina_name_t name,
         if (ipcp_type == NULL)
                 return -1;
 
+        if (!name_is_ok(&name)) {
+                LOG_ERR("Bad name");
+                return -1;
+        }
+
         msg.code = IRM_CREATE_IPCP;
         msg.name = &name;
         msg.ipcp_type = ipcp_type;
@@ -78,6 +83,11 @@ int irm_create_ipcp(rina_name_t name,
 int irm_destroy_ipcp(rina_name_t name)
 {
         struct irm_msg msg;
+
+        if (!name_is_ok(&name)) {
+                LOG_ERR("Bad name");
+                return -1;
+        }
 
         msg.code = IRM_DESTROY_IPCP;
         msg.name = &name;
@@ -95,6 +105,11 @@ int irm_bootstrap_ipcp(rina_name_t name,
 {
         struct irm_msg msg;
 
+        if (!name_is_ok(&name)) {
+                LOG_ERR("Bad name");
+                return -1;
+        }
+
         msg.code = IRM_BOOTSTRAP_IPCP;
         msg.name = &name;
         msg.conf = &conf;
@@ -111,6 +126,11 @@ int irm_enroll_ipcp(rina_name_t name,
                     char * dif_name)
 {
         struct irm_msg msg;
+
+        if (!name_is_ok(&name)) {
+                LOG_ERR("Bad name");
+                return -1;
+        }
 
         msg.code = IRM_ENROLL_IPCP;
         msg.name = &name;
@@ -130,6 +150,11 @@ int irm_reg_ipcp(rina_name_t name,
 {
         struct irm_msg msg;
 
+        if (!name_is_ok(&name)) {
+                LOG_ERR("Bad name");
+                return -1;
+        }
+
         msg.code = IRM_REG_IPCP;
         msg.name = &name;
         msg.difs = difs;
@@ -148,6 +173,11 @@ int irm_unreg_ipcp(rina_name_t name,
                    size_t difs_size)
 {
         struct irm_msg msg;
+
+        if (!name_is_ok(&name)) {
+                LOG_ERR("Bad name");
+                return -1;
+        }
 
         msg.code = IRM_UNREG_IPCP;
         msg.name = &name;

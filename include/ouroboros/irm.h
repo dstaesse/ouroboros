@@ -24,6 +24,7 @@
 #define OUROBOROS_IRM_H
 
 #include "common.h"
+#include "rina_name.h"
 
 int     irm_create_ipcp(rina_name_t name,
                         char * ipcp_type);

@@ -23,6 +23,9 @@
 #ifndef OUROBOROS_SOCKETS_H
 #define OUROBOROS_SOCKETS_H
 
+#include "common.h"
+#include "rina_name.h"
+
 #define IRM_SOCK_PATH "/tmp/irm_sock"
 #define IRM_MSG_BUF_SIZE 256
 

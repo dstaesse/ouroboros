@@ -137,7 +137,7 @@ static int deser_copy_string(uint8_t * data,
 }
 
 static void deser_copy_int(uint8_t * data,
-                           int * dst,
+                           unsigned int * dst,
                            int * offset)
 {
         *dst = 0;
@@ -185,9 +185,7 @@ buffer_t * serialize_irm_msg(struct irm_msg * msg)
 
         ser_copy_value(sizeof(enum irm_msg_code), data, &msg->code, &offset);
 
-        if (msg->name == NULL ||
-            msg->name->ap_name == NULL ||
-            msg->name->ae_name == NULL ) {
+        if (!name_is_ok(msg->name)) {
                 LOG_ERR("Null pointer passed");
                 free(buf->data);
                 free(buf);
@@ -285,7 +283,7 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
 
         deser_copy_enum(data->data, &msg->code, &offset);
 
-        msg->name = malloc(sizeof(*(msg->name)));
+        msg->name = name_create();
         if (msg->name == NULL) {
                 LOG_ERR("Failed to alloc memory");
                 free(msg);
@@ -295,7 +293,7 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
         if (deser_copy_string(data->data,
                               &msg->name->ap_name,
                               &offset)) {
-                free(msg->name);
+                name_destroy(msg->name);
                 free(msg);
                 return NULL;
         }
@@ -305,8 +303,7 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
         if (deser_copy_string(data->data,
                               &msg->name->ae_name,
                               &offset)) {
-                free(msg->name->ap_name);
-                free(msg->name);
+                name_destroy(msg->name);
                 free(msg);
                 return NULL;
         }
@@ -318,11 +315,9 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
                    if (deser_copy_string(data->data,
                                          &msg->ipcp_type,
                                          &offset)) {
-                        free(msg->name->ae_name);
-                        free(msg->name->ap_name);
-                        free(msg->name);
-                        free(msg);
-                        return NULL;
+                           name_destroy(msg->name);
+                           free(msg);
+                           return NULL;
                 }
 
                 break;
@@ -334,9 +329,7 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
                 if (deser_copy_string(data->data,
                                       &msg->dif_name,
                                       &offset)) {
-                        free(msg->name->ae_name);
-                        free(msg->name->ap_name);
-                        free(msg->name);
+                        name_destroy(msg->name);
                         free(msg);
                         return NULL;
                 }
@@ -348,9 +341,7 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
 
                 msg->difs = malloc(sizeof(*(msg->difs)) * difs_size);
                 if (msg->difs == NULL) {
-                        free(msg->name->ae_name);
-                        free(msg->name->ap_name);
-                        free(msg->name);
+                        name_destroy(msg->name);
                         free(msg);
                         return NULL;
                 }
@@ -362,9 +353,7 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
                                 for (j = 0; j < i; j++)
                                         free(msg->difs[j]);
                                 free(msg->difs);
-                                free(msg->name->ae_name);
-                                free(msg->name->ap_name);
-                                free(msg->name);
+                                name_destroy(msg->name);
                                 free(msg);
                                 return NULL;
                         }

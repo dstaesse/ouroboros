@@ -21,6 +21,7 @@
  */
 
 #include <ouroboros/common.h>
+#include <ouroboros/rina_name.h>
 #include <ouroboros/irm.h>
 #include <stdio.h>
 #include <string.h>

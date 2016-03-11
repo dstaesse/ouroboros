@@ -9,6 +9,7 @@ set(HEADER_FILES
         irm.h
         list.h
         logs.h
+        rina_name.h
         sockets.h
 )
 
