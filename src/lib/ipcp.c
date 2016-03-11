@@ -22,42 +22,43 @@
 
 #include <ouroboros/ipcp.h>
 
-struct ipcp {};
-
-struct ipcp * ipcp_create(rina_name_t name,
-                          char * ipcp_type)
+int ipcp_create(rina_name_t name,
+                char * ipcp_type)
 {
-        return NULL;
+        /* zero means failure */
+        return 0;
 }
 
-int ipcp_destroy(struct ipcp * instance)
+int ipcp_destroy(int pid)
 {
         return -1;
 }
 
-int ipcp_reg(struct ipcp * instance,
+int ipcp_reg(int pid,
              char ** difs,
              size_t difs_size)
 {
         return -1;
 }
 
-int ipcp_unreg(struct ipcp * instance,
+int ipcp_unreg(int pid,
                char ** difs,
                size_t difs_size)
 {
         return -1;
 }
 
-int ipcp_bootstrap(struct ipcp * instance,
+int ipcp_bootstrap(int pid,
                    struct dif_config conf)
 {
         return -1;
 }
 
-int ipcp_enroll(struct ipcp * instance,
+int ipcp_enroll(int pid,
                 char * dif_name,
-                rina_name_t member)
+                rina_name_t member,
+                char ** n_1_difs,
+                ssize_t n_1_difs_size)
 {
         return -1;
 }

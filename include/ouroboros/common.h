@@ -35,13 +35,6 @@ typedef struct {
         size_t    size;
 } buffer_t;
 
-typedef struct {
-        char * ap_name;
-        int    api_id;
-        char * ae_name;
-        int    aei_id;
-} rina_name_t;
-
 /* FIXME: may need revision */
 struct qos_spec {
         char * qos_name;

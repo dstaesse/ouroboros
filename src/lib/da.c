@@ -27,7 +27,8 @@ rina_name_t * da_resolve_daf(char * daf_name)
         return NULL;
 }
 
-char ** da_resolve_dap(rina_name_t * name)
+ssize_t       da_resolve_dap(rina_name_t * name,
+                             char ** n_1_difs)
 {
-        return NULL;
+        return 0;
 }
