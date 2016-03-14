@@ -43,6 +43,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         rina_name_t name;
         struct dif_config conf;
 
+        conf.qosspecs = NULL;
+
         name.ap_name = NULL;
         name.api_id = 0;
         name.ae_name = "";
