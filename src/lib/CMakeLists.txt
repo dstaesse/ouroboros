@@ -12,6 +12,7 @@ set(SOURCE_FILES
         du_buff.c
         ipcp.c
         irm.c
+        list.c
         rina_name.c
         sockets.c
 )
