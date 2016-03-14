@@ -311,7 +311,7 @@ uint8_t * du_buff_head_alloc(du_buff_t * dub, size_t size)
                 return NULL;
         }
 
-        if (dub->du_head - size < 0) {
+        if ((long) (dub->du_head - size) < 0) {
                 LOG_WARN("Failed to allocate PCI headspace.");
                 return NULL;
         }
