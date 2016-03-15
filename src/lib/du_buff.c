@@ -81,7 +81,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
         size_t          ts = size - (headspace + len);
 
         if (headspace > DU_BLOCK_DATA_SIZE || ts > DU_BLOCK_DATA_SIZE) {
-                LOG_WARN("Illegal du_buff. Cannot fit PCI in DU_BUFF_BLOCK.");
+                LOG_ERR("Illegal du_buff: Cannot fit PCI in DU_BUFF_BLOCK.");
                 return NULL;
         }
 
