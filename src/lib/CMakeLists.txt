@@ -15,6 +15,7 @@ set(SOURCE_FILES
         list.c
         rina_name.c
         sockets.c
+        utils.c
 )
 
 add_library(ouroboros SHARED ${SOURCE_FILES})
