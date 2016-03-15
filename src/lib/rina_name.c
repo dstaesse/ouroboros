@@ -24,6 +24,7 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/common.h>
 #include <ouroboros/rina_name.h>
+#include <ouroboros/utils.h>
 
 #include <string.h>
 #include <math.h>
@@ -219,18 +220,6 @@ bool name_cmp(uint8_t             flags,
 bool name_is_equal(const rina_name_t * a,
                    const rina_name_t * b)
 { return name_cmp(NAME_CMP_ALL, a, b); }
-
-static int n_digits(unsigned i)
-{
-    int n = 1;
-
-    while (i > 9) {
-        n++;
-        i /= 10;
-    }
-
-    return n;
-}
 
 #define DELIMITER "/"
 

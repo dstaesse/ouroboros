@@ -38,7 +38,7 @@
 
 struct name_to_pid_entry {
         struct list_head next;
-        int pid;
+        pid_t pid;
         rina_name_t * name;
 };
 
@@ -46,8 +46,8 @@ struct irm {
         struct list_head name_to_pid;
 };
 
-static int find_pid_by_name(struct irm * instance,
-                            rina_name_t * name)
+static pid_t find_pid_by_name(struct irm * instance,
+                              rina_name_t * name)
 {
         struct list_head * pos;
 
@@ -68,11 +68,11 @@ static void create_ipcp(struct irm * instance,
                         rina_name_t name,
                         char * ipcp_type)
 {
-        int pid;
+        pid_t pid;
         struct name_to_pid_entry * tmp;
 
         pid = ipcp_create(name, ipcp_type);
-        if (pid == 0) {
+        if (pid == -1) {
                 LOG_ERR("Failed to create IPCP");
                 return;
         }
@@ -90,14 +90,17 @@ static void create_ipcp(struct irm * instance,
                 return;
         }
 
+        LOG_DBG("Created IPC process with pid %d", pid);
+
         list_add(&tmp->next, &instance->name_to_pid);
 }
 
 static void destroy_ipcp(struct irm * instance,
                          rina_name_t name)
 {
-        int pid = 0;
+        pid_t pid = 0;
         struct list_head * pos;
+        struct list_head * n;
 
         pid = find_pid_by_name(instance, &name);
         if (pid == 0) {
@@ -105,10 +108,12 @@ static void destroy_ipcp(struct irm * instance,
                 return;
         }
 
+        LOG_DBG("Destroying ipcp with pid %d", pid);
+
         if (ipcp_destroy(pid))
                 LOG_ERR("Could not destroy IPCP");
 
-        list_for_each(pos, &instance->name_to_pid) {
+        list_for_each_safe(pos, n, &(instance->name_to_pid)) {
                 struct name_to_pid_entry * tmp =
                         list_entry(pos, struct name_to_pid_entry, next);
 
@@ -121,7 +126,7 @@ static void bootstrap_ipcp(struct irm * instance,
                            rina_name_t name,
                            struct dif_config conf)
 {
-        int pid = 0;
+        pid_t pid = 0;
 
         pid = find_pid_by_name(instance, &name);
         if (pid == 0) {
@@ -137,7 +142,7 @@ static void enroll_ipcp(struct irm * instance,
                         rina_name_t name,
                         char * dif_name)
 {
-        int pid = 0;
+        pid_t pid = 0;
         rina_name_t * member;
         char ** n_1_difs = NULL;
         ssize_t n_1_difs_size = 0;
@@ -166,7 +171,7 @@ static void reg_ipcp(struct irm * instance,
                      char ** difs,
                      size_t difs_size)
 {
-        int pid = 0;
+        pid_t pid = 0;
 
         pid = find_pid_by_name(instance, &name);
         if (pid == 0) {
@@ -183,7 +188,7 @@ static void unreg_ipcp(struct irm * instance,
                        char ** difs,
                        size_t difs_size)
 {
-        int pid = 0;
+        pid_t pid = 0;
 
         pid = find_pid_by_name(instance, &name);
         if (pid == 0) {

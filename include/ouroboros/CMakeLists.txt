@@ -1,3 +1,7 @@
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/config.h")
+
 set(HEADER_FILES
         bitmap.h
         cdap.h
@@ -11,7 +15,8 @@ set(HEADER_FILES
         logs.h
         rina_name.h
         sockets.h
+        utils.h
 )
 
-install(FILES ${HEADER_FILES}
+install(FILES ${HEADER_FILES} "${CMAKE_CURRENT_BINARY_DIR}/config.h"
   DESTINATION include/ouroboros)
