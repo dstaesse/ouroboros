@@ -20,10 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <ouroboros/du_buff.h>
 #include "du_buff.c"
 
-#define TEST_BUFF_SIZE 16 * DU_BUFF_BLOCKSIZE
-#define MAX(a,b) a > b ? a : b
+#define TEST_BUFF_SIZE 16 * DU_BLOCK_DATA_SIZE
+#define MAX(a,b) (a > b ? a : b)
+#define MIN(a,b) (a < b ? a : b)
 
 int du_buff_test(int argc, char ** argv)
 {
@@ -35,16 +37,22 @@ int du_buff_test(int argc, char ** argv)
         for (i = 0; i < TEST_BUFF_SIZE; i++)
                 bits[i] = 170;
 
-        i_inc = MAX(1, DU_BUFF_BLOCKSIZE / 4);
-        j_inc = MAX(1, DU_BUFF_BLOCKSIZE / 8);
-        k_inc = MAX(1, DU_BUFF_BLOCKSIZE / 16);
+        i_inc = MAX(1, DU_BLOCK_DATA_SIZE / 4);
+        j_inc = MAX(1, DU_BLOCK_DATA_SIZE / 8);
+        k_inc = MAX(1, DU_BLOCK_DATA_SIZE / 16);
 
-        for (i = DU_BUFF_BLOCKSIZE / 4; i <= TEST_BUFF_SIZE; i += i_inc) {
+        for (i = DU_BUFF_BLOCK_SIZE / 4; i <= TEST_BUFF_SIZE; i += i_inc) {
                 for (j = 0; j < i; j += j_inc) {
                         for (k = 0; k < i - j; k += k_inc) {
                                 du_buff_t * dub = du_buff_create(i);
                                 if (dub == NULL)
                                         return -1;
+
+                                if (k > DU_BLOCK_DATA_SIZE)
+                                        continue;
+
+                                if (i - (j + k) > DU_BLOCK_DATA_SIZE)
+                                        continue;
 
                                 if (du_buff_init(dub, k, bits, j) < 0)
                                         return -1;

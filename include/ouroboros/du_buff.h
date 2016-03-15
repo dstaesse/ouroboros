@@ -25,7 +25,10 @@
 #define OUROBOROS_DU_BUFF_H
 
 #include "common.h"
-#include "list.h"
+
+#ifndef DU_BUFF_BLOCK_SIZE
+#define DU_BUFF_BLOCK_SIZE sysconf(_SC_PAGESIZE)
+#endif
 
 struct du_buff;
 

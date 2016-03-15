@@ -24,15 +24,14 @@
 #include <malloc.h>
 #include <string.h>
 #include <errno.h>
-#include "ouroboros/du_buff.h"
+#include <ouroboros/du_buff.h>
+#include <ouroboros/list.h>
 
 #define OUROBOROS_PREFIX "du_buff"
 
-#ifndef DU_BUFF_BLOCKSIZE
-#define DU_BUFF_BLOCKSIZE (1 << 16)
-#endif
-
 #include "ouroboros/logs.h"
+
+#define DU_BLOCK_DATA_SIZE (DU_BUFF_BLOCK_SIZE - sizeof (struct buffer))
 
 struct buffer {
         uint8_t        * data;
@@ -79,9 +78,13 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
 {
         struct buffer * head = NULL;
         size_t          remaining = size;
-        const size_t    page_size = DU_BUFF_BLOCKSIZE;
         size_t          ts = size - (headspace + len);
-        bool            head_block = true;
+
+        if (headspace > DU_BLOCK_DATA_SIZE || ts > DU_BLOCK_DATA_SIZE)
+        {
+                LOG_WARN("Illegal du_buff. Cannot fit PCI in DU_BUFF_BLOCK.");
+                return NULL;
+        }
 
         head = malloc(sizeof *head);
         if (head == NULL)
@@ -97,17 +100,15 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
 
                 size_t sz;
 
-                if (size > DU_BUFF_BLOCKSIZE && head_block) {
-                        sz = headspace;
-                        head_block = false;
-                } else if (size > DU_BUFF_BLOCKSIZE
-                           && remaining - ts <= DU_BUFF_BLOCKSIZE
+                if (size > DU_BLOCK_DATA_SIZE
+                           && remaining - ts <=  DU_BLOCK_DATA_SIZE
                            && remaining != ts) {
                         sz = remaining - ts;
-                } else if (size > DU_BUFF_BLOCKSIZE && remaining == ts) {
+                } else if (size >  DU_BLOCK_DATA_SIZE && remaining == ts) {
                         sz = ts;
                 } else {
-                        sz = remaining < page_size ? remaining : page_size;
+                        sz = remaining <  DU_BLOCK_DATA_SIZE ?
+                                remaining :  DU_BLOCK_DATA_SIZE;
                 }
 
                 buf = malloc(sizeof *buf);
@@ -290,7 +291,7 @@ int du_buff_init(du_buff_t * dub,
         }
 
         if (start + len > dub->size) {
-                LOG_DBGF("Buffer too small for data %lu.", start);
+                LOG_DBGF("Buffer too small for data.");
                 return -EINVAL;
         }
 
