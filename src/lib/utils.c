@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * The API for the IRM to instruct IPCPs
+ * Handy utilities
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,34 +20,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_H
-#define OUROBOROS_IPCP_H
+int n_digits(unsigned i)
+{
+    int n = 1;
 
-#include <sys/types.h>
+    while (i > 9) {
+        n++;
+        i /= 10;
+    }
 
-#include "common.h"
-#include "rina_name.h"
-
-struct ipcp;
-
-/* Returns the process id */
-pid_t ipcp_create(rina_name_t name,
-                  char * ipcp_type);
-int ipcp_destroy(pid_t pid);
-
-int ipcp_reg(pid_t pid,
-             char ** difs,
-             size_t difs_size);
-int ipcp_unreg(pid_t pid,
-               char ** difs,
-               size_t difs_size);
-
-int ipcp_bootstrap(pid_t pid,
-                   struct dif_config conf);
-int ipcp_enroll(pid_t pid,
-                char * dif_name,
-                rina_name_t member,
-                char ** n_1_difs,
-                ssize_t n_1_difs_size);
-
-#endif
+    return n;
+}
