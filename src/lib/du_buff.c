@@ -80,8 +80,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
         size_t          remaining = size;
         size_t          ts = size - (headspace + len);
 
-        if (headspace > DU_BLOCK_DATA_SIZE || ts > DU_BLOCK_DATA_SIZE)
-        {
+        if (headspace > DU_BLOCK_DATA_SIZE || ts > DU_BLOCK_DATA_SIZE) {
                 LOG_WARN("Illegal du_buff. Cannot fit PCI in DU_BUFF_BLOCK.");
                 return NULL;
         }
@@ -104,11 +103,11 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
                            && remaining - ts <=  DU_BLOCK_DATA_SIZE
                            && remaining != ts) {
                         sz = remaining - ts;
-                } else if (size >  DU_BLOCK_DATA_SIZE && remaining == ts) {
+                } else if (size > DU_BLOCK_DATA_SIZE && remaining == ts) {
                         sz = ts;
                 } else {
-                        sz = remaining <  DU_BLOCK_DATA_SIZE ?
-                                remaining :  DU_BLOCK_DATA_SIZE;
+                        sz = remaining < DU_BLOCK_DATA_SIZE ?
+                                remaining : DU_BLOCK_DATA_SIZE;
                 }
 
                 buf = malloc(sizeof *buf);
@@ -249,7 +248,7 @@ int buffer_copy_data(struct buffer * head,
 
 du_buff_t * du_buff_create(size_t size)
 {
-        du_buff_t * dub = (du_buff_t *)malloc(sizeof(du_buff_t));
+        du_buff_t * dub = malloc(sizeof *dub);
 
         if (dub == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
