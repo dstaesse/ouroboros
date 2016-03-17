@@ -104,14 +104,15 @@ pid_t ipcp_create(rina_name_t name,
         api_id = malloc(n_digits(name.api_id) + 1);
         if (!api_id) {
                 LOG_ERR("Failed to malloc");
-                exit(-1);
+                exit(EXIT_FAILURE);
         }
         sprintf(api_id, "%d", name.api_id);
 
         aei_id = malloc(n_digits(name.aei_id) + 1);
         if (!aei_id) {
                 LOG_ERR("Failed to malloc");
-                exit(-1);
+                free(api_id);
+                exit(EXIT_FAILURE);
         }
         sprintf(aei_id, "%d", name.aei_id);
 
@@ -121,7 +122,9 @@ pid_t ipcp_create(rina_name_t name,
         full_name = malloc(len);
         if (!full_name) {
                 LOG_ERR("Failed to malloc");
-                exit(-1);
+                free(api_id);
+                free(aei_id);
+                exit(EXIT_FAILURE);
         }
 
         strcpy(full_name, INSTALL_DIR);
@@ -140,7 +143,10 @@ pid_t ipcp_create(rina_name_t name,
         LOG_DBG("%s", strerror(errno));
         LOG_ERR("Failed to load IPCP daemon");
         LOG_ERR("Make sure to run the installed version");
-        exit(-1);
+        free(api_id);
+        free(aei_id);
+        free(full_name);
+        exit(EXIT_FAILURE);
 }
 
 int ipcp_destroy(pid_t pid)
