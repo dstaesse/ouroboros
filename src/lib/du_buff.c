@@ -46,7 +46,7 @@ struct du_buff {
         size_t           du_tail;
 };
 
-void buffer_destroy(struct buffer * buf)
+static void buffer_destroy(struct buffer * buf)
 {
         if (buf == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -57,7 +57,7 @@ void buffer_destroy(struct buffer * buf)
         free (buf);
 }
 
-void buffer_destroy_list(struct buffer * head)
+static void buffer_destroy_list(struct buffer * head)
 {
         struct list_head * ptr;
         struct list_head * n;
@@ -72,9 +72,10 @@ void buffer_destroy_list(struct buffer * head)
                 list_del(ptr);
                 buffer_destroy(tmp);
         }
+        free(head);
 }
 
-struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
+static struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
 {
         struct buffer * head = NULL;
         size_t          remaining = size;
@@ -123,6 +124,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
                                 LOG_WARN("Could not allocate memory block.");
                                 buffer_destroy_list(head);
                                 free(head);
+                                free(buf);
                                 return NULL;
                         }
                 } else {
@@ -139,7 +141,7 @@ struct buffer * buffer_create (size_t size, size_t headspace, size_t len)
         return head;
 }
 
-struct buffer * buffer_seek(const struct buffer * head, size_t pos)
+static struct buffer * buffer_seek(const struct buffer * head, size_t pos)
 {
         struct list_head * ptr = NULL;
         size_t cur_buf_start   = 0;
@@ -163,7 +165,7 @@ struct buffer * buffer_seek(const struct buffer * head, size_t pos)
         return NULL;
 }
 
-uint8_t * buffer_seek_pos(const struct buffer * head, size_t pos)
+static uint8_t * buffer_seek_pos(const struct buffer * head, size_t pos)
 {
         struct list_head * ptr = NULL;
         size_t cur_buf_start   = 0;
@@ -188,7 +190,7 @@ uint8_t * buffer_seek_pos(const struct buffer * head, size_t pos)
         return NULL;
 }
 
-int buffer_copy_data(struct buffer * head,
+static int buffer_copy_data(struct buffer * head,
                      size_t          pos,
                      const void    * src,
                      size_t          len)
@@ -241,6 +243,7 @@ int buffer_copy_data(struct buffer * head,
                 else
                         memcpy(ptr_start, copy_pos, space_in_buf);
                 bytes_remaining -= space_in_buf;
+                copy_pos += space_in_buf;
         }
 
         return 0;
@@ -270,7 +273,6 @@ void du_buff_destroy(du_buff_t * dub)
                 return;
         }
         buffer_destroy_list(dub->buffer);
-
         free (dub);
 }
 
