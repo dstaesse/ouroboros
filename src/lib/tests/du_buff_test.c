@@ -48,15 +48,20 @@ int du_buff_test(int argc, char ** argv)
                                 if (dub == NULL)
                                         return -1;
 
-                                if (k > DU_BLOCK_DATA_SIZE)
+                                if (k > DU_BLOCK_DATA_SIZE) {
+                                        du_buff_destroy (dub);
                                         continue;
+                                }
 
-                                if (i - (j + k) > DU_BLOCK_DATA_SIZE)
+                                if (i - (j + k) > DU_BLOCK_DATA_SIZE)  {
+                                        du_buff_destroy (dub);
                                         continue;
+                                }
 
-                                if (du_buff_init(dub, k, bits, j) < 0)
+                                if (du_buff_init(dub, k, bits, j) < 0) {
+                                        du_buff_destroy (dub);
                                         return -1;
-
+                                }
                                 du_buff_destroy (dub);
                         }
                 }
