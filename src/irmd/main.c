@@ -203,7 +203,7 @@ static void unreg_ipcp(struct irm * instance,
 /* FIXME: Close sockfd on closing and release irm */
 int main()
 {
-        struct irm * instance;
+        struct irm * instance = NULL;
         int sockfd;
         uint8_t buf[IRM_MSG_BUF_SIZE];
 
@@ -222,6 +222,7 @@ int main()
                 struct irm_msg * msg;
                 ssize_t count;
                 buffer_t buffer;
+                int i;
 
                 cli_sockfd = accept(sockfd, 0, 0);
                 if (cli_sockfd < 0) {
@@ -242,6 +243,7 @@ int main()
                                 create_ipcp(instance,
                                             *(msg->name),
                                             msg->ipcp_type);
+                                free(msg->ipcp_type);
                                 break;
                         case IRM_DESTROY_IPCP:
                                 destroy_ipcp(instance,
@@ -251,28 +253,37 @@ int main()
                                 bootstrap_ipcp(instance,
                                                *(msg->name),
                                                *(msg->conf));
+                                free(msg->conf);
                                 break;
                         case IRM_ENROLL_IPCP:
                                 enroll_ipcp(instance,
                                             *(msg->name),
                                             msg->dif_name);
+                                free(msg->dif_name);
                                 break;
                         case IRM_REG_IPCP:
                                 reg_ipcp(instance,
                                          *(msg->name),
                                          msg->difs,
                                          msg->difs_size);
+                                for (i = 0; i < msg->difs_size; i++)
+                                        free(msg->difs[i]);
+                                free(msg->difs);
                                 break;
                         case IRM_UNREG_IPCP:
                                 unreg_ipcp(instance,
                                            *(msg->name),
                                            msg->difs,
                                            msg->difs_size);
+                                for (i = 0; i < msg->difs_size; i++)
+                                        free(msg->difs[i]);
+                                free(msg->difs);
                                 break;
                         default:
                                 LOG_ERR("Don't know that message code");
                                 break;
                         }
+                        name_destroy(msg->name);
                         free(msg);
                 }
 

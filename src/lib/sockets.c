@@ -338,6 +338,7 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
         case IRM_REG_IPCP:
         case IRM_UNREG_IPCP:
                 deser_copy_size_t(data->data, &difs_size, &offset);
+                msg->difs_size = difs_size;
 
                 msg->difs = malloc(sizeof(*(msg->difs)) * difs_size);
                 if (msg->difs == NULL) {

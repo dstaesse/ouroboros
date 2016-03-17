@@ -51,7 +51,9 @@ struct irm_msg {
 int              client_socket_open(char * file_name);
 int              server_socket_open(char * file_name);
 
+/* Caller has to free the buffer */
 buffer_t *       serialize_irm_msg(struct irm_msg * msg);
+/* Caller has to free all the allocated fields in the message */
 struct irm_msg * deserialize_irm_msg(buffer_t * data);
 
 #endif
