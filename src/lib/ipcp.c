@@ -31,12 +31,52 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/config.h>
 #include <ouroboros/utils.h>
+#include <ouroboros/sockets.h>
 
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
+static int send_ipcp_msg(pid_t pid,
+                         struct ipcp_msg * msg)
+{
+       int sockfd = 0;
+       buffer_t * buf = NULL;
+       char * sock_path;
+
+       sock_path = ipcp_sock_path(pid);
+       if (sock_path == NULL)
+               return -1;
+
+       sockfd = client_socket_open(sock_path);
+       if (sockfd < 0) {
+               free(sock_path);
+               return -1;
+       }
+
+       buf = serialize_ipcp_msg(msg);
+       if (buf == NULL) {
+               free(sock_path);
+               close(sockfd);
+               return -1;
+       }
+
+       if (write(sockfd, buf->data, buf->size) == -1) {
+               free(sock_path);
+               free(buf->data);
+               free(buf);
+               close(sockfd);
+               return -1;
+       }
+
+       free(buf->data);
+       free(buf);
+
+       close(sockfd);
+       return 0;
+}
 
 pid_t ipcp_create(rina_name_t name,
                   char * ipcp_type)
@@ -47,6 +87,9 @@ pid_t ipcp_create(rina_name_t name,
         size_t len = 0;
         char * ipcp_dir = "bin/ipcpd";
         char * full_name = NULL;
+
+        if (ipcp_type == NULL)
+                return -1;
 
         pid = fork();
         if (pid == -1) {
@@ -121,20 +164,58 @@ int ipcp_reg(pid_t pid,
              char ** difs,
              size_t difs_size)
 {
-        return -1;
+        struct ipcp_msg msg;
+
+        if (difs == NULL)
+                return -1;
+
+        msg.code = IPCP_REG;
+        msg.difs = difs;
+        msg.difs_size = difs_size;
+
+        if (send_ipcp_msg(pid, &msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
 }
 
 int ipcp_unreg(pid_t pid,
                char ** difs,
                size_t difs_size)
 {
-        return -1;
+        struct ipcp_msg msg;
+
+        if (difs == NULL)
+                return -1;
+
+        msg.code = IPCP_UNREG;
+        msg.difs = difs;
+        msg.difs_size = difs_size;
+
+        if (send_ipcp_msg(pid, &msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
 }
 
 int ipcp_bootstrap(pid_t pid,
                    struct dif_config conf)
 {
-        return -1;
+        struct ipcp_msg msg;
+
+        msg.code = IPCP_BOOTSTRAP;
+        msg.conf = &conf;
+
+        if (send_ipcp_msg(pid, &msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
 }
 
 int ipcp_enroll(pid_t pid,
@@ -143,5 +224,24 @@ int ipcp_enroll(pid_t pid,
                 char ** n_1_difs,
                 ssize_t n_1_difs_size)
 {
-        return -1;
+        struct ipcp_msg msg;
+
+        if (n_1_difs == NULL)
+                return -1;
+
+        if (dif_name == NULL)
+                return -1;
+
+        msg.code = IPCP_ENROLL;
+        msg.dif_name = dif_name;
+        msg.member = &member;
+        msg.difs = n_1_difs;
+        msg.difs_size = n_1_difs_size;
+
+        if (send_ipcp_msg(pid, &msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
 }

@@ -44,6 +44,8 @@ static int send_irm_msg(struct irm_msg * msg)
        }
 
        if (write(sockfd, buf->data, buf->size) == -1) {
+               free(buf->data);
+               free(buf);
                close(sockfd);
                return -1;
        }
