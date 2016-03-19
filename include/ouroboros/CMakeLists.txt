@@ -14,6 +14,7 @@ set(HEADER_FILES
         list.h
         logs.h
         rina_name.h
+        shm_du_map.h
         sockets.h
         utils.h
 )
