@@ -39,7 +39,7 @@
 #endif
 
 #ifndef SHM_DU_MAP_SIZE
-#define SHM_DU_MAP_SIZE (1 << 22)
+#define SHM_DU_MAP_SIZE (1 << 26)
 #endif
 
 #include "common.h"
@@ -58,8 +58,7 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
                                         size_t              headspace,
                                         uint8_t           * data,
                                         size_t              len);
-void                 shm_release_du_buff(struct shm_du_map  * dum,
-                                         struct shm_du_buff * sdb);
+int                  shm_release_du_buff(struct shm_du_map  * dum);
 
 uint8_t * shm_du_buff_head_alloc(struct shm_du_map * dum,
                                  struct shm_du_buff * sdb,

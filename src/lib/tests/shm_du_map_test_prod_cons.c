@@ -27,12 +27,12 @@
 #include <pthread.h>
 #include "shm_du_map.c"
 
-#define TEST_BUFF_SIZE (3 * SHM_DU_BLOCK_DATA_SIZE)
+#define TEST_BUFF_SIZE (SHM_DU_BLOCK_DATA_SIZE)
 
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
 
-int * sync;
+int sync;
 
 void * produce()
 {
@@ -46,31 +46,26 @@ void * produce()
         struct timespec     starttime;
         struct timespec     stoptime;
         double              elapsed;
-        long                overruns = 0;
 
         dum = shm_du_map_open();
         if (dum == NULL)
                 return (void *)-1;
 
         srand(time(NULL));
-        clock_gettime(CLOCK_MONOTONIC, &starttime);
 
         test_values = malloc (sizeof *test_values * TEST_BUFF_SIZE);
         for (i = 0; i < TEST_BUFF_SIZE; i++)
                 test_values[i] = 170;
 
-        for (i = 0; i < 4 * SHM_BLOCKS_IN_MAP; i++) {
+        clock_gettime(CLOCK_MONOTONIC, &starttime);
+        for (i = 0; i < SHM_BLOCKS_IN_MAP; i++) {
                 struct shm_du_buff * sdb;
                 size_t               len;
-                struct timespec      ts;
 
-                test_buf_size = rand() % (TEST_BUFF_SIZE - 512) + 512;
+                test_buf_size = TEST_BUFF_SIZE;
 
-                headspace     = MAX(4, rand() % 64);
-                tailspace     = MAX(1, rand() % 24);
-
-                ts.tv_sec     = 0;
-                ts.tv_nsec    = rand() % 90000;
+                headspace     = 32;
+                tailspace     = 8;
 
                 len = test_buf_size - (headspace + tailspace);
 
@@ -81,23 +76,12 @@ void * produce()
                                          len);
 
                 if (sdb != NULL) {
-                        sync[i] = du_buff_ptr_to_idx(dum, sdb);
                         bytes_written += len;
                 }
                 else {
-                        i--;
-                        ++overruns;
-                        ts.tv_nsec = 10000;
-                        nanosleep(&ts, NULL);
-                }
-                nanosleep(&ts, NULL);
-
-                if (overruns > 100) {
-                        LOG_INFO("Bugging out due to overruns.");
-                        sync[i+1] = -2;
+                        sync = -2;
                         break;
                 }
-
         }
 
         clock_gettime(CLOCK_MONOTONIC, &stoptime);
@@ -110,6 +94,9 @@ void * produce()
 
         free(test_values);
         shm_du_map_close(dum);
+
+        sync = -1;
+
         return 0;
 }
 
@@ -117,24 +104,19 @@ void * consume()
 {
         struct shm_du_map * dum;
 
-        long                i;
-
         struct timespec     ts;
 
         ts.tv_sec = 0;
-        ts.tv_nsec = 5000;
+        ts.tv_nsec = 1000;
 
         dum = shm_du_map_open();
 
         if (dum == NULL)
                 pthread_exit((void *) -1);
 
-        for (i = 0; i < 4 * SHM_BLOCKS_IN_MAP; i++) {
-                while (sync[i] == -1)
-                        nanosleep(&ts, NULL); /* wait for the producer */
-                if (sync[i] == -2)
-                        break;
-                shm_release_du_buff(dum, idx_to_du_buff_ptr(dum, sync[i]));
+        while (!sync) {
+                while (!shm_release_du_buff(dum));
+                nanosleep(&ts, NULL);
         }
 
         shm_du_map_close(dum);
@@ -148,11 +130,8 @@ int shm_du_map_test_prod_cons(int argc, char ** argv)
 
         int res1;
 
-        int i;
-
         pthread_t producer;
         pthread_t consumer;
-
         shm_unlink(SHM_DU_MAP_FILENAME);
 
         dum = shm_du_map_create();
@@ -160,18 +139,13 @@ int shm_du_map_test_prod_cons(int argc, char ** argv)
         if (dum == NULL)
                 return -1;
 
-        sync = malloc(sizeof *sync * 4 * SHM_BLOCKS_IN_MAP);
-
-        for (i = 0; i < 4 * SHM_BLOCKS_IN_MAP; i++)
-                sync[i] = -1;
+        sync = 0;
 
         res1 = (int) pthread_create(&producer, NULL, produce, NULL);
         pthread_create(&consumer, NULL, consume, NULL);
 
         pthread_join(producer, NULL);
         pthread_join(consumer, NULL);
-
-        free(sync);
 
         shm_du_map_close(dum);
 

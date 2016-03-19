@@ -54,7 +54,9 @@ int shm_du_map_test_du_buff_create(int argc, char ** argv)
         j_inc = MAX(1, SHM_DU_BLOCK_DATA_SIZE / 8);
         k_inc = MAX(1, SHM_DU_BLOCK_DATA_SIZE / 16);
 
-        for (i = SHM_DU_BUFF_BLOCK_SIZE / 4; i <= TEST_BUFF_SIZE; i += i_inc) {
+        for (i = SHM_DU_BLOCK_DATA_SIZE / 4;
+             i <= TEST_BUFF_SIZE;
+             i += i_inc) {
                 for (j = 0; j < i; j += j_inc) {
                         for (k = 0; k < i - j; k += k_inc) {
                                 if (k > SHM_DU_BLOCK_DATA_SIZE)
@@ -73,7 +75,7 @@ int shm_du_map_test_du_buff_create(int argc, char ** argv)
                                         shm_du_map_close(dum);
                                         return -1;
                                 }
-                                shm_release_du_buff(dum, dub);
+                                shm_release_du_buff(dum);
                         }
                 }
         }
