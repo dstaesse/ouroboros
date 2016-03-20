@@ -39,7 +39,7 @@
 #endif
 
 #ifndef SHM_DU_MAP_SIZE
-#define SHM_DU_MAP_SIZE (1 << 26)
+#define SHM_DU_MAP_SIZE 10
 #endif
 
 #include "common.h"

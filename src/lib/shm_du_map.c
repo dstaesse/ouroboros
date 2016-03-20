@@ -35,7 +35,7 @@
 
 #define SHM_DU_BLOCK_DATA_SIZE (SHM_DU_BUFF_BLOCK_SIZE -                       \
                                 sizeof(struct shm_block))
-#define SHM_BLOCKS_IN_MAP (SHM_DU_MAP_SIZE / SHM_DU_BUFF_BLOCK_SIZE)
+#define SHM_BLOCKS_IN_MAP (1 << SHM_DU_MAP_SIZE)
 #define SHM_BLOCKS_SIZE (SHM_DU_BUFF_BLOCK_SIZE * SHM_BLOCKS_IN_MAP)
 #define SHM_BUFFS_SIZE (SHM_BLOCKS_IN_MAP * sizeof (struct shm_du_buff))
 #define SHM_FILE_SIZE (SHM_BLOCKS_IN_MAP * (SHM_DU_BUFF_BLOCK_SIZE             \
@@ -52,9 +52,9 @@
                                     / SHM_DU_BUFF_BLOCK_SIZE)
 
 #define shm_map_used(dum) ((*(dum->ptr_head) + SHM_BLOCKS_IN_MAP -             \
-                            *(dum->ptr_tail)) % SHM_BLOCKS_IN_MAP)
+                            *(dum->ptr_tail)) & (SHM_BLOCKS_IN_MAP - 1))
 
-#define shm_map_free(dum, i)(shm_map_used(dum) + i < SHM_BLOCKS_IN_MAP)
+#define shm_map_free(dum, i)(shm_map_used(dum) + i + 1 < SHM_BLOCKS_IN_MAP)
 
 struct shm_block {
         size_t size;
@@ -118,8 +118,6 @@ struct shm_du_map * shm_du_map_create()
 
         if (shm_base == MAP_FAILED) {
                 LOG_ERR("Failed to map shared memory.");
-                if (close(shm_fd) == -1)
-                        LOG_ERR("Failed to close invalid shm.");
 
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
                         LOG_ERR("Failed to remove invalid shm.");
@@ -173,9 +171,6 @@ struct shm_du_map * shm_du_map_open()
         if (shm_base == MAP_FAILED) {
                 LOG_ERR("Failed to map shared memory.");
 
-                if (close(shm_fd) == -1)
-                        LOG_ERR("Failed to close invalid shm.");
-
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
                         LOG_ERR("Failed to unlink invalid shm.");
 
@@ -228,7 +223,8 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
         size_t               remaining = size;
         size_t               ts = size - (headspace + len);
         uint8_t            * read_pos = data;
-        size_t               blocks;
+        size_t               blocks = 0;
+        int                  sz = size;
 
         if (dum == NULL || data == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -252,9 +248,10 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
 
         pthread_mutex_lock(dum->shm_mutex);
 
-        blocks = size / SHM_DU_BLOCK_DATA_SIZE;
-        if (size % SHM_DU_BLOCK_DATA_SIZE > 0)
-                ++blocks;
+        while (sz > 0) {
+                sz -= SHM_DU_BLOCK_DATA_SIZE;
+                blocks++;
+        }
 
         if (!shm_map_free(dum, blocks)) {
                 pthread_mutex_unlock(dum->shm_mutex);
@@ -316,7 +313,8 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
 
                 prev_index = *dum->ptr_head;
 
-                *(dum->ptr_head) = (*dum->ptr_head + 1) % SHM_BLOCKS_IN_MAP;
+                *(dum->ptr_head) = (*dum->ptr_head + 1)
+                        & (SHM_BLOCKS_IN_MAP - 1);
         }
 
         pthread_mutex_unlock(dum->shm_mutex);
@@ -337,11 +335,12 @@ int shm_release_du_buff(struct shm_du_map * dum)
         }
 
         while (idx_to_block_ptr(dum, *dum->ptr_tail)->next != -1) {
-                *(dum->ptr_tail) = (*dum->ptr_tail + 1) % SHM_BLOCKS_IN_MAP;
+                *(dum->ptr_tail) = (*dum->ptr_tail + 1)
+                        & (SHM_BLOCKS_IN_MAP -1);
                 released++;
         }
 
-        *(dum->ptr_tail) = (*dum->ptr_tail + 1) % SHM_BLOCKS_IN_MAP;
+        *(dum->ptr_tail) = (*dum->ptr_tail + 1) & (SHM_BLOCKS_IN_MAP - 1);
 
         pthread_mutex_unlock(dum->shm_mutex);
 
