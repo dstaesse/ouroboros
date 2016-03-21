@@ -28,8 +28,6 @@
 #include <stdbool.h>
 #include <errno.h>
 
-typedef uint32_t port_id_t;
-
 typedef struct {
         uint8_t * data;
         size_t    size;
