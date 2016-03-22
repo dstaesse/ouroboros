@@ -9,6 +9,7 @@ set(SOURCE_FILES
         bitmap.c
         cdap.c
         da.c
+        dev.c
         du_buff.c
         ipcp.c
         irm.c
