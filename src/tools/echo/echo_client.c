@@ -33,9 +33,8 @@ int client_main()
         char * message  = "Client says hi!";
         ssize_t count = 0;
 
-        fd = flow_alloc(SERVER_AP_NAME, NULL,
-                        CLIENT_AP_NAME, NULL,
-                        NULL, 0);
+        fd = flow_alloc(SERVER_AP_NAME, CLIENT_AP_NAME,
+                        NULL, NULL, 0);
         if (fd < 0) {
                 printf("Failed to allocate flow\n");
                 return -1;

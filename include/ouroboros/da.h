@@ -26,12 +26,12 @@
 #include "common.h"
 #include "rina_name.h"
 
-rina_name_t * da_resolve_daf(char * daf_name);
+char *  da_resolve_daf(char * daf_name);
 /*
  * n_1_difs is an out parameter
  * The amount of n_1_difs is returned
  */
-ssize_t       da_resolve_dap(rina_name_t * name,
-                             char ** n_1_difs);
+ssize_t da_resolve_dap(char * name,
+                       char ** n_1_difs);
 
 #endif

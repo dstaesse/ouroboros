@@ -83,7 +83,6 @@ pid_t ipcp_create(rina_name_t name,
 {
         pid_t pid = 0;
         char * api_id = NULL;
-        char * aei_id = NULL;
         size_t len = 0;
         char * ipcp_dir = "bin/ipcpd";
         char * full_name = NULL;
@@ -108,22 +107,13 @@ pid_t ipcp_create(rina_name_t name,
         }
         sprintf(api_id, "%d", name.api_id);
 
-        aei_id = malloc(n_digits(name.aei_id) + 1);
-        if (!aei_id) {
-                LOG_ERR("Failed to malloc");
-                free(api_id);
-                exit(EXIT_FAILURE);
-        }
-        sprintf(aei_id, "%d", name.aei_id);
-
         len += strlen(INSTALL_DIR);
         len += strlen(ipcp_dir);
         len += 2;
         full_name = malloc(len);
-        if (!full_name) {
+        if (full_name == NULL) {
                 LOG_ERR("Failed to malloc");
                 free(api_id);
-                free(aei_id);
                 exit(EXIT_FAILURE);
         }
 
@@ -133,7 +123,6 @@ pid_t ipcp_create(rina_name_t name,
 
         char * argv[] = {full_name,
                          name.ap_name, api_id,
-                         name.ae_name, aei_id,
                          ipcp_type, 0};
 
         char * envp[] = {0};
@@ -144,7 +133,6 @@ pid_t ipcp_create(rina_name_t name,
         LOG_ERR("Failed to load IPCP daemon");
         LOG_ERR("Make sure to run the installed version");
         free(api_id);
-        free(aei_id);
         free(full_name);
         exit(EXIT_FAILURE);
 }
@@ -226,7 +214,7 @@ int ipcp_bootstrap(pid_t pid,
 
 int ipcp_enroll(pid_t pid,
                 char * dif_name,
-                rina_name_t member,
+                char * member_name,
                 char ** n_1_difs,
                 ssize_t n_1_difs_size)
 {
@@ -240,7 +228,7 @@ int ipcp_enroll(pid_t pid,
 
         msg.code = IPCP_ENROLL;
         msg.dif_name = dif_name;
-        msg.member = &member;
+        msg.ap_name = member_name;
         msg.difs = n_1_difs;
         msg.difs_size = n_1_difs_size;
 
