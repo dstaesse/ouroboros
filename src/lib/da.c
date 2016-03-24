@@ -22,13 +22,13 @@
 
 #include <ouroboros/da.h>
 
-rina_name_t * da_resolve_daf(char * daf_name)
+char * da_resolve_daf(char * daf_name)
 {
         return NULL;
 }
 
-ssize_t       da_resolve_dap(rina_name_t * name,
-                             char ** n_1_difs)
+ssize_t da_resolve_dap(char * name,
+                       char ** n_1_difs)
 {
         return 0;
 }

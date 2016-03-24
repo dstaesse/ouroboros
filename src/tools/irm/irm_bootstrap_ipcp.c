@@ -32,9 +32,7 @@ static void usage()
         /* FIXME: Add dif_config stuff */
         printf("Usage: irm bootstrap_ipcp\n"
                "           ap <application process name>\n"
-               "           [api <application process instance>]\n"
-               "           [ae <application entity name]\n"
-               "           [aei <application entity instance>]\n");
+               "           [api <application process instance>]\n");
 }
 
 
@@ -47,8 +45,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
 
         name.ap_name = NULL;
         name.api_id = 0;
-        name.ae_name = "";
-        name.aei_id = 0;
 
         while (argc > 0) {
                 if (!parse_name(argv, &name)) {

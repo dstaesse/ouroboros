@@ -24,65 +24,205 @@
 
 #include <ouroboros/logs.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/sockets.h>
 
-int ap_reg(char * ap_name, char * ae_name,
-           char ** difs, size_t difs_size)
+#include <stdlib.h>
+
+int ap_reg(char * ap_name,
+           char ** difs,
+           size_t difs_size)
 {
-        LOG_MISSING;
+        struct irm_msg msg;
+        struct irm_msg * recv_msg = NULL;
+        int fd = 0;
 
-        return -1;
+        if (ap_name == NULL ||
+            difs == NULL ||
+            difs_size == 0) {
+                LOG_ERR("Invalid arguments");
+                return -1;
+        }
+
+        msg.code = IRM_AP_REG;
+        msg.ap_name = ap_name;
+        msg.difs = difs;
+        msg.difs_size = difs_size;
+
+        recv_msg = send_recv_irmd_msg(&msg);
+        if (recv_msg == NULL) {
+                LOG_ERR("Failed to send and receive message");
+                return -1;
+        }
+
+        fd = recv_msg->fd;
+        free(recv_msg);
+
+        return fd;
 }
 
-int ap_unreg(char * ap_name, char * ae_name,
-             char ** difs, size_t difs_size)
+int ap_unreg(char * ap_name,
+             char ** difs,
+             size_t difs_size)
 {
-        LOG_MISSING;
+        struct irm_msg msg;
 
-        return -1;
+        if (ap_name == NULL ||
+            difs == NULL ||
+            difs_size == 0) {
+                LOG_ERR("Invalid arguments");
+                return -1;
+        }
+
+        msg.code = IRM_AP_UNREG;
+        msg.ap_name = ap_name;
+        msg.difs = difs;
+        msg.difs_size = difs_size;
+
+        if (send_irmd_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
 }
 
-int flow_accept(int fd, char * ap_name, char * ae_name)
+int flow_accept(int fd,
+                char * ap_name,
+                char * ae_name)
 {
-        LOG_MISSING;
+        struct irm_msg msg;
+        struct irm_msg * recv_msg = NULL;
+        int cli_fd = 0;
 
-        return -1;
+        if (ap_name == NULL) {
+                LOG_ERR("Invalid arguments");
+                return -1;
+        }
+
+        msg.code = IRM_FLOW_ACCEPT;
+        msg.fd = fd;
+
+        recv_msg = send_recv_irmd_msg(&msg);
+        if (recv_msg == NULL) {
+                LOG_ERR("Failed to send and receive message");
+                return -1;
+        }
+
+        cli_fd = recv_msg->fd;
+        ap_name = recv_msg->ap_name;
+        if (ae_name == NULL)
+                ae_name = "";
+        else
+                ae_name = recv_msg->ae_name;
+        free(recv_msg);
+
+        return cli_fd;
 }
 
-int flow_alloc_resp(int fd, int result)
+int flow_alloc_resp(int fd,
+                    int result)
 {
-        LOG_MISSING;
+        struct irm_msg msg;
 
-        return -1;
+        msg.code = IRM_FLOW_ALLOC_RESP;
+        msg.fd = fd;
+        msg.result = result;
+
+        if (send_irmd_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
 }
 
-int flow_alloc(char * dst_ap_name, char * dst_ae_name,
-               char * src_ap_name, char * src_ae_name,
-               struct qos_spec * qos, int oflags)
+int flow_alloc(char * dst_ap_name,
+               char * src_ap_name,
+               char * src_ae_name,
+               struct qos_spec * qos,
+               int oflags)
 {
-        LOG_MISSING;
+        struct irm_msg msg;
+        struct irm_msg * recv_msg = NULL;
+        int fd = 0;
 
-        return -1;
+        if (dst_ap_name == NULL ||
+            src_ap_name == NULL) {
+                LOG_ERR("Invalid arguments");
+                return -1;
+        }
+
+        msg.code = IRM_FLOW_ALLOC;
+        msg.dst_ap_name = dst_ap_name;
+        msg.ap_name = src_ap_name;
+        if (src_ae_name == NULL)
+                msg.ae_name = "";
+        else
+                msg.ae_name = src_ae_name;
+        msg.qos = qos;
+        msg.oflags = oflags;
+
+        recv_msg = send_recv_irmd_msg(&msg);
+        if (recv_msg == NULL) {
+                LOG_ERR("Failed to send and receive message");
+                return -1;
+        }
+
+        fd = recv_msg->fd;
+        free(recv_msg);
+
+        return fd;
 }
 
 int flow_alloc_res(int fd)
 {
-        LOG_MISSING;
+        struct irm_msg msg;
+        struct irm_msg * recv_msg = NULL;
+        int result = 0;
 
-        return -1;
+        msg.code = IRM_FLOW_ALLOC_RES;
+        msg.fd = fd;
+
+        recv_msg = send_recv_irmd_msg(&msg);
+        if (recv_msg == NULL) {
+                LOG_ERR("Failed to send and receive message");
+                return -1;
+        }
+
+        result = recv_msg->result;
+        free(recv_msg);
+
+        return result;
 }
 
 int flow_dealloc(int fd)
 {
-        LOG_MISSING;
+        struct irm_msg msg;
 
-        return -1;
+        msg.code = IRM_FLOW_DEALLOC;
+        msg.fd = fd;
+
+        if (send_irmd_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
 }
 
 int flow_cntl(int fd, int oflags)
 {
-        LOG_MISSING;
+        struct irm_msg msg;
 
-        return -1;
+        msg.fd = fd;
+        msg.oflags = oflags;
+
+        if (send_irmd_msg(&msg)) {
+                LOG_ERR("Failed to send message to daemon");
+                return -1;
+        }
+
+        return 0;
 }
 
 ssize_t flow_write(int fd,

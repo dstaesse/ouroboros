@@ -28,35 +28,6 @@
 #include <ouroboros/sockets.h>
 #include <stdlib.h>
 
-static int send_irm_msg(struct irm_msg * msg)
-{
-       int sockfd;
-       buffer_t * buf;
-
-       sockfd = client_socket_open(IRM_SOCK_PATH);
-       if (sockfd < 0)
-               return -1;
-
-       buf = serialize_irm_msg(msg);
-       if (buf == NULL) {
-               close(sockfd);
-               return -1;
-       }
-
-       if (write(sockfd, buf->data, buf->size) == -1) {
-               free(buf->data);
-               free(buf);
-               close(sockfd);
-               return -1;
-       }
-
-       free(buf->data);
-       free(buf);
-
-       close(sockfd);
-       return 0;
-}
-
 int irm_create_ipcp(rina_name_t name,
                     char * ipcp_type)
 {
@@ -74,7 +45,7 @@ int irm_create_ipcp(rina_name_t name,
         msg.name = &name;
         msg.ipcp_type = ipcp_type;
 
-        if (send_irm_msg(&msg)) {
+        if (send_irmd_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -94,7 +65,7 @@ int irm_destroy_ipcp(rina_name_t name)
         msg.code = IRM_DESTROY_IPCP;
         msg.name = &name;
 
-        if (send_irm_msg(&msg)) {
+        if (send_irmd_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -116,7 +87,7 @@ int irm_bootstrap_ipcp(rina_name_t name,
         msg.name = &name;
         msg.conf = &conf;
 
-        if (send_irm_msg(&msg)) {
+        if (send_irmd_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -138,7 +109,7 @@ int irm_enroll_ipcp(rina_name_t name,
         msg.name = &name;
         msg.dif_name = dif_name;
 
-        if (send_irm_msg(&msg)) {
+        if (send_irmd_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -162,7 +133,7 @@ int irm_reg_ipcp(rina_name_t name,
         msg.difs = difs;
         msg.difs_size = difs_size;
 
-        if (send_irm_msg(&msg)) {
+        if (send_irmd_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -186,7 +157,7 @@ int irm_unreg_ipcp(rina_name_t name,
         msg.difs = difs;
         msg.difs_size = difs_size;
 
-        if (send_irm_msg(&msg)) {
+        if (send_irmd_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }

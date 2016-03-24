@@ -46,7 +46,7 @@ int ipcp_bootstrap(pid_t pid,
                    struct dif_config conf);
 int ipcp_enroll(pid_t pid,
                 char * dif_name,
-                rina_name_t member,
+                char * member_name,
                 char ** n_1_difs,
                 ssize_t n_1_difs_size);
 

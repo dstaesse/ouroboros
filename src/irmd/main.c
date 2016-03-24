@@ -143,7 +143,7 @@ static void enroll_ipcp(struct irm * instance,
                         char * dif_name)
 {
         pid_t pid = 0;
-        rina_name_t * member;
+        char * member;
         char ** n_1_difs = NULL;
         ssize_t n_1_difs_size = 0;
 
@@ -161,7 +161,7 @@ static void enroll_ipcp(struct irm * instance,
 
         n_1_difs_size = da_resolve_dap(member, n_1_difs);
         if (n_1_difs_size != 0)
-                if (ipcp_enroll(pid, dif_name, *member,
+                if (ipcp_enroll(pid, dif_name, member,
                                 n_1_difs, n_1_difs_size))
                         LOG_ERR("Could not enroll IPCP");
 }
@@ -231,7 +231,7 @@ int main()
                 }
 
                 count = read(cli_sockfd, buf, IRM_MSG_BUF_SIZE);
-                if (count) {
+                if (count > 0) {
                         buffer.size = count;
                         buffer.data = buf;
                         msg = deserialize_irm_msg(&buffer);

@@ -58,17 +58,13 @@ rina_name_t * name_create()
 
         tmp->ap_name = NULL;
         tmp->api_id  = 0;
-        tmp->ae_name = NULL;
-        tmp->aei_id  = 0;
 
         return tmp;
 }
 
 rina_name_t * name_init_from(rina_name_t * dst,
                              const char *  ap_name,
-                             unsigned int  api_id,
-                             const char *  ae_name,
-                             unsigned int  aei_id)
+                             unsigned int  api_id)
 {
         if (dst == NULL)
                 return NULL;
@@ -78,11 +74,8 @@ rina_name_t * name_init_from(rina_name_t * dst,
 
         dst->ap_name = strdup(ap_name);
         dst->api_id = api_id;
-        dst->ae_name = strdup(ae_name);
-        dst->aei_id = aei_id;
 
-        if (dst->ap_name == NULL ||
-            dst->ae_name == NULL) {
+        if (dst->ap_name == NULL) {
                 name_fini(dst);
                 return NULL;
         }
@@ -92,9 +85,7 @@ rina_name_t * name_init_from(rina_name_t * dst,
 
 rina_name_t * name_init_with(rina_name_t * dst,
                              char *        ap_name,
-                             unsigned int  api_id,
-                             char *        ae_name,
-                             unsigned int  aei_id)
+                             unsigned int  api_id)
 {
         if (dst == NULL)
                 return NULL;
@@ -104,8 +95,6 @@ rina_name_t * name_init_with(rina_name_t * dst,
 
         dst->ap_name = ap_name;
         dst->api_id  = api_id;
-        dst->ae_name = ae_name;
-        dst->aei_id  = aei_id;
 
         return dst;
 }
@@ -118,11 +107,6 @@ void name_fini(rina_name_t * n)
         if (n->ap_name != NULL) {
                 free(n->ap_name);
                 n->ap_name = NULL;
-        }
-
-        if (n->ae_name != NULL) {
-                free(n->ae_name);
-                n->ae_name = NULL;
         }
 }
 
@@ -146,9 +130,7 @@ int name_cpy(const rina_name_t * src,
 
         res = name_init_from(dst,
                              src->ap_name,
-                             src->api_id,
-                             src->ae_name,
-                             src->aei_id);
+                             src->api_id);
         if (res == NULL)
                 return -1;
 
@@ -182,8 +164,7 @@ rina_name_t * name_dup(const rina_name_t * src)
 bool name_is_ok(const rina_name_t * n)
 { return (n != NULL &&
           n->ap_name != NULL &&
-          strlen(n->ap_name) &&
-          n->ae_name != NULL); }
+          strlen(n->ap_name)); }
 
 bool name_cmp(uint8_t             flags,
               const rina_name_t * a,
@@ -204,14 +185,6 @@ bool name_cmp(uint8_t             flags,
 
         if (flags & NAME_CMP_API)
                 if (a->api_id !=  b->api_id)
-                        return false;
-
-        if (flags & NAME_CMP_AEN)
-                if (NAME_CMP_FIELD(a, b, ae_name))
-                        return false;
-
-        if (flags & NAME_CMP_AEI)
-                if (a->aei_id != b->aei_id)
                         return false;
 
         return true;
@@ -243,23 +216,13 @@ char * name_to_string(const rina_name_t * n)
                  1 : n_digits(n->api_id));
         size += strlen(DELIMITER);
 
-        size += (n->ae_name != NULL ?
-                 strlen(n->ae_name) : none_len);
-        size += strlen(DELIMITER);
-
-        size += (n->aei_id == 0 ?
-                 1 : n_digits(n->aei_id));
-        size += strlen(DELIMITER);
-
         tmp = malloc(size);
         if (!tmp)
                 return NULL;
 
-        if (sprintf(tmp, "%s%s%d%s%s%s%d",
+        if (sprintf(tmp, "%s%s%d",
                     (n->ap_name != NULL ? n->ap_name : none),
-                    DELIMITER, n->api_id,
-                    DELIMITER, (n->ae_name != NULL ? n->ae_name : none),
-                    DELIMITER, n->aei_id)
+                    DELIMITER, n->api_id)
             != size - 1) {
                 free(tmp);
                 return NULL;
@@ -276,9 +239,6 @@ rina_name_t * string_to_name(const char * s)
         char *       tmp_ap    = NULL;
         char *       tmp_s_api = NULL;
         unsigned int tmp_api   = 0;
-        char *       tmp_ae    = NULL;
-        char *       tmp_s_aei = NULL;
-        unsigned int tmp_aei   = 0;
         char *       tmp2;
 
         if (s == NULL)
@@ -293,10 +253,6 @@ rina_name_t * string_to_name(const char * s)
         tmp_s_api = strtok(NULL, DELIMITER);
         if (tmp_s_api != NULL)
                 tmp_api = (unsigned int) strtol(tmp_s_api, &tmp2, 10);
-        tmp_ae = strtok(NULL, DELIMITER);
-        tmp_s_aei = strtok(NULL, DELIMITER);
-        if (tmp_s_aei != NULL)
-                tmp_aei = (unsigned int) strtol(tmp_s_aei, &tmp2, 10);
 
         name = name_create();
         if (name == NULL) {
@@ -305,8 +261,7 @@ rina_name_t * string_to_name(const char * s)
                 return NULL;
         }
 
-        if (!name_init_from(name, tmp_ap, tmp_api,
-                            tmp_ae, tmp_aei)) {
+        if (!name_init_from(name, tmp_ap, tmp_api)) {
                 name_destroy(name);
                 if (tmp1 != NULL)
                         free(tmp1);

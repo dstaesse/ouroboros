@@ -40,7 +40,21 @@ enum irm_msg_code {
         IRM_BOOTSTRAP_IPCP,
         IRM_ENROLL_IPCP,
         IRM_REG_IPCP,
-        IRM_UNREG_IPCP
+        IRM_UNREG_IPCP,
+        IRM_AP_REG,
+        IRM_AP_REG_R,
+        IRM_AP_UNREG,
+        IRM_FLOW_ACCEPT,
+        IRM_FLOW_ACCEPT_R,
+        IRM_FLOW_ALLOC_RESP,
+        IRM_FLOW_ALLOC,
+        IRM_FLOW_ALLOC_R,
+        IRM_FLOW_ALLOC_RES,
+        IRM_FLOW_ALLOC_RES_R,
+        IRM_FLOW_DEALLOC,
+        IRM_FLOW_CONTROL,
+        IRM_FLOW_WRITE,
+        IRM_FLOW_READ
 };
 
 struct irm_msg {
@@ -51,6 +65,14 @@ struct irm_msg {
         char *              dif_name;
         char **             difs;
         size_t              difs_size;
+        char *              ap_name;
+        char *              ae_name;
+        int                 fd;
+        int                 result;
+        struct qos_spec *   qos;
+        int                 oflags;
+        char *              dst_ap_name;
+        ssize_t             count;
 };
 
 enum ipcp_msg_code {
@@ -64,7 +86,7 @@ struct ipcp_msg {
         enum ipcp_msg_code  code;
         struct dif_config * conf;
         char *              dif_name;
-        rina_name_t *       member;
+        char *              ap_name;
         char **             difs;
         size_t              difs_size;
 };
@@ -72,8 +94,11 @@ struct ipcp_msg {
 /* Returns the full socket path of an IPCP */
 char *            ipcp_sock_path(pid_t pid);
 
-int               client_socket_open(char * file_name);
 int               server_socket_open(char * file_name);
+int               client_socket_open(char * file_name);
+
+int               send_irmd_msg(struct irm_msg * msg);
+struct irm_msg *  send_recv_irmd_msg(struct irm_msg * msg);
 
 /* Caller has to free the buffer */
 buffer_t *        serialize_irm_msg(struct irm_msg * msg);

@@ -34,7 +34,7 @@ void shutdown_server(int signo)
 {
         char * dif = DIF_NAME;
 
-        if (ap_unreg(SERVER_AP_NAME, NULL, &dif, 1)) {
+        if (ap_unreg(SERVER_AP_NAME, &dif, 1)) {
                 printf("Failed to unregister application\n");
                 exit(EXIT_FAILURE);
         }
@@ -59,7 +59,7 @@ int server_main()
                 return -1;
         }
 
-        server_fd = ap_reg(SERVER_AP_NAME, NULL, &dif, 1);
+        server_fd = ap_reg(SERVER_AP_NAME, &dif, 1);
         if (server_fd < 0) {
                 printf("Failed to register application\n");
                 return -1;

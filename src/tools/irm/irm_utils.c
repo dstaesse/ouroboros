@@ -47,10 +47,6 @@ bool parse_name(char ** argv,
                 name->ap_name = *(argv + 1);
         else if (matches(*argv, "api") == 0)
                 name->api_id = atoi(*(argv + 1));
-        else if (matches(*argv, "ae") == 0)
-                name->ae_name = *(argv + 1);
-        else if (matches(*argv, "aei") == 0)
-                name->aei_id = atoi(*(argv + 1));
         else
                 found = false;
 
