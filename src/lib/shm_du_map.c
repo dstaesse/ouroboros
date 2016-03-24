@@ -21,46 +21,33 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef SHM_DU_MAP_C
-#define SHM_DU_MAP_C
-
 #include <ouroboros/shm_du_map.h>
-
 #include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <malloc.h>
 #include <string.h>
 
-
-#define SHM_DU_BLOCK_DATA_SIZE (SHM_DU_BUFF_BLOCK_SIZE -                       \
-                                sizeof(struct shm_block))
-#define SHM_BLOCKS_IN_MAP (1 << SHM_DU_MAP_SIZE)
-#define SHM_BLOCKS_SIZE (SHM_DU_BUFF_BLOCK_SIZE * SHM_BLOCKS_IN_MAP)
-#define SHM_BUFFS_SIZE (SHM_BLOCKS_IN_MAP * sizeof (struct shm_du_buff))
-#define SHM_FILE_SIZE (SHM_BLOCKS_IN_MAP * (SHM_DU_BUFF_BLOCK_SIZE             \
-                                            + sizeof(struct shm_du_buff)       \
-                                            + sizeof(uint8_t))                 \
-                       + 2 * sizeof (size_t)                                   \
+#define SHM_BLOCKS_SIZE (SHM_BLOCKS_IN_MAP * SHM_DU_BUFF_BLOCK_SIZE)
+#define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 2 * sizeof (size_t)                   \
                        + sizeof(pthread_mutex_t))
 
-#define idx_to_block_ptr(dum, i) ((struct shm_block *)                         \
-                                  (dum->shm_base + i * SHM_DU_BUFF_BLOCK_SIZE))
-#define idx_to_du_buff_ptr(dum, i) (dum->ptr_du_buff + i)
-#define du_buff_ptr_to_idx(dum, sdb) ((sdb - dum->ptr_du_buff) / sizeof *sdb)
-#define block_ptr_to_idx(dum, sdb) (((uint8_t *)sdb - dum->shm_base)           \
-                                    / SHM_DU_BUFF_BLOCK_SIZE)
+#define get_head_ptr(dum)                                                      \
+((struct shm_du_buff *)(dum->shm_base + (*dum->ptr_head *                      \
+                                         SHM_DU_BUFF_BLOCK_SIZE)))
 
-#define shm_map_used(dum) ((*(dum->ptr_head) + SHM_BLOCKS_IN_MAP -             \
-                            *(dum->ptr_tail)) & (SHM_BLOCKS_IN_MAP - 1))
+#define get_tail_ptr(dum)                                                      \
+((struct shm_du_buff *)(dum->shm_base + (*dum->ptr_tail *                      \
+                                         SHM_DU_BUFF_BLOCK_SIZE)))
 
-#define shm_map_free(dum, i)(shm_map_used(dum) + i + 1 < SHM_BLOCKS_IN_MAP)
+#define block_ptr_to_idx(dum, sdb)                                             \
+        (((uint8_t *)sdb - dum->shm_base) / SHM_DU_BUFF_BLOCK_SIZE)
 
-struct shm_block {
-        size_t size;
-        long   next;
-        long   prev;
-};
+#define shm_map_used(dum)((*dum->ptr_head + SHM_BLOCKS_IN_MAP - *dum->ptr_tail)\
+                          & (SHM_BLOCKS_IN_MAP - 1))
+#define shm_map_free(dum, i)(shm_map_used(dum) + i < SHM_BLOCKS_IN_MAP)
+
+#define MIN(a,b)(a < b ? a : b)
 
 struct shm_du_buff {
         size_t            size;
@@ -70,7 +57,6 @@ struct shm_du_buff {
 
 struct shm_du_map {
         uint8_t            * shm_base;    /* start of blocks */
-        struct shm_du_buff * ptr_du_buff; /* start of du_buff structs */
         size_t             * ptr_head;    /* start of ringbuffer head */
         size_t             * ptr_tail;    /* start of ringbuffer tail */
         pthread_mutex_t    * shm_mutex;   /* lock all free space in shm */
@@ -86,25 +72,25 @@ struct shm_du_map * shm_du_map_create()
 
         dum = malloc(sizeof *dum);
         if (dum == NULL) {
-                LOG_ERR("Could not allocate struct.");
+                LOG_DBGF("Could not allocate struct.");
                 return NULL;
         }
 
         shm_fd = shm_open(SHM_DU_MAP_FILENAME, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (shm_fd == -1) {
-                LOG_ERR("Failed creating shared memory map.");
+                LOG_DBGF("Failed creating shared memory map.");
                 free(dum);
                 return NULL;
         }
 
-        if (lseek (shm_fd,SHM_FILE_SIZE - 1, SEEK_SET) < 0) {
-                LOG_ERR("Failed to extend shared memory map.");
+        if (lseek(shm_fd, SHM_FILE_SIZE - 1, SEEK_SET) < 0) {
+                LOG_DBGF("Failed to extend shared memory map.");
                 free(dum);
                 return NULL;
         }
 
-        if (write (shm_fd, "", 1) != 1) {
-                LOG_ERR("Failed to finalise extension of shared memory map.");
+        if (write(shm_fd, "", 1) != 1) {
+                LOG_DBGF("Failed to finalise extension of shared memory map.");
                 free(dum);
                 return NULL;
         }
@@ -117,22 +103,18 @@ struct shm_du_map * shm_du_map_create()
                         0);
 
         if (shm_base == MAP_FAILED) {
-                LOG_ERR("Failed to map shared memory.");
+                LOG_DBGF("Failed to map shared memory.");
 
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
-                        LOG_ERR("Failed to remove invalid shm.");
+                        LOG_DBGF("Failed to remove invalid shm.");
 
                 free(dum);
                 return NULL;
         }
-#ifdef CONFIG_OUROBOROS_DEBUG
-        memset(shm_base, 0, SHM_FILE_SIZE);
-#endif
+
         dum->shm_base = shm_base;
-        dum->ptr_du_buff = (struct shm_du_buff *)
-                ((uint8_t *) dum->shm_base + SHM_BLOCKS_SIZE);
         dum->ptr_head = (size_t *)
-                ((uint8_t *) dum->ptr_du_buff + SHM_BUFFS_SIZE);
+                ((uint8_t *) dum->shm_base + SHM_BLOCKS_SIZE);
         dum->ptr_tail = (size_t *)
                 ((uint8_t *) dum->ptr_head + sizeof(size_t));
         dum->shm_mutex = (pthread_mutex_t *)
@@ -158,7 +140,7 @@ struct shm_du_map * shm_du_map_open()
 
         shm_fd = shm_open(SHM_DU_MAP_FILENAME, O_RDWR, 0666);
         if (shm_fd == -1) {
-                LOG_ERR("Failed opening shared memory for du_buff.");
+                LOG_DBGF("Failed opening shared memory.");
                 return NULL;
         }
 
@@ -169,29 +151,31 @@ struct shm_du_map * shm_du_map_open()
                         shm_fd,
                         0);
         if (shm_base == MAP_FAILED) {
-                LOG_ERR("Failed to map shared memory.");
+                LOG_DBGF("Failed to map shared memory.");
+                if (close(shm_fd) == -1)
+                        LOG_DBGF("Failed to close invalid shm.");
 
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
-                        LOG_ERR("Failed to unlink invalid shm.");
+                        LOG_DBGF("Failed to unlink invalid shm.");
 
                 return NULL;
         }
 
         dum = malloc(sizeof *dum);
         if (dum == NULL) {
-                LOG_ERR("Could not allocate struct.");
+                LOG_DBGF("Could not allocate struct.");
                 return NULL;
         }
 
         dum->shm_base = shm_base;
-        dum->ptr_du_buff = (struct shm_du_buff *)
-                ((uint8_t *) dum->shm_base + SHM_BLOCKS_SIZE);
         dum->ptr_head = (size_t *)
-                ((uint8_t *) dum->ptr_du_buff + SHM_BUFFS_SIZE);
+                ((uint8_t *) dum->shm_base + SHM_BLOCKS_SIZE);
         dum->ptr_tail = (size_t *)
                 ((uint8_t *) dum->ptr_head + sizeof(size_t));
         dum->shm_mutex = (pthread_mutex_t *)
                 ((uint8_t *) dum->ptr_tail + sizeof(size_t));
+
+        dum->fd = shm_fd;
 
         return dum;
 }
@@ -219,12 +203,11 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
                                         size_t              len)
 {
         struct shm_du_buff * sdb;
-        long                 prev_index = -1;
-        size_t               remaining = size;
-        size_t               ts = size - (headspace + len);
-        uint8_t            * read_pos = data;
-        size_t               blocks = 0;
-        int                  sz = size;
+        long                 blocks = 0;
+        int                  sz = size + sizeof *sdb;
+        int                  sz2 = headspace + len + sizeof *sdb;
+        uint8_t            * write_pos;
+        size_t               copy_len;
 
         if (dum == NULL || data == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -241,16 +224,17 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
                 return NULL;
         }
 
-        if (headspace > SHM_DU_BLOCK_DATA_SIZE || ts > SHM_DU_BLOCK_DATA_SIZE) {
-                LOG_ERR("Illegal du_buff: Cannot fit PCI in DU_BUFF_BLOCK.");
-                return NULL;
-        }
-
         pthread_mutex_lock(dum->shm_mutex);
 
         while (sz > 0) {
-                sz -= SHM_DU_BLOCK_DATA_SIZE;
-                blocks++;
+                sz -= SHM_DU_BUFF_BLOCK_SIZE;
+                sz2 -= SHM_DU_BUFF_BLOCK_SIZE;
+                if (sz2 < 0 && sz > 0) {
+                        pthread_mutex_unlock(dum->shm_mutex);
+                        LOG_DBG("Can't handle this packet now");
+                        return NULL;
+                }
+                ++blocks;
         }
 
         if (!shm_map_free(dum, blocks)) {
@@ -259,62 +243,23 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
                 return NULL;
         }
 
-        sdb = dum->ptr_du_buff + *dum->ptr_head;
+        sdb = get_head_ptr(dum);
 
         sdb->size = size;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
 
-        while (remaining > 0) {
-                struct shm_block * shm_buf;
-                long               bytes_to_copy = len;
-                uint8_t          * write_pos;
+        copy_len = MIN(len, SHM_DU_BUFF_BLOCK_SIZE - headspace - sizeof *sdb);
+        write_pos = ((uint8_t *) sdb) + sizeof *sdb + headspace;
 
-                shm_buf = idx_to_block_ptr(dum, *(dum->ptr_head));
-
-                write_pos = (uint8_t *) shm_buf + sizeof *shm_buf;
-
-                shm_buf->size = remaining < SHM_DU_BLOCK_DATA_SIZE ?
-                        remaining : SHM_DU_BLOCK_DATA_SIZE;
-
-                bytes_to_copy = shm_buf->size;
-
-                if (remaining <= SHM_DU_BLOCK_DATA_SIZE)
-                        bytes_to_copy -= ts;
-                else if (remaining - ts <= SHM_DU_BLOCK_DATA_SIZE)
-                        shm_buf->size = remaining - ts;
-
-                remaining -= shm_buf->size;
-
-                if (prev_index == -1) {
-#ifdef CONFIG_OUROBOROS_DEBUG
-                        memset(write_pos, 0, sdb->du_head);
-#endif
-                        write_pos += sdb->du_head;
-                        bytes_to_copy -= sdb->du_head;
-                }
-
-                if (prev_index != -1)
-                        idx_to_block_ptr(dum, prev_index)->next =
-                                *(dum->ptr_head);
-
-                if (len > 0) {
-                        memcpy(write_pos, read_pos, bytes_to_copy);
-                }
-                read_pos += bytes_to_copy;
-#ifdef CONFIG_OUROBOROS_DEBUG
-                if (remaining == 0) {
-                        write_pos + = bytes_to_copy;
-                        memset(write_pos, 0, ts);
-                }
-#endif
-                shm_buf->next = -1;
-                shm_buf->prev = prev_index;
-
-                prev_index = *dum->ptr_head;
-
+        while (blocks > 0) {
+                memcpy(write_pos, data, copy_len);
                 *(dum->ptr_head) = (*dum->ptr_head + 1)
                         & (SHM_BLOCKS_IN_MAP - 1);
+                len -= copy_len;
+                copy_len = MIN(len, SHM_DU_BUFF_BLOCK_SIZE);
+                write_pos = (uint8_t *) get_head_ptr(dum);
+                --blocks;
         }
 
         pthread_mutex_unlock(dum->shm_mutex);
@@ -324,7 +269,8 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
 
 int shm_release_du_buff(struct shm_du_map * dum)
 {
-        int released = 0;
+        long sz;
+        long blocks = 0;
 
         pthread_mutex_lock(dum->shm_mutex);
 
@@ -334,25 +280,22 @@ int shm_release_du_buff(struct shm_du_map * dum)
                 return -1;
         }
 
-        while (idx_to_block_ptr(dum, *dum->ptr_tail)->next != -1) {
-                *(dum->ptr_tail) = (*dum->ptr_tail + 1)
-                        & (SHM_BLOCKS_IN_MAP -1);
-                released++;
+        sz = get_tail_ptr(dum)->size;
+
+        while (sz + (long) sizeof (struct shm_du_buff) > 0) {
+                sz -= SHM_DU_BUFF_BLOCK_SIZE;
+                ++blocks;
         }
 
-        *(dum->ptr_tail) = (*dum->ptr_tail + 1) & (SHM_BLOCKS_IN_MAP - 1);
-
+        *(dum->ptr_tail) = (*dum->ptr_tail + blocks) & (SHM_BLOCKS_IN_MAP - 1);
         pthread_mutex_unlock(dum->shm_mutex);
 
         return 0;
 }
 
-uint8_t * shm_du_buff_head_alloc(struct shm_du_map * dum,
-                                 struct shm_du_buff * sdb,
+uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
                                  size_t size)
 {
-        uint8_t * ret;
-
         if (sdb == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
                 return NULL;
@@ -365,17 +308,12 @@ uint8_t * shm_du_buff_head_alloc(struct shm_du_map * dum,
 
         sdb->du_head -= size;
 
-        ret = (uint8_t *) idx_to_block_ptr(dum, du_buff_ptr_to_idx(dum,sdb));
-
-        return ret + sizeof(struct shm_block) + sdb->du_head;
+        return (uint8_t *) sdb + sizeof *sdb + sdb->du_head;
 }
 
-uint8_t * shm_du_buff_tail_alloc(struct shm_du_map * dum,
-                                 struct shm_du_buff * sdb,
+uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
                                  size_t size)
 {
-        uint8_t * ret;
-
         if (sdb == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
                 return NULL;
@@ -388,9 +326,7 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_du_map * dum,
 
         sdb->du_tail += size;
 
-        ret = (uint8_t *) idx_to_block_ptr(dum, du_buff_ptr_to_idx(dum,sdb));
-
-        return ret + sizeof(struct shm_block) + sdb->du_tail;
+        return (uint8_t *) sdb + sizeof *sdb + sdb->du_tail;
 }
 
 int shm_du_buff_head_release(struct shm_du_buff * sdb,
@@ -428,5 +364,3 @@ int shm_du_buff_tail_release(struct shm_du_buff * sdb,
 
         return sdb->du_tail;
 }
-
-#endif

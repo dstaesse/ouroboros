@@ -38,15 +38,14 @@
 #define SHM_DU_MAP_FILENAME "ouroboros_du_map"
 #endif
 
-#ifndef SHM_DU_MAP_SIZE
-#define SHM_DU_MAP_SIZE 10
+#ifndef SHM_BLOCKS_IN_MAP
+#define SHM_BLOCKS_IN_MAP (1 << 12)
 #endif
 
 #include "common.h"
 #include "logs.h"
 
 struct shm_du_buff;
-
 struct shm_du_map;
 
 struct shm_du_map  * shm_du_map_create();
@@ -60,11 +59,9 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
                                         size_t              len);
 int                  shm_release_du_buff(struct shm_du_map  * dum);
 
-uint8_t * shm_du_buff_head_alloc(struct shm_du_map * dum,
-                                 struct shm_du_buff * sdb,
+uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
                                  size_t size);
-uint8_t * shm_du_buff_tail_alloc(struct shm_du_map * dum,
-                                 struct shm_du_buff * sdb,
+uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
                                  size_t size);
 int       shm_du_buff_head_release(struct shm_du_buff * sdb,
                                    size_t size);

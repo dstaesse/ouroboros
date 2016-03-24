@@ -24,10 +24,11 @@
 #include <sys/types.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/mman.h>
 #include <pthread.h>
-#include "shm_du_map.c"
 
-#define TEST_BUFF_SIZE (SHM_DU_BLOCK_DATA_SIZE)
+#define SIZE_OF_DU_BUFF 24
+#define TEST_BUFF_SIZE (SHM_DU_BUFF_BLOCK_SIZE - SIZE_OF_DU_BUFF)
 
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
@@ -48,8 +49,10 @@ void * produce()
         double              elapsed;
 
         dum = shm_du_map_open();
-        if (dum == NULL)
+        if (dum == NULL) {
+                LOG_ERR("Could not open shm.");
                 return (void *)-1;
+        }
 
         srand(time(NULL));
 
@@ -58,7 +61,7 @@ void * produce()
                 test_values[i] = 170;
 
         clock_gettime(CLOCK_MONOTONIC, &starttime);
-        for (i = 0; i < SHM_BLOCKS_IN_MAP; i++) {
+        for (i = 1; i < SHM_BLOCKS_IN_MAP; i++) {
                 struct shm_du_buff * sdb;
                 size_t               len;
 
@@ -93,7 +96,6 @@ void * produce()
                  bytes_written * 8 / (elapsed * 1000000000));
 
         free(test_values);
-        shm_du_map_close(dum);
 
         sync = -1;
 
@@ -107,39 +109,66 @@ void * consume()
         struct timespec     ts;
 
         ts.tv_sec = 0;
-        ts.tv_nsec = 1000;
+        ts.tv_nsec = 1000000;
 
         dum = shm_du_map_open();
 
-        if (dum == NULL)
-                pthread_exit((void *) -1);
+        if (dum == NULL) {
+                LOG_ERR("Could not open shm.");
+                return (void *)-1;
+        }
 
         while (!sync) {
                 while (!shm_release_du_buff(dum));
                 nanosleep(&ts, NULL);
         }
 
-        shm_du_map_close(dum);
-
         return 0;
 }
 
-int shm_du_map_test_prod_cons(int argc, char ** argv)
+int shm_du_map_test(int argc, char ** argv)
 {
         struct shm_du_map * dum;
+        int                 res1;
+        pthread_t           producer;
+        pthread_t           consumer;
 
-        int res1;
+        /* test 1 */
 
-        pthread_t producer;
-        pthread_t consumer;
-        shm_unlink(SHM_DU_MAP_FILENAME);
+        LOG_INFO("starting create/close test.");
 
         dum = shm_du_map_create();
 
-        if (dum == NULL)
+        if (dum == NULL) {
+                LOG_ERR("Could not open shm (dum).");
                 return -1;
+        }
 
-        sync = 0;
+        shm_du_map_close(dum);
+
+        LOG_INFO("done.");
+
+        /* test 2 */
+
+        LOG_INFO("starting sequential test.");
+
+        dum = shm_du_map_create();
+
+        res1 = (int) pthread_create(&producer, NULL, produce, NULL);
+        pthread_join(producer, NULL);
+
+        pthread_create(&consumer, NULL, consume, NULL);
+        pthread_join(consumer, NULL);
+
+        shm_du_map_close(dum);
+
+        LOG_INFO("done.");
+
+        /* test 3 */
+
+        LOG_INFO("starting concurrency test.");
+
+        dum = shm_du_map_create();
 
         res1 = (int) pthread_create(&producer, NULL, produce, NULL);
         pthread_create(&consumer, NULL, consume, NULL);
@@ -148,6 +177,8 @@ int shm_du_map_test_prod_cons(int argc, char ** argv)
         pthread_join(consumer, NULL);
 
         shm_du_map_close(dum);
+
+        LOG_INFO("done.");
 
         return res1;
 }

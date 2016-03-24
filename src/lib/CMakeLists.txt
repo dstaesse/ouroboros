@@ -4,6 +4,16 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
+find_library(LIBRT_LIBRARIES rt)
+if(NOT LIBRT_LIBRARIES)
+       message(FATAL_ERROR "librt not found")
+endif()
+
+find_library(LIBPTHREAD_LIBRARIES pthread)
+if(NOT LIBPTHREAD_LIBRARIES)
+       message(FATAL_ERROR "libpthread not found")
+endif()
+
 set(SOURCE_FILES
         # Add source files here
         bitmap.c
@@ -15,11 +25,13 @@ set(SOURCE_FILES
         irm.c
         list.c
         rina_name.c
+        shm_du_map.c
         sockets.c
         utils.c
 )
 
 add_library(ouroboros SHARED ${SOURCE_FILES})
+target_link_libraries(ouroboros rt pthread)
 
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
