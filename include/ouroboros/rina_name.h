@@ -27,8 +27,6 @@
 typedef struct {
         char *       ap_name;
         unsigned int api_id;
-        char *       ae_name;
-        unsigned int aei_id;
 } rina_name_t;
 
 /*
@@ -50,16 +48,12 @@ rina_name_t * name_create();
  */
 rina_name_t * name_init_from(rina_name_t * dst,
                              const char *  ap_name,
-                             unsigned int  api_id,
-                             const char *  ae_name,
-                             unsigned int  aei_id);
+                             unsigned int  api_id);
 
 /* Takes ownership of the passed parameters */
 rina_name_t * name_init_with(rina_name_t * dst,
                              char *        ap_name,
-                             unsigned int  api_id,
-                             char *        ae_name,
-                             unsigned int  aei_id);
+                             unsigned int  api_id);
 
 /*
  * Finalize a name object, releasing all the embedded resources (without
@@ -85,9 +79,7 @@ bool          name_is_ok(const rina_name_t * n);
 
 #define NAME_CMP_APN 0x01
 #define NAME_CMP_API 0x02
-#define NAME_CMP_AEN 0x04
-#define NAME_CMP_AEI 0x08
-#define NAME_CMP_ALL (NAME_CMP_APN | NAME_CMP_API | NAME_CMP_AEN | NAME_CMP_AEI)
+#define NAME_CMP_ALL (NAME_CMP_APN | NAME_CMP_API)
 
 bool          name_cmp(uint8_t             flags,
                        const rina_name_t * a,

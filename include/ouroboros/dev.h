@@ -26,19 +26,17 @@
 #include <ouroboros/common.h>
 
 /* Returns file descriptor */
-int     ap_reg(char * ap_name, char * ae_name,
-               char ** difs, size_t difs_size);
-int     ap_unreg(char * ap_name, char * ae_name,
-                 char ** difs, size_t difs_size);
+int     ap_reg(char * ap_name, char ** difs, size_t difs_size);
+int     ap_unreg(char * ap_name, char ** difs, size_t difs_size);
 
 /* Returns file descriptor (> 0) and client name(s) */
 int     flow_accept(int fd, char * ap_name, char * ae_name);
 int     flow_alloc_resp(int fd, int result);
 
 /* Returns file descriptor */
-int     flow_alloc(char * dst_ap_name, char * dst_ae_name,
-                   char * src_ap_name, char * src_ae_name,
-                   struct qos_spec * qos, int oflags);
+int     flow_alloc(char * dst_ap_name, char * src_ap_name,
+                   char * src_ae_name, struct qos_spec * qos,
+                   int oflags);
 
 /* If flow is accepted returns a value > 0 */
 int     flow_alloc_res(int fd);

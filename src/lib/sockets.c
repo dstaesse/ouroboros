@@ -96,6 +96,76 @@ int server_socket_open(char * file_name)
         return sockfd;
 }
 
+int send_irmd_msg(struct irm_msg * msg)
+{
+       int sockfd;
+       buffer_t * buf;
+
+       sockfd = client_socket_open(IRM_SOCK_PATH);
+       if (sockfd < 0)
+               return -1;
+
+       buf = serialize_irm_msg(msg);
+       if (buf == NULL) {
+               close(sockfd);
+               return -1;
+       }
+
+       if (write(sockfd, buf->data, buf->size) == -1) {
+               free(buf->data);
+               free(buf);
+               close(sockfd);
+               return -1;
+       }
+
+       free(buf->data);
+       free(buf);
+
+       close(sockfd);
+       return 0;
+}
+
+struct irm_msg * send_recv_irmd_msg(struct irm_msg * msg)
+{
+        int sockfd;
+        buffer_t * buf;
+        ssize_t count = 0;
+        struct irm_msg * recv_msg = NULL;
+
+        sockfd = client_socket_open(IRM_SOCK_PATH);
+        if (sockfd < 0)
+                return NULL;
+
+        buf = serialize_irm_msg(msg);
+        if (buf == NULL) {
+                close(sockfd);
+                return NULL;
+        }
+
+        if (write(sockfd, buf->data, buf->size) == -1) {
+                free(buf->data);
+                free(buf);
+                close(sockfd);
+                return NULL;
+        }
+
+        count = read(sockfd, buf->data, IRM_MSG_BUF_SIZE);
+        if (count <= 0) {
+                free(buf->data);
+                free(buf);
+                close(sockfd);
+                return NULL;
+        }
+
+        recv_msg = deserialize_irm_msg(buf);
+
+        free(buf->data);
+        free(buf);
+
+        close(sockfd);
+        return recv_msg;
+}
+
 char * ipcp_sock_path(pid_t pid)
 {
         char * full_name = NULL;
@@ -154,10 +224,6 @@ static void ser_copy_name(rina_name_t * name,
                        data, name->ap_name, offset);
         ser_copy_value(sizeof(int), data,
                        &name->api_id, offset);
-        ser_copy_value(strlen(name->ae_name) + 1,
-                       data, name->ae_name, offset);
-        ser_copy_value(sizeof(int), data,
-                       &name->aei_id, offset);
 }
 
 static void deser_copy_value(size_t flen,
@@ -217,13 +283,6 @@ static rina_name_t * deser_copy_name(uint8_t * data,
 
         deser_copy_int(data, &name->api_id, offset);
 
-        if (deser_copy_string(data, &name->ae_name, offset)) {
-                name_destroy(name);
-                return NULL;
-        }
-
-        deser_copy_int(data, &name->aei_id, offset);
-
         return name;
 }
 
@@ -274,45 +333,59 @@ buffer_t * serialize_irm_msg(struct irm_msg * msg)
 
         ser_copy_value(sizeof(enum irm_msg_code), data, &msg->code, &offset);
 
-        if (!name_is_ok(msg->name)) {
-                LOG_ERR("Null pointer passed");
-                buffer_destroy(buf);
-                return NULL;
-        }
         ser_copy_name(msg->name, data, &offset);
 
         switch (msg->code) {
         case IRM_CREATE_IPCP:
-                if (!msg->ipcp_type) {
+                if (msg->ipcp_type == NULL ||
+                    !name_is_ok(msg->name)) {
                         LOG_ERR("Null pointer passed");
                         buffer_destroy(buf);
                         return NULL;
                 }
-
+                ser_copy_name(msg->name, data, &offset);
                 ser_copy_value(strlen(msg->ipcp_type) + 1, data,
                                msg->ipcp_type, &offset);
                 break;
         case IRM_DESTROY_IPCP:
+                if (!name_is_ok(msg->name)) {
+                        LOG_ERR("Null pointer passed");
+                        buffer_destroy(buf);
+                        return NULL;
+                }
+                ser_copy_name(msg->name, data, &offset);
                 break;
         case IRM_BOOTSTRAP_IPCP:
+                if (!name_is_ok(msg->name)) {
+                        LOG_ERR("Null pointer passed");
+                        buffer_destroy(buf);
+                        return NULL;
+                }
+                ser_copy_name(msg->name, data, &offset);
                 /* FIXME: Fields missing, need to define dif_conf properly */
                 break;
         case IRM_ENROLL_IPCP:
-                if (msg->dif_name == NULL) {
+                if (msg->dif_name == NULL ||
+                    !name_is_ok(msg->name)) {
                         buffer_destroy(buf);
                         return NULL;
                 }
 
+                ser_copy_name(msg->name, data, &offset);
                 ser_copy_value(strlen(msg->dif_name) + 1, data,
                                msg->dif_name, &offset);
 
                 break;
         case IRM_REG_IPCP:
         case IRM_UNREG_IPCP:
-                if (msg->difs == NULL || msg->difs[0] == NULL) {
+                if (msg->difs == NULL ||
+                    msg->difs[0] == NULL ||
+                    !name_is_ok(msg->name)) {
                         buffer_destroy(buf);
                         return NULL;
                 }
+
+                ser_copy_name(msg->name, data, &offset);
 
                 ser_copy_value(sizeof(size_t), data, &msg->difs_size, &offset);
 
@@ -322,6 +395,105 @@ buffer_t * serialize_irm_msg(struct irm_msg * msg)
                         pos++;
                 }
 
+                break;
+        case IRM_AP_REG:
+        case IRM_AP_UNREG:
+                if (msg->ap_name == NULL ||
+                    msg->difs == NULL ||
+                    msg->difs[0] == NULL) {
+                        LOG_ERR("Invalid arguments");
+                        buffer_destroy(buf);
+                        return NULL;
+                }
+
+                ser_copy_value(strlen(msg->ap_name) + 1,
+                               data, msg->ap_name, &offset);
+
+                ser_copy_value(sizeof(size_t), data, &msg->difs_size, &offset);
+
+                pos = msg->difs;
+                for (i = 0; i < msg->difs_size; i++) {
+                        ser_copy_value(strlen(*pos) + 1, data, *pos, &offset);
+                        pos++;
+                }
+
+                break;
+        case IRM_FLOW_ACCEPT:
+                if (msg->ap_name == NULL ||
+                    msg->ae_name == NULL) {
+                        LOG_ERR("Invalid arguments");
+                        buffer_destroy(buf);
+                        return NULL;
+                }
+
+                ser_copy_value(sizeof(int), data, &msg->fd, &offset);
+
+                ser_copy_value(strlen(msg->ap_name) + 1,
+                               data, msg->ap_name, &offset);
+
+                ser_copy_value(strlen(msg->ae_name) + 1,
+                               data, msg->ae_name, &offset);
+
+                break;
+        case IRM_FLOW_ALLOC_RESP:
+                ser_copy_value(sizeof(int), data, &msg->fd, &offset);
+
+                ser_copy_value(sizeof(int), data, &msg->result, &offset);
+
+                break;
+        case IRM_FLOW_ALLOC:
+                if (msg->ap_name == NULL ||
+                    msg->ae_name == NULL ||
+                    msg->dst_ap_name == NULL ||
+                    msg->qos == NULL) {
+                        LOG_ERR("Invalid arguments");
+                        buffer_destroy(buf);
+                        return NULL;
+                }
+
+                ser_copy_value(strlen(msg->dst_ap_name) + 1,
+                               data, msg->dst_ap_name, &offset);
+
+                ser_copy_value(strlen(msg->ap_name) + 1,
+                               data, msg->ap_name, &offset);
+
+                ser_copy_value(strlen(msg->ae_name) + 1,
+                               data, msg->ae_name, &offset);
+
+                /* FIXME: Serialize qos spec here */
+
+                ser_copy_value(sizeof(int), data, &msg->oflags, &offset);
+
+                break;
+        case IRM_FLOW_ALLOC_RES:
+        case IRM_FLOW_DEALLOC:
+                ser_copy_value(sizeof(int), data, &msg->fd, &offset);
+                break;
+        case IRM_FLOW_CONTROL:
+                ser_copy_value(sizeof(int), data, &msg->fd, &offset);
+                ser_copy_value(sizeof(int), data, &msg->oflags, &offset);
+                break;
+        case IRM_FLOW_WRITE:
+                LOG_MISSING;
+                break;
+        case IRM_FLOW_READ:
+                LOG_MISSING;
+                break;
+        case IRM_AP_REG_R:
+        case IRM_FLOW_ALLOC_R:
+                ser_copy_value(sizeof(int), data, &msg->fd, &offset);
+                break;
+        case IRM_FLOW_ACCEPT_R:
+                ser_copy_value(sizeof(int), data, &msg->fd, &offset);
+
+                ser_copy_value(strlen(msg->ap_name) + 1,
+                               data, msg->ap_name, &offset);
+
+                ser_copy_value(strlen(msg->ae_name) + 1,
+                               data, msg->ae_name, &offset);
+                break;
+        case IRM_FLOW_ALLOC_RES_R:
+                ser_copy_value(sizeof(int), data, &msg->result, &offset);
                 break;
         default:
                 LOG_ERR("Don't know that code");
@@ -355,15 +527,15 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
         deser_copy_value(sizeof(enum irm_msg_code),
                          &msg->code, data->data, &offset);
 
-        msg->name = deser_copy_name(data->data, &offset);
-        if (msg->name == NULL) {
-                LOG_ERR("Failed to reconstruct name");
-                free(msg);
-                return NULL;
-        }
-
         switch (msg->code) {
         case IRM_CREATE_IPCP:
+                msg->name = deser_copy_name(data->data, &offset);
+                if (msg->name == NULL) {
+                        LOG_ERR("Failed to reconstruct name");
+                        free(msg);
+                        return NULL;
+                }
+
                 if (deser_copy_string(data->data,
                                       &msg->ipcp_type,
                                       &offset)) {
@@ -374,10 +546,31 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
 
                 break;
         case IRM_DESTROY_IPCP:
+                msg->name = deser_copy_name(data->data, &offset);
+                if (msg->name == NULL) {
+                        LOG_ERR("Failed to reconstruct name");
+                        free(msg);
+                        return NULL;
+                }
+
                 break;
         case IRM_BOOTSTRAP_IPCP:
+                msg->name = deser_copy_name(data->data, &offset);
+                if (msg->name == NULL) {
+                        LOG_ERR("Failed to reconstruct name");
+                        free(msg);
+                        return NULL;
+                }
+
                 break;
         case IRM_ENROLL_IPCP:
+                msg->name = deser_copy_name(data->data, &offset);
+                if (msg->name == NULL) {
+                        LOG_ERR("Failed to reconstruct name");
+                        free(msg);
+                        return NULL;
+                }
+
                 if (deser_copy_string(data->data,
                                       &msg->dif_name,
                                       &offset)) {
@@ -389,6 +582,13 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
                 break;
         case IRM_REG_IPCP:
         case IRM_UNREG_IPCP:
+                msg->name = deser_copy_name(data->data, &offset);
+                if (msg->name == NULL) {
+                        LOG_ERR("Failed to reconstruct name");
+                        free(msg);
+                        return NULL;
+                }
+
                 deser_copy_size_t(data->data, &difs_size, &offset);
                 msg->difs_size = difs_size;
 
@@ -412,6 +612,22 @@ struct irm_msg * deserialize_irm_msg(buffer_t * data)
                         }
                 }
 
+                break;
+        case IRM_AP_REG:
+        case IRM_AP_REG_R:
+        case IRM_AP_UNREG:
+        case IRM_FLOW_ACCEPT:
+        case IRM_FLOW_ACCEPT_R:
+        case IRM_FLOW_ALLOC_RESP:
+        case IRM_FLOW_ALLOC:
+        case IRM_FLOW_ALLOC_R:
+        case IRM_FLOW_ALLOC_RES:
+        case IRM_FLOW_ALLOC_RES_R:
+        case IRM_FLOW_DEALLOC:
+        case IRM_FLOW_CONTROL:
+        case IRM_FLOW_WRITE:
+        case IRM_FLOW_READ:
+                LOG_MISSING;
                 break;
         default:
                 LOG_ERR("Don't know that code");
@@ -454,12 +670,13 @@ buffer_t * serialize_ipcp_msg(struct ipcp_msg * msg)
                 ser_copy_value(strlen(msg->dif_name) + 1, data,
                                msg->dif_name, &offset);
 
-                if (!name_is_ok(msg->member)) {
+                if (msg->ap_name == NULL) {
                         LOG_ERR("Null pointer passed");
                         buffer_destroy(buf);
                         return NULL;
                 }
-                ser_copy_name(msg->member, data, &offset);
+                ser_copy_value(strlen(msg->ap_name) + 1, data,
+                               msg->ap_name, &offset);
 
                 /* All these operations end with a list of DIFs */
         case IPCP_REG:
@@ -520,8 +737,10 @@ struct ipcp_msg * deserialize_ipcp_msg(buffer_t * data)
                         return NULL;
                 }
 
-                msg->member = deser_copy_name(data->data, &offset);
-                if (msg->member == NULL) {
+                deser_copy_string(data->data,
+                                  &msg->ap_name,
+                                  &offset);
+                if (msg->ap_name == NULL) {
                         LOG_ERR("Failed to reconstruct name");
                         free(msg->dif_name);
                         free(msg);
@@ -533,8 +752,8 @@ struct ipcp_msg * deserialize_ipcp_msg(buffer_t * data)
 
                 msg->difs = malloc(sizeof(*(msg->difs)) * difs_size);
                 if (msg->difs == NULL) {
+                        free(msg->ap_name);
                         free(msg->dif_name);
-                        name_destroy(msg->member);
                         free(msg);
                         return NULL;
                 }
@@ -547,7 +766,7 @@ struct ipcp_msg * deserialize_ipcp_msg(buffer_t * data)
                                         free(msg->difs[j]);
                                 free(msg->dif_name);
                                 free(msg->difs);
-                                name_destroy(msg->member);
+                                free(msg->ap_name);
                                 free(msg);
                                 return NULL;
                         }

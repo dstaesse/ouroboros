@@ -37,8 +37,6 @@ static void usage()
         printf("Usage: irm unregister_ipcp\n"
                "           ap <application process name>\n"
                "           [api <application process instance>]\n"
-               "           [ae <application entity name]\n"
-               "           [aei <application entity instance>]\n"
                "           dif <dif name to unregister from>\n"
                "           [dif <dif name to unregister from>]\n"
                "           [... (maximum %d difs)]\n", MAX_DIFS);
@@ -53,8 +51,6 @@ int do_unregister_ipcp(int argc, char ** argv)
 
         name.ap_name = NULL;
         name.api_id = 0;
-        name.ae_name = "";
-        name.aei_id = 0;
 
         while (argc > 0) {
                 if (!parse_name(argv, &name)) {
