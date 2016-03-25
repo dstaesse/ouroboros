@@ -3,6 +3,12 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
+find_package(ProtobufC REQUIRED)
+
+include_directories(${PROTOBUF_INCLUDE_DIRS})
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+protobuf_generate_c(PROTO_SRCS PROTO_HDRS irmd_messages.proto)
 
 find_library(LIBRT_LIBRARIES rt)
 if(NOT LIBRT_LIBRARIES)
@@ -30,8 +36,8 @@ set(SOURCE_FILES
         utils.c
 )
 
-add_library(ouroboros SHARED ${SOURCE_FILES})
-target_link_libraries(ouroboros rt pthread)
+add_library(ouroboros SHARED ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
+target_link_libraries(ouroboros rt pthread ${PROTOBUF_LIBRARIES})
 
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
