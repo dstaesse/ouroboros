@@ -28,8 +28,6 @@
 #define _POSIX_C_SOURCE 199506L
 #endif
 
-#define OUROBOROS_PREFIX "shm_du_map"
-
 #ifndef SHM_DU_BUFF_BLOCK_SIZE
 #define SHM_DU_BUFF_BLOCK_SIZE sysconf(_SC_PAGESIZE)
 #endif
@@ -43,7 +41,6 @@
 #endif
 
 #include "common.h"
-#include "logs.h"
 
 struct shm_du_buff;
 struct shm_du_map;

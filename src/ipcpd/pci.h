@@ -24,10 +24,7 @@
 #ifndef OUROBOROS_IPCP_PCI_H
 #define OUROBOROS_IPCP_PCI_H
 
-#define OUROBOROS_PREFIX "ipcp/pci"
-
 #include "ouroboros/du_buff.h"
-#include "ouroboros/logs.h"
 #include "dt_const.h"
 
 struct pci;

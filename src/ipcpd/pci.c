@@ -25,6 +25,10 @@
 #include <malloc.h>
 #include <errno.h>
 
+#define OUROBOROS_PREFIX "ipcp/pci"
+
+#include <ouroboros/logs.h>
+
 #define PCI_HEAD_SIZE(a, b) a.addr_size * 2 +  \
         a.cep_id_size * 2 +                    \
         a.pdu_length_size +                    \
