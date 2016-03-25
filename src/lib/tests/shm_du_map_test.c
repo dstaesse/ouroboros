@@ -27,6 +27,10 @@
 #include <sys/mman.h>
 #include <pthread.h>
 
+#define OUROBOROS_PREFIX "lib/test/shm_du_map_test"
+
+#include <ouroboros/logs.h>
+
 #define SIZE_OF_DU_BUFF 24
 #define TEST_BUFF_SIZE (SHM_DU_BUFF_BLOCK_SIZE - SIZE_OF_DU_BUFF)
 

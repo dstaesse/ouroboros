@@ -28,6 +28,11 @@
 #include <malloc.h>
 #include <string.h>
 
+#define OUROBOROS_PREFIX "shm_du_map"
+
+#include <ouroboros/logs.h>
+
+
 #define SHM_BLOCKS_SIZE (SHM_BLOCKS_IN_MAP * SHM_DU_BUFF_BLOCK_SIZE)
 #define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 2 * sizeof (size_t)                   \
                        + sizeof(pthread_mutex_t))
