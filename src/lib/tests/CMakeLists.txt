@@ -5,6 +5,7 @@ create_test_sourcelist(${src_folder}_tests test_suite.c
                        # Add new tests here
                        bitmap_test.c
                        du_buff_test.c
+                       shm_du_map_test.c
 )
 
 add_executable(${src_folder}_test EXCLUDE_FROM_ALL ${${src_folder}_tests})
