@@ -31,7 +31,7 @@ set(SOURCE_FILES
 )
 
 add_library(ouroboros SHARED ${SOURCE_FILES})
-target_link_libraries(ouroboros rt pthread)
+target_link_libraries(ouroboros ${LIBRT_LIBRARIES} ${LIBPTHREAD_LIBRARIES})
 
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
