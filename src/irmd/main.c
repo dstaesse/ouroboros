@@ -124,7 +124,7 @@ static void destroy_ipcp(struct irm * instance,
 
 static void bootstrap_ipcp(struct irm * instance,
                            rina_name_t name,
-                           struct dif_config conf)
+                           struct dif_config * conf)
 {
         pid_t pid = 0;
 
@@ -134,7 +134,7 @@ static void bootstrap_ipcp(struct irm * instance,
                 return;
         }
 
-        if (ipcp_bootstrap(pid, conf))
+        if (ipcp_bootstrap(pid, *conf))
                 LOG_ERR("Could not bootstrap IPCP");
 }
 
@@ -219,10 +219,9 @@ int main()
 
         while (true) {
                 int cli_sockfd;
-                struct irm_msg * msg;
+                irm_msg_t * msg;
                 ssize_t count;
-                buffer_t buffer;
-                int i;
+                rina_name_t name;
 
                 cli_sockfd = accept(sockfd, 0, 0);
                 if (cli_sockfd < 0) {
@@ -232,59 +231,44 @@ int main()
 
                 count = read(cli_sockfd, buf, IRM_MSG_BUF_SIZE);
                 if (count > 0) {
-                        buffer.size = count;
-                        buffer.data = buf;
-                        msg = deserialize_irm_msg(&buffer);
+                        msg = irm_msg__unpack(NULL, count, buf);
                         if (msg == NULL)
                                 continue;
 
+                        name.ap_name = msg->ap_name;
+                        name.api_id = msg->api_id;
+
                         switch (msg->code) {
-                        case IRM_CREATE_IPCP:
-                                create_ipcp(instance,
-                                            *(msg->name),
-                                            msg->ipcp_type);
-                                free(msg->ipcp_type);
+                        case IRM_MSG_CODE__IRM_CREATE_IPCP:
+                                create_ipcp(instance, name, msg->ipcp_type);
                                 break;
-                        case IRM_DESTROY_IPCP:
-                                destroy_ipcp(instance,
-                                             *(msg->name));
+                        case IRM_MSG_CODE__IRM_DESTROY_IPCP:
+                                destroy_ipcp(instance, name);
                                 break;
-                        case IRM_BOOTSTRAP_IPCP:
-                                bootstrap_ipcp(instance,
-                                               *(msg->name),
-                                               *(msg->conf));
-                                free(msg->conf);
+                        case IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP:
+                                bootstrap_ipcp(instance, name, NULL);
                                 break;
-                        case IRM_ENROLL_IPCP:
-                                enroll_ipcp(instance,
-                                            *(msg->name),
-                                            msg->dif_name);
-                                free(msg->dif_name);
+                        case IRM_MSG_CODE__IRM_ENROLL_IPCP:
+                                if (msg->n_dif_name != 1)
+                                        continue;
+                                enroll_ipcp(instance, name, msg->dif_name[0]);
                                 break;
-                        case IRM_REG_IPCP:
-                                reg_ipcp(instance,
-                                         *(msg->name),
-                                         msg->difs,
-                                         msg->difs_size);
-                                for (i = 0; i < msg->difs_size; i++)
-                                        free(msg->difs[i]);
-                                free(msg->difs);
+                        case IRM_MSG_CODE__IRM_REG_IPCP:
+                                reg_ipcp(instance, name,
+                                         msg->dif_name,
+                                         msg->n_dif_name);
                                 break;
-                        case IRM_UNREG_IPCP:
-                                unreg_ipcp(instance,
-                                           *(msg->name),
-                                           msg->difs,
-                                           msg->difs_size);
-                                for (i = 0; i < msg->difs_size; i++)
-                                        free(msg->difs[i]);
-                                free(msg->difs);
+                        case IRM_MSG_CODE__IRM_UNREG_IPCP:
+                                unreg_ipcp(instance, name,
+                                           msg->dif_name,
+                                           msg->n_dif_name);
                                 break;
                         default:
                                 LOG_ERR("Don't know that message code");
                                 break;
                         }
-                        name_destroy(msg->name);
-                        free(msg);
+
+                        irm_msg__free_unpacked(msg, NULL);
                 }
 
                 close(cli_sockfd);

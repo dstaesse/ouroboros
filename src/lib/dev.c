@@ -32,30 +32,29 @@ int ap_reg(char * ap_name,
            char ** difs,
            size_t difs_size)
 {
-        struct irm_msg msg;
-        struct irm_msg * recv_msg = NULL;
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
         int fd = 0;
 
         if (ap_name == NULL ||
             difs == NULL ||
-            difs_size == 0) {
-                LOG_ERR("Invalid arguments");
-                return -1;
+            difs_size == 0 ||
+            difs[0] == NULL) {
+                return -EINVAL;
         }
 
-        msg.code = IRM_AP_REG;
+        msg.code = IRM_MSG_CODE__IRM_AP_REG;
         msg.ap_name = ap_name;
-        msg.difs = difs;
-        msg.difs_size = difs_size;
+        msg.dif_name = difs;
+        msg.n_dif_name = difs_size;
 
-        recv_msg = send_recv_irmd_msg(&msg);
+        recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                LOG_ERR("Failed to send and receive message");
                 return -1;
         }
 
         fd = recv_msg->fd;
-        free(recv_msg);
+        irm_msg__free_unpacked(recv_msg, NULL);
 
         return fd;
 }
@@ -64,21 +63,21 @@ int ap_unreg(char * ap_name,
              char ** difs,
              size_t difs_size)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
         if (ap_name == NULL ||
             difs == NULL ||
-            difs_size == 0) {
-                LOG_ERR("Invalid arguments");
-                return -1;
+            difs_size == 0 ||
+            difs[0] == NULL) {
+                return -EINVAL;
         }
 
-        msg.code = IRM_AP_UNREG;
+        msg.code = IRM_MSG_CODE__IRM_AP_UNREG;
         msg.ap_name = ap_name;
-        msg.difs = difs;
-        msg.difs_size = difs_size;
+        msg.dif_name = difs;
+        msg.n_dif_name = difs_size;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -90,45 +89,47 @@ int flow_accept(int fd,
                 char * ap_name,
                 char * ae_name)
 {
-        struct irm_msg msg;
-        struct irm_msg * recv_msg = NULL;
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
         int cli_fd = 0;
 
         if (ap_name == NULL) {
-                LOG_ERR("Invalid arguments");
-                return -1;
+                return -EINVAL;
         }
 
-        msg.code = IRM_FLOW_ACCEPT;
+        msg.code = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
+        msg.has_fd = true;
         msg.fd = fd;
 
-        recv_msg = send_recv_irmd_msg(&msg);
+        recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                LOG_ERR("Failed to send and receive message");
                 return -1;
         }
 
+        if (recv_msg->has_fd == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
         cli_fd = recv_msg->fd;
         ap_name = recv_msg->ap_name;
-        if (ae_name == NULL)
-                ae_name = "";
-        else
-                ae_name = recv_msg->ae_name;
-        free(recv_msg);
+        ae_name = recv_msg->ae_name;
 
+        irm_msg__free_unpacked(recv_msg, NULL);
         return cli_fd;
 }
 
 int flow_alloc_resp(int fd,
                     int result)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
-        msg.code = IRM_FLOW_ALLOC_RESP;
+        msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
+        msg.has_fd = true;
         msg.fd = fd;
+        msg.has_result = true;
         msg.result = result;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -142,67 +143,74 @@ int flow_alloc(char * dst_ap_name,
                struct qos_spec * qos,
                int oflags)
 {
-        struct irm_msg msg;
-        struct irm_msg * recv_msg = NULL;
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
         int fd = 0;
 
         if (dst_ap_name == NULL ||
-            src_ap_name == NULL) {
+            src_ap_name == NULL ||
+            qos == NULL) {
                 LOG_ERR("Invalid arguments");
                 return -1;
         }
 
-        msg.code = IRM_FLOW_ALLOC;
+        msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst_ap_name = dst_ap_name;
         msg.ap_name = src_ap_name;
-        if (src_ae_name == NULL)
-                msg.ae_name = "";
-        else
-                msg.ae_name = src_ae_name;
-        msg.qos = qos;
+        msg.ae_name = src_ae_name;
+        msg.has_oflags = true;
         msg.oflags = oflags;
 
-        recv_msg = send_recv_irmd_msg(&msg);
+        recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                LOG_ERR("Failed to send and receive message");
+                return -1;
+        }
+
+        if (recv_msg->has_fd == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         fd = recv_msg->fd;
-        free(recv_msg);
-
+        irm_msg__free_unpacked(recv_msg, NULL);
         return fd;
 }
 
 int flow_alloc_res(int fd)
 {
-        struct irm_msg msg;
-        struct irm_msg * recv_msg = NULL;
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
         int result = 0;
 
-        msg.code = IRM_FLOW_ALLOC_RES;
+        msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC_RES;
+        msg.has_fd = true;
         msg.fd = fd;
 
-        recv_msg = send_recv_irmd_msg(&msg);
+        recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                LOG_ERR("Failed to send and receive message");
+                return -1;
+        }
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         result = recv_msg->result;
-        free(recv_msg);
+        irm_msg__free_unpacked(recv_msg, NULL);
 
         return result;
 }
 
 int flow_dealloc(int fd)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
-        msg.code = IRM_FLOW_DEALLOC;
+        msg.code = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
+        msg.has_fd = true;
         msg.fd = fd;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -212,12 +220,13 @@ int flow_dealloc(int fd)
 
 int flow_cntl(int fd, int oflags)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
+        msg.has_fd = true;
         msg.fd = fd;
         msg.oflags = oflags;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
