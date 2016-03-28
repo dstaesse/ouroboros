@@ -8,6 +8,7 @@ set(SOURCE_FILES
         # Add source files here
         main.c
         pci.c
+        shm_pci.c
 )
 
 add_executable (ipcpd ${SOURCE_FILES})

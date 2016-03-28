@@ -40,7 +40,9 @@ install(FILES ${IRM_PROTO_HDRS} ${IPCP_PROTO_HDRS}
 
 add_library(ouroboros SHARED ${SOURCE_FILES}
   ${IRM_PROTO_SRCS} ${IPCP_PROTO_SRCS})
-target_link_libraries(ouroboros rt pthread ${PROTOBUF_C_LIBRARY})
+
+target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
+  ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY})
 
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
