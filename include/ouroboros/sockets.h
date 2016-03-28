@@ -28,6 +28,9 @@
 
 #include <sys/types.h>
 
+#include "irmd_messages.pb-c.h"
+typedef IrmMsg irm_msg_t;
+
 #define IRM_SOCK_PATH "/tmp/irm_sock"
 #define IRM_MSG_BUF_SIZE 256
 
@@ -99,6 +102,8 @@ int               client_socket_open(char * file_name);
 
 int               send_irmd_msg(struct irm_msg * msg);
 struct irm_msg *  send_recv_irmd_msg(struct irm_msg * msg);
+
+int send_irm_msg(irm_msg_t * msg);
 
 /* Caller has to free the buffer */
 buffer_t *        serialize_irm_msg(struct irm_msg * msg);

@@ -166,6 +166,13 @@ struct irm_msg * send_recv_irmd_msg(struct irm_msg * msg)
         return recv_msg;
 }
 
+
+int send_irm_msg(irm_msg_t * msg)
+{
+
+        return -1;
+}
+
 char * ipcp_sock_path(pid_t pid)
 {
         char * full_name = NULL;

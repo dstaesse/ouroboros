@@ -26,20 +26,26 @@
 #include "common.h"
 #include "rina_name.h"
 
-int     irm_create_ipcp(rina_name_t name,
-                        char * ipcp_type);
-int     irm_destroy_ipcp(rina_name_t name);
+int irm_create_ipcp(char * ap_name,
+                    int    api_id,
+                    char * ipcp_type);
+int irm_destroy_ipcp(char * ap_name,
+                     int    api_id);
 
-int     irm_bootstrap_ipcp(rina_name_t name,
-                           struct dif_config conf);
-int     irm_enroll_ipcp(rina_name_t name,
-                        char * dif_name);
+int irm_bootstrap_ipcp(char *              ap_name,
+                       int                 api_id,
+                       struct dif_config * conf);
+int irm_enroll_ipcp(char * ap_name,
+                    int    api_id,
+                    char * dif_name);
 
-int     irm_reg_ipcp(rina_name_t name,
-                     char ** difs,
-                     size_t difs_size);
-int     irm_unreg_ipcp(rina_name_t name,
-                       char ** difs,
-                       size_t difs_size);
+int irm_reg_ipcp(char *  ap_name,
+                 int     api_id,
+                 char ** difs,
+                 size_t  difs_size);
+int irm_unreg_ipcp(char *  ap_name,
+                   int     api_id,
+                   char ** difs,
+                   size_t  difs_size);
 
 #endif

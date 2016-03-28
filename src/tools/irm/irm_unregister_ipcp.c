@@ -45,36 +45,37 @@ static void usage()
 
 int do_unregister_ipcp(int argc, char ** argv)
 {
-        rina_name_t name;
+        char * ap_name = NULL;
+        int api_id = 0;
         char * difs[MAX_DIFS];
         size_t difs_size = 0;
 
-        name.ap_name = NULL;
-        name.api_id = 0;
 
         while (argc > 0) {
-                if (!parse_name(argv, &name)) {
-                        if (matches(*argv, "dif") == 0) {
-                                difs[difs_size++] = *(argv + 1);
-                                if (difs_size > MAX_DIFS) {
-                                        printf("Too many difs specified\n");
-                                        return -1;
-                                }
-                        } else {
-                                printf("\"%s\" is unknown, try \"irm "
-                                       "unregister_ipcp\".\n", *argv);
+                if (matches(*argv, "ap") == 0) {
+                        ap_name = *(argv + 1);
+                } else if (matches(*argv, "api") == 0) {
+                        api_id = atoi(*(argv + 1));
+                } else if (matches(*argv, "dif") == 0) {
+                        difs[difs_size++] = *(argv + 1);
+                        if (difs_size > MAX_DIFS) {
+                                printf("Too many difs specified\n");
                                 return -1;
                         }
+                } else {
+                        printf("\"%s\" is unknown, try \"irm "
+                               "unregister_ipcp\".\n", *argv);
+                        return -1;
                 }
 
                 argc -= 2;
                 argv += 2;
         }
 
-        if (difs_size == 0 || name.ap_name == NULL) {
+        if (difs_size == 0 || ap_name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_unreg_ipcp(name, difs, difs_size);
+        return irm_unreg_ipcp(ap_name, api_id, difs, difs_size);
 }

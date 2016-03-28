@@ -34,10 +34,13 @@ set(SOURCE_FILES
         shm_du_map.c
         sockets.c
         utils.c
-)
+        )
 
-add_library(ouroboros SHARED ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
-target_link_libraries(ouroboros rt pthread ${PROTOBUF_LIBRARIES})
+install(FILES ${PROTO_HDRS}
+        DESTINATION include/ouroboros)
+
+add_library(ouroboros SHARED ${SOURCE_FILES} ${PROTO_SRCS})
+target_link_libraries(ouroboros rt pthread ${PROTOBUF_C_LIBRARY})
 
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
@@ -45,5 +48,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ouroboros LIBRARY DESTINATION lib)
+
+target_include_directories(ouroboros PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 add_subdirectory(tests)
