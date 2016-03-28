@@ -134,7 +134,7 @@ static void bootstrap_ipcp(struct irm * instance,
                 return;
         }
 
-        if (ipcp_bootstrap(pid, *conf))
+        if (ipcp_bootstrap(pid, conf))
                 LOG_ERR("Could not bootstrap IPCP");
 }
 

@@ -31,40 +31,22 @@
 #include "irmd_messages.pb-c.h"
 typedef IrmMsg irm_msg_t;
 
+#include "ipcpd_messages.pb-c.h"
+typedef IpcpMsg ipcp_msg_t;
+
 #define IRM_SOCK_PATH "/tmp/irm_sock"
 #define IRM_MSG_BUF_SIZE 256
 
 #define IPCP_SOCK_PATH_PREFIX "/tmp/ipcp_sock"
 #define IPCP_MSG_BUFS_SIZE IRM_MSG_BUF_SIZE
 
-enum ipcp_msg_code {
-        IPCP_BOOTSTRAP,
-        IPCP_ENROLL,
-        IPCP_REG,
-        IPCP_UNREG
-};
-
-struct ipcp_msg {
-        enum ipcp_msg_code  code;
-        struct dif_config * conf;
-        char *              dif_name;
-        char *              ap_name;
-        char **             difs;
-        size_t              difs_size;
-};
-
 /* Returns the full socket path of an IPCP */
-char *            ipcp_sock_path(pid_t pid);
+char *      ipcp_sock_path(pid_t pid);
 
-int               server_socket_open(char * file_name);
-int               client_socket_open(char * file_name);
+int         server_socket_open(char * file_name);
+int         client_socket_open(char * file_name);
 
-int               send_irm_msg(irm_msg_t * msg);
-irm_msg_t *       send_recv_irm_msg(irm_msg_t * msg);
-
-/* Caller has to free the buffer */
-buffer_t *        serialize_ipcp_msg(struct ipcp_msg * msg);
-/* Caller has to free all the allocated fields in the message */
-struct ipcp_msg * deserialize_ipcp_msg(buffer_t * data);
+int         send_irm_msg(irm_msg_t * msg);
+irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
 
 #endif

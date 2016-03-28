@@ -1,0 +1,14 @@
+enum ipcp_msg_code {
+        IPCP_BOOTSTRAP = 1;
+        IPCP_ENROLL = 2;
+        IPCP_REG = 3;
+        IPCP_UNREG = 4;
+};
+
+message ipcp_msg {
+        required ipcp_msg_code code = 1;
+        optional string ap_name = 2;
+        // Missing dif_config field here
+        repeated string dif_name = 4;
+        repeated string n_1_dif_name = 5;
+};
