@@ -20,14 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef IPCPD_FLOW_H
-#define IPCPD_FLOW_H
+#ifndef OUROBOROS_FLOW_H
+#define OUROBOROS_FLOW_H
 
 #include <ouroboros/common.h>
 
-#ifdef FLOW_MT_SAFE
 #include <pthread.h>
-#endif
 
 /* same values as fcntl.h */
 #define FLOW_O_RDONLY   00000000
@@ -40,8 +38,6 @@
 
 #define FLOW_O_INVALID  00037777
 
-typedef long port_id_t;
-
 enum flow_state {
         FLOW_INIT = 0,
         FLOW_ALLOCATED,
@@ -49,18 +45,17 @@ enum flow_state {
 };
 
 typedef struct flow {
-        port_id_t       port_id;
-        uint16_t        flags;
-        uint8_t         state;
-#ifdef FLOW_MT_SAFE
+        int32_t         port_id;
+        uint16_t        oflags;
+        enum flow_state state;
+
         pthread_mutex_t lock;
-#endif
 } flow_t;
 
-flow_t * flow_create(port_id_t port_id);
+flow_t * flow_create(int32_t   port_id);
 void     flow_destroy(flow_t * flow);
 
 int      flow_set_opts(flow_t * flow, uint16_t opts);
 uint16_t flow_get_opts(const flow_t * flow);
 
-#endif /* IPCPD_FLOW_H */
+#endif /* OUROBOROS_FLOW_H */

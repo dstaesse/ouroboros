@@ -20,23 +20,22 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "flow.h"
 #include <malloc.h>
+#include <ouroboros/flow.h>
 
 #define OUROBOROS_PREFIX "ipcpd/flow"
 
 #include <ouroboros/logs.h>
 
-flow_t * flow_create(port_id_t port_id)
+flow_t * flow_create(int32_t port_id)
 {
         flow_t * flow = malloc(sizeof *flow);
         flow->port_id = port_id;
-        flow->flags = FLOW_O_DEFAULT;
+        flow->oflags = FLOW_O_DEFAULT;
         flow->state = FLOW_INIT;
 
-#ifdef FLOW_MT_SAFE
         pthread_mutex_init(&flow->lock, NULL);
-#endif
+
         return flow;
 }
 
@@ -52,23 +51,18 @@ int flow_set_opts(flow_t * flow, uint16_t opts)
                 return -1;
         }
 
-#ifdef FLOW_MT_SAFE
         pthread_mutex_lock(&flow->lock);
-#endif
 
         if ((opts & FLOW_O_ACCMODE) == FLOW_O_ACCMODE) {
-#ifdef FLOW_MT_SAFE
                 pthread_mutex_unlock(&flow->lock);
-#endif
                 LOG_WARN("Invalid flow options. Setting default.");
                 opts = FLOW_O_DEFAULT;
         }
 
-        flow->flags = opts;
+        flow->oflags = opts;
 
-#ifdef FLOW_MT_SAFE
-                pthread_mutex_unlock(&flow->lock);
-#endif
+        pthread_mutex_unlock(&flow->lock);
+
         return 0;
 }
 
@@ -79,5 +73,5 @@ uint16_t flow_get_opts(const flow_t * flow)
                 return FLOW_O_INVALID;
         }
 
-        return flow->flags;
+        return flow->oflags;
 }

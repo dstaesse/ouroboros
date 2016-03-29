@@ -9,6 +9,7 @@ set(HEADER_FILES
         da.h
         dev.h
         du_buff.h
+        flow.h
         ipcp.h
         irm.h
         list.h
