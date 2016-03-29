@@ -40,10 +40,10 @@
 #include <sys/wait.h>
 
 static int send_ipcp_msg(pid_t pid,
-                         struct ipcp_msg * msg)
+                         ipcp_msg_t * msg)
 {
        int sockfd = 0;
-       buffer_t * buf = NULL;
+       buffer_t buf;
        char * sock_path;
 
        sock_path = ipcp_sock_path(pid);
@@ -56,24 +56,31 @@ static int send_ipcp_msg(pid_t pid,
                return -1;
        }
 
-       buf = serialize_ipcp_msg(msg);
-       if (buf == NULL) {
+       buf.size = ipcp_msg__get_packed_size(msg);
+       if (buf.size == 0) {
+               close(sockfd);
                free(sock_path);
+               return -1;
+       }
+
+       buf.data = malloc(buf.size);
+       if (buf.data == NULL) {
+               close(sockfd);
+               free(sock_path);
+               return -ENOMEM;
+       }
+
+       ipcp_msg__pack(msg, buf.data);
+
+       if (write(sockfd, buf.data, buf.size) == -1) {
+               free(sock_path);
+               free(buf.data);
                close(sockfd);
                return -1;
        }
 
-       if (write(sockfd, buf->data, buf->size) == -1) {
-               free(sock_path);
-               free(buf->data);
-               free(buf);
-               close(sockfd);
-               return -1;
-       }
-
-       free(buf->data);
-       free(buf);
-
+       free(buf.data);
+       free(sock_path);
        close(sockfd);
        return 0;
 }
@@ -158,14 +165,16 @@ int ipcp_reg(pid_t pid,
              char ** difs,
              size_t difs_size)
 {
-        struct ipcp_msg msg;
+        ipcp_msg_t msg = IPCP_MSG__INIT;
 
-        if (difs == NULL)
-                return -1;
+        if (difs == NULL ||
+            difs_size == 0 ||
+            difs[0] == NULL)
+                return -EINVAL;
 
-        msg.code = IPCP_REG;
-        msg.difs = difs;
-        msg.difs_size = difs_size;
+        msg.code = IPCP_MSG_CODE__IPCP_REG;
+        msg.dif_name = difs;
+        msg.n_dif_name = difs_size;
 
         if (send_ipcp_msg(pid, &msg)) {
                 LOG_ERR("Failed to send message to daemon");
@@ -179,14 +188,16 @@ int ipcp_unreg(pid_t pid,
                char ** difs,
                size_t difs_size)
 {
-        struct ipcp_msg msg;
+        ipcp_msg_t msg = IPCP_MSG__INIT;
 
-        if (difs == NULL)
-                return -1;
+        if (difs == NULL ||
+            difs_size == 0 ||
+            difs[0] == NULL)
+                return -EINVAL;
 
-        msg.code = IPCP_UNREG;
-        msg.difs = difs;
-        msg.difs_size = difs_size;
+        msg.code = IPCP_MSG_CODE__IPCP_UNREG;
+        msg.dif_name = difs;
+        msg.n_dif_name = difs_size;
 
         if (send_ipcp_msg(pid, &msg)) {
                 LOG_ERR("Failed to send message to daemon");
@@ -197,12 +208,11 @@ int ipcp_unreg(pid_t pid,
 }
 
 int ipcp_bootstrap(pid_t pid,
-                   struct dif_config conf)
+                   struct dif_config * conf)
 {
-        struct ipcp_msg msg;
+        ipcp_msg_t msg = IPCP_MSG__INIT;
 
-        msg.code = IPCP_BOOTSTRAP;
-        msg.conf = &conf;
+        msg.code = IPCP_MSG_CODE__IPCP_BOOTSTRAP;
 
         if (send_ipcp_msg(pid, &msg)) {
                 LOG_ERR("Failed to send message to daemon");
@@ -218,24 +228,32 @@ int ipcp_enroll(pid_t pid,
                 char ** n_1_difs,
                 ssize_t n_1_difs_size)
 {
-        struct ipcp_msg msg;
+        ipcp_msg_t msg = IPCP_MSG__INIT;
 
-        if (n_1_difs == NULL)
+        if (n_1_difs == NULL ||
+            n_1_difs_size == 0 ||
+            n_1_difs[0] == NULL ||
+            dif_name == NULL ||
+            member_name == NULL)
+                return -EINVAL;
+
+        msg.code = IPCP_MSG_CODE__IPCP_ENROLL;
+        msg.dif_name = malloc(sizeof(*(msg.dif_name)));
+        if (msg.dif_name == NULL) {
+                LOG_ERR("Failed to malloc");
                 return -1;
-
-        if (dif_name == NULL)
-                return -1;
-
-        msg.code = IPCP_ENROLL;
-        msg.dif_name = dif_name;
+        }
+        msg.dif_name[0] = dif_name;
         msg.ap_name = member_name;
-        msg.difs = n_1_difs;
-        msg.difs_size = n_1_difs_size;
+        msg.n_1_dif_name = n_1_difs;
+        msg.n_n_1_dif_name = n_1_difs_size;
 
         if (send_ipcp_msg(pid, &msg)) {
                 LOG_ERR("Failed to send message to daemon");
+                free(msg.dif_name);
                 return -1;
         }
 
+        free(msg.dif_name);
         return 0;
 }

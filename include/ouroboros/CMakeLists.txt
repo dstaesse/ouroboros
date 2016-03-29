@@ -20,4 +20,4 @@ set(HEADER_FILES
 )
 
 install(FILES ${HEADER_FILES} "${CMAKE_CURRENT_BINARY_DIR}/config.h"
-  DESTINATION include/ouroboros)
+        DESTINATION include/ouroboros)
