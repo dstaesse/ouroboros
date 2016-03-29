@@ -24,7 +24,6 @@
 #define OUROBOROS_SOCKETS_H
 
 #include <ouroboros/common.h>
-#include <ouroboros/rina_name.h>
 
 #include <sys/types.h>
 

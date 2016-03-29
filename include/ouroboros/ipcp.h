@@ -26,14 +26,14 @@
 #include <sys/types.h>
 
 #include "common.h"
-#include "rina_name.h"
+#include "instance_name.h"
 
 struct ipcp;
 
 /* Returns the process id */
-pid_t ipcp_create(rina_name_t name,
-                  char *      ipcp_type);
-int ipcp_destroy(pid_t pid);
+pid_t ipcp_create(instance_name_t * api,
+                  char *            ipcp_type);
+int   ipcp_destroy(pid_t pid);
 
 int ipcp_reg(pid_t   pid,
              char ** difs,
@@ -50,4 +50,4 @@ int ipcp_enroll(pid_t   pid,
                 char ** n_1_difs,
                 ssize_t n_1_difs_size);
 
-#endif
+#endif /* OUROBOROS_IPCP_H */

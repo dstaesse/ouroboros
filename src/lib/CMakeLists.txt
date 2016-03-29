@@ -26,10 +26,10 @@ set(SOURCE_FILES
   da.c
   dev.c
   du_buff.c
+  instance_name.c
   ipcp.c
   irm.c
   list.c
-  rina_name.c
   shm_du_map.c
   sockets.c
   utils.c

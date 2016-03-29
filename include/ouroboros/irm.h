@@ -24,28 +24,21 @@
 #define OUROBOROS_IRM_H
 
 #include "common.h"
-#include "rina_name.h"
+#include "instance_name.h"
 
-int irm_create_ipcp(char * ap_name,
-                    int    api_id,
-                    char * ipcp_type);
-int irm_destroy_ipcp(char * ap_name,
-                     int    api_id);
+int irm_create_ipcp(instance_name_t * api,
+                    char *            ipcp_type);
+int irm_destroy_ipcp(instance_name_t * api);
 
-int irm_bootstrap_ipcp(char *              ap_name,
-                       int                 api_id,
+int irm_bootstrap_ipcp(instance_name_t *   api,
                        struct dif_config * conf);
-int irm_enroll_ipcp(char * ap_name,
-                    int    api_id,
-                    char * dif_name);
+int irm_enroll_ipcp(instance_name_t * api,
+                    char *            dif_name);
 
-int irm_reg_ipcp(char *  ap_name,
-                 int     api_id,
-                 char ** difs,
-                 size_t  difs_size);
-int irm_unreg_ipcp(char *  ap_name,
-                   int     api_id,
-                   char ** difs,
-                   size_t  difs_size);
-
-#endif
+int irm_reg_ipcp(instance_name_t * api,
+                 char **           difs,
+                 size_t            difs_size);
+int irm_unreg_ipcp(const instance_name_t * api,
+                   char **                 difs,
+                   size_t                  difs_size);
+#endif /* OUROBOROS_IRM_H */

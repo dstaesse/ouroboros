@@ -29,7 +29,7 @@
 #include <ouroboros/ipcp.h>
 #include <ouroboros/da.h>
 #include <ouroboros/list.h>
-#include <ouroboros/rina_name.h>
+#include <ouroboros/instance_name.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -37,17 +37,17 @@
 #include <errno.h>
 
 struct name_to_pid_entry {
-        struct list_head next;
-        pid_t pid;
-        rina_name_t * name;
+        struct list_head  next;
+        pid_t             pid;
+        instance_name_t * api;
 };
 
 struct irm {
         struct list_head name_to_pid;
 };
 
-static pid_t find_pid_by_name(struct irm * instance,
-                              rina_name_t * name)
+static pid_t find_pid_by_name(struct irm *      instance,
+                              instance_name_t * api)
 {
         struct list_head * pos;
 
@@ -55,23 +55,23 @@ static pid_t find_pid_by_name(struct irm * instance,
                 struct name_to_pid_entry * tmp =
                         list_entry(pos, struct name_to_pid_entry, next);
 
-                LOG_DBG("name is %s", name->ap_name);
+                LOG_DBG("name is %s", api->name);
 
-                if (name_is_equal(name, tmp->name))
+                if (instance_name_cmp(api, tmp->api) == 0)
                         return tmp->pid;
         }
 
         return 0;
 }
 
-static void create_ipcp(struct irm * instance,
-                        rina_name_t name,
-                        char * ipcp_type)
+static void create_ipcp(struct irm *      instance,
+                        instance_name_t * api,
+                        char *            ipcp_type)
 {
         pid_t pid;
         struct name_to_pid_entry * tmp;
 
-        pid = ipcp_create(name, ipcp_type);
+        pid = ipcp_create(api, ipcp_type);
         if (pid == -1) {
                 LOG_ERR("Failed to create IPCP");
                 return;
@@ -84,8 +84,8 @@ static void create_ipcp(struct irm * instance,
         INIT_LIST_HEAD(&tmp->next);
 
         tmp->pid = pid;
-        tmp->name = name_dup(&name);
-        if (tmp->name == NULL) {
+        tmp->api = instance_name_dup(api);
+        if (tmp->api == NULL) {
                 free(tmp);
                 return;
         }
@@ -95,14 +95,14 @@ static void create_ipcp(struct irm * instance,
         list_add(&tmp->next, &instance->name_to_pid);
 }
 
-static void destroy_ipcp(struct irm * instance,
-                         rina_name_t name)
+static void destroy_ipcp(struct irm *      instance,
+                         instance_name_t * api)
 {
         pid_t pid = 0;
         struct list_head * pos;
         struct list_head * n;
 
-        pid = find_pid_by_name(instance, &name);
+        pid = find_pid_by_name(instance, api);
         if (pid == 0) {
                 LOG_ERR("No such IPCP");
                 return;
@@ -117,18 +117,18 @@ static void destroy_ipcp(struct irm * instance,
                 struct name_to_pid_entry * tmp =
                         list_entry(pos, struct name_to_pid_entry, next);
 
-                if (name_is_equal(&name, tmp->name))
+                if (instance_name_cmp(api, tmp->api) == 0)
                         list_del(&tmp->next);
         }
 }
 
-static void bootstrap_ipcp(struct irm * instance,
-                           rina_name_t name,
+static void bootstrap_ipcp(struct irm *        instance,
+                           instance_name_t *   api,
                            struct dif_config * conf)
 {
         pid_t pid = 0;
 
-        pid = find_pid_by_name(instance, &name);
+        pid = find_pid_by_name(instance, api);
         if (pid == 0) {
                 LOG_ERR("No such IPCP");
                 return;
@@ -138,16 +138,16 @@ static void bootstrap_ipcp(struct irm * instance,
                 LOG_ERR("Could not bootstrap IPCP");
 }
 
-static void enroll_ipcp(struct irm * instance,
-                        rina_name_t name,
-                        char * dif_name)
+static void enroll_ipcp(struct irm *       instance,
+                        instance_name_t  * api,
+                        char *             dif_name)
 {
-        pid_t pid = 0;
-        char * member;
+        pid_t   pid = 0;
+        char *  member;
         char ** n_1_difs = NULL;
         ssize_t n_1_difs_size = 0;
 
-        pid = find_pid_by_name(instance, &name);
+        pid = find_pid_by_name(instance, api);
         if (pid == 0) {
                 LOG_ERR("No such IPCP");
                 return;
@@ -166,14 +166,14 @@ static void enroll_ipcp(struct irm * instance,
                         LOG_ERR("Could not enroll IPCP");
 }
 
-static void reg_ipcp(struct irm * instance,
-                     rina_name_t name,
-                     char ** difs,
-                     size_t difs_size)
+static void reg_ipcp(struct irm *      instance,
+                     instance_name_t * api,
+                     char **           difs,
+                     size_t            difs_size)
 {
         pid_t pid = 0;
 
-        pid = find_pid_by_name(instance, &name);
+        pid = find_pid_by_name(instance, api);
         if (pid == 0) {
                 LOG_ERR("No such IPCP");
                 return;
@@ -183,14 +183,14 @@ static void reg_ipcp(struct irm * instance,
                 LOG_ERR("Could not register IPCP to N-1 DIF(s)");
 }
 
-static void unreg_ipcp(struct irm * instance,
-                       rina_name_t name,
-                       char ** difs,
-                       size_t difs_size)
+static void unreg_ipcp(struct irm *       instance,
+                       instance_name_t  * api,
+                       char **            difs,
+                       size_t             difs_size)
 {
         pid_t pid = 0;
 
-        pid = find_pid_by_name(instance, &name);
+        pid = find_pid_by_name(instance, api);
         if (pid == 0) {
                 LOG_ERR("No such IPCP");
                 return;
@@ -204,8 +204,8 @@ static void unreg_ipcp(struct irm * instance,
 int main()
 {
         struct irm * instance = NULL;
-        int sockfd;
-        uint8_t buf[IRM_MSG_BUF_SIZE];
+        int          sockfd;
+        uint8_t      buf[IRM_MSG_BUF_SIZE];
 
         instance = malloc(sizeof(*instance));
         if (instance == NULL)
@@ -221,7 +221,7 @@ int main()
                 int cli_sockfd;
                 irm_msg_t * msg;
                 ssize_t count;
-                rina_name_t name;
+                instance_name_t api;
 
                 cli_sockfd = accept(sockfd, 0, 0);
                 if (cli_sockfd < 0) {
@@ -235,31 +235,31 @@ int main()
                         if (msg == NULL)
                                 continue;
 
-                        name.ap_name = msg->ap_name;
-                        name.api_id = msg->api_id;
+                        api.name = msg->ap_name;
+                        api.id   = msg->api_id;
 
                         switch (msg->code) {
                         case IRM_MSG_CODE__IRM_CREATE_IPCP:
-                                create_ipcp(instance, name, msg->ipcp_type);
+                                create_ipcp(instance, &api, msg->ipcp_type);
                                 break;
                         case IRM_MSG_CODE__IRM_DESTROY_IPCP:
-                                destroy_ipcp(instance, name);
+                                destroy_ipcp(instance, &api);
                                 break;
                         case IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP:
-                                bootstrap_ipcp(instance, name, NULL);
+                                bootstrap_ipcp(instance, &api, NULL);
                                 break;
                         case IRM_MSG_CODE__IRM_ENROLL_IPCP:
                                 if (msg->n_dif_name != 1)
                                         continue;
-                                enroll_ipcp(instance, name, msg->dif_name[0]);
+                                enroll_ipcp(instance, &api, msg->dif_name[0]);
                                 break;
                         case IRM_MSG_CODE__IRM_REG_IPCP:
-                                reg_ipcp(instance, name,
+                                reg_ipcp(instance, &api,
                                          msg->dif_name,
                                          msg->n_dif_name);
                                 break;
                         case IRM_MSG_CODE__IRM_UNREG_IPCP:
-                                unreg_ipcp(instance, name,
+                                unreg_ipcp(instance, &api,
                                            msg->dif_name,
                                            msg->n_dif_name);
                                 break;

@@ -19,21 +19,21 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef RINA_NAME_H
-#define RINA_NAME_H
+#ifndef INSTANCE_NAME_H
+#define INSTANCE_NAME_H
 
 #include "common.h"
 
 typedef struct {
-        char *       ap_name;
-        unsigned int api_id;
-} rina_name_t;
+        char *   name;
+        uint16_t id;
+} instance_name_t;
 
 /*
  * Allocates a new name, returning the allocated object.
  * In case of an error, a NULL is returned.
  */
-rina_name_t * name_create();
+instance_name_t * instance_name_create();
 
 /*
  * Initializes a previously dynamically allocated name (i.e. name_create())
@@ -46,49 +46,44 @@ rina_name_t * name_create();
  *
  * It is allowed to call name_init() over an already initialized object
  */
-rina_name_t * name_init_from(rina_name_t * dst,
-                             const char *  ap_name,
-                             unsigned int  api_id);
+instance_name_t * instance_name_init_from(instance_name_t * dst,
+                                          const char *      name,
+                                          uint16_t          api_id);
 
 /* Takes ownership of the passed parameters */
-rina_name_t * name_init_with(rina_name_t * dst,
-                             char *        ap_name,
-                             unsigned int  api_id);
+instance_name_t * instance_name_init_with(instance_name_t * dst,
+                                          char *            name,
+                                          uint16_t          id);
 
 /*
  * Finalize a name object, releasing all the embedded resources (without
  * releasing the object itself). After name_fini() execution the passed
  * object will be in the same states as at the end of name_init().
  */
-void          name_fini(rina_name_t * dst);
+void          instance_name_fini(instance_name_t * dst);
 
 /* Releases all the associated resources bound to a name object */
-void          name_destroy(rina_name_t * ptr);
+void          instance_name_destroy(instance_name_t * ptr);
 
 /* Duplicates a name object, returning the pointer to the new object */
-rina_name_t * name_dup(const rina_name_t * src);
+instance_name_t * instance_name_dup(const instance_name_t * src);
 
 /*
  * Copies the source object contents into the destination object, both must
  * be previously allocated
  */
-int           name_cpy(const rina_name_t * src, rina_name_t * dst);
+int           instance_name_cpy(const instance_name_t * src,
+                                instance_name_t * dst);
 
-bool          name_is_equal(const rina_name_t * a, const rina_name_t * b);
-bool          name_is_ok(const rina_name_t * n);
+int           instance_name_cmp(const instance_name_t * a,
+                                const instance_name_t * b);
 
-#define NAME_CMP_APN 0x01
-#define NAME_CMP_API 0x02
-#define NAME_CMP_ALL (NAME_CMP_APN | NAME_CMP_API)
-
-bool          name_cmp(uint8_t             flags,
-                       const rina_name_t * a,
-                       const rina_name_t * b);
+bool          instance_name_is_valid(const instance_name_t * n);
 
 /* Returns a name as a (newly allocated) string */
-char *        name_to_string(const rina_name_t * n);
+char *        instance_name_to_string(const instance_name_t * n);
 
 /* Inverse of name_tostring() */
-rina_name_t * string_to_name(const char * s);
+instance_name_t * string_to_instance_name(const char * s);
 
-#endif
+#endif /* INSTANCE_NAME_H */
