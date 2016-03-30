@@ -26,26 +26,25 @@
 #include <ouroboros/common.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
+
 #include <stdlib.h>
 
-int irm_create_ipcp(rina_name_t name,
+int irm_create_ipcp(char * ap_name,
+                    int api_id,
                     char * ipcp_type)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
-        if (ipcp_type == NULL)
-                return -1;
+        if (ipcp_type == NULL || ap_name == NULL)
+                return -EINVAL;
 
-        if (!name_is_ok(&name)) {
-                LOG_ERR("Bad name");
-                return -1;
-        }
-
-        msg.code = IRM_CREATE_IPCP;
-        msg.name = &name;
+        msg.code = IRM_MSG_CODE__IRM_CREATE_IPCP;
+        msg.ap_name = ap_name;
+        msg.has_api_id = true;
+        msg.api_id = api_id;
         msg.ipcp_type = ipcp_type;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -53,19 +52,21 @@ int irm_create_ipcp(rina_name_t name,
         return 0;
 }
 
-int irm_destroy_ipcp(rina_name_t name)
+int irm_destroy_ipcp(char * ap_name,
+                     int api_id)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
-        if (!name_is_ok(&name)) {
-                LOG_ERR("Bad name");
-                return -1;
+        if (ap_name == NULL) {
+                return -EINVAL;
         }
 
-        msg.code = IRM_DESTROY_IPCP;
-        msg.name = &name;
+        msg.code = IRM_MSG_CODE__IRM_DESTROY_IPCP;
+        msg.ap_name = ap_name;
+        msg.has_api_id = true;
+        msg.api_id = api_id;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -73,21 +74,22 @@ int irm_destroy_ipcp(rina_name_t name)
         return 0;
 }
 
-int irm_bootstrap_ipcp(rina_name_t name,
-                       struct dif_config conf)
+int irm_bootstrap_ipcp(char * ap_name,
+                       int api_id,
+                       struct dif_config * conf)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
-        if (!name_is_ok(&name)) {
-                LOG_ERR("Bad name");
-                return -1;
+        if (ap_name == NULL || conf == NULL) {
+                return -EINVAL;
         }
 
-        msg.code = IRM_BOOTSTRAP_IPCP;
-        msg.name = &name;
-        msg.conf = &conf;
+        msg.code = IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP;
+        msg.ap_name = ap_name;
+        msg.has_api_id = true;
+        msg.api_id = api_id;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -95,45 +97,61 @@ int irm_bootstrap_ipcp(rina_name_t name,
         return 0;
 }
 
-int irm_enroll_ipcp(rina_name_t name,
+int irm_enroll_ipcp(char * ap_name,
+                    int api_id,
                     char * dif_name)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
-        if (!name_is_ok(&name)) {
-                LOG_ERR("Bad name");
-                return -1;
+        if (ap_name == NULL || dif_name == NULL) {
+                return -EINVAL;
         }
 
-        msg.code = IRM_ENROLL_IPCP;
-        msg.name = &name;
-        msg.dif_name = dif_name;
+        msg.code = IRM_MSG_CODE__IRM_ENROLL_IPCP;
+        msg.ap_name = ap_name;
+        msg.has_api_id = true;
+        msg.api_id = api_id;
+        msg.n_dif_name = 1;
+        msg.dif_name = malloc(sizeof(*(msg.dif_name)));
+        if (msg.dif_name == NULL) {
+                LOG_ERR("Failed to malloc");
+                return -1;
+        }
+        msg.dif_name[0] = dif_name;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
+                free(msg.dif_name);
                 return -1;
         }
+
+        free(msg.dif_name);
 
         return 0;
 }
 
-int irm_reg_ipcp(rina_name_t name,
+int irm_reg_ipcp(char * ap_name,
+                 int api_id,
                  char ** difs,
                  size_t difs_size)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
-        if (!name_is_ok(&name)) {
-                LOG_ERR("Bad name");
-                return -1;
+        if (ap_name == NULL ||
+            difs == NULL ||
+            difs_size == 0 ||
+            difs[0] == NULL) {
+                return -EINVAL;
         }
 
-        msg.code = IRM_REG_IPCP;
-        msg.name = &name;
-        msg.difs = difs;
-        msg.difs_size = difs_size;
+        msg.code = IRM_MSG_CODE__IRM_REG_IPCP;
+        msg.ap_name = ap_name;
+        msg.has_api_id = true;
+        msg.api_id = api_id;
+        msg.dif_name = difs;
+        msg.n_dif_name = difs_size;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }
@@ -141,23 +159,28 @@ int irm_reg_ipcp(rina_name_t name,
         return 0;
 }
 
-int irm_unreg_ipcp(rina_name_t name,
+int irm_unreg_ipcp(char * ap_name,
+                   int api_id,
                    char ** difs,
                    size_t difs_size)
 {
-        struct irm_msg msg;
+        irm_msg_t msg = IRM_MSG__INIT;
 
-        if (!name_is_ok(&name)) {
-                LOG_ERR("Bad name");
-                return -1;
+        if (ap_name == NULL ||
+            difs == NULL ||
+            difs_size == 0 ||
+            difs[0] == NULL) {
+                return -EINVAL;
         }
 
-        msg.code = IRM_UNREG_IPCP;
-        msg.name = &name;
-        msg.difs = difs;
-        msg.difs_size = difs_size;
+        msg.code = IRM_MSG_CODE__IRM_UNREG_IPCP;
+        msg.ap_name = ap_name;
+        msg.has_api_id = true;
+        msg.api_id = api_id;
+        msg.dif_name = difs;
+        msg.n_dif_name = difs_size;
 
-        if (send_irmd_msg(&msg)) {
+        if (send_irm_msg(&msg)) {
                 LOG_ERR("Failed to send message to daemon");
                 return -1;
         }

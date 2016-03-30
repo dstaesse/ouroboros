@@ -32,21 +32,21 @@ struct ipcp;
 
 /* Returns the process id */
 pid_t ipcp_create(rina_name_t name,
-                  char * ipcp_type);
+                  char *      ipcp_type);
 int ipcp_destroy(pid_t pid);
 
-int ipcp_reg(pid_t pid,
+int ipcp_reg(pid_t   pid,
              char ** difs,
-             size_t difs_size);
-int ipcp_unreg(pid_t pid,
+             size_t  difs_size);
+int ipcp_unreg(pid_t   pid,
                char ** difs,
-               size_t difs_size);
+               size_t  difs_size);
 
-int ipcp_bootstrap(pid_t pid,
-                   struct dif_config conf);
-int ipcp_enroll(pid_t pid,
-                char * dif_name,
-                char * member_name,
+int ipcp_bootstrap(pid_t               pid,
+                   struct dif_config * conf);
+int ipcp_enroll(pid_t   pid,
+                char *  dif_name,
+                char *  member_name,
                 char ** n_1_difs,
                 ssize_t n_1_difs_size);
 
