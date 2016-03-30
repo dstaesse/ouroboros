@@ -22,14 +22,10 @@
 
 #define OUROBOROS_PREFIX "lib-ipcp"
 
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 199506L
-#endif
-
+#include <ouroboros/config.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/common.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/config.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/sockets.h>
 
@@ -96,6 +92,8 @@ pid_t ipcp_create(instance_name_t * api,
 
         if (ipcp_type == NULL)
                 return -1;
+
+        LOG_DBG("%lu", _POSIX_C_SOURCE);
 
         pid = fork();
         if (pid == -1) {

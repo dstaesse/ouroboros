@@ -45,7 +45,6 @@ char *      ipcp_sock_path(pid_t pid);
 int         server_socket_open(char * file_name);
 int         client_socket_open(char * file_name);
 
-int         send_irm_msg(irm_msg_t * msg);
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
 
 #endif

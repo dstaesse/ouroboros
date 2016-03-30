@@ -49,7 +49,11 @@ int ap_reg(char * ap_name,
         msg.n_dif_name = difs_size;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_fd == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
@@ -64,6 +68,8 @@ int ap_unreg(char * ap_name,
              size_t difs_size)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         if (ap_name == NULL ||
             difs == NULL ||
@@ -77,12 +83,19 @@ int ap_unreg(char * ap_name,
         msg.dif_name = difs;
         msg.n_dif_name = difs_size;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
 
 int flow_accept(int fd,
@@ -102,9 +115,8 @@ int flow_accept(int fd,
         msg.fd = fd;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
+        if (recv_msg == NULL)
                 return -1;
-        }
 
         if (recv_msg->has_fd == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -122,6 +134,8 @@ int flow_alloc_resp(int fd,
                     int result)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
         msg.has_fd = true;
@@ -129,12 +143,19 @@ int flow_alloc_resp(int fd,
         msg.has_result = true;
         msg.result = result;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
 
 int flow_alloc(char * dst_ap_name,
@@ -150,8 +171,7 @@ int flow_alloc(char * dst_ap_name,
         if (dst_ap_name == NULL ||
             src_ap_name == NULL ||
             qos == NULL) {
-                LOG_ERR("Invalid arguments");
-                return -1;
+                return -EINVAL;
         }
 
         msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC;
@@ -162,9 +182,8 @@ int flow_alloc(char * dst_ap_name,
         msg.oflags = oflags;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
+        if (recv_msg == NULL)
                 return -1;
-        }
 
         if (recv_msg->has_fd == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -187,9 +206,8 @@ int flow_alloc_res(int fd)
         msg.fd = fd;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
+        if (recv_msg == NULL)
                 return -1;
-        }
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -205,33 +223,51 @@ int flow_alloc_res(int fd)
 int flow_dealloc(int fd)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         msg.code = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_fd = true;
         msg.fd = fd;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
 
 int flow_cntl(int fd, int oflags)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         msg.has_fd = true;
         msg.fd = fd;
         msg.oflags = oflags;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
 
 ssize_t flow_write(int fd,

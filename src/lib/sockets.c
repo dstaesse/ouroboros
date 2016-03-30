@@ -96,41 +96,6 @@ int server_socket_open(char * file_name)
         return sockfd;
 }
 
-int send_irm_msg(irm_msg_t * msg)
-{
-        int sockfd;
-        buffer_t buf;
-
-        sockfd = client_socket_open(IRM_SOCK_PATH);
-        if (sockfd < 0)
-                return -1;
-
-        buf.size = irm_msg__get_packed_size(msg);
-        if (buf.size == 0) {
-                close(sockfd);
-                return -1;
-        }
-
-        buf.data = malloc(buf.size);
-        if (buf.data == NULL) {
-                close(sockfd);
-                return -ENOMEM;
-        }
-
-        irm_msg__pack(msg, buf.data);
-
-        if (write(sockfd, buf.data, buf.size) == -1) {
-                free(buf.data);
-                close(sockfd);
-                return -1;
-        }
-
-        free(buf.data);
-
-        close(sockfd);
-        return 0;
-}
-
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 {
         int sockfd;
