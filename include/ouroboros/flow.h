@@ -36,7 +36,7 @@
 #define FLOW_O_NONBLOCK 00004000
 #define FLOW_O_DEFAULT  00000002
 
-#define FLOW_O_INVALID  00037777
+#define FLOW_O_INVALID  (FLOW_O_WRONLY | FLOW_O_RDWR)
 
 enum flow_state {
         FLOW_INIT = 0,

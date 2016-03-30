@@ -59,9 +59,9 @@ int flow_set_opts(flow_t * flow, uint16_t opts)
         pthread_mutex_lock(&flow->lock);
 
         if ((opts & FLOW_O_ACCMODE) == FLOW_O_ACCMODE) {
+                flow->oflags = FLOW_O_DEFAULT;
                 pthread_mutex_unlock(&flow->lock);
                 LOG_WARN("Invalid flow options. Setting default.");
-                opts = FLOW_O_DEFAULT;
                 return -1;
         }
 
