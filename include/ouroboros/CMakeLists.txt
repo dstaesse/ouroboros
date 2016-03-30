@@ -10,11 +10,11 @@ set(HEADER_FILES
         dev.h
         du_buff.h
         flow.h
+        instance_name.h
         ipcp.h
         irm.h
         list.h
         logs.h
-        rina_name.h
         shm_du_map.h
         sockets.h
         utils.h

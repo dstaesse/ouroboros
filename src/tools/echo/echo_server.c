@@ -26,7 +26,6 @@
 #include <stdlib.h>
 
 #include <ouroboros/dev.h>
-#include <ouroboros/rina_name.h>
 
 #define DIF_NAME "*"
 
