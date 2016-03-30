@@ -19,17 +19,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "name-utils"
+#define OUROBOROS_PREFIX "instance-name"
 
 #include <ouroboros/logs.h>
 #include <ouroboros/common.h>
-#include <ouroboros/rina_name.h>
+#include <ouroboros/instance_name.h>
 #include <ouroboros/utils.h>
 
 #include <string.h>
 #include <math.h>
 #include <malloc.h>
 #include <stdlib.h>
+
+#define instance_name_is_equal(a, b) (instance_name_cmp(a, b) == 0)
 
 static char * strdup(const char * src)
 {
@@ -50,153 +52,144 @@ static char * strdup(const char * src)
         return dst;
 }
 
-rina_name_t * name_create()
+instance_name_t * instance_name_create()
 {
-        rina_name_t * tmp;
+        instance_name_t * tmp;
 
-        tmp = malloc(sizeof(rina_name_t));
+        tmp = malloc(sizeof *tmp);
 
-        tmp->ap_name = NULL;
-        tmp->api_id  = 0;
+        tmp->name = NULL;
+        tmp->id  = 0;
 
         return tmp;
 }
 
-rina_name_t * name_init_from(rina_name_t * dst,
-                             const char *  ap_name,
-                             unsigned int  api_id)
+instance_name_t * instance_name_init_from(instance_name_t * dst,
+                                          const char *      name,
+                                          uint16_t          id)
 {
         if (dst == NULL)
                 return NULL;
 
         /* Clean up the destination, leftovers might be there ... */
-        name_fini(dst);
+        instance_name_fini(dst);
 
-        dst->ap_name = strdup(ap_name);
-        dst->api_id = api_id;
+        dst->name = strdup(name);
+        dst->id = id;
 
-        if (dst->ap_name == NULL) {
-                name_fini(dst);
+        if (dst->name == NULL) {
+                instance_name_fini(dst);
                 return NULL;
         }
 
         return dst;
 }
 
-rina_name_t * name_init_with(rina_name_t * dst,
-                             char *        ap_name,
-                             unsigned int  api_id)
+instance_name_t * instance_name_init_with(instance_name_t * dst,
+                                          char *      name,
+                                          uint16_t          id)
 {
         if (dst == NULL)
                 return NULL;
 
         /* Clean up the destination, leftovers might be there ... */
-        name_fini(dst);
+        instance_name_fini(dst);
 
-        dst->ap_name = ap_name;
-        dst->api_id  = api_id;
+        dst->name = name;
+        dst->id  = id;
 
         return dst;
 }
 
-void name_fini(rina_name_t * n)
+void instance_name_fini(instance_name_t * n)
 {
-        if (n == NULL)
+        if (n == NULL || n->name == NULL)
                 return;
 
-        if (n->ap_name != NULL) {
-                free(n->ap_name);
-                n->ap_name = NULL;
-        }
+        free(n->name);
+        n->name = NULL;
 }
 
-void name_destroy(rina_name_t * ptr)
+void instance_name_destroy(instance_name_t * ptr)
 {
         if (ptr == NULL)
                 return;
 
-        name_fini(ptr);
+        instance_name_fini(ptr);
 
         free(ptr);
 }
 
-int name_cpy(const rina_name_t * src,
-             rina_name_t *       dst)
+int instance_name_cpy(instance_name_t *       dst,
+                      const instance_name_t * src)
 {
-        rina_name_t * res;
+        instance_name_t * res;
 
         if (src == NULL || dst == NULL)
                 return -1;
 
-        res = name_init_from(dst,
-                             src->ap_name,
-                             src->api_id);
+        res = instance_name_init_from(dst, src->name, src->id);
         if (res == NULL)
                 return -1;
 
         return 0;
 }
 
-rina_name_t * name_dup(const rina_name_t * src)
+instance_name_t * instance_name_dup(const instance_name_t * src)
 {
-        rina_name_t * tmp;
+        instance_name_t * tmp;
 
         if (src == NULL)
                 return NULL;
 
-        tmp = name_create();
+        tmp = instance_name_create();
         if (tmp == NULL)
                 return NULL;
 
-        if (name_cpy(src, tmp)) {
-                name_destroy(tmp);
+        if (instance_name_cpy(tmp, src)) {
+                instance_name_destroy(tmp);
                 return NULL;
         }
 
         return tmp;
 }
 
-#define NAME_CMP_FIELD(X, Y, FIELD)                           \
-        ((X->FIELD != NULL && Y->FIELD != NULL) ?             \
-         strcmp(X->FIELD, Y->FIELD) :                         \
-         ((X->FIELD == NULL && Y->FIELD == NULL) ? 0 : -1))
-
-bool name_is_ok(const rina_name_t * n)
-{ return (n != NULL &&
-          n->ap_name != NULL &&
-          strlen(n->ap_name)); }
-
-bool name_cmp(uint8_t             flags,
-              const rina_name_t * a,
-              const rina_name_t * b)
+bool instance_name_is_valid(const instance_name_t * n)
 {
-        if (a == b)
-                return true;
-
-        if (a == NULL || b == NULL)
-                return false;
-
-        if (!(flags & NAME_CMP_ALL))
-                LOG_DBG("No flags, name comparison will be meaningless ...");
-
-        if (flags & NAME_CMP_APN)
-                if (NAME_CMP_FIELD(a, b, ap_name))
-                        return false;
-
-        if (flags & NAME_CMP_API)
-                if (a->api_id !=  b->api_id)
-                        return false;
-
-        return true;
+        return (n != NULL && n->name != NULL && strlen(n->name));
 }
 
-bool name_is_equal(const rina_name_t * a,
-                   const rina_name_t * b)
-{ return name_cmp(NAME_CMP_ALL, a, b); }
+int instance_name_cmp(const instance_name_t * a,
+                      const instance_name_t * b)
+{
+
+        int ret = 0;
+
+        if (a == NULL || b == NULL) {
+                LOG_DBGF("Won't compare NULL.");
+                return -2;
+        }
+
+        if (a == b)
+                return 0;
+
+        ret = strcmp(a->name, b->name);
+
+        if (!ret) {
+                if (a->id == b-> id)
+                        return 0;
+                else
+                        return a->id < b->id ? -1 : 1;
+        }
+
+        return ret;
+}
+
+
 
 #define DELIMITER "/"
 
-char * name_to_string(const rina_name_t * n)
+char * instance_name_to_string(const instance_name_t * n)
 {
         char *       tmp;
         size_t       size;
@@ -206,14 +199,14 @@ char * name_to_string(const rina_name_t * n)
         if (n == NULL)
                 return NULL;
 
-        size  = 0;
+        size = 0;
 
-        size += (n->ap_name != NULL ?
-                 strlen(n->ap_name) : none_len);
+        size += (n->name != NULL ?
+                 strlen(n->name) : none_len);
         size += strlen(DELIMITER);
 
-        size += (n->api_id == 0 ?
-                 1 : n_digits(n->api_id));
+        size += (n->id == 0 ?
+                 1 : n_digits(n->id));
         size += strlen(DELIMITER);
 
         tmp = malloc(size);
@@ -221,8 +214,8 @@ char * name_to_string(const rina_name_t * n)
                 return NULL;
 
         if (sprintf(tmp, "%s%s%d",
-                    (n->ap_name != NULL ? n->ap_name : none),
-                    DELIMITER, n->api_id)
+                    (n->name != NULL ? n->name : none),
+                    DELIMITER, n->id)
             != size - 1) {
                 free(tmp);
                 return NULL;
@@ -231,9 +224,9 @@ char * name_to_string(const rina_name_t * n)
         return tmp;
 }
 
-rina_name_t * string_to_name(const char * s)
+instance_name_t * string_to_instance_name(const char * s)
 {
-        rina_name_t * name;
+        instance_name_t * name;
 
         char *       tmp1      = NULL;
         char *       tmp_ap    = NULL;
@@ -254,15 +247,15 @@ rina_name_t * string_to_name(const char * s)
         if (tmp_s_api != NULL)
                 tmp_api = (unsigned int) strtol(tmp_s_api, &tmp2, 10);
 
-        name = name_create();
+        name = instance_name_create();
         if (name == NULL) {
                 if (tmp1 != NULL)
                         free(tmp1);
                 return NULL;
         }
 
-        if (!name_init_from(name, tmp_ap, tmp_api)) {
-                name_destroy(name);
+        if (!instance_name_init_from(name, tmp_ap, tmp_api)) {
+                instance_name_destroy(name);
                 if (tmp1 != NULL)
                         free(tmp1);
                 return NULL;

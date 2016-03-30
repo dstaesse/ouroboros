@@ -38,15 +38,14 @@ static void usage()
 
 int do_enroll_ipcp(int argc, char ** argv)
 {
-        char * ap_name = NULL;
-        int api_id = 0;
+        instance_name_t api = {NULL, 0};
         char * dif_name = NULL;
 
         while (argc > 0) {
                 if (matches(*argv, "ap") == 0) {
-                        ap_name = *(argv + 1);
+                        api.name = *(argv + 1);
                 } else if (matches(*argv, "api") == 0) {
-                        api_id = atoi(*(argv + 1));
+                        api.id = atoi(*(argv + 1));
                 } else if (matches(*argv, "dif") == 0) {
                         dif_name = *(argv + 1);
                 } else {
@@ -59,10 +58,10 @@ int do_enroll_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (dif_name == NULL || ap_name == NULL) {
+        if (dif_name == NULL || api.name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_enroll_ipcp(ap_name, api_id, dif_name);
+        return irm_enroll_ipcp(&api, dif_name);
 }

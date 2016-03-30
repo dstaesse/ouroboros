@@ -37,14 +37,13 @@ static void usage()
 
 int do_destroy_ipcp(int argc, char ** argv)
 {
-        char * ap_name = NULL;
-        int api_id = 0;
+        instance_name_t api = {NULL, 0};
 
         while (argc > 0) {
                 if (matches(*argv, "ap") == 0) {
-                        ap_name = *(argv + 1);
+                        api.name = *(argv + 1);
                 } else if (matches(*argv, "api") == 0) {
-                        api_id = atoi(*(argv + 1));
+                        api.id = atoi(*(argv + 1));
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "destroy_ipcp\".\n", *argv);
@@ -55,10 +54,10 @@ int do_destroy_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (ap_name == NULL) {
+        if (api.name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_destroy_ipcp(ap_name, api_id);
+        return irm_destroy_ipcp(&api);
 }

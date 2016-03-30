@@ -85,8 +85,8 @@ static int send_ipcp_msg(pid_t pid,
        return 0;
 }
 
-pid_t ipcp_create(rina_name_t name,
-                  char * ipcp_type)
+pid_t ipcp_create(instance_name_t * api,
+                  char *            ipcp_type)
 {
         pid_t pid = 0;
         char * api_id = NULL;
@@ -107,12 +107,12 @@ pid_t ipcp_create(rina_name_t name,
                 return pid;
         }
 
-        api_id = malloc(n_digits(name.api_id) + 1);
+        api_id = malloc(n_digits(api->id) + 1);
         if (!api_id) {
                 LOG_ERR("Failed to malloc");
                 exit(EXIT_FAILURE);
         }
-        sprintf(api_id, "%d", name.api_id);
+        sprintf(api_id, "%d", api->id);
 
         len += strlen(INSTALL_DIR);
         len += strlen(ipcp_dir);
@@ -129,7 +129,7 @@ pid_t ipcp_create(rina_name_t name,
         strcat(full_name, ipcp_dir);
 
         char * argv[] = {full_name,
-                         name.ap_name, api_id,
+                         api->name, api_id,
                          ipcp_type, 0};
 
         char * envp[] = {0};

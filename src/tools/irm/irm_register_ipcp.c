@@ -47,14 +47,13 @@ int do_register_ipcp(int argc, char ** argv)
 {
         char * difs[MAX_DIFS];
         size_t difs_size = 0;
-        char * ap_name = NULL;
-        int api_id = 0;
+        instance_name_t api = {NULL, 0};
 
         while (argc > 0) {
                 if (matches(*argv, "ap") == 0) {
-                        ap_name = *(argv + 1);
+                        api.name = *(argv + 1);
                 } else if (matches(*argv, "api") == 0) {
-                        api_id = atoi(*(argv + 1));
+                        api.id = atoi(*(argv + 1));
                 } else if (matches(*argv, "dif") == 0) {
                         difs[difs_size++] = *(argv + 1);
                         if (difs_size > MAX_DIFS) {
@@ -71,10 +70,10 @@ int do_register_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (difs_size == 0 || ap_name == NULL) {
+        if (difs_size == 0 || api.name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_reg_ipcp(ap_name, api_id, difs, difs_size);
+        return irm_reg_ipcp(&api, difs, difs_size);
 }
