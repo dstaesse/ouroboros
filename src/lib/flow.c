@@ -30,6 +30,11 @@
 flow_t * flow_create(int32_t port_id)
 {
         flow_t * flow = malloc(sizeof *flow);
+        if (flow == NULL) {
+                LOG_DBGF("Could not malloc flow.");
+                return NULL;
+        }
+
         flow->port_id = port_id;
         flow->oflags = FLOW_O_DEFAULT;
         flow->state = FLOW_INIT;
@@ -47,7 +52,7 @@ void flow_destroy(flow_t * flow)
 int flow_set_opts(flow_t * flow, uint16_t opts)
 {
         if (flow == NULL) {
-                LOG_ERR("Non-existing flow.");
+                LOG_DBGF("Non-existing flow.");
                 return -1;
         }
 
@@ -57,6 +62,7 @@ int flow_set_opts(flow_t * flow, uint16_t opts)
                 pthread_mutex_unlock(&flow->lock);
                 LOG_WARN("Invalid flow options. Setting default.");
                 opts = FLOW_O_DEFAULT;
+                return -1;
         }
 
         flow->oflags = opts;
@@ -69,7 +75,7 @@ int flow_set_opts(flow_t * flow, uint16_t opts)
 uint16_t flow_get_opts(const flow_t * flow)
 {
         if (flow == NULL) {
-                LOG_ERR("Non-existing flow.");
+                LOG_DBGF("Non-existing flow.");
                 return FLOW_O_INVALID;
         }
 
