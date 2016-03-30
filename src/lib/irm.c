@@ -34,6 +34,8 @@ int irm_create_ipcp(instance_name_t * api,
                     char *            ipcp_type)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         if (api == NULL || ipcp_type == NULL || api->name == NULL)
                 return -EINVAL;
@@ -44,17 +46,26 @@ int irm_create_ipcp(instance_name_t * api,
         msg.api_id = api->id;
         msg.ipcp_type = ipcp_type;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
 
 int irm_destroy_ipcp(instance_name_t * api)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         if (api == NULL || api->name == NULL)
                 return -EINVAL;
@@ -64,18 +75,27 @@ int irm_destroy_ipcp(instance_name_t * api)
         msg.has_api_id = true;
         msg.api_id = api->id;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
 
 int irm_bootstrap_ipcp(instance_name_t   * api,
                        struct dif_config * conf)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         if (api == NULL || api->name == NULL || conf == NULL)
                 return -EINVAL;
@@ -85,18 +105,27 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
         msg.has_api_id = true;
         msg.api_id = api->id;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
 
 int irm_enroll_ipcp(instance_name_t * api,
                     char *            dif_name)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         if (api == NULL || api->name == NULL || dif_name == NULL)
                 return -EINVAL;
@@ -113,15 +142,22 @@ int irm_enroll_ipcp(instance_name_t * api,
         }
         msg.dif_name[0] = dif_name;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL) {
                 free(msg.dif_name);
                 return -1;
         }
 
-        free(msg.dif_name);
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        free(msg.dif_name);
+        return ret;
 }
 
 int irm_reg_ipcp(instance_name_t * api,
@@ -129,6 +165,8 @@ int irm_reg_ipcp(instance_name_t * api,
                  size_t            difs_size)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         if (api->name == NULL ||
             difs == NULL ||
@@ -144,12 +182,19 @@ int irm_reg_ipcp(instance_name_t * api,
         msg.dif_name = difs;
         msg.n_dif_name = difs_size;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
 
 int irm_unreg_ipcp(const instance_name_t * api,
@@ -157,6 +202,8 @@ int irm_unreg_ipcp(const instance_name_t * api,
                    size_t                  difs_size)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
 
         if (api == NULL ||
             api->name == NULL ||
@@ -173,10 +220,17 @@ int irm_unreg_ipcp(const instance_name_t * api,
         msg.dif_name = difs;
         msg.n_dif_name = difs_size;
 
-        if (send_irm_msg(&msg)) {
-                LOG_ERR("Failed to send message to daemon");
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        return 0;
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
