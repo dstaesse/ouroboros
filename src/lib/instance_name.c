@@ -86,7 +86,7 @@ instance_name_t * instance_name_init_from(instance_name_t * dst,
 }
 
 instance_name_t * instance_name_init_with(instance_name_t * dst,
-                                          char *            name,
+                                          char *      name,
                                           uint16_t          id)
 {
         if (dst == NULL)
@@ -103,13 +103,11 @@ instance_name_t * instance_name_init_with(instance_name_t * dst,
 
 void instance_name_fini(instance_name_t * n)
 {
-        if (n == NULL)
+        if (n == NULL || n->name == NULL)
                 return;
 
-        if (n->name != NULL) {
-                free(n->name);
-                n->name = NULL;
-        }
+        free(n->name);
+        n->name = NULL;
 }
 
 void instance_name_destroy(instance_name_t * ptr)
@@ -122,17 +120,15 @@ void instance_name_destroy(instance_name_t * ptr)
         free(ptr);
 }
 
-int instance_name_cpy(const instance_name_t * src,
-             instance_name_t *       dst)
+int instance_name_cpy(instance_name_t *       dst,
+                      const instance_name_t * src)
 {
         instance_name_t * res;
 
         if (src == NULL || dst == NULL)
                 return -1;
 
-        res = instance_name_init_from(dst,
-                             src->name,
-                             src->id);
+        res = instance_name_init_from(dst, src->name, src->id);
         if (res == NULL)
                 return -1;
 
@@ -150,7 +146,7 @@ instance_name_t * instance_name_dup(const instance_name_t * src)
         if (tmp == NULL)
                 return NULL;
 
-        if (instance_name_cpy(src, tmp)) {
+        if (instance_name_cpy(tmp, src)) {
                 instance_name_destroy(tmp);
                 return NULL;
         }
@@ -160,9 +156,7 @@ instance_name_t * instance_name_dup(const instance_name_t * src)
 
 bool instance_name_is_valid(const instance_name_t * n)
 {
-        return (n != NULL &&
-          n->name != NULL &&
-          strlen(n->name));
+        return (n != NULL && n->name != NULL && strlen(n->name));
 }
 
 int instance_name_cmp(const instance_name_t * a,
@@ -205,7 +199,7 @@ char * instance_name_to_string(const instance_name_t * n)
         if (n == NULL)
                 return NULL;
 
-        size  = 0;
+        size = 0;
 
         size += (n->name != NULL ?
                  strlen(n->name) : none_len);

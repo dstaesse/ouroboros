@@ -72,8 +72,8 @@ instance_name_t * instance_name_dup(const instance_name_t * src);
  * Copies the source object contents into the destination object, both must
  * be previously allocated
  */
-int           instance_name_cpy(const instance_name_t * src,
-                                instance_name_t * dst);
+int           instance_name_cpy(instance_name_t * dst,
+                                const instance_name_t * src);
 
 int           instance_name_cmp(const instance_name_t * a,
                                 const instance_name_t * b);

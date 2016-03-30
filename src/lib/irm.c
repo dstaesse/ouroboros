@@ -35,10 +35,7 @@ int irm_create_ipcp(instance_name_t * api,
 {
         irm_msg_t msg = IRM_MSG__INIT;
 
-        if (api == NULL)
-                return -EINVAL;
-
-        if (ipcp_type == NULL || api == NULL)
+        if (api == NULL || ipcp_type == NULL || api->name == NULL)
                 return -EINVAL;
 
         msg.code = IRM_MSG_CODE__IRM_CREATE_IPCP;
@@ -59,12 +56,8 @@ int irm_destroy_ipcp(instance_name_t * api)
 {
         irm_msg_t msg = IRM_MSG__INIT;
 
-        if (api == NULL)
+        if (api == NULL || api->name == NULL)
                 return -EINVAL;
-
-        if (api->name == NULL) {
-                return -EINVAL;
-        }
 
         msg.code = IRM_MSG_CODE__IRM_DESTROY_IPCP;
         msg.ap_name = api->name;
@@ -84,10 +77,7 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
 {
         irm_msg_t msg = IRM_MSG__INIT;
 
-        if (api == NULL)
-                return -EINVAL;
-
-        if (api->name == NULL || conf == NULL)
+        if (api == NULL || api->name == NULL || conf == NULL)
                 return -EINVAL;
 
         msg.code = IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP;
@@ -108,10 +98,7 @@ int irm_enroll_ipcp(instance_name_t * api,
 {
         irm_msg_t msg = IRM_MSG__INIT;
 
-        if (api == NULL)
-                return -EINVAL;
-
-        if (api->name == NULL || dif_name == NULL)
+        if (api == NULL || api->name == NULL || dif_name == NULL)
                 return -EINVAL;
 
         msg.code = IRM_MSG_CODE__IRM_ENROLL_IPCP;
@@ -171,10 +158,8 @@ int irm_unreg_ipcp(const instance_name_t * api,
 {
         irm_msg_t msg = IRM_MSG__INIT;
 
-        if (api == NULL)
-                return -EINVAL;
-
-        if (api->name == NULL ||
+        if (api == NULL ||
+            api->name == NULL ||
             difs == NULL ||
             difs_size == 0 ||
             difs[0] == NULL) {
