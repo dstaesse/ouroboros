@@ -37,7 +37,7 @@ typedef IpcpMsg ipcp_msg_t;
 #define IRM_MSG_BUF_SIZE 256
 
 #define IPCP_SOCK_PATH_PREFIX "/tmp/ipcp_sock"
-#define IPCP_MSG_BUFS_SIZE IRM_MSG_BUF_SIZE
+#define IPCP_MSG_BUF_SIZE IRM_MSG_BUF_SIZE
 
 /* Returns the full socket path of an IPCP */
 char *      ipcp_sock_path(pid_t pid);

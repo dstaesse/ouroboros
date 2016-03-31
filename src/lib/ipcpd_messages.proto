@@ -3,6 +3,12 @@ enum ipcp_msg_code {
         IPCP_ENROLL = 2;
         IPCP_REG = 3;
         IPCP_UNREG = 4;
+        IPCP_AP_REG = 5;
+        IPCP_AP_UNREG = 6;
+        IPCP_FLOW_ALLOC = 7;
+        IPCP_FLOW_ALLOC_RESP = 8;
+        IPCP_FLOW_DEALLOC = 9;
+        IPCP_REPLY = 10;
 };
 
 message ipcp_msg {
@@ -10,5 +16,8 @@ message ipcp_msg {
         optional string ap_name = 2;
         // Missing dif_config field here
         repeated string dif_name = 4;
-        repeated string n_1_dif_name = 5;
+        optional int32 result = 5;
+        optional uint32 port_id = 6;
+        optional string ae_name = 7;
+        optional string dst_ap_name = 8;
 };
