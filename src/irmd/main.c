@@ -165,8 +165,7 @@ static int enroll_ipcp(instance_name_t  * api,
 
         n_1_difs_size = da_resolve_dap(member, n_1_difs);
         if (n_1_difs_size != 0)
-                if (ipcp_enroll(pid, dif_name, member,
-                                n_1_difs, n_1_difs_size)) {
+                if (ipcp_enroll(pid, member, n_1_difs[0])) {
                         LOG_ERR("Could not enroll IPCP");
                         return -1;
                 }
@@ -264,6 +263,24 @@ static int flow_dealloc(int fd)
 
 static int flow_cntl(int fd,
                      int oflags)
+{
+        return -1;
+}
+
+static int flow_req_arr(uint32_t reg_api_id,
+                        char *   ap_name,
+                        char *   ae_name)
+{
+        return -1;
+}
+
+static int flow_alloc_reply(uint32_t port_id,
+                            int      result)
+{
+        return -1;
+}
+
+static int flow_dealloc_ipcp(uint32_t port_id)
 {
         return -1;
 }
@@ -390,6 +407,21 @@ int main()
                         ret_msg.has_result = true;
                         ret_msg.result = flow_cntl(msg->fd,
                                                    msg->oflags);
+                        break;
+                case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
+                        ret_msg.has_fd = true;
+                        ret_msg.fd = flow_req_arr(msg->port_id,
+                                                  msg->ap_name,
+                                                  msg->ae_name);
+                        break;
+                case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
+                        ret_msg.has_result = true;
+                        ret_msg.result = flow_alloc_reply(msg->port_id,
+                                                          msg->result);
+                        break;
+                case IRM_MSG_CODE__IPCP_FLOW_DEALLOC:
+                        ret_msg.has_result = true;
+                        ret_msg.result = flow_dealloc_ipcp(msg->port_id);
                         break;
                 default:
                         LOG_ERR("Don't know that message code");

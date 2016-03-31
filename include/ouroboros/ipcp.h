@@ -23,10 +23,10 @@
 #ifndef OUROBOROS_IPCP_H
 #define OUROBOROS_IPCP_H
 
-#include <sys/types.h>
+#include <ouroboros/common.h>
+#include <ouroboros/instance_name.h>
 
-#include "common.h"
-#include "instance_name.h"
+#include <sys/types.h>
 
 struct ipcp;
 
@@ -44,19 +44,17 @@ int   ipcp_unreg(pid_t   pid,
 
 int   ipcp_bootstrap(pid_t               pid,
                      struct dif_config * conf);
-int   ipcp_enroll(pid_t   pid,
-                  char *  dif_name,
-                  char *  member_name,
-                  char ** n_1_difs,
-                  ssize_t n_1_difs_size);
+int   ipcp_enroll(pid_t  pid,
+                  char * member_name,
+                  char * n_1_dif);
 
 /* Flow related ops, these go from IRMd to IPCP */
 
 int   ipcp_ap_reg(pid_t    pid,
                   uint32_t reg_api_id,
                   char *   ap_name);
-int   ipcp_ap_unreg(pid_t  pid,
-                    char * ap_name);
+int   ipcp_ap_unreg(pid_t    pid,
+                    uint32_t reg_api_id);
 
 int   ipcp_flow_alloc(pid_t             pid,
                       uint32_t          port_id,

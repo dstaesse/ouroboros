@@ -15,7 +15,10 @@ enum irm_msg_code {
         IRM_FLOW_CONTROL = 14;
         IRM_FLOW_WRITE = 15;
         IRM_FLOW_READ = 16;
-        IRM_REPLY = 17;
+        IPCP_FLOW_REQ_ARR = 17;
+        IPCP_FLOW_ALLOC_REPLY = 18;
+        IPCP_FLOW_DEALLOC = 19;
+        IRM_REPLY = 20;
 };
 
 message irm_msg {
@@ -31,4 +34,6 @@ message irm_msg {
         // Missing qos_spec here
         optional int32 oflags = 10;
         optional string dst_ap_name = 11;
+        optional uint32 port_id = 12;
+        optional int32 pid = 13;
 };
