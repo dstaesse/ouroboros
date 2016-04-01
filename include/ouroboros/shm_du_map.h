@@ -24,10 +24,6 @@
 #ifndef OUROBOROS_SHM_DU_MAP_H
 #define OUROBOROS_SHM_DU_MAP_H
 
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 199506L
-#endif
-
 #ifndef SHM_DU_BUFF_BLOCK_SIZE
 #define SHM_DU_BUFF_BLOCK_SIZE sysconf(_SC_PAGESIZE)
 #endif

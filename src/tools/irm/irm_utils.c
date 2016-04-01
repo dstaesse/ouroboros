@@ -36,19 +36,3 @@ int matches(const char * cmd, const char * pattern)
 
         return memcmp(pattern, cmd, len);
 }
-
-
-bool parse_name(char ** argv,
-                rina_name_t * name)
-{
-        bool found = true;
-
-        if (matches(*argv, "ap") == 0)
-                name->ap_name = *(argv + 1);
-        else if (matches(*argv, "api") == 0)
-                name->api_id = atoi(*(argv + 1));
-        else
-                found = false;
-
-        return found;
-}

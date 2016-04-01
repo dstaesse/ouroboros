@@ -20,10 +20,4 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/rina_name.h>
-
-#include <stdbool.h>
-
 int matches(const char * cmd, const char * pattern);
-
-bool parse_name(char ** argv, rina_name_t * name);

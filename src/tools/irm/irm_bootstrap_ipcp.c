@@ -21,6 +21,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/common.h>
 
@@ -38,29 +39,31 @@ static void usage()
 
 int do_bootstrap_ipcp(int argc, char ** argv)
 {
-        rina_name_t name;
+        instance_name_t api = {NULL, 0};
         struct dif_config conf;
 
         conf.qosspecs = NULL;
 
-        name.ap_name = NULL;
-        name.api_id = 0;
-
         while (argc > 0) {
-                if (!parse_name(argv, &name)) {
+                if (matches(*argv, "ap") == 0) {
+                        api.name = *(argv + 1);
+                } else if (matches(*argv, "api") == 0) {
+                        api.id = atoi(*(argv + 1));
+                } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "enroll_ipcp\".\n", *argv);
+                               "destroy_ipcp\".\n", *argv);
                         return -1;
                 }
+
 
                 argc -= 2;
                 argv += 2;
         }
 
-        if (name.ap_name == NULL) {
+        if (api.name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_bootstrap_ipcp(name, conf);
+        return irm_bootstrap_ipcp(&api, &conf);
 }

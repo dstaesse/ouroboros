@@ -24,7 +24,7 @@
 #define OUROBOROS_DA_H
 
 #include "common.h"
-#include "rina_name.h"
+#include "instance_name.h"
 
 char *  da_resolve_daf(char * daf_name);
 /*

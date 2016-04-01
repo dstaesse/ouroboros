@@ -1,0 +1,39 @@
+enum irm_msg_code {
+        IRM_CREATE_IPCP = 1;
+        IRM_DESTROY_IPCP = 2;
+        IRM_BOOTSTRAP_IPCP = 3;
+        IRM_ENROLL_IPCP = 4;
+        IRM_REG_IPCP = 5;
+        IRM_UNREG_IPCP = 6;
+        IRM_AP_REG = 7;
+        IRM_AP_UNREG = 8;
+        IRM_FLOW_ACCEPT = 9;
+        IRM_FLOW_ALLOC_RESP = 10;
+        IRM_FLOW_ALLOC = 11;
+        IRM_FLOW_ALLOC_RES = 12;
+        IRM_FLOW_DEALLOC = 13;
+        IRM_FLOW_CONTROL = 14;
+        IRM_FLOW_WRITE = 15;
+        IRM_FLOW_READ = 16;
+        IPCP_FLOW_REQ_ARR = 17;
+        IPCP_FLOW_ALLOC_REPLY = 18;
+        IPCP_FLOW_DEALLOC = 19;
+        IRM_REPLY = 20;
+};
+
+message irm_msg {
+        required irm_msg_code code = 1;
+        optional string ap_name = 2;
+        optional uint32 api_id = 3;
+        optional string ae_name = 4;
+        optional string ipcp_type = 5;
+        // Missing dif_config field here
+        repeated string dif_name = 7;
+        optional int32 fd = 8;
+        optional int32 result = 9;
+        // Missing qos_spec here
+        optional int32 oflags = 10;
+        optional string dst_ap_name = 11;
+        optional uint32 port_id = 12;
+        optional int32 pid = 13;
+};

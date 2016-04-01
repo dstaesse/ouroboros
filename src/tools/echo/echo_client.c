@@ -23,7 +23,6 @@
 #define CLIENT_AP_NAME "echo-client"
 
 #include <ouroboros/dev.h>
-#include <ouroboros/rina_name.h>
 
 int client_main()
 {

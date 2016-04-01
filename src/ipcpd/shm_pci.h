@@ -1,9 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Configuration information
+ * Protocol Control Information in Shared Memory Map
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,13 +21,23 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_CONFIG
-#define OUROBOROS_CONFIG
+#ifndef OUROBOROS_IPCP_SHM_PCI_H
+#define OUROBOROS_IPCP_SHM_PCI_H
 
-#define PROJECT_NAME    "@CMAKE_PROJECT_NAME@"
-#define PROJECT_VERSION "@PACKAGE_VERSION@"
-#define INSTALL_DIR     "@CMAKE_INSTALL_PREFIX@"
-#define BUILD_TYPE      "@CMAKE_BUILD_TYPE@"
-#define _POSIX_C_SOURCE 199506L
+#include <ouroboros/shm_du_map.h>
 
-#endif
+#include <dt_const.h>
+
+struct shm_pci;
+
+typedef struct shm_pci shm_pci_t;
+
+shm_pci_t * shm_pci_create(struct shm_du_buff          * dub,
+                           const struct ipcp_dtp_const * dtpc,
+                           const struct ipcp_dup_const * dupc);
+void    shm_pci_destroy(shm_pci_t * pci);
+
+int     shm_pci_init(shm_pci_t * pci);
+void    shm_pci_release(shm_pci_t * pci);
+
+#endif /* OUROBOROS_IPCP_SHM_PCI_H */

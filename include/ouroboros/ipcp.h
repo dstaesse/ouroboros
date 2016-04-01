@@ -23,31 +23,66 @@
 #ifndef OUROBOROS_IPCP_H
 #define OUROBOROS_IPCP_H
 
-#include <sys/types.h>
+#include <ouroboros/common.h>
+#include <ouroboros/instance_name.h>
 
-#include "common.h"
-#include "rina_name.h"
+#include <sys/types.h>
 
 struct ipcp;
 
 /* Returns the process id */
-pid_t ipcp_create(rina_name_t name,
-                  char * ipcp_type);
-int ipcp_destroy(pid_t pid);
+pid_t ipcp_create(instance_name_t * api,
+                  char *            ipcp_type);
+int   ipcp_destroy(pid_t pid);
 
-int ipcp_reg(pid_t pid,
-             char ** difs,
-             size_t difs_size);
-int ipcp_unreg(pid_t pid,
+int   ipcp_reg(pid_t   pid,
                char ** difs,
-               size_t difs_size);
+               size_t  difs_size);
+int   ipcp_unreg(pid_t   pid,
+                 char ** difs,
+                 size_t  difs_size);
 
-int ipcp_bootstrap(pid_t pid,
-                   struct dif_config conf);
-int ipcp_enroll(pid_t pid,
-                char * dif_name,
-                char * member_name,
-                char ** n_1_difs,
-                ssize_t n_1_difs_size);
+int   ipcp_bootstrap(pid_t               pid,
+                     struct dif_config * conf);
+int   ipcp_enroll(pid_t  pid,
+                  char * member_name,
+                  char * n_1_dif);
 
-#endif
+/* Flow related ops, these go from IRMd to IPCP */
+
+int   ipcp_ap_reg(pid_t    pid,
+                  uint32_t reg_api_id,
+                  char *   ap_name);
+int   ipcp_ap_unreg(pid_t    pid,
+                    uint32_t reg_api_id);
+
+int   ipcp_flow_alloc(pid_t             pid,
+                      uint32_t          port_id,
+                      char *            dst_ap_name,
+                      char *            src_ap_name,
+                      char *            src_ae_name,
+                      struct qos_spec * qos);
+int   ipcp_flow_alloc_resp(pid_t    pid,
+                           uint32_t port_id,
+                           int      result);
+
+/* These operations go from the IPCP to the IRMd */
+
+/* Returns the port_id */
+int   ipcp_flow_req_arr(pid_t    pid,
+                        uint32_t reg_api_id,
+                        char *   ap_name,
+                        char *   ae_name);
+int   ipcp_flow_alloc_reply(pid_t    pid,
+                            uint32_t port_id,
+                            int      result);
+
+/*
+ * This operation can go both ways
+ * pid == 0 means the IRMd is the destination
+ */
+int   ipcp_flow_dealloc(pid_t    pid,
+                        uint32_t port_id);
+
+
+#endif /* OUROBOROS_IPCP_H */

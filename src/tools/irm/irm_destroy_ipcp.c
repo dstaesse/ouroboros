@@ -21,6 +21,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/common.h>
 
@@ -36,13 +37,14 @@ static void usage()
 
 int do_destroy_ipcp(int argc, char ** argv)
 {
-        rina_name_t name;
-
-        name.ap_name = NULL;
-        name.api_id = 0;
+        instance_name_t api = {NULL, 0};
 
         while (argc > 0) {
-                if (!parse_name(argv, &name)) {
+                if (matches(*argv, "ap") == 0) {
+                        api.name = *(argv + 1);
+                } else if (matches(*argv, "api") == 0) {
+                        api.id = atoi(*(argv + 1));
+                } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "destroy_ipcp\".\n", *argv);
                         return -1;
@@ -52,10 +54,10 @@ int do_destroy_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (name.ap_name == NULL) {
+        if (api.name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_destroy_ipcp(name);
+        return irm_destroy_ipcp(&api);
 }
