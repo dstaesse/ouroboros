@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <stdlib.h>
+#include <string.h>
+
 int n_digits(unsigned i)
 {
     int n = 1;
@@ -30,4 +33,23 @@ int n_digits(unsigned i)
     }
 
     return n;
+}
+
+char * strdup(const char * src)
+{
+        int len = 0;
+        char * dst = NULL;
+
+        if (src == NULL)
+                return NULL;
+
+        len = strlen(src) + 1;
+
+        dst = malloc(len);
+        if (dst == NULL)
+                return NULL;
+
+        memcpy(dst, src, len);
+
+        return dst;
 }

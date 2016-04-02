@@ -30,31 +30,33 @@
 #include <ouroboros/da.h>
 #include <ouroboros/list.h>
 #include <ouroboros/instance_name.h>
+#include <ouroboros/utils.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <stdlib.h>
 #include <errno.h>
 
-struct name_to_pid_entry {
+struct ipcp_entry {
         struct list_head  next;
         pid_t             pid;
         instance_name_t * api;
+        char *            dif_name;
 };
 
 struct irm {
-        struct list_head name_to_pid;
+        struct list_head ipcps;
 };
 
 struct irm * instance = NULL;
 
-static pid_t find_pid_by_name(instance_name_t * api)
+static pid_t find_pid_by_ipcp_name(instance_name_t * api)
 {
-        struct list_head * pos;
+        struct list_head * pos = NULL;
 
-        list_for_each(pos, &instance->name_to_pid) {
-                struct name_to_pid_entry * tmp =
-                        list_entry(pos, struct name_to_pid_entry, next);
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * tmp =
+                        list_entry(pos, struct ipcp_entry, next);
 
                 LOG_DBG("name is %s", api->name);
 
@@ -65,11 +67,27 @@ static pid_t find_pid_by_name(instance_name_t * api)
         return 0;
 }
 
+static struct ipcp_entry * find_ipcp_by_name(instance_name_t * api)
+{
+        struct ipcp_entry * tmp = NULL;
+        struct list_head * pos = NULL;
+
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * tmp =
+                        list_entry(pos, struct ipcp_entry, next);
+
+                if (instance_name_cmp(api, tmp->api) == 0)
+                        return tmp;
+        }
+
+        return tmp;
+}
+
 static int create_ipcp(instance_name_t * api,
                        char *            ipcp_type)
 {
         pid_t pid;
-        struct name_to_pid_entry * tmp;
+        struct ipcp_entry * tmp = NULL;
 
         pid = ipcp_create(api, ipcp_type);
         if (pid == -1) {
@@ -90,19 +108,21 @@ static int create_ipcp(instance_name_t * api,
                 return -1;
         }
 
+        tmp->dif_name = NULL;
+
         LOG_DBG("Created IPC process with pid %d", pid);
 
-        list_add(&tmp->next, &instance->name_to_pid);
+        list_add(&tmp->next, &instance->ipcps);
         return 0;
 }
 
 static int destroy_ipcp(instance_name_t * api)
 {
         pid_t pid = 0;
-        struct list_head * pos;
-        struct list_head * n;
+        struct list_head * pos = NULL;
+        struct list_head * n = NULL;
 
-        pid = find_pid_by_name(api);
+        pid = find_pid_by_ipcp_name(api);
         if (pid == 0) {
                 LOG_ERR("No such IPCP");
                 return -1;
@@ -113,9 +133,9 @@ static int destroy_ipcp(instance_name_t * api)
         if (ipcp_destroy(pid))
                 LOG_ERR("Could not destroy IPCP");
 
-        list_for_each_safe(pos, n, &(instance->name_to_pid)) {
-                struct name_to_pid_entry * tmp =
-                        list_entry(pos, struct name_to_pid_entry, next);
+        list_for_each_safe(pos, n, &(instance->ipcps)) {
+                struct ipcp_entry * tmp =
+                        list_entry(pos, struct ipcp_entry, next);
 
                 if (instance_name_cmp(api, tmp->api) == 0)
                         list_del(&tmp->next);
@@ -127,16 +147,24 @@ static int destroy_ipcp(instance_name_t * api)
 static int bootstrap_ipcp(instance_name_t *   api,
                           struct dif_config * conf)
 {
-        pid_t pid = 0;
+        struct ipcp_entry * entry = NULL;
 
-        pid = find_pid_by_name(api);
-        if (pid == 0) {
+        entry = find_ipcp_by_name(api);
+        if (entry == NULL) {
                 LOG_ERR("No such IPCP");
                 return -1;
         }
 
-        if (ipcp_bootstrap(pid, conf)) {
+        entry->dif_name = strdup( conf->dif_name);
+        if (entry->dif_name == NULL) {
+                LOG_ERR("Failed to strdup");
+                return -1;
+        }
+
+        if (ipcp_bootstrap(entry->pid, conf)) {
                 LOG_ERR("Could not bootstrap IPCP");
+                free(entry->dif_name);
+                entry->dif_name = NULL;
                 return -1;
         }
 
@@ -146,29 +174,45 @@ static int bootstrap_ipcp(instance_name_t *   api,
 static int enroll_ipcp(instance_name_t  * api,
                        char *             dif_name)
 {
-        pid_t   pid = 0;
-        char *  member;
+        char *  member = NULL;
         char ** n_1_difs = NULL;
         ssize_t n_1_difs_size = 0;
+        struct ipcp_entry * entry = NULL;
 
-        pid = find_pid_by_name(api);
-        if (pid == 0) {
+        entry = find_ipcp_by_name(api);
+        if (entry == NULL) {
                 LOG_ERR("No such IPCP");
+                return -1;
+        }
+
+        entry->dif_name = strdup(dif_name);
+        if (entry->dif_name == NULL) {
+                LOG_ERR("Failed to strdup");
                 return -1;
         }
 
         member = da_resolve_daf(dif_name);
         if (member == NULL) {
                 LOG_ERR("Could not find a member of that DIF");
+                free(entry->dif_name);
+                entry->dif_name = NULL;
                 return -1;
         }
 
         n_1_difs_size = da_resolve_dap(member, n_1_difs);
-        if (n_1_difs_size != 0)
-                if (ipcp_enroll(pid, member, n_1_difs[0])) {
-                        LOG_ERR("Could not enroll IPCP");
-                        return -1;
-                }
+        if (n_1_difs_size < 1) {
+                LOG_ERR("Could not find N-1 DIFs");
+                free(entry->dif_name);
+                entry->dif_name = NULL;
+                return -1;
+        }
+
+        if (ipcp_enroll(entry->pid, member, n_1_difs[0])) {
+                LOG_ERR("Could not enroll IPCP");
+                free(entry->dif_name);
+                entry->dif_name = NULL;
+                return -1;
+        }
 
         return 0;
 }
@@ -179,7 +223,7 @@ static int reg_ipcp(instance_name_t * api,
 {
         pid_t pid = 0;
 
-        pid = find_pid_by_name(api);
+        pid = find_pid_by_ipcp_name(api);
         if (pid == 0) {
                 LOG_ERR("No such IPCP");
                 return -1;
@@ -199,7 +243,7 @@ static int unreg_ipcp(instance_name_t  * api,
 {
         pid_t pid = 0;
 
-        pid = find_pid_by_name(api);
+        pid = find_pid_by_ipcp_name(api);
         if (pid == 0) {
                 LOG_ERR("No such IPCP");
                 return -1;
@@ -295,7 +339,7 @@ int main()
         if (instance == NULL)
                 return -1;
 
-        INIT_LIST_HEAD(&instance->name_to_pid);
+        INIT_LIST_HEAD(&instance->ipcps);
 
         sockfd = server_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0)

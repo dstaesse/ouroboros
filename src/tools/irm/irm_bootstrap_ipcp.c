@@ -42,8 +42,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         instance_name_t api = {NULL, 0};
         struct dif_config conf;
 
-        conf.qosspecs = NULL;
-
         while (argc > 0) {
                 if (matches(*argv, "ap") == 0) {
                         api.name = *(argv + 1);

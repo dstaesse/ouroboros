@@ -25,3 +25,6 @@
  * need when represented as a string
  */
 int n_digits(unsigned i);
+
+/* Returns a copy of the source string */
+char * strdup(const char * src);

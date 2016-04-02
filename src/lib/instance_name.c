@@ -31,27 +31,6 @@
 #include <malloc.h>
 #include <stdlib.h>
 
-#define instance_name_is_equal(a, b) (instance_name_cmp(a, b) == 0)
-
-static char * strdup(const char * src)
-{
-        int len = 0;
-        char * dst = NULL;
-
-        if (src == NULL)
-                return NULL;
-
-        len = strlen(src) + 1;
-
-        dst = malloc(len);
-        if (dst == NULL)
-                return NULL;
-
-        memcpy(dst, src, len);
-
-        return dst;
-}
-
 instance_name_t * instance_name_create()
 {
         instance_name_t * tmp;
