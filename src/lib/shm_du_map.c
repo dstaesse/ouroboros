@@ -25,7 +25,7 @@
 #include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define OUROBOROS_PREFIX "shm_du_map"

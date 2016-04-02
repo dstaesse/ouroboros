@@ -20,7 +20,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <malloc.h>
+#include <stdlib.h>
 #include <ouroboros/flow.h>
 
 #define OUROBOROS_PREFIX "ipcpd/flow"

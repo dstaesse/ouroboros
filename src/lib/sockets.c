@@ -31,7 +31,7 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 
 int client_socket_open(char * file_name)
 {

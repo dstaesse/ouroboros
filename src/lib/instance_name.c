@@ -28,7 +28,6 @@
 
 #include <string.h>
 #include <math.h>
-#include <malloc.h>
 #include <stdlib.h>
 
 instance_name_t * instance_name_create()
