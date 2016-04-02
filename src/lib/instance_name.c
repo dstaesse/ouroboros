@@ -31,8 +31,6 @@
 #include <malloc.h>
 #include <stdlib.h>
 
-#define instance_name_is_equal(a, b) (instance_name_cmp(a, b) == 0)
-
 instance_name_t * instance_name_create()
 {
         instance_name_t * tmp;
