@@ -21,9 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+
 #include <ouroboros/du_buff.h>
 #include <ouroboros/list.h>
 
