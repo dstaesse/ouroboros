@@ -45,7 +45,7 @@ struct qos_spec {
 /* FIXME: What should be configurable in the DIF? */
 struct dif_config {
         /* general data */
-        struct qos_spec * qosspecs;
+        char * dif_name;
 
         /* TODO: efficient policies */
 
