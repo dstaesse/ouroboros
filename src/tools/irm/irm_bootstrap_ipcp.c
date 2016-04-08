@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ouroboros/irm.h>
-#include <ouroboros/common.h>
+#include <ouroboros/dif_config.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
@@ -35,7 +35,6 @@ static void usage()
                "           ap <application process name>\n"
                "           [api <application process instance>]\n");
 }
-
 
 int do_bootstrap_ipcp(int argc, char ** argv)
 {
@@ -52,7 +51,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                                "destroy_ipcp\".\n", *argv);
                         return -1;
                 }
-
 
                 argc -= 2;
                 argv += 2;

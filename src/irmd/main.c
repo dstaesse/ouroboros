@@ -31,6 +31,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/instance_name.h>
 #include <ouroboros/utils.h>
+#include <ouroboros/dif_config.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -84,7 +85,7 @@ static struct ipcp_entry * find_ipcp_by_name(instance_name_t * api)
 }
 
 static int create_ipcp(instance_name_t * api,
-                       char *            ipcp_type)
+                       enum ipcp_type    ipcp_type)
 {
         pid_t pid;
         struct ipcp_entry * tmp = NULL;
@@ -144,8 +145,8 @@ static int destroy_ipcp(instance_name_t * api)
         return 0;
 }
 
-static int bootstrap_ipcp(instance_name_t *   api,
-                          struct dif_config * conf)
+static int bootstrap_ipcp(instance_name_t *  api,
+                          dif_config_msg_t * conf)
 {
         struct ipcp_entry * entry = NULL;
 
@@ -155,7 +156,7 @@ static int bootstrap_ipcp(instance_name_t *   api,
                 return -1;
         }
 
-        entry->dif_name = strdup( conf->dif_name);
+        entry->dif_name = strdup(conf->dif_name);
         if (entry->dif_name == NULL) {
                 LOG_ERR("Failed to strdup");
                 return -1;
@@ -389,7 +390,7 @@ int main()
                         break;
                 case IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP:
                         ret_msg.has_result = true;
-                        ret_msg.result = bootstrap_ipcp(&api, NULL);
+                        ret_msg.result = bootstrap_ipcp(&api, msg->conf);
                         break;
                 case IRM_MSG_CODE__IRM_ENROLL_IPCP:
                         ret_msg.has_result = true;

@@ -42,28 +42,4 @@ struct qos_spec {
         uint32_t jitter;
 };
 
-/* FIXME: What should be configurable in the DIF? */
-struct dif_config {
-        /* general data */
-        char * dif_name;
-
-        /* TODO: efficient policies */
-
-        /* dt field sizes in octets */
-        uint8_t addr_size;
-        uint8_t cep_id_size;
-        uint8_t pdu_length_size;
-        uint8_t qos_id_size;
-        uint8_t seqno_size;
-
-        /* constants for dup */
-        uint8_t ttl_size;
-        uint8_t chk_size;
-
-        /* values, octets */
-        uint32_t min_pdu_size;
-        uint32_t max_pdu_size;
-
-};
-
 #endif /* OUROBOROS_COMMON_H */

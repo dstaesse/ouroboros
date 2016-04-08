@@ -23,17 +23,19 @@
 #ifndef OUROBOROS_IRM_H
 #define OUROBOROS_IRM_H
 
-#include "common.h"
-#include "instance_name.h"
+#include <ouroboros/instance_name.h>
+#include <ouroboros/dif_config.h>
 
 int irm_create_ipcp(instance_name_t * api,
-                    char *            ipcp_type);
+                    enum ipcp_type    ipcp_type);
+
 int irm_destroy_ipcp(instance_name_t * api);
+
+int irm_enroll_ipcp(instance_name_t * api,
+                    char *            dif_name);
 
 int irm_bootstrap_ipcp(instance_name_t *   api,
                        struct dif_config * conf);
-int irm_enroll_ipcp(instance_name_t * api,
-                    char *            dif_name);
 
 int irm_reg_ipcp(instance_name_t * api,
                  char **           difs,
