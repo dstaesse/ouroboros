@@ -8,6 +8,8 @@ find_package(ProtobufC REQUIRED)
 include_directories(${PROTOBUF_INCLUDE_DIRS})
 protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS irmd_messages.proto)
 protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS ipcpd_messages.proto)
+protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
+                                          dif_config.proto)
 
 find_library(LIBRT_LIBRARIES rt)
 if(NOT LIBRT_LIBRARIES)
@@ -36,11 +38,11 @@ set(SOURCE_FILES
   utils.c
   )
 
-install(FILES ${IRM_PROTO_HDRS} ${IPCP_PROTO_HDRS}
+install(FILES ${IRM_PROTO_HDRS} ${IPCP_PROTO_HDRS} ${DIF_CONFIG_PROTO_HDRS}
   DESTINATION include/ouroboros)
 
 add_library(ouroboros SHARED ${SOURCE_FILES}
-  ${IRM_PROTO_SRCS} ${IPCP_PROTO_SRCS})
+  ${IRM_PROTO_SRCS} ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS})
 
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY})

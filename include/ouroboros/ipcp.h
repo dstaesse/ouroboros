@@ -24,7 +24,9 @@
 #define OUROBOROS_IPCP_H
 
 #include <ouroboros/common.h>
+#include <ouroboros/dif_config.h>
 #include <ouroboros/instance_name.h>
+#include <ouroboros/sockets.h>
 
 #include <sys/types.h>
 
@@ -32,7 +34,8 @@ struct ipcp;
 
 /* Returns the process id */
 pid_t ipcp_create(instance_name_t * api,
-                  char *            ipcp_type);
+                  enum ipcp_type    ipcp_type);
+
 int   ipcp_destroy(pid_t pid);
 
 int   ipcp_reg(pid_t   pid,
@@ -42,11 +45,12 @@ int   ipcp_unreg(pid_t   pid,
                  char ** difs,
                  size_t  difs_size);
 
-int   ipcp_bootstrap(pid_t               pid,
-                     struct dif_config * conf);
 int   ipcp_enroll(pid_t  pid,
                   char * member_name,
                   char * n_1_dif);
+
+int   ipcp_bootstrap(pid_t pid,
+                     dif_config_msg_t * conf);
 
 /* Flow related ops, these go from IRMd to IPCP */
 
