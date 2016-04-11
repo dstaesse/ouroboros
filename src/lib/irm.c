@@ -111,7 +111,7 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
         config.ipcp_type = conf->type;
 
         switch (conf->type) {
-        case NORMAL_IPCP:
+        case IPCP_NORMAL:
                 config.has_addr_size = true;
                 config.has_cep_id_size = true;
                 config.has_pdu_length_size = true;
@@ -132,7 +132,7 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
                 config.min_pdu_size = conf->min_pdu_size;
                 config.max_pdu_size = conf->max_pdu_size;
                 break;
-        case SHIM_UDP_IPCP:
+        case IPCP_SHIM_UDP:
                 config.has_ip_addr = true;
 
                 config.ip_addr = conf->ip_addr;

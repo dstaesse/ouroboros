@@ -26,8 +26,8 @@
 #define OUROBOROS_DIF_CONFIG_H
 
 enum ipcp_type {
-        NORMAL_IPCP = 1,
-        SHIM_UDP_IPCP
+        IPCP_NORMAL = 1,
+        IPCP_SHIM_UDP
 };
 
 struct dif_config {

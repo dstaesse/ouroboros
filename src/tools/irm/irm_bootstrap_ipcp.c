@@ -139,7 +139,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         conf.dif_name = dif_name;
 
         if (strcmp(ipcp_type, NORMAL) == 0) {
-                conf.type = NORMAL_IPCP;
+                conf.type = IPCP_NORMAL;
                 conf.addr_size = addr_size;
                 conf.cep_id_size = cep_id_size;
                 conf.pdu_length_size = pdu_length_size;
@@ -150,13 +150,11 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.min_pdu_size = min_pdu_size;
                 conf.max_pdu_size = max_pdu_size;
         } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {
-                conf.type = SHIM_UDP_IPCP;
-
+                conf.type = IPCP_SHIM_UDP;
                 if (ip_addr == 0) {
                         usage();
                         return -1;
                 }
-
                 conf.ip_addr = ip_addr;
         } else {
                 usage();

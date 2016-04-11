@@ -73,9 +73,9 @@ int do_create_ipcp(int argc, char ** argv)
         }
 
         if (strcmp(ipcp_type, NORMAL) == 0)
-                type = NORMAL_IPCP;
+                type = IPCP_NORMAL;
         else if (strcmp(ipcp_type, SHIM_UDP) == 0)
-                type = SHIM_UDP_IPCP;
+                type = IPCP_SHIM_UDP;
         else {
                 usage();
                 return -1;
