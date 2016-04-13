@@ -35,6 +35,8 @@ instance_name_t * instance_name_create()
         instance_name_t * tmp;
 
         tmp = malloc(sizeof *tmp);
+        if (tmp == NULL)
+                return NULL;
 
         tmp->name = NULL;
         tmp->id  = 0;
