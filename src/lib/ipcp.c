@@ -100,18 +100,13 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t pid,
 }
 
 pid_t ipcp_create(instance_name_t * api,
-                  char *            ipcp_type)
+                  enum ipcp_type    ipcp_type)
 {
         pid_t pid = 0;
         char * api_id = NULL;
         size_t len = 0;
         char * ipcp_dir = "bin/ipcpd";
         char * full_name = NULL;
-
-        if (ipcp_type == NULL)
-                return -1;
-
-        LOG_DBG("%lu", _POSIX_C_SOURCE);
 
         pid = fork();
         if (pid == -1) {
@@ -146,7 +141,7 @@ pid_t ipcp_create(instance_name_t * api,
 
         char * argv[] = {full_name,
                          api->name, api_id,
-                         ipcp_type, 0};
+                         0};
 
         char * envp[] = {0};
 
@@ -241,14 +236,19 @@ int ipcp_unreg(pid_t pid,
         return ret;
 }
 
+
 int ipcp_bootstrap(pid_t pid,
-                   struct dif_config * conf)
+                   dif_config_msg_t * conf)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int ret = -1;
 
+        if (conf == NULL)
+                return -EINVAL;
+
         msg.code = IPCP_MSG_CODE__IPCP_BOOTSTRAP;
+        msg.conf = conf;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)

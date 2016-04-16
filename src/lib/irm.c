@@ -31,13 +31,13 @@
 #include <stdlib.h>
 
 int irm_create_ipcp(instance_name_t * api,
-                    char *            ipcp_type)
+                    enum ipcp_type    ipcp_type)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (api == NULL || ipcp_type == NULL || api->name == NULL)
+        if (api == NULL || api->name == NULL)
                 return -EINVAL;
 
         msg.code = IRM_MSG_CODE__IRM_CREATE_IPCP;
@@ -94,6 +94,7 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
                        struct dif_config * conf)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        dif_config_msg_t config = DIF_CONFIG_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
@@ -105,9 +106,45 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
         msg.has_api_id = true;
         msg.api_id = api->id;
 
-        recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
+        msg.conf = &config;
+        config.dif_name = conf->dif_name;
+        config.ipcp_type = conf->type;
+
+        switch (conf->type) {
+        case IPCP_NORMAL:
+                config.has_addr_size = true;
+                config.has_cep_id_size = true;
+                config.has_pdu_length_size = true;
+                config.has_qos_id_size = true;
+                config.has_seqno_size = true;
+                config.has_ttl_size = true;
+                config.has_chk_size = true;
+                config.has_min_pdu_size = true;
+                config.has_max_pdu_size = true;
+
+                config.addr_size = conf->addr_size;
+                config.cep_id_size = conf->cep_id_size;
+                config.pdu_length_size = conf->pdu_length_size;
+                config.qos_id_size = conf->qos_id_size;
+                config.seqno_size = conf->seqno_size;
+                config.ttl_size = conf->ttl_size;
+                config.chk_size = conf->chk_size;
+                config.min_pdu_size = conf->min_pdu_size;
+                config.max_pdu_size = conf->max_pdu_size;
+                break;
+        case IPCP_SHIM_UDP:
+                config.has_ip_addr = true;
+
+                config.ip_addr = conf->ip_addr;
+                break;
+        default:
                 return -1;
+        }
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL) {
+                return -1;
+        }
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);

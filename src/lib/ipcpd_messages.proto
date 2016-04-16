@@ -1,3 +1,5 @@
+import "dif_config.proto";
+
 enum ipcp_msg_code {
         IPCP_BOOTSTRAP = 1;
         IPCP_ENROLL = 2;
@@ -14,7 +16,7 @@ enum ipcp_msg_code {
 message ipcp_msg {
         required ipcp_msg_code code = 1;
         optional string ap_name = 2;
-        // Missing dif_config field here
+        optional dif_config_msg conf = 3;
         repeated string dif_name = 4;
         optional int32 result = 5;
         optional uint32 port_id = 6;

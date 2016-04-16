@@ -20,6 +20,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define MAX(a,b) (a > b ? a : b)
+
 /*
  * Returns the number of characters a uint would
  * need when represented as a string
