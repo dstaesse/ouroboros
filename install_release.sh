@@ -12,7 +12,7 @@ fi
 BUILDDIR=build
 RELEASEDIR=release
 
-bash compile_debug.sh $PREFIX
+bash compile_release.sh $PREFIX
 
 cd $BUILDDIR/$RELEASEDIR
 make install
