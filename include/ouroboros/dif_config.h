@@ -21,12 +21,13 @@
  */
 
 #include <ouroboros/utils.h>
+#include <ouroboros/common.h>
 
 #ifndef OUROBOROS_DIF_CONFIG_H
 #define OUROBOROS_DIF_CONFIG_H
 
 enum ipcp_type {
-        IPCP_NORMAL = 1,
+        IPCP_NORMAL = 0,
         IPCP_SHIM_UDP
 };
 
@@ -53,6 +54,7 @@ struct dif_config {
                 /* Shim UDP */
                 struct {
                         uint32_t ip_addr;
+                        uint32_t dns_addr;
                 };
         };
 };

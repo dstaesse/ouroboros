@@ -43,6 +43,7 @@
 #define DEFAULT_CHK_SIZE 2
 #define DEFAULT_MIN_PDU_SIZE 0
 #define DEFAULT_MAX_PDU_SIZE 9000
+#define DEFAULT_DDNS 0
 
 static void usage()
 {
@@ -64,12 +65,14 @@ static void usage()
                "           [min_pdu <minimum PDU size> (default: %d)]\n"
                "           [max_pdu <maximum PDU size> (default: %d)]\n"
                "if TYPE == " SHIM_UDP "\n"
-               "           ip <IP address in dotted notation>\n",
+               "           ip <IP address in dotted notation>\n"
+               "           [dns <DDNS IP address in dotted notation>"
+               " (default = none: %d)]\n",
                DEFAULT_ADDR_SIZE, DEFAULT_CEP_ID_SIZE,
                DEFAULT_PDU_LEN_SIZE, DEFAULT_QOS_ID_SIZE,
                DEFAULT_SEQ_NO_SIZE, DEFAULT_TTL_SIZE,
                DEFAULT_CHK_SIZE, DEFAULT_MIN_PDU_SIZE,
-               DEFAULT_MAX_PDU_SIZE);
+               DEFAULT_MAX_PDU_SIZE, DEFAULT_DDNS);
 }
 
 int do_bootstrap_ipcp(int argc, char ** argv)
@@ -86,6 +89,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         uint32_t min_pdu_size = DEFAULT_MIN_PDU_SIZE;
         uint32_t max_pdu_size = DEFAULT_MAX_PDU_SIZE;
         uint32_t ip_addr = 0;
+        uint32_t dns_addr = DEFAULT_DDNS;
         char * ipcp_type = NULL;
         char * dif_name = NULL;
 
@@ -100,6 +104,11 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         api.id = atoi(*(argv + 1));
                 } else if (matches(*argv, "ip") == 0) {
                         if (inet_pton (AF_INET, *(argv + 1), &ip_addr) != 1) {
+                                usage();
+                                return -1;
+                        }
+                } else if (matches(*argv, "dns") == 0) {
+                        if (inet_pton (AF_INET, *(argv + 1), &dns_addr) != 1) {
                                 usage();
                                 return -1;
                         }
@@ -156,6 +165,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         return -1;
                 }
                 conf.ip_addr = ip_addr;
+                conf.dns_addr = dns_addr;
         } else {
                 usage();
                 return -1;

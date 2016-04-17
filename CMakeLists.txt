@@ -54,8 +54,8 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
-add_subdirectory(include)
 add_subdirectory(src)
+add_subdirectory(include)
 
 # Uninstall target
 configure_file(

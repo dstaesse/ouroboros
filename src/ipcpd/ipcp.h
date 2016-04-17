@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Handy utilities
+ * IPC process structure
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,36 +20,29 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include <string.h>
+#ifndef IPCPD_IPCP_H
+#define IPCPD_IPCP_H
 
-int n_digits(unsigned i)
-{
-    int n = 1;
+#include "ipcp-ops.h"
+#include "ipcp-data.h"
 
-    while (i > 9) {
-        ++n;
-        i /= 10;
-    }
+enum ipcp_state {
+        IPCP_INIT = 0,
+        IPCP_ENROLLING,
+        IPCP_BOOTSTRAPPING,
+        IPCP_ENROLLED,
+        IPCP_DISCONNECTED,
+        IPCP_SHUTDOWN
+};
 
-    return n;
-}
+struct ipcp {
+        struct ipcp_data * data;
+        struct ipcp_ops *  ops;
 
-char * strdup(const char * src)
-{
-        int len = 0;
-        char * dst = NULL;
+        enum ipcp_state    state;
+        int                irmd_fd;
+};
 
-        if (src == NULL)
-                return NULL;
+int ipcp_main_loop();
 
-        len = strlen(src) + 1;
-
-        dst = malloc(len);
-        if (dst == NULL)
-                return NULL;
-
-        memcpy(dst, src, len);
-
-        return dst;
-}
+#endif

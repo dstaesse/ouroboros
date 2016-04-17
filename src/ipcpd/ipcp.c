@@ -1,0 +1,195 @@
+/*
+ * Ouroboros - Copyright (C) 2016
+ *
+ * IPC process main loop
+ *
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+
+#include <ouroboros/config.h>
+#include <ouroboros/ipcp.h>
+#include <sys/socket.h>
+#include <stdlib.h>
+#include "ipcp.h"
+
+#define OUROBOROS_PREFIX "ipcpd/ipcp"
+#include <ouroboros/logs.h>
+
+int ipcp_main_loop(struct ipcp * _ipcp)
+{
+        int     lsockfd;
+        int     sockfd;
+        uint8_t buf[IPCP_MSG_BUF_SIZE];
+
+        ipcp_msg_t *    msg;
+        ssize_t         count;
+        buffer_t        buffer;
+        ipcp_msg_t      ret_msg = IPCP_MSG__INIT;
+
+        dif_config_msg_t * conf_msg;
+        struct dif_config  conf;
+
+        if (_ipcp == NULL) {
+                LOG_ERR("Invalid ipcp struct.");
+                return 1;
+        }
+
+        sockfd = server_socket_open(ipcp_sock_path(getpid()));
+        if (sockfd < 0) {
+                LOG_ERR("Could not open server socket.");
+                return 1;
+        }
+
+        while (true) {
+                ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
+
+                lsockfd = accept(sockfd, 0, 0);
+                if (lsockfd < 0) {
+                        LOG_ERR("Cannot accept new connection");
+                        break;
+                }
+
+                count = read(lsockfd, buf, IPCP_MSG_BUF_SIZE);
+                if (count <= 0) {
+                        LOG_ERR("Failed to read from socket");
+                        close(lsockfd);
+                        continue;
+                }
+
+                msg = ipcp_msg__unpack(NULL, count, buf);
+                if (msg == NULL) {
+                        close(lsockfd);
+                        continue;
+                }
+
+                switch (msg->code) {
+                case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
+                        conf_msg = msg->conf;
+                        conf.type = conf_msg->ipcp_type;
+                        if (conf_msg->ipcp_type == IPCP_NORMAL) {
+                                conf.addr_size = conf_msg->addr_size;
+                                conf.cep_id_size = conf_msg->cep_id_size;
+                                conf.pdu_length_size
+                                        = conf_msg->pdu_length_size;
+                                conf.qos_id_size     = conf_msg->qos_id_size;
+                                conf.seqno_size      = conf_msg->seqno_size;
+                                conf.ttl_size        = conf_msg->seqno_size;
+                                conf.chk_size        = conf_msg->chk_size;
+                                conf.min_pdu_size    = conf_msg->min_pdu_size;
+                                conf.max_pdu_size    = conf_msg->max_pdu_size;
+                        }
+                        if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
+                                conf.ip_addr = conf_msg->ip_addr;
+                                conf.dns_addr = conf_msg->dns_addr;
+                        }
+
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_bootstrap(&conf);
+                        break;
+                case IPCP_MSG_CODE__IPCP_ENROLL:
+                        if (_ipcp->ops->ipcp_enroll == NULL) {
+                                LOG_ERR("ipcp_enroll unsupported.");
+                        } else {
+                                ret_msg.has_result = true;
+                                ret_msg.result = _ipcp->ops->ipcp_enroll(
+                                        msg->member_name, msg->n_1_dif);
+                        }
+                        break;
+
+                case IPCP_MSG_CODE__IPCP_REG:
+                        if (_ipcp->ops->ipcp_reg == NULL) {
+                                LOG_ERR("ipcp_reg unsupported.");
+
+                        } else {
+                                ret_msg.has_result = true;
+                                ret_msg.result = _ipcp->ops->ipcp_reg(
+                                        msg->dif_names, msg->len);
+                        }
+                        break;
+                case IPCP_MSG_CODE__IPCP_UNREG:
+                        if (_ipcp->ops->ipcp_unreg == NULL) {
+                                LOG_ERR("ipcp_unreg unsupported.");
+
+                        } else {
+                                ret_msg.has_result = true;
+                                ret_msg.result = _ipcp->ops->ipcp_unreg(
+                                        msg->dif_names, msg->len);
+                        }
+                        break;
+                case IPCP_MSG_CODE__IPCP_AP_REG:
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_ap_reg(
+                                msg->ap_name, msg->reg_ap_id);
+                        break;
+                case IPCP_MSG_CODE__IPCP_AP_UNREG:
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_ap_unreg(
+                                msg->reg_ap_id);
+                        break;
+                case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_flow_alloc(
+                                msg->port_id,
+                                msg->dst_ap_name,
+                                msg->ap_name,
+                                msg->ae_name,
+                                NULL);
+                        break;
+                case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_flow_alloc_resp(
+                                msg->port_id, msg->result);
+                        break;
+                case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_flow_dealloc(
+                                msg->port_id);
+                        break;
+                default:
+                        LOG_ERR("Don't know that message code");
+                        break;
+                }
+
+                ipcp_msg__free_unpacked(msg, NULL);
+
+                buffer.size = ipcp_msg__get_packed_size(&ret_msg);
+                if (buffer.size == 0) {
+                        LOG_ERR("Failed to send reply message");
+                        close(lsockfd);
+                        continue;
+                }
+
+                buffer.data = malloc(buffer.size);
+                if (buffer.data == NULL) {
+                        close(lsockfd);
+                        continue;
+                }
+
+                ipcp_msg__pack(&ret_msg, buffer.data);
+
+                if (write(lsockfd, buffer.data, buffer.size) == -1) {
+                        free(buffer.data);
+                        close(lsockfd);
+                        continue;
+                }
+
+                free(buffer.data);
+                close(lsockfd);
+        }
+
+        return 0;
+}
