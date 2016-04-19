@@ -28,7 +28,6 @@ set(SOURCE_FILES
   da.c
   dev.c
   du_buff.c
-  flow.c
   instance_name.c
   ipcp.c
   irm.c

@@ -22,7 +22,6 @@
  */
 
 #include "ipcp-data.h"
-#include <ouroboros/flow.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
