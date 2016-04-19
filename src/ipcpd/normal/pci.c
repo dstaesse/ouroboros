@@ -22,7 +22,7 @@
  */
 
 #include "pci.h"
-#include <malloc.h>
+#include <stdlib.h>
 #include <errno.h>
 
 #define OUROBOROS_PREFIX "ipcp/pci"

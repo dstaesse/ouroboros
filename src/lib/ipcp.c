@@ -61,7 +61,7 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t pid,
                return NULL;
        }
 
-       buf.data = malloc(buf.size);
+       buf.data = malloc(IPCP_MSG_BUF_SIZE);
        if (buf.data == NULL) {
                close(sockfd);
                free(sock_path);
@@ -103,10 +103,14 @@ pid_t ipcp_create(instance_name_t * api,
                   enum ipcp_type    ipcp_type)
 {
         pid_t pid = 0;
+        char irmd_pid[10];
         char * api_id = NULL;
         size_t len = 0;
-        char * ipcp_dir = "bin/ipcpd";
+        char * ipcp_dir = "bin";
         char * full_name = NULL;
+        char * exec_name = NULL;
+
+        sprintf (irmd_pid, "%u", getpid());
 
         pid = fork();
         if (pid == -1) {
@@ -125,10 +129,21 @@ pid_t ipcp_create(instance_name_t * api,
         }
         sprintf(api_id, "%d", api->id);
 
+        if (ipcp_type == IPCP_NORMAL)
+                exec_name = IPCP_NORMAL_EXEC;
+        else if (ipcp_type == IPCP_SHIM_UDP)
+                exec_name = IPCP_SHIM_UDP_EXEC;
+        else {
+                free(api_id);
+                exit(EXIT_FAILURE);
+        }
+
         len += strlen(INSTALL_DIR);
         len += strlen(ipcp_dir);
-        len += 2;
-        full_name = malloc(len);
+        len += strlen(exec_name);
+        len += 3;
+
+        full_name = malloc(len + 1);
         if (full_name == NULL) {
                 LOG_ERR("Failed to malloc");
                 free(api_id);
@@ -138,9 +153,16 @@ pid_t ipcp_create(instance_name_t * api,
         strcpy(full_name, INSTALL_DIR);
         strcat(full_name, "/");
         strcat(full_name, ipcp_dir);
+        strcat(full_name, "/");
+        strcat(full_name, exec_name);
+        full_name[len] = '\0';
+
+        LOG_DBG("Full name is %s", full_name);
 
         char * argv[] = {full_name,
-                         api->name, api_id,
+                         irmd_pid,
+                         api->name,
+                         api_id,
                          0};
 
         char * envp[] = {0};
@@ -172,22 +194,22 @@ int ipcp_destroy(pid_t pid)
         return 0;
 }
 
-int ipcp_reg(pid_t pid,
-             char ** difs,
-             size_t difs_size)
+int ipcp_reg(pid_t   pid,
+             char ** dif_names,
+             size_t  len)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (difs == NULL ||
-            difs_size == 0 ||
-            difs[0] == NULL)
+        if (dif_names == NULL ||
+            len == 0 ||
+            dif_names[0] == NULL)
                 return -EINVAL;
 
-        msg.code = IPCP_MSG_CODE__IPCP_REG;
-        msg.dif_name = difs;
-        msg.n_dif_name = difs_size;
+        msg.code       = IPCP_MSG_CODE__IPCP_REG;
+        msg.dif_names  = dif_names;
+        msg.len        = len;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -205,21 +227,21 @@ int ipcp_reg(pid_t pid,
 }
 
 int ipcp_unreg(pid_t pid,
-               char ** difs,
-               size_t difs_size)
+               char ** dif_names,
+               size_t len)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (difs == NULL ||
-            difs_size == 0 ||
-            difs[0] == NULL)
+        if (dif_names == NULL ||
+            len == 0 ||
+            dif_names[0] == NULL)
                 return -EINVAL;
 
-        msg.code = IPCP_MSG_CODE__IPCP_UNREG;
-        msg.dif_name = difs;
-        msg.n_dif_name = difs_size;
+        msg.code       = IPCP_MSG_CODE__IPCP_UNREG;
+        msg.dif_names  = dif_names;
+        msg.len        = len;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -276,36 +298,36 @@ int ipcp_enroll(pid_t pid,
         if (n_1_dif == NULL || member_name == NULL)
                 return -EINVAL;
 
-        msg.code = IPCP_MSG_CODE__IPCP_ENROLL;
-        msg.dif_name = malloc(sizeof(*(msg.dif_name)));
-        if (msg.dif_name == NULL) {
-                LOG_ERR("Failed to malloc");
+        msg.code        = IPCP_MSG_CODE__IPCP_ENROLL;
+        msg.member_name = malloc(sizeof(*(msg.member_name)));
+        if (msg.member_name == NULL) {
+                LOG_ERR("Failed to malloc.");
                 return -1;
         }
-        msg.dif_name[0] = n_1_dif;
-        msg.ap_name = member_name;
+        msg.n_1_dif     = n_1_dif;
+        msg.member_name = member_name;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL) {
-                free(msg.dif_name);
+                free(msg.member_name);
                 return -1;
         }
 
         if (recv_msg->has_result == false) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
-                free(msg.dif_name);
+                free(msg.member_name);
                 return -1;
         }
 
         ret = recv_msg->result;
         ipcp_msg__free_unpacked(recv_msg, NULL);
-        free(msg.dif_name);
+        free(msg.member_name);
 
         return ret;
 }
 
 int ipcp_ap_reg(pid_t    pid,
-                uint32_t reg_api_id,
+                uint32_t reg_ap_id,
                 char *   ap_name)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
@@ -315,10 +337,10 @@ int ipcp_ap_reg(pid_t    pid,
         if (ap_name == NULL)
                 return -1;
 
-        msg.code = IPCP_MSG_CODE__IPCP_AP_REG;
-        msg.ap_name = ap_name;
-        msg.has_port_id = true;
-        msg.port_id = reg_api_id;
+        msg.code          = IPCP_MSG_CODE__IPCP_AP_REG;
+        msg.ap_name       = ap_name;
+        msg.has_reg_ap_id = true;
+        msg.reg_ap_id     = reg_ap_id;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -336,15 +358,15 @@ int ipcp_ap_reg(pid_t    pid,
 }
 
 int ipcp_ap_unreg(pid_t    pid,
-                  uint32_t reg_api_id)
+                  uint32_t reg_ap_id)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        msg.code = IPCP_MSG_CODE__IPCP_AP_UNREG;
-        msg.has_port_id = true;
-        msg.port_id = reg_api_id;
+        msg.code          = IPCP_MSG_CODE__IPCP_AP_UNREG;
+        msg.has_reg_ap_id = true;
+        msg.reg_ap_id     = reg_ap_id;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -375,12 +397,12 @@ int ipcp_flow_alloc(pid_t             pid,
         if (dst_ap_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
                 return -EINVAL;
 
-        msg.code = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
-        msg.ap_name = src_ap_name;
-        msg.ae_name = src_ae_name;
+        msg.code        = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
+        msg.ap_name     = src_ap_name;
+        msg.ae_name     = src_ae_name;
         msg.dst_ap_name = dst_ap_name;
+        msg.port_id     = port_id;
         msg.has_port_id = true;
-        msg.port_id = port_id;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -405,11 +427,11 @@ int ipcp_flow_alloc_resp(pid_t    pid,
         ipcp_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        msg.code = IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP;
+        msg.code        = IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP;
         msg.has_port_id = true;
-        msg.port_id = port_id;
-        msg.has_result = true;
-        msg.result = result;
+        msg.port_id     = port_id;
+        msg.has_result  = true;
+        msg.result      = result;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -427,7 +449,7 @@ int ipcp_flow_alloc_resp(pid_t    pid,
 }
 
 int ipcp_flow_req_arr(pid_t    pid,
-                      uint32_t reg_api_id,
+                      uint32_t reg_ap_id,
                       char *   ap_name,
                       char *   ae_name)
 {
@@ -438,13 +460,13 @@ int ipcp_flow_req_arr(pid_t    pid,
         if (ap_name == NULL || ae_name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
-        msg.ap_name = ap_name;
-        msg.ae_name = ae_name;
-        msg.port_id = reg_api_id;
-        msg.has_port_id = true;
-        msg.pid = pid;
-        msg.has_pid = true;
+        msg.code          = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
+        msg.ap_name       = ap_name;
+        msg.ae_name       = ae_name;
+        msg.reg_ap_id     = reg_ap_id;
+        msg.has_reg_ap_id = true;
+        msg.pid           = pid;
+        msg.has_pid       = true;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -469,11 +491,11 @@ int ipcp_flow_alloc_reply(pid_t    pid,
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        msg.code = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
-        msg.port_id = port_id;
+        msg.code        = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
+        msg.port_id     = port_id;
         msg.has_port_id = true;
-        msg.result = result;
-        msg.has_result = true;
+        msg.result      = result;
+        msg.has_result  = true;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)

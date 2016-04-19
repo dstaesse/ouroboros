@@ -22,6 +22,7 @@
 
 #define OUROBOROS_PREFIX "irmd"
 
+#include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/common.h>
 #include <ouroboros/sockets.h>
@@ -32,11 +33,14 @@
 #include <ouroboros/instance_name.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/dif_config.h>
+#include <ouroboros/shm_du_map.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <string.h>
 
 struct ipcp_entry {
         struct list_head  next;
@@ -50,6 +54,7 @@ struct irm {
 };
 
 struct irm * instance = NULL;
+struct shm_du_map * dum;
 
 static pid_t find_pid_by_ipcp_name(instance_name_t * api)
 {
@@ -58,8 +63,6 @@ static pid_t find_pid_by_ipcp_name(instance_name_t * api)
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
-
-                LOG_DBG("name is %s", api->name);
 
                 if (instance_name_cmp(api, tmp->api) == 0)
                         return tmp->pid;
@@ -97,8 +100,9 @@ static int create_ipcp(instance_name_t * api,
         }
 
         tmp = malloc(sizeof(*tmp));
-        if (tmp == NULL)
+        if (tmp == NULL) {
                 return -1;
+        }
 
         INIT_LIST_HEAD(&tmp->next);
 
@@ -330,11 +334,44 @@ static int flow_dealloc_ipcp(uint32_t port_id)
         return -1;
 }
 
-/* FIXME: Close sockfd on closing and release irm */
+void irmd_sig_handler(int sig, siginfo_t * info, void * c)
+{
+        switch(sig) {
+        case SIGINT:
+        case SIGTERM:
+        case SIGHUP:
+                shm_du_map_close(dum);
+                free(instance);
+                exit(0);
+        default:
+                return;
+        }
+}
+
 int main()
 {
         int     sockfd;
         uint8_t buf[IRM_MSG_BUF_SIZE];
+
+        struct sigaction sig_act;
+
+        /* init sig_act */
+        memset (&sig_act, 0, sizeof sig_act);
+
+        /* install signal traps */
+        sig_act.sa_sigaction = &irmd_sig_handler;
+        sig_act.sa_flags     = SA_SIGINFO;
+
+        sigaction(SIGINT,  &sig_act, NULL);
+        sigaction(SIGTERM, &sig_act, NULL);
+        sigaction(SIGHUP,  &sig_act, NULL);
+
+
+        if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1)
+                unlink("/dev/shm/" SHM_DU_MAP_FILENAME);
+
+        if ((dum = shm_du_map_create()) == NULL)
+                return -1;
 
         instance = malloc(sizeof(*instance));
         if (instance == NULL)
@@ -343,8 +380,10 @@ int main()
         INIT_LIST_HEAD(&instance->ipcps);
 
         sockfd = server_socket_open(IRM_SOCK_PATH);
-        if (sockfd < 0)
+        if (sockfd < 0) {
+                free(instance);
                 return -1;
+        }
 
         while (true) {
                 int cli_sockfd;

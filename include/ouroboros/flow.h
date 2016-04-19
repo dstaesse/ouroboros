@@ -24,7 +24,7 @@
 #define OUROBOROS_FLOW_H
 
 #include <ouroboros/common.h>
-
+#include <ouroboros/list.h>
 #include <pthread.h>
 
 /* same values as fcntl.h */
@@ -39,17 +39,19 @@
 #define FLOW_O_INVALID  (FLOW_O_WRONLY | FLOW_O_RDWR)
 
 enum flow_state {
-        FLOW_INIT = 0,
+        FLOW_NULL = 0,
         FLOW_ALLOCATED,
         FLOW_PENDING
 };
 
 typedef struct flow {
-        int32_t         port_id;
-        uint16_t        oflags;
-        enum flow_state state;
+        struct list_head list;
 
-        pthread_mutex_t lock;
+        int32_t          port_id;
+        uint16_t         oflags;
+        enum flow_state  state;
+
+        pthread_mutex_t  lock;
 } flow_t;
 
 flow_t * flow_create(int32_t   port_id);
