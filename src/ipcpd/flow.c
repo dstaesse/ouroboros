@@ -21,7 +21,7 @@
  */
 
 #include <stdlib.h>
-#include <ouroboros/flow.h>
+#include "flow.h"
 
 #define OUROBOROS_PREFIX "ipcpd/flow"
 

@@ -23,9 +23,9 @@
 #include <ouroboros/config.h>
 
 #include "ipcp.h"
+#include "flow.h"
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/list.h>
-#include <ouroboros/flow.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/dif_config.h>

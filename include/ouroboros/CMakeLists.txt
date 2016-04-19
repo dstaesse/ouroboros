@@ -10,7 +10,6 @@ set(HEADER_FILES
         dev.h
         dif_config.h
         du_buff.h
-        flow.h
         instance_name.h
         ipcp.h
         irm.h

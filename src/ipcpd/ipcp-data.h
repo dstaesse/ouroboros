@@ -27,11 +27,11 @@
 #include <ouroboros/common.h>
 #include <ouroboros/instance_name.h>
 #include <ouroboros/list.h>
-#include <ouroboros/flow.h>
 #include <sys/types.h>
 #include <pthread.h>
 
 #include "ipcp-ops.h"
+#include "flow.h"
 
 struct ipcp_data {
         instance_name_t   * iname;
