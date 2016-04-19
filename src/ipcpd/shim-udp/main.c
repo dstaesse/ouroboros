@@ -43,9 +43,22 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+#include "irmd_messages.pb-c.h"
+
+typedef IrmMsg irm_msg_t;
+
+#include "ipcpd_messages.pb-c.h"
+
+typedef IpcpMsg ipcp_msg_t;
+
 #define THIS_TYPE IPCP_SHIM_UDP
+#define LISTEN_PORT htons(0x0D1F)
+#define SHIM_UDP_BUF_SIZE 256
 
 #define shim_data(type) ((struct ipcp_udp_data *) type->data)
+
+#define local_ip (((struct ipcp_udp_data *)                              \
+                         _ipcp->data)->s_saddr.sin_addr.s_addr)
 
 /* global for trapping signal */
 int irmd_pid;
@@ -64,16 +77,16 @@ struct ipcp_udp_data {
         uint32_t ip_addr;
         uint32_t dns_addr;
 
+        /* listen server */
+        struct sockaddr_in s_saddr;
+        int                s_fd;
+
         pthread_mutex_t   lock;
 };
 
 struct udp_flow {
         /* FLOW MUST BE FIRST !!!! */
         flow_t flow;
-
-        uint16_t localport;
-
-        struct sockaddr_in * remote;
         int    fd;
 };
 
@@ -131,10 +144,117 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
         return udp_data;
 }
 
+void * ipcp_udp_listener()
+{
+        char buf[SHIM_UDP_BUF_SIZE];
+        int     n = 0;
+
+        struct sockaddr_in f_saddr;
+        struct sockaddr_in c_saddr;
+        struct hostent  *  hostp;
+        struct udp_flow *  flow;
+        int                sfd = shim_data(_ipcp)->s_fd;
+
+        irm_msg_t          msg = IRM_MSG__INIT;
+        irm_msg_t *        ret_msg ;
+
+        while (true) {
+                flow = malloc(sizeof *flow);
+                if (flow == NULL)
+                        continue;
+                n = sizeof c_saddr;
+                n = recvfrom(sfd, buf, SHIM_UDP_BUF_SIZE, 0,
+                             (struct sockaddr *) &c_saddr, (unsigned *) &n);
+                if (n < 0)
+                        continue;
+
+                /* flow alloc request from other host */
+                hostp = gethostbyaddr((const char *)&c_saddr.sin_addr.s_addr,
+                                      sizeof(c_saddr.sin_addr.s_addr), AF_INET);
+                if (hostp == NULL)
+                        continue;
+
+                /* create a new socket for the server */
+
+                flow->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+                if (flow->fd == -1) {
+                        free(flow);
+                        continue;
+                }
+
+                memset((char *)&f_saddr, 0, sizeof f_saddr);
+                f_saddr.sin_family      = AF_INET;
+                f_saddr.sin_addr.s_addr = local_ip;
+
+                /*
+                 * FIXME: we could have a port dedicated per registered AP
+                 * Not that critical for UDP, but will be for LLC
+                 */
+
+                f_saddr.sin_port        = 0;
+
+                /* at least try to get the packet on the wire */
+                while (sendto(flow->fd, buf, n, 0,
+                              (struct sockaddr *) &c_saddr, sizeof c_saddr) < 0)
+                        ;
+
+                /*
+                 * store the remote address in the file descriptor
+                 * this avoids having to store the sockaddr_in in
+                 * the flow structure
+                 */
+
+                if (connect(flow->fd,
+                            (struct sockaddr *)&c_saddr, sizeof c_saddr) < 0) {
+                        close(flow->fd);
+                        free(flow);
+                        continue;
+                }
+
+
+                /* GERONIMOO */
+
+                msg.code = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
+                msg.ap_name = "John Day";
+                msg.ae_name = ""; /* no AE */
+                msg.has_reg_ap_id = true;
+                msg.reg_ap_id = ipcp_data_get_reg_ap_id(_ipcp->data, buf);
+
+                ret_msg = send_recv_irm_msg(&msg);
+                if (ret_msg == NULL) {
+                        LOG_ERR("Could not send message to IRM.");
+                        close(flow->fd);
+                        free(flow);
+                        continue;
+                }
+
+                if (!ret_msg->has_port_id) {
+                        LOG_ERR("Didn't get port_id.");
+                        free(ret_msg);
+                        close(flow->fd);
+                        free(flow);
+                        continue;
+                }
+
+                flow->flow.port_id = ret_msg->port_id;
+                flow->flow.oflags  = FLOW_O_DEFAULT;
+                flow->flow.state   = FLOW_PENDING;
+
+                if(ipcp_data_add_flow(_ipcp->data, (flow_t *) flow)) {
+                        LOG_DBGF("Could not add flow.");
+                        free(ret_msg);
+                        close(flow->fd);
+                        free(flow);
+                        continue;
+                }
+        }
+}
+
 int ipcp_udp_bootstrap(struct dif_config * conf)
 {
         char ipstr[INET_ADDRSTRLEN];
         char dnsstr[INET_ADDRSTRLEN];
+        pthread_t handler;
 
         if (conf->type != THIS_TYPE) {
                 LOG_ERR("Config doesn't match IPCP type.");
@@ -161,6 +281,27 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
 
         shim_data(_ipcp)->ip_addr  = conf->ip_addr;
         shim_data(_ipcp)->dns_addr = conf->dns_addr;
+
+        /* UDP listen server */
+
+        if ((shim_data(_ipcp)->s_fd =
+             socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1) {
+                LOG_DBGF("Can't create socket.");
+                return -1;
+        }
+
+        shim_data(_ipcp)->s_saddr.sin_family      = AF_INET;
+        shim_data(_ipcp)->s_saddr.sin_addr.s_addr = conf->ip_addr;
+        shim_data(_ipcp)->s_saddr.sin_port        = LISTEN_PORT;
+
+        if (bind(shim_data(_ipcp)->s_fd,
+                 (struct sockaddr *)&shim_data(_ipcp)->s_saddr,
+                 sizeof shim_data(_ipcp)->s_saddr ) < 0) {
+                LOG_ERR("Couldn't bind to %s.", ipstr);
+                return -1;
+        }
+
+        pthread_create(&handler, NULL, ipcp_udp_listener, NULL);
 
         _ipcp->state = IPCP_ENROLLED;
 
@@ -196,7 +337,6 @@ int ipcp_udp_ap_unreg(uint32_t reg_ap_id)
 {
         char * name  = strdup(ipcp_data_get_reg_ap_name(_ipcp->data,
                                                         reg_ap_id));
-        LOG_DBG("Unregistering %s.", name);
 
         ipcp_data_del_reg_entry(_ipcp->data, reg_ap_id);
 
@@ -214,11 +354,151 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
                         char *            src_ae_name,
                         struct qos_spec * qos)
 {
-        return 0;
+        char               buf[SHIM_UDP_BUF_SIZE];
+        struct udp_flow *  flow = NULL;
+        struct sockaddr_in l_saddr;
+        struct sockaddr_in r_saddr;
+        int                n;
+
+        irm_msg_t   msg = IRM_MSG__INIT;
+        irm_msg_t * ret_msg = NULL;
+
+        if (dst_ap_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
+                return -1;
+
+        LOG_DBG("Received flow allocation request from %s to %s.",
+                src_ap_name, dst_ap_name);
+
+        if (strlen(dst_ap_name) > 255
+            || strlen(src_ap_name) > 255
+            || strlen(src_ae_name) > 255) {
+                LOG_ERR("Name too long for this shim.");
+                return -1;
+        }
+
+        if (qos != NULL)
+                LOG_DBGF("QoS requested. UDP/IP can't do that.");
+
+        flow = malloc (sizeof *flow);
+        if (flow == NULL)
+                return -1;
+
+        flow->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (flow->fd == -1) {
+                free(flow);
+                return -1;
+        }
+
+        /* this socket is for the flow */
+        memset((char *)&l_saddr, 0, sizeof l_saddr);
+        l_saddr.sin_family      = AF_INET;
+        l_saddr.sin_addr.s_addr = local_ip;
+        l_saddr.sin_port        = 0;
+
+        if (bind(flow->fd, (struct sockaddr *) &l_saddr, sizeof l_saddr) < 0) {
+                char ipstr[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET,
+                          &l_saddr.sin_addr.s_addr,
+                          ipstr,
+                          INET_ADDRSTRLEN);
+                close(flow->fd);
+                free(flow);
+                return -1;
+        }
+
+        /* get the remote IPv4 address using dns */
+        /* FIXME: use calls to specify DDNS server */
+
+#define IP_ADDR 0x7f000001; /* localhost */
+
+        LOG_MISSING;
+
+        memset((char *)&r_saddr, 0, sizeof r_saddr);
+        r_saddr.sin_family      = AF_INET;
+        /* FIXME: pull in correct IP address */
+        r_saddr.sin_addr.s_addr = IP_ADDR; /* FIXME */
+        r_saddr.sin_port        = LISTEN_PORT;
+
+        /* at least try to get the packet on the wire */
+        while (sendto(flow->fd, dst_ap_name, n, 0,
+                      (struct sockaddr *) &r_saddr, sizeof r_saddr) < 0)
+
+        /* wait for the echo from the server */
+        /* FIXME: do this in a different thread not to block the entire shim */
+        n = sizeof r_saddr;
+        n = recvfrom(flow->fd, buf, SHIM_UDP_BUF_SIZE, 0,
+                (struct sockaddr *) &r_saddr, (unsigned *) &n);
+
+        flow->flow.port_id = port_id;
+        flow->flow.oflags  = FLOW_O_DEFAULT;
+        flow->flow.state   = FLOW_ALLOCATED;
+
+        /*
+         * store the remote address in the file descriptor
+         * this avoids having to store the sockaddr_in in
+         * the flow structure
+         */
+
+        if (connect(flow->fd,
+                    (struct sockaddr *)&r_saddr, sizeof r_saddr) < 0) {
+                close(flow->fd);
+                free(flow);
+                return -1;
+        }
+
+        /* add flow to the list */
+
+        pthread_mutex_lock(&_ipcp->data->flow_lock);
+
+        if(ipcp_data_add_flow(_ipcp->data, (flow_t *)flow)) {
+                LOG_DBGF("Could not add flow.");
+                pthread_mutex_unlock(&_ipcp->data->flow_lock);
+                close(flow->fd);
+                free(flow);
+                return -1;
+        }
+
+        pthread_mutex_unlock(&_ipcp->data->flow_lock);
+
+        /* tell IRMd that flow allocation worked */
+        /* well,there is no flow allocation */
+
+        msg.code = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
+        msg.has_port_id = true;
+        msg.port_id = flow->flow.port_id;
+        msg.has_response = true;
+        msg.response = 0;
+
+        ret_msg = send_recv_irm_msg(&msg);
+        if (ret_msg == NULL) {
+                close (flow->fd);
+                ipcp_data_del_flow(_ipcp->data, flow->flow.port_id);
+                return -1;
+        }
+
+        return flow->fd;
 }
 int ipcp_udp_flow_alloc_resp(uint32_t port_id,
-                             int      result)
+                             int      response)
 {
+        struct udp_flow * flow = (struct udp_flow *) ipcp_data_find_flow(
+                _ipcp->data, port_id);
+        if (flow == NULL) {
+                return -1;
+        }
+
+        if (response) {
+                ipcp_data_del_flow(_ipcp->data, port_id);
+                return 0;
+        }
+
+        /* awaken pending flow */
+
+        if (flow->flow.state != FLOW_PENDING)
+                return -1;
+
+        flow->flow.state = FLOW_ALLOCATED;
+
         return 0;
 }
 

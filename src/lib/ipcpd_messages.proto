@@ -26,4 +26,5 @@ message ipcp_msg {
         optional string ae_name      = 10;
         optional dif_config_msg conf = 11;
         optional int32 result        = 12;
+        optional int32 fd            = 13;
 };

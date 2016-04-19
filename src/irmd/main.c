@@ -366,7 +366,6 @@ int main()
         sigaction(SIGTERM, &sig_act, NULL);
         sigaction(SIGHUP,  &sig_act, NULL);
 
-
         if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1)
                 unlink("/dev/shm/" SHM_DU_MAP_FILENAME);
 
@@ -480,8 +479,8 @@ int main()
                                                 msg->oflags);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC_RES:
-                        ret_msg.has_result = true;
-                        ret_msg.result = flow_alloc_res(msg->fd);
+                        ret_msg.has_response = true;
+                        ret_msg.response = flow_alloc_res(msg->fd);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
                         ret_msg.has_result = true;
@@ -493,15 +492,15 @@ int main()
                                                    msg->oflags);
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
-                        ret_msg.has_fd = true;
-                        ret_msg.fd = flow_req_arr(msg->port_id,
-                                                  msg->ap_name,
-                                                  msg->ae_name);
+                        ret_msg.has_port_id = true;
+                        ret_msg.port_id = flow_req_arr(msg->port_id,
+                                                       msg->ap_name,
+                                                       msg->ae_name);
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
                         ret_msg.has_result = true;
                         ret_msg.result = flow_alloc_reply(msg->port_id,
-                                                          msg->result);
+                                                          msg->response);
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_DEALLOC:
                         ret_msg.has_result = true;

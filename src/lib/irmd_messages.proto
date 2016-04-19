@@ -31,11 +31,12 @@ message irm_msg {
         optional uint32 ipcp_type    =  5;
         repeated string dif_name     =  6;
         optional int32 fd            =  7;
-        optional int32 result        =  8;
+        optional int32 response      =  8;
         optional int32 oflags        =  9;
         optional string dst_ap_name  = 10;
         optional uint32 port_id      = 11;
         optional uint32 reg_ap_id    = 12;
         optional int32 pid           = 13;
         optional dif_config_msg conf = 14;
+        optional int32 result        = 15;
 };

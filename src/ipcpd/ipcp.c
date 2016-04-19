@@ -174,8 +174,8 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 LOG_ERR("Flow_alloc unsupported.");
                                 break;
                         }
-                        ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_flow_alloc(
+                        ret_msg.has_fd = true;
+                        ret_msg.fd = _ipcp->ops->ipcp_flow_alloc(
                                 msg->port_id,
                                 msg->dst_ap_name,
                                 msg->ap_name,
