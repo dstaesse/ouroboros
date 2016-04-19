@@ -40,12 +40,12 @@ struct ipcp_ops {
                               uint32_t reg_ap_id);
         int   (* ipcp_ap_unreg)(uint32_t reg_ap_id);
         int   (* ipcp_flow_alloc)(uint32_t port_id,
-                                  char *    dst_ap_name,
-                                  char *    src_ap_name,
-                                  char *    src_ae_name,
+                                  char *   dst_ap_name,
+                                  char *   src_ap_name,
+                                  char *   src_ae_name,
                                   struct qos_spec * qos);
         int   (* ipcp_flow_alloc_resp)(uint32_t port_id,
-                                       int      respnse);
+                                       int      response);
         int   (* ipcp_flow_dealloc)(uint32_t port_id);
 
         /* FIXME: let's see how this will work with the shm_du_map */
