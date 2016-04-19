@@ -29,6 +29,23 @@
 #define OUROBOROS_PREFIX "ipcpd/ipcp"
 #include <ouroboros/logs.h>
 
+int ipcp_arg_check(int argc, char * argv[])
+{
+        if (argc != 4)
+                return -1;
+
+        /* argument 1: pid of irmd */
+        if (atoi(argv[1]) == 0)
+                return -1;
+
+        /* name conformity responsibility of NMS */
+
+        /* argument 2: ap name */
+        /* argument 3: instance id */
+
+        return 0;
+}
+
 int ipcp_main_loop(struct ipcp * _ipcp)
 {
         int     lsockfd;
@@ -78,6 +95,10 @@ int ipcp_main_loop(struct ipcp * _ipcp)
 
                 switch (msg->code) {
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
+                        if (_ipcp->ops->ipcp_bootstrap == NULL) {
+                                LOG_ERR("Bootstrap unsupported.");
+                                break;
+                        }
                         conf_msg = msg->conf;
                         conf.type = conf_msg->ipcp_type;
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
@@ -102,45 +123,57 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
                         if (_ipcp->ops->ipcp_enroll == NULL) {
-                                LOG_ERR("ipcp_enroll unsupported.");
-                        } else {
-                                ret_msg.has_result = true;
-                                ret_msg.result = _ipcp->ops->ipcp_enroll(
-                                        msg->member_name, msg->n_1_dif);
+                                LOG_ERR("Enroll unsupported.");
+                                break;
                         }
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_enroll(
+                                msg->member_name, msg->n_1_dif);
+
                         break;
 
                 case IPCP_MSG_CODE__IPCP_REG:
                         if (_ipcp->ops->ipcp_reg == NULL) {
-                                LOG_ERR("ipcp_reg unsupported.");
+                                LOG_ERR("Reg unsupported.");
+                                break;
 
-                        } else {
-                                ret_msg.has_result = true;
-                                ret_msg.result = _ipcp->ops->ipcp_reg(
-                                        msg->dif_names, msg->len);
                         }
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_reg(
+                                msg->dif_names, msg->len);
                         break;
                 case IPCP_MSG_CODE__IPCP_UNREG:
                         if (_ipcp->ops->ipcp_unreg == NULL) {
-                                LOG_ERR("ipcp_unreg unsupported.");
-
-                        } else {
-                                ret_msg.has_result = true;
-                                ret_msg.result = _ipcp->ops->ipcp_unreg(
-                                        msg->dif_names, msg->len);
+                                LOG_ERR("Unreg unsupported.");
+                                break;
                         }
+                        ret_msg.has_result = true;
+                        ret_msg.result = _ipcp->ops->ipcp_unreg(
+                                msg->dif_names, msg->len);
                         break;
                 case IPCP_MSG_CODE__IPCP_AP_REG:
+                        if (_ipcp->ops->ipcp_ap_reg == NULL) {
+                                LOG_ERR("Ap_reg unsupported.");
+                                break;
+                        }
                         ret_msg.has_result = true;
                         ret_msg.result = _ipcp->ops->ipcp_ap_reg(
                                 msg->ap_name, msg->reg_ap_id);
                         break;
                 case IPCP_MSG_CODE__IPCP_AP_UNREG:
+                        if (_ipcp->ops->ipcp_ap_unreg == NULL) {
+                                LOG_ERR("Ap_unreg unsupported.");
+                                break;
+                        }
                         ret_msg.has_result = true;
                         ret_msg.result = _ipcp->ops->ipcp_ap_unreg(
                                 msg->reg_ap_id);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
+                        if (_ipcp->ops->ipcp_flow_alloc == NULL) {
+                                LOG_ERR("Flow_alloc unsupported.");
+                                break;
+                        }
                         ret_msg.has_result = true;
                         ret_msg.result = _ipcp->ops->ipcp_flow_alloc(
                                 msg->port_id,
@@ -150,11 +183,19 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 NULL);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
+                        if (_ipcp->ops->ipcp_flow_alloc_resp == NULL) {
+                                LOG_ERR("Flow_alloc_resp unsupported.");
+                                break;
+                        }
                         ret_msg.has_result = true;
                         ret_msg.result = _ipcp->ops->ipcp_flow_alloc_resp(
                                 msg->port_id, msg->result);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
+                        if (_ipcp->ops->ipcp_flow_dealloc == NULL) {
+                                LOG_ERR("Flow_dealloc unsupported.");
+                                break;
+                        }
                         ret_msg.has_result = true;
                         ret_msg.result = _ipcp->ops->ipcp_flow_dealloc(
                                 msg->port_id);

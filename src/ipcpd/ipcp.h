@@ -44,5 +44,6 @@ struct ipcp {
 };
 
 int ipcp_main_loop();
+int ipcp_arg_check(int argc, char * argv[]);
 
 #endif

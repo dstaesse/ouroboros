@@ -291,9 +291,10 @@ int main (int argc, char * argv[])
         /* argument 3: instance id */
         struct sigaction sig_act;
 
-        /* FIXME: clean up argument checks */
-        if (argc != 4)
-                LOG_ERR("Wrong arguments passed.");
+        if (ipcp_arg_check(argc, argv)) {
+                LOG_ERR("Wrong arguments.");
+                exit(1);
+        }
 
         /* store the process id of the irmd */
         irmd_pid = atoi(argv[1]);
