@@ -80,12 +80,11 @@ uint64_t     ipcp_data_get_addr(struct ipcp_data * data,
                                 const char *       ap_name);
 bool         ipcp_data_has_flow(struct ipcp_data * data,
                                 uint32_t           port_id);
-bool         ipcp_data_has_flow_s(struct ipcp_data * data,
-                                  uint32_t           port_id,
-                                  enum flow_state    state);
+flow_t *     ipcp_data_find_flow(struct ipcp_data * data,
+                                 uint32_t           port_id);
 int          ipcp_data_add_flow(struct ipcp_data * data,
                                 flow_t *           flow);
-int          ipcp_data_remove_flow(struct ipcp_data * data,
-                                   uint32_t           port_id);
+int          ipcp_data_del_flow(struct ipcp_data * data,
+                                uint32_t           port_id);
 
 #endif /* IPCPD_IPCP_DATA_H */
