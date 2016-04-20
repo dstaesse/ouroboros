@@ -29,6 +29,7 @@
 #include <ouroboros/utils.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/dif_config.h>
+#include <ouroboros/sockets.h>
 
 #define OUROBOROS_PREFIX "ipcpd/shim-udp"
 
@@ -42,14 +43,6 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <pthread.h>
-
-#include "irmd_messages.pb-c.h"
-
-typedef IrmMsg irm_msg_t;
-
-#include "ipcpd_messages.pb-c.h"
-
-typedef IpcpMsg ipcp_msg_t;
 
 #define THIS_TYPE IPCP_SHIM_UDP
 #define LISTEN_PORT htons(0x0D1F)
@@ -159,9 +152,6 @@ void * ipcp_udp_listener()
         irm_msg_t *        ret_msg ;
 
         while (true) {
-                flow = malloc(sizeof *flow);
-                if (flow == NULL)
-                        continue;
                 n = sizeof c_saddr;
                 n = recvfrom(sfd, buf, SHIM_UDP_BUF_SIZE, 0,
                              (struct sockaddr *) &c_saddr, (unsigned *) &n);
@@ -175,6 +165,9 @@ void * ipcp_udp_listener()
                         continue;
 
                 /* create a new socket for the server */
+                flow = malloc(sizeof *flow);
+                if (flow == NULL)
+                        continue;
 
                 flow->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
                 if (flow->fd == -1) {
@@ -193,11 +186,6 @@ void * ipcp_udp_listener()
 
                 f_saddr.sin_port        = 0;
 
-                /* at least try to get the packet on the wire */
-                while (sendto(flow->fd, buf, n, 0,
-                              (struct sockaddr *) &c_saddr, sizeof c_saddr) < 0)
-                        ;
-
                 /*
                  * store the remote address in the file descriptor
                  * this avoids having to store the sockaddr_in in
@@ -211,11 +199,10 @@ void * ipcp_udp_listener()
                         continue;
                 }
 
-
-                /* GERONIMOO */
+                /* reply to IRM */
 
                 msg.code = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
-                msg.ap_name = "John Day";
+                msg.ap_name = ANONYMOUS_AP;
                 msg.ae_name = ""; /* no AE */
                 msg.has_reg_ap_id = true;
                 msg.reg_ap_id = ipcp_data_get_reg_ap_id(_ipcp->data, buf);
@@ -406,7 +393,6 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
                 return -1;
         }
 
-        /* get the remote IPv4 address using dns */
         /* FIXME: use calls to specify DDNS server */
 
 #define IP_ADDR 0x7f000001; /* localhost */
@@ -423,8 +409,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
         while (sendto(flow->fd, dst_ap_name, n, 0,
                       (struct sockaddr *) &r_saddr, sizeof r_saddr) < 0)
 
-        /* wait for the echo from the server */
-        /* FIXME: do this in a different thread not to block the entire shim */
+        /* FIXME:move the client handling to thread pool */
         n = sizeof r_saddr;
         n = recvfrom(flow->fd, buf, SHIM_UDP_BUF_SIZE, 0,
                 (struct sockaddr *) &r_saddr, (unsigned *) &n);
@@ -476,7 +461,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
                 return -1;
         }
 
-        return flow->fd;
+        return 0;
 }
 int ipcp_udp_flow_alloc_resp(uint32_t port_id,
                              int      response)
