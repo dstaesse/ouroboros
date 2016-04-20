@@ -37,6 +37,7 @@
 
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -47,6 +48,7 @@
 #define THIS_TYPE IPCP_SHIM_UDP
 #define LISTEN_PORT htons(0x0D1F)
 #define SHIM_UDP_BUF_SIZE 256
+#define SHIM_UDP_MAX_SDU_SIZE 9000
 
 #define shim_data(type) ((struct ipcp_udp_data *) type->data)
 
@@ -73,6 +75,9 @@ struct ipcp_udp_data {
         /* listen server */
         struct sockaddr_in s_saddr;
         int                s_fd;
+
+        fd_set flow_fd_s;
+        flow_t * fd_to_flow_ptr[FD_SETSIZE];
 
         pthread_mutex_t   lock;
 };
@@ -106,6 +111,7 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
         struct ipcp_data *     data;
         instance_name_t *      instance_name;
         enum ipcp_type         ipcp_type;
+        int                    n;
 
         instance_name = instance_name_create();
         if (instance_name  == NULL) {
@@ -116,12 +122,12 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
         instance_name = instance_name_init_with(
                 instance_name, ap_name, (uint16_t)atoi(ap_id));
 
-        if (instance_name  == NULL) {
+        if (instance_name == NULL) {
                 LOG_ERR("Failed to create instance name struct.");
                 return NULL;
         }
 
-        udp_data= malloc (sizeof *udp_data);
+        udp_data = malloc (sizeof *udp_data);
         if (udp_data == NULL) {
                 LOG_DBGF("Failed to allocate.");
                 return NULL;
@@ -133,6 +139,10 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
                 free(udp_data);
                 return NULL;
         }
+
+        FD_ZERO(&udp_data->flow_fd_s);
+        for (n = 0; n < FD_SETSIZE; ++n)
+                udp_data->fd_to_flow_ptr[n] = NULL;
 
         return udp_data;
 }
@@ -234,7 +244,58 @@ void * ipcp_udp_listener()
                         free(flow);
                         continue;
                 }
+
+                FD_SET(flow->fd, &shim_data(_ipcp)->flow_fd_s);
+                shim_data(_ipcp)->fd_to_flow_ptr[flow->fd] = &flow->flow;
+
         }
+}
+
+static void * ipcp_udp_sdu_reader (void * o)
+{
+        int n;
+        int fd;
+        char buf[SHIM_UDP_MAX_SDU_SIZE];
+
+        struct sockaddr_in r_saddr;
+
+        while (true) {
+                flow_t * flow;
+
+                if (select(FD_SETSIZE,
+                           &shim_data(_ipcp)->flow_fd_s,
+                           NULL, NULL, NULL)
+                    < 0)
+                        continue;
+
+                for (fd = 0; fd < FD_SETSIZE; ++fd) {
+                        if (!FD_ISSET(fd, &shim_data(_ipcp)->flow_fd_s))
+                                continue;
+
+                        n = sizeof r_saddr;
+                        n = recvfrom(fd,
+                                     buf,
+                                     SHIM_UDP_MAX_SDU_SIZE,
+                                     0,
+                                     (struct sockaddr *) &r_saddr,
+                                     (unsigned *) &n);
+
+                        flow = shim_data(_ipcp)->fd_to_flow_ptr[fd];
+                        if (flow->state == FLOW_PENDING) {
+                                if (connect(fd,
+                                            (struct sockaddr *)&r_saddr,
+                                            sizeof r_saddr)
+                                    < 0)
+                                       continue;
+                                flow->state = FLOW_ALLOCATED;
+                        }
+
+                        /* send the sdu to the correct port_id */
+                        LOG_MISSING;
+                }
+        }
+
+        return (void *) 0;
 }
 
 int ipcp_udp_bootstrap(struct dif_config * conf)
@@ -242,6 +303,7 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
         char ipstr[INET_ADDRSTRLEN];
         char dnsstr[INET_ADDRSTRLEN];
         pthread_t handler;
+        pthread_t sdu_reader;
 
         if (conf->type != THIS_TYPE) {
                 LOG_ERR("Config doesn't match IPCP type.");
@@ -289,6 +351,7 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
         }
 
         pthread_create(&handler, NULL, ipcp_udp_listener, NULL);
+        pthread_create(&sdu_reader, NULL, ipcp_udp_sdu_reader, NULL);
 
         _ipcp->state = IPCP_ENROLLED;
 
@@ -341,11 +404,9 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
                         char *            src_ae_name,
                         struct qos_spec * qos)
 {
-        char               buf[SHIM_UDP_BUF_SIZE];
         struct udp_flow *  flow = NULL;
         struct sockaddr_in l_saddr;
         struct sockaddr_in r_saddr;
-        int                n;
 
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * ret_msg = NULL;
@@ -406,30 +467,12 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
         r_saddr.sin_port        = LISTEN_PORT;
 
         /* at least try to get the packet on the wire */
-        while (sendto(flow->fd, dst_ap_name, n, 0,
+        while (sendto(flow->fd, dst_ap_name, strlen(dst_ap_name), 0,
                       (struct sockaddr *) &r_saddr, sizeof r_saddr) < 0)
-
-        /* FIXME:move the client handling to thread pool */
-        n = sizeof r_saddr;
-        n = recvfrom(flow->fd, buf, SHIM_UDP_BUF_SIZE, 0,
-                (struct sockaddr *) &r_saddr, (unsigned *) &n);
 
         flow->flow.port_id = port_id;
         flow->flow.oflags  = FLOW_O_DEFAULT;
-        flow->flow.state   = FLOW_ALLOCATED;
-
-        /*
-         * store the remote address in the file descriptor
-         * this avoids having to store the sockaddr_in in
-         * the flow structure
-         */
-
-        if (connect(flow->fd,
-                    (struct sockaddr *)&r_saddr, sizeof r_saddr) < 0) {
-                close(flow->fd);
-                free(flow);
-                return -1;
-        }
+        flow->flow.state   = FLOW_PENDING;
 
         /* add flow to the list */
 
@@ -445,8 +488,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
 
         pthread_mutex_unlock(&_ipcp->data->flow_lock);
 
-        /* tell IRMd that flow allocation worked */
-        /* well,there is no flow allocation */
+        /* tell IRMd that flow allocation "worked" */
 
         msg.code = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
         msg.has_port_id = true;
@@ -461,13 +503,17 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
                 return -1;
         }
 
+        FD_SET(flow->fd, &shim_data(_ipcp)->flow_fd_s);
+        shim_data(_ipcp)->fd_to_flow_ptr[flow->fd] = &flow->flow;
+
         return 0;
 }
+
 int ipcp_udp_flow_alloc_resp(uint32_t port_id,
                              int      response)
 {
-        struct udp_flow * flow = (struct udp_flow *) ipcp_data_find_flow(
-                _ipcp->data, port_id);
+        struct udp_flow * flow =
+                (struct udp_flow *) ipcp_data_find_flow(_ipcp->data, port_id);
         if (flow == NULL) {
                 return -1;
         }
