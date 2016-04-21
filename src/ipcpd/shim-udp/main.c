@@ -48,7 +48,7 @@
 #define THIS_TYPE IPCP_SHIM_UDP
 #define LISTEN_PORT htons(0x0D1F)
 #define SHIM_UDP_BUF_SIZE 256
-#define SHIM_UDP_MAX_SDU_SIZE 9000
+#define SHIM_UDP_MAX_SDU_SIZE 8980
 
 #define shim_data(type) ((struct ipcp_udp_data *) type->data)
 
@@ -127,7 +127,7 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
                 return NULL;
         }
 
-        udp_data = malloc (sizeof *udp_data);
+        udp_data = malloc(sizeof *udp_data);
         if (udp_data == NULL) {
                 LOG_DBGF("Failed to allocate.");
                 return NULL;
@@ -147,7 +147,7 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
         return udp_data;
 }
 
-void * ipcp_udp_listener()
+static void * ipcp_udp_listener()
 {
         char buf[SHIM_UDP_BUF_SIZE];
         int     n = 0;
@@ -251,7 +251,7 @@ void * ipcp_udp_listener()
         }
 }
 
-static void * ipcp_udp_sdu_reader (void * o)
+static void * ipcp_udp_sdu_reader()
 {
         int n;
         int fd;
@@ -423,7 +423,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
         if (qos != NULL)
                 LOG_DBGF("QoS requested. UDP/IP can't do that.");
 
-        flow = malloc (sizeof *flow);
+        flow = malloc(sizeof *flow);
         if (flow == NULL)
                 return -1;
 
@@ -494,7 +494,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
 
         ret_msg = send_recv_irm_msg(&msg);
         if (ret_msg == NULL) {
-                close (flow->fd);
+                close(flow->fd);
                 ipcp_data_del_flow(_ipcp->data, flow->flow.port_id);
                 return -1;
         }
@@ -562,7 +562,7 @@ struct ipcp * ipcp_udp_create(char * ap_name, char * i_id)
                 return NULL;
         }
 
-        ops = malloc (sizeof *ops);
+        ops = malloc(sizeof *ops);
         if (ops == NULL) {
                 free(data);
                 free(i);

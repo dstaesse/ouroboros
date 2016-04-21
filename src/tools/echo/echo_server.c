@@ -64,7 +64,7 @@ int server_main()
                 return -1;
         }
 
-        printf("Echo server started...");
+        printf("Echo server started...\n");
 
         while (true) {
                 client_fd = flow_accept(server_fd,
@@ -73,7 +73,7 @@ int server_main()
                         continue;
                 }
 
-                printf("New flow from %s", client_name);
+                printf("New flow from %s\n", client_name);
 
                 if (flow_alloc_resp(client_fd, 0)) {
                         printf("Failed to give an allocate response\n");

@@ -89,7 +89,7 @@ static struct ipcp_entry * find_ipcp_by_name(instance_name_t * api)
 
 static pid_t find_pid_by_dif_name(char * dif_name)
 {
-        struct list_head *  pos = NULL;
+        struct list_head * pos = NULL;
 
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * tmp =
