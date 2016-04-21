@@ -64,11 +64,12 @@ int server_main()
                 return -1;
         }
 
+        printf("Echo server started...");
+
         while (true) {
                 client_fd = flow_accept(server_fd,
                                         client_name, NULL);
                 if (client_fd < 0) {
-                        printf("Failed to accept flow\n");
                         continue;
                 }
 

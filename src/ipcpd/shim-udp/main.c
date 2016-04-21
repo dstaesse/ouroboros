@@ -366,8 +366,6 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
 
 int ipcp_udp_ap_reg(char * ap_name, uint32_t reg_ap_id)
 {
-        LOG_DBG("Registering local ap %s, %u.", ap_name, reg_ap_id);
-
         if (_ipcp->state != IPCP_ENROLLED) {
                 LOG_DBGF("Won't register with non-enrolled IPCP.");
                 return -1;
@@ -378,6 +376,9 @@ int ipcp_udp_ap_reg(char * ap_name, uint32_t reg_ap_id)
                 return -1;
         }
 
+        LOG_DBG("Registered local ap %s, %u.", ap_name, reg_ap_id);
+
+        /* FIXME: register application with DNS server */
         LOG_MISSING;
 
         return 0;
@@ -385,15 +386,10 @@ int ipcp_udp_ap_reg(char * ap_name, uint32_t reg_ap_id)
 
 int ipcp_udp_ap_unreg(uint32_t reg_ap_id)
 {
-        char * name  = strdup(ipcp_data_get_reg_ap_name(_ipcp->data,
-                                                        reg_ap_id));
-
         ipcp_data_del_reg_entry(_ipcp->data, reg_ap_id);
 
-        /* we are using dns */
+        /* FIXME: unregister application from DNS server */
         LOG_MISSING;
-
-        free (name);
 
         return 0;
 }

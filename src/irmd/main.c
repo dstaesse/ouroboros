@@ -87,6 +87,24 @@ static struct ipcp_entry * find_ipcp_by_name(instance_name_t * api)
         return tmp;
 }
 
+static pid_t find_pid_by_dif_name(char * dif_name)
+{
+        struct list_head *  pos = NULL;
+
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * tmp =
+                        list_entry(pos, struct ipcp_entry, next);
+
+                if (tmp->dif_name == NULL)
+                        return tmp->pid;
+
+                if (strcmp(dif_name, tmp->dif_name) == 0)
+                        return tmp->pid;
+        }
+
+        return 0;
+}
+
 static int create_ipcp(instance_name_t * api,
                        enum ipcp_type    ipcp_type)
 {
@@ -266,7 +284,41 @@ static int ap_reg(char * ap_name,
                   char ** difs,
                   size_t difs_size)
 {
-        return -1;
+        pid_t pid = 0;
+        int i;
+        int ret = 0;
+
+        if (instance->ipcps.next == NULL)
+                LOG_ERR("No IPCPs in this system.");
+
+        /*
+         * FIXME: this should be resolved by NSM
+         * Now it just takes the first DIF
+         */
+
+        if (strcmp(difs[0], "*") == 0) {
+                difs[0] = list_entry(instance->ipcps.next,
+                                     struct ipcp_entry,
+                                     next)->dif_name;
+                difs_size = 1;
+        }
+
+        for (i = 0; i < difs_size; ++i) {
+                pid = find_pid_by_dif_name(difs[i]);
+                if (pid == 0) {
+                        LOG_ERR("%s: No such DIF.", difs[i]);
+                        continue;
+                }
+
+                /* FIXME: get proper reg_ap_id */
+                if (ipcp_ap_reg(pid, rand(),ap_name)) {
+                        LOG_ERR("Could not register %s in DIF %s.",
+                                ap_name, difs[i]);
+                        ret = -1;
+                }
+        }
+
+        return ret;
 }
 
 static int ap_unreg(char * ap_name,
