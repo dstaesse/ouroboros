@@ -436,8 +436,8 @@ uint64_t ipcp_data_get_addr(struct ipcp_data * data,
         return addr;
 }
 
-static flow_t * find_flow(struct ipcp_data * data,
-                          uint32_t           port_id)
+flow_t * ipcp_data_find_flow(struct ipcp_data * data,
+                             uint32_t           port_id)
 {
         struct list_head * h;
         list_for_each(h, &data->flows) {
@@ -452,7 +452,7 @@ static flow_t * find_flow(struct ipcp_data * data,
 bool ipcp_data_has_flow(struct ipcp_data * data,
                         uint32_t           port_id)
 {
-        return find_flow(data, port_id) != NULL;
+        return ipcp_data_find_flow(data, port_id) != NULL;
 }
 
 int ipcp_data_add_flow(struct ipcp_data * data,
@@ -469,6 +469,29 @@ int ipcp_data_add_flow(struct ipcp_data * data,
         }
 
         list_add(&flow->list,&data->flows);
+
+        pthread_mutex_unlock(&data->flow_lock);
+
+        return 0;
+}
+
+int ipcp_data_del_flow(struct ipcp_data * data,
+                       uint32_t           port_id)
+{
+        flow_t * f;
+
+        if (data == NULL)
+                return -1;
+
+        pthread_mutex_lock(&data->flow_lock);
+
+        f = ipcp_data_find_flow(data, port_id);
+        if (f == NULL)
+                return -1;
+
+        list_del(&f->list);
+
+        free(f);
 
         pthread_mutex_unlock(&data->flow_lock);
 
