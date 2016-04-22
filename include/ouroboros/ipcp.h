@@ -54,15 +54,14 @@ int   ipcp_bootstrap(pid_t pid,
 
 /* Flow related ops, these go from IRMd to IPCP */
 
-int   ipcp_ap_reg(pid_t    pid,
-                  uint32_t reg_api_id,
-                  char *   ap_name);
-int   ipcp_ap_unreg(pid_t    pid,
-                    uint32_t reg_api_id);
+int   ipcp_name_reg(pid_t    pid,
+                    char *   name);
+int   ipcp_name_unreg(pid_t    pid,
+                      char * name);
 
 int   ipcp_flow_alloc(pid_t             pid,
                       uint32_t          port_id,
-                      char *            dst_ap_name,
+                      char *            dst_name,
                       char *            src_ap_name,
                       char *            src_ae_name,
                       struct qos_spec * qos);
@@ -73,13 +72,13 @@ int   ipcp_flow_alloc_resp(pid_t    pid,
 /* These operations go from the IPCP to the IRMd */
 
 /* Returns the port_id */
-int   ipcp_flow_req_arr(pid_t    pid,
-                        uint32_t reg_api_id,
-                        char *   ap_name,
-                        char *   ae_name);
+int   ipcp_flow_req_arr(pid_t  pid,
+                        char * dst_name,
+                        char * src_ap_name,
+                        char * src_ae_name);
 int   ipcp_flow_alloc_reply(pid_t    pid,
                             uint32_t port_id,
-                            int      result);
+                            int      response);
 
 /*
  * This operation can go both ways

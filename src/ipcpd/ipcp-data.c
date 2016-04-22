@@ -35,8 +35,7 @@
 
 struct reg_entry {
         struct list_head list;
-        char *           ap_name;
-        uint32_t         reg_ap_id;
+        char *           name;
 };
 
 struct dir_entry {
@@ -45,16 +44,14 @@ struct dir_entry {
         uint64_t   addr;
 };
 
-static struct reg_entry * reg_entry_create(const char * ap_name,
-                                           uint32_t     reg_ap_id)
+static struct reg_entry * reg_entry_create(const char * name)
 {
         struct reg_entry * entry = malloc(sizeof *entry);
         if (entry == NULL)
                 return NULL;
 
-        entry->reg_ap_id = reg_ap_id;
-        entry->ap_name = strdup(ap_name);
-        if (entry->ap_name == NULL)
+        entry->name = strdup(name);
+        if (entry->name == NULL)
                 return NULL;
 
         return entry;
@@ -65,7 +62,7 @@ static void reg_entry_destroy(struct reg_entry * entry)
         if (entry == NULL)
                 return;
 
-        free(entry->ap_name);
+        free(entry->name);
         free(entry);
 }
 
@@ -194,25 +191,12 @@ void ipcp_data_destroy(struct ipcp_data * data)
 
 
 static struct reg_entry * find_reg_entry_by_name(struct ipcp_data * data,
-                                                 const char *       ap_name)
+                                                 const char *       name)
 {
         struct list_head * h;
         list_for_each(h, &data->registry) {
                 struct reg_entry * e = list_entry(h, struct reg_entry, list);
-                if (!strcmp(e->ap_name, ap_name))
-                        return e;
-        }
-
-        return NULL;
-}
-
-static struct reg_entry * find_reg_entry_by_id(struct ipcp_data * data,
-                                               uint32_t           reg_ap_id)
-{
-        struct list_head * h;
-        list_for_each(h, &data->registry) {
-                struct reg_entry * e = list_entry(h, struct reg_entry, list);
-                if (e->reg_ap_id == reg_ap_id)
+                if (!strcmp(e->name, name))
                         return e;
         }
 
@@ -253,7 +237,7 @@ bool ipcp_data_is_in_directory(struct ipcp_data * data,
 }
 
 int ipcp_data_del_reg_entry(struct ipcp_data * data,
-                            uint32_t           reg_ap_id)
+                            const char *       name)
 {
         struct reg_entry * e;
         if (data == NULL)
@@ -261,7 +245,7 @@ int ipcp_data_del_reg_entry(struct ipcp_data * data,
 
         pthread_mutex_lock(&data->reg_lock);
 
-        e = find_reg_entry_by_id(data, reg_ap_id);
+        e = find_reg_entry_by_name(data, name);
         if (e == NULL) {
                 pthread_mutex_unlock(&data->reg_lock);
                 return 0; /* nothing to do */
@@ -302,23 +286,21 @@ int ipcp_data_del_dir_entry(struct ipcp_data * data,
 }
 
 int ipcp_data_add_reg_entry(struct ipcp_data * data,
-                            char *             ap_name,
-                            uint32_t           reg_ap_id)
+                            const char *       name)
 {
         struct reg_entry * entry;
 
-        if (data == NULL || ap_name == NULL)
+        if (data == NULL || name == NULL)
                 return -1;
 
         pthread_mutex_lock(&data->reg_lock);
 
-        if (find_reg_entry_by_name(data, ap_name) ||
-            find_reg_entry_by_id(data, reg_ap_id)) {
+        if (find_reg_entry_by_name(data, name)) {
                 pthread_mutex_unlock(&data->reg_lock);
                 return -2;
         }
 
-        entry = reg_entry_create(ap_name, reg_ap_id);
+        entry = reg_entry_create(name);
         if (entry == NULL) {
                 pthread_mutex_unlock(&data->reg_lock);
                 return -1;
@@ -332,7 +314,7 @@ int ipcp_data_add_reg_entry(struct ipcp_data * data,
 }
 
 int ipcp_data_add_dir_entry(struct ipcp_data * data,
-                            char *             ap_name,
+                            const char *       ap_name,
                             uint64_t           addr)
 {
         struct dir_entry * entry;
@@ -364,54 +346,6 @@ bool ipcp_data_is_in_registry(struct ipcp_data * data,
                               const char *       ap_name)
 {
         return find_reg_entry_by_name(data, ap_name) != NULL;
-}
-
-uint32_t ipcp_data_get_reg_ap_id(struct ipcp_data * data,
-                                 const char *       ap_name)
-{
-        struct reg_entry * entry;
-        uint32_t id;
-
-        pthread_mutex_lock(&data->reg_lock);
-
-        entry = find_reg_entry_by_name(data, ap_name);
-
-        if (entry == NULL) {
-                pthread_mutex_unlock(&data->reg_lock);
-                return 0; /* undefined behaviour */
-        }
-
-        id = entry->reg_ap_id;
-
-        pthread_mutex_unlock(&data->reg_lock);
-
-        return id;
-}
-
-const char * ipcp_data_get_reg_ap_name(struct ipcp_data * data,
-                                   uint32_t           reg_ap_id)
-{
-        struct reg_entry * entry;
-        char * name;
-
-        pthread_mutex_lock(&data->reg_lock);
-
-        entry = find_reg_entry_by_id(data, reg_ap_id);
-
-        if (entry == NULL) {
-                pthread_mutex_unlock(&data->reg_lock);
-                return NULL;
-        }
-
-        name = strdup(entry->ap_name);
-        if (name == NULL) {
-                pthread_mutex_unlock(&data->reg_lock);
-                return NULL;
-        }
-
-        pthread_mutex_unlock(&data->reg_lock);
-
-        return name;
 }
 
 uint64_t ipcp_data_get_addr(struct ipcp_data * data,

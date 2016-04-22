@@ -68,21 +68,21 @@ int shim_udp_test(int argc, char ** argv)
                 LOG_ERR("Could not bootstrap.");
         }
 
-        if(ipcp_udp_ap_reg("bogus ap", 1865)) {
+        if(ipcp_udp_name_reg("bogus name")) {
                 LOG_ERR("Failed to register application.");
                 shm_du_map_close(dum);
                 exit(1);
         }
 
-        if (ipcp_udp_ap_unreg(1865)) {
+        if (ipcp_udp_name_unreg("bogus name")) {
                 LOG_ERR("Failed to unregister application.");
                 shm_du_map_close(dum);
                 exit(1);
         }
 
         for (i = 0; i  < 1000; ++i) {
-                sprintf (bogus, "bogus ap %4d", i);
-                if(ipcp_udp_ap_reg(bogus, i)) {
+                sprintf (bogus, "bogus name %4d", i);
+                if(ipcp_udp_name_reg(bogus)) {
                          LOG_ERR("Failed to register application %s.", bogus);
                          shm_du_map_close(dum);
                          exit(1);
@@ -90,8 +90,9 @@ int shim_udp_test(int argc, char ** argv)
         }
 
         for (i = 0; i  < 1000; ++i) {
-                if(ipcp_udp_ap_unreg(i)) {
-                         LOG_ERR("Failed to unregister application %d.", i);
+                sprintf (bogus, "bogus name %4d", i);
+                if(ipcp_udp_name_unreg(bogus)) {
+                         LOG_ERR("Failed to unregister application %s.", bogus);
                          shm_du_map_close(dum);
                          exit(1);
                 }

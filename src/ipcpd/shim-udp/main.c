@@ -214,8 +214,7 @@ static void * ipcp_udp_listener()
                 msg.code = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
                 msg.ap_name = ANONYMOUS_AP;
                 msg.ae_name = ""; /* no AE */
-                msg.has_reg_ap_id = true;
-                msg.reg_ap_id = ipcp_data_get_reg_ap_id(_ipcp->data, buf);
+                msg.dst_name = buf;
 
                 ret_msg = send_recv_irm_msg(&msg);
                 if (ret_msg == NULL) {
@@ -247,8 +246,9 @@ static void * ipcp_udp_listener()
 
                 FD_SET(flow->fd, &shim_data(_ipcp)->flow_fd_s);
                 shim_data(_ipcp)->fd_to_flow_ptr[flow->fd] = &flow->flow;
-
         }
+
+        return 0;
 }
 
 static void * ipcp_udp_sdu_reader()
@@ -364,19 +364,19 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
         return 0;
 }
 
-int ipcp_udp_ap_reg(char * ap_name, uint32_t reg_ap_id)
+int ipcp_udp_name_reg(char * name)
 {
         if (_ipcp->state != IPCP_ENROLLED) {
                 LOG_DBGF("Won't register with non-enrolled IPCP.");
                 return -1;
         }
 
-        if (ipcp_data_add_reg_entry(_ipcp->data, ap_name, reg_ap_id)) {
-                LOG_ERR("Failed to add AP to local registry.");
+        if (ipcp_data_add_reg_entry(_ipcp->data, name)) {
+                LOG_ERR("Failed to add %s to local registry.", name);
                 return -1;
         }
 
-        LOG_DBG("Registered local ap %s, %u.", ap_name, reg_ap_id);
+        LOG_DBG("Registered %s", name);
 
         /* FIXME: register application with DNS server */
         LOG_MISSING;
@@ -384,9 +384,11 @@ int ipcp_udp_ap_reg(char * ap_name, uint32_t reg_ap_id)
         return 0;
 }
 
-int ipcp_udp_ap_unreg(uint32_t reg_ap_id)
+int ipcp_udp_name_unreg(char * name)
 {
-        ipcp_data_del_reg_entry(_ipcp->data, reg_ap_id);
+        ipcp_data_del_reg_entry(_ipcp->data, name);
+
+        LOG_DBG("Unregistered %s.", name);
 
         /* FIXME: unregister application from DNS server */
         LOG_MISSING;
@@ -573,8 +575,8 @@ struct ipcp * ipcp_udp_create(char * ap_name, char * i_id)
         ops->ipcp_enroll          = NULL;                       /* shim */
         ops->ipcp_reg             = NULL;                       /* shim */
         ops->ipcp_unreg           = NULL;                       /* shim */
-        ops->ipcp_ap_reg          = ipcp_udp_ap_reg;
-        ops->ipcp_ap_unreg        = ipcp_udp_ap_unreg;
+        ops->ipcp_name_reg        = ipcp_udp_name_reg;
+        ops->ipcp_name_unreg      = ipcp_udp_name_unreg;
         ops->ipcp_flow_alloc      = ipcp_udp_flow_alloc;
         ops->ipcp_flow_alloc_resp = ipcp_udp_flow_alloc_resp;
         ops->ipcp_flow_dealloc    = ipcp_udp_flow_dealloc;
