@@ -22,7 +22,7 @@
  */
 
 #include "shm_pci.h"
-#include <malloc.h>
+#include <stdlib.h>
 #include <errno.h>
 
 #define SHM_PCI_HEAD_SIZE(a, b) a.addr_size * 2 +  \

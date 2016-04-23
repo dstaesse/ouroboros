@@ -44,6 +44,7 @@ int irm_create_ipcp(instance_name_t * api,
         msg.ap_name = api->name;
         msg.has_api_id = true;
         msg.api_id = api->id;
+        msg.has_ipcp_type = true;
         msg.ipcp_type = ipcp_type;
 
         recv_msg = send_recv_irm_msg(&msg);
@@ -101,10 +102,10 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
         if (api == NULL || api->name == NULL || conf == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP;
-        msg.ap_name = api->name;
+        msg.code       = IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP;
+        msg.ap_name    = api->name;
         msg.has_api_id = true;
-        msg.api_id = api->id;
+        msg.api_id     = api->id;
 
         msg.conf = &config;
         config.dif_name = conf->dif_name;
@@ -134,8 +135,9 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
                 break;
         case IPCP_SHIM_UDP:
                 config.has_ip_addr = true;
-
                 config.ip_addr = conf->ip_addr;
+                config.has_dns_addr = true;
+                config.dns_addr = conf->dns_addr;
                 break;
         default:
                 return -1;

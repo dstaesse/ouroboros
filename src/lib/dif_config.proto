@@ -1,16 +1,17 @@
 message dif_config_msg {
-        required string dif_name = 1;
-        required int32 ipcp_type = 2;
+        required string dif_name        =  1;
+        required int32 ipcp_type        =  2;
         // Config for normal IPCP
-        optional uint32 addr_size = 3;
-        optional uint32 cep_id_size = 4;
-        optional uint32 pdu_length_size = 5;
-        optional uint32 qos_id_size = 6;
-        optional uint32 seqno_size = 7;
-        optional uint32 ttl_size = 8;
-        optional uint32 chk_size = 9;
-        optional uint32 min_pdu_size = 10;
-        optional uint32 max_pdu_size = 11;
+        optional uint32 addr_size       =  3;
+        optional uint32 cep_id_size     =  4;
+        optional uint32 pdu_length_size =  5;
+        optional uint32 qos_id_size     =  6;
+        optional uint32 seqno_size      =  7;
+        optional uint32 ttl_size        =  8;
+        optional uint32 chk_size        =  9;
+        optional uint32 min_pdu_size    = 10;
+        optional uint32 max_pdu_size    = 11;
         // Config for shim UDP
-        optional uint32 ip_addr = 12;
+        optional uint32 ip_addr         = 12;
+        optional uint32 dns_addr        = 13;
 }

@@ -29,7 +29,6 @@
 
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <sys/stat.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -61,9 +60,8 @@ int server_socket_open(char * file_name)
 {
         int sockfd;
         struct sockaddr_un serv_addr;
-        struct stat sb;
 
-        if (!stat(file_name, &sb)) {
+        if (access(file_name, F_OK) != -1) {
                 /* File exists */
                 if (unlink(file_name)) {
                         LOG_ERR("Failed to unlink filename: %s",
@@ -113,8 +111,7 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
                 return NULL;
         }
 
-        LOG_DBG("Size will be %lu", buf.size);
-        buf.data = malloc(buf.size);
+        buf.data = malloc(IRM_MSG_BUF_SIZE);
         if (buf.data == NULL) {
                 close(sockfd);
                 return NULL;

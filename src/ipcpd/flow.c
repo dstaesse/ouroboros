@@ -21,7 +21,7 @@
  */
 
 #include <stdlib.h>
-#include <ouroboros/flow.h>
+#include "flow.h"
 
 #define OUROBOROS_PREFIX "ipcpd/flow"
 
@@ -35,9 +35,11 @@ flow_t * flow_create(int32_t port_id)
                 return NULL;
         }
 
+        INIT_LIST_HEAD(&flow->list);
+
         flow->port_id = port_id;
         flow->oflags = FLOW_O_DEFAULT;
-        flow->state = FLOW_INIT;
+        flow->state = FLOW_NULL;
 
         pthread_mutex_init(&flow->lock, NULL);
 
@@ -46,6 +48,8 @@ flow_t * flow_create(int32_t port_id)
 
 void flow_destroy(flow_t * flow)
 {
+        if (flow == NULL)
+                return;
         free(flow);
 }
 

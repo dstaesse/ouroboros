@@ -1,26 +1,9 @@
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
-
-include_directories(${CMAKE_SOURCE_DIR}/include)
-include_directories(${CMAKE_BINARY_DIR}/include)
-
-set(SOURCE_FILES
+set(IPCP_SOURCES
         # Add source files here
-        main.c
-        pci.c
-        shm_pci.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/flow.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/ipcp.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/ipcp-data.c
 )
 
-add_executable (ipcpd ${SOURCE_FILES})
-
-target_link_libraries (ipcpd LINK_PUBLIC ouroboros)
-
-include(MacroAddCompileFlags)
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-   MACRO_ADD_COMPILE_FLAGS(ipcpd -DCONFIG_OUROBOROS_DEBUG)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
-
-install(TARGETS ipcpd RUNTIME DESTINATION bin)
-
-# Enable once ipcpd has tests
-# add_subdirectory(tests)
+add_subdirectory(normal)
+add_subdirectory(shim-udp)
