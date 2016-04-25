@@ -66,7 +66,7 @@ struct ipcp * _ipcp;
 #endif
 
 struct ipcp_udp_data {
-        /* IPCP_DATA STRUCT MUST BE FIRST!! */
+        /* keep ipcp_data first for polymorphism */
         struct ipcp_data ipcp_data;
 
         uint32_t ip_addr;
@@ -83,7 +83,7 @@ struct ipcp_udp_data {
 };
 
 struct udp_flow {
-        /* FLOW MUST BE FIRST !!!! */
+        /* keep flow first for polymorphism */
         flow_t flow;
         int    fd;
 };
@@ -120,7 +120,7 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
         }
 
         instance_name = instance_name_init_with(
-                instance_name, ap_name, (uint16_t)atoi(ap_id));
+                instance_name, ap_name, (uint16_t) atoi(ap_id));
 
         if (instance_name == NULL) {
                 LOG_ERR("Failed to create instance name struct.");
@@ -169,7 +169,7 @@ static void * ipcp_udp_listener()
                         continue;
 
                 /* flow alloc request from other host */
-                hostp = gethostbyaddr((const char *)&c_saddr.sin_addr.s_addr,
+                hostp = gethostbyaddr((const char *) &c_saddr.sin_addr.s_addr,
                                       sizeof(c_saddr.sin_addr.s_addr), AF_INET);
                 if (hostp == NULL)
                         continue;
@@ -185,7 +185,7 @@ static void * ipcp_udp_listener()
                         continue;
                 }
 
-                memset((char *)&f_saddr, 0, sizeof f_saddr);
+                memset((char *) &f_saddr, 0, sizeof f_saddr);
                 f_saddr.sin_family      = AF_INET;
                 f_saddr.sin_addr.s_addr = local_ip;
 
@@ -203,7 +203,7 @@ static void * ipcp_udp_listener()
                  */
 
                 if (connect(flow->fd,
-                            (struct sockaddr *)&c_saddr, sizeof c_saddr) < 0) {
+                            (struct sockaddr *) &c_saddr, sizeof c_saddr) < 0) {
                         close(flow->fd);
                         free(flow);
                         continue;
@@ -283,7 +283,7 @@ static void * ipcp_udp_sdu_reader()
                         flow = shim_data(_ipcp)->fd_to_flow_ptr[fd];
                         if (flow->state == FLOW_PENDING) {
                                 if (connect(fd,
-                                            (struct sockaddr *)&r_saddr,
+                                            (struct sockaddr *) &r_saddr,
                                             sizeof r_saddr)
                                     < 0)
                                        continue;
@@ -344,7 +344,7 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
         shim_data(_ipcp)->s_saddr.sin_port        = LISTEN_PORT;
 
         if (bind(shim_data(_ipcp)->s_fd,
-                 (struct sockaddr *)&shim_data(_ipcp)->s_saddr,
+                 (struct sockaddr *) &shim_data(_ipcp)->s_saddr,
                  sizeof shim_data(_ipcp)->s_saddr ) < 0) {
                 LOG_ERR("Couldn't bind to %s.", ipstr);
                 return -1;
@@ -436,7 +436,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
         }
 
         /* this socket is for the flow */
-        memset((char *)&l_saddr, 0, sizeof l_saddr);
+        memset((char *) &l_saddr, 0, sizeof l_saddr);
         l_saddr.sin_family      = AF_INET;
         l_saddr.sin_addr.s_addr = local_ip;
         l_saddr.sin_port        = 0;
@@ -458,7 +458,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
 
         LOG_MISSING;
 
-        memset((char *)&r_saddr, 0, sizeof r_saddr);
+        memset((char *) &r_saddr, 0, sizeof r_saddr);
         r_saddr.sin_family      = AF_INET;
         /* FIXME: pull in correct IP address */
         r_saddr.sin_addr.s_addr = IP_ADDR; /* FIXME */
@@ -476,7 +476,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
 
         pthread_mutex_lock(&_ipcp->data->flow_lock);
 
-        if(ipcp_data_add_flow(_ipcp->data, (flow_t *)flow)) {
+        if(ipcp_data_add_flow(_ipcp->data, (flow_t *) flow)) {
                 LOG_DBGF("Could not add flow.");
                 pthread_mutex_unlock(&_ipcp->data->flow_lock);
                 close(flow->fd);
@@ -609,7 +609,7 @@ int main (int argc, char * argv[])
         irmd_pid = atoi(argv[1]);
 
         /* init sig_act */
-        memset (&sig_act, 0, sizeof sig_act);
+        memset(&sig_act, 0, sizeof sig_act);
 
         /* install signal traps */
         sig_act.sa_sigaction = &ipcp_sig_handler;

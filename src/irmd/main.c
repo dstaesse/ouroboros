@@ -404,7 +404,7 @@ static int ap_unreg_id(uint32_t reg_ap_id,
         struct reg_name_entry * rne    = NULL;
         struct list_head      * pos  = NULL;
 
-        rne = find_reg_name_entry_by_id (reg_ap_id);
+        rne = find_reg_name_entry_by_id(reg_ap_id);
         if (rne == NULL)
                 return 0; /* no such id */
 
@@ -522,7 +522,9 @@ static int ap_reg(char *  ap_name,
                 return -1;
         }
         /* for now, we register single instances */
-        reg_name_entry_add_name_instance(strdup(ap_name), instance_name_dup(api));
+        reg_name_entry_add_name_instance(strdup(ap_name),
+                                         instance_name_dup(api));
+        instance_name_destroy(api);
 
         return reg_ap_id;
 }
@@ -535,6 +537,8 @@ static int ap_unreg(char *  ap_name,
         struct reg_name_entry * tmp = NULL;
 
         instance_name_t * api = instance_name_create();
+        if (api == NULL)
+                return -1;
         if (instance_name_init_from(api, ap_name, ap_id) == NULL) {
                 instance_name_destroy(api);
                 return -1;
@@ -542,10 +546,12 @@ static int ap_unreg(char *  ap_name,
 
         /* check if ap_name is registered */
         tmp = find_reg_name_entry_by_name(api->name);
-        if (tmp == NULL)
+        if (tmp == NULL) {
+                instance_name_destroy(api);
                 return 0;
-        else
+        } else {
                 return ap_unreg_id(tmp->reg_ap_id, api->id, difs, len);
+        }
 }
 
 
@@ -629,7 +635,7 @@ int main()
         struct sigaction sig_act;
 
         /* init sig_act */
-        memset (&sig_act, 0, sizeof sig_act);
+        memset(&sig_act, 0, sizeof sig_act);
 
         /* install signal traps */
         sig_act.sa_sigaction = &irmd_sig_handler;
