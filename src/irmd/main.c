@@ -218,8 +218,8 @@ static int reg_name_entry_del_name(char * name)
         return 0;
 }
 
-static int create_ipcp(char *         ap_name,
-                       enum ipcp_type ipcp_type)
+static pid_t create_ipcp(char *         ap_name,
+                         enum ipcp_type ipcp_type)
 {
         pid_t pid;
         struct ipcp_entry * tmp = NULL;
@@ -254,7 +254,7 @@ static int create_ipcp(char *         ap_name,
         LOG_DBG("Created IPC process with pid %d", pid);
 
         list_add(&tmp->next, &instance->ipcps);
-        return 0;
+        return pid;
 }
 
 static int destroy_ipcp(instance_name_t * api)

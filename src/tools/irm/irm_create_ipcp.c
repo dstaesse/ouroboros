@@ -78,5 +78,5 @@ int do_create_ipcp(int argc, char ** argv)
                 return -1;
         }
 
-        return irm_create_ipcp(ipcp_name, type);
+        return !irm_create_ipcp(ipcp_name, type);
 }
