@@ -42,10 +42,10 @@ int shim_udp_test(int argc, char ** argv)
         int i = 0;
 
         char bogus[15];
-        memset (&bogus, 0, 15);
+        memset(&bogus, 0, 15);
 
         struct dif_config conf;
-        memset (&conf, 0, sizeof conf);
+        memset(&conf, 0, sizeof conf);
         conf.dif_name = strdup("test-dif");
         conf.type = IPCP_SHIM_UDP;
         conf.ip_addr = 0;
@@ -63,11 +63,11 @@ int shim_udp_test(int argc, char ** argv)
                 exit(1);
         }
 
-        if (ipcp_udp_bootstrap (&conf)) {
+        if (ipcp_udp_bootstrap(&conf)) {
                 LOG_ERR("Could not bootstrap.");
         }
 
-        if(ipcp_udp_name_reg("bogus name")) {
+        if (ipcp_udp_name_reg("bogus name")) {
                 LOG_ERR("Failed to register application.");
                 shm_du_map_close(dum);
                 exit(1);
@@ -80,8 +80,8 @@ int shim_udp_test(int argc, char ** argv)
         }
 
         for (i = 0; i  < 1000; ++i) {
-                sprintf (bogus, "bogus name %4d", i);
-                if(ipcp_udp_name_reg(bogus)) {
+                sprintf(bogus, "bogus name %4d", i);
+                if (ipcp_udp_name_reg(bogus)) {
                          LOG_ERR("Failed to register application %s.", bogus);
                          shm_du_map_close(dum);
                          exit(1);
@@ -89,7 +89,7 @@ int shim_udp_test(int argc, char ** argv)
         }
 
         for (i = 0; i  < 1000; ++i) {
-                sprintf (bogus, "bogus name %4d", i);
+                sprintf(bogus, "bogus name %4d", i);
                 if(ipcp_udp_name_unreg(bogus)) {
                          LOG_ERR("Failed to unregister application %s.", bogus);
                          shm_du_map_close(dum);

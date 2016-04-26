@@ -21,7 +21,6 @@
  */
 
 #include <ouroboros/config.h>
-
 #include "ipcp.h"
 #include "flow.h"
 #include <ouroboros/shm_du_map.h>
@@ -310,7 +309,7 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
                           dnsstr,
                           INET_ADDRSTRLEN);
         else
-                strcpy(dnsstr, "not set");
+                strcpy(dnsstr, "not set.\n");
 
         shim_data(_ipcp)->ip_addr  = conf->ip_addr;
         shim_data(_ipcp)->dns_addr = conf->dns_addr;
@@ -381,7 +380,7 @@ int ipcp_udp_name_unreg(char * name)
 }
 
 int ipcp_udp_flow_alloc(uint32_t          port_id,
-                        char *            dst_ap_name,
+                        char *            dst_name,
                         char *            src_ap_name,
                         char *            src_ae_name,
                         struct qos_spec * qos)
@@ -390,16 +389,18 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
         struct sockaddr_in l_saddr;
         struct sockaddr_in r_saddr;
 
+        struct hostent * h;
+
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * ret_msg = NULL;
 
-        if (dst_ap_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
+        if (dst_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
                 return -1;
 
         LOG_DBG("Received flow allocation request from %s to %s.",
-                src_ap_name, dst_ap_name);
+                src_ap_name, dst_name);
 
-        if (strlen(dst_ap_name) > 255
+        if (strlen(dst_name) > 255
             || strlen(src_ap_name) > 255
             || strlen(src_ae_name) > 255) {
                 LOG_ERR("Name too long for this shim.");
@@ -436,20 +437,21 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
                 return -1;
         }
 
-        /* FIXME: use calls to specify DDNS server */
+        h = gethostbyname(dst_name);
+        if (h == NULL) {
+                close(flow->fd);
+                free(flow);
+                return -1;
+        }
 
-#define IP_ADDR 0x7f000001; /* localhost */
-
-        LOG_MISSING;
 
         memset((char *) &r_saddr, 0, sizeof r_saddr);
         r_saddr.sin_family      = AF_INET;
-        /* FIXME: pull in correct IP address */
-        r_saddr.sin_addr.s_addr = IP_ADDR; /* FIXME */
+        r_saddr.sin_addr.s_addr = (uint32_t) *(h->h_addr_list[0]);
         r_saddr.sin_port        = LISTEN_PORT;
 
         /* at least try to get the packet on the wire */
-        while (sendto(flow->fd, dst_ap_name, strlen(dst_ap_name), 0,
+        while (sendto(flow->fd, dst_name, strlen(dst_name), 0,
                       (struct sockaddr *) &r_saddr, sizeof r_saddr) < 0)
 
         flow->flow.port_id = port_id;
