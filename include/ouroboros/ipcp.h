@@ -33,8 +33,8 @@
 struct ipcp;
 
 /* Returns the process id */
-pid_t ipcp_create(instance_name_t * api,
-                  enum ipcp_type    ipcp_type);
+pid_t ipcp_create(char *         ipcp_name,
+                  enum ipcp_type ipcp_type);
 
 int   ipcp_destroy(pid_t pid);
 

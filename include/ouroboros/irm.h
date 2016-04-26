@@ -26,8 +26,8 @@
 #include <ouroboros/instance_name.h>
 #include <ouroboros/dif_config.h>
 
-int irm_create_ipcp(instance_name_t * api,
-                    enum ipcp_type    ipcp_type);
+int irm_create_ipcp(char *         ipcp_name,
+                    enum ipcp_type ipcp_type);
 
 int irm_destroy_ipcp(instance_name_t * api);
 

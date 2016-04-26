@@ -96,7 +96,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGHUP:
                 LOG_DBG("Terminating by order of %d. Bye.", info->si_pid);
                 if (info->si_pid == irmd_pid) {
-                        shm_du_map_close(_ipcp->data->dum);
+                        /* shm_du_map_close(_ipcp->data->dum); */
                         exit(0);
                 }
         default:
@@ -104,28 +104,12 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         }
 }
 
-struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
-                                            char * ap_id)
+struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name)
 {
         struct ipcp_udp_data * udp_data;
         struct ipcp_data *     data;
-        instance_name_t *      instance_name;
         enum ipcp_type         ipcp_type;
         int                    n;
-
-        instance_name = instance_name_create();
-        if (instance_name  == NULL) {
-                LOG_ERR("Failed to create instance name struct.");
-                return NULL;
-        }
-
-        instance_name = instance_name_init_with(
-                instance_name, ap_name, (uint16_t) atoi(ap_id));
-
-        if (instance_name == NULL) {
-                LOG_ERR("Failed to create instance name struct.");
-                return NULL;
-        }
 
         udp_data = malloc(sizeof *udp_data);
         if (udp_data == NULL) {
@@ -135,7 +119,7 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name,
 
         ipcp_type = THIS_TYPE;
         data = (struct ipcp_data *) udp_data;
-        if (ipcp_data_init(data, instance_name, ipcp_type) == NULL) {
+        if (ipcp_data_init(data, ap_name, ipcp_type) == NULL) {
                 free(udp_data);
                 return NULL;
         }
@@ -548,7 +532,7 @@ int ipcp_udp_du_read(uint32_t port_id,
         return 0;
 }
 
-struct ipcp * ipcp_udp_create(char * ap_name, char * i_id)
+struct ipcp * ipcp_udp_create(char * ap_name)
 {
         struct ipcp * i;
         struct ipcp_udp_data * data;
@@ -558,7 +542,7 @@ struct ipcp * ipcp_udp_create(char * ap_name, char * i_id)
         if (i == NULL)
                 return NULL;
 
-        data = ipcp_udp_data_create(ap_name, i_id);
+        data = ipcp_udp_data_create(ap_name);
         if (data == NULL) {
                 free(i);
                 return NULL;
@@ -597,7 +581,6 @@ int main (int argc, char * argv[])
 {
         /* argument 1: pid of irmd ? */
         /* argument 2: ap name */
-        /* argument 3: instance id */
         struct sigaction sig_act;
 
         if (ipcp_arg_check(argc, argv)) {
@@ -619,7 +602,7 @@ int main (int argc, char * argv[])
         sigaction(SIGTERM, &sig_act, NULL);
         sigaction(SIGHUP,  &sig_act, NULL);
 
-        _ipcp = ipcp_udp_create(argv[2], argv[3]);
+        _ipcp = ipcp_udp_create(argv[2]);
         if (_ipcp == NULL) {
                 LOG_ERR("Won't.");
                 exit(1);

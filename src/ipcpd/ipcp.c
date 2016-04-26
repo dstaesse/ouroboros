@@ -31,7 +31,7 @@
 
 int ipcp_arg_check(int argc, char * argv[])
 {
-        if (argc != 4)
+        if (argc != 3)
                 return -1;
 
         /* argument 1: pid of irmd */
@@ -41,7 +41,6 @@ int ipcp_arg_check(int argc, char * argv[])
         /* name conformity responsibility of NMS */
 
         /* argument 2: ap name */
-        /* argument 3: instance id */
 
         return 0;
 }

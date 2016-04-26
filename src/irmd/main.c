@@ -48,7 +48,6 @@
 
 struct ipcp_entry {
         struct list_head  next;
-        pid_t             pid;
         instance_name_t * api;
         char *            dif_name;
 };
@@ -75,22 +74,7 @@ struct irm {
 
 struct irm * instance = NULL;
 
-static pid_t find_pid_by_ipcp_name(instance_name_t * api)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &instance->ipcps) {
-                struct ipcp_entry * tmp =
-                        list_entry(pos, struct ipcp_entry, next);
-
-                if (instance_name_cmp(api, tmp->api) == 0)
-                        return tmp->pid;
-        }
-
-        return 0;
-}
-
-static struct ipcp_entry * find_ipcp_by_name(instance_name_t * api)
+static struct ipcp_entry * find_ipcp_entry_by_name(instance_name_t * api)
 {
         struct ipcp_entry * tmp = NULL;
         struct list_head * pos = NULL;
@@ -106,22 +90,37 @@ static struct ipcp_entry * find_ipcp_by_name(instance_name_t * api)
         return tmp;
 }
 
-static pid_t find_pid_by_dif_name(char * dif_name)
+static instance_name_t * get_ipcp_by_name(char * ap_name)
 {
         struct list_head * pos = NULL;
 
         list_for_each(pos, &instance->ipcps) {
-                struct ipcp_entry * tmp =
+                struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
 
-                if (tmp->dif_name == NULL)
-                        return tmp->pid;
-
-                if (strcmp(dif_name, tmp->dif_name) == 0)
-                        return tmp->pid;
+                if (strcmp(e->api->name, ap_name) == 0)
+                        return e->api;
         }
 
-        return 0;
+        return NULL;
+}
+
+static instance_name_t * get_ipcp_by_dif_name(char * dif_name)
+{
+        struct list_head * pos = NULL;
+
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(pos, struct ipcp_entry, next);
+
+                if (e->dif_name == NULL)
+                        continue;
+
+                if (strcmp(dif_name, e->dif_name) == 0)
+                        return e->api;
+        }
+
+        return NULL;
 }
 
 static struct reg_name_entry * reg_name_entry_create()
@@ -219,13 +218,13 @@ static int reg_name_entry_del_name(char * name)
         return 0;
 }
 
-static int create_ipcp(instance_name_t * api,
-                       enum ipcp_type    ipcp_type)
+static int create_ipcp(char *         ap_name,
+                       enum ipcp_type ipcp_type)
 {
         pid_t pid;
         struct ipcp_entry * tmp = NULL;
 
-        pid = ipcp_create(api, ipcp_type);
+        pid = ipcp_create(ap_name, ipcp_type);
         if (pid == -1) {
                 LOG_ERR("Failed to create IPCP");
                 return -1;
@@ -238,9 +237,14 @@ static int create_ipcp(instance_name_t * api,
 
         INIT_LIST_HEAD(&tmp->next);
 
-        tmp->pid = pid;
-        tmp->api = instance_name_dup(api);
+        tmp->api = instance_name_create();
         if (tmp->api == NULL) {
+                free(tmp);
+                return -1;
+        }
+
+        if(instance_name_init_from(tmp->api, ap_name, pid) == NULL) {
+                instance_name_destroy(tmp->api);
                 free(tmp);
                 return -1;
         }
@@ -255,19 +259,20 @@ static int create_ipcp(instance_name_t * api,
 
 static int destroy_ipcp(instance_name_t * api)
 {
-        pid_t pid = 0;
         struct list_head * pos = NULL;
         struct list_head * n = NULL;
 
-        pid = find_pid_by_ipcp_name(api);
-        if (pid == 0) {
-                LOG_ERR("No such IPCP");
+        if (api->id == 0)
+                api = get_ipcp_by_name(api->name);
+
+        if (api == NULL) {
+                LOG_ERR("No such IPCP in the system.");
                 return -1;
         }
 
-        LOG_DBG("Destroying ipcp with pid %d", pid);
+        LOG_DBG("Destroying ipcp %s-%d", api->name, api->id);
 
-        if (ipcp_destroy(pid))
+        if (ipcp_destroy(api->id))
                 LOG_ERR("Could not destroy IPCP");
 
         list_for_each_safe(pos, n, &(instance->ipcps)) {
@@ -286,7 +291,15 @@ static int bootstrap_ipcp(instance_name_t *  api,
 {
         struct ipcp_entry * entry = NULL;
 
-        entry = find_ipcp_by_name(api);
+        if (api->id == 0)
+                api = get_ipcp_by_name(api->name);
+
+        if (api == NULL) {
+                LOG_ERR("No such IPCP in the system.");
+                return -1;
+        }
+
+        entry = find_ipcp_entry_by_name(api);
         if (entry == NULL) {
                 LOG_ERR("No such IPCP");
                 return -1;
@@ -298,7 +311,7 @@ static int bootstrap_ipcp(instance_name_t *  api,
                 return -1;
         }
 
-        if (ipcp_bootstrap(entry->pid, conf)) {
+        if (ipcp_bootstrap(entry->api->id, conf)) {
                 LOG_ERR("Could not bootstrap IPCP");
                 free(entry->dif_name);
                 entry->dif_name = NULL;
@@ -316,7 +329,7 @@ static int enroll_ipcp(instance_name_t  * api,
         ssize_t n_1_difs_size = 0;
         struct ipcp_entry * entry = NULL;
 
-        entry = find_ipcp_by_name(api);
+        entry = find_ipcp_entry_by_name(api);
         if (entry == NULL) {
                 LOG_ERR("No such IPCP");
                 return -1;
@@ -344,7 +357,7 @@ static int enroll_ipcp(instance_name_t  * api,
                 return -1;
         }
 
-        if (ipcp_enroll(entry->pid, member, n_1_difs[0])) {
+        if (ipcp_enroll(entry->api->id, member, n_1_difs[0])) {
                 LOG_ERR("Could not enroll IPCP");
                 free(entry->dif_name);
                 entry->dif_name = NULL;
@@ -358,15 +371,7 @@ static int reg_ipcp(instance_name_t * api,
                     char **           difs,
                     size_t            difs_size)
 {
-        pid_t pid = 0;
-
-        pid = find_pid_by_ipcp_name(api);
-        if (pid == 0) {
-                LOG_ERR("No such IPCP");
-                return -1;
-        }
-
-        if (ipcp_reg(pid, difs, difs_size)) {
+        if (ipcp_reg(api->id, difs, difs_size)) {
                 LOG_ERR("Could not register IPCP to N-1 DIF(s)");
                 return -1;
         }
@@ -378,15 +383,8 @@ static int unreg_ipcp(instance_name_t  * api,
                       char **            difs,
                       size_t             difs_size)
 {
-        pid_t pid = 0;
 
-        pid = find_pid_by_ipcp_name(api);
-        if (pid == 0) {
-                LOG_ERR("No such IPCP");
-                return -1;
-        }
-
-        if (ipcp_unreg(pid, difs, difs_size)) {
+        if (ipcp_unreg(api->id, difs, difs_size)) {
                 LOG_ERR("Could not unregister IPCP from N-1 DIF(s)");
                 return -1;
         }
@@ -418,7 +416,7 @@ static int ap_unreg_id(uint32_t reg_ap_id,
                         struct ipcp_entry * e =
                                 list_entry(pos, struct ipcp_entry, next);
 
-                        if (ipcp_name_unreg(e->pid, rne->name)) {
+                        if (ipcp_name_unreg(e->api->id, rne->name)) {
                                 LOG_ERR("Could not unregister %s in DIF %s.",
                                         rne->name, e->dif_name);
                                 --ret;
@@ -426,12 +424,6 @@ static int ap_unreg_id(uint32_t reg_ap_id,
                 }
         } else {
                 for (i = 0; i < len; ++i) {
-                        pid = find_pid_by_dif_name(difs[i]);
-                        if (pid == 0) {
-                                LOG_ERR("%s: No such DIF.", difs[i]);
-                                continue;
-                        }
-
                         if (ipcp_name_unreg(pid, rne->name)) {
                                 LOG_ERR("Could not unregister %s in DIF %s.",
                                         rne->name, difs[i]);
@@ -450,14 +442,14 @@ static int ap_reg(char *  ap_name,
                   char ** difs,
                   size_t  len)
 {
-        pid_t pid = 0;
         int i;
         int ret = 0;
         int reg_ap_id = 0;
         struct list_head * pos = NULL;
         struct reg_name_entry * rne = NULL;
-        instance_name_t * api = NULL;
 
+        instance_name_t * api   = NULL;
+        instance_name_t * ipcpi = NULL;
 
         if (instance->ipcps.next == NULL)
                 LOG_ERR("No IPCPs in this system.");
@@ -493,7 +485,7 @@ static int ap_reg(char *  ap_name,
                         struct ipcp_entry * e =
                                 list_entry(pos, struct ipcp_entry, next);
 
-                        if (ipcp_name_reg(e->pid, api->name)) {
+                        if (ipcp_name_reg(e->api->id, ap_name)) {
                                 LOG_ERR("Could not register %s in DIF %s.",
                                         api->name, e->dif_name);
                         } else {
@@ -502,13 +494,13 @@ static int ap_reg(char *  ap_name,
                 }
         } else {
                 for (i = 0; i < len; ++i) {
-                        pid = find_pid_by_dif_name(difs[i]);
-                        if (pid == 0) {
+                        ipcpi = get_ipcp_by_dif_name(difs[i]);
+                        if (ipcpi == NULL) {
                                 LOG_ERR("%s: No such DIF.", difs[i]);
                                 continue;
                         }
 
-                        if (ipcp_name_reg(pid, api->name)) {
+                        if (ipcp_name_reg(ipcpi->id, api->name)) {
                                 LOG_ERR("Could not register %s in DIF %s.",
                                         api->name, difs[i]);
                         } else {
@@ -539,6 +531,7 @@ static int ap_unreg(char *  ap_name,
         instance_name_t * api = instance_name_create();
         if (api == NULL)
                 return -1;
+
         if (instance_name_init_from(api, ap_name, ap_id) == NULL) {
                 instance_name_destroy(api);
                 return -1;
@@ -652,14 +645,17 @@ int main()
         if (instance == NULL)
                 return -1;
 
-        if ((instance->dum = shm_du_map_create()) == NULL)
+        if ((instance->dum = shm_du_map_create()) == NULL) {
+                free(instance);
                 return -1;
+        }
 
         INIT_LIST_HEAD(&instance->ipcps);
         INIT_LIST_HEAD(&instance->reg_names);
 
         sockfd = server_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0) {
+                shm_du_map_close(instance->dum);
                 free(instance);
                 return -1;
         }
@@ -694,12 +690,13 @@ int main()
                 }
 
                 api.name = msg->ap_name;
-                api.id   = msg->api_id;
+                if (msg->has_api_id == true)
+                        api.id = msg->api_id;
 
                 switch (msg->code) {
                 case IRM_MSG_CODE__IRM_CREATE_IPCP:
                         ret_msg.has_result = true;
-                        ret_msg.result = create_ipcp(&api,
+                        ret_msg.result = create_ipcp(msg->ap_name,
                                                      msg->ipcp_type);
                         break;
                 case IRM_MSG_CODE__IRM_DESTROY_IPCP:

@@ -53,7 +53,7 @@ struct ipcp_data {
 
 struct ipcp_data * ipcp_data_create();
 struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
-                                  instance_name_t *  iname,
+                                  const char *       ipcp_name,
                                   enum ipcp_type     ipcp_type);
 void               ipcp_data_destroy(struct ipcp_data * data);
 

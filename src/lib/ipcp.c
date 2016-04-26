@@ -99,12 +99,11 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t pid,
        return recv_msg;
 }
 
-pid_t ipcp_create(instance_name_t * api,
-                  enum ipcp_type    ipcp_type)
+pid_t ipcp_create(char *         ipcp_name,
+                  enum ipcp_type ipcp_type)
 {
         pid_t pid = 0;
         char irmd_pid[10];
-        char * api_id = NULL;
         size_t len = 0;
         char * ipcp_dir = "bin";
         char * full_name = NULL;
@@ -122,21 +121,12 @@ pid_t ipcp_create(instance_name_t * api,
                 return pid;
         }
 
-        api_id = malloc(n_digits(api->id) + 1);
-        if (!api_id) {
-                LOG_ERR("Failed to malloc");
-                exit(EXIT_FAILURE);
-        }
-        sprintf(api_id, "%d", api->id);
-
         if (ipcp_type == IPCP_NORMAL)
                 exec_name = IPCP_NORMAL_EXEC;
         else if (ipcp_type == IPCP_SHIM_UDP)
                 exec_name = IPCP_SHIM_UDP_EXEC;
-        else {
-                free(api_id);
+        else
                 exit(EXIT_FAILURE);
-        }
 
         len += strlen(INSTALL_DIR);
         len += strlen(ipcp_dir);
@@ -146,7 +136,6 @@ pid_t ipcp_create(instance_name_t * api,
         full_name = malloc(len + 1);
         if (full_name == NULL) {
                 LOG_ERR("Failed to malloc");
-                free(api_id);
                 exit(EXIT_FAILURE);
         }
 
@@ -161,8 +150,7 @@ pid_t ipcp_create(instance_name_t * api,
 
         char * argv[] = {full_name,
                          irmd_pid,
-                         api->name,
-                         api_id,
+                         ipcp_name,
                          0};
 
         char * envp[] = {0};
@@ -172,7 +160,6 @@ pid_t ipcp_create(instance_name_t * api,
         LOG_DBG("%s", strerror(errno));
         LOG_ERR("Failed to load IPCP daemon");
         LOG_ERR("Make sure to run the installed version");
-        free(api_id);
         free(full_name);
         exit(EXIT_FAILURE);
 }

@@ -39,7 +39,6 @@ static void usage()
 {
         printf("Usage: irm create_ipcp\n"
                "           ap <application process name>\n"
-               "           [api <application process instance>]\n"
                "           type [TYPE]\n\n"
                "where TYPE = {" NORMAL " " SHIM_UDP "}\n");
 }
@@ -47,16 +46,14 @@ static void usage()
 int do_create_ipcp(int argc, char ** argv)
 {
         char * ipcp_type = NULL;
-        instance_name_t api = {NULL, 0};
+        char * ipcp_name = NULL;
         enum ipcp_type type = 0;
 
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "ap") == 0) {
-                        api.name = *(argv + 1);
-                } else if (matches(*argv, "api") == 0) {
-                        api.id = atoi(*(argv + 1));
+                        ipcp_name = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "create_ipcp\".\n", *argv);
@@ -67,7 +64,7 @@ int do_create_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (ipcp_type == NULL || api.name == NULL) {
+        if (ipcp_type == NULL || ipcp_name == NULL) {
                 usage();
                 return -1;
         }
@@ -81,5 +78,5 @@ int do_create_ipcp(int argc, char ** argv)
                 return -1;
         }
 
-        return irm_create_ipcp(&api, type);
+        return irm_create_ipcp(ipcp_name, type);
 }

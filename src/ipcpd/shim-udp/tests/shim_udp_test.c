@@ -39,7 +39,6 @@ int shim_udp_test(int argc, char ** argv)
         /* argument 3: instance id */
         struct shm_du_map * dum;
         char * ipcp_name = "test-shim-ipcp";
-        char * i_id = "1";
         int i = 0;
 
         char bogus[15];
@@ -57,7 +56,7 @@ int shim_udp_test(int argc, char ** argv)
                 exit(1);
         }
 
-        _ipcp = ipcp_udp_create(ipcp_name, i_id);
+        _ipcp = ipcp_udp_create(ipcp_name);
         if (_ipcp == NULL) {
                 LOG_ERR("Could not instantiate shim IPCP.");
                 shm_du_map_close(dum);

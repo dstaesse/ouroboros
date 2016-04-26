@@ -104,18 +104,28 @@ struct ipcp_data * ipcp_data_create()
 }
 
 struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
-                                  instance_name_t * iname,
-                                  enum ipcp_type    ipcp_type)
+                                  const char *       ipcp_name,
+                                  enum ipcp_type     ipcp_type)
 {
         if (dst == NULL)
                 return NULL;
 
-        dst->iname = instance_name_dup(iname);
+        dst->iname = instance_name_create();
+        if (dst->iname == NULL)
+                return NULL;
+
+        if(instance_name_init_from(dst->iname, ipcp_name, getpid()) == NULL) {
+                instance_name_destroy(dst->iname);
+                return NULL;
+        }
+
         dst->type  = ipcp_type;
 
         dst->dum = shm_du_map_open();
-        if (dst->dum == NULL)
+        if (dst->dum == NULL) {
+                instance_name_destroy(dst->iname);
                 return NULL;
+        }
 
         /* init the lists */
         INIT_LIST_HEAD(&dst->registry);
