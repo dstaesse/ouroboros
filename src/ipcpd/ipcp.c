@@ -31,7 +31,7 @@
 
 int ipcp_arg_check(int argc, char * argv[])
 {
-        if (argc != 4)
+        if (argc != 3)
                 return -1;
 
         /* argument 1: pid of irmd */
@@ -41,7 +41,6 @@ int ipcp_arg_check(int argc, char * argv[])
         /* name conformity responsibility of NMS */
 
         /* argument 2: ap name */
-        /* argument 3: instance id */
 
         return 0;
 }
@@ -151,35 +150,35 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                         ret_msg.result = _ipcp->ops->ipcp_unreg(
                                 msg->dif_names, msg->len);
                         break;
-                case IPCP_MSG_CODE__IPCP_AP_REG:
-                        if (_ipcp->ops->ipcp_ap_reg == NULL) {
+                case IPCP_MSG_CODE__IPCP_NAME_REG:
+                        if (_ipcp->ops->ipcp_name_reg == NULL) {
                                 LOG_ERR("Ap_reg unsupported.");
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_ap_reg(
-                                msg->ap_name, msg->reg_ap_id);
+                        ret_msg.result = _ipcp->ops->ipcp_name_reg(
+                                msg->name);
                         break;
-                case IPCP_MSG_CODE__IPCP_AP_UNREG:
-                        if (_ipcp->ops->ipcp_ap_unreg == NULL) {
+                case IPCP_MSG_CODE__IPCP_NAME_UNREG:
+                        if (_ipcp->ops->ipcp_name_unreg == NULL) {
                                 LOG_ERR("Ap_unreg unsupported.");
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_ap_unreg(
-                                msg->reg_ap_id);
+                        ret_msg.result = _ipcp->ops->ipcp_name_unreg(
+                                msg->name);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
                         if (_ipcp->ops->ipcp_flow_alloc == NULL) {
                                 LOG_ERR("Flow_alloc unsupported.");
                                 break;
                         }
-                        ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_flow_alloc(
+                        ret_msg.has_fd = true;
+                        ret_msg.fd = _ipcp->ops->ipcp_flow_alloc(
                                 msg->port_id,
-                                msg->dst_ap_name,
-                                msg->ap_name,
-                                msg->ae_name,
+                                msg->dst_name,
+                                msg->src_ap_name,
+                                msg->src_ae_name,
                                 NULL);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:

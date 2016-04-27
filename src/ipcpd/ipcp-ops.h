@@ -36,9 +36,8 @@ struct ipcp_ops {
                            size_t len);
         int   (* ipcp_unreg)(char ** dif_names,
                              size_t len);
-        int   (* ipcp_ap_reg)(char *   ap_name,
-                              uint32_t reg_ap_id);
-        int   (* ipcp_ap_unreg)(uint32_t reg_ap_id);
+        int   (* ipcp_name_reg)(char *   name);
+        int   (* ipcp_name_unreg)(char * name);
         int   (* ipcp_flow_alloc)(uint32_t port_id,
                                   char *   dst_ap_name,
                                   char *   src_ap_name,
