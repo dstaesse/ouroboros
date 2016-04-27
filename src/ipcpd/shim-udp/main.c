@@ -44,11 +44,13 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <sys/wait.h>
 
 #define THIS_TYPE IPCP_SHIM_UDP
 #define LISTEN_PORT htons(0x0D1F)
 #define SHIM_UDP_BUF_SIZE 256
 #define SHIM_UDP_MAX_SDU_SIZE 8980
+#define DNS_TTL 86400
 
 #define shim_data(type) ((struct ipcp_udp_data *) type->data)
 
@@ -340,10 +342,67 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
         return 0;
 }
 
+/* FIXME: Dependency on nsupdate to be removed in the end */
+static int ddns_send(char * cmd)
+{
+        pid_t pid = 0;
+        int wstatus;
+        int pipe_fd[2];
+        char * argv[] = {NSUPDATE_EXEC, 0};
+        char * envp[] = {0};
+
+        if (pipe(pipe_fd)) {
+                LOG_ERR("Failed to create pipe.");
+                return -1;
+        }
+
+        pid = fork();
+        if (pid == -1) {
+                LOG_ERR("Failed to fork.");
+                return -1;
+        }
+
+        if (pid == 0) {
+                close(pipe_fd[1]);
+                dup2(pipe_fd[0], 0);
+                execve(argv[0], &argv[0], envp);
+        }
+
+        close(pipe_fd[0]);
+
+        if (write(pipe_fd[1], cmd, strlen(cmd)) == -1) {
+                LOG_ERR("Failed to register with DNS server.");
+                close(pipe_fd[1]);
+                return -1;
+        }
+
+        waitpid(pid, &wstatus, 0);
+        if (WIFEXITED(wstatus) == true &&
+            WEXITSTATUS(wstatus) == 0)
+                LOG_DBGF("Succesfully communicated with DNS server.");
+        else
+                LOG_ERR("Failed to register with DNS server.");
+
+        close(pipe_fd[1]);
+        return 0;
+}
+
 int ipcp_udp_name_reg(char * name)
 {
+        char ipstr[INET_ADDRSTRLEN];
+        char dnsstr[INET_ADDRSTRLEN];
+        /* max DNS name length + max IP length + command length */
+        char cmd[100];
+        uint32_t dns_addr;
+        uint32_t ip_addr;
+
         if (_ipcp->state != IPCP_ENROLLED) {
                 LOG_DBGF("Won't register with non-enrolled IPCP.");
+                return -1;
+        }
+
+        if (strlen(name) > 24) {
+                LOG_ERR("DNS names cannot be longer than 24 chars.");
                 return -1;
         }
 
@@ -352,22 +411,54 @@ int ipcp_udp_name_reg(char * name)
                 return -1;
         }
 
-        LOG_DBG("Registered %s", name);
+        /* register application with DNS server */
 
-        /* FIXME: register application with DNS server */
-        LOG_MISSING;
+        dns_addr = shim_data(_ipcp)->dns_addr;
+        if (dns_addr != 0) {
+                ip_addr = shim_data(_ipcp)->ip_addr;
+
+                inet_ntop(AF_INET, &ip_addr, ipstr, INET_ADDRSTRLEN);
+                inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN);
+                sprintf(cmd, "server %s\nupdate add %s %d A %s\nsend\nquit\n",
+                        dnsstr, name, DNS_TTL, ipstr);
+
+                if (ddns_send(cmd)) {
+                        ipcp_data_del_reg_entry(_ipcp->data, name);
+                        return -1;
+                }
+        }
+
+        LOG_DBG("Registered %s.", name);
 
         return 0;
 }
 
 int ipcp_udp_name_unreg(char * name)
 {
+        char dnsstr[INET_ADDRSTRLEN];
+        /* max DNS name length + max IP length + max command length */
+        char cmd[100];
+        uint32_t dns_addr;
+
+        if (strlen(name) > 24) {
+                LOG_ERR("DNS names cannot be longer than 24 chars.");
+                return -1;
+        }
+
+        /* unregister application with DNS server */
+
+        dns_addr = shim_data(_ipcp)->dns_addr;
+        if (dns_addr != 0) {
+                inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN);
+                sprintf(cmd, "server %s\nupdate delete %s A\nsend\nquit\n",
+                        dnsstr, name);
+
+                ddns_send(cmd);
+        }
+
         ipcp_data_del_reg_entry(_ipcp->data, name);
 
         LOG_DBG("Unregistered %s.", name);
-
-        /* FIXME: unregister application from DNS server */
-        LOG_MISSING;
 
         return 0;
 }
