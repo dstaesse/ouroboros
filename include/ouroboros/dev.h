@@ -25,6 +25,9 @@
 
 #include <ouroboros/common.h>
 
+#define UNKNOWN_AP "__UNKNOWN_AP__"
+#define UNKNOWN_AE "__UNKNOWN_AE__"
+
 /* Returns file descriptor */
 int     ap_reg(char * ap_name, char ** difs, size_t difs_size);
 int     ap_unreg(char * ap_name, char ** difs, size_t difs_size);

@@ -29,6 +29,7 @@
 #include <ouroboros/ipcp.h>
 #include <ouroboros/dif_config.h>
 #include <ouroboros/sockets.h>
+#include <ouroboros/dev.h>
 
 #define OUROBOROS_PREFIX "ipcpd/shim-udp"
 
@@ -192,7 +193,7 @@ static void * ipcp_udp_listener()
                 /* reply to IRM */
 
                 flow->flow.port_id = ipcp_flow_req_arr(getpid(), buf,
-                                                       ANONYMOUS_AP, "");
+                                                       UNKNOWN_AP, "");
                 if (flow->flow.port_id < 0) {
                         LOG_ERR("Could not get port id from IRMd");
                         close(flow->fd);
@@ -270,6 +271,7 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
         char dnsstr[INET_ADDRSTRLEN];
         pthread_t handler;
         pthread_t sdu_reader;
+        int enable = 1;
 
         if (conf->type != THIS_TYPE) {
                 LOG_ERR("Config doesn't match IPCP type.");
@@ -303,6 +305,14 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
              socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1) {
                 LOG_DBGF("Can't create socket.");
                 return -1;
+        }
+
+        if (setsockopt(shim_data(_ipcp)->s_fd,
+                       SOL_SOCKET,
+                        SO_REUSEADDR,
+                        &enable,
+                       sizeof(int)) < 0) {
+                LOG_DBGF("Setsockopt(SO_REUSEADDR) failed.");
         }
 
         shim_data(_ipcp)->s_saddr.sin_family      = AF_INET;
@@ -419,6 +429,7 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
 
         h = gethostbyname(dst_name);
         if (h == NULL) {
+                LOG_DBGF("Could not resolve %s.", dst_name);
                 close(flow->fd);
                 free(flow);
                 return -1;

@@ -123,6 +123,20 @@ static instance_name_t * get_ipcp_by_dif_name(char * dif_name)
         return NULL;
 }
 
+/* FIXME: this just returns the first IPCP for now */
+static instance_name_t * get_ipcp_by_dst_name(char * dst_name)
+{
+        struct list_head * pos = NULL;
+
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(pos, struct ipcp_entry, next);
+                return e->api;
+        }
+
+        return NULL;
+}
+
 static struct reg_name_entry * reg_name_entry_create()
 {
         struct reg_name_entry * e = malloc(sizeof(*e));
@@ -549,6 +563,7 @@ static int ap_unreg(char *  ap_name,
 
 
 static int flow_accept(int fd,
+                       pid_t pid,
                        char * ap_name,
                        char * ae_name)
 {
@@ -558,17 +573,27 @@ static int flow_accept(int fd,
 static int flow_alloc_resp(int fd,
                            int result)
 {
-
         return -1;
 }
 
-static int flow_alloc(char * dst_ap_name,
+static int flow_alloc(char * dst_name,
                       char * src_ap_name,
                       char * src_ae_name,
                       struct qos_spec * qos,
                       int oflags)
 {
-        return -1;
+        int   port_id = 0;
+        pid_t pid     = get_ipcp_by_dst_name(dst_name)->id;
+
+        LOG_DBG("flow alloc received from %s-%s to %s.",
+                 src_ap_name, src_ae_name, dst_name);
+
+        return ipcp_flow_alloc(pid,
+                               port_id,
+                               dst_name,
+                               src_ap_name,
+                               src_ae_name,
+                               qos);
 }
 
 static int flow_alloc_res(int fd)
@@ -588,9 +613,9 @@ static int flow_cntl(int fd,
         return -1;
 }
 
-static int flow_req_arr(uint32_t reg_api_id,
-                        char *   ap_name,
-                        char *   ae_name)
+static int flow_req_arr(char * dst_name,
+                        char * ap_name,
+                        char * ae_name)
 {
         return -1;
 }
@@ -741,6 +766,7 @@ int main()
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                         ret_msg.has_fd = true;
                         ret_msg.fd = flow_accept(msg->fd,
+                                                 msg->pid,
                                                  ret_msg.ap_name,
                                                  ret_msg.ae_name);
                         break;
@@ -772,7 +798,7 @@ int main()
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         ret_msg.has_port_id = true;
-                        ret_msg.port_id = flow_req_arr(msg->port_id,
+                        ret_msg.port_id = flow_req_arr(msg->dst_name,
                                                        msg->ap_name,
                                                        msg->ae_name);
                         break;

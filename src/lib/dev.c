@@ -177,10 +177,12 @@ int flow_alloc(char * dst_name,
         int fd = 0;
 
         if (dst_name == NULL ||
-            src_ap_name == NULL ||
-            qos == NULL) {
+            src_ap_name == NULL) {
                 return -EINVAL;
         }
+
+        if (src_ae_name == NULL)
+                src_ae_name  = UNKNOWN_AE;
 
         msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst_name    = dst_name;
