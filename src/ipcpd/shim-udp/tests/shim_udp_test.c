@@ -41,8 +41,8 @@ int shim_udp_test(int argc, char ** argv)
         char * ipcp_name = "test-shim-ipcp";
         int i = 0;
 
-        char bogus[15];
-        memset(&bogus, 0, 15);
+        char bogus[16];
+        memset(&bogus, 0, 16);
 
         struct dif_config conf;
         memset(&conf, 0, sizeof conf);
