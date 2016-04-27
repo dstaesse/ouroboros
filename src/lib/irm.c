@@ -30,20 +30,18 @@
 
 #include <stdlib.h>
 
-int irm_create_ipcp(instance_name_t * api,
-                    enum ipcp_type    ipcp_type)
+pid_t irm_create_ipcp(char *         ipcp_name,
+                      enum ipcp_type ipcp_type)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (api == NULL || api->name == NULL)
+        if (ipcp_name == NULL)
                 return -EINVAL;
 
         msg.code = IRM_MSG_CODE__IRM_CREATE_IPCP;
-        msg.ap_name = api->name;
-        msg.has_api_id = true;
-        msg.api_id = api->id;
+        msg.ap_name = ipcp_name;
         msg.has_ipcp_type = true;
         msg.ipcp_type = ipcp_type;
 

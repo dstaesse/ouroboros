@@ -43,9 +43,11 @@ int ap_reg(char * ap_name,
                 return -EINVAL;
         }
 
-        msg.code = IRM_MSG_CODE__IRM_AP_REG;
-        msg.ap_name = ap_name;
-        msg.dif_name = difs;
+        msg.code       = IRM_MSG_CODE__IRM_AP_REG;
+        msg.has_pid    = true;
+        msg.pid        = getpid();
+        msg.ap_name    = ap_name;
+        msg.dif_name   = difs;
         msg.n_dif_name = difs_size;
 
         recv_msg = send_recv_irm_msg(&msg);
@@ -78,9 +80,11 @@ int ap_unreg(char * ap_name,
                 return -EINVAL;
         }
 
-        msg.code = IRM_MSG_CODE__IRM_AP_UNREG;
-        msg.ap_name = ap_name;
-        msg.dif_name = difs;
+        msg.code       = IRM_MSG_CODE__IRM_AP_UNREG;
+        msg.has_pid    = true;
+        msg.pid        = getpid();
+        msg.ap_name    = ap_name;
+        msg.dif_name   = difs;
         msg.n_dif_name = difs_size;
 
         recv_msg = send_recv_irm_msg(&msg);
@@ -110,9 +114,11 @@ int flow_accept(int fd,
                 return -EINVAL;
         }
 
-        msg.code = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
-        msg.has_fd = true;
-        msg.fd = fd;
+        msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
+        msg.has_pid = true;
+        msg.pid     = getpid();
+        msg.has_fd  = true;
+        msg.fd      = fd;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -122,7 +128,7 @@ int flow_accept(int fd,
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
-        cli_fd = recv_msg->fd;
+        cli_fd  = recv_msg->fd;
         ap_name = recv_msg->ap_name;
         ae_name = recv_msg->ae_name;
 
@@ -131,17 +137,19 @@ int flow_accept(int fd,
 }
 
 int flow_alloc_resp(int fd,
-                    int result)
+                    int response)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
-        msg.has_fd = true;
+        msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
+        msg.has_pid      = true;
+        msg.pid          = getpid();
+        msg.has_fd       = true;
         msg.fd = fd;
-        msg.has_result = true;
-        msg.result = result;
+        msg.has_response = true;
+        msg.response     = response;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -158,7 +166,7 @@ int flow_alloc_resp(int fd,
         return ret;
 }
 
-int flow_alloc(char * dst_ap_name,
+int flow_alloc(char * dst_name,
                char * src_ap_name,
                char * src_ae_name,
                struct qos_spec * qos,
@@ -168,18 +176,18 @@ int flow_alloc(char * dst_ap_name,
         irm_msg_t * recv_msg = NULL;
         int fd = 0;
 
-        if (dst_ap_name == NULL ||
+        if (dst_name == NULL ||
             src_ap_name == NULL ||
             qos == NULL) {
                 return -EINVAL;
         }
 
-        msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC;
-        msg.dst_ap_name = dst_ap_name;
-        msg.ap_name = src_ap_name;
-        msg.ae_name = src_ae_name;
-        msg.has_oflags = true;
-        msg.oflags = oflags;
+        msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
+        msg.dst_name    = dst_name;
+        msg.ap_name     = src_ap_name;
+        msg.ae_name     = src_ae_name;
+        msg.has_oflags  = true;
+        msg.oflags      = oflags;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -201,9 +209,11 @@ int flow_alloc_res(int fd)
         irm_msg_t * recv_msg = NULL;
         int result = 0;
 
-        msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC_RES;
-        msg.has_fd = true;
-        msg.fd = fd;
+        msg.code    = IRM_MSG_CODE__IRM_FLOW_ALLOC_RES;
+        msg.has_pid = true;
+        msg.pid     = getpid();
+        msg.has_fd  = true;
+        msg.fd      = fd;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -226,9 +236,11 @@ int flow_dealloc(int fd)
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        msg.code = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
-        msg.has_fd = true;
-        msg.fd = fd;
+        msg.code    = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
+        msg.has_pid = true;
+        msg.pid     = getpid();
+        msg.has_fd  = true;
+        msg.fd      = fd;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -251,9 +263,11 @@ int flow_cntl(int fd, int oflags)
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        msg.has_fd = true;
-        msg.fd = fd;
-        msg.oflags = oflags;
+        msg.has_pid = true;
+        msg.pid     = getpid();
+        msg.has_fd  = true;
+        msg.fd      = fd;
+        msg.oflags  = oflags;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)

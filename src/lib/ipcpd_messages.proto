@@ -1,16 +1,16 @@
 import "dif_config.proto";
 
 enum ipcp_msg_code {
-        IPCP_BOOTSTRAP = 1;
-        IPCP_ENROLL = 2;
-        IPCP_REG = 3;
-        IPCP_UNREG = 4;
-        IPCP_AP_REG = 5;
-        IPCP_AP_UNREG = 6;
-        IPCP_FLOW_ALLOC = 7;
-        IPCP_FLOW_ALLOC_RESP = 8;
-        IPCP_FLOW_DEALLOC = 9;
-        IPCP_REPLY = 10;
+        IPCP_BOOTSTRAP       =  1;
+        IPCP_ENROLL          =  2;
+        IPCP_REG             =  3;
+        IPCP_UNREG           =  4;
+        IPCP_NAME_REG        =  5;
+        IPCP_NAME_UNREG      =  6;
+        IPCP_FLOW_ALLOC      =  7;
+        IPCP_FLOW_ALLOC_RESP =  8;
+        IPCP_FLOW_DEALLOC    =  9;
+        IPCP_REPLY           = 10;
 };
 
 message ipcp_msg {
@@ -19,11 +19,12 @@ message ipcp_msg {
         optional string n_1_dif      =  3;
         repeated string dif_names    =  4;
         optional int32  len          =  5;
-        optional string ap_name      =  6;
-        optional int32 reg_ap_id     =  7;
-        optional int32 port_id       =  8;
-        optional string dst_ap_name  =  9;
-        optional string ae_name      = 10;
+        optional string name         =  6;
+        optional int32 port_id       =  7;
+        optional string dst_name     =  8;
+        optional string src_ap_name  =  9;
+        optional string src_ae_name  = 10;
         optional dif_config_msg conf = 11;
         optional int32 result        = 12;
+        optional int32 fd            = 13;
 };

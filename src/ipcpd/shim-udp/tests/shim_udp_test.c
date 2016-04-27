@@ -39,14 +39,13 @@ int shim_udp_test(int argc, char ** argv)
         /* argument 3: instance id */
         struct shm_du_map * dum;
         char * ipcp_name = "test-shim-ipcp";
-        char * i_id = "1";
         int i = 0;
 
         char bogus[15];
-        memset (&bogus, 0, 15);
+        memset(&bogus, 0, 15);
 
         struct dif_config conf;
-        memset (&conf, 0, sizeof conf);
+        memset(&conf, 0, sizeof conf);
         conf.dif_name = strdup("test-dif");
         conf.type = IPCP_SHIM_UDP;
         conf.ip_addr = 0;
@@ -57,32 +56,32 @@ int shim_udp_test(int argc, char ** argv)
                 exit(1);
         }
 
-        _ipcp = ipcp_udp_create(ipcp_name, i_id);
+        _ipcp = ipcp_udp_create(ipcp_name);
         if (_ipcp == NULL) {
                 LOG_ERR("Could not instantiate shim IPCP.");
                 shm_du_map_close(dum);
                 exit(1);
         }
 
-        if (ipcp_udp_bootstrap (&conf)) {
+        if (ipcp_udp_bootstrap(&conf)) {
                 LOG_ERR("Could not bootstrap.");
         }
 
-        if(ipcp_udp_ap_reg("bogus ap", 1865)) {
+        if (ipcp_udp_name_reg("bogus name")) {
                 LOG_ERR("Failed to register application.");
                 shm_du_map_close(dum);
                 exit(1);
         }
 
-        if (ipcp_udp_ap_unreg(1865)) {
+        if (ipcp_udp_name_unreg("bogus name")) {
                 LOG_ERR("Failed to unregister application.");
                 shm_du_map_close(dum);
                 exit(1);
         }
 
         for (i = 0; i  < 1000; ++i) {
-                sprintf (bogus, "bogus ap %4d", i);
-                if(ipcp_udp_ap_reg(bogus, i)) {
+                sprintf(bogus, "bogus name %4d", i);
+                if (ipcp_udp_name_reg(bogus)) {
                          LOG_ERR("Failed to register application %s.", bogus);
                          shm_du_map_close(dum);
                          exit(1);
@@ -90,8 +89,9 @@ int shim_udp_test(int argc, char ** argv)
         }
 
         for (i = 0; i  < 1000; ++i) {
-                if(ipcp_udp_ap_unreg(i)) {
-                         LOG_ERR("Failed to unregister application %d.", i);
+                sprintf(bogus, "bogus name %4d", i);
+                if(ipcp_udp_name_unreg(bogus)) {
+                         LOG_ERR("Failed to unregister application %s.", bogus);
                          shm_du_map_close(dum);
                          exit(1);
                 }

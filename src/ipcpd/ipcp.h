@@ -26,6 +26,9 @@
 #include "ipcp-ops.h"
 #include "ipcp-data.h"
 
+/* needed to run over shim DIFs */
+#define ANONYMOUS_AP "__ANONYMOUS__"
+
 enum ipcp_state {
         IPCP_INIT = 0,
         IPCP_ENROLLING,
