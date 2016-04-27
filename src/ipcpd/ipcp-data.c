@@ -189,11 +189,12 @@ void ipcp_data_destroy(struct ipcp_data * data)
         clear_directory(data);
         clear_flows(data);
 
-        /* no need to unlock, just free the entire thing
-        pthread_mutex_unlock(&data->flow_lock);
-        pthread_mutex_unlock(&data->dir_lock);
-        pthread_mutex_unlock(&data->reg_lock);
-        */
+        /*
+         * no need to unlock, just free the entire thing
+         * pthread_mutex_unlock(&data->flow_lock);
+         * pthread_mutex_unlock(&data->dir_lock);
+         * pthread_mutex_unlock(&data->reg_lock);
+         */
 
         free(data);
 }
