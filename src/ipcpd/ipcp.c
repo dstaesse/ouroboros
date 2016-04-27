@@ -126,8 +126,9 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_enroll(
-                                msg->member_name, msg->n_1_dif);
+                        ret_msg.result =
+                                _ipcp->ops->ipcp_enroll(msg->member_name,
+                                                        msg->n_1_dif);
 
                         break;
 
@@ -138,8 +139,8 @@ int ipcp_main_loop(struct ipcp * _ipcp)
 
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_reg(
-                                msg->dif_names, msg->len);
+                        ret_msg.result =
+                                _ipcp->ops->ipcp_reg(msg->dif_names, msg->len);
                         break;
                 case IPCP_MSG_CODE__IPCP_UNREG:
                         if (_ipcp->ops->ipcp_unreg == NULL) {
@@ -147,8 +148,8 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_unreg(
-                                msg->dif_names, msg->len);
+                        ret_msg.result =
+                                _ipcp->ops->ipcp_unreg(msg->dif_names, msg->len);
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_REG:
                         if (_ipcp->ops->ipcp_name_reg == NULL) {
@@ -156,8 +157,7 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_name_reg(
-                                msg->name);
+                        ret_msg.result = _ipcp->ops->ipcp_name_reg(msg->name);
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_UNREG:
                         if (_ipcp->ops->ipcp_name_unreg == NULL) {
@@ -165,8 +165,7 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_name_unreg(
-                                msg->name);
+                        ret_msg.result = _ipcp->ops->ipcp_name_unreg(msg->name);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
                         if (_ipcp->ops->ipcp_flow_alloc == NULL) {
@@ -174,12 +173,12 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 break;
                         }
                         ret_msg.has_fd = true;
-                        ret_msg.fd = _ipcp->ops->ipcp_flow_alloc(
-                                msg->port_id,
-                                msg->dst_name,
-                                msg->src_ap_name,
-                                msg->src_ae_name,
-                                NULL);
+                        ret_msg.fd =
+                                _ipcp->ops->ipcp_flow_alloc(msg->port_id,
+                                                            msg->dst_name,
+                                                            msg->src_ap_name,
+                                                            msg->src_ae_name,
+                                                            NULL);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         if (_ipcp->ops->ipcp_flow_alloc_resp == NULL) {
@@ -187,8 +186,9 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_flow_alloc_resp(
-                                msg->port_id, msg->result);
+                        ret_msg.result =
+                                _ipcp->ops->ipcp_flow_alloc_resp(msg->port_id,
+                                                                 msg->result);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                         if (_ipcp->ops->ipcp_flow_dealloc == NULL) {
@@ -196,8 +196,8 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_flow_dealloc(
-                                msg->port_id);
+                        ret_msg.result =
+                                _ipcp->ops->ipcp_flow_dealloc(msg->port_id);
                         break;
                 default:
                         LOG_ERR("Don't know that message code");

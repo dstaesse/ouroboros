@@ -51,8 +51,8 @@
 
 #define shim_data(type) ((struct ipcp_udp_data *) type->data)
 
-#define local_ip (((struct ipcp_udp_data *)                              \
-                         _ipcp->data)->s_saddr.sin_addr.s_addr)
+#define local_ip (((struct ipcp_udp_data *)                     \
+                   _ipcp->data)->s_saddr.sin_addr.s_addr)
 
 /* global for trapping signal */
 int irmd_pid;
@@ -133,16 +133,13 @@ struct ipcp_udp_data * ipcp_udp_data_create(char * ap_name)
 static void * ipcp_udp_listener()
 {
         char buf[SHIM_UDP_BUF_SIZE];
-        int     n = 0;
+        int  n = 0;
 
         struct sockaddr_in f_saddr;
         struct sockaddr_in c_saddr;
         struct hostent  *  hostp;
         struct udp_flow *  flow;
         int                sfd = shim_data(_ipcp)->s_fd;
-
-        irm_msg_t          msg = IRM_MSG__INIT;
-        irm_msg_t *        ret_msg ;
 
         while (true) {
                 n = sizeof c_saddr;
@@ -194,34 +191,20 @@ static void * ipcp_udp_listener()
 
                 /* reply to IRM */
 
-                msg.code = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
-                msg.ap_name = ANONYMOUS_AP;
-                msg.ae_name = ""; /* no AE */
-                msg.dst_name = buf;
-
-                ret_msg = send_recv_irm_msg(&msg);
-                if (ret_msg == NULL) {
-                        LOG_ERR("Could not send message to IRM.");
+                flow->flow.port_id = ipcp_flow_req_arr(getpid(), buf,
+                                                       ANONYMOUS_AP, "");
+                if (flow->flow.port_id < 0) {
+                        LOG_ERR("Could not get port id from IRMd");
                         close(flow->fd);
                         free(flow);
                         continue;
                 }
 
-                if (!ret_msg->has_port_id) {
-                        LOG_ERR("Didn't get port_id.");
-                        free(ret_msg);
-                        close(flow->fd);
-                        free(flow);
-                        continue;
-                }
-
-                flow->flow.port_id = ret_msg->port_id;
-                flow->flow.oflags  = FLOW_O_DEFAULT;
-                flow->flow.state   = FLOW_PENDING;
+                flow->flow.oflags = FLOW_O_DEFAULT;
+                flow->flow.state  = FLOW_PENDING;
 
                 if(ipcp_data_add_flow(_ipcp->data, (flow_t *) flow)) {
                         LOG_DBGF("Could not add flow.");
-                        free(ret_msg);
                         close(flow->fd);
                         free(flow);
                         continue;
@@ -269,7 +252,7 @@ static void * ipcp_udp_sdu_reader()
                                             (struct sockaddr *) &r_saddr,
                                             sizeof r_saddr)
                                     < 0)
-                                       continue;
+                                        continue;
                                 flow->state = FLOW_ALLOCATED;
                         }
 
@@ -391,9 +374,6 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
 
         struct hostent * h;
 
-        irm_msg_t   msg = IRM_MSG__INIT;
-        irm_msg_t * ret_msg = NULL;
-
         if (dst_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
                 return -1;
 
@@ -452,7 +432,8 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
 
         /* at least try to get the packet on the wire */
         while (sendto(flow->fd, dst_name, strlen(dst_name), 0,
-                      (struct sockaddr *) &r_saddr, sizeof r_saddr) < 0)
+                      (struct sockaddr *) &r_saddr, sizeof r_saddr) < 0) {
+        }
 
         flow->flow.port_id = port_id;
         flow->flow.oflags  = FLOW_O_DEFAULT;
@@ -474,14 +455,8 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
 
         /* tell IRMd that flow allocation "worked" */
 
-        msg.code = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
-        msg.has_port_id = true;
-        msg.port_id = flow->flow.port_id;
-        msg.has_response = true;
-        msg.response = 0;
-
-        ret_msg = send_recv_irm_msg(&msg);
-        if (ret_msg == NULL) {
+        if (ipcp_flow_alloc_reply(getpid(), flow->flow.port_id, 0)) {
+                LOG_ERR("Failed to notify IRMd about flow allocation reply");
                 close(flow->fd);
                 ipcp_data_del_flow(_ipcp->data, flow->flow.port_id);
                 return -1;
