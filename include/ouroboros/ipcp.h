@@ -61,13 +61,15 @@ int   ipcp_name_unreg(pid_t    pid,
 
 int   ipcp_flow_alloc(pid_t             pid,
                       uint32_t          port_id,
+                      pid_t             n_pid,
                       char *            dst_name,
                       char *            src_ap_name,
                       char *            src_ae_name,
                       struct qos_spec * qos);
 int   ipcp_flow_alloc_resp(pid_t    pid,
                            uint32_t port_id,
-                           int      result);
+                           pid_t    n_pid,
+                           int      response);
 
 /* These operations go from the IPCP to the IRMd */
 

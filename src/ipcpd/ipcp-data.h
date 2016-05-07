@@ -34,16 +34,10 @@
 #include "flow.h"
 
 struct ipcp_data {
-        instance_name_t   * iname;
         enum ipcp_type      type;
-
-        struct shm_du_map * dum;
 
         struct list_head    registry;
         pthread_mutex_t     reg_lock;
-
-        struct list_head    flows;
-        pthread_mutex_t     flow_lock;
 
         struct list_head    directory;
         pthread_mutex_t     dir_lock;
@@ -53,7 +47,6 @@ struct ipcp_data {
 
 struct ipcp_data * ipcp_data_create();
 struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
-                                  const char *       ipcp_name,
                                   enum ipcp_type     ipcp_type);
 void               ipcp_data_destroy(struct ipcp_data * data);
 
@@ -73,13 +66,4 @@ bool         ipcp_data_is_in_directory(struct ipcp_data * data,
                                        const char *       ap_name);
 uint64_t     ipcp_data_get_addr(struct ipcp_data * data,
                                 const char *       ap_name);
-bool         ipcp_data_has_flow(struct ipcp_data * data,
-                                uint32_t           port_id);
-flow_t *     ipcp_data_find_flow(struct ipcp_data * data,
-                                 uint32_t           port_id);
-int          ipcp_data_add_flow(struct ipcp_data * data,
-                                flow_t *           flow);
-int          ipcp_data_del_flow(struct ipcp_data * data,
-                                uint32_t           port_id);
-
 #endif /* IPCPD_IPCP_DATA_H */

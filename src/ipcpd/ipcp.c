@@ -45,11 +45,12 @@ int ipcp_arg_check(int argc, char * argv[])
         return 0;
 }
 
-int ipcp_main_loop(struct ipcp * _ipcp)
+void * ipcp_main_loop(void * o)
 {
         int     lsockfd;
         int     sockfd;
         uint8_t buf[IPCP_MSG_BUF_SIZE];
+        struct ipcp * _ipcp = (struct ipcp *) o;
 
         ipcp_msg_t *    msg;
         ssize_t         count;
@@ -61,13 +62,13 @@ int ipcp_main_loop(struct ipcp * _ipcp)
 
         if (_ipcp == NULL) {
                 LOG_ERR("Invalid ipcp struct.");
-                return 1;
+                return (void *) 1;
         }
 
         sockfd = server_socket_open(ipcp_sock_path(getpid()));
         if (sockfd < 0) {
                 LOG_ERR("Could not open server socket.");
-                return 1;
+                return (void *) 1;
         }
 
         while (true) {
@@ -113,7 +114,7 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 conf.max_pdu_size    = conf_msg->max_pdu_size;
                         }
                         if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
-                                conf.ip_addr = conf_msg->ip_addr;
+                                conf.ip_addr  = conf_msg->ip_addr;
                                 conf.dns_addr = conf_msg->dns_addr;
                         }
 
@@ -149,7 +150,8 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_unreg(msg->dif_names, msg->len);
+                                _ipcp->ops->ipcp_unreg(msg->dif_names,
+                                                       msg->len);
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_REG:
                         if (_ipcp->ops->ipcp_name_reg == NULL) {
@@ -172,9 +174,10 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                                 LOG_ERR("Flow_alloc unsupported.");
                                 break;
                         }
-                        ret_msg.has_fd = true;
-                        ret_msg.fd =
+                        ret_msg.has_result = true;
+                        ret_msg.result =
                                 _ipcp->ops->ipcp_flow_alloc(msg->port_id,
+                                                            msg->pid,
                                                             msg->dst_name,
                                                             msg->src_ap_name,
                                                             msg->src_ae_name,
@@ -188,6 +191,7 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                         ret_msg.has_result = true;
                         ret_msg.result =
                                 _ipcp->ops->ipcp_flow_alloc_resp(msg->port_id,
+                                                                 msg->pid,
                                                                  msg->result);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
@@ -231,5 +235,5 @@ int ipcp_main_loop(struct ipcp * _ipcp)
                 close(lsockfd);
         }
 
-        return 0;
+        return NULL;
 }

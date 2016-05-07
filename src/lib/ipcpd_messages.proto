@@ -25,6 +25,8 @@ message ipcp_msg {
         optional string src_ap_name  =  9;
         optional string src_ae_name  = 10;
         optional dif_config_msg conf = 11;
-        optional int32 result        = 12;
-        optional int32 fd            = 13;
+        optional int32 fd            = 12;
+        optional int32 pid           = 13;
+        optional int32 response      = 14;
+        optional int32 result        = 15;
 };

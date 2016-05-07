@@ -27,7 +27,7 @@
 
 #include <ouroboros/logs.h>
 
-flow_t * flow_create(int32_t port_id)
+flow_t * flow_create(uint32_t port_id)
 {
         flow_t * flow = malloc(sizeof *flow);
         if (flow == NULL) {
@@ -38,8 +38,7 @@ flow_t * flow_create(int32_t port_id)
         INIT_LIST_HEAD(&flow->list);
 
         flow->port_id = port_id;
-        flow->oflags = FLOW_O_DEFAULT;
-        flow->state = FLOW_NULL;
+        flow->state   = FLOW_NULL;
 
         pthread_mutex_init(&flow->lock, NULL);
 
@@ -51,37 +50,4 @@ void flow_destroy(flow_t * flow)
         if (flow == NULL)
                 return;
         free(flow);
-}
-
-int flow_set_opts(flow_t * flow, uint16_t opts)
-{
-        if (flow == NULL) {
-                LOG_DBGF("Non-existing flow.");
-                return -1;
-        }
-
-        pthread_mutex_lock(&flow->lock);
-
-        if ((opts & FLOW_O_ACCMODE) == FLOW_O_ACCMODE) {
-                flow->oflags = FLOW_O_DEFAULT;
-                pthread_mutex_unlock(&flow->lock);
-                LOG_WARN("Invalid flow options. Setting default.");
-                return -1;
-        }
-
-        flow->oflags = opts;
-
-        pthread_mutex_unlock(&flow->lock);
-
-        return 0;
-}
-
-uint16_t flow_get_opts(const flow_t * flow)
-{
-        if (flow == NULL) {
-                LOG_DBGF("Non-existing flow.");
-                return FLOW_O_INVALID;
-        }
-
-        return flow->oflags;
 }

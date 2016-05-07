@@ -23,19 +23,23 @@
 #define CLIENT_AP_NAME "echo-client"
 
 #include <ouroboros/dev.h>
+#include <stdlib.h>
 
 int client_main()
 {
         int fd = 0;
         int result = 0;
-        uint8_t buf[BUF_SIZE];
+        char buf[BUF_SIZE];
         char * message  = "Client says hi!";
         ssize_t count = 0;
 
-        fd = flow_alloc(SERVER_AP_NAME, CLIENT_AP_NAME,
-                        NULL, NULL, 0);
+        if(ap_init(CLIENT_AP_NAME))
+                return -1;
+
+        fd = flow_alloc(SERVER_AP_NAME, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow\n");
+                ap_fini();
                 return -1;
         }
 
@@ -43,12 +47,14 @@ int client_main()
         if (result < 0) {
                 printf("Flow allocation refused\n");
                 flow_dealloc(fd);
+                ap_fini();
                 return -1;
         }
 
         if (flow_write(fd, message, strlen(message) + 1) == -1) {
                 printf("Failed to write SDU\n");
                 flow_dealloc(fd);
+                ap_fini();
                 return -1;
         }
 
@@ -56,12 +62,15 @@ int client_main()
         if (count < 0) {
                 printf("Failed to read SDU\n");
                 flow_dealloc(fd);
+                ap_fini();
                 return -1;
         }
 
         printf("Server replied with %.*s\n", (int) count, buf);
 
         flow_dealloc(fd);
+
+        ap_fini();
 
         return 0;
 }

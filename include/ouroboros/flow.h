@@ -23,11 +23,6 @@
 #ifndef OUROBOROS_FLOW_H
 #define OUROBOROS_FLOW_H
 
-#include <ouroboros/common.h>
-#include <ouroboros/list.h>
-#include <ouroboros/shm_ap_rbuff.h>
-#include <pthread.h>
-
 /* same values as fcntl.h */
 #define FLOW_O_RDONLY   00000000
 #define FLOW_O_WRONLY   00000001
@@ -44,18 +39,5 @@ enum flow_state {
         FLOW_ALLOCATED,
         FLOW_PENDING
 };
-
-typedef struct flow {
-        struct list_head list;
-
-        uint32_t              port_id;
-        struct shm_ap_rbuff * rb;
-        enum flow_state       state;
-
-        pthread_mutex_t  lock;
-} flow_t;
-
-flow_t * flow_create(uint32_t port_id);
-void     flow_destroy(flow_t * flow);
 
 #endif /* OUROBOROS_FLOW_H */
