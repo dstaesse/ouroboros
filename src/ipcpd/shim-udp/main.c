@@ -774,6 +774,7 @@ int ipcp_udp_flow_dealloc(int port_id)
                 shm_ap_rbuff_close(_ap_instance->flows[fd].rb);
 
         FD_CLR(fd, &shim_data(_ipcp)->flow_fd_s);
+        close(fd);
         return 0;
 }
 
