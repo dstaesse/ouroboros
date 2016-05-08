@@ -108,12 +108,14 @@ struct bmp * bmp_create(size_t bits, ssize_t offset)
                 return NULL;
 
         tmp = malloc(sizeof(*tmp));
-        if (!tmp)
+        if (tmp == NULL)
                 return NULL;
 
-        tmp->bitmap = malloc(BITS_TO_LONGS(bits) * sizeof(*(tmp->bitmap)));
-        if (!tmp->bitmap)
+        tmp->bitmap = malloc(BITS_TO_LONGS(bits) * sizeof(unsigned long));
+        if (tmp->bitmap == NULL) {
+                free(tmp);
                 return NULL;
+        }
 
         tmp->size = bits;
         tmp->offset = offset;
@@ -140,7 +142,8 @@ int bmp_destroy(struct bmp * b)
 
 static ssize_t bad_id(struct bmp * b)
 {
-        assert(b);
+        if (b == NULL)
+                return -1;
 
         return b->offset - 1;
 }
@@ -149,8 +152,8 @@ ssize_t bmp_allocate(struct bmp * b)
 {
         ssize_t id;
 
-        if (!b)
-                return bad_id(b);
+        if (b == NULL)
+                return -1;
 
         id = (ssize_t) find_next_zero_bit(b->bitmap,
                                           b->size);
@@ -177,7 +180,7 @@ static bool is_id_valid(struct bmp * b,
 bool bmp_is_id_valid(struct bmp * b,
                      ssize_t id)
 {
-        if (!b)
+        if (b == NULL)
                 return false;
 
         return is_id_valid(b, id);
@@ -188,7 +191,7 @@ int bmp_release(struct bmp * b,
 {
         ssize_t rid;
 
-        if (!b)
+        if (b == NULL)
                 return -1;
 
         if (!is_id_valid(b, id))

@@ -45,6 +45,9 @@
 ((struct shm_du_buff *)(dum->shm_base + (*dum->ptr_tail *                      \
                                          SHM_DU_BUFF_BLOCK_SIZE)))
 
+#define idx_to_du_buff_ptr(dum, idx)                                           \
+        ((struct shm_du_buff *)(dum->shm_base + (idx * SHM_DU_BUFF_BLOCK_SIZE)))
+
 #define block_ptr_to_idx(dum, sdb)                                             \
         (((uint8_t *)sdb - dum->shm_base) / SHM_DU_BUFF_BLOCK_SIZE)
 
@@ -52,27 +55,31 @@
                           & (SHM_BLOCKS_IN_MAP - 1))
 #define shm_map_free(dum, i)(shm_map_used(dum) + i < SHM_BLOCKS_IN_MAP)
 
+#define sdu_size(dum, idx) (idx_to_du_buff_ptr(dum, idx)->du_tail -            \
+                            idx_to_du_buff_ptr(dum, idx)->du_head)
+
 #define MIN(a,b)(a < b ? a : b)
 
 struct shm_du_buff {
-        size_t            size;
-        size_t            du_head;
-        size_t            du_tail;
+        size_t size;
+        size_t du_head;
+        size_t du_tail;
+        size_t garbage;
 };
 
 struct shm_du_map {
-        uint8_t            * shm_base;    /* start of blocks */
-        size_t             * ptr_head;    /* start of ringbuffer head */
-        size_t             * ptr_tail;    /* start of ringbuffer tail */
-        pthread_mutex_t    * shm_mutex;   /* lock all free space in shm */
-        int                  fd;
+        uint8_t *         shm_base;    /* start of blocks */
+        size_t *          ptr_head;    /* start of ringbuffer head */
+        size_t *          ptr_tail;    /* start of ringbuffer tail */
+        pthread_mutex_t * shm_mutex;   /* lock all free space in shm */
+        int               fd;
 };
 
 struct shm_du_map * shm_du_map_create()
 {
         struct shm_du_map * dum;
         int                 shm_fd;
-        uint8_t           * shm_base;
+        uint8_t *           shm_base;
         pthread_mutexattr_t attr;
 
         dum = malloc(sizeof *dum);
@@ -141,7 +148,13 @@ struct shm_du_map * shm_du_map_open()
 {
         struct shm_du_map * dum;
         int                 shm_fd;
-        uint8_t           * shm_base;
+        uint8_t *           shm_base;
+
+        dum = malloc(sizeof *dum);
+        if (dum == NULL) {
+                LOG_DBGF("Could not allocate struct.");
+                return NULL;
+        }
 
         shm_fd = shm_open(SHM_DU_MAP_FILENAME, O_RDWR, 0666);
         if (shm_fd == -1) {
@@ -163,12 +176,6 @@ struct shm_du_map * shm_du_map_open()
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
                         LOG_DBGF("Failed to unlink invalid shm.");
 
-                return NULL;
-        }
-
-        dum = malloc(sizeof *dum);
-        if (dum == NULL) {
-                LOG_DBGF("Could not allocate struct.");
                 return NULL;
         }
 
@@ -195,38 +202,52 @@ void shm_du_map_close(struct shm_du_map * dum)
         if (munmap(dum->shm_base, SHM_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");
 
+        free(dum);
+}
+
+void shm_du_map_destroy(struct shm_du_map * dum)
+{
+        if (dum == NULL) {
+                LOG_DBGF("Bogus input. Bugging out.");
+                return;
+        }
+
+        if (munmap(dum->shm_base, SHM_FILE_SIZE) == -1)
+                LOG_DBGF("Couldn't unmap shared memory.");
+
         if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
                 LOG_DBGF("Failed to unlink shm.");
 
         free(dum);
 }
 
-struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
-                                        size_t              size,
-                                        size_t              headspace,
-                                        uint8_t           * data,
-                                        size_t              len)
+int shm_create_du_buff(struct shm_du_map * dum,
+                       size_t              size,
+                       size_t              headspace,
+                       uint8_t *           data,
+                       size_t              len)
 {
         struct shm_du_buff * sdb;
         long                 blocks = 0;
         int                  sz = size + sizeof *sdb;
         int                  sz2 = headspace + len + sizeof *sdb;
-        uint8_t            * write_pos;
+        uint8_t *            write_pos;
         size_t               copy_len;
+        size_t               index;
 
         if (dum == NULL || data == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
-                return NULL;
+                return -1;
         }
 
         if (headspace >= size) {
                 LOG_DBGF("Index out of bounds.");
-                return NULL;
+                return -1;
         }
 
         if (headspace + len > size) {
                 LOG_DBGF("Buffer too small for data.");
-                return NULL;
+                return -1;
         }
 
         pthread_mutex_lock(dum->shm_mutex);
@@ -237,20 +258,20 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
                 if (sz2 < 0 && sz > 0) {
                         pthread_mutex_unlock(dum->shm_mutex);
                         LOG_DBG("Can't handle this packet now");
-                        return NULL;
+                        return -1;
                 }
                 ++blocks;
         }
 
         if (!shm_map_free(dum, blocks)) {
                 pthread_mutex_unlock(dum->shm_mutex);
-                LOG_DBGF("Allocation failed, Out of Memory.");
-                return NULL;
+                return -1;
         }
 
         sdb = get_head_ptr(dum);
 
         sdb->size = size;
+        sdb->garbage = 0;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
 
@@ -267,32 +288,76 @@ struct shm_du_buff * shm_create_du_buff(struct shm_du_map * dum,
                 --blocks;
         }
 
+        index = *dum->ptr_head - 1;
+
         pthread_mutex_unlock(dum->shm_mutex);
 
-        return sdb;
+        return index;
 }
 
-int shm_release_du_buff(struct shm_du_map * dum)
+/* FIXME: this cannot handle packets stretching beyond the ringbuffer border */
+int shm_du_map_read_sdu(uint8_t **          dst,
+                        struct shm_du_map * dum,
+                        size_t              idx)
 {
-        long sz;
-        long blocks = 0;
+        size_t    len = 0;
+
+        if (idx > SHM_BLOCKS_IN_MAP)
+                return -1;
 
         pthread_mutex_lock(dum->shm_mutex);
 
         if (*dum->ptr_head == *dum->ptr_tail) {
-                LOG_DBGF("Attempt to free empty ringbuffer. Nothing to do.");
                 pthread_mutex_unlock(dum->shm_mutex);
                 return -1;
         }
 
-        sz = get_tail_ptr(dum)->size;
+        *dst = ((uint8_t *) idx_to_du_buff_ptr(dum, idx)) +
+                sizeof(struct shm_du_buff) +
+                idx_to_du_buff_ptr(dum, idx)->du_head;
+        len = sdu_size(dum, idx);
 
-        while (sz + (long) sizeof (struct shm_du_buff) > 0) {
-                sz -= SHM_DU_BUFF_BLOCK_SIZE;
-                ++blocks;
+        pthread_mutex_unlock(dum->shm_mutex);
+
+        return len;
+}
+
+int shm_release_du_buff(struct shm_du_map * dum, size_t idx)
+{
+        long sz;
+        long blocks = 0;
+
+
+        /* FIXME: this is crap for the test */
+        if (idx > SHM_BLOCKS_IN_MAP)
+                idx = *dum->ptr_tail;
+
+        pthread_mutex_lock(dum->shm_mutex);
+
+        if (*dum->ptr_head == *dum->ptr_tail) {
+                pthread_mutex_unlock(dum->shm_mutex);
+                return -1;
         }
 
-        *(dum->ptr_tail) = (*dum->ptr_tail + blocks) & (SHM_BLOCKS_IN_MAP - 1);
+        idx_to_du_buff_ptr(dum, idx)->garbage = 1;
+
+        if (idx != *dum->ptr_tail) {
+                pthread_mutex_unlock(dum->shm_mutex);
+                return 0;
+        }
+
+        while (get_tail_ptr(dum)->garbage == 1) {
+                sz = get_tail_ptr(dum)->size;
+
+                while (sz + (long) sizeof (struct shm_du_buff) > 0) {
+                        sz -= SHM_DU_BUFF_BLOCK_SIZE;
+                        ++blocks;
+                }
+
+                *(dum->ptr_tail) =
+                        (*dum->ptr_tail + blocks) & (SHM_BLOCKS_IN_MAP - 1);
+        }
+
         pthread_mutex_unlock(dum->shm_mutex);
 
         return 0;
@@ -317,7 +382,7 @@ uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
 }
 
 uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
-                                 size_t size)
+                                 size_t               size)
 {
         if (sdb == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -335,7 +400,7 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
 }
 
 int shm_du_buff_head_release(struct shm_du_buff * sdb,
-                             size_t size)
+                             size_t               size)
 {
         if (sdb == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -353,7 +418,7 @@ int shm_du_buff_head_release(struct shm_du_buff * sdb,
 }
 
 int shm_du_buff_tail_release(struct shm_du_buff * sdb,
-                             size_t size)
+                             size_t               size)
 {
         if (sdb == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");

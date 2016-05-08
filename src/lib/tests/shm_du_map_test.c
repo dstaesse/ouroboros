@@ -32,7 +32,7 @@
 
 #include <ouroboros/logs.h>
 
-#define SIZE_OF_DU_BUFF 24
+#define SIZE_OF_DU_BUFF 32
 #define TEST_BUFF_SIZE (SHM_DU_BUFF_BLOCK_SIZE - SIZE_OF_DU_BUFF)
 
 #define MAX(a,b) (a > b ? a : b)
@@ -44,7 +44,7 @@ void * produce()
 {
         struct shm_du_map * dum;
         long                test_buf_size = 0;
-        uint8_t           * test_values;
+        uint8_t *           test_values;
         int                 headspace;
         int                 tailspace;
         long                i;
@@ -66,9 +66,8 @@ void * produce()
                 test_values[i] = 170;
 
         clock_gettime(CLOCK_MONOTONIC, &starttime);
-        for (i = 1; i < SHM_BLOCKS_IN_MAP; i++) {
-                struct shm_du_buff * sdb;
-                size_t               len;
+        for (i = 1; i < 16 * SHM_BLOCKS_IN_MAP; i++) {
+                size_t len;
 
                 test_buf_size = TEST_BUFF_SIZE;
 
@@ -77,20 +76,18 @@ void * produce()
 
                 len = test_buf_size - (headspace + tailspace);
 
-                sdb = shm_create_du_buff(dum,
-                                         test_buf_size,
-                                         headspace,
-                                         test_values,
-                                         len);
+                if (shm_create_du_buff(dum,
+                                       test_buf_size,
+                                       headspace,
+                                       test_values,
+                                       len) < 0) {
+                        continue;
+                }
 
-                if (sdb != NULL) {
-                        bytes_written += len;
-                }
-                else {
-                        sync = -2;
-                        break;
-                }
+                bytes_written += len;
         }
+
+        sync = -2;
 
         clock_gettime(CLOCK_MONOTONIC, &stoptime);
         elapsed =(stoptime.tv_sec + stoptime.tv_nsec / 1000000000.0) -
@@ -104,13 +101,14 @@ void * produce()
 
         sync = -1;
 
+        shm_du_map_close(dum);
+
         return 0;
 }
 
 void * consume()
 {
         struct shm_du_map * dum;
-
         struct timespec     ts;
 
         ts.tv_sec = 0;
@@ -123,10 +121,15 @@ void * consume()
                 return (void *)-1;
         }
 
-        while (!sync) {
-                while (!shm_release_du_buff(dum));
-                nanosleep(&ts, NULL);
+        while (true) {
+                shm_release_du_buff(dum, 1823429173941);
+                if (sync)
+                        break;
         }
+        nanosleep(&ts, NULL);
+
+
+        shm_du_map_close(dum);
 
         return 0;
 }
@@ -149,7 +152,7 @@ int shm_du_map_test(int argc, char ** argv)
                 return -1;
         }
 
-        shm_du_map_close(dum);
+        shm_du_map_destroy(dum);
 
         LOG_INFO("done.");
 
@@ -165,13 +168,15 @@ int shm_du_map_test(int argc, char ** argv)
         pthread_create(&consumer, NULL, consume, NULL);
         pthread_join(consumer, NULL);
 
-        shm_du_map_close(dum);
+        shm_du_map_destroy(dum);
 
         LOG_INFO("done.");
 
         /* test 3 */
 
         LOG_INFO("starting concurrency test.");
+
+        sync = 0;
 
         dum = shm_du_map_create();
 
@@ -181,7 +186,7 @@ int shm_du_map_test(int argc, char ** argv)
         pthread_join(producer, NULL);
         pthread_join(consumer, NULL);
 
-        shm_du_map_close(dum);
+        shm_du_map_destroy(dum);
 
         LOG_INFO("done.");
 

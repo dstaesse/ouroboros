@@ -32,6 +32,7 @@ set(SOURCE_FILES
   ipcp.c
   irm.c
   list.c
+  shm_ap_rbuff.c
   shm_du_map.c
   sockets.c
   utils.c

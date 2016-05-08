@@ -96,46 +96,26 @@ struct ipcp_data * ipcp_data_create()
         if (data == NULL)
                 return NULL;
 
-        data->iname = NULL;
         data->type  = 0;
-        data->dum   = NULL;
 
         return data;
 }
 
 struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
-                                  const char *       ipcp_name,
                                   enum ipcp_type     ipcp_type)
 {
         if (dst == NULL)
                 return NULL;
 
-        dst->iname = instance_name_create();
-        if (dst->iname == NULL)
-                return NULL;
-
-        if(instance_name_init_from(dst->iname, ipcp_name, getpid()) == NULL) {
-                instance_name_destroy(dst->iname);
-                return NULL;
-        }
-
         dst->type  = ipcp_type;
-
-        dst->dum = shm_du_map_open();
-        if (dst->dum == NULL) {
-                instance_name_destroy(dst->iname);
-                return NULL;
-        }
 
         /* init the lists */
         INIT_LIST_HEAD(&dst->registry);
-        INIT_LIST_HEAD(&dst->flows);
         INIT_LIST_HEAD(&dst->directory);
 
         /* init the mutexes */
         pthread_mutex_init(&dst->reg_lock, NULL);
         pthread_mutex_init(&dst->dir_lock, NULL);
-        pthread_mutex_init(&dst->flow_lock, NULL);
 
         return dst;
 }
@@ -156,42 +136,22 @@ static void clear_directory(struct ipcp_data * data)
                 dir_entry_destroy(list_entry(h, struct dir_entry, list));
 }
 
-static void clear_flows(struct ipcp_data * data)
-{
-        struct list_head * h;
-        struct list_head * t;
-        list_for_each_safe(h, t, &data->flows)
-                flow_destroy(list_entry(h, flow_t, list));
-
-}
-
 void ipcp_data_destroy(struct ipcp_data * data)
 {
         if (data == NULL)
                 return;
 
-        /* FIXME: finish all pending operations here */
-
-        if (data->iname != NULL)
-                instance_name_destroy(data->iname);
-        data->iname = NULL;
-
-        if (data->dum != NULL)
-                shm_du_map_close(data->dum);
-        data->dum = NULL;
+        /* FIXME: finish all pending operations here and cancel all threads */
 
         pthread_mutex_lock(&data->reg_lock);
         pthread_mutex_lock(&data->dir_lock);
-        pthread_mutex_lock(&data->flow_lock);
 
         /* clear the lists */
         clear_registry(data);
         clear_directory(data);
-        clear_flows(data);
 
         /*
          * no need to unlock, just free the entire thing
-         * pthread_mutex_unlock(&data->flow_lock);
          * pthread_mutex_unlock(&data->dir_lock);
          * pthread_mutex_unlock(&data->reg_lock);
          */
@@ -379,66 +339,4 @@ uint64_t ipcp_data_get_addr(struct ipcp_data * data,
         pthread_mutex_unlock(&data->dir_lock);
 
         return addr;
-}
-
-flow_t * ipcp_data_find_flow(struct ipcp_data * data,
-                             uint32_t           port_id)
-{
-        struct list_head * h;
-        list_for_each(h, &data->flows) {
-                flow_t * f = list_entry(h, flow_t, list);
-                if (f->port_id == port_id)
-                        return f;
-        }
-
-        return NULL;
-}
-
-bool ipcp_data_has_flow(struct ipcp_data * data,
-                        uint32_t           port_id)
-{
-        return ipcp_data_find_flow(data, port_id) != NULL;
-}
-
-int ipcp_data_add_flow(struct ipcp_data * data,
-                       flow_t *           flow)
-{
-        if (data == NULL || flow == NULL)
-                return -1;
-
-        pthread_mutex_lock(&data->flow_lock);
-
-        if (ipcp_data_has_flow(data, flow->port_id)) {
-                pthread_mutex_unlock(&data->flow_lock);
-                return -2;
-        }
-
-        list_add(&flow->list,&data->flows);
-
-        pthread_mutex_unlock(&data->flow_lock);
-
-        return 0;
-}
-
-int ipcp_data_del_flow(struct ipcp_data * data,
-                       uint32_t           port_id)
-{
-        flow_t * f;
-
-        if (data == NULL)
-                return -1;
-
-        pthread_mutex_lock(&data->flow_lock);
-
-        f = ipcp_data_find_flow(data, port_id);
-        if (f == NULL)
-                return -1;
-
-        list_del(&f->list);
-
-        free(f);
-
-        pthread_mutex_unlock(&data->flow_lock);
-
-        return 0;
 }

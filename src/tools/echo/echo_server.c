@@ -33,71 +33,80 @@ void shutdown_server(int signo)
 {
         char * dif = DIF_NAME;
 
-        if (ap_unreg(SERVER_AP_NAME, &dif, 1)) {
-                printf("Failed to unregister application\n");
+        if (ap_unreg(&dif, 1)) {
+                printf("Failed to unregister application.\n");
+                ap_fini();
                 exit(EXIT_FAILURE);
         }
 
+        ap_fini();
         exit(EXIT_SUCCESS);
 }
 
 int server_main()
 {
-        int server_fd = 0;
-        int client_fd = 0;
+        int    server_fd = 0;
+        int    client_fd = 0;
         char * dif = DIF_NAME;
         char * client_name = NULL;
-        uint8_t buf[BUF_SIZE];
+        char   buf[BUF_SIZE];
         ssize_t count = 0;
 
-        printf("Starting the server\n");
+        printf("Starting the server.\n");
 
         /* Manual cleanup is required for now */
         if (signal(SIGINT, shutdown_server) == SIG_ERR) {
-                printf("Can't install signal handler\n");
+                printf("Can't install signal handler.\n");
                 return -1;
         }
 
-        server_fd = ap_reg(SERVER_AP_NAME, &dif, 1);
+        if(ap_init(SERVER_AP_NAME)) {
+                printf("Failed to init AP.");
+                return -1;
+        }
+
+        server_fd = ap_reg(&dif, 1);
         if (server_fd < 0) {
-                printf("Failed to register application\n");
+                printf("Failed to register application.\n");
+                ap_fini();
                 return -1;
         }
-
-        printf("Echo server started...\n");
 
         while (true) {
                 client_fd = flow_accept(server_fd,
-                                        client_name, NULL);
+                                        &client_name, NULL);
                 if (client_fd < 0) {
-                        continue;
+                        printf("Failed to accept flow.\n");
+                        break;
                 }
 
-                printf("New flow from %s\n", client_name);
+                printf("New flow from %s.\n", client_name);
 
                 if (flow_alloc_resp(client_fd, 0)) {
-                        printf("Failed to give an allocate response\n");
+                        printf("Failed to give an allocate response.\n");
                         flow_dealloc(client_fd);
                         continue;
                 }
 
-                count = flow_read(client_fd, buf, BUF_SIZE);
+                count = flow_read(client_fd, (void **) &buf, BUF_SIZE);
                 if (count < 0) {
-                        printf("Failed to read SDU\n");
+                        printf("Failed to read SDU.\n");
                         flow_dealloc(client_fd);
                         continue;
                 }
 
-                printf("Message from client is %.*s\n", (int) count, buf);
+                printf("Message from client is %.*s.\n", (int) count, buf);
 
                 if (flow_write(client_fd, buf, count) == -1) {
-                        printf("Failed to write SDU\n");
+                        printf("Failed to write SDU.\n");
                         flow_dealloc(client_fd);
                         continue;
                 }
 
                 flow_dealloc(client_fd);
         }
+
+        ap_fini();
 
         return 0;
 }

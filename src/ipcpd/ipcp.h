@@ -43,7 +43,8 @@ struct ipcp {
         int                irmd_fd;
 };
 
-int ipcp_main_loop();
+void * ipcp_main_loop(void * o);
+void * ipcp_sdu_loop(void * o);
 int ipcp_arg_check(int argc, char * argv[]);
 
 #endif

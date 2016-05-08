@@ -36,13 +36,10 @@ enum irm_msg_code {
         IRM_FLOW_ALLOC        = 11;
         IRM_FLOW_ALLOC_RES    = 12;
         IRM_FLOW_DEALLOC      = 13;
-        IRM_FLOW_CONTROL      = 14;
-        IRM_FLOW_WRITE        = 15;
-        IRM_FLOW_READ         = 16;
-        IPCP_FLOW_REQ_ARR     = 17;
-        IPCP_FLOW_ALLOC_REPLY = 18;
-        IPCP_FLOW_DEALLOC     = 19;
-        IRM_REPLY             = 20;
+        IPCP_FLOW_REQ_ARR     = 14;
+        IPCP_FLOW_ALLOC_REPLY = 15;
+        IPCP_FLOW_DEALLOC     = 16;
+        IRM_REPLY             = 17;
 };
 
 message irm_msg {
@@ -52,12 +49,11 @@ message irm_msg {
         optional uint32 api_id       =  3;
         optional uint32 ipcp_type    =  5;
         repeated string dif_name     =  6;
-        optional int32 fd            =  7;
-        optional int32 response      =  8;
-        optional int32 oflags        =  9;
-        optional string dst_name     = 10;
-        optional uint32 port_id      = 11;
-        optional int32 pid           = 12;
-        optional dif_config_msg conf = 13;
-        optional int32 result        = 14;
+        optional int32 response      =  7;
+        optional string dst_name     =  8;
+        optional uint32 port_id      =  9;
+        optional int32 pid           = 10;
+        optional dif_config_msg conf = 11;
+        optional int32 cfd           = 12;
+        optional int32 result        = 13;
 };
