@@ -49,11 +49,10 @@ message irm_msg {
         optional uint32 api_id       =  3;
         optional uint32 ipcp_type    =  5;
         repeated string dif_name     =  6;
-        optional int32 response      =  7;
+        optional sint32 response     =  7;
         optional string dst_name     =  8;
-        optional uint32 port_id      =  9;
+        optional sint32 port_id      =  9;
         optional int32 pid           = 10;
         optional dif_config_msg conf = 11;
-        optional int32 cfd           = 12;
-        optional int32 result        = 13;
+        optional sint32 result       = 12;
 };

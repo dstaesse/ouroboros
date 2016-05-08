@@ -48,14 +48,14 @@ enum flow_state {
 typedef struct flow {
         struct list_head list;
 
-        uint32_t              port_id;
+        int                   port_id;
         struct shm_ap_rbuff * rb;
         enum flow_state       state;
 
         pthread_mutex_t  lock;
 } flow_t;
 
-flow_t * flow_create(uint32_t port_id);
+flow_t * flow_create(int port_id);
 void     flow_destroy(flow_t * flow);
 
 #endif /* OUROBOROS_FLOW_H */

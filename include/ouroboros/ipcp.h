@@ -49,27 +49,27 @@ int   ipcp_enroll(pid_t  pid,
                   char * member_name,
                   char * n_1_dif);
 
-int   ipcp_bootstrap(pid_t pid,
+int   ipcp_bootstrap(pid_t              pid,
                      dif_config_msg_t * conf);
 
 /* Flow related ops, these go from IRMd to IPCP */
 
-int   ipcp_name_reg(pid_t    pid,
-                    char *   name);
-int   ipcp_name_unreg(pid_t    pid,
+int   ipcp_name_reg(pid_t  pid,
+                    char * name);
+int   ipcp_name_unreg(pid_t  pid,
                       char * name);
 
 int   ipcp_flow_alloc(pid_t             pid,
-                      uint32_t          port_id,
+                      int               port_id,
                       pid_t             n_pid,
                       char *            dst_name,
                       char *            src_ap_name,
                       char *            src_ae_name,
                       struct qos_spec * qos);
-int   ipcp_flow_alloc_resp(pid_t    pid,
-                           uint32_t port_id,
-                           pid_t    n_pid,
-                           int      response);
+int   ipcp_flow_alloc_resp(pid_t pid,
+                           int   port_id,
+                           pid_t n_pid,
+                           int   response);
 
 /* These operations go from the IPCP to the IRMd */
 
@@ -78,16 +78,16 @@ int   ipcp_flow_req_arr(pid_t  pid,
                         char * dst_name,
                         char * src_ap_name,
                         char * src_ae_name);
-int   ipcp_flow_alloc_reply(pid_t    pid,
-                            uint32_t port_id,
-                            int      response);
+int   ipcp_flow_alloc_reply(pid_t pid,
+                            int   port_id,
+                            int   response);
 
 /*
  * This operation can go both ways
  * pid == 0 means the IRMd is the destination
  */
-int   ipcp_flow_dealloc(pid_t    pid,
-                        uint32_t port_id);
+int   ipcp_flow_dealloc(pid_t pid,
+                        int   port_id);
 
 
 #endif /* OUROBOROS_IPCP_H */

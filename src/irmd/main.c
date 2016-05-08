@@ -56,8 +56,6 @@
   #define IRMD_THREADPOOL_SIZE 3
 #endif
 
-
-
 enum flow_state {
         FLOW_NULL = 0,
         FLOW_PENDING,
@@ -94,10 +92,10 @@ struct reg_name_entry {
 struct port_map_entry {
         struct list_head next;
 
-        uint32_t port_id;
+        int port_id;
 
-        pid_t    n_pid;
-        pid_t    n_1_pid;
+        pid_t n_pid;
+        pid_t n_1_pid;
 
         enum flow_state state;
 };
@@ -122,7 +120,7 @@ struct irm {
         pthread_mutex_t lock;
 } * instance = NULL;
 
-static struct port_map_entry * get_port_map_entry(uint32_t port_id)
+static struct port_map_entry * get_port_map_entry(int port_id)
 {
         struct list_head * pos = NULL;
 
@@ -732,9 +730,9 @@ static struct port_map_entry * flow_accept(pid_t    pid,
         return pme;
 }
 
-static int flow_alloc_resp(pid_t     n_pid,
-                           uint32_t  port_id,
-                           int       response)
+static int flow_alloc_resp(pid_t n_pid,
+                           int   port_id,
+                           int   response)
 {
         struct reg_name_entry * rne = get_reg_name_entry_by_id(n_pid);
         struct port_map_entry * pme = get_port_map_entry(port_id);
@@ -800,7 +798,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
         return e;
 }
 
-static int flow_alloc_res(uint32_t port_id)
+static int flow_alloc_res(int port_id)
 {
         bool allocated = false;
         struct port_map_entry * e;
@@ -810,7 +808,7 @@ static int flow_alloc_res(uint32_t port_id)
                 /* FIXME: this needs locking */
                 e = get_port_map_entry(port_id);
                 if (e == NULL) {
-                        LOG_DBGF("Could not locate port_id %u", port_id);
+                        LOG_DBGF("Could not locate port_id %d", port_id);
                         return -1;
                 }
                 if (e->state == FLOW_ALLOCATED)
@@ -821,7 +819,7 @@ static int flow_alloc_res(uint32_t port_id)
         return 0;
 }
 
-static int flow_dealloc(uint32_t port_id)
+static int flow_dealloc(int port_id)
 {
         pid_t    n_1_pid;
 
@@ -876,8 +874,8 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         return pme;
 }
 
-static int flow_alloc_reply(uint32_t port_id,
-                            int      response)
+static int flow_alloc_reply(int port_id,
+                            int response)
 {
         struct port_map_entry * e;
 
@@ -894,7 +892,7 @@ static int flow_alloc_reply(uint32_t port_id,
         return 0;
 }
 
-static int flow_dealloc_ipcp(uint32_t port_id)
+static int flow_dealloc_ipcp(int port_id)
 {
         struct port_map_entry * e = get_port_map_entry(port_id);
         if (e == NULL)

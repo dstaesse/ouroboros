@@ -27,7 +27,7 @@
 
 #include <ouroboros/logs.h>
 
-flow_t * flow_create(uint32_t port_id)
+flow_t * flow_create(int port_id)
 {
         flow_t * flow = malloc(sizeof *flow);
         if (flow == NULL) {

@@ -171,7 +171,7 @@ void shim_ap_fini()
         free(_ap_instance);
 }
 
-static int port_id_to_fd(uint32_t port_id)
+static int port_id_to_fd(int port_id)
 {
         int i;
         for (i = 0; i < AP_MAX_FLOWS; ++i)
@@ -601,7 +601,7 @@ int ipcp_udp_name_unreg(char * name)
         return 0;
 }
 
-int ipcp_udp_flow_alloc(uint32_t          port_id,
+int ipcp_udp_flow_alloc(int               port_id,
                         pid_t             n_pid,
                         char *            dst_name,
                         char *            src_ap_name,
@@ -712,18 +712,18 @@ int ipcp_udp_flow_alloc(uint32_t          port_id,
                        NULL);
         _ap_instance->ping_pong = !_ap_instance->ping_pong;
 
-        LOG_DBG("Allocated flow with port_id %u on UDP fd %d.", port_id, fd);
+        LOG_DBG("Allocated flow with port_id %d on UDP fd %d.", port_id, fd);
 
         return fd;
 }
 
-int ipcp_udp_flow_alloc_resp(uint32_t port_id,
-                             pid_t    n_pid,
-                             int      response)
+int ipcp_udp_flow_alloc_resp(int   port_id,
+                             pid_t n_pid,
+                             int   response)
 {
         int fd = port_id_to_fd(port_id);
         if (fd < 0) {
-                LOG_DBGF("Could not find flow with port_id %u.", port_id);
+                LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return 0;
         }
 
@@ -755,16 +755,16 @@ int ipcp_udp_flow_alloc_resp(uint32_t port_id,
                        NULL);
         _ap_instance->ping_pong = !_ap_instance->ping_pong;
 
-        LOG_DBG("Accepted flow, port_id %u on UDP fd %d.", port_id, fd);
+        LOG_DBG("Accepted flow, port_id %d on UDP fd %d.", port_id, fd);
 
         return 0;
 }
 
-int ipcp_udp_flow_dealloc(uint32_t port_id)
+int ipcp_udp_flow_dealloc(int port_id)
 {
         int fd = port_id_to_fd(port_id);
         if (fd < 0) {
-                LOG_DBGF("Could not find flow with port_id %u.", port_id);
+                LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return 0;
         }
 
@@ -778,11 +778,11 @@ int ipcp_udp_flow_dealloc(uint32_t port_id)
 }
 
 /* FIXME: may be crap, didn't think this one through */
-int ipcp_udp_flow_dealloc_arr(uint32_t port_id)
+int ipcp_udp_flow_dealloc_arr(int port_id)
 {
         int fd = port_id_to_fd(port_id);
         if (fd < 0) {
-                LOG_DBGF("Could not find flow with port_id %u.", port_id);
+                LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return 0;
         }
 

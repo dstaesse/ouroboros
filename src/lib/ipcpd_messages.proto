@@ -20,13 +20,13 @@ message ipcp_msg {
         repeated string dif_names    =  4;
         optional int32  len          =  5;
         optional string name         =  6;
-        optional int32 port_id       =  7;
+        optional sint32 port_id      =  7;
         optional string dst_name     =  8;
         optional string src_ap_name  =  9;
         optional string src_ae_name  = 10;
         optional dif_config_msg conf = 11;
-        optional int32 fd            = 12;
-        optional int32 pid           = 13;
-        optional int32 response      = 14;
-        optional int32 result        = 15;
+        optional sint32 fd           = 12;
+        optional sint32 pid          = 13;
+        optional sint32 response     = 14;
+        optional sint32 result       = 15;
 };
