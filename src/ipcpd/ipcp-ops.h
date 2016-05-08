@@ -33,21 +33,21 @@ struct ipcp_ops {
         int   (* ipcp_enroll)(char * member_name,
                               char * n_1_dif);
         int   (* ipcp_reg)(char ** dif_names,
-                           size_t len);
+                           size_t  len);
         int   (* ipcp_unreg)(char ** dif_names,
-                             size_t len);
+                             size_t  len);
         int   (* ipcp_name_reg)(char *   name);
         int   (* ipcp_name_unreg)(char * name);
-        int   (* ipcp_flow_alloc)(uint32_t port_id,
-                                  pid_t    n_pid,
-                                  char *   dst_ap_name,
-                                  char *   src_ap_name,
-                                  char *   src_ae_name,
+        int   (* ipcp_flow_alloc)(int    port_id,
+                                  pid_t  n_pid,
+                                  char * dst_ap_name,
+                                  char * src_ap_name,
+                                  char * src_ae_name,
                                   struct qos_spec * qos);
-        int   (* ipcp_flow_alloc_resp)(uint32_t port_id,
-                                       pid_t    n_pid,
-                                       int      response);
-        int   (* ipcp_flow_dealloc)(uint32_t port_id);
+        int   (* ipcp_flow_alloc_resp)(int   port_id,
+                                       pid_t n_pid,
+                                       int   response);
+        int   (* ipcp_flow_dealloc)(int port_id);
 };
 
 #endif /* IPCPD_IPCP_OPS_H */

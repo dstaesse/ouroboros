@@ -364,7 +364,7 @@ int ipcp_name_unreg(pid_t  pid,
 }
 
 int ipcp_flow_alloc(pid_t             pid,
-                    uint32_t          port_id,
+                    int               port_id,
                     pid_t             n_pid,
                     char *            dst_name,
                     char *            src_ap_name,
@@ -402,10 +402,10 @@ int ipcp_flow_alloc(pid_t             pid,
         return ret;
 }
 
-int ipcp_flow_alloc_resp(pid_t    pid,
-                         uint32_t port_id,
-                         pid_t    n_pid,
-                         int      response)
+int ipcp_flow_alloc_resp(pid_t pid,
+                         int   port_id,
+                         pid_t n_pid,
+                         int   response)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
@@ -468,9 +468,9 @@ int ipcp_flow_req_arr(pid_t  pid,
         return port_id;
 }
 
-int ipcp_flow_alloc_reply(pid_t    pid,
-                          uint32_t port_id,
-                          int      response)
+int ipcp_flow_alloc_reply(pid_t pid,
+                          int   port_id,
+                          int   response)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -498,8 +498,8 @@ int ipcp_flow_alloc_reply(pid_t    pid,
 }
 
 
-int ipcp_flow_dealloc(pid_t    pid,
-                      uint32_t port_id)
+int ipcp_flow_dealloc(pid_t pid,
+                      int   port_id)
 {
         if (pid != 0) {
                 ipcp_msg_t msg = IPCP_MSG__INIT;

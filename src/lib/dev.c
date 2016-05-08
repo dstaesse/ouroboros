@@ -46,7 +46,7 @@
 
 struct flow {
         struct shm_ap_rbuff * rb;
-        uint32_t              port_id;
+        int                   port_id;
         uint32_t              oflags;
 
         /* don't think this needs locking */
@@ -131,7 +131,7 @@ void ap_fini()
 }
 
 #if 0
-static int port_id_to_fd(uint32_t port_id)
+static int port_id_to_fd(int port_id)
 {
         int i;
         for (i = 0; i < AP_MAX_FLOWS; ++i)
