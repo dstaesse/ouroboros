@@ -25,7 +25,7 @@
 #define OUROBOROS_SHM_AP_RBUFF_H
 
 #ifndef SHM_AP_RBUFF
-#define SHM_AP_RBUFF "ouroboros_rb_"
+#define SHM_AP_RBUFF_PREFIX "ouroboros_rb_"
 #endif
 
 #ifndef SHM_RBUFF_SIZE

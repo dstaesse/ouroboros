@@ -59,7 +59,7 @@ struct shm_ap_rbuff * shm_ap_rbuff_create()
         pthread_mutexattr_t   attr;
         char                  fn[25];
 
-        sprintf(fn, SHM_AP_RBUFF "%d", getpid());
+        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", getpid());
 
         rb = malloc(sizeof(*rb));
         if (rb == NULL) {
@@ -132,7 +132,7 @@ struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t pid)
         struct rb_entry *     shm_base;
         char                  fn[25];
 
-        sprintf(fn, SHM_AP_RBUFF "%d", pid);
+        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", pid);
 
         rb = malloc(sizeof(*rb));
         if (rb == NULL) {
@@ -186,7 +186,7 @@ void shm_ap_rbuff_close(struct shm_ap_rbuff * rb)
                 return;
         }
 
-        sprintf(fn, SHM_AP_RBUFF "%d", rb->pid);
+        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", rb->pid);
 
         if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");
@@ -209,7 +209,7 @@ void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
                 return;
         }
 
-        sprintf(fn, SHM_AP_RBUFF "%d", rb->pid);
+        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", rb->pid);
 
         if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");
