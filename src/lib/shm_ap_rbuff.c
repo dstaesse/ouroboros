@@ -244,17 +244,20 @@ int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
 }
 struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
 {
-        struct rb_entry * e = malloc(sizeof(*e));
-        if (e == NULL)
-                return NULL;
+        struct rb_entry * e = NULL;
 
         if (rb == NULL)
+                return NULL;
+
+        e = malloc(sizeof(*e));
+        if (e == NULL)
                 return NULL;
 
         pthread_mutex_lock(rb->shm_mutex);
 
         if (shm_rbuff_used(rb) == 0) {
                 pthread_mutex_unlock(rb->shm_mutex);
+                free(e);
                 return NULL;
         }
 
