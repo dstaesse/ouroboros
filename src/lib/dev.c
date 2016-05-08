@@ -249,12 +249,26 @@ int flow_accept(int     fd,
                 return -1;
         }
 
+        *ap_name = strdup(recv_msg->ap_name);
+        if (*ap_name == NULL) {
+                bmp_release(_ap_instance->fds, cfd);
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        if (ae_name != NULL) {
+                *ae_name = strdup(recv_msg->ae_name);
+                if (*ae_name == NULL) {
+                        bmp_release(_ap_instance->fds, cfd);
+                        irm_msg__free_unpacked(recv_msg, NULL);
+                        return -1;
+                }
+        }
+
         _ap_instance->flows[cfd].port_id = recv_msg->port_id;
         _ap_instance->flows[cfd].oflags  = FLOW_O_DEFAULT;
 
-        *ap_name = strdup(recv_msg->ap_name);
-        if (ae_name != NULL)
-                *ae_name = strdup(recv_msg->ae_name);
+
 
         irm_msg__free_unpacked(recv_msg, NULL);
 

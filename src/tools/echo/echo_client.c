@@ -33,8 +33,10 @@ int client_main()
         char * message  = "Client says hi!";
         ssize_t count = 0;
 
-        if(ap_init(CLIENT_AP_NAME))
+        if(ap_init(CLIENT_AP_NAME)) {
+                printf("Failed to init AP.");
                 return -1;
+        }
 
         fd = flow_alloc(SERVER_AP_NAME, NULL, NULL);
         if (fd < 0) {

@@ -20,19 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/config.h>
-
 #include <stdbool.h>
 #include <signal.h>
 #include <unistd.h>
 #include <stdlib.h>
 
 #include <ouroboros/dev.h>
-
-#ifdef OUROBOROS_CONFIG_DEBUG
- #define OUROBOROS_PREFIX "echo-server"
- #include <ouroboros/logs.h>
-#endif
 
 #define DIF_NAME "*"
 
@@ -68,6 +61,7 @@ int server_main()
         }
 
         if(ap_init(SERVER_AP_NAME)) {
+                printf("Failed to init AP.");
                 return -1;
         }
 

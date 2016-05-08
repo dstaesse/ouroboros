@@ -53,7 +53,7 @@
 #endif
 
 #ifndef IRMD_THREADPOOL_SIZE
-  #define IRMD_THREADPOOL_SIZE 10
+  #define IRMD_THREADPOOL_SIZE 3
 #endif
 
 
@@ -467,7 +467,7 @@ static int bootstrap_ipcp(instance_name_t *  api,
                 return -1;
         }
 
-        LOG_INFO("Bootstrapped IPCP %s-%d. in DIF %s",
+        LOG_INFO("Bootstrapped IPCP %s-%d in DIF %s.",
                  api->name, api->id, conf->dif_name);
 
         return 0;
@@ -1178,7 +1178,7 @@ static struct irm * irm_create()
 
         i->sockfd = server_socket_open(IRM_SOCK_PATH);
         if (i->sockfd < 0) {
-                irm_destroy(instance);
+                irm_destroy(i);
                 return NULL;
         }
 
@@ -1200,10 +1200,14 @@ int main()
         sig_act.sa_sigaction = &irmd_sig_handler;
         sig_act.sa_flags     = SA_SIGINFO;
 
-        sigaction(SIGINT,  &sig_act, NULL);
-        sigaction(SIGTERM, &sig_act, NULL);
-        sigaction(SIGHUP,  &sig_act, NULL);
-        sigaction(SIGPIPE, &sig_act, NULL);
+        if (sigaction(SIGINT,  &sig_act, NULL) < 0)
+                exit(1);
+        if (sigaction(SIGTERM, &sig_act, NULL) < 0)
+                exit(1);
+        if (sigaction(SIGHUP,  &sig_act, NULL) < 0)
+                exit(1);
+        if (sigaction(SIGPIPE, &sig_act, NULL) < 0)
+                exit(1);
 
         instance = irm_create();
         if (instance == NULL)
