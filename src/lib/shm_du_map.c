@@ -328,9 +328,8 @@ int shm_release_du_buff(struct shm_du_map * dum, size_t idx)
         long blocks = 0;
 
 
-        /* FIXME: this is crap for the test */
         if (idx > SHM_BLOCKS_IN_MAP)
-                idx = *dum->ptr_tail;
+                return -1;
 
         pthread_mutex_lock(dum->shm_mutex);
 
