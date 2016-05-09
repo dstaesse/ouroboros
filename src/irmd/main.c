@@ -83,8 +83,9 @@ struct reg_name_entry {
         bool   accept;
         char * req_ap_name;
         char * req_ae_name;
-        bool   flow_arrived;
+        int    response;
 
+        pthread_cond_t flow_arrived;
         pthread_mutex_t fa_lock;
 };
 
@@ -250,11 +251,14 @@ static struct reg_name_entry * reg_name_entry_create()
         e->name         = NULL;
         e->api          = NULL;
         e->accept       = false;
+        /* pending response */
+        e->response     = 1;
         e->req_ap_name  = NULL;
         e->req_ae_name  = NULL;
-        e->flow_arrived = false;
 
         pthread_mutex_init(&e->fa_lock, NULL);
+        pthread_cond_init(&e->flow_arrived, NULL);
+
         INIT_LIST_HEAD(&e->next);
 
         return e;
@@ -285,6 +289,8 @@ static int reg_name_entry_destroy(struct reg_name_entry * e)
                 free(e->req_ap_name);
         if (e->req_ae_name != NULL)
                 free(e->req_ae_name);
+
+        pthread_mutex_destroy(&e->fa_lock);
 
         free(e);
 
@@ -687,10 +693,6 @@ static struct port_map_entry * flow_accept(pid_t    pid,
                                            char **  ap_name,
                                            char **  ae_name)
 {
-        bool arrived = false;
-
-        struct timespec         ts = {0, 100000};
-
         struct port_map_entry * pme;
         struct reg_name_entry * rne = get_reg_name_entry_by_id(pid);
         if (rne == NULL) {
@@ -705,23 +707,23 @@ static struct port_map_entry * flow_accept(pid_t    pid,
 
         rne->accept = true;
 
-        /* FIXME: wait for a thread that runs select() on flow_arrived */
-        while (!arrived) {
-                /* FIXME: this needs locking */
-                rne = get_reg_name_entry_by_id(pid);
-                if (rne == NULL)
-                        return NULL;
-                arrived = rne->flow_arrived;
-                nanosleep(&ts, NULL);
+        pthread_mutex_lock(&rne->fa_lock);
+
+        pthread_cond_wait(&rne->flow_arrived, &rne->fa_lock);
+
+        if (rne->response == -1) {
+                list_del(&rne->next);
+                reg_name_entry_destroy(rne);
+                return NULL;
         }
 
         pme = get_port_map_entry_n(pid);
         if (pme == NULL) {
                 LOG_ERR("Port_id was not created yet.");
+                pthread_mutex_unlock(&rne->fa_lock);
                 return NULL;
         }
 
-        pthread_mutex_lock(&rne->fa_lock);
         *ap_name = rne->req_ap_name;
         if (ae_name != NULL)
                 *ae_name = rne->req_ae_name;
@@ -734,14 +736,15 @@ static int flow_alloc_resp(pid_t n_pid,
                            int   port_id,
                            int   response)
 {
+        struct port_map_entry * pme = NULL;
         struct reg_name_entry * rne = get_reg_name_entry_by_id(n_pid);
-        struct port_map_entry * pme = get_port_map_entry(port_id);
-
-        if (rne == NULL || pme == NULL)
+        if (rne == NULL)
                 return -1;
 
+        pthread_mutex_lock(&rne->fa_lock);
         /* FIXME: check all instances associated with the name */
         if (!rne->accept) {
+                pthread_mutex_unlock(&rne->fa_lock);
                 LOG_ERR("No process listening for this name.");
                 return -1;
         }
@@ -751,11 +754,15 @@ static int flow_alloc_resp(pid_t n_pid,
          * once we can handle a list of AP-I's, remove it from the list
          */
 
-        rne->flow_arrived = false;
-        rne->accept       = false;
+        rne->accept   = false;
+        rne->response = response;
 
-        if (!response)
+        if (!response) {
+                pme = get_port_map_entry(port_id);
                 pme->state = FLOW_ALLOCATED;
+        }
+
+        pthread_mutex_unlock(&rne->fa_lock);
 
         return ipcp_flow_alloc_resp(pme->n_1_pid,
                                     port_id,
@@ -867,9 +874,8 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         rne->req_ap_name = strdup(ap_name);
         rne->req_ae_name = strdup(ae_name);
 
-        rne->flow_arrived = true;
-
         pthread_mutex_unlock(&rne->fa_lock);
+        pthread_cond_signal(&rne->flow_arrived);
 
         return pme;
 }
