@@ -64,6 +64,7 @@ struct ap_data {
 
 int ap_init(char * ap_name)
 {
+        int i = 0;
         _ap_instance = malloc(sizeof(struct ap_data));
         if (_ap_instance == NULL) {
                 return -1;
@@ -105,6 +106,10 @@ int ap_init(char * ap_name)
                 free(_ap_instance);
                 return -1;
         }
+
+        for (i = 0; i < AP_MAX_FLOWS; ++i)
+                _ap_instance->flows[i].rb = NULL;
+
 
         return 0;
 }
