@@ -440,7 +440,7 @@ static int destroy_ipcp(instance_name_t * api)
                 return 0;
         }
 
-        pid =api->id;
+        pid = api->id;
         if (ipcp_destroy(api->id))
                 LOG_ERR("Could not destroy IPCP.");
 
@@ -837,12 +837,13 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
                 return NULL;
         }
 
-        pme->port_id = bmp_allocate(instance->port_ids);
         pme->n_pid   = pid;
         pme->state   = FLOW_PENDING;
-        pme->n_1_pid = get_ipcp_by_dst_name(dst_name)->id;
 
         pthread_mutex_lock(&instance->r_lock);
+
+        pme->port_id = bmp_allocate(instance->port_ids);
+        pme->n_1_pid = get_ipcp_by_dst_name(dst_name)->id;
 
         list_add(&pme->next, &instance->port_map);
 
@@ -960,11 +961,12 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
                 return NULL;
         }
 
-        pme->port_id = bmp_allocate(instance->port_ids);
         pme->state   = FLOW_PENDING;
         pme->n_1_pid = pid;
 
         pthread_mutex_lock(&instance->r_lock);
+
+        pme->port_id = bmp_allocate(instance->port_ids);
 
         rne = get_reg_name_entry_by_name(dst_name);
         if (rne == NULL) {
@@ -974,7 +976,7 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
                 return NULL;
         }
 
-        pme->n_pid   = rne->api->id;
+        pme->n_pid = rne->api->id;
 
         list_add(&pme->next, &instance->port_map);
 
@@ -983,10 +985,10 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
 
         rne->flow_arrived = true;
 
-        pthread_mutex_unlock(&instance->r_lock);
-
         if (pthread_cond_signal(&rne->acc_signal))
                 LOG_ERR("Failed to send signal.");
+
+        pthread_mutex_unlock(&instance->r_lock);
 
         return pme;
 }
@@ -1015,9 +1017,9 @@ static int flow_alloc_reply(int port_id,
         else
                 e->state = FLOW_NULL;
 
-        pthread_mutex_unlock(&instance->r_lock);
         if (pthread_cond_signal(&e->res_signal))
                 LOG_ERR("Failed to send signal.");
+        pthread_mutex_unlock(&instance->r_lock);
 
         return 0;
 }
