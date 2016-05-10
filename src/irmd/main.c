@@ -53,7 +53,7 @@
 #endif
 
 #ifndef IRMD_THREADPOOL_SIZE
-  #define IRMD_THREADPOOL_SIZE 5
+  #define IRMD_THREADPOOL_SIZE 3
 #endif
 
 enum flow_state {
