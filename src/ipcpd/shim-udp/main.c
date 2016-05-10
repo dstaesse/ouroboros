@@ -400,16 +400,22 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        inet_ntop(AF_INET,
-                  &conf->ip_addr,
-                  ipstr,
-                  INET_ADDRSTRLEN);
+        if (inet_ntop(AF_INET,
+                      &conf->ip_addr,
+                      ipstr,
+                      INET_ADDRSTRLEN) == NULL) {
+                LOG_ERR("Failed to convert IP address");
+                return -1;
+        }
 
         if (conf->dns_addr != 0) {
-                inet_ntop(AF_INET,
-                          &conf->dns_addr,
-                          dnsstr,
-                          INET_ADDRSTRLEN);
+                if (inet_ntop(AF_INET,
+                              &conf->dns_addr,
+                              dnsstr,
+                              INET_ADDRSTRLEN) == NULL) {
+                        LOG_ERR("Failed to convert DNS address");
+                        return -1;
+                }
 #ifndef CONFIG_OUROBOROS_ENABLE_DNS
                 LOG_WARN("DNS address ignored since shim-udp was "
                          "compiled without DNS support.");
@@ -478,6 +484,7 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
 
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
 /* FIXME: Dependency on nsupdate to be removed in the end */
+/* NOTE: Disgusted with this crap */
 static int ddns_send(char * cmd)
 {
         pid_t pid = 0;
@@ -506,7 +513,7 @@ static int ddns_send(char * cmd)
         close(pipe_fd[0]);
 
         if (write(pipe_fd[1], cmd, strlen(cmd)) == -1) {
-                LOG_ERR("Failed to register with DNS server.");
+                LOG_ERR("Failed to communicate with nsupdate.");
                 close(pipe_fd[1]);
                 return -1;
         }
@@ -520,6 +527,83 @@ static int ddns_send(char * cmd)
 
         close(pipe_fd[1]);
         return 0;
+}
+
+
+static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
+{
+        pid_t pid = 0;
+        int wstatus;
+        int pipe_fd[2];
+        char dnsstr[INET_ADDRSTRLEN];
+        char buf[SHIM_UDP_BUF_SIZE];
+        ssize_t count = 0;
+        char * substr;
+        char * substr2;
+        char * addr_str = "Address:";
+        uint32_t ip_addr = 0;
+
+        if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN) == NULL) {
+                return 0;
+        }
+
+
+        if (pipe(pipe_fd)) {
+                LOG_ERR("Failed to create pipe.");
+                return 0;
+        }
+
+        pid = fork();
+        if (pid == -1) {
+                LOG_ERR("Failed to fork.");
+                return 0;
+        }
+
+        if (pid == 0) {
+                char * argv[] = {NSLOOKUP_EXEC, name, dnsstr, 0};
+                char * envp[] = {0};
+
+                close(pipe_fd[0]);
+                dup2(pipe_fd[1], 1);
+                execve(argv[0], &argv[0], envp);
+        }
+
+        close(pipe_fd[1]);
+
+        count = read(pipe_fd[0], buf, SHIM_UDP_BUF_SIZE);
+        if (count <= 0) {
+                LOG_ERR("Failed to communicate with nslookup.");
+                close(pipe_fd[0]);
+                return 0;
+        }
+
+        close(pipe_fd[0]);
+
+        waitpid(pid, &wstatus, 0);
+        if (WIFEXITED(wstatus) == true &&
+            WEXITSTATUS(wstatus) == 0)
+                LOG_DBGF("Succesfully communicated with nslookup.");
+        else
+                LOG_ERR("Failed to resolve DNS address.");
+
+        buf[count] = '\0';
+        substr = strtok(buf, "\n");
+        while (substr != NULL) {
+                substr2 = substr;
+                substr = strtok(NULL, "\n");
+        }
+
+        if (strstr(substr2, addr_str) == NULL) {
+                LOG_ERR("Failed to resolve DNS address.");
+                return 0;
+        }
+
+        if (inet_pton(AF_INET, substr2 + strlen(addr_str) + 1, &ip_addr) != 1) {
+                LOG_ERR("Failed to resolve DNS address.");
+                return 0;
+        }
+
+        return ip_addr;
 }
 #endif
 
@@ -556,8 +640,16 @@ int ipcp_udp_name_reg(char * name)
         if (dns_addr != 0) {
                 ip_addr = shim_data(_ipcp)->ip_addr;
 
-                inet_ntop(AF_INET, &ip_addr, ipstr, INET_ADDRSTRLEN);
-                inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN);
+                if (inet_ntop(AF_INET, &ip_addr,
+                              ipstr, INET_ADDRSTRLEN) == NULL) {
+                        return -1;
+                }
+
+                if (inet_ntop(AF_INET, &dns_addr,
+                              dnsstr, INET_ADDRSTRLEN) == NULL) {
+                        return -1;
+                }
+
                 sprintf(cmd, "server %s\nupdate add %s %d A %s\nsend\nquit\n",
                         dnsstr, name, DNS_TTL, ipstr);
 
@@ -592,7 +684,10 @@ int ipcp_udp_name_unreg(char * name)
 
         dns_addr = shim_data(_ipcp)->dns_addr;
         if (dns_addr != 0) {
-                inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN);
+                if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN)
+                    == NULL) {
+                        return -1;
+                }
                 sprintf(cmd, "server %s\nupdate delete %s A\nsend\nquit\n",
                         dnsstr, name);
 
@@ -618,11 +713,13 @@ int ipcp_udp_flow_alloc(int               port_id,
         struct sockaddr_in r_saddr;
         struct sockaddr_in rf_saddr;
         int                fd;
-        int n;
-
-        char * recv_buf = NULL;
-
-        struct hostent * h;
+        int                n;
+        char *             recv_buf = NULL;
+        struct hostent *   h;
+        uint32_t           ip_addr = 0;
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+        uint32_t           dns_addr = 0;
+#endif
 
         if (dst_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
                 return -1;
@@ -650,22 +747,41 @@ int ipcp_udp_flow_alloc(int               port_id,
                 return -1;
         }
 
-        h = gethostbyname(dst_name);
-        if (h == NULL) {
-                LOG_DBGF("Could not resolve %s.", dst_name);
-                close(fd);
-                return -1;
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+        dns_addr = shim_data(_ipcp)->dns_addr;
+        if (dns_addr != 0) {
+                ip_addr = ddns_resolve(dst_name, dns_addr);
+                if (ip_addr == 0) {
+                        LOG_DBGF("Could not resolve %s.", dst_name);
+                        close(fd);
+                        return -1;
+                }
+        } else {
+#endif
+                h = gethostbyname(dst_name);
+                if (h == NULL) {
+                        LOG_DBGF("Could not resolve %s.", dst_name);
+                        close(fd);
+                        return -1;
+                }
+
+                ip_addr = *((uint32_t *) (h->h_addr_list[0]));
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
         }
+#endif
 
         memset((char *) &r_saddr, 0, sizeof r_saddr);
         r_saddr.sin_family      = AF_INET;
-        r_saddr.sin_addr.s_addr = *((uint32_t *) (h->h_addr_list[0]));
+        r_saddr.sin_addr.s_addr = ip_addr;
         r_saddr.sin_port        = LISTEN_PORT;
 
 
         /* at least try to get the packet on the wire */
-        while (sendto(fd, dst_name, strlen(dst_name), 0,
+        if (sendto(fd, dst_name, strlen(dst_name), 0,
                       (struct sockaddr *) &r_saddr, sizeof r_saddr) < 0) {
+                LOG_ERR("Failed to send packet");
+                close(fd);
+                return -1;
         }
 
         /* wait for the other shim IPCP to respond */
@@ -683,11 +799,12 @@ int ipcp_udp_flow_alloc(int               port_id,
                     (struct sockaddr *) &rf_saddr,
                     sizeof rf_saddr)
             < 0) {
+                close(fd);
                 free(recv_buf);
                 return -1;
         }
 
-        if (!strcmp(recv_buf, dst_name))
+        if (strcmp(recv_buf, dst_name))
                 LOG_WARN("Incorrect echo from server");
 
         free(recv_buf);
@@ -698,6 +815,7 @@ int ipcp_udp_flow_alloc(int               port_id,
         if (_ap_instance->flows[fd].rb == NULL) {
                 LOG_ERR("Could not open N + 1 ringbuffer.");
                 close(fd);
+                return -1;
         }
 
         /* tell IRMd that flow allocation "worked" */

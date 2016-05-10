@@ -40,6 +40,18 @@ if (NOT DISABLE_DNS MATCHES True)
   else()
     message("-- Found nsupdate: ${NSUPDATE_EXECUTABLE}")
   endif()
+
+  # Find the nslookup executable
+  find_program(NSLOOKUP_EXECUTABLE
+    NAMES nslookup
+    DOC "The nslookup tool that resolves DNS names")
+
+  if (${NSLOOKUP_EXECUTABLE} STREQUAL "NSLOOKUP_EXECUTABLE-NOTFOUND")
+    message(FATAL_ERROR
+      "Could not find nslookup, which is needed for DNS resolution")
+  else()
+    message("-- Found nslookup: ${NSLOOKUP_EXECUTABLE}")
+  endif()
 endif()
 
 configure_file(
