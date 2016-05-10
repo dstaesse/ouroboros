@@ -85,6 +85,7 @@ struct reg_name_entry {
         bool   flow_arrived;
 
         pthread_cond_t  acc_signal;
+        pthread_mutex_t acc_lock;
 };
 
 /* keeps track of port_id's between N and N - 1 */
@@ -97,6 +98,7 @@ struct port_map_entry {
         pid_t n_1_pid;
 
         pthread_cond_t  res_signal;
+        pthread_mutex_t res_lock;
 
         enum flow_state state;
 };
@@ -133,6 +135,11 @@ static struct port_map_entry * port_map_entry_create()
         e->state   = FLOW_NULL;
 
         if (pthread_cond_init(&e->res_signal, NULL)) {
+                free(e);
+                return NULL;
+        }
+
+        if (pthread_mutex_init(&e->res_lock, NULL)) {
                 free(e);
                 return NULL;
         }
@@ -274,6 +281,11 @@ static struct reg_name_entry * reg_name_entry_create()
         e->flow_arrived = false;
 
         if (pthread_cond_init(&e->acc_signal, NULL)) {
+                free(e);
+                return NULL;
+        }
+
+        if (pthread_mutex_init(&e->acc_lock, NULL)) {
                 free(e);
                 return NULL;
         }
@@ -547,15 +559,16 @@ static int enroll_ipcp(instance_name_t  * api,
                 return -1;
         }
 
-        if (ipcp_enroll(entry->api->id, member, n_1_difs[0])) {
+        pthread_mutex_unlock(&instance->r_lock);
+
+        if (ipcp_enroll(api->id, member, n_1_difs[0])) {
                 LOG_ERR("Could not enroll IPCP.");
+                pthread_mutex_lock(&instance->r_lock);
                 free(entry->dif_name);
                 entry->dif_name = NULL;
                 pthread_mutex_unlock(&instance->r_lock);
                 return -1;
         }
-
-        pthread_mutex_unlock(&instance->r_lock);
 
         LOG_INFO("Enrolled IPCP %s-%d in DIF %s.",
                  api->name, api->id, dif_name);
@@ -760,8 +773,14 @@ static struct port_map_entry * flow_accept(pid_t    pid,
         rne->accept       = true;
         rne->flow_arrived = false;
 
+        pthread_mutex_unlock(&instance->r_lock);
+        pthread_mutex_lock(&rne->acc_lock);
+
         while (!rne->flow_arrived)
-                pthread_cond_wait(&rne->acc_signal, &instance->r_lock);
+                pthread_cond_wait(&rne->acc_signal, &rne->acc_lock);
+
+        pthread_mutex_unlock(&rne->acc_lock);
+        pthread_mutex_lock(&instance->r_lock);
 
         pme = get_port_map_entry_n(pid);
         if (pme == NULL) {
@@ -895,8 +914,15 @@ static int flow_alloc_res(int port_id)
                 return 0;
         }
 
+        pthread_mutex_unlock(&instance->r_lock);
+        pthread_mutex_lock(&e->res_lock);
+
         while (true) {
-                pthread_cond_wait(&e->res_signal, &instance->r_lock);
+                pthread_cond_wait(&e->res_signal, &e->res_lock);
+
+                pthread_mutex_unlock(&e->res_lock);
+                pthread_mutex_lock(&instance->r_lock);
+
                 e = get_port_map_entry(port_id);
                 if (e == NULL) {
                         pthread_mutex_unlock(&instance->r_lock);
@@ -983,12 +1009,17 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         rne->req_ap_name = strdup(ap_name);
         rne->req_ae_name = strdup(ae_name);
 
+        pthread_mutex_lock(&rne->acc_lock);
+
         rne->flow_arrived = true;
 
         if (pthread_cond_signal(&rne->acc_signal))
                 LOG_ERR("Failed to send signal.");
 
+        pthread_mutex_unlock(&rne->acc_lock);
+
         pthread_mutex_unlock(&instance->r_lock);
+
 
         return pme;
 }
@@ -1006,10 +1037,7 @@ static int flow_alloc_reply(int port_id,
                 return -1;
         }
 
-        if (e->state == FLOW_ALLOCATED) {
-                pthread_mutex_unlock(&instance->r_lock);
-                return 0;
-        }
+        pthread_mutex_lock(&e->res_lock);
 
         if (!response)
                 e->state = FLOW_ALLOCATED;
@@ -1019,6 +1047,9 @@ static int flow_alloc_reply(int port_id,
 
         if (pthread_cond_signal(&e->res_signal))
                 LOG_ERR("Failed to send signal.");
+
+        pthread_mutex_unlock(&e->res_lock);
+
         pthread_mutex_unlock(&instance->r_lock);
 
         return 0;
