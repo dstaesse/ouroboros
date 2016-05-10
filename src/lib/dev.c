@@ -22,6 +22,7 @@
 
 #define OUROBOROS_PREFIX "libouroboros-dev"
 
+#include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/sockets.h>
@@ -33,16 +34,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-
-#define AP_MAX_FLOWS 256
-
-#ifndef DU_BUFF_HEADSPACE
-  #define DU_BUFF_HEADSPACE 128
-#endif
-
-#ifndef DU_BUFF_TAILSPACE
-  #define DU_BUFF_TAILSPACE 0
-#endif
 
 struct flow {
         struct shm_ap_rbuff * rb;
@@ -161,7 +152,7 @@ int ap_reg(char ** difs,
         }
 
         if (_ap_instance == NULL) {
-                LOG_DBG("ap_init was not called");
+                LOG_DBG("ap_init was not called.");
                 return -1;
         }
 
@@ -416,7 +407,6 @@ int flow_cntl(int fd, int cmd, int oflags)
 
 ssize_t flow_write(int fd, void * buf, size_t count)
 {
-        /* the AP chooses the amount of headspace and tailspace */
         size_t index = shm_create_du_buff(_ap_instance->dum,
                                           count + DU_BUFF_HEADSPACE +
                                           DU_BUFF_TAILSPACE,

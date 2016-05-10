@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Configuration information
+ * Configuration information specific for the shim UDP
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,17 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_CONFIG
-#define OUROBOROS_CONFIG
+#ifndef OUROBOROS_SHIM_UDP_CONFIG
+#define OUROBOROS_SHIM_UDP_CONFIG
 
-#define PROJECT_NAME       "@CMAKE_PROJECT_NAME@"
-#define PROJECT_VERSION    "@PACKAGE_VERSION@"
-#define INSTALL_DIR        "@CMAKE_INSTALL_PREFIX@"
-#define _POSIX_C_SOURCE    199506L
-#define IPCP_SHIM_UDP_EXEC "@IPCP_SHIM_UDP_TARGET@"
-#define IPCP_NORMAL_EXEC   "@IPCP_NORMAL_TARGET@"
-#define AP_MAX_FLOWS       256
-#define DU_BUFF_HEADSPACE  128
-#define DU_BUFF_TAILSPACE  0
+#define NSUPDATE_EXEC "@NSUPDATE_EXECUTABLE@"
 
 #endif

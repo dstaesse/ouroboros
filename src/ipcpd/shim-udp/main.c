@@ -23,6 +23,7 @@
 #include <ouroboros/config.h>
 #include "ipcp.h"
 #include "flow.h"
+#include "shim_udp_config.h"
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/list.h>
@@ -31,6 +32,7 @@
 #include <ouroboros/dif_config.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>
+#include <ouroboros/dev.h>
 
 #define OUROBOROS_PREFIX "ipcpd/shim-udp"
 
@@ -73,19 +75,6 @@ struct ipcp * _ipcp;
  * because it doesn't follow all steps necessary steps to get
  * the info
  */
-
-#define UNKNOWN_AP "__UNKNOWN_AP__"
-#define UNKNOWN_AE "__UNKNOWN_AE__"
-
-#define AP_MAX_FLOWS 256
-
-#ifndef DU_BUFF_HEADSPACE
-  #define DU_BUFF_HEADSPACE 128
-#endif
-
-#ifndef DU_BUFF_TAILSPACE
-  #define DU_BUFF_TAILSPACE 0
-#endif
 
 /* the shim needs access to these internals */
 struct shim_ap_data {
@@ -332,8 +321,11 @@ static void * ipcp_udp_listener()
                 }
 
                 /* echo back the packet */
-                while(send(fd, buf, strlen(buf), 0) < 0)
-                        ;
+                if (send(fd, buf, strlen(buf), 0) < 0) {
+                        LOG_ERR("Failed to echo back the packet.");
+                        close(fd);
+                        continue;
+                }
 
                 /* reply to IRM */
 
@@ -413,12 +405,16 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
                   ipstr,
                   INET_ADDRSTRLEN);
 
-        if (conf->dns_addr != 0)
+        if (conf->dns_addr != 0) {
                 inet_ntop(AF_INET,
                           &conf->dns_addr,
                           dnsstr,
                           INET_ADDRSTRLEN);
-        else
+#ifndef CONFIG_OUROBOROS_ENABLE_DNS
+                LOG_WARN("DNS address ignored since shim-udp was "
+                         "compiled without DNS support.");
+#endif
+        } else
                 strcpy(dnsstr, "not set");
 
         shim_data(_ipcp)->ip_addr  = conf->ip_addr;
@@ -480,6 +476,7 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
         return 0;
 }
 
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
 /* FIXME: Dependency on nsupdate to be removed in the end */
 static int ddns_send(char * cmd)
 {
@@ -524,15 +521,18 @@ static int ddns_send(char * cmd)
         close(pipe_fd[1]);
         return 0;
 }
+#endif
 
 int ipcp_udp_name_reg(char * name)
 {
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
         char ipstr[INET_ADDRSTRLEN];
         char dnsstr[INET_ADDRSTRLEN];
         /* max DNS name length + max IP length + command length */
         char cmd[100];
         uint32_t dns_addr;
         uint32_t ip_addr;
+#endif
 
         if (_ipcp->state != IPCP_ENROLLED) {
                 LOG_DBGF("Won't register with non-enrolled IPCP.");
@@ -549,6 +549,7 @@ int ipcp_udp_name_reg(char * name)
                 return -1;
         }
 
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
         /* register application with DNS server */
 
         dns_addr = shim_data(_ipcp)->dns_addr;
@@ -565,6 +566,7 @@ int ipcp_udp_name_reg(char * name)
                         return -1;
                 }
         }
+#endif
 
         LOG_DBG("Registered %s.", name);
 
@@ -573,16 +575,19 @@ int ipcp_udp_name_reg(char * name)
 
 int ipcp_udp_name_unreg(char * name)
 {
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
         char dnsstr[INET_ADDRSTRLEN];
         /* max DNS name length + max IP length + max command length */
         char cmd[100];
         uint32_t dns_addr;
+#endif
 
         if (strlen(name) > 24) {
                 LOG_ERR("DNS names cannot be longer than 24 chars.");
                 return -1;
         }
 
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
         /* unregister application with DNS server */
 
         dns_addr = shim_data(_ipcp)->dns_addr;
@@ -593,6 +598,7 @@ int ipcp_udp_name_unreg(char * name)
 
                 ddns_send(cmd);
         }
+#endif
 
         ipcp_data_del_reg_entry(_ipcp->data, name);
 
