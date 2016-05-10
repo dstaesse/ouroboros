@@ -60,8 +60,8 @@ int server_main()
                 return -1;
         }
 
-        if(ap_init(SERVER_AP_NAME)) {
-                printf("Failed to init AP.");
+        if (ap_init(SERVER_AP_NAME)) {
+                printf("Failed to init AP.\n");
                 return -1;
         }
 
