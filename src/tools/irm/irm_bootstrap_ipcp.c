@@ -132,7 +132,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         max_pdu_size = atoi(*(argv + 1));
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "destroy_ipcp\".\n", *argv);
+                               "bootstrap_ipcp\".\n", *argv);
                         return -1;
                 }
 
