@@ -538,8 +538,8 @@ static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
         char dnsstr[INET_ADDRSTRLEN];
         char buf[SHIM_UDP_BUF_SIZE];
         ssize_t count = 0;
-        char * substr;
-        char * substr2;
+        char * substr = NULL;
+        char * substr2 = NULL;
         char * addr_str = "Address:";
         uint32_t ip_addr = 0;
 
