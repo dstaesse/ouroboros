@@ -148,8 +148,6 @@ pid_t ipcp_create(char *         ipcp_name,
         strcat(full_name, exec_name);
         full_name[len] = '\0';
 
-        LOG_DBG("Full name is %s", full_name);
-
         char * argv[] = {full_name,
                          irmd_pid,
                          ipcp_name,
