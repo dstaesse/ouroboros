@@ -88,11 +88,10 @@ struct shim_ap_data {
         pthread_t mainloop;
         pthread_t sduloop;
         pthread_t handler;
-        pthread_t sdu_reader[2];
-        int       ping_pong;
+        pthread_t sdu_reader;
 } * _ap_instance;
 
-int shim_ap_init(char * ap_name)
+static int shim_ap_init(char * ap_name)
 {
         _ap_instance = malloc(sizeof(struct shim_ap_data));
         if (_ap_instance == NULL) {
@@ -235,21 +234,6 @@ struct ipcp_udp_data * ipcp_udp_data_create()
         return udp_data;
 }
 
-void ipcp_udp_data_destroy(struct ipcp_udp_data * data)
-{
-        if (data == NULL)
-                return;
-
-        ipcp_data_destroy((struct ipcp_data *) data);
-}
-
-void ipcp_udp_destroy(struct ipcp * ipcp)
-{
-        ipcp_udp_data_destroy((struct ipcp_udp_data *) ipcp->data);
-        shim_ap_fini();
-        free(ipcp);
-}
-
 void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 {
         switch(sig) {
@@ -261,9 +245,11 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                                 info->si_pid);
                         pthread_cancel(_ap_instance->mainloop);
                         pthread_cancel(_ap_instance->handler);
-                        pthread_cancel(_ap_instance->sdu_reader[0]);
-                        pthread_cancel(_ap_instance->sdu_reader[1]);
+                        pthread_cancel(_ap_instance->sdu_reader);
                         pthread_cancel(_ap_instance->sduloop);
+
+                        /* FIXME: should be called after join */
+                        shim_ap_fini();
                         exit(0);
                 }
         default:
@@ -278,11 +264,11 @@ static void * ipcp_udp_listener()
 
         struct sockaddr_in f_saddr;
         struct sockaddr_in c_saddr;
-        struct hostent  *  hostp;
         int                sfd = shim_data(_ipcp)->s_fd;
 
         while (true) {
                 int fd;
+                memset(&buf, 0, SHIM_UDP_BUF_SIZE);
                 n = sizeof c_saddr;
                 n = recvfrom(sfd, buf, SHIM_UDP_BUF_SIZE, 0,
                              (struct sockaddr *) &c_saddr, (unsigned *) &n);
@@ -290,9 +276,9 @@ static void * ipcp_udp_listener()
                         continue;
 
                 /* flow alloc request from other host */
-                hostp = gethostbyaddr((const char *) &c_saddr.sin_addr.s_addr,
-                                      sizeof(c_saddr.sin_addr.s_addr), AF_INET);
-                if (hostp == NULL)
+                if (gethostbyaddr((const char *) &c_saddr.sin_addr.s_addr,
+                                  sizeof(c_saddr.sin_addr.s_addr), AF_INET)
+                    == NULL)
                         continue;
 
                 fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -354,18 +340,17 @@ static void * ipcp_udp_sdu_reader()
         int n;
         int fd;
         char buf[SHIM_UDP_MAX_SDU_SIZE];
-
+        struct timeval tv = {0, 10};
         struct sockaddr_in r_saddr;
+        fd_set read_fds;
 
         while (true) {
-                if (select(FD_SETSIZE,
-                           &shim_data(_ipcp)->flow_fd_s,
-                           NULL, NULL, NULL)
-                    < 0)
+                read_fds = shim_data(_ipcp)->flow_fd_s;
+                if (select(FD_SETSIZE, &read_fds, NULL, NULL, &tv) <= 0)
                         continue;
 
                 for (fd = 0; fd < FD_SETSIZE; ++fd) {
-                        if (!FD_ISSET(fd, &shim_data(_ipcp)->flow_fd_s))
+                        if (!FD_ISSET(fd, &read_fds))
                                 continue;
 
                         n = sizeof r_saddr;
@@ -384,7 +369,7 @@ static void * ipcp_udp_sdu_reader()
         return (void *) 0;
 }
 
-int ipcp_udp_bootstrap(struct dif_config * conf)
+static int ipcp_udp_bootstrap(struct dif_config * conf)
 {
         char ipstr[INET_ADDRSTRLEN];
         char dnsstr[INET_ADDRSTRLEN];
@@ -417,11 +402,11 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
                         return -1;
                 }
 #ifndef CONFIG_OUROBOROS_ENABLE_DNS
-                LOG_WARN("DNS address ignored since shim-udp was "
-                         "compiled without DNS support.");
+                LOG_WARN("DNS disabled at compile time, address ignored");
 #endif
-        } else
+        } else {
                 strcpy(dnsstr, "not set");
+        }
 
         shim_data(_ipcp)->ip_addr  = conf->ip_addr;
         shim_data(_ipcp)->dns_addr = conf->dns_addr;
@@ -459,17 +444,10 @@ int ipcp_udp_bootstrap(struct dif_config * conf)
                        NULL,
                        ipcp_udp_listener,
                        NULL);
-        pthread_create(&_ap_instance->sdu_reader[0],
+        pthread_create(&_ap_instance->sdu_reader,
                        NULL,
                        ipcp_udp_sdu_reader,
                        NULL);
-
-        pthread_create(&_ap_instance->sdu_reader[1],
-                       NULL,
-                       ipcp_udp_sdu_reader,
-                       NULL);
-
-        _ap_instance->ping_pong = 0;
 
         _ipcp->state = IPCP_ENROLLED;
 
@@ -528,7 +506,6 @@ static int ddns_send(char * cmd)
         close(pipe_fd[1]);
         return 0;
 }
-
 
 static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
 {
@@ -607,7 +584,7 @@ static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
 }
 #endif
 
-int ipcp_udp_name_reg(char * name)
+static int ipcp_udp_name_reg(char * name)
 {
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         char ipstr[INET_ADDRSTRLEN];
@@ -665,7 +642,7 @@ int ipcp_udp_name_reg(char * name)
         return 0;
 }
 
-int ipcp_udp_name_unreg(char * name)
+static int ipcp_udp_name_unreg(char * name)
 {
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         char dnsstr[INET_ADDRSTRLEN];
@@ -702,12 +679,12 @@ int ipcp_udp_name_unreg(char * name)
         return 0;
 }
 
-int ipcp_udp_flow_alloc(int               port_id,
-                        pid_t             n_pid,
-                        char *            dst_name,
-                        char *            src_ap_name,
-                        char *            src_ae_name,
-                        struct qos_spec * qos)
+static int ipcp_udp_flow_alloc(int               port_id,
+                               pid_t             n_pid,
+                               char *            dst_name,
+                               char *            src_ap_name,
+                               char *            src_ae_name,
+                               struct qos_spec * qos)
 {
         struct sockaddr_in l_saddr;
         struct sockaddr_in r_saddr;
@@ -775,8 +752,6 @@ int ipcp_udp_flow_alloc(int               port_id,
         r_saddr.sin_addr.s_addr = ip_addr;
         r_saddr.sin_port        = LISTEN_PORT;
 
-
-        /* at least try to get the packet on the wire */
         if (sendto(fd, dst_name, strlen(dst_name), 0,
                       (struct sockaddr *) &r_saddr, sizeof r_saddr) < 0) {
                 LOG_ERR("Failed to send packet");
@@ -787,10 +762,15 @@ int ipcp_udp_flow_alloc(int               port_id,
         /* wait for the other shim IPCP to respond */
 
         recv_buf = malloc(strlen(dst_name) + 1);
+        if (recv_buf == NULL) {
+                LOG_ERR("Failed to malloc recv_buff.");
+                close(fd);
+                return -1;
+        }
         n = sizeof(rf_saddr);
         n = recvfrom(fd,
                      recv_buf,
-                     strlen(dst_name) + 1,
+                     strlen(dst_name),
                      0,
                      (struct sockaddr *) &rf_saddr,
                      (unsigned *) &n);
@@ -804,7 +784,7 @@ int ipcp_udp_flow_alloc(int               port_id,
                 return -1;
         }
 
-        if (strcmp(recv_buf, dst_name))
+        if (memcmp(recv_buf, dst_name, strlen(dst_name)))
                 LOG_WARN("Incorrect echo from server");
 
         free(recv_buf);
@@ -829,19 +809,12 @@ int ipcp_udp_flow_alloc(int               port_id,
 
         FD_SET(fd, &shim_data(_ipcp)->flow_fd_s);
 
-        pthread_cancel(_ap_instance->sdu_reader[_ap_instance->ping_pong]);
-        pthread_create(&_ap_instance->sdu_reader[_ap_instance->ping_pong],
-                       NULL,
-                       ipcp_udp_sdu_reader,
-                       NULL);
-        _ap_instance->ping_pong = !_ap_instance->ping_pong;
-
         LOG_DBG("Allocated flow with port_id %d on UDP fd %d.", port_id, fd);
 
         return fd;
 }
 
-int ipcp_udp_flow_alloc_resp(int   port_id,
+static int ipcp_udp_flow_alloc_resp(int   port_id,
                              pid_t n_pid,
                              int   response)
 {
@@ -872,19 +845,12 @@ int ipcp_udp_flow_alloc_resp(int   port_id,
 
         FD_SET(fd, &shim_data(_ipcp)->flow_fd_s);
 
-        pthread_cancel(_ap_instance->sdu_reader[_ap_instance->ping_pong]);
-        pthread_create(&_ap_instance->sdu_reader[_ap_instance->ping_pong],
-                       NULL,
-                       ipcp_udp_sdu_reader,
-                       NULL);
-        _ap_instance->ping_pong = !_ap_instance->ping_pong;
-
         LOG_DBG("Accepted flow, port_id %d on UDP fd %d.", port_id, fd);
 
         return 0;
 }
 
-int ipcp_udp_flow_dealloc(int port_id)
+static int ipcp_udp_flow_dealloc(int port_id)
 {
         int fd = port_id_to_fd(port_id);
         if (fd < 0) {
@@ -902,26 +868,7 @@ int ipcp_udp_flow_dealloc(int port_id)
         return 0;
 }
 
-/* FIXME: may be crap, didn't think this one through */
-int ipcp_udp_flow_dealloc_arr(int port_id)
-{
-        int fd = port_id_to_fd(port_id);
-        if (fd < 0) {
-                LOG_DBGF("Could not find flow with port_id %d.", port_id);
-                return 0;
-        }
-
-        _ap_instance->flows[fd].state   = FLOW_NULL;
-        _ap_instance->flows[fd].port_id = 0;
-        if (_ap_instance->flows[fd].rb != NULL)
-                shm_ap_rbuff_close(_ap_instance->flows[fd].rb);
-
-        FD_CLR(fd, &shim_data(_ipcp)->flow_fd_s);
-
-        return ipcp_flow_dealloc(0, port_id);
-}
-
-struct ipcp * ipcp_udp_create(char * ap_name)
+static struct ipcp * ipcp_udp_create(char * ap_name)
 {
         struct ipcp * i;
         struct ipcp_udp_data * data;
@@ -969,7 +916,7 @@ struct ipcp * ipcp_udp_create(char * ap_name)
 
 /* FIXME: if we move _ap_instance to dev.h, we can reuse it everywhere */
 /* FIXME: stop eating the CPU */
-void * ipcp_udp_sdu_loop(void * o)
+static void * ipcp_udp_sdu_loop(void * o)
 {
         while (true) {
                 struct rb_entry * e = shm_ap_rbuff_read(_ap_instance->rb);
@@ -1039,12 +986,7 @@ int main (int argc, char * argv[])
         pthread_join(_ap_instance->sduloop, NULL);
         pthread_join(_ap_instance->mainloop, NULL);
         pthread_join(_ap_instance->handler, NULL);
-        pthread_join(_ap_instance->sdu_reader[0], NULL);
-        pthread_join(_ap_instance->sdu_reader[1], NULL);
-
-        ipcp_udp_destroy(_ipcp);
-
-        shim_ap_fini();
+        pthread_join(_ap_instance->sdu_reader, NULL);
 
         exit(0);
 }
