@@ -179,14 +179,10 @@ struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t pid)
 }
 void shm_ap_rbuff_close(struct shm_ap_rbuff * rb)
 {
-        char fn[25];
-
         if (rb == NULL) {
                 LOG_DBGF("Bogus input. Bugging out.");
                 return;
         }
-
-        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", rb->pid);
 
         if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");
@@ -197,7 +193,6 @@ void shm_ap_rbuff_close(struct shm_ap_rbuff * rb)
 void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
 {
         char fn[25];
-
 
         if (rb == NULL) {
                 LOG_DBGF("Bogus input. Bugging out.");
