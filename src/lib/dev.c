@@ -38,7 +38,7 @@
 struct flow {
         struct shm_ap_rbuff * rb;
         int                   port_id;
-        uint32_t              oflags;
+        int                   oflags;
 
         /* don't think this needs locking */
 };
@@ -51,7 +51,6 @@ struct ap_data {
         struct shm_ap_rbuff * rb;
         struct flow           flows[AP_MAX_FLOWS];
 } * _ap_instance;
-
 
 int ap_init(char * ap_name)
 {
@@ -105,7 +104,7 @@ int ap_init(char * ap_name)
         return 0;
 }
 
-void ap_fini()
+void ap_fini(void)
 {
         int i = 0;
 
@@ -402,7 +401,16 @@ int flow_dealloc(int fd)
 
 int flow_cntl(int fd, int cmd, int oflags)
 {
-        return -1;
+        int old = _ap_instance->flows[fd].oflags;
+        switch (cmd) {
+        case FLOW_F_GETFL: /* GET FLOW FLAGS */
+                return _ap_instance->flows[fd].oflags;
+        case FLOW_F_SETFL: /* SET FLOW FLAGS */
+                _ap_instance->flows[fd].oflags = oflags;
+                return old;
+        default:
+                return FLOW_O_INVALID; /* unknown command */
+        }
 }
 
 ssize_t flow_write(int fd, void * buf, size_t count)
@@ -417,9 +425,16 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         if (index == -1)
                 return -1;
 
-        if (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0) {
-                shm_release_du_buff(_ap_instance->dum, index);
-                return -EPIPE;
+        if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
+                if (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0) {
+                        shm_release_du_buff(_ap_instance->dum, index);
+                        return -EPIPE;
+                }
+
+                return 0;
+        } else {
+                while (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0)
+                        ;
         }
 
         return 0;
@@ -430,9 +445,18 @@ ssize_t flow_read(int fd, void * buf, size_t count)
         struct rb_entry * e = NULL;
         int n;
         uint8_t * sdu;
-        /* FIXME: move this to a thread  */
-        while (e == NULL || e->port_id != _ap_instance->flows[fd].port_id)
+
+        if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
                 e = shm_ap_rbuff_read(_ap_instance->rb);
+        } else {
+                /* FIXME: move this to a thread  */
+                while (e == NULL ||
+                       e->port_id != _ap_instance->flows[fd].port_id)
+                        e = shm_ap_rbuff_read(_ap_instance->rb);
+        }
+
+        if (e == NULL)
+                return -1;
 
         n = shm_du_map_read_sdu(&sdu,
                                 _ap_instance->dum,
