@@ -242,6 +242,7 @@ int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
 
         return 0;
 }
+
 struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
 {
         struct rb_entry * e = NULL;

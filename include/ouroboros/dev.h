@@ -31,7 +31,7 @@
 
 /* These calls should be removed once we write the ouroboros OS. */
 int     ap_init(char * ap_name);
-void    ap_fini();
+void    ap_fini(void);
 
 /* Returns file descriptor */
 int     ap_reg(char ** difs, size_t difs_size);
