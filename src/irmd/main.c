@@ -1006,12 +1006,16 @@ static int flow_alloc_res(int port_id)
         }
 
         pthread_mutex_unlock(&instance->r_lock);
-        pthread_mutex_lock(&e->res_lock);
 
         while (true) {
+                pthread_mutex_lock(&e->res_lock);
+                pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
+                                     (void*) &e->res_lock);
+
                 pthread_cond_wait(&e->res_signal, &e->res_lock);
 
                 pthread_mutex_unlock(&e->res_lock);
+                pthread_cleanup_pop(0);
                 pthread_mutex_lock(&instance->r_lock);
 
                 e = get_port_map_entry(port_id);
@@ -1032,6 +1036,7 @@ static int flow_alloc_res(int port_id)
 
                 }
                 /* still pending, spurious wake */
+                pthread_mutex_unlock(&instance->r_lock);
         }
 
         pthread_mutex_unlock(&instance->r_lock);
