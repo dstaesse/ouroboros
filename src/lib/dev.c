@@ -425,8 +425,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         if (index == -1)
                 return -1;
 
-        if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK)
-        {
+        if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
                 if (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0) {
                         shm_release_du_buff(_ap_instance->dum, index);
                         return -EPIPE;
