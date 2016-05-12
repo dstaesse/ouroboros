@@ -82,7 +82,7 @@ struct reg_name_entry {
         char * req_ap_name;
         char * req_ae_name;
         int    response;
-        bool   flow_arrived;
+        int    flow_arrived;
 
         pthread_cond_t  acc_signal;
         pthread_mutex_t acc_lock;
@@ -121,6 +121,9 @@ struct irm {
         pthread_t * threadpool;
 
         pthread_mutex_t r_lock;
+
+        bool shutdown;
+        pthread_mutex_t s_lock;
 } * instance = NULL;
 
 static struct port_map_entry * port_map_entry_create()
@@ -278,7 +281,7 @@ static struct reg_name_entry * reg_name_entry_create()
         e->accept       = false;
         e->req_ap_name  = NULL;
         e->req_ae_name  = NULL;
-        e->flow_arrived = false;
+        e->flow_arrived = -1;
 
         if (pthread_cond_init(&e->acc_signal, NULL)) {
                 free(e);
@@ -313,6 +316,14 @@ static int reg_name_entry_destroy(struct reg_name_entry * e)
         if (e == NULL)
                 return 0;
 
+        if (e->accept) {
+                pthread_mutex_lock(&e->acc_lock);
+                e->flow_arrived = -2;
+                pthread_mutex_unlock(&e->acc_lock);
+                pthread_cond_broadcast(&e->acc_signal);
+                sched_yield();
+        }
+
         free(e->name);
         instance_name_destroy(e->api);
 
@@ -322,6 +333,8 @@ static int reg_name_entry_destroy(struct reg_name_entry * e)
                 free(e->req_ae_name);
 
         free(e);
+
+        e = NULL;
 
         return 0;
 }
@@ -396,6 +409,14 @@ static pid_t create_ipcp(char *         ap_name,
 {
         pid_t pid;
         struct ipcp_entry * tmp = NULL;
+
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return -1;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
+
 
         pid = ipcp_create(ap_name, ipcp_type);
         if (pid == -1) {
@@ -476,6 +497,13 @@ static int bootstrap_ipcp(instance_name_t *  api,
 {
         struct ipcp_entry * entry = NULL;
 
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return -1;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
+
         pthread_mutex_lock(&instance->r_lock);
 
         if (api->id == 0)
@@ -524,6 +552,13 @@ static int enroll_ipcp(instance_name_t  * api,
         char ** n_1_difs = NULL;
         ssize_t n_1_difs_size = 0;
         struct ipcp_entry * entry = NULL;
+
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return -1;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
 
         pthread_mutex_lock(&instance->r_lock);
 
@@ -580,6 +615,13 @@ static int reg_ipcp(instance_name_t * api,
                     char **           difs,
                     size_t            difs_size)
 {
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return -1;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
+
         if (ipcp_reg(api->id, difs, difs_size)) {
                 LOG_ERR("Could not register IPCP to N-1 DIF(s).");
                 return -1;
@@ -614,6 +656,12 @@ static int ap_reg(char *  ap_name,
         instance_name_t * api   = NULL;
         instance_name_t * ipcpi = NULL;
 
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return -1;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
 
         pthread_mutex_lock(&instance->r_lock);
 
@@ -742,6 +790,7 @@ static int ap_unreg(char *  ap_name,
                 }
         }
 
+        /* FIXME: check if name is not registered in any DIF before removing */
         reg_name_entry_del_name(rne->name);
 
         pthread_mutex_unlock(&instance->r_lock);
@@ -756,6 +805,12 @@ static struct port_map_entry * flow_accept(pid_t    pid,
         struct port_map_entry * pme;
         struct reg_name_entry * rne = NULL;
 
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return NULL;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
         pthread_mutex_lock(&instance->r_lock);
 
         rne = get_reg_name_entry_by_id(pid);
@@ -771,15 +826,30 @@ static struct port_map_entry * flow_accept(pid_t    pid,
         }
 
         rne->accept       = true;
-        rne->flow_arrived = false;
+        rne->flow_arrived = -1;
 
         pthread_mutex_unlock(&instance->r_lock);
-        pthread_mutex_lock(&rne->acc_lock);
 
-        while (!rne->flow_arrived)
+        pthread_mutex_lock(&rne->acc_lock);
+        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
+                             (void*) &rne->acc_lock);
+
+        while (rne->flow_arrived == -1)
                 pthread_cond_wait(&rne->acc_signal, &rne->acc_lock);
 
         pthread_mutex_unlock(&rne->acc_lock);
+        pthread_cleanup_pop(0);
+
+        pthread_mutex_lock(&rne->acc_lock);
+
+        /* ap with pending accept being unregistered */
+        if (rne->flow_arrived == -2 ) {
+                pthread_mutex_unlock(&rne->acc_lock);
+                return NULL;
+        }
+
+        pthread_mutex_unlock(&rne->acc_lock);
+
         pthread_mutex_lock(&instance->r_lock);
 
         pme = get_port_map_entry_n(pid);
@@ -805,6 +875,13 @@ static int flow_alloc_resp(pid_t n_pid,
         struct port_map_entry * pme = NULL;
         struct reg_name_entry * rne = NULL;
 
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return -1;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
+
         pthread_mutex_lock(&instance->r_lock);
 
         rne = get_reg_name_entry_by_id(n_pid);
@@ -826,7 +903,7 @@ static int flow_alloc_resp(pid_t n_pid,
          */
 
         rne->accept       = false;
-        rne->flow_arrived = false;
+        rne->flow_arrived = -1;
 
         if (!response) {
                 pme = get_port_map_entry(port_id);
@@ -849,6 +926,13 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
 {
         struct port_map_entry * pme;
         instance_name_t * ipcp;
+
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return NULL;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
 
         pme = port_map_entry_create();
         if (pme == NULL) {
@@ -900,6 +984,13 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
 static int flow_alloc_res(int port_id)
 {
         struct port_map_entry * e;
+
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return -1;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
 
         pthread_mutex_lock(&instance->r_lock);
 
@@ -981,6 +1072,13 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         struct reg_name_entry * rne;
         struct port_map_entry * pme;
 
+        pthread_mutex_lock(&instance->s_lock);
+        if (instance->shutdown) {
+                pthread_mutex_unlock(&instance->s_lock);
+                return NULL;
+        }
+        pthread_mutex_unlock(&instance->s_lock);
+
         pme = malloc(sizeof(*pme));
         if (pme == NULL) {
                 LOG_ERR("Failed malloc of port_map_entry.");
@@ -1004,14 +1102,14 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
 
         pme->n_pid = rne->api->id;
 
-        list_add(&pme->next, &instance->port_map);
-
         rne->req_ap_name = strdup(ap_name);
         rne->req_ae_name = strdup(ae_name);
 
+        list_add(&pme->next, &instance->port_map);
+
         pthread_mutex_lock(&rne->acc_lock);
 
-        rne->flow_arrived = true;
+        rne->flow_arrived = 0;
 
         if (pthread_cond_signal(&rne->acc_signal))
                 LOG_ERR("Failed to send signal.");
@@ -1019,7 +1117,6 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         pthread_mutex_unlock(&rne->acc_lock);
 
         pthread_mutex_unlock(&instance->r_lock);
-
 
         return pme;
 }
@@ -1076,13 +1173,17 @@ static int flow_dealloc_ipcp(int port_id)
         return 0;
 }
 
-static void irm_destroy(struct irm * irm)
+static void irm_destroy(struct irm *  irm)
 {
         struct list_head * h;
         struct list_head * t;
 
         if (irm == NULL)
                 return;
+
+        pthread_mutex_lock(&irm->s_lock);
+        instance->shutdown = true;
+        pthread_mutex_unlock(&irm->s_lock);
 
         if (irm->threadpool != NULL)
                 free(irm->threadpool);
@@ -1100,7 +1201,7 @@ static void irm_destroy(struct irm * irm)
                                                        struct reg_name_entry,
                                                        next);
                 list_del(&e->next);
-                free(e);
+                reg_name_entry_destroy(e);
         }
 
         list_for_each_safe(h, t, &irm->port_map) {
@@ -1358,7 +1459,9 @@ static struct irm * irm_create()
                 return NULL;
         }
 
-        if (pthread_mutex_init(&i->r_lock, NULL)) {
+        i->shutdown = false;
+
+        if (pthread_mutex_init(&i->s_lock, NULL)) {
                 irm_destroy(i);
                 return NULL;
         }
