@@ -245,17 +245,16 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
         if (rb == NULL)
                 return NULL;
 
-        e = malloc(sizeof(*e));
-        if (e == NULL)
-                return NULL;
-
         pthread_mutex_lock(rb->shm_mutex);
 
         if (shm_rbuff_used(rb) == 0) {
                 pthread_mutex_unlock(rb->shm_mutex);
-                free(e);
                 return NULL;
         }
+
+        e = malloc(sizeof(*e));
+        if (e == NULL)
+                return NULL;
 
         *e = *(rb->shm_base + *rb->ptr_tail);
 
