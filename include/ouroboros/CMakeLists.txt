@@ -16,6 +16,7 @@ set(HEADER_FILES
         irm.h
         list.h
         logs.h
+        rw_lock.h
         shm_ap_rbuff.h
         shm_du_map.h
         sockets.h
