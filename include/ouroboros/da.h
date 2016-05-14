@@ -23,8 +23,8 @@
 #ifndef OUROBOROS_DA_H
 #define OUROBOROS_DA_H
 
-#include "common.h"
-#include "instance_name.h"
+#include <stdint.h>
+#include <unistd.h>
 
 char *  da_resolve_daf(char * daf_name);
 /*

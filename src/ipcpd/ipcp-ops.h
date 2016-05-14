@@ -25,6 +25,7 @@
 #define IPCPD_IPCP_OPS_H
 
 #include <ouroboros/dif_config.h>
+#include <ouroboros/common.h>
 #include <sys/types.h>
 
 struct ipcp_ops {

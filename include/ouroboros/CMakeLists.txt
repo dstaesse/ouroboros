@@ -8,9 +8,9 @@ set(HEADER_FILES
         dev.h
         dif_config.h
         flow.h
+        instance_name.h
         irm.h
         qos.h
 )
 
-install(FILES ${HEADER_FILES} "${CMAKE_CURRENT_BINARY_DIR}/config.h"
-        DESTINATION include/ouroboros)
+install(FILES ${HEADER_FILES} DESTINATION include/ouroboros)
