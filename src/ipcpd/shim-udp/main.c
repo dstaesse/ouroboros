@@ -189,23 +189,18 @@ void shim_ap_fini()
         free(_ap_instance);
 }
 
+/* only call this under flows_lock */
 static int port_id_to_fd(int port_id)
 {
         int i;
-
-        rw_lock_rdlock(&_ap_instance->flows_lock);
 
         for (i = 0; i < AP_MAX_FLOWS; ++i) {
                 if (_ap_instance->flows[i].port_id == port_id
                     && _ap_instance->flows[i].state != FLOW_NULL) {
 
-                        rw_lock_unlock(&_ap_instance->flows_lock);
-
                         return i;
                 }
         }
-
-        rw_lock_unlock(&_ap_instance->flows_lock);
 
         return -1;
 }
@@ -275,7 +270,7 @@ struct ipcp_udp_data * ipcp_udp_data_create()
 
         udp_data = malloc(sizeof *udp_data);
         if (udp_data == NULL) {
-                LOG_DBGF("Failed to allocate.");
+                LOG_ERR("Failed to allocate.");
                 return NULL;
         }
 
@@ -513,7 +508,11 @@ static void * ipcp_udp_sdu_loop(void * o)
                         continue;
                 }
 
+                rw_lock_rdlock(&_ap_instance->flows_lock);
+
                 fd = port_id_to_fd(e->port_id);
+
+                rw_lock_unlock(&_ap_instance->flows_lock);
 
                 if (fd == -1) {
                         rw_lock_unlock(&_ap_instance->data_lock);
@@ -1054,11 +1053,7 @@ static int ipcp_udp_flow_alloc_resp(int   port_id,
                                     int   response)
 {
         struct shm_ap_rbuff * rb;
-        int fd = port_id_to_fd(port_id);
-        if (fd < 0) {
-                LOG_DBGF("Could not find flow with port_id %d.", port_id);
-                return 0;
-        }
+        int fd = -1;
 
         if (response)
                 return 0;
@@ -1066,6 +1061,14 @@ static int ipcp_udp_flow_alloc_resp(int   port_id,
         /* awaken pending flow */
 
         rw_lock_rdlock(&_ap_instance->flows_lock);
+
+        fd = port_id_to_fd(port_id);
+        if (fd < 0) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
+
+                LOG_DBGF("Could not find flow with port_id %d.", port_id);
+                return 0;
+        }
 
         if (_ap_instance->flows[fd].state != FLOW_PENDING) {
                 rw_lock_unlock(&_ap_instance->flows_lock);
@@ -1110,15 +1113,18 @@ static int ipcp_udp_flow_alloc_resp(int   port_id,
 
 static int ipcp_udp_flow_dealloc(int port_id)
 {
-        int fd = port_id_to_fd(port_id);
+        int fd = -1;
         struct shm_ap_rbuff * rb;
 
+        rw_lock_wrlock(&_ap_instance->flows_lock);
+
+        fd = port_id_to_fd(port_id);
         if (fd < 0) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
+
                 LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return 0;
         }
-
-        rw_lock_wrlock(&_ap_instance->flows_lock);
 
         _ap_instance->flows[fd].state   = FLOW_NULL;
         _ap_instance->flows[fd].port_id = 0;
