@@ -39,9 +39,6 @@ set(SOURCE_FILES
   utils.c
   )
 
-install(FILES ${IRM_PROTO_HDRS} ${IPCP_PROTO_HDRS} ${DIF_CONFIG_PROTO_HDRS}
-  DESTINATION include/ouroboros)
-
 add_library(ouroboros SHARED ${SOURCE_FILES}
   ${IRM_PROTO_SRCS} ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS})
 

@@ -24,8 +24,8 @@
 #ifndef IPCPD_IPCP_OPS_H
 #define IPCPD_IPCP_OPS_H
 
-#include <ouroboros/common.h>
 #include <ouroboros/dif_config.h>
+#include <ouroboros/common.h>
 #include <sys/types.h>
 
 struct ipcp_ops {
@@ -38,12 +38,12 @@ struct ipcp_ops {
                              size_t  len);
         int   (* ipcp_name_reg)(char *   name);
         int   (* ipcp_name_unreg)(char * name);
-        int   (* ipcp_flow_alloc)(int    port_id,
-                                  pid_t  n_pid,
-                                  char * dst_ap_name,
-                                  char * src_ap_name,
-                                  char * src_ae_name,
-                                  struct qos_spec * qos);
+        int   (* ipcp_flow_alloc)(int           port_id,
+                                  pid_t         n_pid,
+                                  char *        dst_ap_name,
+                                  char *        src_ap_name,
+                                  char *        src_ae_name,
+                                  enum qos_cube qos);
         int   (* ipcp_flow_alloc_resp)(int   port_id,
                                        pid_t n_pid,
                                        int   response);

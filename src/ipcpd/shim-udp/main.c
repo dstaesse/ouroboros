@@ -32,6 +32,7 @@
 #include <ouroboros/dif_config.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>
+#include <ouroboros/flow.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/rw_lock.h>
 
@@ -892,12 +893,12 @@ static int ipcp_udp_name_unreg(char * name)
         return 0;
 }
 
-static int ipcp_udp_flow_alloc(int               port_id,
-                               pid_t             n_pid,
-                               char *            dst_name,
-                               char *            src_ap_name,
-                               char *            src_ae_name,
-                               struct qos_spec * qos)
+static int ipcp_udp_flow_alloc(int           port_id,
+                               pid_t         n_pid,
+                               char *        dst_name,
+                               char *        src_ap_name,
+                               char *        src_ae_name,
+                               enum qos_cube qos)
 {
         struct sockaddr_in l_saddr;
         struct sockaddr_in r_saddr;
@@ -932,7 +933,7 @@ static int ipcp_udp_flow_alloc(int               port_id,
                 return -1;
         }
 
-        if (qos != NULL)
+        if (qos != QOS_CUBE_BE)
                 LOG_DBGF("QoS requested. UDP/IP can't do that.");
 
         fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);

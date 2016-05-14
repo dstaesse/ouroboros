@@ -23,81 +23,80 @@
 #ifndef OUROBOROS_CDAP_H
 #define OUROBOROS_CDAP_H
 
-#include "common.h"
 #include <stdbool.h>
 
 struct cdap;
 
 struct cdap_ops {
         /* Sender related callbacks */
-        int (* handle_connect_r)(port_id_t id,
+        int (* handle_connect_r)(int fd,
                                  int invoke_id,
                                  int result);
-        int (* handle_release_r)(port_id_t id,
+        int (* handle_release_r)(int fd,
                                  int invoke_id,
                                  int result);
-        int (* handle_read_r)(port_id_t id,
+        int (* handle_read_r)(int fd,
                               int invoke_id,
                               int result,
                               char * reason,
                               char * obj_val,
                               bool complete);
-        int (* handle_cancelread_r)(port_id_t id,
+        int (* handle_cancelread_r)(int fd,
                                     int invoke_id,
                                     int result);
-        int (* handle_write_r)(port_id_t id,
+        int (* handle_write_r)(int fd,
                                int invoke_id,
                                int result,
                                char * reason,
                                char * obj_val);
-        int (* handle_create_r)(port_id_t id,
+        int (* handle_create_r)(int fd,
                                 int invoke_id,
                                 int result);
-        int (* handle_delete_r)(port_id_t id,
+        int (* handle_delete_r)(int fd,
                                 int invoke_id,
                                 int result);
-        int (* handle_start_r)(port_id_t id,
+        int (* handle_start_r)(int fd,
                                int invoke_id,
                                int result);
-        int (* handle_stop_r)(port_id_t id,
+        int (* handle_stop_r)(int fd,
                               int invoke_id,
                               int result);
 
         /* Receiver related callbacks */
-        int (* handle_connect)(port_id_t id,
+        int (* handle_connect)(int fd,
                                int invoke_id,
                                rina_name_t src,
                                rina_name_t dst,
                                char * auth_mech,
                                char * auth_val);
-        int (* handle_release)(port_id_t id,
+        int (* handle_release)(int fd,
                                int invoke_id);
-        int (* handle_cancelread)(port_id_t id,
+        int (* handle_cancelread)(int fd,
                                   int invoke_id);
-        int (* handle_write)(port_id_t id,
+        int (* handle_write)(int fd,
                              int invoke_id,
                              char * obj_name,
                              char * obj_val);
-        int (* handle_create)(port_id_t id,
+        int (* handle_create)(int fd,
                               int invoke_id,
                               char * obj_class,
                               char * obj_name,
                               char * obj_val);
-        int (* handle_delete)(port_id_t id,
+        int (* handle_delete)(int fd,
                               int invoke_id,
                               char * obj_name);
-        int (* handle_start)(port_id_t id,
+        int (* handle_start)(int fd,
                              int invoke_id,
                              char * obj_name,
                              char * obj_val);
-        int (* handle_stop)(port_id_t id,
+        int (* handle_stop)(int fd,
                             int invoke_id,
                             char * obj_name,
                             char * obj_val);
 };
 
 struct cdap * cdap_create(struct cdap_ops ops,
-                          port_id_t id);
+                          int fd);
 int           cdap_destroy(struct cdap * instance);
 
 /* Sender related functions */

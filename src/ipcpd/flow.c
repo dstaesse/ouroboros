@@ -26,10 +26,11 @@
 #define OUROBOROS_PREFIX "ipcpd/flow"
 
 #include <ouroboros/logs.h>
+#include <ouroboros/flow.h>
 
-flow_t * flow_create(int port_id)
+struct flow * flow_create(int port_id)
 {
-        flow_t * flow = malloc(sizeof *flow);
+        struct flow * flow = malloc(sizeof *flow);
         if (flow == NULL) {
                 LOG_DBGF("Could not malloc flow.");
                 return NULL;
@@ -45,7 +46,7 @@ flow_t * flow_create(int port_id)
         return flow;
 }
 
-void flow_destroy(flow_t * flow)
+void flow_destroy(struct flow * flow)
 {
         if (flow == NULL)
                 return;

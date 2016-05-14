@@ -20,11 +20,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <unistd.h>
+#include <stdint.h>
+
+#include <ouroboros/qos.h>
+#include <ouroboros/flow.h>
+
 #ifndef OUROBOROS_DEV_H
 #define OUROBOROS_DEV_H
-
-#include <ouroboros/common.h>
-#include <ouroboros/flow.h>
 
 #define UNKNOWN_AP "__UNKNOWN_AP__"
 #define UNKNOWN_AE "__UNKNOWN_AE__"

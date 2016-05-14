@@ -22,7 +22,9 @@
 #ifndef INSTANCE_NAME_H
 #define INSTANCE_NAME_H
 
-#include "common.h"
+#include <stdint.h>
+#include <unistd.h>
+#include <stdbool.h>
 
 typedef struct {
         char *   name;

@@ -20,8 +20,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/utils.h>
-#include <ouroboros/common.h>
+#include <stdint.h>
+#include <unistd.h>
 
 #ifndef OUROBOROS_DIF_CONFIG_H
 #define OUROBOROS_DIF_CONFIG_H

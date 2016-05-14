@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * The API to consult the DIF Allocator
+ * Quality of Service specification
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,18 +20,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_DA_H
-#define OUROBOROS_DA_H
+#ifndef OUROBOROS_QOS_H
+#define OUROBOROS_QOS_H
 
-#include <stdint.h>
-#include <unistd.h>
+/* FIXME: may need revision */
+struct qos_spec {
+        char * qos_name;
+        char * dif_name;
 
-char *  da_resolve_daf(char * daf_name);
-/*
- * n_1_difs is an out parameter
- * The amount of n_1_difs is returned
- */
-ssize_t da_resolve_dap(char * name,
-                       char ** n_1_difs);
+        uint32_t delay;
+        uint32_t jitter;
+};
 
 #endif
