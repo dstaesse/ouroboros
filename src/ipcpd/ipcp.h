@@ -23,6 +23,8 @@
 #ifndef IPCPD_IPCP_H
 #define IPCPD_IPCP_H
 
+#include <ouroboros/rw_lock.h>
+
 #include "ipcp-ops.h"
 #include "ipcp-data.h"
 
@@ -38,11 +40,13 @@ enum ipcp_state {
 struct ipcp {
         struct ipcp_data * data;
         struct ipcp_ops *  ops;
+        int                irmd_fd;
 
         enum ipcp_state    state;
-        int                irmd_fd;
+        rw_lock_t          state_lock;
 };
 
+struct ipcp * ipcp_instance_create();
 void * ipcp_main_loop(void * o);
 void * ipcp_sdu_loop(void * o);
 int ipcp_arg_check(int argc, char * argv[]);
