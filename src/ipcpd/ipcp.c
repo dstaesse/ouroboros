@@ -29,6 +29,22 @@
 #define OUROBOROS_PREFIX "ipcpd/ipcp"
 #include <ouroboros/logs.h>
 
+struct ipcp * ipcp_instance_create()
+{
+        struct ipcp * i = malloc(sizeof *i);
+        if (i == NULL)
+                return NULL;
+
+        i->data    = NULL;
+        i->ops     = NULL;
+        i->irmd_fd = -1;
+        i->state   = IPCP_INIT;
+
+        rw_lock_init(&i->state_lock);
+
+        return i;
+}
+
 int ipcp_arg_check(int argc, char * argv[])
 {
         if (argc != 3)
@@ -52,24 +68,32 @@ void * ipcp_main_loop(void * o)
         uint8_t buf[IPCP_MSG_BUF_SIZE];
         struct ipcp * _ipcp = (struct ipcp *) o;
 
-        ipcp_msg_t *    msg;
-        ssize_t         count;
-        buffer_t        buffer;
-        ipcp_msg_t      ret_msg = IPCP_MSG__INIT;
+        ipcp_msg_t * msg;
+        ssize_t      count;
+        buffer_t     buffer;
+        ipcp_msg_t   ret_msg = IPCP_MSG__INIT;
 
         dif_config_msg_t * conf_msg;
         struct dif_config  conf;
+
+        char * sock_path;
 
         if (_ipcp == NULL) {
                 LOG_ERR("Invalid ipcp struct.");
                 return (void *) 1;
         }
 
-        sockfd = server_socket_open(ipcp_sock_path(getpid()));
+        sock_path = ipcp_sock_path(getpid());
+        if (sock_path == NULL)
+                return (void *) 1;
+
+        sockfd = server_socket_open(sock_path);
         if (sockfd < 0) {
                 LOG_ERR("Could not open server socket.");
                 return (void *) 1;
         }
+
+        free(sock_path);
 
         while (true) {
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
