@@ -528,7 +528,8 @@ static void * ipcp_udp_sdu_loop(void * o)
 
                 rw_lock_unlock(&_ap_instance->data_lock);
 
-                send(fd, buf, len, 0);
+                if (send(fd, buf, len, 0) < 0)
+                        LOG_ERR("Failed to send SDU.");
 
                 rw_lock_rdlock(&_ap_instance->data_lock);
 
