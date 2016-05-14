@@ -70,6 +70,8 @@ int rw_lock_rdlock(rw_lock_t * lock)
 
 int rw_lock_wrlock(rw_lock_t * lock)
 {
+        int ret = 0;
+
         if (lock == NULL)
                 return -1;
 
@@ -86,6 +88,8 @@ int rw_lock_wrlock(rw_lock_t * lock)
                 pthread_mutex_lock(&lock->i_lock);
 
                 if (lock->i == 0) {
+                        ++(lock->i);
+                        ret = pthread_mutex_lock(&lock->lock);
                         pthread_mutex_unlock(&lock->i_lock);
                         break;
                 }
@@ -95,9 +99,7 @@ int rw_lock_wrlock(rw_lock_t * lock)
                 sched_yield();
         }
 
-        ++(lock->i);
-
-        return pthread_mutex_lock(&lock->lock);
+        return ret;
 }
 
 int rw_lock_unlock(rw_lock_t * lock)
