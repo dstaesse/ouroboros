@@ -20,15 +20,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_H
-#define OUROBOROS_IPCP_H
-
-#include <ouroboros/common.h>
 #include <ouroboros/dif_config.h>
 #include <ouroboros/instance_name.h>
 #include <ouroboros/sockets.h>
+#include <ouroboros/common.h>
 
 #include <sys/types.h>
+
+#ifndef OUROBOROS_IPCP_H
+#define OUROBOROS_IPCP_H
 
 struct ipcp;
 
@@ -59,13 +59,13 @@ int   ipcp_name_reg(pid_t  pid,
 int   ipcp_name_unreg(pid_t  pid,
                       char * name);
 
-int   ipcp_flow_alloc(pid_t             pid,
-                      int               port_id,
-                      pid_t             n_pid,
-                      char *            dst_name,
-                      char *            src_ap_name,
-                      char *            src_ae_name,
-                      struct qos_spec * qos);
+int   ipcp_flow_alloc(pid_t         pid,
+                      int           port_id,
+                      pid_t         n_pid,
+                      char *        dst_name,
+                      char *        src_ap_name,
+                      char *        src_ae_name,
+                      enum qos_cube qos);
 int   ipcp_flow_alloc_resp(pid_t pid,
                            int   port_id,
                            pid_t n_pid,

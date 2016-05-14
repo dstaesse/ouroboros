@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Flows
+ * Quality of Service specification
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,35 +20,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdlib.h>
-#include "flow.h"
+#ifndef OUROBOROS_QOS_H
+#define OUROBOROS_QOS_H
 
-#define OUROBOROS_PREFIX "ipcpd/flow"
+/* FIXME: may need revision */
+struct qos_spec {
+        char * qos_name;
+        char * dif_name;
 
-#include <ouroboros/logs.h>
-#include <ouroboros/flow.h>
+        uint32_t delay;
+        uint32_t jitter;
+};
 
-struct flow * flow_create(int port_id)
-{
-        struct flow * flow = malloc(sizeof *flow);
-        if (flow == NULL) {
-                LOG_DBGF("Could not malloc flow.");
-                return NULL;
-        }
-
-        INIT_LIST_HEAD(&flow->list);
-
-        flow->port_id = port_id;
-        flow->state   = FLOW_NULL;
-
-        pthread_mutex_init(&flow->lock, NULL);
-
-        return flow;
-}
-
-void flow_destroy(struct flow * flow)
-{
-        if (flow == NULL)
-                return;
-        free(flow);
-}
+#endif

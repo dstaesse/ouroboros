@@ -20,32 +20,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_FLOW_H
-#define OUROBOROS_FLOW_H
+#ifndef OUROBOROS_IPCP_FLOW_H
+#define OUROBOROS_IPCP_FLOW_H
 
-#include <ouroboros/common.h>
 #include <ouroboros/list.h>
+#include <ouroboros/flow.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <pthread.h>
 
-/* same values as fcntl.h */
-#define FLOW_O_RDONLY   00000000
-#define FLOW_O_WRONLY   00000001
-#define FLOW_O_RDWR     00000002
-#define FLOW_O_ACCMODE  00000003
-
-#define FLOW_O_NONBLOCK 00004000
-#define FLOW_O_DEFAULT  00000002
-
-#define FLOW_O_INVALID  (FLOW_O_WRONLY | FLOW_O_RDWR)
-
-enum flow_state {
-        FLOW_NULL = 0,
-        FLOW_ALLOCATED,
-        FLOW_PENDING
-};
-
-typedef struct flow {
+struct flow {
         struct list_head list;
 
         int                   port_id;
@@ -53,9 +36,9 @@ typedef struct flow {
         enum flow_state       state;
 
         pthread_mutex_t  lock;
-} flow_t;
+};
 
-flow_t * flow_create(int port_id);
-void     flow_destroy(flow_t * flow);
+struct flow * flow_create(int port_id);
+void          flow_destroy(struct flow * flow);
 
 #endif /* OUROBOROS_FLOW_H */

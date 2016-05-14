@@ -181,7 +181,7 @@ void * ipcp_main_loop(void * o)
                                                             msg->dst_name,
                                                             msg->src_ap_name,
                                                             msg->src_ae_name,
-                                                            NULL);
+                                                            msg->qos_cube);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         if (_ipcp->ops->ipcp_flow_alloc_resp == NULL) {

@@ -24,7 +24,6 @@
 
 #include <ouroboros/config.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/common.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/ipcp.h>
@@ -35,6 +34,8 @@
 #include <ouroboros/dif_config.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/bitmap.h>
+#include <ouroboros/flow.h>
+#include <ouroboros/qos.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -55,12 +56,6 @@
 #ifndef IRMD_THREADPOOL_SIZE
   #define IRMD_THREADPOOL_SIZE 3
 #endif
-
-enum flow_state {
-        FLOW_NULL = 0,
-        FLOW_PENDING,
-        FLOW_ALLOCATED
-};
 
 struct ipcp_entry {
         struct list_head  next;
@@ -927,6 +922,8 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
         struct port_map_entry * pme;
         instance_name_t * ipcp;
 
+        /* FIXME: Map qos_spec to qos_cube */
+
         pthread_mutex_lock(&instance->s_lock);
         if (instance->shutdown) {
                 pthread_mutex_unlock(&instance->s_lock);
@@ -965,7 +962,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
                             dst_name,
                             src_ap_name,
                             src_ae_name,
-                            qos) < 0) {
+                            QOS_CUBE_BE) < 0) {
                 pthread_mutex_lock(&instance->r_lock);
 
                 list_del(&pme->next);

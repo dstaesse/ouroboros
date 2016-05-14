@@ -33,13 +33,10 @@ typedef struct {
         size_t    size;
 } buffer_t;
 
-/* FIXME: may need revision */
-struct qos_spec {
-        char * qos_name;
-        char * dif_name;
-
-        uint32_t delay;
-        uint32_t jitter;
+/* FIXME: To be decided which QoS cubes we support */
+enum qos_cube {
+        QOS_CUBE_BE = 0,
+        QOS_CUBE_VIDEO
 };
 
 #endif /* OUROBOROS_COMMON_H */

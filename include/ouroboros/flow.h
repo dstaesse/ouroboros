@@ -39,8 +39,8 @@
 
 enum flow_state {
         FLOW_NULL = 0,
-        FLOW_ALLOCATED,
-        FLOW_PENDING
+        FLOW_PENDING,
+        FLOW_ALLOCATED
 };
 
 #endif /* OUROBOROS_FLOW_H */

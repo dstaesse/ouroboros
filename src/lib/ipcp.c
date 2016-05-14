@@ -361,13 +361,13 @@ int ipcp_name_unreg(pid_t  pid,
         return ret;
 }
 
-int ipcp_flow_alloc(pid_t             pid,
-                    int               port_id,
-                    pid_t             n_pid,
-                    char *            dst_name,
-                    char *            src_ap_name,
-                    char *            src_ae_name,
-                    struct qos_spec * qos)
+int ipcp_flow_alloc(pid_t         pid,
+                    int           port_id,
+                    pid_t         n_pid,
+                    char *        dst_name,
+                    char *        src_ap_name,
+                    char *        src_ae_name,
+                    enum qos_cube qos)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
@@ -376,14 +376,16 @@ int ipcp_flow_alloc(pid_t             pid,
         if (dst_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
                 return -EINVAL;
 
-        msg.code        = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
-        msg.has_port_id = true;
-        msg.port_id     = port_id;
-        msg.has_pid     = true;
-        msg.pid         = n_pid;
-        msg.src_ap_name = src_ap_name;
-        msg.src_ae_name = src_ae_name;
-        msg.dst_name    = dst_name;
+        msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
+        msg.has_port_id  = true;
+        msg.port_id      = port_id;
+        msg.has_pid      = true;
+        msg.pid          = n_pid;
+        msg.src_ap_name  = src_ap_name;
+        msg.src_ae_name  = src_ae_name;
+        msg.dst_name     = dst_name;
+        msg.has_qos_cube = true;
+        msg.qos_cube     = qos;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
