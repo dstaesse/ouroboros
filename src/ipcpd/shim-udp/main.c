@@ -196,10 +196,8 @@ static int port_id_to_fd(int port_id)
 
         for (i = 0; i < AP_MAX_FLOWS; ++i) {
                 if (_ap_instance->flows[i].port_id == port_id
-                    && _ap_instance->flows[i].state != FLOW_NULL) {
-
+                    && _ap_instance->flows[i].state != FLOW_NULL)
                         return i;
-                }
         }
 
         return -1;
@@ -457,15 +455,17 @@ static void * ipcp_udp_sdu_reader()
                                 continue;
 
                         n = sizeof r_saddr;
-                        n = recvfrom(fd,
-                                     buf,
-                                     SHIM_UDP_MAX_SDU_SIZE,
-                                     0,
-                                     (struct sockaddr *) &r_saddr,
-                                     (unsigned *) &n);
+                        if ((n = recvfrom(fd,
+                                          buf,
+                                          SHIM_UDP_MAX_SDU_SIZE,
+                                          0,
+                                          (struct sockaddr *) &r_saddr,
+                                          (unsigned *) &n)) <= 0)
+                                continue;
 
                         /* send the sdu to the correct port_id */
-                        ipcp_udp_flow_write(fd, buf, n);
+                        if (ipcp_udp_flow_write(fd, buf, n) < 0)
+                                LOG_ERR("Failed to write SDU.");
                 }
         }
 
