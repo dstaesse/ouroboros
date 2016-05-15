@@ -249,9 +249,6 @@ int flow_accept(int     fd,
         irm_msg_t * recv_msg = NULL;
         int cfd = -1;
 
-        if (ap_name == NULL)
-                return -1;
-
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
 
@@ -270,11 +267,14 @@ int flow_accept(int     fd,
                 return -1;
         }
 
-        *ap_name = strdup(recv_msg->ap_name);
-        if (*ap_name == NULL) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+        if (ap_name != NULL) {
+                *ap_name = strdup(recv_msg->ap_name);
+                if (*ap_name == NULL) {
+                        irm_msg__free_unpacked(recv_msg, NULL);
+                        return -1;
+                }
         }
+
 
         if (ae_name != NULL) {
                 *ae_name = strdup(recv_msg->ae_name);
