@@ -133,9 +133,9 @@ void ap_fini(void)
                 if (_ap_instance->flows[i].rb != NULL)
                         shm_ap_rbuff_close(_ap_instance->flows[i].rb);
 
-        rw_lock_unlock(&_ap_instance->data_lock);
-
         free(_ap_instance);
+
+        rw_lock_unlock(&_ap_instance->data_lock);
 }
 
 #if 0
@@ -163,26 +163,29 @@ int ap_reg(char ** difs,
                 return -EINVAL;
         }
 
-        if (_ap_instance == NULL)
+        rw_lock_rdlock(&_ap_instance->data_lock);
+
+        if (_ap_instance == NULL) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1; /* -ENOTINIT */
+        }
 
         msg.code       = IRM_MSG_CODE__IRM_AP_REG;
         msg.has_pid    = true;
         msg.dif_name   = difs;
         msg.n_dif_name = len;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.pid        = _ap_instance->api->id;
         msg.ap_name    = _ap_instance->api->name;
 
-        rw_lock_unlock(&_ap_instance->data_lock);
-
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
+        if (recv_msg == NULL) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
+        }
 
         if (!recv_msg->has_result) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -192,10 +195,11 @@ int ap_reg(char ** difs,
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
-        rw_lock_wrlock(&_ap_instance->data_lock);
+        rw_lock_wrlock(&_ap_instance->flows_lock);
 
         fd = bmp_allocate(_ap_instance->fds);
 
+        rw_lock_unlock(&_ap_instance->flows_lock);
         rw_lock_unlock(&_ap_instance->data_lock);
 
         return fd;
@@ -214,29 +218,32 @@ int ap_unreg(char ** difs,
                 return -EINVAL;
         }
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
+
         msg.code       = IRM_MSG_CODE__IRM_AP_UNREG;
         msg.has_pid    = true;
         msg.dif_name   = difs;
         msg.n_dif_name = len;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.pid        = _ap_instance->api->id;
         msg.ap_name    = _ap_instance->api->name;
 
-        rw_lock_unlock(&_ap_instance->data_lock);
-
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
+        if (recv_msg == NULL) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
+        }
 
         if (!recv_msg->has_result) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         ret = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
+
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         return ret;
 }
@@ -249,20 +256,21 @@ int flow_accept(int     fd,
         irm_msg_t * recv_msg = NULL;
         int cfd = -1;
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
+
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.pid     = _ap_instance->api->id;
 
-        rw_lock_unlock(&_ap_instance->data_lock);
-
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
+        if (recv_msg == NULL) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
+        }
 
         if (!recv_msg->has_pid || !recv_msg->has_port_id) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -270,6 +278,7 @@ int flow_accept(int     fd,
         if (ap_name != NULL) {
                 *ap_name = strdup(recv_msg->ap_name);
                 if (*ap_name == NULL) {
+                        rw_lock_unlock(&_ap_instance->data_lock);
                         irm_msg__free_unpacked(recv_msg, NULL);
                         return -1;
                 }
@@ -279,30 +288,22 @@ int flow_accept(int     fd,
         if (ae_name != NULL) {
                 *ae_name = strdup(recv_msg->ae_name);
                 if (*ae_name == NULL) {
+                        rw_lock_unlock(&_ap_instance->data_lock);
                         irm_msg__free_unpacked(recv_msg, NULL);
                         return -1;
                 }
         }
 
-        rw_lock_wrlock(&_ap_instance->data_lock);
+        rw_lock_wrlock(&_ap_instance->flows_lock);
 
         cfd = bmp_allocate(_ap_instance->fds);
 
-        rw_lock_unlock(&_ap_instance->data_lock);
-
-        rw_lock_wrlock(&_ap_instance->flows_lock);
-
         _ap_instance->flows[cfd].rb = shm_ap_rbuff_open(recv_msg->pid);
         if (_ap_instance->flows[cfd].rb == NULL) {
-                rw_lock_wrlock(&_ap_instance->data_lock);
-
                 bmp_release(_ap_instance->fds, cfd);
-
-                rw_lock_unlock(&_ap_instance->data_lock);
-
-                irm_msg__free_unpacked(recv_msg, NULL);
-
                 rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
@@ -312,10 +313,6 @@ int flow_accept(int     fd,
         rw_lock_unlock(&_ap_instance->flows_lock);
 
         irm_msg__free_unpacked(recv_msg, NULL);
-
-        rw_lock_wrlock(&_ap_instance->data_lock);
-
-        bmp_release(_ap_instance->fds, fd);
 
         rw_lock_unlock(&_ap_instance->data_lock);
 
@@ -329,15 +326,11 @@ int flow_alloc_resp(int fd,
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
-        msg.has_pid      = true;
-
         rw_lock_rdlock(&_ap_instance->data_lock);
 
+        msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
+        msg.has_pid      = true;
         msg.pid          = _ap_instance->api->id;
-
-        rw_lock_unlock(&_ap_instance->data_lock);
-
         msg.has_port_id  = true;
 
         rw_lock_rdlock(&_ap_instance->flows_lock);
@@ -350,16 +343,21 @@ int flow_alloc_resp(int fd,
         msg.response     = response;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
+        if (recv_msg == NULL) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
+        }
 
         if (!recv_msg->has_result) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         ret = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
+
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         return ret;
 }
@@ -375,6 +373,8 @@ int flow_alloc(char * dst_name,
         if (dst_name == NULL)
                 return -EINVAL;
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
+
         if (src_ae_name == NULL)
                 src_ae_name  = UNKNOWN_AE;
 
@@ -383,39 +383,30 @@ int flow_alloc(char * dst_name,
         msg.ae_name     = src_ae_name;
         msg.has_pid     = true;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.pid         = _ap_instance->api->id;
         msg.ap_name     = _ap_instance->api->name;
 
-        rw_lock_unlock(&_ap_instance->data_lock);
-
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
+        if (recv_msg == NULL) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
+        }
 
         if (!recv_msg->has_pid || !recv_msg->has_port_id) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        rw_lock_wrlock(&_ap_instance->data_lock);
+        rw_lock_wrlock(&_ap_instance->flows_lock);
 
         fd = bmp_allocate(_ap_instance->fds);
 
-        rw_lock_unlock(&_ap_instance->data_lock);
-
-        rw_lock_wrlock(&_ap_instance->flows_lock);
-
         _ap_instance->flows[fd].rb = shm_ap_rbuff_open(recv_msg->pid);
         if (_ap_instance->flows[fd].rb == NULL) {
-                rw_lock_wrlock(&_ap_instance->data_lock);
-
                 bmp_release(_ap_instance->fds, fd);
-
-                rw_lock_unlock(&_ap_instance->data_lock);
-
                 rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -424,6 +415,7 @@ int flow_alloc(char * dst_name,
         _ap_instance->flows[fd].oflags  = FLOW_O_DEFAULT;
 
         rw_lock_unlock(&_ap_instance->flows_lock);
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -436,6 +428,8 @@ int flow_alloc_res(int fd)
         irm_msg_t * recv_msg = NULL;
         int result = 0;
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
+
         msg.code          = IRM_MSG_CODE__IRM_FLOW_ALLOC_RES;
         msg.has_port_id  = true;
 
@@ -446,16 +440,21 @@ int flow_alloc_res(int fd)
         rw_lock_unlock(&_ap_instance->flows_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
+        if (recv_msg == NULL) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
+        }
 
         if (!recv_msg->has_result) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         result = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
+
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         return result;
 }
@@ -465,6 +464,8 @@ int flow_dealloc(int fd)
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
+
+        rw_lock_rdlock(&_ap_instance->data_lock);
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_port_id  = true;
@@ -477,25 +478,26 @@ int flow_dealloc(int fd)
         shm_ap_rbuff_close(_ap_instance->flows[fd].rb);
         _ap_instance->flows[fd].rb = NULL;
 
-        rw_lock_wrlock(&_ap_instance->data_lock);
-
         bmp_release(_ap_instance->fds, fd);
-
-        rw_lock_unlock(&_ap_instance->data_lock);
 
         rw_lock_unlock(&_ap_instance->flows_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
+        if (recv_msg == NULL) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
+        }
 
         if (!recv_msg->has_result) {
+                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         ret = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
+
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         return ret;
 }
@@ -551,16 +553,12 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
                 if (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0) {
                         shm_release_du_buff(_ap_instance->dum, index);
-
                         rw_lock_unlock(&_ap_instance->flows_lock);
-
                         rw_lock_unlock(&_ap_instance->data_lock);
-
                         return -EPIPE;
                 }
 
                 rw_lock_unlock(&_ap_instance->flows_lock);
-
                 rw_lock_unlock(&_ap_instance->data_lock);
 
                 return 0;
@@ -569,9 +567,8 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                         ;
         }
 
-        rw_lock_unlock(&_ap_instance->data_lock);
-
         rw_lock_unlock(&_ap_instance->flows_lock);
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         return 0;
 }
@@ -583,7 +580,6 @@ ssize_t flow_read(int fd, void * buf, size_t count)
         uint8_t * sdu;
 
         rw_lock_rdlock(&_ap_instance->data_lock);
-
         rw_lock_rdlock(&_ap_instance->flows_lock);
 
         if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
