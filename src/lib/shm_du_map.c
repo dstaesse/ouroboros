@@ -199,6 +199,9 @@ void shm_du_map_close(struct shm_du_map * dum)
                 return;
         }
 
+        if (close(dum->fd) < 0)
+                LOG_DBGF("Couldn't close shared memory.");
+
         if (munmap(dum->shm_base, SHM_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");
 
@@ -211,6 +214,9 @@ void shm_du_map_destroy(struct shm_du_map * dum)
                 LOG_DBGF("Bogus input. Bugging out.");
                 return;
         }
+
+        if (close(dum->fd) < 0)
+                LOG_DBGF("Couldn't close shared memory.");
 
         if (munmap(dum->shm_base, SHM_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");
