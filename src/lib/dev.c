@@ -249,6 +249,9 @@ int flow_accept(int     fd,
         irm_msg_t * recv_msg = NULL;
         int cfd = -1;
 
+        if (ap_name == NULL)
+                return -1;
+
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
 
@@ -466,17 +469,21 @@ int flow_dealloc(int fd)
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_port_id  = true;
 
-        rw_lock_rdlock(&_ap_instance->flows_lock);
+        rw_lock_wrlock(&_ap_instance->flows_lock);
 
         msg.port_id      = _ap_instance->flows[fd].port_id;
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
+        _ap_instance->flows[fd].port_id = -1;
+        shm_ap_rbuff_close(_ap_instance->flows[fd].rb);
+        _ap_instance->flows[fd].rb = NULL;
 
         rw_lock_wrlock(&_ap_instance->data_lock);
 
         bmp_release(_ap_instance->fds, fd);
 
         rw_lock_unlock(&_ap_instance->data_lock);
+
+        rw_lock_unlock(&_ap_instance->flows_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)

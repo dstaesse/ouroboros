@@ -180,6 +180,9 @@ void shm_ap_rbuff_close(struct shm_ap_rbuff * rb)
                 return;
         }
 
+        if (close(rb->fd) < 0)
+                LOG_DBGF("Couldn't close shared memory.");
+
         if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");
 
@@ -199,6 +202,9 @@ void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
                 LOG_ERR("Tried to destroy other AP's rbuff.");
                 return;
         }
+
+        if (close(rb->fd) < 0)
+                LOG_DBGF("Couldn't close shared memory.");
 
         sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", rb->pid);
 
