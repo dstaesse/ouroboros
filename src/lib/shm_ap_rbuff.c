@@ -38,7 +38,7 @@
 #define SHM_RBUFF_FILE_SIZE (SHM_RBUFF_SIZE * sizeof(struct rb_entry)          \
                              + 2 * sizeof(size_t) + sizeof(pthread_mutex_t))
 
-#define shm_rbuff_used(rb)((*rb->ptr_head + SHM_RBUFF_SIZE - *rb->ptr_tail)\
+#define shm_rbuff_used(rb)((*rb->ptr_head + SHM_RBUFF_SIZE - *rb->ptr_tail)    \
                           & (SHM_RBUFF_SIZE - 1))
 #define shm_rbuff_free(rb)(shm_rbuff_used(rb) + 1 < SHM_RBUFF_SIZE)
 
@@ -105,12 +105,10 @@ struct shm_ap_rbuff * shm_ap_rbuff_create()
                 return NULL;
         }
 
-        rb->shm_base = shm_base;
-        rb->ptr_head = (size_t *) (rb->shm_base + SHM_RBUFF_SIZE);
-        rb->ptr_tail = (size_t *)
-                ((uint8_t *) rb->ptr_head + sizeof(size_t));
-        rb->shm_mutex = (pthread_mutex_t *)
-                ((uint8_t *) rb->ptr_tail + sizeof(size_t));
+        rb->shm_base  = shm_base;
+        rb->ptr_head  = (size_t *) (rb->shm_base + SHM_RBUFF_SIZE);
+        rb->ptr_tail  = rb->ptr_head + 1;
+        rb->shm_mutex = (pthread_mutex_t *) (rb->ptr_tail + 1);
 
         pthread_mutexattr_init(&attr);
         pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
@@ -165,12 +163,10 @@ struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t pid)
                 return NULL;
         }
 
-        rb->shm_base = shm_base;
-        rb->ptr_head = (size_t *) (rb->shm_base + SHM_RBUFF_SIZE);
-        rb->ptr_tail = (size_t *)
-                ((uint8_t *) rb->ptr_head + sizeof(size_t));
-        rb->shm_mutex = (pthread_mutex_t *)
-                ((uint8_t *) rb->ptr_tail + sizeof(size_t));
+        rb->shm_base  = shm_base;
+        rb->ptr_head  = (size_t *) (rb->shm_base + SHM_RBUFF_SIZE);
+        rb->ptr_tail  = rb->ptr_head + 1;
+        rb->shm_mutex = (pthread_mutex_t *) (rb->ptr_tail + 1);
 
         rb->fd = shm_fd;
         rb->pid = pid;
