@@ -94,9 +94,6 @@ struct shim_ap_data {
         pthread_t             sduloop;
         pthread_t             handler;
         pthread_t             sdu_reader;
-
-        rw_lock_t             thread_lock;
-
 } * _ap_instance;
 
 static int shim_ap_init(char * ap_name)
@@ -306,8 +303,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         }
 
                         if (clean_threads) {
-                                rw_lock_wrlock(&_ap_instance->thread_lock);
-
                                 pthread_cancel(_ap_instance->handler);
                                 pthread_cancel(_ap_instance->sdu_reader);
                                 pthread_cancel(_ap_instance->sduloop);
@@ -315,8 +310,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                                 pthread_join(_ap_instance->sduloop, NULL);
                                 pthread_join(_ap_instance->handler, NULL);
                                 pthread_join(_ap_instance->sdu_reader, NULL);
-
-                                rw_lock_unlock(&_ap_instance->thread_lock);
                         }
 
                         pthread_cancel(_ap_instance->mainloop);
@@ -434,7 +427,7 @@ static void * ipcp_udp_sdu_reader()
         int n;
         int fd;
         char buf[SHIM_UDP_MAX_SDU_SIZE];
-        struct timeval tv = {0, 750};
+        struct timeval tv = {0, 100};
         struct sockaddr_in r_saddr;
         fd_set read_fds;
         int flags;
@@ -503,7 +496,7 @@ static void * ipcp_udp_sdu_loop(void * o)
                 e = shm_ap_rbuff_read(_ap_instance->rb);
 
                 if (e == NULL) {
-                        rw_lock_rdlock(&_ipcp->state_lock);
+                        rw_lock_unlock(&_ipcp->state_lock);
                         continue;
                 }
 
@@ -511,7 +504,7 @@ static void * ipcp_udp_sdu_loop(void * o)
                                           _ap_instance->dum,
                                           e->index);
                 if (len == -1) {
-                        rw_lock_rdlock(&_ipcp->state_lock);
+                        rw_lock_unlock(&_ipcp->state_lock);
                         free(e);
                         continue;
                 }
@@ -911,7 +904,6 @@ static int ipcp_udp_flow_alloc(int           port_id,
         uint32_t           dns_addr = 0;
 #endif
         struct shm_ap_rbuff * rb;
-        struct timespec    wait = {0, 1000000};
 
         if (dst_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
                 return -1;
@@ -1034,8 +1026,6 @@ static int ipcp_udp_flow_alloc(int           port_id,
         _ap_instance->flows[fd].rb      = rb;
 
         FD_SET(fd, &shim_data(_ipcp)->flow_fd_s);
-
-        nanosleep(&wait, NULL);
 
         rw_lock_unlock(&_ap_instance->flows_lock);
 
