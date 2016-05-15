@@ -163,10 +163,8 @@ int ap_reg(char ** difs,
                 return -EINVAL;
         }
 
-        if (_ap_instance == NULL) {
-                LOG_DBG("ap_init was not called.");
-                return -1;
-        }
+        if (_ap_instance == NULL)
+                return -1; /* -ENOTINIT */
 
         msg.code       = IRM_MSG_CODE__IRM_AP_REG;
         msg.has_pid    = true;
@@ -468,10 +466,15 @@ int flow_dealloc(int fd)
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_port_id  = true;
 
-
-        rw_lock_rdlock(&_ap_instance->data_lock);
+        rw_lock_rdlock(&_ap_instance->flows_lock);
 
         msg.port_id      = _ap_instance->flows[fd].port_id;
+
+        rw_lock_unlock(&_ap_instance->flows_lock);
+
+        rw_lock_wrlock(&_ap_instance->data_lock);
+
+        bmp_release(_ap_instance->fds, fd);
 
         rw_lock_unlock(&_ap_instance->data_lock);
 
@@ -556,7 +559,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                 return 0;
         } else {
                 while (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0)
-                        LOG_DBGF("Couldn't write to rbuff.");
+                        ;
         }
 
         rw_lock_unlock(&_ap_instance->data_lock);

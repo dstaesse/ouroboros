@@ -1059,6 +1059,8 @@ static int flow_dealloc(int port_id)
 
         list_del(&e->next);
 
+        bmp_release(instance->port_ids, port_id);
+
         pthread_mutex_unlock(&instance->r_lock);
 
         free(e);
