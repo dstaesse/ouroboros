@@ -395,6 +395,7 @@ static void * ipcp_udp_listener()
                 }
 
                 /* reply to IRM */
+                rw_lock_wrlock(&_ap_instance->flows_lock);
 
                 port_id = ipcp_flow_req_arr(getpid(),
                                             buf,
@@ -404,10 +405,9 @@ static void * ipcp_udp_listener()
                 if (port_id < 0) {
                         LOG_ERR("Could not get port id from IRMd");
                         close(fd);
+                        rw_lock_unlock(&_ap_instance->flows_lock);
                         continue;
                 }
-
-                rw_lock_wrlock(&_ap_instance->flows_lock);
 
                 _ap_instance->flows[fd].port_id = port_id;
                 _ap_instance->flows[fd].rb      = NULL;
