@@ -227,11 +227,11 @@ void shm_du_map_destroy(struct shm_du_map * dum)
         free(dum);
 }
 
-int shm_create_du_buff(struct shm_du_map * dum,
-                       size_t              size,
-                       size_t              headspace,
-                       uint8_t *           data,
-                       size_t              len)
+ssize_t shm_create_du_buff(struct shm_du_map * dum,
+                           size_t              size,
+                           size_t              headspace,
+                           uint8_t *           data,
+                           size_t              len)
 {
         struct shm_du_buff * sdb;
         long                 blocks = 0;
@@ -239,7 +239,7 @@ int shm_create_du_buff(struct shm_du_map * dum,
         int                  sz2 = headspace + len + sizeof *sdb;
         uint8_t *            write_pos;
         size_t               copy_len;
-        size_t               index;
+        ssize_t              index;
 
         if (dum == NULL || data == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -294,7 +294,7 @@ int shm_create_du_buff(struct shm_du_map * dum,
                 --blocks;
         }
 
-        index = *dum->ptr_head - 1;
+        index = (*dum->ptr_head - 1) & (SHM_BLOCKS_IN_MAP - 1);
 
         pthread_mutex_unlock(dum->shm_mutex);
 
@@ -304,9 +304,9 @@ int shm_create_du_buff(struct shm_du_map * dum,
 /* FIXME: this cannot handle packets stretching beyond the ringbuffer border */
 int shm_du_map_read_sdu(uint8_t **          dst,
                         struct shm_du_map * dum,
-                        size_t              idx)
+                        ssize_t             idx)
 {
-        size_t    len = 0;
+        size_t len = 0;
 
         if (idx > SHM_BLOCKS_IN_MAP)
                 return -1;
@@ -328,7 +328,7 @@ int shm_du_map_read_sdu(uint8_t **          dst,
         return len;
 }
 
-int shm_release_du_buff(struct shm_du_map * dum, size_t idx)
+int shm_release_du_buff(struct shm_du_map * dum, ssize_t idx)
 {
         long sz;
         long blocks = 0;

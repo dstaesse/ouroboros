@@ -531,7 +531,7 @@ int flow_cntl(int fd, int cmd, int oflags)
 
 ssize_t flow_write(int fd, void * buf, size_t count)
 {
-        size_t index;
+        ssize_t index;
         struct rb_entry e;
 
         if (buf == NULL)
