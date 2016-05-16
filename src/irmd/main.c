@@ -1223,7 +1223,7 @@ static void irm_destroy(struct irm *  irm)
         if (irm == NULL)
                 return;
 
-        rw_lock_wrlock(&instance->state_lock);
+        rw_lock_wrlock(&irm->state_lock);
 
         if (irm->threadpool != NULL)
                 free(irm->threadpool);
@@ -1256,9 +1256,11 @@ static void irm_destroy(struct irm *  irm)
                 shm_du_map_destroy(irm->dum);
 
         close(irm->sockfd);
+
+        rw_lock_unlock(&irm->state_lock);
+
         free(irm);
 
-        rw_lock_unlock(&instance->state_lock);
 }
 
 void irmd_sig_handler(int sig, siginfo_t * info, void * c)
