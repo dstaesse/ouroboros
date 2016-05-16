@@ -204,8 +204,7 @@ static int port_id_to_fd(int port_id)
 
 static ssize_t ipcp_udp_flow_write(int fd, void * buf, size_t count)
 {
-        /* the AP chooses the amount of headspace and tailspace */
-        size_t index;
+        ssize_t index;
         struct rb_entry e;
 
         rw_lock_rdlock(&_ipcp->state_lock);

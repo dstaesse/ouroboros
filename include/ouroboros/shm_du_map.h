@@ -47,18 +47,18 @@ void                 shm_du_map_close(struct shm_du_map * dum);
 void                 shm_du_map_destroy(struct shm_du_map * dum);
 
 /* returns the index of the buffer in the DU map */
-int shm_create_du_buff(struct shm_du_map * dum,
-                       size_t              size,
-                       size_t              headspace,
-                       uint8_t           * data,
-                       size_t              len);
+ssize_t  shm_create_du_buff(struct shm_du_map * dum,
+                            size_t              size,
+                            size_t              headspace,
+                            uint8_t           * data,
+                            size_t              len);
 
 /* FIXME: revise these */
-int       shm_du_map_read_sdu(uint8_t **           dst,
-                               struct shm_du_map * dum,
-                               size_t              idx);
-int       shm_release_du_buff(struct shm_du_map  * dum, size_t idx);
-
+int       shm_du_map_read_sdu(uint8_t **          dst,
+                              struct shm_du_map * dum,
+                              ssize_t             idx);
+int       shm_release_du_buff(struct shm_du_map  * dum,
+                              ssize_t idx);
 
 /* FIXME: use shm_du_map * and index */
 uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,

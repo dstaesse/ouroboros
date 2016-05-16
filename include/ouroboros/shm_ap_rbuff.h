@@ -37,8 +37,8 @@
 struct shm_ap_rbuff;
 
 struct rb_entry {
-        size_t index;
-        int    port_id;
+        ssize_t index;
+        int     port_id;
 };
 
 struct shm_ap_rbuff * shm_ap_rbuff_create();
