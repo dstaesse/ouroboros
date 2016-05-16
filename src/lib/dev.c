@@ -129,9 +129,14 @@ void ap_fini(void)
                 shm_du_map_close(_ap_instance->dum);
         if (_ap_instance->rb != NULL)
                 shm_ap_rbuff_destroy(_ap_instance->rb);
+
+        rw_lock_rdlock(&_ap_instance->flows_lock);
+
         for (i = 0; i < AP_MAX_FLOWS; ++i)
                 if (_ap_instance->flows[i].rb != NULL)
                         shm_ap_rbuff_close(_ap_instance->flows[i].rb);
+
+        rw_lock_unlock(&_ap_instance->flows_lock);
 
         free(_ap_instance);
 
@@ -218,12 +223,12 @@ int ap_unreg(char ** difs,
                 return -EINVAL;
         }
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.code       = IRM_MSG_CODE__IRM_AP_UNREG;
         msg.has_pid    = true;
         msg.dif_name   = difs;
         msg.n_dif_name = len;
+
+        rw_lock_rdlock(&_ap_instance->data_lock);
 
         msg.pid        = _ap_instance->api->id;
         msg.ap_name    = _ap_instance->api->name;
@@ -241,9 +246,10 @@ int ap_unreg(char ** difs,
         }
 
         ret = recv_msg->result;
-        irm_msg__free_unpacked(recv_msg, NULL);
 
         rw_lock_unlock(&_ap_instance->data_lock);
+
+        irm_msg__free_unpacked(recv_msg, NULL);
 
         return ret;
 }
@@ -256,21 +262,21 @@ int flow_accept(int     fd,
         irm_msg_t * recv_msg = NULL;
         int cfd = -1;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
+
         msg.pid     = _ap_instance->api->id;
+
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
         }
 
         if (!recv_msg->has_pid || !recv_msg->has_port_id) {
-                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -278,7 +284,6 @@ int flow_accept(int     fd,
         if (ap_name != NULL) {
                 *ap_name = strdup(recv_msg->ap_name);
                 if (*ap_name == NULL) {
-                        rw_lock_unlock(&_ap_instance->data_lock);
                         irm_msg__free_unpacked(recv_msg, NULL);
                         return -1;
                 }
@@ -288,12 +293,12 @@ int flow_accept(int     fd,
         if (ae_name != NULL) {
                 *ae_name = strdup(recv_msg->ae_name);
                 if (*ae_name == NULL) {
-                        rw_lock_unlock(&_ap_instance->data_lock);
                         irm_msg__free_unpacked(recv_msg, NULL);
                         return -1;
                 }
         }
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
         cfd = bmp_allocate(_ap_instance->fds);
@@ -311,10 +316,9 @@ int flow_accept(int     fd,
         _ap_instance->flows[cfd].oflags  = FLOW_O_DEFAULT;
 
         rw_lock_unlock(&_ap_instance->flows_lock);
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         irm_msg__free_unpacked(recv_msg, NULL);
-
-        rw_lock_unlock(&_ap_instance->data_lock);
 
         return cfd;
 }
@@ -326,13 +330,12 @@ int flow_alloc_resp(int fd,
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
         msg.has_pid      = true;
         msg.pid          = _ap_instance->api->id;
         msg.has_port_id  = true;
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_rdlock(&_ap_instance->flows_lock);
 
         msg.port_id      = _ap_instance->flows[fd].port_id;
@@ -355,9 +358,10 @@ int flow_alloc_resp(int fd,
         }
 
         ret = recv_msg->result;
-        irm_msg__free_unpacked(recv_msg, NULL);
 
         rw_lock_unlock(&_ap_instance->data_lock);
+
+        irm_msg__free_unpacked(recv_msg, NULL);
 
         return ret;
 }
@@ -373,8 +377,6 @@ int flow_alloc(char * dst_name,
         if (dst_name == NULL)
                 return -EINVAL;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         if (src_ae_name == NULL)
                 src_ae_name  = UNKNOWN_AE;
 
@@ -383,21 +385,24 @@ int flow_alloc(char * dst_name,
         msg.ae_name     = src_ae_name;
         msg.has_pid     = true;
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
+
         msg.pid         = _ap_instance->api->id;
         msg.ap_name     = _ap_instance->api->name;
 
+        rw_lock_unlock(&_ap_instance->data_lock);
+
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
         }
 
         if (!recv_msg->has_pid || !recv_msg->has_port_id) {
-                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
         fd = bmp_allocate(_ap_instance->fds);
@@ -428,33 +433,30 @@ int flow_alloc_res(int fd)
         irm_msg_t * recv_msg = NULL;
         int result = 0;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.code          = IRM_MSG_CODE__IRM_FLOW_ALLOC_RES;
         msg.has_port_id  = true;
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_rdlock(&_ap_instance->flows_lock);
 
         msg.port_id      = _ap_instance->flows[fd].port_id;
 
         rw_lock_unlock(&_ap_instance->flows_lock);
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
         }
 
         if (!recv_msg->has_result) {
-                rw_lock_unlock(&_ap_instance->data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         result = recv_msg->result;
-        irm_msg__free_unpacked(recv_msg, NULL);
 
-        rw_lock_unlock(&_ap_instance->data_lock);
+        irm_msg__free_unpacked(recv_msg, NULL);
 
         return result;
 }
@@ -465,11 +467,10 @@ int flow_dealloc(int fd)
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        rw_lock_rdlock(&_ap_instance->data_lock);
-
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_port_id  = true;
 
+        rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
         msg.port_id      = _ap_instance->flows[fd].port_id;
@@ -495,9 +496,10 @@ int flow_dealloc(int fd)
         }
 
         ret = recv_msg->result;
-        irm_msg__free_unpacked(recv_msg, NULL);
 
         rw_lock_unlock(&_ap_instance->data_lock);
+
+        irm_msg__free_unpacked(recv_msg, NULL);
 
         return ret;
 }
@@ -505,7 +507,7 @@ int flow_dealloc(int fd)
 int flow_cntl(int fd, int cmd, int oflags)
 {
         int old;
-
+        rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
         old = _ap_instance->flows[fd].oflags;
@@ -513,13 +515,16 @@ int flow_cntl(int fd, int cmd, int oflags)
         switch (cmd) {
         case FLOW_F_GETFL: /* GET FLOW FLAGS */
                 rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return old;
         case FLOW_F_SETFL: /* SET FLOW FLAGS */
                 _ap_instance->flows[fd].oflags = oflags;
                 rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return old;
         default:
                 rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
                 return FLOW_O_INVALID; /* unknown command */
         }
 }
