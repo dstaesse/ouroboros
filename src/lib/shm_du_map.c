@@ -294,7 +294,8 @@ ssize_t shm_create_du_buff(struct shm_du_map * dum,
                 --blocks;
         }
 
-        index = (*dum->ptr_head - 1) & (SHM_BLOCKS_IN_MAP - 1);
+        index = (*dum->ptr_head - 1 + SHM_BLOCKS_IN_MAP)
+                & (SHM_BLOCKS_IN_MAP - 1);
 
         pthread_mutex_unlock(dum->shm_mutex);
 
@@ -353,14 +354,14 @@ int shm_release_du_buff(struct shm_du_map * dum, ssize_t idx)
 
         while (get_tail_ptr(dum)->garbage == 1) {
                 sz = get_tail_ptr(dum)->size;
-
-                while (sz + (long) sizeof (struct shm_du_buff) > 0) {
+                while (sz + (long) sizeof(struct shm_du_buff) > 0) {
                         sz -= SHM_DU_BUFF_BLOCK_SIZE;
                         ++blocks;
                 }
 
                 *(dum->ptr_tail) =
                         (*dum->ptr_tail + blocks) & (SHM_BLOCKS_IN_MAP - 1);
+                blocks = 0;
         }
 
         pthread_mutex_unlock(dum->shm_mutex);
