@@ -620,7 +620,7 @@ static int reg_ipcp(instance_name_t * api,
                 return -1;
         }
 
-        rw_lock_wrlock(&instance->reg_lock);
+        rw_lock_unlock(&instance->reg_lock);
         rw_lock_unlock(&instance->state_lock);
 
         return 0;
@@ -849,8 +849,6 @@ static struct port_map_entry * flow_accept(pid_t    pid,
         /* ap with pending accept being unregistered */
         if (rne->flow_arrived == -2 ) {
                 pthread_mutex_unlock(&rne->acc_lock);
-                rw_lock_unlock(&instance->reg_lock);
-                rw_lock_unlock(&instance->state_lock);
                 return NULL;
         }
 
@@ -996,7 +994,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
                 list_del(&pme->next);
                 bmp_release(instance->port_ids, pme->port_id);
                 rw_lock_unlock(&instance->flows_lock);
-                rw_lock_rdlock(&instance->state_lock);
+                rw_lock_unlock(&instance->state_lock);
                 free(pme);
                 return NULL;
         }
