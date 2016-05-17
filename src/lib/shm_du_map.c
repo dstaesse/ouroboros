@@ -334,7 +334,6 @@ int shm_release_du_buff(struct shm_du_map * dum, ssize_t idx)
         long sz;
         long blocks = 0;
 
-
         if (idx > SHM_BLOCKS_IN_MAP)
                 return -1;
 
@@ -352,7 +351,8 @@ int shm_release_du_buff(struct shm_du_map * dum, ssize_t idx)
                 return 0;
         }
 
-        while (get_tail_ptr(dum)->garbage == 1) {
+        while (get_tail_ptr(dum)->garbage == 1 &&
+               *dum->ptr_tail != *dum->ptr_head) {
                 sz = get_tail_ptr(dum)->size;
                 while (sz + (long) sizeof(struct shm_du_buff) > 0) {
                         sz -= SHM_DU_BUFF_BLOCK_SIZE;
@@ -361,6 +361,7 @@ int shm_release_du_buff(struct shm_du_map * dum, ssize_t idx)
 
                 *(dum->ptr_tail) =
                         (*dum->ptr_tail + blocks) & (SHM_BLOCKS_IN_MAP - 1);
+
                 blocks = 0;
         }
 
