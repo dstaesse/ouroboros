@@ -762,14 +762,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         default:
                 return;
         }
-
-        LOG_DBGF("Lock check.");
-        rw_lock_wrlock(&_ap_instance->flows_lock);
-        rw_lock_unlock(&_ap_instance->flows_lock);
-        LOG_DBGF("flows_lock passed.");
-        rw_lock_wrlock(&_ipcp->state_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
-        LOG_DBGF("state_lock passed.");
 }
 
 static int ipcp_udp_bootstrap(struct dif_config * conf)
@@ -1358,10 +1350,6 @@ static int ipcp_udp_flow_dealloc(int port_id)
 {
         int fd = -1;
         struct shm_ap_rbuff * rb;
-        struct timespec wait = {0, 1000000};
-
-        /* flow deallocation should wait for 2 MPL */
-        nanosleep(&wait, NULL);
 
         LOG_DBGF("Deallocating flow with port_id %d.", port_id);
 
