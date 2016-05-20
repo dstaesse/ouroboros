@@ -219,8 +219,6 @@ void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
 
 int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
 {
-        struct rb_entry * pos;
-
         if (rb == NULL || e == NULL)
                 return -1;
 
@@ -231,13 +229,31 @@ int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
                 return -1;
         }
 
-        pos = rb->shm_base + *rb->ptr_head;
-        *pos = *e;
+        *(rb->shm_base + *rb->ptr_head) = *e;
         *rb->ptr_head = (*rb->ptr_head + 1) & (SHM_RBUFF_SIZE -1);
 
         pthread_mutex_unlock(rb->shm_mutex);
 
         return 0;
+}
+
+
+int shm_ap_rbuff_peek(struct shm_ap_rbuff * rb)
+{
+        int port_id = -1;
+
+        pthread_mutex_lock(rb->shm_mutex);
+
+        if (shm_rbuff_used(rb) == 0) {
+                pthread_mutex_unlock(rb->shm_mutex);
+                return -7; /* -EAGAIN */
+        }
+
+        port_id = (rb->shm_base + *rb->ptr_tail)->port_id;
+
+        pthread_mutex_unlock(rb->shm_mutex);
+
+        return port_id;
 }
 
 struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)

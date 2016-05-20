@@ -47,6 +47,7 @@ void                  shm_ap_rbuff_close(struct shm_ap_rbuff * rb);
 void                  shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb);
 int                   shm_ap_rbuff_write(struct shm_ap_rbuff * rb,
                                          struct rb_entry * e);
+int                   shm_ap_rbuff_peek(struct shm_ap_rbuff * rb);
 struct rb_entry *     shm_ap_rbuff_read();
 
 #endif /* OUROBOROS_SHM_AP_RBUFF_H */
