@@ -1124,6 +1124,7 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         int                fd;
         struct hostent *   h;
         uint32_t           ip_addr = 0;
+        bool               fd_wait = true;
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         uint32_t           dns_addr = 0;
 #endif
@@ -1220,7 +1221,19 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         rw_lock_rdlock(&_ipcp->state_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
+        pthread_mutex_lock(&_ap_instance->fd_set_lock);
+
+        _ap_instance->fd_set_sync =  true;
         FD_SET(fd, &shim_data(_ipcp)->flow_fd_s);
+
+        pthread_mutex_unlock(&_ap_instance->fd_set_lock);
+
+        while (fd_wait) {
+                sched_yield();
+                pthread_mutex_lock(&_ap_instance->fd_set_lock);
+                fd_wait = _ap_instance->fd_set_sync;
+                pthread_mutex_unlock(&_ap_instance->fd_set_lock);
+        }
 
         _ap_instance->flows[fd].port_id = port_id;
         _ap_instance->flows[fd].state   = FLOW_PENDING;
