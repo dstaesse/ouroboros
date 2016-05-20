@@ -137,10 +137,9 @@ void ap_fini(void)
                         shm_ap_rbuff_close(_ap_instance->flows[i].rb);
 
         rw_lock_unlock(&_ap_instance->flows_lock);
+        rw_lock_unlock(&_ap_instance->data_lock);
 
         free(_ap_instance);
-
-        rw_lock_unlock(&_ap_instance->data_lock);
 }
 
 #if 0
