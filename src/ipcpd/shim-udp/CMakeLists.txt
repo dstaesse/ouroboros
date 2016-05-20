@@ -12,6 +12,11 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
+find_package(ProtobufC REQUIRED)
+include_directories(${PROTOBUF_INCLUDE_DIRS})
+protobuf_generate_c(SHIM_UDP_PROTO_SRCS SHIM_UDP_PROTO_HDRS
+  shim_udp_messages.proto)
+
 # Find library needed for gethostbyname.
 include(CheckFunctionExists)
 CHECK_FUNCTION_EXISTS("gethostbyname" CMAKE_HAVE_GETHOSTBYNAME)
@@ -64,9 +69,12 @@ set(SHIM_UDP_SOURCES
   # Add source files here
   ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
 
+install(FILES ${SHIM_UDP_PROTO_HDRS} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_executable (ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES}
-  "${CMAKE_CURRENT_BINARY_DIR}/shim_udp_config.h")
-target_link_libraries (ipcpd-shim-udp LINK_PUBLIC ouroboros)
+  ${SHIM_UDP_PROTO_SRCS} "${CMAKE_CURRENT_BINARY_DIR}/shim_udp_config.h")
+target_link_libraries (ipcpd-shim-udp LINK_PUBLIC ouroboros
+  ${PROTOBUF_C_LIBRARY})
 
 # Enable DNS by default
 if (NOT DISABLE_DNS MATCHES True)
@@ -81,4 +89,4 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 install(TARGETS ipcpd-shim-udp RUNTIME DESTINATION bin)
 
 # Enable once ipcp-shim-udp has tests
-add_subdirectory(tests)
+# add_subdirectory(tests)

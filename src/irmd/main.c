@@ -1047,7 +1047,6 @@ static int flow_alloc_res(int port_id)
                 if (e->state == FLOW_ALLOCATED) {
                         rw_lock_unlock(&instance->flows_lock);
                         rw_lock_unlock(&instance->state_lock);
-                        LOG_DBGF("Returning 0.");
                         return 0;
                 }
                 if (e->state == FLOW_NULL) {

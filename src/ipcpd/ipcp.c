@@ -200,8 +200,8 @@ void * ipcp_main_loop(void * o)
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_flow_alloc(msg->port_id,
-                                                            msg->pid,
+                                _ipcp->ops->ipcp_flow_alloc(msg->pid,
+                                                            msg->port_id,
                                                             msg->dst_name,
                                                             msg->src_ap_name,
                                                             msg->src_ae_name,
@@ -214,8 +214,8 @@ void * ipcp_main_loop(void * o)
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_flow_alloc_resp(msg->port_id,
-                                                                 msg->pid,
+                                _ipcp->ops->ipcp_flow_alloc_resp(msg->pid,
+                                                                 msg->port_id,
                                                                  msg->result);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
