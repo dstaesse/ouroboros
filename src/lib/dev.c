@@ -588,18 +588,21 @@ ssize_t flow_read(int fd, void * buf, size_t count)
         rw_lock_rdlock(&_ap_instance->flows_lock);
 
         if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
-                e = shm_ap_rbuff_read(_ap_instance->rb);
-        } else {
-
-                /* FIXME: this will throw away packets for other fd's */
-                while (e == NULL ||
-                       e->port_id != _ap_instance->flows[fd].port_id) {
-                        e = shm_ap_rbuff_read(_ap_instance->rb);
+                if (shm_ap_rbuff_peek(_ap_instance->rb)
+                    != _ap_instance->flows[fd].port_id) {
+                        rw_lock_unlock(&_ap_instance->flows_lock);
+                        rw_lock_unlock(&_ap_instance->data_lock);
+                        return -1;
                 }
+        } else { /* block */
+                while (shm_ap_rbuff_peek(_ap_instance->rb)
+                       != _ap_instance->flows[fd].port_id)
+                        ;
         }
 
         rw_lock_unlock(&_ap_instance->flows_lock);
 
+        e = shm_ap_rbuff_read(_ap_instance->rb);
         if (e == NULL) {
                 rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
