@@ -318,11 +318,6 @@ static int reg_name_entry_destroy(struct reg_name_entry * e)
         free(e->name);
         instance_name_destroy(e->api);
 
-        if (e->req_ap_name != NULL)
-                free(e->req_ap_name);
-        if (e->req_ae_name != NULL)
-                free(e->req_ae_name);
-
         free(e);
 
         e = NULL;
@@ -389,7 +384,6 @@ static int reg_name_entry_del_name(char * name)
                 return 0;
 
         list_del(&e->next);
-
         reg_name_entry_destroy(e);
 
         return 0;
@@ -821,6 +815,7 @@ static struct port_map_entry * flow_accept(pid_t    pid,
                 LOG_DBGF("Unregistered AP calling accept().");
                 return NULL;
         }
+
         if (rne->accept) {
                 rw_lock_unlock(&instance->reg_lock);
                 rw_lock_unlock(&instance->state_lock);
@@ -1016,6 +1011,12 @@ static int flow_alloc_res(int port_id)
                 return -1;
         }
 
+        if (e->state == FLOW_NULL) {
+                rw_lock_unlock(&instance->flows_lock);
+                rw_lock_unlock(&instance->state_lock);
+                return -1;
+        }
+
         if (e->state == FLOW_ALLOCATED) {
                 rw_lock_unlock(&instance->flows_lock);
                 rw_lock_unlock(&instance->state_lock);
@@ -1105,6 +1106,7 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
 {
         struct reg_name_entry * rne;
         struct port_map_entry * pme;
+        bool                    acc_wait = true;
 
         pme = malloc(sizeof(*pme));
         if (pme == NULL) {
@@ -1133,12 +1135,18 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
 
         pme->n_pid = rne->api->id;
 
-        rne->req_ap_name = strdup(ap_name);
-        rne->req_ae_name = strdup(ae_name);
-
         list_add(&pme->next, &instance->port_map);
 
         pthread_mutex_lock(&rne->acc_lock);
+
+        rne->req_ap_name = ap_name;
+        rne->req_ae_name = ae_name;
+
+        if (rne->accept == false) {
+                pthread_mutex_unlock(&rne->acc_lock);
+                LOG_WARN("This AP is not accepting flow allocations.");
+                return NULL;
+        }
 
         rne->flow_arrived = 0;
 
@@ -1146,6 +1154,13 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
 
         if (pthread_cond_signal(&rne->acc_signal))
                 LOG_ERR("Failed to send signal.");
+
+        while (acc_wait) {
+                sched_yield();
+                pthread_mutex_lock(&rne->acc_lock);
+                acc_wait = (rne->flow_arrived != -1);
+                pthread_mutex_unlock(&rne->acc_lock);
+        }
 
         rw_lock_unlock(&instance->flows_lock);
         rw_lock_unlock(&instance->reg_lock);
@@ -1202,6 +1217,8 @@ static int flow_dealloc_ipcp(int port_id)
                 return 0;
         }
 
+        bmp_release(instance->port_ids, port_id);
+
         list_del(&e->next);
 
         rw_lock_unlock(&instance->flows_lock);
@@ -1245,8 +1262,10 @@ static void irm_destroy(struct irm *  irm)
                 struct port_map_entry * e = list_entry(h,
                                                        struct port_map_entry,
                                                        next);
+
                 list_del(&e->next);
                 free(e);
+
         }
 
         if (irm->dum != NULL)

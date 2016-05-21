@@ -50,6 +50,7 @@ int client_socket_open(char * file_name)
                     (struct sockaddr *) &serv_addr,
                     sizeof(serv_addr))) {
                 LOG_ERR("Failed to connect to daemon");
+                close(sockfd);
                 return -1;
         }
 
@@ -83,11 +84,13 @@ int server_socket_open(char * file_name)
                  (struct sockaddr *) &serv_addr,
                  sizeof(serv_addr))) {
                 LOG_ERR("Failed to bind socket");
+                close(sockfd);
                 return -1;
         }
 
         if (listen(sockfd, 0)) {
                 LOG_ERR("Failed to listen to socket");
+                close(sockfd);
                 return -1;
         }
 
