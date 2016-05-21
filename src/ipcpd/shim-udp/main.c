@@ -599,9 +599,6 @@ static int ipcp_udp_flow_dealloc_req(int udp_port)
         struct shm_ap_rbuff * rb;
         int port_id     = -1;
 
-        LOG_DBGF("Remote notified flow deallocation on port %d.",
-                 ntohs(udp_port));
-
         rw_lock_rdlock(&_ipcp->state_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
@@ -633,7 +630,7 @@ static int ipcp_udp_flow_dealloc_req(int udp_port)
 
         close(fd);
 
-        LOG_DBGF("Flow on UDP port %d deallocated.", ntohs(udp_port));
+        LOG_DBGF("Flow with port_id %d deallocated.", port_id);
 
         return 0;
 }
@@ -1456,8 +1453,6 @@ static int ipcp_udp_flow_dealloc(int port_id)
         rw_lock_rdlock(&_ipcp->state_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
-        LOG_DBGF("Grabbed lock for deallocating flow.");
-
         fd = port_id_to_fd(port_id);
         if (fd < 0) {
                 rw_lock_unlock(&_ap_instance->flows_lock);
@@ -1474,8 +1469,6 @@ static int ipcp_udp_flow_dealloc(int port_id)
         clr_fd(fd);
 
         rw_lock_unlock(&_ap_instance->flows_lock);
-
-        LOG_DBGF("Deallocated flow with port_id %d, fd %d.", port_id, fd);
 
         if (rb != NULL)
                 shm_ap_rbuff_close(rb);
