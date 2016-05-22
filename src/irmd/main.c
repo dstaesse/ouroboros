@@ -1487,8 +1487,13 @@ static struct irm * irm_create()
         if (i == NULL)
                 return NULL;
 
-        if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1)
-                unlink("/dev/shm/" SHM_DU_MAP_FILENAME);
+        if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1) {
+                LOG_ERR("IRM daemon is running in this system.");
+                LOG_ERR("If you think this message is in error,");
+                LOG_ERR("please remove /dev/shm/" SHM_DU_MAP_FILENAME);
+                LOG_ERR("(root privileges required) or reboot your system.");
+                return NULL;
+        }
 
         i->threadpool = malloc(sizeof(pthread_t) * IRMD_THREADPOOL_SIZE);
         if (i->threadpool == NULL) {
