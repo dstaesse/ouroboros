@@ -158,6 +158,7 @@ static int shim_ap_init(char * ap_name)
 
         rw_lock_init(&_ap_instance->flows_lock);
         pthread_mutex_init(&_ap_instance->fd_set_lock, NULL);
+
         return 0;
 }
 
@@ -228,7 +229,7 @@ static ssize_t ipcp_udp_flow_write(int fd, void * buf, size_t count)
 
         e.index = index;
 
-        rw_lock_wrlock(&_ap_instance->flows_lock);
+        rw_lock_rdlock(&_ap_instance->flows_lock);
 
         e.port_id = _ap_instance->flows[fd].port_id;
 
@@ -304,6 +305,45 @@ struct ipcp_udp_data * ipcp_udp_data_create()
         return udp_data;
 }
 
+static void set_fd(int fd)
+{
+        bool fd_wait = true;
+
+        pthread_mutex_lock(&_ap_instance->fd_set_lock);
+
+        _ap_instance->fd_set_sync =  true;
+        FD_SET(fd, &shim_data(_ipcp)->flow_fd_s);
+
+        pthread_mutex_unlock(&_ap_instance->fd_set_lock);
+
+        while (fd_wait) {
+                sched_yield();
+                pthread_mutex_lock(&_ap_instance->fd_set_lock);
+                fd_wait = _ap_instance->fd_set_sync;
+                pthread_mutex_unlock(&_ap_instance->fd_set_lock);
+        }
+}
+
+static void clr_fd(int fd)
+{
+        bool fd_wait = true;
+
+        pthread_mutex_lock(&_ap_instance->fd_set_lock);
+
+        _ap_instance->fd_set_sync =  true;
+        FD_CLR(fd, &shim_data(_ipcp)->flow_fd_s);
+
+        pthread_mutex_unlock(&_ap_instance->fd_set_lock);
+
+        while (fd_wait) {
+                sched_yield();
+                pthread_mutex_lock(&_ap_instance->fd_set_lock);
+                fd_wait = _ap_instance->fd_set_sync;
+                pthread_mutex_unlock(&_ap_instance->fd_set_lock);
+        }
+}
+
+
 static int send_shim_udp_msg(shim_udp_msg_t * msg,
                              uint32_t dst_ip_addr)
 {
@@ -360,7 +400,7 @@ static int ipcp_udp_port_alloc(uint32_t dst_ip_addr,
         return send_shim_udp_msg(&msg, dst_ip_addr);
 }
 
-static int ipcp_udp_port_alloc_resp(uint32_t ip_addr,
+static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
                                     uint16_t src_udp_port,
                                     uint16_t dst_udp_port,
                                     int      response)
@@ -374,7 +414,18 @@ static int ipcp_udp_port_alloc_resp(uint32_t ip_addr,
         msg.has_response     = true;
         msg.response         = response;
 
-        return send_shim_udp_msg(&msg, ip_addr);
+        return send_shim_udp_msg(&msg, dst_ip_addr);
+}
+
+static int ipcp_udp_port_dealloc(uint32_t dst_ip_addr,
+                                 uint16_t src_udp_port)
+{
+        shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
+
+        msg.code             = SHIM_UDP_MSG_CODE__FLOW_DEALLOC;
+        msg.src_udp_port     = src_udp_port;
+
+        return send_shim_udp_msg(&msg, dst_ip_addr);
 }
 
 static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
@@ -464,9 +515,9 @@ static int ipcp_udp_port_alloc_reply(int src_udp_port,
                                      int dst_udp_port,
                                      int response)
 {
-        int  fd      = -1;
-        int  ret     = 0;
-        int  port_id = -1;
+        int  fd        = -1;
+        int  ret       =  0;
+        int  port_id   = -1;
 
         struct sockaddr_in t_saddr;
         socklen_t          t_saddr_len = sizeof(t_saddr);
@@ -536,10 +587,53 @@ static int ipcp_udp_port_alloc_reply(int src_udp_port,
         }
 
         LOG_INFO("Flow allocation completed, UDP ports: (%d, %d).",
-                 ntohs(src_udp_port), ntohs(dst_udp_port));
+                 ntohs(dst_udp_port), ntohs(src_udp_port));
 
         return ret;
 
+}
+
+static int ipcp_udp_flow_dealloc_req(int udp_port)
+{
+        int fd      = -1;
+        int port_id = -1;
+
+        struct shm_ap_rbuff * rb;
+
+        rw_lock_rdlock(&_ipcp->state_lock);
+        rw_lock_wrlock(&_ap_instance->flows_lock);
+
+        fd = udp_port_to_fd(udp_port);
+        if (fd < 0) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ipcp->state_lock);
+                LOG_DBGF("Could not find flow on UDP port %d.",
+                         ntohs(udp_port));
+                return 0;
+        }
+
+        clr_fd(fd);
+
+        _ap_instance->flows[fd].state   = FLOW_NULL;
+        port_id = _ap_instance->flows[fd].port_id;
+        _ap_instance->flows[fd].port_id = -1;
+        rb = _ap_instance->flows[fd].rb;
+        _ap_instance->flows[fd].rb      = NULL;
+
+        rw_lock_unlock(&_ap_instance->flows_lock);
+
+        if (rb != NULL)
+                shm_ap_rbuff_close(rb);
+
+        rw_lock_unlock(&_ipcp->state_lock);
+
+        ipcp_flow_dealloc(0, port_id);
+
+        close(fd);
+
+        LOG_DBGF("Flow with port_id %d deallocated.", port_id);
+
+        return 0;
 }
 
 static void * ipcp_udp_listener()
@@ -597,6 +691,9 @@ static void * ipcp_udp_listener()
                         ipcp_udp_port_alloc_reply(msg->src_udp_port,
                                                   msg->dst_udp_port,
                                                   msg->response);
+                        break;
+                case SHIM_UDP_MSG_CODE__FLOW_DEALLOC:
+                        ipcp_udp_flow_dealloc_req(msg->src_udp_port);
                         break;
                 default:
                         LOG_ERR("Unknown message received %d.", msg->code);
@@ -1123,7 +1220,6 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         int                fd;
         struct hostent *   h;
         uint32_t           ip_addr = 0;
-        bool               fd_wait = true;
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         uint32_t           dns_addr = 0;
 #endif
@@ -1220,19 +1316,7 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         rw_lock_rdlock(&_ipcp->state_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
-        pthread_mutex_lock(&_ap_instance->fd_set_lock);
-
-        _ap_instance->fd_set_sync =  true;
-        FD_SET(fd, &shim_data(_ipcp)->flow_fd_s);
-
-        pthread_mutex_unlock(&_ap_instance->fd_set_lock);
-
-        while (fd_wait) {
-                sched_yield();
-                pthread_mutex_lock(&_ap_instance->fd_set_lock);
-                fd_wait = _ap_instance->fd_set_sync;
-                pthread_mutex_unlock(&_ap_instance->fd_set_lock);
-        }
+        set_fd(fd);
 
         _ap_instance->flows[fd].port_id = port_id;
         _ap_instance->flows[fd].state   = FLOW_PENDING;
@@ -1250,7 +1334,7 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
                 rw_lock_rdlock(&_ipcp->state_lock);
                 rw_lock_wrlock(&_ap_instance->flows_lock);
 
-                FD_CLR(fd, &shim_data(_ipcp)->flow_fd_s);
+                clr_fd(fd);
 
                 _ap_instance->flows[fd].port_id = -1;
                 _ap_instance->flows[fd].state   = FLOW_NULL;
@@ -1275,7 +1359,6 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
         struct sockaddr_in f_saddr;
         struct sockaddr_in r_saddr;
         socklen_t len = sizeof(r_saddr);
-        bool fd_wait = true;
 
         if (response)
                 return 0;
@@ -1291,7 +1374,7 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
                 rw_lock_unlock(&_ap_instance->flows_lock);
                 rw_lock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Could not find flow with port_id %d.", port_id);
-                return 0;
+                return -1;
         }
 
         if (_ap_instance->flows[fd].state != FLOW_PENDING) {
@@ -1308,23 +1391,21 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
                 _ap_instance->flows[fd].port_id = -1;
                 rw_lock_unlock(&_ap_instance->flows_lock);
                 rw_lock_unlock(&_ipcp->state_lock);
-                return 0;
+                return -1;
         }
 
         rw_lock_unlock(&_ap_instance->flows_lock);
         rw_lock_unlock(&_ipcp->state_lock);
 
         if (getsockname(fd, (struct sockaddr *) &f_saddr, &len) < 0) {
-                rw_lock_unlock(&_ipcp->state_lock);
-                LOG_DBGF("Flow with port_id %d has no peer.", port_id);
-                return 0;
-        };
+                LOG_DBGF("Flow with port_id %d has no socket.", port_id);
+                return -1;
+        }
 
         if (getpeername(fd, (struct sockaddr *) &r_saddr, &len) < 0) {
-                rw_lock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Flow with port_id %d has no peer.", port_id);
-                return 0;
-        };
+                return -1;
+        }
 
         rw_lock_rdlock(&_ipcp->state_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
@@ -1332,19 +1413,7 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
         _ap_instance->flows[fd].state = FLOW_ALLOCATED;
         _ap_instance->flows[fd].rb    = rb;
 
-        pthread_mutex_lock(&_ap_instance->fd_set_lock);
-
-        _ap_instance->fd_set_sync =  true;
-        FD_SET(fd, &shim_data(_ipcp)->flow_fd_s);
-
-        pthread_mutex_unlock(&_ap_instance->fd_set_lock);
-
-        while (fd_wait) {
-                sched_yield();
-                pthread_mutex_lock(&_ap_instance->fd_set_lock);
-                fd_wait = _ap_instance->fd_set_sync;
-                pthread_mutex_unlock(&_ap_instance->fd_set_lock);
-        }
+        set_fd(fd);
 
         rw_lock_unlock(&_ap_instance->flows_lock);
         rw_lock_unlock(&_ipcp->state_lock);
@@ -1360,7 +1429,7 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
                 shm_ap_rbuff_close(_ap_instance->flows[fd].rb);
                 _ap_instance->flows[fd].rb    = NULL;
 
-                FD_CLR(fd, &shim_data(_ipcp)->flow_fd_s);
+                clr_fd(fd);
 
                 rw_lock_unlock(&_ap_instance->flows_lock);
                 rw_lock_unlock(&_ipcp->state_lock);
@@ -1377,9 +1446,10 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
 static int ipcp_udp_flow_dealloc(int port_id)
 {
         int fd = -1;
+        int remote_udp = -1;
         struct shm_ap_rbuff * rb;
-
-        LOG_DBGF("Deallocating flow with port_id %d.", port_id);
+        struct sockaddr_in    r_saddr;
+        socklen_t             r_saddr_len = sizeof(r_saddr);
 
         rw_lock_rdlock(&_ipcp->state_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
@@ -1393,16 +1463,40 @@ static int ipcp_udp_flow_dealloc(int port_id)
         }
 
         _ap_instance->flows[fd].state   = FLOW_NULL;
-        _ap_instance->flows[fd].port_id = 0;
+        _ap_instance->flows[fd].port_id = -1;
         rb = _ap_instance->flows[fd].rb;
         _ap_instance->flows[fd].rb      = NULL;
 
-        FD_CLR(fd, &shim_data(_ipcp)->flow_fd_s);
+        clr_fd(fd);
 
         rw_lock_unlock(&_ap_instance->flows_lock);
 
         if (rb != NULL)
                 shm_ap_rbuff_close(rb);
+
+        if (getpeername(fd, (struct sockaddr *) &r_saddr, &r_saddr_len) < 0) {
+                rw_lock_unlock(&_ipcp->state_lock);
+                LOG_DBGF("Flow with port_id %d has no peer.", port_id);
+                close(fd);
+                return 0;
+        }
+
+        remote_udp       = r_saddr.sin_port;
+        r_saddr.sin_port = LISTEN_PORT;
+
+        if (connect(fd, (struct sockaddr *) &r_saddr, sizeof(r_saddr)) < 0) {
+                rw_lock_unlock(&_ipcp->state_lock);
+                close(fd);
+                return 0 ;
+        }
+
+        if (ipcp_udp_port_dealloc(r_saddr.sin_addr.s_addr,
+                                  remote_udp) < 0) {
+                LOG_DBGF("Could not notify remote.");
+                rw_lock_unlock(&_ipcp->state_lock);
+                close(fd);
+                return 0;
+        }
 
         rw_lock_unlock(&_ipcp->state_lock);
 

@@ -202,6 +202,7 @@ int ap_reg(char ** difs,
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
         fd = bmp_allocate(_ap_instance->fds);
+        _ap_instance->flows[fd].port_id = -1;
 
         rw_lock_unlock(&_ap_instance->flows_lock);
         rw_lock_unlock(&_ap_instance->data_lock);
@@ -299,8 +300,12 @@ int flow_accept(int     fd,
 
         rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
-
         cfd = bmp_allocate(_ap_instance->fds);
+        if (!bmp_is_id_valid(_ap_instance->fds, cfd)) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
+                return -1;
+        }
 
         _ap_instance->flows[cfd].rb = shm_ap_rbuff_open(recv_msg->pid);
         if (_ap_instance->flows[cfd].rb == NULL) {
@@ -405,7 +410,11 @@ int flow_alloc(char * dst_name,
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
         fd = bmp_allocate(_ap_instance->fds);
-
+        if (!bmp_is_id_valid(_ap_instance->fds, fd)) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
+                return -1;
+        }
         _ap_instance->flows[fd].rb = shm_ap_rbuff_open(recv_msg->pid);
         if (_ap_instance->flows[fd].rb == NULL) {
                 bmp_release(_ap_instance->fds, fd);
