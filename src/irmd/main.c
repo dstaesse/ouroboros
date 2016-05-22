@@ -1208,7 +1208,7 @@ static int flow_dealloc_ipcp(int port_id)
         struct port_map_entry * e = NULL;
 
         rw_lock_rdlock(&instance->state_lock);
-        rw_lock_rdlock(&instance->flows_lock);
+        rw_lock_wrlock(&instance->flows_lock);
 
         e = get_port_map_entry(port_id);
         if (e == NULL) {
