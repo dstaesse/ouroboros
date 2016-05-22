@@ -300,6 +300,7 @@ int flow_accept(int     fd,
 
         rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
+
         cfd = bmp_allocate(_ap_instance->fds);
         if (!bmp_is_id_valid(_ap_instance->fds, cfd)) {
                 rw_lock_unlock(&_ap_instance->flows_lock);
@@ -588,37 +589,39 @@ ssize_t flow_write(int fd, void * buf, size_t count)
 
 ssize_t flow_read(int fd, void * buf, size_t count)
 {
-        struct rb_entry * e = NULL;
+        int idx = -1;
         int n;
         uint8_t * sdu;
 
         rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_rdlock(&_ap_instance->flows_lock);
 
+        if (_ap_instance->flows[fd].port_id < 0) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
+                return -1;
+        }
+
         if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
-                if (shm_ap_rbuff_peek(_ap_instance->rb)
-                    != _ap_instance->flows[fd].port_id) {
-                        rw_lock_unlock(&_ap_instance->flows_lock);
-                        rw_lock_unlock(&_ap_instance->data_lock);
-                        return -1;
-                }
+                idx = shm_ap_rbuff_read_port(_ap_instance->rb,
+                                           _ap_instance->flows[fd].port_id);
         } else { /* block */
-                while (shm_ap_rbuff_peek(_ap_instance->rb)
-                       != _ap_instance->flows[fd].port_id)
+                while ((idx = shm_ap_rbuff_read_port(
+                                _ap_instance->rb,
+                                _ap_instance->flows[fd].port_id)) < 0)
                         ;
         }
 
         rw_lock_unlock(&_ap_instance->flows_lock);
 
-        e = shm_ap_rbuff_read(_ap_instance->rb);
-        if (e == NULL) {
+        if (idx < 0) {
                 rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
         }
 
         n = shm_du_map_read_sdu(&sdu,
                                 _ap_instance->dum,
-                                e->index);
+                                idx);
         if (n < 0) {
                 rw_lock_unlock(&_ap_instance->data_lock);
                 return -1;
@@ -626,7 +629,7 @@ ssize_t flow_read(int fd, void * buf, size_t count)
 
         memcpy(buf, sdu, MIN(n, count));
 
-        shm_release_du_buff(_ap_instance->dum, e->index);
+        shm_release_du_buff(_ap_instance->dum, idx);
 
         rw_lock_unlock(&_ap_instance->data_lock);
 

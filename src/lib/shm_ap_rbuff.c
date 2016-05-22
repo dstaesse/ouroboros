@@ -41,6 +41,8 @@
 #define shm_rbuff_used(rb)((*rb->ptr_head + SHM_RBUFF_SIZE - *rb->ptr_tail)    \
                           & (SHM_RBUFF_SIZE - 1))
 #define shm_rbuff_free(rb)(shm_rbuff_used(rb) + 1 < SHM_RBUFF_SIZE)
+#define head_el_ptr (rb->shm_base + *rb->ptr_head)
+#define tail_el_ptr (rb->shm_base + *rb->ptr_tail)
 
 struct shm_ap_rbuff {
         struct rb_entry * shm_base;    /* start of entry */
@@ -229,31 +231,12 @@ int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
                 return -1;
         }
 
-        *(rb->shm_base + *rb->ptr_head) = *e;
+        *head_el_ptr = *e;
         *rb->ptr_head = (*rb->ptr_head + 1) & (SHM_RBUFF_SIZE -1);
 
         pthread_mutex_unlock(rb->shm_mutex);
 
         return 0;
-}
-
-
-int shm_ap_rbuff_peek(struct shm_ap_rbuff * rb)
-{
-        int port_id = -1;
-
-        pthread_mutex_lock(rb->shm_mutex);
-
-        if (shm_rbuff_used(rb) == 0) {
-                pthread_mutex_unlock(rb->shm_mutex);
-                return -7; /* -EAGAIN */
-        }
-
-        port_id = (rb->shm_base + *rb->ptr_tail)->port_id;
-
-        pthread_mutex_unlock(rb->shm_mutex);
-
-        return port_id;
 }
 
 struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
@@ -283,4 +266,29 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
         pthread_mutex_unlock(rb->shm_mutex);
 
         return e;
+}
+
+ssize_t shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb, int port_id)
+{
+        ssize_t idx = -1;
+
+        pthread_mutex_lock(rb->shm_mutex);
+
+        if (shm_rbuff_used(rb) == 0) {
+                pthread_mutex_unlock(rb->shm_mutex);
+                return -1;
+        }
+
+        if (tail_el_ptr->port_id != port_id) {
+                pthread_mutex_unlock(rb->shm_mutex);
+                return -1;
+        }
+
+        idx = tail_el_ptr->index;
+
+        *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_RBUFF_SIZE -1);
+
+        pthread_mutex_unlock(rb->shm_mutex);
+
+        return idx;
 }
