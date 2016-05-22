@@ -871,6 +871,9 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
         int  enable = 1;
         int  fd = -1;
 
+        if (conf == NULL)
+                return -1; /* -EINVAL */
+
         if (conf->type != THIS_TYPE) {
                 LOG_ERR("Config doesn't match IPCP type.");
                 return -1;
