@@ -69,8 +69,6 @@ set(SHIM_UDP_SOURCES
   # Add source files here
   ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
 
-install(FILES ${SHIM_UDP_PROTO_HDRS} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR})
-
 add_executable (ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES}
   ${SHIM_UDP_PROTO_SRCS} "${CMAKE_CURRENT_BINARY_DIR}/shim_udp_config.h")
 target_link_libraries (ipcpd-shim-udp LINK_PUBLIC ouroboros
