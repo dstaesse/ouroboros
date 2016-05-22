@@ -1076,6 +1076,8 @@ static int flow_dealloc(int port_id)
         rw_lock_rdlock(&instance->state_lock);
         rw_lock_wrlock(&instance->flows_lock);
 
+        bmp_release(instance->port_ids, port_id);
+
         e = get_port_map_entry(port_id);
         if (e == NULL) {
                 rw_lock_unlock(&instance->flows_lock);
@@ -1086,8 +1088,6 @@ static int flow_dealloc(int port_id)
         n_1_pid = e->n_1_pid;
 
         list_del(&e->next);
-
-        bmp_release(instance->port_ids, port_id);
 
         ret = ipcp_flow_dealloc(n_1_pid, port_id);
 
@@ -1216,8 +1216,6 @@ static int flow_dealloc_ipcp(int port_id)
                 rw_lock_unlock(&instance->state_lock);
                 return 0;
         }
-
-        bmp_release(instance->port_ids, port_id);
 
         list_del(&e->next);
 
