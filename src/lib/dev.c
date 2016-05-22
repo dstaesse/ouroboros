@@ -154,26 +154,6 @@ static int port_id_to_fd(int port_id)
 }
 #endif
 
-static void clean_fds()
-{
-        int i;
-        for (i = 0; i < AP_MAX_FLOWS; ++i) {
-                if (flow_alloc_res(i) < 0) {
-                        rw_lock_wrlock(&_ap_instance->flows_lock);
-                        if (_ap_instance->flows[i].port_id < 0) {
-                                rw_lock_unlock(&_ap_instance->flows_lock);
-                                continue;
-                        }
-
-                        bmp_release(_ap_instance->fds, i);
-                        _ap_instance->flows[i].port_id = -1;
-                        shm_ap_rbuff_close(_ap_instance->flows[i].rb);
-                        _ap_instance->flows[i].rb = NULL;
-                        rw_lock_unlock(&_ap_instance->flows_lock);
-                }
-        }
-}
-
 int ap_reg(char ** difs,
            size_t  len)
 {
@@ -289,8 +269,6 @@ int flow_accept(int     fd,
 
         msg.pid     = _ap_instance->api->id;
 
-        clean_fds();
-
         rw_lock_unlock(&_ap_instance->data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
@@ -322,8 +300,12 @@ int flow_accept(int     fd,
 
         rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
-
         cfd = bmp_allocate(_ap_instance->fds);
+        if (!bmp_is_id_valid(_ap_instance->fds, cfd)) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
+                return -1;
+        }
 
         _ap_instance->flows[cfd].rb = shm_ap_rbuff_open(recv_msg->pid);
         if (_ap_instance->flows[cfd].rb == NULL) {
@@ -412,8 +394,6 @@ int flow_alloc(char * dst_name,
         msg.pid         = _ap_instance->api->id;
         msg.ap_name     = _ap_instance->api->name;
 
-        clean_fds();
-
         rw_lock_unlock(&_ap_instance->data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
@@ -427,11 +407,14 @@ int flow_alloc(char * dst_name,
         }
 
         rw_lock_rdlock(&_ap_instance->data_lock);
-
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
         fd = bmp_allocate(_ap_instance->fds);
-
+        if (!bmp_is_id_valid(_ap_instance->fds, fd)) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
+                rw_lock_unlock(&_ap_instance->data_lock);
+                return -1;
+        }
         _ap_instance->flows[fd].rb = shm_ap_rbuff_open(recv_msg->pid);
         if (_ap_instance->flows[fd].rb == NULL) {
                 bmp_release(_ap_instance->fds, fd);

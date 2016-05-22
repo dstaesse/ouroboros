@@ -595,9 +595,10 @@ static int ipcp_udp_port_alloc_reply(int src_udp_port,
 
 static int ipcp_udp_flow_dealloc_req(int udp_port)
 {
-        int fd          = -1;
+        int fd      = -1;
+        int port_id = -1;
+
         struct shm_ap_rbuff * rb;
-        int port_id     = -1;
 
         rw_lock_rdlock(&_ipcp->state_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
@@ -1477,7 +1478,7 @@ static int ipcp_udp_flow_dealloc(int port_id)
                 rw_lock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Flow with port_id %d has no peer.", port_id);
                 close(fd);
-                return 0 ;
+                return 0;
         }
 
         remote_udp       = r_saddr.sin_port;
