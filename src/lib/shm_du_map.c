@@ -32,7 +32,6 @@
 
 #include <ouroboros/logs.h>
 
-
 #define SHM_BLOCKS_SIZE (SHM_BLOCKS_IN_MAP * SHM_DU_BUFF_BLOCK_SIZE)
 #define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 2 * sizeof (size_t)                   \
                        + sizeof(pthread_mutex_t))
@@ -234,17 +233,26 @@ ssize_t shm_create_du_buff(struct shm_du_map * dum,
                            size_t              len)
 {
         struct shm_du_buff * sdb;
+#ifndef SHM_MAP_SINGLE_BLOCK
         long                 blocks = 0;
         int                  sz = size + sizeof *sdb;
         int                  sz2 = headspace + len + sizeof *sdb;
-        uint8_t *            write_pos;
         size_t               copy_len;
+#endif
+        uint8_t *            write_pos;
         ssize_t              index;
 
         if (dum == NULL || data == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
                 return -1;
         }
+
+#ifdef SHM_MAP_SINGLE_BLOCK
+        if (size + sizeof *sdb > SHM_DU_MAP_BLOCK_SIZE) {
+                LOG_DBGF("Multi-block SDU's disabled. Dropping.");
+                return -1;
+        }
+#endif
 
         if (headspace >= size) {
                 LOG_DBGF("Index out of bounds.");
@@ -258,6 +266,7 @@ ssize_t shm_create_du_buff(struct shm_du_map * dum,
 
         pthread_mutex_lock(dum->shm_mutex);
 
+#ifndef SHM_MAP_SINGLE_BLOCK
         while (sz > 0) {
                 sz -= SHM_DU_BUFF_BLOCK_SIZE;
                 sz2 -= SHM_DU_BUFF_BLOCK_SIZE;
@@ -273,17 +282,23 @@ ssize_t shm_create_du_buff(struct shm_du_map * dum,
                 pthread_mutex_unlock(dum->shm_mutex);
                 return -1;
         }
+#else
+        if (!shm_map_free(dum, 1)) {
+                pthread_mutex_unlock(dum->shm_mutex);
+                return -1;
+        }
+#endif
 
         sdb = get_head_ptr(dum);
-
         sdb->size = size;
         sdb->garbage = 0;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
 
-        copy_len = MIN(len, SHM_DU_BUFF_BLOCK_SIZE - headspace - sizeof *sdb);
         write_pos = ((uint8_t *) sdb) + sizeof *sdb + headspace;
 
+#ifndef SHM_MAP_SINGLE_BLOCK
+        copy_len = MIN(len, SHM_DU_BUFF_BLOCK_SIZE - headspace - sizeof *sdb);
         while (blocks > 0) {
                 memcpy(write_pos, data, copy_len);
                 *(dum->ptr_head) = (*dum->ptr_head + 1)
@@ -296,7 +311,11 @@ ssize_t shm_create_du_buff(struct shm_du_map * dum,
 
         index = (*dum->ptr_head - 1 + SHM_BLOCKS_IN_MAP)
                 & (SHM_BLOCKS_IN_MAP - 1);
-
+#else
+        memcpy(write_pos, data, len);
+        index = *dum->ptr_head;
+        *(dum->ptr_head) = (*dum->ptr_head + 1) & (SHM_BLOCKS_IN_MAP - 1);
+#endif
         pthread_mutex_unlock(dum->shm_mutex);
 
         return index;
@@ -331,9 +350,10 @@ int shm_du_map_read_sdu(uint8_t **          dst,
 
 int shm_release_du_buff(struct shm_du_map * dum, ssize_t idx)
 {
+#ifndef SHM_MAP_SINGLE_BLOCK
         long sz;
         long blocks = 0;
-
+#endif
         if (idx > SHM_BLOCKS_IN_MAP)
                 return -1;
 
@@ -353,6 +373,7 @@ int shm_release_du_buff(struct shm_du_map * dum, ssize_t idx)
 
         while (get_tail_ptr(dum)->garbage == 1 &&
                *dum->ptr_tail != *dum->ptr_head) {
+#ifndef SHM_MAP_SINGLE_BLOCK
                 sz = get_tail_ptr(dum)->size;
                 while (sz + (long) sizeof(struct shm_du_buff) > 0) {
                         sz -= SHM_DU_BUFF_BLOCK_SIZE;
@@ -363,6 +384,10 @@ int shm_release_du_buff(struct shm_du_map * dum, ssize_t idx)
                         (*dum->ptr_tail + blocks) & (SHM_BLOCKS_IN_MAP - 1);
 
                 blocks = 0;
+#else
+                *(dum->ptr_tail) =
+                        (*dum->ptr_tail + 1) & (SHM_BLOCKS_IN_MAP - 1);
+#endif
         }
 
         pthread_mutex_unlock(dum->shm_mutex);
