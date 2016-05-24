@@ -46,8 +46,10 @@
                             + ((tx)->tv_nsec - (t0)->tv_nsec) / MILLION)
 
 /* functions for timevals are the same */
-#define tv_diff_us(t0, tx) ts_diff_us(t0, tx)
-#define tv_diff_ms(t0, tx) ts_diff_ms(t0, tx)
+#define tv_diff_us(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * MILLION     \
+                            + ((tx)->tv_usec - (t0)->tv_usec) / 1000L)
+#define tv_diff_ms(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * 1000L       \
+                            + ((tx)->tv_usec - (t0)->tv_usec) / MILLION)
 
 /* functions for timespecs */
 int ts_add(const struct timespec * t,
