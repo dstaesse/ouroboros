@@ -31,7 +31,7 @@ int client_main(int duration, int size, long rate)
         bool stop = false;
         char buf[size];
         long seqnr = 0;
-        long long gap = size * 8 * (BILLION / rate); /* ns */
+        unsigned long gap = size * 8 * (BILLION / rate); /* ns */
 
         struct timespec start;
         struct timespec end;

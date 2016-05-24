@@ -23,13 +23,16 @@
 #ifndef OUROBOROS_TIME_UTILS_H
 #define OUROBOROS_TIME_UTILS_H
 
-#ifndef MILLION
-#define MILLION  1000000L
+#ifdef MILLION
+#undef MILLION
 #endif
 
-#ifndef BILLION
-#define BILLION  1000000000L
+#ifdef BILLION
+#undef BILLION
 #endif
+
+#define MILLION  1000000L
+#define BILLION  1000000000L
 
 #include <sys/time.h>
 #include <limits.h> /* LONG_MAX */

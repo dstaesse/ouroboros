@@ -116,12 +116,15 @@ int server_main()
 {
         int    server_fd = 0;
         int    client_fd = 0;
-        char * dif = DIF_NAME;
+
+        char * dif         = DIF_NAME;
         char * client_name = NULL;
-        int    i         = 0;
+
+        int i = 0;
+
         pthread_t * threads = malloc(sizeof(*threads) * 10);
         if (threads == NULL)
-                exit(1);
+                EXIT_FAILURE;
 
         printf("Server started, interval is %ld s, timeout is %ld s.\n",
                server_settings.interval, server_settings.timeout);

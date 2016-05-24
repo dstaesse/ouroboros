@@ -31,10 +31,7 @@
 #include <stdbool.h>
 
 #define SERVER_AP_NAME "cbr-server"
-#define CLIENT_AP_NAME "echo-client"
-
-#define MILLION 1000000
-#define BILLION 1000000000
+#define CLIENT_AP_NAME "cbr-client"
 
 #define BUF_SIZE 1500
 
@@ -92,7 +89,7 @@ int main(int argc, char ** argv)
                         duration = strtol(*(++argv), &rem, 10);
                         --argc;
                 } else if (strcmp(*argv, "-s") == 0 ||
-                    strcmp(*argv, "--size") == 0) {
+                           strcmp(*argv, "--size") == 0) {
                         size = strtol(*(++argv), &rem, 10);
                         --argc;
                 } else if (strcmp(*argv, "-r") == 0 ||
@@ -106,7 +103,7 @@ int main(int argc, char ** argv)
                                 rate *= BILLION;
                         --argc;
                 } else if (strcmp(*argv, "-l") == 0 ||
-                    strcmp(*argv, "--listen") == 0) {
+                           strcmp(*argv, "--listen") == 0) {
                         server = true;
                 } else {
                         usage();
