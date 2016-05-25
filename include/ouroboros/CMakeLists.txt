@@ -11,6 +11,7 @@ set(HEADER_FILES
         instance_name.h
         irm.h
         qos.h
+        time_utils.h
 )
 
 install(FILES ${HEADER_FILES} DESTINATION include/ouroboros)

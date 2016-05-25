@@ -36,6 +36,7 @@ set(SOURCE_FILES
   shm_ap_rbuff.c
   shm_du_map.c
   sockets.c
+  time_utils.c
   utils.c
   )
 
