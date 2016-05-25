@@ -67,7 +67,7 @@ int client_main(int duration, int size, long rate)
 
                 if (flow_write(fd, buf, size) == -1) {
                         printf("Failed to write SDU.\n");
-                        stop = true;
+                        continue;
                 }
 
                 nanosleep(&interval, NULL);
@@ -78,7 +78,7 @@ int client_main(int duration, int size, long rate)
 
                 if (duration != 0
                     && ts_diff_us(&start, &end) / MILLION >= (long) duration)
-                        stop = 1;
+                        stop = true;
         }
 
         clock_gettime(CLOCK_REALTIME, &end);
