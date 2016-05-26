@@ -67,6 +67,7 @@ int client_main(int duration, int size, long rate)
 
                 if (flow_write(fd, buf, size) == -1) {
                         printf("Failed to write SDU.\n");
+                        stop = true;
                         continue;
                 }
 
