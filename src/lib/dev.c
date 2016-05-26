@@ -345,6 +345,9 @@ int flow_alloc_resp(int fd,
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
+        if (fd < 0)
+                return -EBADF;
+
         msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
         msg.has_pid      = true;
         msg.pid          = _ap_instance->api->id;
@@ -454,6 +457,9 @@ int flow_alloc_res(int fd)
         irm_msg_t * recv_msg = NULL;
         int result = 0;
 
+        if (fd < 0)
+                return -EBADF;
+
         msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RES;
         msg.has_port_id  = true;
 
@@ -528,6 +534,10 @@ int flow_dealloc(int fd)
 int flow_cntl(int fd, int cmd, int oflags)
 {
         int old;
+
+        if (fd < 0)
+                return -EBADF;
+
         rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
@@ -558,32 +568,46 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         if (buf == NULL)
                 return 0;
 
+        if (fd < 0)
+                return -EBADF;
+
         rw_lock_rdlock(&_ap_instance->data_lock);
-
-        index = shm_create_du_buff(_ap_instance->dum,
-                                   count + DU_BUFF_HEADSPACE +
-                                   DU_BUFF_TAILSPACE,
-                                   DU_BUFF_HEADSPACE,
-                                   (uint8_t *) buf,
-                                   count);
-        if (index == -1) {
-                rw_lock_unlock(&_ap_instance->data_lock);
-                return -1;
-        }
-
         rw_lock_rdlock(&_ap_instance->flows_lock);
 
-        e.index   = index;
-        e.port_id = _ap_instance->flows[fd].port_id;
-
         if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
+                index = shm_create_du_buff(_ap_instance->dum,
+                                           count + DU_BUFF_HEADSPACE +
+                                           DU_BUFF_TAILSPACE,
+                                           DU_BUFF_HEADSPACE,
+                                           (uint8_t *) buf,
+                                           count);
+                if (index == -1) {
+                        rw_lock_unlock(&_ap_instance->flows_lock);
+                        rw_lock_unlock(&_ap_instance->data_lock);
+                        return -1;
+                }
+
+                e.index   = index;
+                e.port_id = _ap_instance->flows[fd].port_id;
+
                 if (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0) {
                         shm_release_du_buff(_ap_instance->dum, index);
                         rw_lock_unlock(&_ap_instance->flows_lock);
                         rw_lock_unlock(&_ap_instance->data_lock);
                         return -EPIPE;
                 }
-        } else {
+        } else { /* blocking */
+                while ((index = shm_create_du_buff(_ap_instance->dum,
+                                                   count + DU_BUFF_HEADSPACE +
+                                                   DU_BUFF_TAILSPACE,
+                                                   DU_BUFF_HEADSPACE,
+                                                   (uint8_t *) buf,
+                                                   count)) < 0)
+                        ;
+
+                e.index   = index;
+                e.port_id = _ap_instance->flows[fd].port_id;
+
                 while (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0)
                         ;
         }
@@ -599,6 +623,9 @@ ssize_t flow_read(int fd, void * buf, size_t count)
         int idx = -1;
         int n;
         uint8_t * sdu;
+
+        if (fd < 0)
+                return -EBADF;
 
         rw_lock_rdlock(&_ap_instance->data_lock);
         rw_lock_rdlock(&_ap_instance->flows_lock);
