@@ -248,7 +248,7 @@ ssize_t shm_create_du_buff(struct shm_du_map * dum,
         }
 
 #ifdef SHM_MAP_SINGLE_BLOCK
-        if (size + sizeof *sdb > SHM_DU_MAP_BLOCK_SIZE) {
+        if (size + sizeof *sdb > SHM_DU_BUFF_BLOCK_SIZE) {
                 LOG_DBGF("Multi-block SDU's disabled. Dropping.");
                 return -1;
         }
