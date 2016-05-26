@@ -93,6 +93,9 @@ void * ipcp_main_loop(void * o)
                 return (void *) 1;
         }
 
+        pthread_cleanup_push((void(*)(void *)) close,
+                             (void *) &sockfd);
+
         free(sock_path);
 
         while (true) {
@@ -258,6 +261,8 @@ void * ipcp_main_loop(void * o)
                 free(buffer.data);
                 close(lsockfd);
         }
+
+        pthread_cleanup_pop(0);
 
         return NULL;
 }
