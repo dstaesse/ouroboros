@@ -55,9 +55,11 @@ static void usage(void)
                "  -t, --timeout             Server timeout interval (s)\n"
                "\n"
                "Client options:\n"
-               "  -d  --duration            Duration for sending (s)\n"
+               "  -d, --duration            Duration for sending (s)\n"
+               "  -f, --flood               Send SDU's as fast as possible\n"
                "  -s, --size                SDU size (B)\n"
                "  -r, --rate                Rate (b/s)\n"
+               "      --sleep               Sleep in between sending sdu's\n"
                "\n\n"
                "      --help                Display this help text and exit\n");
 }
@@ -67,6 +69,8 @@ int main(int argc, char ** argv)
         int  duration = 60;      /* One minute test */
         int  size     = 1000;    /* 1000 byte SDU's */
         long rate     = 1000000; /* 1 Mb/s */
+        bool flood    = false;
+        bool sleep    = false;
         char * rem;
 
         bool server = false;
@@ -105,6 +109,11 @@ int main(int argc, char ** argv)
                 } else if (strcmp(*argv, "-l") == 0 ||
                            strcmp(*argv, "--listen") == 0) {
                         server = true;
+                } else if (strcmp(*argv, "-f") == 0 ||
+                           strcmp(*argv, "--flood") == 0) {
+                        flood = true;
+                } else if (strcmp(*argv, "--sleep") == 0) {
+                        sleep = true;
                 } else {
                         usage();
                         return 0;
@@ -117,5 +126,5 @@ int main(int argc, char ** argv)
                 return server_main();
         }
 
-        return client_main(duration, size, rate);
+        return client_main(duration, size, rate, flood, sleep);
 }

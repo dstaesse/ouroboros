@@ -33,7 +33,7 @@
 #endif
 
 #ifndef SHM_BLOCKS_IN_MAP
-#define SHM_BLOCKS_IN_MAP (1 << 12)
+#define SHM_BLOCKS_IN_MAP (1 << 14)
 #endif
 
 #include "common.h"
