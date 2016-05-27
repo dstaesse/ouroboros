@@ -62,6 +62,7 @@ typedef ShimUdpMsg shim_udp_msg_t;
 #define SHIM_UDP_MSG_SIZE 256
 #define SHIM_UDP_MAX_SDU_SIZE 8980
 #define DNS_TTL 86400
+#define FD_UPDATE_TIMEOUT 100 /* microseconds */
 
 #define shim_data(type) ((struct ipcp_udp_data *) type->data)
 
@@ -714,12 +715,13 @@ static void * ipcp_udp_sdu_reader()
         int n;
         int fd;
         char buf[SHIM_UDP_MAX_SDU_SIZE];
-        struct timeval tv = {0, 100};
         struct sockaddr_in r_saddr;
         fd_set read_fds;
         int flags;
 
         while (true) {
+                struct timeval tv = {0, FD_UPDATE_TIMEOUT};
+
                 rw_lock_rdlock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
@@ -759,8 +761,7 @@ static void * ipcp_udp_sdu_reader()
                                 continue;
 
                         /* send the sdu to the correct port_id */
-                        if (ipcp_udp_flow_write(fd, buf, n) < 0)
-                                LOG_ERR("Failed to write SDU.");
+                        ipcp_udp_flow_write(fd, buf, n);
                 }
         }
 
