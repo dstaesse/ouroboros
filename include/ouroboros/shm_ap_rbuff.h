@@ -29,7 +29,7 @@
 #endif
 
 #ifndef SHM_RBUFF_SIZE
-#define SHM_RBUFF_SIZE (1 << 12)
+#define SHM_RBUFF_SIZE (1 << 14)
 #endif
 
 #include <sys/types.h>

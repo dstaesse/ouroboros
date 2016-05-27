@@ -24,18 +24,29 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/time_utils.h>
 
-int client_main(int duration, int size, long rate)
+static void busy_wait_until(const struct timespec * deadline)
+{
+        struct timespec now;
+        clock_gettime(CLOCK_REALTIME, &now);
+        while (now.tv_sec < deadline->tv_sec)
+                clock_gettime(CLOCK_REALTIME, &now);
+        while (now.tv_sec == deadline->tv_sec
+               && now.tv_nsec < deadline->tv_nsec)
+                clock_gettime(CLOCK_REALTIME, &now);
+}
+
+int client_main(int duration, int size, long rate, bool flood, bool sleep)
 {
         int fd = 0;
         int result = 0;
         bool stop = false;
         char buf[size];
         long seqnr = 0;
-        unsigned long gap = size * 8 * (BILLION / rate); /* ns */
+        unsigned long gap = size * 8.0 * (BILLION / (double) rate);
 
         struct timespec start;
         struct timespec end;
-        struct timespec interval = {(gap / BILLION), gap % BILLION};
+        struct timespec intv = {(gap / BILLION), gap % BILLION};
         int ms;
 
         if (ap_init(CLIENT_AP_NAME)) {
@@ -62,24 +73,43 @@ int client_main(int duration, int size, long rate)
         }
 
         clock_gettime(CLOCK_REALTIME, &start);
-        while (!stop) {
-                memcpy(buf, &seqnr, sizeof(seqnr));
+        if (!flood) {
+                while (!stop) {
+                        clock_gettime(CLOCK_REALTIME, &end);
+                        ts_add(&end, &intv, &end);
+                        memcpy(buf, &seqnr, sizeof(seqnr));
 
-                if (flow_write(fd, buf, size) == -1) {
-                        printf("Failed to write SDU.\n");
-                        stop = true;
-                        continue;
+                        if (flow_write(fd, buf, size) == -1) {
+                                stop = true;
+                                continue;
+                        }
+
+                        if (sleep)
+                                nanosleep(&intv, NULL);
+                        else
+                        busy_wait_until(&end);
+
+                        ++seqnr;
+
+                        if (ts_diff_us(&start, &end) / MILLION
+                            >= (long) duration)
+                                stop = true;
+                }
+        } else { /* flood */
+                while (!stop) {
+                        clock_gettime(CLOCK_REALTIME, &end);
+                        if (flow_write(fd, buf, size) == -1) {
+                                stop = true;
+                                continue;
+                        }
+
+                        ++seqnr;
+
+                        if (ts_diff_us(&start, &end) / MILLION
+                            >= (long) duration)
+                                stop = true;
                 }
 
-                nanosleep(&interval, NULL);
-
-                seqnr++;
-
-                clock_gettime(CLOCK_REALTIME, &end);
-
-                if (duration != 0
-                    && ts_diff_us(&start, &end) / MILLION >= (long) duration)
-                        stop = true;
         }
 
         clock_gettime(CLOCK_REALTIME, &end);
