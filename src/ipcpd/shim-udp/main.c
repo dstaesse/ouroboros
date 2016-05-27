@@ -222,26 +222,23 @@ static ssize_t ipcp_udp_flow_write(int fd, void * buf, size_t count)
                 return -1; /* -ENOTENROLLED */
         }
 
-        index = shm_create_du_buff(_ap_instance->dum, count, 0, buf, count);
-
-        if (index == -1) {
-                return -1;
-        }
-
-        e.index = index;
-
         rw_lock_rdlock(&_ap_instance->flows_lock);
 
+        while ((index = shm_create_du_buff(_ap_instance->dum,
+                                           count + DU_BUFF_HEADSPACE +
+                                           DU_BUFF_TAILSPACE,
+                                           DU_BUFF_HEADSPACE,
+                                           (uint8_t *) buf,
+                                           count)) < 0)
+                ;
+
+        e.index   = index;
         e.port_id = _ap_instance->flows[fd].port_id;
 
-        if (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0) {
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                shm_release_du_buff(_ap_instance->dum, index);
-                return -EPIPE;
-        }
+        while (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0)
+                ;
 
         rw_lock_unlock(&_ap_instance->flows_lock);
-
         rw_lock_unlock(&_ipcp->state_lock);
 
         return 0;
