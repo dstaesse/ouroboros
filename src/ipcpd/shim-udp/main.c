@@ -834,13 +834,21 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                if (info->si_pid == irmd_pid || info->si_pid == 0) {
+                if (info->si_pid == irmd_pid) {
+                        bool clean_threads = false;
                         LOG_DBG("Terminating by order of %d. Bye.",
                                 info->si_pid);
 
                         rw_lock_wrlock(&_ipcp->state_lock);
 
-                        if (_ipcp->state == IPCP_ENROLLED) {
+                        if (_ipcp->state == IPCP_ENROLLED)
+                                clean_threads = true;
+
+                        _ipcp->state = IPCP_SHUTDOWN;
+
+                        rw_lock_unlock(&_ipcp->state_lock);
+
+                        if (clean_threads) {
                                 pthread_cancel(_ap_instance->handler);
                                 pthread_cancel(_ap_instance->sdu_reader);
                                 pthread_cancel(_ap_instance->sduloop);
@@ -852,9 +860,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
                         pthread_cancel(_ap_instance->mainloop);
 
-                        _ipcp->state = IPCP_SHUTDOWN;
-
-                        rw_lock_unlock(&_ipcp->state_lock);
                 }
         default:
                 return;
