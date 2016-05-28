@@ -783,7 +783,6 @@ static void * ipcp_udp_sdu_loop(void * o)
                 }
 
                 e = shm_ap_rbuff_read(_ap_instance->rb);
-
                 if (e == NULL) {
                         rw_lock_unlock(&_ipcp->state_lock);
                         continue;
