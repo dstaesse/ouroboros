@@ -34,13 +34,14 @@
 
 #define NORMAL "normal"
 #define SHIM_UDP "shim-udp"
+#define LOCAL "local"
 
 static void usage()
 {
         printf("Usage: irm create_ipcp\n"
                "           ap <application process name>\n"
                "           type [TYPE]\n\n"
-               "where TYPE = {" NORMAL " " SHIM_UDP "}\n");
+               "where TYPE = {" NORMAL " " LOCAL " " SHIM_UDP "}\n");
 }
 
 int do_create_ipcp(int argc, char ** argv)
@@ -73,6 +74,8 @@ int do_create_ipcp(int argc, char ** argv)
                 type = IPCP_NORMAL;
         else if (strcmp(ipcp_type, SHIM_UDP) == 0)
                 type = IPCP_SHIM_UDP;
+        else if (strcmp(ipcp_type, LOCAL) == 0)
+                type = IPCP_LOCAL;
         else {
                 usage();
                 return -1;

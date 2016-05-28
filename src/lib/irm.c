@@ -137,6 +137,8 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
                 config.has_dns_addr = true;
                 config.dns_addr = conf->dns_addr;
                 break;
+        case IPCP_LOCAL:
+                break;
         default:
                 return -1;
         }

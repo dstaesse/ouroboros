@@ -28,6 +28,7 @@
 
 enum ipcp_type {
         IPCP_NORMAL = 0,
+        IPCP_LOCAL,
         IPCP_SHIM_UDP
 };
 
