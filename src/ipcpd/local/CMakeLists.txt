@@ -28,5 +28,5 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ipcpd-local RUNTIME DESTINATION bin)
 
-# Enable once ipcp-shim-udp has tests
+# Enable once ipcp-local has tests
 # add_subdirectory(tests)
