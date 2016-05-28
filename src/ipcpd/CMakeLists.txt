@@ -5,5 +5,6 @@ set(IPCP_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/ipcp-data.c
 )
 
+add_subdirectory(local)
 add_subdirectory(normal)
 add_subdirectory(shim-udp)

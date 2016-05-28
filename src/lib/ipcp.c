@@ -121,12 +121,12 @@ pid_t ipcp_create(char *         ipcp_name,
                 return pid;
         }
 
-        /* clear fd table */
-
         if (ipcp_type == IPCP_NORMAL)
                 exec_name = IPCP_NORMAL_EXEC;
         else if (ipcp_type == IPCP_SHIM_UDP)
                 exec_name = IPCP_SHIM_UDP_EXEC;
+        else if (ipcp_type == IPCP_LOCAL)
+                exec_name = IPCP_LOCAL_EXEC;
         else
                 exit(EXIT_FAILURE);
 

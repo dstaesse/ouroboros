@@ -33,6 +33,7 @@
 
 #define NORMAL "normal"
 #define SHIM_UDP "shim-udp"
+#define LOCAL "local"
 
 #define DEFAULT_ADDR_SIZE 4
 #define DEFAULT_CEP_ID_SIZE 2
@@ -53,7 +54,7 @@ static void usage()
                "           [api <application process instance>]\n"
                "           dif <DIF name>\n"
                "           type [TYPE]\n\n"
-               "where TYPE = {" NORMAL " " SHIM_UDP "}\n\n"
+               "where TYPE = {" NORMAL " " LOCAL " " SHIM_UDP "}\n\n"
                "if TYPE == " NORMAL "\n"
                "           [addr <address size> (default: %d)]\n"
                "           [cep_id <CEP-id size> (default: %d)]\n"
@@ -166,6 +167,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 }
                 conf.ip_addr = ip_addr;
                 conf.dns_addr = dns_addr;
+        } else if (strcmp(ipcp_type, LOCAL) == 0) {
+                conf.type = IPCP_LOCAL;
         } else {
                 usage();
                 return -1;
