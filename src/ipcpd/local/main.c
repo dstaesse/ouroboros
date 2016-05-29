@@ -201,17 +201,16 @@ static void * ipcp_local_sdu_loop(void * o)
                 struct rb_entry * e;
                 int fd;
 
+                e = shm_ap_rbuff_read(_ap_instance->rb);
+                if (e == NULL) {
+                        continue;
+                }
+
                 rw_lock_rdlock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
                         rw_lock_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
-                }
-
-                e = shm_ap_rbuff_read(_ap_instance->rb);
-                if (e == NULL) {
-                        rw_lock_unlock(&_ipcp->state_lock);
-                        continue;
                 }
 
                 rw_lock_rdlock(&_ap_instance->flows_lock);
