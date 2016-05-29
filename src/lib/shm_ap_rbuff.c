@@ -42,6 +42,7 @@
 #define shm_rbuff_used(rb)((*rb->ptr_head + SHM_RBUFF_SIZE - *rb->ptr_tail)    \
                           & (SHM_RBUFF_SIZE - 1))
 #define shm_rbuff_free(rb)(shm_rbuff_used(rb) + 1 < SHM_RBUFF_SIZE)
+#define shm_rbuff_empty(rb) (*rb->ptr_head == *rb->ptr_tail)
 #define head_el_ptr (rb->shm_base + *rb->ptr_head)
 #define tail_el_ptr (rb->shm_base + *rb->ptr_tail)
 
@@ -239,8 +240,7 @@ int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
                 pthread_mutex_unlock(rb->shm_mutex);
                 return -1;
         }
-
-        if (shm_rbuff_used(rb) == 0)
+        if (shm_rbuff_empty(rb))
                 pthread_cond_broadcast(rb->work);
 
         *head_el_ptr = *e;
@@ -262,10 +262,8 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
                              (void*) rb->shm_mutex);
 
         pthread_mutex_lock(rb->shm_mutex);
-        while(shm_rbuff_used(rb) == 0)
+        while(shm_rbuff_empty(rb))
                 pthread_cond_wait(rb->work, rb->shm_mutex);
-
-        pthread_cleanup_pop(0);
 
         e = malloc(sizeof(*e));
         if (e == NULL) {
@@ -277,7 +275,7 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
 
         *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_RBUFF_SIZE -1);
 
-        pthread_mutex_unlock(rb->shm_mutex);
+        pthread_cleanup_pop(1);
 
         return e;
 }
@@ -288,7 +286,7 @@ ssize_t shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb, int port_id)
 
         pthread_mutex_lock(rb->shm_mutex);
 
-        if (shm_rbuff_used(rb) == 0) {
+        if (shm_rbuff_empty(rb)) {
                 pthread_mutex_unlock(rb->shm_mutex);
                 return -1;
         }
