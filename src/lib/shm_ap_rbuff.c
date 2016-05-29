@@ -259,9 +259,9 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
                 return NULL;
 
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void*) rb->shm_mutex);
-
+                             (void *) rb->shm_mutex);
         pthread_mutex_lock(rb->shm_mutex);
+
         while(shm_rbuff_empty(rb))
                 pthread_cond_wait(rb->work, rb->shm_mutex);
 

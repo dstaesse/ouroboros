@@ -775,17 +775,16 @@ static void * ipcp_udp_sdu_loop(void * o)
                 int len = 0;
                 char * buf;
 
+                e = shm_ap_rbuff_read(_ap_instance->rb);
+                if (e == NULL) {
+                        continue;
+                }
+
                 rw_lock_rdlock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
                         rw_lock_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
-                }
-
-                e = shm_ap_rbuff_read(_ap_instance->rb);
-                if (e == NULL) {
-                        rw_lock_unlock(&_ipcp->state_lock);
-                        continue;
                 }
 
                 len = shm_du_map_read_sdu((uint8_t **) &buf,
