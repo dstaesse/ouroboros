@@ -38,6 +38,8 @@
 #include <ouroboros/qos.h>
 #include <ouroboros/rw_lock.h>
 
+#include "utils.h"
+
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <signal.h>
@@ -46,9 +48,6 @@
 #include <string.h>
 #include <limits.h>
 #include <pthread.h>
-
-/* FIXME: this smells like part of namespace management */
-#define ALL_DIFS "*"
 
 #ifndef IRMD_MAX_FLOWS
   #define IRMD_MAX_FLOWS 4096
@@ -229,7 +228,12 @@ static instance_name_t * get_ipcp_by_name(char * ap_name)
         return NULL;
 }
 
-static instance_name_t * get_ipcp_by_dif_name(char * dif_name)
+/*
+ * FIXME: this just returns the first IPCP that
+ * matches the requested DIF name for now
+ */
+static instance_name_t * get_ipcp_by_dst_name(char * dst_name,
+                                              char * dif_name)
 {
         struct list_head * pos = NULL;
 
@@ -240,22 +244,13 @@ static instance_name_t * get_ipcp_by_dif_name(char * dif_name)
                 if (e->dif_name == NULL)
                         continue;
 
-                if (strcmp(dif_name, e->dif_name) == 0)
+                if (dif_name != NULL) {
+                        if (wildcard_match(dif_name, e->dif_name) == 0) {
+                                return e->api;
+                        }
+                } else {
                         return e->api;
-        }
-
-        return NULL;
-}
-
-/* FIXME: this just returns the first IPCP for now */
-static instance_name_t * get_ipcp_by_dst_name(char * dst_name)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &instance->ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(pos, struct ipcp_entry, next);
-                return e->api;
+                }
         }
 
         return NULL;
@@ -470,10 +465,10 @@ static int destroy_ipcp(instance_name_t * api)
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
 
-                if (instance_name_cmp(api, tmp->api) == 0)
+                if (instance_name_cmp(api, tmp->api) == 0) {
                         list_del(&tmp->next);
-
-                ipcp_entry_destroy(tmp);
+                        ipcp_entry_destroy(tmp);
+                }
         }
 
         rw_lock_unlock(&instance->reg_lock);
@@ -649,7 +644,6 @@ static int ap_reg(char *  ap_name,
         struct reg_name_entry * rne = NULL;
 
         instance_name_t * api   = NULL;
-        instance_name_t * ipcpi = NULL;
 
         rw_lock_rdlock(&instance->state_lock);
         rw_lock_wrlock(&instance->reg_lock);
@@ -689,31 +683,22 @@ static int ap_reg(char *  ap_name,
          * contains a single instance only
          */
 
-        if (strcmp(difs[0], ALL_DIFS) == 0) {
-                list_for_each(pos, &instance->ipcps) {
-                        struct ipcp_entry * e =
-                                list_entry(pos, struct ipcp_entry, next);
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(pos, struct ipcp_entry, next);
 
-                        if (ipcp_name_reg(e->api->id, ap_name)) {
-                                LOG_ERR("Could not register %s in DIF %s.",
-                                        api->name, e->dif_name);
-                        } else {
-                                ++ret;
-                        }
-                }
-        } else {
+                if (e->dif_name == NULL)
+                        continue;
+
                 for (i = 0; i < len; ++i) {
-                        ipcpi = get_ipcp_by_dif_name(difs[i]);
-                        if (ipcpi == NULL) {
-                                LOG_ERR("%s: No such DIF.", difs[i]);
-                                continue;
-                        }
-
-                        if (ipcp_name_reg(ipcpi->id, api->name)) {
-                                LOG_ERR("Could not register %s in DIF %s.",
-                                        api->name, difs[i]);
-                        } else {
-                                ++ret;
+                        if (wildcard_match(difs[i], e->dif_name) == 0) {
+                                if (ipcp_name_reg(e->api->id, ap_name)) {
+                                        LOG_ERR("Could not register "
+                                                "%s in DIF %s.",
+                                                api->name, e->dif_name);
+                                } else {
+                                        ++ret;
+                                }
                         }
                 }
         }
@@ -768,23 +753,21 @@ static int ap_unreg(char *  ap_name,
                 return 0;
         }
 
-        if (strcmp(difs[0], ALL_DIFS) == 0) {
-                  list_for_each(pos, &instance->ipcps) {
-                        struct ipcp_entry * e =
-                                list_entry(pos, struct ipcp_entry, next);
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(pos, struct ipcp_entry, next);
 
-                        if (ipcp_name_unreg(e->api->id, rne->name)) {
-                                LOG_ERR("Could not unregister %s in DIF %s.",
-                                        rne->name, e->dif_name);
-                                --ret;
-                        }
-                }
-        } else {
+                if (e->dif_name == NULL)
+                        continue;
+
                 for (i = 0; i < len; ++i) {
-                        if (ipcp_name_unreg(ap_id, rne->name)) {
-                                LOG_ERR("Could not unregister %s in DIF %s.",
-                                        rne->name, difs[i]);
-                                --ret;
+                        if (wildcard_match(difs[i], e->dif_name) == 0) {
+                                if (ipcp_name_unreg(e->api->id, rne->name)) {
+                                        LOG_ERR("Could not unregister "
+                                                "%s in DIF %s.",
+                                                rne->name, e->dif_name);
+                                        --ret;
+                                }
                         }
                 }
         }
@@ -942,6 +925,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
 {
         struct port_map_entry * pme;
         instance_name_t * ipcp;
+        char * dif_name = NULL;
 
         /* FIXME: Map qos_spec to qos_cube */
 
@@ -957,12 +941,14 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
         rw_lock_rdlock(&instance->state_lock);
         rw_lock_rdlock(&instance->reg_lock);
 
-        ipcp = get_ipcp_by_dst_name(dst_name);
+        if (qos != NULL)
+                dif_name = qos->dif_name;
 
+        ipcp = get_ipcp_by_dst_name(dst_name, dif_name);
         if (ipcp == NULL) {
                 rw_lock_unlock(&instance->reg_lock);
                 rw_lock_unlock(&instance->state_lock);
-                LOG_DBG("unknown ipcp");
+                LOG_DBG("Unknown DIF name.");
                 return NULL;
         }
 
@@ -970,7 +956,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
         rw_lock_wrlock(&instance->flows_lock);
 
         pme->port_id = bmp_allocate(instance->port_ids);
-        pme->n_1_pid = get_ipcp_by_dst_name(dst_name)->id;
+        pme->n_1_pid = ipcp->id;
 
         list_add(&pme->next, &instance->port_map);
 
@@ -1227,7 +1213,7 @@ static int flow_dealloc_ipcp(int port_id)
         return 0;
 }
 
-static void irm_destroy(struct irm *  irm)
+static void irm_destroy(struct irm * irm)
 {
         struct list_head * h;
         struct list_head * t;
