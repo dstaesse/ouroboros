@@ -14,4 +14,6 @@ message dif_config_msg {
         // Config for shim UDP
         optional uint32 ip_addr         = 12;
         optional uint32 dns_addr        = 13;
+        // Config for the shim Ethernet LLC
+        optional string if_name         = 14;
 }

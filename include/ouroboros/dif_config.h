@@ -29,7 +29,8 @@
 enum ipcp_type {
         IPCP_NORMAL = 0,
         IPCP_LOCAL,
-        IPCP_SHIM_UDP
+        IPCP_SHIM_UDP,
+        IPCP_SHIM_ETH_LLC
 };
 
 struct dif_config {
@@ -56,6 +57,10 @@ struct dif_config {
                 struct {
                         uint32_t ip_addr;
                         uint32_t dns_addr;
+                };
+                /* Shim Ethernet LLC */
+                struct {
+                        char * if_name;
                 };
         };
 };

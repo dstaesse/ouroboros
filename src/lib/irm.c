@@ -139,6 +139,9 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
                 break;
         case IPCP_LOCAL:
                 break;
+        case IPCP_SHIM_ETH_LLC:
+                config.if_name = conf->if_name;
+                break;
         default:
                 return -1;
         }

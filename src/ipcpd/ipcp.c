@@ -145,6 +145,10 @@ void * ipcp_main_loop(void * o)
                                 conf.dns_addr = conf_msg->dns_addr;
                         }
 
+                        if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC) {
+                                conf.if_name = conf_msg->if_name;
+                        }
+
                         ret_msg.has_result = true;
                         ret_msg.result = _ipcp->ops->ipcp_bootstrap(&conf);
                         break;

@@ -8,3 +8,4 @@ set(IPCP_SOURCES
 add_subdirectory(local)
 add_subdirectory(normal)
 add_subdirectory(shim-udp)
+add_subdirectory(shim-eth-llc)
