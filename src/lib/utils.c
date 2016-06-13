@@ -53,3 +53,21 @@ char * strdup(const char * src)
 
         return dst;
 }
+
+char * path_strip(char * src)
+{
+        char * dst = NULL;
+
+        if (src == NULL)
+                return NULL;
+
+        dst = src + strlen(src);
+
+        while (dst > src && *dst != '/')
+                --dst;
+
+        if (*dst == '/')
+                ++dst;
+
+        return dst;
+}

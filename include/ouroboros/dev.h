@@ -36,12 +36,8 @@
 int     ap_init(char * ap_name);
 void    ap_fini(void);
 
-/* Returns file descriptor */
-int     ap_reg(char ** difs, size_t difs_size);
-int     ap_unreg(char ** difs, size_t difs_size);
-
 /* Returns file descriptor (> 0) and client name(s) */
-int     flow_accept(int fd, char ** ap_name, char ** ae_name);
+int     flow_accept(char ** ae_name);
 int     flow_alloc_resp(int fd, int result);
 
 /* Returns file descriptor */

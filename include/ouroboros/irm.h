@@ -39,10 +39,16 @@ int irm_enroll_ipcp(instance_name_t * api,
 int irm_bootstrap_ipcp(instance_name_t *   api,
                        struct dif_config * conf);
 
-int irm_reg_ipcp(instance_name_t * api,
-                 char **           difs,
-                 size_t            difs_size);
-int irm_unreg_ipcp(const instance_name_t * api,
-                   char **                 difs,
-                   size_t                  difs_size);
+int irm_reg(char *            name,
+            instance_name_t * api,
+            int               argc,
+            char **           argv,
+            bool              autoexec,
+            char **           difs,
+            size_t            difs_size);
+int irm_unreg(char *                  name,
+              const instance_name_t * api,
+              char **                 difs,
+              size_t                  difs_size,
+              bool                    hard);
 #endif /* OUROBOROS_IRM_H */

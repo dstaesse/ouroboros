@@ -11,8 +11,8 @@ set(SOURCE_FILES
         irm_destroy_ipcp.c
         irm_bootstrap_ipcp.c
         irm_enroll_ipcp.c
-        irm_register_ipcp.c
-        irm_unregister_ipcp.c
+        irm_register.c
+        irm_unregister.c
         irm_utils.c
 )
 

@@ -30,9 +30,6 @@
 #include <time.h>
 #include <stdbool.h>
 
-#define SERVER_AP_NAME "cbr-server"
-#define CLIENT_AP_NAME "cbr-client"
-
 #define BUF_SIZE 1500
 
 #include "cbr_client.c"
@@ -49,6 +46,7 @@ static void usage(void)
         printf("Usage: cbr [OPTION]...\n"
                "Sends SDU's from client to server at a constant bit rate.\n\n"
                "  -l, --listen              Run in server mode\n"
+               "  -n, --server_apn          Specify the name of the server.\n"
                "\n"
                "Server options:\n"
                "  -i, --interval            Server report interval (s)\n"
@@ -66,14 +64,20 @@ static void usage(void)
 
 int main(int argc, char ** argv)
 {
-        int  duration = 60;      /* One minute test */
-        int  size     = 1000;    /* 1000 byte SDU's */
-        long rate     = 1000000; /* 1 Mb/s */
-        bool flood    = false;
-        bool sleep    = false;
-        char * rem;
+        int    duration = 60;      /* One minute test */
+        int    size = 1000;    /* 1000 byte SDU's */
+        long   rate = 1000000; /* 1 Mb/s */
+        bool   flood = false;
+        bool   sleep = false;
+        int    ret = 0;
+        char * rem = NULL;
+        char * s_apn = NULL;
 
         bool server = false;
+
+        /* FIXME: should be argv[0] */
+        ap_init(argv[0]);
+
         server_settings.interval = 1; /* One second reporting interval */
         server_settings.timeout  = 1;
 
@@ -87,6 +91,10 @@ int main(int argc, char ** argv)
                 } else if (strcmp(*argv, "-t") == 0 ||
                            strcmp(*argv, "--timeout") == 0) {
                         server_settings.timeout = strtol(*(++argv), &rem, 10);
+                        --argc;
+                } else if (strcmp(*argv, "-n") == 0 ||
+                           strcmp(*argv, "--server_apn") == 0) {
+                        s_apn = *(++argv);
                         --argc;
                 } else if (strcmp(*argv, "-d") == 0 ||
                            strcmp(*argv, "--duration") == 0) {
@@ -123,8 +131,20 @@ int main(int argc, char ** argv)
         }
 
         if (server) {
-                return server_main();
+                ret = server_main();
+
+        } else {
+
+                if (s_apn == NULL) {
+                        printf("No server specified.\n");
+                        usage();
+                        return 0;
+                }
+
+                ret = client_main(s_apn, duration, size, rate, flood, sleep);
         }
 
-        return client_main(duration, size, rate, flood, sleep);
+        ap_fini();
+
+        return ret;
 }

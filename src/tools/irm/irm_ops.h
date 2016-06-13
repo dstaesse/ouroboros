@@ -24,5 +24,5 @@ int do_create_ipcp(int argc, char ** argv);
 int do_destroy_ipcp(int argc, char ** argv);
 int do_bootstrap_ipcp(int argc, char ** argv);
 int do_enroll_ipcp(int argc, char ** argv);
-int do_register_ipcp(int argc, char ** argv);
-int do_unregister_ipcp(int argc, char ** argv);
+int do_register(int argc, char ** argv);
+int do_unregister(int argc, char ** argv);
