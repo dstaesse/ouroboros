@@ -81,6 +81,7 @@ struct reg_name_entry {
         int    flow_arrived;
 
         pthread_cond_t  acc_signal;
+        pthread_cond_t  acc_arr_signal;
         pthread_mutex_t acc_lock;
 };
 
@@ -271,6 +272,11 @@ static struct reg_name_entry * reg_name_entry_create()
         e->req_ae_name  = NULL;
         e->flow_arrived = -1;
 
+        if (pthread_cond_init(&e->acc_arr_signal, NULL)) {
+                free(e);
+                return NULL;
+        }
+
         if (pthread_cond_init(&e->acc_signal, NULL)) {
                 free(e);
                 return NULL;
@@ -312,7 +318,7 @@ static int reg_name_entry_destroy(struct reg_name_entry * e)
                 pthread_mutex_lock(&e->acc_lock);
                 e->flow_arrived = -2;
                 pthread_mutex_unlock(&e->acc_lock);
-                pthread_cond_broadcast(&e->acc_signal);
+                pthread_cond_broadcast(&e->acc_arr_signal);
                 sched_yield();
         }
 
@@ -811,6 +817,8 @@ static struct port_map_entry * flow_accept(pid_t    pid,
         rne->accept       = true;
         rne->flow_arrived = -1;
 
+        pthread_cond_broadcast(&rne->acc_signal);
+
         rw_lock_unlock(&instance->reg_lock);
         rw_lock_unlock(&instance->state_lock);
 
@@ -819,7 +827,7 @@ static struct port_map_entry * flow_accept(pid_t    pid,
                              (void*) &rne->acc_lock);
 
         while (rne->flow_arrived == -1)
-                pthread_cond_wait(&rne->acc_signal, &rne->acc_lock);
+                pthread_cond_wait(&rne->acc_arr_signal, &rne->acc_lock);
 
         pthread_mutex_unlock(&rne->acc_lock);
         pthread_cleanup_pop(0);
@@ -1151,7 +1159,8 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
                 if (rne->autoexec) {
                         pme->n_pid = auto_execute(rne->api->name, rne->argv);
                         while (rne->accept == false)
-                                sched_yield();
+                                pthread_cond_wait(&rne->acc_signal,
+                                                  &rne->acc_lock);
                 }
                 else {
                         pthread_mutex_unlock(&rne->acc_lock);
@@ -1165,7 +1174,7 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
 
         pthread_mutex_unlock(&rne->acc_lock);
 
-        if (pthread_cond_signal(&rne->acc_signal))
+        if (pthread_cond_signal(&rne->acc_arr_signal))
                 LOG_ERR("Failed to send signal.");
 
         while (acc_wait) {
