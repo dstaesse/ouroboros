@@ -63,7 +63,6 @@ int   ipcp_flow_alloc(pid_t         pid,
                       int           port_id,
                       pid_t         n_pid,
                       char *        dst_name,
-                      char *        src_ap_name,
                       char *        src_ae_name,
                       enum qos_cube qos);
 int   ipcp_flow_alloc_resp(pid_t pid,
@@ -76,7 +75,6 @@ int   ipcp_flow_alloc_resp(pid_t pid,
 /* Returns the port_id */
 int   ipcp_flow_req_arr(pid_t  pid,
                         char * dst_name,
-                        char * src_ap_name,
                         char * src_ae_name);
 int   ipcp_flow_alloc_reply(pid_t pid,
                             int   port_id,

@@ -210,7 +210,6 @@ void * ipcp_main_loop(void * o)
                                 _ipcp->ops->ipcp_flow_alloc(msg->pid,
                                                             msg->port_id,
                                                             msg->dst_name,
-                                                            msg->src_ap_name,
                                                             msg->src_ae_name,
                                                             msg->qos_cube);
                         break;

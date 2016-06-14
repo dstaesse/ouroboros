@@ -341,7 +341,6 @@ static int ipcp_local_name_unreg(char * name)
 static int ipcp_local_flow_alloc(pid_t         n_pid,
                                  int           port_id,
                                  char *        dst_name,
-                                 char *        src_ap_name,
                                  char *        src_ae_name,
                                  enum qos_cube qos)
 {
@@ -350,9 +349,9 @@ static int ipcp_local_flow_alloc(pid_t         n_pid,
 
         struct shm_ap_rbuff * rb;
 
-        LOG_INFO("Allocating flow from %s to %s.", src_ap_name, dst_name);
+        LOG_INFO("Allocating flow to %s.", dst_name);
 
-        if (dst_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
+        if (dst_name == NULL || src_ae_name == NULL)
                 return -1;
 
         /* This ipcpd has all QoS */
@@ -387,7 +386,6 @@ static int ipcp_local_flow_alloc(pid_t         n_pid,
         /* reply to IRM */
         port_id = ipcp_flow_req_arr(getpid(),
                                     dst_name,
-                                    src_ap_name,
                                     src_ae_name);
 
         if (port_id < 0) {
@@ -521,7 +519,9 @@ static int ipcp_local_flow_dealloc(int port_id)
 
         bmp_release(_ap_instance->fds, fd);
 
-        _ap_instance->in_out[_ap_instance->in_out[fd]] = -1;
+        if (_ap_instance->in_out[fd] != -1)
+                _ap_instance->in_out[_ap_instance->in_out[fd]] = -1;
+
         _ap_instance->in_out[fd] = -1;
 
         _ap_instance->flows[fd].state   = FLOW_NULL;

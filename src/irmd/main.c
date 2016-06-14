@@ -72,14 +72,16 @@ struct reg_name_entry {
 
         /* FIXME: make a list resolve to AP-I instead */
         instance_name_t  * api;
+        char **            argv;
+        bool               autoexec;
 
         bool   accept;
-        char * req_ap_name;
         char * req_ae_name;
         int    response;
         int    flow_arrived;
 
         pthread_cond_t  acc_signal;
+        pthread_cond_t  acc_arr_signal;
         pthread_mutex_t acc_lock;
 };
 
@@ -264,10 +266,16 @@ static struct reg_name_entry * reg_name_entry_create()
 
         e->name         = NULL;
         e->api          = NULL;
+        e->argv         = NULL;
+        e->autoexec     = false;
         e->accept       = false;
-        e->req_ap_name  = NULL;
         e->req_ae_name  = NULL;
         e->flow_arrived = -1;
+
+        if (pthread_cond_init(&e->acc_arr_signal, NULL)) {
+                free(e);
+                return NULL;
+        }
 
         if (pthread_cond_init(&e->acc_signal, NULL)) {
                 free(e);
@@ -286,13 +294,17 @@ static struct reg_name_entry * reg_name_entry_create()
 
 static struct reg_name_entry * reg_name_entry_init(struct reg_name_entry * e,
                                                    char *                  name,
-                                                   instance_name_t *       api)
+                                                   instance_name_t *       api,
+                                                   char **                 argv,
+                                                   bool                    ae)
 {
         if (e == NULL || name == NULL || api == NULL)
                 return NULL;
 
-        e->name = name;
-        e->api  = api;
+        e->name     = name;
+        e->api      = api;
+        e->argv     = argv;
+        e->autoexec = ae;
 
         return e;
 }
@@ -306,7 +318,7 @@ static int reg_name_entry_destroy(struct reg_name_entry * e)
                 pthread_mutex_lock(&e->acc_lock);
                 e->flow_arrived = -2;
                 pthread_mutex_unlock(&e->acc_lock);
-                pthread_cond_broadcast(&e->acc_signal);
+                pthread_cond_broadcast(&e->acc_arr_signal);
                 sched_yield();
         }
 
@@ -335,6 +347,21 @@ static struct reg_name_entry * get_reg_name_entry_by_name(char * name)
         return NULL;
 }
 
+static struct reg_name_entry * get_reg_name_entry_by_ap_name(char * ap_name)
+{
+        struct list_head * pos = NULL;
+
+        list_for_each(pos, &instance->reg_names) {
+                struct reg_name_entry * e =
+                        list_entry(pos, struct reg_name_entry, next);
+
+                if (strcmp(ap_name, e->api->name) == 0)
+                        return e;
+        }
+
+        return NULL;
+}
+
 static struct reg_name_entry * get_reg_name_entry_by_id(pid_t pid)
 {
         struct list_head * pos = NULL;
@@ -351,7 +378,10 @@ static struct reg_name_entry * get_reg_name_entry_by_id(pid_t pid)
 }
 
 /* FIXME: add only name when we have NSM solved */
-static int reg_name_entry_add_name_instance(char * name, instance_name_t * api)
+static int reg_name_entry_add_name_instance(char *            name,
+                                            instance_name_t * api,
+                                            char **           argv,
+                                            bool              autoexec)
 {
         struct reg_name_entry * e = get_reg_name_entry_by_name(name);
         if (e == NULL) {
@@ -359,7 +389,8 @@ static int reg_name_entry_add_name_instance(char * name, instance_name_t * api)
                 if (e == NULL)
                         return -1;
 
-                if (reg_name_entry_init(e, name, api) == NULL) {
+                if (reg_name_entry_init(e, name, api, argv, autoexec)
+                    == NULL) {
                         reg_name_entry_destroy(e);
                         return -1;
                 }
@@ -595,46 +626,12 @@ static int enroll_ipcp(instance_name_t  * api,
         return 0;
 }
 
-static int reg_ipcp(instance_name_t * api,
-                    char **           difs,
-                    size_t            difs_size)
-{
-        rw_lock_rdlock(&instance->state_lock);
-        rw_lock_wrlock(&instance->reg_lock);
-
-        if (ipcp_reg(api->id, difs, difs_size)) {
-                rw_lock_unlock(&instance->reg_lock);
-                rw_lock_unlock(&instance->state_lock);
-                LOG_ERR("Could not register IPCP to N-1 DIF(s).");
-                return -1;
-        }
-
-        rw_lock_unlock(&instance->reg_lock);
-        rw_lock_unlock(&instance->state_lock);
-
-        return 0;
-}
-
-static int unreg_ipcp(instance_name_t  * api,
-                      char **            difs,
-                      size_t             difs_size)
-{
-        rw_lock_rdlock(&instance->state_lock);
-        rw_lock_wrlock(&instance->reg_lock);
-        if (ipcp_unreg(api->id, difs, difs_size)) {
-                rw_lock_unlock(&instance->reg_lock);
-                rw_lock_unlock(&instance->state_lock);
-                LOG_ERR("Could not unregister IPCP from N-1 DIF(s).");
-                return -1;
-        }
-        rw_lock_unlock(&instance->reg_lock);
-        rw_lock_unlock(&instance->state_lock);
-
-        return 0;
-}
-
-static int ap_reg(char *  ap_name,
+static int ap_reg(char *  name,
+                  char *  ap_name,
                   pid_t   ap_id,
+                  int     argc,
+                  char ** argv,
+                  bool    autoexec,
                   char ** difs,
                   size_t  len)
 {
@@ -644,6 +641,7 @@ static int ap_reg(char *  ap_name,
         struct reg_name_entry * rne = NULL;
 
         instance_name_t * api   = NULL;
+        char ** argv_dup = NULL;
 
         rw_lock_rdlock(&instance->state_lock);
         rw_lock_wrlock(&instance->reg_lock);
@@ -661,16 +659,15 @@ static int ap_reg(char *  ap_name,
                 return -1;
         }
 
-        if (instance_name_init_from(api, ap_name, ap_id) == NULL) {
+        if (instance_name_init_from(api, path_strip(ap_name), ap_id) == NULL) {
                 rw_lock_unlock(&instance->reg_lock);
                 rw_lock_unlock(&instance->state_lock);
                 instance_name_destroy(api);
                 return -1;
         }
 
-        /* check if this ap_name is already registered */
-
-        rne = get_reg_name_entry_by_name(ap_name);
+        /* check if this name is already registered */
+        rne = get_reg_name_entry_by_name(name);
         if (rne != NULL) {
                 rw_lock_unlock(&instance->reg_lock);
                 rw_lock_unlock(&instance->state_lock);
@@ -678,11 +675,6 @@ static int ap_reg(char *  ap_name,
                 return -1; /* can only register one instance for now */
         }
 
-        /*
-         * for now, the whatevercast name is the same as the ap_name and
-         * contains a single instance only
-         */
-
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
@@ -692,26 +684,42 @@ static int ap_reg(char *  ap_name,
 
                 for (i = 0; i < len; ++i) {
                         if (wildcard_match(difs[i], e->dif_name) == 0) {
-                                if (ipcp_name_reg(e->api->id, ap_name)) {
+                                if (ipcp_name_reg(e->api->id, name)) {
                                         LOG_ERR("Could not register "
-                                                "%s in DIF %s.",
-                                                api->name, e->dif_name);
+                                                "%s in DIF %s as %s.",
+                                                api->name, e->dif_name, name);
                                 } else {
+                                        LOG_INFO("Registered %s as %s in %s",
+                                                 api->name, name, e->dif_name);
                                         ++ret;
                                 }
                         }
                 }
         }
-
         if (ret ==  0) {
                 rw_lock_unlock(&instance->reg_lock);
                 rw_lock_unlock(&instance->state_lock);
                 instance_name_destroy(api);
                 return -1;
         }
+
+        /* we need to duplicate argv */
+        if (argc != 0) {
+                argv_dup = malloc((argc + 2) * sizeof(*argv_dup));
+                argv_dup[0] = strdup(api->name);
+                for (i = 1; i <= argc; ++i)
+                        argv_dup[i] = strdup(argv[i - 1]);
+                argv_dup[argc + 1] = NULL;
+        }
+
+
         /* for now, we register single instances */
-        ret = reg_name_entry_add_name_instance(strdup(ap_name),
-                                               api);
+        if ((ret = reg_name_entry_add_name_instance(strdup(name),
+                                                    api,
+                                                    argv_dup,
+                                                    autoexec))
+            < 0)
+                LOG_DBGF("Failed to add application %s.", api->name);
 
         rw_lock_unlock(&instance->reg_lock);
         rw_lock_unlock(&instance->state_lock);
@@ -719,38 +727,28 @@ static int ap_reg(char *  ap_name,
         return ret;
 }
 
-static int ap_unreg(char *  ap_name,
+static int ap_unreg(char *  name,
+                    char *  ap_name,
                     pid_t   ap_id,
                     char ** difs,
-                    size_t  len)
+                    size_t  len,
+                    bool    hard)
 {
         int i;
         int ret = 0;
         struct reg_name_entry * rne = NULL;
         struct list_head      * pos = NULL;
 
+        if (name == NULL || len == 0 || difs == NULL || difs[0] == NULL)
+                return -1;
+
         rw_lock_rdlock(&instance->state_lock);
         rw_lock_wrlock(&instance->reg_lock);
 
-        /* check if ap_name is registered */
-        rne = get_reg_name_entry_by_id(ap_id);
-        if (rne == NULL) {
-                rw_lock_unlock(&instance->reg_lock);
-                rw_lock_unlock(&instance->state_lock);
-                return 0; /* no such id */
-        }
-
-        if (strcmp(ap_name, rne->api->name)) {
-                rw_lock_unlock(&instance->reg_lock);
-                rw_lock_unlock(&instance->state_lock);
-                return 0;
-        }
-
-        if (instance->ipcps.next == NULL) {
-                rw_lock_unlock(&instance->reg_lock);
-                rw_lock_unlock(&instance->state_lock);
-                LOG_ERR("No IPCPs in this system.");
-                return 0;
+        if (!hard && strcmp(difs[0], "*") != 0) {
+                LOG_INFO("Unregistration not complete yet.");
+                LOG_MISSING;
+                return -1;
         }
 
         list_for_each(pos, &instance->ipcps) {
@@ -762,7 +760,8 @@ static int ap_unreg(char *  ap_name,
 
                 for (i = 0; i < len; ++i) {
                         if (wildcard_match(difs[i], e->dif_name) == 0) {
-                                if (ipcp_name_unreg(e->api->id, rne->name)) {
+                                if (ipcp_name_unreg(e->api->id,
+                                                    rne->name)) {
                                         LOG_ERR("Could not unregister "
                                                 "%s in DIF %s.",
                                                 rne->name, e->dif_name);
@@ -772,7 +771,6 @@ static int ap_unreg(char *  ap_name,
                 }
         }
 
-        /* FIXME: check if name is not registered in any DIF before removing */
         reg_name_entry_del_name(rne->name);
 
         rw_lock_unlock(&instance->reg_lock);
@@ -782,8 +780,8 @@ static int ap_unreg(char *  ap_name,
 }
 
 static struct port_map_entry * flow_accept(pid_t    pid,
-                                           char **  ap_name,
-                                           char **  ae_name)
+                                           char *   srv_ap_name,
+                                           char **  dst_ae_name)
 {
         struct port_map_entry * pme;
         struct reg_name_entry * rne = NULL;
@@ -791,11 +789,21 @@ static struct port_map_entry * flow_accept(pid_t    pid,
         rw_lock_rdlock(&instance->state_lock);
         rw_lock_rdlock(&instance->reg_lock);
 
-        rne = get_reg_name_entry_by_id(pid);
+        rne = get_reg_name_entry_by_ap_name(srv_ap_name);
         if (rne == NULL) {
                 rw_lock_unlock(&instance->reg_lock);
                 rw_lock_unlock(&instance->state_lock);
-                LOG_DBGF("Unregistered AP calling accept().");
+                LOG_DBGF("AP %s is unknown.", srv_ap_name);
+                return NULL;
+        }
+
+        if (rne->api->id == 0) {
+                rne->api->id = pid;
+        } else if (rne->api->id != pid) {
+                rw_lock_unlock(&instance->reg_lock);
+                rw_lock_unlock(&instance->state_lock);
+                LOG_DBGF("Can only register one instance.");
+                LOG_MISSING;
                 return NULL;
         }
 
@@ -809,6 +817,8 @@ static struct port_map_entry * flow_accept(pid_t    pid,
         rne->accept       = true;
         rne->flow_arrived = -1;
 
+        pthread_cond_broadcast(&rne->acc_signal);
+
         rw_lock_unlock(&instance->reg_lock);
         rw_lock_unlock(&instance->state_lock);
 
@@ -817,7 +827,7 @@ static struct port_map_entry * flow_accept(pid_t    pid,
                              (void*) &rne->acc_lock);
 
         while (rne->flow_arrived == -1)
-                pthread_cond_wait(&rne->acc_signal, &rne->acc_lock);
+                pthread_cond_wait(&rne->acc_arr_signal, &rne->acc_lock);
 
         pthread_mutex_unlock(&rne->acc_lock);
         pthread_cleanup_pop(0);
@@ -843,9 +853,8 @@ static struct port_map_entry * flow_accept(pid_t    pid,
                 return NULL;
         }
 
-        *ap_name = rne->req_ap_name;
-        if (ae_name != NULL)
-                *ae_name = rne->req_ae_name;
+        if (dst_ae_name != NULL)
+                *dst_ae_name = rne->req_ae_name;
 
         rw_lock_unlock(&instance->flows_lock);
         rw_lock_unlock(&instance->state_lock);
@@ -919,7 +928,6 @@ static int flow_alloc_resp(pid_t n_pid,
 
 static struct port_map_entry * flow_alloc(pid_t  pid,
                                           char * dst_name,
-                                          char * src_ap_name,
                                           char * src_ae_name,
                                           struct qos_spec * qos)
 {
@@ -967,7 +975,6 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
                             pme->port_id,
                             pme->n_pid,
                             dst_name,
-                            src_ap_name,
                             src_ae_name,
                             QOS_CUBE_BE) < 0) {
                 rw_lock_rdlock(&instance->state_lock);
@@ -1085,9 +1092,30 @@ static int flow_dealloc(int port_id)
         return ret;
 }
 
+static int auto_execute(char * ap, char ** argv)
+{
+        pid_t pid;
+        LOG_INFO("Executing %s.", ap);
+        pid = fork();
+        if (pid == -1) {
+                LOG_ERR("Failed to fork");
+                return pid;
+        }
+
+        if (pid != 0) {
+                return pid;
+        }
+
+        execv(ap, argv);
+
+        LOG_ERR("Failed to execute.");
+
+        exit(EXIT_FAILURE);
+        return 0;
+}
+
 static struct port_map_entry * flow_req_arr(pid_t  pid,
                                             char * dst_name,
-                                            char * ap_name,
                                             char * ae_name)
 {
         struct reg_name_entry * rne;
@@ -1125,20 +1153,27 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
 
         pthread_mutex_lock(&rne->acc_lock);
 
-        rne->req_ap_name = ap_name;
         rne->req_ae_name = ae_name;
 
         if (rne->accept == false) {
-                pthread_mutex_unlock(&rne->acc_lock);
-                LOG_WARN("This AP is not accepting flow allocations.");
-                return NULL;
+                if (rne->autoexec) {
+                        pme->n_pid = auto_execute(rne->api->name, rne->argv);
+                        while (rne->accept == false)
+                                pthread_cond_wait(&rne->acc_signal,
+                                                  &rne->acc_lock);
+                } else {
+                        pthread_mutex_unlock(&rne->acc_lock);
+                        LOG_WARN("%s is not accepting flow allocations.",
+                                 rne->name);
+                        return NULL;
+                }
         }
 
         rne->flow_arrived = 0;
 
         pthread_mutex_unlock(&rne->acc_lock);
 
-        if (pthread_cond_signal(&rne->acc_signal))
+        if (pthread_cond_signal(&rne->acc_arr_signal))
                 LOG_ERR("Failed to send signal.");
 
         while (acc_wait) {
@@ -1345,35 +1380,29 @@ void * mainloop()
                         ret_msg.result = enroll_ipcp(&api,
                                                      msg->dif_name[0]);
                         break;
-                case IRM_MSG_CODE__IRM_REG_IPCP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = reg_ipcp(&api,
-                                                  msg->dif_name,
-                                                  msg->n_dif_name);
-                        break;
-                case IRM_MSG_CODE__IRM_UNREG_IPCP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = unreg_ipcp(&api,
-                                                    msg->dif_name,
-                                                    msg->n_dif_name);
-                        break;
                 case IRM_MSG_CODE__IRM_AP_REG:
                         ret_msg.has_result = true;
-                        ret_msg.result = ap_reg(msg->ap_name,
+                        ret_msg.result = ap_reg(msg->dst_name,
+                                                msg->ap_name,
                                                 msg->pid,
+                                                msg->n_args,
+                                                msg->args,
+                                                msg->autoexec,
                                                 msg->dif_name,
                                                 msg->n_dif_name);
                         break;
                 case IRM_MSG_CODE__IRM_AP_UNREG:
                         ret_msg.has_result = true;
-                        ret_msg.result = ap_unreg(msg->ap_name,
+                        ret_msg.result = ap_unreg(msg->dst_name,
+                                                  msg->ap_name,
                                                   msg->pid,
                                                   msg->dif_name,
-                                                  msg->n_dif_name);
+                                                  msg->n_dif_name,
+                                                  msg->hard);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                         e = flow_accept(msg->pid,
-                                        &ret_msg.ap_name,
+                                        msg->ap_name,
                                         &ret_msg.ae_name);
 
                         if (e == NULL)
@@ -1393,7 +1422,6 @@ void * mainloop()
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
                         e = flow_alloc(msg->pid,
                                        msg->dst_name,
-                                       msg->ap_name,
                                        msg->ae_name,
                                        NULL);
                         if (e == NULL)
@@ -1415,7 +1443,6 @@ void * mainloop()
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->pid,
                                          msg->dst_name,
-                                         msg->ap_name,
                                          msg->ae_name);
                         if (e == NULL)
                                 break;

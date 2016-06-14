@@ -35,7 +35,12 @@ static void busy_wait_until(const struct timespec * deadline)
                 clock_gettime(CLOCK_REALTIME, &now);
 }
 
-int client_main(int duration, int size, long rate, bool flood, bool sleep)
+int client_main(char * server,
+                int duration,
+                int size,
+                long rate,
+                bool flood,
+                bool sleep)
 {
         int fd = 0;
         int result = 0;
@@ -49,15 +54,10 @@ int client_main(int duration, int size, long rate, bool flood, bool sleep)
         struct timespec intv = {(gap / BILLION), gap % BILLION};
         int ms;
 
-        if (ap_init(CLIENT_AP_NAME)) {
-                printf("Failed to init AP.\n");
-                return -1;
-        }
-
         printf("Client started, duration %d, rate %lu b/s, size %d B.\n",
                 duration, rate, size);
 
-        fd = flow_alloc(SERVER_AP_NAME, NULL, NULL);
+        fd = flow_alloc(server, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 ap_fini();
@@ -121,8 +121,6 @@ int client_main(int duration, int size, long rate, bool flood, bool sleep)
                seqnr, seqnr * size, ms, (seqnr * size * 8.0)/(ms * 1000));
 
         flow_dealloc(fd);
-
-        ap_fini();
 
         return 0;
 }

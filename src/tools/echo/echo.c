@@ -23,7 +23,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define SERVER_AP_NAME "echo-server"
 #define BUF_SIZE 256
 
 #include "echo_client.c"
@@ -37,14 +36,22 @@ static void usage()
                "      --help                Display this help text and exit\n");
 }
 
-int main(int argc, char ** argv) {
+int main(int argc, char ** argv)
+{
+        int ret = -1;
+        if (ap_init(argv[0])) {
+                printf("Failed to init AP.\n");
+                return -1;
+        }
 
         argc--;
         argv++;
         while (argc > 0) {
                 if (strcmp(*argv, "-l") == 0 ||
                     strcmp(*argv, "--listen") == 0) {
-                        return server_main();
+                        ret = server_main();
+                        ap_fini();
+                        return ret;
                 } else {
                         usage();
                         return 0;
@@ -53,5 +60,9 @@ int main(int argc, char ** argv) {
                 argv++;
         }
 
-        return client_main();
+        ret = client_main();
+
+        ap_fini();
+
+        return ret;
 }

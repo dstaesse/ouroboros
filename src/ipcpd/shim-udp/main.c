@@ -384,7 +384,6 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg,
 static int ipcp_udp_port_alloc(uint32_t dst_ip_addr,
                                uint32_t src_udp_port,
                                char *   dst_name,
-                               char *   src_ap_name,
                                char *   src_ae_name)
 {
         shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
@@ -392,7 +391,6 @@ static int ipcp_udp_port_alloc(uint32_t dst_ip_addr,
         msg.code         = SHIM_UDP_MSG_CODE__FLOW_REQ;
         msg.src_udp_port = src_udp_port;
         msg.dst_name     = dst_name;
-        msg.src_ap_name  = src_ap_name;
         msg.src_ae_name  = src_ae_name;
 
         return send_shim_udp_msg(&msg, dst_ip_addr);
@@ -428,7 +426,6 @@ static int ipcp_udp_port_dealloc(uint32_t dst_ip_addr,
 
 static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                              char * dst_name,
-                             char * src_ap_name,
                              char * src_ae_name)
 {
         int  fd;
@@ -486,7 +483,6 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         /* reply to IRM */
         port_id = ipcp_flow_req_arr(getpid(),
                                     dst_name,
-                                    src_ap_name,
                                     src_ae_name);
 
         if (port_id < 0) {
@@ -682,7 +678,6 @@ static void * ipcp_udp_listener()
                         c_saddr.sin_port = msg->src_udp_port;
                         ipcp_udp_port_req(&c_saddr,
                                           msg->dst_name,
-                                          msg->src_ap_name,
                                           msg->src_ae_name);
                         break;
                 case SHIM_UDP_MSG_CODE__FLOW_REPLY:
@@ -1214,7 +1209,6 @@ static int ipcp_udp_name_unreg(char * name)
 static int ipcp_udp_flow_alloc(pid_t         n_pid,
                                int           port_id,
                                char *        dst_name,
-                               char *        src_ap_name,
                                char *        src_ae_name,
                                enum qos_cube qos)
 {
@@ -1229,12 +1223,11 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
 #endif
         struct shm_ap_rbuff * rb;
 
-        LOG_INFO("Allocating flow from %s to %s.", src_ap_name, dst_name);
+        LOG_INFO("Allocating flow to %s.", dst_name);
 
-        if (dst_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
+        if (dst_name == NULL || src_ae_name == NULL)
                 return -1;
         if (strlen(dst_name) > 255
-            || strlen(src_ap_name) > 255
             || strlen(src_ae_name) > 255) {
                 LOG_ERR("Name too long for this shim.");
                 return -1;
@@ -1332,7 +1325,6 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         if (ipcp_udp_port_alloc(ip_addr,
                                 f_saddr.sin_port,
                                 dst_name,
-                                src_ap_name,
                                 src_ae_name) < 0) {
                 LOG_DBGF("Port alloc returned -1.");
                 rw_lock_rdlock(&_ipcp->state_lock);
