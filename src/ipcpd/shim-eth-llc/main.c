@@ -304,7 +304,7 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
 
         if (sendto(fd, frame, frame_len, 0,
                    (struct sockaddr *) &device, sizeof(device)) <= 0) {
-                LOG_ERR("Failed to send message");
+                LOG_ERR("Failed to send message.");
                 return -1;
         }
 
@@ -318,20 +318,18 @@ static int eth_llc_ipcp_send_mgmt_frame(shim_eth_llc_msg_t * msg,
         uint8_t * buf;
 
         len = shim_eth_llc_msg__get_packed_size(msg);
-        if (len == 0) {
+        if (len == 0)
                 return -1;
-        }
 
         buf = malloc(len);
-        if (buf == NULL) {
+        if (buf == NULL)
                 return -1;
-        }
 
         shim_eth_llc_msg__pack(msg, buf);
 
         if (eth_llc_ipcp_send_frame(dst_addr, reverse_bits(MGMT_SAP),
                                     reverse_bits(MGMT_SAP), buf, len)) {
-                LOG_ERR("Failed to send mgmt frame");
+                LOG_ERR("Failed to send management frame.");
                 return -1;
         }
 
@@ -402,7 +400,7 @@ static int eth_llc_ipcp_port_req(uint8_t r_sap,
         if (index < 0) {
                 rw_lock_unlock(&_ipcp->state_lock);
                 rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                LOG_ERR("Out of free indices");
+                LOG_ERR("Out of free indices.");
                 return -1;
         }
 
@@ -416,7 +414,7 @@ static int eth_llc_ipcp_port_req(uint8_t r_sap,
                 bmp_release(shim_data(_ipcp)->indices, index);
                 rw_lock_unlock(&_ipcp->state_lock);
                 rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                LOG_ERR("Could not get port id from IRMd");
+                LOG_ERR("Could not get port id from IRMd.");
                 return -1;
         }
 
@@ -453,7 +451,7 @@ static int eth_llc_ipcp_port_alloc_reply(uint8_t ssap,
         if (index < 0) {
                 rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
                 rw_lock_unlock(&_ipcp->state_lock);
-                LOG_ERR("No flow found with that SAP");
+                LOG_ERR("No flow found with that SAP.");
                 return -1; /* -EFLOWNOTFOUND */
         }
 
@@ -501,9 +499,9 @@ static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap,
 
         i = sap_to_index(ssap);
         if (i < 0) {
-                LOG_ERR("No flow found for remote deallocation request");
                 rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
                 rw_lock_unlock(&_ipcp->state_lock);
+                LOG_ERR("No flow found for remote deallocation request.");
                 return 0;
         }
 
@@ -527,10 +525,8 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
         shim_eth_llc_msg_t * msg = NULL;
 
         msg = shim_eth_llc_msg__unpack(NULL, len, buf);
-        if (msg == NULL) {
+        if (msg == NULL)
                 return -1;
-        }
-
         switch (msg->code) {
         case SHIM_ETH_LLC_MSG_CODE__FLOW_REQ:
                 if (ipcp_data_is_in_registry(_ipcp->data,
@@ -591,25 +587,23 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                 if (recv(shim_data(_ipcp)->s_fd, buf,
                          SHIM_ETH_LLC_MAX_SDU_SIZE, 0) < 0) {
-                        LOG_ERR("Failed to recv frame");
+                        LOG_ERR("Failed to recv frame.");
                         continue;
                 }
 
-                for (i = 0; i < MAC_SIZE; i++) {
+                for (i = 0; i < MAC_SIZE; i++)
                         dst_mac[i] = buf[i];
-                }
 
                 if (memcmp(shim_data(_ipcp)->device.sll_addr,
                            dst_mac,
                            MAC_SIZE) &&
                     memcmp(br_addr, dst_mac, MAC_SIZE)) {
-                        LOG_DBG("Not a unicast or broadcast frame");
+                        LOG_DBG("Not a unicast or broadcast frame.");
                         continue;
                 }
 
-                for (; i < 2 * MAC_SIZE; i++) {
+                for (; i < 2 * MAC_SIZE; i++)
                         src_mac[i - MAC_SIZE] = buf[i];
-                }
 
                 frame_len = ((buf[i]) << 8) + buf[i + 1];
                 i += 2;
@@ -628,9 +622,9 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                         j = addr_and_saps_to_index(src_mac, ssap, dsap);
                         if (j < 0) {
-                                LOG_DBG("Received data for unknown flow");
                                 rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
                                 rw_lock_unlock(&_ipcp->state_lock);
+                                LOG_DBG("Received data for unknown flow.");
                                 continue;
                         }
 
@@ -700,9 +694,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                 dsap = reverse_bits(shim_data(_ipcp)->flows[i].r_sap);
 
                 if (eth_llc_ipcp_send_frame(shim_data(_ipcp)->flows[i].r_addr,
-                                            dsap, ssap, buf, len)) {
-                        LOG_ERR("Failed to send SDU");
-                }
+                                            dsap, ssap, buf, len))
+                        LOG_ERR("Failed to send SDU.");
 
                 rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
 
@@ -772,7 +765,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         }
 
         if (conf->if_name == NULL) {
-                LOG_ERR("Interface name is NULL");
+                LOG_ERR("Interface name is NULL.");
                 return -1;
         }
 
@@ -780,7 +773,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         fd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (fd < 0) {
-                LOG_ERR("Failed to open socket");
+                LOG_ERR("Failed to open socket.");
                 return -1;
         }
 
@@ -788,7 +781,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
                 close(fd);
-                LOG_ERR("Failed to ioctl: %s", strerror(errno));
+                LOG_ERR("Failed to ioctl: %s.", strerror(errno));
                 return -1;
         }
 
@@ -796,13 +789,13 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         index = if_nametoindex(conf->if_name);
         if (index == 0) {
-                LOG_ERR("Failed to retrieve interface index");
+                LOG_ERR("Failed to retrieve interface index.");
                 return -1;
         }
 
         fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
         if (fd < 0) {
-                LOG_ERR("Failed to create socket: %s", strerror(errno));
+                LOG_ERR("Failed to create socket: %s.", strerror(errno));
                 return -1;
         }
 
@@ -927,8 +920,8 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
         if (ssap < 0) {
                 shm_ap_rbuff_close(rb);
                 bmp_release(shim_data(_ipcp)->indices, index);
-                rw_lock_unlock(&_ipcp->state_lock);
                 rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
+                rw_lock_unlock(&_ipcp->state_lock);
                 return -1;
         }
 
@@ -1119,7 +1112,7 @@ int main(int argc, char * argv[])
 
         _ipcp = ipcp_instance_create();
         if (_ipcp == NULL) {
-                LOG_ERR("Failed to create instance");
+                LOG_ERR("Failed to create instance.");
                 exit(1);
         }
 
