@@ -132,9 +132,7 @@ int main(int argc, char ** argv)
 
         if (server) {
                 ret = server_main();
-
         } else {
-
                 if (s_apn == NULL) {
                         printf("No server specified.\n");
                         usage();

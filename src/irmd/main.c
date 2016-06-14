@@ -705,7 +705,7 @@ static int ap_reg(char *  name,
 
         /* we need to duplicate argv */
         if (argc != 0) {
-                argv_dup = malloc ((argc + 2) * sizeof(*argv_dup));
+                argv_dup = malloc((argc + 2) * sizeof(*argv_dup));
                 argv_dup[0] = strdup(api->name);
                 for (i = 1; i <= argc; ++i)
                         argv_dup[i] = strdup(argv[i - 1]);
@@ -1108,7 +1108,7 @@ static int auto_execute(char * ap, char ** argv)
 
         execv(ap, argv);
 
-        LOG_DBG("Failed to execute.");
+        LOG_ERR("Failed to execute.");
 
         exit(EXIT_FAILURE);
         return 0;
@@ -1161,8 +1161,7 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
                         while (rne->accept == false)
                                 pthread_cond_wait(&rne->acc_signal,
                                                   &rne->acc_lock);
-                }
-                else {
+                } else {
                         pthread_mutex_unlock(&rne->acc_lock);
                         LOG_WARN("%s is not accepting flow allocations.",
                                  rne->name);
