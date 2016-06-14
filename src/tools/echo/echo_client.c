@@ -20,8 +20,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define CLIENT_AP_NAME "echo-client"
-
 #include <ouroboros/dev.h>
 #include <stdlib.h>
 
@@ -33,12 +31,7 @@ int client_main()
         char * message  = "Client says hi!";
         ssize_t count = 0;
 
-        if (ap_init(CLIENT_AP_NAME)) {
-                printf("Failed to init AP.\n");
-                return -1;
-        }
-
-        fd = flow_alloc(SERVER_AP_NAME, NULL, NULL);
+        fd = flow_alloc("echo", NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 ap_fini();
@@ -71,8 +64,6 @@ int client_main()
         printf("Server replied with %.*s\n", (int) count, buf);
 
         flow_dealloc(fd);
-
-        ap_fini();
 
         return 0;
 }

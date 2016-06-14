@@ -30,7 +30,6 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/time_utils.h>
 
-#define DIF_NAME "*"
 #define THREADS_SIZE 10
 
 pthread_t       listen_thread;
@@ -43,19 +42,12 @@ pthread_cond_t  fds_signal;
 
 void shutdown_server(int signo, siginfo_t * info, void * c)
 {
-        char * dif = DIF_NAME;
         int i;
 
         switch(signo) {
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                if (ap_unreg(&dif, 1)) {
-                        printf("Failed to unregister application.\n");
-                        ap_fini();
-                        exit(EXIT_FAILURE);
-                }
-
                 pthread_cancel(listen_thread);
 
                 for (i = 0; i < THREADS_SIZE; i++) {
@@ -157,36 +149,20 @@ void * worker(void * o)
 
 void * listener(void * o)
 {
-        char * dif = DIF_NAME;
-        int server_fd;
-        char * client_name = NULL;
         int client_fd = 0;
         int response = 0;
-
-        if (ap_init(SERVER_AP_NAME)) {
-                printf("Failed to init AP.\n");
-                exit(EXIT_FAILURE);
-        }
-
-        server_fd = ap_reg(&dif, 1);
-        if (server_fd < 0) {
-                printf("Failed to register application.\n");
-                ap_fini();
-                exit(EXIT_FAILURE);
-        }
 
         printf("Server started, interval is %ld s, timeout is %ld s.\n",
                server_settings.interval, server_settings.timeout);
 
         while (true) {
-                client_fd = flow_accept(server_fd,
-                                        &client_name, NULL);
+                client_fd = flow_accept(NULL);
                 if (client_fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;
                 }
 
-                printf("New flow from %s.\n", client_name);
+                printf("New flow.\n");
 
                 pthread_mutex_lock(&fds_lock);
 
@@ -258,8 +234,6 @@ int server_main()
         for (i = 0; i < THREADS_SIZE; i++) {
                 pthread_join(threads[i], NULL);
         }
-
-        ap_fini();
 
         return 0;
 }

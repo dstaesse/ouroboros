@@ -34,6 +34,7 @@ static void usage()
         printf("Usage: irm [OPERATION]\n\n"
                "where OPERATION = {create_ipcp destroy_ipcp \n"
                "                   bootstrap_ipcp enroll_ipcp\n"
+               "                   register unregister\n"
                "                   register_ipcp unregister_ipcp\n");
 }
 
@@ -51,8 +52,8 @@ static const struct cmd {
         { "destroy_ipcp",    do_destroy_ipcp },
         { "bootstrap_ipcp",  do_bootstrap_ipcp },
         { "enroll_ipcp",     do_enroll_ipcp },
-        { "register_ipcp",   do_register_ipcp },
-        { "unregister_ipcp", do_unregister_ipcp },
+        { "register",        do_register },
+        { "unregister",      do_unregister },
         { "help",            do_help },
         { 0 }
 };

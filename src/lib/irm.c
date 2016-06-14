@@ -199,27 +199,39 @@ int irm_enroll_ipcp(instance_name_t * api,
         return ret;
 }
 
-int irm_reg_ipcp(instance_name_t * api,
-                 char **           difs,
-                 size_t            difs_size)
+int irm_reg(char *            name,
+            instance_name_t * api,
+            int               argc,
+            char **           argv,
+            bool              autoexec,
+            char **           difs,
+            size_t            difs_len)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (api->name == NULL ||
-            difs == NULL ||
-            difs_size == 0 ||
-            difs[0] == NULL) {
+        if (name == NULL || api->name == NULL)
                 return -EINVAL;
+
+        msg.code = IRM_MSG_CODE__IRM_AP_REG;
+        msg.dst_name = name;
+        msg.ap_name = api->name;
+        if (difs != NULL) {
+                msg.dif_name = difs;
+                msg.n_dif_name = difs_len;
         }
 
-        msg.code = IRM_MSG_CODE__IRM_REG_IPCP;
-        msg.ap_name = api->name;
-        msg.has_api_id = true;
-        msg.api_id = api->id;
-        msg.dif_name = difs;
-        msg.n_dif_name = difs_size;
+        if (argv != NULL) {
+                msg.n_args = argc;
+                msg.args = argv;
+        } else {
+                msg.has_api_id = true;
+                msg.api_id = api->id;
+        }
+
+        msg.has_autoexec = true;
+        msg.autoexec = autoexec;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -236,28 +248,36 @@ int irm_reg_ipcp(instance_name_t * api,
         return ret;
 }
 
-int irm_unreg_ipcp(const instance_name_t * api,
-                   char **                 difs,
-                   size_t                  difs_size)
+int irm_unreg(char *                  name,
+              const instance_name_t * api,
+              char **                 difs,
+              size_t                  difs_len,
+              bool                    hard)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (api == NULL ||
-            api->name == NULL ||
-            difs == NULL ||
-            difs_size == 0 ||
-            difs[0] == NULL) {
+        if (name == NULL && api == NULL)
                 return -EINVAL;
+
+        if (difs == NULL ||
+            difs_len == 0 ||
+            difs[0] == NULL)
+                return -EINVAL;
+
+        msg.code = IRM_MSG_CODE__IRM_AP_UNREG;
+        if (api != NULL) {
+                msg.ap_name = api->name;
+                msg.has_api_id = true;
+                msg.api_id = api->id;
         }
 
-        msg.code = IRM_MSG_CODE__IRM_UNREG_IPCP;
-        msg.ap_name = api->name;
-        msg.has_api_id = true;
-        msg.api_id = api->id;
         msg.dif_name = difs;
-        msg.n_dif_name = difs_size;
+        msg.n_dif_name = difs_len;
+        if (name != NULL)
+                msg.dst_name = name;
+        msg.hard = hard;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)

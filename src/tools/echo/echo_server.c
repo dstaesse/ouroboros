@@ -27,28 +27,15 @@
 
 #include <ouroboros/dev.h>
 
-#define DIF_NAME "*"
-
 void shutdown_server(int signo)
 {
-        char * dif = DIF_NAME;
-
-        if (ap_unreg(&dif, 1)) {
-                printf("Failed to unregister application.\n");
-                ap_fini();
-                exit(EXIT_FAILURE);
-        }
-
         ap_fini();
         exit(EXIT_SUCCESS);
 }
 
 int server_main()
 {
-        int    server_fd = 0;
         int    client_fd = 0;
-        char * dif = DIF_NAME;
-        char * client_name = NULL;
         char   buf[BUF_SIZE];
         ssize_t count = 0;
 
@@ -60,27 +47,14 @@ int server_main()
                 return -1;
         }
 
-        if (ap_init(SERVER_AP_NAME)) {
-                printf("Failed to init AP.\n");
-                return -1;
-        }
-
-        server_fd = ap_reg(&dif, 1);
-        if (server_fd < 0) {
-                printf("Failed to register application.\n");
-                ap_fini();
-                return -1;
-        }
-
         while (true) {
-                client_fd = flow_accept(server_fd,
-                                        &client_name, NULL);
+                client_fd = flow_accept(NULL);
                 if (client_fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;
                 }
 
-                printf("New flow from %s.\n", client_name);
+                printf("New flow.\n");
 
                 if (flow_alloc_resp(client_fd, 0)) {
                         printf("Failed to give an allocate response.\n");
@@ -105,8 +79,6 @@ int server_main()
 
                 flow_dealloc(client_fd);
         }
-
-        ap_fini();
 
         return 0;
 }

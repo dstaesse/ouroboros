@@ -41,7 +41,6 @@ struct ipcp_ops {
         int   (* ipcp_flow_alloc)(pid_t         n_pid,
                                   int           port_id,
                                   char *        dst_ap_name,
-                                  char *        src_ap_name,
                                   char *        src_ae_name,
                                   enum qos_cube qos);
         int   (* ipcp_flow_alloc_resp)(pid_t n_pid,
