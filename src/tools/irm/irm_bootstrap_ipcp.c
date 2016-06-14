@@ -33,6 +33,7 @@
 
 #define NORMAL "normal"
 #define SHIM_UDP "shim-udp"
+#define SHIM_ETH_LLC "shim-eth-llc"
 #define LOCAL "local"
 
 #define DEFAULT_ADDR_SIZE 4
@@ -54,7 +55,8 @@ static void usage()
                "           [api <application process instance>]\n"
                "           dif <DIF name>\n"
                "           type [TYPE]\n\n"
-               "where TYPE = {" NORMAL " " LOCAL " " SHIM_UDP "}\n\n"
+               "where TYPE = {" NORMAL " " LOCAL " "
+               SHIM_UDP " " SHIM_ETH_LLC"}\n\n"
                "if TYPE == " NORMAL "\n"
                "           [addr <address size> (default: %d)]\n"
                "           [cep_id <CEP-id size> (default: %d)]\n"
@@ -68,7 +70,9 @@ static void usage()
                "if TYPE == " SHIM_UDP "\n"
                "           ip <IP address in dotted notation>\n"
                "           [dns <DDNS IP address in dotted notation>"
-               " (default = none: %d)]\n",
+               " (default = none: %d)]\n"
+               "if TYPE == " SHIM_ETH_LLC "\n"
+               "           if_name <interface name>\n",
                DEFAULT_ADDR_SIZE, DEFAULT_CEP_ID_SIZE,
                DEFAULT_PDU_LEN_SIZE, DEFAULT_QOS_ID_SIZE,
                DEFAULT_SEQ_NO_SIZE, DEFAULT_TTL_SIZE,
@@ -93,6 +97,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         uint32_t dns_addr = DEFAULT_DDNS;
         char * ipcp_type = NULL;
         char * dif_name = NULL;
+        char * if_name = NULL;
 
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {
@@ -113,6 +118,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                                 usage();
                                 return -1;
                         }
+                } else if (matches(*argv, "if_name") == 0) {
+                        if_name = *(argv + 1);
                 } else if (matches(*argv, "addr") == 0) {
                         addr_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "cep_id") == 0) {
@@ -169,6 +176,13 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.dns_addr = dns_addr;
         } else if (strcmp(ipcp_type, LOCAL) == 0) {
                 conf.type = IPCP_LOCAL;
+        } else if (strcmp(ipcp_type, SHIM_ETH_LLC) == 0) {
+                conf.type = IPCP_SHIM_ETH_LLC;
+                if (if_name == NULL) {
+                        usage();
+                        return -1;
+                }
+                conf.if_name = if_name;
         } else {
                 usage();
                 return -1;

@@ -125,6 +125,8 @@ pid_t ipcp_create(char *         ipcp_name,
                 exec_name = IPCP_NORMAL_EXEC;
         else if (ipcp_type == IPCP_SHIM_UDP)
                 exec_name = IPCP_SHIM_UDP_EXEC;
+        else if (ipcp_type == IPCP_SHIM_ETH_LLC)
+                exec_name = IPCP_SHIM_ETH_LLC_EXEC;
         else if (ipcp_type == IPCP_LOCAL)
                 exec_name = IPCP_LOCAL_EXEC;
         else

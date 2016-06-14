@@ -45,8 +45,8 @@ struct ipcp {
 };
 
 struct ipcp * ipcp_instance_create();
-void * ipcp_main_loop(void * o);
-void * ipcp_sdu_loop(void * o);
-int ipcp_arg_check(int argc, char * argv[]);
+void *        ipcp_main_loop(void * o);
+void *        ipcp_sdu_loop(void * o);
+int           ipcp_arg_check(int argc, char * argv[]);
 
 #endif
