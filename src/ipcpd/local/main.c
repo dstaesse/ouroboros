@@ -519,7 +519,9 @@ static int ipcp_local_flow_dealloc(int port_id)
 
         bmp_release(_ap_instance->fds, fd);
 
-        _ap_instance->in_out[_ap_instance->in_out[fd]] = -1;
+        if (_ap_instance->in_out[fd] != -1)
+                _ap_instance->in_out[_ap_instance->in_out[fd]] =-1;
+
         _ap_instance->in_out[fd] = -1;
 
         _ap_instance->flows[fd].state   = FLOW_NULL;
