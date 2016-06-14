@@ -341,7 +341,6 @@ static int eth_llc_ipcp_send_mgmt_frame(shim_eth_llc_msg_t * msg,
 static int eth_llc_ipcp_port_alloc(uint8_t dst_addr[MAC_SIZE],
                                    uint8_t ssap,
                                    char *  dst_name,
-                                   char *  src_ap_name,
                                    char *  src_ae_name)
 {
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
@@ -349,7 +348,6 @@ static int eth_llc_ipcp_port_alloc(uint8_t dst_addr[MAC_SIZE],
         msg.code        = SHIM_ETH_LLC_MSG_CODE__FLOW_REQ;
         msg.ssap        = ssap;
         msg.dst_name    = dst_name;
-        msg.src_ap_name = src_ap_name;
         msg.src_ae_name = src_ae_name;
 
         return eth_llc_ipcp_send_mgmt_frame(&msg, dst_addr);
@@ -386,7 +384,6 @@ static int eth_llc_ipcp_port_dealloc(uint8_t dst_addr[MAC_SIZE],
 static int eth_llc_ipcp_port_req(uint8_t r_sap,
                                  uint8_t r_addr[MAC_SIZE],
                                  char *  dst_name,
-                                 char *  src_ap_name,
                                  char *  src_ae_name)
 {
         int port_id;
@@ -407,7 +404,6 @@ static int eth_llc_ipcp_port_req(uint8_t r_sap,
         /* reply to IRM */
         port_id = ipcp_flow_req_arr(getpid(),
                                     dst_name,
-                                    src_ap_name,
                                     src_ae_name);
 
         if (port_id < 0) {
@@ -534,7 +530,6 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
                         eth_llc_ipcp_port_req(msg->ssap,
                                               r_addr,
                                               msg->dst_name,
-                                              msg->src_ap_name,
                                               msg->src_ae_name);
                 }
                 break;
@@ -877,7 +872,6 @@ static int eth_llc_ipcp_name_unreg(char * name)
 static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
                                    int           port_id,
                                    char *        dst_name,
-                                   char *        src_ap_name,
                                    char *        src_ae_name,
                                    enum qos_cube qos)
 {
@@ -886,9 +880,9 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
         uint8_t r_addr[MAC_SIZE];
         int index = 0;
 
-        LOG_INFO("Allocating flow from %s to %s.", src_ap_name, dst_name);
+        LOG_INFO("Allocating flow to %s.", dst_name);
 
-        if (dst_name == NULL || src_ap_name == NULL || src_ae_name == NULL)
+        if (dst_name == NULL || src_ae_name == NULL)
                 return -1;
 
         if (qos != QOS_CUBE_BE)
@@ -937,7 +931,6 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
 
         if (eth_llc_ipcp_port_alloc(r_addr, ssap,
                                     dst_name,
-                                    src_ap_name,
                                     src_ae_name) < 0) {
                 LOG_DBGF("Port alloc returned -1.");
                 rw_lock_wrlock(&_ipcp->state_lock);
