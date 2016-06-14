@@ -65,6 +65,7 @@ typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 #define MGMT_SAP 0x01
 #define SHIM_ETH_LLC_MAX_SDU_SIZE 1500
 #define MAC_SIZE 6
+#define LLC_HEADER_SIZE 3
 #define MAX_SAPS 64
 
 /* global for trapping signal */
@@ -278,7 +279,7 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
                 return -1;
         }
 
-        length = htons(len);
+        length = htons(len + LLC_HEADER_SIZE);
 
         memcpy(frame, dst_addr, MAC_SIZE * sizeof(uint8_t));
         frame_len += MAC_SIZE;
@@ -580,8 +581,9 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                 rw_lock_unlock(&_ipcp->state_lock);
 
-                if (recv(shim_data(_ipcp)->s_fd, buf,
-                         SHIM_ETH_LLC_MAX_SDU_SIZE, 0) < 0) {
+                frame_len = recv(shim_data(_ipcp)->s_fd, buf,
+                                 SHIM_ETH_LLC_MAX_SDU_SIZE, 0);
+                if (frame_len < 0) {
                         LOG_ERR("Failed to recv frame.");
                         continue;
                 }
@@ -600,12 +602,13 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 for (; i < 2 * MAC_SIZE; i++)
                         src_mac[i - MAC_SIZE] = buf[i];
 
-                frame_len = ((buf[i]) << 8) + buf[i + 1];
                 i += 2;
 
                 dsap = reverse_bits(buf[i++]);
                 ssap = reverse_bits(buf[i++]);
                 i++;
+
+                frame_len -= i;
 
                 if (ssap == MGMT_SAP &&
                     dsap == MGMT_SAP) {
