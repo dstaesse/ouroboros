@@ -1151,6 +1151,8 @@ static int ipcp_udp_name_reg(char * name)
                         return -1;
                 }
         }
+#else
+        rw_lock_unlock(&_ipcp->state_lock);
 #endif
         LOG_DBG("Registered %s.", name);
 
@@ -1606,7 +1608,9 @@ int main (int argc, char * argv[])
         free(_ipcp->ops);
         free(_ipcp);
 
-        exit(0);
+        LOG_DBG("IPCP exited.");
+
+        exit(EXIT_SUCCESS);
 }
 
 #endif /* MAKE_CHECK */
