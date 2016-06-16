@@ -910,7 +910,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                        SO_REUSEADDR,
                        &enable,
                        sizeof(int)) < 0)
-                LOG_WARN("Setsockopt(SO_REUSEADDR) failed.");
+                LOG_WARN("Failed to set SO_REUSEADDR.");
 
         memset((char *) &s_saddr, 0, sizeof(s_saddr));
         shim_data(_ipcp)->s_saddr.sin_family      = AF_INET;
