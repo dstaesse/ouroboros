@@ -486,6 +486,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                                     src_ae_name);
 
         if (port_id < 0) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
                 rw_lock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Could not get port id from IRMd");
                 close(fd);
