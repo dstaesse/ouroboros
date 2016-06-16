@@ -60,7 +60,6 @@ int client_main(char * server,
         fd = flow_alloc(server, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
-                ap_fini();
                 return -1;
         }
 
@@ -68,7 +67,6 @@ int client_main(char * server,
         if (result < 0) {
                 printf("Flow allocation refused.\n");
                 flow_dealloc(fd);
-                ap_fini();
                 return -1;
         }
 
