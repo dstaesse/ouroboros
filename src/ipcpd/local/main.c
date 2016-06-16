@@ -365,8 +365,10 @@ static int ipcp_local_flow_alloc(pid_t         n_pid,
         }
 
         rb = shm_ap_rbuff_open(n_pid);
-        if (rb == NULL)
+        if (rb == NULL) {
+                rw_lock_unlock(&_ipcp->state_lock);
                 return -1; /* -ENORBUFF */
+        }
 
         rw_lock_wrlock(&_ap_instance->flows_lock);
 
@@ -389,6 +391,7 @@ static int ipcp_local_flow_alloc(pid_t         n_pid,
                                     src_ae_name);
 
         if (port_id < 0) {
+                rw_lock_unlock(&_ap_instance->flows_lock);
                 rw_lock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Could not get port id from IRMd");
                 /* shm_ap_rbuff_close(n_pid); */
