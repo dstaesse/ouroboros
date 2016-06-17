@@ -34,7 +34,7 @@
 
 #define SHM_BLOCKS_SIZE (SHM_BLOCKS_IN_MAP * SHM_DU_BUFF_BLOCK_SIZE)
 #define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 2 * sizeof (size_t)                   \
-                       + sizeof(pthread_mutex_t))
+                       + sizeof(pthread_mutex_t)) + sizeof(pid_t)
 
 #define get_head_ptr(dum)                                                      \
 ((struct shm_du_buff *)(dum->shm_base + (*dum->ptr_head *                      \
@@ -71,6 +71,7 @@ struct shm_du_map {
         size_t *          ptr_head;    /* start of ringbuffer head */
         size_t *          ptr_tail;    /* start of ringbuffer tail */
         pthread_mutex_t * shm_mutex;   /* lock all free space in shm */
+        pid_t *           pid;         /* pid of the irmd owner */
         int               fd;
 };
 
@@ -126,10 +127,9 @@ struct shm_du_map * shm_du_map_create()
         dum->shm_base = shm_base;
         dum->ptr_head = (size_t *)
                 ((uint8_t *) dum->shm_base + SHM_BLOCKS_SIZE);
-        dum->ptr_tail = (size_t *)
-                ((uint8_t *) dum->ptr_head + sizeof(size_t));
-        dum->shm_mutex = (pthread_mutex_t *)
-                ((uint8_t *) dum->ptr_tail + sizeof(size_t));
+        dum->ptr_tail = dum->ptr_head + 1;
+        dum->shm_mutex = (pthread_mutex_t *) (dum->ptr_tail + 1);
+        dum->pid = (pid_t *) (dum->shm_mutex + 1);
 
         pthread_mutexattr_init(&attr);
         pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
@@ -137,6 +137,8 @@ struct shm_du_map * shm_du_map_create()
 
         *dum->ptr_head = 0;
         *dum->ptr_tail = 0;
+
+        *dum->pid = getpid();
 
         dum->fd = shm_fd;
 
@@ -181,14 +183,18 @@ struct shm_du_map * shm_du_map_open()
         dum->shm_base = shm_base;
         dum->ptr_head = (size_t *)
                 ((uint8_t *) dum->shm_base + SHM_BLOCKS_SIZE);
-        dum->ptr_tail = (size_t *)
-                ((uint8_t *) dum->ptr_head + sizeof(size_t));
-        dum->shm_mutex = (pthread_mutex_t *)
-                ((uint8_t *) dum->ptr_tail + sizeof(size_t));
+        dum->ptr_tail = dum->ptr_head + 1;
+        dum->shm_mutex = (pthread_mutex_t *) (dum->ptr_tail + 1);
+        dum->pid = (pid_t *) (dum->shm_mutex + 1);
 
         dum->fd = shm_fd;
 
         return dum;
+}
+
+pid_t shm_du_map_owner(struct shm_du_map * dum)
+{
+        return *dum->pid;
 }
 
 void shm_du_map_close(struct shm_du_map * dum)
