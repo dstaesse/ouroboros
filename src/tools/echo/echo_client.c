@@ -34,7 +34,6 @@ int client_main()
         fd = flow_alloc("echo", NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
-                ap_fini();
                 return -1;
         }
 
@@ -42,14 +41,12 @@ int client_main()
         if (result < 0) {
                 printf("Flow allocation refused.\n");
                 flow_dealloc(fd);
-                ap_fini();
                 return -1;
         }
 
         if (flow_write(fd, message, strlen(message) + 1) == -1) {
                 printf("Failed to write SDU.\n");
                 flow_dealloc(fd);
-                ap_fini();
                 return -1;
         }
 
@@ -57,7 +54,6 @@ int client_main()
         if (count < 0) {
                 printf("Failed to read SDU.\n");
                 flow_dealloc(fd);
-                ap_fini();
                 return -1;
         }
 
