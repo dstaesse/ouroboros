@@ -1555,11 +1555,20 @@ static struct irm * irm_create()
                 return NULL;
 
         if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1) {
-                LOG_ERR("IRM daemon is running in this system.");
-                LOG_ERR("If you think this message is in error,");
-                LOG_ERR("please remove /dev/shm/" SHM_DU_MAP_FILENAME);
-                LOG_ERR("(root privileges required) or reboot your system.");
-                return NULL;
+                struct shm_du_map * dum = shm_du_map_open();
+                if (dum == NULL) {
+                        LOG_ERR("Could not examine existing shm file.");
+                        exit(EXIT_FAILURE);
+                }
+                if (kill(shm_du_map_owner(dum), 0) < 0) {
+                        LOG_INFO("IRMd didn't properly shut down last time.");
+                        shm_du_map_destroy(dum);
+                        LOG_INFO("Stale shm file removed.");
+                } else {
+                        LOG_WARN("IRMd already running, exiting.");
+                        free(i);
+                        exit(EXIT_SUCCESS);
+                }
         }
 
         i->threadpool = malloc(sizeof(pthread_t) * IRMD_THREADPOOL_SIZE);
@@ -1621,18 +1630,17 @@ int main()
         sig_act.sa_flags     = SA_SIGINFO;
 
         if (sigaction(SIGINT,  &sig_act, NULL) < 0)
-                exit(1);
+                exit(EXIT_FAILURE);
         if (sigaction(SIGTERM, &sig_act, NULL) < 0)
-                exit(1);
+                exit(EXIT_FAILURE);
         if (sigaction(SIGHUP,  &sig_act, NULL) < 0)
-                exit(1);
+                exit(EXIT_FAILURE);
         if (sigaction(SIGPIPE, &sig_act, NULL) < 0)
-                exit(1);
+                exit(EXIT_FAILURE);
 
         instance = irm_create();
         if (instance == NULL)
                 return 1;
-
 
         pthread_create(&instance->cleanup_flows, NULL, irm_flow_cleaner, NULL);
 
@@ -1647,5 +1655,5 @@ int main()
 
         irm_destroy(instance);
 
-        return 0;
+        exit(EXIT_SUCCESS);
 }
