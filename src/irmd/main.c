@@ -1353,6 +1353,7 @@ void * irm_flow_cleaner()
                         LOG_WARN("Failed to get time.");
                 /* cleanup stale PENDING flows */
                 rw_lock_rdlock(&instance->state_lock);
+                rw_lock_wrlock(&instance->flows_lock);
 
                 list_for_each_safe(pos, n, &(instance->port_map)) {
                         struct port_map_entry * e =
@@ -1362,15 +1363,24 @@ void * irm_flow_cleaner()
 
                         if (e->state == FLOW_PENDING &&
                             ts_diff_ms(&e->t0, &now) > IRMD_FLOW_TIMEOUT) {
-                                LOG_DBGF("Flow time exceeded on port ID %d.",
+                                LOG_DBGF("Pending port_id %d timed out.",
                                          e->port_id);
                                 e->state = FLOW_NULL;
                                 pthread_cond_broadcast(&e->res_signal);
                         }
 
+                        if (kill(e->n_pid, 0) < 0 || kill(e->n_1_pid, 0) < 0) {
+                                bmp_release(instance->port_ids, e->port_id);
+                                list_del(&e->next);
+                                LOG_DBGF("Process died, port_id %d removed.",
+                                         e->port_id);
+                                free(e);
+                        }
+
                         pthread_mutex_unlock(&e->res_lock);
                 }
 
+                rw_lock_unlock(&instance->flows_lock);
                 rw_lock_unlock(&instance->state_lock);
 
                 nanosleep(&timeout, NULL);
