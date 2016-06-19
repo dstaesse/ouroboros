@@ -1059,6 +1059,7 @@ static int flow_alloc_res(int port_id)
                         return 0;
                 }
                 if (e->state == FLOW_NULL) {
+                        /* don't release the port_id, AP has to call dealloc */
                         list_del(&e->next);
                         rw_lock_unlock(&instance->flows_lock);
                         rw_lock_unlock(&instance->state_lock);
@@ -1369,11 +1370,20 @@ void * irm_flow_cleaner()
                                 pthread_cond_broadcast(&e->res_signal);
                         }
 
-                        if (kill(e->n_pid, 0) < 0 || kill(e->n_1_pid, 0) < 0) {
+
+                        if (kill(e->n_pid, 0) < 0) {
                                 bmp_release(instance->port_ids, e->port_id);
+
                                 list_del(&e->next);
-                                LOG_DBGF("Process died, port_id %d removed.",
-                                         e->port_id);
+                                LOG_DBGF("Process %d gone, %d deallocated.",
+                                         e->n_pid, e->port_id);
+                                ipcp_flow_dealloc(e->n_1_pid, e->port_id);
+                                free(e);
+                        }
+                        if (kill(e->n_1_pid, 0) < 0) {
+                                list_del(&e->next);
+                                LOG_ERR("IPCP %d gone, flow %d removed.",
+                                        e->n_1_pid, e->port_id);
                                 free(e);
                         }
 
@@ -1575,7 +1585,7 @@ static struct irm * irm_create()
                         shm_du_map_destroy(dum);
                         LOG_INFO("Stale shm file removed.");
                 } else {
-                        LOG_WARN("IRMd already running, exiting.");
+                        LOG_INFO("IRMd already running, exiting.");
                         free(i);
                         exit(EXIT_SUCCESS);
                 }
