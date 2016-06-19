@@ -1334,6 +1334,7 @@ void irmd_sig_handler(int sig, siginfo_t * info, void * c)
 
                 rw_lock_unlock(&instance->state_lock);
 
+                break;
         case SIGPIPE:
                 LOG_DBG("Ignoring SIGPIPE.");
         default:
