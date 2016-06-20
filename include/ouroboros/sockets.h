@@ -36,10 +36,13 @@ typedef IrmMsg irm_msg_t;
 #include "ipcpd_messages.pb-c.h"
 typedef IpcpMsg ipcp_msg_t;
 
-#define IRM_SOCK_PATH "/tmp/irm_sock"
+#define SOCK_PATH "/var/run/ouroboros/"
+#define SOCK_PATH_SUFFIX ".sock"
+
+#define IRM_SOCK_PATH SOCK_PATH "irm" SOCK_PATH_SUFFIX
 #define IRM_MSG_BUF_SIZE 256
 
-#define IPCP_SOCK_PATH_PREFIX "/tmp/ipcp_sock"
+#define IPCP_SOCK_PATH_PREFIX SOCK_PATH "ipcp"
 #define IPCP_MSG_BUF_SIZE IRM_MSG_BUF_SIZE
 
 /* Returns the full socket path of an IPCP */

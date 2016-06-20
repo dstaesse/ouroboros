@@ -9,16 +9,16 @@ set(SOURCE_FILES
         main.c
 )
 
-add_executable (dad ${SOURCE_FILES})
+add_executable (nsmd ${SOURCE_FILES})
 
-target_link_libraries (dad LINK_PUBLIC ouroboros)
+target_link_libraries (nsmd LINK_PUBLIC ouroboros)
 
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-   MACRO_ADD_COMPILE_FLAGS(dad -DCONFIG_OUROBOROS_DEBUG)
+   MACRO_ADD_COMPILE_FLAGS(nsmd -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS dad RUNTIME DESTINATION bin)
+install(TARGETS nsmd RUNTIME DESTINATION sbin)
 
-# Enable once dad has tests
+# Enable once nsmd has tests
 # add_subdirectory(tests)

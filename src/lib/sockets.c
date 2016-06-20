@@ -22,6 +22,7 @@
 
 #define OUROBOROS_PREFIX "libouroboros-sockets"
 
+#include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/common.h>
 #include <ouroboros/sockets.h>
@@ -153,7 +154,7 @@ char * ipcp_sock_path(pid_t pid)
         char * full_name = NULL;
         char * pid_string = NULL;
         size_t len = 0;
-        char * delim = "-";
+        char * delim = "_";
 
         len = n_digits(pid);
         pid_string = malloc(len + 1);
@@ -164,6 +165,8 @@ char * ipcp_sock_path(pid_t pid)
 
         len += strlen(IPCP_SOCK_PATH_PREFIX);
         len += strlen(delim);
+        len += strlen(SOCK_PATH_SUFFIX);
+
         full_name = malloc(len + 1);
         if (full_name == NULL) {
                 free(pid_string);
@@ -173,6 +176,7 @@ char * ipcp_sock_path(pid_t pid)
         strcpy(full_name, IPCP_SOCK_PATH_PREFIX);
         strcat(full_name, delim);
         strcat(full_name, pid_string);
+        strcat(full_name, SOCK_PATH_SUFFIX);
 
         free(pid_string);
 

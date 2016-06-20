@@ -4,9 +4,9 @@ ME=compile_release
 
 if (($# == 1 ))
 then
-    PREFIX=`echo "$1"|sed -e "s,\/$,,"`
+    PREFIX=$1
 else
-    PREFIX="/usr/local/ouroboros"
+    PREFIX="/"
 fi
 
 BUILDDIR=build

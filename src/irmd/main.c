@@ -49,6 +49,7 @@
 #include <string.h>
 #include <limits.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 #ifndef IRMD_MAX_FLOWS
 #define IRMD_MAX_FLOWS 4096
@@ -1571,16 +1572,20 @@ void * mainloop()
 
 static struct irm * irm_create()
 {
+        struct stat st = {0};
+
         struct irm * i = malloc(sizeof(*i));
         if (i == NULL)
                 return NULL;
 
         if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1) {
                 struct shm_du_map * dum = shm_du_map_open();
+
                 if (dum == NULL) {
                         LOG_ERR("Could not examine existing shm file.");
                         exit(EXIT_FAILURE);
                 }
+
                 if (kill(shm_du_map_owner(dum), 0) < 0) {
                         LOG_INFO("IRMd didn't properly shut down last time.");
                         shm_du_map_destroy(dum);
@@ -1590,6 +1595,11 @@ static struct irm * irm_create()
                         free(i);
                         exit(EXIT_SUCCESS);
                 }
+        }
+
+        if (rw_lock_init(&i->state_lock)) {
+                irm_destroy(i);
+                return NULL;
         }
 
         i->threadpool = malloc(sizeof(pthread_t) * IRMD_THREADPOOL_SIZE);
@@ -1613,13 +1623,22 @@ static struct irm * irm_create()
                 return NULL;
         }
 
+        if (stat(SOCK_PATH, &st) == -1) {
+                if (mkdir(SOCK_PATH, 0777)) {
+                        LOG_ERR("Failed to create sockets directory.");
+                        irm_destroy(i);
+                        return NULL;
+                }
+        }
+
         i->sockfd = server_socket_open(IRM_SOCK_PATH);
         if (i->sockfd < 0) {
                 irm_destroy(i);
                 return NULL;
         }
 
-        if (rw_lock_init(&i->state_lock)) {
+        if (chmod(IRM_SOCK_PATH, 0666)) {
+                LOG_ERR("Failed to chmod socket.");
                 irm_destroy(i);
                 return NULL;
         }
@@ -1643,6 +1662,11 @@ int main()
 
         int t = 0;
 
+        if (geteuid() != 0) {
+                LOG_ERR("IPC Resource Manager must be run as root.");
+                exit(EXIT_FAILURE);
+        }
+
         /* init sig_act */
         memset(&sig_act, 0, sizeof sig_act);
 
@@ -1661,7 +1685,7 @@ int main()
 
         instance = irm_create();
         if (instance == NULL)
-                return 1;
+                exit(EXIT_FAILURE);
 
         pthread_create(&instance->cleanup_flows, NULL, irm_flow_cleaner, NULL);
 

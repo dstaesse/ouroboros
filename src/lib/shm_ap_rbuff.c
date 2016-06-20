@@ -20,10 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/shm_ap_rbuff.h>
+#include <ouroboros/config.h>
+
 #define OUROBOROS_PREFIX "shm_ap_rbuff"
 
 #include <ouroboros/logs.h>
+#include <ouroboros/shm_ap_rbuff.h>
 
 #include <pthread.h>
 #include <sys/mman.h>
@@ -34,6 +36,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #define SHM_RBUFF_FILE_SIZE (SHM_RBUFF_SIZE * sizeof(struct rb_entry)          \
                              + 2 * sizeof(size_t) + sizeof(pthread_mutex_t)    \
@@ -76,6 +79,12 @@ struct shm_ap_rbuff * shm_ap_rbuff_create()
         shm_fd = shm_open(fn, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (shm_fd == -1) {
                 LOG_DBGF("Failed creating ring buffer.");
+                free(rb);
+                return NULL;
+        }
+
+        if (fchmod(shm_fd, 0666)) {
+                LOG_DBGF("Failed to chmod shared memory.");
                 free(rb);
                 return NULL;
         }
