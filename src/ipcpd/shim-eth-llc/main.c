@@ -56,6 +56,8 @@
 #include <netinet/in.h>
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
+#include <poll.h>
+#include <sys/mman.h>
 
 #include "shim_eth_llc_messages.pb-c.h"
 
@@ -96,6 +98,10 @@ struct eth_llc_ipcp_data {
 
         struct shm_du_map *   dum;
         struct shm_ap_rbuff * rb;
+
+        uint8_t *             rx_ring;
+        uint8_t *             tx_ring;
+        int                   tx_offset;
 
         struct eth_llc_flow   flows[AP_MAX_FLOWS];
         rw_lock_t             flows_lock;
@@ -213,7 +219,8 @@ static int addr_and_saps_to_index(uint8_t r_addr[MAC_SIZE],
         int i = 0;
 
         for (i = 0; i < AP_MAX_FLOWS; i++) {
-                if (shim_data(_ipcp)->flows[i].r_sap == r_sap &&
+                if (ipcp_flow(i)->state == FLOW_ALLOCATED &&
+                    shim_data(_ipcp)->flows[i].r_sap == r_sap &&
                     shim_data(_ipcp)->flows[i].sap == sap &&
                     !memcmp(shim_data(_ipcp)->flows[i].r_addr,
                             r_addr,
@@ -267,17 +274,48 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
                                    uint8_t * payload,
                                    size_t    len)
 {
-        uint8_t frame[SHIM_ETH_LLC_MAX_SDU_SIZE];
+
         int frame_len = 0;
-        struct sockaddr_ll device;
         uint8_t cf = 0x03;
         int fd;
         uint16_t length = 0;
+
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+        struct pollfd pfd;
+        struct tpacket_hdr * header;
+        uint8_t * frame;
+#else
+        uint8_t frame[SHIM_ETH_LLC_MAX_SDU_SIZE];
+        struct sockaddr_ll device;
+#endif
 
         if (payload == NULL) {
                 LOG_ERR("Payload was NULL.");
                 return -1;
         }
+
+        fd = (shim_data(_ipcp))->s_fd;
+
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+        header = (void *) shim_data(_ipcp)->tx_ring +
+                (shim_data(_ipcp)->tx_offset * SHM_DU_BUFF_BLOCK_SIZE);
+
+        while (header->tp_status != TP_STATUS_AVAILABLE) {
+                pfd.fd = fd;
+                pfd.revents = 0;
+                pfd.events = POLLIN | POLLRDNORM | POLLERR;
+
+                if (poll(&pfd, 1, -1) <= 0) {
+                        LOG_ERR("Failed to poll: %s.", strerror(errno));
+                        continue;
+                }
+
+                header = (void *) shim_data(_ipcp)->tx_ring +
+                        (shim_data(_ipcp)->tx_offset * SHM_DU_BUFF_BLOCK_SIZE);
+        }
+
+        frame = (void *) header + TPACKET_HDRLEN - sizeof(struct sockaddr_ll);
+#endif
 
         length = htons(len + LLC_HEADER_SIZE);
 
@@ -298,16 +336,27 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
         memcpy(frame + frame_len, payload, len);
         frame_len += len;
 
-        rw_lock_rdlock(&_ipcp->state_lock);
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+        header->tp_len = frame_len;
+        header->tp_status = TP_STATUS_SEND_REQUEST;
+
+        if (send(fd, NULL, 0, 0) < 0) {
+                LOG_ERR("Failed to send message.");
+                return -1;
+        }
+
+        shim_data(_ipcp)->tx_offset =
+                (shim_data(_ipcp)->tx_offset + 1)
+                & (SHM_BLOCKS_IN_MAP -1);
+#else
         device = (shim_data(_ipcp))->device;
-        fd = (shim_data(_ipcp))->s_fd;
-        rw_lock_unlock(&_ipcp->state_lock);
 
         if (sendto(fd, frame, frame_len, 0,
                    (struct sockaddr *) &device, sizeof(device)) <= 0) {
                 LOG_ERR("Failed to send message.");
                 return -1;
         }
+#endif
 
         return 0;
 }
@@ -522,8 +571,11 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
         shim_eth_llc_msg_t * msg = NULL;
 
         msg = shim_eth_llc_msg__unpack(NULL, len, buf);
-        if (msg == NULL)
+        if (msg == NULL) {
+                LOG_ERR("Failed to unpack.");
                 return -1;
+        }
+
         switch (msg->code) {
         case SHIM_ETH_LLC_MSG_CODE__FLOW_REQ:
                 if (ipcp_data_is_in_registry(_ipcp->data,
@@ -557,7 +609,6 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
 
 static void * eth_llc_ipcp_sdu_reader(void * o)
 {
-        uint8_t buf[SHIM_ETH_LLC_MAX_SDU_SIZE];
         ssize_t index;
         struct rb_entry e;
         uint8_t src_mac[MAC_SIZE];
@@ -568,6 +619,16 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         uint8_t dsap = 0;
         int i = 0;
         int j = 0;
+        int eth_type = 0;
+
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+        struct pollfd pfd;
+        int offset = 0;
+        struct tpacket_hdr * header;
+        uint8_t * buf = NULL;
+#else
+        uint8_t buf[SHIM_ETH_LLC_MAX_SDU_SIZE];
+#endif
 
         memset(br_addr, 0xff, MAC_SIZE * sizeof(uint8_t));
 
@@ -581,13 +642,33 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                 rw_lock_unlock(&_ipcp->state_lock);
 
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+                header = (void *) shim_data(_ipcp)->rx_ring +
+                        (offset * SHM_DU_BUFF_BLOCK_SIZE);
+                while (!(header->tp_status & TP_STATUS_USER)) {
+                        pfd.fd = shim_data(_ipcp)->s_fd;
+                        pfd.revents = 0;
+                        pfd.events = POLLIN | POLLRDNORM | POLLERR;
+
+                        if (poll(&pfd, 1, -1) <= 0) {
+                                LOG_ERR("Failed to poll: %s.", strerror(errno));
+                                continue;
+                        }
+
+                        header = (void *) shim_data(_ipcp)->rx_ring +
+                                (offset * SHM_DU_BUFF_BLOCK_SIZE);
+                }
+
+                buf = (void * ) header + header->tp_mac;
+                frame_len = header->tp_len;
+#else
                 frame_len = recv(shim_data(_ipcp)->s_fd, buf,
                                  SHIM_ETH_LLC_MAX_SDU_SIZE, 0);
                 if (frame_len < 0) {
                         LOG_ERR("Failed to recv frame.");
                         continue;
                 }
-
+#endif
                 for (i = 0; i < MAC_SIZE; i++)
                         dst_mac[i] = buf[i];
 
@@ -596,12 +677,25 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                            MAC_SIZE) &&
                     memcmp(br_addr, dst_mac, MAC_SIZE)) {
                         LOG_DBG("Not a unicast or broadcast frame.");
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+                        offset = (offset + 1) & (SHM_BLOCKS_IN_MAP - 1);
+                        header->tp_status = TP_STATUS_KERNEL;
+#endif
                         continue;
                 }
 
                 for (; i < 2 * MAC_SIZE; i++)
                         src_mac[i - MAC_SIZE] = buf[i];
 
+                eth_type = (((buf[i]) << 8) + buf[i + 1]);
+                if (eth_type > SHIM_ETH_LLC_MAX_SDU_SIZE) {
+                        /* Not an LLC packet. */
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+                        offset = (offset + 1) & (SHM_BLOCKS_IN_MAP - 1);
+                        header->tp_status = TP_STATUS_KERNEL;
+#endif
+                        continue;
+                }
                 i += 2;
 
                 dsap = reverse_bits(buf[i++]);
@@ -623,6 +717,11 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                                 rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
                                 rw_lock_unlock(&_ipcp->state_lock);
                                 LOG_DBG("Received data for unknown flow.");
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+                                offset = (offset + 1)
+                                        & (SHM_BLOCKS_IN_MAP - 1);
+                                header->tp_status = TP_STATUS_KERNEL;
+#endif
                                 continue;
                         }
 
@@ -642,6 +741,10 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
                         rw_lock_unlock(&_ipcp->state_lock);
                 }
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+                offset = (offset + 1) & (SHM_BLOCKS_IN_MAP -1);
+                header->tp_status = TP_STATUS_KERNEL;
+#endif
         }
 
         return (void *) 0;
@@ -753,6 +856,11 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         int fd = -1;
         struct ifreq ifr;
         int index;
+        struct sockaddr_ll device;
+
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+        struct tpacket_req req;
+#endif
 
         if (conf == NULL)
                 return -1; /* -EINVAL */
@@ -791,11 +899,70 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
+        memset(&(device), 0, sizeof(device));
+        device.sll_ifindex = index;
+        device.sll_family = AF_PACKET;
+        memcpy(device.sll_addr,
+               ifr.ifr_hwaddr.sa_data,
+               MAC_SIZE * sizeof (uint8_t));
+        device.sll_halen = MAC_SIZE;
+        device.sll_protocol = htons(ETH_P_ALL);
+
         fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
         if (fd < 0) {
                 LOG_ERR("Failed to create socket: %s.", strerror(errno));
                 return -1;
         }
+
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+        if (SHIM_ETH_LLC_MAX_SDU_SIZE > SHM_DU_BUFF_BLOCK_SIZE) {
+                LOG_ERR("Max SDU size is bigger than DU map block size.");
+                close(fd);
+                return -1;
+        }
+
+        req.tp_block_size = SHM_DU_BUFF_BLOCK_SIZE;
+        req.tp_frame_size = SHM_DU_BUFF_BLOCK_SIZE;
+        req.tp_block_nr = SHM_BLOCKS_IN_MAP;
+        req.tp_frame_nr = SHM_BLOCKS_IN_MAP;
+
+        if (setsockopt(fd, SOL_PACKET, PACKET_RX_RING,
+                       (void *) &req, sizeof(req))) {
+                LOG_ERR("Failed to set sockopt PACKET_RX_RING");
+                close(fd);
+                return -1;
+        }
+
+        if (setsockopt(fd, SOL_PACKET, PACKET_TX_RING,
+                       (void *) &req, sizeof(req))) {
+                LOG_ERR("Failed to set sockopt PACKET_TX_RING");
+                close(fd);
+                return -1;
+        }
+#endif
+
+        if (bind(fd,(struct sockaddr *) &device,
+                 sizeof(struct sockaddr_ll))) {
+                LOG_ERR("Failed to bind socket to interface");
+                close(fd);
+                return -1;
+        }
+
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+        shim_data(_ipcp)->rx_ring = mmap(NULL,
+                                         2 * SHM_DU_BUFF_BLOCK_SIZE
+                                         * SHM_BLOCKS_IN_MAP,
+                                         PROT_READ | PROT_WRITE, MAP_SHARED,
+                                         fd, 0);
+        if (shim_data(_ipcp)->rx_ring == NULL) {
+                LOG_ERR("Failed to mmap");
+                close(fd);
+                return -1;
+        }
+        shim_data(_ipcp)->tx_ring = shim_data(_ipcp)->rx_ring
+                + (SHM_DU_BUFF_BLOCK_SIZE * SHM_BLOCKS_IN_MAP);
+
+#endif
 
         rw_lock_wrlock(&_ipcp->state_lock);
 
@@ -807,16 +974,8 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         }
 
         shim_data(_ipcp)->s_fd = fd;
-
-        memset(&(shim_data(_ipcp)->device), 0,
-               sizeof(shim_data(_ipcp)->device));
-        shim_data(_ipcp)->device.sll_ifindex = index;
-        shim_data(_ipcp)->device.sll_family = AF_PACKET;
-        memcpy(shim_data(_ipcp)->device.sll_addr,
-               ifr.ifr_hwaddr.sa_data,
-               MAC_SIZE * sizeof (uint8_t));
-        shim_data(_ipcp)->device.sll_halen = MAC_SIZE;
-        shim_data(_ipcp)->device.sll_protocol = htons(ETH_P_802_3);
+        shim_data(_ipcp)->device = device;
+        shim_data(_ipcp)->tx_offset = 0;
 
         _ipcp->state = IPCP_ENROLLED;
 
@@ -1030,6 +1189,7 @@ static int eth_llc_ipcp_flow_dealloc(int port_id)
         uint8_t sap;
         uint8_t addr[MAC_SIZE];
         int i;
+        int ret;
 
         rw_lock_rdlock(&_ipcp->state_lock);
         rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
@@ -1050,10 +1210,11 @@ static int eth_llc_ipcp_flow_dealloc(int port_id)
 
         rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
 
-        if (eth_llc_ipcp_port_dealloc(addr, sap) < 0)
-                LOG_DBGF("Could not notify remote.");
-
+        ret = eth_llc_ipcp_port_dealloc(addr, sap);
         rw_lock_unlock(&_ipcp->state_lock);
+
+        if (ret < 0)
+                LOG_DBGF("Could not notify remote.");
 
         LOG_DBG("Flow with port_id %d deallocated.", port_id);
 
