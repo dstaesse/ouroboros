@@ -6,7 +6,7 @@ if (($# == 1 ))
 then
     PREFIX=$1
 else
-    PREFIX="/usr/local/ouroboros"
+    PREFIX="/usr/local/ouroboros/"
 fi
 
 BUILDDIR=build

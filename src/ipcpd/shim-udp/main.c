@@ -34,7 +34,6 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/flow.h>
 #include <ouroboros/dev.h>
-#include <ouroboros/rw_lock.h>
 
 #define OUROBOROS_PREFIX "ipcpd/shim-udp"
 
@@ -93,7 +92,7 @@ struct shim_ap_data {
         struct shm_ap_rbuff * rb;
 
         struct flow           flows[AP_MAX_FLOWS];
-        rw_lock_t             flows_lock;
+        pthread_rwlock_t      flows_lock;
 
         pthread_t             mainloop;
         pthread_t             sduloop;
@@ -157,7 +156,7 @@ static int shim_ap_init(char * ap_name)
                 _ap_instance->flows[i].state = FLOW_NULL;
         }
 
-        rw_lock_init(&_ap_instance->flows_lock);
+        pthread_rwlock_init(&_ap_instance->flows_lock, NULL);
         pthread_mutex_init(&_ap_instance->fd_set_lock, NULL);
 
         return 0;
@@ -170,7 +169,7 @@ void shim_ap_fini()
         if (_ap_instance == NULL)
                 return;
 
-        rw_lock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_SHUTDOWN)
                 LOG_WARN("Cleaning up AP while not in shutdown.");
@@ -184,14 +183,14 @@ void shim_ap_fini()
         if (_ap_instance->rb != NULL)
                 shm_ap_rbuff_destroy(_ap_instance->rb);
 
-        rw_lock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         for (i = 0; i < AP_MAX_FLOWS; i ++)
                 if (_ap_instance->flows[i].rb != NULL)
                         shm_ap_rbuff_close(_ap_instance->flows[i].rb);
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         free(_ap_instance);
 }
@@ -215,14 +214,14 @@ static ssize_t ipcp_udp_flow_write(int fd, void * buf, size_t count)
         ssize_t index;
         struct rb_entry e;
 
-        rw_lock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_ENROLLED) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1; /* -ENOTENROLLED */
         }
 
-        rw_lock_rdlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
         while ((index = shm_create_du_buff(_ap_instance->dum,
                                            count + DU_BUFF_HEADSPACE +
@@ -238,8 +237,8 @@ static ssize_t ipcp_udp_flow_write(int fd, void * buf, size_t count)
         while (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0)
                 ;
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }
@@ -477,8 +476,8 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         }
 
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         /* reply to IRM */
         port_id = ipcp_flow_req_arr(getpid(),
@@ -486,8 +485,8 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                                     src_ae_name);
 
         if (port_id < 0) {
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Could not get port id from IRMd");
                 close(fd);
                 return -1;
@@ -497,8 +496,8 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         _ap_instance->flows[fd].rb      = NULL;
         _ap_instance->flows[fd].state   = FLOW_PENDING;
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBGF("Pending allocation request, port_id %d, UDP port (%d, %d).",
                  port_id, ntohs(f_saddr.sin_port), ntohs(c_saddr->sin_port));
@@ -520,20 +519,20 @@ static int ipcp_udp_port_alloc_reply(int src_udp_port,
         LOG_DBGF("Received reply for flow on udp port %d.",
                  ntohs(dst_udp_port));
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_rdlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
         fd = udp_port_to_fd(dst_udp_port);
         if (fd == -1) {
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Unknown flow on UDP port %d.", dst_udp_port);
                 return -1; /* -EUNKNOWNFLOW */
         }
 
         if (_ap_instance->flows[fd].state != FLOW_PENDING) {
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Flow on UDP port %d not pending.", dst_udp_port);
                 return -1; /* -EFLOWNOTPENDING */
         }
@@ -550,8 +549,8 @@ static int ipcp_udp_port_alloc_reply(int src_udp_port,
                 if (getpeername(fd,
                                 (struct sockaddr *) &t_saddr,
                                 &t_saddr_len) < 0) {
-                        rw_lock_unlock(&_ap_instance->flows_lock);
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         LOG_DBGF("Flow with port_id %d has no peer.", port_id);
                         return -1;
                 }
@@ -562,8 +561,8 @@ static int ipcp_udp_port_alloc_reply(int src_udp_port,
                 if (connect(fd,
                             (struct sockaddr *) &t_saddr,
                             sizeof(t_saddr)) < 0) {
-                        rw_lock_unlock(&_ap_instance->flows_lock);
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         close(fd);
                         return -1;
                 }
@@ -571,8 +570,8 @@ static int ipcp_udp_port_alloc_reply(int src_udp_port,
                 _ap_instance->flows[fd].state   = FLOW_ALLOCATED;
         }
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
 
         if ((ret = ipcp_flow_alloc_reply(getpid(),
@@ -595,13 +594,13 @@ static int ipcp_udp_flow_dealloc_req(int udp_port)
 
         struct shm_ap_rbuff * rb;
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         fd = udp_port_to_fd(udp_port);
         if (fd < 0) {
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Could not find flow on UDP port %d.",
                          ntohs(udp_port));
                 return 0;
@@ -615,12 +614,12 @@ static int ipcp_udp_flow_dealloc_req(int udp_port)
         rb = _ap_instance->flows[fd].rb;
         _ap_instance->flows[fd].rb      = NULL;
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
 
         if (rb != NULL)
                 shm_ap_rbuff_close(rb);
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         ipcp_flow_dealloc(0, port_id);
 
@@ -642,16 +641,16 @@ static void * ipcp_udp_listener()
                 int sfd = 0;
                 shim_udp_msg_t * msg = NULL;
 
-                rw_lock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
                 sfd = shim_data(_ipcp)->s_fd;
 
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 memset(&buf, 0, SHIM_UDP_MSG_SIZE);
                 n = sizeof(c_saddr);
@@ -715,14 +714,14 @@ static void * ipcp_udp_sdu_reader()
         while (true) {
                 struct timeval tv = {0, FD_UPDATE_TIMEOUT};
 
-                rw_lock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
-                rw_lock_rdlock(&_ap_instance->flows_lock);
+                pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
                 pthread_mutex_lock(&_ap_instance->fd_set_lock);
 
@@ -731,8 +730,8 @@ static void * ipcp_udp_sdu_reader()
 
                 pthread_mutex_unlock(&_ap_instance->fd_set_lock);
 
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 if (select(FD_SETSIZE, &read_fds, NULL, NULL, &tv) <= 0) {
                         continue;
@@ -776,10 +775,10 @@ static void * ipcp_udp_sdu_loop(void * o)
                         continue;
                 }
 
-                rw_lock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
@@ -787,17 +786,17 @@ static void * ipcp_udp_sdu_loop(void * o)
                                           _ap_instance->dum,
                                           e->index);
                 if (len <= 0) {
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(e);
                         continue;
                 }
 
-                rw_lock_rdlock(&_ap_instance->flows_lock);
+                pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
                 fd = port_id_to_fd(e->port_id);
 
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 if (fd == -1) {
                         free(e);
@@ -807,12 +806,12 @@ static void * ipcp_udp_sdu_loop(void * o)
                 if (send(fd, buf, len, 0) < 0)
                         LOG_ERR("Failed to send SDU.");
 
-                rw_lock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
 
                 if (_ap_instance->dum != NULL)
                         shm_release_du_buff(_ap_instance->dum, e->index);
 
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
         }
 
         return (void *) 1;
@@ -833,14 +832,14 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         LOG_DBG("Terminating by order of %d. Bye.",
                                 info->si_pid);
 
-                        rw_lock_wrlock(&_ipcp->state_lock);
+                        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
                         if (_ipcp->state == IPCP_ENROLLED)
                                 clean_threads = true;
 
                         _ipcp->state = IPCP_SHUTDOWN;
 
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
 
                         if (clean_threads) {
                                 pthread_cancel(_ap_instance->handler);
@@ -925,10 +924,10 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        rw_lock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_INIT) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("IPCP in wrong state.");
                 close(fd);
                 return -1;
@@ -956,7 +955,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                        ipcp_udp_sdu_loop,
                        NULL);
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBG("Bootstrapped shim IPCP over UDP with pid %d.",
                 getpid());
@@ -1107,16 +1106,16 @@ static int ipcp_udp_name_reg(char * name)
                 return -1;
         }
 
-        rw_lock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_ENROLLED) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
         if (ipcp_data_add_reg_entry(_ipcp->data, name)) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
                 return -1;
         }
@@ -1126,7 +1125,7 @@ static int ipcp_udp_name_reg(char * name)
 
         dns_addr = shim_data(_ipcp)->dns_addr;
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (dns_addr != 0) {
                 ip_addr = shim_data(_ipcp)->ip_addr;
@@ -1145,14 +1144,14 @@ static int ipcp_udp_name_reg(char * name)
                         dnsstr, name, DNS_TTL, ipstr);
 
                 if (ddns_send(cmd)) {
-                        rw_lock_rdlock(&_ipcp->state_lock);
+                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         ipcp_data_del_reg_entry(_ipcp->data, name);
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         return -1;
                 }
         }
 #else
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 #endif
         LOG_DBG("Registered %s.", name);
 
@@ -1176,17 +1175,17 @@ static int ipcp_udp_name_unreg(char * name)
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         /* unregister application with DNS server */
 
-        rw_lock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_ENROLLED) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("IPCP is not enrolled");
                 return -1; /* -ENOTENROLLED */
         }
 
         dns_addr = shim_data(_ipcp)->dns_addr;
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (dns_addr != 0) {
                 if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN)
@@ -1200,11 +1199,11 @@ static int ipcp_udp_name_unreg(char * name)
         }
 #endif
 
-        rw_lock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         ipcp_data_del_reg_entry(_ipcp->data, name);
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }
@@ -1262,10 +1261,10 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
                 return -1;
         }
 
-        rw_lock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_ENROLLED) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Won't allocate flow with non-enrolled IPCP.");
                 close(fd);
                 return -1; /* -ENOTENROLLED */
@@ -1274,7 +1273,7 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         dns_addr = shim_data(_ipcp)->dns_addr;
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (dns_addr != 0) {
                 ip_addr = ddns_resolve(dst_name, dns_addr);
@@ -1308,13 +1307,13 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
                 return -1;
         }
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBGF("Pending flow with port_id %d on UDP port %d.",
                  port_id, ntohs(f_saddr.sin_port));
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         set_fd(fd);
 
@@ -1322,16 +1321,16 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         _ap_instance->flows[fd].state   = FLOW_PENDING;
         _ap_instance->flows[fd].rb      = rb;
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (ipcp_udp_port_alloc(ip_addr,
                                 f_saddr.sin_port,
                                 dst_name,
                                 src_ae_name) < 0) {
                 LOG_DBGF("Port alloc returned -1.");
-                rw_lock_rdlock(&_ipcp->state_lock);
-                rw_lock_wrlock(&_ap_instance->flows_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
                 clr_fd(fd);
 
@@ -1340,8 +1339,8 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
                 shm_ap_rbuff_close(_ap_instance->flows[fd].rb);
                  _ap_instance->flows[fd].rb     = NULL;
 
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 close(fd);
                 return -1;
         }
@@ -1362,23 +1361,23 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
         if (response)
                 return 0;
 
-        rw_lock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         /* awaken pending flow */
 
-        rw_lock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         fd = port_id_to_fd(port_id);
         if (fd < 0) {
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return -1;
         }
 
         if (_ap_instance->flows[fd].state != FLOW_PENDING) {
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Flow was not pending.");
                 return -1;
         }
@@ -1388,13 +1387,13 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
                 LOG_ERR("Could not open N + 1 ringbuffer.");
                 _ap_instance->flows[fd].state   = FLOW_NULL;
                 _ap_instance->flows[fd].port_id = -1;
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1;
         }
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (getsockname(fd, (struct sockaddr *) &f_saddr, &len) < 0) {
                 LOG_DBGF("Flow with port_id %d has no socket.", port_id);
@@ -1406,23 +1405,23 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
                 return -1;
         }
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         _ap_instance->flows[fd].state = FLOW_ALLOCATED;
         _ap_instance->flows[fd].rb    = rb;
 
         set_fd(fd);
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (ipcp_udp_port_alloc_resp(r_saddr.sin_addr.s_addr,
                                      f_saddr.sin_port,
                                      r_saddr.sin_port,
                                      response) < 0) {
-                rw_lock_rdlock(&_ipcp->state_lock);
-                rw_lock_wrlock(&_ap_instance->flows_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
                 _ap_instance->flows[fd].state = FLOW_NULL;
                 shm_ap_rbuff_close(_ap_instance->flows[fd].rb);
@@ -1430,8 +1429,8 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
 
                 clr_fd(fd);
 
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 LOG_DBGF("Could not send response.");
                 return -1;
@@ -1450,13 +1449,13 @@ static int ipcp_udp_flow_dealloc(int port_id)
         struct sockaddr_in    r_saddr;
         socklen_t             r_saddr_len = sizeof(r_saddr);
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         fd = port_id_to_fd(port_id);
         if (fd < 0) {
-                rw_lock_unlock(&_ap_instance->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return 0;
         }
@@ -1468,13 +1467,13 @@ static int ipcp_udp_flow_dealloc(int port_id)
 
         clr_fd(fd);
 
-        rw_lock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
 
         if (rb != NULL)
                 shm_ap_rbuff_close(rb);
 
         if (getpeername(fd, (struct sockaddr *) &r_saddr, &r_saddr_len) < 0) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Flow with port_id %d has no peer.", port_id);
                 close(fd);
                 return 0;
@@ -1484,7 +1483,7 @@ static int ipcp_udp_flow_dealloc(int port_id)
         r_saddr.sin_port = LISTEN_PORT;
 
         if (connect(fd, (struct sockaddr *) &r_saddr, sizeof(r_saddr)) < 0) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 close(fd);
                 return 0 ;
         }
@@ -1492,12 +1491,12 @@ static int ipcp_udp_flow_dealloc(int port_id)
         if (ipcp_udp_port_dealloc(r_saddr.sin_addr.s_addr,
                                   remote_udp) < 0) {
                 LOG_DBGF("Could not notify remote.");
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 close(fd);
                 return 0;
         }
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         close(fd);
 
@@ -1590,7 +1589,7 @@ int main (int argc, char * argv[])
                 exit(1);
         }
 
-        rw_lock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
@@ -1598,7 +1597,7 @@ int main (int argc, char * argv[])
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         pthread_join(_ap_instance->mainloop, NULL);
 

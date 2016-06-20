@@ -23,7 +23,8 @@
 #ifndef IPCPD_IPCP_H
 #define IPCPD_IPCP_H
 
-#include <ouroboros/rw_lock.h>
+#include <ouroboros/config.h>
+#include <pthread.h>
 
 #include "ipcp-ops.h"
 #include "ipcp-data.h"
@@ -41,7 +42,7 @@ struct ipcp {
         int                irmd_fd;
 
         enum ipcp_state    state;
-        rw_lock_t          state_lock;
+        pthread_rwlock_t   state_lock;
 };
 
 struct ipcp * ipcp_instance_create();

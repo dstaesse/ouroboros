@@ -36,7 +36,8 @@
 
 #define SHM_BLOCKS_SIZE (SHM_BLOCKS_IN_MAP * SHM_DU_BUFF_BLOCK_SIZE)
 #define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 2 * sizeof (size_t)                   \
-                       + sizeof(pthread_mutex_t)) + sizeof(pid_t)
+                       + sizeof(pthread_mutex_t) + sizeof(pthread_cond_t)      \
+                       + sizeof(pid_t))
 
 #define get_head_ptr(dum)                                                      \
 ((struct shm_du_buff *)(dum->shm_base + (*dum->ptr_head *                      \
@@ -73,6 +74,7 @@ struct shm_du_map {
         size_t *          ptr_head;    /* start of ringbuffer head */
         size_t *          ptr_tail;    /* start of ringbuffer tail */
         pthread_mutex_t * shm_mutex;   /* lock all free space in shm */
+        pthread_cond_t *  sanitize;    /* run sanitizer when buffer full */
         pid_t *           pid;         /* pid of the irmd owner */
         int               fd;
 };
@@ -82,7 +84,8 @@ struct shm_du_map * shm_du_map_create()
         struct shm_du_map * dum;
         int                 shm_fd;
         uint8_t *           shm_base;
-        pthread_mutexattr_t attr;
+        pthread_mutexattr_t mattr;
+        pthread_condattr_t  cattr;
 
         dum = malloc(sizeof *dum);
         if (dum == NULL) {
@@ -137,11 +140,17 @@ struct shm_du_map * shm_du_map_create()
                 ((uint8_t *) dum->shm_base + SHM_BLOCKS_SIZE);
         dum->ptr_tail = dum->ptr_head + 1;
         dum->shm_mutex = (pthread_mutex_t *) (dum->ptr_tail + 1);
-        dum->pid = (pid_t *) (dum->shm_mutex + 1);
+        dum->sanitize = (pthread_cond_t *) (dum->shm_mutex + 1);
+        dum->pid = (pid_t *) (dum->sanitize + 1);
 
-        pthread_mutexattr_init(&attr);
-        pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-        pthread_mutex_init(dum->shm_mutex, &attr);
+        pthread_mutexattr_init(&mattr);
+        pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+        pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
+        pthread_mutex_init(dum->shm_mutex, &mattr);
+
+        pthread_condattr_init(&cattr);
+        pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+        pthread_cond_init(dum->sanitize, &cattr);
 
         *dum->ptr_head = 0;
         *dum->ptr_tail = 0;
@@ -193,7 +202,8 @@ struct shm_du_map * shm_du_map_open()
                 ((uint8_t *) dum->shm_base + SHM_BLOCKS_SIZE);
         dum->ptr_tail = dum->ptr_head + 1;
         dum->shm_mutex = (pthread_mutex_t *) (dum->ptr_tail + 1);
-        dum->pid = (pid_t *) (dum->shm_mutex + 1);
+        dum->sanitize = (pthread_cond_t *) (dum->shm_mutex + 1);
+        dum->pid = (pid_t *) (dum->sanitize + 1);
 
         dum->fd = shm_fd;
 
@@ -203,6 +213,12 @@ struct shm_du_map * shm_du_map_open()
 pid_t shm_du_map_owner(struct shm_du_map * dum)
 {
         return *dum->pid;
+}
+
+void * shm_du_map_sanitize(void * o)
+{
+        LOG_MISSING;
+        return (void *) 0;
 }
 
 void shm_du_map_close(struct shm_du_map * dum)
@@ -294,11 +310,13 @@ ssize_t shm_create_du_buff(struct shm_du_map * dum,
 
         if (!shm_map_free(dum, blocks)) {
                 pthread_mutex_unlock(dum->shm_mutex);
+                pthread_cond_signal(dum->sanitize);
                 return -1;
         }
 #else
         if (!shm_map_free(dum, 1)) {
                 pthread_mutex_unlock(dum->shm_mutex);
+                ptrhead_cond_signal(dum->sanitize);
                 return -1;
         }
 #endif
