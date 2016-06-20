@@ -84,7 +84,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   MACRO_ADD_COMPILE_FLAGS(ipcpd-shim-udp -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS ipcpd-shim-udp RUNTIME DESTINATION bin)
+install(TARGETS ipcpd-shim-udp RUNTIME DESTINATION sbin)
 
 # Enable once ipcp-shim-udp has tests
 # add_subdirectory(tests)

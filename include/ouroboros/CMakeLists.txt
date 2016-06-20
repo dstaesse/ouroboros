@@ -14,4 +14,4 @@ set(HEADER_FILES
         time_utils.h
 )
 
-install(FILES ${HEADER_FILES} DESTINATION include/ouroboros)
+install(FILES ${HEADER_FILES} DESTINATION usr/include/ouroboros)

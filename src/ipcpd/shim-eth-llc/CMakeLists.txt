@@ -34,4 +34,4 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   MACRO_ADD_COMPILE_FLAGS(ipcpd-shim-eth-llc -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS ipcpd-shim-eth-llc RUNTIME DESTINATION bin)
+install(TARGETS ipcpd-shim-eth-llc RUNTIME DESTINATION sbin)

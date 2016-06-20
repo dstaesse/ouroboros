@@ -21,12 +21,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <ouroboros/config.h>
 #include <ouroboros/shm_du_map.h>
 #include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #define OUROBOROS_PREFIX "shm_du_map"
 
@@ -91,6 +93,12 @@ struct shm_du_map * shm_du_map_create()
         shm_fd = shm_open(SHM_DU_MAP_FILENAME, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (shm_fd == -1) {
                 LOG_DBGF("Failed creating shared memory map.");
+                free(dum);
+                return NULL;
+        }
+
+        if (fchmod(shm_fd, 0666)) {
+                LOG_DBGF("Failed to chmod shared memory map.");
                 free(dum);
                 return NULL;
         }

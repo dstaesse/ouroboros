@@ -19,7 +19,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
    MACRO_ADD_COMPILE_FLAGS(irmd -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS irmd RUNTIME DESTINATION bin)
+install(TARGETS irmd RUNTIME DESTINATION sbin)
 
 # Enable once irmd has tests
 # add_subdirectory(tests)

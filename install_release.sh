@@ -4,9 +4,9 @@ ME=install_release
 
 if (($# == 1 ))
 then
-    PREFIX=`echo "$1"|sed -e "s,\/$,,"`
+    PREFIX=$1
 else
-    PREFIX="/usr"
+    PREFIX="/"
 fi
 
 BUILDDIR=build
