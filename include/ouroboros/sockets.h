@@ -36,7 +36,7 @@ typedef IrmMsg irm_msg_t;
 #include "ipcpd_messages.pb-c.h"
 typedef IpcpMsg ipcp_msg_t;
 
-#define SOCK_PATH INSTALL_DIR "var/run/ouroboros/"
+#define SOCK_PATH "/var/run/ouroboros/"
 #define SOCK_PATH_SUFFIX ".sock"
 
 #define IRM_SOCK_PATH SOCK_PATH "irm" SOCK_PATH_SUFFIX

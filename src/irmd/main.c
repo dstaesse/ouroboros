@@ -1578,12 +1578,14 @@ static struct irm * irm_create()
         if (i == NULL)
                 return NULL;
 
-        if (access(INSTALL_DIR "dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1) {
+        if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1) {
                 struct shm_du_map * dum = shm_du_map_open();
+
                 if (dum == NULL) {
                         LOG_ERR("Could not examine existing shm file.");
                         exit(EXIT_FAILURE);
                 }
+
                 if (kill(shm_du_map_owner(dum), 0) < 0) {
                         LOG_INFO("IRMd didn't properly shut down last time.");
                         shm_du_map_destroy(dum);

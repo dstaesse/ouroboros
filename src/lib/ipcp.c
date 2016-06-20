@@ -109,7 +109,7 @@ pid_t ipcp_create(char *         ipcp_name,
         char * full_name = NULL;
         char * exec_name = NULL;
 
-        sprintf (irmd_pid, "%u", getpid());
+        sprintf(irmd_pid, "%u", getpid());
 
         pid = fork();
         if (pid == -1) {
