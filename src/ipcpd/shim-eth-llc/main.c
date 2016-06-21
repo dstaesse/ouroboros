@@ -36,7 +36,6 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/flow.h>
 #include <ouroboros/dev.h>
-#include <ouroboros/rw_lock.h>
 
 #define OUROBOROS_PREFIX "ipcpd/shim-eth-llc"
 
@@ -104,7 +103,7 @@ struct eth_llc_ipcp_data {
         int                   tx_offset;
 
         struct eth_llc_flow   flows[AP_MAX_FLOWS];
-        rw_lock_t             flows_lock;
+        pthread_rwlock_t      flows_lock;
 
         pthread_t             mainloop;
         pthread_t             sdu_writer;
@@ -159,7 +158,7 @@ struct eth_llc_ipcp_data * eth_llc_ipcp_data_create()
                 return NULL;
         }
 
-        rw_lock_init(&eth_llc_data->flows_lock);
+        pthread_rwlock_init(&eth_llc_data->flows_lock, NULL);
 
         return eth_llc_data;
 }
@@ -171,7 +170,7 @@ void eth_llc_ipcp_data_destroy()
         if (_ipcp == NULL)
                 return;
 
-        rw_lock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_SHUTDOWN)
                 LOG_WARN("Cleaning up while not in shutdown.");
@@ -185,14 +184,14 @@ void eth_llc_ipcp_data_destroy()
         if (shim_data(_ipcp)->saps != NULL)
                 bmp_destroy(shim_data(_ipcp)->saps);
 
-        rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_wrlock(&shim_data(_ipcp)->flows_lock);
 
         for (i = 0; i < AP_MAX_FLOWS; i ++)
                 if (ipcp_flow(i)->rb != NULL)
                         shm_ap_rbuff_close(ipcp_flow(i)->rb);
 
-        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         free(_ipcp->data);
 }
@@ -440,13 +439,13 @@ static int eth_llc_ipcp_port_req(uint8_t r_sap,
         ssize_t index = 0;
         int i;
 
-        rw_lock_wrlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&shim_data(_ipcp)->flows_lock);
 
         index = bmp_allocate(shim_data(_ipcp)->indices);
         if (index < 0) {
-                rw_lock_unlock(&_ipcp->state_lock);
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
                 LOG_ERR("Out of free indices.");
                 return -1;
         }
@@ -458,8 +457,8 @@ static int eth_llc_ipcp_port_req(uint8_t r_sap,
 
         if (port_id < 0) {
                 bmp_release(shim_data(_ipcp)->indices, index);
-                rw_lock_unlock(&_ipcp->state_lock);
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
                 LOG_ERR("Could not get port id from IRMd.");
                 return -1;
         }
@@ -472,8 +471,8 @@ static int eth_llc_ipcp_port_req(uint8_t r_sap,
                 shim_data(_ipcp)->flows[index].r_addr[i] = r_addr[i];
         }
 
-        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBG("New flow request, port_id %d, remote SAP %d.", port_id, r_sap);
 
@@ -490,20 +489,20 @@ static int eth_llc_ipcp_port_alloc_reply(uint8_t ssap,
         int port_id = -1;
         int i;
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_rdlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&shim_data(_ipcp)->flows_lock);
 
         index = sap_to_index(ssap);
         if (index < 0) {
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("No flow found with that SAP.");
                 return -1; /* -EFLOWNOTFOUND */
         }
 
         if (ipcp_flow(index)->state != FLOW_PENDING) {
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1; /* -EFLOWNOTPENDING */
         }
 
@@ -519,8 +518,8 @@ static int eth_llc_ipcp_port_alloc_reply(uint8_t ssap,
                 }
         }
 
-        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBG("Flow reply, port_id %d, remote SAP %d.", port_id, dsap);
 
@@ -540,13 +539,13 @@ static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap,
         int port_id = -1;
         int i = 0;
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&shim_data(_ipcp)->flows_lock);
 
         i = sap_to_index(ssap);
         if (i < 0) {
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("No flow found for remote deallocation request.");
                 return 0;
         }
@@ -554,8 +553,8 @@ static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap,
         port_id = ipcp_flow(i)->port_id;
         destroy_ipcp_flow(i);
 
-        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         ipcp_flow_dealloc(0, port_id);
 
@@ -633,14 +632,14 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         memset(br_addr, 0xff, MAC_SIZE * sizeof(uint8_t));
 
         while (true) {
-                rw_lock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                 header = (void *) shim_data(_ipcp)->rx_ring +
@@ -709,13 +708,13 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         eth_llc_ipcp_mgmt_frame((uint8_t *) (buf + i),
                                                 frame_len, src_mac);
                 } else {
-                        rw_lock_rdlock(&_ipcp->state_lock);
-                        rw_lock_rdlock(&shim_data(_ipcp)->flows_lock);
+                        pthread_rwlock_rdlock(&_ipcp->state_lock);
+                        pthread_rwlock_rdlock(&shim_data(_ipcp)->flows_lock);
 
                         j = addr_and_saps_to_index(src_mac, ssap, dsap);
                         if (j < 0) {
-                                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                                rw_lock_unlock(&_ipcp->state_lock);
+                                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                                pthread_rwlock_unlock(&_ipcp->state_lock);
                                 LOG_DBG("Received data for unknown flow.");
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                                 offset = (offset + 1)
@@ -738,8 +737,8 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         while (shm_ap_rbuff_write(ipcp_flow(j)->rb, &e) < 0)
                                 ;
 
-                        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                 }
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                 offset = (offset + 1) & (SHM_BLOCKS_IN_MAP -1);
@@ -765,10 +764,10 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                         continue;
                 }
 
-                rw_lock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
@@ -776,18 +775,18 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                                           shim_data(_ipcp)->dum,
                                           e->index);
                 if (len <= 0) {
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(e);
                         continue;
                 }
 
-                rw_lock_rdlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_rdlock(&shim_data(_ipcp)->flows_lock);
 
                 i = port_id_to_index(e->port_id);
                 if (i < 0) {
                         free(e);
-                        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         continue;
                 }
 
@@ -798,12 +797,12 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                                             dsap, ssap, buf, len))
                         LOG_ERR("Failed to send SDU.");
 
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
 
                 if (shim_data(_ipcp)->dum != NULL)
                         shm_release_du_buff(shim_data(_ipcp)->dum, e->index);
 
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
         }
 
         return (void *) 1;
@@ -824,14 +823,14 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         LOG_DBG("Terminating by order of %d. Bye.",
                                 info->si_pid);
 
-                        rw_lock_wrlock(&_ipcp->state_lock);
+                        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
                         if (_ipcp->state == IPCP_ENROLLED)
                                 clean_threads = true;
 
                         _ipcp->state = IPCP_SHUTDOWN;
 
-                        rw_lock_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
 
                         if (clean_threads) {
                                 pthread_cancel(shim_data(_ipcp)->sdu_reader);
@@ -964,10 +963,10 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
 #endif
 
-        rw_lock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_INIT) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("IPCP in wrong state.");
                 close(fd);
                 return -1;
@@ -989,7 +988,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                        eth_llc_ipcp_sdu_writer,
                        NULL);
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBG("Bootstrapped shim IPCP over Ethernet with LLC with pid %d.",
                 getpid());
@@ -999,21 +998,21 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
 static int eth_llc_ipcp_name_reg(char * name)
 {
-        rw_lock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_ENROLLED) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
         if (ipcp_data_add_reg_entry(_ipcp->data, name)) {
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
                 return -1;
         }
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBG("Registered %s.", name);
 
@@ -1022,11 +1021,11 @@ static int eth_llc_ipcp_name_reg(char * name)
 
 static int eth_llc_ipcp_name_unreg(char * name)
 {
-        rw_lock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         ipcp_data_del_reg_entry(_ipcp->data, name);
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }
@@ -1054,11 +1053,11 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
         if (rb == NULL)
                 return -1; /* -ENORBUFF */
 
-        rw_lock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_ENROLLED) {
                 shm_ap_rbuff_close(rb);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Won't allocate flow with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
@@ -1066,18 +1065,18 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
         index = bmp_allocate(shim_data(_ipcp)->indices);
         if (index < 0) {
                 shm_ap_rbuff_close(rb);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1;
         }
 
-        rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_wrlock(&shim_data(_ipcp)->flows_lock);
 
         ssap = bmp_allocate(shim_data(_ipcp)->saps);
         if (ssap < 0) {
                 shm_ap_rbuff_close(rb);
                 bmp_release(shim_data(_ipcp)->indices, index);
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1;
         }
 
@@ -1086,8 +1085,8 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
         ipcp_flow(index)->rb = rb;
         shim_data(_ipcp)->flows[index].sap = ssap;
 
-        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         memset(r_addr, 0xff, MAC_SIZE * sizeof(uint8_t));
 
@@ -1095,11 +1094,11 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
                                     dst_name,
                                     src_ae_name) < 0) {
                 LOG_DBGF("Port alloc returned -1.");
-                rw_lock_wrlock(&_ipcp->state_lock);
-                rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_wrlock(&_ipcp->state_lock);
+                pthread_rwlock_wrlock(&shim_data(_ipcp)->flows_lock);
                 destroy_ipcp_flow(index);
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1;
         }
 
@@ -1117,20 +1116,20 @@ static int eth_llc_ipcp_flow_alloc_resp(pid_t n_pid,
         int index = -1;
         uint8_t ssap = 0;
 
-        rw_lock_wrlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&shim_data(_ipcp)->flows_lock);
 
         index = port_id_to_index(port_id);
         if (index < 0) {
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return -1;
         }
 
         if (ipcp_flow(index)->state != FLOW_PENDING) {
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Flow was not pending.");
                 return -1;
         }
@@ -1141,8 +1140,8 @@ static int eth_llc_ipcp_flow_alloc_resp(pid_t n_pid,
                 ipcp_flow(index)->state = FLOW_NULL;
                 ipcp_flow(index)->port_id = -1;
                 bmp_release(shim_data(_ipcp)->indices, index);
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1;
         }
 
@@ -1152,8 +1151,8 @@ static int eth_llc_ipcp_flow_alloc_resp(pid_t n_pid,
                 ipcp_flow(index)->port_id = -1;
                 shm_ap_rbuff_close(ipcp_flow(index)->rb);
                 bmp_release(shim_data(_ipcp)->indices, index);
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1;
         }
 
@@ -1161,18 +1160,18 @@ static int eth_llc_ipcp_flow_alloc_resp(pid_t n_pid,
         ipcp_flow(index)->rb = rb;
         shim_data(_ipcp)->flows[index].sap = ssap;
 
-        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (eth_llc_ipcp_port_alloc_resp(shim_data(_ipcp)->flows[index].r_addr,
                                          shim_data(_ipcp)->flows[index].r_sap,
                                          ssap,
                                          response) < 0) {
-                rw_lock_rdlock(&_ipcp->state_lock);
-                rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_wrlock(&shim_data(_ipcp)->flows_lock);
                 destroy_ipcp_flow(index);
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 LOG_DBGF("Could not send response.");
                 return -1;
@@ -1191,13 +1190,13 @@ static int eth_llc_ipcp_flow_dealloc(int port_id)
         int i;
         int ret;
 
-        rw_lock_rdlock(&_ipcp->state_lock);
-        rw_lock_wrlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&shim_data(_ipcp)->flows_lock);
 
         index = port_id_to_index(port_id);
         if (index < 0) {
-                rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
-                rw_lock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 return 0;
         }
 
@@ -1208,10 +1207,12 @@ static int eth_llc_ipcp_flow_dealloc(int port_id)
 
         destroy_ipcp_flow(index);
 
-        rw_lock_unlock(&shim_data(_ipcp)->flows_lock);
+        pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
 
         ret = eth_llc_ipcp_port_dealloc(addr, sap);
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+        if (eth_llc_ipcp_port_dealloc(addr, sap) < 0)
+                LOG_DBGF("Could not notify remote.");
 
         if (ret < 0)
                 LOG_DBGF("Could not notify remote.");
@@ -1289,7 +1290,7 @@ int main(int argc, char * argv[])
         _ipcp->ops = &eth_llc_ops;
         _ipcp->state = IPCP_INIT;
 
-        rw_lock_wrlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
@@ -1298,7 +1299,7 @@ int main(int argc, char * argv[])
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        rw_lock_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         pthread_join(shim_data(_ipcp)->mainloop, NULL);
 

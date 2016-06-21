@@ -40,7 +40,7 @@ struct ipcp * ipcp_instance_create()
         i->irmd_fd = -1;
         i->state   = IPCP_INIT;
 
-        rw_lock_init(&i->state_lock);
+        pthread_rwlock_init(&i->state_lock, NULL);
 
         return i;
 }
