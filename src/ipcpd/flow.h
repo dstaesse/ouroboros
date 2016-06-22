@@ -24,21 +24,14 @@
 #define OUROBOROS_IPCP_FLOW_H
 
 #include <ouroboros/list.h>
-#include <ouroboros/flow.h>
+#include <ouroboros/common.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <pthread.h>
 
 struct flow {
-        struct list_head list;
-
         int                   port_id;
         struct shm_ap_rbuff * rb;
         enum flow_state       state;
-
-        pthread_mutex_t  lock;
 };
-
-struct flow * flow_create(int port_id);
-void          flow_destroy(struct flow * flow);
 
 #endif /* OUROBOROS_FLOW_H */

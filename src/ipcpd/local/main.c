@@ -31,7 +31,7 @@
 #include <ouroboros/dif_config.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>
-#include <ouroboros/flow.h>
+#include <ouroboros/common.h>
 #include <ouroboros/dev.h>
 
 #define OUROBOROS_PREFIX "ipcpd/local"

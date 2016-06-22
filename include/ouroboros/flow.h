@@ -37,10 +37,4 @@
 #define FLOW_F_GETFL    00000001
 #define FLOW_F_SETFL    00000002
 
-enum flow_state {
-        FLOW_NULL = 0,
-        FLOW_PENDING,
-        FLOW_ALLOCATED
-};
-
 #endif /* OUROBOROS_FLOW_H */

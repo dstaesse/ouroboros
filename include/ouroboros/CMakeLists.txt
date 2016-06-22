@@ -7,11 +7,11 @@ set(HEADER_FILES
         da.h
         dev.h
         dif_config.h
+        errno.h
         flow.h
         instance_name.h
         irm.h
         qos.h
-        time_utils.h
 )
 
 install(FILES ${HEADER_FILES} DESTINATION usr/include/ouroboros)
