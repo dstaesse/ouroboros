@@ -46,9 +46,11 @@ int irm_reg(char *            name,
             bool              autoexec,
             char **           difs,
             size_t            difs_size);
+
 int irm_unreg(char *                  name,
               const instance_name_t * api,
               char **                 difs,
               size_t                  difs_size,
               bool                    hard);
+
 #endif /* OUROBOROS_IRM_H */

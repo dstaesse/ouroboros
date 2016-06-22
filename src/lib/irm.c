@@ -22,6 +22,7 @@
 
 #define OUROBOROS_PREFIX "libouroboros-irm"
 
+#include <ouroboros/errno.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/common.h>
 #include <ouroboros/logs.h>
@@ -47,7 +48,7 @@ pid_t irm_create_ipcp(char *         ipcp_name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRM;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -76,7 +77,7 @@ int irm_destroy_ipcp(instance_name_t * api)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRM;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -143,12 +144,12 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
                 config.if_name = conf->if_name;
                 break;
         default:
-                return -1;
+                return -EIPCPTYPE;
         }
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                return -1;
+                return -EIRM;
         }
 
         if (recv_msg->has_result == false) {
@@ -180,14 +181,14 @@ int irm_enroll_ipcp(instance_name_t * api,
         msg.dif_name = malloc(sizeof(*(msg.dif_name)));
         if (msg.dif_name == NULL) {
                 LOG_ERR("Failed to malloc");
-                return -1;
+                return -ENOMEM;
         }
         msg.dif_name[0] = dif_name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
                 free(msg.dif_name);
-                return -1;
+                return -EIRM;
         }
 
         if (recv_msg->has_result == false) {
@@ -238,7 +239,7 @@ int irm_reg(char *            name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRM;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -284,7 +285,7 @@ int irm_unreg(char *                  name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRM;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);

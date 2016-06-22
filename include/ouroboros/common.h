@@ -39,4 +39,10 @@ enum qos_cube {
         QOS_CUBE_VIDEO
 };
 
+enum flow_state {
+        FLOW_NULL = 0,
+        FLOW_PENDING,
+        FLOW_ALLOCATED
+};
+
 #endif /* OUROBOROS_COMMON_H */
