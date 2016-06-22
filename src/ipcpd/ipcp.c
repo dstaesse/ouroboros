@@ -159,7 +159,7 @@ void * ipcp_main_loop(void * o)
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_enroll(msg->member_name,
+                                _ipcp->ops->ipcp_enroll(msg->dif_name,
                                                         msg->n_1_dif);
 
                         break;

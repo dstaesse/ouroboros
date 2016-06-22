@@ -15,7 +15,7 @@ enum ipcp_msg_code {
 
 message ipcp_msg {
         required ipcp_msg_code code  =  1;
-        optional string member_name  =  2;
+        optional string dif_name     =  2;
         optional string n_1_dif      =  3;
         repeated string dif_names    =  4;
         optional int32  len          =  5;
