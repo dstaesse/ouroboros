@@ -30,7 +30,7 @@
 
 struct ipcp_ops {
         int   (* ipcp_bootstrap)(struct dif_config * conf);
-        int   (* ipcp_enroll)(char * member_name,
+        int   (* ipcp_enroll)(char * dif_name,
                               char * n_1_dif);
         int   (* ipcp_reg)(char ** dif_names,
                            size_t  len);

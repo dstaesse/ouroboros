@@ -48,7 +48,7 @@ pid_t irm_create_ipcp(char *         ipcp_name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -EIRM;
+                return -1;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -77,7 +77,7 @@ int irm_destroy_ipcp(instance_name_t * api)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -EIRM;
+                return -1;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -149,7 +149,7 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                return -EIRM;
+                return -1;
         }
 
         if (recv_msg->has_result == false) {
@@ -188,7 +188,7 @@ int irm_enroll_ipcp(instance_name_t * api,
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
                 free(msg.dif_name);
-                return -EIRM;
+                return -1;
         }
 
         if (recv_msg->has_result == false) {
@@ -239,7 +239,7 @@ int irm_reg(char *            name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -EIRM;
+                return -1;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -285,7 +285,7 @@ int irm_unreg(char *                  name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -EIRM;
+                return -1;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);

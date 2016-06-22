@@ -25,9 +25,7 @@
 
 #include <errno.h>
 
-#define ENOSHM       1000 /* Creation or access of shared memory failed */
-#define EIRM         1001 /* Could not talk to the IPC Resource Manager */
-#define ENOTALLOC    1002 /* Flow is not allocated */
-#define EIPCPTYPE    1003 /* Unknown IPCP type */
+#define ENOTALLOC    1000 /* Flow is not allocated */
+#define EIPCPTYPE    1001 /* Unknown IPCP type */
 
 #endif

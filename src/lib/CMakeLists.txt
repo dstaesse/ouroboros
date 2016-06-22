@@ -25,13 +25,13 @@ set(SOURCE_FILES
   # Add source files here
   bitmap.c
   cdap.c
-  da.c
   dev.c
   du_buff.c
   instance_name.c
   ipcp.c
   irm.c
   list.c
+  nsm.c
   shm_ap_rbuff.c
   shm_du_map.c
   sockets.c

@@ -27,7 +27,7 @@
 #include <ouroboros/sockets.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/ipcp.h>
-#include <ouroboros/da.h>
+#include <ouroboros/nsm.h>
 #include <ouroboros/list.h>
 #include <ouroboros/instance_name.h>
 #include <ouroboros/utils.h>
@@ -572,7 +572,6 @@ static int bootstrap_ipcp(instance_name_t *  api,
 static int enroll_ipcp(instance_name_t  * api,
                        char *             dif_name)
 {
-        char *  member = NULL;
         char ** n_1_difs = NULL;
         ssize_t n_1_difs_size = 0;
         struct ipcp_entry * entry = NULL;
@@ -596,16 +595,7 @@ static int enroll_ipcp(instance_name_t  * api,
                 return -1;
         }
 
-        member = da_resolve_daf(dif_name);
-        if (member == NULL) {
-                free(entry->dif_name);
-                entry->dif_name = NULL;
-                pthread_rwlock_unlock(&instance->reg_lock);
-                pthread_rwlock_unlock(&instance->state_lock);
-                return -1;
-        }
-
-        n_1_difs_size = da_resolve_dap(member, n_1_difs);
+        n_1_difs_size = nsm_resolve(dif_name, n_1_difs);
         if (n_1_difs_size < 1) {
                 free(entry->dif_name);
                 entry->dif_name = NULL;
@@ -615,7 +605,7 @@ static int enroll_ipcp(instance_name_t  * api,
                 return -1;
         }
 
-        if (ipcp_enroll(api->id, member, n_1_difs[0])) {
+        if (ipcp_enroll(api->id, dif_name, n_1_difs[0])) {
                 free(entry->dif_name);
                 entry->dif_name = NULL;
                 pthread_rwlock_unlock(&instance->reg_lock);
