@@ -105,7 +105,7 @@ pid_t ipcp_create(char *         ipcp_name,
         pid_t pid = 0;
         char irmd_pid[10];
         size_t len = 0;
-        char * ipcp_dir = "/sbin/";
+        char * ipcp_dir = "sbin/";
         char * full_name = NULL;
         char * exec_name = NULL;
 

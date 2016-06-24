@@ -656,19 +656,19 @@ static int registry_add_entry(char * name, char * ap_name, uint32_t flags)
 
         e = get_reg_entry_by_name(name);
         if (e != NULL) {
-                LOG_INFO("Name %s already registered.", name);
+                LOG_DBG("Name %s already registered.", name);
                 return -1;
         }
 
         e = reg_entry_create();
         if (e == NULL) {
-                LOG_ERR("Could not create registry entry.");
+                LOG_DBG("Could not create registry entry.");
                 return -1;
         }
 
         e = reg_entry_init(e, name, ap_name, flags);
         if (e == NULL) {
-                LOG_ERR("Could not initialize registry entry.");
+                LOG_DBG("Could not initialize registry entry.");
                 reg_entry_destroy(e);
                 return -1;
         }
@@ -690,52 +690,45 @@ static int registry_add_ap_auto(char *  name,
 
         e = get_reg_entry_by_name(name);
         if (e == NULL) {
-                LOG_DBGF("Name %s not found in registry.", name);
+                LOG_DBG("Name %s not found in registry.", name);
                 return -1;
         }
 
         if (!(e->flags & REG_AP_AUTO)) {
-                LOG_DBGF("%s does not allow auto-instantiation.", name);
+                LOG_DBG("%s does not allow auto-instantiation.", name);
                 return -1;
         }
 
         if (!reg_entry_has_ap_name(e, ap_name)) {
-                LOG_DBGF("AP name %s not associated with %s.", ap_name, name);
+                LOG_DBG("AP name %s not associated with %s.", ap_name, name);
                 return -1;
         }
 
         if (e->state == REG_NAME_NULL) {
-                LOG_DBGF("Tried to add instantiation info in NULL state.");
+                LOG_DBG("Tried to add instantiation info in NULL state.");
                 return -1;
         }
 
         a = reg_entry_get_reg_auto(e, ap_name);
         if (a != NULL) {
-                LOG_DBGF("Updating auto-instantiation info for %s.", ap_name);
+                LOG_DBG("Updating auto-instantiation info for %s.", ap_name);
                 list_del(&a->next);
                 free(a->ap_name);
                 if (a->argv != NULL) {
                         while (*a->argv != NULL)
                                 free(*a->argv++);
                 }
-
         } else {
                 a = malloc(sizeof(*a));
-                if (a == NULL) {
+                if (a == NULL)
                         return -1;
-                }
         }
 
         a->ap_name = ap_name;
         a->argv    = argv;
 
-        switch(e->state) {
-        case REG_NAME_IDLE:
+        if(e->state == REG_NAME_IDLE)
                 e->state = REG_NAME_AUTO_ACCEPT;
-                break;
-        default:
-                break;
-        }
 
         list_add(&a->next, &e->auto_ap_info);
 
@@ -754,33 +747,27 @@ static int registry_remove_ap_auto(char * name,
 
         e = get_reg_entry_by_name(name);
         if (e == NULL) {
-                LOG_DBGF("Name %s not found in registry.", name);
+                LOG_DBG("Name %s not found in registry.", name);
                 return -1;
         }
 
         a = reg_entry_get_reg_auto(e, ap_name);
         if (a == NULL) {
-                LOG_DBGF("Quto-instantiation info for %s not found.", ap_name);
+                LOG_DBG("Auto-instantiation info for %s not found.", ap_name);
                 return -1;
         }
 
         list_del(&a->next);
 
-        switch(e->state) {
-        case REG_NAME_AUTO_ACCEPT:
-                if (list_empty(&e->auto_ap_info))
-                        e->state = REG_NAME_IDLE;
-                break;
-        default:
-                break;
-        }
+        if(e->state == REG_NAME_AUTO_ACCEPT && list_empty(&e->auto_ap_info))
+                e->state = REG_NAME_IDLE;
 
         return 0;
 }
 #endif
 
 static struct reg_instance * registry_add_ap_instance(char * name,
-                                               pid_t pid)
+                                                      pid_t pid)
 {
         struct reg_entry * e    = NULL;
         struct reg_instance * i = NULL;
@@ -790,39 +777,34 @@ static struct reg_instance * registry_add_ap_instance(char * name,
 
         e = get_reg_entry_by_name(name);
         if (e == NULL) {
-                LOG_DBGF("Name %s not found in registry.", name);
+                LOG_DBG("Name %s not found in registry.", name);
                 return NULL;
         }
 
         if (pid == 0) {
-                LOG_DBGF("Invalid pid.");
+                LOG_DBG("Invalid pid.");
                 return NULL;
         }
 
         if (reg_entry_has_api(e, pid)) {
-                LOG_DBGF("Instance already registered with this name.");
+                LOG_DBG("Instance already registered with this name.");
                 return NULL;
         }
 
         if (e->state == REG_NAME_NULL) {
-                LOG_DBGF("Tried to add instance in NULL state.");
+                LOG_DBG("Tried to add instance in NULL state.");
                 return NULL;
         }
 
         i = reg_instance_create(pid);
         if (i == NULL) {
-                LOG_DBGF("Failed to create reg_instance");
+                LOG_DBG("Failed to create reg_instance");
                 return NULL;
         }
 
-        switch(e->state) {
-        case REG_NAME_IDLE:
-        case REG_NAME_AUTO_EXEC:
+        if(e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_EXEC) {
                 e->state = REG_NAME_FLOW_ACCEPT;
                 pthread_cond_signal(&e->acc_signal);
-                break;
-        default:
-                break;
         }
 
         list_add(&i->next, &e->ap_instances);
@@ -840,13 +822,13 @@ static int registry_remove_ap_instance(char * name, pid_t pid)
 
         e = get_reg_entry_by_name(name);
         if (e == NULL) {
-                LOG_DBGF("Name %s is not registered.", name);
+                LOG_DBG("Name %s is not registered.", name);
                 return -1;
         }
 
         i = reg_entry_get_reg_instance(e, pid);
         if (i == NULL) {
-                LOG_DBGF("Instance %d is not accepting flows for %s.",
+                LOG_DBG("Instance %d is not accepting flows for %s.",
                          pid, name);
                 return -1;
         }
@@ -1306,7 +1288,7 @@ static struct port_map_entry * flow_accept(pid_t   pid,
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
-                LOG_DBGF("AP %s is unknown.", srv_ap_name);
+                LOG_ERR("AP %s is unknown.", srv_ap_name);
                 return NULL;
         }
 
@@ -1319,7 +1301,7 @@ static struct port_map_entry * flow_accept(pid_t   pid,
                                 pid,srv_ap_name);
                         return NULL;
                 }
-                LOG_DBGF("New instance (%d) of %s added.", pid, srv_ap_name);
+                LOG_INFO("New instance (%d) of %s added.", pid, srv_ap_name);
         }
 
         pthread_rwlock_unlock(&instance->reg_lock);
@@ -1369,8 +1351,6 @@ static int flow_alloc_resp(pid_t n_pid,
         struct port_map_entry * pme = NULL;
         struct reg_entry * rne      = NULL;
         int ret = -1;
-
-        LOG_DBGF("Instance %d response for flow %d", n_pid, port_id);
 
         pthread_rwlock_rdlock(&instance->state_lock);
 
@@ -1466,7 +1446,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
         if (ipcp == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
-                LOG_DBG("Unknown DIF name.");
+                LOG_ERR("Unknown DIF name.");
                 return NULL;
         }
 
@@ -1514,18 +1494,21 @@ static int flow_alloc_res(int port_id)
 
         e = get_port_map_entry(port_id);
         if (e == NULL) {
+                LOG_ERR("Could not find port %d.", port_id);
                 pthread_rwlock_unlock(&instance->flows_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 return -1;
         }
 
         if (e->state == FLOW_NULL) {
+                LOG_ERR("Port %d is deprecated.", port_id);
                 pthread_rwlock_unlock(&instance->flows_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 return -1;
         }
 
         if (e->state == FLOW_ALLOCATED) {
+                LOG_ERR("Port %d already allocated.", port_id);
                 pthread_rwlock_unlock(&instance->flows_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 return 0;
@@ -1623,7 +1606,7 @@ static int auto_execute(char ** argv)
 
         execv(argv[0], argv);
 
-        LOG_ERR("Failed to execute.");
+        LOG_ERR("Failed to execute %s.", argv[0]);
 
         exit(EXIT_FAILURE);
 }
@@ -1655,7 +1638,7 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
-                LOG_DBGF("Unknown name: %s.", dst_name);
+                LOG_ERR("Unknown name: %s.", dst_name);
                 free(pme);
                 return NULL;
         }
@@ -1667,7 +1650,7 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
                 pthread_mutex_unlock(&rne->state_lock);
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
-                LOG_DBGF("No AP's for %s.", dst_name);
+                LOG_ERR("No AP's for %s.", dst_name);
                 free(pme);
                 return NULL;
         case REG_NAME_AUTO_ACCEPT:
@@ -1697,14 +1680,17 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         case REG_NAME_FLOW_ACCEPT:
                 pme->n_pid = registry_resolve_api(rne);
                 if(pme->n_pid == 0) {
-                        LOG_DBGF("Invalid pid returned.");
-                        exit(EXIT_FAILURE);
+                        pthread_mutex_unlock(&rne->state_lock);
+                        pthread_rwlock_unlock(&instance->reg_lock);
+                        pthread_rwlock_unlock(&instance->state_lock);
+                        LOG_ERR("Invalid pid returned.");
+                        return NULL;
                 }
                 pthread_mutex_unlock(&rne->state_lock);
                 pthread_rwlock_unlock(&instance->reg_lock);
                 break;
         default:
-                LOG_DBGF("IRMs in wrong state.");
+                LOG_ERR("IRMd in wrong state.");
                 break;
         }
 
@@ -1801,7 +1787,7 @@ static void irm_destroy()
         pthread_rwlock_rdlock(&instance->state_lock);
 
         if (instance->state != IRMD_NULL)
-                LOG_DBGF("Unsafe destroy.");
+                LOG_WARN("Unsafe destroy.");
 
         if (instance->threadpool != NULL)
                 free(instance->threadpool);
@@ -1909,7 +1895,7 @@ void * irm_flow_cleaner()
 
                         if (e->state == FLOW_PENDING &&
                             ts_diff_ms(&e->t0, &now) > IRMD_FLOW_TIMEOUT) {
-                                LOG_DBGF("Pending port_id %d timed out.",
+                                LOG_INFO("Pending port_id %d timed out.",
                                          e->port_id);
                                 e->state = FLOW_NULL;
                                 pthread_cond_signal(&e->res_signal);
@@ -1923,7 +1909,7 @@ void * irm_flow_cleaner()
                                 bmp_release(instance->port_ids, e->port_id);
 
                                 list_del(&e->next);
-                                LOG_DBGF("Process %d gone, %d deallocated.",
+                                LOG_INFO("Process %d gone, %d deallocated.",
                                          e->n_pid, e->port_id);
                                 ipcp_flow_dealloc(e->n_1_pid, e->port_id);
                                 free(e);
@@ -1950,7 +1936,7 @@ void * irm_flow_cleaner()
                                                    struct reg_instance,
                                                    next);
                                 if (kill(r->pid, 0) < 0) {
-                                        LOG_DBGF("Process %d gone, "
+                                        LOG_INFO("Process %d gone, "
                                                  "instance deleted.",
                                                  r->pid);
                                         registry_remove_ap_instance(e->name,
