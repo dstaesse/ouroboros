@@ -106,11 +106,11 @@ int instance_name_cpy(instance_name_t *       dst,
         instance_name_t * res;
 
         if (src == NULL || dst == NULL)
-                return -1;
+                return -EINVAL;
 
         res = instance_name_init_from(dst, src->name, src->id);
         if (res == NULL)
-                return -1;
+                return -ENOMEM;
 
         return 0;
 }

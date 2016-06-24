@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * The API to instruct the DIF Allocator
+ * The API to instruct the global Namespace Manager
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,15 +20,24 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/da.h>
+#ifndef OUROBOROS_NSM_H
+#define OUROBOROS_NSM_H
 
-char * da_resolve_daf(char * daf_name)
-{
-        return NULL;
-}
+#include <stdint.h>
+#include <unistd.h>
 
-ssize_t da_resolve_dap(char * name,
-                       char ** n_1_difs)
-{
-        return 0;
-}
+int    nsm_reg(char *  name,
+               char ** dafs,
+               size_t  dafs_size);
+
+int    nsm_unreg(char *  name,
+                 char ** dafs,
+                 size_t  dafs_size);
+
+/*
+ * dafs is an out parameter
+ * The amount of DAFs is returned
+ */
+ssize_t nsm_resolve(char *  name,
+                    char ** dafs);
+#endif

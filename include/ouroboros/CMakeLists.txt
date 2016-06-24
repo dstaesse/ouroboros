@@ -4,14 +4,14 @@ configure_file(
 
 set(HEADER_FILES
         cdap.h
-        da.h
         dev.h
         dif_config.h
+        errno.h
         flow.h
         instance_name.h
         irm.h
+        nsm.h
         qos.h
-        time_utils.h
 )
 
 install(FILES ${HEADER_FILES} DESTINATION usr/include/ouroboros)

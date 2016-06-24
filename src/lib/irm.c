@@ -22,6 +22,7 @@
 
 #define OUROBOROS_PREFIX "libouroboros-irm"
 
+#include <ouroboros/errno.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/common.h>
 #include <ouroboros/logs.h>
@@ -143,7 +144,7 @@ int irm_bootstrap_ipcp(instance_name_t   * api,
                 config.if_name = conf->if_name;
                 break;
         default:
-                return -1;
+                return -EIPCPTYPE;
         }
 
         recv_msg = send_recv_irm_msg(&msg);
@@ -180,7 +181,7 @@ int irm_enroll_ipcp(instance_name_t * api,
         msg.dif_name = malloc(sizeof(*(msg.dif_name)));
         if (msg.dif_name == NULL) {
                 LOG_ERR("Failed to malloc");
-                return -1;
+                return -ENOMEM;
         }
         msg.dif_name[0] = dif_name;
 

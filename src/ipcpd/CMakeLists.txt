@@ -1,6 +1,5 @@
 set(IPCP_SOURCES
         # Add source files here
-        ${CMAKE_CURRENT_SOURCE_DIR}/flow.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ipcp.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ipcp-data.c
 )

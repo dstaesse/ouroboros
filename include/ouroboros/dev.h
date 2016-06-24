@@ -29,7 +29,6 @@
 #ifndef OUROBOROS_DEV_H
 #define OUROBOROS_DEV_H
 
-#define UNKNOWN_AP "__UNKNOWN_AP__"
 #define UNKNOWN_AE "__UNKNOWN_AE__"
 
 /* These calls should be removed once we write the ouroboros OS. */

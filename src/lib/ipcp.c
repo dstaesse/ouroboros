@@ -275,35 +275,32 @@ int ipcp_bootstrap(pid_t pid,
 }
 
 int ipcp_enroll(pid_t pid,
-                char * member_name,
+                char * dif_name,
                 char * n_1_dif)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (n_1_dif == NULL || member_name == NULL)
+        if (n_1_dif == NULL || dif_name == NULL)
                 return -EINVAL;
 
-        msg.code        = IPCP_MSG_CODE__IPCP_ENROLL;
-        msg.member_name = member_name;
-        msg.n_1_dif     = n_1_dif;
+        msg.code     = IPCP_MSG_CODE__IPCP_ENROLL;
+        msg.dif_name = dif_name;
+        msg.n_1_dif  = n_1_dif;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL) {
-                free(msg.member_name);
                 return -1;
         }
 
         if (recv_msg->has_result == false) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
-                free(msg.member_name);
                 return -1;
         }
 
         ret = recv_msg->result;
         ipcp_msg__free_unpacked(recv_msg, NULL);
-        free(msg.member_name);
 
         return ret;
 }

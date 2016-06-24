@@ -23,6 +23,7 @@
 #define OUROBOROS_PREFIX "libouroboros-dev"
 
 #include <ouroboros/config.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/sockets.h>
@@ -62,13 +63,13 @@ int ap_init(char * ap_name)
 
         _ap_instance = malloc(sizeof(struct ap_data));
         if (_ap_instance == NULL) {
-                return -1;
+                return -ENOMEM;
         }
 
         _ap_instance->api = instance_name_create();
         if (_ap_instance->api == NULL) {
                 free(_ap_instance);
-                return -1;
+                return -ENOMEM;
         }
 
         if (instance_name_init_from(_ap_instance->api,
@@ -76,14 +77,14 @@ int ap_init(char * ap_name)
                                     getpid()) == NULL) {
                 instance_name_destroy(_ap_instance->api);
                 free(_ap_instance);
-                return -1;
+                return -ENOMEM;
         }
 
         _ap_instance->fds = bmp_create(AP_MAX_FLOWS, 0);
         if (_ap_instance->fds == NULL) {
                 instance_name_destroy(_ap_instance->api);
                 free(_ap_instance);
-                return -1;
+                return -ENOMEM;
         }
 
         _ap_instance->dum = shm_du_map_open();
@@ -210,7 +211,7 @@ int flow_accept(char ** ae_name)
                         pthread_rwlock_unlock(&_ap_instance->flows_lock);
                         pthread_rwlock_unlock(&_ap_instance->data_lock);
                         irm_msg__free_unpacked(recv_msg, NULL);
-                        return -1;
+                        return -ENOMEM;
                 }
         }
 
@@ -232,7 +233,7 @@ int flow_alloc_resp(int fd,
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (fd < 0)
+        if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
@@ -242,6 +243,12 @@ int flow_alloc_resp(int fd,
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
         pthread_rwlock_rdlock(&_ap_instance->flows_lock);
+
+        if (_ap_instance->flows[fd].port_id < 0) {
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ap_instance->data_lock);
+                return -ENOTALLOC;
+        }
 
         msg.port_id      = _ap_instance->flows[fd].port_id;
 
@@ -343,7 +350,7 @@ int flow_alloc_res(int fd)
         irm_msg_t * recv_msg = NULL;
         int result = 0;
 
-        if (fd < 0)
+        if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RES;
@@ -351,6 +358,12 @@ int flow_alloc_res(int fd)
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
         pthread_rwlock_rdlock(&_ap_instance->flows_lock);
+
+        if (_ap_instance->flows[fd].port_id < 0) {
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ap_instance->data_lock);
+                return -ENOTALLOC;
+        }
 
         msg.port_id      = _ap_instance->flows[fd].port_id;
 
@@ -385,6 +398,12 @@ int flow_dealloc(int fd)
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
         pthread_rwlock_wrlock(&_ap_instance->flows_lock);
+
+        if (_ap_instance->flows[fd].port_id < 0) {
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ap_instance->data_lock);
+                return -ENOTALLOC;
+        }
 
         msg.port_id      = _ap_instance->flows[fd].port_id;
 
@@ -421,11 +440,17 @@ int flow_cntl(int fd, int cmd, int oflags)
 {
         int old;
 
-        if (fd < 0)
+        if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
         pthread_rwlock_wrlock(&_ap_instance->flows_lock);
+
+        if (_ap_instance->flows[fd].port_id < 0) {
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ap_instance->data_lock);
+                return -ENOTALLOC;
+        }
 
         old = _ap_instance->flows[fd].oflags;
 
@@ -454,11 +479,17 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         if (buf == NULL)
                 return 0;
 
-        if (fd < 0)
+        if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
         pthread_rwlock_rdlock(&_ap_instance->flows_lock);
+
+        if (_ap_instance->flows[fd].port_id < 0) {
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ap_instance->data_lock);
+                return -ENOTALLOC;
+        }
 
         if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
                 index = shm_create_du_buff(_ap_instance->dum,
@@ -470,7 +501,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                 if (index == -1) {
                         pthread_rwlock_unlock(&_ap_instance->flows_lock);
                         pthread_rwlock_unlock(&_ap_instance->data_lock);
-                        return -1;
+                        return -EAGAIN;
                 }
 
                 e.index   = index;
@@ -480,7 +511,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                         shm_release_du_buff(_ap_instance->dum, index);
                         pthread_rwlock_unlock(&_ap_instance->flows_lock);
                         pthread_rwlock_unlock(&_ap_instance->data_lock);
-                        return -EPIPE;
+                        return -1;
                 }
         } else { /* blocking */
                 while ((index = shm_create_du_buff(_ap_instance->dum,
@@ -510,7 +541,7 @@ ssize_t flow_read(int fd, void * buf, size_t count)
         int n;
         uint8_t * sdu;
 
-        if (fd < 0)
+        if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
@@ -519,16 +550,17 @@ ssize_t flow_read(int fd, void * buf, size_t count)
         if (_ap_instance->flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
                 pthread_rwlock_unlock(&_ap_instance->data_lock);
-                return -1;
+                return -ENOTALLOC;
         }
 
         if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
                 idx = shm_ap_rbuff_read_port(_ap_instance->rb,
                                            _ap_instance->flows[fd].port_id);
         } else { /* block */
-                while ((idx = shm_ap_rbuff_read_port(
-                                _ap_instance->rb,
-                                _ap_instance->flows[fd].port_id)) < 0)
+                while ((idx =
+                        shm_ap_rbuff_read_port(_ap_instance->rb,
+                                               _ap_instance->
+                                               flows[fd].port_id)) < 0)
                         ;
         }
 
@@ -536,7 +568,7 @@ ssize_t flow_read(int fd, void * buf, size_t count)
 
         if (idx < 0) {
                 pthread_rwlock_unlock(&_ap_instance->data_lock);
-                return -1;
+                return -EAGAIN;
         }
 
         n = shm_du_map_read_sdu(&sdu,
