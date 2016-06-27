@@ -151,8 +151,8 @@ static void reg_instance_wake(struct reg_instance * i)
 
         i->state = REG_I_WAKE;
 
-        pthread_mutex_unlock(&i->mutex);
         pthread_cond_signal(&i->wakeup);
+        pthread_mutex_unlock(&i->mutex);
 }
 
 static void reg_instance_destroy(struct reg_instance * i)
@@ -802,7 +802,7 @@ static struct reg_instance * registry_add_ap_instance(char * name,
                 return NULL;
         }
 
-        if(e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_EXEC) {
+        if(e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT) {
                 e->state = REG_NAME_FLOW_ACCEPT;
                 pthread_cond_signal(&e->acc_signal);
         }
@@ -834,6 +834,8 @@ static int registry_remove_ap_instance(char * name, pid_t pid)
         }
 
         list_del(&i->next);
+
+        reg_instance_destroy(i);
 
         if (list_empty(&e->ap_instances)) {
                 if ((e->flags & REG_AP_AUTO) &&
@@ -1491,14 +1493,13 @@ static int flow_alloc_res(int port_id)
         }
 
         if (e->state == FLOW_NULL) {
-                LOG_ERR("Port %d is deprecated.", port_id);
+                LOG_INFO("Port %d is deprecated.", port_id);
                 pthread_rwlock_unlock(&instance->flows_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 return -1;
         }
 
         if (e->state == FLOW_ALLOCATED) {
-                LOG_ERR("Port %d already allocated.", port_id);
                 pthread_rwlock_unlock(&instance->flows_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 return 0;
@@ -1646,10 +1647,10 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         case REG_NAME_AUTO_ACCEPT:
                 rne->state = REG_NAME_AUTO_EXEC;
                 pthread_mutex_unlock(&rne->state_lock);
-                pthread_rwlock_unlock(&instance->reg_lock);
-                pthread_rwlock_unlock(&instance->state_lock);
 
                 if (auto_execute(registry_resolve_auto(rne)) < 0) {
+                        pthread_rwlock_unlock(&instance->reg_lock);
+                        pthread_rwlock_unlock(&instance->state_lock);
                         free(pme);
                         return NULL;
                 }
@@ -1662,34 +1663,38 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
                         pthread_cond_wait(&rne->acc_signal,
                                           &rne->state_lock);
 
-                pthread_cleanup_pop(true);
+                pthread_cleanup_pop(false);
 
-                pthread_rwlock_rdlock(&instance->state_lock);
-                pthread_rwlock_rdlock(&instance->reg_lock);
-                pthread_mutex_lock(&rne->state_lock);
         case REG_NAME_FLOW_ACCEPT:
+                pthread_mutex_unlock(&rne->state_lock);
+
                 pme->n_pid = registry_resolve_api(rne);
                 if(pme->n_pid == 0) {
-                        pthread_mutex_unlock(&rne->state_lock);
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
                         LOG_ERR("Invalid pid returned.");
                         return NULL;
                 }
-                pthread_mutex_unlock(&rne->state_lock);
-                pthread_rwlock_unlock(&instance->reg_lock);
+
                 break;
         default:
+                pthread_mutex_unlock(&rne->state_lock);
+                pthread_rwlock_unlock(&instance->reg_lock);
+                pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("IRMd in wrong state.");
-                break;
+                free(pme);
+                return NULL;
         }
 
+        pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_wrlock(&instance->flows_lock);
         pme->port_id = bmp_allocate(instance->port_ids);
 
         list_add(&pme->next, &instance->port_map);
 
         pthread_rwlock_unlock(&instance->flows_lock);
+
+        pthread_mutex_lock(&rne->state_lock);
 
         rne->req_ae_name = ae_name;
 
@@ -1783,13 +1788,11 @@ static void irm_destroy()
                 free(instance->threadpool);
 
         pthread_rwlock_wrlock(&instance->reg_lock);
-
-        if (instance->port_ids != NULL)
-                bmp_destroy(instance->port_ids);
         /* clear the lists */
         list_for_each_safe(h, t, &instance->ipcps) {
                 struct ipcp_entry * e = list_entry(h, struct ipcp_entry, next);
                 list_del(&e->next);
+                ipcp_destroy(e->api->id);
                 ipcp_entry_destroy(e);
         }
 
@@ -1812,6 +1815,10 @@ static void irm_destroy()
                 port_map_entry_destroy(e);
 
         }
+
+        if (instance->port_ids != NULL)
+                bmp_destroy(instance->port_ids);
+
         pthread_rwlock_unlock(&instance->flows_lock);
 
         if (instance->dum != NULL)
@@ -1822,7 +1829,6 @@ static void irm_destroy()
         pthread_rwlock_unlock(&instance->state_lock);
 
         free(instance);
-
 }
 
 void irmd_sig_handler(int sig, siginfo_t * info, void * c)
@@ -1847,11 +1853,9 @@ void irmd_sig_handler(int sig, siginfo_t * info, void * c)
 
                 pthread_cancel(instance->shm_sanitize);
                 pthread_cancel(instance->cleanup_flows);
-
-
                 break;
         case SIGPIPE:
-                LOG_DBG("Ignoring SIGPIPE.");
+                LOG_DBG("Ignored SIGPIPE.");
         default:
                 return;
         }
@@ -1875,6 +1879,12 @@ void * irm_flow_cleaner()
                 /* cleanup stale PENDING flows */
 
                 pthread_rwlock_rdlock(&instance->state_lock);
+
+                if (&instance->state == IRMD_NULL) {
+                        pthread_rwlock_unlock(&instance->state_lock);
+                        return (void *) 0;
+                }
+
                 pthread_rwlock_wrlock(&instance->flows_lock);
 
                 list_for_each_safe(pos, n, &(instance->port_map)) {
@@ -1902,18 +1912,17 @@ void * irm_flow_cleaner()
                                 LOG_INFO("Process %d gone, %d deallocated.",
                                          e->n_pid, e->port_id);
                                 ipcp_flow_dealloc(e->n_1_pid, e->port_id);
-                                free(e);
+                                port_map_entry_destroy(e);
                         }
                         if (kill(e->n_1_pid, 0) < 0) {
                                 list_del(&e->next);
                                 LOG_ERR("IPCP %d gone, flow %d removed.",
                                         e->n_1_pid, e->port_id);
-                                free(e);
+                                port_map_entry_destroy(e);
                         }
                 }
 
                 pthread_rwlock_unlock(&instance->flows_lock);
-
                 pthread_rwlock_wrlock(&instance->reg_lock);
 
                 list_for_each_safe(pos, n, &(instance->registry)) {
