@@ -18,7 +18,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
    MACRO_ADD_COMPILE_FLAGS(nsmd -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS nsmd RUNTIME DESTINATION sbin)
+install(TARGETS nsmd RUNTIME DESTINATION /sbin)
 
 # Enable once nsmd has tests
 # add_subdirectory(tests)

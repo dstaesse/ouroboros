@@ -14,4 +14,4 @@ set(HEADER_FILES
         qos.h
 )
 
-install(FILES ${HEADER_FILES} DESTINATION usr/include/ouroboros)
+install(FILES ${HEADER_FILES} DESTINATION /usr/include/ouroboros)

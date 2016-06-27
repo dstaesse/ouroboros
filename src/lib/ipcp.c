@@ -105,7 +105,7 @@ pid_t ipcp_create(char *         ipcp_name,
         pid_t pid = 0;
         char irmd_pid[10];
         size_t len = 0;
-        char * ipcp_dir = "sbin/";
+        char * ipcp_dir = "/sbin/";
         char * full_name = NULL;
         char * exec_name = NULL;
 
@@ -132,7 +132,7 @@ pid_t ipcp_create(char *         ipcp_name,
         else
                 exit(EXIT_FAILURE);
 
-        len += strlen(INSTALL_DIR);
+        len += strlen(INSTALL_PREFIX);
         len += strlen(ipcp_dir);
         len += strlen(exec_name);
         len += 1;
@@ -143,7 +143,7 @@ pid_t ipcp_create(char *         ipcp_name,
                 exit(EXIT_FAILURE);
         }
 
-        strcpy(full_name, INSTALL_DIR);
+        strcpy(full_name, INSTALL_PREFIX);
         strcat(full_name, ipcp_dir);
         strcat(full_name, exec_name);
         full_name[len] = '\0';
