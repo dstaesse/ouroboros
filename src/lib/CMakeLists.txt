@@ -50,7 +50,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   MACRO_ADD_COMPILE_FLAGS(ouroboros -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS ouroboros LIBRARY DESTINATION usr/lib)
+install(TARGETS ouroboros LIBRARY DESTINATION /usr/lib)
 
 target_include_directories(ouroboros PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 

@@ -24,7 +24,7 @@ SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
-  "${CMAKE_INSTALL_PREFIX}usr/lib" isSystemDir)
+  "${CMAKE_INSTALL_PREFIX}/usr/lib" isSystemDir)
 IF("${isSystemDir}" STREQUAL "-1")
    SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/usr/lib")
 ENDIF("${isSystemDir}" STREQUAL "-1")
@@ -50,7 +50,7 @@ configure_file(
   "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
   @ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
-  DESTINATION "usr/lib/pkgconfig")
+  DESTINATION "/usr/lib/pkgconfig")
 
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
