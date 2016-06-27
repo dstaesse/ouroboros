@@ -6,7 +6,7 @@ if (($# == 1 ))
 then
     PREFIX=`echo "$1"|sed -e "s,\/$,,"`
 else
-    PREFIX="/usr/local/ouroboros"
+    PREFIX="/usr/local/ouroboros/"
 fi
 
 BUILDDIR=build

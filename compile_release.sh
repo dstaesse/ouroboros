@@ -6,7 +6,7 @@ if (($# == 1 ))
 then
     PREFIX=`echo "$1"|sed -e "s,\/$,,"`
 else
-    PREFIX=""
+    PREFIX="/"
 fi
 
 BUILDDIR=build

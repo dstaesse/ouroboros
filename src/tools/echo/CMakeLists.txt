@@ -13,4 +13,4 @@ add_executable(echo-app ${SOURCE_FILES})
 
 target_link_libraries(echo-app LINK_PUBLIC ouroboros)
 
-install(TARGETS echo-app RUNTIME DESTINATION /usr/bin)
+install(TARGETS echo-app RUNTIME DESTINATION usr/bin)
