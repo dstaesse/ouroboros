@@ -28,7 +28,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
    MACRO_ADD_COMPILE_FLAGS(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-install(TARGETS ipcpd-normal RUNTIME DESTINATION /sbin)
+install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
 
 # Enable once ipcp-normal has tests
 # add_subdirectory(tests)
