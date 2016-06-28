@@ -600,7 +600,7 @@ static int ipcp_udp_flow_dealloc_req(int udp_port)
         struct shm_ap_rbuff * rb;
 
         pthread_rwlock_rdlock(&_ipcp->state_lock);
-        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
         fd = udp_port_to_fd(udp_port);
         if (fd < 0) {
@@ -612,6 +612,9 @@ static int ipcp_udp_flow_dealloc_req(int udp_port)
         }
 
         clr_fd(fd);
+
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         _ap_instance->flows[fd].state   = FLOW_NULL;
         port_id = _ap_instance->flows[fd].port_id;
@@ -1319,12 +1322,6 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
                 return -1;
         }
 
-        pthread_rwlock_rdlock(&_ap_instance->flows_lock);
-
-        set_fd(fd);
-
-        pthread_rwlock_unlock(&_ap_instance->flows_lock);
-
         pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         _ap_instance->flows[fd].port_id = port_id;
@@ -1332,6 +1329,12 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         _ap_instance->flows[fd].rb      = rb;
 
         pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ap_instance->flows_lock);
+
+        set_fd(fd);
+
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+
         pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (ipcp_udp_port_alloc(ip_addr,
@@ -1339,9 +1342,12 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
                                 dst_name,
                                 src_ae_name) < 0) {
                 pthread_rwlock_rdlock(&_ipcp->state_lock);
-                pthread_rwlock_wrlock(&_ap_instance->flows_lock);
+                pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
                 clr_fd(fd);
+
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
                 _ap_instance->flows[fd].port_id = -1;
                 _ap_instance->flows[fd].state   = FLOW_NULL;
@@ -1436,13 +1442,16 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
                                      r_saddr.sin_port,
                                      response) < 0) {
                 pthread_rwlock_rdlock(&_ipcp->state_lock);
+                pthread_rwlock_rdlock(&_ap_instance->flows_lock);
+
+                clr_fd(fd);
+
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
                 pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
                 _ap_instance->flows[fd].state = FLOW_NULL;
                 shm_ap_rbuff_close(_ap_instance->flows[fd].rb);
                 _ap_instance->flows[fd].rb    = NULL;
-
-                clr_fd(fd);
 
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
                 pthread_rwlock_unlock(&_ipcp->state_lock);
@@ -1464,7 +1473,7 @@ static int ipcp_udp_flow_dealloc(int port_id)
         socklen_t             r_saddr_len = sizeof(r_saddr);
 
         pthread_rwlock_rdlock(&_ipcp->state_lock);
-        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
+        pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
         fd = port_id_to_fd(port_id);
         if (fd < 0) {
@@ -1474,12 +1483,15 @@ static int ipcp_udp_flow_dealloc(int port_id)
                 return 0;
         }
 
+        clr_fd(fd);
+
+        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        pthread_rwlock_wrlock(&_ap_instance->flows_lock);
+
         _ap_instance->flows[fd].state   = FLOW_NULL;
         _ap_instance->flows[fd].port_id = -1;
         rb = _ap_instance->flows[fd].rb;
         _ap_instance->flows[fd].rb      = NULL;
-
-        clr_fd(fd);
 
         pthread_rwlock_unlock(&_ap_instance->flows_lock);
 
