@@ -70,7 +70,7 @@ typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 #define MAX_SAPS 64
 
 /* global for trapping signal */
-int irmd_pid;
+int irmd_api;
 
 struct ipcp * _ipcp;
 
@@ -816,7 +816,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                if (info->si_pid == irmd_pid) {
+                if (info->si_pid == irmd_api) {
                         bool clean_threads = false;
                         LOG_DBG("Terminating by order of %d. Bye.",
                                 info->si_pid);
@@ -988,7 +988,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         pthread_rwlock_unlock(&_ipcp->state_lock);
 
-        LOG_DBG("Bootstrapped shim IPCP over Ethernet with LLC with pid %d.",
+        LOG_DBG("Bootstrapped shim IPCP over Ethernet with LLC with api %d.",
                 getpid());
 
         return 0;
@@ -1028,7 +1028,7 @@ static int eth_llc_ipcp_name_unreg(char * name)
         return 0;
 }
 
-static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
+static int eth_llc_ipcp_flow_alloc(pid_t         n_api,
                                    int           port_id,
                                    char *        dst_name,
                                    char *        src_ae_name,
@@ -1047,7 +1047,7 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
         if (qos != QOS_CUBE_BE)
                 LOG_DBGF("QoS requested. Ethernet LLC can't do that. For now.");
 
-        rb = shm_ap_rbuff_open(n_pid);
+        rb = shm_ap_rbuff_open(n_api);
         if (rb == NULL)
                 return -1; /* -ENORBUFF */
 
@@ -1106,7 +1106,7 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_pid,
         return index;
 }
 
-static int eth_llc_ipcp_flow_alloc_resp(pid_t n_pid,
+static int eth_llc_ipcp_flow_alloc_resp(pid_t n_api,
                                         int   port_id,
                                         int   response)
 {
@@ -1132,7 +1132,7 @@ static int eth_llc_ipcp_flow_alloc_resp(pid_t n_pid,
                 return -1;
         }
 
-        rb = shm_ap_rbuff_open(n_pid);
+        rb = shm_ap_rbuff_open(n_api);
         if (rb == NULL) {
                 LOG_ERR("Could not open N + 1 ringbuffer.");
                 ipcp_flow(index)->state = FLOW_NULL;
@@ -1250,7 +1250,7 @@ int main(int argc, char * argv[])
         }
 
         /* store the process id of the irmd */
-        irmd_pid = atoi(argv[1]);
+        irmd_api = atoi(argv[1]);
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));

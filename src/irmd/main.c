@@ -48,6 +48,8 @@
 #include <pthread.h>
 #include <sys/stat.h>
 
+#define API_INVALID 0
+
 #define IRMD_MAX_FLOWS 4096
 
 #define IRMD_THREADPOOL_SIZE 3
@@ -90,22 +92,22 @@ enum reg_i_state {
 
 struct reg_instance {
         struct list_head next;
-        pid_t            pid;
+        pid_t            api;
 
-        /* the pid will block on this */
+        /* the api will block on this */
         enum reg_i_state state;
         pthread_cond_t   wakeup;
         pthread_mutex_t  mutex;
 };
 
-static struct reg_instance * reg_instance_create(pid_t pid)
+static struct reg_instance * reg_instance_create(pid_t api)
 {
         struct reg_instance * i;
         i = malloc(sizeof(*i));
         if (i == NULL)
                 return NULL;
 
-        i->pid   = pid;
+        i->api   = api;
         i->state = REG_I_WAKE;
 
         pthread_mutex_init(&i->mutex, NULL);
@@ -217,8 +219,8 @@ struct port_map_entry {
 
         int port_id;
 
-        pid_t n_pid;
-        pid_t n_1_pid;
+        pid_t n_api;
+        pid_t n_1_api;
 
         pthread_cond_t  res_signal;
         pthread_mutex_t res_lock;
@@ -237,7 +239,7 @@ struct irm {
 
         /* keep track of all flows in this processing system */
         struct bmp * port_ids;
-        /* maps port_ids to pid pair */
+        /* maps port_ids to api pair */
         struct list_head port_map;
         pthread_rwlock_t  flows_lock;
 
@@ -257,8 +259,8 @@ static struct port_map_entry * port_map_entry_create()
         if (e == NULL)
                 return NULL;
 
-        e->n_pid   = 0;
-        e->n_1_pid = 0;
+        e->n_api   = 0;
+        e->n_1_api = 0;
         e->port_id = 0;
         e->state   = FLOW_NULL;
 
@@ -316,7 +318,7 @@ static struct port_map_entry * get_port_map_entry(int port_id)
         return NULL;
 }
 
-static struct port_map_entry * get_port_map_entry_n(pid_t n_pid)
+static struct port_map_entry * get_port_map_entry_n(pid_t n_api)
 {
         struct list_head * pos = NULL;
 
@@ -324,7 +326,7 @@ static struct port_map_entry * get_port_map_entry_n(pid_t n_pid)
                 struct port_map_entry * e =
                         list_entry(pos, struct port_map_entry, next);
 
-                if (e->n_pid == n_pid)
+                if (e->n_api == n_api)
                         return e;
         }
 
@@ -359,7 +361,7 @@ static void ipcp_entry_destroy(struct ipcp_entry * e)
         free(e);
 }
 
-static struct ipcp_entry * get_ipcp_entry_by_pid(pid_t api)
+static struct ipcp_entry * get_ipcp_entry_by_api(pid_t api)
 {
         struct list_head * pos = NULL;
 
@@ -539,7 +541,7 @@ static struct reg_ap_name * reg_entry_get_ap_name(struct reg_entry * e,
 }
 
 static struct reg_instance * reg_entry_get_reg_instance(struct reg_entry * e,
-                                                        pid_t              pid)
+                                                        pid_t              api)
 {
         struct list_head * pos = NULL;
 
@@ -547,7 +549,7 @@ static struct reg_instance * reg_entry_get_reg_instance(struct reg_entry * e,
                 struct reg_instance * r =
                         list_entry(pos, struct reg_instance, next);
 
-                if (r->pid == pid)
+                if (r->api == api)
                         return r;
         }
 
@@ -606,7 +608,7 @@ static struct reg_entry * get_reg_entry_by_ap_name(char * ap_name)
         return NULL;
 }
 
-static struct reg_entry * get_reg_entry_by_ap_id(pid_t pid)
+static struct reg_entry * get_reg_entry_by_ap_id(pid_t api)
 {
         struct list_head * pos = NULL;
 
@@ -619,7 +621,7 @@ static struct reg_entry * get_reg_entry_by_ap_id(pid_t pid)
                         struct reg_instance * r =
                                 list_entry(p, struct reg_instance, next);
 
-                        if (r->pid == pid)
+                        if (r->api == api)
                                 return e;
                 }
         }
@@ -747,12 +749,12 @@ static int registry_remove_ap_auto(char * name,
 #endif
 
 static struct reg_instance * registry_add_ap_instance(char * name,
-                                                      pid_t pid)
+                                                      pid_t api)
 {
         struct reg_entry * e    = NULL;
         struct reg_instance * i = NULL;
 
-        if (name == NULL || pid == 0)
+        if (name == NULL || api == 0)
                 return NULL;
 
         e = get_reg_entry_by_name(name);
@@ -761,12 +763,12 @@ static struct reg_instance * registry_add_ap_instance(char * name,
                 return NULL;
         }
 
-        if (pid == 0) {
-                LOG_DBG("Invalid pid.");
+        if (api == API_INVALID) {
+                LOG_DBG("Invalid api.");
                 return NULL;
         }
 
-        if (reg_entry_has_api(e, pid)) {
+        if (reg_entry_has_api(e, api)) {
                 LOG_DBG("Instance already registered with this name.");
                 return NULL;
         }
@@ -776,7 +778,7 @@ static struct reg_instance * registry_add_ap_instance(char * name,
                 return NULL;
         }
 
-        i = reg_instance_create(pid);
+        i = reg_instance_create(api);
         if (i == NULL) {
                 LOG_DBG("Failed to create reg_instance");
                 return NULL;
@@ -792,12 +794,12 @@ static struct reg_instance * registry_add_ap_instance(char * name,
         return i;
 }
 
-static int registry_remove_ap_instance(char * name, pid_t pid)
+static int registry_remove_ap_instance(char * name, pid_t api)
 {
         struct reg_entry * e    = NULL;
         struct reg_instance * i = NULL;
 
-        if (name == NULL || pid == 0)
+        if (name == NULL || api == 0)
                 return -1;
 
         e = get_reg_entry_by_name(name);
@@ -806,10 +808,10 @@ static int registry_remove_ap_instance(char * name, pid_t pid)
                 return -1;
         }
 
-        i = reg_entry_get_reg_instance(e, pid);
+        i = reg_entry_get_reg_instance(e, api);
         if (i == NULL) {
                 LOG_DBG("Instance %d is not accepting flows for %s.",
-                         pid, name);
+                         api, name);
                 return -1;
         }
 
@@ -838,7 +840,7 @@ static pid_t registry_resolve_api(struct reg_entry * e)
         list_for_each(pos, &e->ap_instances) {
                 struct reg_instance * r =
                         list_entry(pos, struct reg_instance, next);
-                return r->pid;
+                return r->api;
         }
 
         return 0;
@@ -873,7 +875,7 @@ static void registry_del_name(char * name)
 static pid_t create_ipcp(char *         name,
                          enum ipcp_type ipcp_type)
 {
-        pid_t pid;
+        pid_t api;
         struct ipcp_entry * tmp = NULL;
 
         pthread_rwlock_rdlock(&instance->state_lock);
@@ -883,8 +885,8 @@ static pid_t create_ipcp(char *         name,
                 return 0;
         }
 
-        pid = ipcp_create(ipcp_type);
-        if (pid == -1) {
+        api = ipcp_create(ipcp_type);
+        if (api == -1) {
                 pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("Failed to create IPCP.");
                 return -1;
@@ -898,7 +900,7 @@ static pid_t create_ipcp(char *         name,
 
         INIT_LIST_HEAD(&tmp->next);
 
-        tmp->api = pid;
+        tmp->api = api;
         tmp->name = strdup(name);
         if (tmp->name  == NULL) {
                 ipcp_entry_destroy(tmp);
@@ -915,9 +917,9 @@ static pid_t create_ipcp(char *         name,
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
-        LOG_INFO("Created IPCP %d.", pid);
+        LOG_INFO("Created IPCP %d.", api);
 
-        return pid;
+        return api;
 }
 
 static int destroy_ipcp(pid_t api)
@@ -962,7 +964,7 @@ static int bootstrap_ipcp(pid_t              api,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        entry = get_ipcp_entry_by_pid(api);
+        entry = get_ipcp_entry_by_api(api);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1012,7 +1014,7 @@ static int enroll_ipcp(pid_t  api,
 
         pthread_rwlock_rdlock(&instance->reg_lock);
 
-        entry = get_ipcp_entry_by_pid(api);
+        entry = get_ipcp_entry_by_api(api);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1142,7 +1144,7 @@ static int unbind_name(char * name,
 }
 
 static ssize_t list_ipcps(char * name,
-                          pid_t ** pids)
+                          pid_t ** apis)
 {
         struct list_head * pos = NULL;
         ssize_t count = 0;
@@ -1157,8 +1159,8 @@ static ssize_t list_ipcps(char * name,
                 }
         }
 
-        *pids = malloc(count * sizeof(pid_t));
-        if (*pids == NULL) {
+        *apis = malloc(count * sizeof(pid_t));
+        if (*apis == NULL) {
                 return -1;
         }
 
@@ -1167,7 +1169,7 @@ static ssize_t list_ipcps(char * name,
                         list_entry(pos, struct ipcp_entry, next);
 
                 if (wildcard_match(name, tmp->name) == 0) {
-                        (*pids)[i++] = tmp->api;
+                        (*apis)[i++] = tmp->api;
                 }
         }
 
@@ -1287,7 +1289,7 @@ static int ap_unreg(char *  name,
         return ret;
 }
 
-static struct port_map_entry * flow_accept(pid_t   pid,
+static struct port_map_entry * flow_accept(pid_t   api,
                                            char *  srv_ap_name,
                                            char ** dst_ae_name)
 {
@@ -1312,16 +1314,16 @@ static struct port_map_entry * flow_accept(pid_t   pid,
                 return NULL;
         }
 
-        if (!reg_entry_has_api(rne, pid)) {
-                rgi = registry_add_ap_instance(rne->name, pid);
+        if (!reg_entry_has_api(rne, api)) {
+                rgi = registry_add_ap_instance(rne->name, api);
                 if (rgi == NULL) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
                         LOG_ERR("Failed to register instance %d with %s.",
-                                pid,srv_ap_name);
+                                api,srv_ap_name);
                         return NULL;
                 }
-                LOG_INFO("New instance (%d) of %s added.", pid, srv_ap_name);
+                LOG_INFO("New instance (%d) of %s added.", api, srv_ap_name);
         }
 
         pthread_rwlock_unlock(&instance->reg_lock);
@@ -1345,7 +1347,7 @@ static struct port_map_entry * flow_accept(pid_t   pid,
 
         pthread_rwlock_rdlock(&instance->flows_lock);
 
-        pme = get_port_map_entry_n(pid);
+        pme = get_port_map_entry_n(api);
         if (pme == NULL) {
                 pthread_rwlock_unlock(&instance->flows_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1364,7 +1366,7 @@ static struct port_map_entry * flow_accept(pid_t   pid,
         return pme;
 }
 
-static int flow_alloc_resp(pid_t n_pid,
+static int flow_alloc_resp(pid_t n_api,
                            int   port_id,
                            int   response)
 {
@@ -1381,7 +1383,7 @@ static int flow_alloc_resp(pid_t n_pid,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        rne = get_reg_entry_by_ap_id(n_pid);
+        rne = get_reg_entry_by_ap_id(n_api);
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1397,7 +1399,7 @@ static int flow_alloc_resp(pid_t n_pid,
 
         pthread_mutex_lock(&rne->state_lock);
 
-        registry_remove_ap_instance(rne->name, n_pid);
+        registry_remove_ap_instance(rne->name, n_api);
 
         pthread_mutex_unlock(&rne->state_lock);
 
@@ -1416,9 +1418,9 @@ static int flow_alloc_resp(pid_t n_pid,
                 pme->state = FLOW_ALLOCATED;
                 pthread_rwlock_unlock(&instance->flows_lock);
 
-                ret = ipcp_flow_alloc_resp(pme->n_1_pid,
+                ret = ipcp_flow_alloc_resp(pme->n_1_api,
                                            port_id,
-                                           pme->n_pid,
+                                           pme->n_api,
                                            response);
         }
 
@@ -1427,7 +1429,7 @@ static int flow_alloc_resp(pid_t n_pid,
         return ret;
 }
 
-static struct port_map_entry * flow_alloc(pid_t  pid,
+static struct port_map_entry * flow_alloc(pid_t  api,
                                           char * dst_name,
                                           char * src_ae_name,
                                           struct qos_spec * qos)
@@ -1452,7 +1454,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
                 return NULL;
         }
 
-        pme->n_pid = pid;
+        pme->n_api = api;
         pme->state = FLOW_PENDING;
         if (clock_gettime(CLOCK_MONOTONIC, &pme->t0) < 0)
                 LOG_WARN("Failed to set timestamp.");
@@ -1474,7 +1476,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
         pthread_rwlock_wrlock(&instance->flows_lock);
 
         pme->port_id = bmp_allocate(instance->port_ids);
-        pme->n_1_pid = ipcp;
+        pme->n_1_api = ipcp;
 
         list_add(&pme->next, &instance->port_map);
 
@@ -1483,7 +1485,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
 
         if (ipcp_flow_alloc(ipcp,
                             pme->port_id,
-                            pme->n_pid,
+                            pme->n_api,
                             dst_name,
                             src_ae_name,
                             QOS_CUBE_BE) < 0) {
@@ -1578,7 +1580,7 @@ static int flow_alloc_res(int port_id)
 
 static int flow_dealloc(int port_id)
 {
-        pid_t n_1_pid;
+        pid_t n_1_api;
         int   ret = 0;
 
         struct port_map_entry * e = NULL;
@@ -1594,13 +1596,13 @@ static int flow_dealloc(int port_id)
                 return 0;
         }
 
-        n_1_pid = e->n_1_pid;
+        n_1_api = e->n_1_api;
 
         list_del(&e->next);
 
         pthread_rwlock_unlock(&instance->flows_lock);
 
-        ret = ipcp_flow_dealloc(n_1_pid, port_id);
+        ret = ipcp_flow_dealloc(n_1_api, port_id);
 
         pthread_rwlock_unlock(&instance->state_lock);
 
@@ -1611,16 +1613,16 @@ static int flow_dealloc(int port_id)
 
 static int auto_execute(char ** argv)
 {
-        pid_t pid;
+        pid_t api;
         LOG_INFO("Executing %s.", argv[0]);
-        pid = fork();
-        if (pid == -1) {
+        api = fork();
+        if (api == -1) {
                 LOG_ERR("Failed to fork");
-                return pid;
+                return api;
         }
 
-        if (pid != 0) {
-                return pid;
+        if (api != 0) {
+                return api;
         }
 
         execv(argv[0], argv);
@@ -1630,7 +1632,7 @@ static int auto_execute(char ** argv)
         exit(EXIT_FAILURE);
 }
 
-static struct port_map_entry * flow_req_arr(pid_t  pid,
+static struct port_map_entry * flow_req_arr(pid_t  api,
                                             char * dst_name,
                                             char * ae_name)
 {
@@ -1646,7 +1648,7 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         }
 
         pme->state   = FLOW_PENDING;
-        pme->n_1_pid = pid;
+        pme->n_1_api = api;
         if (clock_gettime(CLOCK_MONOTONIC, &pme->t0) < 0)
                 LOG_WARN("Failed to set timestamp.");
 
@@ -1696,11 +1698,11 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
         case REG_NAME_FLOW_ACCEPT:
                 pthread_mutex_unlock(&rne->state_lock);
 
-                pme->n_pid = registry_resolve_api(rne);
-                if(pme->n_pid == 0) {
+                pme->n_api = registry_resolve_api(rne);
+                if(pme->n_api == 0) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
-                        LOG_ERR("Invalid pid returned.");
+                        LOG_ERR("Invalid api returned.");
                         return NULL;
                 }
 
@@ -1728,7 +1730,7 @@ static struct port_map_entry * flow_req_arr(pid_t  pid,
 
         rne->state = REG_NAME_FLOW_ARRIVED;
 
-        reg_instance_wake(reg_entry_get_reg_instance(rne, pme->n_pid));
+        reg_instance_wake(reg_entry_get_reg_instance(rne, pme->n_api));
 
         pthread_mutex_unlock(&rne->state_lock);
 
@@ -1933,19 +1935,19 @@ void * irm_flow_cleaner()
 
                         pthread_mutex_unlock(&e->res_lock);
 
-                        if (kill(e->n_pid, 0) < 0) {
+                        if (kill(e->n_api, 0) < 0) {
                                 bmp_release(instance->port_ids, e->port_id);
 
                                 list_del(&e->next);
                                 LOG_INFO("Process %d gone, %d deallocated.",
-                                         e->n_pid, e->port_id);
-                                ipcp_flow_dealloc(e->n_1_pid, e->port_id);
+                                         e->n_api, e->port_id);
+                                ipcp_flow_dealloc(e->n_1_api, e->port_id);
                                 port_map_entry_destroy(e);
                         }
-                        if (kill(e->n_1_pid, 0) < 0) {
+                        if (kill(e->n_1_api, 0) < 0) {
                                 list_del(&e->next);
                                 LOG_ERR("IPCP %d gone, flow %d removed.",
-                                        e->n_1_pid, e->port_id);
+                                        e->n_1_api, e->port_id);
                                 port_map_entry_destroy(e);
                         }
                 }
@@ -1962,12 +1964,12 @@ void * irm_flow_cleaner()
                                         list_entry(pos2,
                                                    struct reg_instance,
                                                    next);
-                                if (kill(r->pid, 0) < 0) {
+                                if (kill(r->api, 0) < 0) {
                                         LOG_INFO("Process %d gone, "
                                                  "instance deleted.",
-                                                 r->pid);
+                                                 r->api);
                                         registry_remove_ap_instance(e->name,
-                                                                    r->pid);
+                                                                    r->api);
                                 }
                         }
                 }
@@ -1995,7 +1997,7 @@ void * mainloop()
                 buffer_t buffer;
                 irm_msg_t ret_msg = IRM_MSG__INIT;
                 struct port_map_entry * e = NULL;
-                pid_t * pids = NULL;
+                pid_t * apis = NULL;
 
                 ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
 
@@ -2055,9 +2057,9 @@ void * mainloop()
                                                      msg->opts);
                         break;
                 case IRM_MSG_CODE__IRM_LIST_IPCPS:
-                        ret_msg.n_pids = list_ipcps(msg->dst_name,
-                                                    &pids);
-                        ret_msg.pids = pids;
+                        ret_msg.n_apis = list_ipcps(msg->dst_name,
+                                                    &apis);
+                        ret_msg.apis = apis;
                         ret_msg.has_result = true;
                         break;
                 case IRM_MSG_CODE__IRM_REG:
@@ -2073,7 +2075,7 @@ void * mainloop()
                                                   msg->n_dif_name);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
-                        e = flow_accept(msg->pid,
+                        e = flow_accept(msg->api,
                                         msg->ap_name,
                                         &ret_msg.ae_name);
 
@@ -2082,17 +2084,17 @@ void * mainloop()
 
                         ret_msg.has_port_id = true;
                         ret_msg.port_id     = e->port_id;
-                        ret_msg.has_pid     = true;
-                        ret_msg.pid         = e->n_1_pid;
+                        ret_msg.has_api     = true;
+                        ret_msg.api         = e->n_1_api;
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP:
                         ret_msg.has_result = true;
-                        ret_msg.result = flow_alloc_resp(msg->pid,
+                        ret_msg.result = flow_alloc_resp(msg->api,
                                                          msg->port_id,
                                                          msg->response);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
-                        e = flow_alloc(msg->pid,
+                        e = flow_alloc(msg->api,
                                        msg->dst_name,
                                        msg->ae_name,
                                        NULL);
@@ -2101,8 +2103,8 @@ void * mainloop()
 
                         ret_msg.has_port_id = true;
                         ret_msg.port_id     = e->port_id;
-                        ret_msg.has_pid     = true;
-                        ret_msg.pid         = e->n_1_pid;
+                        ret_msg.has_api     = true;
+                        ret_msg.api         = e->n_1_api;
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC_RES:
                         ret_msg.has_result = true;
@@ -2113,7 +2115,7 @@ void * mainloop()
                         ret_msg.result = flow_dealloc(msg->port_id);
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
-                        e = flow_req_arr(msg->pid,
+                        e = flow_req_arr(msg->api,
                                          msg->dst_name,
                                          msg->ae_name);
                         if (e == NULL)
@@ -2121,8 +2123,8 @@ void * mainloop()
 
                         ret_msg.has_port_id = true;
                         ret_msg.port_id     = e->port_id;
-                        ret_msg.has_pid     = true;
-                        ret_msg.pid         = e->n_pid;
+                        ret_msg.has_api     = true;
+                        ret_msg.api         = e->n_api;
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
                         ret_msg.has_result = true;
@@ -2143,16 +2145,16 @@ void * mainloop()
                 buffer.size = irm_msg__get_packed_size(&ret_msg);
                 if (buffer.size == 0) {
                         LOG_ERR("Failed to send reply message.");
-                        if (pids != NULL)
-                                free(pids);
+                        if (apis != NULL)
+                                free(apis);
                         close(cli_sockfd);
                         continue;
                 }
 
                 buffer.data = malloc(buffer.size);
                 if (buffer.data == NULL) {
-                        if (pids != NULL)
-                                free(pids);
+                        if (apis != NULL)
+                                free(apis);
                         close(cli_sockfd);
                         continue;
                 }
@@ -2161,14 +2163,14 @@ void * mainloop()
 
                 if (write(cli_sockfd, buffer.data, buffer.size) == -1) {
                         free(buffer.data);
-                        if (pids != NULL)
-                                free(pids);
+                        if (apis != NULL)
+                                free(apis);
                         close(cli_sockfd);
                         continue;
                 }
 
-                if (pids != NULL)
-                        free(pids);
+                if (apis != NULL)
+                        free(apis);
 
                 free(buffer.data);
                 close(cli_sockfd);

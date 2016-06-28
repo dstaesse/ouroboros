@@ -149,19 +149,19 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 }
 
 
-char * ipcp_sock_path(pid_t pid)
+char * ipcp_sock_path(pid_t api)
 {
         char * full_name = NULL;
-        char * pid_string = NULL;
+        char * api_string = NULL;
         size_t len = 0;
         char * delim = "_";
 
-        len = n_digits(pid);
-        pid_string = malloc(len + 1);
-        if (pid_string == NULL)
+        len = n_digits(api);
+        api_string = malloc(len + 1);
+        if (api_string == NULL)
                 return NULL;
 
-        sprintf(pid_string, "%d", pid);
+        sprintf(api_string, "%d", api);
 
         len += strlen(IPCP_SOCK_PATH_PREFIX);
         len += strlen(delim);
@@ -169,16 +169,16 @@ char * ipcp_sock_path(pid_t pid)
 
         full_name = malloc(len + 1);
         if (full_name == NULL) {
-                free(pid_string);
+                free(api_string);
                 return NULL;
         }
 
         strcpy(full_name, IPCP_SOCK_PATH_PREFIX);
         strcat(full_name, delim);
-        strcat(full_name, pid_string);
+        strcat(full_name, api_string);
         strcat(full_name, SOCK_PATH_SUFFIX);
 
-        free(pid_string);
+        free(api_string);
 
         return full_name;
 }

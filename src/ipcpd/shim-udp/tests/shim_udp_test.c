@@ -34,9 +34,6 @@ struct ipcp * _ipcp;
 
 int shim_udp_test(int argc, char ** argv)
 {
-        /* argument 1: pid of irmd ? */
-        /* argument 2: ap name */
-        /* argument 3: instance id */
         struct shm_du_map * dum;
         char * ipcp_name = "test-shim-ipcp";
         int i = 0;

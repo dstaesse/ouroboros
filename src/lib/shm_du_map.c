@@ -75,7 +75,7 @@ struct shm_du_map {
         size_t *          ptr_tail;    /* start of ringbuffer tail */
         pthread_mutex_t * shm_mutex;   /* lock all free space in shm */
         pthread_cond_t *  sanitize;    /* run sanitizer when buffer full */
-        pid_t *           pid;         /* pid of the irmd owner */
+        pid_t *           api;         /* api of the irmd owner */
         int               fd;
 };
 
@@ -141,7 +141,7 @@ struct shm_du_map * shm_du_map_create()
         dum->ptr_tail = dum->ptr_head + 1;
         dum->shm_mutex = (pthread_mutex_t *) (dum->ptr_tail + 1);
         dum->sanitize = (pthread_cond_t *) (dum->shm_mutex + 1);
-        dum->pid = (pid_t *) (dum->sanitize + 1);
+        dum->api = (pid_t *) (dum->sanitize + 1);
 
         pthread_mutexattr_init(&mattr);
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
@@ -155,7 +155,7 @@ struct shm_du_map * shm_du_map_create()
         *dum->ptr_head = 0;
         *dum->ptr_tail = 0;
 
-        *dum->pid = getpid();
+        *dum->api = getpid();
 
         dum->fd = shm_fd;
 
@@ -203,7 +203,7 @@ struct shm_du_map * shm_du_map_open()
         dum->ptr_tail = dum->ptr_head + 1;
         dum->shm_mutex = (pthread_mutex_t *) (dum->ptr_tail + 1);
         dum->sanitize = (pthread_cond_t *) (dum->shm_mutex + 1);
-        dum->pid = (pid_t *) (dum->sanitize + 1);
+        dum->api = (pid_t *) (dum->sanitize + 1);
 
         dum->fd = shm_fd;
 
@@ -212,7 +212,7 @@ struct shm_du_map * shm_du_map_open()
 
 pid_t shm_du_map_owner(struct shm_du_map * dum)
 {
-        return *dum->pid;
+        return *dum->api;
 }
 
 void * shm_du_map_sanitize(void * o)

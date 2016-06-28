@@ -46,7 +46,7 @@ typedef IpcpMsg ipcp_msg_t;
 #define IPCP_MSG_BUF_SIZE IRM_MSG_BUF_SIZE
 
 /* Returns the full socket path of an IPCP */
-char *      ipcp_sock_path(pid_t pid);
+char *      ipcp_sock_path(pid_t api);
 
 int         server_socket_open(char * file_name);
 int         client_socket_open(char * file_name);

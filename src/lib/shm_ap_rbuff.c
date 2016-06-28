@@ -55,7 +55,7 @@ struct shm_ap_rbuff {
         size_t *          ptr_tail;    /* start of ringbuffer tail */
         pthread_mutex_t * shm_mutex;   /* lock all free space in shm */
         pthread_cond_t *  work;        /* threads will wait for a signal */
-        pid_t             pid;         /* pid to which this rb belongs */
+        pid_t             api;         /* api to which this rb belongs */
         int               fd;
 };
 
@@ -138,19 +138,19 @@ struct shm_ap_rbuff * shm_ap_rbuff_create()
         *rb->ptr_tail = 0;
 
         rb->fd  = shm_fd;
-        rb->pid = getpid();
+        rb->api = getpid();
 
         return rb;
 }
 
-struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t pid)
+struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t api)
 {
         struct shm_ap_rbuff * rb;
         int                   shm_fd;
         struct rb_entry *     shm_base;
         char                  fn[25];
 
-        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", pid);
+        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", api);
 
         rb = malloc(sizeof(*rb));
         if (rb == NULL) {
@@ -190,7 +190,7 @@ struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t pid)
         rb->work      = (pthread_cond_t *) (rb->shm_mutex + 1);
 
         rb->fd = shm_fd;
-        rb->pid = pid;
+        rb->api = api;
 
         return rb;
 }
@@ -219,7 +219,7 @@ void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
                 return;
         }
 
-        if (rb->pid != getpid()) {
+        if (rb->api != getpid()) {
                 LOG_ERR("Tried to destroy other AP's rbuff.");
                 return;
         }
@@ -227,7 +227,7 @@ void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
         if (close(rb->fd) < 0)
                 LOG_DBGF("Couldn't close shared memory.");
 
-        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", rb->pid);
+        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", rb->api);
 
         if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");

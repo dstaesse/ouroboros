@@ -69,7 +69,7 @@ typedef ShimUdpMsg shim_udp_msg_t;
                    _ipcp->data)->s_saddr.sin_addr.s_addr)
 
 /* global for trapping signal */
-int irmd_pid;
+int irmd_api;
 
 /* this IPCP's data */
 #ifdef MAKE_CHECK
@@ -817,7 +817,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                if (info->si_pid == irmd_pid) {
+                if (info->si_pid == irmd_api) {
                         bool clean_threads = false;
                         LOG_DBG("Terminating by order of %d. Bye.",
                                 info->si_pid);
@@ -947,7 +947,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 
         pthread_rwlock_unlock(&_ipcp->state_lock);
 
-        LOG_DBG("Bootstrapped shim IPCP over UDP with pid %d.",
+        LOG_DBG("Bootstrapped shim IPCP over UDP with api %d.",
                 getpid());
 
         LOG_DBG("Bound to IP address %s.", ipstr);
@@ -961,7 +961,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 /* NOTE: Disgusted with this crap */
 static int ddns_send(char * cmd)
 {
-        pid_t pid = 0;
+        pid_t api = 0;
         int wstatus;
         int pipe_fd[2];
         char * argv[] = {NSUPDATE_EXEC, 0};
@@ -972,13 +972,13 @@ static int ddns_send(char * cmd)
                 return -1;
         }
 
-        pid = fork();
-        if (pid == -1) {
+        api = fork();
+        if (api == -1) {
                 LOG_ERR("Failed to fork.");
                 return -1;
         }
 
-        if (pid == 0) {
+        if (api == 0) {
                 close(pipe_fd[1]);
                 dup2(pipe_fd[0], 0);
                 execve(argv[0], &argv[0], envp);
@@ -992,7 +992,7 @@ static int ddns_send(char * cmd)
                 return -1;
         }
 
-        waitpid(pid, &wstatus, 0);
+        waitpid(api, &wstatus, 0);
         if (WIFEXITED(wstatus) == true &&
             WEXITSTATUS(wstatus) == 0)
                 LOG_DBG("Succesfully communicated with DNS server.");
@@ -1005,7 +1005,7 @@ static int ddns_send(char * cmd)
 
 static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
 {
-        pid_t pid = 0;
+        pid_t api = 0;
         int wstatus;
         int pipe_fd[2];
         char dnsstr[INET_ADDRSTRLEN];
@@ -1026,13 +1026,13 @@ static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
                 return 0;
         }
 
-        pid = fork();
-        if (pid == -1) {
+        api = fork();
+        if (api == -1) {
                 LOG_ERR("Failed to fork.");
                 return 0;
         }
 
-        if (pid == 0) {
+        if (api == 0) {
                 char * argv[] = {NSLOOKUP_EXEC, name, dnsstr, 0};
                 char * envp[] = {0};
 
@@ -1052,7 +1052,7 @@ static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
 
         close(pipe_fd[0]);
 
-        waitpid(pid, &wstatus, 0);
+        waitpid(api, &wstatus, 0);
         if (WIFEXITED(wstatus) == true &&
             WEXITSTATUS(wstatus) == 0)
                 LOG_DBG("Succesfully communicated with nslookup.");
@@ -1198,7 +1198,7 @@ static int ipcp_udp_name_unreg(char * name)
         return 0;
 }
 
-static int ipcp_udp_flow_alloc(pid_t         n_pid,
+static int ipcp_udp_flow_alloc(pid_t         n_api,
                                int           port_id,
                                char *        dst_name,
                                char *        src_ae_name,
@@ -1228,7 +1228,7 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         if (qos != QOS_CUBE_BE)
                 LOG_DBG("QoS requested. UDP/IP can't do that.");
 
-        rb = shm_ap_rbuff_open(n_pid);
+        rb = shm_ap_rbuff_open(n_api);
         if (rb == NULL)
                 return -1; /* -ENORBUFF */
 
@@ -1348,7 +1348,7 @@ static int ipcp_udp_flow_alloc(pid_t         n_pid,
         return fd;
 }
 
-static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
+static int ipcp_udp_flow_alloc_resp(pid_t n_api,
                                     int   port_id,
                                     int   response)
 {
@@ -1389,7 +1389,7 @@ static int ipcp_udp_flow_alloc_resp(pid_t n_pid,
                 return -1;
         }
 
-        rb = shm_ap_rbuff_open(n_pid);
+        rb = shm_ap_rbuff_open(n_api);
         if (rb == NULL) {
                 LOG_ERR("Could not open N + 1 ringbuffer.");
                 _ap_instance->flows[fd].state   = FLOW_NULL;
@@ -1576,7 +1576,7 @@ int main (int argc, char * argv[])
                 exit(1);
 
         /* store the process id of the irmd */
-        irmd_pid = atoi(argv[1]);
+        irmd_api = atoi(argv[1]);
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));

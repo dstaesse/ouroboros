@@ -148,12 +148,12 @@ int flow_accept(char ** ae_name)
         int cfd = -1;
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
-        msg.has_pid = true;
+        msg.has_api = true;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
 
         msg.ap_name = _ap_instance->ap_name;
-        msg.pid     = _ap_instance->api;
+        msg.api     = _ap_instance->api;
 
         pthread_rwlock_unlock(&_ap_instance->data_lock);
 
@@ -162,7 +162,7 @@ int flow_accept(char ** ae_name)
                 return -1;
         }
 
-        if (!recv_msg->has_pid || !recv_msg->has_port_id) {
+        if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -178,7 +178,7 @@ int flow_accept(char ** ae_name)
                 return -1;
         }
 
-        _ap_instance->flows[cfd].rb = shm_ap_rbuff_open(recv_msg->pid);
+        _ap_instance->flows[cfd].rb = shm_ap_rbuff_open(recv_msg->api);
         if (_ap_instance->flows[cfd].rb == NULL) {
                 bmp_release(_ap_instance->fds, cfd);
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
@@ -221,8 +221,8 @@ int flow_alloc_resp(int fd,
                 return -EBADF;
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
-        msg.has_pid      = true;
-        msg.pid          = _ap_instance->api;
+        msg.has_api      = true;
+        msg.api          = _ap_instance->api;
         msg.has_port_id  = true;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
@@ -279,11 +279,11 @@ int flow_alloc(char * dst_name,
         msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst_name    = dst_name;
         msg.ae_name     = src_ae_name;
-        msg.has_pid     = true;
+        msg.has_api     = true;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
 
-        msg.pid         = _ap_instance->api;
+        msg.api         = _ap_instance->api;
 
         pthread_rwlock_unlock(&_ap_instance->data_lock);
 
@@ -292,7 +292,7 @@ int flow_alloc(char * dst_name,
                 return -1;
         }
 
-        if (!recv_msg->has_pid || !recv_msg->has_port_id) {
+        if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -308,7 +308,7 @@ int flow_alloc(char * dst_name,
                 return -1;
         }
 
-        _ap_instance->flows[fd].rb = shm_ap_rbuff_open(recv_msg->pid);
+        _ap_instance->flows[fd].rb = shm_ap_rbuff_open(recv_msg->api);
         if (_ap_instance->flows[fd].rb == NULL) {
                 bmp_release(_ap_instance->fds, fd);
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);

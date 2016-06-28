@@ -177,12 +177,12 @@ ssize_t irm_list_ipcps(char *   name,
                 return -1;
         }
 
-        if (recv_msg->pids == NULL) {
+        if (recv_msg->apis == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        nr = recv_msg->n_pids;
+        nr = recv_msg->n_apis;
         *apis = malloc(nr * sizeof(pid_t));
         if (*apis == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -190,7 +190,7 @@ ssize_t irm_list_ipcps(char *   name,
         }
 
         for (i = 0; i < nr; i++) {
-                (*apis)[i] = recv_msg->pids[i];
+                (*apis)[i] = recv_msg->apis[i];
         }
 
         irm_msg__free_unpacked(recv_msg, NULL);
