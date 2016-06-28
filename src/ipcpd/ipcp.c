@@ -47,16 +47,12 @@ struct ipcp * ipcp_instance_create()
 
 int ipcp_arg_check(int argc, char * argv[])
 {
-        if (argc != 3)
+        if (argc != 2)
                 return -1;
 
         /* argument 1: pid of irmd */
         if (atoi(argv[1]) == 0)
                 return -1;
-
-        /* name conformity responsibility of NMS */
-
-        /* argument 2: ap name */
 
         return 0;
 }

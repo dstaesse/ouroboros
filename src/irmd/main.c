@@ -25,13 +25,11 @@
 #include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
-#include <ouroboros/irm.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/nsm.h>
 #include <ouroboros/list.h>
-#include <ouroboros/instance_name.h>
 #include <ouroboros/utils.h>
-#include <ouroboros/dif_config.h>
+#include <ouroboros/irm_config.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/flow.h>
@@ -58,17 +56,14 @@
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 
-#define REG_AP_AUTO   0x0001
-/* FIXME: add support for unique */
-#define REG_AP_UNIQUE 0x0002
-
 #define reg_entry_has_api(e, id) (reg_entry_get_reg_instance(e, id) != NULL)
 #define reg_entry_has_ap_name(e, name) (reg_entry_get_ap_name(e, name) != NULL)
 #define reg_entry_has_ap_auto(e, name) (reg_entry_get_reg_auto(e, name) != NULL)
 
 struct ipcp_entry {
         struct list_head  next;
-        instance_name_t * api;
+        char *            name;
+        pid_t             api;
         char *            dif_name;
 };
 
@@ -342,7 +337,7 @@ static struct ipcp_entry * ipcp_entry_create()
         if (e == NULL)
                 return NULL;
 
-        e->api = NULL;
+        e->name = NULL;
         e->dif_name = NULL;
 
         INIT_LIST_HEAD(&e->next);
@@ -355,8 +350,8 @@ static void ipcp_entry_destroy(struct ipcp_entry * e)
         if (e == NULL)
                 return;
 
-        if (e->api != NULL)
-                instance_name_destroy(e->api);
+        if (e->name != NULL)
+                free(e->name);
 
         if (e->dif_name != NULL)
                 free(e->dif_name);
@@ -364,7 +359,7 @@ static void ipcp_entry_destroy(struct ipcp_entry * e)
         free(e);
 }
 
-static struct ipcp_entry * get_ipcp_entry_by_name(instance_name_t * api)
+static struct ipcp_entry * get_ipcp_entry_by_pid(pid_t api)
 {
         struct list_head * pos = NULL;
 
@@ -372,23 +367,8 @@ static struct ipcp_entry * get_ipcp_entry_by_name(instance_name_t * api)
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
 
-                if (instance_name_cmp(api, tmp->api) == 0)
+                if (api == tmp->api)
                         return tmp;
-        }
-
-        return NULL;
-}
-
-static instance_name_t * get_ipcp_by_name(char * ap_name)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &instance->ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(pos, struct ipcp_entry, next);
-
-                if (strcmp(e->api->name, ap_name) == 0)
-                        return e->api;
         }
 
         return NULL;
@@ -398,8 +378,8 @@ static instance_name_t * get_ipcp_by_name(char * ap_name)
  * FIXME: this just returns the first IPCP that
  * matches the requested DIF name for now
  */
-static instance_name_t * get_ipcp_by_dst_name(char * dst_name,
-                                              char * dif_name)
+static pid_t get_ipcp_by_dst_name(char * dst_name,
+                                  char * dif_name)
 {
         struct list_head * pos = NULL;
 
@@ -419,7 +399,7 @@ static instance_name_t * get_ipcp_by_dst_name(char * dst_name,
                 }
         }
 
-        return NULL;
+        return 0;
 }
 
 static struct reg_entry * reg_entry_create()
@@ -647,7 +627,7 @@ static struct reg_entry * get_reg_entry_by_ap_id(pid_t pid)
         return NULL;
 }
 
-static int registry_add_entry(char * name, char * ap_name, uint32_t flags)
+static int registry_add_entry(char * name, char * ap_name, uint16_t flags)
 {
         struct reg_entry * e = NULL;
 
@@ -694,7 +674,7 @@ static int registry_add_ap_auto(char *  name,
                 return -1;
         }
 
-        if (!(e->flags & REG_AP_AUTO)) {
+        if (!(e->flags & BIND_AP_AUTO)) {
                 LOG_DBG("%s does not allow auto-instantiation.", name);
                 return -1;
         }
@@ -838,7 +818,7 @@ static int registry_remove_ap_instance(char * name, pid_t pid)
         reg_instance_destroy(i);
 
         if (list_empty(&e->ap_instances)) {
-                if ((e->flags & REG_AP_AUTO) &&
+                if ((e->flags & BIND_AP_AUTO) &&
                         !list_empty(&e->auto_ap_info))
                         e->state = REG_NAME_AUTO_ACCEPT;
                 else
@@ -890,7 +870,7 @@ static void registry_del_name(char * name)
         return;
 }
 
-static pid_t create_ipcp(char *         ap_name,
+static pid_t create_ipcp(char *         name,
                          enum ipcp_type ipcp_type)
 {
         pid_t pid;
@@ -903,7 +883,7 @@ static pid_t create_ipcp(char *         ap_name,
                 return 0;
         }
 
-        pid = ipcp_create(ap_name, ipcp_type);
+        pid = ipcp_create(ipcp_type);
         if (pid == -1) {
                 pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("Failed to create IPCP.");
@@ -918,15 +898,9 @@ static pid_t create_ipcp(char *         ap_name,
 
         INIT_LIST_HEAD(&tmp->next);
 
-        tmp->api = instance_name_create();
-        if (tmp->api == NULL) {
-                ipcp_entry_destroy(tmp);
-                pthread_rwlock_unlock(&instance->state_lock);
-                return -1;
-        }
-
-        if(instance_name_init_from(tmp->api, ap_name, pid) == NULL) {
-                instance_name_destroy(tmp->api);
+        tmp->api = pid;
+        tmp->name = strdup(name);
+        if (tmp->name  == NULL) {
                 ipcp_entry_destroy(tmp);
                 pthread_rwlock_unlock(&instance->state_lock);
                 return -1;
@@ -941,56 +915,40 @@ static pid_t create_ipcp(char *         ap_name,
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
-        LOG_INFO("Created IPCP %s-%d.", ap_name, pid);
+        LOG_INFO("Created IPCP %d.", pid);
 
         return pid;
 }
 
-static int destroy_ipcp(instance_name_t * api)
+static int destroy_ipcp(pid_t api)
 {
         struct list_head * pos = NULL;
         struct list_head * n   = NULL;
-        pid_t pid = 0;
-
-        if (api == NULL)
-                return 0;
 
         pthread_rwlock_rdlock(&instance->state_lock);
         pthread_rwlock_wrlock(&instance->reg_lock);
-
-        if (api->id == 0)
-                api = get_ipcp_by_name(api->name);
-
-        if (api == NULL) {
-                pthread_rwlock_unlock(&instance->reg_lock);
-                pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("No such IPCP in the system.");
-                return 0;
-        }
-
-        pid = api->id;
-        if (ipcp_destroy(api->id))
-                LOG_ERR("Could not destroy IPCP.");
 
         list_for_each_safe(pos, n, &(instance->ipcps)) {
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
 
-                if (instance_name_cmp(api, tmp->api) == 0) {
+                if (api == tmp->api) {
+                        if (ipcp_destroy(api))
+                                LOG_ERR("Could not destroy IPCP.");
                         list_del(&tmp->next);
                         ipcp_entry_destroy(tmp);
+
+                        LOG_INFO("Destroyed IPCP %d.", api);
                 }
         }
 
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
-        LOG_INFO("Destroyed IPCP %d.", pid);
-
         return 0;
 }
 
-static int bootstrap_ipcp(instance_name_t *  api,
+static int bootstrap_ipcp(pid_t              api,
                           dif_config_msg_t * conf)
 {
         struct ipcp_entry * entry = NULL;
@@ -1004,17 +962,7 @@ static int bootstrap_ipcp(instance_name_t *  api,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        if (api->id == 0)
-                api = get_ipcp_by_name(api->name);
-
-        if (api == NULL) {
-                pthread_rwlock_unlock(&instance->reg_lock);
-                pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("No such IPCP in the system.");
-                return -1;
-        }
-
-        entry = get_ipcp_entry_by_name(api);
+        entry = get_ipcp_entry_by_pid(api);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1030,7 +978,7 @@ static int bootstrap_ipcp(instance_name_t *  api,
                 return -1;
         }
 
-        if (ipcp_bootstrap(entry->api->id, conf)) {
+        if (ipcp_bootstrap(entry->api, conf)) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("Could not bootstrap IPCP.");
@@ -1042,14 +990,14 @@ static int bootstrap_ipcp(instance_name_t *  api,
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
-        LOG_INFO("Bootstrapped IPCP %s-%d in DIF %s.",
-                 api->name, api->id, conf->dif_name);
+        LOG_INFO("Bootstrapped IPCP %d in DIF %s.",
+                 entry->api, conf->dif_name);
 
         return 0;
 }
 
-static int enroll_ipcp(instance_name_t  * api,
-                       char *             dif_name)
+static int enroll_ipcp(pid_t  api,
+                       char * dif_name)
 {
         char ** n_1_difs = NULL;
         ssize_t n_1_difs_size = 0;
@@ -1064,7 +1012,7 @@ static int enroll_ipcp(instance_name_t  * api,
 
         pthread_rwlock_rdlock(&instance->reg_lock);
 
-        entry = get_ipcp_entry_by_name(api);
+        entry = get_ipcp_entry_by_pid(api);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1090,7 +1038,7 @@ static int enroll_ipcp(instance_name_t  * api,
                 return -1;
         }
 
-        if (ipcp_enroll(api->id, dif_name, n_1_difs[0])) {
+        if (ipcp_enroll(api, dif_name, n_1_difs[0])) {
                 free(entry->dif_name);
                 entry->dif_name = NULL;
                 pthread_rwlock_unlock(&instance->reg_lock);
@@ -1102,30 +1050,138 @@ static int enroll_ipcp(instance_name_t  * api,
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
-        LOG_INFO("Enrolled IPCP %s-%d in DIF %s.",
-                 api->name, api->id, dif_name);
+        LOG_INFO("Enrolled IPCP %d in DIF %s.",
+                 entry->api, dif_name);
 
         return 0;
 }
 
-/* FIXME: distinction between registering names and associating instances */
+static int bind_name(char *   name,
+                     char *   ap_name,
+                     uint16_t opts,
+                     int      argc,
+                     char **  argv)
+{
+        int i;
+
+        char ** argv_dup = NULL;
+        char * apn = path_strip(ap_name);
+
+        pthread_rwlock_rdlock(&instance->state_lock);
+
+        if (instance->state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&instance->state_lock);
+                return -1;
+        }
+
+        pthread_rwlock_wrlock(&instance->reg_lock);
+
+        if (registry_add_entry(strdup(name), strdup(apn), opts) < 0) {
+                pthread_rwlock_unlock(&instance->reg_lock);
+                pthread_rwlock_unlock(&instance->state_lock);
+                LOG_ERR("Failed to register %s.", name);
+                return -1;
+        }
+
+        if (opts & BIND_AP_AUTO) {
+                /* we need to duplicate argv */
+                if (argc != 0) {
+                        argv_dup = malloc((argc + 2) * sizeof(*argv_dup));
+                        argv_dup[0] = strdup(ap_name);
+                        for (i = 1; i <= argc; ++i)
+                                argv_dup[i] = strdup(argv[i - 1]);
+                        argv_dup[argc + 1] = NULL;
+                }
+
+                registry_add_ap_auto(name, strdup(apn), argv_dup);
+        }
+
+        pthread_rwlock_unlock(&instance->reg_lock);
+        pthread_rwlock_unlock(&instance->state_lock);
+
+        return 0;
+}
+
+static int unbind_name(char * name,
+                       char * ap_name,
+                       uint16_t opts)
+
+{
+        struct reg_entry * rne = NULL;
+
+        if (name == NULL || ap_name  == NULL)
+                return -1;
+
+        pthread_rwlock_rdlock(&instance->state_lock);
+
+        if (instance->state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&instance->state_lock);
+                return -1;
+        }
+
+        pthread_rwlock_wrlock(&instance->reg_lock);
+
+        rne = get_reg_entry_by_name(name);
+        if (rne == NULL) {
+                pthread_rwlock_unlock(&instance->reg_lock);
+                pthread_rwlock_unlock(&instance->state_lock);
+                LOG_ERR("Tried to unbind a name that is not bound.");
+                return -1;
+        }
+
+        /*
+         * FIXME: Remove the mapping of name to ap_name.
+         * Remove the name only if it was the last mapping.
+         */
+        registry_del_name(rne->name);
+
+        pthread_rwlock_unlock(&instance->reg_lock);
+        pthread_rwlock_unlock(&instance->state_lock);
+
+        return 0;
+}
+
+static ssize_t list_ipcps(char * name,
+                          pid_t ** pids)
+{
+        struct list_head * pos = NULL;
+        ssize_t count = 0;
+        int i = 0;
+
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * tmp =
+                        list_entry(pos, struct ipcp_entry, next);
+
+                if (wildcard_match(name, tmp->name) == 0) {
+                        count++;
+                }
+        }
+
+        *pids = malloc(count * sizeof(pid_t));
+        if (*pids == NULL) {
+                return -1;
+        }
+
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * tmp =
+                        list_entry(pos, struct ipcp_entry, next);
+
+                if (wildcard_match(name, tmp->name) == 0) {
+                        (*pids)[i++] = tmp->api;
+                }
+        }
+
+        return count;
+}
+
 static int ap_reg(char *  name,
-                  char *  ap_name,
-                  pid_t   ap_id,
-                  int     argc,
-                  char ** argv,
-                  bool    autoexec,
                   char ** difs,
                   size_t  len)
 {
         int i;
         int ret = 0;
-
+        struct reg_entry * reg = NULL;
         struct list_head * pos = NULL;
-        char ** argv_dup       = NULL;
-        char * apn = path_strip(ap_name);
-
-        uint32_t flags = 0;
 
         pthread_rwlock_rdlock(&instance->state_lock);
 
@@ -1142,13 +1198,11 @@ static int ap_reg(char *  name,
                 return -1;
         }
 
-        if (autoexec)
-                flags |= REG_AP_AUTO;
-
-        if (registry_add_entry(strdup(name), strdup(apn), flags) < 0) {
+        reg = get_reg_entry_by_name(name);
+        if (reg == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("Failed to register %s.", name);
+                LOG_ERR("Tried to register a name that is not bound.");
                 return -1;
         }
 
@@ -1161,13 +1215,13 @@ static int ap_reg(char *  name,
 
                 for (i = 0; i < len; ++i) {
                         if (wildcard_match(difs[i], e->dif_name) == 0) {
-                                if (ipcp_name_reg(e->api->id, name)) {
+                                if (ipcp_name_reg(e->api, name)) {
                                         LOG_ERR("Could not register "
-                                                "%s in DIF %s as %s.",
-                                                apn, e->dif_name, name);
+                                                "%s in DIF %s.",
+                                                name, e->dif_name);
                                 } else {
-                                        LOG_INFO("Registered %s as %s in %s",
-                                                 apn, name, e->dif_name);
+                                        LOG_INFO("Registered %s in %s",
+                                                 name, e->dif_name);
                                         ++ret;
                                 }
                         }
@@ -1180,21 +1234,6 @@ static int ap_reg(char *  name,
                 return -1;
         }
 
-        if (autoexec) {
-                /* we need to duplicate argv */
-                if (argc != 0) {
-                        argv_dup = malloc((argc + 2) * sizeof(*argv_dup));
-                        argv_dup[0] = strdup(ap_name);
-                        for (i = 1; i <= argc; ++i)
-                                argv_dup[i] = strdup(argv[i - 1]);
-                        argv_dup[argc + 1] = NULL;
-                }
-
-                registry_add_ap_auto(name, strdup(apn), argv_dup);
-        } else {
-                registry_add_ap_instance(name, ap_id);
-        }
-
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
@@ -1202,11 +1241,8 @@ static int ap_reg(char *  name,
 }
 
 static int ap_unreg(char *  name,
-                    char *  ap_name,
-                    pid_t   ap_id,
                     char ** difs,
-                    size_t  len,
-                    bool    hard)
+                    size_t  len)
 {
         int i;
         int ret = 0;
@@ -1225,12 +1261,6 @@ static int ap_unreg(char *  name,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        if (!hard && strcmp(difs[0], "*") != 0) {
-                LOG_INFO("Unregistration not complete yet.");
-                LOG_MISSING;
-                return -1;
-        }
-
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
@@ -1240,7 +1270,7 @@ static int ap_unreg(char *  name,
 
                 for (i = 0; i < len; ++i) {
                         if (wildcard_match(difs[i], e->dif_name) == 0) {
-                                if (ipcp_name_unreg(e->api->id,
+                                if (ipcp_name_unreg(e->api,
                                                     rne->name)) {
                                         LOG_ERR("Could not unregister "
                                                 "%s in DIF %s.",
@@ -1250,8 +1280,6 @@ static int ap_unreg(char *  name,
                         }
                 }
         }
-
-        registry_del_name(rne->name);
 
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
@@ -1405,7 +1433,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
                                           struct qos_spec * qos)
 {
         struct port_map_entry * pme;
-        instance_name_t * ipcp;
+        pid_t ipcp;
         char * dif_name = NULL;
 
         /* FIXME: Map qos_spec to qos_cube */
@@ -1435,7 +1463,7 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
                 dif_name = qos->dif_name;
 
         ipcp = get_ipcp_by_dst_name(dst_name, dif_name);
-        if (ipcp == NULL) {
+        if (ipcp == 0) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("Unknown DIF name.");
@@ -1446,14 +1474,14 @@ static struct port_map_entry * flow_alloc(pid_t  pid,
         pthread_rwlock_wrlock(&instance->flows_lock);
 
         pme->port_id = bmp_allocate(instance->port_ids);
-        pme->n_1_pid = ipcp->id;
+        pme->n_1_pid = ipcp;
 
         list_add(&pme->next, &instance->port_map);
 
         pthread_rwlock_unlock(&instance->flows_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
-        if (ipcp_flow_alloc(ipcp->id,
+        if (ipcp_flow_alloc(ipcp,
                             pme->port_id,
                             pme->n_pid,
                             dst_name,
@@ -1792,7 +1820,7 @@ static void irm_destroy()
         list_for_each_safe(h, t, &instance->ipcps) {
                 struct ipcp_entry * e = list_entry(h, struct ipcp_entry, next);
                 list_del(&e->next);
-                ipcp_destroy(e->api->id);
+                ipcp_destroy(e->api);
                 ipcp_entry_destroy(e);
         }
 
@@ -1964,10 +1992,10 @@ void * mainloop()
                 int cli_sockfd;
                 irm_msg_t * msg;
                 ssize_t count;
-                instance_name_t api;
                 buffer_t buffer;
                 irm_msg_t ret_msg = IRM_MSG__INIT;
                 struct port_map_entry * e = NULL;
+                pid_t * pids = NULL;
 
                 ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
 
@@ -1992,48 +2020,57 @@ void * mainloop()
 
                 pthread_cleanup_push(clean_msg, (void *) msg);
 
-                api.name = msg->ap_name;
-                if (msg->has_api_id == true)
-                        api.id = msg->api_id;
-
                 switch (msg->code) {
                 case IRM_MSG_CODE__IRM_CREATE_IPCP:
                         ret_msg.has_result = true;
-                        ret_msg.result = create_ipcp(msg->ap_name,
+                        ret_msg.result = create_ipcp(msg->dst_name,
                                                      msg->ipcp_type);
                         break;
                 case IRM_MSG_CODE__IRM_DESTROY_IPCP:
                         ret_msg.has_result = true;
-                        ret_msg.result = destroy_ipcp(&api);
+                        ret_msg.result = destroy_ipcp(msg->api);
                         break;
                 case IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP:
                         ret_msg.has_result = true;
-                        ret_msg.result = bootstrap_ipcp(&api, msg->conf);
+                        ret_msg.result = bootstrap_ipcp(msg->api,
+                                                        msg->conf);
                         break;
                 case IRM_MSG_CODE__IRM_ENROLL_IPCP:
                         ret_msg.has_result = true;
-                        ret_msg.result = enroll_ipcp(&api,
+                        ret_msg.result = enroll_ipcp(msg->api,
                                                      msg->dif_name[0]);
                         break;
-                case IRM_MSG_CODE__IRM_AP_REG:
+                case IRM_MSG_CODE__IRM_BIND:
+                        ret_msg.has_result = true;
+                        ret_msg.result = bind_name(msg->dst_name,
+                                                   msg->ap_name,
+                                                   msg->opts,
+                                                   msg->n_args,
+                                                   msg->args);
+                        break;
+                case IRM_MSG_CODE__IRM_UNBIND:
+                        ret_msg.has_result = true;
+                        ret_msg.result = unbind_name(msg->dst_name,
+                                                     msg->ap_name,
+                                                     msg->opts);
+                        break;
+                case IRM_MSG_CODE__IRM_LIST_IPCPS:
+                        ret_msg.n_pids = list_ipcps(msg->dst_name,
+                                                    &pids);
+                        ret_msg.pids = pids;
+                        ret_msg.has_result = true;
+                        break;
+                case IRM_MSG_CODE__IRM_REG:
                         ret_msg.has_result = true;
                         ret_msg.result = ap_reg(msg->dst_name,
-                                                msg->ap_name,
-                                                msg->pid,
-                                                msg->n_args,
-                                                msg->args,
-                                                msg->autoexec,
                                                 msg->dif_name,
                                                 msg->n_dif_name);
                         break;
-                case IRM_MSG_CODE__IRM_AP_UNREG:
+                case IRM_MSG_CODE__IRM_UNREG:
                         ret_msg.has_result = true;
                         ret_msg.result = ap_unreg(msg->dst_name,
-                                                  msg->ap_name,
-                                                  msg->pid,
                                                   msg->dif_name,
-                                                  msg->n_dif_name,
-                                                  msg->hard);
+                                                  msg->n_dif_name);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                         e = flow_accept(msg->pid,
@@ -2106,12 +2143,16 @@ void * mainloop()
                 buffer.size = irm_msg__get_packed_size(&ret_msg);
                 if (buffer.size == 0) {
                         LOG_ERR("Failed to send reply message.");
+                        if (pids != NULL)
+                                free(pids);
                         close(cli_sockfd);
                         continue;
                 }
 
                 buffer.data = malloc(buffer.size);
                 if (buffer.data == NULL) {
+                        if (pids != NULL)
+                                free(pids);
                         close(cli_sockfd);
                         continue;
                 }
@@ -2120,9 +2161,14 @@ void * mainloop()
 
                 if (write(cli_sockfd, buffer.data, buffer.size) == -1) {
                         free(buffer.data);
+                        if (pids != NULL)
+                                free(pids);
                         close(cli_sockfd);
                         continue;
                 }
+
+                if (pids != NULL)
+                        free(pids);
 
                 free(buffer.data);
                 close(cli_sockfd);

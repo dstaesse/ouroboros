@@ -1,10 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Register names in IPCPs
+ * Destroy IPC Processes
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
- *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,44 +20,32 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/irm.h>
-
 #include <stdio.h>
+
+#include <ouroboros/irm.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define MAX_DIFS 128
-
 static void usage()
 {
-        printf("Usage: irm register\n"
-               "           name <name>\n"
-               "           dif <dif name to register with>\n"
-               "           [dif <dif name to register with>]\n"
-               "           [... (maximum %d difs)]\n"
-               , MAX_DIFS);
+        printf("Usage: irm ipcp destroy\n"
+               "                name <ipcp name>\n");
 }
 
-
-int do_register(int argc, char ** argv)
+int do_destroy_ipcp(int argc, char ** argv)
 {
-        char * name = NULL;
-        char * difs[MAX_DIFS];
-        size_t difs_len = 0;
+        char *  name = NULL;
+        pid_t * apis;
+        ssize_t len = 0;
+        int     i = 0;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                } else if (matches(*argv, "dif") == 0) {
-                        difs[difs_len++] = *(argv + 1);
-                        if (difs_len > MAX_DIFS) {
-                                printf("Too many difs specified\n");
-                                return -1;
-                        }
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "register\".\n", *argv);
+                               "ipcp destroy\".\n", *argv);
                         return -1;
                 }
 
@@ -66,10 +53,18 @@ int do_register(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (difs_len < 1 || name == NULL) {
+        if (name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_reg(name, difs, difs_len);
+        len = irm_list_ipcps(name, &apis);
+        if (len <= 0)
+                return -1;
+
+        for (i = 0; i < len; i++)
+                if (irm_destroy_ipcp(apis[i]))
+                        return -1;
+
+        return 0;
 }

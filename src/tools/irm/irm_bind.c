@@ -1,9 +1,8 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Register names in IPCPs
+ * Bind AP to a name
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,55 +20,62 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/irm.h>
-
 #include <stdio.h>
+#include <string.h>
+
+#include <ouroboros/irm.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define MAX_DIFS 128
-
 static void usage()
 {
-        printf("Usage: irm register\n"
+        printf("Usage: irm bind\n"
                "           name <name>\n"
-               "           dif <dif name to register with>\n"
-               "           [dif <dif name to register with>]\n"
-               "           [... (maximum %d difs)]\n"
-               , MAX_DIFS);
+               "           apn <application process name>\n"
+               "           [auto] (instantiate apn if not running)\n"
+               "           [unique] (there can only be one instantiation)\n"
+               "           [-- <application arguments>]\n");
 }
 
 
-int do_register(int argc, char ** argv)
+int do_bind(int argc, char ** argv)
 {
         char * name = NULL;
-        char * difs[MAX_DIFS];
-        size_t difs_len = 0;
+        char * ap_name = NULL;
+        uint16_t flags = 0;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                } else if (matches(*argv, "dif") == 0) {
-                        difs[difs_len++] = *(argv + 1);
-                        if (difs_len > MAX_DIFS) {
-                                printf("Too many difs specified\n");
-                                return -1;
-                        }
+                        ++argv;
+                        --argc;
+                } else if (matches(*argv, "apn") == 0) {
+                        ap_name = *(argv + 1);
+                        ++argv;
+                        --argc;
+                } else if (strcmp(*argv, "auto") == 0) {
+                        flags |= BIND_AP_AUTO;
+                } else if (strcmp(*argv, "unique") == 0) {
+                        flags |= BIND_AP_UNIQUE;
+                } else if (strcmp(*argv, "--") == 0) {
+                        ++argv;
+                        --argc;
+                        break;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "register\".\n", *argv);
+                               "bind\".\n", *argv);
                         return -1;
                 }
 
-                argc -= 2;
-                argv += 2;
+                ++argv;
+                --argc;
         }
 
-        if (difs_len < 1 || name == NULL) {
+        if (name == NULL || ap_name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_reg(name, difs, difs_len);
+        return irm_bind(name, ap_name, flags, argc, argv);
 }

@@ -26,7 +26,7 @@
 #include <arpa/inet.h>
 
 #include <ouroboros/irm.h>
-#include <ouroboros/dif_config.h>
+#include <ouroboros/irm_config.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
@@ -50,29 +50,28 @@
 static void usage()
 {
         /* FIXME: Add dif_config stuff */
-        printf("Usage: irm bootstrap_ipcp\n"
-               "           ap <application process name>\n"
-               "           [api <application process instance>]\n"
-               "           dif <DIF name>\n"
-               "           type [TYPE]\n\n"
+        printf("Usage: irm ipcp bootstrap\n"
+               "                name <ipcp name>\n"
+               "                dif <DIF name>\n"
+               "                type [TYPE]\n\n"
                "where TYPE = {" NORMAL " " LOCAL " "
                SHIM_UDP " " SHIM_ETH_LLC"}\n\n"
                "if TYPE == " NORMAL "\n"
-               "           [addr <address size> (default: %d)]\n"
-               "           [cep_id <CEP-id size> (default: %d)]\n"
-               "           [pdu_len <PDU length size> (default: %d)]\n"
-               "           [qos_id <QoS-id size> (default: %d)]\n"
-               "           [seqno <sequence number size> (default: %d)]\n"
-               "           [ttl <time to live size>  (default: %d)]\n"
-               "           [chk <checksum size>  (default: %d)]\n"
-               "           [min_pdu <minimum PDU size> (default: %d)]\n"
-               "           [max_pdu <maximum PDU size> (default: %d)]\n"
+               "                [addr <address size> (default: %d)]\n"
+               "                [cep_id <CEP-id size> (default: %d)]\n"
+               "                [pdu_len <PDU length size> (default: %d)]\n"
+               "                [qos_id <QoS-id size> (default: %d)]\n"
+               "                [seqno <sequence number size> (default: %d)]\n"
+               "                [ttl <time to live size>  (default: %d)]\n"
+               "                [chk <checksum size>  (default: %d)]\n"
+               "                [min_pdu <minimum PDU size> (default: %d)]\n"
+               "                [max_pdu <maximum PDU size> (default: %d)]\n"
                "if TYPE == " SHIM_UDP "\n"
-               "           ip <IP address in dotted notation>\n"
-               "           [dns <DDNS IP address in dotted notation>"
+               "                ip <IP address in dotted notation>\n"
+               "                [dns <DDNS IP address in dotted notation>"
                " (default = none: %d)]\n"
                "if TYPE == " SHIM_ETH_LLC "\n"
-               "           if_name <interface name>\n",
+               "                if_name <interface name>\n",
                DEFAULT_ADDR_SIZE, DEFAULT_CEP_ID_SIZE,
                DEFAULT_PDU_LEN_SIZE, DEFAULT_QOS_ID_SIZE,
                DEFAULT_SEQ_NO_SIZE, DEFAULT_TTL_SIZE,
@@ -82,7 +81,7 @@ static void usage()
 
 int do_bootstrap_ipcp(int argc, char ** argv)
 {
-        instance_name_t   api = {NULL, 0};
+        char * name = NULL;
         struct dif_config conf;
         uint8_t addr_size = DEFAULT_ADDR_SIZE;
         uint8_t cep_id_size = DEFAULT_CEP_ID_SIZE;
@@ -98,16 +97,17 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         char * ipcp_type = NULL;
         char * dif_name = NULL;
         char * if_name = NULL;
+        pid_t * apis;
+        ssize_t len = 0;
+        int i = 0;
 
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "dif") == 0) {
                         dif_name = *(argv + 1);
-                } else if (matches(*argv, "ap") == 0) {
-                        api.name = *(argv + 1);
-                } else if (matches(*argv, "api") == 0) {
-                        api.id = atoi(*(argv + 1));
+                } else if (matches(*argv, "name") == 0) {
+                        name = *(argv + 1);
                 } else if (matches(*argv, "ip") == 0) {
                         if (inet_pton (AF_INET, *(argv + 1), &ip_addr) != 1) {
                                 usage();
@@ -140,7 +140,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         max_pdu_size = atoi(*(argv + 1));
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "bootstrap_ipcp\".\n", *argv);
+                               "ipcp bootstrap\".\n", *argv);
                         return -1;
                 }
 
@@ -148,7 +148,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (api.name == NULL || dif_name == NULL || ipcp_type == NULL) {
+        if (name == NULL || dif_name == NULL || ipcp_type == NULL) {
                 usage();
                 return -1;
         }
@@ -188,5 +188,13 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 return -1;
         }
 
-        return irm_bootstrap_ipcp(&api, &conf);
+        len = irm_list_ipcps(name, &apis);
+        if (len <= 0)
+                return -1;
+
+        for (i = 0; i < len; i++)
+                if (irm_bootstrap_ipcp(apis[i], &conf))
+                        return -1;
+
+        return 0;
 }

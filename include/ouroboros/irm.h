@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * The API to instruct the IRM
+ * The API to instruct the IPC Resource Manager
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -23,34 +23,40 @@
 #ifndef OUROBOROS_IRM_H
 #define OUROBOROS_IRM_H
 
-#include <ouroboros/instance_name.h>
-#include <ouroboros/dif_config.h>
-
+#include <ouroboros/irm_config.h>
 #include <sys/types.h>
 
-pid_t irm_create_ipcp(char *         ipcp_name,
-                      enum ipcp_type ipcp_type);
+pid_t   irm_create_ipcp(char *         name,
+                        enum ipcp_type ipcp_type);
 
-int irm_destroy_ipcp(instance_name_t * api);
+int     irm_destroy_ipcp(pid_t api);
 
-int irm_enroll_ipcp(instance_name_t * api,
-                    char *            dif_name);
+/* APIs is an out-parameter */
+ssize_t irm_list_ipcps(char *   name,
+                       pid_t ** apis);
 
-int irm_bootstrap_ipcp(instance_name_t *   api,
-                       struct dif_config * conf);
+int     irm_enroll_ipcp(pid_t  api,
+                        char * dif_name);
 
-int irm_reg(char *            name,
-            instance_name_t * api,
-            int               argc,
-            char **           argv,
-            bool              autoexec,
-            char **           difs,
-            size_t            difs_size);
+int     irm_bootstrap_ipcp(pid_t               api,
+                           struct dif_config * conf);
 
-int irm_unreg(char *                  name,
-              const instance_name_t * api,
-              char **                 difs,
-              size_t                  difs_size,
-              bool                    hard);
+int     irm_bind(char *   name,
+                 char *   ap_name,
+                 uint16_t opts,
+                 int      argc,
+                 char **  argv);
+
+int     irm_unbind(char *   name,
+                   char *   ap_name,
+                   uint16_t opts);
+
+int     irm_reg(char *  name,
+                char ** difs,
+                size_t  difs_size);
+
+int     irm_unreg(char *  name,
+                  char ** difs,
+                  size_t  difs_size);
 
 #endif /* OUROBOROS_IRM_H */

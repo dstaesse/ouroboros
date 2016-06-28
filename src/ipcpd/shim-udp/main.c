@@ -29,7 +29,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/ipcp.h>
-#include <ouroboros/dif_config.h>
+#include <ouroboros/irm_config.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/flow.h>
@@ -86,7 +86,7 @@ struct ipcp * _ipcp;
 
 /* the shim needs access to these internals */
 struct shim_ap_data {
-        instance_name_t *     api;
+        pid_t                 api;
         struct shm_du_map *   dum;
         struct bmp *          fds;
         struct shm_ap_rbuff * rb;
@@ -103,7 +103,7 @@ struct shim_ap_data {
         pthread_mutex_t       fd_set_lock;
 } * _ap_instance;
 
-static int shim_ap_init(char * ap_name)
+static int shim_ap_init()
 {
         int i;
 
@@ -112,30 +112,16 @@ static int shim_ap_init(char * ap_name)
                 return -1;
         }
 
-        _ap_instance->api = instance_name_create();
-        if (_ap_instance->api == NULL) {
-                free(_ap_instance);
-                return -1;
-        }
-
-        if (instance_name_init_from(_ap_instance->api,
-                                    ap_name,
-                                    getpid()) == NULL) {
-                instance_name_destroy(_ap_instance->api);
-                free(_ap_instance);
-                return -1;
-        }
+        _ap_instance->api = getpid();
 
         _ap_instance->fds = bmp_create(AP_MAX_FLOWS, 0);
         if (_ap_instance->fds == NULL) {
-                instance_name_destroy(_ap_instance->api);
                 free(_ap_instance);
                 return -1;
         }
 
         _ap_instance->dum = shm_du_map_open();
         if (_ap_instance->dum == NULL) {
-                instance_name_destroy(_ap_instance->api);
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
                 return -1;
@@ -143,7 +129,6 @@ static int shim_ap_init(char * ap_name)
 
         _ap_instance->rb = shm_ap_rbuff_create();
         if (_ap_instance->rb == NULL) {
-                instance_name_destroy(_ap_instance->api);
                 shm_du_map_close(_ap_instance->dum);
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
@@ -174,8 +159,6 @@ void shim_ap_fini()
         if (_ipcp->state != IPCP_SHUTDOWN)
                 LOG_WARN("Cleaning up AP while not in shutdown.");
 
-        if (_ap_instance->api != NULL)
-                instance_name_destroy(_ap_instance->api);
         if (_ap_instance->fds != NULL)
                 bmp_destroy(_ap_instance->fds);
         if (_ap_instance->dum != NULL)
@@ -1576,8 +1559,6 @@ static struct ipcp * ipcp_udp_create()
 
 int main (int argc, char * argv[])
 {
-        /* argument 1: pid of irmd ? */
-        /* argument 2: ap name */
         struct sigaction sig_act;
         sigset_t  sigset;
         sigemptyset(&sigset);
@@ -1591,7 +1572,7 @@ int main (int argc, char * argv[])
                 exit(1);
         }
 
-        if (shim_ap_init(argv[2]) < 0)
+        if (shim_ap_init() < 0)
                 exit(1);
 
         /* store the process id of the irmd */

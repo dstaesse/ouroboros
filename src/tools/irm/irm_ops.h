@@ -20,9 +20,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+int ipcp_cmd(int argc, char ** argv);
 int do_create_ipcp(int argc, char ** argv);
 int do_destroy_ipcp(int argc, char ** argv);
 int do_bootstrap_ipcp(int argc, char ** argv);
 int do_enroll_ipcp(int argc, char ** argv);
+
+int do_bind(int argc, char ** argv);
+int do_unbind(int argc, char ** argv);
 int do_register(int argc, char ** argv);
 int do_unregister(int argc, char ** argv);

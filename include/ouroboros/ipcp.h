@@ -20,8 +20,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/dif_config.h>
-#include <ouroboros/instance_name.h>
+#include <ouroboros/irm_config.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/common.h>
 
@@ -33,8 +32,7 @@
 struct ipcp;
 
 /* Returns the process id */
-pid_t ipcp_create(char *         ipcp_name,
-                  enum ipcp_type ipcp_type);
+pid_t ipcp_create(enum ipcp_type ipcp_type);
 
 int   ipcp_destroy(pid_t pid);
 

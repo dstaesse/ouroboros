@@ -31,7 +31,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/ipcp.h>
-#include <ouroboros/dif_config.h>
+#include <ouroboros/irm_config.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/flow.h>
@@ -675,7 +675,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                            dst_mac,
                            MAC_SIZE) &&
                     memcmp(br_addr, dst_mac, MAC_SIZE)) {
-                        LOG_DBG("Not a unicast or broadcast frame.");
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                         offset = (offset + 1) & (SHM_BLOCKS_IN_MAP - 1);
                         header->tp_status = TP_STATUS_KERNEL;
@@ -715,7 +714,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         if (j < 0) {
                                 pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
                                 pthread_rwlock_unlock(&_ipcp->state_lock);
-                                LOG_DBG("Received data for unknown flow.");
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                                 offset = (offset + 1)
                                         & (SHM_BLOCKS_IN_MAP - 1);
@@ -1236,8 +1234,6 @@ static struct ipcp_ops eth_llc_ops = {
 
 int main(int argc, char * argv[])
 {
-        /* argument 1: pid of irmd ? */
-        /* argument 2: ap name */
         struct sigaction sig_act;
         sigset_t  sigset;
         int i = 0;

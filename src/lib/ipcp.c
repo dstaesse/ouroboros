@@ -99,8 +99,7 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t pid,
        return recv_msg;
 }
 
-pid_t ipcp_create(char *         ipcp_name,
-                  enum ipcp_type ipcp_type)
+pid_t ipcp_create(enum ipcp_type ipcp_type)
 {
         pid_t pid = 0;
         char irmd_pid[10];
@@ -150,7 +149,6 @@ pid_t ipcp_create(char *         ipcp_name,
 
         char * argv[] = {full_name,
                          irmd_pid,
-                         ipcp_name,
                          0};
 
         char * envp[] = {0};

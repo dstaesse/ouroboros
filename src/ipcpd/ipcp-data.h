@@ -25,7 +25,6 @@
 #define IPCPD_IPCP_DATA_H
 
 #include <ouroboros/common.h>
-#include <ouroboros/instance_name.h>
 #include <ouroboros/list.h>
 #include <sys/types.h>
 #include <pthread.h>
