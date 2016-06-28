@@ -20,19 +20,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/common.h>
-#include <ouroboros/irm.h>
 #include <stdio.h>
-#include <string.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
 static void usage()
 {
-        printf("Usage: irm [OPERATION]\n\n"
-               "where OPERATION = {ipcp bind unbind\n"
-               "                   register unregister\n");
+        printf("Usage: irm ipcp [OPERATION]\n\n"
+               "where OPERATION = {create destroy\n"
+               "                   bootstrap enroll help\n");
 }
 
 static int do_help(int argc, char **argv)
@@ -45,12 +42,11 @@ static const struct cmd {
         const char * cmd;
         int (* func)(int argc, char ** argv);
 } cmds[] = {
-        { "ipcp",            ipcp_cmd },
-        { "bind",            do_bind },
-        { "unbind",          do_unbind },
-        { "register",        do_register },
-        { "unregister",      do_unregister },
-        { "help",            do_help },
+        { "create",     do_create_ipcp },
+        { "destroy",    do_destroy_ipcp },
+        { "bootstrap",  do_bootstrap_ipcp },
+        { "enroll",     do_enroll_ipcp },
+        { "help",       do_help },
         { 0 }
 };
 
@@ -65,17 +61,17 @@ static int do_cmd(const char * argv0,
                         return c->func(argc - 1, argv + 1);
         }
 
-        fprintf(stderr, "\"%s\" is unknown, try \"irm help\".\n", argv0);
+        fprintf(stderr, "\"%s\" is unknown, try \"irm ipcp help\".\n", argv0);
 
         return -1;
 }
 
-int main(int argc, char ** argv) {
-
-        if (argc < 2) {
+int ipcp_cmd(int argc, char ** argv)
+{
+        if (argc < 1) {
                 usage();
                 return -1;
         }
 
-        return do_cmd(argv[1], argc - 1, argv + 1);
+        return do_cmd(argv[0], argc, argv);
 }

@@ -21,13 +21,9 @@
  */
 
 #include <ouroboros/irm.h>
-#include <ouroboros/common.h>
-#include <ouroboros/instance_name.h>
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
@@ -39,9 +35,9 @@
 
 static void usage()
 {
-        printf("Usage: irm create_ipcp\n"
-               "           ap <application process name>\n"
-               "           type [TYPE]\n\n"
+        printf("Usage: irm ipcp create\n"
+               "                name <ipcp name>\n"
+               "                type [TYPE]\n\n"
                "where TYPE = {" NORMAL " " LOCAL " "
                SHIM_UDP " " SHIM_ETH_LLC "}\n");
 }
@@ -55,11 +51,11 @@ int do_create_ipcp(int argc, char ** argv)
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
-                } else if (matches(*argv, "ap") == 0) {
+                } else if (matches(*argv, "name") == 0) {
                         ipcp_name = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "create_ipcp\".\n", *argv);
+                               "ipcp create\".\n", *argv);
                         return -1;
                 }
 

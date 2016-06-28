@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Enroll IPC Processes
+ * Unbind names in the processing system
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,36 +21,32 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
+
 #include <ouroboros/irm.h>
-#include <ouroboros/common.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
 static void usage()
 {
-        printf("Usage: irm enroll_ipcp\n"
-               "           ap <application process name>\n"
-               "           [api <application process instance>]\n"
-               "           dif <dif to enroll in>\n");
+        printf("Usage: irm unbind\n"
+               "           name <name>\n"
+               "           ap <application process name>\n");
 }
 
-int do_enroll_ipcp(int argc, char ** argv)
+int do_unbind(int argc, char ** argv)
 {
-        instance_name_t api = {NULL, 0};
-        char * dif_name = NULL;
+        char * name = NULL;
+        char * ap_name = NULL;
 
         while (argc > 0) {
-                if (matches(*argv, "ap") == 0) {
-                        api.name = *(argv + 1);
-                } else if (matches(*argv, "api") == 0) {
-                        api.id = atoi(*(argv + 1));
-                } else if (matches(*argv, "dif") == 0) {
-                        dif_name = *(argv + 1);
+                if (matches(*argv, "name") == 0) {
+                        name = *(argv + 1);
+                } else if (matches(*argv, "ap") == 0) {
+                        ap_name = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "enroll_ipcp\".\n", *argv);
+                               "unbind\".\n", *argv);
                         return -1;
                 }
 
@@ -58,10 +54,10 @@ int do_enroll_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (dif_name == NULL || api.name == NULL) {
+        if (name == NULL && ap_name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_enroll_ipcp(&api, dif_name);
+        return irm_unbind(name, ap_name, 0);
 }

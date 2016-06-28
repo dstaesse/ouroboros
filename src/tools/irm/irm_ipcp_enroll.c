@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Destroy IPC Processes
+ * Enroll IPC Processes
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -21,32 +21,35 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
+
 #include <ouroboros/irm.h>
-#include <ouroboros/common.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
 static void usage()
 {
-        printf("Usage: irm destroy_ipcp\n"
-               "           ap <application process name>\n"
-               "           [api <application process instance>]\n");
+        printf("Usage: irm ipcp enroll\n"
+               "                name <ipcp name>\n"
+               "                dif <dif to enroll in>\n");
 }
 
-int do_destroy_ipcp(int argc, char ** argv)
+int do_enroll_ipcp(int argc, char ** argv)
 {
-        instance_name_t api = {NULL, 0};
+        char * name = NULL;
+        char * dif_name = NULL;
+        pid_t * apis;
+        ssize_t len = 0;
+        int i = 0;
 
         while (argc > 0) {
-                if (matches(*argv, "ap") == 0) {
-                        api.name = *(argv + 1);
-                } else if (matches(*argv, "api") == 0) {
-                        api.id = atoi(*(argv + 1));
+                if (matches(*argv, "name") == 0) {
+                        name = *(argv + 1);
+                } else if (matches(*argv, "dif") == 0) {
+                        dif_name = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "destroy_ipcp\".\n", *argv);
+                               "enroll_ipcp\".\n", *argv);
                         return -1;
                 }
 
@@ -54,10 +57,18 @@ int do_destroy_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (api.name == NULL) {
+        if (dif_name == NULL || name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_destroy_ipcp(&api);
+        len = irm_list_ipcps(name, &apis);
+        if (len <= 0)
+                return -1;
+
+        for (i = 0; i < len; i++)
+                if (irm_enroll_ipcp(apis[i], dif_name))
+                        return -1;
+
+        return 0;
 }

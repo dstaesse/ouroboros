@@ -27,7 +27,7 @@ message ipcp_msg {
         optional sint32 qos_cube     = 11;
         optional dif_config_msg conf = 12;
         optional sint32 fd           = 13;
-        optional sint32 pid          = 14;
+        optional sint32 api          = 14;
         optional sint32 response     = 15;
         optional sint32 result       = 16;
 };

@@ -47,16 +47,12 @@ struct ipcp * ipcp_instance_create()
 
 int ipcp_arg_check(int argc, char * argv[])
 {
-        if (argc != 3)
+        if (argc != 2)
                 return -1;
 
-        /* argument 1: pid of irmd */
+        /* argument 1: api of irmd */
         if (atoi(argv[1]) == 0)
                 return -1;
-
-        /* name conformity responsibility of NMS */
-
-        /* argument 2: ap name */
 
         return 0;
 }
@@ -207,7 +203,7 @@ void * ipcp_main_loop(void * o)
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_flow_alloc(msg->pid,
+                                _ipcp->ops->ipcp_flow_alloc(msg->api,
                                                             msg->port_id,
                                                             msg->dst_name,
                                                             msg->src_ae_name,
@@ -220,7 +216,7 @@ void * ipcp_main_loop(void * o)
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_flow_alloc_resp(msg->pid,
+                                _ipcp->ops->ipcp_flow_alloc_resp(msg->api,
                                                                  msg->port_id,
                                                                  msg->result);
                         break;

@@ -28,7 +28,6 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>
-#include <ouroboros/instance_name.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/utils.h>
@@ -45,7 +44,8 @@ struct flow {
 };
 
 struct ap_data {
-        instance_name_t *     api;
+        char *                ap_name;
+        pid_t                 api;
         struct shm_du_map *   dum;
         struct bmp *          fds;
         struct shm_ap_rbuff * rb;
@@ -66,30 +66,17 @@ int ap_init(char * ap_name)
                 return -ENOMEM;
         }
 
-        _ap_instance->api = instance_name_create();
-        if (_ap_instance->api == NULL) {
-                free(_ap_instance);
-                return -ENOMEM;
-        }
-
-        if (instance_name_init_from(_ap_instance->api,
-                                    ap_name,
-                                    getpid()) == NULL) {
-                instance_name_destroy(_ap_instance->api);
-                free(_ap_instance);
-                return -ENOMEM;
-        }
+        _ap_instance->api = getpid();
+        _ap_instance->ap_name = ap_name;
 
         _ap_instance->fds = bmp_create(AP_MAX_FLOWS, 0);
         if (_ap_instance->fds == NULL) {
-                instance_name_destroy(_ap_instance->api);
                 free(_ap_instance);
                 return -ENOMEM;
         }
 
         _ap_instance->dum = shm_du_map_open();
         if (_ap_instance->dum == NULL) {
-                instance_name_destroy(_ap_instance->api);
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
                 return -1;
@@ -97,7 +84,6 @@ int ap_init(char * ap_name)
 
         _ap_instance->rb = shm_ap_rbuff_create();
         if (_ap_instance->rb == NULL) {
-                instance_name_destroy(_ap_instance->api);
                 shm_du_map_close(_ap_instance->dum);
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
@@ -124,8 +110,6 @@ void ap_fini(void)
 
         pthread_rwlock_wrlock(&_ap_instance->data_lock);
 
-        if (_ap_instance->api != NULL)
-                instance_name_destroy(_ap_instance->api);
         if (_ap_instance->fds != NULL)
                 bmp_destroy(_ap_instance->fds);
         if (_ap_instance->dum != NULL)
@@ -164,12 +148,12 @@ int flow_accept(char ** ae_name)
         int cfd = -1;
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
-        msg.has_pid = true;
+        msg.has_api = true;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
 
-        msg.ap_name = _ap_instance->api->name;
-        msg.pid     = _ap_instance->api->id;
+        msg.ap_name = _ap_instance->ap_name;
+        msg.api     = _ap_instance->api;
 
         pthread_rwlock_unlock(&_ap_instance->data_lock);
 
@@ -178,7 +162,7 @@ int flow_accept(char ** ae_name)
                 return -1;
         }
 
-        if (!recv_msg->has_pid || !recv_msg->has_port_id) {
+        if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -194,7 +178,7 @@ int flow_accept(char ** ae_name)
                 return -1;
         }
 
-        _ap_instance->flows[cfd].rb = shm_ap_rbuff_open(recv_msg->pid);
+        _ap_instance->flows[cfd].rb = shm_ap_rbuff_open(recv_msg->api);
         if (_ap_instance->flows[cfd].rb == NULL) {
                 bmp_release(_ap_instance->fds, cfd);
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
@@ -237,8 +221,8 @@ int flow_alloc_resp(int fd,
                 return -EBADF;
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP;
-        msg.has_pid      = true;
-        msg.pid          = _ap_instance->api->id;
+        msg.has_api      = true;
+        msg.api          = _ap_instance->api;
         msg.has_port_id  = true;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
@@ -295,11 +279,11 @@ int flow_alloc(char * dst_name,
         msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst_name    = dst_name;
         msg.ae_name     = src_ae_name;
-        msg.has_pid     = true;
+        msg.has_api     = true;
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
 
-        msg.pid         = _ap_instance->api->id;
+        msg.api         = _ap_instance->api;
 
         pthread_rwlock_unlock(&_ap_instance->data_lock);
 
@@ -308,7 +292,7 @@ int flow_alloc(char * dst_name,
                 return -1;
         }
 
-        if (!recv_msg->has_pid || !recv_msg->has_port_id) {
+        if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -324,7 +308,7 @@ int flow_alloc(char * dst_name,
                 return -1;
         }
 
-        _ap_instance->flows[fd].rb = shm_ap_rbuff_open(recv_msg->pid);
+        _ap_instance->flows[fd].rb = shm_ap_rbuff_open(recv_msg->api);
         if (_ap_instance->flows[fd].rb == NULL) {
                 bmp_release(_ap_instance->fds, fd);
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);

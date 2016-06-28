@@ -27,7 +27,6 @@ set(SOURCE_FILES
   cdap.c
   dev.c
   du_buff.c
-  instance_name.c
   ipcp.c
   irm.c
   list.c
