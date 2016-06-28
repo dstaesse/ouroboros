@@ -13,4 +13,4 @@ add_executable(cbr ${SOURCE_FILES})
 
 target_link_libraries(cbr LINK_PUBLIC ouroboros)
 
-install(TARGETS cbr RUNTIME DESTINATION /usr/bin)
+install(TARGETS cbr RUNTIME DESTINATION usr/bin)
