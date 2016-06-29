@@ -709,7 +709,7 @@ static int registry_add_ap_auto(char *  name,
         a->ap_name = ap_name;
         a->argv    = argv;
 
-        if(e->state == REG_NAME_IDLE)
+        if (e->state == REG_NAME_IDLE)
                 e->state = REG_NAME_AUTO_ACCEPT;
 
         list_add(&a->next, &e->auto_ap_info);
@@ -741,7 +741,7 @@ static int registry_remove_ap_auto(char * name,
 
         list_del(&a->next);
 
-        if(e->state == REG_NAME_AUTO_ACCEPT && list_empty(&e->auto_ap_info))
+        if (e->state == REG_NAME_AUTO_ACCEPT && list_empty(&e->auto_ap_info))
                 e->state = REG_NAME_IDLE;
 
         return 0;
@@ -784,7 +784,7 @@ static struct reg_instance * registry_add_ap_instance(char * name,
                 return NULL;
         }
 
-        if(e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT
+        if (e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT
            || e->state == REG_NAME_AUTO_EXEC) {
                 e->state = REG_NAME_FLOW_ACCEPT;
                 pthread_cond_signal(&e->acc_signal);
@@ -1910,7 +1910,7 @@ void * irm_flow_cleaner()
                                    IRMD_CLEANUP_TIMER % BILLION};
 
         while (true) {
-                if(clock_gettime(CLOCK_MONOTONIC, &now) < 0)
+                if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
                         LOG_WARN("Failed to get time.");
                 /* cleanup stale PENDING flows */
 
