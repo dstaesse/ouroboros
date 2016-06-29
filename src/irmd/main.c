@@ -784,7 +784,8 @@ static struct reg_instance * registry_add_ap_instance(char * name,
                 return NULL;
         }
 
-        if(e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT) {
+        if(e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT
+           || e->state == REG_NAME_AUTO_EXEC) {
                 e->state = REG_NAME_FLOW_ACCEPT;
                 pthread_cond_signal(&e->acc_signal);
         }
@@ -1640,6 +1641,7 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
         struct port_map_entry * pme = NULL;
 
         bool acc_wait = true;
+        enum reg_name_state state;
 
         pme = port_map_entry_create();
         if (pme == NULL) {
@@ -1665,16 +1667,18 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
         }
 
         pthread_mutex_lock(&rne->state_lock);
+        state = rne->state;
+        pthread_mutex_unlock(&rne->state_lock);
 
-        switch (rne->state) {
+        switch (state) {
         case REG_NAME_IDLE:
-                pthread_mutex_unlock(&rne->state_lock);
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("No AP's for %s.", dst_name);
                 free(pme);
                 return NULL;
         case REG_NAME_AUTO_ACCEPT:
+                pthread_mutex_lock(&rne->state_lock);
                 rne->state = REG_NAME_AUTO_EXEC;
                 pthread_mutex_unlock(&rne->state_lock);
 
@@ -1685,6 +1689,8 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
                         return NULL;
                 }
 
+                pthread_rwlock_unlock(&instance->reg_lock);
+
                 pthread_mutex_lock(&rne->state_lock);
                 pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
                                      (void *) &rne->state_lock);
@@ -1693,13 +1699,13 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
                         pthread_cond_wait(&rne->acc_signal,
                                           &rne->state_lock);
 
-                pthread_cleanup_pop(false);
+                pthread_cleanup_pop(true);
+
+                pthread_rwlock_rdlock(&instance->reg_lock);
 
         case REG_NAME_FLOW_ACCEPT:
-                pthread_mutex_unlock(&rne->state_lock);
-
                 pme->n_api = registry_resolve_api(rne);
-                if(pme->n_api == 0) {
+                if (pme->n_api == 0) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
                         LOG_ERR("Invalid api returned.");
@@ -1708,7 +1714,6 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
 
                 break;
         default:
-                pthread_mutex_unlock(&rne->state_lock);
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("IRMd in wrong state.");
@@ -1717,6 +1722,7 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
         }
 
         pthread_rwlock_unlock(&instance->reg_lock);
+
         pthread_rwlock_wrlock(&instance->flows_lock);
         pme->port_id = bmp_allocate(instance->port_ids);
 
@@ -2305,7 +2311,7 @@ int main()
 
         pthread_create(&instance->cleanup_flows, NULL, irm_flow_cleaner, NULL);
         pthread_create(&instance->shm_sanitize, NULL,
-                       shm_du_map_sanitize, NULL);
+                       shm_du_map_sanitize, instance->dum);
 
         /* wait for (all of them) to return */
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)
