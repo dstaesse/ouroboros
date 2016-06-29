@@ -26,7 +26,6 @@ set(SOURCE_FILES
   bitmap.c
   cdap.c
   dev.c
-  du_buff.c
   ipcp.c
   irm.c
   list.c
