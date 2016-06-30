@@ -30,6 +30,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/irm_config.h>
+#include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/flow.h>
@@ -163,7 +164,7 @@ static void reg_instance_destroy(struct reg_instance * i)
 
         while (wait) {
                 pthread_mutex_lock(&i->mutex);
-                if (pthread_cond_destroy(&i->wakeup) < 0)
+                if (pthread_cond_destroy(&i->wakeup))
                         pthread_cond_broadcast(&i->wakeup);
                 else
                         wait = false;
@@ -291,7 +292,7 @@ static void port_map_entry_destroy(struct port_map_entry * e)
 
         while (wait) {
                 pthread_mutex_lock(&e->res_lock);
-                if (pthread_cond_destroy(&e->res_signal) < 0)
+                if (pthread_cond_destroy(&e->res_signal))
                         pthread_cond_broadcast(&e->res_signal);
                 else
                         wait = false;
@@ -477,7 +478,7 @@ static void reg_entry_destroy(struct reg_entry * e)
 
         while (wait) {
                 pthread_mutex_lock(&e->state_lock);
-                if (pthread_cond_destroy(&e->acc_signal) < 0)
+                if (pthread_cond_destroy(&e->acc_signal))
                         pthread_cond_broadcast(&e->acc_signal);
                 else
                         wait = false;
@@ -1942,18 +1943,26 @@ void * irm_flow_cleaner()
                         pthread_mutex_unlock(&e->res_lock);
 
                         if (kill(e->n_api, 0) < 0) {
+                                struct shm_ap_rbuff * n_rb =
+                                        shm_ap_rbuff_open(e->n_api);
                                 bmp_release(instance->port_ids, e->port_id);
 
                                 list_del(&e->next);
                                 LOG_INFO("Process %d gone, %d deallocated.",
                                          e->n_api, e->port_id);
                                 ipcp_flow_dealloc(e->n_1_api, e->port_id);
+                                if (n_rb != NULL)
+                                        shm_ap_rbuff_destroy(n_rb);
                                 port_map_entry_destroy(e);
                         }
                         if (kill(e->n_1_api, 0) < 0) {
+                                struct shm_ap_rbuff * n_1_rb =
+                                        shm_ap_rbuff_open(e->n_1_api);
                                 list_del(&e->next);
                                 LOG_ERR("IPCP %d gone, flow %d removed.",
                                         e->n_1_api, e->port_id);
+                                if (n_1_rb != NULL)
+                                        shm_ap_rbuff_destroy(n_1_rb);
                                 port_map_entry_destroy(e);
                         }
                 }
@@ -2205,7 +2214,8 @@ static struct irm * irm_create()
                         shm_du_map_destroy(dum);
                         LOG_INFO("Stale shm file removed.");
                 } else {
-                        LOG_INFO("IRMd already running, exiting.");
+                        LOG_INFO("IRMd already running (%d), exiting.",
+                                 shm_du_map_owner(dum));
                         free(instance);
                         exit(EXIT_SUCCESS);
                 }

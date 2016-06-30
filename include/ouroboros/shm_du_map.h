@@ -24,18 +24,6 @@
 #ifndef OUROBOROS_SHM_DU_MAP_H
 #define OUROBOROS_SHM_DU_MAP_H
 
-#ifndef SHM_DU_BUFF_BLOCK_SIZE
-#define SHM_DU_BUFF_BLOCK_SIZE sysconf(_SC_PAGESIZE)
-#endif
-
-#ifndef SHM_DU_MAP_FILENAME
-#define SHM_DU_MAP_FILENAME "ouroboros_du_map"
-#endif
-
-#ifndef SHM_BLOCKS_IN_MAP
-#define SHM_BLOCKS_IN_MAP (1 << 14)
-#endif
-
 #include "common.h"
 #include <sys/types.h>
 #include <pthread.h>
@@ -51,18 +39,18 @@ pid_t               shm_du_map_owner(struct shm_du_map * dum);
 void *              shm_du_map_sanitize(void * o);
 
 /* returns the index of the buffer in the DU map */
-ssize_t  shm_create_du_buff(struct shm_du_map * dum,
-                            size_t              size,
-                            size_t              headspace,
-                            uint8_t           * data,
-                            size_t              len);
+ssize_t  shm_du_map_write(struct shm_du_map * dum,
+                          pid_t               dst_api,
+                          size_t              headspace,
+                          size_t              tailspace,
+                          uint8_t *           data,
+                          size_t              data_len);
 
-/* FIXME: revise these */
-int       shm_du_map_read_sdu(uint8_t **          dst,
-                              struct shm_du_map * dum,
-                              ssize_t             idx);
-int       shm_release_du_buff(struct shm_du_map  * dum,
-                              ssize_t idx);
+int       shm_du_map_read(uint8_t **          dst,
+                          struct shm_du_map * dum,
+                          ssize_t             idx);
+int       shm_du_map_remove(struct shm_du_map  * dum,
+                            ssize_t idx);
 
 /* FIXME: use shm_du_map * and index */
 uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
