@@ -32,6 +32,8 @@ struct flow {
         int                   port_id;
         struct shm_ap_rbuff * rb;
         enum flow_state       state;
+
+        pid_t                 api;
 };
 
 #endif /* OUROBOROS_FLOW_H */

@@ -206,12 +206,12 @@ static ssize_t ipcp_udp_flow_write(int fd, void * buf, size_t count)
 
         pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
-        while ((index = shm_create_du_buff(_ap_instance->dum,
-                                           count + DU_BUFF_HEADSPACE +
-                                           DU_BUFF_TAILSPACE,
-                                           DU_BUFF_HEADSPACE,
-                                           (uint8_t *) buf,
-                                           count)) < 0)
+        while ((index = shm_du_map_write(_ap_instance->dum,
+                                         _ap_instance->flows[fd].api,
+                                         0,
+                                         0,
+                                         (uint8_t *) buf,
+                                         count)) < 0)
                 ;
 
         e.index   = index;
@@ -772,9 +772,9 @@ static void * ipcp_udp_sdu_loop(void * o)
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
-                len = shm_du_map_read_sdu((uint8_t **) &buf,
-                                          _ap_instance->dum,
-                                          e->index);
+                len = shm_du_map_read((uint8_t **) &buf,
+                                      _ap_instance->dum,
+                                      e->index);
                 if (len <= 0) {
                         pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(e);
@@ -799,7 +799,7 @@ static void * ipcp_udp_sdu_loop(void * o)
                 pthread_rwlock_rdlock(&_ipcp->state_lock);
 
                 if (_ap_instance->dum != NULL)
-                        shm_release_du_buff(_ap_instance->dum, e->index);
+                        shm_du_map_remove(_ap_instance->dum, e->index);
 
                 pthread_rwlock_unlock(&_ipcp->state_lock);
         }

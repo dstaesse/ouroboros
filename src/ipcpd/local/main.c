@@ -178,7 +178,6 @@ static int port_id_to_fd(int port_id)
 /* FIXME: if we move _ap_instance to dev.h, we can reuse it everywhere */
 static void * ipcp_local_sdu_loop(void * o)
 {
-
         while (true) {
                 struct rb_entry * e;
                 int fd;
@@ -208,6 +207,7 @@ static void * ipcp_local_sdu_loop(void * o)
 
                 while (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, e) < 0)
                         ;
+
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
                 pthread_rwlock_unlock(&_ipcp->state_lock);
         }
