@@ -2106,8 +2106,11 @@ void * mainloop()
                                         msg->ap_name,
                                         &ret_msg.ae_name);
 
-                        if (e == NULL)
+                        if (e == NULL) {
+                                ret_msg.has_result = true;
+                                ret_msg.result = -1;
                                 break;
+                        }
 
                         ret_msg.has_port_id = true;
                         ret_msg.port_id     = e->port_id;
@@ -2125,8 +2128,11 @@ void * mainloop()
                                        msg->dst_name,
                                        msg->ae_name,
                                        NULL);
-                        if (e == NULL)
+                        if (e == NULL) {
+                                ret_msg.has_result = true;
+                                ret_msg.result = -1;
                                 break;
+                        }
 
                         ret_msg.has_port_id = true;
                         ret_msg.port_id     = e->port_id;
@@ -2145,8 +2151,11 @@ void * mainloop()
                         e = flow_req_arr(msg->api,
                                          msg->dst_name,
                                          msg->ae_name);
-                        if (e == NULL)
+                        if (e == NULL) {
+                                ret_msg.has_result = true;
+                                ret_msg.result = -1;
                                 break;
+                        }
 
                         ret_msg.has_port_id = true;
                         ret_msg.port_id     = e->port_id;
