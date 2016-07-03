@@ -22,7 +22,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
+#include <errno.h>
 
 #include <ouroboros/irm.h>
 
@@ -45,7 +45,7 @@ int do_bind(int argc, char ** argv)
         char * name = NULL;
         char * ap_name = NULL;
         uint16_t flags = 0;
-        struct stat s;
+        int ret = 0;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
@@ -79,15 +79,17 @@ int do_bind(int argc, char ** argv)
                 return -1;
         }
 
-        if (stat(ap_name, &s) != 0) {
-                printf("Application %s does not exist.\n", ap_name);
+        ret = irm_bind(name, ap_name, flags, argc, argv);
+        if (ret == -ENOENT) {
+                printf("%s does not exist.\n", ap_name);
                 return -1;
         }
 
-        if (!(s.st_mode & S_IXUSR)) {
-                printf("Application %s is not executable.\n", ap_name);
+        if (ret == -EPERM) {
+                printf("Cannot execute %s, please check permissions.\n",
+                        ap_name);
                 return -1;
         }
 
-        return irm_bind(name, ap_name, flags, argc, argv);
+        return ret;
 }
