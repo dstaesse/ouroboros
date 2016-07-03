@@ -1613,9 +1613,21 @@ static int flow_dealloc(int port_id)
         return ret;
 }
 
-static int auto_execute(char ** argv)
+static pid_t auto_execute(char ** argv)
 {
         pid_t api;
+        struct stat s;
+
+        if (stat(argv[0], &s) != 0) {
+                LOG_WARN("Application %s does not exist.", argv[0]);
+                return -1;
+        }
+
+        if (!(s.st_mode & S_IXUSR)) {
+                LOG_WARN("Application %s is not executable.", argv[0]);
+                return -1;
+        }
+
         LOG_INFO("Executing %s.", argv[0]);
         api = fork();
         if (api == -1) {

@@ -22,6 +22,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include <ouroboros/irm.h>
 
@@ -44,6 +45,7 @@ int do_bind(int argc, char ** argv)
         char * name = NULL;
         char * ap_name = NULL;
         uint16_t flags = 0;
+        struct stat s;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
@@ -74,6 +76,16 @@ int do_bind(int argc, char ** argv)
 
         if (name == NULL || ap_name == NULL) {
                 usage();
+                return -1;
+        }
+
+        if (stat(ap_name, &s) != 0) {
+                printf("Application %s does not exist.\n\n", ap_name);
+                return -1;
+        }
+
+        if (!(s.st_mode & S_IXUSR)) {
+                printf("Application %s is not executable.\n\n", ap_name);
                 return -1;
         }
 
