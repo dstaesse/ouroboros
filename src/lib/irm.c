@@ -29,6 +29,7 @@
 #include <ouroboros/sockets.h>
 
 #include <stdlib.h>
+#include <sys/stat.h>
 
 pid_t irm_create_ipcp(char *         name,
                       enum ipcp_type ipcp_type)
@@ -246,9 +247,16 @@ int irm_bind(char *   name,
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
+        struct stat s;
 
         if (name == NULL || ap_name == NULL)
                 return -EINVAL;
+
+        if (stat(ap_name, &s) != 0)
+                return -ENOENT;
+
+        if (!(s.st_mode & S_IXUSR))
+                return -EPERM;
 
         msg.code = IRM_MSG_CODE__IRM_BIND;
         msg.dst_name = name;
