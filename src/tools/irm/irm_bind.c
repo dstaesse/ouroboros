@@ -80,12 +80,12 @@ int do_bind(int argc, char ** argv)
         }
 
         if (stat(ap_name, &s) != 0) {
-                printf("Application %s does not exist.\n\n", ap_name);
+                printf("Application %s does not exist.\n", ap_name);
                 return -1;
         }
 
         if (!(s.st_mode & S_IXUSR)) {
-                printf("Application %s is not executable.\n\n", ap_name);
+                printf("Application %s is not executable.\n", ap_name);
                 return -1;
         }
 
