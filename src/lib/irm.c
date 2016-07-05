@@ -268,9 +268,11 @@ static int check_ap_path(char ** ap_name)
         if (*ap_name == NULL || path == NULL)
                 return -EINVAL;
 
-        if (!strlen(path) || strchr(*ap_name, '/') == NULL)
+        if (!strlen(path) || strchr(*ap_name, '/') != NULL) {
                 if ((ret = check_ap(*ap_name)) < 0)
                         return ret;
+                return 0;
+        }
 
         tmp = malloc(strlen(path) + strlen(*ap_name) + 2);
         if (tmp == NULL)
