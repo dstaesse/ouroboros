@@ -961,7 +961,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 /* NOTE: Disgusted with this crap */
 static int ddns_send(char * cmd)
 {
-        pid_t api = 0;
+        pid_t api = -1;
         int wstatus;
         int pipe_fd[2];
         char * argv[] = {NSUPDATE_EXEC, 0};
@@ -1005,7 +1005,7 @@ static int ddns_send(char * cmd)
 
 static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
 {
-        pid_t api = 0;
+        pid_t api = -1;
         int wstatus;
         int pipe_fd[2];
         char dnsstr[INET_ADDRSTRLEN];

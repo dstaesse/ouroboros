@@ -348,9 +348,9 @@ ssize_t shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb, int port_id)
 
 pid_t shm_ap_rbuff_get_api(struct shm_ap_rbuff *rb)
 {
-        pid_t api = 0;
+        pid_t api = -1;
         if (rb == NULL)
-                return 0;
+                return -1;
 
         pthread_mutex_lock(rb->shm_mutex);
         api = rb->api;

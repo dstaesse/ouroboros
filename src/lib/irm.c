@@ -67,7 +67,7 @@ int irm_destroy_ipcp(pid_t api)
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (api == 0)
+        if (api == -1)
                 return -EINVAL;
 
         msg.code    = IRM_MSG_CODE__IRM_DESTROY_IPCP;
@@ -97,7 +97,7 @@ int irm_bootstrap_ipcp(pid_t               api,
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (api == 0 || conf == NULL)
+        if (api == -1 || conf == NULL)
                 return -EINVAL;
 
         msg.code    = IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP;
@@ -209,7 +209,7 @@ int irm_enroll_ipcp(pid_t  api,
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (api == 0 || dif_name == NULL)
+        if (api == -1 || dif_name == NULL)
                 return -EINVAL;
 
         msg.code = IRM_MSG_CODE__IRM_ENROLL_IPCP;

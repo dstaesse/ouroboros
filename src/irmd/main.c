@@ -51,8 +51,6 @@
 #include <pthread.h>
 #include <sys/stat.h>
 
-#define API_INVALID 0
-
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 
 struct ipcp_entry {
@@ -114,9 +112,9 @@ static struct port_map_entry * port_map_entry_create()
         if (e == NULL)
                 return NULL;
 
-        e->n_api   = 0;
-        e->n_1_api = 0;
-        e->port_id = 0;
+        e->n_api   = -1;
+        e->n_1_api = -1;
+        e->port_id = -1;
         e->state   = FLOW_NULL;
 
         if (pthread_cond_init(&e->res_signal, NULL)) {
@@ -256,7 +254,7 @@ static pid_t get_ipcp_by_dst_name(char * dst_name,
                 }
         }
 
-        return 0;
+        return -1;
 }
 
 static pid_t create_ipcp(char *         name,
@@ -269,7 +267,7 @@ static pid_t create_ipcp(char *         name,
 
         if (instance->state != IRMD_RUNNING) {
                 pthread_rwlock_unlock(&instance->state_lock);
-                return 0;
+                return -1;
         }
 
         api = ipcp_create(ipcp_type);
@@ -456,6 +454,9 @@ static int bind_name(char *   name,
         char ** argv_dup = NULL;
         char * apn = path_strip(ap_name);
 
+        if (name == NULL || ap_name == NULL)
+                return -EINVAL;
+
         pthread_rwlock_rdlock(&instance->state_lock);
 
         if (instance->state != IRMD_RUNNING) {
@@ -577,6 +578,9 @@ static int ap_reg(char *  name,
         int ret = 0;
         struct reg_entry * reg = NULL;
         struct list_head * pos = NULL;
+
+        if (name == NULL || difs == NULL || len == 0 || difs[0] == NULL)
+                return -EINVAL;
 
         pthread_rwlock_rdlock(&instance->state_lock);
 
@@ -1113,7 +1117,7 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
 
         case REG_NAME_FLOW_ACCEPT:
                 pme->n_api = reg_entry_resolve_api(rne);
-                if (pme->n_api == 0) {
+                if (pme->n_api == -1) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
                         LOG_ERR("Invalid api returned.");

@@ -103,7 +103,7 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
 
 pid_t ipcp_create(enum ipcp_type ipcp_type)
 {
-        pid_t api = 0;
+        pid_t api = -1;
         char irmd_api[10];
         size_t len = 0;
         char * ipcp_dir = "/sbin/";
