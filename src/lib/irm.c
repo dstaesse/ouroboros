@@ -22,6 +22,7 @@
 
 #define OUROBOROS_PREFIX "libouroboros-irm"
 
+#include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/common.h>
@@ -29,6 +30,7 @@
 #include <ouroboros/sockets.h>
 
 #include <stdbool.h>
+#include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 
@@ -239,6 +241,84 @@ int irm_enroll_ipcp(pid_t  api,
         return ret;
 }
 
+static int check_ap(char * ap_name)
+{
+        struct stat s;
+
+        if (stat(ap_name, &s) != 0)
+                return -ENOENT;
+
+        if (!(s.st_mode & S_IXUSR))
+                return -EPERM;
+
+        return 0;
+}
+
+static int check_ap_path(char ** ap_name)
+{
+        char * path = getenv("PATH");
+        char * path_end = path + strlen(path) + 1;
+        char * pstart;
+        char * pstop = path;
+        char * tmp;
+        char * tstop;
+        char * tstart;
+        bool   perm = true;
+        int    ret = 0;
+
+        if (*ap_name == NULL || path == NULL)
+                return -EINVAL;
+
+        if (!strlen(path) || strchr(*ap_name, '/') == NULL)
+                if ((ret = check_ap(*ap_name)) < 0)
+                        return ret;
+
+        tmp = malloc(strlen(path) + strlen(*ap_name) + 2);
+        if (tmp == NULL)
+                return -ENOMEM;
+
+        tstop = tmp + strlen(path) + 1;
+        strcpy(tstop--, *ap_name);
+
+        while (pstop < path_end) {
+                ret = 0;
+                pstart = pstop;
+                if (*pstart != '/') {
+                        free(tmp);
+                        return -EINVAL;
+                }
+
+                while (*pstop != '\0' && *pstop != ':')
+                        pstop++;
+
+                *pstop = '\0';
+                tstart = tstop - (pstop++ - pstart);
+                strcpy(tstart, pstart);
+                *tstop = '/';
+
+                if ((ret = check_ap(tstart)) < 0) {
+                        if (ret == -EPERM)
+                                perm = false;
+                        continue;
+                }
+
+                free(*ap_name);
+                *ap_name = strdup(tstart);
+                free(tmp);
+
+                if (*ap_name == NULL)
+                        return -ENOMEM;
+
+                return 0;
+        }
+
+        free(tmp);
+        if (!perm)
+                return -EPERM;
+
+        return -ENOENT;
+}
+
 int irm_bind(char *   name,
              char *   ap_name,
              uint16_t opts,
@@ -248,20 +328,23 @@ int irm_bind(char *   name,
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
-        struct stat s;
+        char * full_ap_name;
 
         if (name == NULL || ap_name == NULL)
                 return -EINVAL;
 
-        if (stat(ap_name, &s) != 0)
-                return -ENOENT;
+        full_ap_name = strdup(ap_name);
+        if (full_ap_name == NULL)
+                return -ENOMEM;
 
-        if (!(s.st_mode & S_IXUSR))
-                return -EPERM;
+        if ((ret = check_ap_path(&full_ap_name)) < 0) {
+                free(full_ap_name);
+                return ret;
+        }
 
         msg.code = IRM_MSG_CODE__IRM_BIND;
         msg.dst_name = name;
-        msg.ap_name = ap_name;
+        msg.ap_name = full_ap_name;
 
         if (argv != NULL) {
                 msg.n_args = argc;
@@ -283,6 +366,7 @@ int irm_bind(char *   name,
         ret = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
 
+        free(full_ap_name);
         return ret;
 }
 

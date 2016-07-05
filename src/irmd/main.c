@@ -1103,6 +1103,8 @@ static int bind_name(char *   name,
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
+        LOG_INFO("Bound %s to registered name %s.", ap_name, name);
+
         return 0;
 }
 
@@ -1141,6 +1143,8 @@ static int unbind_name(char * name,
 
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
+
+        LOG_INFO("Removed binding from %s to %s.", ap_name, name);
 
         return 0;
 }
@@ -1280,6 +1284,9 @@ static int ap_unreg(char *  name,
                                                 "%s in DIF %s.",
                                                 rne->name, e->dif_name);
                                         --ret;
+                                } else {
+                                        LOG_INFO("Unregistered %s from %s.",
+                                                 rne->name, e->dif_name);
                                 }
                         }
                 }

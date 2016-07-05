@@ -21,14 +21,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "ipcp-data.h"
+#include <ouroboros/config.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/list.h>
-#include <ouroboros/utils.h>
 
 #define OUROBOROS_PREFIX "ipcp-utils"
 
 #include <ouroboros/logs.h>
+
+#include "ipcp-data.h"
 
 #include <string.h>
 #include <stdlib.h>
