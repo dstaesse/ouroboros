@@ -48,7 +48,6 @@ int     flow_alloc(char * dst_name,
 int     flow_alloc_res(int fd);
 int     flow_dealloc(int fd);
 
-/* Wraps around fnctl */
 int     flow_cntl(int fd, int cmd, int oflags);
 ssize_t flow_write(int fd, void * buf, size_t count);
 ssize_t flow_read(int fd, void * buf, size_t count);

@@ -53,9 +53,8 @@ static ssize_t cdap_msg_to_buffer(cdap_t * msg,
         len = msg->n_value;
 
         *val = malloc(len * sizeof(**val));
-        if (*val == NULL) {
+        if (*val == NULL)
                 return -1;
-        }
 
         for (i = 0; i < len; i++) {
                 if (msg->value[i].data == NULL) {
@@ -76,20 +75,18 @@ static void * sdu_reader(void * o)
         struct cdap * instance = (struct cdap *) o;
         cdap_t * msg;
         uint8_t buf[BUF_SIZE];
-        size_t len;
+        ssize_t len;
         ssize_t length;
         buffer_t * val;
 
         while (true) {
                 len = flow_read(instance->fd, buf, BUF_SIZE);
-                if (len < 0) {
+                if (len < 0)
                         return (void *) -1;
-                }
 
                 msg = cdap__unpack(NULL, len, buf);
-                if (msg == NULL) {
+                if (msg == NULL)
                         continue;
-                }
 
                 switch (msg->opcode) {
                 case OPCODE__READ:
@@ -166,6 +163,7 @@ struct cdap * cdap_create(struct cdap_ops * ops,
                           int               fd)
 {
         struct cdap * instance = NULL;
+        int flags;
 
         if (ops == NULL || fd < 0 ||
             ops->cdap_reply == NULL ||
@@ -175,6 +173,10 @@ struct cdap * cdap_create(struct cdap_ops * ops,
             ops->cdap_delete == NULL ||
             ops->cdap_start == NULL ||
             ops->cdap_stop == NULL)
+                return NULL;
+
+        flags = flow_cntl(fd, FLOW_F_GETFL, 0);
+        if (flags & FLOW_O_NONBLOCK)
                 return NULL;
 
         instance = malloc(sizeof(*instance));
@@ -250,15 +252,23 @@ static int write_msg(struct cdap * instance,
                      cdap_t * msg)
 {
         buffer_t buf;
+        int ret;
 
         buf.len = cdap__get_packed_size(msg);
-        if (buf.len == 0) {
+        if (buf.len == 0)
                 return -1;
-        }
+
+        buf.data = malloc(BUF_SIZE);
+        if (buf.data == NULL)
+                return -1;
 
         cdap__pack(msg, buf.data);
 
-        return flow_write(instance->fd, buf.data, buf.len);
+        ret = flow_write(instance->fd, buf.data, buf.len);
+
+        free(buf.data);
+
+        return ret;
 }
 
 static int buffer_to_cdap_msg(cdap_t * msg,
@@ -268,9 +278,8 @@ static int buffer_to_cdap_msg(cdap_t * msg,
         int i;
 
         msg->value = malloc(len * sizeof(*msg->value));
-        if (msg->value == NULL) {
+        if (msg->value == NULL)
                 return -1;
-        }
 
         msg->n_value = len;
         for (i = 0; i < len; i++) {
@@ -422,9 +431,8 @@ int cdap_send_reply(struct cdap * instance,
         msg.has_result = true;
         msg.result = result;
 
-        if (buffer_to_cdap_msg(&msg, val, len)) {
+        if (buffer_to_cdap_msg(&msg, val, len))
                 return -1;
-        }
 
         return write_msg(instance, &msg);
 }

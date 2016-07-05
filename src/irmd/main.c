@@ -1936,7 +1936,7 @@ void * irm_flow_cleaner()
 
                 pthread_rwlock_rdlock(&instance->state_lock);
 
-                if (&instance->state == IRMD_NULL) {
+                if (instance->state == IRMD_NULL) {
                         pthread_rwlock_unlock(&instance->state_lock);
                         return (void *) 0;
                 }

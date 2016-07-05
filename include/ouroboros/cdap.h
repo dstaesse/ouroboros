@@ -3,7 +3,7 @@
  *
  * The Common Distributed Application Protocol
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
