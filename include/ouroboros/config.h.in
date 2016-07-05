@@ -41,5 +41,8 @@
 #define DU_BUFF_TAILSPACE      0
 #define SHM_AP_RBUFF_PREFIX    "ouroboros_rb_"
 #define SHM_RBUFF_SIZE         (1 << 14)
+#define IRMD_MAX_FLOWS         4096
+#define IRMD_THREADPOOL_SIZE   3
+#define IRMD_FLOW_TIMEOUT      5000 /* ms */
 
 #endif

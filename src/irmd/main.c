@@ -3,7 +3,8 @@
  *
  * The IPC Resource Manager
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,6 +39,7 @@
 #include <ouroboros/time_utils.h>
 
 #include "utils.h"
+#include "registry.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -51,17 +53,7 @@
 
 #define API_INVALID 0
 
-#define IRMD_MAX_FLOWS 4096
-
-#define IRMD_THREADPOOL_SIZE 3
-
-#define IRMD_FLOW_TIMEOUT 5000 /* ms */
-
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
-
-#define reg_entry_has_api(e, id) (reg_entry_get_reg_instance(e, id) != NULL)
-#define reg_entry_has_ap_name(e, name) (reg_entry_get_ap_name(e, name) != NULL)
-#define reg_entry_has_ap_auto(e, name) (reg_entry_get_reg_auto(e, name) != NULL)
 
 struct ipcp_entry {
         struct list_head  next;
@@ -74,144 +66,6 @@ enum irm_state {
         IRMD_NULL = 0,
         IRMD_RUNNING,
         IRMD_SHUTDOWN
-};
-
-enum reg_name_state {
-        REG_NAME_NULL = 0,
-        REG_NAME_IDLE,
-        REG_NAME_AUTO_ACCEPT,
-        REG_NAME_AUTO_EXEC,
-        REG_NAME_FLOW_ACCEPT,
-        REG_NAME_FLOW_ARRIVED
-};
-
-enum reg_i_state {
-        REG_I_NULL = 0,
-        REG_I_SLEEP,
-        REG_I_WAKE
-};
-
-struct reg_instance {
-        struct list_head next;
-        pid_t            api;
-
-        /* the api will block on this */
-        enum reg_i_state state;
-        pthread_cond_t   wakeup;
-        pthread_mutex_t  mutex;
-};
-
-static struct reg_instance * reg_instance_create(pid_t api)
-{
-        struct reg_instance * i;
-        i = malloc(sizeof(*i));
-        if (i == NULL)
-                return NULL;
-
-        i->api   = api;
-        i->state = REG_I_WAKE;
-
-        pthread_mutex_init(&i->mutex, NULL);
-        pthread_cond_init(&i->wakeup, NULL);
-
-        INIT_LIST_HEAD(&i->next);
-
-        return i;
-}
-
-static void reg_instance_sleep(struct reg_instance * i)
-{
-        pthread_mutex_lock(&i->mutex);
-        if (i->state != REG_I_WAKE) {
-                pthread_mutex_unlock(&i->mutex);
-                return;
-        }
-
-        i->state = REG_I_SLEEP;
-
-        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void *) &i->mutex);
-
-        while (i->state == REG_I_SLEEP)
-                pthread_cond_wait(&i->wakeup, &i->mutex);
-
-        pthread_cleanup_pop(true);
-}
-
-static void reg_instance_wake(struct reg_instance * i)
-{
-        pthread_mutex_lock(&i->mutex);
-
-        if (i->state == REG_I_NULL) {
-                pthread_mutex_unlock(&i->mutex);
-                return;
-        }
-
-        i->state = REG_I_WAKE;
-
-        pthread_cond_signal(&i->wakeup);
-        pthread_mutex_unlock(&i->mutex);
-}
-
-static void reg_instance_destroy(struct reg_instance * i)
-{
-        bool wait = true;
-        pthread_mutex_lock(&i->mutex);
-        i->state = REG_I_NULL;
-
-        pthread_cond_broadcast(&i->wakeup);
-        pthread_mutex_unlock(&i->mutex);
-
-        while (wait) {
-                pthread_mutex_lock(&i->mutex);
-                if (pthread_cond_destroy(&i->wakeup))
-                        pthread_cond_broadcast(&i->wakeup);
-                else
-                        wait = false;
-                pthread_mutex_unlock(&i->mutex);
-        }
-
-        pthread_mutex_destroy(&i->mutex);
-
-        free(i);
-}
-
-struct reg_auto {
-        struct list_head next;
-        char * ap_name;
-        char ** argv;
-};
-
-struct reg_ap_name {
-        struct list_head next;
-        char * ap_name;
-};
-
-/* an entry in the registry */
-struct reg_entry {
-        struct list_head next;
-
-        /* generic name */
-        char * name;
-
-        /* names of the aps that can listen to this name */
-        struct list_head ap_names;
-
-        enum reg_name_state state;
-
-        uint32_t flags;
-
-        /* auto execution info */
-        struct list_head auto_ap_info;
-
-        /* known instances */
-        struct list_head ap_instances;
-
-        char * req_ae_name;
-        int    response;
-
-        pthread_cond_t  acc_signal;
-        pthread_mutex_t state_lock;
 };
 
 /* keeps track of port_id's between N and N - 1 */
@@ -403,475 +257,6 @@ static pid_t get_ipcp_by_dst_name(char * dst_name,
         }
 
         return 0;
-}
-
-static struct reg_entry * reg_entry_create()
-{
-        struct reg_entry * e = malloc(sizeof(*e));
-        if (e == NULL)
-                return NULL;
-
-        e->name         = NULL;
-        e->state        = REG_NAME_NULL;
-        e->flags        = 0;
-
-        e->req_ae_name  = NULL;
-        e->response     = -1;
-
-        return e;
-}
-
-static struct reg_entry * reg_entry_init(struct reg_entry * e,
-                                         char *             name,
-                                         char *             ap_name,
-                                         uint32_t           flags)
-{
-        if (e == NULL || name == NULL || ap_name == NULL)
-                return NULL;
-
-        struct reg_ap_name * n = malloc(sizeof(*n));
-        if (n == NULL)
-                return NULL;
-
-        INIT_LIST_HEAD(&e->next);
-        INIT_LIST_HEAD(&e->ap_names);
-        INIT_LIST_HEAD(&e->auto_ap_info);
-        INIT_LIST_HEAD(&e->ap_instances);
-
-        e->name    = name;
-        e->flags   = flags;
-        n->ap_name = ap_name;
-
-        list_add(&n->next, &e->ap_names);
-
-        if (pthread_cond_init(&e->acc_signal, NULL)) {
-                free(e);
-                return NULL;
-        }
-
-        if (pthread_mutex_init(&e->state_lock, NULL)) {
-                free(e);
-                return NULL;
-        }
-
-        e->state = REG_NAME_IDLE;
-
-        return e;
-}
-
-static void reg_entry_destroy(struct reg_entry * e)
-{
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
-
-        bool wait = true;
-
-        if (e == NULL)
-                return;
-
-        pthread_mutex_lock(&e->state_lock);
-
-        e->state = REG_NAME_NULL;
-
-        pthread_cond_broadcast(&e->acc_signal);
-        pthread_mutex_unlock(&e->state_lock);
-
-        while (wait) {
-                pthread_mutex_lock(&e->state_lock);
-                if (pthread_cond_destroy(&e->acc_signal))
-                        pthread_cond_broadcast(&e->acc_signal);
-                else
-                        wait = false;
-                pthread_mutex_unlock(&e->state_lock);
-        }
-
-        pthread_mutex_destroy(&e->state_lock);
-
-        if (e->name != NULL)
-                free(e->name);
-
-        if (e->req_ae_name != NULL)
-                free(e->req_ae_name);
-
-        list_for_each_safe(pos, n, &e->ap_instances) {
-                struct reg_instance * i =
-                        list_entry(pos, struct reg_instance, next);
-                reg_instance_destroy(i);
-        }
-
-        list_for_each_safe(pos, n, &e->auto_ap_info) {
-                struct reg_auto * a =
-                        list_entry(pos, struct reg_auto, next);
-
-                if (a->argv != NULL) {
-                        char ** t = a->argv;
-                        while (*a->argv != NULL)
-                                free(*(a->argv++));
-                        free(t);
-                }
-
-                free(a->ap_name);
-                free(a);
-        }
-
-        list_for_each_safe(pos, n, &e->ap_names) {
-                struct reg_ap_name * n =
-                        list_entry(pos, struct reg_ap_name, next);
-
-                free(n->ap_name);
-                free(n);
-        }
-
-        free(e);
-}
-
-static struct reg_ap_name * reg_entry_get_ap_name(struct reg_entry * e,
-                                                  char *             ap_name)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &e->ap_names) {
-                struct reg_ap_name * n =
-                        list_entry(pos, struct reg_ap_name, next);
-
-                if (strcmp(ap_name, n->ap_name) == 0)
-                        return n;
-        }
-
-        return NULL;
-}
-
-static struct reg_instance * reg_entry_get_reg_instance(struct reg_entry * e,
-                                                        pid_t              api)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &e->ap_instances) {
-                struct reg_instance * r =
-                        list_entry(pos, struct reg_instance, next);
-
-                if (r->api == api)
-                        return r;
-        }
-
-        return NULL;
-}
-
-static struct reg_auto * reg_entry_get_reg_auto(struct reg_entry * e,
-                                                char *             ap_name)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &e->auto_ap_info) {
-                struct reg_auto * a =
-                        list_entry(pos, struct reg_auto, next);
-
-                if (strcmp(ap_name, a->ap_name) == 0)
-                        return a;
-        }
-
-        return NULL;
-}
-
-static struct reg_entry * get_reg_entry_by_name(char * name)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &instance->registry) {
-                struct reg_entry * e =
-                        list_entry(pos, struct reg_entry, next);
-
-                if (strcmp(name, e->name) == 0)
-                        return e;
-        }
-
-        return NULL;
-}
-
-static struct reg_entry * get_reg_entry_by_ap_name(char * ap_name)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &instance->registry) {
-                struct list_head * p = NULL;
-                struct reg_entry * e =
-                        list_entry(pos, struct reg_entry, next);
-
-                list_for_each(p, &e->ap_names) {
-                        struct reg_ap_name * n =
-                                list_entry(p, struct reg_ap_name, next);
-
-                        if (strcmp(n->ap_name, ap_name) == 0)
-                                return e;
-                }
-        }
-
-        return NULL;
-}
-
-static struct reg_entry * get_reg_entry_by_ap_id(pid_t api)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, &instance->registry) {
-                struct list_head * p = NULL;
-                struct reg_entry * e =
-                        list_entry(pos, struct reg_entry, next);
-
-                list_for_each(p, &e->ap_instances) {
-                        struct reg_instance * r =
-                                list_entry(p, struct reg_instance, next);
-
-                        if (r->api == api)
-                                return e;
-                }
-        }
-
-        return NULL;
-}
-
-static int registry_add_entry(char * name, char * ap_name, uint16_t flags)
-{
-        struct reg_entry * e = NULL;
-
-        if (name == NULL || ap_name == NULL)
-                return -EINVAL;
-
-        e = get_reg_entry_by_name(name);
-        if (e != NULL) {
-                LOG_DBG("Name %s already registered.", name);
-                return -1;
-        }
-
-        e = reg_entry_create();
-        if (e == NULL) {
-                LOG_DBG("Could not create registry entry.");
-                return -1;
-        }
-
-        e = reg_entry_init(e, name, ap_name, flags);
-        if (e == NULL) {
-                LOG_DBG("Could not initialize registry entry.");
-                reg_entry_destroy(e);
-                return -1;
-        }
-
-        list_add(&e->next, &instance->registry);
-
-        return 0;
-}
-
-static int registry_add_ap_auto(char *  name,
-                                char *  ap_name,
-                                char ** argv)
-{
-        struct reg_entry * e;
-        struct reg_auto * a;
-
-        if (name == NULL || ap_name == NULL)
-                return -EINVAL;
-
-        e = get_reg_entry_by_name(name);
-        if (e == NULL) {
-                LOG_DBG("Name %s not found in registry.", name);
-                return -1;
-        }
-
-        if (!(e->flags & BIND_AP_AUTO)) {
-                LOG_DBG("%s does not allow auto-instantiation.", name);
-                return -1;
-        }
-
-        if (!reg_entry_has_ap_name(e, ap_name)) {
-                LOG_DBG("AP name %s not associated with %s.", ap_name, name);
-                return -1;
-        }
-
-        if (e->state == REG_NAME_NULL) {
-                LOG_DBG("Tried to add instantiation info in NULL state.");
-                return -1;
-        }
-
-        a = reg_entry_get_reg_auto(e, ap_name);
-        if (a != NULL) {
-                LOG_DBG("Updating auto-instantiation info for %s.", ap_name);
-                list_del(&a->next);
-                free(a->ap_name);
-                if (a->argv != NULL) {
-                        while (*a->argv != NULL)
-                                free(*a->argv++);
-                }
-        } else {
-                a = malloc(sizeof(*a));
-                if (a == NULL)
-                        return -1;
-        }
-
-        a->ap_name = ap_name;
-        a->argv    = argv;
-
-        if (e->state == REG_NAME_IDLE)
-                e->state = REG_NAME_AUTO_ACCEPT;
-
-        list_add(&a->next, &e->auto_ap_info);
-
-        return 0;
-}
-
-#if 0
-static int registry_remove_ap_auto(char * name,
-                                   char * ap_name)
-{
-        struct reg_entry * e;
-        struct reg_auto * a;
-
-        if (name == NULL || ap_name == NULL)
-                return -EINVAL;
-
-        e = get_reg_entry_by_name(name);
-        if (e == NULL) {
-                LOG_DBG("Name %s not found in registry.", name);
-                return -1;
-        }
-
-        a = reg_entry_get_reg_auto(e, ap_name);
-        if (a == NULL) {
-                LOG_DBG("Auto-instantiation info for %s not found.", ap_name);
-                return -1;
-        }
-
-        list_del(&a->next);
-
-        if (e->state == REG_NAME_AUTO_ACCEPT && list_empty(&e->auto_ap_info))
-                e->state = REG_NAME_IDLE;
-
-        return 0;
-}
-#endif
-
-static struct reg_instance * registry_add_ap_instance(char * name,
-                                                      pid_t api)
-{
-        struct reg_entry * e    = NULL;
-        struct reg_instance * i = NULL;
-
-        if (name == NULL || api == 0)
-                return NULL;
-
-        e = get_reg_entry_by_name(name);
-        if (e == NULL) {
-                LOG_DBG("Name %s not found in registry.", name);
-                return NULL;
-        }
-
-        if (api == API_INVALID) {
-                LOG_DBG("Invalid api.");
-                return NULL;
-        }
-
-        if (reg_entry_has_api(e, api)) {
-                LOG_DBG("Instance already registered with this name.");
-                return NULL;
-        }
-
-        if (e->state == REG_NAME_NULL) {
-                LOG_DBG("Tried to add instance in NULL state.");
-                return NULL;
-        }
-
-        i = reg_instance_create(api);
-        if (i == NULL) {
-                LOG_DBG("Failed to create reg_instance");
-                return NULL;
-        }
-
-        if (e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT
-           || e->state == REG_NAME_AUTO_EXEC) {
-                e->state = REG_NAME_FLOW_ACCEPT;
-                pthread_cond_signal(&e->acc_signal);
-        }
-
-        list_add(&i->next, &e->ap_instances);
-
-        return i;
-}
-
-static int registry_remove_ap_instance(char * name, pid_t api)
-{
-        struct reg_entry * e    = NULL;
-        struct reg_instance * i = NULL;
-
-        if (name == NULL || api == 0)
-                return -1;
-
-        e = get_reg_entry_by_name(name);
-        if (e == NULL) {
-                LOG_DBG("Name %s is not registered.", name);
-                return -1;
-        }
-
-        i = reg_entry_get_reg_instance(e, api);
-        if (i == NULL) {
-                LOG_DBG("Instance %d is not accepting flows for %s.",
-                         api, name);
-                return -1;
-        }
-
-        list_del(&i->next);
-
-        reg_instance_destroy(i);
-
-        if (list_empty(&e->ap_instances)) {
-                if ((e->flags & BIND_AP_AUTO) &&
-                        !list_empty(&e->auto_ap_info))
-                        e->state = REG_NAME_AUTO_ACCEPT;
-                else
-                        e->state = REG_NAME_IDLE;
-        } else {
-                e->state = REG_NAME_FLOW_ACCEPT;
-        }
-
-        return 0;
-}
-
-static pid_t registry_resolve_api(struct reg_entry * e)
-{
-        struct list_head * pos = NULL;
-
-        /* FIXME: now just returns the first accepting instance */
-        list_for_each(pos, &e->ap_instances) {
-                struct reg_instance * r =
-                        list_entry(pos, struct reg_instance, next);
-                return r->api;
-        }
-
-        return 0;
-}
-
-static char ** registry_resolve_auto(struct reg_entry * e)
-{
-        struct list_head * pos = NULL;
-
-        /* FIXME: now just returns the first accepting instance */
-        list_for_each(pos, &e->auto_ap_info) {
-                struct reg_auto * r =
-                        list_entry(pos, struct reg_auto, next);
-                return r->argv;
-        }
-
-        return NULL;
-}
-
-static void registry_del_name(char * name)
-{
-        struct reg_entry * e = get_reg_entry_by_name(name);
-        if (e == NULL)
-                return;
-
-        list_del(&e->next);
-        reg_entry_destroy(e);
-
-        return;
 }
 
 static pid_t create_ipcp(char *         name,
@@ -1080,7 +465,8 @@ static int bind_name(char *   name,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        if (registry_add_entry(strdup(name), strdup(apn), opts) < 0) {
+        if (registry_add_entry(&instance->registry,
+                               strdup(name), strdup(apn), opts) < 0) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("Failed to register %s.", name);
@@ -1097,7 +483,8 @@ static int bind_name(char *   name,
                         argv_dup[argc + 1] = NULL;
                 }
 
-                registry_add_ap_auto(name, strdup(apn), argv_dup);
+                registry_add_ap_auto(&instance->registry,
+                                     name, strdup(apn), argv_dup);
         }
 
         pthread_rwlock_unlock(&instance->reg_lock);
@@ -1127,7 +514,7 @@ static int unbind_name(char * name,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        rne = get_reg_entry_by_name(name);
+        rne = registry_get_entry_by_name(&instance->registry, name);
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1139,7 +526,7 @@ static int unbind_name(char * name,
          * FIXME: Remove the mapping of name to ap_name.
          * Remove the name only if it was the last mapping.
          */
-        registry_del_name(rne->name);
+        registry_del_name(&instance->registry, rne->name);
 
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
@@ -1206,7 +593,7 @@ static int ap_reg(char *  name,
                 return -1;
         }
 
-        reg = get_reg_entry_by_name(name);
+        reg = registry_get_entry_by_name(&instance->registry, name);
         if (reg == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1315,7 +702,7 @@ static struct port_map_entry * flow_accept(pid_t   api,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        rne = get_reg_entry_by_ap_name(srv_ap_name);
+        rne = registry_get_entry_by_ap_name(&instance->registry, srv_ap_name);
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1324,7 +711,8 @@ static struct port_map_entry * flow_accept(pid_t   api,
         }
 
         if (!reg_entry_has_api(rne, api)) {
-                rgi = registry_add_ap_instance(rne->name, api);
+                rgi = registry_add_ap_instance(&instance->registry,
+                                               rne->name, api);
                 if (rgi == NULL) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
@@ -1392,7 +780,7 @@ static int flow_alloc_resp(pid_t n_api,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        rne = get_reg_entry_by_ap_id(n_api);
+        rne = registry_get_entry_by_ap_id(&instance->registry, n_api);
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1408,7 +796,7 @@ static int flow_alloc_resp(pid_t n_api,
 
         pthread_mutex_lock(&rne->state_lock);
 
-        registry_remove_ap_instance(rne->name, n_api);
+        registry_remove_ap_instance(&instance->registry, rne->name, n_api);
 
         pthread_mutex_unlock(&rne->state_lock);
 
@@ -1677,7 +1065,7 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
         pthread_rwlock_rdlock(&instance->state_lock);
         pthread_rwlock_rdlock(&instance->reg_lock);
 
-        rne = get_reg_entry_by_name(dst_name);
+        rne = registry_get_entry_by_name(&instance->registry, dst_name);
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -1702,7 +1090,7 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
                 rne->state = REG_NAME_AUTO_EXEC;
                 pthread_mutex_unlock(&rne->state_lock);
 
-                if (auto_execute(registry_resolve_auto(rne)) < 0) {
+                if (auto_execute(reg_entry_resolve_auto(rne)) < 0) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
                         free(pme);
@@ -1724,7 +1112,7 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
                 pthread_rwlock_rdlock(&instance->reg_lock);
 
         case REG_NAME_FLOW_ACCEPT:
-                pme->n_api = registry_resolve_api(rne);
+                pme->n_api = reg_entry_resolve_api(rne);
                 if (pme->n_api == 0) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
@@ -2002,8 +1390,10 @@ void * irm_flow_cleaner()
                                         LOG_INFO("Process %d gone, "
                                                  "instance deleted.",
                                                  r->api);
-                                        registry_remove_ap_instance(e->name,
-                                                                    r->api);
+                                        registry_remove_ap_instance(
+                                                &instance->registry,
+                                                e->name,
+                                                r->api);
                                 }
                         }
                 }
