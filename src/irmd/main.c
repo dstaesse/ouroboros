@@ -2178,8 +2178,8 @@ void * mainloop()
 
                 pthread_cleanup_pop(true);
 
-                buffer.size = irm_msg__get_packed_size(&ret_msg);
-                if (buffer.size == 0) {
+                buffer.len = irm_msg__get_packed_size(&ret_msg);
+                if (buffer.len == 0) {
                         LOG_ERR("Failed to send reply message.");
                         if (apis != NULL)
                                 free(apis);
@@ -2187,7 +2187,7 @@ void * mainloop()
                         continue;
                 }
 
-                buffer.data = malloc(buffer.size);
+                buffer.data = malloc(buffer.len);
                 if (buffer.data == NULL) {
                         if (apis != NULL)
                                 free(apis);
@@ -2197,7 +2197,7 @@ void * mainloop()
 
                 irm_msg__pack(&ret_msg, buffer.data);
 
-                if (write(cli_sockfd, buffer.data, buffer.size) == -1) {
+                if (write(cli_sockfd, buffer.data, buffer.len) == -1) {
                         free(buffer.data);
                         if (apis != NULL)
                                 free(apis);

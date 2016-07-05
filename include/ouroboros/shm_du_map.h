@@ -24,7 +24,9 @@
 #ifndef OUROBOROS_SHM_DU_MAP_H
 #define OUROBOROS_SHM_DU_MAP_H
 
-#include "common.h"
+#include <errno.h>
+#include <unistd.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <pthread.h>
 

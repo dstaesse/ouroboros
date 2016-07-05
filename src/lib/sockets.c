@@ -32,6 +32,7 @@
 #include <sys/un.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 int client_socket_open(char * file_name)
 {
@@ -109,8 +110,8 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
         if (sockfd < 0)
                 return NULL;
 
-        buf.size = irm_msg__get_packed_size(msg);
-        if (buf.size == 0) {
+        buf.len = irm_msg__get_packed_size(msg);
+        if (buf.len == 0) {
                 close(sockfd);
                 return NULL;
         }
@@ -123,7 +124,7 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 
         irm_msg__pack(msg, buf.data);
 
-        if (write(sockfd, buf.data, buf.size) == -1) {
+        if (write(sockfd, buf.data, buf.len) == -1) {
                 free(buf.data);
                 close(sockfd);
                 return NULL;

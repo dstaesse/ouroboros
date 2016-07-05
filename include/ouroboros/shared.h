@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * IPC process structure
+ * Shared definitions between IRMd and IPCPs
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,36 +20,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef IPCPD_IPCP_H
-#define IPCPD_IPCP_H
+#ifndef OUROBOROS_SHARED_H
+#define OUROBOROS_SHARED_H
 
-#include <ouroboros/config.h>
-#include <ouroboros/shared.h>
-
-#include <pthread.h>
-
-#include "ipcp-ops.h"
-#include "ipcp-data.h"
-
-enum ipcp_state {
-        IPCP_INIT = 0,
-        IPCP_ENROLLED,
-        IPCP_DISCONNECTED,
-        IPCP_SHUTDOWN
+/* FIXME: To be decided which QoS cubes we support */
+enum qos_cube {
+        QOS_CUBE_BE = 0,
+        QOS_CUBE_VIDEO
 };
 
-struct ipcp {
-        struct ipcp_data * data;
-        struct ipcp_ops *  ops;
-        int                irmd_fd;
-
-        enum ipcp_state    state;
-        pthread_rwlock_t   state_lock;
+enum flow_state {
+        FLOW_NULL = 0,
+        FLOW_PENDING,
+        FLOW_ALLOCATED
 };
 
-struct ipcp * ipcp_instance_create();
-void *        ipcp_main_loop(void * o);
-void *        ipcp_sdu_loop(void * o);
-int           ipcp_arg_check(int argc, char * argv[]);
-
-#endif
+#endif /* OUROBOROS_SHARED_H */

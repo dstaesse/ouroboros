@@ -28,6 +28,7 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 

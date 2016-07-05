@@ -25,24 +25,10 @@
 
 #include <stdint.h>
 #include <unistd.h>
-#include <stdbool.h>
-#include <errno.h>
 
 typedef struct {
         uint8_t * data;
-        size_t    size;
+        size_t    len;
 } buffer_t;
-
-/* FIXME: To be decided which QoS cubes we support */
-enum qos_cube {
-        QOS_CUBE_BE = 0,
-        QOS_CUBE_VIDEO
-};
-
-enum flow_state {
-        FLOW_NULL = 0,
-        FLOW_PENDING,
-        FLOW_ALLOCATED
-};
 
 #endif /* OUROBOROS_COMMON_H */
