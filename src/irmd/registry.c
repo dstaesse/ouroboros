@@ -290,7 +290,7 @@ pid_t reg_entry_resolve_api(struct reg_entry * e)
                 return r->api;
         }
 
-        return 0;
+        return -1;
 }
 
 char ** reg_entry_resolve_auto(struct reg_entry * e)
@@ -498,17 +498,12 @@ struct reg_instance * registry_add_ap_instance(struct list_head * registry,
         struct reg_entry * e    = NULL;
         struct reg_instance * i = NULL;
 
-        if (name == NULL || api == 0)
+        if (name == NULL || api == -1)
                 return NULL;
 
         e = registry_get_entry_by_name(registry, name);
         if (e == NULL) {
                 LOG_DBG("Name %s not found in registry.", name);
-                return NULL;
-        }
-
-        if (api == 0) {
-                LOG_DBG("Invalid api.");
                 return NULL;
         }
 
@@ -546,8 +541,8 @@ int registry_remove_ap_instance(struct list_head * registry,
         struct reg_entry * e    = NULL;
         struct reg_instance * i = NULL;
 
-        if (name == NULL || api == 0)
-                return -1;
+        if (name == NULL || api == -1)
+                return -EINVAL;
 
         e = registry_get_entry_by_name(registry, name);
         if (e == NULL) {

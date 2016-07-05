@@ -89,12 +89,12 @@ static void garbage_collect(struct shm_du_map * dum)
 {
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         struct shm_du_buff * sdb;
-        while ((sdb = get_tail_ptr(dum))->dst_api == 0 &&
+        while ((sdb = get_tail_ptr(dum))->dst_api == -1 &&
                !shm_map_empty(dum))
                 *dum->ptr_tail = (*dum->ptr_tail + sdb->blocks)
                         & (SHM_BLOCKS_IN_MAP - 1);
 #else
-        while (get_tail_ptr(dum)->dst_api == 0 &&
+        while (get_tail_ptr(dum)->dst_api == -1 &&
                !shm_map_empty(dum))
                 *dum->ptr_tail =
                         (*dum->ptr_tail + 1) & (SHM_BLOCKS_IN_MAP - 1);
@@ -110,7 +110,7 @@ static void clean_sdus(struct shm_du_map * dum, pid_t api)
         while (idx != *dum->ptr_head) {
                 buf = idx_to_du_buff_ptr(dum, idx);
                 if (buf->dst_api == api)
-                        buf->dst_api = 0;
+                        buf->dst_api = -1;
 #ifdef SHM_DU_MAP_MULTI_BLOCK
                 idx = (idx + buf->blocks) & (SHM_BLOCKS_IN_MAP - 1);
 #else
@@ -271,7 +271,7 @@ struct shm_du_map * shm_du_map_open()
 pid_t shm_du_map_owner(struct shm_du_map * dum)
 {
         if (dum == NULL)
-                return 0;
+                return -1;
 
         return *dum->api;
 }
@@ -444,7 +444,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
                 sdb = get_head_ptr(dum);
                 sdb->size    = 0;
                 sdb->blocks  = padblocks;
-                sdb->dst_api = 0;
+                sdb->dst_api = -1;
                 sdb->du_head = 0;
                 sdb->du_tail = 0;
 
@@ -518,7 +518,7 @@ int shm_du_map_remove(struct shm_du_map * dum, ssize_t idx)
                 return -1;
         }
 
-        idx_to_du_buff_ptr(dum, idx)->dst_api = 0;
+        idx_to_du_buff_ptr(dum, idx)->dst_api = -1;
 
         if (idx != *dum->ptr_tail) {
                 pthread_mutex_unlock(dum->shm_mutex);
