@@ -35,25 +35,6 @@ int n_digits(unsigned i)
     return n;
 }
 
-char * strdup(const char * src)
-{
-        int len = 0;
-        char * dst = NULL;
-
-        if (src == NULL)
-                return NULL;
-
-        len = strlen(src) + 1;
-
-        dst = malloc(len);
-        if (dst == NULL)
-                return NULL;
-
-        memcpy(dst, src, len);
-
-        return dst;
-}
-
 char * path_strip(char * src)
 {
         char * dst = NULL;

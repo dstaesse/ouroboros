@@ -22,12 +22,12 @@
 
 #define OUROBOROS_PREFIX "libouroboros-irm"
 
+#include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/common.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
-#include <ouroboros/utils.h>
 
 #include <string.h>
 #include <stdlib.h>
