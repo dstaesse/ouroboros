@@ -22,7 +22,7 @@
 
 #include <ouroboros/irm_config.h>
 #include <ouroboros/sockets.h>
-#include <ouroboros/common.h>
+#include <ouroboros/shared.h>
 
 #include <sys/types.h>
 

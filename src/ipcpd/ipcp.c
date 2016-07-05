@@ -236,14 +236,14 @@ void * ipcp_main_loop(void * o)
 
                 ipcp_msg__free_unpacked(msg, NULL);
 
-                buffer.size = ipcp_msg__get_packed_size(&ret_msg);
-                if (buffer.size == 0) {
+                buffer.len = ipcp_msg__get_packed_size(&ret_msg);
+                if (buffer.len == 0) {
                         LOG_ERR("Failed to send reply message");
                         close(lsockfd);
                         continue;
                 }
 
-                buffer.data = malloc(buffer.size);
+                buffer.data = malloc(buffer.len);
                 if (buffer.data == NULL) {
                         close(lsockfd);
                         continue;
@@ -251,7 +251,7 @@ void * ipcp_main_loop(void * o)
 
                 ipcp_msg__pack(&ret_msg, buffer.data);
 
-                if (write(lsockfd, buffer.data, buffer.size) == -1) {
+                if (write(lsockfd, buffer.data, buffer.len) == -1) {
                         free(buffer.data);
                         close(lsockfd);
                         continue;

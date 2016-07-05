@@ -9,7 +9,9 @@ include_directories(${PROTOBUF_INCLUDE_DIRS})
 protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS irmd_messages.proto)
 protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS ipcpd_messages.proto)
 protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
-                                          dif_config.proto)
+  dif_config.proto)
+protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS
+  cdap.proto)
 
 find_library(LIBRT_LIBRARIES rt)
 if(NOT LIBRT_LIBRARIES)
@@ -38,7 +40,8 @@ set(SOURCE_FILES
   )
 
 add_library(ouroboros SHARED ${SOURCE_FILES}
-  ${IRM_PROTO_SRCS} ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS})
+  ${IRM_PROTO_SRCS} ${IPCP_PROTO_SRCS}
+  ${DIF_CONFIG_PROTO_SRCS} ${CDAP_PROTO_SRCS})
 
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY})

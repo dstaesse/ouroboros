@@ -340,8 +340,8 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg,
        r_saddr.sin_addr.s_addr = dst_ip_addr;
        r_saddr.sin_port        = LISTEN_PORT;
 
-       buf.size = shim_udp_msg__get_packed_size(msg);
-       if (buf.size == 0) {
+       buf.len = shim_udp_msg__get_packed_size(msg);
+       if (buf.len == 0) {
                return -1;
        }
 
@@ -354,7 +354,7 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg,
 
        if (sendto(shim_data(_ipcp)->s_fd,
                   buf.data,
-                  buf.size,
+                  buf.len,
                   0,
                   (struct sockaddr *) &r_saddr,
                   sizeof(r_saddr)) == -1) {

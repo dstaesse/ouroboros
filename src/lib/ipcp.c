@@ -32,6 +32,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <errno.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -54,8 +56,8 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
                return NULL;
        }
 
-       buf.size = ipcp_msg__get_packed_size(msg);
-       if (buf.size == 0) {
+       buf.len = ipcp_msg__get_packed_size(msg);
+       if (buf.len == 0) {
                close(sockfd);
                free(sock_path);
                return NULL;
@@ -70,7 +72,7 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
 
        ipcp_msg__pack(msg, buf.data);
 
-       if (write(sockfd, buf.data, buf.size) == -1) {
+       if (write(sockfd, buf.data, buf.len) == -1) {
                free(sock_path);
                free(buf.data);
                close(sockfd);
