@@ -390,7 +390,7 @@ void shm_du_map_destroy(struct shm_du_map * dum)
                 return;
         }
 
-        if (getpid() != *dum->api) {
+        if (getpid() != *dum->api && kill(*dum->api, 0) == 0) {
                 LOG_DBGF("Only IRMd can destroy %s.", SHM_DU_MAP_FILENAME);
                 return;
         }
