@@ -102,7 +102,7 @@ static void garbage_collect(struct shm_du_map * dum)
 #endif
 }
 
-static void clean_sdus(struct shm_du_map * dum, pid_t api)
+static void clean_sdus(struct shm_du_map * dum, pid_t api, bool exit)
 {
         size_t idx = *dum->ptr_tail;
         struct shm_du_buff * buf;
@@ -120,7 +120,7 @@ static void clean_sdus(struct shm_du_map * dum, pid_t api)
 
         garbage_collect(dum);
 
-        if (kill(api, 0) == 0) {
+        if (!exit && kill(api, 0) == 0) {
                 struct shm_ap_rbuff * rb;
                 rb = shm_ap_rbuff_open(api);
                 if (rb != NULL) {
@@ -319,7 +319,7 @@ void * shm_du_map_sanitize(void * o)
 
                 if (kill(api, 0)) {
                         LOG_DBGF("Dead process %d left stale sdu.", api);
-                        clean_sdus(dum, api);
+                        clean_sdus(dum, api, false);
                         continue;
                 }
 
@@ -339,7 +339,7 @@ void * shm_du_map_sanitize(void * o)
 
                         if (ret == ETIMEDOUT) {
                                 LOG_DBGF("SDU timed out.");
-                                clean_sdus(dum, api);
+                                clean_sdus(dum, api, false);
                         }
                 }
         }
@@ -356,7 +356,7 @@ void shm_du_map_close_on_exit(struct shm_du_map * dum)
                 return;
         }
 
-        clean_sdus(dum, getpid());
+        clean_sdus(dum, getpid(), true);
 
         if (close(dum->fd) < 0)
                 LOG_DBGF("Couldn't close shared memory.");
