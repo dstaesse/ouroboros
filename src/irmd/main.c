@@ -50,6 +50,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 
@@ -66,35 +67,42 @@ enum irm_state {
         IRMD_SHUTDOWN
 };
 
+struct spawned_api {
+        struct list_head next;
+        pid_t            api;
+};
+
 /* keeps track of port_id's between N and N - 1 */
 struct port_map_entry {
         struct list_head next;
 
-        int port_id;
+        int              port_id;
 
-        pid_t n_api;
-        pid_t n_1_api;
+        pid_t            n_api;
+        pid_t            n_1_api;
 
-        pthread_cond_t  res_signal;
-        pthread_mutex_t res_lock;
+        pthread_cond_t   res_signal;
+        pthread_mutex_t  res_lock;
 
-        enum flow_state state;
+        enum flow_state  state;
 
-        struct timespec t0;
+        struct timespec  t0;
 };
 
 struct irm {
         /* FIXME: list of ipcps could be merged into the registry */
-        struct list_head ipcps;
+        struct list_head    ipcps;
 
-        struct list_head registry;
-        pthread_rwlock_t reg_lock;
+        struct list_head    registry;
+        pthread_rwlock_t    reg_lock;
+
+        struct list_head    spawned_apis;
 
         /* keep track of all flows in this processing system */
-        struct bmp * port_ids;
+        struct bmp *        port_ids;
         /* maps port_ids to api pair */
-        struct list_head port_map;
-        pthread_rwlock_t  flows_lock;
+        struct list_head    port_map;
+        pthread_rwlock_t    flows_lock;
 
         enum irm_state      state;
         struct shm_du_map * dum;
@@ -102,8 +110,8 @@ struct irm {
         int                 sockfd;
         pthread_rwlock_t    state_lock;
 
-        pthread_t cleanup_flows;
-        pthread_t shm_sanitize;
+        pthread_t           cleanup_flows;
+        pthread_t           shm_sanitize;
 } * instance = NULL;
 
 static struct port_map_entry * port_map_entry_create()
@@ -260,8 +268,12 @@ static pid_t get_ipcp_by_dst_name(char * dst_name,
 static pid_t create_ipcp(char *         name,
                          enum ipcp_type ipcp_type)
 {
-        pid_t api;
+        struct spawned_api * api;
         struct ipcp_entry * tmp = NULL;
+
+        api = malloc(sizeof(*api));
+        if (api == NULL)
+                return -ENOMEM;
 
         pthread_rwlock_rdlock(&instance->state_lock);
 
@@ -270,8 +282,8 @@ static pid_t create_ipcp(char *         name,
                 return -1;
         }
 
-        api = ipcp_create(ipcp_type);
-        if (api == -1) {
+        api->api = ipcp_create(ipcp_type);
+        if (api->api == -1) {
                 pthread_rwlock_unlock(&instance->state_lock);
                 LOG_ERR("Failed to create IPCP.");
                 return -1;
@@ -285,7 +297,7 @@ static pid_t create_ipcp(char *         name,
 
         INIT_LIST_HEAD(&tmp->next);
 
-        tmp->api = api;
+        tmp->api = api->api;
         tmp->name = strdup(name);
         if (tmp->name  == NULL) {
                 ipcp_entry_destroy(tmp);
@@ -299,12 +311,30 @@ static pid_t create_ipcp(char *         name,
 
         list_add(&tmp->next, &instance->ipcps);
 
+        list_add(&api->next, &instance->spawned_apis);
+
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
-        LOG_INFO("Created IPCP %d.", api);
+        LOG_INFO("Created IPCP %d.", api->api);
 
-        return api;
+        return api->api;
+}
+
+static void clear_spawned_api(pid_t api)
+{
+        struct list_head * pos = NULL;
+        struct list_head * n   = NULL;
+
+        list_for_each_safe(pos, n, &(instance->spawned_apis)) {
+                struct spawned_api * a =
+                        list_entry(pos, struct spawned_api, next);
+
+                if (api == a->api) {
+                        list_del(&a->next);
+                        free(a);
+                }
+        }
 }
 
 static int destroy_ipcp(pid_t api)
@@ -320,6 +350,7 @@ static int destroy_ipcp(pid_t api)
                         list_entry(pos, struct ipcp_entry, next);
 
                 if (api == tmp->api) {
+                        clear_spawned_api(api);
                         if (ipcp_destroy(api))
                                 LOG_ERR("Could not destroy IPCP.");
                         list_del(&tmp->next);
@@ -1035,9 +1066,8 @@ static pid_t auto_execute(char ** argv)
                 return api;
         }
 
-        if (api != 0) {
+        if (api != 0)
                 return api;
-        }
 
         execv(argv[0], argv);
 
@@ -1055,6 +1085,8 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
 
         bool acc_wait = true;
         enum reg_name_state state;
+
+        struct spawned_api * c_api;
 
         pme = port_map_entry_create();
         if (pme == NULL) {
@@ -1091,16 +1123,31 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
                 free(pme);
                 return NULL;
         case REG_NAME_AUTO_ACCEPT:
-                pthread_mutex_lock(&rne->state_lock);
-                rne->state = REG_NAME_AUTO_EXEC;
-                pthread_mutex_unlock(&rne->state_lock);
-
-                if (auto_execute(reg_entry_resolve_auto(rne)) < 0) {
+                c_api = malloc(sizeof(*c_api));
+                if (c_api == NULL) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
                         free(pme);
                         return NULL;
                 }
+
+                pthread_mutex_lock(&rne->state_lock);
+                rne->state = REG_NAME_AUTO_EXEC;
+                pthread_mutex_unlock(&rne->state_lock);
+
+                if ((c_api->api = auto_execute(reg_entry_resolve_auto(rne)))
+                    < 0) {
+                        pthread_mutex_lock(&rne->state_lock);
+                        rne->state = REG_NAME_AUTO_ACCEPT;
+                        pthread_mutex_unlock(&rne->state_lock);
+                        pthread_rwlock_unlock(&instance->reg_lock);
+                        pthread_rwlock_unlock(&instance->state_lock);
+                        free(pme);
+                        free(c_api);
+                        return NULL;
+                }
+
+                list_add(&c_api->next, &instance->spawned_apis);
 
                 pthread_rwlock_unlock(&instance->reg_lock);
 
@@ -1227,7 +1274,6 @@ static void irm_destroy()
         struct list_head * h;
         struct list_head * t;
 
-
         pthread_rwlock_rdlock(&instance->state_lock);
 
         if (instance->state != IRMD_NULL)
@@ -1242,6 +1288,7 @@ static void irm_destroy()
                 struct ipcp_entry * e = list_entry(h, struct ipcp_entry, next);
                 list_del(&e->next);
                 ipcp_destroy(e->api);
+                clear_spawned_api(e->api);
                 ipcp_entry_destroy(e);
         }
 
@@ -1249,6 +1296,18 @@ static void irm_destroy()
                 struct reg_entry * e = list_entry(h, struct reg_entry, next);
                 list_del(&e->next);
                 reg_entry_destroy(e);
+        }
+
+        list_for_each_safe(h, t, &instance->spawned_apis) {
+                struct spawned_api * api =
+                        list_entry(h, struct spawned_api, next);
+                int status;
+                if (kill(api->api, SIGTERM))
+                        LOG_DBGF("Could not send kill signal to %d.", api->api);
+                else if (waitpid(api->api, &status, 0) < 0)
+                        LOG_DBGF("Error waiting for %d to exit.", api->api);
+                list_del(&api->next);
+                free(api);
         }
 
         pthread_rwlock_unlock(&instance->reg_lock);
@@ -1259,10 +1318,8 @@ static void irm_destroy()
                 struct port_map_entry * e = list_entry(h,
                                                        struct port_map_entry,
                                                        next);
-
                 list_del(&e->next);
                 port_map_entry_destroy(e);
-
         }
 
         if (instance->port_ids != NULL)
@@ -1321,6 +1378,7 @@ void * irm_flow_cleaner()
 
         struct timespec timeout = {IRMD_CLEANUP_TIMER / BILLION,
                                    IRMD_CLEANUP_TIMER % BILLION};
+        int status;
 
         while (true) {
                 if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
@@ -1382,7 +1440,7 @@ void * irm_flow_cleaner()
                 pthread_rwlock_unlock(&instance->flows_lock);
                 pthread_rwlock_wrlock(&instance->reg_lock);
 
-                list_for_each_safe(pos, n, &(instance->registry)) {
+                list_for_each_safe(pos, n, &instance->registry) {
                         struct reg_entry * e =
                                 list_entry(pos, struct reg_entry, next);
 
@@ -1400,6 +1458,20 @@ void * irm_flow_cleaner()
                                                 r->api,
                                                 e->name);
                                 }
+                        }
+                }
+
+                list_for_each_safe(pos, n, &instance->spawned_apis) {
+                        struct spawned_api * api =
+                                list_entry(pos, struct spawned_api, next);
+                        waitpid(api->api, &status, WNOHANG);
+
+                        if (kill(api->api, 0) < 0) {
+                                LOG_INFO("Spawned process %d terminated "
+                                         "with exit status %d.",
+                                         api->api, status);
+                                list_del(&api->next);
+                                free(api);
                         }
                 }
 
@@ -1674,6 +1746,7 @@ static struct irm * irm_create()
         }
 
         INIT_LIST_HEAD(&instance->ipcps);
+        INIT_LIST_HEAD(&instance->spawned_apis);
         INIT_LIST_HEAD(&instance->registry);
         INIT_LIST_HEAD(&instance->port_map);
 
