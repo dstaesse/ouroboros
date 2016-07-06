@@ -50,6 +50,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <sys/wait.h>
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
@@ -1782,16 +1783,80 @@ static struct irm * irm_create()
         return instance;
 }
 
-int main()
+static void usage()
+{
+        LOG_ERR("Usage: irmd \n\n"
+                 "         [--stdout (Print to stdout instead of logs)]\n");
+}
+
+int main(int argc, char ** argv)
 {
         struct sigaction sig_act;
 
         int t = 0;
 
+        char * log_file = INSTALL_PREFIX LOG_DIR "irmd.log";
+        DIR * log_dir;
+        struct dirent * ent;
+        char * point;
+        char * log_path;
+        size_t len = 0;
+        bool use_stdout = false;
+
         if (geteuid() != 0) {
                 LOG_ERR("IPC Resource Manager must be run as root.");
                 exit(EXIT_FAILURE);
         }
+
+        argc--;
+        argv++;
+        while (argc > 0) {
+                if (strcmp(*argv, "--stdout") == 0) {
+                        use_stdout = true;
+                        argc--;
+                        argv++;
+                } else {
+                        usage();
+                        exit(EXIT_FAILURE);
+                }
+        }
+
+
+        if (!use_stdout &&
+            (log_dir = opendir(INSTALL_PREFIX LOG_DIR)) != NULL) {
+                while ((ent = readdir(log_dir)) != NULL) {
+                        point = strrchr(ent->d_name,'.');
+                        if (point == NULL ||
+                            strcmp(point, ".log") != 0)
+                                continue;
+
+                        len += strlen(INSTALL_PREFIX);
+                        len += strlen(LOG_DIR);
+                        len += strlen(ent->d_name);
+
+                        log_path = malloc(len + 1);
+                        if (log_path == NULL) {
+                                LOG_ERR("Failed to malloc");
+                                exit(EXIT_FAILURE);
+                        }
+
+                        strcpy(log_path, INSTALL_PREFIX);
+                        strcat(log_path, LOG_DIR);
+                        strcat(log_path, ent->d_name);
+
+                        unlink(log_path);
+
+                        free(log_path);
+                        len = 0;
+                }
+                closedir(log_dir);
+        }
+
+        if (!use_stdout)
+                if (set_logfile(log_file))
+                        LOG_ERR("Cannot open %s, falling back to "
+                                "stdout for logs.",
+                                log_file);
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof sig_act);

@@ -31,6 +31,7 @@ set(SOURCE_FILES
   ipcp.c
   irm.c
   list.c
+  logs.c
   nsm.c
   shm_ap_rbuff.c
   shm_du_map.c

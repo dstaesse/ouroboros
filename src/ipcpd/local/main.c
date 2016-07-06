@@ -573,7 +573,7 @@ static struct ipcp * ipcp_local_create()
 
 #ifndef MAKE_CHECK
 
-int main (int argc, char * argv[])
+int main(int argc, char * argv[])
 {
         struct sigaction sig_act;
         sigset_t  sigset;
@@ -583,8 +583,8 @@ int main (int argc, char * argv[])
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
 
-        if (ipcp_arg_check(argc, argv)) {
-                LOG_ERR("Wrong arguments.");
+        if (ipcp_parse_arg(argc, argv)) {
+                LOG_ERR("Failed to parse arguments.");
                 exit(1);
         }
 

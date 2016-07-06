@@ -1245,8 +1245,8 @@ int main(int argc, char * argv[])
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
 
-        if (ipcp_arg_check(argc, argv)) {
-                LOG_ERR("Wrong arguments.");
+        if (ipcp_parse_arg(argc, argv)) {
+                LOG_ERR("Failed to parse arguments.");
                 exit(1);
         }
 
