@@ -1711,6 +1711,7 @@ static struct irm * irm_create()
                 } else {
                         LOG_INFO("IRMd already running (%d), exiting.",
                                  shm_du_map_owner(dum));
+                        shm_du_map_close(dum);
                         free(instance);
                         exit(EXIT_SUCCESS);
                 }

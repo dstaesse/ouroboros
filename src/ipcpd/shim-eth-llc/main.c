@@ -176,7 +176,7 @@ void eth_llc_ipcp_data_destroy()
                 LOG_WARN("Cleaning up while not in shutdown.");
 
         if (shim_data(_ipcp)->dum != NULL)
-                shm_du_map_close(shim_data(_ipcp)->dum);
+                shm_du_map_close_on_exit(shim_data(_ipcp)->dum);
         if (shim_data(_ipcp)->rb != NULL)
                 shm_ap_rbuff_destroy(shim_data(_ipcp)->rb);
         if (shim_data(_ipcp)->indices != NULL)

@@ -123,8 +123,10 @@ static void clean_sdus(struct shm_du_map * dum, pid_t api)
         if (kill(api, 0) == 0) {
                 struct shm_ap_rbuff * rb;
                 rb = shm_ap_rbuff_open(api);
-                shm_ap_rbuff_reset(rb);
-                shm_ap_rbuff_close(rb);
+                if (rb != NULL) {
+                        shm_ap_rbuff_reset(rb);
+                        shm_ap_rbuff_close(rb);
+                }
         }
 
         *dum->choked = 0;
@@ -347,6 +349,24 @@ void * shm_du_map_sanitize(void * o)
         return (void *) 0;
 }
 
+void shm_du_map_close_on_exit(struct shm_du_map * dum)
+{
+        if (dum == NULL) {
+                LOG_DBGF("Bogus input. Bugging out.");
+                return;
+        }
+
+        clean_sdus(dum, getpid());
+
+        if (close(dum->fd) < 0)
+                LOG_DBGF("Couldn't close shared memory.");
+
+        if (munmap(dum->shm_base, SHM_FILE_SIZE) == -1)
+                LOG_DBGF("Couldn't unmap shared memory.");
+
+        free(dum);
+}
+
 void shm_du_map_close(struct shm_du_map * dum)
 {
         if (dum == NULL) {
@@ -367,6 +387,11 @@ void shm_du_map_destroy(struct shm_du_map * dum)
 {
         if (dum == NULL) {
                 LOG_DBGF("Bogus input. Bugging out.");
+                return;
+        }
+
+        if (getpid() != *dum->api) {
+                LOG_DBGF("Only IRMd can destroy %s.", SHM_DU_MAP_FILENAME);
                 return;
         }
 
