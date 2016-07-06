@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * IPC process structure
+ * Logging facilities
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,36 +20,17 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef IPCPD_IPCP_H
-#define IPCPD_IPCP_H
+#define OUROBOROS_PREFIX "logging"
 
-#include <ouroboros/config.h>
-#include <ouroboros/shared.h>
+#include <ouroboros/logs.h>
 
-#include <pthread.h>
+FILE * logfile = NULL;
 
-#include "ipcp-ops.h"
-#include "ipcp-data.h"
+int set_logfile(char * filename)
+{
+        logfile = fopen(filename, "w");
+        if (logfile == NULL)
+                return -1;
 
-enum ipcp_state {
-        IPCP_INIT = 0,
-        IPCP_ENROLLED,
-        IPCP_DISCONNECTED,
-        IPCP_SHUTDOWN
-};
-
-struct ipcp {
-        struct ipcp_data * data;
-        struct ipcp_ops *  ops;
-        int                irmd_fd;
-
-        enum ipcp_state    state;
-        pthread_rwlock_t   state_lock;
-};
-
-struct ipcp * ipcp_instance_create();
-void *        ipcp_main_loop(void * o);
-void *        ipcp_sdu_loop(void * o);
-int           ipcp_parse_arg(int argc, char * argv[]);
-
-#endif
+        return 0;
+}

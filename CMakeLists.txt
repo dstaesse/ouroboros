@@ -55,6 +55,10 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
+# Log directory
+set(LOG_DIR "var/log/ouroboros")
+install(DIRECTORY DESTINATION ${LOG_DIR})
+
 add_subdirectory(src)
 add_subdirectory(include)
 

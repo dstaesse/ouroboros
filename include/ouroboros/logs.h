@@ -30,32 +30,51 @@
 #error You must define OUROBOROS_PREFIX before including this file
 #endif
 
+int set_logfile(char * filename);
+
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
 #define ANSI_COLOR_YELLOW  "\x1b[33m"
 #define ANSI_COLOR_BLUE    "\x1b[34m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-#define __LOG(CLR, PFX, LVL, FMT, ARGS...)                                     \
-        do { printf(CLR PFX "(" LVL "): " FMT ANSI_COLOR_RESET "\n", ##ARGS); }\
-        while (0)
+#define DEBUG_CODE "DB"
+#define ERROR_CODE "EE"
+#define WARN_CODE  "WW"
+#define INFO_CODE  "II"
+#define IMPL_CODE  "NI"
 
-#define LOG_ERR(FMT,   ARGS...) __LOG(ANSI_COLOR_RED, OUROBOROS_PREFIX,        \
-                                      "EE", FMT, ##ARGS)
-#define LOG_WARN(FMT,  ARGS...) __LOG(ANSI_COLOR_YELLOW, OUROBOROS_PREFIX,     \
-                                      "WW", FMT, ##ARGS)
-#define LOG_INFO(FMT,  ARGS...) __LOG(ANSI_COLOR_GREEN, OUROBOROS_PREFIX,      \
-                                      "II", FMT, ##ARGS)
-#define LOG_NI(FMT,   ARGS...) __LOG(ANSI_COLOR_BLUE, OUROBOROS_PREFIX,        \
-                                     "NI",  FMT, ##ARGS)
+extern FILE * logfile;
+
+#define __LOG(CLR, LVL, FMT, ARGS...)                                    \
+        do {                                                            \
+                if (logfile != NULL) {                                  \
+                        fprintf(logfile,                                \
+                                OUROBOROS_PREFIX "(" LVL "): "      \
+                                FMT ANSI_COLOR_RESET "\n", ##ARGS);     \
+                        fflush(logfile);                                \
+                } else {                                                \
+                        printf(CLR OUROBOROS_PREFIX "(" LVL "): "       \
+                               FMT ANSI_COLOR_RESET "\n", ##ARGS);      \
+                }                                                       \
+        } while (0)
+
+#define LOG_ERR(FMT, ARGS...) __LOG(ANSI_COLOR_RED,             \
+                                    ERROR_CODE, FMT, ##ARGS)
+#define LOG_WARN(FMT, ARGS...) __LOG(ANSI_COLOR_YELLOW,         \
+                                     WARN_CODE, FMT, ##ARGS)
+#define LOG_INFO(FMT, ARGS...) __LOG(ANSI_COLOR_GREEN,          \
+                                     INFO_CODE, FMT, ##ARGS)
+#define LOG_NI(FMT, ARGS...) __LOG(ANSI_COLOR_BLUE,             \
+                                   IMPL_CODE,  FMT, ##ARGS)
 
 #ifdef CONFIG_OUROBOROS_DEBUG
-#define LOG_DBG(FMT,   ARGS...) __LOG("", OUROBOROS_PREFIX, "DB", FMT, ##ARGS)
+#define LOG_DBG(FMT, ARGS...) __LOG("", DEBUG_CODE, FMT, ##ARGS)
 #else
-#define LOG_DBG(FMT,   ARGS...) do { } while (0)
+#define LOG_DBG(FMT, ARGS...) do { } while (0)
 #endif
 
-#define LOG_DBGF(FMT,  ARGS...) LOG_DBG("%s: " FMT, __FUNCTION__, ##ARGS)
+#define LOG_DBGF(FMT, ARGS...) LOG_DBG("%s: " FMT, __FUNCTION__, ##ARGS)
 
 #define LOG_MISSING LOG_NI("Missing code in %s:%d",__FILE__, __LINE__)
 

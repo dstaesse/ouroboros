@@ -22,12 +22,14 @@
 
 #include <ouroboros/config.h>
 #include <ouroboros/ipcp.h>
-#include <sys/socket.h>
-#include <stdlib.h>
-#include "ipcp.h"
 
 #define OUROBOROS_PREFIX "ipcpd/ipcp"
 #include <ouroboros/logs.h>
+
+#include <string.h>
+#include <sys/socket.h>
+#include <stdlib.h>
+#include "ipcp.h"
 
 struct ipcp * ipcp_instance_create()
 {
@@ -45,14 +47,41 @@ struct ipcp * ipcp_instance_create()
         return i;
 }
 
-int ipcp_arg_check(int argc, char * argv[])
+int ipcp_parse_arg(int argc, char * argv[])
 {
-        if (argc != 2)
+        char * log_file;
+        size_t len = 0;
+
+        if (!(argc == 3 || argc == 2))
                 return -1;
 
         /* argument 1: api of irmd */
         if (atoi(argv[1]) == 0)
                 return -1;
+
+        if (argv[2] == NULL)
+                return 0;
+
+        len += strlen(INSTALL_PREFIX);
+        len += strlen(LOG_DIR);
+        len += strlen(argv[2]);
+
+        log_file = malloc(len + 1);
+        if (log_file == NULL) {
+                LOG_ERR("Failed to malloc");
+                return -1;
+        }
+
+        strcpy(log_file, INSTALL_PREFIX);
+        strcat(log_file, LOG_DIR);
+        strcat(log_file, argv[2]);
+        log_file[len] = '\0';
+
+        if (set_logfile(log_file))
+                LOG_ERR("Cannot open %s, falling back to stdout for logs.",
+                        log_file);
+
+        free(log_file);
 
         return 0;
 }
