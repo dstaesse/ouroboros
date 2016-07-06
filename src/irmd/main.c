@@ -715,8 +715,9 @@ static struct port_map_entry * flow_accept(pid_t   api,
         }
 
         if (!reg_entry_has_api(rne, api)) {
-                rgi = registry_add_ap_instance(&instance->registry,
-                                               rne->name, api);
+                rgi = registry_add_api_name(&instance->registry,
+                                            api,
+                                            rne->name);
                 if (rgi == NULL) {
                         pthread_rwlock_unlock(&instance->reg_lock);
                         pthread_rwlock_unlock(&instance->state_lock);
@@ -800,7 +801,7 @@ static int flow_alloc_resp(pid_t n_api,
 
         pthread_mutex_lock(&rne->state_lock);
 
-        registry_remove_ap_instance(&instance->registry, rne->name, n_api);
+        registry_remove_api_name(&instance->registry, n_api, rne->name);
 
         pthread_mutex_unlock(&rne->state_lock);
 
@@ -1392,12 +1393,12 @@ void * irm_flow_cleaner()
                                                    next);
                                 if (kill(r->api, 0) < 0) {
                                         LOG_INFO("Process %d gone, "
-                                                 "instance deleted.",
+                                                 "registry binding removed.",
                                                  r->api);
-                                        registry_remove_ap_instance(
+                                        registry_remove_api_name(
                                                 &instance->registry,
-                                                e->name,
-                                                r->api);
+                                                r->api,
+                                                e->name);
                                 }
                         }
                 }
