@@ -491,9 +491,9 @@ int registry_remove_ap_auto(struct list_head * registry,
 }
 
 
-struct reg_instance * registry_add_ap_instance(struct list_head * registry,
-                                               char *             name,
-                                               pid_t              api)
+struct reg_instance * registry_add_api_name(struct list_head * registry,
+                                            pid_t              api,
+                                            char *             name)
 {
         struct reg_entry * e    = NULL;
         struct reg_instance * i = NULL;
@@ -534,9 +534,9 @@ struct reg_instance * registry_add_ap_instance(struct list_head * registry,
         return i;
 }
 
-int registry_remove_ap_instance(struct list_head * registry,
-                                char *             name,
-                                pid_t              api)
+int registry_remove_api_name(struct list_head * registry,
+                             pid_t              api,
+                             char *             name)
 {
         struct reg_entry * e    = NULL;
         struct reg_instance * i = NULL;

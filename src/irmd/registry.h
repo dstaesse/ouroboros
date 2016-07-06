@@ -130,12 +130,12 @@ int                   registry_add_ap_auto(struct list_head * registry,
 int                   registry_remove_ap_auto(struct list_head * registry,
                                               char *             name,
                                               char *             ap_name);
-struct reg_instance * registry_add_ap_instance(struct list_head * registry,
-                                               char *             name,
-                                               pid_t              api);
-int                   registry_remove_ap_instance(struct list_head * registry,
-                                                  char *             name,
-                                                  pid_t              api);
+struct reg_instance * registry_add_api_name(struct list_head * registry,
+                                            pid_t              api,
+                                            char *             name);
+int                   registry_remove_api_name(struct list_head * registry,
+                                               pid_t              api,
+                                               char *             name);
 struct reg_entry *    registry_get_entry_by_name(struct list_head * registry,
                                                  char *             name);
 struct reg_entry *    registry_get_entry_by_ap_name(struct list_head * registry,
