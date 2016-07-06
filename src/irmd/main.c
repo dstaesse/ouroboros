@@ -1696,6 +1696,8 @@ static struct irm * irm_create()
         if (instance == NULL)
                 return NULL;
 
+        instance->state = IRMD_NULL;
+
         if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1) {
                 struct shm_du_map * dum = shm_du_map_open();
 
@@ -1716,6 +1718,8 @@ static struct irm * irm_create()
                         free(instance);
                         exit(EXIT_SUCCESS);
                 }
+
+                shm_du_map_close(dum);
         }
 
         if (pthread_rwlock_init(&instance->state_lock, NULL)) {
@@ -1736,17 +1740,6 @@ static struct irm * irm_create()
                 return NULL;
         }
 
-        instance->threadpool = malloc(sizeof(pthread_t) * IRMD_THREADPOOL_SIZE);
-        if (instance->threadpool == NULL) {
-                irm_destroy();
-                return NULL;
-        }
-
-        if ((instance->dum = shm_du_map_create()) == NULL) {
-                irm_destroy();
-                return NULL;
-        }
-
         INIT_LIST_HEAD(&instance->ipcps);
         INIT_LIST_HEAD(&instance->spawned_apis);
         INIT_LIST_HEAD(&instance->registry);
@@ -1754,6 +1747,12 @@ static struct irm * irm_create()
 
         instance->port_ids = bmp_create(IRMD_MAX_FLOWS, 0);
         if (instance->port_ids == NULL) {
+                irm_destroy();
+                return NULL;
+        }
+
+        instance->threadpool = malloc(sizeof(pthread_t) * IRMD_THREADPOOL_SIZE);
+        if (instance->threadpool == NULL) {
                 irm_destroy();
                 return NULL;
         }
@@ -1774,6 +1773,11 @@ static struct irm * irm_create()
 
         if (chmod(IRM_SOCK_PATH, 0666)) {
                 LOG_ERR("Failed to chmod socket.");
+                irm_destroy();
+                return NULL;
+        }
+
+        if ((instance->dum = shm_du_map_create()) == NULL) {
                 irm_destroy();
                 return NULL;
         }
@@ -1893,6 +1897,8 @@ int main(int argc, char ** argv)
         pthread_join(instance->cleanup_flows, NULL);
 
         irm_destroy();
+
+        close_logfile();
 
         exit(EXIT_SUCCESS);
 }
