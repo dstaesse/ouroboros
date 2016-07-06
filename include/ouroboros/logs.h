@@ -46,11 +46,11 @@ int set_logfile(char * filename);
 
 extern FILE * logfile;
 
-#define __LOG(CLR, LVL, FMT, ARGS...)                                    \
+#define __LOG(CLR, LVL, FMT, ARGS...)                                   \
         do {                                                            \
                 if (logfile != NULL) {                                  \
                         fprintf(logfile,                                \
-                                OUROBOROS_PREFIX "(" LVL "): "      \
+                                OUROBOROS_PREFIX "(" LVL "): "          \
                                 FMT ANSI_COLOR_RESET "\n", ##ARGS);     \
                         fflush(logfile);                                \
                 } else {                                                \
