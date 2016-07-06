@@ -141,7 +141,7 @@ void shim_ap_fini()
         if (_ap_instance->fds != NULL)
                 bmp_destroy(_ap_instance->fds);
         if (_ap_instance->dum != NULL)
-                shm_du_map_close(_ap_instance->dum);
+                shm_du_map_close_on_exit(_ap_instance->dum);
         if (_ap_instance->rb != NULL)
                 shm_ap_rbuff_destroy(_ap_instance->rb);
 

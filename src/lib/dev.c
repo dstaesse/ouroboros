@@ -113,10 +113,10 @@ void ap_fini(void)
 
         if (_ap_instance->fds != NULL)
                 bmp_destroy(_ap_instance->fds);
-        if (_ap_instance->dum != NULL)
-                shm_du_map_close(_ap_instance->dum);
         if (_ap_instance->rb != NULL)
                 shm_ap_rbuff_destroy(_ap_instance->rb);
+        if (_ap_instance->dum != NULL)
+                shm_du_map_close_on_exit(_ap_instance->dum);
 
         pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 

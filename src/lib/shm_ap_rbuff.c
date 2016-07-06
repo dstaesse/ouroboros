@@ -36,6 +36,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <errno.h>
+#include <signal.h>
 #include <sys/stat.h>
 
 #define SHM_RBUFF_FILE_SIZE (SHM_RBUFF_SIZE * sizeof(struct rb_entry)          \
@@ -161,7 +162,7 @@ struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t api)
 
         shm_fd = shm_open(fn, O_RDWR, 0666);
         if (shm_fd == -1) {
-                LOG_DBGF("Failed opening shared memory %s.", fn);
+                LOG_DBGF("%d failed opening shared memory %s.", getpid(), fn);
                 return NULL;
         }
 

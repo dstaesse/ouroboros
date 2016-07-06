@@ -36,6 +36,7 @@ struct shm_du_map;
 struct shm_du_map * shm_du_map_create();
 struct shm_du_map * shm_du_map_open();
 void                shm_du_map_close(struct shm_du_map * dum);
+void                shm_du_map_close_on_exit(struct shm_du_map * dum);
 void                shm_du_map_destroy(struct shm_du_map * dum);
 pid_t               shm_du_map_owner(struct shm_du_map * dum);
 void *              shm_du_map_sanitize(void * o);
