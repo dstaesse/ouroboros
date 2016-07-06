@@ -44,5 +44,6 @@
 #define IRMD_MAX_FLOWS         4096
 #define IRMD_THREADPOOL_SIZE   3
 #define IRMD_FLOW_TIMEOUT      5000 /* ms */
+#define LOG_DIR                "/@LOG_DIR@/"
 
 #endif

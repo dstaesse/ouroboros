@@ -109,6 +109,7 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
         char * ipcp_dir = "/sbin/";
         char * full_name = NULL;
         char * exec_name = NULL;
+        char * log_file = NULL;
 
         sprintf(irmd_api, "%u", getpid());
 
@@ -149,8 +150,19 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
         strcat(full_name, exec_name);
         full_name[len] = '\0';
 
+        if (logfile != NULL) {
+                log_file = malloc(20);
+                if (log_file == NULL) {
+                        LOG_ERR("Failed to malloc.");
+                        exit(EXIT_FAILURE);
+                }
+                sprintf(log_file, "ipcpd-%u.log", getpid());
+        }
+
+        /* log_file to be placed at the end */
         char * argv[] = {full_name,
                          irmd_api,
+                         log_file,
                          0};
 
         char * envp[] = {0};
