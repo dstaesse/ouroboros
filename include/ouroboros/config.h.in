@@ -34,12 +34,13 @@
 #define AP_MAX_FLOWS           256
 #define SHM_DU_BUFF_BLOCK_SIZE sysconf(_SC_PAGESIZE)
 #define SHM_DU_MAP_MULTI_BLOCK
-#define SHM_DU_MAP_FILENAME    "ouroboros_du_map"
+#define SHM_DU_MAP_FILENAME    "ouroboros.shm"
+#define LOCKFILE_NAME          "ouroboros.lockfile"
 #define SHM_BLOCKS_IN_MAP      (1 << 14)
 #define SHM_DU_TIMEOUT_MICROS  15000
 #define DU_BUFF_HEADSPACE      128
 #define DU_BUFF_TAILSPACE      0
-#define SHM_AP_RBUFF_PREFIX    "ouroboros_rb_"
+#define SHM_AP_RBUFF_PREFIX    "ouroboros.rbuff."
 #define SHM_RBUFF_SIZE         (1 << 14)
 #define IRMD_MAX_FLOWS         4096
 #define IRMD_THREADPOOL_SIZE   3

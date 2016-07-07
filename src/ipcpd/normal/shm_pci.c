@@ -21,9 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <ourboros/errno.h>
+
 #include "shm_pci.h"
 #include <stdlib.h>
-#include <errno.h>
 
 #define SHM_PCI_HEAD_SIZE(a, b) a.addr_size * 2 +  \
         a.cep_id_size * 2 +                    \

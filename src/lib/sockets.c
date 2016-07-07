@@ -23,6 +23,7 @@
 #define OUROBOROS_PREFIX "libouroboros-sockets"
 
 #include <ouroboros/config.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/common.h>
 #include <ouroboros/sockets.h>
@@ -32,7 +33,6 @@
 #include <sys/un.h>
 #include <string.h>
 #include <stdlib.h>
-#include <errno.h>
 
 int client_socket_open(char * file_name)
 {

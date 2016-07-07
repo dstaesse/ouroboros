@@ -26,13 +26,13 @@
 
 #define OUROBOROS_PREFIX "registry"
 
+#include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/irm_config.h>
 
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include <errno.h>
 
 struct reg_instance * reg_instance_create(pid_t api)
 {

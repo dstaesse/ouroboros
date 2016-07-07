@@ -31,6 +31,7 @@ set(SOURCE_FILES
   ipcp.c
   irm.c
   list.c
+  lockfile.c
   logs.c
   nsm.c
   shm_ap_rbuff.c
