@@ -22,6 +22,7 @@
  */
 
 #include <ouroboros/config.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/time_utils.h>
@@ -33,7 +34,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
-#include <errno.h>
 #include <sys/stat.h>
 
 #define OUROBOROS_PREFIX "shm_du_map"

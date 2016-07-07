@@ -22,9 +22,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
 
 #include <ouroboros/irm.h>
+#include <ouroboros/errno.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"

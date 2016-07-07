@@ -23,6 +23,7 @@
 #include <ouroboros/config.h>
 #include "ipcp.h"
 #include "flow.h"
+#include <ouroboros/errno.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/list.h>
@@ -38,7 +39,6 @@
 
 #include <ouroboros/logs.h>
 
-#include <errno.h>
 #include <string.h>
 #include <signal.h>
 #include <stdlib.h>

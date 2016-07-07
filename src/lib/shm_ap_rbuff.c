@@ -21,6 +21,7 @@
  */
 
 #include <ouroboros/config.h>
+#include <ouroboros/errno.h>
 
 #define OUROBOROS_PREFIX "shm_ap_rbuff"
 
@@ -35,7 +36,6 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <errno.h>
 #include <signal.h>
 #include <sys/stat.h>
 

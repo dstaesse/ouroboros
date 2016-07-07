@@ -24,6 +24,7 @@
 #define OUROBOROS_PREFIX "irmd"
 
 #include <ouroboros/config.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/ipcp.h>
@@ -46,7 +47,6 @@
 #include <sys/un.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <string.h>
 #include <limits.h>
 #include <pthread.h>

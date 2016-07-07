@@ -26,6 +26,7 @@
 
 #include "ipcp.h"
 #include "flow.h"
+#include <ouroboros/errno.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/list.h>
@@ -47,7 +48,6 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <errno.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>

@@ -23,6 +23,7 @@
 #define OUROBOROS_PREFIX "lib-ipcp"
 
 #include <ouroboros/config.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/common.h>
 #include <ouroboros/logs.h>
@@ -32,7 +33,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
-#include <errno.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/wait.h>
