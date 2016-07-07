@@ -23,10 +23,13 @@
 #ifndef OUROBOROS_IRMD_REGISTRY_H
 #define OUROBOROS_IRMD_REGISTRY_H
 
+#include <ouroboros/config.h>
 #include <ouroboros/list.h>
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <pthread.h>
+#include <string.h>
 #include <sys/types.h>
 
 #define reg_entry_has_api(e, id) (reg_entry_get_reg_instance(e, id) != NULL)
@@ -78,6 +81,9 @@ struct reg_entry {
         /* known instances */
         struct list_head ap_instances;
 
+        /* difs in which this name is registered */
+        struct list_head difs;
+
         char * req_ae_name;
         int    response;
 
@@ -94,6 +100,11 @@ struct reg_auto {
 struct reg_ap_name {
         struct list_head next;
         char * ap_name;
+};
+
+struct reg_dif_name {
+        struct list_head next;
+        char * dif_name;
 };
 
 struct reg_instance * reg_instance_create(pid_t api);
@@ -118,7 +129,12 @@ struct reg_auto *     reg_entry_get_reg_auto(struct reg_entry * e,
                                              char *             ap_name);
 pid_t                 reg_entry_resolve_api(struct reg_entry * e);
 char **               reg_entry_resolve_auto(struct reg_entry * e);
-
+bool                  reg_entry_is_local_in_dif(struct reg_entry * e,
+                                                char *             dif_name);
+int                   reg_entry_add_local_in_dif(struct reg_entry * e,
+                                                 char *             dif_name);
+void                  reg_entry_del_local_from_dif(struct reg_entry * e,
+                                                   char *             dif_name);
 int                   registry_add_entry(struct list_head * registry,
                                          char *             name,
                                          char *             ap_name,

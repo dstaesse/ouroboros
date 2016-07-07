@@ -60,6 +60,7 @@ struct ipcp_entry {
         struct list_head  next;
         char *            name;
         pid_t             api;
+        enum ipcp_type    type;
         char *            dif_name;
 };
 
@@ -240,27 +241,53 @@ static struct ipcp_entry * get_ipcp_entry_by_api(pid_t api)
         return NULL;
 }
 
-/*
- * FIXME: this just returns the first IPCP that
- * matches the requested DIF name for now
- */
-static pid_t get_ipcp_by_dst_name(char * dst_name,
-                                  char * dif_name)
+
+/* FIXME: Check if the name exists anywhere in a DIF. */
+static pid_t get_ipcp_by_dst_name(char * dst_name)
 {
         struct list_head * pos = NULL;
+        struct reg_entry * re =
+                registry_get_entry_by_name(&instance->registry, dst_name);
+
+        if (re != NULL) {
+                list_for_each(pos, &instance->ipcps) {
+                        struct ipcp_entry * e =
+                                list_entry(pos, struct ipcp_entry, next);
+                        if (e->dif_name == NULL)
+                                continue;
+
+                        if (e->type == IPCP_LOCAL)
+                                return e->api;
+                }
+        }
 
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
+                if (e->dif_name != NULL && e->type == IPCP_NORMAL) {
+                        if (re != NULL &&
+                            !reg_entry_is_local_in_dif(re, e->dif_name))
+                                continue;
+                        return e->api;
+                }
+        }
 
-                if (e->dif_name == NULL)
-                        continue;
-
-                if (dif_name != NULL) {
-                        if (wildcard_match(dif_name, e->dif_name) == 0) {
+        if (re == NULL) {
+                list_for_each(pos, &instance->ipcps) {
+                        struct ipcp_entry * e =
+                                list_entry(pos, struct ipcp_entry, next);
+                        if (e->dif_name != NULL && e->type == IPCP_SHIM_ETH_LLC)
                                 return e->api;
-                        }
-                } else {
+                }
+        }
+
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(pos, struct ipcp_entry, next);
+                if (e->dif_name != NULL && e->type == IPCP_SHIM_UDP) {
+                        if (re != NULL &&
+                            !reg_entry_is_local_in_dif(re, e->dif_name))
+                                continue;
                         return e->api;
                 }
         }
@@ -273,6 +300,8 @@ static pid_t create_ipcp(char *         name,
 {
         struct spawned_api * api;
         struct ipcp_entry * tmp = NULL;
+
+        struct list_head * pos;
 
         api = malloc(sizeof(*api));
         if (api == NULL)
@@ -309,8 +338,16 @@ static pid_t create_ipcp(char *         name,
         }
 
         tmp->dif_name = NULL;
+        tmp->type = ipcp_type;
 
         pthread_rwlock_wrlock(&instance->reg_lock);
+
+        list_for_each(pos, &instance->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(pos, struct ipcp_entry, next);
+                if (e->type < ipcp_type)
+                        break;
+        }
 
         list_add(&tmp->next, &instance->ipcps);
 
@@ -647,16 +684,17 @@ static int ap_reg(char *  name,
                         continue;
 
                 for (i = 0; i < len; ++i) {
-                        if (wildcard_match(difs[i], e->dif_name) == 0) {
-                                if (ipcp_name_reg(e->api, name)) {
-                                        LOG_ERR("Could not register "
-                                                "%s in DIF %s.",
-                                                name, e->dif_name);
-                                } else {
-                                        LOG_INFO("Registered %s in %s",
-                                                 name, e->dif_name);
-                                        ++ret;
-                                }
+                        if (wildcard_match(difs[i], e->dif_name))
+                                continue;
+
+                        if (ipcp_name_reg(e->api, name) ||
+                            reg_entry_add_local_in_dif(reg, e->dif_name)) {
+                                LOG_ERR("Could not register %s in DIF %s.",
+                                        name, e->dif_name);
+                        } else {
+                                LOG_INFO("Registered %s in %s",
+                                         name, e->dif_name);
+                                ++ret;
                         }
                 }
         }
@@ -679,7 +717,7 @@ static int ap_unreg(char *  name,
 {
         int i;
         int ret = 0;
-        struct reg_entry * rne = NULL;
+        struct reg_entry * re  = NULL;
         struct list_head * pos = NULL;
 
         if (name == NULL || len == 0 || difs == NULL || difs[0] == NULL)
@@ -694,6 +732,14 @@ static int ap_unreg(char *  name,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
+        re = registry_get_entry_by_name(&instance->registry, name);
+        if (re == NULL) {
+                pthread_rwlock_unlock(&instance->reg_lock);
+                pthread_rwlock_unlock(&instance->state_lock);
+                LOG_ERR("Tried to unregister a name that is not bound.");
+                return -1;
+        }
+
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
@@ -702,17 +748,17 @@ static int ap_unreg(char *  name,
                         continue;
 
                 for (i = 0; i < len; ++i) {
-                        if (wildcard_match(difs[i], e->dif_name) == 0) {
-                                if (ipcp_name_unreg(e->api,
-                                                    rne->name)) {
-                                        LOG_ERR("Could not unregister "
-                                                "%s in DIF %s.",
-                                                rne->name, e->dif_name);
-                                        --ret;
-                                } else {
-                                        LOG_INFO("Unregistered %s from %s.",
-                                                 rne->name, e->dif_name);
-                                }
+                        if (wildcard_match(difs[i], e->dif_name))
+                                continue;
+
+                        if (ipcp_name_unreg(e->api, re->name)) {
+                                LOG_ERR("Could not unregister %s in DIF %s.",
+                                        re->name, e->dif_name);
+                                --ret;
+                        } else {
+                                reg_entry_del_local_from_dif(re, e->dif_name);
+                                LOG_INFO("Unregistered %s from %s.",
+                                         re->name, e->dif_name);
                         }
                 }
         }
@@ -872,7 +918,6 @@ static struct port_map_entry * flow_alloc(pid_t  api,
 {
         struct port_map_entry * pme;
         pid_t ipcp;
-        char * dif_name = NULL;
 
         /* FIXME: Map qos_spec to qos_cube */
 
@@ -897,14 +942,11 @@ static struct port_map_entry * flow_alloc(pid_t  api,
 
         pthread_rwlock_rdlock(&instance->reg_lock);
 
-        if (qos != NULL)
-                dif_name = qos->dif_name;
-
-        ipcp = get_ipcp_by_dst_name(dst_name, dif_name);
-        if (ipcp == 0) {
+        ipcp = get_ipcp_by_dst_name(dst_name);
+        if (ipcp == -1) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("Unknown DIF name.");
+                LOG_INFO("Destination unreachable.");
                 return NULL;
         }
 
@@ -1723,8 +1765,6 @@ static struct irm * irm_create()
                         free(instance);
                         return NULL;
                 }
-
-                lockfile_close(lf);
         }
 
         if (pthread_rwlock_init(&instance->state_lock, NULL)) {

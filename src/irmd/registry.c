@@ -143,6 +143,7 @@ struct reg_entry * reg_entry_init(struct reg_entry * e,
         INIT_LIST_HEAD(&e->ap_names);
         INIT_LIST_HEAD(&e->auto_ap_info);
         INIT_LIST_HEAD(&e->ap_instances);
+        INIT_LIST_HEAD(&e->difs);
 
         e->name    = name;
         e->flags   = flags;
@@ -228,8 +229,64 @@ void reg_entry_destroy(struct reg_entry * e)
                 free(n);
         }
 
+        list_for_each_safe(pos, n, &e->difs) {
+                struct reg_dif_name * d =
+                        list_entry(pos, struct reg_dif_name, next);
+                free(d->dif_name);
+                free(d);
+        }
+
         free(e);
 }
+
+bool reg_entry_is_local_in_dif(struct reg_entry * e,
+                               char *             dif_name)
+{
+        struct list_head * pos = NULL;
+
+        list_for_each(pos, &e->difs) {
+                struct reg_dif_name * d =
+                        list_entry(pos, struct reg_dif_name, next);
+
+                if (!strcmp(dif_name, d->dif_name))
+                        return true;
+        }
+
+        return false;
+}
+
+int reg_entry_add_local_in_dif(struct reg_entry * e,
+                               char *             dif_name)
+{
+        if (!reg_entry_is_local_in_dif(e, dif_name)) {
+                struct reg_dif_name * rdn = malloc(sizeof(*rdn));
+                rdn->dif_name = strdup(dif_name);
+                if (rdn->dif_name == NULL)
+                        return -1;
+                list_add(&rdn->next, &e->difs);
+                return 0;
+        }
+
+        return 0; /* already registered. Is ok */
+}
+
+void reg_entry_del_local_from_dif(struct reg_entry * e,
+                                  char *             dif_name)
+{
+        struct list_head * pos = NULL;
+        struct list_head * n   = NULL;
+
+        list_for_each_safe(pos, n, &e->difs) {
+                struct reg_dif_name * d =
+                        list_entry(pos, struct reg_dif_name, next);
+
+                if (!strcmp(dif_name, d->dif_name)) {
+                        list_del(&d->next);
+                        free(d);
+                }
+        }
+}
+
 
 struct reg_ap_name * reg_entry_get_ap_name(struct reg_entry * e,
                                            char *             ap_name)
