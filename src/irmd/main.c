@@ -31,6 +31,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/irm_config.h>
+#include <ouroboros/lockfile.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/bitmap.h>
@@ -106,6 +107,7 @@ struct irm {
         pthread_rwlock_t    flows_lock;
 
         enum irm_state      state;
+        struct lockfile *   lf;
         struct shm_du_map * dum;
         pthread_t *         threadpool;
         int                 sockfd;
@@ -1331,6 +1333,9 @@ static void irm_destroy()
         if (instance->dum != NULL)
                 shm_du_map_destroy(instance->dum);
 
+        if (instance->lf != NULL)
+                lockfile_destroy(instance->lf);
+
         close(instance->sockfd);
 
         pthread_rwlock_unlock(&instance->state_lock);
@@ -1698,28 +1703,28 @@ static struct irm * irm_create()
 
         instance->state = IRMD_NULL;
 
-        if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1) {
-                struct shm_du_map * dum = shm_du_map_open();
-
-                if (dum == NULL) {
-                        LOG_ERR("Could not examine existing shm file.");
+        if (access("/dev/shm/" LOCKFILE_NAME, F_OK) != -1) {
+                struct lockfile * lf = lockfile_open();
+                if (lf == NULL) {
+                        LOG_ERR("Failed to open existing lockfile.");
                         free(instance);
                         return NULL;
                 }
 
-                if (kill(shm_du_map_owner(dum), 0) < 0) {
+                if (kill(lockfile_owner(lf), 0) < 0) {
                         LOG_INFO("IRMd didn't properly shut down last time.");
-                        shm_du_map_destroy(dum);
-                        LOG_INFO("Stale shm file removed.");
+                        shm_du_map_destroy(shm_du_map_open());
+                        LOG_INFO("Stale resources cleaned");
+                        lockfile_destroy(lf);
                 } else {
                         LOG_INFO("IRMd already running (%d), exiting.",
-                                 shm_du_map_owner(dum));
-                        shm_du_map_close(dum);
+                                 lockfile_owner(lf));
+                        lockfile_close(lf);
                         free(instance);
                         return NULL;
                 }
 
-                shm_du_map_close(dum);
+                lockfile_close(lf);
         }
 
         if (pthread_rwlock_init(&instance->state_lock, NULL)) {
@@ -1773,6 +1778,11 @@ static struct irm * irm_create()
 
         if (chmod(IRM_SOCK_PATH, 0666)) {
                 LOG_ERR("Failed to chmod socket.");
+                irm_destroy();
+                return NULL;
+        }
+
+        if ((instance->lf = lockfile_create()) == NULL) {
                 irm_destroy();
                 return NULL;
         }

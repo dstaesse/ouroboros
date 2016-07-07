@@ -26,7 +26,7 @@
 
 #include <ouroboros/logs.h>
 #include <ouroboros/shm_ap_rbuff.h>
-#include <ouroboros/shm_du_map.h>
+#include <ouroboros/lockfile.h>
 
 #include <pthread.h>
 #include <sys/mman.h>
@@ -215,7 +215,7 @@ void shm_ap_rbuff_close(struct shm_ap_rbuff * rb)
 void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
 {
         char fn[25];
-        struct shm_du_map * dum = NULL;
+        struct lockfile * lf = NULL;
 
         if (rb == NULL) {
                 LOG_DBGF("Bogus input. Bugging out.");
@@ -223,15 +223,17 @@ void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
         }
 
         if (rb->api != getpid()) {
-                dum = shm_du_map_open();
-                if (shm_du_map_owner(dum) == getpid()) {
+                lf = lockfile_open();
+                if (lf == NULL)
+                        return;
+                if (lockfile_owner(lf) == getpid()) {
                         LOG_DBGF("Ringbuffer %d destroyed by IRMd %d.",
                                  rb->api, getpid());
-                        shm_du_map_close(dum);
+                        lockfile_close(lf);
                 } else {
                         LOG_ERR("AP-I %d tried to destroy rbuff owned by %d.",
                                 getpid(), rb->api);
-                        shm_du_map_close(dum);
+                        lockfile_close(lf);
                         return;
                 }
         }

@@ -24,11 +24,9 @@
 #ifndef OUROBOROS_SHM_DU_MAP_H
 #define OUROBOROS_SHM_DU_MAP_H
 
-#include <errno.h>
-#include <unistd.h>
 #include <stdint.h>
-#include <sys/types.h>
 #include <pthread.h>
+#include <sys/types.h>
 
 struct shm_du_buff;
 struct shm_du_map;
@@ -38,7 +36,6 @@ struct shm_du_map * shm_du_map_open();
 void                shm_du_map_close(struct shm_du_map * dum);
 void                shm_du_map_close_on_exit(struct shm_du_map * dum);
 void                shm_du_map_destroy(struct shm_du_map * dum);
-pid_t               shm_du_map_owner(struct shm_du_map * dum);
 void *              shm_du_map_sanitize(void * o);
 
 /* returns the index of the buffer in the DU map */

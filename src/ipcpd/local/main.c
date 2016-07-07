@@ -38,6 +38,7 @@
 
 #include <ouroboros/logs.h>
 
+#include <errno.h>
 #include <string.h>
 #include <signal.h>
 #include <stdlib.h>

@@ -29,9 +29,11 @@
 #include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <errno.h>
 #include <sys/stat.h>
 
 #define OUROBOROS_PREFIX "shm_du_map"
@@ -268,14 +270,6 @@ struct shm_du_map * shm_du_map_open()
         dum->fd = shm_fd;
 
         return dum;
-}
-
-pid_t shm_du_map_owner(struct shm_du_map * dum)
-{
-        if (dum == NULL)
-                return -1;
-
-        return *dum->api;
 }
 
 void * shm_du_map_sanitize(void * o)
