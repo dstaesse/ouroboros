@@ -1704,7 +1704,7 @@ static struct irm * irm_create()
                 if (dum == NULL) {
                         LOG_ERR("Could not examine existing shm file.");
                         free(instance);
-                        exit(EXIT_FAILURE);
+                        return NULL;
                 }
 
                 if (kill(shm_du_map_owner(dum), 0) < 0) {
@@ -1716,7 +1716,7 @@ static struct irm * irm_create()
                                  shm_du_map_owner(dum));
                         shm_du_map_close(dum);
                         free(instance);
-                        exit(EXIT_SUCCESS);
+                        return NULL;
                 }
 
                 shm_du_map_close(dum);
@@ -1879,8 +1879,10 @@ int main(int argc, char ** argv)
                 exit(EXIT_FAILURE);
 
         instance = irm_create();
-        if (instance == NULL)
+        if (instance == NULL) {
+                close_logfile();
                 exit(EXIT_FAILURE);
+        }
 
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)
                 pthread_create(&instance->threadpool[t], NULL, mainloop, NULL);
