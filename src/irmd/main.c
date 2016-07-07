@@ -1696,13 +1696,15 @@ static struct irm * irm_create()
         if (instance == NULL)
                 return NULL;
 
+        instance->state = IRMD_NULL;
+
         if (access("/dev/shm/" SHM_DU_MAP_FILENAME, F_OK) != -1) {
                 struct shm_du_map * dum = shm_du_map_open();
 
                 if (dum == NULL) {
                         LOG_ERR("Could not examine existing shm file.");
                         free(instance);
-                        exit(EXIT_FAILURE);
+                        return NULL;
                 }
 
                 if (kill(shm_du_map_owner(dum), 0) < 0) {
@@ -1714,8 +1716,10 @@ static struct irm * irm_create()
                                  shm_du_map_owner(dum));
                         shm_du_map_close(dum);
                         free(instance);
-                        exit(EXIT_SUCCESS);
+                        return NULL;
                 }
+
+                shm_du_map_close(dum);
         }
 
         if (pthread_rwlock_init(&instance->state_lock, NULL)) {
@@ -1736,17 +1740,6 @@ static struct irm * irm_create()
                 return NULL;
         }
 
-        instance->threadpool = malloc(sizeof(pthread_t) * IRMD_THREADPOOL_SIZE);
-        if (instance->threadpool == NULL) {
-                irm_destroy();
-                return NULL;
-        }
-
-        if ((instance->dum = shm_du_map_create()) == NULL) {
-                irm_destroy();
-                return NULL;
-        }
-
         INIT_LIST_HEAD(&instance->ipcps);
         INIT_LIST_HEAD(&instance->spawned_apis);
         INIT_LIST_HEAD(&instance->registry);
@@ -1754,6 +1747,12 @@ static struct irm * irm_create()
 
         instance->port_ids = bmp_create(IRMD_MAX_FLOWS, 0);
         if (instance->port_ids == NULL) {
+                irm_destroy();
+                return NULL;
+        }
+
+        instance->threadpool = malloc(sizeof(pthread_t) * IRMD_THREADPOOL_SIZE);
+        if (instance->threadpool == NULL) {
                 irm_destroy();
                 return NULL;
         }
@@ -1774,6 +1773,11 @@ static struct irm * irm_create()
 
         if (chmod(IRM_SOCK_PATH, 0666)) {
                 LOG_ERR("Failed to chmod socket.");
+                irm_destroy();
+                return NULL;
+        }
+
+        if ((instance->dum = shm_du_map_create()) == NULL) {
                 irm_destroy();
                 return NULL;
         }
@@ -1875,8 +1879,10 @@ int main(int argc, char ** argv)
                 exit(EXIT_FAILURE);
 
         instance = irm_create();
-        if (instance == NULL)
+        if (instance == NULL) {
+                close_logfile();
                 exit(EXIT_FAILURE);
+        }
 
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)
                 pthread_create(&instance->threadpool[t], NULL, mainloop, NULL);
@@ -1893,6 +1899,8 @@ int main(int argc, char ** argv)
         pthread_join(instance->cleanup_flows, NULL);
 
         irm_destroy();
+
+        close_logfile();
 
         exit(EXIT_SUCCESS);
 }

@@ -34,3 +34,9 @@ int set_logfile(char * filename)
 
         return 0;
 }
+
+void close_logfile()
+{
+        if (logfile != NULL)
+                fclose(logfile);
+}

@@ -1569,11 +1569,13 @@ int main(int argc, char * argv[])
 
         if (ipcp_parse_arg(argc, argv)) {
                 LOG_ERR("Failed to parse arguments.");
-                exit(1);
+                exit(EXIT_FAILURE);
         }
 
-        if (shim_ap_init() < 0)
-                exit(1);
+        if (shim_ap_init() < 0) {
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
 
         /* store the process id of the irmd */
         irmd_api = atoi(argv[1]);
@@ -1592,8 +1594,9 @@ int main(int argc, char * argv[])
 
         _ipcp = ipcp_udp_create();
         if (_ipcp == NULL) {
-                LOG_ERR("Won't.");
-                exit(1);
+                LOG_ERR("Failed to create IPCP.");
+                close_logfile();
+                exit(EXIT_FAILURE);
         }
 
         pthread_rwlock_wrlock(&_ipcp->state_lock);
@@ -1613,6 +1616,8 @@ int main(int argc, char * argv[])
         free(_ipcp->data);
         free(_ipcp->ops);
         free(_ipcp);
+
+        close_logfile();
 
         exit(EXIT_SUCCESS);
 }

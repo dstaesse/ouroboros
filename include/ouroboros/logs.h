@@ -30,7 +30,8 @@
 #error You must define OUROBOROS_PREFIX before including this file
 #endif
 
-int set_logfile(char * filename);
+int  set_logfile(char * filename);
+void close_logfile();
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"

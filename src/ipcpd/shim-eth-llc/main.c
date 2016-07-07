@@ -1247,7 +1247,7 @@ int main(int argc, char * argv[])
 
         if (ipcp_parse_arg(argc, argv)) {
                 LOG_ERR("Failed to parse arguments.");
-                exit(1);
+                exit(EXIT_FAILURE);
         }
 
         /* store the process id of the irmd */
@@ -1268,14 +1268,16 @@ int main(int argc, char * argv[])
         _ipcp = ipcp_instance_create();
         if (_ipcp == NULL) {
                 LOG_ERR("Failed to create instance.");
-                exit(1);
+                close_logfile();
+                exit(EXIT_FAILURE);
         }
 
         _ipcp->data = (struct ipcp_data *) eth_llc_ipcp_data_create();
         if (_ipcp->data == NULL) {
                 LOG_ERR("Failed to create instance data.");
                 free(_ipcp);
-                exit(1);
+                close_logfile();
+                exit(EXIT_FAILURE);
         }
 
         for (i = 0; i < AP_MAX_FLOWS; i++) {
@@ -1304,5 +1306,7 @@ int main(int argc, char * argv[])
 
         free(_ipcp);
 
-        exit(0);
+        close_logfile();
+
+        exit(EXIT_SUCCESS);
 }
