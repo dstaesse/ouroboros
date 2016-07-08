@@ -1224,8 +1224,6 @@ static int eth_llc_ipcp_flow_dealloc(int port_id)
 static struct ipcp_ops eth_llc_ops = {
         .ipcp_bootstrap       = eth_llc_ipcp_bootstrap,
         .ipcp_enroll          = NULL,                       /* shim */
-        .ipcp_reg             = NULL,                       /* shim */
-        .ipcp_unreg           = NULL,                       /* shim */
         .ipcp_name_reg        = eth_llc_ipcp_name_reg,
         .ipcp_name_unreg      = eth_llc_ipcp_name_unreg,
         .ipcp_flow_alloc      = eth_llc_ipcp_flow_alloc,

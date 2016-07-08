@@ -557,8 +557,6 @@ static struct ipcp * ipcp_local_create()
 
         ops->ipcp_bootstrap       = ipcp_local_bootstrap;
         ops->ipcp_enroll          = NULL;                       /* shim */
-        ops->ipcp_reg             = NULL;                       /* shim */
-        ops->ipcp_unreg           = NULL;                       /* shim */
         ops->ipcp_name_reg        = ipcp_local_name_reg;
         ops->ipcp_name_unreg      = ipcp_local_name_unreg;
         ops->ipcp_flow_alloc      = ipcp_local_flow_alloc;

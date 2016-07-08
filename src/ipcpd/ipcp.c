@@ -188,27 +188,6 @@ void * ipcp_main_loop(void * o)
                                                         msg->n_1_dif);
 
                         break;
-
-                case IPCP_MSG_CODE__IPCP_REG:
-                        if (_ipcp->ops->ipcp_reg == NULL) {
-                                LOG_ERR("Reg unsupported.");
-                                break;
-
-                        }
-                        ret_msg.has_result = true;
-                        ret_msg.result =
-                                _ipcp->ops->ipcp_reg(msg->dif_names, msg->len);
-                        break;
-                case IPCP_MSG_CODE__IPCP_UNREG:
-                        if (_ipcp->ops->ipcp_unreg == NULL) {
-                                LOG_ERR("Unreg unsupported.");
-                                break;
-                        }
-                        ret_msg.has_result = true;
-                        ret_msg.result =
-                                _ipcp->ops->ipcp_unreg(msg->dif_names,
-                                                       msg->len);
-                        break;
                 case IPCP_MSG_CODE__IPCP_NAME_REG:
                         if (_ipcp->ops->ipcp_name_reg == NULL) {
                                 LOG_ERR("Ap_reg unsupported.");
