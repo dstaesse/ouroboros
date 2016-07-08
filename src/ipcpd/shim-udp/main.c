@@ -1539,8 +1539,6 @@ static struct ipcp * ipcp_udp_create()
 
         ops->ipcp_bootstrap       = ipcp_udp_bootstrap;
         ops->ipcp_enroll          = NULL;                       /* shim */
-        ops->ipcp_reg             = NULL;                       /* shim */
-        ops->ipcp_unreg           = NULL;                       /* shim */
         ops->ipcp_name_reg        = ipcp_udp_name_reg;
         ops->ipcp_name_unreg      = ipcp_udp_name_unreg;
         ops->ipcp_flow_alloc      = ipcp_udp_flow_alloc;

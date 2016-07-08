@@ -36,13 +36,6 @@ pid_t ipcp_create(enum ipcp_type ipcp_type);
 
 int   ipcp_destroy(pid_t api);
 
-int   ipcp_reg(pid_t   api,
-               char ** difs,
-               size_t  difs_size);
-int   ipcp_unreg(pid_t   api,
-                 char ** difs,
-                 size_t  difs_size);
-
 int   ipcp_enroll(pid_t  api,
                   char * dif_name,
                   char * n_1_dif);
