@@ -233,7 +233,6 @@ static struct ipcp_entry * get_ipcp_entry_by_api(pid_t api)
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
-
                 if (api == tmp->api)
                         return tmp;
         }
@@ -246,50 +245,16 @@ static struct ipcp_entry * get_ipcp_entry_by_api(pid_t api)
 static pid_t get_ipcp_by_dst_name(char * dst_name)
 {
         struct list_head * pos = NULL;
-        struct reg_entry * re =
-                registry_get_entry_by_name(&instance->registry, dst_name);
-
-        if (re != NULL) {
-                list_for_each(pos, &instance->ipcps) {
-                        struct ipcp_entry * e =
-                                list_entry(pos, struct ipcp_entry, next);
-                        if (e->dif_name == NULL)
-                                continue;
-
-                        if (e->type == IPCP_LOCAL)
-                                return e->api;
-                }
-        }
+        char * dif_name =
+                registry_get_dif_for_dst(&instance->registry, dst_name);
+        if (dif_name == NULL)
+                return -1;
 
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
-                if (e->dif_name != NULL && e->type == IPCP_NORMAL) {
-                        if (re != NULL &&
-                            !reg_entry_is_local_in_dif(re, e->dif_name))
-                                continue;
+                if (strcmp(e->dif_name, dif_name) == 0)
                         return e->api;
-                }
-        }
-
-        if (re == NULL) {
-                list_for_each(pos, &instance->ipcps) {
-                        struct ipcp_entry * e =
-                                list_entry(pos, struct ipcp_entry, next);
-                        if (e->dif_name != NULL && e->type == IPCP_SHIM_ETH_LLC)
-                                return e->api;
-                }
-        }
-
-        list_for_each(pos, &instance->ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(pos, struct ipcp_entry, next);
-                if (e->dif_name != NULL && e->type == IPCP_SHIM_UDP) {
-                        if (re != NULL &&
-                            !reg_entry_is_local_in_dif(re, e->dif_name))
-                                continue;
-                        return e->api;
-                }
         }
 
         return -1;
@@ -520,10 +485,9 @@ static int bind_name(char *   name,
                      int      argc,
                      char **  argv)
 {
-        int i;
-
+        char * apn       = path_strip(ap_name);
         char ** argv_dup = NULL;
-        char * apn = path_strip(ap_name);
+        int i            = 0;
 
         if (name == NULL || ap_name == NULL)
                 return -EINVAL;
@@ -537,14 +501,6 @@ static int bind_name(char *   name,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        if (registry_add_entry(&instance->registry,
-                               strdup(name), strdup(apn), opts) < 0) {
-                pthread_rwlock_unlock(&instance->reg_lock);
-                pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("Failed to register %s.", name);
-                return -1;
-        }
-
         if (opts & BIND_AP_AUTO) {
                 /* we need to duplicate argv */
                 if (argc != 0) {
@@ -554,9 +510,15 @@ static int bind_name(char *   name,
                                 argv_dup[i] = strdup(argv[i - 1]);
                         argv_dup[argc + 1] = NULL;
                 }
+        }
 
-                registry_add_ap_auto(&instance->registry,
-                                     name, strdup(apn), argv_dup);
+        if (registry_add_binding(&instance->registry,
+                                 strdup(name), strdup(apn),
+                                 opts, argv_dup) < 0) {
+                pthread_rwlock_unlock(&instance->reg_lock);
+                pthread_rwlock_unlock(&instance->state_lock);
+                LOG_ERR("Failed to register %s.", name);
+                return -1;
         }
 
         pthread_rwlock_unlock(&instance->reg_lock);
@@ -567,15 +529,16 @@ static int bind_name(char *   name,
         return 0;
 }
 
-static int unbind_name(char * name,
-                       char * ap_name,
+static int unbind_name(char *   name,
+                       char *   apn,
                        uint16_t opts)
 
 {
-        struct reg_entry * rne = NULL;
+        if (name == NULL)
+                return -EINVAL;
 
-        if (name == NULL || ap_name  == NULL)
-                return -1;
+        if (!(opts & UNBIND_AP_HARD) && apn == NULL)
+                return -EINVAL;
 
         pthread_rwlock_rdlock(&instance->state_lock);
 
@@ -586,24 +549,17 @@ static int unbind_name(char * name,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        rne = registry_get_entry_by_name(&instance->registry, name);
-        if (rne == NULL) {
+        if ((opts & UNBIND_AP_HARD) && apn == NULL) {
+                registry_deassign(&instance->registry, name);
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("Tried to unbind a name that is not bound.");
-                return -1;
+                LOG_INFO("Removed all bindings of %s.", name);
+        } else {
+                registry_del_binding(&instance->registry, name, apn);
+                pthread_rwlock_unlock(&instance->reg_lock);
+                pthread_rwlock_unlock(&instance->state_lock);
+                LOG_INFO("Removed binding from %s to %s.", apn, name);
         }
-
-        /*
-         * FIXME: Remove the mapping of name to ap_name.
-         * Remove the name only if it was the last mapping.
-         */
-        registry_del_name(&instance->registry, rne->name);
-
-        pthread_rwlock_unlock(&instance->reg_lock);
-        pthread_rwlock_unlock(&instance->state_lock);
-
-        LOG_INFO("Removed binding from %s to %s.", ap_name, name);
 
         return 0;
 }
@@ -647,7 +603,6 @@ static int ap_reg(char *  name,
 {
         int i;
         int ret = 0;
-        struct reg_entry * reg = NULL;
         struct list_head * pos = NULL;
 
         if (name == NULL || difs == NULL || len == 0 || difs[0] == NULL)
@@ -668,14 +623,6 @@ static int ap_reg(char *  name,
                 return -1;
         }
 
-        reg = registry_get_entry_by_name(&instance->registry, name);
-        if (reg == NULL) {
-                pthread_rwlock_unlock(&instance->reg_lock);
-                pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("Tried to register a name that is not bound.");
-                return -1;
-        }
-
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
@@ -687,13 +634,19 @@ static int ap_reg(char *  name,
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
 
-                        if (ipcp_name_reg(e->api, name) ||
-                            reg_entry_add_local_in_dif(reg, e->dif_name)) {
+                        if (ipcp_name_reg(e->api, name)) {
                                 LOG_ERR("Could not register %s in DIF %s.",
                                         name, e->dif_name);
                         } else {
-                                LOG_INFO("Registered %s in %s",
-                                         name, e->dif_name);
+                                if(registry_add_name_to_dif(&instance->registry,
+                                                            name,
+                                                            e->dif_name,
+                                                            e->type) < 0)
+                                        LOG_WARN("Registered unbound name %s. "
+                                                 "Registry may be inconsistent",
+                                                 name);
+                                LOG_INFO("Registered %s in %s %d.",
+                                         name, e->dif_name, e->type);
                                 ++ret;
                         }
                 }
@@ -717,7 +670,6 @@ static int ap_unreg(char *  name,
 {
         int i;
         int ret = 0;
-        struct reg_entry * re  = NULL;
         struct list_head * pos = NULL;
 
         if (name == NULL || len == 0 || difs == NULL || difs[0] == NULL)
@@ -732,14 +684,6 @@ static int ap_unreg(char *  name,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        re = registry_get_entry_by_name(&instance->registry, name);
-        if (re == NULL) {
-                pthread_rwlock_unlock(&instance->reg_lock);
-                pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("Tried to unregister a name that is not bound.");
-                return -1;
-        }
-
         list_for_each(pos, &instance->ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
@@ -751,14 +695,16 @@ static int ap_unreg(char *  name,
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
 
-                        if (ipcp_name_unreg(e->api, re->name)) {
+                        if (ipcp_name_unreg(e->api, name)) {
                                 LOG_ERR("Could not unregister %s in DIF %s.",
-                                        re->name, e->dif_name);
+                                        name, e->dif_name);
                                 --ret;
                         } else {
-                                reg_entry_del_local_from_dif(re, e->dif_name);
+                                registry_del_name_from_dif(&instance->registry,
+                                                           name,
+                                                           e->dif_name);
                                 LOG_INFO("Unregistered %s from %s.",
-                                         re->name, e->dif_name);
+                                         name, e->dif_name);
                         }
                 }
         }
@@ -774,8 +720,8 @@ static struct port_map_entry * flow_accept(pid_t   api,
                                            char ** dst_ae_name)
 {
         struct port_map_entry * pme = NULL;
-        struct reg_entry * rne      = NULL;
-        struct reg_instance * rgi   = NULL;
+        struct reg_entry *      rne = NULL;
+        struct reg_api *        rgi = NULL;
 
         pthread_rwlock_rdlock(&instance->state_lock);
 
@@ -786,7 +732,7 @@ static struct port_map_entry * flow_accept(pid_t   api,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        rne = registry_get_entry_by_ap_name(&instance->registry, srv_ap_name);
+        rne = registry_get_entry_by_apn(&instance->registry, srv_ap_name);
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -794,7 +740,7 @@ static struct port_map_entry * flow_accept(pid_t   api,
                 return NULL;
         }
 
-        if (!reg_entry_has_api(rne, api)) {
+        if (!reg_entry_get_reg_api(rne, api)) {
                 rgi = registry_add_api_name(&instance->registry,
                                             api,
                                             rne->name);
@@ -811,7 +757,7 @@ static struct port_map_entry * flow_accept(pid_t   api,
         pthread_rwlock_unlock(&instance->reg_lock);
         pthread_rwlock_unlock(&instance->state_lock);
 
-        reg_instance_sleep(rgi);
+        reg_api_sleep(rgi);
 
         pthread_rwlock_rdlock(&instance->state_lock);
         pthread_rwlock_rdlock(&instance->reg_lock);
@@ -865,7 +811,7 @@ static int flow_alloc_resp(pid_t n_api,
 
         pthread_rwlock_wrlock(&instance->reg_lock);
 
-        rne = registry_get_entry_by_ap_id(&instance->registry, n_api);
+        rne = registry_get_entry_by_api(&instance->registry, n_api);
         if (rne == NULL) {
                 pthread_rwlock_unlock(&instance->reg_lock);
                 pthread_rwlock_unlock(&instance->state_lock);
@@ -881,7 +827,7 @@ static int flow_alloc_resp(pid_t n_api,
 
         pthread_mutex_lock(&rne->state_lock);
 
-        registry_remove_api_name(&instance->registry, n_api, rne->name);
+        registry_del_api(&instance->registry, n_api);
 
         pthread_mutex_unlock(&rne->state_lock);
 
@@ -1180,7 +1126,7 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
                 rne->state = REG_NAME_AUTO_EXEC;
                 pthread_mutex_unlock(&rne->state_lock);
 
-                if ((c_api->api = auto_execute(reg_entry_resolve_auto(rne)))
+                if ((c_api->api = auto_execute(reg_entry_get_auto_info(rne)))
                     < 0) {
                         pthread_mutex_lock(&rne->state_lock);
                         rne->state = REG_NAME_AUTO_ACCEPT;
@@ -1241,7 +1187,7 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
 
         rne->state = REG_NAME_FLOW_ARRIVED;
 
-        reg_instance_wake(reg_entry_get_reg_instance(rne, pme->n_api));
+        reg_api_wake(reg_entry_get_reg_api(rne, pme->n_api));
 
         pthread_mutex_unlock(&rne->state_lock);
 
@@ -1492,19 +1438,18 @@ void * irm_flow_cleaner()
                         struct reg_entry * e =
                                 list_entry(pos, struct reg_entry, next);
 
-                        list_for_each_safe(pos2, n2, &e->ap_instances) {
-                                struct reg_instance * r =
+                        list_for_each_safe(pos2, n2, &e->reg_apis) {
+                                struct reg_api * r =
                                         list_entry(pos2,
-                                                   struct reg_instance,
+                                                   struct reg_api,
                                                    next);
                                 if (kill(r->api, 0) < 0) {
                                         LOG_INFO("Process %d gone, "
                                                  "registry binding removed.",
                                                  r->api);
-                                        registry_remove_api_name(
+                                        registry_del_api(
                                                 &instance->registry,
-                                                r->api,
-                                                e->name);
+                                                r->api);
                                 }
                         }
                 }
