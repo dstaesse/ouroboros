@@ -413,8 +413,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         long                 blocks = 0;
         long                 padblocks = 0;
-        int                  sz = headspace + len + sizeof *sdb;
-        int                  sz2 = sz + tailspace;
+        int                  sz = size + sizeof *sdb;
 #endif
         uint8_t *            write_pos;
         ssize_t              index = -1;
@@ -425,7 +424,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
         }
 
 #ifndef SHM_DU_MAP_MULTI_BLOCK
-        if (size + sizeof *sdb > SHM_DU_BUFF_BLOCK_SIZE) {
+        if (sz > SHM_DU_BUFF_BLOCK_SIZE) {
                 LOG_DBGF("Multi-block SDU's disabled. Dropping.");
                 return -1;
         }
@@ -435,14 +434,8 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
                 pthread_mutex_consistent(dum->shm_mutex);
         }
 #ifdef SHM_DU_MAP_MULTI_BLOCK
-        while (sz2 > 0) {
-                sz2 -= SHM_DU_BUFF_BLOCK_SIZE;
+        while (sz > 0) {
                 sz -= SHM_DU_BUFF_BLOCK_SIZE;
-                if (sz < 0 && sz2 > 0) {
-                        pthread_mutex_unlock(dum->shm_mutex);
-                        LOG_DBG("Can't handle this packet now.");
-                        return -EAGAIN;
-                }
                 ++blocks;
         }
 
@@ -478,7 +471,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
 #ifdef  SHM_DU_MAP_MULTI_BLOCK
         sdb->blocks  = blocks;
 #endif
-        write_pos = ((uint8_t *) sdb) + sizeof *sdb + headspace;
+        write_pos = ((uint8_t *) (sdb + 1)) + headspace;
 
         memcpy(write_pos, data, len);
 
@@ -515,7 +508,7 @@ int shm_du_map_read(uint8_t **          dst,
 
         sdb = idx_to_du_buff_ptr(dum, idx);
         len = sdb->du_tail - sdb->du_head;
-        *dst = ((uint8_t *) sdb) + sizeof(struct shm_du_buff) + sdb->du_head;
+        *dst = ((uint8_t *) (sdb + 1)) + sdb->du_head;
 
         pthread_mutex_unlock(dum->shm_mutex);
 
@@ -547,6 +540,7 @@ int shm_du_map_remove(struct shm_du_map * dum, ssize_t idx)
         garbage_collect(dum);
 
         *dum->choked = 0;
+
         pthread_cond_signal(dum->healthy);
 
         pthread_mutex_unlock(dum->shm_mutex);
@@ -554,74 +548,136 @@ int shm_du_map_remove(struct shm_du_map * dum, ssize_t idx)
         return 0;
 }
 
-uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
-                                 size_t size)
+uint8_t * shm_du_buff_head_alloc(struct shm_du_map * dum,
+                                 int                 idx,
+                                 ssize_t             size)
 {
-        if (sdb == NULL) {
-                LOG_DBGF("Bogus input, bugging out.");
+        struct shm_du_buff * sdb;
+        uint8_t * buf;
+
+        if (dum  == NULL)
                 return NULL;
+
+        if (idx < 0 || idx > SHM_BLOCKS_IN_MAP)
+                return NULL;
+
+        if (pthread_mutex_lock(dum->shm_mutex) == EOWNERDEAD) {
+                LOG_DBGF("Recovering dead mutex.");
+                pthread_mutex_consistent(dum->shm_mutex);
         }
 
+        sdb = idx_to_du_buff_ptr(dum, idx);
+
         if ((long) (sdb->du_head - size) < 0) {
+                pthread_mutex_unlock(dum->shm_mutex);
                 LOG_DBGF("Failed to allocate PCI headspace.");
                 return NULL;
         }
 
         sdb->du_head -= size;
 
-        return (uint8_t *) sdb + sizeof *sdb + sdb->du_head;
+        buf = (uint8_t *) (sdb + 1) + sdb->du_head;
+
+        pthread_mutex_unlock(dum->shm_mutex);
+
+        return buf;
 }
 
-uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
-                                 size_t               size)
+uint8_t * shm_du_buff_tail_alloc(struct shm_du_map * dum,
+                                 int                 idx,
+                                 ssize_t             size)
 {
-        if (sdb == NULL) {
-                LOG_DBGF("Bogus input, bugging out.");
+        struct shm_du_buff * sdb;
+        uint8_t * buf;
+
+        if (dum  == NULL)
                 return NULL;
+
+        if (idx < 0 || idx > SHM_BLOCKS_IN_MAP)
+                return NULL;
+
+        if (pthread_mutex_lock(dum->shm_mutex) == EOWNERDEAD) {
+                LOG_DBGF("Recovering dead mutex.");
+                pthread_mutex_consistent(dum->shm_mutex);
         }
 
+        sdb = idx_to_du_buff_ptr(dum, idx);
+
         if (sdb->du_tail + size >= sdb->size) {
+                pthread_mutex_unlock(dum->shm_mutex);
                 LOG_DBGF("Failed to allocate PCI tailspace.");
                 return NULL;
         }
 
+        buf = (uint8_t *) (sdb + 1) + sdb->du_tail;
+
         sdb->du_tail += size;
 
-        return (uint8_t *) sdb + sizeof *sdb + sdb->du_tail;
+        pthread_mutex_unlock(dum->shm_mutex);
+
+        return buf;
 }
 
-int shm_du_buff_head_release(struct shm_du_buff * sdb,
-                             size_t               size)
+int shm_du_buff_head_release(struct shm_du_map * dum,
+                             int                 idx,
+                             ssize_t             size)
 {
-        if (sdb == NULL) {
-                LOG_DBGF("Bogus input, bugging out.");
-                return -EINVAL;
+        struct shm_du_buff * sdb;
+
+        if (dum  == NULL)
+                return -1;
+
+        if (idx < 0 || idx > SHM_BLOCKS_IN_MAP)
+                return -1;
+
+        if (pthread_mutex_lock(dum->shm_mutex) == EOWNERDEAD) {
+                LOG_DBGF("Recovering dead mutex.");
+                pthread_mutex_consistent(dum->shm_mutex);
         }
 
+        sdb = idx_to_du_buff_ptr(dum, idx);
+
         if (size > sdb->du_tail - sdb->du_head) {
+                pthread_mutex_unlock(dum->shm_mutex);
                 LOG_DBGF("Tried to release beyond sdu boundary.");
                 return -EOVERFLOW;
         }
 
         sdb->du_head += size;
 
-        return sdb->du_head;
+        pthread_mutex_unlock(dum->shm_mutex);
+
+        return 0;
 }
 
-int shm_du_buff_tail_release(struct shm_du_buff * sdb,
-                             size_t               size)
+int shm_du_buff_tail_release(struct shm_du_map * dum,
+                             int                 idx,
+                             ssize_t             size)
 {
-        if (sdb == NULL) {
-                LOG_DBGF("Bogus input, bugging out.");
-                return -EINVAL;
+        struct shm_du_buff * sdb;
+
+        if (dum  == NULL)
+                return -1;
+
+        if (idx < 0 || idx > SHM_BLOCKS_IN_MAP)
+                return -1;
+
+        if (pthread_mutex_lock(dum->shm_mutex) == EOWNERDEAD) {
+                LOG_DBGF("Recovering dead mutex.");
+                pthread_mutex_consistent(dum->shm_mutex);
         }
 
+        sdb = idx_to_du_buff_ptr(dum, idx);
+
         if (size > sdb->du_tail - sdb->du_head) {
+                pthread_mutex_unlock(dum->shm_mutex);
                 LOG_DBGF("Tried to release beyond sdu boundary.");
                 return -EOVERFLOW;
         }
 
         sdb->du_tail -= size;
 
-        return sdb->du_tail;
+        pthread_mutex_unlock(dum->shm_mutex);
+
+        return 0;
 }

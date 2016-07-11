@@ -50,16 +50,18 @@ int       shm_du_map_read(uint8_t **          dst,
                           struct shm_du_map * dum,
                           ssize_t             idx);
 int       shm_du_map_remove(struct shm_du_map  * dum,
-                            ssize_t idx);
+                            ssize_t              idx);
 
-/* FIXME: use shm_du_map * and index */
-uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
-                                 size_t size);
-uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
-                                 size_t size);
-int       shm_du_buff_head_release(struct shm_du_buff * sdb,
-                                   size_t size);
-int       shm_du_buff_tail_release(struct shm_du_buff * sdb,
-                                   size_t size);
-
+uint8_t * shm_du_buff_head_alloc(struct shm_du_map * dum,
+                                 int                 idx,
+                                 ssize_t             size);
+uint8_t * shm_du_buff_tail_alloc(struct shm_du_map * dum,
+                                 int                 idx,
+                                 ssize_t             size);
+int       shm_du_buff_head_release(struct shm_du_map * dum,
+                                   int                 idx,
+                                   ssize_t             size);
+int       shm_du_buff_tail_release(struct shm_du_map * dum,
+                                   int                 idx,
+                                   ssize_t             size);
 #endif /* OUROBOROS_SHM_DU_MAP_H */
