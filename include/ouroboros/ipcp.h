@@ -37,8 +37,7 @@ pid_t ipcp_create(enum ipcp_type ipcp_type);
 int   ipcp_destroy(pid_t api);
 
 int   ipcp_enroll(pid_t  api,
-                  char * dif_name,
-                  char * n_1_dif);
+                  char * dif_name);
 
 int   ipcp_bootstrap(pid_t              api,
                      dif_config_msg_t * conf);
