@@ -422,8 +422,6 @@ static int bootstrap_ipcp(pid_t              api,
 static int enroll_ipcp(pid_t  api,
                        char * dif_name)
 {
-        char ** n_1_difs = NULL;
-        ssize_t n_1_difs_size = 0;
         struct ipcp_entry * entry = NULL;
 
         pthread_rwlock_rdlock(&instance->state_lock);
@@ -451,17 +449,7 @@ static int enroll_ipcp(pid_t  api,
                 return -1;
         }
 
-        n_1_difs_size = nsm_resolve(dif_name, n_1_difs);
-        if (n_1_difs_size < 1) {
-                free(entry->dif_name);
-                entry->dif_name = NULL;
-                pthread_rwlock_unlock(&instance->reg_lock);
-                pthread_rwlock_unlock(&instance->state_lock);
-                LOG_ERR("Could not find N-1 DIFs.");
-                return -1;
-        }
-
-        if (ipcp_enroll(api, dif_name, n_1_difs[0])) {
+        if (ipcp_enroll(api, dif_name)) {
                 free(entry->dif_name);
                 entry->dif_name = NULL;
                 pthread_rwlock_unlock(&instance->reg_lock);

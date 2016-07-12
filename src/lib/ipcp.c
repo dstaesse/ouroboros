@@ -221,20 +221,18 @@ int ipcp_bootstrap(pid_t api,
         return ret;
 }
 
-int ipcp_enroll(pid_t api,
-                char * dif_name,
-                char * n_1_dif)
+int ipcp_enroll(pid_t  api,
+                char * dif_name)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (n_1_dif == NULL || dif_name == NULL)
+        if (dif_name == NULL)
                 return -EINVAL;
 
         msg.code     = IPCP_MSG_CODE__IPCP_ENROLL;
         msg.dif_name = dif_name;
-        msg.n_1_dif  = n_1_dif;
 
         recv_msg = send_recv_ipcp_msg(api, &msg);
         if (recv_msg == NULL) {
@@ -252,8 +250,8 @@ int ipcp_enroll(pid_t api,
         return ret;
 }
 
-int ipcp_name_reg(pid_t    api,
-                  char *   name)
+int ipcp_name_reg(pid_t  api,
+                  char * name)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;

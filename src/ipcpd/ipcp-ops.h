@@ -30,8 +30,7 @@
 
 struct ipcp_ops {
         int   (* ipcp_bootstrap)(struct dif_config * conf);
-        int   (* ipcp_enroll)(char * dif_name,
-                              char * n_1_dif);
+        int   (* ipcp_enroll)(char * dif_name);
         int   (* ipcp_name_reg)(char *   name);
         int   (* ipcp_name_unreg)(char * name);
         int   (* ipcp_flow_alloc)(pid_t         n_api,

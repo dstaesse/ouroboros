@@ -184,8 +184,7 @@ void * ipcp_main_loop(void * o)
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_enroll(msg->dif_name,
-                                                        msg->n_1_dif);
+                                _ipcp->ops->ipcp_enroll(msg->dif_name);
 
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_REG:
