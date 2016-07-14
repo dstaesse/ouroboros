@@ -23,11 +23,10 @@
 #ifndef OUROBOROS_QOS_H
 #define OUROBOROS_QOS_H
 
+#include <stdint.h>
+
 /* FIXME: may need revision */
 struct qos_spec {
-        char * qos_name;
-        char * dif_name;
-
         uint32_t delay;
         uint32_t jitter;
 };

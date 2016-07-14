@@ -1,11 +1,21 @@
-#define OUROBOROS_PREFIX "ipcp"
+#define OUROBOROS_PREFIX "normal-ipcp"
 
 #include <ouroboros/logs.h>
 #include <stdbool.h>
 
+#include "fmgr.h"
+#include "ribmgr.h"
+
 int main()
 {
-        LOG_DBG("Test of the IPCP");
+        if (fmgr_init()) {
+                return -1;
+        }
+
+        if (ribmgr_init()) {
+                fmgr_fini();
+                return -1;
+        }
 
         while (true) {
 

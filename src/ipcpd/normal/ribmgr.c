@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Flows
+ * RIB manager of the IPC Process
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,20 +20,43 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_FLOW_H
-#define OUROBOROS_IPCP_FLOW_H
+#define OUROBOROS_PREFIX "rib-manager"
 
-#include <ouroboros/list.h>
-#include <ouroboros/shm_ap_rbuff.h>
+#include <ouroboros/logs.h>
 
-#include <stdint.h>
+#include "ribmgr.h"
 
-struct flow {
-        int                   port_id;
-        struct shm_ap_rbuff * rb;
-        enum flow_state       state;
+int ribmgr_init()
+{
+        LOG_MISSING;
 
-        pid_t                 api;
-};
+        return -1;
+}
 
-#endif /* OUROBOROS_FLOW_H */
+int ribmgr_fini()
+{
+        LOG_MISSING;
+
+        return -1;
+}
+
+int ribmgr_mgmt_flow(int fd)
+{
+        LOG_MISSING;
+
+        return -1;
+}
+
+int ribmgr_bootstrap(struct dif_config * conf)
+{
+        LOG_MISSING;
+
+        return -1;
+}
+
+int ribmgr_fmgr_msg()
+{
+        LOG_MISSING;
+
+        return -1;
+}
