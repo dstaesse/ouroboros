@@ -23,13 +23,15 @@
 #ifndef OUROBOROS_IPCP_RIBMGR_H
 #define OUROBOROS_IPCP_RIBMGR_H
 
-int rib_init();
-int rib_fini();
+#include <ouroboros/irm_config.h>
 
-int rib_mgmt_flow(int fd);
-int rib_bootstrap(struct dif_config * conf);
+int ribmgr_init();
+int ribmgr_fini();
+
+int ribmgr_mgmt_flow(int fd);
+int ribmgr_bootstrap(struct dif_config * conf);
 
 /* Called by Flow Manager (param of type fmgr_msg_t) */
-int rib_fmgr_msg();
+int ribmgr_fmgr_msg();
 
 #endif

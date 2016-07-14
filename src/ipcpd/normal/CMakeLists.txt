@@ -17,6 +17,9 @@ SET(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 set(SOURCE_FILES
         # Add source files here
         main.c
+        fmgr.c
+        frct.c
+        ribmgr.c
 )
 
 add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES})

@@ -23,9 +23,13 @@
 #ifndef OUROBOROS_IPCP_FRCT_H
 #define OUROBOROS_IPCP_FRCT_H
 
+#include <ouroboros/shared.h>
+
+#include "dt_const.h"
+
 struct frct_i;
 
-int             frct_init(struct dt_const * const);
+int             frct_init(struct dt_const * dt_const);
 int             frct_fini();
 
 struct frct_i * frct_i_create(int port_id,

@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Flows
+ * The Flow and Retransmission control component
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,20 +20,48 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_FLOW_H
-#define OUROBOROS_IPCP_FLOW_H
+#define OUROBOROS_PREFIX "flow-rtx-control"
 
-#include <ouroboros/list.h>
-#include <ouroboros/shm_ap_rbuff.h>
+#include <ouroboros/logs.h>
 
-#include <stdint.h>
+#include "frct.h"
 
-struct flow {
-        int                   port_id;
-        struct shm_ap_rbuff * rb;
-        enum flow_state       state;
+struct frct_i {
 
-        pid_t                 api;
 };
 
-#endif /* OUROBOROS_FLOW_H */
+int frct_init(struct dt_const * dt_const)
+{
+        LOG_MISSING;
+
+        return -1;
+}
+
+int frct_fini()
+{
+        LOG_MISSING;
+
+        return -1;
+}
+
+struct frct_i * frct_i_create(int port_id,
+                              enum qos_cube cube)
+{
+        LOG_MISSING;
+
+        return NULL;
+}
+
+int frct_i_destroy(struct frct_i * instance)
+{
+        LOG_MISSING;
+
+        return -1;
+}
+
+int frct_dt_flow(int fd)
+{
+        LOG_MISSING;
+
+        return -1;
+}

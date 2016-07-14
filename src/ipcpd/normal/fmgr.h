@@ -23,8 +23,14 @@
 #ifndef OUROBOROS_IPCP_FMGR_H
 #define OUROBOROS_IPCP_FMGR_H
 
-#include <ouroboros/qos.h>
 #include <ouroboros/shared.h>
+
+#include <unistd.h>
+#include <stdint.h>
+#include <sys/types.h>
+
+#define MGMT_AE "Management"
+#define DT_AE "Data transfer"
 
 int fmgr_init();
 int fmgr_fini();

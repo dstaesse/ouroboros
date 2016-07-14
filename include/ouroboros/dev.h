@@ -35,17 +35,19 @@
 int     ap_init(char * ap_name);
 void    ap_fini(void);
 
-/* Returns file descriptor (> 0) and client AE name */
+/* Returns file descriptor (> 0) and client AE name. */
 int     flow_accept(char ** ae_name);
 int     flow_alloc_resp(int fd, int result);
 
-/* Returns file descriptor */
+/*
+ * Returns file descriptor (> 0).
+ * On returning, qos will contain the actual supplied QoS.
+ */
 int     flow_alloc(char * dst_name,
                    char * src_ae_name,
                    struct qos_spec * qos);
-
-/* If flow is accepted returns a value > 0 */
 int     flow_alloc_res(int fd);
+
 int     flow_dealloc(int fd);
 
 int     flow_cntl(int fd, int cmd, int oflags);

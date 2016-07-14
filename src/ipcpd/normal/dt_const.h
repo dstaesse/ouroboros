@@ -24,19 +24,14 @@
 #ifndef IPCP_DT_CONST_H
 #define IPCP_DT_CONST_H
 
-#include "ouroboros/common.h"
+#include <stdint.h>
 
-struct ipcp_dtp_const {
-        /* sizes in octets */
+struct dt_const {
         uint8_t addr_size;
         uint8_t cep_id_size;
         uint8_t pdu_length_size;
         uint8_t seqno_size;
         uint8_t qos_id_size;
-        /* uint8_t ctrl_sqnum_sz;  is this in the spec?? */
-};
-
-struct ipcp_dup_const {
         uint8_t ttl_size;
         uint8_t chk_size;
 };
