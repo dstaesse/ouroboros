@@ -771,8 +771,6 @@ static struct port_map_entry * flow_accept(pid_t   api,
                 return NULL;
         }
 
-        rne->req_ae_name = NULL;
-
         if (dst_ae_name != NULL)
                 *dst_ae_name = rne->req_ae_name;
 
@@ -1179,13 +1177,16 @@ static struct port_map_entry * flow_req_arr(pid_t  api,
 
         pthread_mutex_unlock(&rne->state_lock);
 
-        while (acc_wait) {
-                pthread_mutex_lock(&rne->state_lock);
-                acc_wait = (rne->state == REG_NAME_FLOW_ARRIVED);
-                pthread_mutex_unlock(&rne->state_lock);
-        }
-
         pthread_rwlock_unlock(&instance->state_lock);
+
+        while (acc_wait) {
+                pthread_rwlock_rdlock(&instance->state_lock);
+                pthread_mutex_lock(&rne->state_lock);
+                acc_wait = (rne->state == REG_NAME_FLOW_ARRIVED &&
+                            instance->state == IRMD_RUNNING);
+                pthread_mutex_unlock(&rne->state_lock);
+                pthread_rwlock_unlock(&instance->state_lock);
+        }
 
         return pme;
 }
