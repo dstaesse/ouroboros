@@ -30,14 +30,14 @@ int ribmgr_init()
 {
         LOG_MISSING;
 
-        return -1;
+        return 0;
 }
 
 int ribmgr_fini()
 {
         LOG_MISSING;
 
-        return -1;
+        return 0;
 }
 
 int ribmgr_mgmt_flow(int fd)
