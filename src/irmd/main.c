@@ -247,6 +247,36 @@ static pid_t get_ipcp_by_dst_name(char * dst_name)
         struct list_head * pos = NULL;
         char * dif_name =
                 registry_get_dif_for_dst(&instance->registry, dst_name);
+        if (dif_name == NULL) {
+                list_for_each(pos, &instance->ipcps) {
+                        struct ipcp_entry * e =
+                                list_entry(pos, struct ipcp_entry, next);
+                        if (e->type == IPCP_NORMAL) {
+                                dif_name = e->dif_name;
+                                break;
+                        }
+                }
+
+                list_for_each(pos, &instance->ipcps) {
+                        struct ipcp_entry * e =
+                                list_entry(pos, struct ipcp_entry, next);
+                        if (e->type == IPCP_SHIM_ETH_LLC) {
+                                dif_name = e->dif_name;
+                                break;
+                        }
+                }
+
+
+                list_for_each(pos, &instance->ipcps) {
+                        struct ipcp_entry * e =
+                                list_entry(pos, struct ipcp_entry, next);
+                        if (e->type == IPCP_SHIM_UDP) {
+                                dif_name = e->dif_name;
+                                break;
+                        }
+                }
+        }
+
         if (dif_name == NULL)
                 return -1;
 
