@@ -59,7 +59,7 @@ struct reg_api {
 
         /* the api will block on this */
         enum reg_i_state state;
-        pthread_cond_t   wakeup;
+        pthread_cond_t   cond_state;
         pthread_mutex_t  mutex;
 };
 

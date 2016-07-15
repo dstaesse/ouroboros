@@ -63,7 +63,7 @@ struct reg_api * reg_api_create(pid_t api)
         i->state = REG_I_WAKE;
 
         pthread_mutex_init(&i->mutex, NULL);
-        pthread_cond_init(&i->wakeup, NULL);
+        pthread_cond_init(&i->cond_state, NULL);
 
         INIT_LIST_HEAD(&i->next);
 
@@ -72,21 +72,18 @@ struct reg_api * reg_api_create(pid_t api)
 
 void reg_api_destroy(struct reg_api * i)
 {
-        bool wait = true;
         pthread_mutex_lock(&i->mutex);
-        i->state = REG_I_NULL;
 
-        pthread_cond_broadcast(&i->wakeup);
+        if (i->state != REG_I_SLEEP)
+                i->state = REG_I_WAKE;
+        else
+                i->state = REG_I_NULL;
+
+        pthread_cond_broadcast(&i->cond_state);
         pthread_mutex_unlock(&i->mutex);
 
-        while (wait) {
-                pthread_mutex_lock(&i->mutex);
-                if (pthread_cond_destroy(&i->wakeup))
-                        pthread_cond_broadcast(&i->wakeup);
-                else
-                        wait = false;
-                pthread_mutex_unlock(&i->mutex);
-        }
+        while (i->state != REG_I_WAKE)
+                ;
 
         pthread_mutex_destroy(&i->mutex);
 
@@ -107,7 +104,10 @@ void reg_api_sleep(struct reg_api * i)
                              (void *) &i->mutex);
 
         while (i->state == REG_I_SLEEP)
-                pthread_cond_wait(&i->wakeup, &i->mutex);
+                pthread_cond_wait(&i->cond_state, &i->mutex);
+
+        i->state = REG_I_WAKE;
+        pthread_cond_signal(&i->cond_state);
 
         pthread_cleanup_pop(true);
 }
@@ -123,7 +123,7 @@ void reg_api_wake(struct reg_api * i)
 
         i->state = REG_I_WAKE;
 
-        pthread_cond_signal(&i->wakeup);
+        pthread_cond_signal(&i->cond_state);
         pthread_mutex_unlock(&i->mutex);
 }
 
@@ -674,27 +674,6 @@ char * registry_get_dif_for_dst(struct list_head * registry,
                 return NULL;
         } else {
                 LOG_DBGF("No local ap %s found.", dst_name);
-                list_for_each(pos, &re->difs) {
-                        struct reg_dif * rd =
-                                list_entry(pos, struct reg_dif, next);
-                        if (rd->type == IPCP_NORMAL)
-                                return rd->dif_name;
-                }
-
-                list_for_each(pos, &re->difs) {
-                        struct reg_dif * rd =
-                                list_entry(pos, struct reg_dif, next);
-                        if (rd->type == IPCP_SHIM_ETH_LLC)
-                                return rd->dif_name;
-                }
-
-                list_for_each(pos, &re->difs) {
-                        struct reg_dif * rd =
-                                list_entry(pos, struct reg_dif, next);
-                        if (rd->type == IPCP_SHIM_UDP)
-                                return rd->dif_name;
-                }
-
                 return NULL;
         }
 }
