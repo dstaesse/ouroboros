@@ -34,14 +34,14 @@ int frct_init(struct dt_const * dt_const)
 {
         LOG_MISSING;
 
-        return -1;
+        return 0;
 }
 
 int frct_fini()
 {
         LOG_MISSING;
 
-        return -1;
+        return 0;
 }
 
 struct frct_i * frct_i_create(int port_id,
