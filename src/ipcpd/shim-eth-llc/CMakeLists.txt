@@ -12,8 +12,6 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-find_package(ProtobufC REQUIRED)
-include_directories(${PROTOBUF_INCLUDE_DIRS})
 protobuf_generate_c(SHIM_ETH_LLC_PROTO_SRCS SHIM_ETH_LLC_PROTO_HDRS
   shim_eth_llc_messages.proto)
 
