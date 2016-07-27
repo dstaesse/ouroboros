@@ -59,6 +59,9 @@ add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 set(LOG_DIR "var/log/ouroboros")
 install(DIRECTORY DESTINATION ${LOG_DIR})
 
+find_package(ProtobufC REQUIRED)
+include_directories(${PROTOBUF_C_INCLUDE_DIRS})
+
 add_subdirectory(src)
 add_subdirectory(include)
 

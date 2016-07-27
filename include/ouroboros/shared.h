@@ -32,7 +32,8 @@ enum qos_cube {
 enum flow_state {
         FLOW_NULL = 0,
         FLOW_PENDING,
-        FLOW_ALLOCATED
+        FLOW_ALLOCATED,
+        FLOW_DESTROY
 };
 
 #endif /* OUROBOROS_SHARED_H */
