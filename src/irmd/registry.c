@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <signal.h>
 
 #define reg_entry_has_auto_binding(e)  (reg_entry_get_auto_info(e) != NULL)
 #define reg_entry_has_api(e, api)      (reg_entry_get_reg_api(e, api) != NULL)
@@ -52,7 +53,25 @@ struct reg_dif {
         enum ipcp_type   type;
 };
 
-struct reg_api * reg_api_create(pid_t api)
+enum api_state {
+        REG_I_NULL = 0,
+        REG_I_INIT,
+        REG_I_SLEEP,
+        REG_I_WAKE,
+        REG_I_DESTROY
+};
+
+struct reg_api {
+        struct list_head next;
+        pid_t            api;
+
+        /* the api will block on this */
+        enum api_state   state;
+        pthread_cond_t   state_cond;
+        pthread_mutex_t  state_lock;
+};
+
+static struct reg_api * reg_api_create(pid_t api)
 {
         struct reg_api * i;
         i = malloc(sizeof(*i));
@@ -60,74 +79,86 @@ struct reg_api * reg_api_create(pid_t api)
                 return NULL;
 
         i->api   = api;
-        i->state = REG_I_WAKE;
+        i->state = REG_I_INIT;
 
-        pthread_mutex_init(&i->mutex, NULL);
-        pthread_cond_init(&i->cond_state, NULL);
+        pthread_mutex_init(&i->state_lock, NULL);
+        pthread_cond_init(&i->state_cond, NULL);
 
         INIT_LIST_HEAD(&i->next);
 
         return i;
 }
 
-void reg_api_destroy(struct reg_api * i)
+static void reg_api_destroy(struct reg_api * i)
 {
-        pthread_mutex_lock(&i->mutex);
+        pthread_mutex_lock(&i->state_lock);
 
-        if (i->state != REG_I_SLEEP)
-                i->state = REG_I_WAKE;
-        else
-                i->state = REG_I_NULL;
+        if (i->state != REG_I_NULL)
+                i->state = REG_I_DESTROY;
 
-        pthread_cond_broadcast(&i->cond_state);
-        pthread_mutex_unlock(&i->mutex);
+        pthread_cond_signal(&i->state_cond);
 
-        while (i->state != REG_I_WAKE)
-                ;
+        pthread_mutex_unlock(&i->state_lock);
 
-        pthread_mutex_destroy(&i->mutex);
+        pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+                             (void *) &i->state_lock);
+
+        while (i->state != REG_I_NULL)
+                pthread_cond_wait(&i->state_cond, &i->state_lock);
+
+        pthread_cleanup_pop(true);
+
+        pthread_cond_destroy(&i->state_cond);
+        pthread_mutex_destroy(&i->state_lock);
 
         free(i);
 }
 
 void reg_api_sleep(struct reg_api * i)
 {
-        pthread_mutex_lock(&i->mutex);
-        if (i->state != REG_I_WAKE) {
-                pthread_mutex_unlock(&i->mutex);
+        if (i == NULL)
+                return;
+
+        pthread_mutex_lock(&i->state_lock);
+        if (i->state != REG_I_INIT) {
+                pthread_mutex_unlock(&i->state_lock);
                 return;
         }
 
         i->state = REG_I_SLEEP;
 
         pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
-                             (void *) &i->mutex);
+                             (void *) &i->state_lock);
 
         while (i->state == REG_I_SLEEP)
-                pthread_cond_wait(&i->cond_state, &i->mutex);
+                pthread_cond_wait(&i->state_cond, &i->state_lock);
 
-        i->state = REG_I_WAKE;
-        pthread_cond_signal(&i->cond_state);
+        i->state = REG_I_NULL;
+        pthread_cond_signal(&i->state_cond);
 
         pthread_cleanup_pop(true);
 }
 
 void reg_api_wake(struct reg_api * i)
 {
-        pthread_mutex_lock(&i->mutex);
+        pthread_mutex_lock(&i->state_lock);
 
         if (i->state == REG_I_NULL) {
-                pthread_mutex_unlock(&i->mutex);
+                pthread_mutex_unlock(&i->state_lock);
                 return;
         }
 
         i->state = REG_I_WAKE;
 
-        pthread_cond_signal(&i->cond_state);
-        pthread_mutex_unlock(&i->mutex);
+        pthread_cond_broadcast(&i->state_cond);
+
+        while (i->state == REG_I_WAKE)
+                pthread_cond_wait(&i->state_cond, &i->state_lock);
+
+        pthread_mutex_unlock(&i->state_lock);
 }
 
-struct reg_binding * reg_binding_create(char *   apn,
+static struct reg_binding * reg_binding_create(char *   apn,
                                         uint32_t flags,
                                         char **  argv)
 {
@@ -144,7 +175,7 @@ struct reg_binding * reg_binding_create(char *   apn,
         return b;
 }
 
-void reg_binding_destroy(struct reg_binding * b)
+static void reg_binding_destroy(struct reg_binding * b)
 {
         if (b == NULL)
                 return;
@@ -160,7 +191,7 @@ void reg_binding_destroy(struct reg_binding * b)
         free(b);
 }
 
-struct reg_entry * reg_entry_create()
+static struct reg_entry * reg_entry_create()
 {
         struct reg_entry * e = malloc(sizeof(*e));
         if (e == NULL)
@@ -175,7 +206,7 @@ struct reg_entry * reg_entry_create()
         return e;
 }
 
-struct reg_entry * reg_entry_init(struct reg_entry * e,
+static struct reg_entry * reg_entry_init(struct reg_entry * e,
                                   char *             name)
 {
         if (e == NULL || name == NULL)
@@ -188,7 +219,7 @@ struct reg_entry * reg_entry_init(struct reg_entry * e,
 
         e->name = name;
 
-        if (pthread_cond_init(&e->acc_signal, NULL))
+        if (pthread_cond_init(&e->state_cond, NULL))
                 return NULL;
 
         if (pthread_mutex_init(&e->state_lock, NULL))
@@ -199,7 +230,7 @@ struct reg_entry * reg_entry_init(struct reg_entry * e,
         return e;
 }
 
-void reg_entry_destroy(struct reg_entry * e)
+static void reg_entry_destroy(struct reg_entry * e)
 {
         struct list_head * pos = NULL;
         struct list_head * n   = NULL;
@@ -211,17 +242,14 @@ void reg_entry_destroy(struct reg_entry * e)
 
         pthread_mutex_lock(&e->state_lock);
 
-        e->state = REG_NAME_NULL;
+        e->state = REG_NAME_DESTROY;
 
-        pthread_cond_broadcast(&e->acc_signal);
+        pthread_cond_broadcast(&e->state_cond);
         pthread_mutex_unlock(&e->state_lock);
 
         while (wait) {
                 pthread_mutex_lock(&e->state_lock);
-                if (pthread_cond_destroy(&e->acc_signal))
-                        pthread_cond_broadcast(&e->acc_signal);
-                else
-                        wait = false;
+                pthread_cond_broadcast(&e->state_cond);
                 pthread_mutex_unlock(&e->state_lock);
         }
 
@@ -593,7 +621,7 @@ struct reg_api * registry_add_api_name(struct list_head * registry,
         if (e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT
            || e->state == REG_NAME_AUTO_EXEC) {
                 e->state = REG_NAME_FLOW_ACCEPT;
-                pthread_cond_signal(&e->acc_signal);
+                pthread_cond_signal(&e->state_cond);
         }
 
         list_add(&i->next, &e->reg_apis);
@@ -636,10 +664,33 @@ void registry_del_api(struct list_head * registry,
                 e->state = REG_NAME_FLOW_ACCEPT;
         }
 
+        pthread_cond_signal(&e->state_cond);
+
         return;
 }
 
-/* FIXME: optimize this */
+void registry_sanitize_apis(struct list_head * registry)
+{
+        struct list_head * pos = NULL;
+        struct list_head * n   = NULL;
+
+        struct list_head * pos2 = NULL;
+        struct list_head * n2   = NULL;
+
+        list_for_each_safe(pos, n, registry) {
+                struct reg_entry * e = list_entry(pos, struct reg_entry, next);
+                list_for_each_safe(pos2, n2, &e->reg_apis) {
+                        struct reg_api * r
+                                = list_entry(pos2, struct reg_api, next);
+                        if (kill(r->api, 0) < 0) {
+                                LOG_DBG("Process %d gone, binding removed.",
+                                        r->api);
+                                registry_del_api(registry, r->api);
+                        }
+                }
+        }
+}
+
 char * registry_get_dif_for_dst(struct list_head * registry,
                                 char *             dst_name)
 {
@@ -673,7 +724,7 @@ char * registry_get_dif_for_dst(struct list_head * registry,
 
                 return NULL;
         } else {
-                LOG_DBGF("No local ap %s found.", dst_name);
+                LOG_DBG("No local ap %s found.", dst_name);
                 return NULL;
         }
 }
@@ -699,4 +750,19 @@ void registry_del_name_from_dif(struct list_head * registry,
                 return;
 
         reg_entry_del_local_from_dif(re, dif_name);
+}
+
+void registry_destroy(struct list_head * registry)
+{
+        struct list_head * h = NULL;
+        struct list_head * t = NULL;
+
+        if (registry == NULL)
+                return;
+
+        list_for_each_safe(h, t, registry) {
+                struct reg_entry * e = list_entry(h, struct reg_entry, next);
+                list_del(&e->next);
+                reg_entry_destroy(e);
+        }
 }

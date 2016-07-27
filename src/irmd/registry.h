@@ -44,24 +44,11 @@ enum reg_name_state {
         REG_NAME_AUTO_ACCEPT,
         REG_NAME_AUTO_EXEC,
         REG_NAME_FLOW_ACCEPT,
-        REG_NAME_FLOW_ARRIVED
+        REG_NAME_FLOW_ARRIVED,
+        REG_NAME_DESTROY
 };
 
-enum reg_i_state {
-        REG_I_NULL = 0,
-        REG_I_SLEEP,
-        REG_I_WAKE
-};
-
-struct reg_api {
-        struct list_head next;
-        pid_t            api;
-
-        /* the api will block on this */
-        enum reg_i_state state;
-        pthread_cond_t   cond_state;
-        pthread_mutex_t  mutex;
-};
+struct reg_api;
 
 /* an entry in the registry */
 struct reg_entry {
@@ -76,30 +63,16 @@ struct reg_entry {
         /* known instances */
         struct list_head    reg_apis;
 
-        /* flow handling information */
+        /* FIXME: flow handling information should not be here */
         enum reg_name_state state;
         char *              req_ae_name;
         int                 response;
-        pthread_cond_t      acc_signal;
+        pthread_cond_t      state_cond;
         pthread_mutex_t     state_lock;
 };
 
-struct reg_api *      reg_api_create(pid_t api);
-void                  reg_api_destroy(struct reg_api * i);
 void                  reg_api_sleep(struct reg_api * i);
 void                  reg_api_wake(struct reg_api * i);
-
-
-
-struct reg_binding *  reg_binding_create(char *   apn,
-                                         uint32_t opts,
-                                         char **  argv);
-void                  reg_binding_destroy();
-
-struct reg_entry *    reg_entry_create();
-struct reg_entry *    reg_entry_init(struct reg_entry * e,
-                                     char *             name);
-void                  reg_entry_destroy(struct reg_entry * e);
 
 struct reg_binding *  reg_entry_get_binding(struct reg_entry * e,
                                             char *             apn);
@@ -135,6 +108,7 @@ struct reg_api *      registry_add_api_name(struct list_head * registry,
                                             char *             name);
 void                  registry_del_api(struct list_head * registry,
                                        pid_t              api);
+void                  registry_sanitize_apis(struct list_head * registry);
 struct reg_api *      registry_get_api_by_name(struct list_head * registry,
                                                char *             name);
 struct reg_entry *    registry_get_entry_by_name(struct list_head * registry,
@@ -152,4 +126,6 @@ int                   registry_add_name_to_dif(struct list_head * registry,
 void                  registry_del_name_from_dif(struct list_head * registry,
                                                  char *             name,
                                                  char *             dif_name);
+void                  registry_destroy(struct list_head * registry);
+
 #endif
