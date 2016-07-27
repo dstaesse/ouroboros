@@ -30,7 +30,6 @@
 #include <ouroboros/utils.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/irm_config.h>
-#include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/shared.h>
 #include <ouroboros/dev.h>

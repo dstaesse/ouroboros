@@ -39,7 +39,6 @@
 #define DEFAULT_ADDR_SIZE 4
 #define DEFAULT_CEP_ID_SIZE 2
 #define DEFAULT_PDU_LEN_SIZE 2
-#define DEFAULT_QOS_ID_SIZE 1
 #define DEFAULT_SEQ_NO_SIZE 4
 #define DEFAULT_TTL_SIZE 1
 #define DEFAULT_CHK_SIZE 2
@@ -60,7 +59,6 @@ static void usage()
                "                [addr <address size> (default: %d)]\n"
                "                [cep_id <CEP-id size> (default: %d)]\n"
                "                [pdu_len <PDU length size> (default: %d)]\n"
-               "                [qos_id <QoS-id size> (default: %d)]\n"
                "                [seqno <sequence number size> (default: %d)]\n"
                "                [ttl <time to live size>  (default: %d)]\n"
                "                [chk <checksum size>  (default: %d)]\n"
@@ -73,10 +71,9 @@ static void usage()
                "if TYPE == " SHIM_ETH_LLC "\n"
                "                if_name <interface name>\n",
                DEFAULT_ADDR_SIZE, DEFAULT_CEP_ID_SIZE,
-               DEFAULT_PDU_LEN_SIZE, DEFAULT_QOS_ID_SIZE,
-               DEFAULT_SEQ_NO_SIZE, DEFAULT_TTL_SIZE,
-               DEFAULT_CHK_SIZE, DEFAULT_MIN_PDU_SIZE,
-               DEFAULT_MAX_PDU_SIZE, DEFAULT_DDNS);
+               DEFAULT_PDU_LEN_SIZE, DEFAULT_SEQ_NO_SIZE,
+               DEFAULT_TTL_SIZE, DEFAULT_CHK_SIZE,
+               DEFAULT_MIN_PDU_SIZE, DEFAULT_MAX_PDU_SIZE, DEFAULT_DDNS);
 }
 
 int do_bootstrap_ipcp(int argc, char ** argv)
@@ -86,7 +83,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         uint8_t addr_size = DEFAULT_ADDR_SIZE;
         uint8_t cep_id_size = DEFAULT_CEP_ID_SIZE;
         uint8_t pdu_length_size = DEFAULT_PDU_LEN_SIZE;
-        uint8_t qos_id_size = DEFAULT_QOS_ID_SIZE;
         uint8_t seqno_size = DEFAULT_SEQ_NO_SIZE;
         uint8_t ttl_size = DEFAULT_TTL_SIZE;
         uint8_t chk_size = DEFAULT_CHK_SIZE;
@@ -126,8 +122,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         cep_id_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "pdu_len") == 0) {
                         pdu_length_size = atoi(*(argv + 1));
-                } else if (matches(*argv, "qos_id") == 0) {
-                        qos_id_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "seqno") == 0) {
                         seqno_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "ttl") == 0) {
@@ -160,7 +154,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.addr_size = addr_size;
                 conf.cep_id_size = cep_id_size;
                 conf.pdu_length_size = pdu_length_size;
-                conf.qos_id_size = qos_id_size;
                 conf.seqno_size = seqno_size;
                 conf.ttl_size = ttl_size;
                 conf.chk_size = chk_size;

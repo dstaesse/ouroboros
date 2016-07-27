@@ -48,7 +48,7 @@ struct fmgr {
         struct list_head n_1_flows;
         pthread_mutex_t n_1_flows_lock;
 
-} * instance = NULL;
+} * fmgr = NULL;
 
 static int add_n_1_fd(int fd,
                       char * ae_name)
@@ -65,9 +65,9 @@ static int add_n_1_fd(int fd,
         tmp->fd = fd;
         tmp->ae_name = ae_name;
 
-        pthread_mutex_lock(&instance->n_1_flows_lock);
-        list_add(&tmp->next, &instance->n_1_flows);
-        pthread_mutex_unlock(&instance->n_1_flows_lock);
+        pthread_mutex_lock(&fmgr->n_1_flows_lock);
+        list_add(&tmp->next, &fmgr->n_1_flows);
+        pthread_mutex_unlock(&fmgr->n_1_flows_lock);
 
         return 0;
 }
@@ -77,12 +77,16 @@ static void * fmgr_listen(void * o)
         int fd;
         char * ae_name;
 
+        /* FIXME: Only start to listen once we are enrolled */
+
         while (true) {
                 fd = flow_accept(&ae_name);
                 if (fd < 0) {
                         LOG_ERR("Failed to accept flow.");
                         continue;
                 }
+
+                LOG_DBG("New flow alloc request for AE %s", ae_name);
 
                 if (!(strcmp(ae_name, MGMT_AE) == 0 ||
                       strcmp(ae_name, DT_AE) == 0)) {
@@ -101,18 +105,20 @@ static void * fmgr_listen(void * o)
                 LOG_DBG("Accepted new flow allocation request for AE %s.",
                         ae_name);
 
-                if (strcmp(ae_name, MGMT_AE) == 0 &&
-                    ribmgr_mgmt_flow(fd)) {
-                        LOG_ERR("Failed to hand file descriptor to RIB.");
-                        flow_dealloc(fd);
-                        continue;
+                if (strcmp(ae_name, MGMT_AE) == 0) {
+                        if (ribmgr_mgmt_flow(fd)) {
+                                LOG_ERR("Failed to hand fd to RIB.");
+                                flow_dealloc(fd);
+                                continue;
+                        }
                 }
 
-                if (strcmp(ae_name, DT_AE) == 0 &&
-                    frct_dt_flow(fd)) {
-                        LOG_ERR("Failed to hand file descriptor to FRCT.");
-                        flow_dealloc(fd);
-                        continue;
+                if (strcmp(ae_name, DT_AE) == 0) {
+                        if (frct_dt_flow(fd)) {
+                                LOG_ERR("Failed to hand fd to FRCT.");
+                                flow_dealloc(fd);
+                                continue;
+                        }
                 }
 
                 if (add_n_1_fd(fd, ae_name)) {
@@ -127,16 +133,16 @@ static void * fmgr_listen(void * o)
 
 int fmgr_init()
 {
-        instance = malloc(sizeof(*instance));
-        if (instance == NULL) {
+        fmgr = malloc(sizeof(*fmgr));
+        if (fmgr == NULL) {
                 return -1;
         }
 
-        INIT_LIST_HEAD(&instance->n_1_flows);
+        INIT_LIST_HEAD(&fmgr->n_1_flows);
 
-        pthread_mutex_init(&instance->n_1_flows_lock, NULL);
+        pthread_mutex_init(&fmgr->n_1_flows_lock, NULL);
 
-        pthread_create(&instance->listen_thread,
+        pthread_create(&fmgr->listen_thread,
                        NULL,
                        fmgr_listen,
                        NULL);
@@ -148,12 +154,12 @@ int fmgr_fini()
 {
         struct list_head * pos = NULL;
 
-        pthread_cancel(instance->listen_thread);
+        pthread_cancel(fmgr->listen_thread);
 
-        pthread_join(instance->listen_thread,
+        pthread_join(fmgr->listen_thread,
                      NULL);
 
-        list_for_each(pos, &instance->n_1_flows) {
+        list_for_each(pos, &fmgr->n_1_flows) {
                 struct n_1_flow * e =
                         list_entry(pos, struct n_1_flow, next);
                 if (e->ae_name != NULL)
@@ -161,7 +167,7 @@ int fmgr_fini()
                 flow_dealloc(e->fd);
         }
 
-        free(instance);
+        free(fmgr);
 
         return 0;
 }

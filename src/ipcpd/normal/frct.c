@@ -22,6 +22,8 @@
 
 #define OUROBOROS_PREFIX "flow-rtx-control"
 
+#include <stdlib.h>
+
 #include <ouroboros/logs.h>
 
 #include "frct.h"
@@ -30,16 +32,29 @@ struct frct_i {
 
 };
 
-int frct_init(struct dt_const * dt_const)
+struct frct {
+        struct dt_const * dtc;
+
+} * frct = NULL;
+
+int frct_init(struct dt_const * dtc)
 {
-        LOG_MISSING;
+        if (dtc == NULL)
+                return -1;
+
+        frct = malloc(sizeof(*frct));
+        if (frct == NULL) {
+                return -1;
+        }
+
+        frct->dtc = dtc;
 
         return 0;
 }
 
 int frct_fini()
 {
-        LOG_MISSING;
+        free(frct);
 
         return 0;
 }
