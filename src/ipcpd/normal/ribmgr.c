@@ -34,8 +34,11 @@
 #include "ribmgr.h"
 #include "dt_const.h"
 #include "frct.h"
+#include "ipcp.h"
 
 #define ENROLLMENT "enrollment"
+
+extern struct ipcp * _ipcp;
 
 enum cdap_opcode {
         READ = 0,
@@ -103,11 +106,11 @@ int cdap_request_add(struct cdap * instance,
 int ribmgr_init()
 {
         rib = malloc(sizeof(*rib));
-        if (rib == NULL) {
+        if (rib == NULL)
                 return -1;
-        }
 
         INIT_LIST_HEAD(&rib->flows);
+        INIT_LIST_HEAD(&rib->cdap_reqs);
 
         if (pthread_rwlock_init(&rib->flows_lock, NULL)) {
                 LOG_ERR("Failed to initialize rwlock.");
@@ -141,11 +144,13 @@ int ribmgr_fini()
         pthread_mutex_unlock(&rib->cdap_reqs_lock);
 
         pthread_rwlock_wrlock(&rib->flows_lock);
-        list_for_each_safe(pos, n, &rib->cdap_reqs) {
+        list_for_each_safe(pos, n, &rib->flows) {
                 struct mgmt_flow * flow =
                         list_entry(pos, struct mgmt_flow, next);
                 if (cdap_destroy(flow->instance))
                         LOG_ERR("Failed to destroy CDAP instance.");
+                list_del(&flow->next);
+                free(flow);
         }
         pthread_rwlock_unlock(&rib->flows_lock);
 
@@ -232,7 +237,7 @@ static struct cdap_ops ribmgr_ops = {
         .cdap_stop   = ribmgr_cdap_stop
 };
 
-int ribmgr_mgmt_flow(int fd)
+int ribmgr_add_flow(int fd)
 {
         struct cdap * instance = NULL;
         struct mgmt_flow * flow;
@@ -253,8 +258,14 @@ int ribmgr_mgmt_flow(int fd)
         flow->instance = instance;
         flow->fd = fd;
 
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
         pthread_rwlock_wrlock(&rib->flows_lock);
-        if (list_empty(&rib->flows)) {
+        if (list_empty(&rib->flows) &&
+            (_ipcp->state == IPCP_INIT ||
+             _ipcp->state == IPCP_DISCONNECTED)) {
+                _ipcp->state = IPCP_PENDING_ENROLL;
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+
                 pthread_mutex_lock(&rib->cdap_reqs_lock);
                 iid = cdap_send_start(instance,
                                       ENROLLMENT);
@@ -277,11 +288,33 @@ int ribmgr_mgmt_flow(int fd)
                 }
                 pthread_mutex_unlock(&rib->cdap_reqs_lock);
         }
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         list_add(&flow->next, &rib->flows);
         pthread_rwlock_unlock(&rib->flows_lock);
 
         return 0;
+}
+
+int ribmgr_remove_flow(int fd)
+{
+        struct list_head * pos, * n = NULL;
+
+        pthread_rwlock_wrlock(&rib->flows_lock);
+        list_for_each_safe(pos, n, &rib->flows) {
+                struct mgmt_flow * flow =
+                        list_entry(pos, struct mgmt_flow, next);
+                if (flow->fd == fd) {
+                        if (cdap_destroy(flow->instance))
+                                LOG_ERR("Failed to destroy CDAP instance.");
+                        list_del(&flow->next);
+                        free(flow);
+                        return 0;
+                }
+        }
+        pthread_rwlock_unlock(&rib->flows_lock);
+
+        return -1;
 }
 
 int ribmgr_bootstrap(struct dif_config * conf)
@@ -309,11 +342,4 @@ int ribmgr_bootstrap(struct dif_config * conf)
         LOG_DBG("Bootstrapped RIB Manager.");
 
         return 0;
-}
-
-int ribmgr_fmgr_msg()
-{
-        LOG_MISSING;
-
-        return -1;
 }

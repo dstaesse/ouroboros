@@ -52,7 +52,4 @@ int fmgr_flow_alloc_resp(pid_t n_api,
 
 int fmgr_flow_dealloc(int port_id);
 
-/* RIB Manager calls this (param will be of type fmgr_msg_t) */
-int fmgr_flow_msg();
-
 #endif

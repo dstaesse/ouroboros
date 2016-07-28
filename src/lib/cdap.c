@@ -212,6 +212,7 @@ struct cdap * cdap_create(struct cdap_ops * ops,
         }
 
         instance->ops = ops;
+        instance->fd = fd;
 
         instance->ids = bmp_create(IDS_SIZE, 0);
         if (instance->ids == NULL) {
@@ -233,6 +234,9 @@ int cdap_destroy(struct cdap * instance)
                 return -1;
 
         pthread_cancel(instance->reader);
+
+        if (flow_dealloc(instance->fd))
+                return -1;
 
         pthread_mutex_lock(&instance->ids_lock);
 

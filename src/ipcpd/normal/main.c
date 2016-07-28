@@ -80,14 +80,14 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
                         pthread_cancel(normal_data(_ipcp)->mainloop);
 
+                        if (fmgr_fini())
+                                LOG_ERR("Failed to finalize flow manager.");
+
                         if (ribmgr_fini())
                                 LOG_ERR("Failed to finalize RIB manager.");
 
                         if (frct_fini())
                                 LOG_ERR("Failed to finalize FRCT.");
-
-                        if (fmgr_fini())
-                                LOG_ERR("Failed to finalize flow manager.");
                 }
         default:
                 return;
@@ -138,15 +138,15 @@ static int normal_ipcp_enroll(char * dif_name)
                 return -1; /* -ENOTINIT */
         }
 
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+
         if (fmgr_mgmt_flow(dif_name)) {
                 pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Failed to establish management flow.");
                 return -1;
         }
 
-        _ipcp->state = IPCP_ENROLLED;
-
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        /* FIXME: Wait until state changed to ENROLLED */
 
         return 0;
 }

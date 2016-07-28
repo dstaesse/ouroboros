@@ -296,7 +296,7 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
         while (tail_el_ptr->port_id < 0)
                 *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_RBUFF_SIZE -1);
 
-        while(shm_rbuff_empty(rb))
+        while (shm_rbuff_empty(rb))
                 if (pthread_cond_wait(rb->work, rb->shm_mutex)
                     == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");

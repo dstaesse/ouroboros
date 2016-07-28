@@ -29,12 +29,10 @@
 #include "frct.h"
 
 struct frct_i {
-
 };
 
 struct frct {
         struct dt_const * dtc;
-
 } * frct = NULL;
 
 int frct_init(struct dt_const * dtc)
@@ -43,9 +41,8 @@ int frct_init(struct dt_const * dtc)
                 return -1;
 
         frct = malloc(sizeof(*frct));
-        if (frct == NULL) {
+        if (frct == NULL)
                 return -1;
-        }
 
         frct->dtc = dtc;
 

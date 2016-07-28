@@ -28,10 +28,9 @@
 int ribmgr_init();
 int ribmgr_fini();
 
-int ribmgr_mgmt_flow(int fd);
-int ribmgr_bootstrap(struct dif_config * conf);
+int ribmgr_add_flow(int fd);
+int ribmgr_remove_flow(int fd);
 
-/* Called by Flow Manager (param of type fmgr_msg_t) */
-int ribmgr_fmgr_msg();
+int ribmgr_bootstrap(struct dif_config * conf);
 
 #endif
