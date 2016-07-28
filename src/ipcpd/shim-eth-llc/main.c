@@ -53,8 +53,17 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
+
+#ifdef __linux__
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
+#endif
+
+#ifdef __FreeBSD__
+#include <net/if_dl.h>
+#include <netinet/if_ether.h>
+#endif
+
 #include <poll.h>
 #include <sys/mman.h>
 
@@ -89,7 +98,11 @@ struct eth_llc_ipcp_data {
         /* Keep ipcp_data first for polymorphism. */
         struct ipcp_data      ipcp_data;
 
+#ifdef __FreeBSD__
+        struct sockaddr_dl    device;
+#else
         struct sockaddr_ll    device;
+#endif
         int                   s_fd;
 
         struct bmp *          indices;
@@ -285,7 +298,11 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
         uint8_t * frame;
 #else
         uint8_t frame[SHIM_ETH_LLC_MAX_SDU_SIZE];
-        struct sockaddr_ll device;
+#ifdef __FreeBSD__
+        struct sockaddr_dl    device;
+#else
+        struct sockaddr_ll    device;
+#endif
 #endif
 
         if (payload == NULL) {
@@ -321,7 +338,11 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
         memcpy(frame, dst_addr, MAC_SIZE * sizeof(uint8_t));
         frame_len += MAC_SIZE;
         memcpy(frame + frame_len,
+#ifdef __FreeBSD__
+               LLADDR(&shim_data(_ipcp)->device),
+#else
                shim_data(_ipcp)->device.sll_addr,
+#endif
                MAC_SIZE * sizeof(uint8_t));
         frame_len += MAC_SIZE;
         memcpy(frame + frame_len, &length, 2 * sizeof(uint8_t));
@@ -671,8 +692,11 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 #endif
                 for (i = 0; i < MAC_SIZE; i++)
                         dst_mac[i] = buf[i];
-
+#ifdef __FreeBSD__
+                if (memcmp(LLADDR(&shim_data(_ipcp)->device),
+#else
                 if (memcmp(shim_data(_ipcp)->device.sll_addr,
+#endif
                            dst_mac,
                            MAC_SIZE) &&
                     memcmp(br_addr, dst_mac, MAC_SIZE)) {
@@ -868,7 +892,13 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         int fd = -1;
         struct ifreq ifr;
         int index;
+#ifdef __FreeBSD__
+        struct ifaddrs * ifaddr;
+        struct ifaddrs * ifa;
+        struct sockaddr_dl device;
+#else
         struct sockaddr_ll device;
+#endif
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         struct tpacket_req req;
@@ -897,21 +927,58 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         memcpy(ifr.ifr_name, conf->if_name, strlen(conf->if_name));
 
+#ifdef __FreeBSD__
+        if (getifaddrs(&ifaddr) < 0)  {
+                close(fd);
+                LOG_ERR("Could not get interfaces.");
+                return -1;
+        }
+
+        for (ifa = ifaddr, index = 0; ifa != NULL; ifa = ifa->ifa_next, ++index) {
+                if (strcmp(ifa->ifa_name, conf->if_name))
+                        continue;
+                LOG_DBGF("Interface %s found.", conf->if_name);
+
+                memcpy(&ifr.ifr_addr, ifa->ifa_addr, sizeof(*ifa->ifa_addr));
+                break;
+        }
+
+        if (ifa == NULL) {
+                LOG_ERR("Interface not found.");
+                freeifaddrs(ifaddr);
+                return -1;
+        }
+
+        freeifaddrs(ifaddr);
+
+#else
         if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
                 close(fd);
                 LOG_ERR("Failed to ioctl: %s.", strerror(errno));
                 return -1;
         }
 
-        close(fd);
-
         index = if_nametoindex(conf->if_name);
         if (index == 0) {
                 LOG_ERR("Failed to retrieve interface index.");
                 return -1;
         }
+#endif
+
+        close(fd);
 
         memset(&(device), 0, sizeof(device));
+#ifdef __FreeBSD__
+        device.sdl_index = index;
+        device.sdl_family = AF_LINK;
+        memcpy(LLADDR(&device),
+               ifr.ifr_addr.sa_data,
+               MAC_SIZE * sizeof (uint8_t));
+        device.sdl_alen = MAC_SIZE;
+        /* TODO: replace socket calls with bpf for BSD */
+        LOG_MISSING;
+        fd = socket(AF_LINK, SOCK_RAW, 0);
+#else
         device.sll_ifindex = index;
         device.sll_family = AF_PACKET;
         memcpy(device.sll_addr,
@@ -921,6 +988,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         device.sll_protocol = htons(ETH_P_ALL);
 
         fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
+#endif
         if (fd < 0) {
                 LOG_ERR("Failed to create socket: %s.", strerror(errno));
                 return -1;
@@ -953,8 +1021,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         }
 #endif
 
-        if (bind(fd,(struct sockaddr *) &device,
-                 sizeof(struct sockaddr_ll))) {
+        if (bind(fd,(struct sockaddr *) &device, sizeof(device))) {
                 LOG_ERR("Failed to bind socket to interface");
                 close(fd);
                 return -1;

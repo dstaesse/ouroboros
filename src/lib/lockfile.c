@@ -60,7 +60,7 @@ struct lockfile * lockfile_create() {
                 return NULL;
         }
 
-        if (lseek(lf->fd, LF_SIZE - 1, SEEK_SET) < 0) {
+        if (ftruncate(lf->fd, LF_SIZE - 1) < 0) {
                 LOG_DBGF("Failed to extend lockfile.");
                 free(lf);
                 return NULL;
@@ -99,7 +99,7 @@ struct lockfile * lockfile_open() {
                 return NULL;
 
         lf->fd = shm_open(LOCKFILE_NAME, O_RDWR, 0666);
-        if (lf->fd == -1) {
+        if (lf->fd < 0) {
                 LOG_DBGF("Could not open lock file.");
                 free(lf);
                 return NULL;

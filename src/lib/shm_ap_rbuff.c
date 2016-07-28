@@ -90,7 +90,7 @@ struct shm_ap_rbuff * shm_ap_rbuff_create()
                 return NULL;
         }
 
-        if (lseek(shm_fd, SHM_RBUFF_FILE_SIZE - 1, SEEK_SET) < 0) {
+        if (ftruncate(shm_fd, SHM_RBUFF_FILE_SIZE - 1) < 0) {
                 LOG_DBGF("Failed to extend ringbuffer.");
                 free(rb);
                 return NULL;
