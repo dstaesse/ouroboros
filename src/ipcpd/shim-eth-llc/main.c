@@ -614,6 +614,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         uint8_t dst_mac[MAC_SIZE];
         uint8_t br_addr[MAC_SIZE];
         int frame_len = 0;
+        int len_frame = 0;
         uint8_t ssap = 0;
         uint8_t dsap = 0;
         int i = 0;
@@ -694,6 +695,9 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 #endif
                         continue;
                 }
+
+                len_frame = ((buf[i]) << 8) + buf[i + 1];
+                len_frame -= 3;
                 i += 2;
 
                 dsap = reverse_bits(buf[i++]);
@@ -701,6 +705,15 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 i++;
 
                 frame_len -= i;
+
+                /*
+                 * Take minimum of length reported in frame
+                 * and frame length reported by kernel. Some device
+                 * drivers change the length in the frame. Some
+                 * others add padding, making the length reported
+                 * by the kernel too high. Sigh. Lousy workaround.
+                 */
+                frame_len = MIN(frame_len, len_frame);
 
                 if (ssap == MGMT_SAP &&
                     dsap == MGMT_SAP) {
@@ -712,7 +725,8 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                         j = addr_and_saps_to_index(src_mac, ssap, dsap);
                         if (j < 0) {
-                                pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
+                                pthread_rwlock_unlock(&shim_data(_ipcp)->
+                                                      flows_lock);
                                 pthread_rwlock_unlock(&_ipcp->state_lock);
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                                 offset = (offset + 1)
