@@ -998,17 +998,13 @@ static int flow_alloc_res(int port_id)
                 return 0;
         }
 
-        if (e->state == FLOW_DESTROY) {
-                /* don't release the port_id, AP has to call dealloc */
-                e->state = FLOW_NULL;
-                pthread_cond_signal(&e->state_cond);
-                pthread_mutex_unlock(&e->state_lock);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                return -1;
-        }
+        e->state = FLOW_NULL;
+        pthread_cond_signal(&e->state_cond);
+        pthread_mutex_unlock(&e->state_lock);
+        pthread_rwlock_unlock(&irmd->flows_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
 
-        return 0;
+        return -1;
 }
 
 static int flow_dealloc(int port_id)
@@ -1083,7 +1079,6 @@ static struct irm_flow * flow_req_arr(pid_t  api,
         struct reg_entry *      rne = NULL;
         struct irm_flow * pme = NULL;
 
-        bool acc_wait = true;
         enum reg_name_state state;
 
         struct spawned_api * c_api;
@@ -1163,6 +1158,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_rdlock(&irmd->reg_lock);
                 pthread_mutex_lock(&rne->state_lock);
                 if (rne->state == REG_NAME_DESTROY) {
+                        rne->state = REG_NAME_NULL;
                         pthread_mutex_unlock(&rne->state_lock);
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         return NULL;
@@ -1207,14 +1203,14 @@ static struct irm_flow * flow_req_arr(pid_t  api,
 
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        while (acc_wait) {
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                pthread_mutex_lock(&rne->state_lock);
-                acc_wait = (rne->state == REG_NAME_FLOW_ARRIVED &&
-                            irmd->state == IRMD_RUNNING);
-                pthread_mutex_unlock(&rne->state_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-        }
+        pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+                             (void *) &rne->state_lock);
+
+        while (rne->state == REG_NAME_FLOW_ARRIVED &&
+               irmd->state == IRMD_RUNNING)
+                pthread_cond_wait(&rne->state_cond, &rne->state_lock);
+
+        pthread_cleanup_pop(true);
 
         return pme;
 }
