@@ -998,17 +998,13 @@ static int flow_alloc_res(int port_id)
                 return 0;
         }
 
-        if (e->state == FLOW_DESTROY) {
-                /* don't release the port_id, AP has to call dealloc */
-                e->state = FLOW_NULL;
-                pthread_cond_signal(&e->state_cond);
-                pthread_mutex_unlock(&e->state_lock);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                return -1;
-        }
+        e->state = FLOW_NULL;
+        pthread_cond_signal(&e->state_cond);
+        pthread_mutex_unlock(&e->state_lock);
+        pthread_rwlock_unlock(&irmd->flows_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
 
-        return 0;
+        return -1;
 }
 
 static int flow_dealloc(int port_id)
