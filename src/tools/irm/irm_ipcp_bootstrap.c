@@ -24,7 +24,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
-
+#ifdef __FreeBSD__
+#include <sys/socket.h>
+#endif
 #include <ouroboros/irm.h>
 #include <ouroboros/irm_config.h>
 

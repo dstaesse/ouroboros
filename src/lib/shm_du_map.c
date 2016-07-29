@@ -161,7 +161,7 @@ struct shm_du_map * shm_du_map_create()
                 return NULL;
         }
 
-        if (lseek(shm_fd, SHM_FILE_SIZE - 1, SEEK_SET) < 0) {
+        if (ftruncate(shm_fd, SHM_FILE_SIZE - 1) < 0) {
                 LOG_DBGF("Failed to extend shared memory map.");
                 free(dum);
                 return NULL;
@@ -235,7 +235,7 @@ struct shm_du_map * shm_du_map_open()
         }
 
         shm_fd = shm_open(SHM_DU_MAP_FILENAME, O_RDWR, 0666);
-        if (shm_fd == -1) {
+        if (shm_fd < 0) {
                 LOG_DBGF("Failed opening shared memory.");
                 return NULL;
         }

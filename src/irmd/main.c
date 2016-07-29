@@ -1679,28 +1679,6 @@ static struct irm * irm_create()
 
         irmd->state = IRMD_NULL;
 
-        if (access("/dev/shm/" LOCKFILE_NAME, F_OK) != -1) {
-                struct lockfile * lf = lockfile_open();
-                if (lf == NULL) {
-                        LOG_ERR("Failed to open existing lockfile.");
-                        free(irmd);
-                        return NULL;
-                }
-
-                if (kill(lockfile_owner(lf), 0) < 0) {
-                        LOG_INFO("IRMd didn't properly shut down last time.");
-                        shm_du_map_destroy(shm_du_map_open());
-                        LOG_INFO("Stale resources cleaned");
-                        lockfile_destroy(lf);
-                } else {
-                        LOG_INFO("IRMd already running (%d), exiting.",
-                                 lockfile_owner(lf));
-                        lockfile_close(lf);
-                        free(irmd);
-                        return NULL;
-                }
-        }
-
         if (pthread_rwlock_init(&irmd->state_lock, NULL)) {
                 LOG_ERR("Failed to initialize rwlock.");
                 free(irmd);
@@ -1757,6 +1735,28 @@ static struct irm * irm_create()
         }
 
         if ((irmd->lf = lockfile_create()) == NULL) {
+                if ((irmd->lf = lockfile_open()) == NULL) {
+                        LOG_ERR("Lockfile error.");
+                        irm_destroy();
+                        return NULL;
+                }
+
+                if (kill(lockfile_owner(irmd->lf), 0) < 0) {
+                        LOG_INFO("IRMd didn't properly shut down last time.");
+                        shm_du_map_destroy(shm_du_map_open());
+                        LOG_INFO("Stale resources cleaned");
+                        lockfile_destroy(irmd->lf);
+                        irmd->lf = lockfile_create();
+                } else {
+                        LOG_INFO("IRMd already running (%d), exiting.",
+                                 lockfile_owner(irmd->lf));
+                        lockfile_close(irmd->lf);
+                        free(irmd);
+                        return NULL;
+                }
+        }
+
+        if (irmd->lf == NULL) {
                 irm_destroy();
                 return NULL;
         }
@@ -1767,6 +1767,8 @@ static struct irm * irm_create()
         }
 
         irmd->state = IRMD_RUNNING;
+
+        LOG_INFO("IRMd started...");
 
         return irmd;
 }

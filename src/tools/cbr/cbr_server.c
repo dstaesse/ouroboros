@@ -22,6 +22,11 @@
  */
 
 #include <stdbool.h>
+
+#ifdef __FreeBSD__
+#define __XSI_VISIBLE
+#endif
+
 #include <signal.h>
 #include <unistd.h>
 #include <stdlib.h>
