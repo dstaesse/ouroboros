@@ -77,6 +77,7 @@ typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 #define MAC_SIZE 6
 #define LLC_HEADER_SIZE 3
 #define MAX_SAPS 64
+#define ETH_HEADER_SIZE (2 * MAC_SIZE + 2)
 
 /* global for trapping signal */
 int irmd_api;
@@ -86,6 +87,17 @@ struct ipcp * _ipcp;
 #define shim_data(type) ((struct eth_llc_ipcp_data *) type->data)
 
 #define ipcp_flow(index) ((struct flow *) &(shim_data(_ipcp)->flows[index]))
+
+struct eth_llc_frame {
+        uint8_t dst_hwaddr[MAC_SIZE];
+        uint8_t src_hwaddr[MAC_SIZE];
+        uint8_t length[2];
+        uint8_t dsap;
+        uint8_t ssap;
+        uint8_t cf;
+        uint8_t size[2];
+        uint8_t payload;
+};
 
 struct eth_llc_flow {
         struct flow flow;
@@ -224,9 +236,9 @@ static int port_id_to_index(int port_id)
 }
 
 /* only call this under flows_lock */
-static int addr_and_saps_to_index(uint8_t r_addr[MAC_SIZE],
-                                  uint8_t r_sap,
-                                  uint8_t sap)
+static int addr_and_saps_to_index(const uint8_t * r_addr,
+                                  uint8_t   r_sap,
+                                  uint8_t   sap)
 {
         int i = 0;
 
@@ -286,11 +298,12 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
                                    uint8_t * payload,
                                    size_t    len)
 {
-
         int frame_len = 0;
         uint8_t cf = 0x03;
         int fd;
-        uint16_t length = 0;
+
+        uint16_t size;
+        uint16_t length;
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         struct pollfd pfd;
@@ -304,9 +317,15 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
         struct sockaddr_ll    device;
 #endif
 #endif
-
+        struct eth_llc_frame * llc_frame;
         if (payload == NULL) {
                 LOG_ERR("Payload was NULL.");
+                return -1;
+        }
+
+        if (len > SHIM_ETH_LLC_MAX_SDU_SIZE - 2) {
+                LOG_WARN("Payload exceeds MTU (%lu > %d).",
+                         (unsigned long) len, SHIM_ETH_LLC_MAX_SDU_SIZE);
                 return -1;
         }
 
@@ -333,35 +352,35 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
         frame = (void *) header + TPACKET_HDRLEN - sizeof(struct sockaddr_ll);
 #endif
 
-        length = htons(len + LLC_HEADER_SIZE);
+        llc_frame = (struct eth_llc_frame *) frame;
 
-        memcpy(frame, dst_addr, MAC_SIZE * sizeof(uint8_t));
-        frame_len += MAC_SIZE;
-        memcpy(frame + frame_len,
+        memcpy(&llc_frame->dst_hwaddr, dst_addr, MAC_SIZE);
+        memcpy(&llc_frame->src_hwaddr,
 #ifdef __FreeBSD__
                LLADDR(&shim_data(_ipcp)->device),
 #else
                shim_data(_ipcp)->device.sll_addr,
 #endif
-               MAC_SIZE * sizeof(uint8_t));
-        frame_len += MAC_SIZE;
-        memcpy(frame + frame_len, &length, 2 * sizeof(uint8_t));
-        frame_len += 2 * sizeof(uint8_t);
-        memcpy(frame + frame_len, &dsap, sizeof(uint8_t));
-        frame_len += sizeof(uint8_t);
-        memcpy(frame + frame_len, &ssap, sizeof(uint8_t));
-        frame_len += sizeof(uint8_t);
-        memcpy(frame + frame_len, &cf, sizeof(uint8_t));
-        frame_len += sizeof(uint8_t);
-        memcpy(frame + frame_len, payload, len);
-        frame_len += len;
+               MAC_SIZE);
+
+        length = htons(LLC_HEADER_SIZE + sizeof(size) + len);
+        memcpy(&llc_frame->length, &length, sizeof(length));
+        llc_frame->dsap = dsap;
+        llc_frame->ssap = ssap;
+        llc_frame->cf = cf;
+        /* write the payload length, can't trust the driver */
+        size = htons(len);
+        memcpy(&llc_frame->size, &size, sizeof(size));
+        memcpy(&llc_frame->payload, payload, len);
+
+        frame_len = ETH_HEADER_SIZE + LLC_HEADER_SIZE + sizeof(uint16_t) + len;
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         header->tp_len = frame_len;
         header->tp_status = TP_STATUS_SEND_REQUEST;
 
         if (send(fd, NULL, 0, 0) < 0) {
-                LOG_ERR("Failed to send message.");
+                LOG_ERR("Failed to write frame into TX_RING.");
                 return -1;
         }
 
@@ -631,16 +650,14 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 {
         ssize_t index;
         struct rb_entry e;
-        uint8_t src_mac[MAC_SIZE];
-        uint8_t dst_mac[MAC_SIZE];
         uint8_t br_addr[MAC_SIZE];
-        int frame_len = 0;
-        int len_frame = 0;
-        uint8_t ssap = 0;
-        uint8_t dsap = 0;
+        uint8_t dsap;
+        uint8_t ssap;
         int i = 0;
-        int j = 0;
-        int eth_type = 0;
+        struct eth_llc_frame * llc_frame;
+
+        uint16_t length;
+        uint16_t size;
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         struct pollfd pfd;
@@ -649,6 +666,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         uint8_t * buf = NULL;
 #else
         uint8_t buf[SHIM_ETH_LLC_MAX_SDU_SIZE];
+        int frame_len = 0;
 #endif
 
         memset(br_addr, 0xff, MAC_SIZE * sizeof(uint8_t));
@@ -681,7 +699,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 }
 
                 buf = (void * ) header + header->tp_mac;
-                frame_len = header->tp_len;
 #else
                 frame_len = recv(shim_data(_ipcp)->s_fd, buf,
                                  SHIM_ETH_LLC_MAX_SDU_SIZE, 0);
@@ -690,16 +707,17 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         continue;
                 }
 #endif
-                for (i = 0; i < MAC_SIZE; i++)
-                        dst_mac[i] = buf[i];
+
+                llc_frame = (struct eth_llc_frame *) buf;
+
 #ifdef __FreeBSD__
                 if (memcmp(LLADDR(&shim_data(_ipcp)->device),
 #else
                 if (memcmp(shim_data(_ipcp)->device.sll_addr,
 #endif
-                           dst_mac,
+                           &llc_frame->dst_hwaddr,
                            MAC_SIZE) &&
-                    memcmp(br_addr, dst_mac, MAC_SIZE)) {
+                    memcmp(br_addr, &llc_frame->dst_hwaddr, MAC_SIZE)) {
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                         offset = (offset + 1) & (SHM_BLOCKS_IN_MAP - 1);
                         header->tp_status = TP_STATUS_KERNEL;
@@ -707,11 +725,9 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         continue;
                 }
 
-                for (; i < 2 * MAC_SIZE; i++)
-                        src_mac[i - MAC_SIZE] = buf[i];
+                memcpy(&length, &llc_frame->length, sizeof(length));
 
-                eth_type = (((buf[i]) << 8) + buf[i + 1]);
-                if (eth_type > SHIM_ETH_LLC_MAX_SDU_SIZE) {
+                if (ntohs(length) > SHIM_ETH_LLC_MAX_SDU_SIZE) {
                         /* Not an LLC packet. */
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                         offset = (offset + 1) & (SHM_BLOCKS_IN_MAP - 1);
@@ -720,35 +736,23 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         continue;
                 }
 
-                len_frame = ((buf[i]) << 8) + buf[i + 1];
-                len_frame -= 3;
-                i += 2;
+                dsap = reverse_bits(llc_frame->dsap);
+                ssap = reverse_bits(llc_frame->ssap);
 
-                dsap = reverse_bits(buf[i++]);
-                ssap = reverse_bits(buf[i++]);
-                i++;
+                memcpy(&size, &llc_frame->size, sizeof(length));
 
-                frame_len -= i;
-
-                /*
-                 * Take minimum of length reported in frame
-                 * and frame length reported by kernel. Some device
-                 * drivers change the length in the frame. Some
-                 * others add padding, making the length reported
-                 * by the kernel too high. Sigh. Lousy workaround.
-                 */
-                frame_len = MIN(frame_len, len_frame);
-
-                if (ssap == MGMT_SAP &&
-                    dsap == MGMT_SAP) {
-                        eth_llc_ipcp_mgmt_frame((uint8_t *) (buf + i),
-                                                frame_len, src_mac);
+                if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
+                        eth_llc_ipcp_mgmt_frame(&llc_frame->payload,
+                                                ntohs(size),
+                                                llc_frame->src_hwaddr);
                 } else {
                         pthread_rwlock_rdlock(&_ipcp->state_lock);
                         pthread_rwlock_rdlock(&shim_data(_ipcp)->flows_lock);
 
-                        j = addr_and_saps_to_index(src_mac, ssap, dsap);
-                        if (j < 0) {
+                        i = addr_and_saps_to_index(llc_frame->src_hwaddr,
+                                                   ssap,
+                                                   dsap);
+                        if (i < 0) {
                                 pthread_rwlock_unlock(&shim_data(_ipcp)->
                                                       flows_lock);
                                 pthread_rwlock_unlock(&_ipcp->state_lock);
@@ -760,18 +764,20 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                                 continue;
                         }
 
-                        while ((index = shm_du_map_write(shim_data(_ipcp)->dum,
-                                                         ipcp_flow(j)->api,
-                                                         0,
-                                                         0,
-                                                         (uint8_t *) (buf + i),
-                                                         frame_len)) < 0)
+                        while ((index =
+                                shm_du_map_write(shim_data(_ipcp)->dum,
+                                                 ipcp_flow(i)->api,
+                                                 0,
+                                                 0,
+                                                 &llc_frame->payload,
+                                                 ntohs(size)))
+                                < 0)
                                 ;
 
                         e.index = index;
-                        e.port_id = ipcp_flow(j)->port_id;
+                        e.port_id = ipcp_flow(i)->port_id;
 
-                        while (shm_ap_rbuff_write(ipcp_flow(j)->rb, &e) < 0)
+                        while (shm_ap_rbuff_write(ipcp_flow(i)->rb, &e) < 0)
                                 ;
 
                         pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
@@ -1291,8 +1297,6 @@ static int eth_llc_ipcp_flow_dealloc(int port_id)
 
         ret = eth_llc_ipcp_port_dealloc(addr, sap);
         pthread_rwlock_unlock(&_ipcp->state_lock);
-        if (eth_llc_ipcp_port_dealloc(addr, sap) < 0)
-                LOG_DBGF("Could not notify remote.");
 
         if (ret < 0)
                 LOG_DBGF("Could not notify remote.");
