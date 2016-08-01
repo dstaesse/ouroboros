@@ -1,3 +1,25 @@
+/*
+ * Ouroboros - Copyright (C) 2016
+ *
+ * Normal IPC Process
+ *
+ *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+
 #define OUROBOROS_PREFIX "normal-ipcp"
 
 #include <ouroboros/config.h>
@@ -58,14 +80,14 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
                         pthread_cancel(normal_data(_ipcp)->mainloop);
 
+                        if (fmgr_fini())
+                                LOG_ERR("Failed to finalize flow manager.");
+
                         if (ribmgr_fini())
                                 LOG_ERR("Failed to finalize RIB manager.");
 
                         if (frct_fini())
                                 LOG_ERR("Failed to finalize FRCT.");
-
-                        if (fmgr_fini())
-                                LOG_ERR("Failed to finalize flow manager.");
                 }
         default:
                 return;
@@ -108,16 +130,48 @@ static int normal_ipcp_name_unreg(char * name)
 
 static int normal_ipcp_enroll(char * dif_name)
 {
-        LOG_MISSING;
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
-        return -1;
+        if (_ipcp->state != IPCP_INIT) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                LOG_DBGF("Won't enroll an IPCP that is not in INIT.");
+                return -1; /* -ENOTINIT */
+        }
+
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+
+        if (fmgr_mgmt_flow(dif_name)) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                LOG_ERR("Failed to establish management flow.");
+                return -1;
+        }
+
+        /* FIXME: Wait until state changed to ENROLLED */
+
+        return 0;
 }
 
 static int normal_ipcp_bootstrap(struct dif_config * conf)
 {
-        LOG_MISSING;
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
-        return -1;
+        if (_ipcp->state != IPCP_INIT) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                LOG_DBGF("Won't bootstrap an IPCP that is not in INIT.");
+                return -1; /* -ENOTINIT */
+        }
+
+        if (ribmgr_bootstrap(conf)) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                LOG_ERR("Failed to bootstrap RIB manager.");
+                return -1;
+        }
+
+        _ipcp->state = IPCP_ENROLLED;
+
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+
+        return 0;
 }
 
 static struct ipcp_ops normal_ops = {

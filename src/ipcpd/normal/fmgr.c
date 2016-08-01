@@ -35,6 +35,9 @@
 #include "fmgr.h"
 #include "ribmgr.h"
 #include "frct.h"
+#include "ipcp.h"
+
+extern struct ipcp * _ipcp;
 
 struct n_1_flow {
         int fd;
@@ -48,7 +51,7 @@ struct fmgr {
         struct list_head n_1_flows;
         pthread_mutex_t n_1_flows_lock;
 
-} * instance = NULL;
+} * fmgr = NULL;
 
 static int add_n_1_fd(int fd,
                       char * ae_name)
@@ -65,9 +68,9 @@ static int add_n_1_fd(int fd,
         tmp->fd = fd;
         tmp->ae_name = ae_name;
 
-        pthread_mutex_lock(&instance->n_1_flows_lock);
-        list_add(&tmp->next, &instance->n_1_flows);
-        pthread_mutex_unlock(&instance->n_1_flows_lock);
+        pthread_mutex_lock(&fmgr->n_1_flows_lock);
+        list_add(&tmp->next, &fmgr->n_1_flows);
+        pthread_mutex_unlock(&fmgr->n_1_flows_lock);
 
         return 0;
 }
@@ -77,10 +80,21 @@ static void * fmgr_listen(void * o)
         int fd;
         char * ae_name;
 
-        while (true) {
+        /* FIXME: Avoid busy wait and react to pthread_cond_t */
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        while (_ipcp->state != IPCP_ENROLLED ||
+               _ipcp->state != IPCP_SHUTDOWN) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                sched_yield();
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
+        }
+
+        while (_ipcp->state != IPCP_SHUTDOWN) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 fd = flow_accept(&ae_name);
                 if (fd < 0) {
                         LOG_ERR("Failed to accept flow.");
+                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         continue;
                 }
 
@@ -89,37 +103,46 @@ static void * fmgr_listen(void * o)
                         if (flow_alloc_resp(fd, -1))
                                 LOG_ERR("Failed to reply to flow allocation.");
                         flow_dealloc(fd);
+                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         continue;
                 }
 
                 if (flow_alloc_resp(fd, 0)) {
                         LOG_ERR("Failed to reply to flow allocation.");
                         flow_dealloc(fd);
+                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         continue;
                 }
 
                 LOG_DBG("Accepted new flow allocation request for AE %s.",
                         ae_name);
 
-                if (strcmp(ae_name, MGMT_AE) == 0 &&
-                    ribmgr_mgmt_flow(fd)) {
-                        LOG_ERR("Failed to hand file descriptor to RIB.");
-                        flow_dealloc(fd);
-                        continue;
+                if (strcmp(ae_name, MGMT_AE) == 0) {
+                        if (ribmgr_add_flow(fd)) {
+                                LOG_ERR("Failed to hand fd to RIB.");
+                                flow_dealloc(fd);
+                                pthread_rwlock_rdlock(&_ipcp->state_lock);
+                                continue;
+                        }
                 }
 
-                if (strcmp(ae_name, DT_AE) == 0 &&
-                    frct_dt_flow(fd)) {
-                        LOG_ERR("Failed to hand file descriptor to FRCT.");
-                        flow_dealloc(fd);
-                        continue;
+                if (strcmp(ae_name, DT_AE) == 0) {
+                        if (frct_dt_flow(fd)) {
+                                LOG_ERR("Failed to hand fd to FRCT.");
+                                flow_dealloc(fd);
+                                pthread_rwlock_rdlock(&_ipcp->state_lock);
+                                continue;
+                        }
                 }
 
                 if (add_n_1_fd(fd, ae_name)) {
                         LOG_ERR("Failed to add file descriptor to list.");
                         flow_dealloc(fd);
+                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         continue;
                 }
+
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
         }
 
         return (void *) 0;
@@ -127,16 +150,15 @@ static void * fmgr_listen(void * o)
 
 int fmgr_init()
 {
-        instance = malloc(sizeof(*instance));
-        if (instance == NULL) {
+        fmgr = malloc(sizeof(*fmgr));
+        if (fmgr == NULL)
                 return -1;
-        }
 
-        INIT_LIST_HEAD(&instance->n_1_flows);
+        INIT_LIST_HEAD(&fmgr->n_1_flows);
 
-        pthread_mutex_init(&instance->n_1_flows_lock, NULL);
+        pthread_mutex_init(&fmgr->n_1_flows_lock, NULL);
 
-        pthread_create(&instance->listen_thread,
+        pthread_create(&fmgr->listen_thread,
                        NULL,
                        fmgr_listen,
                        NULL);
@@ -148,20 +170,21 @@ int fmgr_fini()
 {
         struct list_head * pos = NULL;
 
-        pthread_cancel(instance->listen_thread);
+        pthread_cancel(fmgr->listen_thread);
 
-        pthread_join(instance->listen_thread,
+        pthread_join(fmgr->listen_thread,
                      NULL);
 
-        list_for_each(pos, &instance->n_1_flows) {
+        list_for_each(pos, &fmgr->n_1_flows) {
                 struct n_1_flow * e =
                         list_entry(pos, struct n_1_flow, next);
                 if (e->ae_name != NULL)
                         free(e->ae_name);
-                flow_dealloc(e->fd);
+                if (ribmgr_remove_flow(e->fd))
+                    LOG_ERR("Failed to remove management flow.");
         }
 
-        free(instance);
+        free(fmgr);
 
         return 0;
 }
@@ -185,7 +208,7 @@ int fmgr_mgmt_flow(char * dst_name)
                 return -1;
         }
 
-        if (ribmgr_mgmt_flow(fd)) {
+        if (ribmgr_add_flow(fd)) {
                 LOG_ERR("Failed to hand file descriptor to RIB manager");
                 flow_dealloc(fd);
                 return -1;
@@ -228,13 +251,6 @@ int fmgr_flow_alloc_resp(pid_t n_api,
 }
 
 int fmgr_flow_dealloc(int port_id)
-{
-        LOG_MISSING;
-
-        return -1;
-}
-
-int fmgr_flow_msg()
 {
         LOG_MISSING;
 

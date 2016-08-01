@@ -69,6 +69,28 @@ static ssize_t cdap_msg_to_buffer(cdap_t * msg,
         return len;
 }
 
+static int next_invoke_id(struct cdap * instance)
+{
+        int ret;
+
+        pthread_mutex_lock(&instance->ids_lock);
+        ret = bmp_allocate(instance->ids);
+        pthread_mutex_unlock(&instance->ids_lock);
+
+        return ret;
+}
+
+static int release_invoke_id(struct cdap * instance,
+                             int id)
+{
+        int ret;
+
+        pthread_mutex_lock(&instance->ids_lock);
+        ret = bmp_release(instance->ids, id);
+        pthread_mutex_unlock(&instance->ids_lock);
+
+        return ret;
+}
 
 static void * sdu_reader(void * o)
 {
@@ -146,6 +168,7 @@ static void * sdu_reader(void * o)
                                                           msg->result,
                                                           val,
                                                           length);
+                                release_invoke_id(instance, msg->invoke_id);
                                 free(val);
                         }
                         break;
@@ -189,6 +212,7 @@ struct cdap * cdap_create(struct cdap_ops * ops,
         }
 
         instance->ops = ops;
+        instance->fd = fd;
 
         instance->ids = bmp_create(IDS_SIZE, 0);
         if (instance->ids == NULL) {
@@ -211,6 +235,9 @@ int cdap_destroy(struct cdap * instance)
 
         pthread_cancel(instance->reader);
 
+        if (flow_dealloc(instance->fd))
+                return -1;
+
         pthread_mutex_lock(&instance->ids_lock);
 
         bmp_destroy(instance->ids);
@@ -223,29 +250,6 @@ int cdap_destroy(struct cdap * instance)
         free(instance);
 
         return 0;
-}
-
-static int next_invoke_id(struct cdap * instance)
-{
-        int ret;
-
-        pthread_mutex_lock(&instance->ids_lock);
-        ret = bmp_allocate(instance->ids);
-        pthread_mutex_unlock(&instance->ids_lock);
-
-        return ret;
-}
-
-static int release_invoke_id(struct cdap * instance,
-                             int id)
-{
-        int ret;
-
-        pthread_mutex_lock(&instance->ids_lock);
-        ret = bmp_release(instance->ids, id);
-        pthread_mutex_unlock(&instance->ids_lock);
-
-        return ret;
 }
 
 static int write_msg(struct cdap * instance,

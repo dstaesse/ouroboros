@@ -29,7 +29,7 @@
 
 struct frct_i;
 
-int             frct_init(struct dt_const * dt_const);
+int             frct_init(struct dt_const * dtc);
 int             frct_fini();
 
 struct frct_i * frct_i_create(int port_id,

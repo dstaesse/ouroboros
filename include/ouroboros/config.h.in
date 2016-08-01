@@ -47,7 +47,7 @@
 #define SHM_AP_RBUFF_PREFIX    "/ouroboros.rbuff."
 #define SHM_RBUFF_SIZE         (1 << 14)
 #define IRMD_MAX_FLOWS         4096
-#define IRMD_THREADPOOL_SIZE   3
+#define IRMD_THREADPOOL_SIZE   5
 #define IRMD_FLOW_TIMEOUT      5000 /* ms */
 #define LOG_DIR                "/@LOG_DIR@/"
 
