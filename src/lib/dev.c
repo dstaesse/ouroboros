@@ -130,17 +130,14 @@ void ap_fini(void)
         free(_ap_instance);
 }
 
-#if 0
 static int port_id_to_fd(int port_id)
 {
         int i;
         for (i = 0; i < AP_MAX_FLOWS; ++i)
-                if (_ap_instance->flows[i].port_id == port_id
-                        && _ap_instance->flows[i].state != FLOW_NULL)
+                if (_ap_instance->flows[i].port_id == port_id)
                         return i;
         return -1;
 }
-#endif
 
 int flow_accept(char ** ae_name)
 {
@@ -521,6 +518,14 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         pthread_rwlock_unlock(&_ap_instance->data_lock);
 
         return 0;
+}
+
+int flow_select(const struct timespec * timeout)
+{
+        int port_id = shm_ap_rbuff_peek(_ap_instance->rb, timeout);
+        if (port_id < 0)
+                return port_id;
+        return port_id_to_fd(port_id);
 }
 
 ssize_t flow_read(int fd, void * buf, size_t count)

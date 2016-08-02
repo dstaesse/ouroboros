@@ -416,7 +416,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
         int                  sz = size + sizeof *sdb;
 #endif
         uint8_t *            write_pos;
-        ssize_t              index = -1;
+        ssize_t              idx = -1;
 
         if (dum == NULL || data == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -475,7 +475,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
 
         memcpy(write_pos, data, len);
 
-        index = *dum->ptr_head;
+        idx = *dum->ptr_head;
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         *dum->ptr_head = (*dum->ptr_head + blocks) & (SHM_BLOCKS_IN_MAP - 1);
 #else
@@ -483,7 +483,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
 #endif
         pthread_mutex_unlock(dum->shm_mutex);
 
-        return index;
+        return idx;
 }
 
 int shm_du_map_read(uint8_t **          dst,
