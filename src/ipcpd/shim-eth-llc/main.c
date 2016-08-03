@@ -386,7 +386,7 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
 
         shim_data(_ipcp)->tx_offset =
                 (shim_data(_ipcp)->tx_offset + 1)
-                & (SHM_BLOCKS_IN_MAP -1);
+                & (SHM_BUFFER_SIZE -1);
 #else
         device = (shim_data(_ipcp))->device;
 
@@ -719,7 +719,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                            MAC_SIZE) &&
                     memcmp(br_addr, &llc_frame->dst_hwaddr, MAC_SIZE)) {
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                        offset = (offset + 1) & (SHM_BLOCKS_IN_MAP - 1);
+                        offset = (offset + 1) & (SHM_BUFFER_SIZE - 1);
                         header->tp_status = TP_STATUS_KERNEL;
 #endif
                         continue;
@@ -730,7 +730,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 if (ntohs(length) > SHIM_ETH_LLC_MAX_SDU_SIZE) {
                         /* Not an LLC packet. */
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                        offset = (offset + 1) & (SHM_BLOCKS_IN_MAP - 1);
+                        offset = (offset + 1) & (SHM_BUFFER_SIZE - 1);
                         header->tp_status = TP_STATUS_KERNEL;
 #endif
                         continue;
@@ -758,7 +758,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                                 pthread_rwlock_unlock(&_ipcp->state_lock);
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                                 offset = (offset + 1)
-                                        & (SHM_BLOCKS_IN_MAP - 1);
+                                        & (SHM_BUFFER_SIZE - 1);
                                 header->tp_status = TP_STATUS_KERNEL;
 #endif
                                 continue;
@@ -784,7 +784,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         pthread_rwlock_unlock(&_ipcp->state_lock);
                 }
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                offset = (offset + 1) & (SHM_BLOCKS_IN_MAP -1);
+                offset = (offset + 1) & (SHM_BUFFER_SIZE -1);
                 header->tp_status = TP_STATUS_KERNEL;
 #endif
         }
@@ -1009,8 +1009,8 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         req.tp_block_size = SHM_DU_BUFF_BLOCK_SIZE;
         req.tp_frame_size = SHM_DU_BUFF_BLOCK_SIZE;
-        req.tp_block_nr = SHM_BLOCKS_IN_MAP;
-        req.tp_frame_nr = SHM_BLOCKS_IN_MAP;
+        req.tp_block_nr = SHM_BUFFER_SIZE;
+        req.tp_frame_nr = SHM_BUFFER_SIZE;
 
         if (setsockopt(fd, SOL_PACKET, PACKET_RX_RING,
                        (void *) &req, sizeof(req))) {
@@ -1036,7 +1036,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         shim_data(_ipcp)->rx_ring = mmap(NULL,
                                          2 * SHM_DU_BUFF_BLOCK_SIZE
-                                         * SHM_BLOCKS_IN_MAP,
+                                         * SHM_BUFFER_SIZE,
                                          PROT_READ | PROT_WRITE, MAP_SHARED,
                                          fd, 0);
         if (shim_data(_ipcp)->rx_ring == NULL) {
@@ -1045,7 +1045,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
         shim_data(_ipcp)->tx_ring = shim_data(_ipcp)->rx_ring
-                + (SHM_DU_BUFF_BLOCK_SIZE * SHM_BLOCKS_IN_MAP);
+                + (SHM_DU_BUFF_BLOCK_SIZE * SHM_BUFFER_SIZE);
 
 #endif
 
