@@ -39,13 +39,12 @@ void                shm_du_map_destroy(struct shm_du_map * dum);
 void *              shm_du_map_sanitize(void * o);
 
 /* returns the index of the buffer in the DU map */
-ssize_t  shm_du_map_write(struct shm_du_map * dum,
-                          pid_t               dst_api,
-                          size_t              headspace,
-                          size_t              tailspace,
-                          uint8_t *           data,
-                          size_t              data_len);
-
+ssize_t   shm_du_map_write(struct shm_du_map * dum,
+                           pid_t               dst_api,
+                           size_t              headspace,
+                           size_t              tailspace,
+                           uint8_t *           data,
+                           size_t              data_len);
 int       shm_du_map_read(uint8_t **          dst,
                           struct shm_du_map * dum,
                           ssize_t             idx);

@@ -22,6 +22,7 @@
 
 #include <unistd.h>
 #include <stdint.h>
+#include <sys/time.h>
 
 #include <ouroboros/qos.h>
 #include <ouroboros/flow.h>
@@ -53,5 +54,6 @@ int     flow_dealloc(int fd);
 int     flow_cntl(int fd, int cmd, int oflags);
 ssize_t flow_write(int fd, void * buf, size_t count);
 ssize_t flow_read(int fd, void * buf, size_t count);
+int     flow_select(const struct timespec * timeout);
 
 #endif

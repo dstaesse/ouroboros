@@ -25,6 +25,7 @@
 #define OUROBOROS_SHM_AP_RBUFF_H
 
 #include <sys/types.h>
+#include <sys/time.h>
 #include <stdbool.h>
 
 struct shm_ap_rbuff;
@@ -41,6 +42,8 @@ void                  shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb);
 int                   shm_ap_rbuff_write(struct shm_ap_rbuff * rb,
                                          struct rb_entry * e);
 struct rb_entry *     shm_ap_rbuff_read(struct shm_ap_rbuff * rb);
+int                   shm_ap_rbuff_peek(struct shm_ap_rbuff * rb,
+                                        const struct timespec * timeout);
 ssize_t               shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb,
                                              int port_id);
 pid_t                 shm_ap_rbuff_get_api(struct shm_ap_rbuff * rb);
