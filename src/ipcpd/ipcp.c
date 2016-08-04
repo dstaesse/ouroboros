@@ -91,7 +91,7 @@ static void close_ptr(void * o)
         close(*((int *) o));
 }
 
-static void clean_msg (void * msg)
+static void clean_msg(void * msg)
 {
          ipcp_msg__free_unpacked(msg, NULL);
 }

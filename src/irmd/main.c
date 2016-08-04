@@ -151,11 +151,13 @@ static void irm_flow_destroy(struct irm_flow * e)
 
         if (e->state == FLOW_PENDING)
                 e->state = FLOW_DESTROY;
+        else
+                e->state = FLOW_NULL;
 
         pthread_cond_signal(&e->state_cond);
         pthread_mutex_unlock(&e->state_lock);
 
-        pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+        pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
                              (void *) &e->state_lock);
 
         while (e->state != FLOW_NULL)
@@ -942,6 +944,14 @@ static struct irm_flow * flow_alloc(pid_t  api,
         return pme;
 }
 
+static void cleanup_alloc_res(void * o)
+{
+        struct irm_flow * e = (struct irm_flow *) o;
+        if (e->state == FLOW_PENDING)
+                e->state = FLOW_NULL;
+        pthread_mutex_unlock(&e->state_lock);
+}
+
 static int flow_alloc_res(int port_id)
 {
         struct irm_flow * e;
@@ -979,8 +989,7 @@ static int flow_alloc_res(int port_id)
         pthread_rwlock_unlock(&irmd->state_lock);
 
         pthread_mutex_lock(&e->state_lock);
-        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void*) &e->state_lock);
+        pthread_cleanup_push(cleanup_alloc_res, (void *) e);
 
         while (e->state == FLOW_PENDING)
                 pthread_cond_wait(&e->state_cond, &e->state_lock);
@@ -1035,7 +1044,7 @@ static int flow_dealloc(int port_id)
 
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        free(e);
+        irm_flow_destroy(e);
 
         return ret;
 }
@@ -1147,7 +1156,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
 
                 pthread_mutex_lock(&rne->state_lock);
-                pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+                pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
                                      (void *) &rne->state_lock);
 
                 while (rne->state == REG_NAME_AUTO_EXEC)
@@ -1203,7 +1212,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
 
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+        pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
                              (void *) &rne->state_lock);
 
         while (rne->state == REG_NAME_FLOW_ARRIVED &&
@@ -1268,7 +1277,7 @@ static int flow_dealloc_ipcp(int port_id)
         pthread_rwlock_unlock(&irmd->flows_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        free(e);
+        irm_flow_destroy(e);
 
         return 0;
 }
