@@ -75,8 +75,10 @@ int main(int argc, char ** argv)
 
         bool server = false;
 
-        /* FIXME: should be argv[0] */
-        ap_init(argv[0]);
+        if (ap_init(argv[0]) < 0) {
+                printf("Failed to init.\n");
+                exit(EXIT_FAILURE);
+        }
 
         server_settings.interval = 1; /* One second reporting interval */
         server_settings.timeout  = 1;
