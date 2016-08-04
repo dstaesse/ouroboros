@@ -1611,7 +1611,7 @@ int main(int argc, char * argv[])
 
         shim_ap_fini();
 
-        free(_ipcp->data);
+        ipcp_data_destroy(_ipcp->data);
         free(_ipcp->ops);
         free(_ipcp);
 

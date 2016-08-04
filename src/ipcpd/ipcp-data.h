@@ -50,11 +50,11 @@ struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
 void               ipcp_data_destroy(struct ipcp_data * data);
 
 int          ipcp_data_add_reg_entry(struct ipcp_data * data,
-                                     const char *       name);
+                                     char *             name);
 int          ipcp_data_del_reg_entry(struct ipcp_data * data,
                                      const char *       name);
 int          ipcp_data_add_dir_entry(struct ipcp_data * data,
-                                     const char *       ap_name,
+                                     char *             ap_name,
                                      uint64_t           addr);
 int          ipcp_data_del_dir_entry(struct ipcp_data * data,
                                      const char *       ap_name,

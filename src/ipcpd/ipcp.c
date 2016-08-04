@@ -86,6 +86,16 @@ int ipcp_parse_arg(int argc, char * argv[])
         return 0;
 }
 
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
+
+static void clean_msg(void * msg)
+{
+         ipcp_msg__free_unpacked(msg, NULL);
+}
+
 void * ipcp_main_loop(void * o)
 {
         int     lsockfd;
@@ -118,10 +128,9 @@ void * ipcp_main_loop(void * o)
                 return (void *) 1;
         }
 
-        pthread_cleanup_push((void(*)(void *)) close,
-                             (void *) &sockfd);
-
         free(sock_path);
+
+        pthread_cleanup_push(close_ptr, (void *) &sockfd);
 
         while (true) {
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
@@ -144,6 +153,8 @@ void * ipcp_main_loop(void * o)
                         close(lsockfd);
                         continue;
                 }
+
+                pthread_cleanup_push(clean_msg, (void *) msg);
 
                 switch (msg->code) {
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
@@ -170,9 +181,8 @@ void * ipcp_main_loop(void * o)
                                 conf.dns_addr = conf_msg->dns_addr;
                         }
 
-                        if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC) {
+                        if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC)
                                 conf.if_name = conf_msg->if_name;
-                        }
 
                         ret_msg.has_result = true;
                         ret_msg.result = _ipcp->ops->ipcp_bootstrap(&conf);
@@ -193,7 +203,8 @@ void * ipcp_main_loop(void * o)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_name_reg(msg->name);
+                        ret_msg.result =
+                                _ipcp->ops->ipcp_name_reg(strdup(msg->name));
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_UNREG:
                         if (_ipcp->ops->ipcp_name_unreg == NULL) {
@@ -201,7 +212,8 @@ void * ipcp_main_loop(void * o)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_name_unreg(msg->name);
+                        ret_msg.result =
+                                _ipcp->ops->ipcp_name_unreg(msg->name);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
                         if (_ipcp->ops->ipcp_flow_alloc == NULL) {
@@ -241,7 +253,8 @@ void * ipcp_main_loop(void * o)
                         break;
                 }
 
-                ipcp_msg__free_unpacked(msg, NULL);
+                pthread_cleanup_pop(true);
+
 
                 buffer.len = ipcp_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
@@ -265,10 +278,10 @@ void * ipcp_main_loop(void * o)
                 }
 
                 free(buffer.data);
-                close(lsockfd);
+
         }
 
-        pthread_cleanup_pop(0);
+        pthread_cleanup_pop(true);
 
         return NULL;
 }
