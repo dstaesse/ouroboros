@@ -412,8 +412,8 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         long                 blocks = 0;
         long                 padblocks = 0;
-        int                  sz = size + sizeof *sdb;
 #endif
+        int                  sz = size + sizeof *sdb;
         uint8_t *            write_pos;
         ssize_t              idx = -1;
 
@@ -497,8 +497,8 @@ ssize_t shm_du_map_write_b(struct shm_du_map * dum,
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         long                 blocks = 0;
         long                 padblocks = 0;
-        int                  sz = size + sizeof *sdb;
 #endif
+        int                  sz = size + sizeof *sdb;
         uint8_t *            write_pos;
         ssize_t              idx = -1;
 
