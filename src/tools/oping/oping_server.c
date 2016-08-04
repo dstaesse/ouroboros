@@ -37,9 +37,7 @@ void shutdown_server(int signo, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                pthread_cancel(server.server_pt);
                 pthread_cancel(server.accept_pt);
-                pthread_cancel(server.cleaner_pt);
         default:
                 return;
         }
@@ -154,8 +152,12 @@ int server_main()
         pthread_create(&server.accept_pt, NULL, accept_thread, NULL);
         pthread_create(&server.server_pt, NULL, server_thread, NULL);
 
-        pthread_join(server.server_pt, NULL);
         pthread_join(server.accept_pt, NULL);
+
+        pthread_cancel(server.server_pt);
+        pthread_cancel(server.cleaner_pt);
+
+        pthread_join(server.server_pt, NULL);
         pthread_join(server.cleaner_pt, NULL);
 
         return 0;
