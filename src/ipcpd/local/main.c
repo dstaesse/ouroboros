@@ -292,10 +292,6 @@ static int ipcp_local_name_reg(char * name)
                 return -1; /* -ENOTENROLLED */
         }
 
-        pthread_rwlock_unlock(&_ipcp->state_lock);
-
-        pthread_rwlock_rdlock(&_ipcp->state_lock);
-
         if (ipcp_data_add_reg_entry(_ipcp->data, name)) {
                 pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Failed to add %s to local registry.", name);
@@ -627,7 +623,8 @@ int main(int argc, char * argv[])
 
         shim_ap_fini();
 
-        free(_ipcp->data);
+        ipcp_data_destroy(_ipcp->data);
+
         free(_ipcp->ops);
         free(_ipcp);
 

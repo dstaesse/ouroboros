@@ -1464,7 +1464,7 @@ void * irm_flow_cleaner()
         }
 }
 
-void clean_msg(void * msg)
+static void clean_msg(void * msg)
 {
         irm_msg__free_unpacked(msg, NULL);
 }

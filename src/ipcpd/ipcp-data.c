@@ -45,13 +45,13 @@ struct dir_entry {
         uint64_t   addr;
 };
 
-static struct reg_entry * reg_entry_create(const char * name)
+static struct reg_entry * reg_entry_create(char * name)
 {
-        struct reg_entry * entry = malloc(sizeof *entry);
+        struct reg_entry * entry = malloc(sizeof(*entry));
         if (entry == NULL)
                 return NULL;
 
-        entry->name = strdup(name);
+        entry->name = name;
         if (entry->name == NULL)
                 return NULL;
 
@@ -63,19 +63,20 @@ static void reg_entry_destroy(struct reg_entry * entry)
         if (entry == NULL)
                 return;
 
-        free(entry->name);
+        if (entry->name != NULL)
+                free(entry->name);
         free(entry);
 }
 
-static struct dir_entry * dir_entry_create(const char * ap_name,
-                                           uint64_t     addr)
+static struct dir_entry * dir_entry_create(char *   ap_name,
+                                           uint64_t addr)
 {
-        struct dir_entry * entry = malloc(sizeof *entry);
+        struct dir_entry * entry = malloc(sizeof(*entry));
         if (entry == NULL)
                 return NULL;
 
         entry->addr    = addr;
-        entry->ap_name = strdup(ap_name);
+        entry->ap_name = ap_name;
         if (entry->ap_name == NULL)
                 return NULL;
 
@@ -87,17 +88,18 @@ static void dir_entry_destroy(struct dir_entry * entry)
         if (entry == NULL)
                 return;
 
-        free(entry->ap_name);
+        if (entry->ap_name != NULL)
+                free(entry->ap_name);
         free(entry);
 }
 
 struct ipcp_data * ipcp_data_create()
 {
-        struct ipcp_data * data = malloc(sizeof *data);
+        struct ipcp_data * data = malloc(sizeof(*data));
         if (data == NULL)
                 return NULL;
 
-        data->type  = 0;
+        data->type = 0;
 
         return data;
 }
@@ -125,24 +127,28 @@ static void clear_registry(struct ipcp_data * data)
 {
         struct list_head * h;
         struct list_head * t;
-        list_for_each_safe(h, t, &data->registry)
-                reg_entry_destroy(list_entry(h, struct reg_entry, list));
+        list_for_each_safe(h, t, &data->registry) {
+                struct reg_entry * e = list_entry(h, struct reg_entry, list);
+                list_del(&e->list);
+                reg_entry_destroy(e);
+        }
 }
 
 static void clear_directory(struct ipcp_data * data)
 {
         struct list_head * h;
         struct list_head * t;
-        list_for_each_safe(h, t, &data->directory)
-                dir_entry_destroy(list_entry(h, struct dir_entry, list));
+        list_for_each_safe(h, t, &data->directory) {
+                struct dir_entry * e = list_entry(h, struct dir_entry, list);
+                list_del(&e->list);
+                dir_entry_destroy(e);
+        }
 }
 
 void ipcp_data_destroy(struct ipcp_data * data)
 {
         if (data == NULL)
                 return;
-
-        /* FIXME: finish all pending operations here and cancel all threads */
 
         pthread_mutex_lock(&data->reg_lock);
         pthread_mutex_lock(&data->dir_lock);
@@ -151,11 +157,11 @@ void ipcp_data_destroy(struct ipcp_data * data)
         clear_registry(data);
         clear_directory(data);
 
-        /*
-         * no need to unlock, just free the entire thing
-         * pthread_mutex_unlock(&data->dir_lock);
-         * pthread_mutex_unlock(&data->reg_lock);
-         */
+        pthread_mutex_unlock(&data->dir_lock);
+        pthread_mutex_unlock(&data->reg_lock);
+
+        pthread_mutex_destroy(&data->dir_lock);
+        pthread_mutex_destroy(&data->reg_lock);
 
         free(data);
 }
@@ -258,7 +264,7 @@ int ipcp_data_del_dir_entry(struct ipcp_data * data,
 }
 
 int ipcp_data_add_reg_entry(struct ipcp_data * data,
-                            const char *       name)
+                            char *             name)
 {
         struct reg_entry * entry;
 
@@ -278,7 +284,7 @@ int ipcp_data_add_reg_entry(struct ipcp_data * data,
                 return -1;
         }
 
-        list_add(&entry->list,&data->registry);
+        list_add(&entry->list, &data->registry);
 
         pthread_mutex_unlock(&data->reg_lock);
 
@@ -286,7 +292,7 @@ int ipcp_data_add_reg_entry(struct ipcp_data * data,
 }
 
 int ipcp_data_add_dir_entry(struct ipcp_data * data,
-                            const char *       ap_name,
+                            char *             ap_name,
                             uint64_t           addr)
 {
         struct dir_entry * entry;

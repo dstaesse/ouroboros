@@ -218,7 +218,7 @@ void eth_llc_ipcp_data_destroy()
         pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
         pthread_rwlock_unlock(&_ipcp->state_lock);
 
-        free(_ipcp->data);
+        ipcp_data_destroy(_ipcp->data);
 }
 
 /* only call this under flows_lock */
