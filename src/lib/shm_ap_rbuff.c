@@ -173,6 +173,7 @@ struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t api)
         shm_fd = shm_open(fn, O_RDWR, 0666);
         if (shm_fd == -1) {
                 LOG_DBG("%d failed opening shared memory %s.", getpid(), fn);
+                free(rb);
                 return NULL;
         }
 
