@@ -210,7 +210,7 @@ static struct reg_entry * reg_entry_create()
 }
 
 static struct reg_entry * reg_entry_init(struct reg_entry * e,
-                                  char *             name)
+                                         char *             name)
 {
         if (e == NULL || name == NULL)
                 return NULL;

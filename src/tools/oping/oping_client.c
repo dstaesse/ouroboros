@@ -212,16 +212,21 @@ int client_main()
         printf("--- %s ping statistics ---\n", client.s_apn);
         printf("%d SDU's transmitted, ", client.sent);
         printf("%d received, ", client.rcvd);
-        printf("%d%% packet loss, ", 100 - ((100 * client.rcvd) / client.sent));
+        printf("%d%% packet loss, ", client.sent == 0 ? 0 :
+               100 - ((100 * client.rcvd) / client.sent));
         printf("time: %.3f ms\n", ts_diff_us(&tic, &toc) / 1000.0);
-        printf("rtt min/avg/max/mdev = %.3f/%.3f/%.3f/",
-               client.rtt_min,
-               client.rtt_avg,
-               client.rtt_max);
-        client.rcvd > 1 ?
-                printf("%.3f ms\n",
-                       sqrt(client.rtt_m2 / (float) (client.rcvd - 1))) :
-                printf("Nan ms\n");
+
+        if (client.rcvd > 0) {
+                printf("rtt min/avg/max/mdev = %.3f/%.3f/%.3f/",
+                       client.rtt_min,
+                       client.rtt_avg,
+                       client.rtt_max);
+                if (client.rcvd > 1)
+                        printf("%.3f ms\n",
+                               sqrt(client.rtt_m2 / (float) (client.rcvd - 1)));
+                else
+                        printf("NaN ms\n");
+        }
 
         pthread_mutex_lock(&client.lock);
         free(client.times);

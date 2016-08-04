@@ -657,10 +657,10 @@ static int ap_reg(char *  name,
                                 LOG_ERR("Could not register %s in DIF %s.",
                                         name, e->dif_name);
                         } else {
-                                if(registry_add_name_to_dif(&irmd->registry,
-                                                            name,
-                                                            e->dif_name,
-                                                            e->type) < 0)
+                                if (registry_add_name_to_dif(&irmd->registry,
+                                                             name,
+                                                             e->dif_name,
+                                                             e->type) < 0)
                                         LOG_WARN("Registered unbound name %s. "
                                                  "Registry may be inconsistent",
                                                  name);
