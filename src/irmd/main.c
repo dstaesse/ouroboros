@@ -664,8 +664,8 @@ static int ap_reg(char *  name,
                                         LOG_WARN("Registered unbound name %s. "
                                                  "Registry may be inconsistent",
                                                  name);
-                                LOG_INFO("Registered %s in %s %d.",
-                                         name, e->dif_name, e->type);
+                                LOG_INFO("Registered %s in %s.",
+                                         name, e->dif_name);
                                 ++ret;
                         }
                 }
