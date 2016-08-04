@@ -86,6 +86,11 @@ int ipcp_parse_arg(int argc, char * argv[])
         return 0;
 }
 
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
+
 void * ipcp_main_loop(void * o)
 {
         int     lsockfd;
@@ -118,7 +123,7 @@ void * ipcp_main_loop(void * o)
                 return (void *) 1;
         }
 
-        pthread_cleanup_push((void(*)(void *)) close,
+        pthread_cleanup_push(close_ptr,
                              (void *) &sockfd);
 
         free(sock_path);
@@ -268,7 +273,7 @@ void * ipcp_main_loop(void * o)
                 close(lsockfd);
         }
 
-        pthread_cleanup_pop(0);
+        pthread_cleanup_pop(false);
 
         return NULL;
 }
