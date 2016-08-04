@@ -1434,6 +1434,7 @@ void * irm_flow_cleaner()
                                 if (n_rb != NULL)
                                         shm_ap_rbuff_destroy(n_rb);
                                 irm_flow_destroy(e);
+                                continue;
                         }
                         if (kill(e->n_1_api, 0) < 0) {
                                 struct shm_ap_rbuff * n_1_rb =
