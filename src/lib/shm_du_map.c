@@ -182,7 +182,6 @@ struct shm_du_map * shm_du_map_create()
 
         if (shm_base == MAP_FAILED) {
                 LOG_DBGF("Failed to map shared memory.");
-
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
                         LOG_DBGF("Failed to remove invalid shm.");
 
@@ -237,6 +236,7 @@ struct shm_du_map * shm_du_map_open()
         shm_fd = shm_open(SHM_DU_MAP_FILENAME, O_RDWR, 0666);
         if (shm_fd < 0) {
                 LOG_DBGF("Failed opening shared memory.");
+                free(dum);
                 return NULL;
         }
 
@@ -250,10 +250,9 @@ struct shm_du_map * shm_du_map_open()
                 LOG_DBGF("Failed to map shared memory.");
                 if (close(shm_fd) == -1)
                         LOG_DBGF("Failed to close invalid shm.");
-
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
                         LOG_DBGF("Failed to unlink invalid shm.");
-
+                free(dum);
                 return NULL;
         }
 
