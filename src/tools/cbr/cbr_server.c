@@ -24,7 +24,7 @@
 #include <stdbool.h>
 
 #ifdef __FreeBSD__
-#define __XSI_VISIBLE
+#define __XSI_VISIBLE 500
 #endif
 
 #include <signal.h>
@@ -112,13 +112,13 @@ void handle_flow(int fd)
                         printf("Flow %4d: %9ld SDUs (%12ld bytes) in %9ld ms"
                                " => %9.4f p/s, %9.4f Mb/s\n",
                                fd,
-                               sdus-sdus_intv,
-                               bytes_read-bytes_read_intv,
+                               sdus - sdus_intv,
+                               bytes_read - bytes_read_intv,
                                us / 1000,
-                               ((sdus-sdus_intv) / (float) us) * MILLION,
-                               8 * (bytes_read-bytes_read_intv)
+                               ((sdus - sdus_intv) / (float) us) * MILLION,
+                               8 * (bytes_read - bytes_read_intv)
                                / (float)(us));
-                        iv_start=iv_end;
+                        iv_start = iv_end;
                         sdus_intv = sdus;
                         bytes_read_intv = bytes_read;
                         ts_add(&iv_start, &intv, &iv_end);
@@ -134,13 +134,13 @@ void * worker(void * o)
                 pthread_mutex_lock(&fds_lock);
                 pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
                                      (void *) &fds_lock);
-                while (fds[fds_index] == -1) {
+                while (fds[fds_index] == -1)
                         pthread_cond_wait(&fds_signal, &fds_lock);
-                }
 
                 cli_fd = fds[fds_index];
                 fds[fds_index] = -1;
-                pthread_cleanup_pop(1);
+
+                pthread_cleanup_pop(true);
 
                 handle_flow(cli_fd);
 
