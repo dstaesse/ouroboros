@@ -802,6 +802,8 @@ static void * ipcp_udp_sdu_loop(void * o)
                         shm_du_map_remove(_ap_instance->dum, e->index);
 
                 pthread_rwlock_unlock(&_ipcp->state_lock);
+
+                free(e);
         }
 
         return (void *) 1;

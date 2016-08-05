@@ -846,6 +846,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                         shm_du_map_remove(shim_data(_ipcp)->dum, e->index);
 
                 pthread_rwlock_unlock(&_ipcp->state_lock);
+
+                free(e);
         }
 
         return (void *) 1;
