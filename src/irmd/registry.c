@@ -253,9 +253,6 @@ static void reg_entry_destroy(struct reg_entry * e)
         if (e->name != NULL)
                 free(e->name);
 
-        if (e->req_ae_name != NULL)
-                free(e->req_ae_name);
-
         list_for_each_safe(pos, n, &e->reg_apis) {
                 struct reg_api * i = list_entry(pos, struct reg_api, next);
                 reg_api_destroy(i);
