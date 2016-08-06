@@ -52,9 +52,6 @@
 #define shm_rbuff_empty(rb) (*rb->ptr_head == *rb->ptr_tail)
 #define head_el_ptr(rb) (rb->shm_base + *rb->ptr_head)
 #define tail_el_ptr(rb) (rb->shm_base + *rb->ptr_tail)
-#define clean_sdus(rb)                                                         \
-        while (!shm_rbuff_empty(rb) && tail_el_ptr(rb)->port_id < 0)           \
-                *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_BUFFER_SIZE -1);     \
 
 struct shm_ap_rbuff {
         struct rb_entry * shm_base;    /* start of entry */
@@ -316,8 +313,6 @@ int shm_ap_rbuff_peek(struct shm_ap_rbuff * rb,
                 pthread_mutex_consistent(rb->lock);
         }
 
-        clean_sdus(rb);
-
         while (shm_rbuff_empty(rb)) {
                 if (timeout != NULL)
                         ret = pthread_cond_timedwait(rb->add,
@@ -325,8 +320,6 @@ int shm_ap_rbuff_peek(struct shm_ap_rbuff * rb,
                                                      &abstime);
                 else
                         ret = pthread_cond_wait(rb->add, rb->lock);
-
-                clean_sdus(rb);
 
                 if (ret == EOWNERDEAD) {
                         LOG_DBG("Recovering dead mutex.");
@@ -361,8 +354,6 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
                 pthread_mutex_consistent(rb->lock);
         }
 
-        clean_sdus(rb);
-
         while (shm_rbuff_empty(rb))
                 if (pthread_cond_wait(rb->add, rb->lock) == EOWNERDEAD) {
                 LOG_DBG("Recovering dead mutex.");
@@ -392,8 +383,6 @@ ssize_t shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb, int port_id)
                 LOG_DBG("Recovering dead mutex.");
                 pthread_mutex_consistent(rb->lock);
         }
-
-        clean_sdus(rb);
 
         if (shm_rbuff_empty(rb) || tail_el_ptr(rb)->port_id != port_id) {
                 pthread_mutex_unlock(rb->lock);
@@ -429,8 +418,6 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
                 ts_add(&abstime, timeout, &abstime);
         }
 
-        clean_sdus(rb);
-
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rb->lock);
 
@@ -441,8 +428,6 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
                                                      &abstime);
                 else
                         ret = pthread_cond_wait(rb->del, rb->lock);
-
-                clean_sdus(rb);
 
                 if (ret == EOWNERDEAD) {
                         LOG_DBG("Recovering dead mutex.");
