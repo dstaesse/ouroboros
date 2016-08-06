@@ -332,7 +332,7 @@ void * shm_du_map_sanitize(void * o)
                         }
 
                         if (ret == ETIMEDOUT) {
-                                LOG_DBGF("SDU timed out.");
+                                LOG_DBGF("SDU timed out (dst: %d).", api);
                                 clean_sdus(dum, api, false);
                         }
                 }
@@ -439,7 +439,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
                 ++blocks;
         }
 
-        if (blocks + *dum->ptr_head > SHM_BUFFER_SIZE - 1)
+        if (blocks + *dum->ptr_head > SHM_BUFFER_SIZE)
                 padblocks = SHM_BUFFER_SIZE - *dum->ptr_head;
 
         if (!shm_map_free(dum, (blocks + padblocks))) {
@@ -528,7 +528,7 @@ ssize_t shm_du_map_write_b(struct shm_du_map * dum,
                 ++blocks;
         }
 
-        if (blocks + *dum->ptr_head > SHM_BUFFER_SIZE - 1)
+        if (blocks + *dum->ptr_head > SHM_BUFFER_SIZE)
                 padblocks = SHM_BUFFER_SIZE - *dum->ptr_head;
 
         while (!shm_map_free(dum, (blocks + padblocks))) {
