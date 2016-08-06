@@ -115,7 +115,8 @@ void * writer(void * o)
 {
         int * fdp = (int *) o;
         struct timespec now;
-        struct timespec wait = {client.interval / 1000, client.interval % 1000};
+        struct timespec wait = {client.interval / 1000,
+                                (client.interval % 1000) * MILLION};
         struct oping_msg * msg;
         char * buf = malloc(client.size);
 
