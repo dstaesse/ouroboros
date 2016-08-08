@@ -34,6 +34,7 @@
 #define MILLION  1000000L
 #define BILLION  1000000000L
 
+#include <time.h>
 #include <sys/time.h>
 #include <limits.h> /* LONG_MAX */
 

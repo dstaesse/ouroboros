@@ -22,7 +22,7 @@
 
 #include <unistd.h>
 #include <stdint.h>
-#include <sys/time.h>
+#include <time.h>
 
 #include <ouroboros/qos.h>
 #include <ouroboros/flow.h>
