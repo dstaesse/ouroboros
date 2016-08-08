@@ -36,7 +36,11 @@
 #include "frct.h"
 #include "ipcp.h"
 
-#define ENROLLMENT "enrollment"
+#include "static_info.pb-c.h"
+typedef StaticInfoMsg static_info_msg_t;
+
+#define ENROLLMENT  "enrollment"
+#define STATIC_INFO "static DIF information"
 
 extern struct ipcp * _ipcp;
 
@@ -66,6 +70,8 @@ struct mgmt_flow {
 
 struct rib {
         struct dt_const  dtc;
+
+        uint32_t         address;
 
         struct list_head flows;
         pthread_rwlock_t flows_lock;
@@ -162,17 +168,41 @@ int ribmgr_fini()
 int ribmgr_cdap_reply(struct cdap * instance,
                       int           invoke_id,
                       int           result,
-                      buffer_t *    val,
+                      uint8_t *     data,
                       size_t        len)
 {
-        LOG_MISSING;
+        struct list_head * pos, * n = NULL;
 
-        /* FIXME: Check all cdap_reqs here to see if we expect a reply */
+        pthread_mutex_lock(&rib->cdap_reqs_lock);
+        list_for_each_safe(pos, n, &rib->cdap_reqs) {
+                struct cdap_request * req =
+                        list_entry(pos, struct cdap_request, next);
+                if (req->instance == instance &&
+                    req->invoke_id == invoke_id) {
+                        if (result != 0)
+                                LOG_ERR("CDAP command with code %d and name %s "
+                                        "failed with error %d",
+                                        req->code, req->name, result);
+                        else
+                                LOG_DBG("CDAP command with code %d and name %s "
+                                        "executed succesfully",
+                                        req->code, req->name);
 
-        return -1;
+                        /* FIXME: In case of a read, update values here */
+
+                        free(req->name);
+                        list_del(&req->next);
+                        free(req);
+                        break;
+                }
+        }
+        pthread_mutex_unlock(&rib->cdap_reqs_lock);
+
+        return 0;
 }
 
 int ribmgr_cdap_read(struct cdap * instance,
+                     int           invoke_id,
                      char *        name)
 {
         LOG_MISSING;
@@ -181,19 +211,67 @@ int ribmgr_cdap_read(struct cdap * instance,
 }
 
 int ribmgr_cdap_write(struct cdap * instance,
+                      int           invoke_id,
                       char *        name,
-                      buffer_t *    val,
+                      uint8_t *     data,
                       size_t        len,
                       uint32_t      flags)
 {
-        LOG_MISSING;
+        static_info_msg_t * msg;
+        int ret = 0;
 
-        return -1;
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        if (_ipcp->state == IPCP_PENDING_ENROLL &&
+            strcmp(name, STATIC_INFO) == 0) {
+                LOG_DBG("Received static DIF information.");
+
+                msg = static_info_msg__unpack(NULL, len, data);
+                if (msg == NULL) {
+                        _ipcp->state = IPCP_INIT;
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        cdap_send_reply(instance, invoke_id, -1, NULL, 0);
+                        LOG_ERR("Failed to unpack static info message.");
+                        return -1;
+                }
+
+                rib->dtc.addr_size = msg->addr_size;
+                rib->dtc.cep_id_size = msg->cep_id_size;
+                rib->dtc.pdu_length_size = msg->pdu_length_size;
+                rib->dtc.seqno_size = msg->seqno_size;
+                rib->dtc.ttl_size = msg->ttl_size;
+                rib->dtc.chk_size = msg->chk_size;
+                rib->dtc.min_pdu_size = msg->min_pdu_size;
+                rib->dtc.max_pdu_size = msg->max_pdu_size;
+
+                rib->address = msg->address;
+
+                if (frct_init(&rib->dtc, rib->address)) {
+                        _ipcp->state = IPCP_INIT;
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        cdap_send_reply(instance, invoke_id, -1, NULL, 0);
+                        static_info_msg__free_unpacked(msg, NULL);
+                        LOG_ERR("Failed to init FRCT");
+                        return -1;
+                }
+
+                static_info_msg__free_unpacked(msg, NULL);
+        } else
+                ret = -1;
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+
+        if (cdap_send_reply(instance, invoke_id, ret, NULL, 0)) {
+                LOG_ERR("Failed to send reply to write request.");
+                return -1;
+        }
+
+        return 0;
 }
 
 int ribmgr_cdap_create(struct cdap * instance,
+                       int           invoke_id,
                        char *        name,
-                       buffer_t      val)
+                       uint8_t *     data,
+                       size_t        len)
 {
         LOG_MISSING;
 
@@ -201,8 +279,10 @@ int ribmgr_cdap_create(struct cdap * instance,
 }
 
 int ribmgr_cdap_delete(struct cdap * instance,
+                       int           invoke_id,
                        char *        name,
-                       buffer_t      val)
+                       uint8_t *     data,
+                       size_t        len)
 {
         LOG_MISSING;
 
@@ -210,21 +290,135 @@ int ribmgr_cdap_delete(struct cdap * instance,
 }
 
 int ribmgr_cdap_start(struct cdap * instance,
+                      int           invoke_id,
                       char *        name)
 {
-        LOG_MISSING;
+        static_info_msg_t stat_info = STATIC_INFO_MSG__INIT;
+        uint8_t * data = NULL;
+        size_t len = 0;
+        int iid = 0;
 
-        /* FIXME: Handle enrollment request here */
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        if (_ipcp->state == IPCP_ENROLLED &&
+            strcmp(name, ENROLLMENT) == 0) {
+                LOG_DBG("New enrollment request.");
 
-        return -1;
+                if (cdap_send_reply(instance, invoke_id, 0, NULL, 0)) {
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        LOG_ERR("Failed to send reply to enrollment request.");
+                        return -1;
+                }
+
+                stat_info.addr_size = rib->dtc.addr_size;
+                stat_info.cep_id_size = rib->dtc.cep_id_size;
+                stat_info.pdu_length_size = rib->dtc.pdu_length_size;
+                stat_info.seqno_size = rib->dtc.seqno_size;
+                stat_info.ttl_size = rib->dtc.ttl_size;
+                stat_info.chk_size = rib->dtc.chk_size;
+                stat_info.min_pdu_size  = rib->dtc.min_pdu_size;
+                stat_info.max_pdu_size = rib->dtc.max_pdu_size;
+
+                /* FIXME: Hand out an address. */
+                stat_info.address = 0;
+
+                len = static_info_msg__get_packed_size(&stat_info);
+                if (len == 0) {
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        LOG_ERR("Failed to get size of static information.");
+                        return -1;
+                }
+
+                data = malloc(len);
+                if (data == NULL) {
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        LOG_ERR("Failed to allocate memory.");
+                        return -1;
+                }
+
+                static_info_msg__pack(&stat_info, data);
+
+                LOG_DBGF("Sending static info...");
+
+                pthread_mutex_lock(&rib->cdap_reqs_lock);
+
+                iid = cdap_send_write(instance, STATIC_INFO, data, len, 0);
+                if (iid < 0) {
+                        pthread_mutex_unlock(&rib->cdap_reqs_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        free(data);
+                        LOG_ERR("Failed to send static information.");
+                        return -1;
+                }
+
+                if (cdap_request_add(instance, WRITE, STATIC_INFO, iid)) {
+                        pthread_mutex_unlock(&rib->cdap_reqs_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        free(data);
+                        LOG_ERR("Failed to add CDAP request to list.");
+                        return -1;
+                }
+                pthread_mutex_unlock(&rib->cdap_reqs_lock);
+
+                /* FIXME: Send neighbors here. */
+
+                LOG_DBGF("Sending stop enrollment...");
+
+                pthread_mutex_lock(&rib->cdap_reqs_lock);
+
+                iid = cdap_send_stop(instance, ENROLLMENT);
+                if (iid < 0) {
+                        pthread_mutex_unlock(&rib->cdap_reqs_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        free(data);
+                        LOG_ERR("Failed to send stop of enrollment.");
+                        return -1;
+                }
+
+                if (cdap_request_add(instance, STOP, ENROLLMENT, iid)) {
+                        pthread_mutex_unlock(&rib->cdap_reqs_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        free(data);
+                        LOG_ERR("Failed to add CDAP request to list.");
+                        return -1;
+                }
+                pthread_mutex_unlock(&rib->cdap_reqs_lock);
+
+                free(data);
+        } else {
+                if (cdap_send_reply(instance, invoke_id, -1, NULL, 0)) {
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        LOG_ERR("Failed to send reply to start request.");
+                        return -1;
+                }
+        }
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+
+        return 0;
 }
 
 int ribmgr_cdap_stop(struct cdap * instance,
+                     int           invoke_id,
                      char *        name)
 {
-        LOG_MISSING;
+        int ret = 0;
 
-        return -1;
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        if (_ipcp->state == IPCP_PENDING_ENROLL &&
+            strcmp(name, ENROLLMENT) == 0) {
+                LOG_DBG("Stop enrollment received.");
+
+                _ipcp->state = IPCP_ENROLLED;
+        } else
+                ret = -1;
+
+        if (cdap_send_reply(instance, invoke_id, ret, NULL, 0)) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                LOG_ERR("Failed to send reply to stop request.");
+                return -1;
+        }
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+
+        return 0;
 }
 
 static struct cdap_ops ribmgr_ops = {
@@ -258,13 +452,11 @@ int ribmgr_add_flow(int fd)
         flow->instance = instance;
         flow->fd = fd;
 
-        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
         pthread_rwlock_wrlock(&rib->flows_lock);
         if (list_empty(&rib->flows) &&
-            (_ipcp->state == IPCP_INIT ||
-             _ipcp->state == IPCP_DISCONNECTED)) {
+            _ipcp->state == IPCP_INIT) {
                 _ipcp->state = IPCP_PENDING_ENROLL;
-                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 pthread_mutex_lock(&rib->cdap_reqs_lock);
                 iid = cdap_send_start(instance,
@@ -334,7 +526,10 @@ int ribmgr_bootstrap(struct dif_config * conf)
         rib->dtc.min_pdu_size = conf->min_pdu_size;
         rib->dtc.max_pdu_size = conf->max_pdu_size;
 
-        if (frct_init(&rib->dtc)) {
+        /* FIXME: Set correct address. */
+        rib->address = 0;
+
+        if (frct_init(&rib->dtc, rib->address)) {
                 LOG_ERR("Failed to initialize FRCT.");
                 return -1;
         }

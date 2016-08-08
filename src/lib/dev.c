@@ -20,11 +20,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "libouroboros-dev"
-
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
-#include <ouroboros/logs.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>

@@ -14,6 +14,9 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 SET(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 
+protobuf_generate_c(STATIC_INFO_SRCS STATIC_INFO_HDRS
+  static_info.proto)
+
 set(SOURCE_FILES
         # Add source files here
         main.c
@@ -22,7 +25,8 @@ set(SOURCE_FILES
         ribmgr.c
 )
 
-add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES})
+add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
+  ${STATIC_INFO_SRCS})
 target_link_libraries (ipcpd-normal LINK_PUBLIC ouroboros)
 
 include(MacroAddCompileFlags)

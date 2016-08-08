@@ -23,7 +23,6 @@
 #include <ouroboros/config.h>
 #include <ouroboros/cdap.h>
 #include <ouroboros/bitmap.h>
-#include <ouroboros/common.h>
 #include <ouroboros/dev.h>
 
 #include <stdlib.h>
@@ -43,32 +42,6 @@ struct cdap {
         pthread_t         reader;
         struct cdap_ops * ops;
 };
-
-
-static ssize_t cdap_msg_to_buffer(cdap_t * msg,
-                                  buffer_t ** val)
-{
-        int i;
-        size_t len;
-
-        len = msg->n_value;
-
-        *val = malloc(len * sizeof(**val));
-        if (*val == NULL)
-                return -1;
-
-        for (i = 0; i < len; i++) {
-                if (msg->value[i].data == NULL) {
-                        free(*val);
-                        return -1;
-                }
-
-                (*val)[i].data = msg->value[i].data;
-                (*val)[i].len = msg->value[i].len;
-        }
-
-        return len;
-}
 
 static int next_invoke_id(struct cdap * instance)
 {
@@ -99,8 +72,6 @@ static void * sdu_reader(void * o)
         cdap_t * msg;
         uint8_t buf[BUF_SIZE];
         ssize_t len;
-        ssize_t length;
-        buffer_t * val;
 
         while (true) {
                 len = flow_read(instance->fd, buf, BUF_SIZE);
@@ -115,63 +86,59 @@ static void * sdu_reader(void * o)
                 case OPCODE__READ:
                         if (msg->name != NULL)
                                 instance->ops->cdap_read(instance,
+                                                         msg->invoke_id,
                                                          msg->name);
                         break;
                 case OPCODE__WRITE:
-                        length = cdap_msg_to_buffer(msg, &val);
                         if (msg->name != NULL &&
-                            msg->value != NULL &&
-                            len > 0) {
+                            msg->has_value) {
                                 instance->ops->cdap_write(instance,
+                                                          msg->invoke_id,
                                                           msg->name,
-                                                          val,
-                                                          length,
+                                                          msg->value.data,
+                                                          msg->value.len,
                                                           msg->flags);
-                                free(val);
                         }
                         break;
                 case OPCODE__CREATE:
-                        length = cdap_msg_to_buffer(msg, &val);
                         if (msg->name != NULL &&
-                            length == 1) {
+                            msg->has_value) {
                                 instance->ops->cdap_create(instance,
+                                                           msg->invoke_id,
                                                            msg->name,
-                                                           val[0]);
-                                free(val);
+                                                           msg->value.data,
+                                                           msg->value.len);
                         }
                         break;
                 case OPCODE__DELETE:
-                        length = cdap_msg_to_buffer(msg, &val);
                         if (msg->name != NULL &&
-                            length == 1) {
+                            msg->has_value) {
                                 instance->ops->cdap_create(instance,
+                                                           msg->invoke_id,
                                                            msg->name,
-                                                           val[0]);
-                                free(val);
+                                                           msg->value.data,
+                                                           msg->value.len);
                         }
                         break;
                 case OPCODE__START:
                         if (msg->name != NULL)
                                 instance->ops->cdap_start(instance,
+                                                          msg->invoke_id,
                                                           msg->name);
                         break;
                 case OPCODE__STOP:
                         if (msg->name != NULL)
                                 instance->ops->cdap_stop(instance,
+                                                         msg->invoke_id,
                                                          msg->name);
                         break;
                 case OPCODE__REPLY:
-                        length = cdap_msg_to_buffer(msg, &val);
-                        if (msg->name != NULL &&
-                            length > 0) {
-                                instance->ops->cdap_reply(instance,
-                                                          msg->invoke_id,
-                                                          msg->result,
-                                                          val,
-                                                          length);
-                                release_invoke_id(instance, msg->invoke_id);
-                                free(val);
-                        }
+                        instance->ops->cdap_reply(instance,
+                                                  msg->invoke_id,
+                                                  msg->result,
+                                                  msg->value.data,
+                                                  msg->value.len);
+                        release_invoke_id(instance, msg->invoke_id);
                         break;
                 default:
                         break;
@@ -256,48 +223,25 @@ int cdap_destroy(struct cdap * instance)
 static int write_msg(struct cdap * instance,
                      cdap_t * msg)
 {
-        buffer_t buf;
         int ret;
+        uint8_t * data;
+        size_t len;
 
-        buf.len = cdap__get_packed_size(msg);
-        if (buf.len == 0)
+        len = cdap__get_packed_size(msg);
+        if (len == 0)
                 return -1;
 
-        buf.data = malloc(BUF_SIZE);
-        if (buf.data == NULL)
+        data = malloc(BUF_SIZE);
+        if (data == NULL)
                 return -1;
 
-        cdap__pack(msg, buf.data);
+        cdap__pack(msg, data);
 
-        ret = flow_write(instance->fd, buf.data, buf.len);
+        ret = flow_write(instance->fd, data, len);
 
-        free(buf.data);
+        free(data);
 
         return ret;
-}
-
-static int buffer_to_cdap_msg(cdap_t * msg,
-                              buffer_t * val,
-                              size_t len)
-{
-        int i;
-
-        msg->value = malloc(len * sizeof(*msg->value));
-        if (msg->value == NULL)
-                return -1;
-
-        msg->n_value = len;
-        for (i = 0; i < len; i++) {
-                if (val[i].data == NULL) {
-                        free(msg->value);
-                        return -1;
-                }
-
-                msg->value[i].data = val[i].data;
-                msg->value[i].len = val[i].len;
-        }
-
-        return 0;
 }
 
 static int send_read_or_start_or_stop(struct cdap * instance,
@@ -318,19 +262,22 @@ static int send_read_or_start_or_stop(struct cdap * instance,
         msg.invoke_id = id;
         msg.name = name;
 
-        return write_msg(instance, &msg);
+        if (write_msg(instance, &msg))
+                return -1;
+
+        return id;
 }
 
 static int send_create_or_delete(struct cdap * instance,
                                  char *        name,
-                                 buffer_t      val,
+                                 uint8_t *     data,
+                                 size_t        len,
                                  opcode_t      code)
 {
         int id;
         cdap_t msg = CDAP__INIT;
-        int ret;
 
-        if (instance == NULL || name == NULL)
+        if (instance == NULL || name == NULL || data == NULL)
                 return -1;
 
         id = next_invoke_id(instance);
@@ -340,17 +287,14 @@ static int send_create_or_delete(struct cdap * instance,
         msg.opcode = code;
         msg.name = name;
         msg.invoke_id = id;
+        msg.has_value = true;
+        msg.value.data = data;
+        msg.value.len = len;
 
-        if (buffer_to_cdap_msg(&msg, &val, 1)) {
-                release_invoke_id(instance, id);
+        if (write_msg(instance, &msg))
                 return -1;
-        }
 
-        ret = write_msg(instance, &msg);
-
-        free(msg.value);
-
-        return ret;
+        return id;
 }
 
 int cdap_send_read(struct cdap * instance,
@@ -361,16 +305,14 @@ int cdap_send_read(struct cdap * instance,
 
 int cdap_send_write(struct cdap * instance,
                     char *        name,
-                    buffer_t *    val,
+                    uint8_t *     data,
                     size_t        len,
                     uint32_t      flags)
 {
         int id;
-        int ret;
         cdap_t msg = CDAP__INIT;
 
-        if (instance == NULL || name == NULL ||
-            val == NULL || len < 1)
+        if (instance == NULL || name == NULL || data == NULL)
                 return -1;
 
         id = next_invoke_id(instance);
@@ -382,31 +324,30 @@ int cdap_send_write(struct cdap * instance,
         msg.has_flags = true;
         msg.flags = flags;
         msg.invoke_id = id;
+        msg.has_value = true;
+        msg.value.data = data;
+        msg.value.len = len;
 
-        if (buffer_to_cdap_msg(&msg, val, len)) {
-                release_invoke_id(instance, id);
+        if (write_msg(instance, &msg))
                 return -1;
-        }
 
-        ret = write_msg(instance, &msg);
-
-        free(msg.value);
-
-        return ret;
+        return id;
 }
 
 int cdap_send_create(struct cdap * instance,
                      char *        name,
-                     buffer_t      val)
+                     uint8_t *     data,
+                     size_t        len)
 {
-        return send_create_or_delete(instance, name, val, OPCODE__CREATE);
+        return send_create_or_delete(instance, name, data, len, OPCODE__CREATE);
 }
 
 int cdap_send_delete(struct cdap * instance,
                      char *        name,
-                     buffer_t      val)
+                     uint8_t *     data,
+                     size_t        len)
 {
-        return send_create_or_delete(instance, name, val, OPCODE__DELETE);
+        return send_create_or_delete(instance, name, data, len, OPCODE__DELETE);
 }
 
 int cdap_send_start(struct cdap * instance,
@@ -424,20 +365,24 @@ int cdap_send_stop(struct cdap * instance,
 int cdap_send_reply(struct cdap * instance,
                     int           invoke_id,
                     int           result,
-                    buffer_t *    val,
+                    uint8_t *     data,
                     size_t        len)
 {
         cdap_t msg = CDAP__INIT;
 
-        if (instance == NULL || val == NULL)
+        if (instance == NULL)
                 return -1;
 
+        msg.opcode = OPCODE__REPLY;
         msg.invoke_id = invoke_id;
         msg.has_result = true;
         msg.result = result;
 
-        if (buffer_to_cdap_msg(&msg, val, len))
-                return -1;
+        if (data != NULL) {
+                msg.has_value = true;
+                msg.value.data = data;
+                msg.value.len = len;
+        }
 
         return write_msg(instance, &msg);
 }

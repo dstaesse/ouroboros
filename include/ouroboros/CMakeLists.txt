@@ -4,7 +4,6 @@ configure_file(
 
 set(HEADER_FILES
   cdap.h
-  common.h
   dev.h
   errno.h
   flow.h
