@@ -62,7 +62,7 @@ int server_main()
                         continue;
                 }
 
-                count = flow_read(client_fd, (void **) &buf, BUF_SIZE);
+                count = flow_read(client_fd, &buf, BUF_SIZE);
                 if (count < 0) {
                         printf("Failed to read SDU.\n");
                         flow_dealloc(client_fd);
