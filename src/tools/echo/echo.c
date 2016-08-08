@@ -20,6 +20,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define _POSIX_C_SOURCE 199309L
+
 #include <stdio.h>
 #include <string.h>
 
