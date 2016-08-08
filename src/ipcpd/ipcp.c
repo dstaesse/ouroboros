@@ -141,6 +141,8 @@ void * ipcp_main_loop(void * o)
                         break;
                 }
 
+                pthread_cleanup_push(close_ptr, (void *) &lsockfd);
+
                 count = read(lsockfd, buf, IPCP_MSG_BUF_SIZE);
                 if (count <= 0) {
                         LOG_ERR("Failed to read from socket");
@@ -278,6 +280,7 @@ void * ipcp_main_loop(void * o)
                 }
 
                 free(buffer.data);
+                pthread_cleanup_pop(true);
 
         }
 
