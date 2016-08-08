@@ -42,11 +42,11 @@
 
 #define PTHREAD_COND_CLOCK CLOCK_MONOTONIC
 
-#define SHM_RBUFF_FILE_SIZE (SHM_BUFFER_SIZE * sizeof(struct rb_entry)          \
+#define SHM_RBUFF_FILE_SIZE (SHM_BUFFER_SIZE * sizeof(struct rb_entry)         \
                              + 2 * sizeof(size_t) + sizeof(pthread_mutex_t)    \
                              + 2 * sizeof (pthread_cond_t))
 
-#define shm_rbuff_used(rb)((*rb->ptr_head + SHM_BUFFER_SIZE - *rb->ptr_tail)    \
+#define shm_rbuff_used(rb)((*rb->ptr_head + SHM_BUFFER_SIZE - *rb->ptr_tail)   \
                           & (SHM_BUFFER_SIZE - 1))
 #define shm_rbuff_free(rb)(shm_rbuff_used(rb) + 1 < SHM_BUFFER_SIZE)
 #define shm_rbuff_empty(rb) (*rb->ptr_head == *rb->ptr_tail)
@@ -421,25 +421,45 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rb->lock);
 
-        while (tail_el_ptr(rb)->port_id != port_id) {
-                if (timeout != NULL)
-                        ret = pthread_cond_timedwait(rb->del,
-                                                     rb->lock,
-                                                     &abstime);
-                else
-                        ret = pthread_cond_wait(rb->del, rb->lock);
+        while (shm_rbuff_empty(rb) || tail_el_ptr(rb)->port_id != port_id) {
+                while (shm_rbuff_empty(rb)) {
+                        if (timeout != NULL)
+                                ret = pthread_cond_timedwait(rb->add,
+                                                             rb->lock,
+                                                             &abstime);
+                        else
+                                ret = pthread_cond_wait(rb->add, rb->lock);
 
-                if (ret == EOWNERDEAD) {
-                        LOG_DBG("Recovering dead mutex.");
-                        pthread_mutex_consistent(rb->lock);
+                        if (ret == EOWNERDEAD) {
+                                LOG_DBG("Recovering dead mutex.");
+                                pthread_mutex_consistent(rb->lock);
+                        }
+
+                        if (ret == ETIMEDOUT) {
+                                pthread_mutex_unlock(rb->lock);
+                                return -ret;
+                        }
                 }
 
-                if (ret == ETIMEDOUT) {
-                        pthread_mutex_unlock(rb->lock);
-                        return -ret;
+                while (tail_el_ptr(rb)->port_id != port_id) {
+                        if (timeout != NULL)
+                                ret = pthread_cond_timedwait(rb->del,
+                                                             rb->lock,
+                                                             &abstime);
+                        else
+                                ret = pthread_cond_wait(rb->del, rb->lock);
+
+                        if (ret == EOWNERDEAD) {
+                                LOG_DBG("Recovering dead mutex.");
+                                pthread_mutex_consistent(rb->lock);
+                        }
+
+                        if (ret == ETIMEDOUT) {
+                                pthread_mutex_unlock(rb->lock);
+                                return -ret;
+                        }
                 }
         }
-
         idx = tail_el_ptr(rb)->index;
 
         *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_BUFFER_SIZE -1);
