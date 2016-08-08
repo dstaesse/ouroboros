@@ -210,6 +210,8 @@ static void * ipcp_local_sdu_loop(void * o)
 
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
                 pthread_rwlock_unlock(&_ipcp->state_lock);
+
+                free(e);
         }
 
         return (void *) 1;

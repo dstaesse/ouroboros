@@ -33,6 +33,8 @@
 #include <sys/un.h>
 #include <string.h>
 #include <stdlib.h>
+#include <pthread.h>
+#include <stdbool.h>
 
 int client_socket_open(char * file_name)
 {
@@ -99,6 +101,11 @@ int server_socket_open(char * file_name)
         return sockfd;
 }
 
+void close_ptr(void * o)
+{
+        close(*(int *) o);
+}
+
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 {
         int sockfd;
@@ -122,6 +129,9 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
                 return NULL;
         }
 
+        pthread_cleanup_push(close_ptr, &sockfd);
+        pthread_cleanup_push((void (*)(void *)) free, (void *) buf.data);
+
         irm_msg__pack(msg, buf.data);
 
         if (write(sockfd, buf.data, buf.len) == -1) {
@@ -144,8 +154,9 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
                 return NULL;
         }
 
-        free(buf.data);
-        close(sockfd);
+        pthread_cleanup_pop(true);
+        pthread_cleanup_pop(true);
+
         return recv_msg;
 }
 

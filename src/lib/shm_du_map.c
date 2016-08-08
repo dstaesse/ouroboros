@@ -91,13 +91,14 @@ static void garbage_collect(struct shm_du_map * dum)
 {
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         struct shm_du_buff * sdb;
-        while ((sdb = get_tail_ptr(dum))->dst_api == -1 &&
-               !shm_map_empty(dum))
+        while (!shm_map_empty(dum) &&
+               (sdb = get_tail_ptr(dum))->dst_api == -1)
+
                 *dum->ptr_tail = (*dum->ptr_tail + sdb->blocks)
                         & (SHM_BUFFER_SIZE - 1);
 #else
-        while (get_tail_ptr(dum)->dst_api == -1 &&
-               !shm_map_empty(dum))
+        while (!shm_map_empty(dum) &&
+               get_tail_ptr(dum)->dst_api == -1)
                 *dum->ptr_tail =
                         (*dum->ptr_tail + 1) & (SHM_BUFFER_SIZE - 1);
 
@@ -182,7 +183,6 @@ struct shm_du_map * shm_du_map_create()
 
         if (shm_base == MAP_FAILED) {
                 LOG_DBGF("Failed to map shared memory.");
-
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
                         LOG_DBGF("Failed to remove invalid shm.");
 
@@ -237,6 +237,7 @@ struct shm_du_map * shm_du_map_open()
         shm_fd = shm_open(SHM_DU_MAP_FILENAME, O_RDWR, 0666);
         if (shm_fd < 0) {
                 LOG_DBGF("Failed opening shared memory.");
+                free(dum);
                 return NULL;
         }
 
@@ -250,10 +251,9 @@ struct shm_du_map * shm_du_map_open()
                 LOG_DBGF("Failed to map shared memory.");
                 if (close(shm_fd) == -1)
                         LOG_DBGF("Failed to close invalid shm.");
-
                 if (shm_unlink(SHM_DU_MAP_FILENAME) == -1)
                         LOG_DBGF("Failed to unlink invalid shm.");
-
+                free(dum);
                 return NULL;
         }
 
@@ -332,7 +332,7 @@ void * shm_du_map_sanitize(void * o)
                         }
 
                         if (ret == ETIMEDOUT) {
-                                LOG_DBGF("SDU timed out.");
+                                LOG_DBGF("SDU timed out (dst: %d).", api);
                                 clean_sdus(dum, api, false);
                         }
                 }
@@ -413,8 +413,8 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         long                 blocks = 0;
         long                 padblocks = 0;
-        int                  sz = size + sizeof *sdb;
 #endif
+        int                  sz = size + sizeof *sdb;
         uint8_t *            write_pos;
         ssize_t              idx = -1;
 
@@ -439,7 +439,7 @@ ssize_t shm_du_map_write(struct shm_du_map * dum,
                 ++blocks;
         }
 
-        if (blocks + *dum->ptr_head > SHM_BUFFER_SIZE - 1)
+        if (blocks + *dum->ptr_head > SHM_BUFFER_SIZE)
                 padblocks = SHM_BUFFER_SIZE - *dum->ptr_head;
 
         if (!shm_map_free(dum, (blocks + padblocks))) {
@@ -498,8 +498,8 @@ ssize_t shm_du_map_write_b(struct shm_du_map * dum,
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         long                 blocks = 0;
         long                 padblocks = 0;
-        int                  sz = size + sizeof *sdb;
 #endif
+        int                  sz = size + sizeof *sdb;
         uint8_t *            write_pos;
         ssize_t              idx = -1;
 
@@ -528,7 +528,7 @@ ssize_t shm_du_map_write_b(struct shm_du_map * dum,
                 ++blocks;
         }
 
-        if (blocks + *dum->ptr_head > SHM_BUFFER_SIZE - 1)
+        if (blocks + *dum->ptr_head > SHM_BUFFER_SIZE)
                 padblocks = SHM_BUFFER_SIZE - *dum->ptr_head;
 
         while (!shm_map_free(dum, (blocks + padblocks))) {

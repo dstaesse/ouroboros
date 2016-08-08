@@ -34,8 +34,14 @@
 #include <string.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <pthread.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
 
 static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
                                        ipcp_msg_t * msg)
@@ -56,24 +62,26 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
                return NULL;
        }
 
+       free(sock_path);
+
        buf.len = ipcp_msg__get_packed_size(msg);
        if (buf.len == 0) {
                close(sockfd);
-               free(sock_path);
                return NULL;
        }
 
        buf.data = malloc(IPCP_MSG_BUF_SIZE);
        if (buf.data == NULL) {
                close(sockfd);
-               free(sock_path);
                return NULL;
        }
+
+       pthread_cleanup_push(close_ptr, (void *) &sockfd);
+       pthread_cleanup_push((void (*)(void *)) free, (void *) buf.data);
 
        ipcp_msg__pack(msg, buf.data);
 
        if (write(sockfd, buf.data, buf.len) == -1) {
-               free(sock_path);
                free(buf.data);
                close(sockfd);
                return NULL;
@@ -81,7 +89,6 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
 
        count = read(sockfd, buf.data, IPCP_MSG_BUF_SIZE);
        if (count <= 0) {
-               free(sock_path);
                free(buf.data);
                close(sockfd);
                return NULL;
@@ -89,15 +96,14 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
 
        recv_msg = ipcp_msg__unpack(NULL, count, buf.data);
        if (recv_msg == NULL) {
-               free(sock_path);
                free(buf.data);
                close(sockfd);
                return NULL;
        }
 
-       free(buf.data);
-       free(sock_path);
-       close(sockfd);
+       pthread_cleanup_pop(true);
+       pthread_cleanup_pop(true);
+
        return recv_msg;
 }
 

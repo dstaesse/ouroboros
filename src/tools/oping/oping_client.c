@@ -115,7 +115,8 @@ void * writer(void * o)
 {
         int * fdp = (int *) o;
         struct timespec now;
-        struct timespec wait = {client.interval / 1000, client.interval % 1000};
+        struct timespec wait = {client.interval / 1000,
+                                (client.interval % 1000) * MILLION};
         struct oping_msg * msg;
         char * buf = malloc(client.size);
 
@@ -132,12 +133,15 @@ void * writer(void * o)
         printf("Pinging %s with %d bytes of data:\n\n",
                client.s_apn, client.size);
 
+        pthread_cleanup_push((void (*) (void *)) free, buf);
+
         while (client.sent < client.count) {
                 nanosleep(&wait, NULL);
                 msg->id = htonl(client.sent);
                 if (flow_write(*fdp, buf, client.size) == -1) {
                         printf("Failed to send SDU.\n");
                         flow_dealloc(*fdp);
+                        free(buf);
                         return (void *) -1;
                 }
 
@@ -147,6 +151,8 @@ void * writer(void * o)
                 client.times[client.sent++] = now;
                 pthread_mutex_unlock(&client.lock);
         }
+
+        pthread_cleanup_pop(true);
 
         return (void *) 0;
 }

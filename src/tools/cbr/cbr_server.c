@@ -47,18 +47,11 @@ pthread_cond_t  fds_signal;
 
 void shutdown_server(int signo, siginfo_t * info, void * c)
 {
-        int i;
-
         switch(signo) {
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
                 pthread_cancel(listen_thread);
-
-                for (i = 0; i < THREADS_SIZE; i++) {
-                        pthread_cancel(threads[i]);
-                }
-
         default:
                 return;
         }
@@ -226,19 +219,18 @@ int server_main()
                 exit(EXIT_FAILURE);
         }
 
-        for (i = 0; i < THREADS_SIZE; i++) {
-                pthread_create(&threads[i], NULL,
-                               worker, NULL);
-        }
+        for (i = 0; i < THREADS_SIZE; i++)
+                pthread_create(&threads[i], NULL, worker, NULL);
 
-        pthread_create(&listen_thread, NULL,
-                       listener, NULL);
+        pthread_create(&listen_thread, NULL, listener, NULL);
 
         pthread_join(listen_thread, NULL);
 
-        for (i = 0; i < THREADS_SIZE; i++) {
+        for (i = 0; i < THREADS_SIZE; i++)
+                pthread_cancel(threads[i]);
+
+        for (i = 0; i < THREADS_SIZE; i++)
                 pthread_join(threads[i], NULL);
-        }
 
         return 0;
 }
