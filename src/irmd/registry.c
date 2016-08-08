@@ -53,117 +53,9 @@ struct reg_dif {
         enum ipcp_type   type;
 };
 
-enum api_state {
-        REG_I_NULL = 0,
-        REG_I_INIT,
-        REG_I_SLEEP,
-        REG_I_WAKE,
-        REG_I_DESTROY
-};
-
-struct reg_api {
-        struct list_head next;
-        pid_t            api;
-
-        /* the api will block on this */
-        enum api_state   state;
-        pthread_cond_t   state_cond;
-        pthread_mutex_t  state_lock;
-};
-
-static struct reg_api * reg_api_create(pid_t api)
-{
-        struct reg_api * i;
-        i = malloc(sizeof(*i));
-        if (i == NULL)
-                return NULL;
-
-        i->api   = api;
-        i->state = REG_I_INIT;
-
-        pthread_mutex_init(&i->state_lock, NULL);
-        pthread_cond_init(&i->state_cond, NULL);
-
-        INIT_LIST_HEAD(&i->next);
-
-        return i;
-}
-
-static void reg_api_destroy(struct reg_api * i)
-{
-        pthread_mutex_lock(&i->state_lock);
-
-        if (i->state != REG_I_NULL)
-                i->state = REG_I_DESTROY;
-
-        pthread_cond_signal(&i->state_cond);
-
-        pthread_mutex_unlock(&i->state_lock);
-
-        pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
-                             (void *) &i->state_lock);
-
-        while (i->state != REG_I_NULL)
-                pthread_cond_wait(&i->state_cond, &i->state_lock);
-
-        pthread_cleanup_pop(true);
-
-        pthread_cond_destroy(&i->state_cond);
-        pthread_mutex_destroy(&i->state_lock);
-
-        free(i);
-}
-
-static void cleanup_sleeper(void * o) {
-        struct reg_api * i = (struct reg_api *) o;
-        i->state = REG_I_NULL;
-        pthread_cond_signal(&i->state_cond);
-        pthread_mutex_unlock(&i->state_lock);
-}
-
-void reg_api_sleep(struct reg_api * i)
-{
-        if (i == NULL)
-                return;
-
-        pthread_mutex_lock(&i->state_lock);
-        if (i->state != REG_I_INIT) {
-                pthread_mutex_unlock(&i->state_lock);
-                return;
-        }
-
-        i->state = REG_I_SLEEP;
-
-        pthread_cleanup_push(cleanup_sleeper, (void *) i);
-
-        while (i->state == REG_I_SLEEP)
-                pthread_cond_wait(&i->state_cond, &i->state_lock);
-
-        pthread_cleanup_pop(true);
-}
-
-void reg_api_wake(struct reg_api * i)
-{
-        pthread_mutex_lock(&i->state_lock);
-
-        if (i->state == REG_I_NULL) {
-                pthread_mutex_unlock(&i->state_lock);
-                return;
-        }
-
-        i->state = REG_I_WAKE;
-
-        pthread_cond_broadcast(&i->state_cond);
-
-        while (i->state == REG_I_WAKE)
-                pthread_cond_wait(&i->state_cond, &i->state_lock);
-
-        pthread_mutex_unlock(&i->state_lock);
-}
-
 static struct reg_binding * reg_binding_create(char *   apn,
-                                        uint32_t flags,
-                                        char **  argv)
+                                               uint32_t flags,
+                                               char **  argv)
 {
         struct reg_binding * b = malloc(sizeof(*b));
         if (b == NULL)
@@ -248,6 +140,7 @@ static void reg_entry_destroy(struct reg_entry * e)
         pthread_cond_broadcast(&e->state_cond);
         pthread_mutex_unlock(&e->state_lock);
 
+        pthread_cond_destroy(&e->state_cond);
         pthread_mutex_destroy(&e->state_lock);
 
         if (e->name != NULL)
