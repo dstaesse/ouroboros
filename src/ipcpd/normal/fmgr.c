@@ -82,8 +82,8 @@ static void * fmgr_listen(void * o)
 
         /* FIXME: Avoid busy wait and react to pthread_cond_t */
         pthread_rwlock_rdlock(&_ipcp->state_lock);
-        while (_ipcp->state != IPCP_ENROLLED ||
-               _ipcp->state != IPCP_SHUTDOWN) {
+        while (!(_ipcp->state == IPCP_ENROLLED ||
+                 _ipcp->state == IPCP_SHUTDOWN)) {
                 pthread_rwlock_unlock(&_ipcp->state_lock);
                 sched_yield();
                 pthread_rwlock_rdlock(&_ipcp->state_lock);

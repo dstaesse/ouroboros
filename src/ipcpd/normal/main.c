@@ -146,7 +146,14 @@ static int normal_ipcp_enroll(char * dif_name)
                 return -1;
         }
 
-        /* FIXME: Wait until state changed to ENROLLED */
+        /* FIXME: Wait passively until state changed to ENROLLED */
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        while (_ipcp->state != IPCP_ENROLLED) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                sched_yield();
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
+        }
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }

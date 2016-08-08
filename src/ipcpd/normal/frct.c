@@ -33,9 +33,10 @@ struct frct_i {
 
 struct frct {
         struct dt_const * dtc;
+        uint32_t address;
 } * frct = NULL;
 
-int frct_init(struct dt_const * dtc)
+int frct_init(struct dt_const * dtc, uint32_t address)
 {
         if (dtc == NULL)
                 return -1;
@@ -45,13 +46,15 @@ int frct_init(struct dt_const * dtc)
                 return -1;
 
         frct->dtc = dtc;
+        frct->address = address;
 
         return 0;
 }
 
 int frct_fini()
 {
-        free(frct);
+        if (frct != NULL)
+                free(frct);
 
         return 0;
 }

@@ -820,6 +820,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                 if (len <= 0) {
                         pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(e);
+                        LOG_ERR("Length of du map read was %d.", len);
                         continue;
                 }
 

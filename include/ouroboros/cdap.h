@@ -24,8 +24,6 @@
 #ifndef OUROBOROS_CDAP_H
 #define OUROBOROS_CDAP_H
 
-#include <ouroboros/common.h>
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -39,27 +37,35 @@ struct cdap_ops {
         int (* cdap_reply)(struct cdap * instance,
                            int           invoke_id,
                            int           result,
-                           buffer_t *    val,
+                           uint8_t *     data,
                            size_t        len);
 
         int (* cdap_read)(struct cdap * instance,
+                          int           invoke_id,
                           char *        name);
         int (* cdap_write)(struct cdap * instance,
+                           int           invoke_id,
                            char *        name,
-                           buffer_t *    val,
+                           uint8_t *     data,
                            size_t        len,
                            uint32_t      flags);
 
         int (* cdap_create)(struct cdap * instance,
+                            int           invoke_id,
                             char *        name,
-                            buffer_t      val);
+                            uint8_t *     data,
+                            size_t        len);
         int (* cdap_delete)(struct cdap * instance,
+                            int           invoke_id,
                             char *        name,
-                            buffer_t      val);
+                            uint8_t *     data,
+                            size_t        len);
 
         int (* cdap_start)(struct cdap * instance,
+                           int           invoke_id,
                            char *        name);
         int (* cdap_stop)(struct cdap * instance,
+                          int           invoke_id,
                           char *        name);
 };
 
@@ -73,16 +79,18 @@ int           cdap_send_read(struct cdap * instance,
                              char *        name);
 int           cdap_send_write(struct cdap * instance,
                               char *        name,
-                              buffer_t *    val,
+                              uint8_t *     data,
                               size_t        len,
                               uint32_t      flags);
 
 int           cdap_send_create(struct cdap * instance,
                                char *        name,
-                               buffer_t      val);
+                               uint8_t *     data,
+                               size_t        len);
 int           cdap_send_delete(struct cdap * instance,
                                char *        name,
-                               buffer_t      val);
+                               uint8_t *     data,
+                               size_t        len);
 
 int           cdap_send_start(struct cdap * instance,
                               char *        name);
@@ -93,6 +101,6 @@ int           cdap_send_stop(struct cdap * instance,
 int           cdap_send_reply(struct cdap * instance,
                               int           invoke_id,
                               int           result,
-                              buffer_t *    val,
+                              uint8_t *     data,
                               size_t        len);
 #endif
