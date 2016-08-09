@@ -64,7 +64,6 @@ void irm_flow_destroy(struct irm_flow * f)
                 f->state = FLOW_NULL;
 
         pthread_cond_signal(&f->state_cond);
-        pthread_mutex_unlock(&f->state_lock);
 
         pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
                              (void *) &f->state_lock);

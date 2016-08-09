@@ -56,8 +56,6 @@ void reg_api_destroy(struct reg_api * i)
 
         pthread_cond_signal(&i->state_cond);
 
-        pthread_mutex_unlock(&i->state_lock);
-
         pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
                              (void *) &i->state_lock);
 
@@ -75,7 +73,7 @@ void reg_api_destroy(struct reg_api * i)
 static void cleanup_sleeper(void * o) {
         struct reg_api * i = (struct reg_api *) o;
         i->state = REG_I_NULL;
-        pthread_cond_signal(&i->state_cond);
+        pthread_cond_broadcast(&i->state_cond);
         pthread_mutex_unlock(&i->state_lock);
 }
 
