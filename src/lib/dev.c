@@ -503,12 +503,21 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                         return -1;
                 }
         } else { /* blocking */
-                idx = shm_du_map_write_b(_ap_instance->dum,
-                                         _ap_instance->flows[fd].api,
+                struct shm_du_map * dum = _ap_instance->dum;
+                pid_t               api = _ap_instance->flows[fd].api;
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ap_instance->data_lock);
+
+                idx = shm_du_map_write_b(dum,
+                                         api,
                                          DU_BUFF_HEADSPACE,
                                          DU_BUFF_TAILSPACE,
                                          (uint8_t *) buf,
                                          count);
+
+                pthread_rwlock_rdlock(&_ap_instance->data_lock);
+                pthread_rwlock_rdlock(&_ap_instance->flows_lock);
+
                 e.index   = idx;
                 e.port_id = _ap_instance->flows[fd].port_id;
 
@@ -548,15 +557,21 @@ ssize_t flow_read(int fd, void * buf, size_t count)
                 return -ENOTALLOC;
         }
 
-        if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK)
+        if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
                 idx = shm_ap_rbuff_read_port(_ap_instance->rb,
                                              _ap_instance->flows[fd].port_id);
-        else
-                idx = shm_ap_rbuff_read_port_b(_ap_instance->rb,
-                                               _ap_instance->flows[fd].port_id,
-                                               _ap_instance->flows[fd].timeout);
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+        } else {
+                struct shm_ap_rbuff * rb      = _ap_instance->rb;
+                int                   port_id = _ap_instance->flows[fd].port_id;
+                struct timespec *     timeout = _ap_instance->flows[fd].timeout;
+                pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                pthread_rwlock_unlock(&_ap_instance->data_lock);
 
-        pthread_rwlock_unlock(&_ap_instance->flows_lock);
+                idx = shm_ap_rbuff_read_port_b(rb, port_id, timeout);
+
+                pthread_rwlock_rdlock(&_ap_instance->data_lock);
+        }
 
         if (idx < 0) {
                 pthread_rwlock_unlock(&_ap_instance->data_lock);
