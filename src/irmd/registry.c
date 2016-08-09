@@ -544,6 +544,8 @@ void registry_del_api(struct list_head * registry,
 
         reg_api_destroy(i);
 
+        pthread_mutex_lock(&e->state_lock);
+
         if (list_empty(&e->reg_apis)) {
                 if (reg_entry_has_auto_binding(e))
                         e->state = REG_NAME_AUTO_ACCEPT;
@@ -554,6 +556,7 @@ void registry_del_api(struct list_head * registry,
         }
 
         pthread_cond_signal(&e->state_cond);
+        pthread_mutex_unlock(&e->state_lock);
 
         return;
 }

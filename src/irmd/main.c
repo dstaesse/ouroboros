@@ -787,9 +787,9 @@ static int flow_alloc_resp(pid_t n_api,
                 return -1;
         }
 
-        registry_del_api(&irmd->registry, n_api);
-
         pthread_mutex_unlock(&rne->state_lock);
+
+        registry_del_api(&irmd->registry, n_api);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
 
@@ -1401,9 +1401,10 @@ void * irm_flow_cleaner()
                 }
 
                 pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_wrlock(&irmd->reg_lock);
 
                 registry_sanitize_apis(&irmd->registry);
+
+                pthread_rwlock_wrlock(&irmd->reg_lock);
 
                 list_for_each_safe(pos, n, &irmd->spawned_apis) {
                         struct spawned_api * api =
