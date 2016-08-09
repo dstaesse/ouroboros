@@ -256,7 +256,7 @@ void * ipcp_main_loop(void * o)
                 }
 
                 pthread_cleanup_pop(true);
-
+                pthread_cleanup_pop(false);
 
                 buffer.len = ipcp_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
@@ -280,7 +280,7 @@ void * ipcp_main_loop(void * o)
                 }
 
                 free(buffer.data);
-                pthread_cleanup_pop(true);
+                close(lsockfd);
 
         }
 

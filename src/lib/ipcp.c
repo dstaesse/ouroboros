@@ -81,25 +81,11 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
 
        ipcp_msg__pack(msg, buf.data);
 
-       if (write(sockfd, buf.data, buf.len) == -1) {
-               free(buf.data);
-               close(sockfd);
-               return NULL;
-       }
+       if (write(sockfd, buf.data, buf.len) != -1)
+               count = read(sockfd, buf.data, IPCP_MSG_BUF_SIZE);
 
-       count = read(sockfd, buf.data, IPCP_MSG_BUF_SIZE);
-       if (count <= 0) {
-               free(buf.data);
-               close(sockfd);
-               return NULL;
-       }
-
-       recv_msg = ipcp_msg__unpack(NULL, count, buf.data);
-       if (recv_msg == NULL) {
-               free(buf.data);
-               close(sockfd);
-               return NULL;
-       }
+       if (count > 0)
+               recv_msg = ipcp_msg__unpack(NULL, count, buf.data);
 
        pthread_cleanup_pop(true);
        pthread_cleanup_pop(true);

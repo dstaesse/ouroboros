@@ -787,9 +787,9 @@ static int flow_alloc_resp(pid_t n_api,
                 return -1;
         }
 
-        registry_del_api(&irmd->registry, n_api);
-
         pthread_mutex_unlock(&rne->state_lock);
+
+        registry_del_api(&irmd->registry, n_api);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
 
@@ -1401,9 +1401,10 @@ void * irm_flow_cleaner()
                 }
 
                 pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_wrlock(&irmd->reg_lock);
 
                 registry_sanitize_apis(&irmd->registry);
+
+                pthread_rwlock_wrlock(&irmd->reg_lock);
 
                 list_for_each_safe(pos, n, &irmd->spawned_apis) {
                         struct spawned_api * api =
@@ -1429,6 +1430,11 @@ void * irm_flow_cleaner()
 static void clean_msg(void * msg)
 {
         irm_msg__free_unpacked(msg, NULL);
+}
+
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
 }
 
 void * mainloop()
@@ -1465,6 +1471,7 @@ void * mainloop()
                         continue;
                 }
 
+                pthread_cleanup_push(close_ptr, &cli_sockfd);
                 pthread_cleanup_push(clean_msg, (void *) msg);
 
                 switch (msg->code) {
@@ -1595,6 +1602,7 @@ void * mainloop()
                 }
 
                 pthread_cleanup_pop(true);
+                pthread_cleanup_pop(false);
 
                 buffer.len = irm_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
@@ -1615,16 +1623,11 @@ void * mainloop()
 
                 irm_msg__pack(&ret_msg, buffer.data);
 
-                if (write(cli_sockfd, buffer.data, buffer.len) == -1) {
-                        free(buffer.data);
-                        if (apis != NULL)
-                                free(apis);
-                        close(cli_sockfd);
-                        continue;
-                }
-
                 if (apis != NULL)
                         free(apis);
+
+                if (write(cli_sockfd, buffer.data, buffer.len) == -1)
+                        LOG_ERR("Failed to send reply message.");
 
                 free(buffer.data);
                 close(cli_sockfd);
