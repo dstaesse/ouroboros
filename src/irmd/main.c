@@ -1431,6 +1431,11 @@ static void clean_msg(void * msg)
         irm_msg__free_unpacked(msg, NULL);
 }
 
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
+
 void * mainloop()
 {
         uint8_t buf[IRM_MSG_BUF_SIZE];
@@ -1465,6 +1470,7 @@ void * mainloop()
                         continue;
                 }
 
+                pthread_cleanup_push(close_ptr, &cli_sockfd);
                 pthread_cleanup_push(clean_msg, (void *) msg);
 
                 switch (msg->code) {
@@ -1595,6 +1601,7 @@ void * mainloop()
                 }
 
                 pthread_cleanup_pop(true);
+                pthread_cleanup_pop(false);
 
                 buffer.len = irm_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
@@ -1615,16 +1622,11 @@ void * mainloop()
 
                 irm_msg__pack(&ret_msg, buffer.data);
 
-                if (write(cli_sockfd, buffer.data, buffer.len) == -1) {
-                        free(buffer.data);
-                        if (apis != NULL)
-                                free(apis);
-                        close(cli_sockfd);
-                        continue;
-                }
-
                 if (apis != NULL)
                         free(apis);
+
+                if (write(cli_sockfd, buffer.data, buffer.len) == -1)
+                        LOG_ERR("Failed to send reply message.");
 
                 free(buffer.data);
                 close(cli_sockfd);
