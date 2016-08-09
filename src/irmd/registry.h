@@ -33,6 +33,8 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include "reg_api.h"
+
 #define registry_has_name(r, name) \
         (registry_get_entry_by_name(r, name) != NULL)
 #define registry_name_has_api(r, name) \
@@ -47,8 +49,6 @@ enum reg_name_state {
         REG_NAME_FLOW_ARRIVED,
         REG_NAME_DESTROY
 };
-
-struct reg_api;
 
 /* an entry in the registry */
 struct reg_entry {
@@ -70,9 +70,6 @@ struct reg_entry {
         pthread_cond_t      state_cond;
         pthread_mutex_t     state_lock;
 };
-
-void                  reg_api_sleep(struct reg_api * i);
-void                  reg_api_wake(struct reg_api * i);
 
 struct reg_binding *  reg_entry_get_binding(struct reg_entry * e,
                                             char *             apn);
