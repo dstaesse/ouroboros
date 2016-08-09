@@ -746,7 +746,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                                                 ntohs(size),
                                                 llc_frame->src_hwaddr);
                 } else {
-                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         pthread_rwlock_rdlock(&shim_data(_ipcp)->flows_lock);
 
                         i = addr_and_saps_to_index(llc_frame->src_hwaddr,
@@ -755,7 +754,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         if (i < 0) {
                                 pthread_rwlock_unlock(&shim_data(_ipcp)->
                                                       flows_lock);
-                                pthread_rwlock_unlock(&_ipcp->state_lock);
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                                 offset = (offset + 1)
                                         & (SHM_BUFFER_SIZE - 1);
@@ -781,7 +779,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                                 ;
 
                         pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
-                        pthread_rwlock_unlock(&_ipcp->state_lock);
                 }
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                 offset = (offset + 1) & (SHM_BUFFER_SIZE -1);
@@ -803,9 +800,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                 uint8_t dsap;
 
                 e = shm_ap_rbuff_read(shim_data(_ipcp)->rb);
-                if (e == NULL) {
+                if (e == NULL)
                         continue;
-                }
 
                 pthread_rwlock_rdlock(&_ipcp->state_lock);
 
@@ -813,12 +809,12 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                         pthread_rwlock_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 len = shm_du_map_read((uint8_t **) &buf,
                                       shim_data(_ipcp)->dum,
                                       e->index);
                 if (len <= 0) {
-                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(e);
                         LOG_ERR("Length of du map read was %d.", len);
                         continue;
@@ -830,7 +826,6 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                 if (i < 0) {
                         free(e);
                         pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
-                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         continue;
                 }
 
@@ -845,8 +840,6 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
 
                 if (shim_data(_ipcp)->dum != NULL)
                         shm_du_map_remove(shim_data(_ipcp)->dum, e->index);
-
-                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 free(e);
         }
