@@ -49,6 +49,5 @@ ssize_t               shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb,
 ssize_t               shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
                                                int port_id,
                                                const struct timespec * timeout);
-pid_t                 shm_ap_rbuff_get_api(struct shm_ap_rbuff * rb);
 void                  shm_ap_rbuff_reset(struct shm_ap_rbuff * rb);
 #endif /* OUROBOROS_SHM_AP_RBUFF_H */

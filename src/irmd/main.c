@@ -524,6 +524,9 @@ static ssize_t list_ipcps(char * name,
         ssize_t count = 0;
         int i = 0;
 
+        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd->reg_lock);
+
         list_for_each(pos, &irmd->ipcps) {
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
@@ -535,6 +538,8 @@ static ssize_t list_ipcps(char * name,
 
         *apis = malloc(count * sizeof(pid_t));
         if (*apis == NULL) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
                 return -1;
         }
 
@@ -546,6 +551,9 @@ static ssize_t list_ipcps(char * name,
                         (*apis)[i++] = tmp->api;
                 }
         }
+
+        pthread_rwlock_unlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
 
         return count;
 }
@@ -884,6 +892,7 @@ static void cleanup_alloc_res(void * o)
         struct irm_flow * f = (struct irm_flow *) o;
         if (f->state == FLOW_PENDING)
                 f->state = FLOW_NULL;
+        pthread_cond_broadcast(&f->state_cond);
         pthread_mutex_unlock(&f->state_lock);
 }
 
@@ -936,6 +945,7 @@ static int flow_alloc_res(int port_id)
         pthread_mutex_lock(&f->state_lock);
 
         if (f->state == FLOW_ALLOCATED) {
+                pthread_cond_broadcast(&f->state_cond);
                 pthread_mutex_unlock(&f->state_lock);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
@@ -943,7 +953,7 @@ static int flow_alloc_res(int port_id)
         }
 
         f->state = FLOW_NULL;
-        pthread_cond_signal(&f->state_cond);
+        pthread_cond_broadcast(&f->state_cond);
         pthread_mutex_unlock(&f->state_lock);
         pthread_rwlock_unlock(&irmd->flows_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
@@ -1040,7 +1050,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 LOG_WARN("Failed to set timestamp.");
 
         pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_rdlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd->reg_lock);
 
         rne = registry_get_entry_by_name(&irmd->registry, dst_name);
         if (rne == NULL) {
@@ -1172,7 +1182,7 @@ static int flow_alloc_reply(int port_id,
         struct irm_flow * f;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_rdlock(&irmd->flows_lock);
+        pthread_rwlock_wrlock(&irmd->flows_lock);
 
         f = get_irm_flow(port_id);
         if (f == NULL) {

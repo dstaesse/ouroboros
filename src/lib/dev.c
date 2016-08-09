@@ -203,6 +203,7 @@ int flow_accept(char ** ae_name)
 
         _ap_instance->flows[cfd].port_id = recv_msg->port_id;
         _ap_instance->flows[cfd].oflags  = FLOW_O_DEFAULT;
+        _ap_instance->flows[cfd].api     = recv_msg->api;
 
         pthread_rwlock_unlock(&_ap_instance->flows_lock);
         pthread_rwlock_unlock(&_ap_instance->data_lock);
@@ -321,8 +322,7 @@ int flow_alloc(char * dst_name,
 
         _ap_instance->flows[fd].port_id = recv_msg->port_id;
         _ap_instance->flows[fd].oflags  = FLOW_O_DEFAULT;
-        _ap_instance->flows[fd].api     =
-                shm_ap_rbuff_get_api(_ap_instance->flows[fd].rb);
+        _ap_instance->flows[fd].api     = recv_msg->api;
 
         pthread_rwlock_unlock(&_ap_instance->flows_lock);
         pthread_rwlock_unlock(&_ap_instance->data_lock);
