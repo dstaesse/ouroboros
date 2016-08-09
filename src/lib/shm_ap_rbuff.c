@@ -247,10 +247,6 @@ void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
                 }
         }
 
-        pthread_mutex_destroy(rb->lock);
-        pthread_cond_destroy(rb->add);
-        pthread_cond_destroy(rb->del);
-
         if (close(rb->fd) < 0)
                 LOG_DBG("Couldn't close shared memory.");
 
@@ -326,13 +322,14 @@ int shm_ap_rbuff_peek(struct shm_ap_rbuff * rb,
                         pthread_mutex_consistent(rb->lock);
                 }
 
-                if (ret == ETIMEDOUT) {
-                        pthread_mutex_unlock(rb->lock);
-                        return -ret;
-                }
+                if (ret == ETIMEDOUT)
+                        break;
         }
 
-        ret = (rb->shm_base + *rb->ptr_tail)->port_id;
+        if (ret != ETIMEDOUT)
+                ret = (rb->shm_base + *rb->ptr_tail)->port_id;
+        else
+                ret = -ETIMEDOUT;
 
         pthread_cleanup_pop(true);
 
@@ -361,14 +358,10 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
         }
 
         e = malloc(sizeof(*e));
-        if (e == NULL) {
-                pthread_mutex_unlock(rb->lock);
-                return NULL;
+        if (e != NULL) {
+                *e = *(rb->shm_base + *rb->ptr_tail);
+                *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_BUFFER_SIZE -1);
         }
-
-        *e = *(rb->shm_base + *rb->ptr_tail);
-
-        *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_BUFFER_SIZE -1);
 
         pthread_cleanup_pop(true);
 
@@ -394,7 +387,6 @@ ssize_t shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb, int port_id)
         *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_BUFFER_SIZE -1);
 
         pthread_cond_broadcast(rb->del);
-
         pthread_mutex_unlock(rb->lock);
 
         return idx;
@@ -421,7 +413,8 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rb->lock);
 
-        while (shm_rbuff_empty(rb) || tail_el_ptr(rb)->port_id != port_id) {
+        while ((shm_rbuff_empty(rb) || tail_el_ptr(rb)->port_id != port_id)
+               && (ret != ETIMEDOUT)) {
                 while (shm_rbuff_empty(rb)) {
                         if (timeout != NULL)
                                 ret = pthread_cond_timedwait(rb->add,
@@ -435,10 +428,8 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
                                 pthread_mutex_consistent(rb->lock);
                         }
 
-                        if (ret == ETIMEDOUT) {
-                                pthread_mutex_unlock(rb->lock);
-                                return -ret;
-                        }
+                        if (ret == ETIMEDOUT)
+                                break;
                 }
 
                 while (tail_el_ptr(rb)->port_id != port_id) {
@@ -454,17 +445,17 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
                                 pthread_mutex_consistent(rb->lock);
                         }
 
-                        if (ret == ETIMEDOUT) {
-                                pthread_mutex_unlock(rb->lock);
-                                return -ret;
-                        }
+                        if (ret == ETIMEDOUT)
+                                break;
                 }
         }
-        idx = tail_el_ptr(rb)->index;
 
-        *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_BUFFER_SIZE -1);
+        if (ret != ETIMEDOUT) {
+                idx = tail_el_ptr(rb)->index;
+                *rb->ptr_tail = (*rb->ptr_tail + 1) & (SHM_BUFFER_SIZE -1);
 
-        pthread_cond_broadcast(rb->del);
+                pthread_cond_broadcast(rb->del);
+        }
 
         pthread_cleanup_pop(true);
 
