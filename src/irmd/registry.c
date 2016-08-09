@@ -503,6 +503,8 @@ struct reg_api * registry_add_api_name(struct list_head * registry,
                 return NULL;
         }
 
+        pthread_mutex_lock(&e->state_lock);
+
         if (e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT
            || e->state == REG_NAME_AUTO_EXEC) {
                 e->state = REG_NAME_FLOW_ACCEPT;
@@ -510,6 +512,8 @@ struct reg_api * registry_add_api_name(struct list_head * registry,
         }
 
         list_add(&i->next, &e->reg_apis);
+
+        pthread_mutex_unlock(&e->state_lock);
 
         return i;
 }

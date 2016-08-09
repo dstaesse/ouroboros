@@ -91,14 +91,11 @@ static void garbage_collect(struct shm_du_map * dum)
 {
 #ifdef SHM_DU_MAP_MULTI_BLOCK
         struct shm_du_buff * sdb;
-        while (!shm_map_empty(dum) &&
-               (sdb = get_tail_ptr(dum))->dst_api == -1)
-
+        while (!shm_map_empty(dum) && (sdb = get_tail_ptr(dum))->dst_api == -1)
                 *dum->ptr_tail = (*dum->ptr_tail + sdb->blocks)
                         & (SHM_BUFFER_SIZE - 1);
 #else
-        while (!shm_map_empty(dum) &&
-               get_tail_ptr(dum)->dst_api == -1)
+        while (!shm_map_empty(dum) && get_tail_ptr(dum)->dst_api == -1)
                 *dum->ptr_tail =
                         (*dum->ptr_tail + 1) & (SHM_BUFFER_SIZE - 1);
 
@@ -296,8 +293,7 @@ void * shm_du_map_sanitize(void * o)
                 struct timespec now;
                 struct timespec dl;
 
-                if (pthread_cond_wait(dum->full, dum->lock)
-                        == EOWNERDEAD) {
+                if (pthread_cond_wait(dum->full, dum->lock) == EOWNERDEAD) {
                         LOG_WARN("Recovering dead mutex.");
                         pthread_mutex_consistent(dum->lock);
                 }

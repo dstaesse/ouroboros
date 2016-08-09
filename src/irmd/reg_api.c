@@ -111,8 +111,11 @@ void reg_api_wake(struct reg_api * i)
 
         pthread_cond_broadcast(&i->state_cond);
 
+        pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+                             (void *) &i->state_lock);
+
         while (i->state == REG_I_WAKE)
                 pthread_cond_wait(&i->state_cond, &i->state_lock);
 
-        pthread_mutex_unlock(&i->state_lock);
+        pthread_cleanup_pop(true);
 }
