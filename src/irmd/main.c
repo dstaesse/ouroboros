@@ -67,8 +67,7 @@ struct ipcp_entry {
 
 enum irm_state {
         IRMD_NULL = 0,
-        IRMD_RUNNING,
-        IRMD_SHUTDOWN
+        IRMD_RUNNING
 };
 
 struct spawned_api {
@@ -718,7 +717,14 @@ static struct irm_flow * flow_accept(pid_t   api,
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        reg_api_sleep(rgi);
+        while (reg_api_sleep(rgi) == -ETIMEDOUT) {
+                pthread_rwlock_rdlock(&irmd->state_lock);
+                if (irmd->state != IRMD_RUNNING) {
+                        pthread_rwlock_unlock(&irmd->state_lock);
+                        break;
+                }
+                pthread_rwlock_unlock(&irmd->state_lock);
+        }
 
         pthread_rwlock_rdlock(&irmd->state_lock);
         pthread_rwlock_rdlock(&irmd->reg_lock);
@@ -887,15 +893,6 @@ static struct irm_flow * flow_alloc(pid_t  api,
         return f;
 }
 
-static void cleanup_alloc_res(void * o)
-{
-        struct irm_flow * f = (struct irm_flow *) o;
-        if (f->state == FLOW_PENDING)
-                f->state = FLOW_NULL;
-        pthread_cond_broadcast(&f->state_cond);
-        pthread_mutex_unlock(&f->state_lock);
-}
-
 static int flow_alloc_res(int port_id)
 {
         struct irm_flow * f;
@@ -933,12 +930,11 @@ static int flow_alloc_res(int port_id)
         pthread_rwlock_unlock(&irmd->state_lock);
 
         pthread_mutex_lock(&f->state_lock);
-        pthread_cleanup_push(cleanup_alloc_res, (void *) f);
 
         while (f->state == FLOW_PENDING)
                 pthread_cond_wait(&f->state_cond, &f->state_lock);
 
-        pthread_cleanup_pop(true);
+        pthread_mutex_unlock(&f->state_lock);
 
         pthread_rwlock_rdlock(&irmd->state_lock);
         pthread_rwlock_wrlock(&irmd->flows_lock);
@@ -1103,13 +1099,11 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->state_lock);
 
                 pthread_mutex_lock(&rne->state_lock);
-                pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
-                                     (void *) &rne->state_lock);
 
                 while (rne->state == REG_NAME_AUTO_EXEC)
                         pthread_cond_wait(&rne->state_cond, &rne->state_lock);
 
-                pthread_cleanup_pop(true);
+                pthread_mutex_unlock(&rne->state_lock);
 
                 pthread_rwlock_rdlock(&irmd->state_lock);
                 pthread_rwlock_rdlock(&irmd->reg_lock);
@@ -1165,13 +1159,11 @@ static struct irm_flow * flow_req_arr(pid_t  api,
         reg_api_wake(rgi);
 
         pthread_mutex_lock(&rne->state_lock);
-        pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
-                             (void *) &rne->state_lock);
 
         while (rne->state == REG_NAME_FLOW_ARRIVED)
                 pthread_cond_wait(&rne->state_cond, &rne->state_lock);
 
-        pthread_cleanup_pop(true);
+        pthread_mutex_unlock(&rne->state_lock);
 
         return f;
 }
@@ -1304,26 +1296,17 @@ static void irm_destroy()
 
 void irmd_sig_handler(int sig, siginfo_t * info, void * c)
 {
-        int i;
-
         switch(sig) {
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
+                LOG_INFO("IRMd shutting down...");
+
                 pthread_rwlock_wrlock(&irmd->state_lock);
 
                 irmd->state = IRMD_NULL;
 
                 pthread_rwlock_unlock(&irmd->state_lock);
-
-                if (irmd->threadpool != NULL) {
-                        for (i = 0; i < IRMD_THREADPOOL_SIZE; i++)
-                                pthread_cancel(irmd->threadpool[i]);
-
-                }
-
-                pthread_cancel(irmd->shm_sanitize);
-                pthread_cancel(irmd->cleanup_flows);
                 break;
         case SIGPIPE:
                 LOG_DBG("Ignored SIGPIPE.");
@@ -1349,7 +1332,7 @@ void * irm_flow_cleaner()
 
                 pthread_rwlock_rdlock(&irmd->state_lock);
 
-                if (irmd->state == IRMD_NULL) {
+                if (irmd->state != IRMD_RUNNING) {
                         pthread_rwlock_unlock(&irmd->state_lock);
                         return (void *) 0;
                 }
@@ -1427,16 +1410,6 @@ void * irm_flow_cleaner()
         }
 }
 
-static void clean_msg(void * msg)
-{
-        irm_msg__free_unpacked(msg, NULL);
-}
-
-static void close_ptr(void * o)
-{
-        close(*((int *) o));
-}
-
 void * mainloop()
 {
         uint8_t buf[IRM_MSG_BUF_SIZE];
@@ -1450,13 +1423,18 @@ void * mainloop()
                 struct irm_flow * e = NULL;
                 pid_t * apis = NULL;
 
+                pthread_rwlock_rdlock(&irmd->state_lock);
+                if (irmd->state != IRMD_RUNNING) {
+                        pthread_rwlock_unlock(&irmd->state_lock);
+                        break;
+                }
+                pthread_rwlock_unlock(&irmd->state_lock);
+
                 ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
 
                 cli_sockfd = accept(irmd->sockfd, 0, 0);
-                if (cli_sockfd < 0) {
-                        LOG_ERR("Cannot accept new connection.");
+                if (cli_sockfd < 0)
                         continue;
-                }
 
                 count = read(cli_sockfd, buf, IRM_MSG_BUF_SIZE);
                 if (count <= 0) {
@@ -1470,9 +1448,6 @@ void * mainloop()
                         close(cli_sockfd);
                         continue;
                 }
-
-                pthread_cleanup_push(close_ptr, &cli_sockfd);
-                pthread_cleanup_push(clean_msg, (void *) msg);
 
                 switch (msg->code) {
                 case IRM_MSG_CODE__IRM_CREATE_IPCP:
@@ -1601,8 +1576,7 @@ void * mainloop()
                         break;
                 }
 
-                pthread_cleanup_pop(true);
-                pthread_cleanup_pop(false);
+                irm_msg__free_unpacked(msg, NULL);
 
                 buffer.len = irm_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
@@ -1632,11 +1606,15 @@ void * mainloop()
                 free(buffer.data);
                 close(cli_sockfd);
         }
+
+        return (void *) 0;
 }
 
 static struct irm * irm_create()
 {
         struct stat st = {0};
+        struct timeval timeout = {(IRMD_ACCEPT_TIMEOUT / 1000),
+                                  (IRMD_ACCEPT_TIMEOUT % 1000) * 1000};
 
         irmd = malloc(sizeof(*irmd));
         if (irmd == NULL)
@@ -1689,6 +1667,16 @@ static struct irm * irm_create()
 
         irmd->sockfd = server_socket_open(IRM_SOCK_PATH);
         if (irmd->sockfd < 0) {
+                irm_destroy();
+                return NULL;
+        }
+
+        if (setsockopt(irmd->sockfd,
+                       SOL_SOCKET,
+                       SO_RCVTIMEO,
+                       (char *) &timeout,
+                       sizeof(timeout)) < 0) {
+                LOG_ERR("Failed setting socket option.");
                 irm_destroy();
                 return NULL;
         }
@@ -1846,12 +1834,16 @@ int main(int argc, char ** argv)
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)
                 pthread_join(irmd->threadpool[t], NULL);
 
-        pthread_join(irmd->shm_sanitize, NULL);
         pthread_join(irmd->cleanup_flows, NULL);
+
+        pthread_cancel(irmd->shm_sanitize);
+        pthread_join(irmd->shm_sanitize, NULL);
 
         irm_destroy();
 
         close_logfile();
+
+        LOG_INFO("Bye.");
 
         exit(EXIT_SUCCESS);
 }

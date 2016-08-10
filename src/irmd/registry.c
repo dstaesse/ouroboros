@@ -22,8 +22,6 @@
 
 #include "registry.h"
 
-#include <ouroboros/config.h>
-
 #define OUROBOROS_PREFIX "registry"
 
 #include <ouroboros/errno.h>

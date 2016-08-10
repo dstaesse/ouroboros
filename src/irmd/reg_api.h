@@ -49,7 +49,7 @@ struct reg_api {
 
 struct reg_api * reg_api_create(pid_t pid);
 void             reg_api_destroy(struct reg_api * i);
-void             reg_api_sleep(struct reg_api * i);
+int              reg_api_sleep(struct reg_api * i);
 void             reg_api_wake(struct reg_api * i);
 
 #endif /* OUROBOROS_IRMD_REG_API_H */
