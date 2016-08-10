@@ -175,6 +175,11 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
+        if (api_bind(conf->dif_name) < 0) {
+                printf("Failed to bind the server api.");
+                return -1;
+        }
+
         _ipcp->state = IPCP_ENROLLED;
 
         pthread_rwlock_unlock(&_ipcp->state_lock);

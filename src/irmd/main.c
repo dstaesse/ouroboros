@@ -43,6 +43,7 @@
 #include "utils.h"
 #include "registry.h"
 #include "irm_flow.h"
+#include "api_table.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -78,8 +79,6 @@ struct spawned_api {
         pid_t            api;
 };
 
-/* keeps track of port_id's between N and N - 1 */
-
 struct irm {
         /* FIXME: list of ipcps could be merged into the registry */
         struct list_head    ipcps;
@@ -87,6 +86,7 @@ struct irm {
         struct list_head    registry;
         pthread_rwlock_t    reg_lock;
 
+        struct list_head    api_table;
         struct list_head    spawned_apis;
 
         /* keep track of all flows in this processing system */
@@ -717,13 +717,58 @@ static int ap_unreg(char *  name,
         return ret;
 }
 
+static int api_bind(pid_t api, char * apn, char * ap_subset)
+{
+        int ret = 0;
+        char * apn_dup;
+        char * ap_s_dup = ap_subset;
+        if (apn == NULL)
+                return -EINVAL;
+
+        pthread_rwlock_rdlock(&irmd->state_lock);
+
+        if (irmd->state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd->state_lock);
+                return -EPERM;
+        }
+
+        pthread_rwlock_wrlock(&irmd->reg_lock);
+
+        apn_dup = strdup(apn);
+        if (apn_dup == NULL) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                return -ENOMEM;
+        }
+
+        if (ap_subset != NULL) {
+                ap_s_dup = strdup(ap_subset);
+                if (ap_s_dup == NULL) {
+                        pthread_rwlock_unlock(&irmd->reg_lock);
+                        pthread_rwlock_unlock(&irmd->state_lock);
+                        return -ENOMEM;
+                }
+        }
+
+        ret = api_table_add_api(&irmd->api_table,
+                                api,
+                                apn_dup,
+                                ap_s_dup);
+
+        pthread_rwlock_unlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
+
+        return ret;
+}
+
 static struct irm_flow * flow_accept(pid_t   api,
-                                     char *  srv_ap_name,
                                      char ** dst_ae_name)
 {
         struct irm_flow *  f   = NULL;
         struct reg_entry * rne = NULL;
         struct reg_api *   rgi = NULL;
+
+        char * srv_ap_name;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
 
@@ -733,6 +778,10 @@ static struct irm_flow * flow_accept(pid_t   api,
         }
 
         pthread_rwlock_wrlock(&irmd->reg_lock);
+
+        srv_ap_name = api_table_get_apn(&irmd->api_table, api);
+        if (srv_ap_name == NULL)
+                return NULL;
 
         rne = registry_get_entry_by_apn(&irmd->registry, srv_ap_name);
         if (rne == NULL) {
@@ -1458,6 +1507,18 @@ void * irm_flow_cleaner()
                         }
                 }
 
+                list_for_each_safe(pos, n, &irmd->api_table) {
+                        struct api_entry * e =
+                                list_entry(pos, struct api_entry, next);
+
+                        if (kill(e->api, 0) < 0) {
+                                LOG_INFO("Instance %d removed from api table.",
+                                         e->api);
+                                list_del(&e->next);
+                                api_entry_destroy(e);
+                        }
+                }
+
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
 
@@ -1548,6 +1609,12 @@ void * mainloop()
                                                      msg->ap_name,
                                                      msg->opts);
                         break;
+                case IRM_MSG_CODE__IRM_API_BIND:
+                        ret_msg.has_result = true;
+                        ret_msg.result = api_bind(msg->api,
+                                                  msg->ap_name,
+                                                  msg->ap_subset);
+                        break;
                 case IRM_MSG_CODE__IRM_LIST_IPCPS:
                         ret_msg.n_apis = list_ipcps(msg->dst_name,
                                                     &apis);
@@ -1568,7 +1635,6 @@ void * mainloop()
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                         e = flow_accept(msg->api,
-                                        msg->ap_name,
                                         &ret_msg.ae_name);
 
                         if (e == NULL) {
@@ -1706,6 +1772,7 @@ static struct irm * irm_create()
         }
 
         INIT_LIST_HEAD(&irmd->ipcps);
+        INIT_LIST_HEAD(&irmd->api_table);
         INIT_LIST_HEAD(&irmd->spawned_apis);
         INIT_LIST_HEAD(&irmd->registry);
         INIT_LIST_HEAD(&irmd->irm_flows);

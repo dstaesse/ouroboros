@@ -6,6 +6,7 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(SOURCE_FILES
         # Add source files here
+        api_table.c
         irm_flow.c
         main.c
         reg_api.c

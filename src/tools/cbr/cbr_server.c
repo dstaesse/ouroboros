@@ -206,7 +206,7 @@ int server_main()
             sigaction(SIGHUP,  &sig_act, NULL) ||
             sigaction(SIGPIPE, &sig_act, NULL)) {
                 printf("Failed to install sighandler.\n");
-                exit(EXIT_FAILURE);
+                return -1;
         }
 
         if (pthread_mutex_init(&fds_lock, NULL)) {
@@ -216,7 +216,12 @@ int server_main()
 
         if (pthread_cond_init(&fds_signal, NULL)) {
                 printf("Failed to init cond.\n");
-                exit(EXIT_FAILURE);
+                return -1;
+        }
+
+        if (api_bind(NULL) < 0) {
+                printf("Failed to bind the server api.");
+                return -1;
         }
 
         for (i = 0; i < THREADS_SIZE; i++)

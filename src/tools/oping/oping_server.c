@@ -148,6 +148,11 @@ int server_main()
                 return -1;
         }
 
+        if (api_bind(NULL) < 0) {
+                printf("Failed to bind the server instance.");
+                return -1;
+        }
+
         pthread_create(&server.cleaner_pt, NULL, cleaner_thread, NULL);
         pthread_create(&server.accept_pt, NULL, accept_thread, NULL);
         pthread_create(&server.server_pt, NULL, server_thread, NULL);

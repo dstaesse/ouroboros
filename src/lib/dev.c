@@ -134,6 +134,42 @@ void ap_fini(void)
         free(_ap_instance);
 }
 
+int api_bind(char * ap_subset)
+{
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
+
+        msg.code    = IRM_MSG_CODE__IRM_API_BIND;
+        msg.has_api = true;
+
+        if (_ap_instance->ap_name == NULL)
+                return -EPERM; /* call init first */
+
+        pthread_rwlock_rdlock(&_ap_instance->data_lock);
+
+        msg.api = _ap_instance->api;
+        msg.ap_name = _ap_instance->ap_name;
+
+        pthread_rwlock_unlock(&_ap_instance->data_lock);
+
+        msg.ap_subset = ap_subset;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL) {
+                return -1;
+        }
+
+        if (!recv_msg->has_result || (ret = recv_msg->result)) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return ret;
+        }
+
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
 static int port_id_to_fd(int port_id)
 {
         int i;
@@ -154,7 +190,6 @@ int flow_accept(char ** ae_name)
 
         pthread_rwlock_rdlock(&_ap_instance->data_lock);
 
-        msg.ap_name = _ap_instance->ap_name;
         msg.api     = _ap_instance->api;
 
         pthread_rwlock_unlock(&_ap_instance->data_lock);
