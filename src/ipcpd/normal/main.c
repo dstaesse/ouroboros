@@ -27,6 +27,7 @@
 #include <ouroboros/shm_du_map.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/ipcp.h>
 
 #include <stdbool.h>
 #include <signal.h>
@@ -325,6 +326,15 @@ int main(int argc, char * argv[])
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         pthread_rwlock_unlock(&_ipcp->state_lock);
+
+        if (ipcp_create_r(getpid())) {
+                LOG_ERR("Failed to notify IRMd we are initialized.");
+                normal_ipcp_data_destroy();
+                fmgr_fini();
+                free(_ipcp);
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
 
         pthread_join(normal_data(_ipcp)->mainloop, NULL);
 

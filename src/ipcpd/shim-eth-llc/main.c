@@ -1379,6 +1379,12 @@ int main(int argc, char * argv[])
 
         pthread_rwlock_unlock(&_ipcp->state_lock);
 
+        if (ipcp_create_r(getpid())) {
+                LOG_ERR("Failed to notify IRMd we are initialized.");
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
+
         pthread_join(shim_data(_ipcp)->mainloop, NULL);
 
         eth_llc_ipcp_data_destroy();

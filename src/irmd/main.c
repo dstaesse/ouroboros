@@ -63,6 +63,9 @@ struct ipcp_entry {
         pid_t            api;
         enum ipcp_type   type;
         char *           dif_name;
+        pthread_cond_t   init_cond;
+        pthread_mutex_t  init_lock;
+        bool             init;
 };
 
 enum irm_state {
@@ -244,8 +247,11 @@ static pid_t create_ipcp(char *         name,
                 return -1;
         }
 
+        pthread_rwlock_wrlock(&irmd->reg_lock);
+
         api->api = ipcp_create(ipcp_type);
         if (api->api == -1) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Failed to create IPCP.");
                 return -1;
@@ -253,6 +259,7 @@ static pid_t create_ipcp(char *         name,
 
         tmp = ipcp_entry_create();
         if (tmp == NULL) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return -1;
         }
@@ -263,14 +270,17 @@ static pid_t create_ipcp(char *         name,
         tmp->name = strdup(name);
         if (tmp->name  == NULL) {
                 ipcp_entry_destroy(tmp);
+                pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return -1;
         }
 
+        pthread_cond_init(&tmp->init_cond, NULL);
+        pthread_mutex_init(&tmp->init_lock, NULL);
+
         tmp->dif_name = NULL;
         tmp->type = ipcp_type;
-
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        tmp->init = false;
 
         list_for_each(pos, &irmd->ipcps) {
                 struct ipcp_entry * e =
@@ -283,12 +293,44 @@ static pid_t create_ipcp(char *         name,
 
         list_add(&api->next, &irmd->spawned_apis);
 
+        pthread_mutex_lock(&tmp->init_lock);
+
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
+
+        while (tmp->init == false)
+                pthread_cond_wait(&tmp->init_cond, &tmp->init_lock);
+
+        pthread_mutex_unlock(&tmp->init_lock);
 
         LOG_INFO("Created IPCP %d.", api->api);
 
         return api->api;
+}
+
+static int create_ipcp_r(pid_t api)
+{
+        struct list_head * pos = NULL;
+
+        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd->reg_lock);
+
+        list_for_each(pos, &irmd->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(pos, struct ipcp_entry, next);
+
+                if (e->api == api) {
+                        pthread_mutex_lock(&e->init_lock);
+                        e->init = true;
+                        pthread_cond_broadcast(&e->init_cond);
+                        pthread_mutex_unlock(&e->init_lock);
+                }
+        }
+
+        pthread_rwlock_unlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
+
+        return 0;
 }
 
 static void clear_spawned_api(pid_t api)
@@ -1492,6 +1534,10 @@ void * mainloop()
                         ret_msg.has_result = true;
                         ret_msg.result = create_ipcp(msg->dst_name,
                                                      msg->ipcp_type);
+                        break;
+                case IRM_MSG_CODE__IPCP_CREATE_R:
+                        ret_msg.has_result = true;
+                        ret_msg.result = create_ipcp_r(msg->api);
                         break;
                 case IRM_MSG_CODE__IRM_DESTROY_IPCP:
                         ret_msg.has_result = true;
