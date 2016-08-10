@@ -261,13 +261,13 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+
         if (_ipcp->state != IPCP_INIT) {
                 pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("IPCP in wrong state.");
                 return -1;
         }
-
-        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         _ipcp->state = IPCP_ENROLLED;
 
