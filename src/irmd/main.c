@@ -1477,6 +1477,8 @@ void * mainloop()
                 irm_msg_t ret_msg = IRM_MSG__INIT;
                 struct irm_flow * e = NULL;
                 pid_t * apis = NULL;
+                struct timeval tv = {(SOCKET_TIMEOUT / 1000),
+                                     (SOCKET_TIMEOUT % 1000) * 1000};
 
                 pthread_rwlock_rdlock(&irmd->state_lock);
                 if (irmd->state != IRMD_RUNNING) {
@@ -1490,6 +1492,10 @@ void * mainloop()
                 cli_sockfd = accept(irmd->sockfd, 0, 0);
                 if (cli_sockfd < 0)
                         continue;
+
+                if (setsockopt(cli_sockfd, SOL_SOCKET, SO_RCVTIMEO,
+                               (void *) &tv, sizeof(tv)))
+                        LOG_WARN("Failed to set timeout on socket.");
 
                 count = read(cli_sockfd, buf, IRM_MSG_BUF_SIZE);
                 if (count <= 0) {
@@ -1639,7 +1645,7 @@ void * mainloop()
 
                 buffer.len = irm_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
-                        LOG_ERR("Failed to send reply message.");
+                        LOG_ERR("Failed to calculate length of reply message.");
                         if (apis != NULL)
                                 free(apis);
                         close(cli_sockfd);
@@ -1660,7 +1666,7 @@ void * mainloop()
                         free(apis);
 
                 if (write(cli_sockfd, buffer.data, buffer.len) == -1)
-                        LOG_ERR("Failed to send reply message.");
+                        LOG_WARN("Failed to send reply message.");
 
                 free(buffer.data);
                 close(cli_sockfd);
@@ -1730,11 +1736,8 @@ static struct irm * irm_create()
                 return NULL;
         }
 
-        if (setsockopt(irmd->sockfd,
-                       SOL_SOCKET,
-                       SO_RCVTIMEO,
-                       (char *) &timeout,
-                       sizeof(timeout)) < 0) {
+        if (setsockopt(irmd->sockfd, SOL_SOCKET, SO_RCVTIMEO,
+                       (char *) &timeout, sizeof(timeout)) < 0) {
                 LOG_ERR("Failed setting socket option.");
                 irm_destroy();
                 return NULL;

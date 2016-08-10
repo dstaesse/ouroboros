@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <sys/time.h>
 
 int client_socket_open(char * file_name)
 {
@@ -106,16 +107,24 @@ void close_ptr(void * o)
         close(*(int *) o);
 }
 
-irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
+static irm_msg_t * send_recv_irm_msg_timed(irm_msg_t * msg,
+                                           bool timed)
 {
         int sockfd;
         buffer_t buf;
         ssize_t count = 0;
         irm_msg_t * recv_msg = NULL;
+        struct timeval tv = {(SOCKET_TIMEOUT / 1000),
+                             (SOCKET_TIMEOUT % 1000) * 1000};
 
         sockfd = client_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0)
                 return NULL;
+
+        if (timed)
+                if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,
+                               (void *) &tv, sizeof(tv)))
+                        LOG_WARN("Failed to set timeout on socket.");
 
         buf.len = irm_msg__get_packed_size(msg);
         if (buf.len == 0) {
@@ -147,6 +156,11 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
         return recv_msg;
 }
 
+irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
+{ return send_recv_irm_msg_timed(msg, true); }
+
+irm_msg_t * send_recv_irm_msg_b(irm_msg_t * msg)
+{ return send_recv_irm_msg_timed(msg, false); }
 
 char * ipcp_sock_path(pid_t api)
 {

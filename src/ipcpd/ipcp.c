@@ -113,6 +113,9 @@ void * ipcp_main_loop(void * o)
 
         char * sock_path;
 
+        struct timeval tv = {(SOCKET_TIMEOUT / 1000),
+                             (SOCKET_TIMEOUT % 1000) * 1000};
+
         if (_ipcp == NULL) {
                 LOG_ERR("Invalid ipcp struct.");
                 return (void *) 1;
@@ -140,6 +143,10 @@ void * ipcp_main_loop(void * o)
                         LOG_ERR("Cannot accept new connection");
                         break;
                 }
+
+                if (setsockopt(lsockfd, SOL_SOCKET, SO_RCVTIMEO,
+                               (void *) &tv, sizeof(tv)))
+                        LOG_WARN("Failed to set timeout on socket.");
 
                 pthread_cleanup_push(close_ptr, (void *) &lsockfd);
 
