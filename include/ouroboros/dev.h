@@ -36,6 +36,9 @@
 int     ap_init(char * ap_name);
 void    ap_fini(void);
 
+/* This call binds an instance to a specific subset of applications */
+int     api_bind(char * ap_subset);
+
 /* Returns file descriptor (> 0) and client AE name. */
 int     flow_accept(char ** ae_name);
 int     flow_alloc_resp(int fd, int result);
