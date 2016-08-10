@@ -159,10 +159,9 @@ int flow_accept(char ** ae_name)
 
         pthread_rwlock_unlock(&_ap_instance->data_lock);
 
-        recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
+        recv_msg = send_recv_irm_msg_b(&msg);
+        if (recv_msg == NULL)
                 return -1;
-        }
 
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -358,7 +357,7 @@ int flow_alloc_res(int fd)
         pthread_rwlock_unlock(&_ap_instance->flows_lock);
         pthread_rwlock_unlock(&_ap_instance->data_lock);
 
-        recv_msg = send_recv_irm_msg(&msg);
+        recv_msg = send_recv_irm_msg_b(&msg);
         if (recv_msg == NULL) {
                 return -1;
         }

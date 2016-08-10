@@ -37,6 +37,8 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 
 static void close_ptr(void * o)
 {
@@ -51,6 +53,8 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
        char * sock_path = NULL;
        ssize_t count = 0;
        ipcp_msg_t * recv_msg = NULL;
+       struct timeval tv = {(SOCKET_TIMEOUT / 1000),
+                            (SOCKET_TIMEOUT % 1000) * 1000};
 
        sock_path = ipcp_sock_path(api);
        if (sock_path == NULL)
@@ -61,6 +65,10 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
                free(sock_path);
                return NULL;
        }
+
+       if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,
+                      (void *) &tv, sizeof(tv)))
+               LOG_WARN("Failed to set timeout on socket.");
 
        free(sock_path);
 
