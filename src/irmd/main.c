@@ -1402,9 +1402,9 @@ void * irm_flow_cleaner()
 
                 pthread_rwlock_unlock(&irmd->flows_lock);
 
-                registry_sanitize_apis(&irmd->registry);
-
                 pthread_rwlock_wrlock(&irmd->reg_lock);
+
+                registry_sanitize_apis(&irmd->registry);
 
                 list_for_each_safe(pos, n, &irmd->spawned_apis) {
                         struct spawned_api * api =
