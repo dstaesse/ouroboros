@@ -1337,6 +1337,8 @@ void * irm_flow_cleaner()
         struct timespec now;
         struct list_head * pos = NULL;
         struct list_head * n   = NULL;
+        struct list_head * h   = NULL;
+        struct list_head * t   = NULL;
 
         struct timespec timeout = {IRMD_CLEANUP_TIMER / BILLION,
                                    IRMD_CLEANUP_TIMER % BILLION};
@@ -1415,6 +1417,17 @@ void * irm_flow_cleaner()
                                 LOG_INFO("Spawned process %d terminated "
                                          "with exit status %d.",
                                          api->api, status);
+
+                                list_for_each_safe(h, t, &irmd->ipcps) {
+                                        struct ipcp_entry * e =
+                                                list_entry(h, struct ipcp_entry,
+                                                           next);
+                                        if (e->api == api->api) {
+                                                list_del(&e->next);
+                                                ipcp_entry_destroy(e);
+                                        }
+                                }
+
                                 list_del(&api->next);
                                 free(api);
                         }
