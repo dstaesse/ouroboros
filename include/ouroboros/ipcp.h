@@ -34,6 +34,9 @@ struct ipcp;
 /* Returns the process id */
 pid_t ipcp_create(enum ipcp_type ipcp_type);
 
+/* IPCP calls this when it is initialized */
+int   ipcp_create_r(pid_t api);
+
 int   ipcp_destroy(pid_t api);
 
 int   ipcp_enroll(pid_t  api,

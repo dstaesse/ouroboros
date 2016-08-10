@@ -168,6 +168,31 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
         exit(EXIT_FAILURE);
 }
 
+int ipcp_create_r(pid_t api)
+{
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
+
+        msg.code         = IRM_MSG_CODE__IPCP_CREATE_R;
+        msg.has_api      = true;
+        msg.api          = api;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
 int ipcp_destroy(pid_t api)
 {
         int status;
