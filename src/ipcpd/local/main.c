@@ -261,13 +261,13 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+
         if (_ipcp->state != IPCP_INIT) {
                 pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("IPCP in wrong state.");
                 return -1;
         }
-
-        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         _ipcp->state = IPCP_ENROLLED;
 
@@ -620,6 +620,12 @@ int main(int argc, char * argv[])
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         pthread_rwlock_unlock(&_ipcp->state_lock);
+
+        if (ipcp_create_r(getpid())) {
+                LOG_ERR("Failed to notify IRMd we are initialized.");
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
 
         pthread_join(_ap_instance->mainloop, NULL);
 

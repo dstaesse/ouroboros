@@ -184,12 +184,17 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         }
 
         len = irm_list_ipcps(name, &apis);
-        if (len <= 0)
-                return -1;
+        if (len <= 0) {
+                if (!irm_create_ipcp(name, conf.type))
+                        return -1;
+                len = irm_list_ipcps(name, &apis);
+        }
 
         for (i = 0; i < len; i++)
                 if (irm_bootstrap_ipcp(apis[i], &conf))
                         return -1;
+
+        free(apis);
 
         return 0;
 }

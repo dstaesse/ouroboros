@@ -24,23 +24,24 @@ import "dif_config.proto";
 
 enum irm_msg_code {
         IRM_CREATE_IPCP       =  1;
-        IRM_DESTROY_IPCP      =  2;
-        IRM_LIST_IPCPS        =  3;
-        IRM_BOOTSTRAP_IPCP    =  4;
-        IRM_ENROLL_IPCP       =  5;
-        IRM_BIND              =  6;
-        IRM_UNBIND            =  7;
-        IRM_REG               =  8;
-        IRM_UNREG             =  9;
-        IRM_FLOW_ACCEPT       = 10;
-        IRM_FLOW_ALLOC_RESP   = 11;
-        IRM_FLOW_ALLOC        = 12;
-        IRM_FLOW_ALLOC_RES    = 13;
-        IRM_FLOW_DEALLOC      = 14;
-        IPCP_FLOW_REQ_ARR     = 15;
-        IPCP_FLOW_ALLOC_REPLY = 16;
-        IPCP_FLOW_DEALLOC     = 17;
-        IRM_REPLY             = 18;
+        IPCP_CREATE_R         =  2;
+        IRM_DESTROY_IPCP      =  3;
+        IRM_LIST_IPCPS        =  4;
+        IRM_BOOTSTRAP_IPCP    =  5;
+        IRM_ENROLL_IPCP       =  6;
+        IRM_BIND              =  7;
+        IRM_UNBIND            =  8;
+        IRM_REG               =  9;
+        IRM_UNREG             = 10;
+        IRM_FLOW_ACCEPT       = 11;
+        IRM_FLOW_ALLOC_RESP   = 12;
+        IRM_FLOW_ALLOC        = 13;
+        IRM_FLOW_ALLOC_RES    = 14;
+        IRM_FLOW_DEALLOC      = 15;
+        IPCP_FLOW_REQ_ARR     = 16;
+        IPCP_FLOW_ALLOC_REPLY = 17;
+        IPCP_FLOW_DEALLOC     = 18;
+        IRM_REPLY             = 19;
 };
 
 message irm_msg {
