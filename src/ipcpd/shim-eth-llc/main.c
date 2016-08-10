@@ -379,7 +379,7 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
         header->tp_len = frame_len;
         header->tp_status = TP_STATUS_SEND_REQUEST;
 
-        if (send(fd, NULL, 0, 0) < 0) {
+        if (send(fd, NULL, 0, MSG_DONTWAIT) < 0) {
                 LOG_ERR("Failed to write frame into TX_RING.");
                 return -1;
         }
