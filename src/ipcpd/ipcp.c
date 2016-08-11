@@ -173,6 +173,7 @@ void * ipcp_main_loop(void * o)
                         }
                         conf_msg = msg->conf;
                         conf.type = conf_msg->ipcp_type;
+                        conf.dif_name = conf_msg->dif_name;
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
                                 conf.addr_size = conf_msg->addr_size;
                                 conf.cep_id_size = conf_msg->cep_id_size;
@@ -202,8 +203,7 @@ void * ipcp_main_loop(void * o)
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result =
-                                _ipcp->ops->ipcp_enroll(msg->dif_name);
+                        ret_msg.result = _ipcp->ops->ipcp_enroll(msg->dif_name);
 
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_REG:

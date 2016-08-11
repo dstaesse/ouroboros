@@ -135,7 +135,7 @@ static int normal_ipcp_enroll(char * dif_name)
 
         if (_ipcp->state != IPCP_INIT) {
                 pthread_rwlock_unlock(&_ipcp->state_lock);
-                LOG_DBGF("Won't enroll an IPCP that is not in INIT.");
+                LOG_ERR("Won't enroll an IPCP that is not in INIT.");
                 return -1; /* -ENOTINIT */
         }
 
@@ -161,11 +161,13 @@ static int normal_ipcp_enroll(char * dif_name)
 
 static int normal_ipcp_bootstrap(struct dif_config * conf)
 {
+        LOG_DBGF("bootstrapping in dif %s.", conf->dif_name);
+
         pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_INIT) {
                 pthread_rwlock_unlock(&_ipcp->state_lock);
-                LOG_DBGF("Won't bootstrap an IPCP that is not in INIT.");
+                LOG_ERR("Won't bootstrap an IPCP that is not in INIT.");
                 return -1; /* -ENOTINIT */
         }
 
@@ -176,7 +178,7 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
         }
 
         if (api_bind(conf->dif_name) < 0) {
-                LOG_ERR("Failed to bind the server api.");
+                LOG_ERR("Failed to bind the server AP instance.");
                 return -1;
         }
 
