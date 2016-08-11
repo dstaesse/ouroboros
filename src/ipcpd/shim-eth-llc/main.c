@@ -78,6 +78,8 @@ typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 #define LLC_HEADER_SIZE 3
 #define MAX_SAPS 64
 #define ETH_HEADER_SIZE (2 * MAC_SIZE + 2)
+#define ETH_FRAME_SIZE (SHIM_ETH_LLC_MAX_SDU_SIZE + ETH_HEADER_SIZE +       \
+                        LLC_HEADER_SIZE + 2)
 
 /* global for trapping signal */
 int irmd_api;
@@ -323,11 +325,8 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
                 return -1;
         }
 
-        if (len > SHIM_ETH_LLC_MAX_SDU_SIZE - 2) {
-                LOG_WARN("Payload exceeds MTU (%lu > %d).",
-                         (unsigned long) len, SHIM_ETH_LLC_MAX_SDU_SIZE);
+        if (len > SHIM_ETH_LLC_MAX_SDU_SIZE)
                 return -1;
-        }
 
         fd = (shim_data(_ipcp))->s_fd;
 
@@ -655,8 +654,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         uint8_t ssap;
         int i = 0;
         struct eth_llc_frame * llc_frame;
-
-        uint16_t length;
         uint16_t size;
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
@@ -665,7 +662,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         struct tpacket_hdr * header;
         uint8_t * buf = NULL;
 #else
-        uint8_t buf[SHIM_ETH_LLC_MAX_SDU_SIZE];
+        uint8_t buf[ETH_FRAME_SIZE];
         int frame_len = 0;
 #endif
 
@@ -725,21 +722,10 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         continue;
                 }
 
-                memcpy(&length, &llc_frame->length, sizeof(length));
-
-                if (ntohs(length) > SHIM_ETH_LLC_MAX_SDU_SIZE) {
-                        /* Not an LLC packet. */
-#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                        offset = (offset + 1) & (SHM_BUFFER_SIZE - 1);
-                        header->tp_status = TP_STATUS_KERNEL;
-#endif
-                        continue;
-                }
-
                 dsap = reverse_bits(llc_frame->dsap);
                 ssap = reverse_bits(llc_frame->ssap);
 
-                memcpy(&size, &llc_frame->size, sizeof(length));
+                memcpy(&size, &llc_frame->size, sizeof(size));
 
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
                         eth_llc_ipcp_mgmt_frame(&llc_frame->payload,
@@ -832,9 +818,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                 ssap = reverse_bits(shim_data(_ipcp)->flows[i].sap);
                 dsap = reverse_bits(shim_data(_ipcp)->flows[i].r_sap);
 
-                if (eth_llc_ipcp_send_frame(shim_data(_ipcp)->flows[i].r_addr,
-                                            dsap, ssap, buf, len))
-                        LOG_ERR("Failed to send SDU.");
+                eth_llc_ipcp_send_frame(shim_data(_ipcp)->flows[i].r_addr,
+                                        dsap, ssap, buf, len);
 
                 pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
 
