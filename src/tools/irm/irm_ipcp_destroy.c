@@ -21,6 +21,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <ouroboros/irm.h>
 
@@ -65,6 +66,8 @@ int do_destroy_ipcp(int argc, char ** argv)
         for (i = 0; i < len; i++)
                 if (irm_destroy_ipcp(apis[i]))
                         return -1;
+
+        free(apis);
 
         return 0;
 }
