@@ -21,6 +21,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <ouroboros/irm.h>
 
@@ -63,12 +64,17 @@ int do_enroll_ipcp(int argc, char ** argv)
         }
 
         len = irm_list_ipcps(name, &apis);
-        if (len <= 0)
-                return -1;
+        if (len <= 0) {
+                if (!irm_create_ipcp(name, IPCP_NORMAL))
+                        return -1;
+                len = irm_list_ipcps(name, &apis);
+        }
 
         for (i = 0; i < len; i++)
                 if (irm_enroll_ipcp(apis[i], dif_name))
                         return -1;
+
+        free(apis);
 
         return 0;
 }
