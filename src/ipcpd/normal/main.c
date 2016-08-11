@@ -176,7 +176,7 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
         }
 
         if (api_bind(conf->dif_name) < 0) {
-                printf("Failed to bind the server api.");
+                LOG_ERR("Failed to bind the server api.");
                 return -1;
         }
 
