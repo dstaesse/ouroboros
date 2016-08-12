@@ -42,9 +42,20 @@ struct ipcp * ipcp_instance_create()
         i->irmd_fd = -1;
         i->state   = IPCP_INIT;
 
-        pthread_rwlock_init(&i->state_lock, NULL);
+        pthread_mutex_init(&i->state_lock, NULL);
+        pthread_cond_init(&i->state_cond, NULL);
 
         return i;
+}
+
+void ipcp_state_change(struct ipcp * ipcp,
+                       enum ipcp_state state)
+{
+        if (ipcp == NULL)
+            return;
+
+        ipcp->state = state;
+        pthread_cond_broadcast(&ipcp->state_cond);
 }
 
 int ipcp_parse_arg(int argc, char * argv[])

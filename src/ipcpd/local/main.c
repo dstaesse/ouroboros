@@ -133,7 +133,7 @@ void shim_ap_fini()
         if (_ap_instance == NULL)
                 return;
 
-        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        pthread_mutex_lock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_SHUTDOWN)
                 LOG_WARN("Cleaning up AP while not in shutdown.");
@@ -152,7 +152,7 @@ void shim_ap_fini()
                         shm_ap_rbuff_close(_ap_instance->flows[i].rb);
 
         pthread_rwlock_unlock(&_ap_instance->flows_lock);
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        pthread_mutex_unlock(&_ipcp->state_lock);
 
         free(_ap_instance);
 }
@@ -187,10 +187,10 @@ static void * ipcp_local_sdu_loop(void * o)
                         continue;
                 }
 
-                pthread_rwlock_rdlock(&_ipcp->state_lock);
+                pthread_mutex_lock(&_ipcp->state_lock);
 
                 if (_ipcp->state != IPCP_ENROLLED) {
-                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        pthread_mutex_unlock(&_ipcp->state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
@@ -198,7 +198,7 @@ static void * ipcp_local_sdu_loop(void * o)
                 fd = _ap_instance->in_out[port_id_to_fd(e->port_id)];
                 if (fd == -1) {
                         pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        pthread_mutex_unlock(&_ipcp->state_lock);
                         free(e);
                         continue;
                 }
@@ -209,7 +209,7 @@ static void * ipcp_local_sdu_loop(void * o)
                         ;
 
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
 
                 free(e);
         }
@@ -233,14 +233,14 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         LOG_DBG("Terminating by order of %d. Bye.",
                                 info->si_pid);
 
-                        pthread_rwlock_wrlock(&_ipcp->state_lock);
+                        pthread_mutex_lock(&_ipcp->state_lock);
 
                         if (_ipcp->state == IPCP_ENROLLED)
                                 clean_threads = true;
 
                         _ipcp->state = IPCP_SHUTDOWN;
 
-                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                        pthread_mutex_unlock(&_ipcp->state_lock);
 
                         if (clean_threads) {
                                 pthread_cancel(_ap_instance->sduloop);
@@ -261,10 +261,10 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        pthread_mutex_lock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_INIT) {
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_ERR("IPCP in wrong state.");
                 return -1;
         }
@@ -276,7 +276,7 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
                        ipcp_local_sdu_loop,
                        NULL);
 
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        pthread_mutex_unlock(&_ipcp->state_lock);
 
         LOG_DBG("Bootstrapped local IPCP with api %d.",
                 getpid());
@@ -286,21 +286,21 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
 
 static int ipcp_local_name_reg(char * name)
 {
-        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_mutex_lock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_ENROLLED) {
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
         if (ipcp_data_add_reg_entry(_ipcp->data, name)) {
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Failed to add %s to local registry.", name);
                 return -1;
         }
 
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        pthread_mutex_unlock(&_ipcp->state_lock);
 
         LOG_DBG("Registered %s.", name);
 
@@ -309,11 +309,11 @@ static int ipcp_local_name_reg(char * name)
 
 static int ipcp_local_name_unreg(char * name)
 {
-        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_mutex_lock(&_ipcp->state_lock);
 
         ipcp_data_del_reg_entry(_ipcp->data, name);
 
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        pthread_mutex_unlock(&_ipcp->state_lock);
 
         return 0;
 }
@@ -336,17 +336,17 @@ static int ipcp_local_flow_alloc(pid_t         n_api,
 
         /* This ipcpd has all QoS */
 
-        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_mutex_lock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_ENROLLED) {
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Won't allocate flow with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
         rb = shm_ap_rbuff_open(n_api);
         if (rb == NULL) {
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 return -1; /* -ENORBUFF */
         }
 
@@ -355,7 +355,7 @@ static int ipcp_local_flow_alloc(pid_t         n_api,
         in_fd = bmp_allocate(_ap_instance->fds);
         if (!bmp_is_id_valid(_ap_instance->fds, in_fd)) {
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 return -EMFILE;
         }
 
@@ -372,7 +372,7 @@ static int ipcp_local_flow_alloc(pid_t         n_api,
 
         if (port_id < 0) {
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_ERR("Could not get port id from IRMd");
                 /* shm_ap_rbuff_close(n_api); */
                 return -1;
@@ -382,7 +382,7 @@ static int ipcp_local_flow_alloc(pid_t         n_api,
         if (!bmp_is_id_valid(_ap_instance->fds, out_fd)) {
                 /* shm_ap_rbuff_close(n_api); */
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 return -1; /* -ENOMOREFDS */
         }
 
@@ -394,7 +394,7 @@ static int ipcp_local_flow_alloc(pid_t         n_api,
         _ap_instance->in_out[out_fd] = in_fd;
 
         pthread_rwlock_unlock(&_ap_instance->flows_lock);
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        pthread_mutex_unlock(&_ipcp->state_lock);
 
         LOG_DBGF("Pending local allocation request, port_id %d.", port_id);
 
@@ -413,7 +413,7 @@ static int ipcp_local_flow_alloc_resp(pid_t n_api,
         if (response)
                 return 0;
 
-        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_mutex_lock(&_ipcp->state_lock);
 
         /* awaken pending flow */
 
@@ -422,14 +422,14 @@ static int ipcp_local_flow_alloc_resp(pid_t n_api,
         in_fd = port_id_to_fd(port_id);
         if (in_fd < 0) {
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return -1;
         }
 
         if (_ap_instance->flows[in_fd].state != FLOW_PENDING) {
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Flow was not pending.");
                 return -1;
         }
@@ -441,7 +441,7 @@ static int ipcp_local_flow_alloc_resp(pid_t n_api,
                 _ap_instance->flows[in_fd].port_id = -1;
                 _ap_instance->in_out[in_fd] = -1;
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 return -1;
         }
 
@@ -453,7 +453,7 @@ static int ipcp_local_flow_alloc_resp(pid_t n_api,
         out_fd = _ap_instance->in_out[in_fd];
         if (out_fd < 0) {
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_DBGF("No pending local flow with port_id %d.", port_id);
                 return -1;
         }
@@ -461,7 +461,7 @@ static int ipcp_local_flow_alloc_resp(pid_t n_api,
         if (_ap_instance->flows[out_fd].state != FLOW_PENDING) {
                  /* FIXME: clean up other end */
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Flow was not pending.");
                 return -1;
         }
@@ -469,7 +469,7 @@ static int ipcp_local_flow_alloc_resp(pid_t n_api,
         _ap_instance->flows[out_fd].state = FLOW_ALLOCATED;
 
         pthread_rwlock_unlock(&_ap_instance->flows_lock);
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        pthread_mutex_unlock(&_ipcp->state_lock);
 
         if ((ret = ipcp_flow_alloc_reply(getpid(),
                                          _ap_instance->flows[out_fd].port_id,
@@ -489,13 +489,13 @@ static int ipcp_local_flow_dealloc(int port_id)
         int fd = -1;
         struct shm_ap_rbuff * rb;
 
-        pthread_rwlock_rdlock(&_ipcp->state_lock);
+        pthread_mutex_lock(&_ipcp->state_lock);
         pthread_rwlock_wrlock(&_ap_instance->flows_lock);
 
         fd = port_id_to_fd(port_id);
         if (fd < 0) {
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_mutex_unlock(&_ipcp->state_lock);
                 LOG_DBGF("Could not find flow with port_id %d.", port_id);
                 return 0;
         }
@@ -517,7 +517,7 @@ static int ipcp_local_flow_dealloc(int port_id)
         if (rb != NULL)
                 shm_ap_rbuff_close(rb);
 
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        pthread_mutex_unlock(&_ipcp->state_lock);
 
         LOG_DBGF("Flow with port_id %d deallocated.", port_id);
 
@@ -611,7 +611,7 @@ int main(int argc, char * argv[])
                 exit(EXIT_FAILURE);
         }
 
-        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        pthread_mutex_lock(&_ipcp->state_lock);
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
@@ -619,7 +619,7 @@ int main(int argc, char * argv[])
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        pthread_rwlock_unlock(&_ipcp->state_lock);
+        pthread_mutex_unlock(&_ipcp->state_lock);
 
         if (ipcp_create_r(getpid())) {
                 LOG_ERR("Failed to notify IRMd we are initialized.");

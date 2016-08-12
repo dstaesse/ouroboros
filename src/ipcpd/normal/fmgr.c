@@ -80,21 +80,22 @@ static void * fmgr_listen(void * o)
         int fd;
         char * ae_name;
 
-        /* FIXME: Avoid busy wait and react to pthread_cond_t */
-        pthread_rwlock_rdlock(&_ipcp->state_lock);
-        while (!(_ipcp->state == IPCP_ENROLLED ||
-                 _ipcp->state == IPCP_SHUTDOWN)) {
-                pthread_rwlock_unlock(&_ipcp->state_lock);
-                sched_yield();
-                pthread_rwlock_rdlock(&_ipcp->state_lock);
-        }
+        while (true) {
+                pthread_mutex_lock(&_ipcp->state_lock);
+                while (!(_ipcp->state == IPCP_ENROLLED ||
+                         _ipcp->state == IPCP_SHUTDOWN))
+                        pthread_cond_wait(&_ipcp->state_cond,
+                                          &_ipcp->state_lock);
 
-        while (_ipcp->state != IPCP_SHUTDOWN) {
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                if (_ipcp->state == IPCP_SHUTDOWN) {
+                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        return 0;
+                }
+                pthread_mutex_unlock(&_ipcp->state_lock);
+
                 fd = flow_accept(&ae_name);
                 if (fd < 0) {
                         LOG_ERR("Failed to accept flow.");
-                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         continue;
                 }
 
@@ -103,14 +104,12 @@ static void * fmgr_listen(void * o)
                         if (flow_alloc_resp(fd, -1))
                                 LOG_ERR("Failed to reply to flow allocation.");
                         flow_dealloc(fd);
-                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         continue;
                 }
 
                 if (flow_alloc_resp(fd, 0)) {
                         LOG_ERR("Failed to reply to flow allocation.");
                         flow_dealloc(fd);
-                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         continue;
                 }
 
@@ -121,7 +120,6 @@ static void * fmgr_listen(void * o)
                         if (ribmgr_add_flow(fd)) {
                                 LOG_ERR("Failed to hand fd to RIB.");
                                 flow_dealloc(fd);
-                                pthread_rwlock_rdlock(&_ipcp->state_lock);
                                 continue;
                         }
                 }
@@ -130,7 +128,6 @@ static void * fmgr_listen(void * o)
                         if (frct_dt_flow(fd)) {
                                 LOG_ERR("Failed to hand fd to FRCT.");
                                 flow_dealloc(fd);
-                                pthread_rwlock_rdlock(&_ipcp->state_lock);
                                 continue;
                         }
                 }
@@ -138,11 +135,8 @@ static void * fmgr_listen(void * o)
                 if (add_n_1_fd(fd, ae_name)) {
                         LOG_ERR("Failed to add file descriptor to list.");
                         flow_dealloc(fd);
-                        pthread_rwlock_rdlock(&_ipcp->state_lock);
                         continue;
                 }
-
-                pthread_rwlock_rdlock(&_ipcp->state_lock);
         }
 
         return (void *) 0;

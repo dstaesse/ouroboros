@@ -45,10 +45,13 @@ struct ipcp {
         int                irmd_fd;
 
         enum ipcp_state    state;
-        pthread_rwlock_t   state_lock;
+        pthread_mutex_t    state_lock;
+        pthread_cond_t     state_cond;
 };
 
 struct ipcp * ipcp_instance_create();
+void          ipcp_state_change(struct ipcp * ipcp,
+                                enum ipcp_state state);
 void *        ipcp_main_loop(void * o);
 void *        ipcp_sdu_loop(void * o);
 int           ipcp_parse_arg(int argc, char * argv[]);
