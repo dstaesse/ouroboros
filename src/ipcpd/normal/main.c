@@ -101,7 +101,7 @@ static int normal_ipcp_name_reg(char * name)
 
         if (_ipcp->state != IPCP_ENROLLED) {
                 pthread_mutex_unlock(&_ipcp->state_lock);
-                LOG_DBGF("Won't register with non-enrolled IPCP.");
+                LOG_ERR("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
@@ -158,8 +158,6 @@ static int normal_ipcp_enroll(char * dif_name)
 
 static int normal_ipcp_bootstrap(struct dif_config * conf)
 {
-        LOG_DBGF("Bootstrapping in DIF %s.", conf->dif_name);
-
         pthread_mutex_lock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_INIT) {
@@ -174,14 +172,13 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        if (api_bind(conf->dif_name) < 0) {
-                LOG_ERR("Failed to bind the server AP instance.");
-                return -1;
-        }
-
         ipcp_state_change(_ipcp, IPCP_ENROLLED);
 
+        _ipcp->data->dif_name = conf->dif_name;
+
         pthread_mutex_unlock(&_ipcp->state_lock);
+
+        LOG_DBG("Bootstrapped in DIF %s.", conf->dif_name);
 
         return 0;
 }
@@ -248,7 +245,7 @@ void normal_ipcp_data_destroy()
 
         pthread_mutex_unlock(&_ipcp->state_lock);
 
-        free(_ipcp->data);
+        ipcp_data_destroy(_ipcp->data);
 }
 
 int main(int argc, char * argv[])

@@ -184,7 +184,13 @@ void * ipcp_main_loop(void * o)
                         }
                         conf_msg = msg->conf;
                         conf.type = conf_msg->ipcp_type;
-                        conf.dif_name = conf_msg->dif_name;
+                        conf.dif_name = strdup(conf_msg->dif_name);
+                        if (conf.dif_name == NULL) {
+                                ret_msg.has_result = true;
+                                ret_msg.result = -1;
+                                break;
+                        }
+
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
                                 conf.addr_size = conf_msg->addr_size;
                                 conf.cep_id_size = conf_msg->cep_id_size;
