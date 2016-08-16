@@ -111,6 +111,7 @@ struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
                 return NULL;
 
         dst->type  = ipcp_type;
+        dst->dif_name = NULL;
 
         /* init the lists */
         INIT_LIST_HEAD(&dst->registry);
@@ -156,6 +157,9 @@ void ipcp_data_destroy(struct ipcp_data * data)
         /* clear the lists */
         clear_registry(data);
         clear_directory(data);
+
+        if (data->dif_name != NULL)
+                free(data->dif_name);
 
         pthread_mutex_unlock(&data->dir_lock);
         pthread_mutex_unlock(&data->reg_lock);

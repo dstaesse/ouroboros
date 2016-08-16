@@ -34,6 +34,7 @@
 
 struct ipcp_data {
         enum ipcp_type      type;
+        char *              dif_name;
 
         struct list_head    registry;
         pthread_mutex_t     reg_lock;
