@@ -31,32 +31,6 @@ IF(NOT CMAKE_HAVE_GETHOSTBYNAME)
   ENDIF (CMAKE_LIB_NSL_HAS_GETHOSTBYNAME)
 ENDIF(NOT CMAKE_HAVE_GETHOSTBYNAME)
 
-# Enable DNS by default
-if (NOT DISABLE_DNS MATCHES True)
-  # Find the nsupdate executable
-  find_program(NSUPDATE_EXECUTABLE
-    NAMES nsupdate
-    DOC "The nsupdate tool that enables DDNS")
-
-  if (${NSUPDATE_EXECUTABLE} STREQUAL "NSUPDATE_EXECUTABLE-NOTFOUND")
-    message(FATAL_ERROR "Could not find nsupdate, which is needed for DDNS")
-  else()
-    message("-- Found nsupdate: ${NSUPDATE_EXECUTABLE}")
-  endif()
-
-  # Find the nslookup executable
-  find_program(NSLOOKUP_EXECUTABLE
-    NAMES nslookup
-    DOC "The nslookup tool that resolves DNS names")
-
-  if (${NSLOOKUP_EXECUTABLE} STREQUAL "NSLOOKUP_EXECUTABLE-NOTFOUND")
-    message(FATAL_ERROR
-      "Could not find nslookup, which is needed for DNS resolution")
-  else()
-    message("-- Found nslookup: ${NSLOOKUP_EXECUTABLE}")
-  endif()
-endif()
-
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/shim_udp_config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/shim_udp_config.h")
@@ -72,8 +46,23 @@ add_executable (ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES}
 target_link_libraries (ipcpd-shim-udp LINK_PUBLIC ouroboros
   ${PROTOBUF_C_LIBRARY})
 
-# Enable DNS by default
-if (NOT DISABLE_DNS MATCHES True)
+# Find the nsupdate executable
+find_program(NSUPDATE_EXECUTABLE
+  NAMES nsupdate
+  DOC "The nsupdate tool that enables DDNS")
+
+# Find the nslookup executable
+find_program(NSLOOKUP_EXECUTABLE
+  NAMES nslookup
+  DOC "The nslookup tool that resolves DNS names")
+
+if (${NSUPDATE_EXECUTABLE} STREQUAL "NSUPDATE_EXECUTABLE-NOTFOUND")
+  message("-- Could not find nsupdate. Disabling DDNS functionality.")
+elseif (${NSLOOKUP_EXECUTABLE} STREQUAL "NSLOOKUP_EXECUTABLE-NOTFOUND")
+  message("-- Could not find nslookup. Disabling DNS lookups.")
+else ()
+  message("-- Found nsupdate: ${NSUPDATE_EXECUTABLE}")
+  message("-- Found nslookup: ${NSLOOKUP_EXECUTABLE}")
   MACRO_ADD_COMPILE_FLAGS(ipcpd-shim-udp -DCONFIG_OUROBOROS_ENABLE_DNS)
 endif()
 
