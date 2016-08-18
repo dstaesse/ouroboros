@@ -26,10 +26,12 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/cdap.h>
 #include <ouroboros/list.h>
+#include <ouroboros/time_utils.h>
 
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
+#include <errno.h>
 
 #include "ribmgr.h"
 #include "dt_const.h"
@@ -58,6 +60,9 @@ struct cdap_request {
         char *           name;
         int              invoke_id;
         struct cdap *    instance;
+        int              result;
+        bool             replied;
+        pthread_cond_t   cond;
 
         struct list_head next;
 };
@@ -81,12 +86,19 @@ struct rib {
 } * rib = NULL;
 
 /* Call while holding cdap_reqs_lock */
-int cdap_request_add(struct cdap * instance,
+int cdap_result_wait(struct cdap * instance,
                      enum cdap_opcode code,
                      char * name,
                      int invoke_id)
 {
         struct cdap_request * req;
+        pthread_condattr_t cattr;
+        struct timespec timeout = {(CDAP_REPLY_TIMEOUT / 1000),
+                                   (CDAP_REPLY_TIMEOUT % 1000) * MILLION};
+        struct timespec abstime;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeout, &abstime);
 
         req = malloc(sizeof(*req));
         if (req == NULL)
@@ -95,6 +107,12 @@ int cdap_request_add(struct cdap * instance,
         req->code = code;
         req->invoke_id = invoke_id;
         req->instance = instance;
+        req->result = -1;
+        req->replied = false;
+
+        pthread_condattr_init(&cattr);
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+        pthread_cond_init(&req->cond, &cattr);
 
         req->name = strdup(name);
         if (req->name == NULL) {
@@ -106,7 +124,15 @@ int cdap_request_add(struct cdap * instance,
 
         list_add(&req->next, &rib->cdap_reqs);
 
-        return 0;
+        while (req->replied == false)
+                if (pthread_cond_timedwait(&req->cond,
+                                           &rib->cdap_reqs_lock,
+                                           &abstime) == ETIMEDOUT) {
+                        LOG_ERR("Didn't receive a CDAP reply in time.");
+                        return -1;
+                }
+
+        return req->result;
 }
 
 int ribmgr_init()
@@ -190,6 +216,14 @@ int ribmgr_cdap_reply(struct cdap * instance,
 
                         /* FIXME: In case of a read, update values here */
 
+                        req->replied = true;
+                        req->result = result;
+                        pthread_cond_broadcast(&req->cond);
+                        pthread_mutex_unlock(&rib->cdap_reqs_lock);
+
+                        sched_yield();
+
+                        pthread_mutex_lock(&rib->cdap_reqs_lock);
                         free(req->name);
                         list_del(&req->next);
                         free(req);
@@ -350,11 +384,11 @@ int ribmgr_cdap_start(struct cdap * instance,
                         return -1;
                 }
 
-                if (cdap_request_add(instance, WRITE, STATIC_INFO, iid)) {
+                if (cdap_result_wait(instance, WRITE, STATIC_INFO, iid)) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
                         pthread_mutex_unlock(&_ipcp->state_lock);
                         free(data);
-                        LOG_ERR("Failed to add CDAP request to list.");
+                        LOG_ERR("Remote did not receive static information.");
                         return -1;
                 }
                 pthread_mutex_unlock(&rib->cdap_reqs_lock);
@@ -374,11 +408,11 @@ int ribmgr_cdap_start(struct cdap * instance,
                         return -1;
                 }
 
-                if (cdap_request_add(instance, STOP, ENROLLMENT, iid)) {
+                if (cdap_result_wait(instance, STOP, ENROLLMENT, iid)) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
                         pthread_mutex_unlock(&_ipcp->state_lock);
                         free(data);
-                        LOG_ERR("Failed to add CDAP request to list.");
+                        LOG_ERR("Remote failed to complete enrollment.");
                         return -1;
                 }
                 pthread_mutex_unlock(&rib->cdap_reqs_lock);
@@ -470,10 +504,10 @@ int ribmgr_add_flow(int fd)
                         return -1;
                 }
 
-                if (cdap_request_add(instance, START, ENROLLMENT, iid)) {
+                if (cdap_result_wait(instance, START, ENROLLMENT, iid)) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
                         pthread_rwlock_unlock(&rib->flows_lock);
-                        LOG_ERR("Failed to add CDAP request to list.");
+                        LOG_ERR("Failed to start enrollment.");
                         cdap_destroy(instance);
                         free(flow);
                         return -1;

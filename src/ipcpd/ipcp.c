@@ -33,6 +33,8 @@
 
 struct ipcp * ipcp_instance_create()
 {
+        pthread_condattr_t cattr;
+
         struct ipcp * i = malloc(sizeof *i);
         if (i == NULL)
                 return NULL;
@@ -43,7 +45,9 @@ struct ipcp * ipcp_instance_create()
         i->state   = IPCP_INIT;
 
         pthread_mutex_init(&i->state_lock, NULL);
-        pthread_cond_init(&i->state_cond, NULL);
+        pthread_condattr_init(&cattr);
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+        pthread_cond_init(&i->state_cond, &cattr);
 
         return i;
 }

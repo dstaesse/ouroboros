@@ -41,15 +41,19 @@
 #define SHM_DU_MAP_FILENAME    "/ouroboros.shm"
 #define LOCKFILE_NAME          "/ouroboros.lockfile"
 #define SHM_BUFFER_SIZE        (1 << 14)
-#define SHM_DU_TIMEOUT_MICROS  15000
 #define DU_BUFF_HEADSPACE      128
 #define DU_BUFF_TAILSPACE      0
 #define SHM_AP_RBUFF_PREFIX    "/ouroboros.rbuff."
 #define IRMD_MAX_FLOWS         4096
 #define IRMD_THREADPOOL_SIZE   5
-#define IRMD_ACCEPT_TIMEOUT    100 /* ms */
-#define IRMD_FLOW_TIMEOUT      5000 /* ms */
 #define LOG_DIR                "/@LOG_DIR@/"
-#define SOCKET_TIMEOUT         2000 /* ms */
+#define PTHREAD_COND_CLOCK     CLOCK_MONOTONIC
+/* Timeout values */
+#define SHM_DU_TIMEOUT_MICROS  15000
+#define IRMD_ACCEPT_TIMEOUT    100
+#define IRMD_FLOW_TIMEOUT      5000
+#define SOCKET_TIMEOUT         4000
+#define CDAP_REPLY_TIMEOUT     1000
+#define ENROLL_TIMEOUT         2000
 
 #endif

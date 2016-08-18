@@ -40,8 +40,6 @@
 #include <signal.h>
 #include <sys/stat.h>
 
-#define PTHREAD_COND_CLOCK CLOCK_MONOTONIC
-
 #define SHM_RBUFF_FILE_SIZE (SHM_BUFFER_SIZE * sizeof(struct rb_entry)         \
                              + 2 * sizeof(size_t) + sizeof(pthread_mutex_t)    \
                              + 2 * sizeof (pthread_cond_t))
