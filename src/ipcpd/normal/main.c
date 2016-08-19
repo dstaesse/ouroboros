@@ -28,12 +28,14 @@
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp.h>
+#include <ouroboros/time_utils.h>
 
 #include <stdbool.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
+#include <errno.h>
 
 #include "fmgr.h"
 #include "ribmgr.h"
@@ -131,6 +133,13 @@ static int normal_ipcp_name_unreg(char * name)
 
 static int normal_ipcp_enroll(char * dif_name)
 {
+        struct timespec timeout = {(ENROLL_TIMEOUT / 1000),
+                                   (ENROLL_TIMEOUT % 1000) * MILLION};
+        struct timespec abstime;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeout, &abstime);
+
         pthread_mutex_lock(&_ipcp->state_lock);
 
         if (_ipcp->state != IPCP_INIT) {
@@ -147,10 +156,15 @@ static int normal_ipcp_enroll(char * dif_name)
                 return -1;
         }
 
-        /* FIXME: Change into timedwait, see solution in irmd first */
         pthread_mutex_lock(&_ipcp->state_lock);
         while (_ipcp->state != IPCP_ENROLLED)
-                pthread_cond_wait(&_ipcp->state_cond, &_ipcp->state_lock);
+                if (pthread_cond_timedwait(&_ipcp->state_cond,
+                                           &_ipcp->state_lock,
+                                           &abstime) == ETIMEDOUT) {
+                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        LOG_ERR("Enrollment didn't complete in time.");
+                        return -1;
+                }
         pthread_mutex_unlock(&_ipcp->state_lock);
 
         return 0;
