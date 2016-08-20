@@ -23,24 +23,57 @@
 #ifndef OUROBOROS_IRMD_API_TABLE_H
 #define OUROBOROS_IRMD_API_TABLE_H
 
-#include <unistd.h>
+#include "utils.h"
 
-struct api_entry {
-        struct list_head next;
-        pid_t  api;
-        char * apn;
-        char * ap_subset; /* unique instance identifier */
+#include <unistd.h>
+#include <pthread.h>
+
+enum api_state {
+        API_NULL = 0,
+        API_INIT,
+        API_SLEEP,
+        API_WAKE,
+        API_DESTROY
 };
 
-struct api_entry * api_entry_create(pid_t api, char * apn, char * ap_subset);
+struct api_entry {
+        struct list_head   next;
+        pid_t              api;
+        char *             apn;      /* application process instantiated */
+        char *             daf_name; /* DAF this AP-I belongs to */
+        struct list_head   names;    /* names for which this api accepts flows */
+
+        struct reg_entry * re;       /* reg_entry for which a flow arrived */
+
+        /* the api will block on this */
+        enum api_state     state;
+        pthread_cond_t     state_cond;
+        pthread_mutex_t    state_lock;
+};
+
+struct api_entry * api_entry_create(pid_t  api,
+                                    char * apn);
+
 void               api_entry_destroy(struct api_entry * e);
 
-int    api_table_add_api(struct list_head * api_table,
-                         pid_t api,
-                         char * apn,
-                         char * ap_subset);
-void   api_table_del_api(struct list_head * api_table, pid_t api);
-char * api_table_get_apn(struct list_head * api_table, pid_t api);
-char * api_table_get_ap_subset(struct list_head * api_table, pid_t api);
+int                api_entry_sleep(struct api_entry * e);
+
+void               api_entry_wake(struct api_entry * e,
+                                  struct reg_entry * re);
+
+int                api_entry_add_name(struct api_entry * e,
+                                      char *             name);
+
+void               api_entry_del_name(struct api_entry * e,
+                                      char *             name);
+
+int                api_table_add(struct list_head * api_table,
+                                 struct api_entry * e);
+
+void               api_table_del(struct list_head * api_table,
+                                 pid_t              api);
+
+struct api_entry * api_table_get(struct list_head * api_table,
+                                 pid_t              api);
 
 #endif /* OUROBOROS_IRMD_API_TABLE_H */

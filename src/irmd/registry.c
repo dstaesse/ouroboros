@@ -21,6 +21,7 @@
  */
 
 #include "registry.h"
+#include "utils.h"
 
 #define OUROBOROS_PREFIX "registry"
 
@@ -32,57 +33,14 @@
 #include <stdbool.h>
 #include <string.h>
 #include <signal.h>
-
-#define reg_entry_has_auto_binding(e)  (reg_entry_get_auto_info(e) != NULL)
-#define reg_entry_has_api(e, api)      (reg_entry_get_reg_api(e, api) != NULL)
-#define reg_entry_has_binding(e, name) (reg_entry_get_binding(e, name) != NULL)
-
-
-struct reg_binding {
-        struct list_head next;
-        char *           apn;
-        uint32_t         flags;
-        char **          argv;
-};
+#include <unistd.h>
+#include <limits.h>
 
 struct reg_dif {
         struct list_head next;
         char *           dif_name;
         enum ipcp_type   type;
 };
-
-static struct reg_binding * reg_binding_create(char *   apn,
-                                               uint32_t flags,
-                                               char **  argv)
-{
-        struct reg_binding * b = malloc(sizeof(*b));
-        if (b == NULL)
-                return NULL;
-
-        INIT_LIST_HEAD(&b->next);
-
-        b->apn   = apn;
-        b->flags = flags;
-        b->argv  = argv;
-
-        return b;
-}
-
-static void reg_binding_destroy(struct reg_binding * b)
-{
-        if (b == NULL)
-                return;
-
-        if (b->argv != NULL) {
-                char ** t = b->argv;
-                while (*t != NULL)
-                        free(*t++);
-                free(b->argv);
-        }
-
-        free(b->apn);
-        free(b);
-}
 
 static struct reg_entry * reg_entry_create()
 {
@@ -107,7 +65,7 @@ static struct reg_entry * reg_entry_init(struct reg_entry * e,
 
         INIT_LIST_HEAD(&e->next);
         INIT_LIST_HEAD(&e->difs);
-        INIT_LIST_HEAD(&e->bindings);
+        INIT_LIST_HEAD(&e->reg_apns);
         INIT_LIST_HEAD(&e->reg_apis);
 
         e->name = name;
@@ -125,8 +83,8 @@ static struct reg_entry * reg_entry_init(struct reg_entry * e,
 
 static void reg_entry_destroy(struct reg_entry * e)
 {
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
+        struct list_head * p = NULL;
+        struct list_head * h = NULL;
 
         if (e == NULL)
                 return;
@@ -144,20 +102,22 @@ static void reg_entry_destroy(struct reg_entry * e)
         if (e->name != NULL)
                 free(e->name);
 
-        list_for_each_safe(pos, n, &e->reg_apis) {
-                struct reg_api * i = list_entry(pos, struct reg_api, next);
-                reg_api_destroy(i);
+        list_for_each_safe(p, h, &e->reg_apis) {
+                struct pid_el * i = list_entry(p, struct pid_el, next);
+                list_del(&i->next);
+                free(i);
         }
 
-        list_for_each_safe(pos, n, &e->bindings) {
-                struct reg_binding * b =
-                        list_entry(pos, struct reg_binding, next);
-                reg_binding_destroy(b);
+        list_for_each_safe(p, h, &e->reg_apns) {
+                struct str_el * a = list_entry(p, struct str_el, next);
+                list_del(&a->next);
+                free(a->str);
+                free(a);
         }
 
-        list_for_each_safe(pos, n, &e->difs) {
-                struct reg_dif * d =
-                        list_entry(pos, struct reg_dif, next);
+        list_for_each_safe(p, h, &e->difs) {
+                struct reg_dif * d = list_entry(p, struct reg_dif, next);
+                list_del(&d->next);
                 free(d->dif_name);
                 free(d);
         }
@@ -165,15 +125,12 @@ static void reg_entry_destroy(struct reg_entry * e)
         free(e);
 }
 
-bool reg_entry_is_local_in_dif(struct reg_entry * e,
-                               char *             dif_name)
+static bool reg_entry_is_local_in_dif(struct reg_entry * e, char * dif_name)
 {
-        struct list_head * pos = NULL;
+        struct list_head * p = NULL;
 
-        list_for_each(pos, &e->difs) {
-                struct reg_dif * d =
-                        list_entry(pos, struct reg_dif, next);
-
+        list_for_each(p, &e->difs) {
+                struct reg_dif * d = list_entry(p, struct reg_dif, next);
                 if (!strcmp(dif_name, d->dif_name))
                         return true;
         }
@@ -181,9 +138,9 @@ bool reg_entry_is_local_in_dif(struct reg_entry * e,
         return false;
 }
 
-int reg_entry_add_local_in_dif(struct reg_entry * e,
-                               char *             dif_name,
-                               enum ipcp_type     type)
+static int reg_entry_add_local_in_dif(struct reg_entry * e,
+                                      char *             dif_name,
+                                      enum ipcp_type     type)
 {
         if (!reg_entry_is_local_in_dif(e, dif_name)) {
                 struct reg_dif * rdn = malloc(sizeof(*rdn));
@@ -198,16 +155,14 @@ int reg_entry_add_local_in_dif(struct reg_entry * e,
         return 0; /* already registered. Is ok */
 }
 
-void reg_entry_del_local_from_dif(struct reg_entry * e,
-                                  char *             dif_name)
+static void reg_entry_del_local_from_dif(struct reg_entry * e,
+                                         char *             dif_name)
 {
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
+        struct list_head * p = NULL;
+        struct list_head * h = NULL;
 
-        list_for_each_safe(pos, n, &e->difs) {
-                struct reg_dif * d =
-                        list_entry(pos, struct reg_dif, next);
-
+        list_for_each_safe(p, h, &e->difs) {
+                struct reg_dif * d = list_entry(p, struct reg_dif, next);
                 if (!strcmp(dif_name, d->dif_name)) {
                         list_del(&d->next);
                         free(d);
@@ -215,165 +170,181 @@ void reg_entry_del_local_from_dif(struct reg_entry * e,
         }
 }
 
-struct reg_binding * reg_entry_get_binding(struct reg_entry * e,
-                                           char *             apn)
+static bool reg_entry_has_apn(struct reg_entry * e, char * apn)
 {
-        struct list_head * pos = NULL;
+        struct list_head * p;
 
-        list_for_each(pos, &e->bindings) {
-                struct reg_binding * n =
-                        list_entry(pos, struct reg_binding, next);
-
-                if (strcmp(apn, n->apn) == 0)
-                        return n;
+        list_for_each(p, &e->reg_apns) {
+                struct str_el * e = list_entry(p, struct str_el, next);
+                if (!strcmp(e->str, apn))
+                        return true;
         }
 
-        return NULL;
+        return false;
 }
 
-void reg_entry_del_binding(struct reg_entry * e,
-                           char *             apn)
+int reg_entry_add_apn(struct reg_entry * e, struct apn_entry * a)
 {
-        struct reg_binding * b = reg_entry_get_binding(e, apn);
-        if (b == NULL)
+        struct str_el * n;
+
+        if (reg_entry_has_apn(e, a->apn)) {
+                LOG_WARN("AP %s already accepting flows for %s.",
+                         a->apn, e->name);
+                return 0;
+        }
+
+        if (!(a->flags & BIND_AP_AUTO)) {
+                LOG_DBG("AP %s cannot be auto-instantiated.", a->apn);
+                return -EINVAL;
+        }
+
+        n = malloc(sizeof(*n));
+        if (n == NULL)
+                return -ENOMEM;
+
+        n->str = strdup(a->apn);
+        if (n->str == NULL)
+                return -ENOMEM;
+
+        list_add(&n->next, &e->reg_apns);
+
+        if (e->state == REG_NAME_IDLE)
+                e->state = REG_NAME_AUTO_ACCEPT;
+
+        return 0;
+}
+
+void reg_entry_del_apn(struct reg_entry * e, char * apn)
+{
+        struct list_head * p = NULL;
+        struct list_head * h = NULL;
+
+        list_for_each_safe(p, h, &e->reg_apns) {
+                struct str_el * e = list_entry(p, struct str_el, next);
+                if (!wildcard_match(apn, e->str)) {
+                        list_del(&e->next);
+                        free(e->str);
+                        free(e);
+                }
+        }
+
+        if (e->state == REG_NAME_AUTO_ACCEPT && list_empty(&e->reg_apns)) {
+                e->state = REG_NAME_IDLE;
+                pthread_cond_broadcast(&e->state_cond);
+        }
+
+}
+
+char * reg_entry_get_apn(struct reg_entry * e)
+{
+        if (!list_empty(&e->reg_apis) || list_empty(&e->reg_apns))
+                return NULL;
+
+        return list_first_entry(&e->reg_apns, struct str_el, next)->str;
+}
+
+static bool reg_entry_has_api(struct reg_entry * e, pid_t api)
+{
+        struct list_head * p;
+
+        list_for_each(p, &e->reg_apns) {
+                struct pid_el * e = list_entry(p, struct pid_el, next);
+                if (e->pid == api)
+                        return true;
+        }
+
+        return false;
+}
+
+int reg_entry_add_api(struct reg_entry * e, pid_t api)
+{
+        struct pid_el * i;
+
+        if (e == NULL)
+                return -EINVAL;
+
+        if (reg_entry_has_api(e, api)) {
+                LOG_DBG("Instance already registered with this name.");
+                return -EPERM;
+        }
+
+        if (e->state == REG_NAME_NULL) {
+                LOG_DBG("Tried to add instance in NULL state.");
+                return -EPERM;
+        }
+
+        i = malloc(sizeof(*i));
+        if (i == NULL)
+                return -ENOMEM;
+
+        i->pid = api;
+        list_add(&i->next, &e->reg_apis);
+
+        if (e->state == REG_NAME_IDLE ||
+            e->state == REG_NAME_AUTO_ACCEPT ||
+            e->state == REG_NAME_AUTO_EXEC) {
+                e->state = REG_NAME_FLOW_ACCEPT;
+                pthread_cond_signal(&e->state_cond);
+        }
+
+        return 0;
+}
+
+void reg_entry_del_api(struct reg_entry * e, pid_t api)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        if (e == NULL)
                 return;
 
-        list_del(&b->next);
-        free(b);
-}
-
-struct reg_binding * reg_entry_add_binding(struct reg_entry * e,
-                                           char *             apn,
-                                           uint32_t           flags,
-                                           char **            argv)
-{
-        struct reg_binding * b;
-        if ((b = reg_entry_get_binding(e, apn)) != NULL) {
-                LOG_DBG("Updating AP name %s binding with %s.",
-                        apn, e->name);
-                reg_entry_del_binding(e, b->apn);
+        list_for_each_safe(p, h, &e->reg_apis) {
+                struct pid_el * a = list_entry(p, struct pid_el, next);
+                if (a->pid == api) {
+                        list_del(&a->next);
+                        free(a);
+                }
         }
 
-        if (flags & BIND_AP_AUTO) {
-                b = reg_binding_create(apn, flags, argv);
-                if (e->state == REG_NAME_IDLE)
+        if (list_empty(&e->reg_apis)) {
+                if (!list_empty(&e->reg_apns))
                         e->state = REG_NAME_AUTO_ACCEPT;
+                else
+                        e->state = REG_NAME_IDLE;
         } else {
-                flags &= ~BIND_AP_AUTO;
-                b = reg_binding_create(apn, flags, NULL);
+                e->state = REG_NAME_FLOW_ACCEPT;
         }
 
-        list_add(&b->next, &e->bindings);
-
-        return b;
+        pthread_cond_broadcast(&e->state_cond);
 }
 
-char ** reg_entry_get_auto_info(struct reg_entry * e)
+pid_t reg_entry_get_api(struct reg_entry * e)
 {
-        struct list_head * pos = NULL;
+        if (e == NULL)
+                return -1;
 
-        list_for_each(pos, &e->bindings) {
-                struct reg_binding * b =
-                        list_entry(pos, struct reg_binding, next);
-                if (b->flags & BIND_AP_AUTO)
-                    return b->argv;
-        }
+        if (list_empty(&e->reg_apis))
+                return -1;
 
-        return NULL;
+        return list_first_entry(&e->reg_apis, struct pid_el, next)->pid;
 }
 
-struct reg_api * reg_entry_get_reg_api(struct reg_entry * e,
-                                       pid_t              api)
+struct reg_entry * registry_get_entry(struct list_head * registry,
+                                      char *             name)
 {
-        struct list_head * pos = NULL;
+        struct list_head * p   = NULL;
 
-        list_for_each(pos, &e->reg_apis) {
-                struct reg_api * r =
-                        list_entry(pos, struct reg_api, next);
-
-                if (r->api == api)
-                        return r;
-        }
-
-        return NULL;
-}
-
-pid_t reg_entry_resolve_api(struct reg_entry * e)
-{
-        struct list_head * pos = NULL;
-
-        /* FIXME: now just returns the first accepting instance */
-        list_for_each(pos, &e->reg_apis) {
-                struct reg_api * r =
-                        list_entry(pos, struct reg_api, next);
-                return r->api;
-        }
-
-        return -1;
-}
-
-struct reg_entry * registry_get_entry_by_name(struct list_head * registry,
-                                              char *             name)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, registry) {
-                struct reg_entry * e =
-                        list_entry(pos, struct reg_entry, next);
-
-                if (strcmp(name, e->name) == 0)
+        list_for_each(p, registry) {
+                struct reg_entry * e = list_entry(p, struct reg_entry, next);
+                if (!wildcard_match(name, e->name))
                         return e;
         }
 
         return NULL;
 }
 
-struct reg_entry * registry_get_entry_by_apn(struct list_head * registry,
-                                             char *             apn)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, registry) {
-                struct list_head * p = NULL;
-                struct reg_entry * e =
-                        list_entry(pos, struct reg_entry, next);
-
-                list_for_each(p, &e->bindings) {
-                        struct reg_binding * b =
-                                list_entry(p, struct reg_binding, next);
-
-                        if (strcmp(b->apn, apn) == 0)
-                                return e;
-                }
-        }
-
-        return NULL;
-}
-
-struct reg_entry * registry_get_entry_by_api(struct list_head * registry,
-                                             pid_t              api)
-{
-        struct list_head * pos = NULL;
-
-        list_for_each(pos, registry) {
-                struct list_head * p = NULL;
-                struct reg_entry * e =
-                        list_entry(pos, struct reg_entry, next);
-
-                list_for_each(p, &e->reg_apis) {
-                        struct reg_api * r =
-                                list_entry(p, struct reg_api, next);
-
-                        if (r->api == api)
-                                return e;
-                }
-        }
-
-        return NULL;
-}
-
-struct reg_entry * registry_assign(struct list_head * registry,
-                                   char *             name)
+struct reg_entry * registry_add_name(struct list_head * registry,
+                                     char *             name)
 {
         struct reg_entry * e = NULL;
 
@@ -403,10 +374,10 @@ struct reg_entry * registry_assign(struct list_head * registry,
         return e;
 }
 
-void registry_deassign(struct list_head * registry,
+void registry_del_name(struct list_head * registry,
                        char *             name)
 {
-        struct reg_entry * e = registry_get_entry_by_name(registry, name);
+        struct reg_entry * e = registry_get_entry(registry, name);
         if (e == NULL)
                 return;
 
@@ -416,169 +387,22 @@ void registry_deassign(struct list_head * registry,
         return;
 }
 
-int registry_add_binding(struct list_head * registry,
-                         char *             name,
-                         char *             apn,
-                         uint32_t           flags,
-                         char **            argv)
-{
-        struct reg_entry * e;
-
-        if (name == NULL || apn == NULL)
-                return -EINVAL;
-
-        e = registry_get_entry_by_name(registry, name);
-        if (e == NULL) {
-                LOG_DBG("Adding new name to registry: %s.", name);
-                e = registry_assign(registry, name);
-        }
-
-        if (e->state == REG_NAME_NULL) {
-                LOG_DBG("Tried to add binding in NULL state.");
-                return -1;
-        }
-
-        if(reg_entry_add_binding(e, apn, flags, argv) == NULL)
-                return -1;
-
-        return 0;
-}
-
-
-void registry_del_binding(struct list_head * registry,
-                          char *             name,
-                          char *             apn)
-{
-        struct reg_entry *   e = NULL;
-
-        if (name == NULL || apn == NULL)
-                return;
-
-        e = registry_get_entry_by_name(registry, name);
-        if (e == NULL) {
-                LOG_DBG("Name %s not found in registry.", name);
-                return;
-        }
-
-        reg_entry_del_binding(e, apn);
-
-        if (e->state == REG_NAME_AUTO_ACCEPT && !reg_entry_has_auto_binding(e))
-                e->state = REG_NAME_IDLE;
-
-        return;
-}
-
-
-struct reg_api * registry_add_api_name(struct list_head * registry,
-                                       pid_t              api,
-                                       char *             name)
-{
-        struct reg_entry * e = NULL;
-        struct reg_api *   i = NULL;
-
-        if (name == NULL || api == -1)
-                return NULL;
-
-        e = registry_get_entry_by_name(registry, name);
-        if (e == NULL) {
-                LOG_DBG("Name %s not found in registry.", name);
-                return NULL;
-        }
-
-        if (e->state == REG_NAME_NULL) {
-                LOG_DBG("Tried to add instance in NULL state.");
-                return NULL;
-        }
-
-        if (reg_entry_has_api(e, api)) {
-                LOG_DBG("Instance already registered with this name.");
-                return NULL;
-        }
-
-        i = reg_api_create(api);
-        if (i == NULL) {
-                LOG_DBG("Failed to create reg_instance");
-                return NULL;
-        }
-
-        pthread_mutex_lock(&e->state_lock);
-
-        if (e->state == REG_NAME_IDLE || e->state == REG_NAME_AUTO_ACCEPT
-           || e->state == REG_NAME_AUTO_EXEC) {
-                e->state = REG_NAME_FLOW_ACCEPT;
-                pthread_cond_signal(&e->state_cond);
-        }
-
-        list_add(&i->next, &e->reg_apis);
-
-        pthread_mutex_unlock(&e->state_lock);
-
-        return i;
-}
-
 void registry_del_api(struct list_head * registry,
                       pid_t              api)
 {
-        struct reg_entry * e = NULL;
-        struct reg_api * i   = NULL;
+        struct list_head * p;
 
         if ( api == -1)
                 return;
 
-        e = registry_get_entry_by_api(registry, api);
-        if (e == NULL) {
-                LOG_DBG("Instance %d not found.", api);
-                return;
+        list_for_each(p, registry) {
+                struct reg_entry * e = list_entry(p, struct reg_entry, next);
+                pthread_mutex_lock(&e->state_lock);
+                reg_entry_del_api(e, api);
+                pthread_mutex_unlock(&e->state_lock);
         }
-
-        i = reg_entry_get_reg_api(e, api);
-        if (i == NULL) {
-                LOG_DBG("Instance %d is not accepting flows for %s.",
-                         api, e->name);
-                return;
-        }
-
-        list_del(&i->next);
-
-        reg_api_destroy(i);
-
-        pthread_mutex_lock(&e->state_lock);
-
-        if (list_empty(&e->reg_apis)) {
-                if (reg_entry_has_auto_binding(e))
-                        e->state = REG_NAME_AUTO_ACCEPT;
-                else
-                        e->state = REG_NAME_IDLE;
-        } else {
-                e->state = REG_NAME_FLOW_ACCEPT;
-        }
-
-        pthread_cond_signal(&e->state_cond);
-        pthread_mutex_unlock(&e->state_lock);
 
         return;
-}
-
-void registry_sanitize_apis(struct list_head * registry)
-{
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
-
-        struct list_head * pos2 = NULL;
-        struct list_head * n2   = NULL;
-
-        list_for_each_safe(pos, n, registry) {
-                struct reg_entry * e = list_entry(pos, struct reg_entry, next);
-                list_for_each_safe(pos2, n2, &e->reg_apis) {
-                        struct reg_api * r
-                                = list_entry(pos2, struct reg_api, next);
-                        if (kill(r->api, 0) < 0) {
-                                LOG_DBG("Process %d gone, binding removed.",
-                                        r->api);
-                                registry_del_api(registry, r->api);
-                        }
-                }
-        }
 }
 
 char * registry_get_dif_for_dst(struct list_head * registry,
@@ -586,7 +410,7 @@ char * registry_get_dif_for_dst(struct list_head * registry,
 {
         struct list_head * pos = NULL;
         struct reg_entry * re =
-                registry_get_entry_by_name(registry, dst_name);
+                registry_get_entry(registry, dst_name);
 
         if (re != NULL) { /* local AP */
                 list_for_each(pos, &re->difs) {
@@ -624,7 +448,7 @@ int registry_add_name_to_dif(struct list_head * registry,
                              char *             dif_name,
                              enum ipcp_type     type)
 {
-        struct reg_entry * re = registry_get_entry_by_name(registry, name);
+        struct reg_entry * re = registry_get_entry(registry, name);
         if (re == NULL)
                 return -1;
 
@@ -635,7 +459,7 @@ void registry_del_name_from_dif(struct list_head * registry,
                                 char *             name,
                                 char *             dif_name)
 {
-        struct reg_entry * re = registry_get_entry_by_name(registry, name);
+        struct reg_entry * re = registry_get_entry(registry, name);
         if (re == NULL)
                 return;
 
@@ -644,14 +468,14 @@ void registry_del_name_from_dif(struct list_head * registry,
 
 void registry_destroy(struct list_head * registry)
 {
+        struct list_head * p = NULL;
         struct list_head * h = NULL;
-        struct list_head * t = NULL;
 
         if (registry == NULL)
                 return;
 
-        list_for_each_safe(h, t, registry) {
-                struct reg_entry * e = list_entry(h, struct reg_entry, next);
+        list_for_each_safe(p, h, registry) {
+                struct reg_entry * e = list_entry(p, struct reg_entry, next);
                 list_del(&e->next);
                 reg_entry_destroy(e);
         }

@@ -321,21 +321,21 @@ static int check_ap_path(char ** ap_name)
         return -ENOENT;
 }
 
-int irm_bind(char *   name,
-             char *   ap_name,
-             uint16_t opts,
-             int      argc,
-             char **  argv)
+int irm_bind_ap(char *   ap,
+                char *   name,
+                uint16_t opts,
+                int      argc,
+                char **  argv)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
         char * full_ap_name;
 
-        if (name == NULL || ap_name == NULL)
+        if (ap == NULL || name == NULL)
                 return -EINVAL;
 
-        full_ap_name = strdup(ap_name);
+        full_ap_name = strdup(ap);
         if (full_ap_name == NULL)
                 return -ENOMEM;
 
@@ -344,7 +344,7 @@ int irm_bind(char *   name,
                 return ret;
         }
 
-        msg.code = IRM_MSG_CODE__IRM_BIND;
+        msg.code = IRM_MSG_CODE__IRM_BIND_AP;
         msg.dst_name = name;
         msg.ap_name = full_ap_name;
 
@@ -372,23 +372,76 @@ int irm_bind(char *   name,
         return ret;
 }
 
-int irm_unbind(char *   name,
-               char *   ap_name,
-               uint16_t opts)
+int irm_bind_api(pid_t api, char * name)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (name == NULL || ap_name == NULL)
+        if (name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_UNBIND;
-
+        msg.code = IRM_MSG_CODE__IRM_BIND_API;
+        msg.has_api  = true;
+        msg.api      = api;
         msg.dst_name = name;
-        msg.ap_name = ap_name;
-        msg.has_opts = true;
-        msg.opts = opts;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int irm_unbind_ap(char * ap, char * name)
+{
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
+
+        if (name == NULL)
+                return -EINVAL;
+
+        msg.code = IRM_MSG_CODE__IRM_UNBIND_AP;
+        msg.ap_name  = ap;
+        msg.dst_name = name;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int irm_unbind_api(pid_t api, char * name)
+{
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
+
+        if (name == NULL)
+                return -EINVAL;
+
+        msg.code = IRM_MSG_CODE__IRM_UNBIND_API;
+        msg.has_api  = true;
+        msg.api      = api;
+        msg.dst_name = name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)

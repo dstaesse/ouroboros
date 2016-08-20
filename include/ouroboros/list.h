@@ -135,6 +135,16 @@ void list_splice_init(struct list_head * list,
         ((type *)((char *)(ptr)-(unsigned long)(&((type *)0)->member)))
 
 /**
+ * list_first_entry - get the struct for the first entry
+ * expects the list to be non-empty
+ * @ptr:        the &struct list_head pointer.
+ * @type:       the type of the struct this is embedded in.
+ * @member:     the name of the list_struct within the struct.
+ */
+#define list_first_entry(ptr, type, member) \
+        list_entry((ptr)->next, type, member)
+
+/**
  * list_for_each - iterate over a list
  * @pos:        the &struct list_head to use as a loop counter.
  * @head:       the head for your list.

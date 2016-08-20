@@ -24,4 +24,26 @@
  * Checks whether the string argument matches the pattern argument,
  * which is a wildcard pattern.
  */
+
+#ifndef OUROBOROS_IRMD_UTILS_H
+#define OUROBOROS_IRMD_UTILS_H
+
+#include <sys/types.h>
+
+struct str_el {
+        struct list_head next;
+        char *           str;
+};
+
+struct pid_el {
+        struct list_head next;
+        pid_t            pid;
+};
+
 int wildcard_match(const char * pattern, const char * string);
+
+/* functions for copying and destroying arguments list */
+char ** argvdup(char ** argv);
+void    argvfree(char ** argv);
+
+#endif /* OUROBOROS_IRM_UTILS_H */

@@ -29,7 +29,7 @@ static void usage()
 {
         printf("Usage: irm ipcp [OPERATION]\n\n"
                "where OPERATION = {create destroy\n"
-               "                   bootstrap enroll help\n");
+               "                   bootstrap enroll help}\n");
 }
 
 static int do_help(int argc, char **argv)

@@ -1,8 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Bind AP to a name
+ * Bind names in the processing system
  *
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,75 +22,57 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 
 #include <ouroboros/irm.h>
-#include <ouroboros/errno.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
 static void usage()
 {
-        printf("Usage: irm bind\n"
-               "           name <name>\n"
-               "           apn <application process name>\n"
-               "           [auto] (instantiate apn if not running)\n"
-               "           [unique] (there can only be one instantiation)\n"
-               "           [-- <application arguments>]\n");
+        printf("Usage: irm bind [OPERATION]\n"
+               "where OPERATION = {ap api ipcp help}\n");
 }
 
-
-int do_bind(int argc, char ** argv)
+static int do_help(int argc, char **argv)
 {
-        char * name = NULL;
-        char * ap_name = NULL;
-        uint16_t flags = 0;
-        int ret = 0;
+        usage();
+        return 0;
+}
 
-        while (argc > 0) {
-                if (matches(*argv, "name") == 0) {
-                        name = *(argv + 1);
-                        ++argv;
-                        --argc;
-                } else if (matches(*argv, "apn") == 0) {
-                        ap_name = *(argv + 1);
-                        ++argv;
-                        --argc;
-                } else if (strcmp(*argv, "auto") == 0) {
-                        flags |= BIND_AP_AUTO;
-                } else if (strcmp(*argv, "unique") == 0) {
-                        flags |= BIND_AP_UNIQUE;
-                } else if (strcmp(*argv, "--") == 0) {
-                        ++argv;
-                        --argc;
-                        break;
-                } else {
-                        printf("\"%s\" is unknown, try \"irm "
-                               "bind\".\n", *argv);
-                        return -1;
-                }
+static const struct cmd {
+        const char * cmd;
+        int (* func)(int argc, char ** argv);
+} cmds[] = {
+        { "ap",   do_bind_ap },
+        { "api",  do_bind_api },
+        { "ipcp", do_bind_ipcp },
+        { "help", do_help },
+        { 0 }
+};
 
-                ++argv;
-                --argc;
+static int do_cmd(const char * argv0,
+                  int argc,
+                  char ** argv)
+{
+        const struct cmd * c;
+
+        for (c = cmds; c->cmd; ++c) {
+                if (!matches(argv0, c->cmd))
+                        return c->func(argc, argv);
         }
 
-        if (name == NULL || ap_name == NULL) {
+        fprintf(stderr, "\"%s\" is unknown, try \"irm bind help\".\n", argv0);
+
+        return -1;
+}
+
+int bind_cmd(int argc, char ** argv)
+{
+        if (argc < 1) {
                 usage();
                 return -1;
         }
 
-        ret = irm_bind(name, ap_name, flags, argc, argv);
-        if (ret == -ENOENT) {
-                printf("%s does not exist.\n", ap_name);
-                return -1;
-        }
-
-        if (ret == -EPERM) {
-                printf("Cannot execute %s, please check permissions.\n",
-                        ap_name);
-                return -1;
-        }
-
-        return ret;
+        return do_cmd(argv[0], argc, argv);
 }

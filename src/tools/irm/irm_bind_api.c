@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Unbind names in the processing system
+ * Bind AP-I to a name
  *
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
@@ -22,54 +22,47 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <ouroboros/irm.h>
+#include <ouroboros/errno.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
 static void usage()
 {
-        printf("Usage: irm unbind [OPERATION]\n"
-               "where OPERATION = {ap api ipcp help}\n");
+        printf("Usage: irm bind api <pid> name <name>\n");
 }
 
-static int do_help(int argc, char **argv)
+int do_bind_api(int argc, char ** argv)
 {
-        usage();
-        return 0;
-}
+        pid_t api = -1;
+        char * name = NULL;
 
-static const struct cmd {
-        const char * cmd;
-        int (* func)(int argc, char ** argv);
-} cmds[] = {
-        { "ap",   do_unbind_ap },
-        { "api",  do_unbind_api },
-        { "ipcp", do_unbind_ipcp },
-        { "help", do_help },
-        { 0 }
-};
+        while (argc > 0) {
+                if (matches(*argv, "name") == 0) {
+                        name = *(argv + 1);
+                        ++argv;
+                        --argc;
+                } else if (matches(*argv, "api") == 0) {
+                        api = strtol(*(argv + 1), NULL, 10);
+                        ++argv;
+                        --argc;
+                } else {
+                        printf("\"%s\" is unknown, try \"irm "
+                               "bind api\".\n", *argv);
+                        return -1;
+                }
 
-static int do_cmd(const char * argv0, int argc, char ** argv)
-{
-        const struct cmd * c;
+                ++argv;
+                --argc;
+        }
 
-        for (c = cmds; c->cmd; ++c)
-                if (!matches(argv0, c->cmd))
-                        return c->func(argc, argv);
-
-        fprintf(stderr, "\"%s\" is unknown, try \"irm unbind help\".\n", argv0);
-
-        return -1;
-}
-
-int unbind_cmd(int argc, char ** argv)
-{
-        if (argc < 1) {
+        if (api < 0 || name == NULL) {
                 usage();
                 return -1;
         }
 
-        return do_cmd(argv[0], argc, argv);
+        return irm_bind_api(api, name);
 }

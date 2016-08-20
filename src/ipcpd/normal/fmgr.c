@@ -79,7 +79,6 @@ static void * fmgr_listen(void * o)
 {
         int fd;
         char * ae_name;
-        bool bound = false;
 
         while (true) {
                 pthread_mutex_lock(&_ipcp->state_lock);
@@ -93,14 +92,6 @@ static void * fmgr_listen(void * o)
                         return 0;
                 }
                 pthread_mutex_unlock(&_ipcp->state_lock);
-
-                if (!bound && api_bind(_ipcp->data->dif_name) < 0) {
-                        LOG_ERR("Failed to bind the server instance.");
-                        pthread_mutex_unlock(&_ipcp->state_lock);
-                        return (void *) -1;
-                }
-
-                bound = true;
 
                 fd = flow_accept(&ae_name);
                 if (fd < 0) {

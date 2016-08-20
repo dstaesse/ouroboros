@@ -30,8 +30,7 @@
 
 #define BIND_AP_AUTO   0x01
 #define BIND_AP_UNIQUE 0x02
-
-#define UNBIND_AP_HARD 0x01
+#define BIND_AP_LOC    0x04
 
 enum ipcp_type {
         IPCP_NORMAL = 0,
