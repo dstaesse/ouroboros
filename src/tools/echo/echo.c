@@ -41,19 +41,15 @@ static void usage()
 int main(int argc, char ** argv)
 {
         int ret = -1;
-        if (ap_init(argv[0])) {
-                printf("Failed to init AP.\n");
-                return -1;
-        }
+        char ** argv_dup = argv;
+        bool server = false;
 
         argc--;
         argv++;
         while (argc > 0) {
                 if (strcmp(*argv, "-l") == 0 ||
                     strcmp(*argv, "--listen") == 0) {
-                        ret = server_main();
-                        ap_fini();
-                        return ret;
+                        server = true;
                 } else {
                         usage();
                         return 0;
@@ -62,7 +58,19 @@ int main(int argc, char ** argv)
                 argv++;
         }
 
-        ret = client_main();
+        if (server) {
+                if (ap_init(argv_dup[0])) {
+                        printf("Failed to init AP.\n");
+                        return -1;
+                }
+                ret = server_main();
+        } else {
+                if (ap_init(NULL)) {
+                        printf("Failed to init AP.\n");
+                        return -1;
+                }
+                ret = client_main();
+        }
 
         ap_fini();
 

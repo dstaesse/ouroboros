@@ -53,8 +53,11 @@ void * cleaner_thread(void * o)
                 clock_gettime(CLOCK_REALTIME, &now);
                 pthread_mutex_lock(&server.lock);
                 for (i = 0; i < OPING_MAX_FLOWS; ++i)
-                        if (ts_diff_ms(&server.times[i], &now) > deadline_ms)
+                        if (server.flows[i] &&
+                            ts_diff_ms(&server.times[i], &now) > deadline_ms) {
+                                server.flows[i] = false;
                                 flow_dealloc(i);
+                        }
 
                 pthread_mutex_unlock(&server.lock);
                 sleep(1);
@@ -123,6 +126,7 @@ void * accept_thread(void * o)
                 clock_gettime(CLOCK_REALTIME, &now);
 
                 pthread_mutex_lock(&server.lock);
+                server.flows[fd] = true;
                 server.times[fd] = now;
                 pthread_mutex_unlock(&server.lock);
 
@@ -135,6 +139,7 @@ void * accept_thread(void * o)
 int server_main()
 {
         struct sigaction sig_act;
+        int i = 0;
 
         memset(&sig_act, 0, sizeof sig_act);
         sig_act.sa_sigaction = &shutdown_server;
@@ -148,10 +153,8 @@ int server_main()
                 return -1;
         }
 
-        if (api_bind(NULL) < 0) {
-                printf("Failed to bind the server instance.");
-                return -1;
-        }
+        for (i = 0; i < OPING_MAX_FLOWS; ++i)
+                server.flows[i] = false;
 
         pthread_create(&server.cleaner_pt, NULL, cleaner_thread, NULL);
         pthread_create(&server.accept_pt, NULL, accept_thread, NULL);

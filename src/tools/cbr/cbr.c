@@ -72,13 +72,9 @@ int main(int argc, char ** argv)
         int    ret = 0;
         char * rem = NULL;
         char * s_apn = NULL;
+        char ** argv_dup = argv;
 
         bool server = false;
-
-        if (ap_init(argv[0]) < 0) {
-                printf("Failed to init.\n");
-                exit(EXIT_FAILURE);
-        }
 
         server_settings.interval = 1; /* One second reporting interval */
         server_settings.timeout  = 1;
@@ -133,8 +129,18 @@ int main(int argc, char ** argv)
         }
 
         if (server) {
+                if (ap_init(argv_dup[0]) < 0) {
+                        printf("Failed to init.\n");
+                        exit(EXIT_FAILURE);
+                }
+
                 ret = server_main();
         } else {
+                if (ap_init(NULL) < 0) {
+                        printf("Failed to init.\n");
+                        exit(EXIT_FAILURE);
+                }
+
                 if (s_apn == NULL) {
                         printf("No server specified.\n");
                         usage();

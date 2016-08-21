@@ -53,6 +53,7 @@ static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
        char * sock_path = NULL;
        ssize_t count = 0;
        ipcp_msg_t * recv_msg = NULL;
+
        struct timeval tv = {(SOCKET_TIMEOUT / 1000),
                             (SOCKET_TIMEOUT % 1000) * 1000};
 
@@ -260,9 +261,8 @@ int ipcp_enroll(pid_t  api,
         msg.dif_name = dif_name;
 
         recv_msg = send_recv_ipcp_msg(api, &msg);
-        if (recv_msg == NULL) {
+        if (recv_msg == NULL)
                 return -1;
-        }
 
         if (recv_msg->has_result == false) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);

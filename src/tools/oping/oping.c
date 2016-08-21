@@ -60,6 +60,7 @@ struct c {
 
 struct s {
         struct timespec times[OPING_MAX_FLOWS];
+        bool            flows[OPING_MAX_FLOWS];
         pthread_mutex_t lock;
 
         pthread_t cleaner_pt;
@@ -95,11 +96,7 @@ int main(int argc, char ** argv)
         int ret = -1;
         char * rem = NULL;
         bool serv = false;
-
-        if (ap_init(argv[0])) {
-                printf("Failed to init AP.\n");
-                exit(EXIT_FAILURE);
-        }
+        char ** argv_dup = argv;
 
         argc--;
         argv++;
@@ -138,8 +135,18 @@ int main(int argc, char ** argv)
         }
 
         if (serv) {
+                if (ap_init(argv_dup[0])) {
+                        printf("Failed to init AP.\n");
+                        exit(EXIT_FAILURE);
+                }
+
                 ret = server_main();
         } else {
+                if (ap_init(NULL)) {
+                        printf("Failed to init AP.\n");
+                        exit(EXIT_FAILURE);
+                }
+
                 if (client.s_apn == NULL) {
                         printf("No server specified.\n");
                         usage();

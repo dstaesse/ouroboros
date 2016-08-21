@@ -39,11 +39,6 @@ int server_main()
         char   buf[BUF_SIZE];
         ssize_t count = 0;
 
-        if (api_bind(NULL) < 0) {
-                printf("Failed to bind the server api.");
-                return -1;
-        }
-
         printf("Starting the server.\n");
 
         /* Manual cleanup is required for now */

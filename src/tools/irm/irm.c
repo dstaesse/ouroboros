@@ -46,8 +46,8 @@ static const struct cmd {
         int (* func)(int argc, char ** argv);
 } cmds[] = {
         { "ipcp",            ipcp_cmd },
-        { "bind",            do_bind },
-        { "unbind",          do_unbind },
+        { "bind",            bind_cmd },
+        { "unbind",          unbind_cmd },
         { "register",        do_register },
         { "unregister",      do_unregister },
         { "help",            do_help },

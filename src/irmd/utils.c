@@ -1,8 +1,73 @@
 /*
+ * Ouroboros - Copyright (C) 2016
+ *
+ * The IPC Resource Manager - Utilities
+ *
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+
+#include <ouroboros/config.h>
+#include <stdlib.h>
+#include <string.h>
+
+void argvfree(char ** argv)
+{
+        char ** argv_dup = argv;
+        if (argv == NULL)
+                return;
+
+        while (*argv_dup != NULL)
+                free(*(argv_dup++));
+
+        free(argv);
+}
+
+char ** argvdup(char ** argv)
+{
+        int argc = 0;
+        char ** argv_dup = argv;
+        int i;
+
+        if (argv == NULL)
+                return NULL;
+
+        while (*(argv_dup++) != NULL)
+                argc++;
+
+        if (argc != 0) {
+                argv_dup = malloc((argc + 1) * sizeof(*argv_dup));
+                for (i = 0; i < argc; ++i) {
+                        argv_dup[i] = strdup(argv[i]);
+                        if (argv_dup[i] == NULL) {
+                                argvfree(argv_dup);
+                                return NULL;
+                        }
+                }
+        }
+        argv_dup[argc] = NULL;
+        return argv_dup;
+}
+
+/*
  * Copyright (c) 1989, 1993, 1994
  *      The Regents of the University of California.  All rights reserved.
  *
- * This code is derived from software contributed to Berkeley by
+ * Wildcard Match code below is derived from software contributed to Berkeley by
  * Guido van Rossum.
  *
  * Copyright (c) 2011 The FreeBSD Foundation

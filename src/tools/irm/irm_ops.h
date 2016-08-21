@@ -26,7 +26,13 @@ int do_destroy_ipcp(int argc, char ** argv);
 int do_bootstrap_ipcp(int argc, char ** argv);
 int do_enroll_ipcp(int argc, char ** argv);
 
-int do_bind(int argc, char ** argv);
-int do_unbind(int argc, char ** argv);
+int bind_cmd(int argc, char ** argv);
+int do_bind_ap(int argc, char ** argv);
+int do_bind_api(int argc, char ** argv);
+int do_bind_ipcp(int argc, char ** argv);
+int unbind_cmd(int argc, char ** argv);
+int do_unbind_ap(int argc, char ** argv);
+int do_unbind_api(int argc, char ** argv);
+int do_unbind_ipcp(int argc, char ** argv);
 int do_register(int argc, char ** argv);
 int do_unregister(int argc, char ** argv);

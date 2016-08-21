@@ -31,7 +31,7 @@ pid_t   irm_create_ipcp(char *         name,
 
 int     irm_destroy_ipcp(pid_t api);
 
-/* APIs is an out-parameter */
+/* apis is an out-parameter */
 ssize_t irm_list_ipcps(char *   name,
                        pid_t ** apis);
 
@@ -41,15 +41,20 @@ int     irm_enroll_ipcp(pid_t  api,
 int     irm_bootstrap_ipcp(pid_t               api,
                            struct dif_config * conf);
 
-int     irm_bind(char *   name,
-                 char *   ap_name,
-                 uint16_t opts,
-                 int      argc,
-                 char **  argv);
+int     irm_bind_ap(char *   ap,
+                    char *   name,
+                    uint16_t opts,
+                    int      argc,
+                    char **  argv);
 
-int     irm_unbind(char *   name,
-                   char *   ap_name,
-                   uint16_t opts);
+int     irm_unbind_ap(char * ap,
+                      char * name);
+
+int     irm_bind_api(pid_t api,
+                     char * name);
+
+int     irm_unbind_api(pid_t api,
+                       char * name);
 
 int     irm_reg(char *  name,
                 char ** difs,

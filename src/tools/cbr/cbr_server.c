@@ -219,11 +219,6 @@ int server_main()
                 return -1;
         }
 
-        if (api_bind(NULL) < 0) {
-                printf("Failed to bind the server api.");
-                return -1;
-        }
-
         for (i = 0; i < THREADS_SIZE; i++)
                 pthread_create(&threads[i], NULL, worker, NULL);
 
