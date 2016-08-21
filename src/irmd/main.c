@@ -98,7 +98,7 @@ struct irm {
         enum irm_state      state;
         pthread_rwlock_t    state_lock;
 
-        pthread_t           cleanup_flows;
+        pthread_t           irm_sanitize;
         pthread_t           shm_sanitize;
 } * irmd = NULL;
 
@@ -1624,17 +1624,15 @@ void irmd_sig_handler(int sig, siginfo_t * info, void * c)
         }
 }
 
-void * irm_flow_cleaner()
+void * irm_sanitize()
 {
         struct timespec now;
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
-        struct list_head * h   = NULL;
-        struct list_head * t   = NULL;
+        struct list_head * p = NULL;
+        struct list_head * h = NULL;
 
         struct timespec timeout = {IRMD_CLEANUP_TIMER / BILLION,
                                    IRMD_CLEANUP_TIMER % BILLION};
-        int status;
+        int s;
 
         while (true) {
                 if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
@@ -1648,11 +1646,61 @@ void * irm_flow_cleaner()
                         return (void *) 0;
                 }
 
+                pthread_rwlock_wrlock(&irmd->reg_lock);
+
+                list_for_each_safe(p, h, &irmd->spawned_apis) {
+                        struct pid_el * e = list_entry(p, struct pid_el, next);
+                        if (kill(e->pid, 0) >= 0)
+                                continue;
+                        waitpid(e->pid, &s, WNOHANG);
+                        LOG_DBG("Child process %d died, error %d.", e->pid, s);
+                        list_del(&e->next);
+                        free(e);
+                }
+
+                list_for_each_safe(p, h, &irmd->api_table) {
+                        struct api_entry * e =
+                                list_entry(p, struct api_entry, next);
+                        if (kill(e->api, 0) >= 0)
+                                continue;
+                        LOG_DBG("Dead AP-I removed: %d.", e->api);
+                        list_del(&e->next);
+                        api_entry_destroy(e);
+                }
+
+                list_for_each_safe(p, h, &irmd->ipcps) {
+                        struct ipcp_entry * e =
+                                list_entry(p, struct ipcp_entry, next);
+                        if (kill(e->api, 0) >= 0)
+                                continue;
+                        LOG_DBG("Dead ipcp removed: %d.", e->api);
+                        list_del(&e->next);
+                        ipcp_entry_destroy(e);
+                }
+
+                list_for_each_safe(p, h, &irmd->registry) {
+                        struct list_head * p2;
+                        struct list_head * h2;
+                        struct reg_entry * e =
+                                list_entry(p, struct reg_entry, next);
+                        list_for_each_safe(p2, h2, &e->reg_apis) {
+                                struct pid_el * a =
+                                        list_entry(p2, struct pid_el, next);
+                                if (kill(a->pid, 0) >= 0)
+                                        continue;
+                                LOG_DBG("Dead AP-I removed from: %d %s.",
+                                        a->pid, e->name);
+                                list_del(&a->next);
+                                free(a);
+                        }
+                }
+
+                pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_wrlock(&irmd->flows_lock);
 
-                list_for_each_safe(pos, n, &(irmd->irm_flows)) {
+                list_for_each_safe(p, h, &irmd->irm_flows) {
                         struct irm_flow * f =
-                                list_entry(pos, struct irm_flow, next);
+                                list_entry(p, struct irm_flow, next);
 
                         pthread_mutex_lock(&f->state_lock);
 
@@ -1674,7 +1722,7 @@ void * irm_flow_cleaner()
                                 bmp_release(irmd->port_ids, f->port_id);
 
                                 list_del(&f->next);
-                                LOG_INFO("Process %d gone, %d deallocated.",
+                                LOG_INFO("AP-I %d gone, flow %d deallocated.",
                                          f->n_api, f->port_id);
                                 ipcp_flow_dealloc(f->n_1_api, f->port_id);
                                 if (n_rb != NULL)
@@ -1695,48 +1743,6 @@ void * irm_flow_cleaner()
                 }
 
                 pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_wrlock(&irmd->reg_lock);
-
-                /* FIXME: clear registry of dead AP-I's */
-
-                list_for_each_safe(pos, n, &irmd->spawned_apis) {
-                        struct pid_el * api =
-                                list_entry(pos, struct pid_el, next);
-                        waitpid(api->pid, &status, WNOHANG);
-
-                        if (kill(api->pid, 0) < 0) {
-                                LOG_INFO("Spawned process %d terminated "
-                                         "with exit status %d.",
-                                         api->pid, status);
-
-                                list_for_each_safe(h, t, &irmd->ipcps) {
-                                        struct ipcp_entry * e =
-                                                list_entry(h, struct ipcp_entry,
-                                                           next);
-                                        if (e->api == api->pid) {
-                                                list_del(&e->next);
-                                                ipcp_entry_destroy(e);
-                                        }
-                                }
-
-                                list_del(&api->next);
-                                free(api);
-                        }
-                }
-
-                list_for_each_safe(pos, n, &irmd->api_table) {
-                        struct api_entry * e =
-                                list_entry(pos, struct api_entry, next);
-
-                        if (kill(e->api, 0) < 0) {
-                                LOG_INFO("Instance %d removed from api table.",
-                                         e->api);
-                                list_del(&e->next);
-                                api_entry_destroy(e);
-                        }
-                }
-
-                pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
 
                 nanosleep(&timeout, NULL);
@@ -2179,7 +2185,7 @@ int main(int argc, char ** argv)
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)
                 pthread_create(&irmd->threadpool[t], NULL, mainloop, NULL);
 
-        pthread_create(&irmd->cleanup_flows, NULL, irm_flow_cleaner, NULL);
+        pthread_create(&irmd->irm_sanitize, NULL, irm_sanitize, NULL);
         pthread_create(&irmd->shm_sanitize, NULL,
                        shm_du_map_sanitize, irmd->dum);
 
@@ -2187,7 +2193,7 @@ int main(int argc, char ** argv)
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)
                 pthread_join(irmd->threadpool[t], NULL);
 
-        pthread_join(irmd->cleanup_flows, NULL);
+        pthread_join(irmd->irm_sanitize, NULL);
 
         pthread_cancel(irmd->shm_sanitize);
         pthread_join(irmd->shm_sanitize, NULL);
