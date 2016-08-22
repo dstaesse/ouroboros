@@ -24,6 +24,7 @@
 #define OUROBOROS_IPCP_FRCT_H
 
 #include <ouroboros/shared.h>
+#include <ouroboros/common.h>
 
 #include "dt_const.h"
 
@@ -33,10 +34,23 @@ int             frct_init(struct dt_const * dtc,
                           uint32_t address);
 int             frct_fini();
 
-struct frct_i * frct_i_create(int port_id,
-                              enum qos_cube cube);
-int             frct_i_destroy(struct frct_i * instance);
+int             frct_dt_flow(int fd,
+                             enum qos_cube qos);
+/*
+ * FIXME: Will take the index in the DU map,
+ * possibly cep-ids and address
+ */
+int             frct_rmt_post();
 
-int             frct_dt_flow(int fd);
+struct frct_i * frct_i_create(uint32_t      address,
+                              buffer_t *    buf,
+                              enum qos_cube cube);
+/* FIXME: Hand QoS cube here too? We received it in the flow alloc message. */
+int             frct_i_accept(struct frct_i * instance,
+                              buffer_t *      buf);
+int             frct_i_destroy(struct frct_i * instance,
+                               buffer_t *      buf);
+
+/* FIXME: Add read/write ops for frct instances */
 
 #endif

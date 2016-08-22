@@ -29,6 +29,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include "frct.h"
+
 #define MGMT_AE "Management"
 #define DT_AE "Data transfer"
 
@@ -37,9 +39,10 @@ int fmgr_fini();
 
 /* N-flow ops */
 int fmgr_mgmt_flow(char * dst_name);
-int fmgr_dt_flow(char * dst_name);
+int fmgr_dt_flow(char * dst_name,
+                 enum qos_cube qos);
 
-/* N+1-flow ops */
+/* N+1-flow ops, local */
 int fmgr_flow_alloc(pid_t         n_api,
                     int           port_id,
                     char *        dst_ap_name,
@@ -51,5 +54,10 @@ int fmgr_flow_alloc_resp(pid_t n_api,
                          int   response);
 
 int fmgr_flow_dealloc(int port_id);
+
+/* N+1-flow ops, remote */
+int fmgr_flow_alloc_msg(struct frct_i * frct_i,
+                        buffer_t *      buf);
+
 
 #endif
