@@ -39,7 +39,7 @@ int do_enroll_ipcp(int argc, char ** argv)
 {
         char * name = NULL;
         char * dif_name = NULL;
-        pid_t * apis;
+        pid_t * apis = NULL;
         ssize_t len = 0;
         int i = 0;
 
@@ -74,7 +74,8 @@ int do_enroll_ipcp(int argc, char ** argv)
                 if (irm_enroll_ipcp(apis[i], dif_name))
                         return -1;
 
-        free(apis);
+        if (apis != NULL)
+                free(apis);
 
         return 0;
 }

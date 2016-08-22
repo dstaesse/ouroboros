@@ -95,7 +95,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         char * ipcp_type = NULL;
         char * dif_name = NULL;
         char * if_name = NULL;
-        pid_t * apis;
+        pid_t * apis = NULL;
         ssize_t len = 0;
         int i = 0;
 
@@ -194,7 +194,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 if (irm_bootstrap_ipcp(apis[i], &conf))
                         return -1;
 
-        free(apis);
+        if (apis != NULL)
+                free(apis);
 
         return 0;
 }
