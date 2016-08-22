@@ -103,7 +103,13 @@ int ipcp_parse_arg(int argc, char * argv[])
 
 static void close_ptr(void * o)
 {
+        char * name = ipcp_sock_path(getpid());
         close(*((int *) o));
+
+        if (unlink(name))
+                LOG_DBG("Could not unlink %s.", name);
+
+        free(name);
 }
 
 static void clean_msg(void * msg)

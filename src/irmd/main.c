@@ -1595,6 +1595,9 @@ static void irm_destroy()
 
         close(irmd->sockfd);
 
+        if (unlink(IRM_SOCK_PATH))
+                LOG_DBG("Failed to unlink %s.", IRM_SOCK_PATH);
+
         pthread_rwlock_unlock(&irmd->state_lock);
 
         pthread_rwlock_destroy(&irmd->reg_lock);
