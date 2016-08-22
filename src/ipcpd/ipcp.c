@@ -127,6 +127,7 @@ void * ipcp_main_loop(void * o)
         struct dif_config  conf;
 
         char * sock_path;
+        char * msg_name_dup;
 
         struct timeval tv = {(SOCKET_TIMEOUT / 1000),
                              (SOCKET_TIMEOUT % 1000) * 1000};
@@ -188,7 +189,7 @@ void * ipcp_main_loop(void * o)
                         }
                         conf_msg = msg->conf;
                         conf.type = conf_msg->ipcp_type;
-                        conf.dif_name = conf_msg->dif_name;
+                        conf.dif_name = strdup(conf_msg->dif_name);
                         if (conf.dif_name == NULL) {
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
@@ -217,6 +218,8 @@ void * ipcp_main_loop(void * o)
 
                         ret_msg.has_result = true;
                         ret_msg.result = _ipcp->ops->ipcp_bootstrap(&conf);
+                        if (ret_msg.result < 0)
+                                free(conf.dif_name);
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
                         if (_ipcp->ops->ipcp_enroll == NULL) {
@@ -232,9 +235,12 @@ void * ipcp_main_loop(void * o)
                                 LOG_ERR("Ap_reg unsupported.");
                                 break;
                         }
+                        msg_name_dup = strdup(msg->name);
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_name_reg(strdup(msg->name));
+                                _ipcp->ops->ipcp_name_reg(msg_name_dup);
+                        if (ret_msg.result < 0)
+                                free(msg_name_dup);
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_UNREG:
                         if (_ipcp->ops->ipcp_name_unreg == NULL) {
