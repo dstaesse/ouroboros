@@ -59,4 +59,7 @@ void               apn_table_del(struct list_head * apn_table,
 struct apn_entry * apn_table_get(struct list_head * apn_table,
                                  char *             ap);
 
+struct apn_entry * apn_table_get_by_apn(struct list_head * apn_table,
+                                        char *             apn);
+
 #endif /* OUROBOROS_IRMD_APN_TABLE_H */
