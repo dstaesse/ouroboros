@@ -1286,15 +1286,16 @@ static pid_t auto_execute(char ** argv)
                 return -1;
         }
 
-        LOG_INFO("Executing %s.", argv[0]);
         api = fork();
         if (api == -1) {
                 LOG_ERR("Failed to fork");
                 return api;
         }
 
-        if (api != 0)
+        if (api != 0) {
+                LOG_INFO("Instantiated %s as AP-i %d.", argv[0], api);
                 return api;
+        }
 
         execv(argv[0], argv);
 
@@ -1653,9 +1654,9 @@ void * irm_sanitize()
 
                 list_for_each_safe(p, h, &irmd->spawned_apis) {
                         struct pid_el * e = list_entry(p, struct pid_el, next);
+                        waitpid(e->pid, &s, WNOHANG);
                         if (kill(e->pid, 0) >= 0)
                                 continue;
-                        waitpid(e->pid, &s, WNOHANG);
                         LOG_DBG("Child process %d died, error %d.", e->pid, s);
                         list_del(&e->next);
                         free(e);
