@@ -1693,8 +1693,7 @@ void * irm_sanitize()
                                         continue;
                                 LOG_DBG("Dead AP-I removed from: %d %s.",
                                         a->pid, e->name);
-                                list_del(&a->next);
-                                free(a);
+                                reg_entry_del_api(e, a->pid);
                         }
                 }
 
