@@ -61,8 +61,6 @@ int do_bind_ap(int argc, char ** argv)
                         flags |= BIND_AP_AUTO;
                 } else if (strcmp(*argv, "unique") == 0) {
                         flags |= BIND_AP_UNIQUE;
-                } else if (strcmp(*argv, "loc") == 0) {
-                        flags |= BIND_AP_LOC;
                 } else if (strcmp(*argv, "--") == 0) {
                         ++argv;
                         --argc;
