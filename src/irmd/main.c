@@ -1364,7 +1364,8 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_mutex_lock(&re->state_lock);
 
                 re->state = REG_NAME_AUTO_EXEC;
-                a = apn_table_get(&irmd->apn_table, reg_entry_get_apn(re));
+                a = apn_table_get_by_apn(&irmd->apn_table,
+                                         reg_entry_get_apn(re));
                 pthread_mutex_unlock(&re->state_lock);
                 if (a == NULL || (c_api->pid = auto_execute(a->argv)) < 0) {
                         pthread_mutex_lock(&re->state_lock);

@@ -162,3 +162,20 @@ struct apn_entry * apn_table_get(struct list_head * apn_table, char * ap)
 
         return NULL;
 }
+
+struct apn_entry * apn_table_get_by_apn(struct list_head * apn_table,
+                                        char *             apn)
+{
+        struct list_head * p;
+
+        if (apn_table == NULL || apn == NULL)
+                return NULL;
+
+        list_for_each(p, apn_table) {
+                struct apn_entry * e = list_entry(p, struct apn_entry, next);
+                if (!strcmp(e->apn, apn))
+                        return e;
+        }
+
+        return NULL;
+}
