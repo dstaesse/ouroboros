@@ -12,10 +12,13 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-SET(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
+set(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 
 protobuf_generate_c(STATIC_INFO_SRCS STATIC_INFO_HDRS
   static_info.proto)
+
+protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS
+  flow_alloc.proto)
 
 set(SOURCE_FILES
         # Add source files here
@@ -23,15 +26,16 @@ set(SOURCE_FILES
         fmgr.c
         frct.c
         ribmgr.c
+        rmt.c
 )
 
 add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
-  ${STATIC_INFO_SRCS})
+  ${STATIC_INFO_SRCS} ${FLOW_ALLOC_SRCS})
 target_link_libraries (ipcpd-normal LINK_PUBLIC ouroboros)
 
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-   MACRO_ADD_COMPILE_FLAGS(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
+   macro_add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
