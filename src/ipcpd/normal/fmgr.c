@@ -98,17 +98,16 @@ static void * fmgr_listen(void * o)
         char * ae_name;
 
         while (true) {
-                pthread_mutex_lock(&_ipcp->state_lock);
-                while (!(_ipcp->state == IPCP_ENROLLED ||
-                         _ipcp->state == IPCP_SHUTDOWN))
-                        pthread_cond_wait(&_ipcp->state_cond,
-                                          &_ipcp->state_lock);
+                ipcp_wait_state(_ipcp, IPCP_ENROLLED, NULL);
 
-                if (_ipcp->state == IPCP_SHUTDOWN) {
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
+
+                if (ipcp_get_state(_ipcp) == IPCP_SHUTDOWN) {
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         return 0;
                 }
-                pthread_mutex_unlock(&_ipcp->state_lock);
+
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
                 fd = flow_accept(&ae_name);
                 if (fd < 0) {

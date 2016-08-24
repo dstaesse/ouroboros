@@ -254,15 +254,15 @@ int ribmgr_cdap_write(struct cdap * instance,
         static_info_msg_t * msg;
         int ret = 0;
 
-        pthread_mutex_lock(&_ipcp->state_lock);
-        if (_ipcp->state == IPCP_PENDING_ENROLL &&
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        if (ipcp_get_state(_ipcp) == IPCP_PENDING_ENROLL &&
             strcmp(name, STATIC_INFO) == 0) {
                 LOG_DBG("Received static DIF information.");
 
                 msg = static_info_msg__unpack(NULL, len, data);
                 if (msg == NULL) {
-                        ipcp_state_change(_ipcp, IPCP_INIT);
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        ipcp_set_state(_ipcp, IPCP_INIT);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         cdap_send_reply(instance, invoke_id, -1, NULL, 0);
                         LOG_ERR("Failed to unpack static info message.");
                         return -1;
@@ -280,8 +280,8 @@ int ribmgr_cdap_write(struct cdap * instance,
                 rib->address = msg->address;
 
                 if (frct_init(&rib->dtc, rib->address)) {
-                        ipcp_state_change(_ipcp, IPCP_INIT);
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        ipcp_set_state(_ipcp, IPCP_INIT);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         cdap_send_reply(instance, invoke_id, -1, NULL, 0);
                         static_info_msg__free_unpacked(msg, NULL);
                         LOG_ERR("Failed to init FRCT");
@@ -289,9 +289,11 @@ int ribmgr_cdap_write(struct cdap * instance,
                 }
 
                 static_info_msg__free_unpacked(msg, NULL);
-        } else
+        } else {
                 ret = -1;
-        pthread_mutex_unlock(&_ipcp->state_lock);
+        }
+
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (cdap_send_reply(instance, invoke_id, ret, NULL, 0)) {
                 LOG_ERR("Failed to send reply to write request.");
@@ -332,13 +334,13 @@ int ribmgr_cdap_start(struct cdap * instance,
         size_t len = 0;
         int iid = 0;
 
-        pthread_mutex_lock(&_ipcp->state_lock);
-        if (_ipcp->state == IPCP_ENROLLED &&
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        if (ipcp_get_state(_ipcp) == IPCP_ENROLLED &&
             strcmp(name, ENROLLMENT) == 0) {
                 LOG_DBG("New enrollment request.");
 
                 if (cdap_send_reply(instance, invoke_id, 0, NULL, 0)) {
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         LOG_ERR("Failed to send reply to enrollment request.");
                         return -1;
                 }
@@ -357,14 +359,14 @@ int ribmgr_cdap_start(struct cdap * instance,
 
                 len = static_info_msg__get_packed_size(&stat_info);
                 if (len == 0) {
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         LOG_ERR("Failed to get size of static information.");
                         return -1;
                 }
 
                 data = malloc(len);
                 if (data == NULL) {
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         LOG_ERR("Failed to allocate memory.");
                         return -1;
                 }
@@ -378,7 +380,7 @@ int ribmgr_cdap_start(struct cdap * instance,
                 iid = cdap_send_write(instance, STATIC_INFO, data, len, 0);
                 if (iid < 0) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(data);
                         LOG_ERR("Failed to send static information.");
                         return -1;
@@ -386,7 +388,7 @@ int ribmgr_cdap_start(struct cdap * instance,
 
                 if (cdap_result_wait(instance, WRITE, STATIC_INFO, iid)) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(data);
                         LOG_ERR("Remote did not receive static information.");
                         return -1;
@@ -402,7 +404,7 @@ int ribmgr_cdap_start(struct cdap * instance,
                 iid = cdap_send_stop(instance, ENROLLMENT);
                 if (iid < 0) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(data);
                         LOG_ERR("Failed to send stop of enrollment.");
                         return -1;
@@ -410,7 +412,7 @@ int ribmgr_cdap_start(struct cdap * instance,
 
                 if (cdap_result_wait(instance, STOP, ENROLLMENT, iid)) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         free(data);
                         LOG_ERR("Remote failed to complete enrollment.");
                         return -1;
@@ -420,12 +422,12 @@ int ribmgr_cdap_start(struct cdap * instance,
                 free(data);
         } else {
                 if (cdap_send_reply(instance, invoke_id, -1, NULL, 0)) {
-                        pthread_mutex_unlock(&_ipcp->state_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         LOG_ERR("Failed to send reply to start request.");
                         return -1;
                 }
         }
-        pthread_mutex_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }
@@ -436,21 +438,21 @@ int ribmgr_cdap_stop(struct cdap * instance,
 {
         int ret = 0;
 
-        pthread_mutex_lock(&_ipcp->state_lock);
-        if (_ipcp->state == IPCP_PENDING_ENROLL &&
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
+        if (ipcp_get_state(_ipcp) == IPCP_PENDING_ENROLL &&
             strcmp(name, ENROLLMENT) == 0) {
                 LOG_DBG("Stop enrollment received.");
 
-                ipcp_state_change(_ipcp, IPCP_ENROLLED);
+                ipcp_set_state(_ipcp, IPCP_ENROLLED);
         } else
                 ret = -1;
 
         if (cdap_send_reply(instance, invoke_id, ret, NULL, 0)) {
-                pthread_mutex_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Failed to send reply to stop request.");
                 return -1;
         }
-        pthread_mutex_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }
@@ -486,11 +488,11 @@ int ribmgr_add_flow(int fd)
         flow->instance = instance;
         flow->fd = fd;
 
-        pthread_mutex_lock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
         pthread_rwlock_wrlock(&rib->flows_lock);
         if (list_empty(&rib->flows) &&
-            _ipcp->state == IPCP_INIT) {
-                ipcp_state_change(_ipcp, IPCP_PENDING_ENROLL);
+            ipcp_get_state(_ipcp) == IPCP_INIT) {
+                ipcp_set_state(_ipcp, IPCP_PENDING_ENROLL);
 
                 pthread_mutex_lock(&rib->cdap_reqs_lock);
                 iid = cdap_send_start(instance,
@@ -498,6 +500,7 @@ int ribmgr_add_flow(int fd)
                 if (iid < 0) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
                         pthread_rwlock_unlock(&rib->flows_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         LOG_ERR("Failed to start enrollment.");
                         cdap_destroy(instance);
                         free(flow);
@@ -507,6 +510,7 @@ int ribmgr_add_flow(int fd)
                 if (cdap_result_wait(instance, START, ENROLLMENT, iid)) {
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
                         pthread_rwlock_unlock(&rib->flows_lock);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         LOG_ERR("Failed to start enrollment.");
                         cdap_destroy(instance);
                         free(flow);
@@ -514,10 +518,10 @@ int ribmgr_add_flow(int fd)
                 }
                 pthread_mutex_unlock(&rib->cdap_reqs_lock);
         }
-        pthread_mutex_unlock(&_ipcp->state_lock);
 
         list_add(&flow->next, &rib->flows);
         pthread_rwlock_unlock(&rib->flows_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }
@@ -534,6 +538,7 @@ int ribmgr_remove_flow(int fd)
                         if (cdap_destroy(flow->instance))
                                 LOG_ERR("Failed to destroy CDAP instance.");
                         list_del(&flow->next);
+                        pthread_rwlock_unlock(&rib->flows_lock);
                         free(flow);
                         return 0;
                 }

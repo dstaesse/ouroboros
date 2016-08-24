@@ -75,13 +75,11 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         LOG_DBG("Terminating by order of %d. Bye.",
                                 info->si_pid);
 
-                        pthread_mutex_lock(&_ipcp->state_lock);
+                        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
-                        ipcp_state_change(_ipcp, IPCP_SHUTDOWN);
+                        ipcp_set_state(_ipcp, IPCP_SHUTDOWN);
 
-                        pthread_mutex_unlock(&_ipcp->state_lock);
-
-                        pthread_cancel(normal_data(_ipcp)->mainloop);
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
 
                         if (fmgr_fini())
                                 LOG_ERR("Failed to finalize flow manager.");
@@ -99,21 +97,15 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
 static int normal_ipcp_name_reg(char * name)
 {
-        pthread_mutex_lock(&_ipcp->state_lock);
-
-        if (_ipcp->state != IPCP_ENROLLED) {
-                pthread_mutex_unlock(&_ipcp->state_lock);
-                LOG_ERR("Won't register with non-enrolled IPCP.");
-                return -1; /* -ENOTENROLLED */
-        }
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         if (ipcp_data_add_reg_entry(_ipcp->data, name)) {
-                pthread_mutex_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
                 return -1;
         }
 
-        pthread_mutex_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBG("Registered %s.", name);
 
@@ -122,11 +114,11 @@ static int normal_ipcp_name_reg(char * name)
 
 static int normal_ipcp_name_unreg(char * name)
 {
-        pthread_mutex_lock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
         ipcp_data_del_reg_entry(_ipcp->data, name);
 
-        pthread_mutex_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }
@@ -135,62 +127,59 @@ static int normal_ipcp_enroll(char * dif_name)
 {
         struct timespec timeout = {(ENROLL_TIMEOUT / 1000),
                                    (ENROLL_TIMEOUT % 1000) * MILLION};
-        struct timespec abstime;
 
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-        ts_add(&abstime, &timeout, &abstime);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
-        pthread_mutex_lock(&_ipcp->state_lock);
-
-        if (_ipcp->state != IPCP_INIT) {
-                pthread_mutex_unlock(&_ipcp->state_lock);
+        if (ipcp_get_state(_ipcp) != IPCP_INIT) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Won't enroll an IPCP that is not in INIT.");
                 return -1; /* -ENOTINIT */
         }
 
-        pthread_mutex_unlock(&_ipcp->state_lock);
-
         if (fmgr_mgmt_flow(dif_name)) {
-                pthread_mutex_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Failed to establish management flow.");
                 return -1;
         }
 
-        pthread_mutex_lock(&_ipcp->state_lock);
-        while (_ipcp->state != IPCP_ENROLLED)
-                if (pthread_cond_timedwait(&_ipcp->state_cond,
-                                           &_ipcp->state_lock,
-                                           &abstime) == ETIMEDOUT) {
-                        pthread_mutex_unlock(&_ipcp->state_lock);
-                        LOG_ERR("Enrollment didn't complete in time.");
-                        return -1;
-                }
-        pthread_mutex_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+
+        if (ipcp_wait_state(_ipcp, IPCP_ENROLLED, &timeout) == -ETIMEDOUT) {
+                LOG_ERR("Enrollment timed out.");
+                return -1;
+        }
+
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
+
+        if (ipcp_get_state(_ipcp) != IPCP_ENROLLED) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
+                return -1;
+        }
 
         return 0;
 }
 
 static int normal_ipcp_bootstrap(struct dif_config * conf)
 {
-        pthread_mutex_lock(&_ipcp->state_lock);
+        pthread_rwlock_wrlock(&_ipcp->state_lock);
 
-        if (_ipcp->state != IPCP_INIT) {
-                pthread_mutex_unlock(&_ipcp->state_lock);
+        if (ipcp_get_state(_ipcp) != IPCP_INIT) {
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Won't bootstrap an IPCP that is not in INIT.");
                 return -1; /* -ENOTINIT */
         }
 
         if (ribmgr_bootstrap(conf)) {
-                pthread_mutex_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Failed to bootstrap RIB manager.");
                 return -1;
         }
 
-        ipcp_state_change(_ipcp, IPCP_ENROLLED);
+        ipcp_set_state(_ipcp, IPCP_ENROLLED);
 
         _ipcp->data->dif_name = conf->dif_name;
 
-        pthread_mutex_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         LOG_DBG("Bootstrapped in DIF %s.", conf->dif_name);
 
@@ -247,9 +236,9 @@ void normal_ipcp_data_destroy()
         if (_ipcp == NULL)
                 return;
 
-        pthread_mutex_lock(&_ipcp->state_lock);
+        pthread_rwlock_rdlock(&_ipcp->state_lock);
 
-        if (_ipcp->state != IPCP_SHUTDOWN)
+        if (ipcp_get_state(_ipcp) != IPCP_SHUTDOWN)
                 LOG_WARN("Cleaning up while not in shutdown.");
 
         if (normal_data(_ipcp)->dum != NULL)
@@ -257,7 +246,7 @@ void normal_ipcp_data_destroy()
         if (normal_data(_ipcp)->rb != NULL)
                 shm_ap_rbuff_close(normal_data(_ipcp)->rb);
 
-        pthread_mutex_unlock(&_ipcp->state_lock);
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         ipcp_data_destroy(_ipcp->data);
 }
@@ -331,16 +320,12 @@ int main(int argc, char * argv[])
                 exit(EXIT_FAILURE);
         }
 
-        pthread_mutex_lock(&_ipcp->state_lock);
-
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         pthread_create(&normal_data(_ipcp)->mainloop, NULL,
                        ipcp_main_loop, _ipcp);
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
-
-        pthread_mutex_unlock(&_ipcp->state_lock);
 
         if (ipcp_create_r(getpid())) {
                 LOG_ERR("Failed to notify IRMd we are initialized.");

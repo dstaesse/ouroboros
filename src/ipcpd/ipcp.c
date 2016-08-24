@@ -22,6 +22,7 @@
 
 #include <ouroboros/config.h>
 #include <ouroboros/ipcp.h>
+#include <ouroboros/time_utils.h>
 
 #define OUROBOROS_PREFIX "ipcpd/ipcp"
 #include <ouroboros/logs.h>
@@ -44,7 +45,8 @@ struct ipcp * ipcp_instance_create()
         i->irmd_fd = -1;
         i->state   = IPCP_INIT;
 
-        pthread_mutex_init(&i->state_lock, NULL);
+        pthread_rwlock_init(&i->state_lock, NULL);
+        pthread_mutex_init(&i->state_mtx, NULL);
         pthread_condattr_init(&cattr);
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
         pthread_cond_init(&i->state_cond, &cattr);
@@ -52,14 +54,65 @@ struct ipcp * ipcp_instance_create()
         return i;
 }
 
-void ipcp_state_change(struct ipcp * ipcp,
-                       enum ipcp_state state)
+void ipcp_set_state(struct ipcp * ipcp,
+                    enum ipcp_state state)
 {
         if (ipcp == NULL)
             return;
 
+        pthread_mutex_lock(&ipcp->state_mtx);
+
         ipcp->state = state;
+
         pthread_cond_broadcast(&ipcp->state_cond);
+        pthread_mutex_unlock(&ipcp->state_mtx);
+}
+
+enum ipcp_state ipcp_get_state(struct ipcp * ipcp)
+{
+        enum ipcp_state state;
+
+        if (ipcp == NULL)
+                return IPCP_NULL;
+
+        pthread_mutex_lock(&ipcp->state_mtx);
+
+        state = ipcp->state;
+
+        pthread_mutex_unlock(&ipcp->state_mtx);
+
+        return state;
+}
+
+int ipcp_wait_state(struct ipcp *           ipcp,
+                    enum ipcp_state         state,
+                    const struct timespec * timeout)
+{
+        struct timespec abstime;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, timeout, &abstime);
+
+        pthread_mutex_lock(&ipcp->state_mtx);
+
+        while (ipcp->state != state && ipcp->state != IPCP_SHUTDOWN) {
+                int ret;
+                if (timeout == NULL)
+                        ret = pthread_cond_wait(&ipcp->state_cond,
+                                                &ipcp->state_mtx);
+                else
+                        ret = pthread_cond_timedwait(&ipcp->state_cond,
+                                                     &ipcp->state_mtx,
+                                                     &abstime);
+                if (ret) {
+                        pthread_mutex_unlock(&ipcp->state_mtx);
+                        return -ret;
+                }
+        }
+
+        pthread_mutex_unlock(&ipcp->state_mtx);
+
+        return 0;
 }
 
 int ipcp_parse_arg(int argc, char * argv[])
@@ -101,22 +154,6 @@ int ipcp_parse_arg(int argc, char * argv[])
         return 0;
 }
 
-static void close_ptr(void * o)
-{
-        char * name = ipcp_sock_path(getpid());
-        close(*((int *) o));
-
-        if (unlink(name))
-                LOG_DBG("Could not unlink %s.", name);
-
-        free(name);
-}
-
-static void clean_msg(void * msg)
-{
-         ipcp_msg__free_unpacked(msg, NULL);
-}
-
 void * ipcp_main_loop(void * o)
 {
         int     lsockfd;
@@ -135,8 +172,12 @@ void * ipcp_main_loop(void * o)
         char * sock_path;
         char * msg_name_dup;
 
-        struct timeval tv = {(SOCKET_TIMEOUT / 1000),
+        struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
+                             (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
+
+        struct timeval ltv = {(SOCKET_TIMEOUT / 1000),
                              (SOCKET_TIMEOUT % 1000) * 1000};
+
 
         if (_ipcp == NULL) {
                 LOG_ERR("Invalid ipcp struct.");
@@ -150,27 +191,32 @@ void * ipcp_main_loop(void * o)
         sockfd = server_socket_open(sock_path);
         if (sockfd < 0) {
                 LOG_ERR("Could not open server socket.");
+                free(sock_path);
                 return (void *) 1;
         }
 
-        free(sock_path);
-
-        pthread_cleanup_push(close_ptr, (void *) &sockfd);
+        if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,
+                       (void *) &tv, sizeof(tv)))
+                LOG_WARN("Failed to set timeout on socket.");
 
         while (true) {
-                ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
-
-                lsockfd = accept(sockfd, 0, 0);
-                if (lsockfd < 0) {
-                        LOG_ERR("Cannot accept new connection");
+                pthread_rwlock_rdlock(&_ipcp->state_lock);
+                if (ipcp_get_state(_ipcp) == IPCP_SHUTDOWN) {
+                        pthread_rwlock_unlock(&_ipcp->state_lock);
                         break;
                 }
 
-                if (setsockopt(lsockfd, SOL_SOCKET, SO_RCVTIMEO,
-                               (void *) &tv, sizeof(tv)))
-                        LOG_WARN("Failed to set timeout on socket.");
+                pthread_rwlock_unlock(&_ipcp->state_lock);
 
-                pthread_cleanup_push(close_ptr, (void *) &lsockfd);
+                ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
+
+                lsockfd = accept(sockfd, 0, 0);
+                if (lsockfd < 0)
+                        continue;
+
+                if (setsockopt(lsockfd, SOL_SOCKET, SO_RCVTIMEO,
+                               (void *) &ltv, sizeof(ltv)))
+                        LOG_WARN("Failed to set timeout on socket.");
 
                 count = read(lsockfd, buf, IPCP_MSG_BUF_SIZE);
                 if (count <= 0) {
@@ -184,8 +230,6 @@ void * ipcp_main_loop(void * o)
                         close(lsockfd);
                         continue;
                 }
-
-                pthread_cleanup_push(clean_msg, (void *) msg);
 
                 switch (msg->code) {
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
@@ -201,7 +245,6 @@ void * ipcp_main_loop(void * o)
                                 ret_msg.result = -1;
                                 break;
                         }
-
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
                                 conf.addr_size = conf_msg->addr_size;
                                 conf.cep_id_size = conf_msg->cep_id_size;
@@ -218,7 +261,6 @@ void * ipcp_main_loop(void * o)
                                 conf.ip_addr  = conf_msg->ip_addr;
                                 conf.dns_addr = conf_msg->dns_addr;
                         }
-
                         if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC)
                                 conf.if_name = conf_msg->if_name;
 
@@ -295,8 +337,7 @@ void * ipcp_main_loop(void * o)
                         break;
                 }
 
-                pthread_cleanup_pop(true);
-                pthread_cleanup_pop(false);
+                ipcp_msg__free_unpacked(msg, NULL);
 
                 buffer.len = ipcp_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
@@ -321,10 +362,13 @@ void * ipcp_main_loop(void * o)
 
                 free(buffer.data);
                 close(lsockfd);
-
         }
 
-        pthread_cleanup_pop(true);
+        close(sockfd);
+        if (unlink(sock_path))
+                LOG_DBG("Could not unlink %s.", sock_path);
 
-        return NULL;
+        free(sock_path);
+
+        return (void *) 0;
 }
