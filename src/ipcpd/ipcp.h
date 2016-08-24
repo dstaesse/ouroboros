@@ -27,12 +27,14 @@
 #include <ouroboros/shared.h>
 
 #include <pthread.h>
+#include <time.h>
 
 #include "ipcp-ops.h"
 #include "ipcp-data.h"
 
 enum ipcp_state {
-        IPCP_INIT = 0,
+        IPCP_NULL = 0,
+        IPCP_INIT,
         IPCP_PENDING_ENROLL,
         IPCP_ENROLLED,
         IPCP_DISCONNECTED,
@@ -45,15 +47,27 @@ struct ipcp {
         int                irmd_fd;
 
         enum ipcp_state    state;
-        pthread_mutex_t    state_lock;
+        pthread_rwlock_t   state_lock;
+        pthread_mutex_t    state_mtx;
         pthread_cond_t     state_cond;
 };
 
-struct ipcp * ipcp_instance_create();
-void          ipcp_state_change(struct ipcp * ipcp,
-                                enum ipcp_state state);
-void *        ipcp_main_loop(void * o);
-void *        ipcp_sdu_loop(void * o);
-int           ipcp_parse_arg(int argc, char * argv[]);
+struct ipcp *   ipcp_instance_create();
+
+void            ipcp_set_state(struct ipcp *   ipcp,
+                               enum ipcp_state state);
+
+enum ipcp_state ipcp_get_state(struct ipcp * ipcp);
+
+int             ipcp_wait_state(struct ipcp *           ipcp,
+                                enum ipcp_state         state,
+                                const struct timespec * timeout);
+
+void *          ipcp_main_loop(void * o);
+
+void *          ipcp_sdu_loop(void * o);
+
+int             ipcp_parse_arg(int argc,
+                               char * argv[]);
 
 #endif
