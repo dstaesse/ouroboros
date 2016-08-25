@@ -80,15 +80,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         ipcp_set_state(_ipcp, IPCP_SHUTDOWN);
 
                         pthread_rwlock_unlock(&_ipcp->state_lock);
-
-                        if (fmgr_fini())
-                                LOG_ERR("Failed to finalize flow manager.");
-
-                        if (ribmgr_fini())
-                                LOG_ERR("Failed to finalize RIB manager.");
-
-                        if (frct_fini())
-                                LOG_ERR("Failed to finalize FRCT.");
                 }
         default:
                 return;
@@ -247,9 +238,9 @@ void normal_ipcp_data_destroy()
         if (normal_data(_ipcp)->rb != NULL)
                 shm_ap_rbuff_close(normal_data(_ipcp)->rb);
 
-        pthread_rwlock_unlock(&_ipcp->state_lock);
-
         ipcp_data_destroy(_ipcp->data);
+
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 }
 
 int main(int argc, char * argv[])
@@ -338,6 +329,15 @@ int main(int argc, char * argv[])
         }
 
         pthread_join(normal_data(_ipcp)->mainloop, NULL);
+
+        if (fmgr_fini())
+                LOG_ERR("Failed to finalize flow manager.");
+
+        if (ribmgr_fini())
+                LOG_ERR("Failed to finalize RIB manager.");
+
+        if (frct_fini())
+                LOG_ERR("Failed to finalize FRCT.");
 
         normal_ipcp_data_destroy();
         free(_ipcp);

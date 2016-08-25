@@ -182,8 +182,7 @@ int fmgr_fini()
 
         pthread_cancel(fmgr->listen_thread);
 
-        pthread_join(fmgr->listen_thread,
-                     NULL);
+        pthread_join(fmgr->listen_thread, NULL);
 
         list_for_each(pos, &fmgr->n_1_flows) {
                 struct n_1_flow * e =
@@ -193,6 +192,9 @@ int fmgr_fini()
                 if (ribmgr_remove_flow(e->fd))
                     LOG_ERR("Failed to remove management flow.");
         }
+
+        pthread_mutex_destroy(&fmgr->n_1_flows_lock);
+        pthread_mutex_destroy(&fmgr->n_flows_lock);
 
         free(fmgr);
 
