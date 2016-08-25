@@ -428,7 +428,6 @@ int fmgr_flow_alloc_resp(pid_t n_api,
 {
         struct n_flow * flow;
         flow_alloc_msg_t msg = FLOW_ALLOC_MSG__INIT;
-        int ret;
         buffer_t buf;
 
         pthread_mutex_lock(&fmgr->n_flows_lock);
@@ -464,26 +463,30 @@ int fmgr_flow_alloc_resp(pid_t n_api,
         flow_alloc_msg__pack(&msg, buf.data);
 
         if (response < 0) {
-                ret = frct_i_destroy(flow->frct_i, &buf);
+                frct_i_destroy(flow->frct_i, &buf);
                 free(buf.data);
                 list_del(&flow->next);
                 free(flow);
         } else {
-                frct_i_accept(flow->frct_i, &buf);
+                if (frct_i_accept(flow->frct_i, &buf)) {
+                        pthread_mutex_unlock(&fmgr->n_flows_lock);
+                        return -1;
+                }
+
                 flow->flow.state = FLOW_ALLOCATED;
                 flow->flow.api = n_api;
 
                 flow->flow.rb = shm_ap_rbuff_open(n_api);
                 if (flow->flow.rb == NULL) {
-                        ret = n_flow_dealloc(port_id);
+                        n_flow_dealloc(port_id);
                         pthread_mutex_unlock(&fmgr->n_flows_lock);
-                        return ret;
+                        return -1;
                 }
         }
 
         pthread_mutex_unlock(&fmgr->n_flows_lock);
 
-        return ret;
+        return 0;
 }
 
 int fmgr_flow_dealloc(int port_id)
