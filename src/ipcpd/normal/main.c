@@ -136,13 +136,12 @@ static int normal_ipcp_enroll(char * dif_name)
                 return -1; /* -ENOTINIT */
         }
 
+        pthread_rwlock_unlock(&_ipcp->state_lock);
+
         if (fmgr_mgmt_flow(dif_name)) {
-                pthread_rwlock_unlock(&_ipcp->state_lock);
                 LOG_ERR("Failed to establish management flow.");
                 return -1;
         }
-
-        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         if (ipcp_wait_state(_ipcp, IPCP_ENROLLED, &timeout) == -ETIMEDOUT) {
                 LOG_ERR("Enrollment timed out.");
@@ -155,6 +154,8 @@ static int normal_ipcp_enroll(char * dif_name)
                 pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1;
         }
+
+        pthread_rwlock_unlock(&_ipcp->state_lock);
 
         return 0;
 }

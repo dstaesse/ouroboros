@@ -425,13 +425,20 @@ static int enroll_ipcp(pid_t  api,
                 return -1;
         }
 
-        pthread_rwlock_rdlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd->reg_lock);
 
         entry = get_ipcp_entry_by_api(api);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("No such IPCP.");
+                return -1;
+        }
+
+        if (entry->dif_name != NULL) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_ERR("IPCP in wrong state");
                 return -1;
         }
 
@@ -443,7 +450,12 @@ static int enroll_ipcp(pid_t  api,
                 return -1;
         }
 
+        pthread_rwlock_unlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
+
         if (ipcp_enroll(api, dif_name)) {
+                pthread_rwlock_rdlock(&irmd->state_lock);
+                pthread_rwlock_wrlock(&irmd->reg_lock);
                 free(entry->dif_name);
                 entry->dif_name = NULL;
                 pthread_rwlock_unlock(&irmd->reg_lock);
@@ -452,11 +464,8 @@ static int enroll_ipcp(pid_t  api,
                 return -1;
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
-
         LOG_INFO("Enrolled IPCP %d in DIF %s.",
-                 entry->api, dif_name);
+                 api, dif_name);
 
         return 0;
 }
