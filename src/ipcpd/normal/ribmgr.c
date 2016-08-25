@@ -37,6 +37,7 @@
 #include "dt_const.h"
 #include "frct.h"
 #include "ipcp.h"
+#include "cdap_request.h"
 
 #include "static_info.pb-c.h"
 typedef StaticInfoMsg static_info_msg_t;
@@ -45,27 +46,6 @@ typedef StaticInfoMsg static_info_msg_t;
 #define STATIC_INFO "static DIF information"
 
 extern struct ipcp * _ipcp;
-
-enum cdap_opcode {
-        READ = 0,
-        WRITE,
-        START,
-        STOP,
-        CREATE,
-        DELETE
-};
-
-struct cdap_request {
-        enum cdap_opcode code;
-        char *           name;
-        int              invoke_id;
-        struct cdap *    instance;
-        int              result;
-        bool             replied;
-        pthread_cond_t   cond;
-
-        struct list_head next;
-};
 
 struct mgmt_flow {
         struct cdap *    instance;
@@ -86,53 +66,48 @@ struct rib {
 } * rib = NULL;
 
 /* Call while holding cdap_reqs_lock */
+/* FIXME: better not to call blocking functions under any lock */
 int cdap_result_wait(struct cdap * instance,
                      enum cdap_opcode code,
                      char * name,
                      int invoke_id)
 {
         struct cdap_request * req;
-        pthread_condattr_t cattr;
-        struct timespec timeout = {(CDAP_REPLY_TIMEOUT / 1000),
-                                   (CDAP_REPLY_TIMEOUT % 1000) * MILLION};
-        struct timespec abstime;
-
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-        ts_add(&abstime, &timeout, &abstime);
-
-        req = malloc(sizeof(*req));
-        if (req == NULL)
+        int ret;
+        char * name_dup = strdup(name);
+        if (name_dup == NULL)
                 return -1;
 
-        req->code = code;
-        req->invoke_id = invoke_id;
-        req->instance = instance;
-        req->result = -1;
-        req->replied = false;
-
-        pthread_condattr_init(&cattr);
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
-        pthread_cond_init(&req->cond, &cattr);
-
-        req->name = strdup(name);
-        if (req->name == NULL) {
-                free(req);
+        req = cdap_request_create(code, name_dup, invoke_id, instance);
+        if (req == NULL) {
+                free(name_dup);
                 return -1;
         }
 
-        INIT_LIST_HEAD(&req->next);
-
         list_add(&req->next, &rib->cdap_reqs);
 
-        while (req->replied == false)
-                if (pthread_cond_timedwait(&req->cond,
-                                           &rib->cdap_reqs_lock,
-                                           &abstime) == ETIMEDOUT) {
-                        LOG_ERR("Didn't receive a CDAP reply in time.");
-                        return -1;
-                }
+        pthread_mutex_unlock(&rib->cdap_reqs_lock);
 
-        return req->result;
+        ret = cdap_request_wait(req);
+
+        pthread_mutex_lock(&rib->cdap_reqs_lock);
+
+        if (ret == -1)  /* should only be on ipcp shutdown */
+                LOG_DBG("Waiting CDAP request destroyed.");
+
+        if (ret == -ETIMEDOUT)
+                LOG_ERR("CDAP Request timed out.");
+
+        if (ret)
+                LOG_DBG("Unknown error code: %d.", ret);
+
+        if (!ret)
+                ret = req->result;
+
+        list_del(&req->next);
+        cdap_request_destroy(req);
+
+        return ret;
 }
 
 int ribmgr_init()
@@ -200,11 +175,13 @@ int ribmgr_cdap_reply(struct cdap * instance,
         struct list_head * pos, * n = NULL;
 
         pthread_mutex_lock(&rib->cdap_reqs_lock);
+
         list_for_each_safe(pos, n, &rib->cdap_reqs) {
                 struct cdap_request * req =
                         list_entry(pos, struct cdap_request, next);
                 if (req->instance == instance &&
-                    req->invoke_id == invoke_id) {
+                    req->invoke_id == invoke_id &&
+                    req->state == REQ_PENDING) {
                         if (result != 0)
                                 LOG_ERR("CDAP command with code %d and name %s "
                                         "failed with error %d",
@@ -214,20 +191,12 @@ int ribmgr_cdap_reply(struct cdap * instance,
                                         "executed succesfully",
                                         req->code, req->name);
 
-                        /* FIXME: In case of a read, update values here */
-
-                        req->replied = true;
-                        req->result = result;
-                        pthread_cond_broadcast(&req->cond);
                         pthread_mutex_unlock(&rib->cdap_reqs_lock);
 
-                        sched_yield();
+                        /* FIXME: In case of a read, update values here */
+                        cdap_request_respond(req, result);
 
                         pthread_mutex_lock(&rib->cdap_reqs_lock);
-                        free(req->name);
-                        list_del(&req->next);
-                        free(req);
-                        break;
                 }
         }
         pthread_mutex_unlock(&rib->cdap_reqs_lock);

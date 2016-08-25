@@ -25,6 +25,7 @@ set(SOURCE_FILES
         main.c
         fmgr.c
         frct.c
+        cdap_request.c
         ribmgr.c
         rmt.c
 )
