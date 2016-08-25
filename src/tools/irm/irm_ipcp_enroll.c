@@ -70,9 +70,12 @@ int do_enroll_ipcp(int argc, char ** argv)
                 len = irm_list_ipcps(name, &apis);
         }
 
-        for (i = 0; i < len; i++)
-                if (irm_enroll_ipcp(apis[i], dif_name))
+        for (i = 0; i < len; i++) {
+                if (irm_enroll_ipcp(apis[i], dif_name)) {
+                        free(apis);
                         return -1;
+                }
+        }
 
         if (apis != NULL)
                 free(apis);
