@@ -1548,6 +1548,20 @@ static void irm_destroy()
         if (irmd->threadpool != NULL)
                 free(irmd->threadpool);
 
+        pthread_rwlock_wrlock(&irmd->flows_lock);
+
+        list_for_each_safe(p, h, &irmd->irm_flows) {
+                struct irm_flow * f = list_entry(p, struct irm_flow, next);
+                list_del(&f->next);
+                ipcp_flow_dealloc(f->n_1_api, f->port_id);
+                irm_flow_destroy(f);
+        }
+
+        close(irmd->sockfd);
+
+        if (unlink(IRM_SOCK_PATH))
+                LOG_DBG("Failed to unlink %s.", IRM_SOCK_PATH);
+
         pthread_rwlock_wrlock(&irmd->reg_lock);
         /* clear the lists */
         list_for_each_safe(p, h, &irmd->ipcps) {
@@ -1585,14 +1599,6 @@ static void irm_destroy()
 
         pthread_rwlock_unlock(&irmd->reg_lock);
 
-        pthread_rwlock_wrlock(&irmd->flows_lock);
-
-        list_for_each_safe(p, h, &irmd->irm_flows) {
-                struct irm_flow * f = list_entry(p, struct irm_flow, next);
-                list_del(&f->next);
-                irm_flow_destroy(f);
-        }
-
         if (irmd->port_ids != NULL)
                 bmp_destroy(irmd->port_ids);
 
@@ -1603,11 +1609,6 @@ static void irm_destroy()
 
         if (irmd->lf != NULL)
                 lockfile_destroy(irmd->lf);
-
-        close(irmd->sockfd);
-
-        if (unlink(IRM_SOCK_PATH))
-                LOG_DBG("Failed to unlink %s.", IRM_SOCK_PATH);
 
         pthread_rwlock_unlock(&irmd->state_lock);
 
