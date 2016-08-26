@@ -830,8 +830,8 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGTERM:
         case SIGHUP:
                 if (info->si_pid == irmd_api) {
-                        LOG_DBG("Terminating by order of %d. Bye.",
-                                info->si_pid);
+                        LOG_DBG("IPCP %d terminating by order of %d. Bye.",
+                                getpid(), info->si_pid);
 
                         pthread_rwlock_wrlock(&_ipcp->state_lock);
 
