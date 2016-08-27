@@ -70,6 +70,11 @@ void api_entry_destroy(struct api_entry * e)
 
         pthread_mutex_lock(&e->state_lock);
 
+        if (e->state == API_DESTROY) {
+                pthread_mutex_unlock(&e->state_lock);
+                return;
+        }
+
         if (e->state == API_SLEEP)
                 e->state = API_DESTROY;
 
@@ -163,6 +168,9 @@ int api_entry_sleep(struct api_entry * e)
                 }
         }
 
+        if (e->state == API_DESTROY)
+                ret = -1;
+
         e->state = API_INIT;
         pthread_cond_broadcast(&e->state_cond);
         pthread_mutex_unlock(&e->state_lock);
@@ -177,7 +185,7 @@ void api_entry_wake(struct api_entry * e, struct reg_entry * re)
 
         pthread_mutex_lock(&e->state_lock);
 
-        if (e->state == API_NULL) {
+        if (e->state != API_SLEEP) {
                 pthread_mutex_unlock(&e->state_lock);
                 return;
         }
