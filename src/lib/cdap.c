@@ -107,7 +107,7 @@ static void * handle_cdap_msg(void * o)
         case OPCODE__DELETE:
                 if (msg->name != NULL &&
                     msg->has_value)
-                        instance->ops->cdap_create(instance,
+                        instance->ops->cdap_delete(instance,
                                                    msg->invoke_id,
                                                    msg->name,
                                                    msg->value.data,
