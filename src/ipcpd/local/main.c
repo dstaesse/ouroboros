@@ -24,7 +24,7 @@
 #include "ipcp.h"
 #include "flow.h"
 #include <ouroboros/errno.h>
-#include <ouroboros/shm_du_map.h>
+#include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
@@ -67,7 +67,7 @@ struct ipcp * _ipcp;
 /* the shim needs access to these internals */
 struct shim_ap_data {
         pid_t                 api;
-        struct shm_du_map *   dum;
+        struct shm_rdrbuff *  rdrb;
         struct bmp *          fds;
         struct shm_ap_rbuff * rb;
 
@@ -98,8 +98,8 @@ static int shim_ap_init()
                 return -1;
         }
 
-        _ap_instance->dum = shm_du_map_open();
-        if (_ap_instance->dum == NULL) {
+        _ap_instance->rdrb = shm_rdrbuff_open();
+        if (_ap_instance->rdrb == NULL) {
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
                 return -1;
@@ -107,7 +107,7 @@ static int shim_ap_init()
 
         _ap_instance->rb = shm_ap_rbuff_create();
         if (_ap_instance->rb == NULL) {
-                shm_du_map_close(_ap_instance->dum);
+                shm_rdrbuff_close(_ap_instance->rdrb);
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
                 return -1;
@@ -139,8 +139,13 @@ void shim_ap_fini()
 
         if (_ap_instance->fds != NULL)
                 bmp_destroy(_ap_instance->fds);
-        if (_ap_instance->dum != NULL)
-                shm_du_map_close_on_exit(_ap_instance->dum);
+
+        /* remove all remaining sdus */
+        while ((i = shm_ap_rbuff_peek_idx(_ap_instance->rb)) >= 0)
+                shm_rdrbuff_remove(_ap_instance->rdrb, i);
+
+        if (_ap_instance->rdrb != NULL)
+                shm_rdrbuff_close(_ap_instance->rdrb);
         if (_ap_instance->rb != NULL)
                 shm_ap_rbuff_destroy(_ap_instance->rb);
 

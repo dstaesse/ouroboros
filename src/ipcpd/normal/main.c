@@ -24,7 +24,7 @@
 
 #include <ouroboros/config.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/shm_du_map.h>
+#include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp.h>
@@ -55,7 +55,7 @@ struct normal_ipcp_data {
         /* Keep ipcp_data first for polymorphism. */
         struct ipcp_data      ipcp_data;
 
-        struct shm_du_map *   dum;
+        struct shm_rdrbuff *  rdrb;
         struct shm_ap_rbuff * rb;
 
         pthread_t             mainloop;
@@ -206,15 +206,15 @@ struct normal_ipcp_data * normal_ipcp_data_create()
                 return NULL;
         }
 
-        normal_data->dum = shm_du_map_open();
-        if (normal_data->dum == NULL) {
+        normal_data->rdrb = shm_rdrbuff_open();
+        if (normal_data->rdrb == NULL) {
                 free(normal_data);
                 return NULL;
         }
 
         normal_data->rb = shm_ap_rbuff_open(getpid());
         if (normal_data->rb == NULL) {
-                shm_du_map_close(normal_data->dum);
+                shm_rdrbuff_close(normal_data->rdrb);
                 free(normal_data);
                 return NULL;
         }
@@ -225,6 +225,8 @@ struct normal_ipcp_data * normal_ipcp_data_create()
 
 void normal_ipcp_data_destroy()
 {
+        int idx = 0;
+
         if (_ipcp == NULL)
                 return;
 
@@ -233,8 +235,12 @@ void normal_ipcp_data_destroy()
         if (ipcp_get_state(_ipcp) != IPCP_SHUTDOWN)
                 LOG_WARN("Cleaning up while not in shutdown.");
 
-        if (normal_data(_ipcp)->dum != NULL)
-                shm_du_map_close_on_exit(normal_data(_ipcp)->dum);
+        /* remove all remaining sdus */
+        while ((idx = shm_ap_rbuff_peek_idx(normal_data(_ipcp)->rb)) >= 0)
+                shm_rdrbuff_remove(normal_data(_ipcp)->rdrb, idx);
+
+        if (normal_data(_ipcp)->rdrb != NULL)
+                shm_rdrbuff_close(normal_data(_ipcp)->rdrb);
         if (normal_data(_ipcp)->rb != NULL)
                 shm_ap_rbuff_close(normal_data(_ipcp)->rb);
 

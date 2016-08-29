@@ -25,7 +25,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/bitmap.h>
-#include <ouroboros/shm_du_map.h>
+#include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/utils.h>
 
@@ -45,7 +45,7 @@ struct flow {
 struct ap_data {
         char *                ap_name;
         pid_t                 api;
-        struct shm_du_map *   dum;
+        struct shm_rdrbuff *  rdrb;
         struct bmp *          fds;
         struct shm_ap_rbuff * rb;
         pthread_rwlock_t      data_lock;
@@ -105,8 +105,8 @@ int ap_init(char * ap_name)
                 return -ENOMEM;
         }
 
-        _ap_instance->dum = shm_du_map_open();
-        if (_ap_instance->dum == NULL) {
+        _ap_instance->rdrb = shm_rdrbuff_open();
+        if (_ap_instance->rdrb == NULL) {
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
                 return -1;
@@ -114,7 +114,7 @@ int ap_init(char * ap_name)
 
         _ap_instance->rb = shm_ap_rbuff_create();
         if (_ap_instance->rb == NULL) {
-                shm_du_map_close(_ap_instance->dum);
+                shm_rdrbuff_close(_ap_instance->rdrb);
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
                 return -1;
@@ -146,12 +146,16 @@ void ap_fini(void)
 
         pthread_rwlock_wrlock(&_ap_instance->data_lock);
 
+        /* remove all remaining sdus */
+        while ((i = shm_ap_rbuff_peek_idx(_ap_instance->rb)) >= 0)
+                shm_rdrbuff_remove(_ap_instance->rdrb, i);
+
         if (_ap_instance->fds != NULL)
                 bmp_destroy(_ap_instance->fds);
         if (_ap_instance->rb != NULL)
                 shm_ap_rbuff_destroy(_ap_instance->rb);
-        if (_ap_instance->dum != NULL)
-                shm_du_map_close_on_exit(_ap_instance->dum);
+        if (_ap_instance->rdrb != NULL)
+                shm_rdrbuff_close(_ap_instance->rdrb);
 
         pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
@@ -515,7 +519,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         }
 
         if (_ap_instance->flows[fd].oflags & FLOW_O_NONBLOCK) {
-                idx = shm_du_map_write(_ap_instance->dum,
+                idx = shm_rdrbuff_write(_ap_instance->rdrb,
                                        _ap_instance->flows[fd].api,
                                        DU_BUFF_HEADSPACE,
                                        DU_BUFF_TAILSPACE,
@@ -531,18 +535,18 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                 e.port_id = _ap_instance->flows[fd].port_id;
 
                 if (shm_ap_rbuff_write(_ap_instance->flows[fd].rb, &e) < 0) {
-                        shm_du_map_remove(_ap_instance->dum, idx);
+                        shm_rdrbuff_remove(_ap_instance->rdrb, idx);
                         pthread_rwlock_unlock(&_ap_instance->flows_lock);
                         pthread_rwlock_unlock(&_ap_instance->data_lock);
                         return -1;
                 }
         } else { /* blocking */
-                struct shm_du_map * dum = _ap_instance->dum;
-                pid_t               api = _ap_instance->flows[fd].api;
+                struct shm_rdrbuff * rdrb = _ap_instance->rdrb;
+                pid_t                api = _ap_instance->flows[fd].api;
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
                 pthread_rwlock_unlock(&_ap_instance->data_lock);
 
-                idx = shm_du_map_write_b(dum,
+                idx = shm_rdrbuff_write_b(rdrb,
                                          api,
                                          DU_BUFF_HEADSPACE,
                                          DU_BUFF_TAILSPACE,
@@ -567,7 +571,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
 
 int flow_select(const struct timespec * timeout)
 {
-        int port_id = shm_ap_rbuff_peek(_ap_instance->rb, timeout);
+        int port_id = shm_ap_rbuff_peek_b(_ap_instance->rb, timeout);
         if (port_id < 0)
                 return port_id;
         return port_id_to_fd(port_id);
@@ -612,7 +616,7 @@ ssize_t flow_read(int fd, void * buf, size_t count)
                 return -EAGAIN;
         }
 
-        n = shm_du_map_read(&sdu, _ap_instance->dum, idx);
+        n = shm_rdrbuff_read(&sdu, _ap_instance->rdrb, idx);
         if (n < 0) {
                 pthread_rwlock_unlock(&_ap_instance->data_lock);
                 return -1;
@@ -620,7 +624,7 @@ ssize_t flow_read(int fd, void * buf, size_t count)
 
         memcpy(buf, sdu, MIN(n, count));
 
-        shm_du_map_remove(_ap_instance->dum, idx);
+        shm_rdrbuff_remove(_ap_instance->rdrb, idx);
 
         pthread_rwlock_unlock(&_ap_instance->data_lock);
 

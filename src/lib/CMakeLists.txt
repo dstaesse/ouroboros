@@ -33,7 +33,7 @@ set(SOURCE_FILES
   logs.c
   nsm.c
   shm_ap_rbuff.c
-  shm_du_map.c
+  shm_rdrbuff.c
   sockets.c
   time_utils.c
   utils.c

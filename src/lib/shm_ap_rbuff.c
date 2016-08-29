@@ -285,8 +285,32 @@ int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
         return 0;
 }
 
-int shm_ap_rbuff_peek(struct shm_ap_rbuff * rb,
-                      const struct timespec * timeout)
+int shm_ap_rbuff_peek_idx(struct shm_ap_rbuff * rb)
+{
+        int ret = 0;
+
+        if (rb == NULL)
+                return -EINVAL;
+
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
+                LOG_DBG("Recovering dead mutex.");
+                pthread_mutex_consistent(rb->lock);
+        }
+
+        if (shm_rbuff_empty(rb)) {
+                pthread_mutex_unlock(rb->lock);
+                return -1;
+        }
+
+        ret = (rb->shm_base + *rb->ptr_tail)->index;
+
+        pthread_mutex_unlock(rb->lock);
+
+        return ret;
+}
+
+int shm_ap_rbuff_peek_b(struct shm_ap_rbuff * rb,
+                        const struct timespec * timeout)
 {
         struct timespec abstime;
         int ret = 0;

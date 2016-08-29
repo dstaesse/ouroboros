@@ -34,7 +34,7 @@
 #include <ouroboros/irm_config.h>
 #include <ouroboros/lockfile.h>
 #include <ouroboros/shm_ap_rbuff.h>
-#include <ouroboros/shm_du_map.h>
+#include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/flow.h>
 #include <ouroboros/qos.h>
@@ -75,31 +75,31 @@ enum irm_state {
 };
 
 struct irm {
-        struct list_head    registry;
+        struct list_head     registry;
 
-        struct list_head    ipcps;
+        struct list_head     ipcps;
 
-        struct list_head    api_table;
-        struct list_head    apn_table;
-        struct list_head    spawned_apis;
-        pthread_rwlock_t    reg_lock;
+        struct list_head     api_table;
+        struct list_head     apn_table;
+        struct list_head     spawned_apis;
+        pthread_rwlock_t     reg_lock;
 
         /* keep track of all flows in this processing system */
-        struct bmp *        port_ids;
+        struct bmp *         port_ids;
         /* maps port_ids to api pair */
-        struct list_head    irm_flows;
-        pthread_rwlock_t    flows_lock;
+        struct list_head     irm_flows;
+        pthread_rwlock_t     flows_lock;
 
-        struct lockfile *   lf;
-        struct shm_du_map * dum;
-        pthread_t *         threadpool;
-        int                 sockfd;
+        struct lockfile *    lf;
+        struct shm_rdrbuff * rdrb;
+        pthread_t *          threadpool;
+        int                  sockfd;
 
-        enum irm_state      state;
-        pthread_rwlock_t    state_lock;
+        enum irm_state       state;
+        pthread_rwlock_t     state_lock;
 
-        pthread_t           irm_sanitize;
-        pthread_t           shm_sanitize;
+        pthread_t            irm_sanitize;
+        pthread_t            shm_sanitize;
 } * irmd = NULL;
 
 static struct irm_flow * get_irm_flow(int port_id)
@@ -1604,8 +1604,8 @@ static void irm_destroy()
 
         pthread_rwlock_unlock(&irmd->flows_lock);
 
-        if (irmd->dum != NULL)
-                shm_du_map_destroy(irmd->dum);
+        if (irmd->rdrb != NULL)
+                shm_rdrbuff_destroy(irmd->rdrb);
 
         if (irmd->lf != NULL)
                 lockfile_destroy(irmd->lf);
@@ -2072,7 +2072,8 @@ static int irm_create()
 
                 if (kill(lockfile_owner(irmd->lf), 0) < 0) {
                         LOG_INFO("IRMd didn't properly shut down last time.");
-                        shm_du_map_destroy(shm_du_map_open());
+                        /* FIXME: do this for each QOS_CUBE in the system */
+                        shm_rdrbuff_destroy(shm_rdrbuff_open(QOS_CUBE_BE));
                         LOG_INFO("Stale resources cleaned");
                         lockfile_destroy(irmd->lf);
                         irmd->lf = lockfile_create();
@@ -2090,7 +2091,8 @@ static int irm_create()
                 return -1;
         }
 
-        if ((irmd->dum = shm_du_map_create()) == NULL) {
+        /* FIXME: create an rdrb for each QOS_CUBE in the system */
+        if ((irmd->rdrb = shm_rdrbuff_create(QOS_CUBE_BE)) == NULL) {
                 irm_destroy();
                 return -1;
         }
@@ -2201,7 +2203,7 @@ int main(int argc, char ** argv)
 
         pthread_create(&irmd->irm_sanitize, NULL, irm_sanitize, NULL);
         pthread_create(&irmd->shm_sanitize, NULL,
-                       shm_du_map_sanitize, irmd->dum);
+                       shm_rdrbuff_sanitize, irmd->rdrb);
 
         /* wait for (all of them) to return */
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)
