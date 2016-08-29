@@ -107,7 +107,7 @@ static void * handle_cdap_msg(void * o)
         case OPCODE__DELETE:
                 if (msg->name != NULL &&
                     msg->has_value)
-                        instance->ops->cdap_create(instance,
+                        instance->ops->cdap_delete(instance,
                                                    msg->invoke_id,
                                                    msg->name,
                                                    msg->value.data,
@@ -230,12 +230,10 @@ struct cdap * cdap_create(struct cdap_ops * ops,
 int cdap_destroy(struct cdap * instance)
 {
         if (instance == NULL)
-                return -1;
+                return 0;
 
         pthread_cancel(instance->reader);
-
-        if (flow_dealloc(instance->fd))
-                return -1;
+        pthread_join(instance->reader, NULL);
 
         pthread_mutex_lock(&instance->ids_lock);
 
@@ -243,8 +241,7 @@ int cdap_destroy(struct cdap * instance)
 
         pthread_mutex_unlock(&instance->ids_lock);
 
-        pthread_join(instance->reader,
-                     NULL);
+        flow_dealloc(instance->fd);
 
         free(instance);
 

@@ -41,7 +41,7 @@ struct api_entry {
         pid_t              api;
         char *             apn;      /* application process instantiated */
         char *             daf_name; /* DAF this AP-I belongs to */
-        struct list_head   names;    /* names for which this api accepts flows */
+        struct list_head   names;    /* names for which api accepts flows */
 
         struct reg_entry * re;       /* reg_entry for which a flow arrived */
 
