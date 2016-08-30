@@ -22,7 +22,6 @@
  */
 
 #include <ouroboros/config.h>
-#include <ouroboros/shm_du_map.h>
 #include <ouroboros/list.h>
 
 #define OUROBOROS_PREFIX "ipcp-utils"

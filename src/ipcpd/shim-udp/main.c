@@ -24,7 +24,7 @@
 #include "ipcp.h"
 #include "flow.h"
 #include "shim_udp_config.h"
-#include <ouroboros/shm_du_map.h>
+#include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
@@ -87,7 +87,7 @@ struct ipcp * _ipcp;
 /* the shim needs access to these internals */
 struct shim_ap_data {
         pid_t                 api;
-        struct shm_du_map *   dum;
+        struct shm_rdrbuff *  rdrb;
         struct bmp *          fds;
         struct shm_ap_rbuff * rb;
 
@@ -121,8 +121,8 @@ static int shim_ap_init()
                 return -1;
         }
 
-        _ap_instance->dum = shm_du_map_open();
-        if (_ap_instance->dum == NULL) {
+        _ap_instance->rdrb = shm_rdrbuff_open();
+        if (_ap_instance->rdrb == NULL) {
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
                 return -1;
@@ -130,7 +130,7 @@ static int shim_ap_init()
 
         _ap_instance->rb = shm_ap_rbuff_create();
         if (_ap_instance->rb == NULL) {
-                shm_du_map_close(_ap_instance->dum);
+                shm_rdrbuff_close(_ap_instance->rdrb);
                 bmp_destroy(_ap_instance->fds);
                 free(_ap_instance);
                 return -1;
@@ -163,8 +163,13 @@ void shim_ap_fini()
 
         if (_ap_instance->fds != NULL)
                 bmp_destroy(_ap_instance->fds);
-        if (_ap_instance->dum != NULL)
-                shm_du_map_close_on_exit(_ap_instance->dum);
+
+        /* remove all remaining sdus */
+        while ((i = shm_ap_rbuff_peek_idx(_ap_instance->rb)) >= 0)
+                shm_rdrbuff_remove(_ap_instance->rdrb, i);
+
+        if (_ap_instance->rdrb != NULL)
+                shm_rdrbuff_close(_ap_instance->rdrb);
         if (_ap_instance->rb != NULL)
                 shm_ap_rbuff_destroy(_ap_instance->rb);
 
@@ -202,7 +207,7 @@ static ssize_t ipcp_udp_flow_write(int fd, void * buf, size_t count)
         pthread_rwlock_rdlock(&_ipcp->state_lock);
         pthread_rwlock_rdlock(&_ap_instance->flows_lock);
 
-        index = shm_du_map_write_b(_ap_instance->dum,
+        index = shm_rdrbuff_write_b(_ap_instance->rdrb,
                                    _ap_instance->flows[fd].api,
                                    0,
                                    0,
@@ -745,8 +750,8 @@ static void * ipcp_udp_sdu_loop(void * o)
 
                 pthread_rwlock_rdlock(&_ipcp->state_lock);
 
-                len = shm_du_map_read((uint8_t **) &buf,
-                                      _ap_instance->dum,
+                len = shm_rdrbuff_read((uint8_t **) &buf,
+                                      _ap_instance->rdrb,
                                       e->index);
                 if (len <= 0) {
                         pthread_rwlock_unlock(&_ipcp->state_lock);
@@ -771,8 +776,8 @@ static void * ipcp_udp_sdu_loop(void * o)
 
                 pthread_rwlock_rdlock(&_ipcp->state_lock);
 
-                if (_ap_instance->dum != NULL)
-                        shm_du_map_remove(_ap_instance->dum, e->index);
+                if (_ap_instance->rdrb != NULL)
+                        shm_rdrbuff_remove(_ap_instance->rdrb, e->index);
 
                 pthread_rwlock_unlock(&_ipcp->state_lock);
 

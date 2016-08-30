@@ -27,7 +27,7 @@
 #include "ipcp.h"
 #include "flow.h"
 #include <ouroboros/errno.h>
-#include <ouroboros/shm_du_map.h>
+#include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
@@ -122,7 +122,7 @@ struct eth_llc_ipcp_data {
         struct bmp *          indices;
         struct bmp *          saps;
 
-        struct shm_du_map *   dum;
+        struct shm_rdrbuff *  rdrb;
         struct shm_ap_rbuff * rb;
 
         uint8_t *             rx_ring;
@@ -155,15 +155,15 @@ struct eth_llc_ipcp_data * eth_llc_ipcp_data_create()
                 return NULL;
         }
 
-        eth_llc_data->dum = shm_du_map_open();
-        if (eth_llc_data->dum == NULL) {
+        eth_llc_data->rdrb = shm_rdrbuff_open();
+        if (eth_llc_data->rdrb == NULL) {
                 free(eth_llc_data);
                 return NULL;
         }
 
         eth_llc_data->rb = shm_ap_rbuff_create();
         if (eth_llc_data->rb == NULL) {
-                shm_du_map_close(eth_llc_data->dum);
+                shm_rdrbuff_close(eth_llc_data->rdrb);
                 free(eth_llc_data);
                 return NULL;
         }
@@ -171,7 +171,7 @@ struct eth_llc_ipcp_data * eth_llc_ipcp_data_create()
         eth_llc_data->indices = bmp_create(AP_MAX_FLOWS, 0);
         if (eth_llc_data->indices == NULL) {
                 shm_ap_rbuff_destroy(eth_llc_data->rb);
-                shm_du_map_close(eth_llc_data->dum);
+                shm_rdrbuff_close(eth_llc_data->rdrb);
                 free(eth_llc_data);
                 return NULL;
         }
@@ -180,7 +180,7 @@ struct eth_llc_ipcp_data * eth_llc_ipcp_data_create()
         if (eth_llc_data->indices == NULL) {
                 bmp_destroy(eth_llc_data->indices);
                 shm_ap_rbuff_destroy(eth_llc_data->rb);
-                shm_du_map_close(eth_llc_data->dum);
+                shm_rdrbuff_close(eth_llc_data->rdrb);
                 free(eth_llc_data);
                 return NULL;
         }
@@ -202,8 +202,12 @@ void eth_llc_ipcp_data_destroy()
         if (ipcp_get_state(_ipcp) != IPCP_SHUTDOWN)
                 LOG_WARN("Cleaning up while not in shutdown.");
 
-        if (shim_data(_ipcp)->dum != NULL)
-                shm_du_map_close_on_exit(shim_data(_ipcp)->dum);
+        /* remove all remaining sdus */
+        while ((i = shm_ap_rbuff_peek_idx(shim_data(_ipcp)->rb)) >= 0)
+                shm_rdrbuff_remove(shim_data(_ipcp)->rdrb, i);
+
+        if (shim_data(_ipcp)->rdrb != NULL)
+                shm_rdrbuff_close(shim_data(_ipcp)->rdrb);
         if (shim_data(_ipcp)->rb != NULL)
                 shm_ap_rbuff_destroy(shim_data(_ipcp)->rb);
         if (shim_data(_ipcp)->indices != NULL)
@@ -332,7 +336,7 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         header = (void *) shim_data(_ipcp)->tx_ring +
-                (shim_data(_ipcp)->tx_offset * SHM_DU_BUFF_BLOCK_SIZE);
+                (shim_data(_ipcp)->tx_offset * SHM_RDRB_BLOCK_SIZE);
 
         while (header->tp_status != TP_STATUS_AVAILABLE) {
                 pfd.fd = fd;
@@ -345,7 +349,7 @@ static int eth_llc_ipcp_send_frame(uint8_t   dst_addr[MAC_SIZE],
                 }
 
                 header = (void *) shim_data(_ipcp)->tx_ring +
-                        (shim_data(_ipcp)->tx_offset * SHM_DU_BUFF_BLOCK_SIZE);
+                        (shim_data(_ipcp)->tx_offset * SHM_RDRB_BLOCK_SIZE);
         }
 
         frame = (void *) header + TPACKET_HDRLEN - sizeof(struct sockaddr_ll);
@@ -671,7 +675,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         while (true) {
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                 header = (void *) shim_data(_ipcp)->rx_ring +
-                        (offset * SHM_DU_BUFF_BLOCK_SIZE);
+                        (offset * SHM_RDRB_BLOCK_SIZE);
                 while (!(header->tp_status & TP_STATUS_USER)) {
                         pfd.fd = shim_data(_ipcp)->s_fd;
                         pfd.revents = 0;
@@ -683,7 +687,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         }
 
                         header = (void *) shim_data(_ipcp)->rx_ring +
-                                (offset * SHM_DU_BUFF_BLOCK_SIZE);
+                                (offset * SHM_RDRB_BLOCK_SIZE);
                 }
 
                 buf = (void * ) header + header->tp_mac;
@@ -740,7 +744,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         }
 
                         while ((index =
-                                shm_du_map_write(shim_data(_ipcp)->dum,
+                                shm_rdrbuff_write(shim_data(_ipcp)->rdrb,
                                                  ipcp_flow(i)->api,
                                                  0,
                                                  0,
@@ -782,8 +786,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
 
                 pthread_rwlock_rdlock(&_ipcp->state_lock);
 
-                len = shm_du_map_read((uint8_t **) &buf,
-                                      shim_data(_ipcp)->dum,
+                len = shm_rdrbuff_read((uint8_t **) &buf,
+                                      shim_data(_ipcp)->rdrb,
                                       e->index);
                 if (len <= 0) {
                         free(e);
@@ -808,8 +812,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
 
                 pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
 
-                if (shim_data(_ipcp)->dum != NULL)
-                        shm_du_map_remove(shim_data(_ipcp)->dum, e->index);
+                if (shim_data(_ipcp)->rdrb != NULL)
+                        shm_rdrbuff_remove(shim_data(_ipcp)->rdrb, e->index);
 
                 pthread_rwlock_unlock(&_ipcp->state_lock);
 
@@ -849,7 +853,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 {
         int fd = -1;
         struct ifreq ifr;
-        int index;
+        int idx;
 #ifdef __FreeBSD__
         struct ifaddrs * ifaddr;
         struct ifaddrs * ifa;
@@ -892,7 +896,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        for (ifa = ifaddr, index = 0; ifa != NULL; ifa = ifa->ifa_next, ++index) {
+        for (ifa = ifaddr, idx = 0; ifa != NULL; ifa = ifa->ifa_next, ++idx) {
                 if (strcmp(ifa->ifa_name, conf->if_name))
                         continue;
                 LOG_DBGF("Interface %s found.", conf->if_name);
@@ -916,8 +920,8 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        index = if_nametoindex(conf->if_name);
-        if (index == 0) {
+        idx = if_nametoindex(conf->if_name);
+        if (idx == 0) {
                 LOG_ERR("Failed to retrieve interface index.");
                 return -1;
         }
@@ -927,7 +931,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         memset(&(device), 0, sizeof(device));
 #ifdef __FreeBSD__
-        device.sdl_index = index;
+        device.sdl_index = idx;
         device.sdl_family = AF_LINK;
         memcpy(LLADDR(&device),
                ifr.ifr_addr.sa_data,
@@ -937,7 +941,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         LOG_MISSING;
         fd = socket(AF_LINK, SOCK_RAW, 0);
 #else
-        device.sll_ifindex = index;
+        device.sll_ifindex = idx;
         device.sll_family = AF_PACKET;
         memcpy(device.sll_addr,
                ifr.ifr_hwaddr.sa_data,
@@ -953,14 +957,14 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         }
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-        if (SHIM_ETH_LLC_MAX_SDU_SIZE > SHM_DU_BUFF_BLOCK_SIZE) {
+        if (SHIM_ETH_LLC_MAX_SDU_SIZE > SHM_RDRB_BLOCK_SIZE) {
                 LOG_ERR("Max SDU size is bigger than DU map block size.");
                 close(fd);
                 return -1;
         }
 
-        req.tp_block_size = SHM_DU_BUFF_BLOCK_SIZE;
-        req.tp_frame_size = SHM_DU_BUFF_BLOCK_SIZE;
+        req.tp_block_size = SHM_RDRB_BLOCK_SIZE;
+        req.tp_frame_size = SHM_RDRB_BLOCK_SIZE;
         req.tp_block_nr = SHM_BUFFER_SIZE;
         req.tp_frame_nr = SHM_BUFFER_SIZE;
 
@@ -987,7 +991,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         shim_data(_ipcp)->rx_ring = mmap(NULL,
-                                         2 * SHM_DU_BUFF_BLOCK_SIZE
+                                         2 * SHM_RDRB_BLOCK_SIZE
                                          * SHM_BUFFER_SIZE,
                                          PROT_READ | PROT_WRITE, MAP_SHARED,
                                          fd, 0);
@@ -997,10 +1001,9 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
         shim_data(_ipcp)->tx_ring = shim_data(_ipcp)->rx_ring
-                + (SHM_DU_BUFF_BLOCK_SIZE * SHM_BUFFER_SIZE);
+                + (SHM_RDRB_BLOCK_SIZE * SHM_BUFFER_SIZE);
 
 #endif
-
         pthread_rwlock_wrlock(&_ipcp->state_lock);
 
         if (ipcp_get_state(_ipcp) != IPCP_INIT) {

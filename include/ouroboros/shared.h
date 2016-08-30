@@ -26,7 +26,8 @@
 /* FIXME: To be decided which QoS cubes we support */
 enum qos_cube {
         QOS_CUBE_BE = 0,
-        QOS_CUBE_VIDEO
+        QOS_CUBE_VIDEO,
+        QOS_MAX
 };
 
 enum flow_state {
