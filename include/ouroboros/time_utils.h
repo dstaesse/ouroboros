@@ -78,4 +78,26 @@ int tv_to_ts(const struct timeval * src,
 int ts_to_tv(const struct timespec * src,
              struct timeval *        dst);
 
+#ifdef __APPLE__ /* morons */
+
+/* taken from time.h */
+#define CLOCK_REALTIME                  0
+#define CLOCK_MONOTONIC                 1
+#define CLOCK_PROCESS_CPUTIME_ID        2
+#define CLOCK_THREAD_CPUTIME_ID         3
+#define CLOCK_MONOTONIC_RAW             4
+#define CLOCK_REALTIME_COARSE           5
+#define CLOCK_MONOTONIC_COARSE          6
+#define CLOCK_BOOTTIME                  7
+#define CLOCK_REALTIME_ALARM            8
+#define CLOCK_BOOTTIME_ALARM            9
+#define CLOCK_SGI_CYCLE                 10      /* Hardware specific */
+#define CLOCK_TAI                       11
+
+#define CLOCKS_MASK                     (CLOCK_REALTIME | CLOCK_MONOTONIC)
+#define CLOCKS_MONO                     CLOCK_MONOTONIC
+
+int clock_gettime(int clock, struct timespec * t);
+#endif
+
 #endif /* OUROBOROS_TIME_UTILS_H */

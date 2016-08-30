@@ -228,7 +228,9 @@ struct shm_rdrbuff * shm_rdrbuff_create()
 
         pthread_mutexattr_init(&mattr);
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+#ifndef __APPLE__
         pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
+#endif
         pthread_mutex_init(rdrb->lock, &mattr);
 
         pthread_condattr_init(&cattr);
@@ -325,11 +327,14 @@ void * shm_rdrbuff_sanitize(void * o)
 
         if (rdrb == NULL)
                 return (void *) -1;
-
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_WARN("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
+#endif
 
         pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
                              (void *) rdrb->lock);
@@ -338,12 +343,14 @@ void * shm_rdrbuff_sanitize(void * o)
                 int ret = 0;
                 struct timespec now;
                 struct timespec dl;
-
+#ifdef __APPLE__
+                pthread_cond_wait(rdrb->full, rdrb->lock);
+#else
                 if (pthread_cond_wait(rdrb->full, rdrb->lock) == EOWNERDEAD) {
                         LOG_WARN("Recovering dead mutex.");
                         pthread_mutex_consistent(rdrb->lock);
                 }
-
+#endif
                 *rdrb->choked = 1;
 
                 garbage_collect(rdrb);
@@ -367,12 +374,12 @@ void * shm_rdrbuff_sanitize(void * o)
                                                      &dl);
                         if (!ret)
                                 continue;
-
+#ifndef __APPLE__
                         if (ret == EOWNERDEAD) {
                                 LOG_WARN("Recovering dead mutex.");
                                 pthread_mutex_consistent(rdrb->lock);
                         }
-
+#endif
                         if (ret == ETIMEDOUT) {
                                 LOG_DBGF("SDU timed out (dst: %d).", api);
                                 clean_sdus(rdrb, api);
@@ -462,10 +469,14 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                 return -1;
         }
 #endif
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
+#endif
 #ifdef SHM_RDRBUFF_MULTI_BLOCK
         while (sz > 0) {
                 sz -= SHM_RDRB_BLOCK_SIZE;
@@ -547,11 +558,14 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                 return -1;
         }
 #endif
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
-
+#endif
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rdrb->lock);
 
@@ -616,12 +630,14 @@ int shm_rdrbuff_read(uint8_t **           dst,
 
         if (idx > SHM_BUFFER_SIZE)
                 return -1;
-
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
-
+#endif
         if (shm_rdrb_empty(rdrb)) {
                 pthread_mutex_unlock(rdrb->lock);
                 return -1;
@@ -640,12 +656,14 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
 {
         if (idx > SHM_BUFFER_SIZE)
                 return -1;
-
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
-
+#endif
         if (shm_rdrb_empty(rdrb)) {
                 pthread_mutex_unlock(rdrb->lock);
                 return -1;
@@ -682,11 +700,14 @@ uint8_t * shm_du_buff_head_alloc(struct shm_rdrbuff * rdrb,
         if (idx < 0 || idx > SHM_BUFFER_SIZE)
                 return NULL;
 
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
-
+#endif
         sdb = idx_to_du_buff_ptr(rdrb, idx);
 
         if ((long) (sdb->du_head - size) < 0) {
@@ -717,11 +738,14 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_rdrbuff * rdrb,
         if (idx < 0 || idx > SHM_BUFFER_SIZE)
                 return NULL;
 
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
-
+#endif
         sdb = idx_to_du_buff_ptr(rdrb, idx);
 
         if (sdb->du_tail + size >= sdb->size) {
@@ -751,10 +775,14 @@ int shm_du_buff_head_release(struct shm_rdrbuff * rdrb,
         if (idx < 0 || idx > SHM_BUFFER_SIZE)
                 return -1;
 
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
+#endif
 
         sdb = idx_to_du_buff_ptr(rdrb, idx);
 
@@ -783,11 +811,14 @@ int shm_du_buff_tail_release(struct shm_rdrbuff * rdrb,
         if (idx < 0 || idx > SHM_BUFFER_SIZE)
                 return -1;
 
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
                 LOG_DBGF("Recovering dead mutex.");
                 pthread_mutex_consistent(rdrb->lock);
         }
-
+#endif
         sdb = idx_to_du_buff_ptr(rdrb, idx);
 
         if (size > sdb->du_tail - sdb->du_head) {
