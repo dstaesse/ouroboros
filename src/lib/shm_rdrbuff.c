@@ -70,7 +70,7 @@
 
 struct shm_du_buff {
         size_t size;
-#ifdef SHM_DU_MAP_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         size_t blocks;
 #endif
         size_t du_head;
@@ -93,7 +93,7 @@ struct shm_rdrbuff {
 
 static void garbage_collect(struct shm_rdrbuff * rdrb)
 {
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         struct shm_du_buff * sdb;
         while (!shm_rdrb_empty(rdrb) &&
                (sdb = get_tail_ptr(rdrb))->dst_api == -1)
@@ -116,7 +116,7 @@ static void clean_sdus(struct shm_rdrbuff * rdrb, pid_t api)
                 buf = idx_to_du_buff_ptr(rdrb, idx);
                 if (buf->dst_api == api)
                         buf->dst_api = -1;
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
                 idx = (idx + buf->blocks) & (SHM_BUFFER_SIZE - 1);
 #else
                 idx = (idx + 1) & (SHM_BUFFER_SIZE - 1);
@@ -450,7 +450,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 {
         struct shm_du_buff * sdb;
         size_t               size = headspace + len + tailspace;
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         long                 blocks = 0;
         long                 padblocks = 0;
 #endif
@@ -463,7 +463,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                 return -1;
         }
 
-#ifndef SHM_RDRBUFF_MULTI_BLOCK
+#ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE) {
                 LOG_DBGF("Multi-block SDU's disabled. Dropping.");
                 return -1;
@@ -477,7 +477,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                 pthread_mutex_consistent(rdrb->lock);
         }
 #endif
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         while (sz > 0) {
                 sz -= SHM_RDRB_BLOCK_SIZE;
                 ++blocks;
@@ -495,7 +495,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                 return -1;
         }
 
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         if (padblocks) {
                 sdb = get_head_ptr(rdrb);
                 sdb->size    = 0;
@@ -512,7 +512,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         sdb->dst_api = dst_api;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
-#ifdef  SHM_RDRBUFF_MULTI_BLOCK
+#ifdef  SHM_RDRB_MULTI_BLOCK
         sdb->blocks  = blocks;
 #endif
         write_pos = ((uint8_t *) (sdb + 1)) + headspace;
@@ -520,7 +520,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         memcpy(write_pos, data, len);
 
         idx = *rdrb->ptr_head;
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         *rdrb->ptr_head = (*rdrb->ptr_head + blocks) & (SHM_BUFFER_SIZE - 1);
 #else
         *rdrb->ptr_head = (*rdrb->ptr_head + 1) & (SHM_BUFFER_SIZE - 1);
@@ -539,7 +539,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
 {
         struct shm_du_buff * sdb;
         size_t               size = headspace + len + tailspace;
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         long                 blocks = 0;
         long                 padblocks = 0;
 #endif
@@ -552,7 +552,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                 return -1;
         }
 
-#ifndef SHM_RDRBUFF_MULTI_BLOCK
+#ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE) {
                 LOG_DBGF("Multi-block SDU's disabled. Dropping.");
                 return -1;
@@ -569,7 +569,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rdrb->lock);
 
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         while (sz > 0) {
                 sz -= SHM_RDRB_BLOCK_SIZE;
                 ++blocks;
@@ -586,7 +586,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                 pthread_cond_wait(rdrb->healthy, rdrb->lock);
         }
 
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         if (padblocks) {
                 sdb = get_head_ptr(rdrb);
                 sdb->size    = 0;
@@ -603,7 +603,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         sdb->dst_api = dst_api;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
-#ifdef  SHM_RDRBUFF_MULTI_BLOCK
+#ifdef  SHM_RDRB_MULTI_BLOCK
         sdb->blocks  = blocks;
 #endif
         write_pos = ((uint8_t *) (sdb + 1)) + headspace;
@@ -611,7 +611,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         memcpy(write_pos, data, len);
 
         idx = *rdrb->ptr_head;
-#ifdef SHM_RDRBUFF_MULTI_BLOCK
+#ifdef SHM_RDRB_MULTI_BLOCK
         *rdrb->ptr_head = (*rdrb->ptr_head + blocks) & (SHM_BUFFER_SIZE - 1);
 #else
         *rdrb->ptr_head = (*rdrb->ptr_head + 1) & (SHM_BUFFER_SIZE - 1);
