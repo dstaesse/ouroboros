@@ -48,7 +48,9 @@ struct cdap_request * cdap_request_create(enum cdap_opcode code,
         creq->result = -1;
 
         pthread_condattr_init(&cattr);
+#ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
         pthread_cond_init(&creq->cond, &cattr);
         pthread_mutex_init(&creq->lock, NULL);
 

@@ -11,9 +11,13 @@ protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
 protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS
   cdap.proto)
 
-find_library(LIBRT_LIBRARIES rt)
-if(NOT LIBRT_LIBRARIES)
-  message(FATAL_ERROR "librt not found")
+if(NOT APPLE)
+  find_library(LIBRT_LIBRARIES rt)
+  if(NOT LIBRT_LIBRARIES)
+    message(FATAL_ERROR "librt not found")
+  endif()
+else()
+  set(LIBRT_LIBRARIES "")
 endif()
 
 find_library(LIBPTHREAD_LIBRARIES pthread)

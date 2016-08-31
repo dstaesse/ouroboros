@@ -48,7 +48,9 @@ struct ipcp * ipcp_instance_create()
         pthread_rwlock_init(&i->state_lock, NULL);
         pthread_mutex_init(&i->state_mtx, NULL);
         pthread_condattr_init(&cattr);
+#ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
         pthread_cond_init(&i->state_cond, &cattr);
 
         return i;
