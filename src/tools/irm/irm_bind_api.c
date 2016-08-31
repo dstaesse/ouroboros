@@ -40,7 +40,7 @@ int do_bind_api(int argc, char ** argv)
         pid_t api = -1;
         char * name = NULL;
 
-        while (argc > 0) {
+        while (argc > 1) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                         ++argv;
@@ -59,7 +59,7 @@ int do_bind_api(int argc, char ** argv)
                 --argc;
         }
 
-        if (api < 0 || name == NULL) {
+        if (argc == 1 || api < 0 || name == NULL) {
                 usage();
                 return -1;
         }
