@@ -50,7 +50,7 @@ endif()
 
 # Find library
 find_library(PROTOBUF_C_LIBRARY
-    NAMES libprotobuf-c.so libprotobuf-c
+    NAMES libprotobuf-c.so libprotobuf-c libprotobuf-c.dylib
 )
 mark_as_advanced(PROTOBUF_C_LIBRARY)
 

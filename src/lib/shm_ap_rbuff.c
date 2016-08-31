@@ -131,13 +131,17 @@ struct shm_ap_rbuff * shm_ap_rbuff_create()
         rb->del      = rb->add + 1;
 
         pthread_mutexattr_init(&mattr);
+#ifndef __APPLE__
         pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
+#endif
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
         pthread_mutex_init(rb->lock, &mattr);
 
         pthread_condattr_init(&cattr);
         pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+#ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
         pthread_cond_init(rb->add, &cattr);
         pthread_cond_init(rb->del, &cattr);
 
@@ -264,11 +268,14 @@ int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
         if (rb == NULL || e == NULL)
                 return -1;
 
+#ifdef __APPLE__
+        pthread_mutex_lock(rb->lock);
+#else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
                 LOG_DBG("Recovering dead mutex.");
                 pthread_mutex_consistent(rb->lock);
         }
-
+#endif
         if (!shm_rbuff_free(rb)) {
                 pthread_mutex_unlock(rb->lock);
                 return -1;
@@ -291,12 +298,14 @@ int shm_ap_rbuff_peek_idx(struct shm_ap_rbuff * rb)
 
         if (rb == NULL)
                 return -EINVAL;
-
+#ifdef __APPLE__
+        pthread_mutex_lock(rb->lock);
+#else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
                 LOG_DBG("Recovering dead mutex.");
                 pthread_mutex_consistent(rb->lock);
         }
-
+#endif
         if (shm_rbuff_empty(rb)) {
                 pthread_mutex_unlock(rb->lock);
                 return -1;
@@ -325,12 +334,14 @@ int shm_ap_rbuff_peek_b(struct shm_ap_rbuff * rb,
 
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rb->lock);
-
+#ifdef __APPLE__
+        pthread_mutex_lock(rb->lock);
+#else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
                 LOG_DBG("Recovering dead mutex.");
                 pthread_mutex_consistent(rb->lock);
         }
-
+#endif
         while (shm_rbuff_empty(rb)) {
                 if (timeout != NULL)
                         ret = pthread_cond_timedwait(rb->add,
@@ -338,12 +349,12 @@ int shm_ap_rbuff_peek_b(struct shm_ap_rbuff * rb,
                                                      &abstime);
                 else
                         ret = pthread_cond_wait(rb->add, rb->lock);
-
+#ifndef __APPLE__
                 if (ret == EOWNERDEAD) {
                         LOG_DBG("Recovering dead mutex.");
                         pthread_mutex_consistent(rb->lock);
                 }
-
+#endif
                 if (ret == ETIMEDOUT)
                         break;
         }
@@ -368,17 +379,23 @@ struct rb_entry * shm_ap_rbuff_read(struct shm_ap_rbuff * rb)
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rb->lock);
 
+#ifdef __APPLE__
+        pthread_mutex_lock(rb->lock);
+#else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
                 LOG_DBG("Recovering dead mutex.");
                 pthread_mutex_consistent(rb->lock);
         }
-
+#endif
         while (shm_rbuff_empty(rb))
+#ifdef __APPLE__
+                pthread_cond_wait(rb->add, rb->lock);
+#else
                 if (pthread_cond_wait(rb->add, rb->lock) == EOWNERDEAD) {
-                LOG_DBG("Recovering dead mutex.");
-                pthread_mutex_consistent(rb->lock);
-        }
-
+                        LOG_DBG("Recovering dead mutex.");
+                        pthread_mutex_consistent(rb->lock);
+                }
+#endif
         e = malloc(sizeof(*e));
         if (e != NULL) {
                 *e = *(rb->shm_base + *rb->ptr_tail);
@@ -394,11 +411,14 @@ ssize_t shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb, int port_id)
 {
         ssize_t idx = -1;
 
+#ifdef __APPLE__
+        pthread_mutex_lock(rb->lock);
+#else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
                 LOG_DBG("Recovering dead mutex.");
                 pthread_mutex_consistent(rb->lock);
         }
-
+#endif
         if (shm_rbuff_empty(rb) || tail_el_ptr(rb)->port_id != port_id) {
                 pthread_mutex_unlock(rb->lock);
                 return -1;
@@ -422,11 +442,14 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
         int ret = 0;
         ssize_t idx = -1;
 
+#ifdef __APPLE__
+        pthread_mutex_lock(rb->lock);
+#else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
                 LOG_DBG("Recovering dead mutex.");
                 pthread_mutex_consistent(rb->lock);
         }
-
+#endif
         if (timeout != NULL) {
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
                 ts_add(&abstime, timeout, &abstime);
@@ -444,12 +467,12 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
                                                              &abstime);
                         else
                                 ret = pthread_cond_wait(rb->add, rb->lock);
-
+#ifndef __APPLE__
                         if (ret == EOWNERDEAD) {
                                 LOG_DBG("Recovering dead mutex.");
                                 pthread_mutex_consistent(rb->lock);
                         }
-
+#endif
                         if (ret == ETIMEDOUT)
                                 break;
                 }
@@ -461,12 +484,12 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
                                                              &abstime);
                         else
                                 ret = pthread_cond_wait(rb->del, rb->lock);
-
+#ifndef __APPLE__
                         if (ret == EOWNERDEAD) {
                                 LOG_DBG("Recovering dead mutex.");
                                 pthread_mutex_consistent(rb->lock);
                         }
-
+#endif
                         if (ret == ETIMEDOUT)
                                 break;
                 }
