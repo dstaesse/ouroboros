@@ -482,6 +482,7 @@ static int bind_ap(char *   ap,
         int i;
         char * name_dup = NULL;
         struct apn_entry * e = NULL;
+        struct reg_entry * re = NULL;
 
         if (ap == NULL || name == NULL)
                 return -EINVAL;
@@ -560,6 +561,10 @@ static int bind_ap(char *   ap,
                 free(name_dup);
                 return -ENOMEM;
         }
+
+        re = registry_get_entry(&irmd->registry, name);
+        if (re != NULL && reg_entry_add_apn(re, e) < 0)
+                LOG_ERR("Failed adding AP %s for name %s.", ap, name);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
