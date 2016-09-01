@@ -355,14 +355,17 @@ void * shm_rdrbuff_sanitize(void * o)
 
                 garbage_collect(rdrb);
 
-                if (shm_rdrb_empty(rdrb))
+                if (shm_rdrb_empty(rdrb)) {
+                        pthread_cond_broadcast(rdrb->healthy);
                         continue;
+                }
 
                 api = get_tail_ptr(rdrb)->dst_api;
 
                 if (kill(api, 0)) {
                         LOG_DBGF("Dead process %d left stale sdu.", api);
                         clean_sdus(rdrb, api);
+                        pthread_cond_broadcast(rdrb->healthy);
                         continue;
                 }
 
@@ -385,6 +388,7 @@ void * shm_rdrbuff_sanitize(void * o)
                                 clean_sdus(rdrb, api);
                         }
                 }
+                pthread_cond_broadcast(rdrb->healthy);
         }
 
         pthread_cleanup_pop(true);
@@ -681,7 +685,6 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
         *rdrb->choked = 0;
 
         pthread_cond_broadcast(rdrb->healthy);
-
         pthread_mutex_unlock(rdrb->lock);
 
         return 0;
