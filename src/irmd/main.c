@@ -579,6 +579,7 @@ static int bind_api(pid_t  api,
 {
         char * name_dup = NULL;
         struct api_entry * e = NULL;
+        struct reg_entry * re = NULL;
 
         if (name == NULL)
                 return -EINVAL;
@@ -616,6 +617,10 @@ static int bind_api(pid_t  api,
                 free(name_dup);
                 return -1;
         }
+
+        re = registry_get_entry(&irmd->registry, name);
+        if (re != NULL && reg_entry_add_api(re, api) < 0)
+                LOG_ERR("Failed adding AP-I %d for name %s.", api, name);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
@@ -923,7 +928,7 @@ static int api_announce(pid_t api, char * apn)
                         }
 
                         list_add(&n->next, &e->names);
-                        LOG_DBG("API %d inherits listen name %s from AP %s.",
+                        LOG_DBG("AP-I %d inherits listen name %s from AP %s.",
                                 api, n->str, e->apn);
                 }
         }
@@ -1307,7 +1312,7 @@ static pid_t auto_execute(char ** argv)
         }
 
         if (api != 0) {
-                LOG_INFO("Instantiated %s as AP-i %d.", argv[0], api);
+                LOG_INFO("Instantiated %s as AP-I %d.", argv[0], api);
                 return api;
         }
 
