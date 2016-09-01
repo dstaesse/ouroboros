@@ -1,5 +1,8 @@
 find_package(SWIG)
 
+include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_BINARY_DIR}/include)
+
 if (NOT SWIG_FOUND)
   message("-- SWIG not found: Bindings for other languages disabled.")
 else ()
