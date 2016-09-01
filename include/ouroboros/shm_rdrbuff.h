@@ -67,18 +67,18 @@ int       shm_rdrbuff_remove(struct shm_rdrbuff  * rdrb,
 
 
 uint8_t * shm_du_buff_head_alloc(struct shm_rdrbuff * rdrb,
-                                 int                  idx,
-                                 ssize_t              size);
+                                 ssize_t              idx,
+                                 size_t               size);
 
 uint8_t * shm_du_buff_tail_alloc(struct shm_rdrbuff * rdrb,
-                                 int                  idx,
-                                 ssize_t              size);
+                                 ssize_t              idx,
+                                 size_t               size);
 
 int       shm_du_buff_head_release(struct shm_rdrbuff * rdrb,
-                                   int                  idx,
-                                   ssize_t              size);
+                                   ssize_t              idx,
+                                   size_t               size);
 
 int       shm_du_buff_tail_release(struct shm_rdrbuff * rdrb,
-                                   int                  idx,
-                                   ssize_t              size);
+                                   ssize_t              idx,
+                                   size_t               size);
 #endif /* OUROBOROS_SHM_RDRBUFF_H */

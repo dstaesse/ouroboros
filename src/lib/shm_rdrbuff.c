@@ -691,8 +691,8 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
 }
 
 uint8_t * shm_du_buff_head_alloc(struct shm_rdrbuff * rdrb,
-                                 int                  idx,
-                                 ssize_t              size)
+                                 ssize_t              idx,
+                                 size_t               size)
 {
         struct shm_du_buff * sdb;
         uint8_t * buf;
@@ -729,8 +729,8 @@ uint8_t * shm_du_buff_head_alloc(struct shm_rdrbuff * rdrb,
 }
 
 uint8_t * shm_du_buff_tail_alloc(struct shm_rdrbuff * rdrb,
-                                 int                  idx,
-                                 ssize_t              size)
+                                 ssize_t              idx,
+                                 size_t               size)
 {
         struct shm_du_buff * sdb;
         uint8_t * buf;
@@ -767,8 +767,8 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_rdrbuff * rdrb,
 }
 
 int shm_du_buff_head_release(struct shm_rdrbuff * rdrb,
-                             int                  idx,
-                             ssize_t              size)
+                             ssize_t              idx,
+                             size_t               size)
 {
         struct shm_du_buff * sdb;
 
@@ -803,8 +803,8 @@ int shm_du_buff_head_release(struct shm_rdrbuff * rdrb,
 }
 
 int shm_du_buff_tail_release(struct shm_rdrbuff * rdrb,
-                             int                  idx,
-                             ssize_t              size)
+                             ssize_t              idx,
+                             size_t               size)
 {
         struct shm_du_buff * sdb;
 
