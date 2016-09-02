@@ -216,7 +216,7 @@ int client_main()
 
         printf("\n");
         printf("--- %s ping statistics ---\n", client.s_apn);
-        printf("%d SDU's transmitted, ", client.sent);
+        printf("%d SDUs transmitted, ", client.sent);
         printf("%d received, ", client.rcvd);
         printf("%d%% packet loss, ", client.sent == 0 ? 0 :
                100 - ((100 * client.rcvd) / client.sent));

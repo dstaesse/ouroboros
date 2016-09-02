@@ -469,7 +469,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE) {
-                LOG_DBGF("Multi-block SDU's disabled. Dropping.");
+                LOG_DBGF("Multi-block SDUs disabled. Dropping.");
                 return -1;
         }
 #endif
@@ -558,7 +558,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE) {
-                LOG_DBGF("Multi-block SDU's disabled. Dropping.");
+                LOG_DBGF("Multi-block SDUs disabled. Dropping.");
                 return -1;
         }
 #endif
