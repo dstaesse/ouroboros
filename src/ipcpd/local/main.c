@@ -393,7 +393,7 @@ static int ipcp_local_flow_alloc_resp(pid_t n_api,
                                       int   response)
 {
         struct shm_ap_rbuff * rb;
-        int in_fd = -1;\
+        int in_fd = -1;
         int out_fd = -1;
         int ret = -1;
 
