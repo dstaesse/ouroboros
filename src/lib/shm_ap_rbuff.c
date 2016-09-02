@@ -40,6 +40,10 @@
 #include <signal.h>
 #include <sys/stat.h>
 
+#define FN_MAX_CHARS 255
+#define NORTH false
+#define SOUTH true
+
 #define SHM_RBUFF_FILE_SIZE (SHM_BUFFER_SIZE * sizeof(struct rb_entry)         \
                              + 2 * sizeof(size_t) + sizeof(pthread_mutex_t)    \
                              + 2 * sizeof (pthread_cond_t))
@@ -59,19 +63,23 @@ struct shm_ap_rbuff {
         pthread_cond_t *  add;         /* SDU arrived */
         pthread_cond_t *  del;         /* SDU removed */
         pid_t             api;         /* api to which this rb belongs */
+        bool              dir;         /* direction, false = N */
         int               fd;
 };
 
-struct shm_ap_rbuff * shm_ap_rbuff_create()
+static struct shm_ap_rbuff * shm_ap_rbuff_create(bool dir)
 {
         struct shm_ap_rbuff * rb;
         int                   shm_fd;
         struct rb_entry *     shm_base;
         pthread_mutexattr_t   mattr;
         pthread_condattr_t    cattr;
-        char                  fn[25];
+        char                  fn[FN_MAX_CHARS];
 
-        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", getpid());
+        if (dir == SOUTH)
+                sprintf(fn, SHM_AP_RBUFF_PREFIX "south.%d", getpid());
+        else
+                sprintf(fn, SHM_AP_RBUFF_PREFIX "north.%d", getpid());
 
         rb = malloc(sizeof(*rb));
         if (rb == NULL) {
@@ -150,18 +158,22 @@ struct shm_ap_rbuff * shm_ap_rbuff_create()
 
         rb->fd  = shm_fd;
         rb->api = getpid();
+        rb->dir = dir;
 
         return rb;
 }
 
-struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t api)
+static struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t api, bool dir)
 {
         struct shm_ap_rbuff * rb;
         int                   shm_fd;
         struct rb_entry *     shm_base;
-        char                  fn[25];
+        char                  fn[FN_MAX_CHARS];
 
-        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", api);
+        if (dir == SOUTH)
+                sprintf(fn, SHM_AP_RBUFF_PREFIX "south.%d", api);
+        else
+                sprintf(fn, SHM_AP_RBUFF_PREFIX "north.%d", api);
 
         rb = malloc(sizeof(*rb));
         if (rb == NULL) {
@@ -204,9 +216,31 @@ struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t api)
 
         rb->fd = shm_fd;
         rb->api = api;
+        rb->dir = dir;
 
         return rb;
 }
+
+struct shm_ap_rbuff * shm_ap_rbuff_create_n()
+{
+        return shm_ap_rbuff_create(NORTH);
+}
+
+struct shm_ap_rbuff * shm_ap_rbuff_create_s()
+{
+        return shm_ap_rbuff_create(SOUTH);
+}
+
+struct shm_ap_rbuff * shm_ap_rbuff_open_n(pid_t api)
+{
+        return shm_ap_rbuff_open(api, NORTH);
+}
+
+struct shm_ap_rbuff * shm_ap_rbuff_open_s(pid_t api)
+{
+        return shm_ap_rbuff_open(api, SOUTH);
+}
+
 void shm_ap_rbuff_close(struct shm_ap_rbuff * rb)
 {
         if (rb == NULL) {
@@ -252,7 +286,10 @@ void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
         if (close(rb->fd) < 0)
                 LOG_DBG("Couldn't close shared memory.");
 
-        sprintf(fn, SHM_AP_RBUFF_PREFIX "%d", rb->api);
+        if (rb->dir == SOUTH)
+                sprintf(fn, SHM_AP_RBUFF_PREFIX "south.%d", rb->api);
+        else
+                sprintf(fn, SHM_AP_RBUFF_PREFIX "north.%d", rb->api);
 
         if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
                 LOG_DBG("Couldn't unmap shared memory.");

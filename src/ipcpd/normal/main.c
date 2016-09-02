@@ -212,7 +212,7 @@ struct normal_ipcp_data * normal_ipcp_data_create()
                 return NULL;
         }
 
-        normal_data->rb = shm_ap_rbuff_open(getpid());
+        normal_data->rb = shm_ap_rbuff_create_n();
         if (normal_data->rb == NULL) {
                 shm_rdrbuff_close(normal_data->rdrb);
                 free(normal_data);

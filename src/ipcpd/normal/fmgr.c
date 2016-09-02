@@ -367,7 +367,7 @@ int fmgr_flow_alloc(pid_t         n_api,
 
         free(buf.data);
 
-        flow->flow.rb = shm_ap_rbuff_open(n_api);
+        flow->flow.rb = shm_ap_rbuff_open_s(n_api);
         if (flow->flow.rb == NULL) {
                 pthread_mutex_unlock(&fmgr->n_flows_lock);
                 free(flow);
@@ -478,7 +478,7 @@ int fmgr_flow_alloc_resp(pid_t n_api,
                 flow->flow.state = FLOW_ALLOCATED;
                 flow->flow.api = n_api;
 
-                flow->flow.rb = shm_ap_rbuff_open(n_api);
+                flow->flow.rb = shm_ap_rbuff_open_s(n_api);
                 if (flow->flow.rb == NULL) {
                         n_flow_dealloc(port_id);
                         pthread_mutex_unlock(&fmgr->n_flows_lock);
