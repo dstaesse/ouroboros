@@ -139,13 +139,13 @@ static char * rdrb_filename(enum qos_cube qos)
                 ++chars;
         } while (qm > 0);
 
-        str = malloc(strlen(SHM_RDRB_PREFIX) + chars + 2);
+        str = malloc(strlen(SHM_RDRB_PREFIX) + chars + 1);
         if (str == NULL) {
                 LOG_ERR("Failed to create shm_rdrbuff: Out of Memory.");
                 return NULL;
         }
 
-        sprintf(str, "%s.%d", SHM_RDRB_PREFIX, (int) qos);
+        sprintf(str, "%s%d", SHM_RDRB_PREFIX, (int) qos);
 
         return str;
 }

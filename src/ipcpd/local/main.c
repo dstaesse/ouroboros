@@ -105,7 +105,7 @@ static int shim_ap_init()
                 return -1;
         }
 
-        _ap_instance->rb = shm_ap_rbuff_create();
+        _ap_instance->rb = shm_ap_rbuff_create_n();
         if (_ap_instance->rb == NULL) {
                 shm_rdrbuff_close(_ap_instance->rdrb);
                 bmp_destroy(_ap_instance->fds);
@@ -331,7 +331,7 @@ static int ipcp_local_flow_alloc(pid_t         n_api,
                 return -1; /* -ENOTENROLLED */
         }
 
-        rb = shm_ap_rbuff_open(n_api);
+        rb = shm_ap_rbuff_open_s(n_api);
         if (rb == NULL) {
                 pthread_rwlock_unlock(&_ipcp->state_lock);
                 return -1; /* -ENORBUFF */
@@ -421,7 +421,7 @@ static int ipcp_local_flow_alloc_resp(pid_t n_api,
                 return -1;
         }
 
-        rb = shm_ap_rbuff_open(n_api);
+        rb = shm_ap_rbuff_open_s(n_api);
         if (rb == NULL) {
                 LOG_ERR("Could not open N + 1 ringbuffer.");
                 _ap_instance->flows[in_fd].state   = FLOW_NULL;

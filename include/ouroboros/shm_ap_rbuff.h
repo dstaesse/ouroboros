@@ -35,20 +35,38 @@ struct rb_entry {
         int     port_id;
 };
 
-struct shm_ap_rbuff * shm_ap_rbuff_create();
-struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t api);
+/* recv SDUs from N + 1 */
+struct shm_ap_rbuff * shm_ap_rbuff_create_n();
+
+/* recv SDUs from N - 1 */
+struct shm_ap_rbuff * shm_ap_rbuff_create_s();
+
+/* write SDUs to N - 1 */
+struct shm_ap_rbuff * shm_ap_rbuff_open_n(pid_t api);
+
+/* write SDUs to N + 1 */
+struct shm_ap_rbuff * shm_ap_rbuff_open_s(pid_t api);
+
 void                  shm_ap_rbuff_close(struct shm_ap_rbuff * rb);
+
 void                  shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb);
+
 int                   shm_ap_rbuff_write(struct shm_ap_rbuff * rb,
-                                         struct rb_entry * e);
+                                         struct rb_entry *     e);
+
 struct rb_entry *     shm_ap_rbuff_read(struct shm_ap_rbuff * rb);
+
 int                   shm_ap_rbuff_peek_idx(struct shm_ap_rbuff * rb);
+
 int                   shm_ap_rbuff_peek_b(struct shm_ap_rbuff * rb,
                                           const struct timespec * timeout);
+
 ssize_t               shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb,
-                                             int port_id);
-ssize_t               shm_ap_rbuff_read_port_b(struct shm_ap_rbuff * rb,
-                                               int port_id,
+                                             int                   port_id);
+
+ssize_t               shm_ap_rbuff_read_port_b(struct shm_ap_rbuff *   rb,
+                                               int                     port_id,
                                                const struct timespec * timeout);
+
 void                  shm_ap_rbuff_reset(struct shm_ap_rbuff * rb);
 #endif /* OUROBOROS_SHM_AP_RBUFF_H */

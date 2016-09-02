@@ -1742,7 +1742,7 @@ void * irm_sanitize()
 
                         if (kill(f->n_api, 0) < 0) {
                                 struct shm_ap_rbuff * n_rb =
-                                        shm_ap_rbuff_open(f->n_api);
+                                        shm_ap_rbuff_open_s(f->n_api);
                                 bmp_release(irmd->port_ids, f->port_id);
 
                                 list_del(&f->next);
@@ -1755,13 +1755,17 @@ void * irm_sanitize()
                                 continue;
                         }
                         if (kill(f->n_1_api, 0) < 0) {
-                                struct shm_ap_rbuff * n_1_rb =
-                                        shm_ap_rbuff_open(f->n_1_api);
+                                struct shm_ap_rbuff * n_1_rb_s =
+                                        shm_ap_rbuff_open_s(f->n_1_api);
+                                struct shm_ap_rbuff * n_1_rb_n =
+                                        shm_ap_rbuff_open_n(f->n_1_api);
                                 list_del(&f->next);
                                 LOG_ERR("IPCP %d gone, flow %d removed.",
                                         f->n_1_api, f->port_id);
-                                if (n_1_rb != NULL)
-                                        shm_ap_rbuff_destroy(n_1_rb);
+                                if (n_1_rb_n != NULL)
+                                        shm_ap_rbuff_destroy(n_1_rb_n);
+                                if (n_1_rb_s != NULL)
+                                        shm_ap_rbuff_destroy(n_1_rb_s);
                                 irm_flow_destroy(f);
                         }
                 }

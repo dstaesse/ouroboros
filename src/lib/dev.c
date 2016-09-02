@@ -112,7 +112,7 @@ int ap_init(char * ap_name)
                 return -1;
         }
 
-        _ap_instance->rb = shm_ap_rbuff_create();
+        _ap_instance->rb = shm_ap_rbuff_create_s();
         if (_ap_instance->rb == NULL) {
                 shm_rdrbuff_close(_ap_instance->rdrb);
                 bmp_destroy(_ap_instance->fds);
@@ -216,7 +216,7 @@ int flow_accept(char ** ae_name)
                 return -1;
         }
 
-        _ap_instance->flows[cfd].rb = shm_ap_rbuff_open(recv_msg->api);
+        _ap_instance->flows[cfd].rb = shm_ap_rbuff_open_n(recv_msg->api);
         if (_ap_instance->flows[cfd].rb == NULL) {
                 bmp_release(_ap_instance->fds, cfd);
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);
@@ -347,7 +347,7 @@ int flow_alloc(char * dst_name,
                 return -1;
         }
 
-        _ap_instance->flows[fd].rb = shm_ap_rbuff_open(recv_msg->api);
+        _ap_instance->flows[fd].rb = shm_ap_rbuff_open_n(recv_msg->api);
         if (_ap_instance->flows[fd].rb == NULL) {
                 bmp_release(_ap_instance->fds, fd);
                 pthread_rwlock_unlock(&_ap_instance->flows_lock);

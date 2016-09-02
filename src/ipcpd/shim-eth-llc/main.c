@@ -161,7 +161,7 @@ struct eth_llc_ipcp_data * eth_llc_ipcp_data_create()
                 return NULL;
         }
 
-        eth_llc_data->rb = shm_ap_rbuff_create();
+        eth_llc_data->rb = shm_ap_rbuff_create_n();
         if (eth_llc_data->rb == NULL) {
                 shm_rdrbuff_close(eth_llc_data->rdrb);
                 free(eth_llc_data);
@@ -1084,7 +1084,7 @@ static int eth_llc_ipcp_flow_alloc(pid_t         n_api,
         if (qos != QOS_CUBE_BE)
                 LOG_DBGF("QoS requested. Ethernet LLC can't do that. For now.");
 
-        rb = shm_ap_rbuff_open(n_api);
+        rb = shm_ap_rbuff_open_s(n_api);
         if (rb == NULL)
                 return -1; /* -ENORBUFF */
 
@@ -1169,7 +1169,7 @@ static int eth_llc_ipcp_flow_alloc_resp(pid_t n_api,
                 return -1;
         }
 
-        rb = shm_ap_rbuff_open(n_api);
+        rb = shm_ap_rbuff_open_s(n_api);
         if (rb == NULL) {
                 LOG_ERR("Could not open N + 1 ringbuffer.");
                 ipcp_flow(index)->state = FLOW_NULL;
