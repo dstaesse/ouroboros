@@ -73,12 +73,9 @@ int   ipcp_flow_alloc_reply(pid_t api,
                             int   port_id,
                             int   response);
 
-/*
- * This operation can go both ways
- * api == 0 means the IRMd is the destination
- */
 int   ipcp_flow_dealloc(pid_t api,
                         int   port_id);
 
+int   irm_flow_dealloc(int port_id);
 
 #endif /* OUROBOROS_IPCP_H */

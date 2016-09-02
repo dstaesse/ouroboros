@@ -606,7 +606,7 @@ static int ipcp_udp_flow_dealloc_req(int udp_port)
 
         pthread_rwlock_unlock(&_ipcp->state_lock);
 
-        ipcp_flow_dealloc(0, port_id);
+        irm_flow_dealloc(port_id);
 
         close(fd);
 

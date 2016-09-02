@@ -583,7 +583,7 @@ int fmgr_flow_alloc_msg(struct frct_i * frct_i,
                         return -1;
                 }
 
-                ret = ipcp_flow_dealloc(0, flow->flow.port_id);
+                ret = irm_flow_dealloc(flow->flow.port_id);
                 break;
         default:
                 LOG_ERR("Got an unknown flow allocation message.");
