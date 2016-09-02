@@ -599,7 +599,7 @@ static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap,
         pthread_rwlock_unlock(&shim_data(_ipcp)->flows_lock);
         pthread_rwlock_unlock(&_ipcp->state_lock);
 
-        ipcp_flow_dealloc(0, port_id);
+        irm_flow_dealloc(port_id);
 
         LOG_DBG("Flow with port_id %d deallocated.", port_id);
 

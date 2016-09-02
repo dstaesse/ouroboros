@@ -464,49 +464,51 @@ int ipcp_flow_alloc_reply(pid_t api,
 int ipcp_flow_dealloc(pid_t api,
                       int   port_id)
 {
-        if (api != 0) {
-                ipcp_msg_t msg = IPCP_MSG__INIT;
-                ipcp_msg_t * recv_msg = NULL;
-                int ret = -1;
 
-                msg.code        = IPCP_MSG_CODE__IPCP_FLOW_DEALLOC;
-                msg.has_port_id = true;
-                msg.port_id     = port_id;
+        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int ret = -1;
 
-                recv_msg = send_recv_ipcp_msg(api, &msg);
-                if (recv_msg == NULL)
-                        return 0;
+        msg.code        = IPCP_MSG_CODE__IPCP_FLOW_DEALLOC;
+        msg.has_port_id = true;
+        msg.port_id     = port_id;
 
-                if (recv_msg->has_result == false) {
-                        ipcp_msg__free_unpacked(recv_msg, NULL);
-                        return 0;
-                }
+        recv_msg = send_recv_ipcp_msg(api, &msg);
+        if (recv_msg == NULL)
+                return 0;
 
-                ret = recv_msg->result;
+        if (recv_msg->has_result == false) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
-
-                return ret;
-        } else {
-                irm_msg_t msg = IRM_MSG__INIT;
-                irm_msg_t * recv_msg = NULL;
-                int ret = -1;
-
-                msg.code        = IRM_MSG_CODE__IPCP_FLOW_DEALLOC;
-                msg.has_port_id = true;
-                msg.port_id     = port_id;
-
-                recv_msg = send_recv_irm_msg(&msg);
-                if (recv_msg == NULL)
-                        return 0;
-
-                if (recv_msg->has_result == false) {
-                        irm_msg__free_unpacked(recv_msg, NULL);
-                        return 0;
-                }
-
-                ret = recv_msg->result;
-                irm_msg__free_unpacked(recv_msg, NULL);
-
-                return ret;
+                return 0;
         }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int irm_flow_dealloc(int port_id)
+{
+        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int ret = -1;
+
+        msg.code        = IRM_MSG_CODE__IPCP_FLOW_DEALLOC;
+        msg.has_port_id = true;
+        msg.port_id     = port_id;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return 0;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return 0;
+        }
+
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
 }
