@@ -24,6 +24,7 @@
 #ifndef OUROBOROS_SHM_AP_RBUFF_H
 #define OUROBOROS_SHM_AP_RBUFF_H
 
+#include <ouroboros/select.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <stdbool.h>
@@ -58,7 +59,8 @@ struct rb_entry *     shm_ap_rbuff_read(struct shm_ap_rbuff * rb);
 
 int                   shm_ap_rbuff_peek_idx(struct shm_ap_rbuff * rb);
 
-int                   shm_ap_rbuff_peek_b(struct shm_ap_rbuff * rb,
+int                   shm_ap_rbuff_peek_b(struct shm_ap_rbuff *   rb,
+                                          bool *                  set,
                                           const struct timespec * timeout);
 
 ssize_t               shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb,
@@ -69,4 +71,5 @@ ssize_t               shm_ap_rbuff_read_port_b(struct shm_ap_rbuff *   rb,
                                                const struct timespec * timeout);
 
 void                  shm_ap_rbuff_reset(struct shm_ap_rbuff * rb);
+
 #endif /* OUROBOROS_SHM_AP_RBUFF_H */

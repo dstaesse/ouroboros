@@ -23,6 +23,9 @@
 
 #define _POSIX_C_SOURCE 199506L
 
+#include <ouroboros/select.h>
+#include <ouroboros/dev.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
@@ -59,9 +62,9 @@ struct c {
 } client;
 
 struct s {
-        struct timespec times[OPING_MAX_FLOWS];
-        bool            flows[OPING_MAX_FLOWS];
-        pthread_mutex_t lock;
+        struct timespec   times[OPING_MAX_FLOWS];
+        struct flow_set * flows;
+        pthread_mutex_t   lock;
 
         pthread_t cleaner_pt;
         pthread_t accept_pt;

@@ -28,9 +28,16 @@
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/utils.h>
+#include <ouroboros/select.h>
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+
+struct flow_set {
+        bool b[IRMD_MAX_FLOWS];
+        pthread_rwlock_t lock;
+};
 
 struct flow {
         struct shm_ap_rbuff * rb;
@@ -577,14 +584,6 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         return 0;
 }
 
-int flow_select(const struct timespec * timeout)
-{
-        int port_id = shm_ap_rbuff_peek_b(ai->rb, timeout);
-        if (port_id < 0)
-                return port_id;
-        return ai->ports[port_id];
-}
-
 ssize_t flow_read(int fd, void * buf, size_t count)
 {
         int idx = -1;
@@ -637,4 +636,80 @@ ssize_t flow_read(int fd, void * buf, size_t count)
         pthread_rwlock_unlock(&ai->data_lock);
 
         return n;
+}
+
+/* select functions */
+
+struct flow_set * flow_set_create()
+{
+        struct flow_set * set = malloc(sizeof(*set));
+        if (set == NULL)
+                return NULL;
+
+        if (pthread_rwlock_init(&set->lock, NULL)) {
+                free(set);
+                return NULL;
+        }
+
+        memset(&set->b, 0, sizeof(set->b));
+
+        return set;
+}
+
+void flow_set_zero(struct flow_set * set)
+{
+        pthread_rwlock_wrlock(&set->lock);
+        memset(&set->b, 0, sizeof(set->b));
+        pthread_rwlock_unlock(&set->lock);
+}
+
+void flow_set_add(struct flow_set * set, int fd)
+{
+        pthread_rwlock_wrlock(&set->lock);
+        set->b[ai->flows[fd].port_id] = true;
+        pthread_rwlock_unlock(&set->lock);
+}
+
+void flow_set_del(struct flow_set * set, int fd)
+{
+        pthread_rwlock_wrlock(&set->lock);
+        set->b[ai->flows[fd].port_id] = false;
+        pthread_rwlock_unlock(&set->lock);
+}
+
+bool flow_set_has(struct flow_set * set, int fd)
+{
+        bool ret;
+        pthread_rwlock_rdlock(&set->lock);
+        ret = set->b[ai->flows[fd].port_id];
+        pthread_rwlock_unlock(&set->lock);
+        return ret;
+}
+
+void flow_set_destroy(struct flow_set * set)
+{
+        pthread_rwlock_destroy(&set->lock);
+        free(set);
+}
+
+static void flow_set_cpy(bool * dst, struct flow_set * src)
+{
+        pthread_rwlock_rdlock(&src->lock);
+        memcpy(dst, src->b, IRMD_MAX_FLOWS);
+        pthread_rwlock_unlock(&src->lock);
+}
+
+int flow_select(struct flow_set * set, const struct timespec * timeout)
+{
+        int port_id;
+        bool b[IRMD_MAX_FLOWS];
+        if (set == NULL) {
+                port_id = shm_ap_rbuff_peek_b(ai->rb, NULL, timeout);
+        } else {
+                flow_set_cpy(b, set);
+                port_id = shm_ap_rbuff_peek_b(ai->rb, (bool *) b, timeout);
+        }
+        if (port_id < 0)
+                return port_id;
+        return ai->ports[port_id];
 }

@@ -10,7 +10,8 @@ set(HEADER_FILES
   irm.h
   irm_config.h
   nsm.h
-  qos.h)
+  qos.h
+  select.h)
 
 install(FILES ${HEADER_FILES} DESTINATION usr/include/ouroboros)
 

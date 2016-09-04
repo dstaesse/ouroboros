@@ -22,7 +22,6 @@
 
 #include <unistd.h>
 #include <stdint.h>
-#include <time.h>
 
 #include <ouroboros/qos.h>
 #include <ouroboros/flow.h>
@@ -34,10 +33,12 @@
 
 /* These calls should be removed once we write the ouroboros OS. */
 int     ap_init(char * ap_name);
+
 void    ap_fini(void);
 
 /* Returns file descriptor (> 0) and client AE name. */
 int     flow_accept(char ** ae_name);
+
 int     flow_alloc_resp(int fd, int result);
 
 /*
@@ -47,13 +48,21 @@ int     flow_alloc_resp(int fd, int result);
 int     flow_alloc(char * dst_name,
                    char * src_ae_name,
                    struct qos_spec * qos);
+
 int     flow_alloc_res(int fd);
 
 int     flow_dealloc(int fd);
 
-int     flow_cntl(int fd, int cmd, int oflags);
-ssize_t flow_write(int fd, void * buf, size_t count);
-ssize_t flow_read(int fd, void * buf, size_t count);
-int     flow_select(const struct timespec * timeout);
+int     flow_cntl(int fd,
+                  int cmd,
+                  int oflags);
+
+ssize_t flow_write(int fd,
+                   void * buf,
+                   size_t count);
+
+ssize_t flow_read(int fd,
+                  void * buf,
+                  size_t count);
 
 #endif
