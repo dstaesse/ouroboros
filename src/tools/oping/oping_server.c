@@ -21,8 +21,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/dev.h>
-
 #ifdef __FreeBSD__
 #define __XSI_VISIBLE 500
 #endif
@@ -53,9 +51,9 @@ void * cleaner_thread(void * o)
                 clock_gettime(CLOCK_REALTIME, &now);
                 pthread_mutex_lock(&server.lock);
                 for (i = 0; i < OPING_MAX_FLOWS; ++i)
-                        if (server.flows[i] &&
+                        if (flow_set_has(server.flows, i) &&
                             ts_diff_ms(&server.times[i], &now) > deadline_ms) {
-                                server.flows[i] = false;
+                                flow_set_del(server.flows, i);
                                 flow_dealloc(i);
                         }
 
@@ -70,10 +68,16 @@ void * server_thread(void *o)
         int msg_len = 0;
         struct oping_msg * msg = (struct oping_msg *) buf;
         struct timespec now = {0, 0};
+        struct timespec timeout = {0, 100 * MILLION};
 
         while (true) {
-
-                int fd = flow_select(NULL);
+                int fd = flow_select(server.flows, &timeout);
+                if (fd == -ETIMEDOUT)
+                        continue;
+                if (fd < 0) {
+                        printf("Failed to get active fd.\n");
+                        continue;
+                }
                 while (!((msg_len = flow_read(fd, buf, OPING_BUF_SIZE)) < 0)) {
                         if (msg_len < 0)
                                 continue;
@@ -126,7 +130,7 @@ void * accept_thread(void * o)
                 clock_gettime(CLOCK_REALTIME, &now);
 
                 pthread_mutex_lock(&server.lock);
-                server.flows[fd] = true;
+                flow_set_add(server.flows, fd);
                 server.times[fd] = now;
                 pthread_mutex_unlock(&server.lock);
 
@@ -139,7 +143,6 @@ void * accept_thread(void * o)
 int server_main()
 {
         struct sigaction sig_act;
-        int i = 0;
 
         memset(&sig_act, 0, sizeof sig_act);
         sig_act.sa_sigaction = &shutdown_server;
@@ -153,8 +156,11 @@ int server_main()
                 return -1;
         }
 
-        for (i = 0; i < OPING_MAX_FLOWS; ++i)
-                server.flows[i] = false;
+        server.flows = flow_set_create();
+        if (server.flows == NULL)
+                return 0;
+
+        flow_set_zero(server.flows);
 
         pthread_create(&server.cleaner_pt, NULL, cleaner_thread, NULL);
         pthread_create(&server.accept_pt, NULL, accept_thread, NULL);

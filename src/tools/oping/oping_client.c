@@ -65,7 +65,7 @@ void * reader(void * o)
 
         /* FIXME: use flow timeout option once we have it */
         while(client.rcvd != client.count &&
-              (fd = flow_select(&timeout)) != -ETIMEDOUT) {
+              (fd = flow_select(NULL, &timeout)) != -ETIMEDOUT) {
                 flow_cntl(fd, FLOW_F_SETFL, FLOW_O_NONBLOCK);
                 while (!((msg_len = flow_read(fd, buf, OPING_BUF_SIZE)) < 0)) {
                         if (msg_len < 0)
