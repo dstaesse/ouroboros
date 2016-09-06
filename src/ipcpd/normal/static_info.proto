@@ -3,8 +3,8 @@ message static_info_msg {
         required uint32 cep_id_size     = 2;
         required uint32 pdu_length_size = 3;
         required uint32 seqno_size      = 4;
-        required uint32 ttl_size        = 5;
-        required uint32 chk_size        = 6;
+        required bool   has_ttl         = 5;
+        required bool   has_chk         = 6;
         required uint32 min_pdu_size    = 7;
         required uint32 max_pdu_size    = 8;
         required uint32 address         = 9;

@@ -690,32 +690,32 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
         return 0;
 }
 
-uint8_t * shm_du_buff_head_alloc(struct shm_rdrbuff * rdrb,
-                                 ssize_t              idx,
+uint8_t * shm_du_buff_head(struct shm_du_buff * sdb)
+{
+        if (sdb == NULL)
+                return NULL;
+
+        return (uint8_t *) (sdb + 1) + sdb->du_head;
+}
+
+uint8_t * shm_du_buff_tail(struct shm_du_buff * sdb)
+{
+        if (sdb == NULL)
+                return NULL;
+
+        return (uint8_t *) (sdb + 1) + sdb->du_tail;
+}
+
+uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
                                  size_t               size)
 {
-        struct shm_du_buff * sdb;
-        uint8_t * buf;
+        uint8_t * buf = NULL;
 
-        if (rdrb  == NULL)
+        if (sdb  == NULL)
                 return NULL;
-
-        if (idx < 0 || idx > SHM_BUFFER_SIZE)
-                return NULL;
-
-#ifdef __APPLE__
-        pthread_mutex_lock(rdrb->lock);
-#else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
-                pthread_mutex_consistent(rdrb->lock);
-        }
-#endif
-        sdb = idx_to_du_buff_ptr(rdrb, idx);
 
         if ((long) (sdb->du_head - size) < 0) {
-                pthread_mutex_unlock(rdrb->lock);
-                LOG_DBGF("Failed to allocate PCI headspace.");
+                LOG_ERR("Failed to allocate PCI headspace.");
                 return NULL;
         }
 
@@ -723,37 +723,19 @@ uint8_t * shm_du_buff_head_alloc(struct shm_rdrbuff * rdrb,
 
         buf = (uint8_t *) (sdb + 1) + sdb->du_head;
 
-        pthread_mutex_unlock(rdrb->lock);
-
         return buf;
 }
 
-uint8_t * shm_du_buff_tail_alloc(struct shm_rdrbuff * rdrb,
-                                 ssize_t              idx,
+uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
                                  size_t               size)
 {
-        struct shm_du_buff * sdb;
-        uint8_t * buf;
+        uint8_t * buf = NULL;
 
-        if (rdrb  == NULL)
+        if (sdb  == NULL)
                 return NULL;
-
-        if (idx < 0 || idx > SHM_BUFFER_SIZE)
-                return NULL;
-
-#ifdef __APPLE__
-        pthread_mutex_lock(rdrb->lock);
-#else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
-                pthread_mutex_consistent(rdrb->lock);
-        }
-#endif
-        sdb = idx_to_du_buff_ptr(rdrb, idx);
 
         if (sdb->du_tail + size >= sdb->size) {
-                pthread_mutex_unlock(rdrb->lock);
-                LOG_DBGF("Failed to allocate PCI tailspace.");
+                LOG_ERR("Failed to allocate PCI tailspace.");
                 return NULL;
         }
 
@@ -761,78 +743,37 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_rdrbuff * rdrb,
 
         sdb->du_tail += size;
 
-        pthread_mutex_unlock(rdrb->lock);
-
         return buf;
 }
 
-int shm_du_buff_head_release(struct shm_rdrbuff * rdrb,
-                             ssize_t              idx,
+int shm_du_buff_head_release(struct shm_du_buff * sdb,
                              size_t               size)
 {
-        struct shm_du_buff * sdb;
-
-        if (rdrb  == NULL)
+        if (sdb  == NULL)
                 return -1;
-
-        if (idx < 0 || idx > SHM_BUFFER_SIZE)
-                return -1;
-
-#ifdef __APPLE__
-        pthread_mutex_lock(rdrb->lock);
-#else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
-                pthread_mutex_consistent(rdrb->lock);
-        }
-#endif
-
-        sdb = idx_to_du_buff_ptr(rdrb, idx);
 
         if (size > sdb->du_tail - sdb->du_head) {
-                pthread_mutex_unlock(rdrb->lock);
-                LOG_DBGF("Tried to release beyond sdu boundary.");
+                LOG_DBGF("Tried to release beyond SDU boundary.");
                 return -EOVERFLOW;
         }
 
         sdb->du_head += size;
 
-        pthread_mutex_unlock(rdrb->lock);
-
         return 0;
 }
 
-int shm_du_buff_tail_release(struct shm_rdrbuff * rdrb,
-                             ssize_t              idx,
+int shm_du_buff_tail_release(struct shm_du_buff * sdb,
                              size_t               size)
 {
-        struct shm_du_buff * sdb;
-
-        if (rdrb  == NULL)
+        if (sdb  == NULL)
                 return -1;
-
-        if (idx < 0 || idx > SHM_BUFFER_SIZE)
-                return -1;
-
-#ifdef __APPLE__
-        pthread_mutex_lock(rdrb->lock);
-#else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
-                pthread_mutex_consistent(rdrb->lock);
-        }
-#endif
-        sdb = idx_to_du_buff_ptr(rdrb, idx);
 
         if (size > sdb->du_tail - sdb->du_head) {
-                pthread_mutex_unlock(rdrb->lock);
-                LOG_DBGF("Tried to release beyond sdu boundary.");
+                LOG_ERR("Tried to release beyond SDU boundary.");
                 return -EOVERFLOW;
         }
 
         sdb->du_tail -= size;
-
-        pthread_mutex_unlock(rdrb->lock);
 
         return 0;
 }

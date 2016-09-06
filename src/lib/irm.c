@@ -115,8 +115,8 @@ int irm_bootstrap_ipcp(pid_t               api,
                 config.has_pdu_length_size = true;
                 config.has_qos_id_size = true;
                 config.has_seqno_size = true;
-                config.has_ttl_size = true;
-                config.has_chk_size = true;
+                config.has_has_ttl = true;
+                config.has_has_chk = true;
                 config.has_min_pdu_size = true;
                 config.has_max_pdu_size = true;
 
@@ -125,8 +125,8 @@ int irm_bootstrap_ipcp(pid_t               api,
                 config.pdu_length_size = conf->pdu_length_size;
                 config.qos_id_size = conf->qos_id_size;
                 config.seqno_size = conf->seqno_size;
-                config.ttl_size = conf->ttl_size;
-                config.chk_size = conf->chk_size;
+                config.has_ttl = conf->has_ttl;
+                config.has_chk = conf->has_chk;
                 config.min_pdu_size = conf->min_pdu_size;
                 config.max_pdu_size = conf->max_pdu_size;
                 break;

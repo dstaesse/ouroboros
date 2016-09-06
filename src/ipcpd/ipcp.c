@@ -252,12 +252,12 @@ void * ipcp_main_loop(void * o)
                                 conf.cep_id_size = conf_msg->cep_id_size;
                                 conf.pdu_length_size
                                         = conf_msg->pdu_length_size;
-                                conf.qos_id_size     = conf_msg->qos_id_size;
-                                conf.seqno_size      = conf_msg->seqno_size;
-                                conf.ttl_size        = conf_msg->seqno_size;
-                                conf.chk_size        = conf_msg->chk_size;
-                                conf.min_pdu_size    = conf_msg->min_pdu_size;
-                                conf.max_pdu_size    = conf_msg->max_pdu_size;
+                                conf.qos_id_size = conf_msg->qos_id_size;
+                                conf.seqno_size = conf_msg->seqno_size;
+                                conf.has_ttl = conf_msg->has_ttl;
+                                conf.has_chk = conf_msg->has_chk;
+                                conf.min_pdu_size = conf_msg->min_pdu_size;
+                                conf.max_pdu_size = conf_msg->max_pdu_size;
                         }
                         if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
                                 conf.ip_addr  = conf_msg->ip_addr;

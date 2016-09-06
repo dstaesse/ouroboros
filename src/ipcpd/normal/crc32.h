@@ -1,9 +1,8 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Protocol Control Information in Shared Memory Map
+ * 32-bit Cyclic Redundancy Check
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,31 +20,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_SHM_PCI_H
-#define OUROBOROS_IPCP_SHM_PCI_H
+#ifndef OUROBOROS_IPCP_CRC32_H
+#define OUROBOROS_IPCP_CRC32_H
 
-#include <ouroboros/shm_rdrbuff.h>
+#include <stdint.h>
 
-#include <dt_const.h>
+void crc32(uint32_t * crc, const uint8_t * buf, size_t len);
 
-struct pci {
-        uint64_t dst_addr;
-        uint64_t src_addr;
-        uint32_t dst_cep_id;
-        uint32_t src_cep_id;
-        uint32_t pdu_length;
-        uint64_t seqno;
-        uint8_t  qos_id;
-        uint8_t  ttl;
-};
-
-int          shm_pci_ser(struct shm_du_buff * sdb,
-                         struct pci * pci);
-
-struct pci * shm_pci_des(struct shm_du_buff * sdb);
-
-int          shm_pci_shrink(struct shm_du_buff * sdb);
-
-int          shm_pci_dec_ttl(struct shm_du_buff * sdb);
-
-#endif /* OUROBOROS_IPCP_SHM_PCI_H */
+#endif /* OUROBOROS_IPCP_CRC32_H */

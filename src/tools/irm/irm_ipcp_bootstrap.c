@@ -42,8 +42,6 @@
 #define DEFAULT_CEP_ID_SIZE 2
 #define DEFAULT_PDU_LEN_SIZE 2
 #define DEFAULT_SEQ_NO_SIZE 4
-#define DEFAULT_TTL_SIZE 1
-#define DEFAULT_CHK_SIZE 2
 #define DEFAULT_MIN_PDU_SIZE 0
 #define DEFAULT_MAX_PDU_SIZE 9000
 #define DEFAULT_DDNS 0
@@ -62,8 +60,8 @@ static void usage()
                "                [cep_id <CEP-id size> (default: %d)]\n"
                "                [pdu_len <PDU length size> (default: %d)]\n"
                "                [seqno <sequence number size> (default: %d)]\n"
-               "                [ttl <time to live size>  (default: %d)]\n"
-               "                [chk <checksum size>  (default: %d)]\n"
+               "                [ttl <add time to live value in the PCI>]\n"
+               "                [chk <add 32-bit checksum in the PCI>]\n"
                "                [min_pdu <minimum PDU size> (default: %d)]\n"
                "                [max_pdu <maximum PDU size> (default: %d)]\n"
                "if TYPE == " SHIM_UDP "\n"
@@ -74,7 +72,6 @@ static void usage()
                "                if_name <interface name>\n",
                DEFAULT_ADDR_SIZE, DEFAULT_CEP_ID_SIZE,
                DEFAULT_PDU_LEN_SIZE, DEFAULT_SEQ_NO_SIZE,
-               DEFAULT_TTL_SIZE, DEFAULT_CHK_SIZE,
                DEFAULT_MIN_PDU_SIZE, DEFAULT_MAX_PDU_SIZE, DEFAULT_DDNS);
 }
 
@@ -86,8 +83,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         uint8_t cep_id_size = DEFAULT_CEP_ID_SIZE;
         uint8_t pdu_length_size = DEFAULT_PDU_LEN_SIZE;
         uint8_t seqno_size = DEFAULT_SEQ_NO_SIZE;
-        uint8_t ttl_size = DEFAULT_TTL_SIZE;
-        uint8_t chk_size = DEFAULT_CHK_SIZE;
+        bool has_ttl = false;
+        bool has_chk = false;
         uint32_t min_pdu_size = DEFAULT_MIN_PDU_SIZE;
         uint32_t max_pdu_size = DEFAULT_MAX_PDU_SIZE;
         uint32_t ip_addr = 0;
@@ -112,7 +109,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                                 return -1;
                         }
                 } else if (matches(*argv, "dns") == 0) {
-                        if (inet_pton (AF_INET, *(argv + 1), &dns_addr) != 1) {
+                        if (inet_pton(AF_INET, *(argv + 1), &dns_addr) != 1) {
                                 usage();
                                 return -1;
                         }
@@ -127,9 +124,13 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 } else if (matches(*argv, "seqno") == 0) {
                         seqno_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "ttl") == 0) {
-                        ttl_size = atoi(*(argv + 1));
+                        has_ttl = true;
+                        argc++;
+                        argv--;
                 } else if (matches(*argv, "chk") == 0) {
-                        chk_size = atoi(*(argv + 1));
+                        has_chk = true;
+                        argc++;
+                        argv--;
                 } else if (matches(*argv, "min_pdu") == 0) {
                         min_pdu_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "max_pdu") == 0) {
@@ -157,8 +158,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.cep_id_size = cep_id_size;
                 conf.pdu_length_size = pdu_length_size;
                 conf.seqno_size = seqno_size;
-                conf.ttl_size = ttl_size;
-                conf.chk_size = chk_size;
+                conf.has_ttl = has_ttl;
+                conf.has_chk = has_chk;
                 conf.min_pdu_size = min_pdu_size;
                 conf.max_pdu_size = max_pdu_size;
         } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {

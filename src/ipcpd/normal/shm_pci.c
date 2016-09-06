@@ -21,127 +21,183 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ourboros/errno.h>
-
-#include "shm_pci.h"
-#include <stdlib.h>
-
-#define SHM_PCI_HEAD_SIZE(a, b) a.addr_size * 2 +  \
-        a.cep_id_size * 2 +                    \
-        a.pdu_length_size +                    \
-        b.ttl_size +                           \
-        a.seqno_size +                         \
-        a.qos_id_size
-#define SHM_PCI_TAIL_SIZE(b) b.chk_size
-
 #define OUROBOROS_PREFIX "ipcpd/shm_pci"
 
 #include <ouroboros/logs.h>
+#include <ouroboros/errno.h>
 
-struct shm_pci {
-        /* head */
-        uint8_t * dst_addr;
-        uint8_t * src_addr;
-        uint8_t * dst_cep_id;
-        uint8_t * src_cep_id;
-        uint8_t * pdu_length;
-        uint8_t * ttl;
-        uint8_t * seqno;
-        uint8_t * qos_id;
+#include <stdlib.h>
+#include <string.h>
 
-        uint8_t * chk;
+#include "shm_pci.h"
+#include "frct.h"
+#include "crc32.h"
 
-        struct shm_du_buff * dub;
+#define QOS_ID_SIZE 1
+#define DEFAULT_TTL 60
+#define TTL_SIZE 1
+#define CHK_SIZE 4
 
-        struct ipcp_dtp_const dtpc;
-        struct ipcp_dup_const dupc;
-
-};
-
-shm_pci_t * shm_pci_create(struct shm_du_buff      * dub,
-                           const struct ipcp_dtp_const * dtpc,
-                           const struct ipcp_dup_const * dupc)
+static int shm_pci_head_size(struct dt_const * dtc)
 {
-        struct shm_pci * p;
+        int len = 0;
 
-        if (dub == NULL) {
-                LOG_DBGF("Bogus input. Bugging out.");
-                return NULL;
-        }
+        len = dtc->addr_size * 2 + dtc->cep_id_size * 2
+                + dtc->pdu_length_size + dtc->seqno_size
+                + QOS_ID_SIZE;
 
-        p = malloc(sizeof *p);
+        if (dtc->has_ttl)
+                len += TTL_SIZE;
 
-        if (p == NULL)
-                return NULL;
-
-        p->dub = dub;
-
-        p->dtpc = *dtpc;
-        p->dupc = *dupc;
-
-        p->dst_addr   = NULL;
-        p->src_addr   = NULL;
-        p->dst_cep_id = NULL;
-        p->src_cep_id = NULL;
-        p->pdu_length = NULL;
-        p->ttl        = NULL;
-        p->seqno      = NULL;
-        p->qos_id     = NULL;
-        p->chk        = NULL;
-
-        return p;
+        return len;
 }
 
-void shm_pci_destroy(shm_pci_t * pci)
+static int shm_pci_tail_size(struct dt_const * dtc)
 {
-        free(pci);
+        return dtc->has_chk ? CHK_SIZE : 0;
 }
 
-int shm_pci_init(shm_pci_t * pci)
+int shm_pci_ser(struct shm_du_buff * sdb,
+                struct pci * pci)
 {
-        if (pci == NULL) {
-                LOG_DBGF("Bogus input. Bugging out.");
-                return -EINVAL;
+        uint8_t * head;
+        uint8_t * tail;
+        int offset = 0;
+        struct dt_const * dtc;
+        uint8_t ttl = DEFAULT_TTL;
+
+        dtc = frct_dt_const();
+        if (dtc == NULL)
+                return -1;
+
+        head = shm_du_buff_head_alloc(sdb, shm_pci_head_size(dtc));
+        if (head == NULL)
+                return -1;
+
+        memcpy(head, &pci->dst_addr, dtc->addr_size);
+        offset += dtc->addr_size;
+        memcpy(head + offset, &pci->src_addr, dtc->addr_size);
+        offset += dtc->addr_size;
+        memcpy(head + offset, &pci->dst_cep_id, dtc->cep_id_size);
+        offset += dtc->cep_id_size;
+        memcpy(head + offset, &pci->src_cep_id, dtc->cep_id_size);
+        offset += dtc->cep_id_size;
+        memcpy(head + offset, &pci->pdu_length, dtc->pdu_length_size);
+        offset += dtc->pdu_length_size;
+        memcpy(head + offset, &pci->seqno, dtc->seqno_size);
+        offset += dtc->seqno_size;
+        memcpy(head + offset, &pci->qos_id, QOS_ID_SIZE);
+        offset += QOS_ID_SIZE;
+        if (dtc->has_ttl)
+                memcpy(head + offset, &ttl, TTL_SIZE);
+
+        if (dtc->has_chk) {
+                tail = shm_du_buff_tail_alloc(sdb, shm_pci_tail_size(dtc));
+                if (tail == NULL) {
+                        shm_du_buff_head_release(sdb, shm_pci_tail_size(dtc));
+                        return -1;
+                }
+
+                crc32((uint32_t *) tail, head, tail - head);
         }
-
-        uint8_t * pci_head = shm_du_buff_head_alloc(
-                pci->dub, SHM_PCI_HEAD_SIZE(pci->dtpc, pci->dupc));
-        uint8_t * pci_tail = shm_du_buff_tail_alloc(
-                pci->dub, SHM_PCI_TAIL_SIZE(pci->dupc));
-
-        if (pci_head == NULL) {
-                LOG_DBG("Failed to allocate space for PCI at head.");
-                return -ENOBUFS;
-        }
-
-        if (pci_tail == NULL) {
-                LOG_DBG("Failed to allocate space for PCI at tail.");
-                return -ENOBUFS;
-        }
-
-        pci->dst_addr   = pci_head;
-        pci->src_addr   = (pci_head += pci->dtpc.addr_size);
-        pci->dst_cep_id = (pci_head += pci->dtpc.addr_size);
-        pci->src_cep_id = (pci_head += pci->dtpc.cep_id_size);
-        pci->pdu_length = (pci_head += pci->dtpc.cep_id_size);
-        pci->ttl        = (pci_head += pci->dtpc.pdu_length_size);
-        pci->seqno      = (pci_head += pci->dupc.ttl_size);
-        pci->qos_id     = (pci_head += pci->dtpc.seqno_size);
-
-        pci->chk        = (pci_tail);
 
         return 0;
 }
 
-void shm_pci_release(shm_pci_t * pci)
+struct pci * shm_pci_des(struct shm_du_buff * sdb)
 {
+        uint8_t * head;
+        struct pci * pci;
+        int offset = 0;
+        struct dt_const * dtc;
+
+        head = shm_du_buff_head(sdb);
+        if (head == NULL)
+                return NULL;
+
+        dtc = frct_dt_const();
+        if (dtc == NULL)
+                return NULL;
+
+        pci = malloc(sizeof(*pci));
         if (pci == NULL)
-                return;
+                return NULL;
 
-        if (pci->dub == NULL)
-                return;
+        memcpy(&pci->dst_addr, head, dtc->addr_size);
+        offset += dtc->addr_size;
+        memcpy(&pci->src_addr, head + offset, dtc->addr_size);
+        offset += dtc->addr_size;
+        memcpy(&pci->dst_cep_id, head + offset, dtc->cep_id_size);
+        offset += dtc->cep_id_size;
+        memcpy(&pci->src_cep_id, head + offset, dtc->cep_id_size);
+        offset += dtc->cep_id_size;
+        memcpy(&pci->pdu_length, head + offset, dtc->pdu_length_size);
+        offset += dtc->pdu_length_size;
+        memcpy(&pci->seqno, head + offset, dtc->seqno_size);
+        offset += dtc->seqno_size;
+        memcpy(&pci->qos_id, head + offset, QOS_ID_SIZE);
+        offset += QOS_ID_SIZE;
+        if (dtc->has_ttl)
+                memcpy(&pci->ttl, head + offset, TTL_SIZE);
 
-        shm_du_buff_head_release(pci->dub, SHM_PCI_HEAD_SIZE(pci->dtpc,
-                                                             pci->dupc));
-        shm_du_buff_tail_release(pci->dub, SHM_PCI_TAIL_SIZE(pci->dupc));
+        return pci;
+}
+
+int shm_pci_shrink(struct shm_du_buff * sdb)
+{
+        struct dt_const * dtc;
+
+        if (sdb == NULL)
+                return -1;
+
+        dtc = frct_dt_const();
+        if (dtc == NULL)
+                return -1;
+
+        if (shm_du_buff_head_release(sdb, shm_pci_head_size(dtc))) {
+                LOG_ERR("Failed to shrink head.");
+                return -1;
+        }
+
+        if (shm_du_buff_tail_release(sdb, shm_pci_tail_size(dtc))) {
+                LOG_ERR("Failed to shrink tail.");
+                return -1;
+        }
+
+        return 0;
+}
+
+int shm_pci_dec_ttl(struct shm_du_buff * sdb)
+{
+        struct dt_const * dtc;
+        int offset = 0;
+        uint8_t * head;
+        uint8_t * tail;
+
+        dtc = frct_dt_const();
+        if (dtc == NULL)
+                return -1;
+
+        if (dtc->has_ttl == false)
+                return 0;
+
+        offset = shm_pci_head_size(dtc) - 1;
+
+        head = shm_du_buff_head(sdb);
+        if (head == NULL)
+                return -1;
+
+        head[offset]--;
+
+        if (dtc->has_chk) {
+                tail = shm_du_buff_tail(sdb);
+                if (tail == NULL)
+                        return -1;
+
+                tail -= CHK_SIZE;
+
+                crc32((uint32_t *) tail, head, tail - head);
+        }
+
+        return 0;
 }

@@ -126,6 +126,14 @@ int frct_fini()
         return 0;
 }
 
+struct dt_const * frct_dt_const()
+{
+        if (frct == NULL)
+                return NULL;
+
+        return frct->dtc;
+}
+
 int frct_dt_flow(int fd,
                  enum qos_cube qos)
 {
