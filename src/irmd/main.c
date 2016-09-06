@@ -212,6 +212,9 @@ static pid_t get_ipcp_by_dst_name(char * dst_name)
 
         list_for_each(p, &irmd->ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                if (e->dif_name == NULL)
+                        continue;
+
                 if (strcmp(e->dif_name, dif_name) == 0)
                         return e->api;
         }
