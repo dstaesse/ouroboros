@@ -30,6 +30,7 @@
 #include "ouroboros/irm_config.h"
 #include "ouroboros/nsm.h"
 #include "ouroboros/qos.h"
+#include "ouroboros/select.h"
 %}
 
 typedef int pid_t;
@@ -42,3 +43,4 @@ typedef int pid_t;
 %include "ouroboros/irm_config.h"
 %include "ouroboros/nsm.h"
 %include "ouroboros/qos.h"
+%include "ouroboros/select.h"
