@@ -154,6 +154,7 @@ static char * rdrb_filename(enum qos_cube qos)
 struct shm_rdrbuff * shm_rdrbuff_create()
 {
         struct shm_rdrbuff * rdrb;
+        mode_t               mask;
         int                  shm_fd;
         uint8_t *            shm_base;
         pthread_mutexattr_t  mattr;
@@ -171,6 +172,8 @@ struct shm_rdrbuff * shm_rdrbuff_create()
                 return NULL;
         }
 
+        mask = umask(0);
+
         shm_fd = shm_open(shm_rdrb_fn, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (shm_fd == -1) {
                 LOG_DBGF("Failed creating shared memory map.");
@@ -179,12 +182,7 @@ struct shm_rdrbuff * shm_rdrbuff_create()
                 return NULL;
         }
 
-        if (fchmod(shm_fd, 0666)) {
-                LOG_DBGF("Failed to chmod shared memory map.");
-                free(shm_rdrb_fn);
-                free(rdrb);
-                return NULL;
-        }
+        umask(mask);
 
         if (ftruncate(shm_fd, SHM_FILE_SIZE - 1) < 0) {
                 LOG_DBGF("Failed to extend shared memory map.");

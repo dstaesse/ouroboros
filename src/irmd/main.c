@@ -2159,7 +2159,6 @@ int main(int argc, char ** argv)
                 }
         }
 
-
         if (!use_stdout &&
             (log_dir = opendir(INSTALL_PREFIX LOG_DIR)) != NULL) {
                 while ((ent = readdir(log_dir)) != NULL) {

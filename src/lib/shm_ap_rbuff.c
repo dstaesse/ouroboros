@@ -75,6 +75,7 @@ static struct shm_ap_rbuff * shm_ap_rbuff_create(bool dir)
         pthread_mutexattr_t   mattr;
         pthread_condattr_t    cattr;
         char                  fn[FN_MAX_CHARS];
+        mode_t                mask;
 
         if (dir == SOUTH)
                 sprintf(fn, SHM_AP_RBUFF_PREFIX "south.%d", getpid());
@@ -87,6 +88,8 @@ static struct shm_ap_rbuff * shm_ap_rbuff_create(bool dir)
                 return NULL;
         }
 
+        mask = umask(0);
+
         shm_fd = shm_open(fn, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (shm_fd == -1) {
                 LOG_DBG("Failed creating ring buffer.");
@@ -94,11 +97,7 @@ static struct shm_ap_rbuff * shm_ap_rbuff_create(bool dir)
                 return NULL;
         }
 
-        if (fchmod(shm_fd, 0666)) {
-                LOG_DBG("Failed to chmod shared memory.");
-                free(rb);
-                return NULL;
-        }
+        umask(mask);
 
         if (ftruncate(shm_fd, SHM_RBUFF_FILE_SIZE - 1) < 0) {
                 LOG_DBG("Failed to extend ringbuffer.");
