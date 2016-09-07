@@ -62,6 +62,7 @@
 #ifdef __FreeBSD__
 #include <net/if_dl.h>
 #include <netinet/if_ether.h>
+#include <ifaddrs.h>
 #endif
 
 #include <poll.h>
