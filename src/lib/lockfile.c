@@ -43,9 +43,12 @@ struct lockfile {
 };
 
 struct lockfile * lockfile_create() {
+        mode_t mask;
         struct lockfile * lf = malloc(sizeof(*lf));
         if (lf == NULL)
                 return NULL;
+
+        mask = umask(0);
 
         lf->fd = shm_open(LOCKFILE_NAME, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (lf->fd == -1) {
@@ -54,11 +57,7 @@ struct lockfile * lockfile_create() {
                 return NULL;
         }
 
-        if (fchmod(lf->fd, 0666)) {
-                LOG_DBGF("Failed to chmod lockfile.");
-                free(lf);
-                return NULL;
-        }
+        umask(mask);
 
         if (ftruncate(lf->fd, LF_SIZE - 1) < 0) {
                 LOG_DBGF("Failed to extend lockfile.");
