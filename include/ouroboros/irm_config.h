@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #ifndef OUROBOROS_IRM_CONFIG_H
 #define OUROBOROS_IRM_CONFIG_H
@@ -52,8 +53,8 @@ struct dif_config {
                         uint8_t seqno_size;
 
                         /* DUP constants */
-                        uint8_t ttl_size;
-                        uint8_t chk_size;
+                        bool has_ttl;
+                        bool has_chk;
 
                         uint32_t min_pdu_size;
                         uint32_t max_pdu_size;

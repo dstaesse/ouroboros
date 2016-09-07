@@ -241,8 +241,8 @@ int ribmgr_cdap_write(struct cdap * instance,
                 rib->dtc.cep_id_size = msg->cep_id_size;
                 rib->dtc.pdu_length_size = msg->pdu_length_size;
                 rib->dtc.seqno_size = msg->seqno_size;
-                rib->dtc.ttl_size = msg->ttl_size;
-                rib->dtc.chk_size = msg->chk_size;
+                rib->dtc.has_ttl = msg->has_ttl;
+                rib->dtc.has_chk = msg->has_chk;
                 rib->dtc.min_pdu_size = msg->min_pdu_size;
                 rib->dtc.max_pdu_size = msg->max_pdu_size;
 
@@ -318,8 +318,8 @@ int ribmgr_cdap_start(struct cdap * instance,
                 stat_info.cep_id_size = rib->dtc.cep_id_size;
                 stat_info.pdu_length_size = rib->dtc.pdu_length_size;
                 stat_info.seqno_size = rib->dtc.seqno_size;
-                stat_info.ttl_size = rib->dtc.ttl_size;
-                stat_info.chk_size = rib->dtc.chk_size;
+                stat_info.has_ttl = rib->dtc.has_ttl;
+                stat_info.has_chk = rib->dtc.has_chk;
                 stat_info.min_pdu_size  = rib->dtc.min_pdu_size;
                 stat_info.max_pdu_size = rib->dtc.max_pdu_size;
 
@@ -529,8 +529,8 @@ int ribmgr_bootstrap(struct dif_config * conf)
         rib->dtc.cep_id_size  = conf->cep_id_size;
         rib->dtc.pdu_length_size = conf->pdu_length_size;
         rib->dtc.seqno_size = conf->seqno_size;
-        rib->dtc.ttl_size = conf->ttl_size;
-        rib->dtc.chk_size = conf->chk_size;
+        rib->dtc.has_ttl = conf->has_ttl;
+        rib->dtc.has_chk = conf->has_chk;
         rib->dtc.min_pdu_size = conf->min_pdu_size;
         rib->dtc.max_pdu_size = conf->max_pdu_size;
 

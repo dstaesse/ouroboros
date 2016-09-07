@@ -22,12 +22,14 @@ protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS
 
 set(SOURCE_FILES
         # Add source files here
-        main.c
+        cdap_request.c
+        crc32.c
         fmgr.c
         frct.c
-        cdap_request.c
+        main.c
         ribmgr.c
         rmt.c
+        shm_pci.c
 )
 
 add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
