@@ -35,7 +35,9 @@
 #include <stdio.h>
 
 struct flow_set {
-        bool b[IRMD_MAX_FLOWS];
+        bool dirty;
+        bool b[IRMD_MAX_FLOWS]; /* working copy */
+        bool s[IRMD_MAX_FLOWS]; /* safe copy */
         pthread_rwlock_t lock;
 };
 
@@ -653,6 +655,8 @@ struct flow_set * flow_set_create()
 
         memset(&set->b, 0, sizeof(set->b));
 
+        set->dirty = true;
+
         return set;
 }
 
@@ -660,6 +664,7 @@ void flow_set_zero(struct flow_set * set)
 {
         pthread_rwlock_wrlock(&set->lock);
         memset(&set->b, 0, sizeof(set->b));
+        set->dirty = true;
         pthread_rwlock_unlock(&set->lock);
 }
 
@@ -667,6 +672,7 @@ void flow_set_add(struct flow_set * set, int fd)
 {
         pthread_rwlock_wrlock(&set->lock);
         set->b[ai->flows[fd].port_id] = true;
+        set->dirty = true;
         pthread_rwlock_unlock(&set->lock);
 }
 
@@ -674,6 +680,7 @@ void flow_set_del(struct flow_set * set, int fd)
 {
         pthread_rwlock_wrlock(&set->lock);
         set->b[ai->flows[fd].port_id] = false;
+        set->dirty = true;
         pthread_rwlock_unlock(&set->lock);
 }
 
@@ -692,22 +699,23 @@ void flow_set_destroy(struct flow_set * set)
         free(set);
 }
 
-static void flow_set_cpy(bool * dst, struct flow_set * src)
+static void flow_set_cpy(struct flow_set * set)
 {
-        pthread_rwlock_rdlock(&src->lock);
-        memcpy(dst, src->b, IRMD_MAX_FLOWS);
-        pthread_rwlock_unlock(&src->lock);
+        pthread_rwlock_rdlock(&set->lock);
+        if (set->dirty)
+                memcpy(set->s, set->b, IRMD_MAX_FLOWS);
+        set->dirty = false;
+        pthread_rwlock_unlock(&set->lock);
 }
 
 int flow_select(struct flow_set * set, const struct timespec * timeout)
 {
         int port_id;
-        bool b[IRMD_MAX_FLOWS];
         if (set == NULL) {
                 port_id = shm_ap_rbuff_peek_b(ai->rb, NULL, timeout);
         } else {
-                flow_set_cpy(b, set);
-                port_id = shm_ap_rbuff_peek_b(ai->rb, (bool *) b, timeout);
+                flow_set_cpy(set);
+                port_id = shm_ap_rbuff_peek_b(ai->rb, (bool *) set->s, timeout);
         }
         if (port_id < 0)
                 return port_id;
