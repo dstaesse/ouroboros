@@ -190,14 +190,14 @@ struct shm_rdrbuff * shm_rdrbuff_create()
                 free(rdrb);
                 return NULL;
         }
-
+#ifndef __APPLE
         if (write(shm_fd, "", 1) != 1) {
                 LOG_DBGF("Failed to finalise extension of shared memory map.");
                 free(shm_rdrb_fn);
                 free(rdrb);
                 return NULL;
         }
-
+#endif
         shm_base = mmap(NULL,
                         SHM_FILE_SIZE,
                         PROT_READ | PROT_WRITE,

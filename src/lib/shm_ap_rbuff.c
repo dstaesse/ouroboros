@@ -104,13 +104,13 @@ static struct shm_ap_rbuff * shm_ap_rbuff_create(bool dir)
                 free(rb);
                 return NULL;
         }
-
+#ifndef __APPLE__
         if (write(shm_fd, "", 1) != 1) {
                 LOG_DBG("Failed to finalise extension of ringbuffer.");
                 free(rb);
                 return NULL;
         }
-
+#endif
         shm_base = mmap(NULL,
                         SHM_RBUFF_FILE_SIZE,
                         PROT_READ | PROT_WRITE,

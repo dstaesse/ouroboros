@@ -64,13 +64,13 @@ struct lockfile * lockfile_create() {
                 free(lf);
                 return NULL;
         }
-
+#ifndef __APPLE__
         if (write(lf->fd, "", 1) != 1) {
                 LOG_DBGF("Failed to finalise lockfile.");
                 free(lf);
                 return NULL;
         }
-
+#endif
         lf->api = mmap(NULL,
                        LF_SIZE, PROT_READ | PROT_WRITE,
                        MAP_SHARED,
