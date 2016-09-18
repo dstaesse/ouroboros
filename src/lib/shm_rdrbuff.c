@@ -24,7 +24,6 @@
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/shm_rdrbuff.h>
-#include <ouroboros/shm_ap_rbuff.h>
 #include <ouroboros/time_utils.h>
 
 #include <pthread.h>
@@ -35,6 +34,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <stdbool.h>
 
 #define OUROBOROS_PREFIX "shm_rdrbuff"
 
@@ -76,6 +76,7 @@ struct shm_du_buff {
         size_t du_head;
         size_t du_tail;
         pid_t  dst_api;
+        size_t idx;
 };
 
 struct shm_rdrbuff {
@@ -458,7 +459,6 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 #endif
         int                  sz = size + sizeof *sdb;
         uint8_t *            write_pos;
-        ssize_t              idx = -1;
 
         if (rdrb == NULL || data == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -505,6 +505,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                 sdb->dst_api = -1;
                 sdb->du_head = 0;
                 sdb->du_tail = 0;
+                sdb->idx     = *rdrb->ptr_head;
 
                 *rdrb->ptr_head = 0;
         }
@@ -521,7 +522,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 
         memcpy(write_pos, data, len);
 
-        idx = *rdrb->ptr_head;
+        sdb->idx = *rdrb->ptr_head;
 #ifdef SHM_RDRB_MULTI_BLOCK
         *rdrb->ptr_head = (*rdrb->ptr_head + blocks) & (SHM_BUFFER_SIZE - 1);
 #else
@@ -529,7 +530,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 #endif
         pthread_mutex_unlock(rdrb->lock);
 
-        return idx;
+        return sdb->idx;
 }
 
 ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
@@ -547,7 +548,6 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
 #endif
         int                  sz = size + sizeof *sdb;
         uint8_t *            write_pos;
-        ssize_t              idx = -1;
 
         if (rdrb == NULL || data == NULL) {
                 LOG_DBGF("Bogus input, bugging out.");
@@ -596,6 +596,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                 sdb->dst_api = -1;
                 sdb->du_head = 0;
                 sdb->du_tail = 0;
+                sdb->idx     = *rdrb->ptr_head;
 
                 *rdrb->ptr_head = 0;
         }
@@ -612,7 +613,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
 
         memcpy(write_pos, data, len);
 
-        idx = *rdrb->ptr_head;
+        sdb->idx = *rdrb->ptr_head;
 #ifdef SHM_RDRB_MULTI_BLOCK
         *rdrb->ptr_head = (*rdrb->ptr_head + blocks) & (SHM_BUFFER_SIZE - 1);
 #else
@@ -620,7 +621,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
 #endif
         pthread_cleanup_pop(true);
 
-        return idx;
+        return sdb->idx;
 }
 
 int shm_rdrbuff_read(uint8_t **           dst,
@@ -652,6 +653,32 @@ int shm_rdrbuff_read(uint8_t **           dst,
         pthread_mutex_unlock(rdrb->lock);
 
         return len;
+}
+
+struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, ssize_t idx)
+{
+        struct shm_du_buff * sdb;
+
+        if (idx > SHM_BUFFER_SIZE)
+                return NULL;
+#ifdef __APPLE__
+        pthread_mutex_lock(rdrb->lock);
+#else
+        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
+                LOG_DBGF("Recovering dead mutex.");
+                pthread_mutex_consistent(rdrb->lock);
+        }
+#endif
+        if (shm_rdrb_empty(rdrb)) {
+                pthread_mutex_unlock(rdrb->lock);
+                return NULL;
+        }
+
+        sdb = idx_to_du_buff_ptr(rdrb, idx);
+
+        pthread_mutex_unlock(rdrb->lock);
+
+        return sdb;
 }
 
 int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
@@ -686,6 +713,11 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
         pthread_mutex_unlock(rdrb->lock);
 
         return 0;
+}
+
+size_t shm_du_buff_get_idx(struct shm_du_buff * sdb)
+{
+        return sdb->idx;
 }
 
 uint8_t * shm_du_buff_head(struct shm_du_buff * sdb)

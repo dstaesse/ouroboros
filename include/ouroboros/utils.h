@@ -20,8 +20,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define MAX(a,b) (a > b ? a : b)
-#define MIN(a,b) (a < b ? a : b)
+#ifndef OUROBOROS_UTILS_H
+#define OUROBOROS_UTILS_H
+
+#include <stdint.h>
+#include <unistd.h>
+
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+
+typedef struct {
+        uint8_t * data;
+        size_t    len;
+} buffer_t;
 
 /*
  * Returns the number of characters a uint would
@@ -34,3 +45,5 @@ char * strdup(const char * src);
 
 /* gets the application name */
 char * path_strip(char * src);
+
+#endif /* OUROBOROS_UTILS_H */

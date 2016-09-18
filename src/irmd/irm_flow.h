@@ -24,11 +24,17 @@
 #define OUROBOROS_IRMD_IRM_FLOW_H
 
 #include <ouroboros/list.h>
-#include <ouroboros/shared.h>
 
 #include <sys/types.h>
 #include <pthread.h>
 #include <time.h>
+
+enum flow_state {
+        FLOW_NULL = 0,
+        FLOW_PENDING,
+        FLOW_ALLOCATED,
+        FLOW_DESTROY
+};
 
 struct irm_flow {
         struct list_head next;
@@ -46,6 +52,16 @@ struct irm_flow {
 };
 
 struct irm_flow * irm_flow_create();
+
 void              irm_flow_destroy(struct irm_flow * f);
+
+enum flow_state   irm_flow_get_state(struct irm_flow * f);
+
+
+void              irm_flow_set_state(struct irm_flow * f,
+                                     enum flow_state   state);
+
+enum flow_state   irm_flow_wait_state(struct irm_flow * f,
+                                      enum flow_state   state);
 
 #endif /* OUROBOROS_IRMD_IRM_FLOW_H */

@@ -23,8 +23,6 @@
 #ifndef OUROBOROS_SOCKETS_H
 #define OUROBOROS_SOCKETS_H
 
-#include <ouroboros/common.h>
-
 #include <sys/types.h>
 
 #include "dif_config.pb-c.h"
@@ -49,9 +47,11 @@ typedef IpcpMsg ipcp_msg_t;
 char *      ipcp_sock_path(pid_t api);
 
 int         server_socket_open(char * file_name);
+
 int         client_socket_open(char * file_name);
 
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
+
 irm_msg_t * send_recv_irm_msg_b(irm_msg_t * msg);
 
 #endif

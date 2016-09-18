@@ -29,13 +29,8 @@
 #ifndef OUROBOROS_IPCP_H
 #define OUROBOROS_IPCP_H
 
-struct ipcp;
-
 /* Returns the process id */
 pid_t ipcp_create(enum ipcp_type ipcp_type);
-
-/* IPCP calls this when it is initialized */
-int   ipcp_create_r(pid_t api);
 
 int   ipcp_destroy(pid_t api);
 
@@ -44,8 +39,6 @@ int   ipcp_enroll(pid_t  api,
 
 int   ipcp_bootstrap(pid_t              api,
                      dif_config_msg_t * conf);
-
-/* Flow related ops, these go from IRMd to IPCP */
 
 int   ipcp_name_reg(pid_t  api,
                     char * name);
@@ -63,19 +56,7 @@ int   ipcp_flow_alloc_resp(pid_t api,
                            pid_t n_api,
                            int   response);
 
-/* These operations go from the IPCP to the IRMd */
-
-/* Returns the port_id */
-int   ipcp_flow_req_arr(pid_t  api,
-                        char * dst_name,
-                        char * src_ae_name);
-int   ipcp_flow_alloc_reply(pid_t api,
-                            int   port_id,
-                            int   response);
-
 int   ipcp_flow_dealloc(pid_t api,
                         int   port_id);
-
-int   irm_flow_dealloc(int port_id);
 
 #endif /* OUROBOROS_IPCP_H */

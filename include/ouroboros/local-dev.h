@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Flows
+ * Optimized calls for the local IPCPs
  *
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
@@ -20,21 +20,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_FLOW_H
-#define OUROBOROS_FLOW_H
+#include <ouroboros/shm_ap_rbuff.h>
 
-/* same values as fcntl.h */
-#define FLOW_O_RDONLY   00000000
-#define FLOW_O_WRONLY   00000001
-#define FLOW_O_RDWR     00000002
-#define FLOW_O_ACCMODE  00000003
+#ifndef OUROBOROS_LOCAL_DEV_H
+#define OUROBOROS_LOCAL_DEV_H
 
-#define FLOW_O_NONBLOCK 00004000
-#define FLOW_O_DEFAULT  00000002
+/* returns flow descriptor and rb_entry, no access to du_buff */
+int     local_flow_read(struct rb_entry * e);
 
-#define FLOW_O_INVALID  (FLOW_O_WRONLY | FLOW_O_RDWR)
+int     local_flow_write(int               fd,
+                         struct rb_entry * e);
 
-#define FLOW_F_GETFL    00000001
-#define FLOW_F_SETFL    00000002
-
-#endif /* OUROBOROS_FLOW_H */
+#endif /* OUROBOROS_LOCAL_DEV_H */

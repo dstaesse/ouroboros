@@ -1,9 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Flows
+ * Additional API for IPCPs
  *
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,20 +21,30 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_FLOW_H
-#define OUROBOROS_IPCP_FLOW_H
+#include <unistd.h>
+#include <time.h>
 
-#include <ouroboros/list.h>
-#include <ouroboros/shm_ap_rbuff.h>
+#include <ouroboros/qos.h>
+#include <ouroboros/shm_rdrbuff.h>
 
-#include <stdint.h>
+#ifndef OUROBOROS_IPCP_DEV_H
+#define OUROBOROS_IPCP_DEV_H
 
-struct flow {
-        int                   port_id;
-        struct shm_ap_rbuff * rb;
-        enum flow_state       state;
+int  ipcp_create_r(pid_t api);
 
-        pid_t                 api;
-};
+int  ipcp_flow_req_arr(pid_t  api,
+                       char * dst_name,
+                       char * src_ae_name);
 
-#endif /* OUROBOROS_FLOW_H */
+int  ipcp_flow_alloc_reply(int fd,
+                           int response);
+
+/* returns flow descriptor and du buff */
+int  ipcp_flow_read(struct shm_du_buff ** sdb);
+
+int  ipcp_flow_write(int                  fd,
+                     struct shm_du_buff * sdb);
+
+void ipcp_flow_del(struct shm_du_buff * sdb);
+
+#endif /* OUROBOROS_IPCP_DEV_H */

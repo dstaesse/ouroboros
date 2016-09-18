@@ -21,6 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <ouroboros/dev.h>
+#include <ouroboros/time_utils.h>
+#include <ouroboros/fcntl.h>
+
 #include <stdbool.h>
 
 #ifdef __FreeBSD__
@@ -31,9 +35,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <pthread.h>
-
-#include <ouroboros/dev.h>
-#include <ouroboros/time_utils.h>
 
 #define THREADS_SIZE 10
 

@@ -6,7 +6,7 @@ set(HEADER_FILES
   cdap.h
   dev.h
   errno.h
-  flow.h
+  fcntl.h
   irm.h
   irm_config.h
   nsm.h

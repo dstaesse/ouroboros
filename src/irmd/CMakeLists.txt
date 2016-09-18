@@ -8,6 +8,7 @@ set(SOURCE_FILES
         # Add source files here
         api_table.c
         apn_table.c
+        ipcp.c
         irm_flow.c
         main.c
         registry.c

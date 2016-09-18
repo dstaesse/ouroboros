@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Utils of the IPC Resource Manager
+ * Flows
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,31 +20,25 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/*
- * Checks whether the string argument matches the pattern argument,
- * which is a wildcard pattern.
- */
+#ifndef OUROBOROS_FCNTL_H
+#define OUROBOROS_FCNTL_H
 
-#ifndef OUROBOROS_IRMD_UTILS_H
-#define OUROBOROS_IRMD_UTILS_H
+/* same values as fcntl.h */
+#define FLOW_O_RDONLY   00000000
+#define FLOW_O_WRONLY   00000001
+#define FLOW_O_RDWR     00000002
+#define FLOW_O_ACCMODE  00000003
 
-#include <sys/types.h>
+#define FLOW_O_NONBLOCK 00004000
+#define FLOW_O_DEFAULT  00000002
 
-struct str_el {
-        struct list_head next;
-        char *           str;
-};
+#define FLOW_O_INVALID  (FLOW_O_WRONLY | FLOW_O_RDWR)
 
-struct pid_el {
-        struct list_head next;
-        pid_t            pid;
-};
+#define FLOW_F_GETFL    00000001
+#define FLOW_F_SETFL    00000002
 
-int     wildcard_match(const char * pattern,
-                       const char * string);
+int     flow_cntl(int fd,
+                  int cmd,
+                  int oflags);
 
-/* functions for copying and destroying arguments list */
-char ** argvdup(char ** argv);
-void    argvfree(char ** argv);
-
-#endif /* OUROBOROS_IRM_UTILS_H */
+#endif /* OUROBOROS_FCNTL_H */

@@ -58,6 +58,11 @@ void irm_flow_destroy(struct irm_flow * f)
 {
         pthread_mutex_lock(&f->state_lock);
 
+        if (f->state == FLOW_DESTROY) {
+                pthread_mutex_unlock(&f->state_lock);
+                return;
+        }
+
         if (f->state == FLOW_PENDING)
                 f->state = FLOW_DESTROY;
         else
@@ -74,4 +79,46 @@ void irm_flow_destroy(struct irm_flow * f)
         pthread_mutex_destroy(&f->state_lock);
 
         free(f);
+}
+
+enum flow_state irm_flow_get_state(struct irm_flow * f)
+{
+        enum flow_state state;
+
+        pthread_mutex_lock(&f->state_lock);
+
+        state = f->state;
+
+        pthread_mutex_unlock(&f->state_lock);
+
+        return state;
+}
+
+void irm_flow_set_state(struct irm_flow * f, enum flow_state state)
+{
+        pthread_mutex_lock(&f->state_lock);
+
+        f->state = state;
+        pthread_cond_broadcast(&f->state_cond);
+
+        pthread_mutex_unlock(&f->state_lock);
+}
+
+enum flow_state irm_flow_wait_state(struct irm_flow * f, enum flow_state state)
+{
+        pthread_mutex_lock(&f->state_lock);
+
+        while (!(f->state == state || f->state == FLOW_DESTROY))
+                pthread_cond_wait(&f->state_cond, &f->state_lock);
+
+        if (state == FLOW_DESTROY) {
+                f->state = FLOW_NULL;
+                pthread_cond_broadcast(&f->state_cond);
+        }
+
+        state = f->state;
+
+        pthread_mutex_unlock(&f->state_lock);
+
+        return state;
 }

@@ -22,7 +22,7 @@
  */
 
 #include <ouroboros/dev.h>
-#include <ouroboros/errno.h>
+#include <ouroboros/fcntl.h>
 #include <ouroboros/time_utils.h>
 
 #ifdef __FreeBSD__
@@ -34,6 +34,7 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <math.h>
+#include <errno.h>
 #include <float.h>
 
 void shutdown_client(int signo, siginfo_t * info, void * c)

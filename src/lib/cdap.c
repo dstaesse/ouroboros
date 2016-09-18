@@ -24,6 +24,7 @@
 #include <ouroboros/cdap.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/fcntl.h>
 
 #include <stdlib.h>
 #include <pthread.h>

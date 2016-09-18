@@ -25,7 +25,6 @@
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/common.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/utils.h>
 
@@ -102,13 +101,12 @@ int server_socket_open(char * file_name)
         return sockfd;
 }
 
-void close_ptr(void * o)
+static void close_ptr(void * o)
 {
         close(*(int *) o);
 }
 
-static irm_msg_t * send_recv_irm_msg_timed(irm_msg_t * msg,
-                                           bool timed)
+static irm_msg_t * send_recv_irm_msg_timed(irm_msg_t * msg, bool timed)
 {
         int sockfd;
         buffer_t buf;
