@@ -21,8 +21,12 @@
  */
 
 #include <ouroboros/config.h>
-#include <ouroboros/ipcp.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/utils.h>
+#include <ouroboros/sockets.h>
+#include <ouroboros/errno.h>
+#include <ouroboros/dev.h>
+#include <ouroboros/np1_flow.h>
 
 #define OUROBOROS_PREFIX "ipcpd/ipcp"
 #include <ouroboros/logs.h>
@@ -32,62 +36,68 @@
 #include <stdlib.h>
 #include "ipcp.h"
 
-struct ipcp * ipcp_instance_create()
+int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
 {
         pthread_condattr_t cattr;
 
-        struct ipcp * i = malloc(sizeof *i);
-        if (i == NULL)
-                return NULL;
+        ipcpi.irmd_fd = -1;
+        ipcpi.state   = IPCP_INIT;
 
-        i->data    = NULL;
-        i->ops     = NULL;
-        i->irmd_fd = -1;
-        i->state   = IPCP_INIT;
+        ipcpi.ops = ops;
 
-        pthread_rwlock_init(&i->state_lock, NULL);
-        pthread_mutex_init(&i->state_mtx, NULL);
+        ipcpi.data = ipcp_data_create();
+        if (ipcpi.data == NULL)
+                return -ENOMEM;
+
+        ipcp_data_init(ipcpi.data, type);
+
+        pthread_rwlock_init(&ipcpi.state_lock, NULL);
+        pthread_mutex_init(&ipcpi.state_mtx, NULL);
         pthread_condattr_init(&cattr);
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        pthread_cond_init(&i->state_cond, &cattr);
+        pthread_cond_init(&ipcpi.state_cond, &cattr);
 
-        return i;
+        pthread_create(&ipcpi.mainloop, NULL, ipcp_main_loop, NULL);
+
+        return 0;
 }
 
-void ipcp_set_state(struct ipcp * ipcp,
-                    enum ipcp_state state)
+void ipcp_fini()
 {
-        if (ipcp == NULL)
-            return;
+        pthread_join(ipcpi.mainloop, NULL);
 
-        pthread_mutex_lock(&ipcp->state_mtx);
-
-        ipcp->state = state;
-
-        pthread_cond_broadcast(&ipcp->state_cond);
-        pthread_mutex_unlock(&ipcp->state_mtx);
+        ipcp_data_destroy(ipcpi.data);
+        pthread_cond_destroy(&ipcpi.state_cond);
+        pthread_mutex_destroy(&ipcpi.state_mtx);
+        pthread_rwlock_destroy(&ipcpi.state_lock);
 }
 
-enum ipcp_state ipcp_get_state(struct ipcp * ipcp)
+void ipcp_set_state(enum ipcp_state state)
+{
+        pthread_mutex_lock(&ipcpi.state_mtx);
+
+        ipcpi.state = state;
+
+        pthread_cond_broadcast(&ipcpi.state_cond);
+        pthread_mutex_unlock(&ipcpi.state_mtx);
+}
+
+enum ipcp_state ipcp_get_state()
 {
         enum ipcp_state state;
 
-        if (ipcp == NULL)
-                return IPCP_NULL;
+        pthread_mutex_lock(&ipcpi.state_mtx);
 
-        pthread_mutex_lock(&ipcp->state_mtx);
+        state = ipcpi.state;
 
-        state = ipcp->state;
-
-        pthread_mutex_unlock(&ipcp->state_mtx);
+        pthread_mutex_unlock(&ipcpi.state_mtx);
 
         return state;
 }
 
-int ipcp_wait_state(struct ipcp *           ipcp,
-                    enum ipcp_state         state,
+int ipcp_wait_state(enum ipcp_state         state,
                     const struct timespec * timeout)
 {
         struct timespec abstime;
@@ -95,24 +105,24 @@ int ipcp_wait_state(struct ipcp *           ipcp,
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, timeout, &abstime);
 
-        pthread_mutex_lock(&ipcp->state_mtx);
+        pthread_mutex_lock(&ipcpi.state_mtx);
 
-        while (ipcp->state != state && ipcp->state != IPCP_SHUTDOWN) {
+        while (ipcpi.state != state && ipcpi.state != IPCP_SHUTDOWN) {
                 int ret;
                 if (timeout == NULL)
-                        ret = pthread_cond_wait(&ipcp->state_cond,
-                                                &ipcp->state_mtx);
+                        ret = pthread_cond_wait(&ipcpi.state_cond,
+                                                &ipcpi.state_mtx);
                 else
-                        ret = pthread_cond_timedwait(&ipcp->state_cond,
-                                                     &ipcp->state_mtx,
+                        ret = pthread_cond_timedwait(&ipcpi.state_cond,
+                                                     &ipcpi.state_mtx,
                                                      &abstime);
                 if (ret) {
-                        pthread_mutex_unlock(&ipcp->state_mtx);
+                        pthread_mutex_unlock(&ipcpi.state_mtx);
                         return -ret;
                 }
         }
 
-        pthread_mutex_unlock(&ipcp->state_mtx);
+        pthread_mutex_unlock(&ipcpi.state_mtx);
 
         return 0;
 }
@@ -161,7 +171,6 @@ void * ipcp_main_loop(void * o)
         int     lsockfd;
         int     sockfd;
         uint8_t buf[IPCP_MSG_BUF_SIZE];
-        struct ipcp * _ipcp = (struct ipcp *) o;
 
         ipcp_msg_t * msg;
         ssize_t      count;
@@ -180,12 +189,6 @@ void * ipcp_main_loop(void * o)
         struct timeval ltv = {(SOCKET_TIMEOUT / 1000),
                              (SOCKET_TIMEOUT % 1000) * 1000};
 
-
-        if (_ipcp == NULL) {
-                LOG_ERR("Invalid ipcp struct.");
-                return (void *) 1;
-        }
-
         sock_path = ipcp_sock_path(getpid());
         if (sock_path == NULL)
                 return (void *) 1;
@@ -202,13 +205,15 @@ void * ipcp_main_loop(void * o)
                 LOG_WARN("Failed to set timeout on socket.");
 
         while (true) {
-                pthread_rwlock_rdlock(&_ipcp->state_lock);
-                if (ipcp_get_state(_ipcp) == IPCP_SHUTDOWN) {
-                        pthread_rwlock_unlock(&_ipcp->state_lock);
+                int fd = -1;
+
+                pthread_rwlock_rdlock(&ipcpi.state_lock);
+                if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
                         break;
                 }
 
-                pthread_rwlock_unlock(&_ipcp->state_lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
 
@@ -235,7 +240,7 @@ void * ipcp_main_loop(void * o)
 
                 switch (msg->code) {
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
-                        if (_ipcp->ops->ipcp_bootstrap == NULL) {
+                        if (ipcpi.ops->ipcp_bootstrap == NULL) {
                                 LOG_ERR("Bootstrap unsupported.");
                                 break;
                         }
@@ -267,72 +272,102 @@ void * ipcp_main_loop(void * o)
                                 conf.if_name = conf_msg->if_name;
 
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_bootstrap(&conf);
+                        ret_msg.result = ipcpi.ops->ipcp_bootstrap(&conf);
                         if (ret_msg.result < 0)
                                 free(conf.dif_name);
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
-                        if (_ipcp->ops->ipcp_enroll == NULL) {
+                        if (ipcpi.ops->ipcp_enroll == NULL) {
                                 LOG_ERR("Enroll unsupported.");
                                 break;
                         }
                         ret_msg.has_result = true;
-                        ret_msg.result = _ipcp->ops->ipcp_enroll(msg->dif_name);
+                        ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dif_name);
 
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_REG:
-                        if (_ipcp->ops->ipcp_name_reg == NULL) {
+                        if (ipcpi.ops->ipcp_name_reg == NULL) {
                                 LOG_ERR("Ap_reg unsupported.");
                                 break;
                         }
                         msg_name_dup = strdup(msg->name);
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_name_reg(msg_name_dup);
+                                ipcpi.ops->ipcp_name_reg(msg_name_dup);
                         if (ret_msg.result < 0)
                                 free(msg_name_dup);
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_UNREG:
-                        if (_ipcp->ops->ipcp_name_unreg == NULL) {
+                        if (ipcpi.ops->ipcp_name_unreg == NULL) {
                                 LOG_ERR("Ap_unreg unsupported.");
                                 break;
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_name_unreg(msg->name);
+                                ipcpi.ops->ipcp_name_unreg(msg->name);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
-                        if (_ipcp->ops->ipcp_flow_alloc == NULL) {
+                        if (ipcpi.ops->ipcp_flow_alloc == NULL) {
                                 LOG_ERR("Flow_alloc unsupported.");
                                 break;
                         }
+                        fd = np1_flow_alloc(msg->api, msg->port_id);
+                        if (fd < 0) {
+                                LOG_ERR("Could not get fd for flow.");
+                                ret_msg.has_result = true;
+                                ret_msg.result = -1;
+                                break;
+                        }
+
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_flow_alloc(msg->api,
-                                                            msg->port_id,
+                                ipcpi.ops->ipcp_flow_alloc(fd,
                                                             msg->dst_name,
                                                             msg->src_ae_name,
                                                             msg->qos_cube);
+                        if (ret_msg.result < 0) {
+                                LOG_DBG("Deallocating failed flow on port_id %d.",
+                                        msg->port_id);
+                                flow_dealloc(fd);
+                        }
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
-                        if (_ipcp->ops->ipcp_flow_alloc_resp == NULL) {
+                        if (ipcpi.ops->ipcp_flow_alloc_resp == NULL) {
                                 LOG_ERR("Flow_alloc_resp unsupported.");
                                 break;
                         }
-                        ret_msg.has_result = true;
-                        ret_msg.result =
-                                _ipcp->ops->ipcp_flow_alloc_resp(msg->api,
-                                                                 msg->port_id,
-                                                                 msg->result);
-                        break;
-                case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
-                        if (_ipcp->ops->ipcp_flow_dealloc == NULL) {
-                                LOG_ERR("Flow_dealloc unsupported.");
-                                break;
+
+                        if (!msg->response) {
+                                fd = np1_flow_resp(msg->api, msg->port_id);
+                                if (fd < 0) {
+                                        LOG_ERR("Could not get fd for flow.");
+                                        ret_msg.has_result = true;
+                                        ret_msg.result = -1;
+                                        break;
+                                }
                         }
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                _ipcp->ops->ipcp_flow_dealloc(msg->port_id);
+                                ipcpi.ops->ipcp_flow_alloc_resp(fd,
+                                                                msg->response);
+                        break;
+                case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
+                        if (ipcpi.ops->ipcp_flow_dealloc == NULL) {
+                                LOG_ERR("Flow_dealloc unsupported.");
+                                break;
+                        }
+
+                        fd = np1_flow_dealloc(msg->port_id);
+                        if (fd < 0) {
+                                LOG_ERR("Could not get fd for flow.");
+                                ret_msg.has_result = true;
+                                ret_msg.result = -1;
+                                break;
+                        }
+
+                        ret_msg.has_result = true;
+                        ret_msg.result =
+                                ipcpi.ops->ipcp_flow_dealloc(fd);
                         break;
                 default:
                         LOG_ERR("Don't know that message code");

@@ -20,15 +20,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "lib-ipcp"
-
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
-#include <ouroboros/ipcp.h>
-#include <ouroboros/common.h>
-#include <ouroboros/logs.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/sockets.h>
+
+#define OUROBOROS_PREFIX "irmd/ipcp"
+
+#include <ouroboros/logs.h>
+
+#include "ipcp.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -42,11 +43,10 @@
 
 static void close_ptr(void * o)
 {
-        close(*((int *) o));
+        close(*(int *) o);
 }
 
-static ipcp_msg_t * send_recv_ipcp_msg(pid_t api,
-                                       ipcp_msg_t * msg)
+ipcp_msg_t * send_recv_ipcp_msg(pid_t api, ipcp_msg_t * msg)
 {
        int sockfd = 0;
        buffer_t buf;
@@ -175,31 +175,6 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
         LOG_ERR("Make sure to run the installed version");
         free(full_name);
         exit(EXIT_FAILURE);
-}
-
-int ipcp_create_r(pid_t api)
-{
-        irm_msg_t msg = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int ret = -1;
-
-        msg.code         = IRM_MSG_CODE__IPCP_CREATE_R;
-        msg.has_api      = true;
-        msg.api          = api;
-
-        recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
-                return -1;
-
-        if (recv_msg->has_result == false) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
-        }
-
-        ret = recv_msg->result;
-        irm_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
 }
 
 int ipcp_destroy(pid_t api)
@@ -399,68 +374,6 @@ int ipcp_flow_alloc_resp(pid_t api,
         return ret;
 }
 
-int ipcp_flow_req_arr(pid_t  api,
-                      char * dst_name,
-                      char * src_ae_name)
-{
-        irm_msg_t msg = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int port_id = -1;
-
-        if (dst_name == NULL || src_ae_name == NULL)
-                return -EINVAL;
-
-        msg.code          = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
-        msg.has_api       = true;
-        msg.api           = api;
-        msg.dst_name      = dst_name;
-        msg.ae_name       = src_ae_name;
-
-        recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
-                return -1;
-
-        if (!recv_msg->has_port_id) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
-        }
-
-        port_id = recv_msg->port_id;
-        irm_msg__free_unpacked(recv_msg, NULL);
-
-        return port_id;
-}
-
-int ipcp_flow_alloc_reply(pid_t api,
-                          int   port_id,
-                          int   response)
-{
-        irm_msg_t msg = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int ret = -1;
-
-        msg.code         = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
-        msg.port_id      = port_id;
-        msg.has_port_id  = true;
-        msg.response     = response;
-        msg.has_response = true;
-
-        recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
-                return -1;
-
-        if (recv_msg->has_result == false) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
-        }
-
-        ret = recv_msg->result;
-        irm_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
-}
-
-
 int ipcp_flow_dealloc(pid_t api,
                       int   port_id)
 {
@@ -484,31 +397,6 @@ int ipcp_flow_dealloc(pid_t api,
 
         ret = recv_msg->result;
         ipcp_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
-}
-
-int irm_flow_dealloc(int port_id)
-{
-        irm_msg_t msg = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int ret = -1;
-
-        msg.code        = IRM_MSG_CODE__IPCP_FLOW_DEALLOC;
-        msg.has_port_id = true;
-        msg.port_id     = port_id;
-
-        recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
-                return 0;
-
-        if (recv_msg->has_result == false) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return 0;
-        }
-
-        ret = recv_msg->result;
-        irm_msg__free_unpacked(recv_msg, NULL);
 
         return ret;
 }

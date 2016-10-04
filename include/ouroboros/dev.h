@@ -20,11 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <unistd.h>
-#include <stdint.h>
-
 #include <ouroboros/qos.h>
-#include <ouroboros/flow.h>
+
+#include <unistd.h>
 
 #ifndef OUROBOROS_DEV_H
 #define OUROBOROS_DEV_H
@@ -36,32 +34,29 @@ int     ap_init(char * ap_name);
 
 void    ap_fini(void);
 
-/* Returns file descriptor (> 0) and client AE name. */
+/* Returns flow descriptor (> 0) and client AE name. */
 int     flow_accept(char ** ae_name);
 
-int     flow_alloc_resp(int fd, int result);
+int     flow_alloc_resp(int fd,
+                        int response);
 
 /*
- * Returns file descriptor (> 0).
+ * Returns flow descriptor (> 0).
  * On returning, qos will contain the actual supplied QoS.
  */
-int     flow_alloc(char * dst_name,
-                   char * src_ae_name,
+int     flow_alloc(char *            dst_name,
+                   char *            src_ae_name,
                    struct qos_spec * qos);
 
 int     flow_alloc_res(int fd);
 
 int     flow_dealloc(int fd);
 
-int     flow_cntl(int fd,
-                  int cmd,
-                  int oflags);
-
-ssize_t flow_write(int fd,
+ssize_t flow_write(int    fd,
                    void * buf,
                    size_t count);
 
-ssize_t flow_read(int fd,
+ssize_t flow_read(int    fd,
                   void * buf,
                   size_t count);
 

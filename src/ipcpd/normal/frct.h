@@ -24,7 +24,7 @@
 #define OUROBOROS_IPCP_FRCT_H
 
 #include <ouroboros/shared.h>
-#include <ouroboros/common.h>
+#include <ouroboros/utils.h>
 
 #include "dt_const.h"
 

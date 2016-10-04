@@ -36,17 +36,9 @@ struct rb_entry {
         int     port_id;
 };
 
-/* recv SDUs from N + 1 */
-struct shm_ap_rbuff * shm_ap_rbuff_create_n();
+struct shm_ap_rbuff * shm_ap_rbuff_create();
 
-/* recv SDUs from N - 1 */
-struct shm_ap_rbuff * shm_ap_rbuff_create_s();
-
-/* write SDUs to N - 1 */
-struct shm_ap_rbuff * shm_ap_rbuff_open_n(pid_t api);
-
-/* write SDUs to N + 1 */
-struct shm_ap_rbuff * shm_ap_rbuff_open_s(pid_t api);
+struct shm_ap_rbuff * shm_ap_rbuff_open(pid_t api);
 
 void                  shm_ap_rbuff_close(struct shm_ap_rbuff * rb);
 

@@ -24,7 +24,6 @@
 #define IPCPD_IPCP_H
 
 #include <ouroboros/config.h>
-#include <ouroboros/shared.h>
 
 #include <pthread.h>
 #include <time.h>
@@ -50,22 +49,22 @@ struct ipcp {
         pthread_rwlock_t   state_lock;
         pthread_mutex_t    state_mtx;
         pthread_cond_t     state_cond;
-};
 
-struct ipcp *   ipcp_instance_create();
+        pthread_t          mainloop;
+} ipcpi;
 
-void            ipcp_set_state(struct ipcp *   ipcp,
-                               enum ipcp_state state);
+int             ipcp_init();
 
-enum ipcp_state ipcp_get_state(struct ipcp * ipcp);
+void            ipcp_fini();
 
-int             ipcp_wait_state(struct ipcp *           ipcp,
-                                enum ipcp_state         state,
+void            ipcp_set_state(enum ipcp_state state);
+
+enum ipcp_state ipcp_get_state();
+
+int             ipcp_wait_state(enum ipcp_state         state,
                                 const struct timespec * timeout);
 
 void *          ipcp_main_loop(void * o);
-
-void *          ipcp_sdu_loop(void * o);
 
 int             ipcp_parse_arg(int argc,
                                char * argv[]);

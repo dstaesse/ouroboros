@@ -43,8 +43,7 @@ enum irm_msg_code {
         IRM_FLOW_DEALLOC      = 18;
         IPCP_FLOW_REQ_ARR     = 19;
         IPCP_FLOW_ALLOC_REPLY = 20;
-        IPCP_FLOW_DEALLOC     = 21;
-        IRM_REPLY             = 22;
+        IRM_REPLY             = 21;
 };
 
 message irm_msg {

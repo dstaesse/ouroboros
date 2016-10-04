@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Common definitions
+ * Adapter functions for N + 1 flow descriptors
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,15 +20,23 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_COMMON_H
-#define OUROBOROS_COMMON_H
-
-#include <stdint.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <time.h>
 
-typedef struct {
-        uint8_t * data;
-        size_t    len;
-} buffer_t;
+#include <ouroboros/qos.h>
+#include <ouroboros/flow.h>
+#include <ouroboros/shm_rdrbuff.h>
 
-#endif /* OUROBOROS_COMMON_H */
+#ifndef OUROBOROS_NP1_FLOW_H
+#define OUROBOROS_NP1_FLOW_H
+
+int  np1_flow_alloc(pid_t n_api,
+                    int   port_id);
+
+int  np1_flow_resp(pid_t n_api,
+                   int   port_id);
+
+int  np1_flow_dealloc(int port_id);
+
+#endif /* OUROBOROS_NP1_FLOW_H */

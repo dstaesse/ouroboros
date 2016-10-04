@@ -23,7 +23,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <ouroboros/common.h>
 
 #include "irm_utils.h"
 

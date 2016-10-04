@@ -20,7 +20,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/common.h>
 #include <ouroboros/irm.h>
 #include <stdio.h>
 #include <string.h>

@@ -25,7 +25,7 @@
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/irm.h>
-#include <ouroboros/common.h>
+#include <ouroboros/utils.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
 
