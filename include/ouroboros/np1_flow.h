@@ -20,16 +20,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <unistd.h>
-#include <stdint.h>
-#include <time.h>
-
-#include <ouroboros/qos.h>
-#include <ouroboros/flow.h>
-#include <ouroboros/shm_rdrbuff.h>
-
 #ifndef OUROBOROS_NP1_FLOW_H
 #define OUROBOROS_NP1_FLOW_H
+
+#include <unistd.h>
 
 int  np1_flow_alloc(pid_t n_api,
                     int   port_id);
