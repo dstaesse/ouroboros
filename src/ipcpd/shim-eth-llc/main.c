@@ -575,14 +575,11 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                 uint8_t dsap;
                 uint8_t r_addr[MAC_SIZE];
 
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
                 fd = ipcp_flow_read(&sdb);
-                if (fd < 0) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                if (fd < 0)
                         continue;
-                }
 
+                pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
 
                 ssap = reverse_bits(eth_llc_data.fd_to_ef[fd].sap);
