@@ -889,10 +889,10 @@ int np1_flow_resp(pid_t n_api, int port_id)
         int fd;
         struct shm_ap_rbuff * rb;
 
+        port_wait_assign(&ai.ports[port_id]);
+
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
-
-        port_wait_assign(&ai.ports[port_id]);
 
         fd = ai.ports[port_id].fd;
         if (fd < 0) {
