@@ -927,16 +927,18 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd, int response)
 static int eth_llc_ipcp_flow_dealloc(int fd)
 {
         uint8_t sap;
+        uint8_t r_sap;
         uint8_t addr[MAC_SIZE];
         int ret;
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
-        sap = eth_llc_data.fd_to_ef[fd].r_sap;
+        r_sap = eth_llc_data.fd_to_ef[fd].r_sap;
+        sap = eth_llc_data.fd_to_ef[fd].sap;
         memcpy(addr, eth_llc_data.fd_to_ef[fd].r_addr, MAC_SIZE);
 
-        bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
+        bmp_release(eth_llc_data.saps, sap);
         eth_llc_data.fd_to_ef[fd].sap = -1;
         eth_llc_data.fd_to_ef[fd].r_sap = -1;
         memset(&eth_llc_data.fd_to_ef[fd].r_addr, 0, MAC_SIZE);
@@ -945,7 +947,7 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
 
-        ret = eth_llc_ipcp_sap_dealloc(addr, sap);
+        ret = eth_llc_ipcp_sap_dealloc(addr, r_sap);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
         if (ret < 0)
