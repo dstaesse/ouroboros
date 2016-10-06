@@ -49,7 +49,7 @@ int                   shm_ap_rbuff_write(struct shm_ap_rbuff * rb,
 
 struct rb_entry *     shm_ap_rbuff_read(struct shm_ap_rbuff * rb);
 
-int                   shm_ap_rbuff_peek_idx(struct shm_ap_rbuff * rb);
+int                   shm_ap_rbuff_pop_idx(struct shm_ap_rbuff * rb);
 
 int                   shm_ap_rbuff_peek_b(struct shm_ap_rbuff *   rb,
                                           bool *                  set,
