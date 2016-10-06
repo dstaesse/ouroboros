@@ -138,6 +138,7 @@ void * writer(void * o)
 
         while (client.sent < client.count) {
                 nanosleep(&wait, NULL);
+                msg->type = htonl(ECHO_REQUEST);
                 msg->id = htonl(client.sent);
                 if (flow_write(*fdp, buf, client.size) == -1) {
                         printf("Failed to send SDU.\n");
