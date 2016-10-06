@@ -520,9 +520,9 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 #else
                 if (memcmp(eth_llc_data.device.sll_addr,
 #endif
-                           &llc_frame->dst_hwaddr,
+                           llc_frame->dst_hwaddr,
                            MAC_SIZE) &&
-                    memcmp(br_addr, &llc_frame->dst_hwaddr, MAC_SIZE)) {
+                    memcmp(br_addr, llc_frame->dst_hwaddr, MAC_SIZE)) {
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                         offset = (offset + 1) & (SHM_BUFFER_SIZE - 1);
                         header->tp_status = TP_STATUS_KERNEL;
@@ -530,11 +530,21 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         continue;
                 }
 
+                memcpy(&length, &llc_frame->length, sizeof(length));
+                length = ntohs(length);
+
+                if (length > 0x05FF) { /* DIX */
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+                        offset = (offset + 1) & (SHM_BUFFER_SIZE -1);
+                        header->tp_status = TP_STATUS_KERNEL;
+#endif
+                        continue;
+                }
+
+                length -= LLC_HEADER_SIZE;
+
                 dsap = reverse_bits(llc_frame->dsap);
                 ssap = reverse_bits(llc_frame->ssap);
-
-                memcpy(&length, &llc_frame->length, sizeof(length));
-                length = ntohs(length) - LLC_HEADER_SIZE;
 
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
                         eth_llc_ipcp_mgmt_frame(&llc_frame->payload,
@@ -553,9 +563,21 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                                 continue;
                         }
 
+                        if (eth_llc_data.fd_to_ef[fd].r_sap != ssap
+                            || memcmp(eth_llc_data.fd_to_ef[fd].r_addr,
+                                      llc_frame->src_hwaddr, MAC_SIZE)) {
+                                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+                                offset = (offset + 1) & (SHM_BUFFER_SIZE -1);
+                                header->tp_status = TP_STATUS_KERNEL;
+#endif
+                                continue;
+                        }
+
                         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
 
                         flow_write(fd, &llc_frame->payload, length);
+
                 }
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                 offset = (offset + 1) & (SHM_BUFFER_SIZE -1);
@@ -705,7 +727,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         device.sdl_alen = MAC_SIZE;
         /* TODO: replace socket calls with bpf for BSD */
         LOG_MISSING;
-        fd = socket(AF_LINK, SOCK_RAW, 0);
+        skfd = socket(AF_LINK, SOCK_RAW, 0);
 #else
         device.sll_ifindex = idx;
         device.sll_family = AF_PACKET;

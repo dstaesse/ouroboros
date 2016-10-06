@@ -83,7 +83,8 @@ void * server_thread(void *o)
                                 continue;
 
                         if (ntohl(msg->type) != ECHO_REQUEST) {
-                                printf("Invalid message received.\n");
+                                printf("Invalid message on fd %d: type %d, len = %d.\n",
+                                       fd, ntohl(msg->type), msg_len);
                                 continue;
                         }
 
