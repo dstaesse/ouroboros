@@ -255,7 +255,7 @@ void ap_fini()
         pthread_rwlock_wrlock(&ai.data_lock);
 
         /* remove all remaining sdus */
-        while ((i = shm_ap_rbuff_peek_idx(ai.rb)) >= 0)
+        while ((i = shm_ap_rbuff_pop_idx(ai.rb)) >= 0)
                 shm_rdrbuff_remove(ai.rdrb, i);
 
         if (ai.fds != NULL)

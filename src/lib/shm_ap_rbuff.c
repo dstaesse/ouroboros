@@ -294,7 +294,7 @@ int shm_ap_rbuff_write(struct shm_ap_rbuff * rb, struct rb_entry * e)
         return 0;
 }
 
-int shm_ap_rbuff_peek_idx(struct shm_ap_rbuff * rb)
+int shm_ap_rbuff_pop_idx(struct shm_ap_rbuff * rb)
 {
         int ret = 0;
 
@@ -314,6 +314,8 @@ int shm_ap_rbuff_peek_idx(struct shm_ap_rbuff * rb)
         }
 
         ret = tail_el_ptr(rb)->index;
+
+        *rb->ptr_head = (*rb->ptr_head + 1) & (SHM_BUFFER_SIZE -1);
 
         pthread_mutex_unlock(rb->lock);
 
