@@ -313,7 +313,8 @@ void * ipcp_main_loop(void * o)
                         }
                         fd = np1_flow_alloc(msg->api, msg->port_id);
                         if (fd < 0) {
-                                LOG_ERR("Could not get fd for flow.");
+                                LOG_ERR("Could not get fd for port_id. %d",
+                                        msg->port_id);
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
                                 break;
@@ -326,7 +327,7 @@ void * ipcp_main_loop(void * o)
                                                             msg->src_ae_name,
                                                             msg->qos_cube);
                         if (ret_msg.result < 0) {
-                                LOG_DBG("Deallocating failed flow on port_id %d.",
+                                LOG_DBG("Deallocate failed on port_id %d.",
                                         msg->port_id);
                                 flow_dealloc(fd);
                         }
@@ -340,7 +341,8 @@ void * ipcp_main_loop(void * o)
                         if (!msg->response) {
                                 fd = np1_flow_resp(msg->api, msg->port_id);
                                 if (fd < 0) {
-                                        LOG_ERR("Could not get fd for flow.");
+                                        LOG_ERR("Could not get fd for port_id %d.",
+                                                msg->port_id);
                                         ret_msg.has_result = true;
                                         ret_msg.result = -1;
                                         break;
@@ -359,7 +361,8 @@ void * ipcp_main_loop(void * o)
 
                         fd = np1_flow_dealloc(msg->port_id);
                         if (fd < 0) {
-                                LOG_ERR("Could not get fd for flow.");
+                                LOG_ERR("Could not deallocate port_id %d.",
+                                        msg->port_id);
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
                                 break;

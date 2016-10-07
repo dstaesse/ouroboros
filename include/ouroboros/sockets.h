@@ -54,4 +54,6 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
 
 irm_msg_t * send_recv_irm_msg_b(irm_msg_t * msg);
 
+void        send_irm_msg(irm_msg_t * msg);
+
 #endif
