@@ -130,7 +130,7 @@ struct flow {
 
         pid_t                 api;
 
-        struct timespec       timeout;
+        struct timespec *     timeout;
 };
 
 struct {
@@ -220,8 +220,7 @@ int ap_init(char * ap_name)
                 ai.flows[i].port_id = -1;
                 ai.flows[i].oflags = 0;
                 ai.flows[i].api = -1;
-                ai.flows[i].timeout.tv_sec  = 0;
-                ai.flows[i].timeout.tv_nsec = 0;
+                ai.flows[i].timeout = NULL;
         }
 
         ai.ports = malloc(sizeof(*ai.ports) * IRMD_MAX_FLOWS);
@@ -270,9 +269,12 @@ void ap_fini()
 
         pthread_rwlock_rdlock(&ai.flows_lock);
 
-        for (i = 0; i < AP_MAX_FLOWS; ++i)
+        for (i = 0; i < AP_MAX_FLOWS; ++i) {
                 if (ai.flows[i].rb != NULL)
                         shm_ap_rbuff_close(ai.flows[i].rb);
+                if (ai.flows[i].timeout != NULL)
+                        free(ai.flows[i].timeout);
+        }
 
         for (i = 0; i < IRMD_MAX_FLOWS; ++i) {
                 ai.ports[i].state = PORT_NULL;
@@ -527,8 +529,6 @@ int flow_alloc_res(int fd)
 int flow_dealloc(int fd)
 {
         irm_msg_t msg = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int ret = -1;
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_port_id  = true;
@@ -552,30 +552,20 @@ int flow_dealloc(int fd)
         shm_ap_rbuff_close(ai.flows[fd].rb);
         ai.flows[fd].rb = NULL;
         ai.flows[fd].api = -1;
+        if (ai.flows[fd].timeout != NULL) {
+                free(ai.flows[fd].timeout);
+                ai.flows[fd].timeout = NULL;
+        }
 
         bmp_release(ai.fds, fd);
 
         pthread_rwlock_unlock(&ai.flows_lock);
 
-        recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -1;
-        }
-
-        if (!recv_msg->has_result) {
-                pthread_rwlock_unlock(&ai.data_lock);
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
-        }
-
-        ret = recv_msg->result;
+        send_irm_msg(&msg);
 
         pthread_rwlock_unlock(&ai.data_lock);
 
-        irm_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
+        return 0;
 }
 
 int flow_cntl(int fd, int cmd, int oflags)
@@ -708,10 +698,10 @@ ssize_t flow_read(int fd, void * buf, size_t count)
         } else {
                 struct shm_ap_rbuff * rb      = ai.rb;
                 int                   port_id = ai.flows[fd].port_id;
-                struct timespec       timeout = ai.flows[fd].timeout;
+                struct timespec *     timeout = ai.flows[fd].timeout;
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
-                idx = shm_ap_rbuff_read_port_b(rb, port_id, &timeout);
+                idx = shm_ap_rbuff_read_port_b(rb, port_id, timeout);
                 pthread_rwlock_rdlock(&ai.data_lock);
         }
 

@@ -587,8 +587,6 @@ static int bind_api(pid_t  api,
         if (name == NULL)
                 return -EINVAL;
 
-        LOG_DBG("BIND_API called %d, %s", api, name);
-
         pthread_rwlock_rdlock(&irmd->state_lock);
 
         if (irmd->state != IRMD_RUNNING) {
@@ -1231,29 +1229,32 @@ static int flow_alloc_res(int port_id)
 
 static int flow_dealloc(pid_t api, int port_id)
 {
-        pid_t n_1_api;
+        pid_t n_1_api = -1;
         int   ret = 0;
 
         struct irm_flow * f = NULL;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
         pthread_rwlock_wrlock(&irmd->flows_lock);
-        bmp_release(irmd->port_ids, port_id);
 
         f = get_irm_flow(port_id);
         if (f == NULL) {
+                bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return 0;
         }
 
-        n_1_api = f->n_1_api;
+        if (api == f->n_api) {
+                    bmp_release(irmd->port_ids, port_id);
+                    n_1_api = f->n_1_api;
+        }
 
         list_del(&f->next);
 
         pthread_rwlock_unlock(&irmd->flows_lock);
 
-        if (api != n_1_api)
+        if (n_1_api != -1)
                 ret = ipcp_flow_dealloc(n_1_api, port_id);
 
         pthread_rwlock_unlock(&irmd->state_lock);
@@ -1772,8 +1773,7 @@ void * mainloop()
                         break;
                 case IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP:
                         ret_msg.has_result = true;
-                        ret_msg.result = bootstrap_ipcp(msg->api,
-                                                        msg->conf);
+                        ret_msg.result = bootstrap_ipcp(msg->api, msg->conf);
                         break;
                 case IRM_MSG_CODE__IRM_ENROLL_IPCP:
                         ret_msg.has_result = true;
@@ -1790,27 +1790,22 @@ void * mainloop()
                         break;
                 case IRM_MSG_CODE__IRM_UNBIND_AP:
                         ret_msg.has_result = true;
-                        ret_msg.result = unbind_ap(msg->ap_name,
-                                                   msg->dst_name);
+                        ret_msg.result = unbind_ap(msg->ap_name, msg->dst_name);
                         break;
                 case IRM_MSG_CODE__IRM_API_ANNOUNCE:
                         ret_msg.has_result = true;
-                        ret_msg.result = api_announce(msg->api,
-                                                      msg->ap_name);
+                        ret_msg.result = api_announce(msg->api, msg->ap_name);
                         break;
                 case IRM_MSG_CODE__IRM_BIND_API:
                         ret_msg.has_result = true;
-                        ret_msg.result = bind_api(msg->api,
-                                                  msg->dst_name);
+                        ret_msg.result = bind_api(msg->api, msg->dst_name);
                         break;
                 case IRM_MSG_CODE__IRM_UNBIND_API:
                         ret_msg.has_result = true;
-                        ret_msg.result = unbind_api(msg->api,
-                                                    msg->dst_name);
+                        ret_msg.result = unbind_api(msg->api, msg->dst_name);
                         break;
                 case IRM_MSG_CODE__IRM_LIST_IPCPS:
-                        ret_msg.n_apis = list_ipcps(msg->dst_name,
-                                                    &apis);
+                        ret_msg.n_apis = list_ipcps(msg->dst_name, &apis);
                         ret_msg.apis = apis;
                         ret_msg.has_result = true;
                         break;
@@ -1827,15 +1822,12 @@ void * mainloop()
                                                     msg->n_dif_name);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
-                        e = flow_accept(msg->api,
-                                        &ret_msg.ae_name);
-
+                        e = flow_accept(msg->api, &ret_msg.ae_name);
                         if (e == NULL) {
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
                                 break;
                         }
-
                         ret_msg.has_port_id = true;
                         ret_msg.port_id     = e->port_id;
                         ret_msg.has_api     = true;
@@ -1857,8 +1849,6 @@ void * mainloop()
                                 ret_msg.result = -1;
                                 break;
                         }
-
-                        /* FIXME: badly timed dealloc may give SEGV */
                         ret_msg.has_port_id = true;
                         ret_msg.port_id     = e->port_id;
                         ret_msg.has_api     = true;
@@ -1869,9 +1859,10 @@ void * mainloop()
                         ret_msg.result = flow_alloc_res(msg->port_id);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
-                        ret_msg.has_result = true;
-                        ret_msg.result = flow_dealloc(msg->api, msg->port_id);
-                        break;
+                        flow_dealloc(msg->api, msg->port_id);
+                        irm_msg__free_unpacked(msg, NULL);
+                        close(cli_sockfd);
+                        continue;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->api,
                                          msg->dst_name,
