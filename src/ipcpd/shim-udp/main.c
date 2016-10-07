@@ -510,7 +510,7 @@ static void * ipcp_udp_sdu_loop(void * o)
                 int fd;
                 struct shm_du_buff * sdb;
 
-                fd = ipcp_flow_read(&sdb);
+                fd = ipcp_read_shim(&sdb);
                 if (fd < 0)
                         continue;
 

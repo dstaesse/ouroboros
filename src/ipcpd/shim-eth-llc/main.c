@@ -597,7 +597,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                 uint8_t dsap;
                 uint8_t r_addr[MAC_SIZE];
 
-                fd = ipcp_flow_read(&sdb);
+                fd = ipcp_read_shim(&sdb);
                 if (fd < 0)
                         continue;
 

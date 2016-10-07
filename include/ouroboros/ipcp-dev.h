@@ -39,12 +39,15 @@ int  ipcp_flow_req_arr(pid_t  api,
 int  ipcp_flow_alloc_reply(int fd,
                            int response);
 
-/* returns flow descriptor and du buff */
-int  ipcp_flow_read(struct shm_du_buff ** sdb);
+int  ipcp_flow_read(int                   fd,
+                    struct shm_du_buff ** sdb);
 
 int  ipcp_flow_write(int                  fd,
                      struct shm_du_buff * sdb);
 
 void ipcp_flow_del(struct shm_du_buff * sdb);
+
+/* returns flow descriptor and du buff */
+int  ipcp_read_shim(struct shm_du_buff ** sdb);
 
 #endif /* OUROBOROS_IPCP_DEV_H */
