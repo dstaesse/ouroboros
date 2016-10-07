@@ -1026,24 +1026,39 @@ int ipcp_flow_alloc_reply(int fd, int response)
         return ret;
 }
 
-int ipcp_flow_read(struct shm_du_buff ** sdb)
+int ipcp_flow_read(int fd, struct shm_du_buff ** sdb)
 {
-        int fd;
-        struct rb_entry * e;
-
-        e = shm_ap_rbuff_read(ai.rb);
+        int idx = -1;
+        int port_id = -1;
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
-        fd = ai.ports[e->port_id].fd;
-
-        *sdb = shm_rdrbuff_get(ai.rdrb, e->index);
+        if ((port_id = ai.flows[fd].port_id) < 0) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -ENOTALLOC;
+        }
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
 
-        return fd;
+        idx = shm_ap_rbuff_read_port(ai.rb, port_id);
+        if (idx < 0) {
+                pthread_rwlock_rdlock(&ai.data_lock);
+                pthread_rwlock_rdlock(&ai.flows_lock);
+                return idx;
+        }
+
+        pthread_rwlock_rdlock(&ai.data_lock);
+        pthread_rwlock_rdlock(&ai.flows_lock);
+
+        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
+
+        pthread_rwlock_unlock(&ai.flows_lock);
+        pthread_rwlock_unlock(&ai.data_lock);
+
+        return 0;
 }
 
 int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
@@ -1112,6 +1127,26 @@ int local_flow_write(int fd, struct rb_entry * e)
         pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
+}
+
+int ipcp_read_shim(struct shm_du_buff ** sdb)
+{
+        int fd;
+        struct rb_entry * e;
+
+        e = shm_ap_rbuff_read(ai.rb);
+
+        pthread_rwlock_rdlock(&ai.data_lock);
+        pthread_rwlock_rdlock(&ai.flows_lock);
+
+        fd = ai.ports[e->port_id].fd;
+
+        *sdb = shm_rdrbuff_get(ai.rdrb, e->index);
+
+        pthread_rwlock_unlock(&ai.flows_lock);
+        pthread_rwlock_unlock(&ai.data_lock);
+
+        return fd;
 }
 
 void ipcp_flow_del(struct shm_du_buff * sdb)
