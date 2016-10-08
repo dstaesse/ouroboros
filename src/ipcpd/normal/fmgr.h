@@ -35,7 +35,6 @@
 #define DT_AE "Data transfer"
 
 int fmgr_init();
-
 int fmgr_fini();
 
 /* N-flow ops */
@@ -56,8 +55,11 @@ int fmgr_flow_alloc_resp(int fd,
 int fmgr_flow_dealloc(int fd);
 
 /* N+1-flow ops, remote */
-int fmgr_flow_alloc_msg(struct frct_i * frct_i,
-                        buffer_t *      buf);
+int fmgr_frct_post_buf(cep_id_t   id,
+                       buffer_t * buf);
 
+/* SDU for N+1-flow */
+int fmgr_frct_post_sdu(cep_id_t             id,
+                       struct shm_du_buff * sdb);
 
 #endif

@@ -26,34 +26,29 @@
 #include <ouroboros/shared.h>
 #include <ouroboros/utils.h>
 
-#include "dt_const.h"
+#include "shm_pci.h"
 
 struct frct_i;
 
-int               frct_init(struct dt_const * dtc,
-                            uint32_t address);
-int               frct_fini();
+int         frct_init(uint32_t address);
+int         frct_fini();
 
-struct dt_const * frct_dt_const();
+/* Called by RMT upon receipt of a PDU for us */
+int         frct_rmt_post_sdu(struct pci *         pci,
+                              struct shm_du_buff * sdb);
 
-int               frct_dt_flow(int fd,
-                               enum qos_cube qos);
+cep_id_t    frct_i_create(uint32_t      address,
+                          buffer_t *    buf,
+                          enum qos_cube cube);
 
-/*
- * FIXME: Will take the index in the DU map,
- * possibly cep-ids and address
- */
-int                frct_rmt_post();
+int         frct_i_accept(cep_id_t      id,
+                          buffer_t *    buf,
+                          enum qos_cube cube);
 
-struct frct_i *    frct_i_create(uint32_t      address,
-                                 buffer_t *    buf,
-                                 enum qos_cube cube);
-/* FIXME: Hand QoS cube here too? We received it in the flow alloc message. */
-int                frct_i_accept(struct frct_i * instance,
-                                 buffer_t *      buf);
-int                frct_i_destroy(struct frct_i * instance,
-                                  buffer_t *      buf);
+int         frct_i_destroy(cep_id_t   id,
+                           buffer_t * buf);
 
-/* FIXME: Add read/write ops for frct instances */
+int         frct_i_write_sdu(cep_id_t             id,
+                             struct shm_du_buff * sdb);
 
 #endif

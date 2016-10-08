@@ -32,6 +32,7 @@
 #include "shm_pci.h"
 #include "frct.h"
 #include "crc32.h"
+#include "ribmgr.h"
 
 #define QOS_ID_SIZE 1
 #define DEFAULT_TTL 60
@@ -57,22 +58,12 @@ static int shm_pci_tail_size(struct dt_const * dtc)
         return dtc->has_chk ? CHK_SIZE : 0;
 }
 
-int shm_pci_ser(struct shm_du_buff * sdb,
-                struct pci * pci)
+static void ser_pci_head(uint8_t * head,
+                         struct pci * pci,
+                         struct dt_const * dtc)
 {
-        uint8_t * head;
-        uint8_t * tail;
         int offset = 0;
-        struct dt_const * dtc;
         uint8_t ttl = DEFAULT_TTL;
-
-        dtc = frct_dt_const();
-        if (dtc == NULL)
-                return -1;
-
-        head = shm_du_buff_head_alloc(sdb, shm_pci_head_size(dtc));
-        if (head == NULL)
-                return -1;
 
         memcpy(head, &pci->dst_addr, dtc->addr_size);
         offset += dtc->addr_size;
@@ -90,6 +81,24 @@ int shm_pci_ser(struct shm_du_buff * sdb,
         offset += QOS_ID_SIZE;
         if (dtc->has_ttl)
                 memcpy(head + offset, &ttl, TTL_SIZE);
+}
+
+int shm_pci_ser(struct shm_du_buff * sdb,
+                struct pci * pci)
+{
+        uint8_t * head;
+        uint8_t * tail;
+        struct dt_const * dtc;
+
+        dtc = ribmgr_dt_const();
+        if (dtc == NULL)
+                return -1;
+
+        head = shm_du_buff_head_alloc(sdb, shm_pci_head_size(dtc));
+        if (head == NULL)
+                return -1;
+
+        ser_pci_head(head, pci, dtc);
 
         if (dtc->has_chk) {
                 tail = shm_du_buff_tail_alloc(sdb, shm_pci_tail_size(dtc));
@@ -104,6 +113,48 @@ int shm_pci_ser(struct shm_du_buff * sdb,
         return 0;
 }
 
+buffer_t * shm_pci_ser_buf(buffer_t *   buf,
+                           struct pci * pci)
+{
+        buffer_t * buffer;
+        struct dt_const * dtc;
+
+        if (buf == NULL || pci == NULL)
+                return NULL;
+
+        dtc = ribmgr_dt_const();
+        if (dtc == NULL)
+                return NULL;
+
+        buffer = malloc(sizeof(*buffer));
+        if (buffer == NULL)
+                return NULL;
+
+        buffer->len = buf->len +
+                shm_pci_head_size(dtc) +
+                shm_pci_tail_size(dtc);
+
+        buffer->data = malloc(buffer->len);
+        if (buffer->data == NULL) {
+                free(buffer);
+                return NULL;
+        }
+
+        ser_pci_head(buffer->data, pci, dtc);
+        memcpy(buffer->data + shm_pci_head_size(dtc),
+               buf->data, buf->len);
+
+        free(buf->data);
+
+        if (dtc->has_chk)
+                crc32((uint32_t *) buffer->data +
+                      shm_pci_head_size(dtc) + buf->len,
+                      buffer->data,
+                      shm_pci_head_size(dtc) + buf->len);
+
+        return buffer;
+}
+
 struct pci * shm_pci_des(struct shm_du_buff * sdb)
 {
         uint8_t * head;
@@ -115,7 +166,7 @@ struct pci * shm_pci_des(struct shm_du_buff * sdb)
         if (head == NULL)
                 return NULL;
 
-        dtc = frct_dt_const();
+        dtc = ribmgr_dt_const();
         if (dtc == NULL)
                 return NULL;
 
@@ -150,7 +201,7 @@ int shm_pci_shrink(struct shm_du_buff * sdb)
         if (sdb == NULL)
                 return -1;
 
-        dtc = frct_dt_const();
+        dtc = ribmgr_dt_const();
         if (dtc == NULL)
                 return -1;
 
@@ -174,7 +225,7 @@ int shm_pci_dec_ttl(struct shm_du_buff * sdb)
         uint8_t * head;
         uint8_t * tail;
 
-        dtc = frct_dt_const();
+        dtc = ribmgr_dt_const();
         if (dtc == NULL)
                 return -1;
 

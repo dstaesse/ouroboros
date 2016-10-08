@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * The Relaying and Multiplexing task
+ * Normal IPCP configuration constants
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,27 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_RMT_H
-#define OUROBOROS_IPCP_RMT_H
+#ifndef OUROBOROS_IPCP_CONFIG_H
+#define OUROBOROS_IPCP_CONFIG_H
 
-#include <ouroboros/shm_rdrbuff.h>
-#include <ouroboros/utils.h>
-
-#include "dt_const.h"
-#include "shm_pci.h"
-
-int rmt_init(uint32_t address);
-int rmt_fini();
-
-int rmt_dt_flow(int           fd,
-                enum qos_cube qos);
-
-/* Hand PDU to RMT, SDU from N+1 */
-int rmt_frct_write_sdu(struct pci *         pci,
-                       struct shm_du_buff * sdb);
-
-/* Hand PDU to RMT, SDU from N */
-int rmt_frct_write_buf(struct pci * pci,
-                       buffer_t *   buf);
+#define FD_UPDATE_TIMEOUT 100 /* microseconds */
 
 #endif

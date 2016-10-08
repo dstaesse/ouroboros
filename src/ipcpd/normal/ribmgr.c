@@ -39,6 +39,7 @@
 #include "frct.h"
 #include "ipcp.h"
 #include "cdap_request.h"
+#include "rmt.h"
 
 #include "static_info.pb-c.h"
 typedef StaticInfoMsg static_info_msg_t;
@@ -241,12 +242,22 @@ int ribmgr_cdap_write(struct cdap * instance,
 
                 rib.address = msg->address;
 
-                if (frct_init(&rib.dtc, rib.address)) {
+                if (frct_init(rib.address)) {
                         ipcp_set_state(IPCP_INIT);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         cdap_send_reply(instance, invoke_id, -1, NULL, 0);
                         static_info_msg__free_unpacked(msg, NULL);
                         LOG_ERR("Failed to init FRCT");
+                        return -1;
+                }
+
+                if (rmt_init(rib.address)) {
+                        ipcp_set_state(IPCP_INIT);
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        frct_fini();
+                        cdap_send_reply(instance, invoke_id, -1, NULL, 0);
+                        static_info_msg__free_unpacked(msg, NULL);
+                        LOG_ERR("Failed to init RMT");
                         return -1;
                 }
 
@@ -529,12 +540,23 @@ int ribmgr_bootstrap(struct dif_config * conf)
         /* FIXME: Set correct address. */
         rib.address = 0;
 
-        if (frct_init(&rib.dtc, rib.address)) {
+        if (frct_init(rib.address)) {
                 LOG_ERR("Failed to initialize FRCT.");
+                return -1;
+        }
+
+        if (rmt_init(rib.address)) {
+                LOG_ERR("Failed to initialize RMT.");
+                frct_fini();
                 return -1;
         }
 
         LOG_DBG("Bootstrapped RIB Manager.");
 
         return 0;
+}
+
+struct dt_const * ribmgr_dt_const()
+{
+        return &(rib.dtc);
 }

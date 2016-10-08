@@ -25,22 +25,34 @@
 #define OUROBOROS_IPCP_SHM_PCI_H
 
 #include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/utils.h>
 
-#include <dt_const.h>
+#include "dt_const.h"
+
+#define PDU_TYPE_MGMT 0x40
+#define PDU_TYPE_DTP  0x80
+
+typedef uint32_t cep_id_t;
+#define INVALID_CEP_ID 0
 
 struct pci {
+        uint8_t  pdu_type;
         uint64_t dst_addr;
         uint64_t src_addr;
-        uint32_t dst_cep_id;
-        uint32_t src_cep_id;
+        cep_id_t dst_cep_id;
+        cep_id_t src_cep_id;
+        uint8_t  qos_id;
         uint32_t pdu_length;
         uint64_t seqno;
-        uint8_t  qos_id;
         uint8_t  ttl;
+        uint8_t  flags;
 };
 
 int          shm_pci_ser(struct shm_du_buff * sdb,
-                         struct pci * pci);
+                         struct pci *         pci);
+
+buffer_t *   shm_pci_ser_buf(buffer_t *   buf,
+                             struct pci * pci);
 
 struct pci * shm_pci_des(struct shm_du_buff * sdb);
 
