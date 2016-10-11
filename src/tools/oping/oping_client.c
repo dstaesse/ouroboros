@@ -73,8 +73,7 @@ void * reader(void * o)
                                 continue;
 
                         if (ntohl(msg->type) != ECHO_REPLY) {
-                                printf("Invalid message received (%d).\n",
-                                       msg->type);
+                                printf("Invalid message on fd %d.\n", fd);
                                 continue;
                         }
 
