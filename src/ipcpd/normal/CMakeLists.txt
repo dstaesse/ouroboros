@@ -28,7 +28,6 @@ set(SOURCE_FILES
         frct.c
         main.c
         ribmgr.c
-        rmt.c
         shm_pci.c
 )
 

@@ -109,7 +109,7 @@ static int normal_ipcp_enroll(char * dif_name)
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        if (fmgr_mgmt_flow(dif_name)) {
+        if (fmgr_nm1_mgmt_flow(dif_name)) {
                 LOG_ERR("Failed to establish management flow.");
                 return -1;
         }
@@ -163,9 +163,9 @@ static struct ipcp_ops normal_ops = {
         .ipcp_enroll          = normal_ipcp_enroll,
         .ipcp_name_reg        = normal_ipcp_name_reg,
         .ipcp_name_unreg      = normal_ipcp_name_unreg,
-        .ipcp_flow_alloc      = fmgr_flow_alloc,
-        .ipcp_flow_alloc_resp = fmgr_flow_alloc_resp,
-        .ipcp_flow_dealloc    = fmgr_flow_dealloc
+        .ipcp_flow_alloc      = fmgr_np1_alloc,
+        .ipcp_flow_alloc_resp = fmgr_np1_alloc_resp,
+        .ipcp_flow_dealloc    = fmgr_np1_dealloc
 };
 
 int main(int argc, char * argv[])

@@ -241,7 +241,7 @@ int ribmgr_cdap_write(struct cdap * instance,
 
                 rib.address = msg->address;
 
-                if (frct_init(&rib.dtc, rib.address)) {
+                if (frct_init()) {
                         ipcp_set_state(IPCP_INIT);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         cdap_send_reply(instance, invoke_id, -1, NULL, 0);
@@ -529,7 +529,7 @@ int ribmgr_bootstrap(struct dif_config * conf)
         /* FIXME: Set correct address. */
         rib.address = 0;
 
-        if (frct_init(&rib.dtc, rib.address)) {
+        if (frct_init()) {
                 LOG_ERR("Failed to initialize FRCT.");
                 return -1;
         }
@@ -537,4 +537,14 @@ int ribmgr_bootstrap(struct dif_config * conf)
         LOG_DBG("Bootstrapped RIB Manager.");
 
         return 0;
+}
+
+struct dt_const * ribmgr_dt_const()
+{
+        return &(rib.dtc);
+}
+
+uint32_t ribmgr_address()
+{
+        return rib.address;
 }
