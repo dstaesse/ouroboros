@@ -29,22 +29,24 @@
 
 struct flow_set;
 
-struct flow_set * flow_set_create();
+typedef struct flow_set flow_set_t;
 
-void              flow_set_destroy(struct flow_set * set);
+flow_set_t * flow_set_create();
 
-void              flow_set_zero(struct flow_set * set);
+void         flow_set_destroy(flow_set_t * set);
 
-void              flow_set_add(struct flow_set * set,
-                               int               fd);
+void         flow_set_zero(flow_set_t * set);
 
-void              flow_set_del(struct flow_set * set,
-                               int               fd);
+void         flow_set_add(flow_set_t * set,
+                          int          fd);
 
-bool              flow_set_has(struct flow_set * set,
-                               int               fd);
+void         flow_set_del(flow_set_t * set,
+                          int          fd);
 
-int               flow_select(struct flow_set *       set,
-                              const struct timespec * timeout);
+bool         flow_set_has(flow_set_t * set,
+                          int          fd);
+
+int          flow_select(flow_set_t *            set,
+                         const struct timespec * timeout);
 
 #endif /* OUROBOROS_SELECT_H */

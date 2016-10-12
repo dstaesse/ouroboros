@@ -63,7 +63,7 @@ struct c {
 
 struct s {
         struct timespec   times[OPING_MAX_FLOWS];
-        struct flow_set * flows;
+        flow_set_t *      flows;
         pthread_mutex_t   lock;
 
         pthread_t cleaner_pt;

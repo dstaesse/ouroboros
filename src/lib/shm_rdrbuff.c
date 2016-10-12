@@ -35,6 +35,7 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #define OUROBOROS_PREFIX "shm_rdrbuff"
 
@@ -324,8 +325,8 @@ void * shm_rdrbuff_sanitize(void * o)
 
         pid_t   api;
 
-        if (rdrb == NULL)
-                return (void *) -1;
+        assert(o);
+
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
@@ -397,10 +398,7 @@ void * shm_rdrbuff_sanitize(void * o)
 
 void shm_rdrbuff_close(struct shm_rdrbuff * rdrb)
 {
-        if (rdrb == NULL) {
-                LOG_DBGF("Bogus input. Bugging out.");
-                return;
-        }
+        assert(rdrb);
 
         if (close(rdrb->fd) < 0)
                 LOG_DBGF("Couldn't close shared memory.");
@@ -415,10 +413,7 @@ void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
 {
         char * shm_rdrb_fn;
 
-        if (rdrb == NULL) {
-                LOG_DBGF("Bogus input. Bugging out.");
-                return;
-        }
+        assert(rdrb);
 
         if (getpid() != *rdrb->api && kill(*rdrb->api, 0) == 0) {
                 LOG_DBG("Process %d tried to destroy active rdrb.", getpid());
@@ -460,10 +455,8 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         int                  sz = size + sizeof *sdb;
         uint8_t *            write_pos;
 
-        if (rdrb == NULL || data == NULL) {
-                LOG_DBGF("Bogus input, bugging out.");
-                return -1;
-        }
+        assert(rdrb);
+        assert(data);
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE) {
@@ -534,11 +527,11 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 }
 
 ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
-                           pid_t               dst_api,
-                           size_t              headspace,
-                           size_t              tailspace,
-                           uint8_t *           data,
-                           size_t              len)
+                           pid_t                 dst_api,
+                           size_t                headspace,
+                           size_t                tailspace,
+                           uint8_t *             data,
+                           size_t                len)
 {
         struct shm_du_buff * sdb;
         size_t               size = headspace + len + tailspace;
@@ -549,10 +542,8 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         int                  sz = size + sizeof *sdb;
         uint8_t *            write_pos;
 
-        if (rdrb == NULL || data == NULL) {
-                LOG_DBGF("Bogus input, bugging out.");
-                return -1;
-        }
+        assert(rdrb);
+        assert(data);
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE) {
@@ -631,6 +622,9 @@ int shm_rdrbuff_read(uint8_t **           dst,
         size_t len = 0;
         struct shm_du_buff * sdb;
 
+        assert(dst);
+        assert(rdrb);
+
         if (idx > SHM_BUFFER_SIZE)
                 return -1;
 #ifdef __APPLE__
@@ -659,6 +653,8 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, ssize_t idx)
 {
         struct shm_du_buff * sdb;
 
+        assert(rdrb);
+
         if (idx > SHM_BUFFER_SIZE)
                 return NULL;
 #ifdef __APPLE__
@@ -683,6 +679,8 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, ssize_t idx)
 
 int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
 {
+        assert(rdrb);
+
         if (idx > SHM_BUFFER_SIZE)
                 return -1;
 #ifdef __APPLE__
@@ -717,21 +715,21 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
 
 size_t shm_du_buff_get_idx(struct shm_du_buff * sdb)
 {
+        assert(sdb);
+
         return sdb->idx;
 }
 
 uint8_t * shm_du_buff_head(struct shm_du_buff * sdb)
 {
-        if (sdb == NULL)
-                return NULL;
+        assert(sdb);
 
         return (uint8_t *) (sdb + 1) + sdb->du_head;
 }
 
 uint8_t * shm_du_buff_tail(struct shm_du_buff * sdb)
 {
-        if (sdb == NULL)
-                return NULL;
+        assert(sdb);
 
         return (uint8_t *) (sdb + 1) + sdb->du_tail;
 }
@@ -741,8 +739,7 @@ uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
 {
         uint8_t * buf = NULL;
 
-        if (sdb  == NULL)
-                return NULL;
+        assert(sdb);
 
         if ((long) (sdb->du_head - size) < 0) {
                 LOG_ERR("Failed to allocate PCI headspace.");
@@ -761,8 +758,7 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
 {
         uint8_t * buf = NULL;
 
-        if (sdb  == NULL)
-                return NULL;
+        assert(sdb);
 
         if (sdb->du_tail + size >= sdb->size) {
                 LOG_ERR("Failed to allocate PCI tailspace.");
@@ -779,8 +775,7 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
 int shm_du_buff_head_release(struct shm_du_buff * sdb,
                              size_t               size)
 {
-        if (sdb  == NULL)
-                return -1;
+        assert(sdb);
 
         if (size > sdb->du_tail - sdb->du_head) {
                 LOG_DBGF("Tried to release beyond SDU boundary.");
@@ -795,8 +790,7 @@ int shm_du_buff_head_release(struct shm_du_buff * sdb,
 int shm_du_buff_tail_release(struct shm_du_buff * sdb,
                              size_t               size)
 {
-        if (sdb  == NULL)
-                return -1;
+        assert(sdb);
 
         if (size > sdb->du_tail - sdb->du_head) {
                 LOG_ERR("Tried to release beyond SDU boundary.");
