@@ -35,6 +35,11 @@ int               ribmgr_remove_flow(int fd);
 
 int               ribmgr_bootstrap(struct dif_config * conf);
 
+/*
+ * FIXME: Should we expose the RIB?
+ * Else we may end up with a lot of getters and setters
+ */
 struct dt_const * ribmgr_dt_const();
+uint32_t          ribmgr_address();
 
 #endif

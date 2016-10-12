@@ -32,8 +32,8 @@
 #include <pthread.h>
 
 #include "frct.h"
-#include "rmt.h"
 #include "fmgr.h"
+#include "ribmgr.h"
 
 enum conn_state {
         CONN_PENDING = 0,
@@ -51,8 +51,6 @@ struct frct_i {
 };
 
 struct {
-        uint32_t address;
-
         pthread_mutex_t instances_lock;
         struct frct_i ** instances;
 
@@ -82,10 +80,9 @@ static int release_cep_id(int id)
         return ret;
 }
 
-int frct_init(uint32_t address)
+int frct_init()
 {
         int i;
-        frct.address = address;
 
         if (pthread_mutex_init(&frct.cep_ids_lock, NULL))
                 return -1;
@@ -142,7 +139,7 @@ static struct frct_i * create_frct_i(uint32_t address,
         return instance;
 }
 
-int frct_rmt_post_sdu(struct pci * pci,
+int frct_nm1_post_sdu(struct pci * pci,
                       struct shm_du_buff * sdb)
 {
         struct frct_i * instance;
@@ -167,14 +164,14 @@ int frct_rmt_post_sdu(struct pci * pci,
                 buf.len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
                 buf.data = shm_du_buff_head(sdb);
 
-                if (fmgr_frct_post_buf(id, &buf)) {
+                if (fmgr_np1_post_buf(id, &buf)) {
                         LOG_ERR("Failed to hand buffer to FMGR.");
                         free(pci);
                         return -1;
                 }
         } else {
                 /* FIXME: Known cep-ids are delivered to FMGR (minimal DTP) */
-                if (fmgr_frct_post_sdu(pci->dst_cep_id, sdb)) {
+                if (fmgr_np1_post_sdu(pci->dst_cep_id, sdb)) {
                         LOG_ERR("Failed to hand SDU to FMGR.");
                         free(pci);
                         return -1;
@@ -217,15 +214,15 @@ cep_id_t frct_i_create(uint32_t      address,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = address;
-        pci.src_addr = frct.address;
+        pci.src_addr = ribmgr_address();
         pci.dst_cep_id = 0;
         pci.src_cep_id = id;
         pci.seqno = 0;
         pci.qos_id = cube;
 
-        if (rmt_frct_write_buf(&pci, buf)) {
+        if (fmgr_nm1_write_buf(&pci, buf)) {
                 free(instance);
-                LOG_ERR("Failed to hand PDU to RMT.");
+                LOG_ERR("Failed to hand PDU to FMGR.");
                 return INVALID_CEP_ID;
         }
 
@@ -262,7 +259,7 @@ int frct_i_accept(cep_id_t       id,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = frct.address;
+        pci.src_addr = ribmgr_address();
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = 0;
@@ -270,7 +267,7 @@ int frct_i_accept(cep_id_t       id,
 
         pthread_mutex_unlock(&frct.instances_lock);
 
-        if (rmt_frct_write_buf(&pci, buf))
+        if (fmgr_nm1_write_buf(&pci, buf))
                 return -1;
 
         return 0;
@@ -299,7 +296,7 @@ int frct_i_destroy(cep_id_t   id,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = frct.address;
+        pci.src_addr = ribmgr_address();
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = 0;
@@ -309,7 +306,7 @@ int frct_i_destroy(cep_id_t   id,
         pthread_mutex_unlock(&frct.instances_lock);
 
         if (buf != NULL && buf->data != NULL)
-                if (rmt_frct_write_buf(&pci, buf))
+                if (fmgr_nm1_write_buf(&pci, buf))
                         return -1;
 
         return 0;
@@ -341,15 +338,15 @@ int frct_i_write_sdu(cep_id_t             id,
 
         pci.pdu_type = PDU_TYPE_DTP;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = frct.address;
+        pci.src_addr = ribmgr_address();
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = (instance->seqno)++;
         pci.qos_id = instance->cube;
 
-        if (rmt_frct_write_sdu(&pci, sdb)) {
+        if (fmgr_nm1_write_sdu(&pci, sdb)) {
                 pthread_mutex_unlock(&frct.instances_lock);
-                LOG_ERR("Failed to hand SDU to RMT.");
+                LOG_ERR("Failed to hand SDU to FMGR.");
                 return -1;
         }
 

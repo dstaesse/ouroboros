@@ -30,12 +30,8 @@
 
 struct frct_i;
 
-int         frct_init(uint32_t address);
+int         frct_init();
 int         frct_fini();
-
-/* Called by RMT upon receipt of a PDU for us */
-int         frct_rmt_post_sdu(struct pci *         pci,
-                              struct shm_du_buff * sdb);
 
 cep_id_t    frct_i_create(uint32_t      address,
                           buffer_t *    buf,
@@ -50,5 +46,8 @@ int         frct_i_destroy(cep_id_t   id,
 
 int         frct_i_write_sdu(cep_id_t             id,
                              struct shm_du_buff * sdb);
+
+int         frct_nm1_post_sdu(struct pci *         pci,
+                              struct shm_du_buff * sdb);
 
 #endif
