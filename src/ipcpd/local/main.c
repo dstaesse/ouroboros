@@ -252,6 +252,8 @@ static int ipcp_local_flow_dealloc(int fd)
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
+        flow_dealloc(fd);
+
         LOG_INFO("Flow with fd %d deallocated.", fd);
 
         return 0;

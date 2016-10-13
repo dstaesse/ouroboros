@@ -975,6 +975,8 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
         if (ret < 0)
                 LOG_DBG("Could not notify remote.");
 
+        flow_dealloc(fd);
+
         LOG_DBG("Flow with fd %d deallocated.", fd);
 
         return 0;
