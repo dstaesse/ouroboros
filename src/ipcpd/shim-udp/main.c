@@ -1117,6 +1117,8 @@ static int ipcp_udp_flow_dealloc(int fd)
 
         close(skfd);
 
+        flow_dealloc(fd);
+
         LOG_DBG("Flow with fd %d deallocated.", fd);
 
         return 0;

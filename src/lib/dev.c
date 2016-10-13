@@ -566,10 +566,9 @@ int flow_dealloc(int fd)
         shm_ap_rbuff_close_port(ai.rb, msg.port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
+        pthread_rwlock_unlock(&ai.data_lock);
 
         send_irm_msg(&msg);
-
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -864,22 +863,6 @@ int np1_flow_dealloc(int port_id)
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         fd = ai.ports[port_id].fd;
-        if (fd < 0) {
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return fd;
-        }
-
-        ai.flows[fd].port_id = -1;
-        shm_ap_rbuff_close(ai.flows[fd].rb);
-        ai.flows[fd].rb = NULL;
-        ai.flows[fd].api = -1;
-
-        bmp_release(ai.fds, fd);
-
-        port_destroy(&ai.ports[port_id]);
-
-        shm_ap_rbuff_close_port(ai.rb, port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);

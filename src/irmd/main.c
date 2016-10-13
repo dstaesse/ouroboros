@@ -38,7 +38,6 @@
 
 #include <ouroboros/logs.h>
 
-
 #include "utils.h"
 #include "registry.h"
 #include "irm_flow.h"
@@ -1144,7 +1143,7 @@ static struct irm_flow * flow_alloc(pid_t  api,
         }
 
         f->n_api = api;
-        f->state = FLOW_PENDING;
+        f->state = FLOW_ALLOC_PENDING;
 
         if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
                 LOG_WARN("Failed to set timestamp.");
@@ -1239,29 +1238,41 @@ static int flow_dealloc(pid_t api, int port_id)
 
         f = get_irm_flow(port_id);
         if (f == NULL) {
-                bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_DBG("Deallocate called for unknown port.");
                 return 0;
         }
 
         if (api == f->n_api) {
-                    bmp_release(irmd->port_ids, port_id);
-                    n_1_api = f->n_1_api;
+                f->n_api = -1;
+                n_1_api = f->n_1_api;
+        } else if (api == f->n_1_api) {
+                f->n_1_api = -1;
+        } else {
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_DBG("Dealloc called by wrong AP-I.");
+                return -EPERM;
         }
 
-        list_del(&f->next);
+        if (irm_flow_get_state(f) == FLOW_DEALLOC_PENDING) {
+                list_del(&f->next);
+                irm_flow_destroy(f);
+                bmp_release(irmd->port_ids, port_id);
+                LOG_INFO("Completed deallocation of port_id %d by AP-I %d.",
+                         port_id, api);
+        } else {
+                irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
+                LOG_DBG("Partial deallocation of port_id %d by AP-I %d.",
+                        port_id, api);
+        }
 
         pthread_rwlock_unlock(&irmd->flows_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
 
         if (n_1_api != -1)
                 ret = ipcp_flow_dealloc(n_1_api, port_id);
-
-        pthread_rwlock_unlock(&irmd->state_lock);
-
-        irm_flow_destroy(f);
-
-        LOG_INFO("Deallocated flow with port_id %d.", port_id);
 
         return ret;
 }
@@ -1322,7 +1333,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 return NULL;
         }
 
-        f->state   = FLOW_PENDING;
+        f->state   = FLOW_ALLOC_PENDING;
         f->n_1_api = api;
         if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
                 LOG_WARN("Failed to set timestamp.");
@@ -1672,7 +1683,7 @@ void * irm_sanitize()
                         struct irm_flow * f =
                                 list_entry(p, struct irm_flow, next);
 
-                        if (irm_flow_get_state(f) == FLOW_PENDING
+                        if (irm_flow_get_state(f) == FLOW_ALLOC_PENDING
                             && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
                                 LOG_INFO("Pending port_id %d timed out.",
                                          f->port_id);

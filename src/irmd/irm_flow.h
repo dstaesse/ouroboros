@@ -31,8 +31,9 @@
 
 enum flow_state {
         FLOW_NULL = 0,
-        FLOW_PENDING,
+        FLOW_ALLOC_PENDING,
         FLOW_ALLOCATED,
+        FLOW_DEALLOC_PENDING,
         FLOW_DESTROY
 };
 

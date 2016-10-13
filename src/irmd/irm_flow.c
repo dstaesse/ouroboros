@@ -63,7 +63,7 @@ void irm_flow_destroy(struct irm_flow * f)
                 return;
         }
 
-        if (f->state == FLOW_PENDING)
+        if (f->state == FLOW_ALLOC_PENDING)
                 f->state = FLOW_DESTROY;
         else
                 f->state = FLOW_NULL;
