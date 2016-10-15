@@ -249,18 +249,14 @@ void shm_ap_rbuff_open_port(struct shm_ap_rbuff * rb, int port_id)
                 pthread_mutex_consistent(rb->lock);
         }
 #endif
-
-#ifdef OUROBOROS_CONFIG_DEBUG
-        if (!rb->acl[port_id])
-                LOG_DBG("Trying to open open port.");
-#endif
         rb->acl[port_id] = 0; /* open */
 
         pthread_mutex_unlock(rb->lock);
 }
 
-void shm_ap_rbuff_close_port(struct shm_ap_rbuff * rb, int port_id)
+int shm_ap_rbuff_close_port(struct shm_ap_rbuff * rb, int port_id)
 {
+        int ret = 0;
 
         assert(rb);
 
@@ -272,13 +268,14 @@ void shm_ap_rbuff_close_port(struct shm_ap_rbuff * rb, int port_id)
                 pthread_mutex_consistent(rb->lock);
         }
 #endif
-#ifdef OUROBOROS_CONFIG_DEBUG
-        if (rb->acl[port_id])
-                LOG_DBG("Trying to close closed port.");
-#endif
         rb->acl[port_id] = -1;
 
+        if (rb->cntrs[port_id] > 0)
+                ret = -EBUSY;
+
         pthread_mutex_unlock(rb->lock);
+
+        return ret;
 }
 
 void shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb)
@@ -551,6 +548,8 @@ ssize_t shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb, int port_id)
 {
         ssize_t idx = -1;
 
+        assert(rb);
+
 #ifdef __APPLE__
         pthread_mutex_lock(rb->lock);
 #else
@@ -559,11 +558,6 @@ ssize_t shm_ap_rbuff_read_port(struct shm_ap_rbuff * rb, int port_id)
                 pthread_mutex_consistent(rb->lock);
         }
 #endif
-        if (rb->acl[port_id]) {
-                pthread_mutex_unlock(rb->lock);
-                return -ENOTALLOC;
-        }
-
         if (shm_rbuff_empty(rb) || tail_el_ptr(rb)->port_id != port_id) {
                 pthread_mutex_unlock(rb->lock);
                 return -1;
@@ -597,11 +591,6 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff *   rb,
                 pthread_mutex_consistent(rb->lock);
         }
 #endif
-        if (rb->acl[port_id]) {
-                pthread_mutex_unlock(rb->lock);
-                return -ENOTALLOC;
-        }
-
         if (timeout != NULL) {
                 idx = -ETIMEDOUT;
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
@@ -650,7 +639,7 @@ ssize_t shm_ap_rbuff_read_port_b(struct shm_ap_rbuff *   rb,
 
         if (ret != ETIMEDOUT) {
                 idx = tail_el_ptr(rb)->index;
-                  --rb->cntrs[port_id];
+                --rb->cntrs[port_id];
                 *rb->tail = (*rb->tail + 1) & (SHM_BUFFER_SIZE -1);
 
                 pthread_cond_broadcast(rb->del);

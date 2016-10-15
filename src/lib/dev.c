@@ -548,6 +548,12 @@ int flow_dealloc(int fd)
                 return -ENOTALLOC;
         }
 
+        if (shm_ap_rbuff_close_port(ai.rb, ai.flows[fd].port_id) == -EBUSY) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -EBUSY;
+        }
+
         msg.port_id = ai.flows[fd].port_id;
 
         port_destroy(&ai.ports[msg.port_id]);
@@ -562,8 +568,6 @@ int flow_dealloc(int fd)
         }
 
         bmp_release(ai.fds, fd);
-
-        shm_ap_rbuff_close_port(ai.rb, msg.port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
@@ -1091,26 +1095,32 @@ int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
         return 0;
 }
 
-int local_flow_read(struct rb_entry * e)
+struct rb_entry * local_flow_read(int fd)
 {
-        int fd;
-
-        *e = *(shm_ap_rbuff_read(ai.rb));
+        int port_id;
+        struct rb_entry * e = NULL;
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
-        fd = ai.ports[e->port_id].fd;
+        port_id = ai.flows[fd].port_id;
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
 
-        return fd;
+        if (port_id != -1) {
+                e = malloc(sizeof(*e));
+                if (e == NULL)
+                        return NULL;
+                e->index = shm_ap_rbuff_read_port(ai.rb, port_id);
+        }
+
+        return e;
 }
 
 int local_flow_write(int fd, struct rb_entry * e)
 {
-        if (e == NULL)
+        if (e == NULL || fd < 0)
                 return -EINVAL;
 
         pthread_rwlock_rdlock(&ai.data_lock);
@@ -1135,9 +1145,7 @@ int local_flow_write(int fd, struct rb_entry * e)
 int ipcp_read_shim(struct shm_du_buff ** sdb)
 {
         int fd;
-        struct rb_entry * e;
-
-        e = shm_ap_rbuff_read(ai.rb);
+        struct rb_entry * e = shm_ap_rbuff_read(ai.rb);
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);

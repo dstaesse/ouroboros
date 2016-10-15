@@ -25,10 +25,9 @@
 #ifndef OUROBOROS_LOCAL_DEV_H
 #define OUROBOROS_LOCAL_DEV_H
 
-/* returns flow descriptor and rb_entry, no access to du_buff */
-int     local_flow_read(struct rb_entry * e);
+struct rb_entry * local_flow_read(int fd);
 
-int     local_flow_write(int               fd,
-                         struct rb_entry * e);
+int               local_flow_write(int               fd,
+                                   struct rb_entry * e);
 
 #endif /* OUROBOROS_LOCAL_DEV_H */

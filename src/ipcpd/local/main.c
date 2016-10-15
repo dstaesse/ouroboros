@@ -24,6 +24,7 @@
 #include "ipcp.h"
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/select.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
 #define OUROBOROS_PREFIX "ipcpd/local"
@@ -66,8 +67,10 @@ void local_data_fini()
 static void * ipcp_local_sdu_loop(void * o)
 {
         while (true) {
-                struct rb_entry e;
-                int fd = local_flow_read(&e);
+                int fd;
+                struct rb_entry * e;
+
+                fd = flow_select(NULL, NULL);
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -77,13 +80,18 @@ static void * ipcp_local_sdu_loop(void * o)
                 }
 
                 pthread_rwlock_rdlock(&local_data.lock);
+
+                e = local_flow_read(fd);
+
                 fd = local_data.in_out[fd];
-                pthread_rwlock_unlock(&local_data.lock);
 
                 if (fd != -1)
-                        local_flow_write(fd, &e);
+                        local_flow_write(fd, e);
 
+                pthread_rwlock_unlock(&local_data.lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
+
+                free(e);
         }
 
         return (void *) 1;
@@ -209,8 +217,6 @@ static int ipcp_local_flow_alloc_resp(int fd, int response)
         int out_fd = -1;
         int ret = -1;
 
-        LOG_DBG("Received response for fd %d: %d.", fd, response);
-
         if (response)
                 return 0;
 
@@ -235,24 +241,21 @@ static int ipcp_local_flow_alloc_resp(int fd, int response)
 
 static int ipcp_local_flow_dealloc(int fd)
 {
-        int out_fd = -1;
+        struct timespec t = {0, 10000};
+
+        if (fd < 0)
+                return -EINVAL;
+
+        while (flow_dealloc(fd) == -EBUSY)
+                nanosleep(&t, NULL);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&local_data.lock);
-
-        out_fd = local_data.in_out[fd];
-
-        if (out_fd != -1) {
-                local_data.in_out[out_fd] = -1;
-                flow_dealloc(out_fd);
-        }
 
         local_data.in_out[fd] = -1;
 
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        flow_dealloc(fd);
 
         LOG_INFO("Flow with fd %d deallocated.", fd);
 
