@@ -747,7 +747,8 @@ struct flow_set * flow_set_create()
                 return NULL;
         }
 
-        memset(&set->b, 0, sizeof(set->b));
+        memset(set->b, 0, IRMD_MAX_FLOWS);
+        memset(set->s, 0, IRMD_MAX_FLOWS);
 
         set->dirty = true;
 
@@ -757,7 +758,7 @@ struct flow_set * flow_set_create()
 void flow_set_zero(struct flow_set * set)
 {
         pthread_rwlock_wrlock(&set->lock);
-        memset(&set->b, 0, sizeof(set->b));
+        memset(set->b, 0, IRMD_MAX_FLOWS);
         set->dirty = true;
         pthread_rwlock_unlock(&set->lock);
 }
