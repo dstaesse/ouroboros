@@ -24,6 +24,7 @@
 #include "ipcp.h"
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/fcntl.h>
 #include <ouroboros/select.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
@@ -252,6 +253,7 @@ static int ipcp_local_flow_dealloc(int fd)
         pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&local_data.lock);
 
+        flow_cntl(local_data.in_out[fd], FLOW_F_SETFL, FLOW_O_WRONLY);
         local_data.in_out[fd] = -1;
 
         pthread_rwlock_unlock(&local_data.lock);

@@ -561,6 +561,7 @@ int flow_dealloc(int fd)
         ai.flows[fd].port_id = -1;
         shm_ap_rbuff_close(ai.flows[fd].rb);
         ai.flows[fd].rb = NULL;
+        ai.flows[fd].oflags = 0;
         ai.flows[fd].api = -1;
         if (ai.flows[fd].timeout != NULL) {
                 free(ai.flows[fd].timeout);
@@ -602,6 +603,10 @@ int flow_cntl(int fd, int cmd, int oflags)
                 return old;
         case FLOW_F_SETFL: /* SET FLOW FLAGS */
                 ai.flows[fd].oflags = oflags;
+                if (oflags & FLOW_O_WRONLY)
+                        shm_ap_rbuff_close_port(ai.rb, ai.flows[fd].port_id);
+                if (oflags & FLOW_O_RDWR)
+                        shm_ap_rbuff_open_port(ai.rb, ai.flows[fd].port_id);
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 return old;
@@ -630,6 +635,12 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
+        }
+
+        if (ai.flows[fd].oflags & FLOW_O_RDONLY) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -EPERM;
         }
 
         if (ai.flows[fd].oflags & FLOW_O_NONBLOCK) {
@@ -1077,6 +1088,12 @@ int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
+
+        if (ai.flows[fd].oflags & FLOW_O_RDONLY) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -EPERM;
+        }
 
         if (ai.flows[fd].rb == NULL) {
                 pthread_rwlock_unlock(&ai.flows_lock);
