@@ -47,7 +47,7 @@ void                  shm_ap_rbuff_destroy(struct shm_ap_rbuff * rb);
 void                  shm_ap_rbuff_open_port(struct shm_ap_rbuff * rb,
                                              int                   port_id);
 
-void                  shm_ap_rbuff_close_port(struct shm_ap_rbuff * rb,
+int                   shm_ap_rbuff_close_port(struct shm_ap_rbuff * rb,
                                               int                   port_id);
 
 int                   shm_ap_rbuff_write(struct shm_ap_rbuff * rb,
