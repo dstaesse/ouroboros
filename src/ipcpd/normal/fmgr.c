@@ -389,6 +389,16 @@ int fmgr_np1_alloc(int           fd,
         buffer_t buf;
         flow_alloc_msg_t msg = FLOW_ALLOC_MSG__INIT;
 
+        pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+        if (ipcp_get_state() != IPCP_ENROLLED) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("IPCP is not enrolled yet.");
+                return -1; /* -ENOTINIT */
+        }
+
+        pthread_rwlock_unlock(&ipcpi.state_lock);
+
         /* FIXME: Obtain correct address here from DIF NSM */
 
         msg.code = FLOW_ALLOC_CODE__FLOW_REQ;
