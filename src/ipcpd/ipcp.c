@@ -323,9 +323,9 @@ void * ipcp_main_loop(void * o)
                         ret_msg.has_result = true;
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc(fd,
-                                                            msg->dst_name,
-                                                            msg->src_ae_name,
-                                                            msg->qos_cube);
+                                                           msg->dst_name,
+                                                           msg->src_ae_name,
+                                                           msg->qos_cube);
                         if (ret_msg.result < 0) {
                                 LOG_DBG("Deallocate failed on port_id %d.",
                                         msg->port_id);

@@ -55,20 +55,21 @@ void * reader(void * o)
         struct timespec timeout = {2, 0};
         struct timespec now = {0, 0};
 
-        struct oping_msg * msg;
         char buf[OPING_BUF_SIZE];
+        struct oping_msg * msg = (struct oping_msg *) buf;
         int fd = 0;
         int msg_len = 0;
         float ms = 0;
         float d = 0;
-
-        msg = (struct oping_msg *) buf;
+        fqueue_t * fq = fqueue_create();
+        if (fq == NULL)
+                return (void *) 1;
 
         /* FIXME: use flow timeout option once we have it */
-        while(client.rcvd != client.count &&
-              (fd = flow_select(NULL, &timeout)) != -ETIMEDOUT) {
-                flow_cntl(fd, FLOW_F_SETFL, FLOW_O_NONBLOCK);
-                while (!((msg_len = flow_read(fd, buf, OPING_BUF_SIZE)) < 0)) {
+        while (client.rcvd != client.count
+               && flow_event_wait(client.flows, fq, &timeout) != -ETIMEDOUT) {
+                while ((fd = fqueue_next(fq)) >= 0) {
+                        msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
                         if (msg_len < 0)
                                 continue;
 
@@ -165,11 +166,19 @@ int client_main()
         struct timespec tic;
         struct timespec toc;
 
-        int fd = flow_alloc(client.s_apn, NULL, NULL);
+        int fd;
+
+        client.flows = flow_set_create();
+        if (client.flows == NULL)
+                return 0;
+
+        fd = flow_alloc(client.s_apn, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 return -1;
         }
+
+        flow_set_add(client.flows, fd);
 
         if (flow_alloc_res(fd)) {
                 printf("Flow allocation refused.\n");

@@ -47,7 +47,4 @@ int  ipcp_flow_write(int                  fd,
 
 void ipcp_flow_del(struct shm_du_buff * sdb);
 
-/* returns flow descriptor and du buff */
-int  ipcp_read_shim(struct shm_du_buff ** sdb);
-
 #endif /* OUROBOROS_IPCP_DEV_H */

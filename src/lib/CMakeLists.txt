@@ -35,7 +35,8 @@ set(SOURCE_FILES
   lockfile.c
   logs.c
   nsm.c
-  shm_ap_rbuff.c
+  shm_flow_set.c
+  shm_rbuff.c
   shm_rdrbuff.c
   sockets.c
   time_utils.c

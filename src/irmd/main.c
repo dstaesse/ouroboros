@@ -28,7 +28,7 @@
 #include <ouroboros/utils.h>
 #include <ouroboros/irm_config.h>
 #include <ouroboros/lockfile.h>
-#include <ouroboros/shm_ap_rbuff.h>
+#include <ouroboros/shm_rbuff.h>
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/qos.h>
@@ -1692,26 +1692,26 @@ void * irm_sanitize()
                         }
 
                         if (kill(f->n_api, 0) < 0) {
-                                struct shm_ap_rbuff * rb =
-                                        shm_ap_rbuff_open(f->n_api);
+                                struct shm_rbuff * rb =
+                                        shm_rbuff_open(f->n_api, f->port_id);
                                 bmp_release(irmd->port_ids, f->port_id);
                                 list_del(&f->next);
                                 LOG_INFO("AP-I %d gone, flow %d deallocated.",
                                          f->n_api, f->port_id);
                                 ipcp_flow_dealloc(f->n_1_api, f->port_id);
                                 if (rb != NULL)
-                                        shm_ap_rbuff_destroy(rb);
+                                        shm_rbuff_destroy(rb);
                                 irm_flow_destroy(f);
                                 continue;
                         }
                         if (kill(f->n_1_api, 0) < 0) {
-                                struct shm_ap_rbuff * rb =
-                                        shm_ap_rbuff_open(f->n_1_api);
+                                struct shm_rbuff * rb =
+                                        shm_rbuff_open(f->n_1_api, f->port_id);
                                 list_del(&f->next);
                                 LOG_ERR("IPCP %d gone, flow %d removed.",
                                         f->n_1_api, f->port_id);
                                 if (rb != NULL)
-                                        shm_ap_rbuff_destroy(rb);
+                                        shm_rbuff_destroy(rb);
                                 irm_flow_destroy(f);
                         }
                 }

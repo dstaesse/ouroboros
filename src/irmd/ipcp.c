@@ -111,6 +111,7 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
         char * full_name = NULL;
         char * exec_name = NULL;
         char * log_file = NULL;
+        char * argv[4];
 
         sprintf(irmd_api, "%u", getpid());
 
@@ -161,14 +162,12 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
         }
 
         /* log_file to be placed at the end */
-        char * argv[] = {full_name,
-                         irmd_api,
-                         log_file,
-                         0};
+        argv[0] = full_name;
+        argv[1] = irmd_api;
+        argv[2] = log_file;
+        argv[3] = NULL;
 
-        char * envp[] = {0};
-
-        execve(argv[0], &argv[0], envp);
+        execv(argv[0], &argv[0]);
 
         LOG_DBG("%s", strerror(errno));
         LOG_ERR("Failed to load IPCP daemon");

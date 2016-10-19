@@ -23,7 +23,7 @@
 
 #define _POSIX_C_SOURCE 199506L
 
-#include <ouroboros/select.h>
+#include <ouroboros/fqueue.h>
 #include <ouroboros/dev.h>
 
 #include <stdio.h>
@@ -52,6 +52,8 @@ struct c {
         float  rtt_max;
         float  rtt_avg;
         float  rtt_m2;
+
+        flow_set_t * flows;
 
         /* needs locking */
         struct timespec * times;
