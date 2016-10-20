@@ -68,7 +68,7 @@ struct shm_rbuff {
         int               port_id;  /* port_id of the flow           */
 };
 
-struct shm_rbuff * shm_rbuff_create(int port_id)
+struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
 {
         struct shm_rbuff *  rb;
         int                 shm_fd;
@@ -78,7 +78,7 @@ struct shm_rbuff * shm_rbuff_create(int port_id)
         char                fn[FN_MAX_CHARS];
         mode_t              mask;
 
-        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", getpid(), port_id);
+        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", api, port_id);
 
         rb = malloc(sizeof(*rb));
         if (rb == NULL) {
@@ -148,8 +148,11 @@ struct shm_rbuff * shm_rbuff_create(int port_id)
         *rb->head = 0;
         *rb->tail = 0;
 
-        rb->api = getpid();
+        rb->api = api;
         rb->port_id = port_id;
+
+        if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
+                LOG_DBG("Couldn't unmap shared memory.");
 
         return rb;
 }
@@ -221,36 +224,14 @@ void shm_rbuff_close(struct shm_rbuff * rb)
 void shm_rbuff_destroy(struct shm_rbuff * rb)
 {
         char fn[25];
-        struct lockfile * lf = NULL;
 
-        assert(rb);
-
-        if (rb->api != getpid()) {
-                lf = lockfile_open();
-                if (lf == NULL) {
-                        LOG_ERR("Failed to open lockfile.");
-                        return;
-                }
-
-                if (lockfile_owner(lf) == getpid()) {
-                        LOG_DBG("Ringbuffer %d destroyed by IRMd %d.",
-                                 rb->api, getpid());
-                        lockfile_close(lf);
-                } else {
-                        LOG_ERR("AP-I %d tried to destroy rbuff owned by %d.",
-                                getpid(), rb->api);
-                        lockfile_close(lf);
-                        return;
-                }
-        }
+        if (rb == NULL)
+                return;
 
         sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->api, rb->port_id);
 
-        if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
-                LOG_DBG("Couldn't unmap shared memory.");
-
         if (shm_unlink(fn) == -1)
-                LOG_DBG("Failed to unlink shm.");
+                LOG_DBG("Failed to unlink shm %s.", fn);
 
         free(rb);
 }

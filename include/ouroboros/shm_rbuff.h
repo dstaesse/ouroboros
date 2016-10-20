@@ -28,7 +28,7 @@
 
 struct shm_rbuff;
 
-struct shm_rbuff * shm_rbuff_create(int port_id);
+struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id);
 
 struct shm_rbuff * shm_rbuff_open(pid_t api, int port_id);
 

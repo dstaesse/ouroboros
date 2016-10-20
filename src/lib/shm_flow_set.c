@@ -315,7 +315,6 @@ int shm_flow_set_has(struct shm_flow_set * shm_set,
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
         assert(!(idx < 0) && idx < AP_MAX_FQUEUES);
 
-
         pthread_mutex_lock(shm_set->lock);
 
         if (shm_set->mtable[port_id] == idx)

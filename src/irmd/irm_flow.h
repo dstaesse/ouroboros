@@ -24,6 +24,7 @@
 #define OUROBOROS_IRMD_IRM_FLOW_H
 
 #include <ouroboros/list.h>
+#include <ouroboros/shm_rbuff.h>
 
 #include <sys/types.h>
 #include <pthread.h>
@@ -38,18 +39,21 @@ enum flow_state {
 };
 
 struct irm_flow {
-        struct list_head next;
+        struct list_head   next;
 
-        int              port_id;
+        int                port_id;
 
-        pid_t            n_api;
-        pid_t            n_1_api;
+        pid_t              n_api;
+        pid_t              n_1_api;
 
-        struct timespec  t0;
+        struct shm_rbuff * n_rb;
+        struct shm_rbuff * n_1_rb;
 
-        enum flow_state  state;
-        pthread_cond_t   state_cond;
-        pthread_mutex_t  state_lock;
+        struct timespec    t0;
+
+        enum flow_state    state;
+        pthread_cond_t     state_cond;
+        pthread_mutex_t    state_lock;
 };
 
 struct irm_flow * irm_flow_create();

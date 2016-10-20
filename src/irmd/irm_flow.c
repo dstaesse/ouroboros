@@ -36,6 +36,9 @@ struct irm_flow * irm_flow_create()
         f->n_api   = -1;
         f->n_1_api = -1;
         f->port_id = -1;
+        f->n_rb    = NULL;
+        f->n_1_rb  = NULL;
+
         f->state   = FLOW_NULL;
 
         if (pthread_cond_init(&f->state_cond, NULL)) {
@@ -77,6 +80,9 @@ void irm_flow_destroy(struct irm_flow * f)
 
         pthread_cond_destroy(&f->state_cond);
         pthread_mutex_destroy(&f->state_lock);
+
+        shm_rbuff_destroy(f->n_rb);
+        shm_rbuff_destroy(f->n_1_rb);
 
         free(f);
 }

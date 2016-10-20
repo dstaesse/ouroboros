@@ -288,7 +288,7 @@ void ap_fini()
                         int idx;
                         while ((idx = shm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
                                 shm_rdrbuff_remove(ai.rdrb, idx);
-                        shm_rbuff_destroy(ai.flows[i].rx_rb);
+                        shm_rbuff_close(ai.flows[i].rx_rb);
                         shm_rbuff_close(ai.flows[i].tx_rb);
                         shm_flow_set_close(ai.flows[i].set);
                 }
@@ -349,7 +349,7 @@ int flow_accept(char ** ae_name)
                 return -1;
         }
 
-        ai.flows[fd].rx_rb = shm_rbuff_create(recv_msg->port_id);
+        ai.flows[fd].rx_rb = shm_rbuff_open(ai.api, recv_msg->port_id);
         if (ai.flows[fd].rx_rb == NULL) {
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
@@ -361,7 +361,7 @@ int flow_accept(char ** ae_name)
         ai.flows[fd].set = shm_flow_set_open(recv_msg->api);
         if (ai.flows[fd].set == NULL) {
                 bmp_release(ai.fds, fd);
-                shm_rbuff_destroy(ai.flows[fd].rx_rb);
+                shm_rbuff_close(ai.flows[fd].rx_rb);
                 shm_rbuff_close(ai.flows[fd].tx_rb);
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
@@ -373,7 +373,7 @@ int flow_accept(char ** ae_name)
         if (ae_name != NULL) {
                 *ae_name = strdup(recv_msg->ae_name);
                 if (*ae_name == NULL) {
-                        shm_rbuff_destroy(ai.flows[fd].tx_rb);
+                        shm_rbuff_close(ai.flows[fd].tx_rb);
                         shm_rbuff_close(ai.flows[fd].tx_rb);
                         shm_flow_set_close(ai.flows[fd].set);
                         bmp_release(ai.fds, fd);
@@ -508,29 +508,8 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
         ai.flows[fd].port_id = recv_msg->port_id;
         ai.flows[fd].oflags  = FLOW_O_DEFAULT;
         ai.flows[fd].api     = recv_msg->api;
-        ai.flows[fd].rx_rb   = shm_rbuff_create(recv_msg->port_id);
+        ai.flows[fd].rx_rb   = shm_rbuff_open(ai.api, recv_msg->port_id);
         if (ai.flows[fd].rx_rb == NULL) {
-                bmp_release(ai.fds, fd);
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
-        }
-
-        ai.flows[fd].tx_rb   = shm_rbuff_open(recv_msg->api, recv_msg->port_id);
-        if (ai.flows[fd].tx_rb == NULL) {
-                shm_rbuff_destroy(ai.flows[fd].rx_rb);
-                bmp_release(ai.fds, fd);
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
-        }
-
-        ai.flows[fd].set = shm_flow_set_open(recv_msg->api);
-        if (ai.flows[fd].set == NULL) {
-                shm_rbuff_close(ai.flows[fd].tx_rb);
-                shm_rbuff_destroy(ai.flows[fd].rx_rb);
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
@@ -572,6 +551,23 @@ int flow_alloc_res(int fd)
 
         msg.port_id = ai.flows[fd].port_id;
 
+        ai.flows[fd].tx_rb = shm_rbuff_open(ai.flows[fd].api,
+                                            ai.flows[fd].port_id);
+        if (ai.flows[fd].tx_rb == NULL) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        ai.flows[fd].set = shm_flow_set_open(ai.flows[fd].api);
+        if (ai.flows[fd].set == NULL) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
 
@@ -599,7 +595,7 @@ int flow_dealloc(int fd)
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_port_id  = true;
         msg.has_api      = true;
-        msg.api          = getpid();
+        msg.api          = ai.api;
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
@@ -621,7 +617,7 @@ int flow_dealloc(int fd)
         port_destroy(&ai.ports[msg.port_id]);
 
         ai.flows[fd].port_id = -1;
-        shm_rbuff_destroy(ai.flows[fd].rx_rb);
+        shm_rbuff_close(ai.flows[fd].rx_rb);
         ai.flows[fd].rx_rb = NULL;
         shm_rbuff_close(ai.flows[fd].tx_rb);
         ai.flows[fd].tx_rb = NULL;
@@ -990,7 +986,7 @@ int np1_flow_alloc(pid_t n_api, int port_id)
                 return -1;
         }
 
-        ai.flows[fd].rx_rb = shm_rbuff_create(port_id);
+        ai.flows[fd].rx_rb = shm_rbuff_open(ai.api, port_id);
         if (ai.flows[fd].rx_rb == NULL) {
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
@@ -1046,7 +1042,7 @@ int np1_flow_resp(pid_t n_api, int port_id)
         ai.flows[fd].tx_rb = shm_rbuff_open(n_api, port_id);
         if (ai.flows[fd].tx_rb == NULL) {
                 ai.flows[fd].port_id = -1;
-                shm_rbuff_destroy(ai.flows[fd].rx_rb);
+                shm_rbuff_close(ai.flows[fd].rx_rb);
                 port_destroy(&ai.ports[port_id]);
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
@@ -1057,7 +1053,7 @@ int np1_flow_resp(pid_t n_api, int port_id)
         if (ai.flows[fd].set == NULL) {
                 shm_rbuff_close(ai.flows[fd].tx_rb);
                 ai.flows[fd].port_id = -1;
-                shm_rbuff_destroy(ai.flows[fd].rx_rb);
+                shm_rbuff_close(ai.flows[fd].rx_rb);
                 port_destroy(&ai.ports[port_id]);
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
@@ -1143,7 +1139,7 @@ int ipcp_flow_req_arr(pid_t  api, char * dst_name, char * src_ae_name)
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
-        ai.flows[fd].rx_rb = shm_rbuff_create(port_id);
+        ai.flows[fd].rx_rb = shm_rbuff_open(ai.api, port_id);
         if (ai.flows[fd].rx_rb == NULL) {
                 ai.flows[fd].port_id = -1;
                 port_destroy(&ai.ports[port_id]);
