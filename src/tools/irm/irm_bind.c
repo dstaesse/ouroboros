@@ -36,6 +36,9 @@ static void usage()
 
 static int do_help(int argc, char **argv)
 {
+        (void) argc;
+        (void) argv;
+
         usage();
         return 0;
 }

@@ -26,6 +26,9 @@ int nsm_reg(char * name,
             char ** dafs,
             size_t dafs_size)
 {
+        (void) name;
+        (void) dafs;
+        (void) dafs_size;
 
         return -1;
 }
@@ -34,6 +37,10 @@ int nsm_unreg(char * name,
               char ** dafs,
               size_t dafs_size)
 {
+        (void) name;
+        (void) dafs;
+        (void) dafs_size;
+
 
         return -1;
 }
@@ -41,5 +48,8 @@ int nsm_unreg(char * name,
 ssize_t nsm_resolve(char * name,
                     char ** dafs)
 {
+        (void) name;
+        (void) dafs;
+
         return -1;
 }

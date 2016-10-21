@@ -39,6 +39,9 @@
 
 void shutdown_client(int signo, siginfo_t * info, void * c)
 {
+        (void) info;
+        (void) c;
+
         switch(signo) {
         case SIGINT:
         case SIGTERM:
@@ -65,6 +68,8 @@ void * reader(void * o)
         if (fq == NULL)
                 return (void *) 1;
 
+        (void) o;
+
         /* FIXME: use flow timeout option once we have it */
         while (client.rcvd != client.count
                && flow_event_wait(client.flows, fq, &timeout) != -ETIMEDOUT) {
@@ -78,7 +83,7 @@ void * reader(void * o)
                                 continue;
                         }
 
-                        if (ntohl(msg->id) >= client.count) {
+                        if ((int) ntohl(msg->id) >= client.count) {
                                 printf("Invalid id.\n");
                                 continue;
                         }

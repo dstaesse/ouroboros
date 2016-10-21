@@ -48,6 +48,9 @@ pthread_cond_t  fds_signal;
 
 void shutdown_server(int signo, siginfo_t * info, void * c)
 {
+        (void) info;
+        (void) c;
+
         switch(signo) {
         case SIGINT:
         case SIGTERM:
@@ -124,6 +127,8 @@ void * worker(void * o)
 {
         int cli_fd;
 
+        (void) o;
+
         while (true) {
                 pthread_mutex_lock(&fds_lock);
                 pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
@@ -150,6 +155,8 @@ void * listener(void * o)
 {
         int client_fd = 0;
         int response = 0;
+
+        (void) o;
 
         printf("Server started, interval is %ld s, timeout is %ld s.\n",
                server_settings.interval, server_settings.timeout);

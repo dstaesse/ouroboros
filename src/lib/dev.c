@@ -467,6 +467,9 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
         irm_msg_t * recv_msg = NULL;
         int fd = -1;
 
+        /*  FIXME: add qos support */
+        (void) qos;
+
         if (dst_name == NULL)
                 return -EINVAL;
 
@@ -756,7 +759,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
 ssize_t flow_read(int fd, void * buf, size_t count)
 {
         int idx = -1;
-        int n;
+        ssize_t n;
         uint8_t * sdu;
 
         if (fd < 0 || fd >= AP_MAX_FLOWS)
@@ -794,7 +797,7 @@ ssize_t flow_read(int fd, void * buf, size_t count)
                 return -1;
         }
 
-        memcpy(buf, sdu, MIN(n, count));
+        memcpy(buf, sdu, MIN(n, (ssize_t) count));
 
         shm_rdrbuff_remove(ai.rdrb, idx);
 

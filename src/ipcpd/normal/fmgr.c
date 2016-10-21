@@ -126,6 +126,8 @@ static void * fmgr_nm1_acceptor(void * o)
         int    fd;
         char * ae_name;
 
+        (void) o;
+
         while (true) {
                 ipcp_wait_state(IPCP_ENROLLED, NULL);
 
@@ -190,6 +192,8 @@ static void * fmgr_np1_sdu_reader(void * o)
         if (fq == NULL)
                 return (void *) 1;
 
+        (void) o;
+
         while (true) {
                 int ret = flow_event_wait(fmgr.np1_set, fq, &timeout);
                 if (ret == -ETIMEDOUT)
@@ -240,6 +244,9 @@ void * fmgr_nm1_sdu_reader(void * o)
         fqueue_t * fq = fqueue_create();
         if (fq == NULL)
                 return (void *) 1;
+
+        (void) o;
+
         while (true) {
                 int ret = flow_event_wait(fmgr.nm1_set, fq, &timeout);
                 if (ret == -ETIMEDOUT)

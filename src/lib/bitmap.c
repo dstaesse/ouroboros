@@ -158,7 +158,7 @@ ssize_t bmp_allocate(struct bmp * b)
         id = (ssize_t) find_next_zero_bit(b->bitmap,
                                           b->size);
 
-        if (id >= b->size)
+        if (id >= (ssize_t) b->size)
                 return bad_id(b);
 
         bitmap_set(b->bitmap, id);
@@ -171,7 +171,7 @@ static bool is_id_valid(struct bmp * b,
 {
         assert(b);
 
-        if ((id < b->offset) || (id > (b->offset + b->size)))
+        if ((id < b->offset) || (id > (ssize_t) (b->offset + b->size)))
                 return false;
 
         return true;

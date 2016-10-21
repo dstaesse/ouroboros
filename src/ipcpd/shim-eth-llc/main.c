@@ -415,7 +415,7 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
 
 }
 
-static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap, uint8_t * r_addr)
+static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap)
 {
         int fd = -1;
 
@@ -462,7 +462,7 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf, size_t len, uint8_t * r_addr)
                                              msg->response);
                 break;
         case SHIM_ETH_LLC_MSG_CODE__FLOW_DEALLOC:
-                eth_llc_ipcp_flow_dealloc_req(msg->ssap, r_addr);
+                eth_llc_ipcp_flow_dealloc_req(msg->ssap);
                 break;
         default:
                 LOG_ERR("Unknown message received %d.", msg->code);
@@ -491,6 +491,8 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         int frame_len = 0;
 #endif
         struct eth_llc_frame * llc_frame;
+
+        (void) o;
 
         memset(br_addr, 0xff, MAC_SIZE * sizeof(uint8_t));
 
@@ -608,6 +610,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
         if (fq == NULL)
                 return (void *) 1;
 
+        (void) o;
+
         while (true) {
                 int ret = flow_event_wait(eth_llc_data.np1_flows, fq, &timeout);
                 if (ret == -ETIMEDOUT)
@@ -648,6 +652,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
 
 void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 {
+        (void) c;
+
         switch(sig) {
         case SIGINT:
         case SIGTERM:
@@ -903,7 +909,7 @@ static int eth_llc_ipcp_flow_alloc(int           fd,
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         ssap = bmp_allocate(eth_llc_data.saps);
-        if (ssap < 0) {
+        if (!bmp_is_id_valid(eth_llc_data.saps, ssap)) {
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
@@ -945,7 +951,7 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd, int response)
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         ssap = bmp_allocate(eth_llc_data.saps);
-        if (ssap < 0) {
+        if (!bmp_is_id_valid(eth_llc_data.saps, ssap)) {
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;

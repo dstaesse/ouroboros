@@ -80,6 +80,8 @@ static void * ipcp_local_sdu_loop(void * o)
         if (fq == NULL)
                 return (void *) 1;
 
+        (void) o;
+
         while (true) {
                 int fd;
                 int ret;
@@ -121,6 +123,8 @@ static void * ipcp_local_sdu_loop(void * o)
 
 void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 {
+        (void) c;
+
         switch(sig) {
         case SIGINT:
         case SIGTERM:
@@ -203,6 +207,9 @@ static int ipcp_local_flow_alloc(int           fd,
                                  enum qos_cube qos)
 {
         int out_fd = -1;
+
+        /* FIXME: support qos */
+        (void) qos;
 
         LOG_DBG("Allocating flow to %s on fd %d.", dst_name, fd);
 

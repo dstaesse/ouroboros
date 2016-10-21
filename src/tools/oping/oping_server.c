@@ -31,6 +31,9 @@
 
 void shutdown_server(int signo, siginfo_t * info, void * c)
 {
+        (void) info;
+        (void) c;
+
         switch(signo) {
         case SIGINT:
         case SIGTERM:
@@ -46,6 +49,8 @@ void * cleaner_thread(void * o)
         int i = 0;
         struct timespec now = {0, 0};
         int deadline_ms = 10000;
+
+        (void) o;
 
         while (true) {
                 clock_gettime(CLOCK_REALTIME, &now);
@@ -73,6 +78,8 @@ void * server_thread(void *o)
         fqueue_t * fq = fqueue_create();
         if (fq == NULL)
                 return (void *) 1;
+
+        (void) o;
 
         while (true) {
                 int ret = flow_event_wait(server.flows, fq, &timeout);
@@ -116,6 +123,8 @@ void * accept_thread(void * o)
 {
         int fd = 0;
         struct timespec now = {0, 0};
+
+        (void) o;
 
         printf("Ouroboros ping server started.\n");
 

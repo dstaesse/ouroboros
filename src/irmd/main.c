@@ -729,7 +729,7 @@ static ssize_t list_ipcps(char * name, pid_t ** apis)
 
 static int name_reg(char *  name, char ** difs, size_t  len)
 {
-        int i;
+        size_t i;
         int ret = 0;
         struct list_head * p = NULL;
 
@@ -829,7 +829,7 @@ static int name_reg(char *  name, char ** difs, size_t  len)
 
 static int name_unreg(char *  name, char ** difs, size_t  len)
 {
-        int i;
+        size_t i;
         int ret = 0;
         struct list_head * pos = NULL;
 
@@ -1127,6 +1127,7 @@ static struct irm_flow * flow_alloc(pid_t  api,
         int port_id;
 
         /* FIXME: Map qos_spec to qos_cube */
+        (void) qos;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
 
@@ -1630,6 +1631,9 @@ static void irm_destroy()
 
 void irmd_sig_handler(int sig, siginfo_t * info, void * c)
 {
+        (void) info;
+        (void) c;
+
         switch(sig) {
         case SIGINT:
         case SIGTERM:

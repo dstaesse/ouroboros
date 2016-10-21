@@ -689,7 +689,7 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
 
         idx_to_du_buff_ptr(rdrb, idx)->dst_api = -1;
 
-        if (idx != *rdrb->ptr_tail) {
+        if (idx != (ssize_t) *rdrb->ptr_tail) {
                 pthread_mutex_unlock(rdrb->lock);
                 return 0;
         }

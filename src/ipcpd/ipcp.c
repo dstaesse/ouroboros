@@ -189,6 +189,8 @@ void * ipcp_main_loop(void * o)
         struct timeval ltv = {(SOCKET_TIMEOUT / 1000),
                              (SOCKET_TIMEOUT % 1000) * 1000};
 
+        (void) o;
+
         sock_path = ipcp_sock_path(getpid());
         if (sock_path == NULL)
                 return (void *) 1;

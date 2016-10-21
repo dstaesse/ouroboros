@@ -524,6 +524,8 @@ static void * ipcp_udp_sdu_loop(void * o)
         if (fq == NULL)
                 return (void *) 1;
 
+        (void) o;
+
         while (true) {
                 int ret = flow_event_wait(udp_data.np1_flows, fq, &timeout);
                 if (ret == -ETIMEDOUT)
@@ -563,6 +565,8 @@ static void * ipcp_udp_sdu_loop(void * o)
 
 void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 {
+        (void) c;
+
         switch(sig) {
         case SIGINT:
         case SIGTERM:
