@@ -34,11 +34,11 @@ struct fqueue;
 typedef struct flow_set flow_set_t;
 typedef struct fqueue fqueue_t;
 
-flow_set_t * flow_set_create();
+flow_set_t * flow_set_create(void);
 
 void         flow_set_destroy(flow_set_t * set);
 
-fqueue_t *   fqueue_create();
+fqueue_t *   fqueue_create(void);
 
 void         fqueue_destroy(struct fqueue * fq);
 

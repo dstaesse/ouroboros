@@ -23,7 +23,7 @@
 #include <ouroboros/dev.h>
 #include <stdlib.h>
 
-int client_main()
+int client_main(void)
 {
         int fd = 0;
         int result = 0;

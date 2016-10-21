@@ -46,7 +46,7 @@
 #define DEFAULT_MAX_PDU_SIZE 9000
 #define DEFAULT_DDNS 0
 
-static void usage()
+static void usage(void)
 {
         /* FIXME: Add dif_config stuff */
         printf("Usage: irm ipcp bootstrap\n"

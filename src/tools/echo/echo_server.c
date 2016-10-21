@@ -35,7 +35,7 @@ void shutdown_server(int signo)
         exit(EXIT_SUCCESS);
 }
 
-int server_main()
+int server_main(void)
 {
         int    client_fd = 0;
         char   buf[BUF_SIZE];

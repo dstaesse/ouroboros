@@ -107,7 +107,7 @@ void * server_thread(void *o)
                         server.times[fd] = now;
                         pthread_mutex_unlock(&server.lock);
 
-                        msg->type = htonl((uint32_t) ECHO_REPLY);
+                        msg->type = htonl(ECHO_REPLY);
 
                         if (flow_write(fd, buf, msg_len) < 0) {
                                 printf("Error writing to flow (fd %d).\n", fd);
@@ -156,7 +156,7 @@ void * accept_thread(void * o)
         return (void *) 0;
 }
 
-int server_main()
+int server_main(void)
 {
         struct sigaction sig_act;
 

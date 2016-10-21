@@ -41,30 +41,30 @@
 
 #include <ouroboros/logs.h>
 
-#define SHM_BLOCKS_SIZE (SHM_BUFFER_SIZE * SHM_RDRB_BLOCK_SIZE)
-#define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 3 * sizeof (size_t)                   \
+#define SHM_BLOCKS_SIZE ((SHM_BUFFER_SIZE) * SHM_RDRB_BLOCK_SIZE)
+#define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 3 * sizeof(size_t)                    \
                        + sizeof(pthread_mutex_t) + 2 * sizeof(pthread_cond_t)  \
                        + sizeof(pid_t))
 
 #define get_head_ptr(rdrb)                                                     \
-        ((struct shm_du_buff *)(rdrb->shm_base + (*rdrb->ptr_head *            \
-                                                  SHM_RDRB_BLOCK_SIZE)))
+        ((struct shm_du_buff *) (rdrb->shm_base + (*rdrb->ptr_head             \
+                                                   * SHM_RDRB_BLOCK_SIZE)))
 
 #define get_tail_ptr(rdrb)                                                     \
-        ((struct shm_du_buff *)(rdrb->shm_base + (*rdrb->ptr_tail *            \
-                                                  SHM_RDRB_BLOCK_SIZE)))
+        ((struct shm_du_buff *) (rdrb->shm_base + (*rdrb->ptr_tail             \
+                                                   * SHM_RDRB_BLOCK_SIZE)))
 
 #define idx_to_du_buff_ptr(rdrb, idx)                                          \
-        ((struct shm_du_buff *)(rdrb->shm_base + (idx * SHM_RDRB_BLOCK_SIZE)))
+        ((struct shm_du_buff *) (rdrb->shm_base + idx * SHM_RDRB_BLOCK_SIZE))
 
 #define block_ptr_to_idx(rdrb, sdb)                                            \
         (((uint8_t *)sdb - rdrb->shm_base) / SHM_RDRB_BLOCK_SIZE)
 
 #define shm_rdrb_used(rdrb)                                                    \
-        ((*rdrb->ptr_head + SHM_BUFFER_SIZE - *rdrb->ptr_tail)                 \
-         & (SHM_BUFFER_SIZE - 1))
+        ((*rdrb->ptr_head + (SHM_BUFFER_SIZE) - *rdrb->ptr_tail)               \
+         & ((SHM_BUFFER_SIZE) - 1))
 #define shm_rdrb_free(rdrb, i)                                                 \
-        (shm_rdrb_used(rdrb) + i < SHM_BUFFER_SIZE)
+        (shm_rdrb_used(rdrb) + i < (SHM_BUFFER_SIZE))
 
 #define shm_rdrb_empty(rdrb)                                                   \
         (*rdrb->ptr_tail == *rdrb->ptr_head)
@@ -99,11 +99,11 @@ static void garbage_collect(struct shm_rdrbuff * rdrb)
         while (!shm_rdrb_empty(rdrb) &&
                (sdb = get_tail_ptr(rdrb))->dst_api == -1)
                 *rdrb->ptr_tail = (*rdrb->ptr_tail + sdb->blocks)
-                        & (SHM_BUFFER_SIZE - 1);
+                        & ((SHM_BUFFER_SIZE) - 1);
 #else
         while (!shm_rdrb_empty(rdrb) && get_tail_ptr(rdrb)->dst_api == -1)
                 *rdrb->ptr_tail =
-                        (*rdrb->ptr_tail + 1) & (SHM_BUFFER_SIZE - 1);
+                        (*rdrb->ptr_tail + 1) & ((SHM_BUFFER_SIZE) - 1);
 
 #endif
 }
@@ -118,9 +118,9 @@ static void clean_sdus(struct shm_rdrbuff * rdrb, pid_t api)
                 if (buf->dst_api == api)
                         buf->dst_api = -1;
 #ifdef SHM_RDRB_MULTI_BLOCK
-                idx = (idx + buf->blocks) & (SHM_BUFFER_SIZE - 1);
+                idx = (idx + buf->blocks) & ((SHM_BUFFER_SIZE) - 1);
 #else
-                idx = (idx + 1) & (SHM_BUFFER_SIZE - 1);
+                idx = (idx + 1) & ((SHM_BUFFER_SIZE) - 1);
 #endif
         }
 
@@ -131,7 +131,7 @@ static void clean_sdus(struct shm_rdrbuff * rdrb, pid_t api)
 
 static char * rdrb_filename(enum qos_cube qos)
 {
-        int chars = 0;
+        size_t chars = 0;
         char * str;
         int qm = QOS_MAX;
 
@@ -440,10 +440,10 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         struct shm_du_buff * sdb;
         size_t               size = headspace + len + tailspace;
 #ifdef SHM_RDRB_MULTI_BLOCK
-        long                 blocks = 0;
-        long                 padblocks = 0;
+        size_t               blocks = 0;
+        size_t               padblocks = 0;
 #endif
-        int                  sz = size + sizeof *sdb;
+        ssize_t              sz = size + sizeof(*sdb);
         uint8_t *            write_pos;
 
         assert(rdrb);
@@ -469,10 +469,10 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                 ++blocks;
         }
 
-        if (blocks + *rdrb->ptr_head > SHM_BUFFER_SIZE)
-                padblocks = SHM_BUFFER_SIZE - *rdrb->ptr_head;
+        if (blocks + *rdrb->ptr_head > (SHM_BUFFER_SIZE))
+                padblocks = (SHM_BUFFER_SIZE) - *rdrb->ptr_head;
 
-        if (!shm_rdrb_free(rdrb, (blocks + padblocks))) {
+        if (!shm_rdrb_free(rdrb, blocks + padblocks)) {
 #else
         if (!shm_rdrb_free(rdrb, 1)) {
 #endif
@@ -508,9 +508,9 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 
         sdb->idx = *rdrb->ptr_head;
 #ifdef SHM_RDRB_MULTI_BLOCK
-        *rdrb->ptr_head = (*rdrb->ptr_head + blocks) & (SHM_BUFFER_SIZE - 1);
+        *rdrb->ptr_head = (*rdrb->ptr_head + blocks) & ((SHM_BUFFER_SIZE) - 1);
 #else
-        *rdrb->ptr_head = (*rdrb->ptr_head + 1) & (SHM_BUFFER_SIZE - 1);
+        *rdrb->ptr_head = (*rdrb->ptr_head + 1) & ((SHM_BUFFER_SIZE) - 1);
 #endif
         pthread_mutex_unlock(rdrb->lock);
 
@@ -527,10 +527,10 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         struct shm_du_buff * sdb;
         size_t               size = headspace + len + tailspace;
 #ifdef SHM_RDRB_MULTI_BLOCK
-        long                 blocks = 0;
-        long                 padblocks = 0;
+        size_t               blocks = 0;
+        size_t               padblocks = 0;
 #endif
-        int                  sz = size + sizeof *sdb;
+        ssize_t              sz = size + sizeof(*sdb);
         uint8_t *            write_pos;
 
         assert(rdrb);
@@ -550,7 +550,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                 pthread_mutex_consistent(rdrb->lock);
         }
 #endif
-        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
+        pthread_cleanup_push((void (*) (void *)) pthread_mutex_unlock,
                              (void *) rdrb->lock);
 
 #ifdef SHM_RDRB_MULTI_BLOCK
@@ -559,8 +559,8 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                 ++blocks;
         }
 
-        if (blocks + *rdrb->ptr_head > SHM_BUFFER_SIZE)
-                padblocks = SHM_BUFFER_SIZE - *rdrb->ptr_head;
+        if (blocks + *rdrb->ptr_head > (SHM_BUFFER_SIZE))
+                padblocks = (SHM_BUFFER_SIZE) - *rdrb->ptr_head;
 
         while (!shm_rdrb_free(rdrb, (blocks + padblocks))) {
 #else
@@ -597,27 +597,26 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
 
         sdb->idx = *rdrb->ptr_head;
 #ifdef SHM_RDRB_MULTI_BLOCK
-        *rdrb->ptr_head = (*rdrb->ptr_head + blocks) & (SHM_BUFFER_SIZE - 1);
+        *rdrb->ptr_head = (*rdrb->ptr_head + blocks) & ((SHM_BUFFER_SIZE) - 1);
 #else
-        *rdrb->ptr_head = (*rdrb->ptr_head + 1) & (SHM_BUFFER_SIZE - 1);
+        *rdrb->ptr_head = (*rdrb->ptr_head + 1) & ((SHM_BUFFER_SIZE) - 1);
 #endif
         pthread_cleanup_pop(true);
 
         return sdb->idx;
 }
 
-int shm_rdrbuff_read(uint8_t **           dst,
-                     struct shm_rdrbuff * rdrb,
-                     ssize_t              idx)
+ssize_t shm_rdrbuff_read(uint8_t **           dst,
+                         struct shm_rdrbuff * rdrb,
+                         size_t               idx)
 {
-        size_t len = 0;
+        ssize_t len = 0;
         struct shm_du_buff * sdb;
 
         assert(dst);
         assert(rdrb);
+        assert(idx < (SHM_BUFFER_SIZE));
 
-        if (idx > SHM_BUFFER_SIZE)
-                return -1;
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
@@ -632,7 +631,7 @@ int shm_rdrbuff_read(uint8_t **           dst,
         }
 
         sdb = idx_to_du_buff_ptr(rdrb, idx);
-        len = sdb->du_tail - sdb->du_head;
+        len = (ssize_t) (sdb->du_tail - sdb->du_head);
         *dst = ((uint8_t *) (sdb + 1)) + sdb->du_head;
 
         pthread_mutex_unlock(rdrb->lock);
@@ -640,14 +639,13 @@ int shm_rdrbuff_read(uint8_t **           dst,
         return len;
 }
 
-struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, ssize_t idx)
+struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, size_t idx)
 {
         struct shm_du_buff * sdb;
 
         assert(rdrb);
+        assert(idx < (SHM_BUFFER_SIZE));
 
-        if (idx > SHM_BUFFER_SIZE)
-                return NULL;
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
@@ -668,12 +666,11 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, ssize_t idx)
         return sdb;
 }
 
-int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
+int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, size_t idx)
 {
         assert(rdrb);
+        assert(idx < (SHM_BUFFER_SIZE));
 
-        if (idx > SHM_BUFFER_SIZE)
-                return -1;
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
@@ -689,7 +686,7 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, ssize_t idx)
 
         idx_to_du_buff_ptr(rdrb, idx)->dst_api = -1;
 
-        if (idx != (ssize_t) *rdrb->ptr_tail) {
+        if (idx != *rdrb->ptr_tail) {
                 pthread_mutex_unlock(rdrb->lock);
                 return 0;
         }

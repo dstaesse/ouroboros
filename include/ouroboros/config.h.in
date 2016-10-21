@@ -41,7 +41,7 @@
 #define SHM_RDRB_MULTI_BLOCK
 #define SHM_RDRB_PREFIX        "/ouroboros.rdrb."
 #define LOCKFILE_NAME          "/ouroboros.lockfile"
-#define SHM_BUFFER_SIZE        (1 << 14)
+#define SHM_BUFFER_SIZE        1 << 14
 #define DU_BUFF_HEADSPACE      128
 #define DU_BUFF_TAILSPACE      0
 #define SHM_RBUFF_PREFIX       "/ouroboros.rbuff."

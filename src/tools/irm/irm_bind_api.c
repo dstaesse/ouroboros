@@ -30,7 +30,7 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: irm bind api <pid> name <name>\n");
 }

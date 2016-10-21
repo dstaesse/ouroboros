@@ -129,7 +129,7 @@ static struct irm_flow * get_irm_flow_n(pid_t n_api)
         return NULL;
 }
 
-static struct ipcp_entry * ipcp_entry_create()
+static struct ipcp_entry * ipcp_entry_create(void)
 {
         struct ipcp_entry * e = malloc(sizeof(*e));
         if (e == NULL)
@@ -694,7 +694,7 @@ static int unbind_api(pid_t api, char * name)
 static ssize_t list_ipcps(char * name, pid_t ** apis)
 {
         struct list_head * pos = NULL;
-        ssize_t count = 0;
+        size_t count = 0;
         int i = 0;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
@@ -1163,10 +1163,18 @@ static struct irm_flow * flow_alloc(pid_t  api,
         pthread_rwlock_wrlock(&irmd->flows_lock);
 
         port_id = f->port_id = bmp_allocate(irmd->port_ids);
-        f->n_1_api = ipcp;
+        if (!bmp_is_id_valid(irmd->port_ids, (ssize_t) port_id)) {
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_ERR("Could not allocate port_id.");
+                irm_flow_destroy(f);
+                return NULL;
+        }
 
+        f->n_1_api = ipcp;
         f->n_rb = shm_rbuff_create(api, port_id);
         if (f->n_rb == NULL) {
+                bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Could not create ringbuffer for AP-I %d.", api);
@@ -1176,6 +1184,7 @@ static struct irm_flow * flow_alloc(pid_t  api,
 
         f->n_1_rb = shm_rbuff_create(ipcp, port_id);
         if (f->n_1_rb == NULL) {
+                bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Could not create ringbuffer for AP-I %d.", ipcp);
@@ -1461,6 +1470,13 @@ static struct irm_flow * flow_req_arr(pid_t  api,
 
         pthread_rwlock_wrlock(&irmd->flows_lock);
         f->port_id = bmp_allocate(irmd->port_ids);
+        if (!bmp_is_id_valid(irmd->port_ids, f->port_id)) {
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_ERR("Could not create ringbuffer for AP-I %d.", f->n_api);
+                irm_flow_destroy(f);
+                return NULL;
+        }
 
         f->n_rb = shm_rbuff_create(f->n_api, f->port_id);
         if (f->n_rb == NULL) {
@@ -1546,7 +1562,7 @@ static int flow_alloc_reply(int port_id, int response)
         return 0;
 }
 
-static void irm_destroy()
+static void irm_destroy(void)
 {
         struct list_head * p;
         struct list_head * h;
@@ -1653,7 +1669,7 @@ void irmd_sig_handler(int sig, siginfo_t * info, void * c)
         }
 }
 
-void * irm_sanitize()
+void * irm_sanitize(void * o)
 {
         struct timespec now;
         struct list_head * p = NULL;
@@ -1662,6 +1678,8 @@ void * irm_sanitize()
         struct timespec timeout = {IRMD_CLEANUP_TIMER / BILLION,
                                    IRMD_CLEANUP_TIMER % BILLION};
         int s;
+
+        (void) o;
 
         while (true) {
                 if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
@@ -1762,9 +1780,11 @@ void * irm_sanitize()
         }
 }
 
-void * mainloop()
+void * mainloop(void * o)
 {
         uint8_t buf[IRM_MSG_BUF_SIZE];
+
+        (void) o;
 
         while (true) {
                 int cli_sockfd;
@@ -1971,7 +1991,7 @@ void * mainloop()
         return (void *) 0;
 }
 
-static int irm_create()
+static int irm_create(void)
 {
         struct stat st = {0};
         struct timeval timeout = {(IRMD_ACCEPT_TIMEOUT / 1000),
@@ -2057,7 +2077,7 @@ static int irm_create()
                 if (kill(lockfile_owner(irmd->lf), 0) < 0) {
                         LOG_INFO("IRMd didn't properly shut down last time.");
                         /* FIXME: do this for each QOS_CUBE in the system */
-                        shm_rdrbuff_destroy(shm_rdrbuff_open(QOS_CUBE_BE));
+                        shm_rdrbuff_destroy(shm_rdrbuff_open());
                         LOG_INFO("Stale resources cleaned");
                         lockfile_destroy(irmd->lf);
                         irmd->lf = lockfile_create();
@@ -2076,7 +2096,7 @@ static int irm_create()
         }
 
         /* FIXME: create an rdrb for each QOS_CUBE in the system */
-        if ((irmd->rdrb = shm_rdrbuff_create(QOS_CUBE_BE)) == NULL) {
+        if ((irmd->rdrb = shm_rdrbuff_create()) == NULL) {
                 irm_destroy();
                 return -1;
         }
@@ -2088,7 +2108,7 @@ static int irm_create()
         return 0;
 }
 
-static void usage()
+static void usage(void)
 {
         LOG_ERR("Usage: irmd \n\n"
                  "         [--stdout (Print to stdout instead of logs)]\n");

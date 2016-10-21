@@ -35,9 +35,9 @@ struct shm_rdrbuff;
 
 size_t               shm_du_buff_get_idx(struct shm_du_buff * sdb);
 
-struct shm_rdrbuff * shm_rdrbuff_create();
+struct shm_rdrbuff * shm_rdrbuff_create(void);
 
-struct shm_rdrbuff * shm_rdrbuff_open();
+struct shm_rdrbuff * shm_rdrbuff_open(void);
 
 void                 shm_rdrbuff_close(struct shm_rdrbuff * rdrb);
 
@@ -60,15 +60,15 @@ ssize_t              shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                                          uint8_t *            data,
                                          size_t               data_len);
 
-int                  shm_rdrbuff_read(uint8_t **           dst,
+ssize_t              shm_rdrbuff_read(uint8_t **           dst,
                                       struct shm_rdrbuff * rdrb,
-                                      ssize_t              idx);
+                                      size_t               idx);
 
 struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb,
-                                     ssize_t              idx);
+                                     size_t               idx);
 
 int                  shm_rdrbuff_remove(struct shm_rdrbuff  * rdrb,
-                                        ssize_t               idx);
+                                        size_t                idx);
 
 uint8_t *            shm_du_buff_head(struct shm_du_buff * sdb);
 

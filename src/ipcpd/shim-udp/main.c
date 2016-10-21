@@ -94,7 +94,7 @@ struct {
         pthread_mutex_t    fd_set_lock;
 } udp_data;
 
-static int udp_data_init()
+static int udp_data_init(void)
 {
         int i;
 
@@ -119,7 +119,7 @@ static int udp_data_init()
         return 0;
 }
 
-static void udp_data_fini()
+static void udp_data_fini(void)
 {
         flow_set_destroy(udp_data.np1_flows);
 
@@ -192,7 +192,7 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg, uint32_t dst_ip_addr)
 }
 
 static int ipcp_udp_port_alloc(uint32_t dst_ip_addr,
-                               uint32_t src_udp_port,
+                               uint16_t src_udp_port,
                                char *   dst_name,
                                char *   src_ae_name)
 {
@@ -314,8 +314,8 @@ static int udp_port_to_fd(int udp_port)
         return -1;
 }
 
-static int ipcp_udp_port_alloc_reply(int src_udp_port,
-                                     int dst_udp_port,
+static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
+                                     uint16_t dst_udp_port,
                                      int response)
 {
         int fd   = -1;
@@ -368,7 +368,7 @@ static int ipcp_udp_port_alloc_reply(int src_udp_port,
         return ret;
 }
 
-static int ipcp_udp_flow_dealloc_req(int udp_port)
+static int ipcp_udp_flow_dealloc_req(uint16_t udp_port)
 {
         int skfd = -1;
         int fd   = -1;
@@ -408,12 +408,14 @@ static int ipcp_udp_flow_dealloc_req(int udp_port)
         return 0;
 }
 
-static void * ipcp_udp_listener()
+static void * ipcp_udp_listener(void * o)
 {
         uint8_t buf[SHIM_UDP_MSG_SIZE];
-        int  n = 0;
+        ssize_t  n = 0;
         struct sockaddr_in c_saddr;
         int sfd = udp_data.s_fd;
+
+        (void) o;
 
         while (true) {
                 shim_udp_msg_t * msg = NULL;
@@ -464,9 +466,9 @@ static void * ipcp_udp_listener()
         return 0;
 }
 
-static void * ipcp_udp_sdu_reader()
+static void * ipcp_udp_sdu_reader(void * o)
 {
-        int n;
+        ssize_t n;
         int skfd;
         int fd;
         /* FIXME: avoid this copy */
@@ -475,6 +477,8 @@ static void * ipcp_udp_sdu_reader()
         fd_set read_fds;
         int flags;
         struct timeval tv = {0, FD_UPDATE_TIMEOUT};
+
+        (void) o;
 
         while (true) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
@@ -507,7 +511,6 @@ static void * ipcp_udp_sdu_reader()
                                           (unsigned *) &n)) <= 0)
                                 continue;
 
-                        /* send the sdu to the correct fd */
                         flow_write(fd, buf, n);
                 }
         }
@@ -1109,7 +1112,7 @@ static int ipcp_udp_flow_alloc_resp(int fd, int response)
 static int ipcp_udp_flow_dealloc(int fd)
 {
         int skfd = -1;
-        int remote_udp = -1;
+        uint16_t remote_udp;
         struct timespec t = {0, 10000};
         struct sockaddr_in    r_saddr;
         socklen_t             r_saddr_len = sizeof(r_saddr);

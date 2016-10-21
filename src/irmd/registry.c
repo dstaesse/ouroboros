@@ -42,7 +42,7 @@ struct reg_dif {
         enum ipcp_type   type;
 };
 
-static struct reg_entry * reg_entry_create()
+static struct reg_entry * reg_entry_create(void)
 {
         struct reg_entry * e = malloc(sizeof(*e));
         if (e == NULL)

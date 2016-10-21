@@ -30,7 +30,7 @@
 #include "echo_client.c"
 #include "echo_server.c"
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: echo-app [OPTION]...\n"
                "Sends an echo between a server and a client\n\n"

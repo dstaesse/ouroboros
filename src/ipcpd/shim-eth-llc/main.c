@@ -123,7 +123,7 @@ struct {
         pthread_t          sdu_reader;
 } eth_llc_data;
 
-static int eth_llc_data_init()
+static int eth_llc_data_init(void)
 {
         int i;
 
@@ -166,7 +166,7 @@ static int eth_llc_data_init()
         return 0;
 }
 
-void eth_llc_data_fini()
+void eth_llc_data_fini(void)
 {
         bmp_destroy(eth_llc_data.saps);
         flow_set_destroy(eth_llc_data.np1_flows);
@@ -190,7 +190,7 @@ static int eth_llc_ipcp_send_frame(uint8_t * dst_addr,
                                    uint8_t * payload,
                                    size_t    len)
 {
-        int frame_len = 0;
+        uint32_t frame_len = 0;
         uint8_t cf = 0x03;
         uint16_t length;
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
@@ -262,7 +262,7 @@ static int eth_llc_ipcp_send_frame(uint8_t * dst_addr,
         }
 
         eth_llc_data.tx_offset =
-                (eth_llc_data.tx_offset + 1) & (SHM_BUFFER_SIZE - 1);
+                (eth_llc_data.tx_offset + 1) & ((SHM_BUFFER_SIZE) - 1);
 #else
         if (sendto(eth_llc_data.s_fd,
                    frame,
@@ -534,7 +534,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                            MAC_SIZE) &&
                     memcmp(br_addr, llc_frame->dst_hwaddr, MAC_SIZE)) {
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                        offset = (offset + 1) & (SHM_BUFFER_SIZE - 1);
+                        offset = (offset + 1) & ((SHM_BUFFER_SIZE) - 1);
                         header->tp_status = TP_STATUS_KERNEL;
 #endif
                         continue;
@@ -545,7 +545,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                 if (length > 0x05FF) { /* DIX */
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                        offset = (offset + 1) & (SHM_BUFFER_SIZE -1);
+                        offset = (offset + 1) & ((SHM_BUFFER_SIZE) -1);
                         header->tp_status = TP_STATUS_KERNEL;
 #endif
                         continue;
@@ -567,7 +567,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         if (fd < 0) {
                                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                                offset = (offset + 1) & (SHM_BUFFER_SIZE - 1);
+                                offset = (offset + 1) & ((SHM_BUFFER_SIZE) - 1);
                                 header->tp_status = TP_STATUS_KERNEL;
 #endif
                                 continue;
@@ -578,7 +578,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                                       llc_frame->src_hwaddr, MAC_SIZE)) {
                                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                                offset = (offset + 1) & (SHM_BUFFER_SIZE -1);
+                                offset = (offset + 1) & ((SHM_BUFFER_SIZE) -1);
                                 header->tp_status = TP_STATUS_KERNEL;
 #endif
                                 continue;
@@ -590,7 +590,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                 }
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-                offset = (offset + 1) & (SHM_BUFFER_SIZE -1);
+                offset = (offset + 1) & ((SHM_BUFFER_SIZE) - 1);
                 header->tp_status = TP_STATUS_KERNEL;
 #endif
         }
@@ -807,7 +807,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         eth_llc_data.rx_ring = mmap(NULL, 2 * SHM_RDRB_BLOCK_SIZE
-                                    * SHM_BUFFER_SIZE,
+                                    * (SHM_BUFFER_SIZE),
                                     PROT_READ | PROT_WRITE, MAP_SHARED,
                                     skfd, 0);
         if (eth_llc_data.rx_ring == NULL) {
@@ -817,7 +817,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         }
 
         eth_llc_data.tx_ring = eth_llc_data.rx_ring
-                + SHM_RDRB_BLOCK_SIZE * SHM_BUFFER_SIZE;
+                + SHM_RDRB_BLOCK_SIZE * (SHM_BUFFER_SIZE);
 #endif
         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
@@ -908,7 +908,7 @@ static int eth_llc_ipcp_flow_alloc(int           fd,
 
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
-        ssap = bmp_allocate(eth_llc_data.saps);
+        ssap =  bmp_allocate(eth_llc_data.saps);
         if (!bmp_is_id_valid(eth_llc_data.saps, ssap)) {
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -923,7 +923,10 @@ static int eth_llc_ipcp_flow_alloc(int           fd,
 
         memset(r_addr, 0xff, MAC_SIZE);
 
-        if (eth_llc_ipcp_sap_alloc(r_addr, ssap, dst_name, src_ae_name) < 0) {
+        if (eth_llc_ipcp_sap_alloc(r_addr,
+                                   ssap,
+                                   dst_name,
+                                   src_ae_name) < 0) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
                 bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
@@ -965,7 +968,10 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd, int response)
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        if (eth_llc_ipcp_sap_alloc_resp(r_addr, ssap, r_sap, response) < 0) {
+        if (eth_llc_ipcp_sap_alloc_resp(r_addr,
+                                        ssap,
+                                        r_sap,
+                                        response) < 0) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
                 bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
@@ -976,7 +982,7 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd, int response)
 
         flow_set_add(eth_llc_data.np1_flows, fd);
 
-        LOG_DBG("Accepted flow, fd %d, SAP %d.", fd, ssap);
+        LOG_DBG("Accepted flow, fd %d, SAP %d.", fd, (uint8_t)ssap);
 
         return 0;
 }

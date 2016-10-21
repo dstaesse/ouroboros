@@ -43,7 +43,7 @@
 
 #define FN_MAX_CHARS 255
 
-#define FQUEUESIZE (SHM_BUFFER_SIZE * sizeof(int))
+#define FQUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(int))
 
 #define SHM_FLOW_SET_FILE_SIZE (IRMD_MAX_FLOWS * sizeof(ssize_t)          \
                                 + AP_MAX_FQUEUES * sizeof(size_t)         \
@@ -51,7 +51,7 @@
                                 + AP_MAX_FQUEUES * FQUEUESIZE             \
                                 + sizeof(pthread_mutex_t))
 
-#define fqueue_ptr(fs, idx) (fs->fqueues + SHM_BUFFER_SIZE * idx)
+#define fqueue_ptr(fs, idx) (fs->fqueues + (SHM_BUFFER_SIZE) * idx)
 
 struct shm_flow_set {
         ssize_t *         mtable;
@@ -123,7 +123,7 @@ struct shm_flow_set * shm_flow_set_create()
         set->conds   = (pthread_cond_t *)(set->heads + AP_MAX_FQUEUES);
         set->fqueues = (int *) (set->conds + AP_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
-                (set->fqueues + AP_MAX_FQUEUES * SHM_BUFFER_SIZE);
+                (set->fqueues + AP_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
         pthread_mutexattr_init(&mattr);
 #ifndef __APPLE__
@@ -194,7 +194,7 @@ struct shm_flow_set * shm_flow_set_open(pid_t api)
         set->conds   = (pthread_cond_t *)(set->heads + AP_MAX_FQUEUES);
         set->fqueues = (int *) (set->conds + AP_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
-                (set->fqueues + AP_MAX_FQUEUES * SHM_BUFFER_SIZE);
+                (set->fqueues + AP_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
         set->api = api;
 
@@ -249,16 +249,16 @@ void shm_flow_set_close(struct shm_flow_set * set)
 }
 
 void shm_flow_set_zero(struct shm_flow_set * shm_set,
-                       ssize_t               idx)
+                       size_t                idx)
 {
         ssize_t i = 0;
 
-        assert(!(idx < 0) && idx < AP_MAX_FQUEUES);
+        assert(idx < AP_MAX_FQUEUES);
 
         pthread_mutex_lock(shm_set->lock);
 
         for (i = 0; i < IRMD_MAX_FLOWS; ++i)
-                if (shm_set->mtable[i] == idx)
+                if (shm_set->mtable[i] == (ssize_t) idx)
                         shm_set->mtable[i] = -1;
 
         shm_set->heads[idx] = 0;
@@ -268,12 +268,12 @@ void shm_flow_set_zero(struct shm_flow_set * shm_set,
 
 
 int shm_flow_set_add(struct shm_flow_set * shm_set,
-                     ssize_t               idx,
+                     size_t                idx,
                      int                   port_id)
 {
         assert(shm_set);
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
-        assert(!(idx < 0) && idx < AP_MAX_FQUEUES);
+        assert(idx < AP_MAX_FQUEUES);
 
         pthread_mutex_lock(shm_set->lock);
 
@@ -290,34 +290,34 @@ int shm_flow_set_add(struct shm_flow_set * shm_set,
 }
 
 void shm_flow_set_del(struct shm_flow_set * shm_set,
-                      ssize_t               idx,
+                      size_t                idx,
                       int                   port_id)
 {
         assert(shm_set);
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
-        assert(!(idx < 0) && idx < AP_MAX_FQUEUES);
+        assert(idx < AP_MAX_FQUEUES);
 
         pthread_mutex_lock(shm_set->lock);
 
-        if (shm_set->mtable[port_id] == idx)
+        if (shm_set->mtable[port_id] == (ssize_t) idx)
                 shm_set->mtable[port_id] = -1;
 
         pthread_mutex_unlock(shm_set->lock);
 }
 
 int shm_flow_set_has(struct shm_flow_set * shm_set,
-                     ssize_t               idx,
+                     size_t                idx,
                      int                   port_id)
 {
         int ret = 0;
 
         assert(shm_set);
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
-        assert(!(idx < 0) && idx < AP_MAX_FQUEUES);
+        assert(idx < AP_MAX_FQUEUES);
 
         pthread_mutex_lock(shm_set->lock);
 
-        if (shm_set->mtable[port_id] == idx)
+        if (shm_set->mtable[port_id] == (ssize_t) idx)
                 ret = 1;
 
         pthread_mutex_unlock(shm_set->lock);
@@ -346,16 +346,16 @@ void shm_flow_set_notify(struct shm_flow_set * shm_set, int port_id)
 }
 
 
-int shm_flow_set_wait(const struct shm_flow_set * shm_set,
-                      ssize_t                     idx,
-                      int *                       fqueue,
-                      const struct timespec *     timeout)
+ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
+                          size_t                      idx,
+                          int *                       fqueue,
+                          const struct timespec *     timeout)
 {
-        int ret = 0;
+        ssize_t ret = 0;
         struct timespec abstime;
 
         assert(shm_set);
-        assert(!(idx < 0) && idx < AP_MAX_FQUEUES);
+        assert(idx < AP_MAX_FQUEUES);
 
 #ifdef __APPLE__
         pthread_mutex_lock(shm_set->lock);
@@ -397,11 +397,10 @@ int shm_flow_set_wait(const struct shm_flow_set * shm_set,
                 memcpy(fqueue,
                        fqueue_ptr(shm_set, idx),
                        shm_set->heads[idx] * sizeof(int));
-                ret = shm_set->heads[idx];
                 shm_set->heads[idx] = 0;
         }
 
         pthread_cleanup_pop(true);
 
-        return ret;
+        return 0;
 }

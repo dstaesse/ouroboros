@@ -44,7 +44,7 @@ struct ipcp_data {
         pthread_mutex_t     lock;
 };
 
-struct ipcp_data * ipcp_data_create();
+struct ipcp_data * ipcp_data_create(void);
 
 struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
                                   enum ipcp_type     ipcp_type);

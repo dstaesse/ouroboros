@@ -30,10 +30,11 @@
 
 struct frct_i;
 
-int         frct_init();
-int         frct_fini();
+int         frct_init(void);
 
-cep_id_t    frct_i_create(uint32_t      address,
+int         frct_fini(void);
+
+cep_id_t    frct_i_create(uint64_t      address,
                           buffer_t *    buf,
                           enum qos_cube cube);
 

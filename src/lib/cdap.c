@@ -56,13 +56,14 @@ static int next_invoke_id(struct cdap * instance)
 
         pthread_mutex_lock(&instance->ids_lock);
         ret = bmp_allocate(instance->ids);
+        if (!bmp_is_id_valid(instance->ids, ret))
+                ret = -1; /* INVALID_INVOKE_ID */
         pthread_mutex_unlock(&instance->ids_lock);
 
         return ret;
 }
 
-static int release_invoke_id(struct cdap * instance,
-                             int id)
+static int release_invoke_id(struct cdap * instance, int id)
 {
         int ret;
 

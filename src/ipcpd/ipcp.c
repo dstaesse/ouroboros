@@ -257,8 +257,7 @@ void * ipcp_main_loop(void * o)
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
                                 conf.addr_size = conf_msg->addr_size;
                                 conf.cep_id_size = conf_msg->cep_id_size;
-                                conf.pdu_length_size
-                                        = conf_msg->pdu_length_size;
+                                conf.pdu_length_size = conf_msg->pdu_length_size;
                                 conf.qos_id_size = conf_msg->qos_id_size;
                                 conf.seqno_size = conf_msg->seqno_size;
                                 conf.has_ttl = conf_msg->has_ttl;

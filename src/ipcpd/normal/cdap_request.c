@@ -134,8 +134,7 @@ int cdap_request_wait(struct cdap_request * creq)
         return ret;
 }
 
-void cdap_request_respond(struct cdap_request * creq,
-                          int                   response)
+void cdap_request_respond(struct cdap_request * creq, int response)
 {
         if (creq == NULL)
                 return;

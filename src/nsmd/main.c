@@ -2,7 +2,7 @@
 
 #include <ouroboros/logs.h>
 
-int main()
+int main(void)
 {
         LOG_DBG("Test of the DA");
 

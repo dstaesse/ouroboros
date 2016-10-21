@@ -63,7 +63,7 @@ void shutdown_server(int signo, siginfo_t * info, void * c)
 
 void handle_flow(int fd)
 {
-        ssize_t count = 0;
+        int count = 0;
         char buf[BUF_SIZE];
 
         struct timespec now;
@@ -112,9 +112,9 @@ void handle_flow(int fd)
                                sdus - sdus_intv,
                                bytes_read - bytes_read_intv,
                                us / 1000,
-                               ((sdus - sdus_intv) / (float) us) * MILLION,
+                               ((sdus - sdus_intv) / (double) us) * MILLION,
                                8 * (bytes_read - bytes_read_intv)
-                               / (float)(us));
+                               / (double)(us));
                         iv_start = iv_end;
                         sdus_intv = sdus;
                         bytes_read_intv = bytes_read;
@@ -197,7 +197,7 @@ void * listener(void * o)
         return 0;
 }
 
-int server_main()
+int server_main(void)
 {
         struct sigaction sig_act;
         int i;

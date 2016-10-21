@@ -28,25 +28,25 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
-#define BITS_PER_BYTE 8
+#define BITS_PER_BYTE CHAR_BIT
 
-#define BITS_PER_LONG (sizeof(long) *  BITS_PER_BYTE)
+#define BITS_PER_LONG (sizeof(size_t) *  BITS_PER_BYTE)
 
 #define BIT_WORD(nr) ((nr) / BITS_PER_LONG)
 
 #define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
 
 #define BITS_TO_LONGS(nr) \
-        DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
+        DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(size_t))
 
-static unsigned long find_next_zero_bit(const unsigned long * addr,
-                                        unsigned long nbits)
+static size_t find_next_zero_bit(const size_t * addr, size_t nbits)
 {
-        unsigned long tmp;
-        unsigned long start = 0;
-        unsigned long pos = 0;
-        unsigned long mask;
+        size_t tmp;
+        size_t start = 0;
+        size_t pos = 0;
+        size_t mask;
 
         /* First find correct word */
         tmp = ~addr[start];
@@ -68,36 +68,33 @@ static unsigned long find_next_zero_bit(const unsigned long * addr,
         return (start * BITS_PER_LONG) + pos;
 }
 
-static void bitmap_zero(unsigned long * dst,
-                        unsigned int nbits)
+static void bitmap_zero(size_t * dst, size_t nbits)
 {
-        unsigned int len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
+        size_t len = BITS_TO_LONGS(nbits) * sizeof(size_t);
         memset(dst, 0, len);
 }
 
-static void bitmap_clear(unsigned long * map,
-                         unsigned int start)
+static void bitmap_clear(size_t * map, size_t start)
 {
-        unsigned long * p = map + BIT_WORD(start);
-        unsigned long mask = ~(1UL << (start % (BITS_PER_LONG)));
+        size_t * p = map + BIT_WORD(start);
+        size_t mask = ~(1UL << (start % (BITS_PER_LONG)));
 
         *p &= mask;
 }
 
-static void bitmap_set(unsigned long * map,
-                       unsigned int start)
+static void bitmap_set(size_t * map, size_t start)
 {
-        unsigned long * p = map + BIT_WORD(start);
-        unsigned long mask = 1UL << (start % (BITS_PER_LONG));
+        size_t * p = map + BIT_WORD(start);
+        size_t mask = 1UL << (start % (BITS_PER_LONG));
 
         *p |= mask;
 }
 
 struct bmp {
         ssize_t offset;
-        size_t  size;
+        size_t size;
 
-        unsigned long * bitmap;
+        size_t * bitmap;
 };
 
 struct bmp * bmp_create(size_t bits, ssize_t offset)
@@ -111,7 +108,7 @@ struct bmp * bmp_create(size_t bits, ssize_t offset)
         if (tmp == NULL)
                 return NULL;
 
-        tmp->bitmap = malloc(BITS_TO_LONGS(bits) * sizeof(unsigned long));
+        tmp->bitmap = malloc(BITS_TO_LONGS(bits) * sizeof(size_t));
         if (tmp->bitmap == NULL) {
                 free(tmp);
                 return NULL;
@@ -150,15 +147,13 @@ static ssize_t bad_id(struct bmp * b)
 
 ssize_t bmp_allocate(struct bmp * b)
 {
-        ssize_t id;
+        size_t id;
 
         if (b == NULL)
                 return -1;
 
-        id = (ssize_t) find_next_zero_bit(b->bitmap,
-                                          b->size);
-
-        if (id >= (ssize_t) b->size)
+        id = find_next_zero_bit(b->bitmap, b->size);
+        if (id >= b->size)
                 return bad_id(b);
 
         bitmap_set(b->bitmap, id);
@@ -166,8 +161,7 @@ ssize_t bmp_allocate(struct bmp * b)
         return id + b->offset;
 }
 
-static bool is_id_valid(struct bmp * b,
-                        ssize_t id)
+static bool is_id_valid(struct bmp * b, ssize_t id)
 {
         assert(b);
 
@@ -177,8 +171,7 @@ static bool is_id_valid(struct bmp * b,
         return true;
 }
 
-bool bmp_is_id_valid(struct bmp * b,
-                     ssize_t id)
+bool bmp_is_id_valid(struct bmp * b, ssize_t id)
 {
         if (b == NULL)
                 return false;
@@ -186,10 +179,9 @@ bool bmp_is_id_valid(struct bmp * b,
         return is_id_valid(b, id);
 }
 
-int bmp_release(struct bmp * b,
-                ssize_t id)
+int bmp_release(struct bmp * b, ssize_t id)
 {
-        ssize_t rid;
+        size_t rid;
 
         if (b == NULL)
                 return -1;

@@ -38,6 +38,7 @@
 #include <pthread.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <assert.h>
 
 #define EVENT_WAIT_TIMEOUT 100 /* us */
 #define THIS_TYPE IPCP_LOCAL
@@ -53,7 +54,7 @@ struct {
         pthread_t             sduloop;
 } local_data;
 
-int local_data_init()
+static int local_data_init(void)
 {
         int i;
         for (i = 0; i < IRMD_MAX_FLOWS; ++i)
@@ -68,7 +69,7 @@ int local_data_init()
         return 0;
 }
 
-void local_data_fini()
+static void local_data_fini(void)
 {
         pthread_rwlock_destroy(&local_data.lock);
 }
@@ -91,10 +92,7 @@ static void * ipcp_local_sdu_loop(void * o)
                 if (ret == -ETIMEDOUT)
                         continue;
 
-                if (ret < 0) {
-                        LOG_ERR("Event wait returned error code %d.", -ret);
-                        continue;
-                }
+                assert(!ret);
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -107,6 +105,8 @@ static void * ipcp_local_sdu_loop(void * o)
 
                 while ((fd = fqueue_next(fq)) >= 0) {
                         idx = local_flow_read(fd);
+
+                        assert((size_t) idx < (SHM_BUFFER_SIZE));
 
                         fd = local_data.in_out[fd];
 
@@ -147,10 +147,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
 static int ipcp_local_bootstrap(struct dif_config * conf)
 {
-        if (conf->type != THIS_TYPE) {
-                LOG_ERR("Config doesn't match IPCP type.");
-                return -1;
-        }
+        assert (conf->type == THIS_TYPE);
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
@@ -208,15 +205,12 @@ static int ipcp_local_flow_alloc(int           fd,
 {
         int out_fd = -1;
 
-        /* FIXME: support qos */
+        /* This ipcpd has all QoS */
         (void) qos;
 
         LOG_DBG("Allocating flow to %s on fd %d.", dst_name, fd);
 
-        if (dst_name == NULL || src_ae_name == NULL)
-                return -1;
-
-        /* This ipcpd has all QoS */
+        assert(dst_name || src_ae_name);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -278,8 +272,7 @@ static int ipcp_local_flow_dealloc(int fd)
 {
         struct timespec t = {0, 10000};
 
-        if (fd < 0)
-                return -EINVAL;
+        assert(!(fd < 0));
 
         flow_set_del(local_data.flows, fd);
 

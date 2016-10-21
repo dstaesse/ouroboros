@@ -33,7 +33,7 @@
 #define SHIM_ETH_LLC "shim-eth-llc"
 #define LOCAL "local"
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: irm ipcp create\n"
                "                name <ipcp name>\n"

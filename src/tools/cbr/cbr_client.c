@@ -46,8 +46,8 @@ int client_main(char * server,
         int result = 0;
         bool stop = false;
         char buf[size];
-        long seqnr = 0;
-        unsigned long gap = size * 8.0 * (BILLION / (double) rate);
+        int seqnr = 0;
+        long gap = size * 8.0 * (BILLION / (double) rate);
 
         struct timespec start;
         struct timespec end;
@@ -55,7 +55,7 @@ int client_main(char * server,
         int ms;
 
         printf("Client started, duration %d, rate %lu b/s, size %d B.\n",
-                duration, rate, size);
+               duration, rate, size);
 
         fd = flow_alloc(server, NULL, NULL);
         if (fd < 0) {
@@ -85,18 +85,17 @@ int client_main(char * server,
                         if (sleep)
                                 nanosleep(&intv, NULL);
                         else
-                        busy_wait_until(&end);
+                                busy_wait_until(&end);
 
                         ++seqnr;
 
-                        if (ts_diff_us(&start, &end) / MILLION
-                            >= (long) duration)
+                        if (ts_diff_us(&start, &end) / MILLION >= duration)
                                 stop = true;
                 }
         } else { /* flood */
                 while (!stop) {
                         clock_gettime(CLOCK_REALTIME, &end);
-                        if (flow_write(fd, buf, size) == -1) {
+                        if (flow_write(fd, buf, (size_t) size) == -1) {
                                 stop = true;
                                 continue;
                         }
@@ -115,7 +114,7 @@ int client_main(char * server,
         ms = ts_diff_ms(&start, &end);
 
         printf("sent statistics: "
-               "%9ld SDUs, %12ld bytes in %9d ms, %4.4f Mb/s\n",
+               "%9d SDUs, %12d bytes in %9d ms, %4.4f Mb/s\n",
                seqnr, seqnr * size, ms, (seqnr * size * 8.0)/(ms * 1000));
 
         flow_dealloc(fd);

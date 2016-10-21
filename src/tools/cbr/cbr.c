@@ -64,7 +64,7 @@ static void usage(void)
 
 int main(int argc, char ** argv)
 {
-        int    duration = 60;      /* One minute test */
+        int    duration = 60;  /* One minute test */
         int    size = 1000;    /* 1000 byte SDUs */
         long   rate = 1000000; /* 1 Mb/s */
         bool   flood = false;

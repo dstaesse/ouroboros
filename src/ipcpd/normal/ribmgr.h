@@ -27,10 +27,12 @@
 
 #include "dt_const.h"
 
-int               ribmgr_init();
-int               ribmgr_fini();
+int               ribmgr_init(void);
+
+int               ribmgr_fini(void);
 
 int               ribmgr_add_flow(int fd);
+
 int               ribmgr_remove_flow(int fd);
 
 int               ribmgr_bootstrap(struct dif_config * conf);
@@ -39,7 +41,8 @@ int               ribmgr_bootstrap(struct dif_config * conf);
  * FIXME: Should we expose the RIB?
  * Else we may end up with a lot of getters and setters
  */
-struct dt_const * ribmgr_dt_const();
-uint32_t          ribmgr_address();
+struct dt_const * ribmgr_dt_const(void);
+
+uint32_t          ribmgr_address(void);
 
 #endif

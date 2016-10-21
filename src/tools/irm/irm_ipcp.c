@@ -25,7 +25,7 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: irm ipcp [OPERATION]\n\n"
                "where OPERATION = {create destroy\n"

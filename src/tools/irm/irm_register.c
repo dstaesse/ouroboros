@@ -30,7 +30,7 @@
 
 #define MAX_DIFS 128
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: irm register\n"
                "           name <name>\n"

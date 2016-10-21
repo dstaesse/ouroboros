@@ -28,7 +28,7 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: irm bind [OPERATION]\n"
                "where OPERATION = {ap api ipcp help}\n");
