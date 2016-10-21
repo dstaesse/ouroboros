@@ -39,10 +39,10 @@
 
 struct lockfile {
         pid_t * api;
-        int fd;
 };
 
 struct lockfile * lockfile_create() {
+        int fd;
         mode_t mask;
         struct lockfile * lf = malloc(sizeof(*lf));
         if (lf == NULL)
@@ -50,8 +50,8 @@ struct lockfile * lockfile_create() {
 
         mask = umask(0);
 
-        lf->fd = shm_open(LOCKFILE_NAME, O_CREAT | O_EXCL | O_RDWR, 0666);
-        if (lf->fd == -1) {
+        fd = shm_open(LOCKFILE_NAME, O_CREAT | O_EXCL | O_RDWR, 0666);
+        if (fd == -1) {
                 LOG_DBGF("Could not create lock file.");
                 free(lf);
                 return NULL;
@@ -59,30 +59,24 @@ struct lockfile * lockfile_create() {
 
         umask(mask);
 
-        if (ftruncate(lf->fd, LF_SIZE - 1) < 0) {
+        if (ftruncate(fd, LF_SIZE - 1) < 0) {
                 LOG_DBGF("Failed to extend lockfile.");
                 free(lf);
                 return NULL;
         }
-#ifndef __APPLE__
-        if (write(lf->fd, "", 1) != 1) {
-                LOG_DBGF("Failed to finalise lockfile.");
-                free(lf);
-                return NULL;
-        }
-#endif
+
         lf->api = mmap(NULL,
                        LF_SIZE, PROT_READ | PROT_WRITE,
                        MAP_SHARED,
-                       lf->fd,
+                       fd,
                        0);
+
+        close (fd);
 
         if (lf->api == MAP_FAILED) {
                 LOG_DBGF("Failed to map lockfile.");
-
                 if (shm_unlink(LOCKFILE_NAME) == -1)
                         LOG_DBGF("Failed to remove invalid lockfile.");
-
                 free(lf);
                 return NULL;
         }
@@ -93,12 +87,13 @@ struct lockfile * lockfile_create() {
 }
 
 struct lockfile * lockfile_open() {
+        int fd;
         struct lockfile * lf = malloc(sizeof(*lf));
         if (lf == NULL)
                 return NULL;
 
-        lf->fd = shm_open(LOCKFILE_NAME, O_RDWR, 0666);
-        if (lf->fd < 0) {
+        fd = shm_open(LOCKFILE_NAME, O_RDWR, 0666);
+        if (fd < 0) {
                 LOG_DBGF("Could not open lock file.");
                 free(lf);
                 return NULL;
@@ -107,15 +102,15 @@ struct lockfile * lockfile_open() {
         lf->api = mmap(NULL,
                        LF_SIZE, PROT_READ | PROT_WRITE,
                        MAP_SHARED,
-                       lf->fd,
+                       fd,
                        0);
+
+        close(fd);
 
         if (lf->api == MAP_FAILED) {
                 LOG_DBGF("Failed to map lockfile.");
-
                 if (shm_unlink(LOCKFILE_NAME) == -1)
                         LOG_DBGF("Failed to remove invalid lockfile.");
-
                 free(lf);
                 return NULL;
         }
@@ -129,9 +124,6 @@ void lockfile_close(struct lockfile * lf)
                 LOG_DBGF("Bogus input. Bugging out.");
                 return;
         }
-
-        if (close(lf->fd) < 0)
-                LOG_DBGF("Couldn't close lockfile.");
 
         if (munmap(lf->api, LF_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap lockfile.");
@@ -150,9 +142,6 @@ void lockfile_destroy(struct lockfile * lf)
                 LOG_DBGF("Only IRMd can destroy %s.", LOCKFILE_NAME);
                 return;
         }
-
-        if (close(lf->fd) < 0)
-                LOG_DBGF("Couldn't close lockfile.");
 
         if (munmap(lf->api, LF_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap lockfile.");

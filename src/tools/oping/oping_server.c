@@ -69,16 +69,23 @@ void * server_thread(void *o)
         struct oping_msg * msg = (struct oping_msg *) buf;
         struct timespec now = {0, 0};
         struct timespec timeout = {0, 100 * MILLION};
+        int fd;
+        fqueue_t * fq = fqueue_create();
+        if (fq == NULL)
+                return (void *) 1;
 
         while (true) {
-                int fd = flow_select(server.flows, &timeout);
-                if (fd == -ETIMEDOUT)
+                int ret = flow_event_wait(server.flows, fq, &timeout);
+                if (ret == -ETIMEDOUT)
                         continue;
-                if (fd < 0) {
-                        printf("Failed to get active fd.\n");
-                        continue;
+
+                if (ret < 0) {
+                        printf("Event error.\n");
+                        break;
                 }
-                while (!((msg_len = flow_read(fd, buf, OPING_BUF_SIZE)) < 0)) {
+
+                while ((fd = fqueue_next(fq)) >= 0) {
+                        msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
                         if (msg_len < 0)
                                 continue;
 
@@ -159,8 +166,6 @@ int server_main()
         server.flows = flow_set_create();
         if (server.flows == NULL)
                 return 0;
-
-        flow_set_zero(server.flows);
 
         pthread_create(&server.cleaner_pt, NULL, cleaner_thread, NULL);
         pthread_create(&server.accept_pt, NULL, accept_thread, NULL);

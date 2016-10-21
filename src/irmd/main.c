@@ -28,7 +28,7 @@
 #include <ouroboros/utils.h>
 #include <ouroboros/irm_config.h>
 #include <ouroboros/lockfile.h>
-#include <ouroboros/shm_ap_rbuff.h>
+#include <ouroboros/shm_rbuff.h>
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/qos.h>
@@ -1164,6 +1164,24 @@ static struct irm_flow * flow_alloc(pid_t  api,
         port_id = f->port_id = bmp_allocate(irmd->port_ids);
         f->n_1_api = ipcp;
 
+        f->n_rb = shm_rbuff_create(api, port_id);
+        if (f->n_rb == NULL) {
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_ERR("Could not create ringbuffer for AP-I %d.", api);
+                irm_flow_destroy(f);
+                return NULL;
+        }
+
+        f->n_1_rb = shm_rbuff_create(ipcp, port_id);
+        if (f->n_1_rb == NULL) {
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_ERR("Could not create ringbuffer for AP-I %d.", ipcp);
+                irm_flow_destroy(f);
+                return NULL;
+        }
+
         list_add(&f->next, &irmd->irm_flows);
 
         pthread_rwlock_unlock(&irmd->flows_lock);
@@ -1346,7 +1364,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Unknown name: %s.", dst_name);
-                free(f);
+                irm_flow_destroy(f);
                 return NULL;
         }
 
@@ -1359,14 +1377,14 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("No AP's for %s.", dst_name);
-                free(f);
+                irm_flow_destroy(f);
                 return NULL;
         case REG_NAME_AUTO_ACCEPT:
                 c_api = malloc(sizeof(*c_api));
                 if (c_api == NULL) {
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
-                        free(f);
+                        irm_flow_destroy(f);
                         return NULL;
                 }
 
@@ -1384,7 +1402,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                         pthread_rwlock_unlock(&irmd->state_lock);
                         LOG_ERR("Could not get start apn for reg_entry %s.",
                                 re->name);
-                        free(f);
+                        irm_flow_destroy(f);
                         free(c_api);
                         return NULL;
                 }
@@ -1411,6 +1429,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                         pthread_mutex_unlock(&re->state_lock);
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
+                        irm_flow_destroy(f);
                         return NULL;
                 }
 
@@ -1424,6 +1443,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
                         LOG_ERR("Invalid api returned.");
+                        irm_flow_destroy(f);
                         return NULL;
                 }
 
@@ -1432,7 +1452,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("IRMd in wrong state.");
-                free(f);
+                irm_flow_destroy(f);
                 return NULL;
         }
 
@@ -1440,6 +1460,26 @@ static struct irm_flow * flow_req_arr(pid_t  api,
 
         pthread_rwlock_wrlock(&irmd->flows_lock);
         f->port_id = bmp_allocate(irmd->port_ids);
+
+        f->n_rb = shm_rbuff_create(f->n_api, f->port_id);
+        if (f->n_rb == NULL) {
+                bmp_release(irmd->port_ids, f->port_id);
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_ERR("Could not create ringbuffer for AP-I %d.", f->n_api);
+                irm_flow_destroy(f);
+                return NULL;
+        }
+
+        f->n_1_rb = shm_rbuff_create(f->n_1_api, f->port_id);
+        if (f->n_1_rb == NULL) {
+                bmp_release(irmd->port_ids, f->port_id);
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_ERR("Could not create ringbuffer for AP-I %d.", f->n_1_api);
+                irm_flow_destroy(f);
+                return NULL;
+        }
 
         list_add(&f->next, &irmd->irm_flows);
 
@@ -1455,10 +1495,13 @@ static struct irm_flow * flow_req_arr(pid_t  api,
 
         e = api_table_get(&irmd->api_table, h_api);
         if (e == NULL) {
-                LOG_ERR("Could not get api table entry for %d.", h_api);
                 pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_wrlock(&irmd->flows_lock);
+                bmp_release(irmd->port_ids, f->port_id);
+                pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                free(f);
+                LOG_ERR("Could not get api table entry for %d.", h_api);
+                irm_flow_destroy(f);
                 return NULL;
         }
 
@@ -1692,26 +1735,18 @@ void * irm_sanitize()
                         }
 
                         if (kill(f->n_api, 0) < 0) {
-                                struct shm_ap_rbuff * rb =
-                                        shm_ap_rbuff_open(f->n_api);
                                 bmp_release(irmd->port_ids, f->port_id);
                                 list_del(&f->next);
                                 LOG_INFO("AP-I %d gone, flow %d deallocated.",
                                          f->n_api, f->port_id);
                                 ipcp_flow_dealloc(f->n_1_api, f->port_id);
-                                if (rb != NULL)
-                                        shm_ap_rbuff_destroy(rb);
                                 irm_flow_destroy(f);
                                 continue;
                         }
                         if (kill(f->n_1_api, 0) < 0) {
-                                struct shm_ap_rbuff * rb =
-                                        shm_ap_rbuff_open(f->n_1_api);
                                 list_del(&f->next);
                                 LOG_ERR("IPCP %d gone, flow %d removed.",
                                         f->n_1_api, f->port_id);
-                                if (rb != NULL)
-                                        shm_ap_rbuff_destroy(rb);
                                 irm_flow_destroy(f);
                         }
                 }

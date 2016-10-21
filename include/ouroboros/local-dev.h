@@ -20,14 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/shm_ap_rbuff.h>
-
 #ifndef OUROBOROS_LOCAL_DEV_H
 #define OUROBOROS_LOCAL_DEV_H
 
-struct rb_entry * local_flow_read(int fd);
+ssize_t local_flow_read(int fd);
 
-int               local_flow_write(int               fd,
-                                   struct rb_entry * e);
+int     local_flow_write(int     fd,
+                         ssize_t idx);
 
 #endif /* OUROBOROS_LOCAL_DEV_H */

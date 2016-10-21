@@ -90,7 +90,6 @@ struct shm_rdrbuff {
         pthread_cond_t *  full;        /* run sanitizer when buffer full */
         pid_t *           api;         /* api of the irmd owner */
         enum qos_cube     qos;         /* qos id which this buffer serves */
-        int               fd;
 };
 
 static void garbage_collect(struct shm_rdrbuff * rdrb)
@@ -189,23 +188,19 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         if (ftruncate(shm_fd, SHM_FILE_SIZE - 1) < 0) {
                 LOG_DBGF("Failed to extend shared memory map.");
                 free(shm_rdrb_fn);
+                close(shm_fd);
                 free(rdrb);
                 return NULL;
         }
-#ifndef __APPLE
-        if (write(shm_fd, "", 1) != 1) {
-                LOG_DBGF("Failed to finalise extension of shared memory map.");
-                free(shm_rdrb_fn);
-                free(rdrb);
-                return NULL;
-        }
-#endif
+
         shm_base = mmap(NULL,
                         SHM_FILE_SIZE,
                         PROT_READ | PROT_WRITE,
                         MAP_SHARED,
                         shm_fd,
                         0);
+
+        close(shm_fd);
 
         if (shm_base == MAP_FAILED) {
                 LOG_DBGF("Failed to map shared memory.");
@@ -235,6 +230,9 @@ struct shm_rdrbuff * shm_rdrbuff_create()
 
         pthread_condattr_init(&cattr);
         pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
         pthread_cond_init(rdrb->full, &cattr);
         pthread_cond_init(rdrb->healthy, &cattr);
 
@@ -246,7 +244,6 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         *rdrb->api = getpid();
 
         rdrb->qos = qos;
-        rdrb->fd  = shm_fd;
 
         free(shm_rdrb_fn);
 
@@ -287,10 +284,11 @@ struct shm_rdrbuff * shm_rdrbuff_open()
                         MAP_SHARED,
                         shm_fd,
                         0);
+
+        close(shm_fd);
+
         if (shm_base == MAP_FAILED) {
                 LOG_DBGF("Failed to map shared memory.");
-                if (close(shm_fd) == -1)
-                        LOG_DBG("Failed to close invalid shm.");
                 if (shm_unlink(shm_rdrb_fn) == -1)
                         LOG_DBG("Failed to unlink invalid shm.");
                 free(shm_rdrb_fn);
@@ -309,7 +307,6 @@ struct shm_rdrbuff * shm_rdrbuff_open()
         rdrb->api = (pid_t *) (rdrb->full + 1);
 
         rdrb->qos = qos;
-        rdrb->fd = shm_fd;
 
         free(shm_rdrb_fn);
 
@@ -400,9 +397,6 @@ void shm_rdrbuff_close(struct shm_rdrbuff * rdrb)
 {
         assert(rdrb);
 
-        if (close(rdrb->fd) < 0)
-                LOG_DBGF("Couldn't close shared memory.");
-
         if (munmap(rdrb->shm_base, SHM_FILE_SIZE) == -1)
                 LOG_DBGF("Couldn't unmap shared memory.");
 
@@ -419,9 +413,6 @@ void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
                 LOG_DBG("Process %d tried to destroy active rdrb.", getpid());
                 return;
         }
-
-        if (close(rdrb->fd) < 0)
-                LOG_DBG("Couldn't close shared memory.");
 
         if (munmap(rdrb->shm_base, SHM_FILE_SIZE) == -1)
                 LOG_DBG("Couldn't unmap shared memory.");

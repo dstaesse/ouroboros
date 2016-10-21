@@ -7,11 +7,11 @@ set(HEADER_FILES
   dev.h
   errno.h
   fcntl.h
+  fqueue.h
   irm.h
   irm_config.h
   nsm.h
-  qos.h
-  select.h)
+  qos.h)
 
 install(FILES ${HEADER_FILES} DESTINATION usr/include/ouroboros)
 
