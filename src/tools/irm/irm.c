@@ -47,13 +47,13 @@ static const struct cmd {
         const char * cmd;
         int (* func)(int argc, char ** argv);
 } cmds[] = {
-        { "ipcp",            ipcp_cmd },
-        { "bind",            bind_cmd },
-        { "unbind",          unbind_cmd },
-        { "register",        do_register },
-        { "unregister",      do_unregister },
-        { "help",            do_help },
-        { 0 }
+        { "ipcp",       ipcp_cmd },
+        { "bind",       bind_cmd },
+        { "unbind",     unbind_cmd },
+        { "register",   do_register },
+        { "unregister", do_unregister },
+        { "help",       do_help },
+        { NULL,         NULL }
 };
 
 static int do_cmd(const char * argv0,
