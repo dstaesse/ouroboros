@@ -960,12 +960,13 @@ int flow_event_wait(struct flow_set *       set,
         if (fq->fqsize > 0)
                 return 0;
 
+        assert(!fq->next);
+
         ret = shm_flow_set_wait(ai.fqset, set->idx, fq->fqueue, timeout);
         if (ret == -ETIMEDOUT)
                 return -ETIMEDOUT;
 
         fq->fqsize = ret;
-        fq->next   = 0;
 
         return 0;
 }

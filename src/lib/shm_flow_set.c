@@ -356,6 +356,7 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
 
         assert(shm_set);
         assert(idx < AP_MAX_FQUEUES);
+        assert(fqueue);
 
 #ifdef __APPLE__
         pthread_mutex_lock(shm_set->lock);
@@ -397,10 +398,11 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
                 memcpy(fqueue,
                        fqueue_ptr(shm_set, idx),
                        shm_set->heads[idx] * sizeof(int));
+                ret = shm_set->heads[idx];
                 shm_set->heads[idx] = 0;
         }
 
         pthread_cleanup_pop(true);
 
-        return 0;
+        return ret;
 }
