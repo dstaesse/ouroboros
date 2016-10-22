@@ -276,7 +276,6 @@ void ap_fini()
         bmp_destroy(ai.fds);
         bmp_destroy(ai.fqueues);
         shm_flow_set_destroy(ai.fqset);
-        shm_rdrbuff_close(ai.rdrb);
 
         if (ai.daf_name != NULL)
                 free(ai.daf_name);
@@ -302,6 +301,8 @@ void ap_fini()
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
                 pthread_cond_destroy(&ai.ports[i].state_cond);
         }
+
+        shm_rdrbuff_close(ai.rdrb);
 
         free(ai.flows);
         free(ai.ports);
