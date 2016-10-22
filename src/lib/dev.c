@@ -699,7 +699,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                 return -ENOTALLOC;
         }
 
-        if (ai.flows[fd].oflags & FLOW_O_RDONLY) {
+        if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 return -EPERM;
@@ -1257,7 +1257,7 @@ int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
-        if (ai.flows[fd].oflags & FLOW_O_RDONLY) {
+        if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 return -EPERM;
