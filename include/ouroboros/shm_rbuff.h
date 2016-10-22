@@ -41,7 +41,7 @@ int                shm_rbuff_block(struct shm_rbuff * rb);
 void               shm_rbuff_unblock(struct shm_rbuff * rb);
 
 int                shm_rbuff_write(struct shm_rbuff * rb,
-                                   ssize_t            idx);
+                                   size_t             idx);
 
 ssize_t            shm_rbuff_read(struct shm_rbuff * rb);
 

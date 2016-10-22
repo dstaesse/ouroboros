@@ -29,11 +29,13 @@
 
 void shutdown_server(int signo)
 {
+        (void) signo;
+
         ap_fini();
         exit(EXIT_SUCCESS);
 }
 
-int server_main()
+int server_main(void)
 {
         int    client_fd = 0;
         char   buf[BUF_SIZE];

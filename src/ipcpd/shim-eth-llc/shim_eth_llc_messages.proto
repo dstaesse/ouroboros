@@ -8,7 +8,7 @@ message shim_eth_llc_msg {
         required shim_eth_llc_msg_code code  = 1;
         optional string dst_name             = 2;
         optional string src_ae_name          = 3;
-        required sint32 ssap                 = 4;
-        optional sint32 dsap                 = 5;
+        required uint32 ssap                 = 4;
+        optional uint32 dsap                 = 5;
         optional sint32 response             = 6;
 };

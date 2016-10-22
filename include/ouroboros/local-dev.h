@@ -25,7 +25,7 @@
 
 ssize_t local_flow_read(int fd);
 
-int     local_flow_write(int     fd,
-                         ssize_t idx);
+int     local_flow_write(int    fd,
+                         size_t idx);
 
 #endif /* OUROBOROS_LOCAL_DEV_H */

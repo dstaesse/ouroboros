@@ -48,10 +48,10 @@ struct c {
         /* stats */
         int    sent;
         int    rcvd;
-        float  rtt_min;
-        float  rtt_max;
-        float  rtt_avg;
-        float  rtt_m2;
+        double rtt_min;
+        double rtt_max;
+        double rtt_avg;
+        double rtt_m2;
 
         flow_set_t * flows;
 
@@ -82,7 +82,7 @@ struct oping_msg {
 #include "oping_client.c"
 #include "oping_server.c"
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: oping [OPTION]...\n"
                "Checks liveness between a client and a server\n"

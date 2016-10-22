@@ -35,6 +35,9 @@ int bitmap_test(int argc, char ** argv)
         ssize_t r;
         ssize_t offset = 100;
 
+        (void) argc;
+        (void) argv;
+
         srand(time(NULL));
 
         bmp = bmp_create(bits, offset);

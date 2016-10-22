@@ -285,7 +285,7 @@ void ap_fini()
 
         for (i = 0; i < AP_MAX_FLOWS; ++i) {
                 if (ai.flows[i].tx_rb != NULL) {
-                        int idx;
+                        ssize_t idx;
                         while ((idx = shm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
                                 shm_rdrbuff_remove(ai.rdrb, idx);
                         shm_rbuff_close(ai.flows[i].rx_rb);
@@ -466,6 +466,9 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int fd = -1;
+
+        /*  FIXME: add qos support */
+        (void) qos;
 
         if (dst_name == NULL)
                 return -EINVAL;
@@ -755,8 +758,8 @@ ssize_t flow_write(int fd, void * buf, size_t count)
 
 ssize_t flow_read(int fd, void * buf, size_t count)
 {
-        int idx = -1;
-        int n;
+        ssize_t idx = -1;
+        ssize_t n;
         uint8_t * sdu;
 
         if (fd < 0 || fd >= AP_MAX_FLOWS)
@@ -794,7 +797,7 @@ ssize_t flow_read(int fd, void * buf, size_t count)
                 return -1;
         }
 
-        memcpy(buf, sdu, MIN(n, count));
+        memcpy(buf, sdu, MIN((size_t) n, count));
 
         shm_rdrbuff_remove(ai.rdrb, idx);
 
@@ -949,7 +952,7 @@ int flow_event_wait(struct flow_set *       set,
                     struct fqueue *         fq,
                     const struct timespec * timeout)
 {
-        int ret;
+        ssize_t ret;
 
         if (set == NULL)
                 return -EINVAL;
@@ -960,9 +963,6 @@ int flow_event_wait(struct flow_set *       set,
         ret = shm_flow_set_wait(ai.fqset, set->idx, fq->fqueue, timeout);
         if (ret == -ETIMEDOUT)
                 return -ETIMEDOUT;
-
-        if (ret < 0)
-                return ret;
 
         fq->fqsize = ret;
         fq->next   = 0;
@@ -1214,7 +1214,7 @@ int ipcp_flow_alloc_reply(int fd, int response)
 
 int ipcp_flow_read(int fd, struct shm_du_buff ** sdb)
 {
-        int idx = -1;
+        ssize_t idx = -1;
         int port_id = -1;
 
         pthread_rwlock_rdlock(&ai.data_lock);
@@ -1249,7 +1249,7 @@ int ipcp_flow_read(int fd, struct shm_du_buff ** sdb)
 
 int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
 {
-        ssize_t idx;
+        size_t idx;
 
         if (sdb == NULL)
                 return -EINVAL;
@@ -1285,7 +1285,7 @@ ssize_t local_flow_read(int fd)
         return shm_rbuff_read(ai.flows[fd].rx_rb);
 }
 
-int local_flow_write(int fd, ssize_t idx)
+int local_flow_write(int fd, size_t idx)
 {
         if (fd < 0)
                 return -EINVAL;
@@ -1323,6 +1323,12 @@ int ipcp_read_shim(int fd, struct shm_du_buff ** sdb)
         }
 
         idx = shm_rbuff_read(ai.flows[fd].rx_rb);
+        if (idx < 0) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -EAGAIN;
+        }
+
         *sdb = shm_rdrbuff_get(ai.rdrb, idx);
 
         pthread_rwlock_unlock(&ai.flows_lock);

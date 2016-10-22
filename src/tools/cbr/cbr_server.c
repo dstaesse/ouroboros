@@ -48,6 +48,9 @@ pthread_cond_t  fds_signal;
 
 void shutdown_server(int signo, siginfo_t * info, void * c)
 {
+        (void) info;
+        (void) c;
+
         switch(signo) {
         case SIGINT:
         case SIGTERM:
@@ -60,7 +63,7 @@ void shutdown_server(int signo, siginfo_t * info, void * c)
 
 void handle_flow(int fd)
 {
-        ssize_t count = 0;
+        int count = 0;
         char buf[BUF_SIZE];
 
         struct timespec now;
@@ -109,9 +112,9 @@ void handle_flow(int fd)
                                sdus - sdus_intv,
                                bytes_read - bytes_read_intv,
                                us / 1000,
-                               ((sdus - sdus_intv) / (float) us) * MILLION,
+                               ((sdus - sdus_intv) / (double) us) * MILLION,
                                8 * (bytes_read - bytes_read_intv)
-                               / (float)(us));
+                               / (double)(us));
                         iv_start = iv_end;
                         sdus_intv = sdus;
                         bytes_read_intv = bytes_read;
@@ -123,6 +126,8 @@ void handle_flow(int fd)
 void * worker(void * o)
 {
         int cli_fd;
+
+        (void) o;
 
         while (true) {
                 pthread_mutex_lock(&fds_lock);
@@ -150,6 +155,8 @@ void * listener(void * o)
 {
         int client_fd = 0;
         int response = 0;
+
+        (void) o;
 
         printf("Server started, interval is %ld s, timeout is %ld s.\n",
                server_settings.interval, server_settings.timeout);
@@ -190,7 +197,7 @@ void * listener(void * o)
         return 0;
 }
 
-int server_main()
+int server_main(void)
 {
         struct sigaction sig_act;
         int i;

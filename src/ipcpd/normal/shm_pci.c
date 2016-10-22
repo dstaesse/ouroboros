@@ -39,13 +39,12 @@
 #define TTL_SIZE 1
 #define CHK_SIZE 4
 
-static int shm_pci_head_size(struct dt_const * dtc)
+static size_t shm_pci_head_size(struct dt_const * dtc)
 {
-        int len = 0;
+        size_t len = 0;
 
         len = dtc->addr_size * 2 + dtc->cep_id_size * 2
-                + dtc->pdu_length_size + dtc->seqno_size
-                + QOS_ID_SIZE;
+                + dtc->pdu_length_size + dtc->seqno_size + QOS_ID_SIZE;
 
         if (dtc->has_ttl)
                 len += TTL_SIZE;
@@ -53,7 +52,7 @@ static int shm_pci_head_size(struct dt_const * dtc)
         return len;
 }
 
-static int shm_pci_tail_size(struct dt_const * dtc)
+static size_t shm_pci_tail_size(struct dt_const * dtc)
 {
         return dtc->has_chk ? CHK_SIZE : 0;
 }
@@ -162,9 +161,10 @@ struct pci * shm_pci_des(struct shm_du_buff * sdb)
         int offset = 0;
         struct dt_const * dtc;
 
-        head = shm_du_buff_head(sdb);
-        if (head == NULL)
+        if (sdb == NULL)
                 return NULL;
+
+        head = shm_du_buff_head(sdb);
 
         dtc = ribmgr_dt_const();
         if (dtc == NULL)
@@ -221,7 +221,7 @@ int shm_pci_shrink(struct shm_du_buff * sdb)
 int shm_pci_dec_ttl(struct shm_du_buff * sdb)
 {
         struct dt_const * dtc;
-        int offset = 0;
+        size_t offset = 0;
         uint8_t * head;
         uint8_t * tail;
 

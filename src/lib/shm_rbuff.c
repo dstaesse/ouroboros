@@ -44,14 +44,14 @@
 
 #define FN_MAX_CHARS 255
 
-#define SHM_RBUFF_FILE_SIZE (SHM_BUFFER_SIZE * sizeof(ssize_t)          \
+#define SHM_RBUFF_FILE_SIZE ((SHM_BUFFER_SIZE) * sizeof(ssize_t)          \
                              + 2 * sizeof(size_t) + sizeof(int8_t)      \
                              + sizeof(pthread_mutex_t)                  \
                              + 2 * sizeof (pthread_cond_t))
 
-#define shm_rbuff_used(rb) ((*rb->head + SHM_BUFFER_SIZE - *rb->tail)   \
-                            & (SHM_BUFFER_SIZE - 1))
-#define shm_rbuff_free(rb) (shm_rbuff_used(rb) + 1 < SHM_BUFFER_SIZE)
+#define shm_rbuff_used(rb) ((*rb->head + (SHM_BUFFER_SIZE) - *rb->tail)   \
+                            & ((SHM_BUFFER_SIZE) - 1))
+#define shm_rbuff_free(rb) (shm_rbuff_used(rb) + 1 < (SHM_BUFFER_SIZE))
 #define shm_rbuff_empty(rb) (*rb->head == *rb->tail)
 #define head_el_ptr(rb) (rb->shm_base + *rb->head)
 #define tail_el_ptr(rb) (rb->shm_base + *rb->tail)
@@ -122,7 +122,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         }
 
         rb->shm_base = shm_base;
-        rb->head     = (size_t *) (rb->shm_base + SHM_BUFFER_SIZE);
+        rb->head     = (size_t *) (rb->shm_base + (SHM_BUFFER_SIZE));
         rb->tail     = rb->head + 1;
         rb->acl      = (int8_t *) (rb->tail + 1);
         rb->lock     = (pthread_mutex_t *) (rb->acl + 1);
@@ -198,7 +198,7 @@ struct shm_rbuff * shm_rbuff_open(pid_t api, int port_id)
         }
 
         rb->shm_base = shm_base;
-        rb->head     = (size_t *) (rb->shm_base + SHM_BUFFER_SIZE);
+        rb->head     = (size_t *) (rb->shm_base + (SHM_BUFFER_SIZE));
         rb->tail     = rb->head + 1;
         rb->acl      = (int8_t *) (rb->tail + 1);
         rb->lock     = (pthread_mutex_t *) (rb->acl + 1);
@@ -236,10 +236,10 @@ void shm_rbuff_destroy(struct shm_rbuff * rb)
         free(rb);
 }
 
-int shm_rbuff_write(struct shm_rbuff * rb, ssize_t idx)
+int shm_rbuff_write(struct shm_rbuff * rb, size_t idx)
 {
         assert(rb);
-        assert(idx >= 0);
+        assert(idx < SHM_BUFFER_SIZE);
 
 #ifdef __APPLE__
         pthread_mutex_lock(rb->lock);
@@ -262,8 +262,8 @@ int shm_rbuff_write(struct shm_rbuff * rb, ssize_t idx)
         if (shm_rbuff_empty(rb))
                 pthread_cond_broadcast(rb->add);
 
-        *head_el_ptr(rb) = idx;
-        *rb->head = (*rb->head + 1) & (SHM_BUFFER_SIZE -1);
+        *head_el_ptr(rb) = (ssize_t) idx;
+        *rb->head = (*rb->head + 1) & ((SHM_BUFFER_SIZE) -1);
 
         pthread_mutex_unlock(rb->lock);
 
@@ -272,7 +272,7 @@ int shm_rbuff_write(struct shm_rbuff * rb, ssize_t idx)
 
 ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 {
-        int ret = 0;
+        ssize_t ret = 0;
 
         assert(rb);
 
@@ -286,11 +286,11 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 #endif
         if (shm_rbuff_empty(rb)) {
                 pthread_mutex_unlock(rb->lock);
-                return -1;
+                return -EAGAIN;
         }
 
         ret = *tail_el_ptr(rb);
-        *rb->tail = (*rb->tail + 1) & (SHM_BUFFER_SIZE -1);
+        *rb->tail = (*rb->tail + 1) & ((SHM_BUFFER_SIZE) - 1);
 
         pthread_mutex_unlock(rb->lock);
 
@@ -344,7 +344,7 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
 
         if (idx != -ETIMEDOUT) {
                 idx = *tail_el_ptr(rb);
-                *rb->tail = (*rb->tail + 1) & (SHM_BUFFER_SIZE -1);
+                *rb->tail = (*rb->tail + 1) & ((SHM_BUFFER_SIZE) - 1);
                 pthread_cond_broadcast(rb->del);
         }
 

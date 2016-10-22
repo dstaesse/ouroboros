@@ -42,7 +42,7 @@ enum conn_state {
 
 struct frct_i {
         uint32_t cep_id;
-        uint32_t r_address;
+        uint64_t r_address;
         uint32_t r_cep_id;
         enum qos_cube cube;
         uint64_t seqno;
@@ -58,18 +58,20 @@ struct {
         pthread_mutex_t cep_ids_lock;
 } frct;
 
-static int next_cep_id()
+static cep_id_t next_cep_id(void)
 {
-        int ret;
+        cep_id_t ret;
 
         pthread_mutex_lock(&frct.cep_ids_lock);
         ret = bmp_allocate(frct.cep_ids);
+        if (!bmp_is_id_valid(frct.cep_ids, ret))
+                ret = INVALID_CEP_ID;
         pthread_mutex_unlock(&frct.cep_ids_lock);
 
         return ret;
 }
 
-static int release_cep_id(int id)
+static int release_cep_id(cep_id_t id)
 {
         int ret;
 
@@ -117,7 +119,7 @@ int frct_fini()
         return 0;
 }
 
-static struct frct_i * create_frct_i(uint32_t address,
+static struct frct_i * create_frct_i(uint64_t address,
                                      cep_id_t r_cep_id)
 {
         struct frct_i * instance;
@@ -128,6 +130,11 @@ static struct frct_i * create_frct_i(uint32_t address,
                 return NULL;
 
         id = next_cep_id();
+        if (id == INVALID_CEP_ID) {
+                free(instance);
+                return NULL;
+        }
+
         instance->r_address = address;
         instance->cep_id = id;
         instance->r_cep_id = r_cep_id;
@@ -191,7 +198,7 @@ static void destroy_frct_i(struct frct_i * instance)
         free(instance);
 }
 
-cep_id_t frct_i_create(uint32_t      address,
+cep_id_t frct_i_create(uint64_t      address,
                        buffer_t *    buf,
                        enum qos_cube cube)
 {

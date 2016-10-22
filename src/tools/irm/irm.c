@@ -27,7 +27,7 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: irm [OPERATION]\n\n"
                "where OPERATION = {ipcp bind unbind\n"
@@ -36,6 +36,9 @@ static void usage()
 
 static int do_help(int argc, char **argv)
 {
+        (void) argc;
+        (void) argv;
+
         usage();
         return 0;
 }

@@ -144,7 +144,6 @@ static irm_msg_t * send_recv_irm_msg_timed(irm_msg_t * msg, bool timed)
         if (write(sockfd, buf.data, buf.len) != -1)
                 count = read(sockfd, buf.data, IRM_MSG_BUF_SIZE);
 
-
         if (count > 0)
                 recv_msg = irm_msg__unpack(NULL, count, buf.data);
 

@@ -53,13 +53,14 @@ struct ipcp {
         pthread_t          mainloop;
 } ipcpi;
 
-int             ipcp_init();
+int             ipcp_init(enum ipcp_type type,
+                          struct ipcp_ops * ops);
 
-void            ipcp_fini();
+void            ipcp_fini(void);
 
 void            ipcp_set_state(enum ipcp_state state);
 
-enum ipcp_state ipcp_get_state();
+enum ipcp_state ipcp_get_state(void);
 
 int             ipcp_wait_state(enum ipcp_state         state,
                                 const struct timespec * timeout);

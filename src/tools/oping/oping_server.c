@@ -31,6 +31,9 @@
 
 void shutdown_server(int signo, siginfo_t * info, void * c)
 {
+        (void) info;
+        (void) c;
+
         switch(signo) {
         case SIGINT:
         case SIGTERM:
@@ -46,6 +49,8 @@ void * cleaner_thread(void * o)
         int i = 0;
         struct timespec now = {0, 0};
         int deadline_ms = 10000;
+
+        (void) o;
 
         while (true) {
                 clock_gettime(CLOCK_REALTIME, &now);
@@ -74,6 +79,8 @@ void * server_thread(void *o)
         if (fq == NULL)
                 return (void *) 1;
 
+        (void) o;
+
         while (true) {
                 int ret = flow_event_wait(server.flows, fq, &timeout);
                 if (ret == -ETIMEDOUT)
@@ -100,7 +107,7 @@ void * server_thread(void *o)
                         server.times[fd] = now;
                         pthread_mutex_unlock(&server.lock);
 
-                        msg->type = htonl((uint32_t) ECHO_REPLY);
+                        msg->type = htonl(ECHO_REPLY);
 
                         if (flow_write(fd, buf, msg_len) < 0) {
                                 printf("Error writing to flow (fd %d).\n", fd);
@@ -116,6 +123,8 @@ void * accept_thread(void * o)
 {
         int fd = 0;
         struct timespec now = {0, 0};
+
+        (void) o;
 
         printf("Ouroboros ping server started.\n");
 
@@ -147,7 +156,7 @@ void * accept_thread(void * o)
         return (void *) 0;
 }
 
-int server_main()
+int server_main(void)
 {
         struct sigaction sig_act;
 

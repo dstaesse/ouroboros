@@ -34,28 +34,34 @@
 #define MGMT_AE "Management"
 #define DT_AE "Data transfer"
 
-int fmgr_init();
-int fmgr_fini();
+int fmgr_init(void);
+
+int fmgr_fini(void);
 
 int fmgr_np1_alloc(int           fd,
                    char *        dst_ap_name,
                    char *        src_ae_name,
                    enum qos_cube qos);
+
 int fmgr_np1_alloc_resp(int fd,
                         int response);
+
 int fmgr_np1_dealloc(int fd);
 
 int fmgr_np1_post_buf(cep_id_t   id,
                       buffer_t * buf);
+
 int fmgr_np1_post_sdu(cep_id_t             id,
                       struct shm_du_buff * sdb);
 
 int fmgr_nm1_mgmt_flow(char * dst_name);
+
 int fmgr_nm1_dt_flow(char * dst_name,
                      enum qos_cube qos);
 
 int fmgr_nm1_write_sdu(struct pci *         pci,
                        struct shm_du_buff * sdb);
+
 int fmgr_nm1_write_buf(struct pci * pci,
                        buffer_t *   buf);
 

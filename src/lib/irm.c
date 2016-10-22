@@ -166,8 +166,8 @@ ssize_t irm_list_ipcps(char *   name,
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        ssize_t nr = -1;
-        int i;
+        size_t nr = 0;
+        size_t i;
 
         if (apis == NULL)
                 return -EINVAL;

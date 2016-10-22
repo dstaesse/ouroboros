@@ -30,7 +30,7 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-static void usage()
+static void usage(void)
 {
         printf("Usage: irm unbind ipcp <name>\n"
                "          [name <name>, omit: remove all information.\n");

@@ -27,8 +27,8 @@
 
 struct lockfile;
 
-struct lockfile * lockfile_create();
-struct lockfile * lockfile_open();
+struct lockfile * lockfile_create(void);
+struct lockfile * lockfile_open(void);
 void              lockfile_close(struct lockfile * lf);
 void              lockfile_destroy(struct lockfile * lf);
 

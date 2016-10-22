@@ -167,6 +167,9 @@ int ribmgr_cdap_reply(struct cdap * instance,
 {
         struct list_head * pos, * n = NULL;
 
+        (void) data;
+        (void) len;
+
         pthread_mutex_lock(&rib.cdap_reqs_lock);
 
         list_for_each_safe(pos, n, &rib.cdap_reqs) {
@@ -202,6 +205,9 @@ int ribmgr_cdap_read(struct cdap * instance,
                      char *        name)
 {
         LOG_MISSING;
+        (void) instance;
+        (void) invoke_id;
+        (void) name;
 
         return -1;
 }
@@ -215,6 +221,8 @@ int ribmgr_cdap_write(struct cdap * instance,
 {
         static_info_msg_t * msg;
         int ret = 0;
+
+        (void) flags;
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
         if (ipcp_get_state() == IPCP_PENDING_ENROLL &&
@@ -272,6 +280,11 @@ int ribmgr_cdap_create(struct cdap * instance,
                        size_t        len)
 {
         LOG_MISSING;
+        (void) instance;
+        (void) invoke_id;
+        (void) name;
+        (void) data;
+        (void) len;
 
         return -1;
 }
@@ -283,6 +296,11 @@ int ribmgr_cdap_delete(struct cdap * instance,
                        size_t        len)
 {
         LOG_MISSING;
+        (void) instance;
+        (void) invoke_id;
+        (void) name;
+        (void) data;
+        (void) len;
 
         return -1;
 }

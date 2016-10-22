@@ -47,6 +47,8 @@ int irmd_api;
 
 void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 {
+        (void) c;
+
         switch(sig) {
         case SIGINT:
         case SIGTERM:

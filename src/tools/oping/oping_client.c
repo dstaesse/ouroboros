@@ -39,6 +39,9 @@
 
 void shutdown_client(int signo, siginfo_t * info, void * c)
 {
+        (void) info;
+        (void) c;
+
         switch(signo) {
         case SIGINT:
         case SIGTERM:
@@ -59,11 +62,13 @@ void * reader(void * o)
         struct oping_msg * msg = (struct oping_msg *) buf;
         int fd = 0;
         int msg_len = 0;
-        float ms = 0;
-        float d = 0;
+        double ms = 0;
+        double d = 0;
         fqueue_t * fq = fqueue_create();
         if (fq == NULL)
                 return (void *) 1;
+
+        (void) o;
 
         /* FIXME: use flow timeout option once we have it */
         while (client.rcvd != client.count
@@ -78,7 +83,7 @@ void * reader(void * o)
                                 continue;
                         }
 
-                        if (ntohl(msg->id) >= client.count) {
+                        if (ntohl(msg->id) >= (ssize_t) client.count) {
                                 printf("Invalid id.\n");
                                 continue;
                         }
@@ -89,7 +94,7 @@ void * reader(void * o)
 
                         pthread_mutex_lock(&client.lock);
                         ms = ts_diff_us(&client.times[ntohl(msg->id)], &now)
-                                /1000.0;
+                                / 1000.0;
                         pthread_mutex_unlock(&client.lock);
 
                         printf("%d bytes from %s: seq=%d time=%.3f ms\n",
@@ -159,7 +164,7 @@ void * writer(void * o)
         return (void *) 0;
 }
 
-int client_main()
+int client_main(void)
 {
         struct sigaction sig_act;
 
