@@ -17,6 +17,7 @@ protobuf_generate_c(SHIM_UDP_PROTO_SRCS SHIM_UDP_PROTO_HDRS
 
 # Find library needed for gethostbyname.
 include(CheckFunctionExists)
+include(CheckLibraryExists)
 CHECK_FUNCTION_EXISTS("gethostbyname" CMAKE_HAVE_GETHOSTBYNAME)
 IF(NOT CMAKE_HAVE_GETHOSTBYNAME)
   CHECK_LIBRARY_EXISTS("nsl" "gethostbyname" "" CMAKE_LIB_NSL_HAS_GETHOSTBYNAME)
