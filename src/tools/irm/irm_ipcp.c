@@ -45,12 +45,12 @@ static const struct cmd {
         const char * cmd;
         int (* func)(int argc, char ** argv);
 } cmds[] = {
-        { "create",     do_create_ipcp },
-        { "destroy",    do_destroy_ipcp },
-        { "bootstrap",  do_bootstrap_ipcp },
-        { "enroll",     do_enroll_ipcp },
-        { "help",       do_help },
-        { 0 }
+        { "create",    do_create_ipcp },
+        { "destroy",   do_destroy_ipcp },
+        { "bootstrap", do_bootstrap_ipcp },
+        { "enroll",    do_enroll_ipcp },
+        { "help",      do_help },
+        { NULL,        NULL }
 };
 
 static int do_cmd(const char * argv0,

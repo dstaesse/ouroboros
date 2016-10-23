@@ -276,7 +276,6 @@ void ap_fini()
         bmp_destroy(ai.fds);
         bmp_destroy(ai.fqueues);
         shm_flow_set_destroy(ai.fqset);
-        shm_rdrbuff_close(ai.rdrb);
 
         if (ai.daf_name != NULL)
                 free(ai.daf_name);
@@ -302,6 +301,8 @@ void ap_fini()
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
                 pthread_cond_destroy(&ai.ports[i].state_cond);
         }
+
+        shm_rdrbuff_close(ai.rdrb);
 
         free(ai.flows);
         free(ai.ports);
@@ -699,7 +700,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                 return -ENOTALLOC;
         }
 
-        if (ai.flows[fd].oflags & FLOW_O_RDONLY) {
+        if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 return -EPERM;
@@ -960,12 +961,13 @@ int flow_event_wait(struct flow_set *       set,
         if (fq->fqsize > 0)
                 return 0;
 
+        assert(!fq->next);
+
         ret = shm_flow_set_wait(ai.fqset, set->idx, fq->fqueue, timeout);
         if (ret == -ETIMEDOUT)
                 return -ETIMEDOUT;
 
         fq->fqsize = ret;
-        fq->next   = 0;
 
         return 0;
 }
@@ -1257,7 +1259,7 @@ int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
-        if (ai.flows[fd].oflags & FLOW_O_RDONLY) {
+        if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 return -EPERM;

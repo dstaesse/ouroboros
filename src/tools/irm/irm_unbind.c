@@ -51,7 +51,7 @@ static const struct cmd {
         { "api",  do_unbind_api },
         { "ipcp", do_unbind_ipcp },
         { "help", do_help },
-        { 0 }
+        { NULL,   NULL }
 };
 
 static int do_cmd(const char * argv0, int argc, char ** argv)

@@ -1993,13 +1993,15 @@ void * mainloop(void * o)
 
 static int irm_create(void)
 {
-        struct stat st = {0};
+        struct stat st;
         struct timeval timeout = {(IRMD_ACCEPT_TIMEOUT / 1000),
                                   (IRMD_ACCEPT_TIMEOUT % 1000) * 1000};
 
         irmd = malloc(sizeof(*irmd));
         if (irmd == NULL)
                 return -ENOMEM;
+
+        memset(&st, 0, sizeof(st));
 
         irmd->state = IRMD_NULL;
 
