@@ -1151,6 +1151,7 @@ int ipcp_flow_req_arr(pid_t  api, char * dst_name, char * src_ae_name)
         }
 
         ai.flows[fd].port_id = port_id;
+        ai.flows[fd].oflags = FLOW_O_DEFAULT;
 
         ai.ports[port_id].fd = fd;
         port_set_state(&(ai.ports[port_id]), PORT_ID_ASSIGNED);
