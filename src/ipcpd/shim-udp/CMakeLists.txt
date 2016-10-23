@@ -15,23 +15,6 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 protobuf_generate_c(SHIM_UDP_PROTO_SRCS SHIM_UDP_PROTO_HDRS
   shim_udp_messages.proto)
 
-# Find library needed for gethostbyname.
-include(CheckFunctionExists)
-include(CheckLibraryExists)
-CHECK_FUNCTION_EXISTS("gethostbyname" CMAKE_HAVE_GETHOSTBYNAME)
-IF(NOT CMAKE_HAVE_GETHOSTBYNAME)
-  CHECK_LIBRARY_EXISTS("nsl" "gethostbyname" "" CMAKE_LIB_NSL_HAS_GETHOSTBYNAME)
-  IF (CMAKE_LIB_NSL_HAS_GETHOSTBYNAME)
-    SET (X11_X_EXTRA_LIBS ${X11_X_EXTRA_LIBS} -lnsl)
-  ELSE (CMAKE_LIB_NSL_HAS_GETHOSTBYNAME)
-    CHECK_LIBRARY_EXISTS("bsd" "gethostbyname" ""
-      CMAKE_LIB_BSD_HAS_GETHOSTBYNAME)
-    IF (CMAKE_LIB_BSD_HAS_GETHOSTBYNAME)
-      SET (X11_X_EXTRA_LIBS ${X11_X_EXTRA_LIBS} -lbsd)
-    ENDIF (CMAKE_LIB_BSD_HAS_GETHOSTBYNAME)
-  ENDIF (CMAKE_LIB_NSL_HAS_GETHOSTBYNAME)
-ENDIF(NOT CMAKE_HAVE_GETHOSTBYNAME)
-
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/shim_udp_config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/shim_udp_config.h")
