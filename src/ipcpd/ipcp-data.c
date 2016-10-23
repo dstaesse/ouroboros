@@ -32,6 +32,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 struct reg_entry {
         struct list_head list;
@@ -50,6 +51,8 @@ static struct reg_entry * reg_entry_create(char * name)
         if (entry == NULL)
                 return NULL;
 
+        assert(name);
+
         entry->name = name;
         if (entry->name == NULL)
                 return NULL;
@@ -59,11 +62,11 @@ static struct reg_entry * reg_entry_create(char * name)
 
 static void reg_entry_destroy(struct reg_entry * entry)
 {
-        if (entry == NULL)
-                return;
+        assert(entry);
 
         if (entry->name != NULL)
                 free(entry->name);
+
         free(entry);
 }
 
@@ -73,6 +76,8 @@ static struct dir_entry * dir_entry_create(char *   ap_name,
         struct dir_entry * entry = malloc(sizeof(*entry));
         if (entry == NULL)
                 return NULL;
+
+        assert(ap_name);
 
         entry->addr    = addr;
         entry->ap_name = ap_name;
@@ -84,11 +89,11 @@ static struct dir_entry * dir_entry_create(char *   ap_name,
 
 static void dir_entry_destroy(struct dir_entry * entry)
 {
-        if (entry == NULL)
-                return;
+        assert(entry);
 
         if (entry->ap_name != NULL)
                 free(entry->ap_name);
+
         free(entry);
 }
 
@@ -116,9 +121,9 @@ struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
         INIT_LIST_HEAD(&dst->registry);
         INIT_LIST_HEAD(&dst->directory);
 
-        /* init the mutexes */
-        pthread_mutex_init(&dst->reg_lock, NULL);
-        pthread_mutex_init(&dst->dir_lock, NULL);
+        /* init the locks */
+        pthread_rwlock_init(&dst->reg_lock, NULL);
+        pthread_rwlock_init(&dst->dir_lock, NULL);
 
         return dst;
 }
@@ -127,6 +132,9 @@ static void clear_registry(struct ipcp_data * data)
 {
         struct list_head * h;
         struct list_head * t;
+
+        assert(data);
+
         list_for_each_safe(h, t, &data->registry) {
                 struct reg_entry * e = list_entry(h, struct reg_entry, list);
                 list_del(&e->list);
@@ -138,6 +146,9 @@ static void clear_directory(struct ipcp_data * data)
 {
         struct list_head * h;
         struct list_head * t;
+
+        assert(data);
+
         list_for_each_safe(h, t, &data->directory) {
                 struct dir_entry * e = list_entry(h, struct dir_entry, list);
                 list_del(&e->list);
@@ -150,21 +161,23 @@ void ipcp_data_destroy(struct ipcp_data * data)
         if (data == NULL)
                 return;
 
-        pthread_mutex_lock(&data->reg_lock);
-        pthread_mutex_lock(&data->dir_lock);
-
         /* clear the lists */
+        pthread_rwlock_wrlock(&data->reg_lock);
+
         clear_registry(data);
+
+        pthread_rwlock_unlock(&data->reg_lock);
+        pthread_rwlock_wrlock(&data->dir_lock);
+
         clear_directory(data);
+
+        pthread_rwlock_unlock(&data->dir_lock);
 
         if (data->dif_name != NULL)
                 free(data->dif_name);
 
-        pthread_mutex_unlock(&data->dir_lock);
-        pthread_mutex_unlock(&data->reg_lock);
-
-        pthread_mutex_destroy(&data->dir_lock);
-        pthread_mutex_destroy(&data->reg_lock);
+        pthread_rwlock_destroy(&data->dir_lock);
+        pthread_rwlock_destroy(&data->reg_lock);
 
         free(data);
 }
@@ -175,6 +188,10 @@ static struct reg_entry * find_reg_entry_by_name(struct ipcp_data * data,
                                                  const char *       name)
 {
         struct list_head * h;
+
+        assert(data);
+        assert(name);
+
         list_for_each(h, &data->registry) {
                 struct reg_entry * e = list_entry(h, struct reg_entry, list);
                 if (!strcmp(e->name, name))
@@ -214,7 +231,15 @@ static struct dir_entry * find_dir_entry_any(struct ipcp_data * data,
 bool ipcp_data_is_in_directory(struct ipcp_data * data,
                                const char *       ap_name)
 {
-        return find_dir_entry_any(data, ap_name) != NULL;
+        bool ret = false;
+
+        pthread_rwlock_rdlock(&data->dir_lock);
+
+        ret = (find_dir_entry_any(data, ap_name) != NULL);
+
+        pthread_rwlock_unlock(&data->dir_lock);
+
+        return ret;
 }
 
 int ipcp_data_del_reg_entry(struct ipcp_data * data,
@@ -224,19 +249,19 @@ int ipcp_data_del_reg_entry(struct ipcp_data * data,
         if (data == NULL)
                 return -1;
 
-        pthread_mutex_lock(&data->reg_lock);
+        pthread_rwlock_wrlock(&data->reg_lock);
 
         e = find_reg_entry_by_name(data, name);
         if (e == NULL) {
-                pthread_mutex_unlock(&data->reg_lock);
+                pthread_rwlock_unlock(&data->reg_lock);
                 return 0; /* nothing to do */
         }
 
         list_del(&e->list);
 
-        reg_entry_destroy(e);
+        pthread_rwlock_unlock(&data->reg_lock);
 
-        pthread_mutex_unlock(&data->reg_lock);
+        reg_entry_destroy(e);
 
         return 0;
 }
@@ -249,19 +274,19 @@ int ipcp_data_del_dir_entry(struct ipcp_data * data,
         if (data == NULL)
                 return -1;
 
-        pthread_mutex_lock(&data->dir_lock);
+        pthread_rwlock_wrlock(&data->dir_lock);
 
         e = find_dir_entry(data, ap_name, addr);
         if (e == NULL) {
-                pthread_mutex_unlock(&data->dir_lock);
+                pthread_rwlock_unlock(&data->dir_lock);
                 return 0; /* nothing to do */
         }
 
         list_del(&e->list);
 
-        dir_entry_destroy(e);
+        pthread_rwlock_unlock(&data->dir_lock);
 
-        pthread_mutex_unlock(&data->dir_lock);
+        dir_entry_destroy(e);
 
         return 0;
 }
@@ -274,22 +299,22 @@ int ipcp_data_add_reg_entry(struct ipcp_data * data,
         if (data == NULL || name == NULL)
                 return -1;
 
-        pthread_mutex_lock(&data->reg_lock);
+        pthread_rwlock_wrlock(&data->reg_lock);
 
         if (find_reg_entry_by_name(data, name)) {
-                pthread_mutex_unlock(&data->reg_lock);
-                return -2;
+                pthread_rwlock_unlock(&data->reg_lock);
+                return -1;
         }
 
         entry = reg_entry_create(name);
         if (entry == NULL) {
-                pthread_mutex_unlock(&data->reg_lock);
+                pthread_rwlock_unlock(&data->reg_lock);
                 return -1;
         }
 
         list_add(&entry->list, &data->registry);
 
-        pthread_mutex_unlock(&data->reg_lock);
+        pthread_rwlock_unlock(&data->reg_lock);
 
         return 0;
 }
@@ -303,22 +328,22 @@ int ipcp_data_add_dir_entry(struct ipcp_data * data,
         if (data == NULL || ap_name == NULL)
                 return -1;
 
-        pthread_mutex_lock(&data->dir_lock);
+        pthread_rwlock_wrlock(&data->dir_lock);
 
         if (find_dir_entry(data, ap_name, addr) != NULL) {
-                pthread_mutex_unlock(&data->dir_lock);
-                return -2;
+                pthread_rwlock_unlock(&data->dir_lock);
+                return -1;
         }
 
         entry = dir_entry_create(ap_name, addr);
         if (entry == NULL) {
-                pthread_mutex_unlock(&data->dir_lock);
+                pthread_rwlock_unlock(&data->dir_lock);
                 return -1;
         }
 
         list_add(&entry->list,&data->directory);
 
-        pthread_mutex_unlock(&data->dir_lock);
+        pthread_rwlock_unlock(&data->dir_lock);
 
         return 0;
 }
@@ -326,7 +351,18 @@ int ipcp_data_add_dir_entry(struct ipcp_data * data,
 bool ipcp_data_is_in_registry(struct ipcp_data * data,
                               const char *       ap_name)
 {
-        return find_reg_entry_by_name(data, ap_name) != NULL;
+        bool ret = false;
+
+        if (data == NULL || ap_name == NULL)
+                return false;
+
+        pthread_rwlock_rdlock(&data->reg_lock);
+
+        ret = (find_reg_entry_by_name(data, ap_name) != NULL);
+
+        pthread_rwlock_unlock(&data->reg_lock);
+
+        return ret;
 }
 
 uint64_t ipcp_data_get_addr(struct ipcp_data * data,
@@ -335,18 +371,18 @@ uint64_t ipcp_data_get_addr(struct ipcp_data * data,
         struct dir_entry * entry;
         uint64_t           addr;
 
-        pthread_mutex_lock(&data->dir_lock);
+        pthread_rwlock_rdlock(&data->dir_lock);
 
         entry = find_dir_entry_any(data, ap_name);
 
         if (entry == NULL) {
-                pthread_mutex_unlock(&data->dir_lock);
+                pthread_rwlock_unlock(&data->dir_lock);
                 return 0; /* undefined behaviour, 0 may be a valid address */
         }
 
         addr = entry->addr;
 
-        pthread_mutex_unlock(&data->dir_lock);
+        pthread_rwlock_unlock(&data->dir_lock);
 
         return addr;
 }

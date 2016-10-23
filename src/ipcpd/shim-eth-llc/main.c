@@ -426,7 +426,7 @@ static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap)
         if (fd < 0) {
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("No flow found for remote deallocation request.");
+                LOG_DBG("Flow already deallocated.");
                 return 0;
         }
 
@@ -1009,10 +1009,9 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
         eth_llc_data.ef_to_fd[sap] = -1;
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-
-        ret = eth_llc_ipcp_sap_dealloc(addr, r_sap);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
+        ret = eth_llc_ipcp_sap_dealloc(addr, r_sap);
         if (ret < 0)
                 LOG_DBG("Could not notify remote.");
 

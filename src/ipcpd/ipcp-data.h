@@ -36,12 +36,10 @@ struct ipcp_data {
         char *              dif_name;
 
         struct list_head    registry;
-        pthread_mutex_t     reg_lock;
+        pthread_rwlock_t    reg_lock;
 
         struct list_head    directory;
-        pthread_mutex_t     dir_lock;
-
-        pthread_mutex_t     lock;
+        pthread_rwlock_t    dir_lock;
 };
 
 struct ipcp_data * ipcp_data_create(void);
