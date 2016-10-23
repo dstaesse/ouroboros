@@ -587,7 +587,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
 
                         flow_write(fd, &llc_frame->payload, length);
-
                 }
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
                 offset = (offset + 1) & ((SHM_BUFFER_SIZE) - 1);
@@ -617,10 +616,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                 if (ret == -ETIMEDOUT)
                         continue;
 
-                if (ret < 0) {
-                        LOG_ERR("Event wait returned error code %d.", -ret);
-                        continue;
-                }
+                assert(!ret);
 
                 while ((fd = fqueue_next(fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
@@ -968,10 +964,7 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd, int response)
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        if (eth_llc_ipcp_sap_alloc_resp(r_addr,
-                                        ssap,
-                                        r_sap,
-                                        response) < 0) {
+        if (eth_llc_ipcp_sap_alloc_resp(r_addr, ssap, r_sap, response) < 0) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
                 bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
