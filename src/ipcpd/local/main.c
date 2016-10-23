@@ -98,6 +98,7 @@ static void * ipcp_local_sdu_loop(void * o)
 
                 if (ipcp_get_state() != IPCP_ENROLLED) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
+                        fqueue_destroy(fq);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 

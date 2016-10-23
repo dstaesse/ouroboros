@@ -153,39 +153,6 @@ static irm_msg_t * send_recv_irm_msg_timed(irm_msg_t * msg, bool timed)
         return recv_msg;
 }
 
-void send_irm_msg(irm_msg_t * msg)
-{
-        int sockfd;
-        buffer_t buf;
-
-        sockfd = client_socket_open(IRM_SOCK_PATH);
-        if (sockfd < 0)
-                return;
-
-        buf.len = irm_msg__get_packed_size(msg);
-        if (buf.len == 0) {
-                close(sockfd);
-                return;
-        }
-
-        buf.data = malloc(buf.len);
-        if (buf.data == NULL) {
-                close(sockfd);
-                return;
-        }
-
-        pthread_cleanup_push(close_ptr, &sockfd);
-        pthread_cleanup_push((void (*)(void *)) free, (void *) buf.data);
-
-        irm_msg__pack(msg, buf.data);
-
-        if (write(sockfd, buf.data, buf.len) < 0)
-                return;
-
-        pthread_cleanup_pop(true);
-        pthread_cleanup_pop(true);
-}
-
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 { return send_recv_irm_msg_timed(msg, true); }
 
