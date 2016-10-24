@@ -64,16 +64,14 @@ void * reader(void * o)
         int msg_len = 0;
         double ms = 0;
         double d = 0;
-        fqueue_t * fq = fqueue_create();
-        if (fq == NULL)
-                return (void *) 1;
 
         (void) o;
 
         /* FIXME: use flow timeout option once we have it */
         while (client.rcvd != client.count
-               && flow_event_wait(client.flows, fq, &timeout) != -ETIMEDOUT) {
-                while ((fd = fqueue_next(fq)) >= 0) {
+               && (flow_event_wait(client.flows, client.fq, &timeout)
+                   != -ETIMEDOUT)) {
+                while ((fd = fqueue_next(client.fq)) >= 0) {
                         msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
                         if (msg_len < 0)
                                 continue;
@@ -175,7 +173,13 @@ int client_main(void)
 
         client.flows = flow_set_create();
         if (client.flows == NULL)
-                return 0;
+                return -1;
+
+        client.fq = fqueue_create();
+        if (client.fq == NULL) {
+                flow_set_destroy(client.flows);
+                return -1;
+        }
 
         fd = flow_alloc(client.s_apn, NULL, NULL);
         if (fd < 0) {
@@ -251,6 +255,8 @@ int client_main(void)
 
         pthread_mutex_lock(&client.lock);
         free(client.times);
+        flow_set_destroy(client.flows);
+        fqueue_destroy(client.fq);
         pthread_mutex_unlock(&client.lock);
         pthread_mutex_destroy(&client.lock);
 
