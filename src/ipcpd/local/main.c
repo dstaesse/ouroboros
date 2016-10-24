@@ -49,6 +49,7 @@ int irmd_api;
 struct {
         int                   in_out[IRMD_MAX_FLOWS];
         flow_set_t *          flows;
+        fqueue_t *            fq;
 
         pthread_rwlock_t      lock;
         pthread_t             sduloop;
@@ -64,6 +65,12 @@ static int local_data_init(void)
         if (local_data.flows == NULL)
                 return -ENFILE;
 
+        local_data.fq = fqueue_create();
+        if (local_data.fq == NULL) {
+                flow_set_destroy(local_data.flows);
+                return -ENOMEM;
+        }
+
         pthread_rwlock_init(&local_data.lock, NULL);
 
         return 0;
@@ -71,40 +78,35 @@ static int local_data_init(void)
 
 static void local_data_fini(void)
 {
+        flow_set_destroy(local_data.flows);
+        fqueue_destroy(local_data.fq);
         pthread_rwlock_destroy(&local_data.lock);
 }
 
 static void * ipcp_local_sdu_loop(void * o)
 {
         struct timespec timeout = {0, EVENT_WAIT_TIMEOUT * 1000};
-        fqueue_t * fq = fqueue_create();
-        if (fq == NULL)
-                return (void *) 1;
 
         (void) o;
 
         while (true) {
                 int fd;
-                int ret;
                 ssize_t idx;
 
-                ret = flow_event_wait(local_data.flows, fq, &timeout);
-                if (ret == -ETIMEDOUT)
+                if (flow_event_wait(local_data.flows, local_data.fq, &timeout)
+                    == -ETIMEDOUT)
                         continue;
-
-                assert(!ret);
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
                 if (ipcp_get_state() != IPCP_ENROLLED) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
-                        fqueue_destroy(fq);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
                 pthread_rwlock_rdlock(&local_data.lock);
 
-                while ((fd = fqueue_next(fq)) >= 0) {
+                while ((fd = fqueue_next(local_data.fq)) >= 0) {
                         idx = local_flow_read(fd);
 
                         assert((size_t) idx < (SHM_BUFFER_SIZE));
@@ -151,7 +153,8 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        (void) conf;
+        /* this IPCP doesn't need to maintain its dif_name */
+        free(conf->dif_name);
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
