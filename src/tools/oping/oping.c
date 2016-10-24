@@ -54,6 +54,7 @@ struct c {
         double rtt_m2;
 
         flow_set_t * flows;
+        fqueue_t *   fq;
 
         /* needs locking */
         struct timespec * times;
@@ -66,6 +67,7 @@ struct c {
 struct s {
         struct timespec   times[OPING_MAX_FLOWS];
         flow_set_t *      flows;
+        fqueue_t *        fq;
         pthread_mutex_t   lock;
 
         pthread_t cleaner_pt;

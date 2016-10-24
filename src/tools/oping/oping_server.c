@@ -75,23 +75,15 @@ void * server_thread(void *o)
         struct timespec now = {0, 0};
         struct timespec timeout = {0, 100 * MILLION};
         int fd;
-        fqueue_t * fq = fqueue_create();
-        if (fq == NULL)
-                return (void *) 1;
 
         (void) o;
 
         while (true) {
-                int ret = flow_event_wait(server.flows, fq, &timeout);
-                if (ret == -ETIMEDOUT)
+                if (flow_event_wait(server.flows, server.fq, &timeout)
+                    == -ETIMEDOUT)
                         continue;
 
-                if (ret < 0) {
-                        printf("Event error.\n");
-                        break;
-                }
-
-                while ((fd = fqueue_next(fq)) >= 0) {
+                while ((fd = fqueue_next(server.fq)) >= 0) {
                         msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
                         if (msg_len < 0)
                                 continue;
@@ -176,6 +168,12 @@ int server_main(void)
         if (server.flows == NULL)
                 return 0;
 
+        server.fq = fqueue_create();
+        if (server.fq == NULL) {
+                flow_set_destroy(server.flows);
+                return -1;
+        }
+
         pthread_create(&server.cleaner_pt, NULL, cleaner_thread, NULL);
         pthread_create(&server.accept_pt, NULL, accept_thread, NULL);
         pthread_create(&server.server_pt, NULL, server_thread, NULL);
@@ -184,6 +182,9 @@ int server_main(void)
 
         pthread_cancel(server.server_pt);
         pthread_cancel(server.cleaner_pt);
+
+        flow_set_destroy(server.flows);
+        fqueue_destroy(server.fq);
 
         pthread_join(server.server_pt, NULL);
         pthread_join(server.cleaner_pt, NULL);
