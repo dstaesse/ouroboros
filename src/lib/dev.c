@@ -283,7 +283,7 @@ void ap_fini()
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         for (i = 0; i < AP_MAX_FLOWS; ++i) {
-                if (ai.flows[i].tx_rb != NULL) {
+                if (ai.flows[i].rx_rb != NULL) {
                         ssize_t idx;
                         while ((idx = shm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
                                 shm_rdrbuff_remove(ai.rdrb, idx);
@@ -560,15 +560,14 @@ int flow_alloc_res(int fd)
         if (ai.flows[fd].tx_rb == NULL) {
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
-                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         ai.flows[fd].set = shm_flow_set_open(ai.flows[fd].api);
         if (ai.flows[fd].set == NULL) {
+                shm_rbuff_close(ai.flows[fd].tx_rb);
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
-                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
@@ -595,6 +594,7 @@ int flow_alloc_res(int fd)
 int flow_dealloc(int fd)
 {
         irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_port_id  = true;
@@ -618,6 +618,24 @@ int flow_dealloc(int fd)
 
         msg.port_id = ai.flows[fd].port_id;
 
+        pthread_rwlock_unlock(&ai.flows_lock);
+        pthread_rwlock_unlock(&ai.data_lock);
+
+        recv_msg = send_recv_irm_msg_b(&msg);
+        if (recv_msg == NULL) {
+                return -1;
+        }
+
+        if (!recv_msg->has_result) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        pthread_rwlock_rdlock(&ai.data_lock);
+        pthread_rwlock_wrlock(&ai.flows_lock);
+
         port_destroy(&ai.ports[msg.port_id]);
 
         ai.flows[fd].port_id = -1;
@@ -627,6 +645,7 @@ int flow_dealloc(int fd)
         ai.flows[fd].tx_rb = NULL;
         ai.flows[fd].oflags = 0;
         ai.flows[fd].api = -1;
+        shm_flow_set_close(ai.flows[fd].set);
         if (ai.flows[fd].timeout != NULL) {
                 free(ai.flows[fd].timeout);
                 ai.flows[fd].timeout = NULL;
@@ -636,8 +655,6 @@ int flow_dealloc(int fd)
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
-
-        send_irm_msg(&msg);
 
         return 0;
 }

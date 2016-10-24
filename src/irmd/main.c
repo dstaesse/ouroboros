@@ -1929,10 +1929,9 @@ void * mainloop(void * o)
                         ret_msg.result = flow_alloc_res(msg->port_id);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
-                        flow_dealloc(msg->api, msg->port_id);
-                        irm_msg__free_unpacked(msg, NULL);
-                        close(cli_sockfd);
-                        continue;
+                        ret_msg.has_result = true;
+                        ret_msg.result = flow_dealloc(msg->api, msg->port_id);
+                        break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->api,
                                          msg->dst_name,
