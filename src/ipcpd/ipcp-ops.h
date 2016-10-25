@@ -36,6 +36,8 @@ struct ipcp_ops {
 
         int   (* ipcp_name_unreg)(char * name);
 
+        int   (* ipcp_name_query)(char * name);
+
         int   (* ipcp_flow_alloc)(int           fd,
                                   char *        dst_ap_name,
                                   char *        src_ae_name,

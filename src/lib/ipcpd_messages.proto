@@ -5,10 +5,11 @@ enum ipcp_msg_code {
         IPCP_ENROLL          =  2;
         IPCP_NAME_REG        =  3;
         IPCP_NAME_UNREG      =  4;
-        IPCP_FLOW_ALLOC      =  5;
-        IPCP_FLOW_ALLOC_RESP =  6;
-        IPCP_FLOW_DEALLOC    =  7;
-        IPCP_REPLY           =  8;
+        IPCP_NAME_QUERY      =  5;
+        IPCP_FLOW_ALLOC      =  6;
+        IPCP_FLOW_ALLOC_RESP =  7;
+        IPCP_FLOW_DEALLOC    =  8;
+        IPCP_REPLY           =  9;
 };
 
 message ipcp_msg {

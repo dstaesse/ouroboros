@@ -20,14 +20,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define OUROBOROS_PREFIX "irmd/ipcp"
+
 #include <ouroboros/config.h>
+#include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/sockets.h>
-
-#define OUROBOROS_PREFIX "irmd/ipcp"
-
-#include <ouroboros/logs.h>
 
 #include "ipcp.h"
 
@@ -285,6 +284,31 @@ int ipcp_name_unreg(pid_t  api,
         int ret = -1;
 
         msg.code = IPCP_MSG_CODE__IPCP_NAME_UNREG;
+        msg.name = name;
+
+        recv_msg = send_recv_ipcp_msg(api, &msg);
+        if (recv_msg == NULL)
+                return -1;
+
+        if (recv_msg->has_result == false) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int ipcp_name_query(pid_t api,
+                    char * name)
+{
+        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int ret = -1;
+
+        msg.code = IPCP_MSG_CODE__IPCP_NAME_QUERY;
         msg.name = name;
 
         recv_msg = send_recv_ipcp_msg(api, &msg);

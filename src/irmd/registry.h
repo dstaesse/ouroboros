@@ -27,14 +27,14 @@
 #include <ouroboros/list.h>
 #include <ouroboros/irm_config.h>
 
+#include "api_table.h"
+#include "apn_table.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <pthread.h>
 #include <string.h>
 #include <sys/types.h>
-
-#include "api_table.h"
-#include "apn_table.h"
 
 #define registry_has_name(r, name) \
         (registry_get_entry(r, name) != NULL)
@@ -98,9 +98,6 @@ void               registry_sanitize_apis(struct list_head * registry);
 
 struct reg_entry * registry_get_entry(struct list_head * registry,
                                       char *             name);
-
-char *             registry_get_dif_for_dst(struct list_head * registry,
-                                            char *             dst_name);
 
 int                registry_add_name_to_dif(struct list_head * registry,
                                             char *             name,

@@ -1,14 +1,16 @@
 enum shim_eth_llc_msg_code {
-        FLOW_REQ     = 1;
-        FLOW_REPLY   = 2;
-        FLOW_DEALLOC = 3;
+        FLOW_REQ         = 1;
+        FLOW_REPLY       = 2;
+        FLOW_DEALLOC     = 3;
+        NAME_QUERY_REQ   = 4;
+        NAME_QUERY_REPLY = 5;
 };
 
 message shim_eth_llc_msg {
         required shim_eth_llc_msg_code code  = 1;
         optional string dst_name             = 2;
         optional string src_ae_name          = 3;
-        required uint32 ssap                 = 4;
+        optional uint32 ssap                 = 4;
         optional uint32 dsap                 = 5;
         optional sint32 response             = 6;
 };

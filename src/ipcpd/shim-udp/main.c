@@ -20,9 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define OUROBOROS_PREFIX "ipcpd/shim-udp"
+
 #include <ouroboros/config.h>
-#include "ipcp.h"
-#include "shim_udp_config.h"
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/dev.h>
@@ -30,10 +30,11 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/fcntl.h>
 #include <ouroboros/errno.h>
-
-#define OUROBOROS_PREFIX "ipcpd/shim-udp"
-
 #include <ouroboros/logs.h>
+
+#include "shim_udp_messages.pb-c.h"
+#include "ipcp.h"
+#include "shim_udp_config.h"
 
 #include <string.h>
 #include <sys/socket.h>
@@ -46,8 +47,6 @@
 #include <pthread.h>
 #include <sys/wait.h>
 #include <fcntl.h>
-
-#include "shim_udp_messages.pb-c.h"
 
 typedef ShimUdpMsg shim_udp_msg_t;
 
@@ -833,7 +832,7 @@ static int ipcp_udp_name_reg(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_add_reg_entry(ipcpi.data, name)) {
+        if (ipcp_data_reg_add_entry(ipcpi.data, name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
                 return -1;
@@ -864,7 +863,7 @@ static int ipcp_udp_name_reg(char * name)
 
                 if (ddns_send(cmd)) {
                         pthread_rwlock_rdlock(&ipcpi.state_lock);
-                        ipcp_data_del_reg_entry(ipcpi.data, name);
+                        ipcp_data_reg_del_entry(ipcpi.data, name);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         return -1;
                 }
@@ -885,7 +884,6 @@ static int ipcp_udp_name_unreg(char * name)
         char cmd[100];
         uint32_t dns_addr;
 #endif
-
         if (strlen(name) > 24) {
                 LOG_ERR("DNS names cannot be longer than 24 chars.");
                 return -1;
@@ -914,7 +912,74 @@ static int ipcp_udp_name_unreg(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        ipcp_data_del_reg_entry(ipcpi.data, name);
+        ipcp_data_reg_del_entry(ipcpi.data, name);
+
+        pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        return 0;
+}
+
+static int ipcp_udp_name_query(char * name)
+{
+        uint32_t           ip_addr = 0;
+        struct hostent *   h;
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+        uint32_t           dns_addr = 0;
+#endif
+
+        assert(name);
+
+        if (strlen(name) > 24) {
+                LOG_ERR("DNS names cannot be longer than 24 chars.");
+                return -1;
+        }
+
+        pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+        if (ipcp_get_state() != IPCP_ENROLLED) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_DBG("Won't query a name on a non-enrolled IPCP.");
+                return -1; /* -ENOTENROLLED */
+        }
+
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+        dns_addr = udp_data.dns_addr;
+
+        if (dns_addr != 0) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+
+                ip_addr = ddns_resolve(name, dns_addr);
+                if (ip_addr == 0) {
+                        LOG_DBG("Could not resolve %s.", name);
+                        return -1;
+                }
+
+                pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+                if (ipcp_get_state() != IPCP_ENROLLED) {
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        LOG_DBG("Won't add name to the directory.");
+                        return -1; /* -ENOTENROLLED */
+                }
+        } else {
+#endif
+                h = gethostbyname(name);
+                if (h == NULL) {
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        LOG_DBG("Could not resolve %s.", name);
+                        return -1;
+                }
+
+                ip_addr = *((uint32_t *) (h->h_addr_list[0]));
+#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+        }
+#endif
+
+        if (ipcp_data_dir_add_entry(ipcpi.data, name, ip_addr)) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to add directory entry.");
+                return -1;
+        }
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
@@ -930,15 +995,13 @@ static int ipcp_udp_flow_alloc(int           fd,
         struct sockaddr_in f_saddr; /* flow */
         socklen_t          f_saddr_len = sizeof(f_saddr);
         int                skfd;
-        struct hostent *   h;
         uint32_t           ip_addr = 0;
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
-        uint32_t           dns_addr = 0;
-#endif
+
         LOG_DBG("Allocating flow to %s.", dst_name);
 
         if (dst_name == NULL || src_ae_name == NULL)
                 return -1;
+
         if (strlen(dst_name) > 255
             || strlen(src_ae_name) > 255) {
                 LOG_ERR("Name too long for this shim.");
@@ -976,39 +1039,13 @@ static int ipcp_udp_flow_alloc(int           fd,
                 return -1; /* -ENOTENROLLED */
         }
 
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
-        dns_addr = udp_data.dns_addr;
-
-        if (dns_addr != 0) {
+        if (!ipcp_data_dir_has(ipcpi.data, dst_name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-
-                ip_addr = ddns_resolve(dst_name, dns_addr);
-                if (ip_addr == 0) {
-                        LOG_DBG("Could not resolve %s.", dst_name);
-                        close(fd);
-                        return -1;
-                }
-
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-                if (ipcp_get_state() != IPCP_ENROLLED) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_DBG("Won't allocate flow with non-enrolled IPCP.");
-                        close(skfd);
-                        return -1; /* -ENOTENROLLED */
-                }
-        } else {
-#endif
-                h = gethostbyname(dst_name);
-                if (h == NULL) {
-                        LOG_DBG("Could not resolve %s.", dst_name);
-                        close(skfd);
-                        return -1;
-                }
-
-                ip_addr = *((uint32_t *) (h->h_addr_list[0]));
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+                LOG_DBG("Could not resolve destination.");
+                close(skfd);
+                return -1;
         }
-#endif
+        ip_addr = (uint32_t) ipcp_data_dir_get_addr(ipcpi.data, dst_name);
 
         /* connect to server (store the remote IP address in the fd) */
         memset((char *) &r_saddr, 0, sizeof(r_saddr));
@@ -1171,6 +1208,7 @@ static struct ipcp_ops udp_ops = {
         .ipcp_enroll          = NULL,                       /* shim */
         .ipcp_name_reg        = ipcp_udp_name_reg,
         .ipcp_name_unreg      = ipcp_udp_name_unreg,
+        .ipcp_name_query      = ipcp_udp_name_query,
         .ipcp_flow_alloc      = ipcp_udp_flow_alloc,
         .ipcp_flow_alloc_resp = ipcp_udp_flow_alloc_resp,
         .ipcp_flow_dealloc    = ipcp_udp_flow_dealloc
