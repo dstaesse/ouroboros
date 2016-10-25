@@ -79,6 +79,7 @@ struct {
         int                s_fd;
 
         flow_set_t *       np1_flows;
+        fqueue_t *         fq;
         fd_set             flow_fd_s;
         /* bidir mappings of (n - 1) file descriptor to (n) flow descriptor */
         int                uf_to_fd[FD_SETSIZE];
@@ -112,6 +113,12 @@ static int udp_data_init(void)
         if (udp_data.np1_flows == NULL)
                 return -ENOMEM;
 
+        udp_data.fq = fqueue_create();
+        if (udp_data.fq == NULL) {
+                flow_set_destroy(udp_data.np1_flows);
+                return -ENOMEM;
+        }
+
         pthread_rwlock_init(&udp_data.flows_lock, NULL);
         pthread_cond_init(&udp_data.fd_set_cond, NULL);
         pthread_mutex_init(&udp_data.fd_set_lock, NULL);
@@ -122,6 +129,7 @@ static int udp_data_init(void)
 static void udp_data_fini(void)
 {
         flow_set_destroy(udp_data.np1_flows);
+        fqueue_destroy(udp_data.fq);
 
         pthread_rwlock_destroy(&udp_data.flows_lock);
         pthread_mutex_destroy(&udp_data.fd_set_lock);
@@ -523,23 +531,16 @@ static void * ipcp_udp_sdu_loop(void * o)
         int fd;
         struct timespec timeout = {0, FD_UPDATE_TIMEOUT * 1000};
         struct shm_du_buff * sdb;
-        fqueue_t * fq = fqueue_create();
-        if (fq == NULL)
-                return (void *) 1;
 
         (void) o;
 
         while (true) {
-                int ret = flow_event_wait(udp_data.np1_flows, fq, &timeout);
-                if (ret == -ETIMEDOUT)
+                if (flow_event_wait(udp_data.np1_flows,
+                                    udp_data.fq,
+                                    &timeout)  == -ETIMEDOUT)
                         continue;
 
-                if (ret < 0) {
-                        LOG_ERR("Event wait returned error code %d.", -ret);
-                        continue;
-                }
-
-                while ((fd = fqueue_next(fq)) >= 0) {
+                while ((fd = fqueue_next(udp_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 LOG_ERR("Bad read from fd %d.", fd);
                                 continue;
@@ -594,13 +595,11 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
         int  enable = 1;
         int  fd = -1;
 
-        if (conf == NULL)
-                return -1; /* -EINVAL */
+        assert(conf);
+        assert(conf->type == THIS_TYPE);
 
-        if (conf->type != THIS_TYPE) {
-                LOG_ERR("Config doesn't match IPCP type.");
-                return -1;
-        }
+        /* this IPCP doesn't need to maintain its dif_name */
+        free(conf->dif_name);
 
         if (inet_ntop(AF_INET,
                       &conf->ip_addr,
