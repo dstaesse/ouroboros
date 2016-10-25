@@ -115,13 +115,14 @@ void * accept_thread(void * o)
 {
         int fd = 0;
         struct timespec now = {0, 0};
+        struct qos_spec qs;
 
         (void) o;
 
         printf("Ouroboros ping server started.\n");
 
         while (true) {
-                fd = flow_accept(NULL);
+                fd = flow_accept(NULL, &qs);
                 if (fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;

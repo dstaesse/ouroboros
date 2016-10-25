@@ -40,6 +40,7 @@ int server_main(void)
         int    client_fd = 0;
         char   buf[BUF_SIZE];
         ssize_t count = 0;
+        struct qos_spec qs;
 
         printf("Starting the server.\n");
 
@@ -50,7 +51,7 @@ int server_main(void)
         }
 
         while (true) {
-                client_fd = flow_accept(NULL);
+                client_fd = flow_accept(NULL, &qs);
                 if (client_fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;

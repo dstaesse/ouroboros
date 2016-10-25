@@ -155,6 +155,7 @@ void * listener(void * o)
 {
         int client_fd = 0;
         int response = 0;
+        struct qos_spec qs;
 
         (void) o;
 
@@ -162,7 +163,7 @@ void * listener(void * o)
                server_settings.interval, server_settings.timeout);
 
         while (true) {
-                client_fd = flow_accept(NULL);
+                client_fd = flow_accept(NULL, &qs);
                 if (client_fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;

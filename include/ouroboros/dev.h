@@ -34,8 +34,9 @@ int     ap_init(char * ap_name);
 
 void    ap_fini(void);
 
-/* Returns flow descriptor (> 0) and client AE name. */
-int     flow_accept(char ** ae_name);
+/* Returns flow descriptor (> 0), client AE name and qos spec. */
+int     flow_accept(char **           ae_name,
+                    struct qos_spec * qos);
 
 int     flow_alloc_resp(int fd,
                         int response);
