@@ -115,6 +115,7 @@ struct {
         int                tx_offset;
 #endif
         flow_set_t *       np1_flows;
+        fqueue_t *         fq;
         int *              ef_to_fd;
         struct ef *        fd_to_ef;
         pthread_rwlock_t   flows_lock;
@@ -152,6 +153,15 @@ static int eth_llc_data_init(void)
                 return -ENOMEM;
         }
 
+        eth_llc_data.fq = fqueue_create();
+        if (eth_llc_data.fq == NULL) {
+                flow_set_destroy(eth_llc_data.np1_flows);
+                bmp_destroy(eth_llc_data.saps);
+                free(eth_llc_data.ef_to_fd);
+                free(eth_llc_data.fd_to_ef);
+                return -ENOMEM;
+        }
+
         for (i = 0; i < MAX_SAPS; ++i)
                 eth_llc_data.ef_to_fd[i] = -1;
 
@@ -170,6 +180,7 @@ void eth_llc_data_fini(void)
 {
         bmp_destroy(eth_llc_data.saps);
         flow_set_destroy(eth_llc_data.np1_flows);
+        fqueue_destroy(eth_llc_data.fq);
         free(eth_llc_data.fd_to_ef);
         free(eth_llc_data.ef_to_fd);
         pthread_rwlock_destroy(&eth_llc_data.flows_lock);
@@ -605,20 +616,16 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
         uint8_t dsap;
         uint8_t r_addr[MAC_SIZE];
         struct timespec timeout = {0, EVENT_WAIT_TIMEOUT * 1000};
-        fqueue_t * fq = fqueue_create();
-        if (fq == NULL)
-                return (void *) 1;
 
         (void) o;
 
         while (true) {
-                int ret = flow_event_wait(eth_llc_data.np1_flows, fq, &timeout);
-                if (ret == -ETIMEDOUT)
+                if (flow_event_wait(eth_llc_data.np1_flows,
+                                    eth_llc_data.fq,
+                                    &timeout) == -ETIMEDOUT)
                         continue;
 
-                assert(!ret);
-
-                while ((fd = fqueue_next(fq)) >= 0) {
+                while ((fd = fqueue_next(eth_llc_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 LOG_ERR("Bad read from fd %d.", fd);
                                 continue;
@@ -686,13 +693,11 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         struct tpacket_req req;
 #endif
 
-        if (conf == NULL)
-                return -1; /* -EINVAL */
+        assert(conf);
+        assert(conf->type == THIS_TYPE);
 
-        if (conf->type != THIS_TYPE) {
-                LOG_ERR("Config doesn't match IPCP type.");
-                return -1;
-        }
+        /* this IPCP doesn't need to maintain its dif_name */
+        free(conf->dif_name);
 
         if (conf->if_name == NULL) {
                 LOG_ERR("Interface name is NULL.");
