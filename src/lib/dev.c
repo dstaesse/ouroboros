@@ -492,9 +492,8 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
         pthread_rwlock_unlock(&ai.data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
+        if (recv_msg == NULL)
                 return -1;
-        }
 
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);

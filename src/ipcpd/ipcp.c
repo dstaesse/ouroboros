@@ -41,15 +41,45 @@
 int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
 {
         pthread_condattr_t cattr;
+        int t;
+
+        struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
+                             (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
 
         ipcpi.irmd_fd = -1;
         ipcpi.state   = IPCP_INIT;
 
+        ipcpi.threadpool = malloc(sizeof(pthread_t) * IPCPD_THREADPOOL_SIZE);
+        if (ipcpi.threadpool == NULL) {
+                return -ENOMEM;
+        }
+
+        ipcpi.sock_path = ipcp_sock_path(getpid());
+        if (ipcpi.sock_path == NULL) {
+                free(ipcpi.threadpool);
+                return -1;
+        }
+
+        ipcpi.sockfd = server_socket_open(ipcpi.sock_path);
+        if (ipcpi.sockfd < 0) {
+                LOG_ERR("Could not open server socket.");
+                free(ipcpi.threadpool);
+                free(ipcpi.sock_path);
+                return -1;
+        }
+
+        if (setsockopt(ipcpi.sockfd, SOL_SOCKET, SO_RCVTIMEO,
+                       (void *) &tv, sizeof(tv)))
+                LOG_WARN("Failed to set timeout on socket.");
+
         ipcpi.ops = ops;
 
         ipcpi.data = ipcp_data_create();
-        if (ipcpi.data == NULL)
+        if (ipcpi.data == NULL) {
+                free(ipcpi.threadpool);
+                free(ipcpi.sock_path);
                 return -ENOMEM;
+        }
 
         ipcp_data_init(ipcpi.data, type);
 
@@ -61,14 +91,26 @@ int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
 #endif
         pthread_cond_init(&ipcpi.state_cond, &cattr);
 
-        pthread_create(&ipcpi.mainloop, NULL, ipcp_main_loop, NULL);
+        for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
+                pthread_create(&ipcpi.threadpool[t], NULL,
+                               ipcp_main_loop, NULL);
 
         return 0;
 }
 
 void ipcp_fini()
 {
-        pthread_join(ipcpi.mainloop, NULL);
+        int t;
+
+        for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
+                pthread_join(ipcpi.threadpool[t], NULL);
+
+        close(ipcpi.sockfd);
+        if (unlink(ipcpi.sock_path))
+                LOG_DBG("Could not unlink %s.", ipcpi.sock_path);
+
+        free(ipcpi.sock_path);
+        free(ipcpi.threadpool);
 
         ipcp_data_destroy(ipcpi.data);
         pthread_cond_destroy(&ipcpi.state_cond);
@@ -171,7 +213,6 @@ int ipcp_parse_arg(int argc, char * argv[])
 void * ipcp_main_loop(void * o)
 {
         int     lsockfd;
-        int     sockfd;
         uint8_t buf[IPCP_MSG_BUF_SIZE];
 
         ipcp_msg_t * msg;
@@ -182,31 +223,12 @@ void * ipcp_main_loop(void * o)
         dif_config_msg_t * conf_msg;
         struct dif_config  conf;
 
-        char * sock_path;
         char * msg_name_dup;
-
-        struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
-                             (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
 
         struct timeval ltv = {(SOCKET_TIMEOUT / 1000),
                              (SOCKET_TIMEOUT % 1000) * 1000};
 
         (void) o;
-
-        sock_path = ipcp_sock_path(getpid());
-        if (sock_path == NULL)
-                return (void *) 1;
-
-        sockfd = server_socket_open(sock_path);
-        if (sockfd < 0) {
-                LOG_ERR("Could not open server socket.");
-                free(sock_path);
-                return (void *) 1;
-        }
-
-        if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,
-                       (void *) &tv, sizeof(tv)))
-                LOG_WARN("Failed to set timeout on socket.");
 
         while (true) {
                 int fd = -1;
@@ -221,7 +243,7 @@ void * ipcp_main_loop(void * o)
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
 
-                lsockfd = accept(sockfd, 0, 0);
+                lsockfd = accept(ipcpi.sockfd, 0, 0);
                 if (lsockfd < 0)
                         continue;
 
@@ -415,12 +437,6 @@ void * ipcp_main_loop(void * o)
                 free(buffer.data);
                 close(lsockfd);
         }
-
-        close(sockfd);
-        if (unlink(sock_path))
-                LOG_DBG("Could not unlink %s.", sock_path);
-
-        free(sock_path);
 
         return (void *) 0;
 }
