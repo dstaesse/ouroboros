@@ -1248,8 +1248,12 @@ static int flow_alloc_res(int port_id)
         pthread_rwlock_unlock(&irmd->flows_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        if (irm_flow_wait_state(f, FLOW_ALLOCATED) == FLOW_ALLOCATED)
+        if (irm_flow_wait_state(f, FLOW_ALLOCATED) == FLOW_ALLOCATED) {
+                LOG_INFO("Flow on port_id %d allocated.", port_id);
                 return 0;
+        }
+
+        LOG_INFO("Pending flow on port_id %d torn down.", port_id);
 
         return -1;
 }
@@ -1351,6 +1355,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
 
         struct pid_el * c_api;
         pid_t h_api = -1;
+        int port_id = -1;
 
         LOG_DBGF("Flow req arrived from IPCP %d for %s on AE %s.",
                  api, dst_name, ae_name);
@@ -1469,7 +1474,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
         pthread_rwlock_unlock(&irmd->reg_lock);
 
         pthread_rwlock_wrlock(&irmd->flows_lock);
-        f->port_id = bmp_allocate(irmd->port_ids);
+        port_id = f->port_id = bmp_allocate(irmd->port_ids);
         if (!bmp_is_id_valid(irmd->port_ids, f->port_id)) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
@@ -1533,6 +1538,8 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_cond_wait(&re->state_cond, &re->state_lock);
 
         pthread_mutex_unlock(&re->state_lock);
+
+        LOG_INFO("Flow on port_id %d allocated.", port_id);
 
         return f;
 }
