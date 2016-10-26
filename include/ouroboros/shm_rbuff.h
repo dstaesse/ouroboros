@@ -36,9 +36,11 @@ void               shm_rbuff_close(struct shm_rbuff * rb);
 
 void               shm_rbuff_destroy(struct shm_rbuff * rb);
 
-int                shm_rbuff_block(struct shm_rbuff * rb);
+void               shm_rbuff_block(struct shm_rbuff * rb);
 
 void               shm_rbuff_unblock(struct shm_rbuff * rb);
+
+void               shm_rbuff_fini(struct shm_rbuff * rb);
 
 int                shm_rbuff_write(struct shm_rbuff * rb,
                                    size_t             idx);

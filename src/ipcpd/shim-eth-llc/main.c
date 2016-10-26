@@ -348,17 +348,6 @@ static int eth_llc_ipcp_sap_alloc_resp(uint8_t * dst_addr,
         return eth_llc_ipcp_send_mgmt_frame(&msg, dst_addr);
 }
 
-static int eth_llc_ipcp_sap_dealloc(uint8_t * dst_addr, uint8_t ssap)
-{
-        shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
-
-        msg.code     = SHIM_ETH_LLC_MSG_CODE__FLOW_DEALLOC;
-        msg.has_ssap = true;
-        msg.ssap     = ssap;
-
-        return eth_llc_ipcp_send_mgmt_frame(&msg, dst_addr);
-}
-
 static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
                                 uint8_t * r_addr,
                                 char *    dst_name,
@@ -427,29 +416,6 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
 
 }
 
-static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap)
-{
-        int fd = -1;
-
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
-
-        fd = eth_llc_data.ef_to_fd[ssap];
-        if (fd < 0) {
-                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Flow already deallocated.");
-                return 0;
-        }
-
-        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        flow_cntl(fd, FLOW_F_SETFL, FLOW_O_WRONLY);
-
-        return 0;
-}
-
 static int eth_llc_ipcp_name_query_req(char * name, uint8_t * r_addr)
 {
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
@@ -508,9 +474,6 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf, size_t len, uint8_t * r_addr)
                                              r_addr,
                                              msg->dsap,
                                              msg->response);
-                break;
-        case SHIM_ETH_LLC_MSG_CODE__FLOW_DEALLOC:
-                eth_llc_ipcp_flow_dealloc_req(msg->ssap);
                 break;
         case SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ:
                 eth_llc_ipcp_name_query_req(msg->dst_name, r_addr);
@@ -1074,25 +1037,18 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd, int response)
 
 static int eth_llc_ipcp_flow_dealloc(int fd)
 {
-        struct timespec t = {0, 10000};
-
         uint8_t sap;
-        uint8_t r_sap;
         uint8_t addr[MAC_SIZE];
-        int ret;
 
-        flow_set_del(eth_llc_data.np1_flows, fd);
-
-        while (flow_dealloc(fd) == -EBUSY)
-                nanosleep(&t, NULL);
+        ipcp_flow_fini(fd);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
-        r_sap = eth_llc_data.fd_to_ef[fd].r_sap;
+        flow_set_del(eth_llc_data.np1_flows, fd);
+
         sap = eth_llc_data.fd_to_ef[fd].sap;
         memcpy(addr, eth_llc_data.fd_to_ef[fd].r_addr, MAC_SIZE);
-
         bmp_release(eth_llc_data.saps, sap);
         eth_llc_data.fd_to_ef[fd].sap = -1;
         eth_llc_data.fd_to_ef[fd].r_sap = -1;
@@ -1103,9 +1059,7 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        ret = eth_llc_ipcp_sap_dealloc(addr, r_sap);
-        if (ret < 0)
-                LOG_DBG("Could not notify remote.");
+        flow_dealloc(fd);
 
         LOG_DBG("Flow with fd %d deallocated.", fd);
 

@@ -230,17 +230,6 @@ static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
         return send_shim_udp_msg(&msg, dst_ip_addr);
 }
 
-static int ipcp_udp_port_dealloc(uint32_t dst_ip_addr,
-                                 uint16_t src_udp_port)
-{
-        shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
-
-        msg.code             = SHIM_UDP_MSG_CODE__FLOW_DEALLOC;
-        msg.src_udp_port     = src_udp_port;
-
-        return send_shim_udp_msg(&msg, dst_ip_addr);
-}
-
 static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                              char * dst_name,
                              char * src_ae_name)
@@ -375,46 +364,6 @@ static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
         return ret;
 }
 
-static int ipcp_udp_flow_dealloc_req(uint16_t udp_port)
-{
-        int skfd = -1;
-        int fd   = -1;
-
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-        pthread_rwlock_wrlock(&udp_data.flows_lock);
-
-        fd = udp_port_to_fd(udp_port);
-        if (fd < 0) {
-                pthread_rwlock_unlock(&udp_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Could not find flow on UDP port %d.",
-                         ntohs(udp_port));
-                return 0;
-        }
-
-        skfd = udp_data.fd_to_uf[fd].skfd;
-
-        udp_data.uf_to_fd[skfd]    = -1;
-        udp_data.fd_to_uf[fd].udp  = -1;
-        udp_data.fd_to_uf[fd].skfd = -1;
-
-        pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_rdlock(&udp_data.flows_lock);
-
-        clr_fd(skfd);
-
-        pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        flow_cntl(fd, FLOW_F_SETFL, FLOW_O_WRONLY);
-
-        close(skfd);
-
-        LOG_DBG("Flow with fd %d deallocated.", fd);
-
-        return 0;
-}
-
 static void * ipcp_udp_listener(void * o)
 {
         uint8_t buf[SHIM_UDP_MSG_SIZE];
@@ -455,9 +404,6 @@ static void * ipcp_udp_listener(void * o)
                         ipcp_udp_port_alloc_reply(msg->src_udp_port,
                                                   msg->dst_udp_port,
                                                   msg->response);
-                        break;
-                case SHIM_UDP_MSG_CODE__FLOW_DEALLOC:
-                        ipcp_udp_flow_dealloc_req(msg->src_udp_port);
                         break;
                 default:
                         LOG_ERR("Unknown message received %d.", msg->code);
@@ -1153,15 +1099,10 @@ static int ipcp_udp_flow_alloc_resp(int fd, int response)
 static int ipcp_udp_flow_dealloc(int fd)
 {
         int skfd = -1;
-        uint16_t remote_udp;
-        struct timespec t = {0, 10000};
-        struct sockaddr_in    r_saddr;
-        socklen_t             r_saddr_len = sizeof(r_saddr);
+
+        ipcp_flow_fini(fd);
 
         flow_set_del(udp_data.np1_flows, fd);
-
-        while (flow_dealloc(fd) == -EBUSY)
-                nanosleep(&t, NULL);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&udp_data.flows_lock);
@@ -1180,27 +1121,9 @@ static int ipcp_udp_flow_dealloc(int fd)
         pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        if (getpeername(skfd, (struct sockaddr *) &r_saddr, &r_saddr_len) < 0) {
-                LOG_DBG("Socket with fd %d has no peer.", skfd);
-                close(skfd);
-                return 0;
-        }
-
-        remote_udp       = r_saddr.sin_port;
-        r_saddr.sin_port = LISTEN_PORT;
-
-        if (connect(skfd, (struct sockaddr *) &r_saddr, sizeof(r_saddr)) < 0) {
-                close(skfd);
-                return 0 ;
-        }
-
-        if (ipcp_udp_port_dealloc(r_saddr.sin_addr.s_addr, remote_udp) < 0) {
-                LOG_DBG("Could not notify remote.");
-                close(skfd);
-                return 0;
-        }
-
         close(skfd);
+
+        flow_dealloc(fd);
 
         LOG_DBG("Flow with fd %d deallocated.", fd);
 

@@ -1,7 +1,6 @@
 enum shim_udp_msg_code {
         FLOW_REQ     = 1;
         FLOW_REPLY   = 2;
-        FLOW_DEALLOC = 3;
 };
 
 message shim_udp_msg {

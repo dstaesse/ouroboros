@@ -612,12 +612,6 @@ int flow_dealloc(int fd)
                 return -ENOTALLOC;
         }
 
-        if (shm_rbuff_block(ai.flows[fd].rx_rb) == -EBUSY) {
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -EBUSY;
-        }
-
         msg.port_id = ai.flows[fd].port_id;
 
         pthread_rwlock_unlock(&ai.flows_lock);
@@ -1285,11 +1279,7 @@ int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
                 return -EPERM;
         }
 
-        if (ai.flows[fd].tx_rb == NULL) {
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -EPERM;
-        }
+        assert(ai.flows[fd].tx_rb);
 
         idx = shm_du_buff_get_idx(sdb);
 
@@ -1302,9 +1292,38 @@ int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
         return 0;
 }
 
+int ipcp_flow_fini(int fd)
+{
+        struct shm_rbuff * rb;
+
+        flow_cntl(fd, FLOW_F_SETFL, FLOW_O_WRONLY);
+
+        pthread_rwlock_rdlock(&ai.data_lock);
+        pthread_rwlock_rdlock(&ai.flows_lock);
+
+        rb = ai.flows[fd].rx_rb;
+
+        pthread_rwlock_unlock(&ai.flows_lock);
+        pthread_rwlock_unlock(&ai.data_lock);
+
+        shm_rbuff_fini(rb);
+
+        return 0;
+}
+
 ssize_t local_flow_read(int fd)
 {
-        return shm_rbuff_read(ai.flows[fd].rx_rb);
+        ssize_t ret;
+
+        pthread_rwlock_rdlock(&ai.data_lock);
+        pthread_rwlock_rdlock(&ai.flows_lock);
+
+        ret = shm_rbuff_read(ai.flows[fd].rx_rb);
+
+        pthread_rwlock_unlock(&ai.flows_lock);
+        pthread_rwlock_unlock(&ai.data_lock);
+
+        return ret;
 }
 
 int local_flow_write(int fd, size_t idx)
@@ -1315,11 +1334,7 @@ int local_flow_write(int fd, size_t idx)
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
-        if (ai.flows[fd].tx_rb == NULL) {
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -EPERM;
-        }
+        assert(ai.flows[fd].tx_rb);
 
         shm_rbuff_write(ai.flows[fd].tx_rb, idx);
 
@@ -1338,11 +1353,7 @@ int ipcp_read_shim(int fd, struct shm_du_buff ** sdb)
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
-        if (ai.flows[fd].rx_rb == NULL) {
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -EPERM;
-        }
+        assert(ai.flows[fd].rx_rb);
 
         idx = shm_rbuff_read(ai.flows[fd].rx_rb);
         if (idx < 0) {

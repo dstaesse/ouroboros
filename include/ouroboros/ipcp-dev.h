@@ -45,6 +45,8 @@ int  ipcp_flow_read(int                   fd,
 int  ipcp_flow_write(int                  fd,
                      struct shm_du_buff * sdb);
 
+void ipcp_flow_fini(int fd);
+
 void ipcp_flow_del(struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCP_DEV_H */
