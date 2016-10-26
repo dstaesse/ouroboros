@@ -941,6 +941,11 @@ static int ipcp_udp_name_query(char * name)
                 return -1; /* -ENOTENROLLED */
         }
 
+        if (ipcp_data_dir_has(ipcpi.data, name)) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return 0;
+        }
+
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         dns_addr = udp_data.dns_addr;
 
