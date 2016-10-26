@@ -125,6 +125,7 @@ static void * fmgr_nm1_acceptor(void * o)
 {
         int    fd;
         char * ae_name;
+        struct qos_spec qs;
 
         (void) o;
 
@@ -140,7 +141,7 @@ static void * fmgr_nm1_acceptor(void * o)
 
                 pthread_rwlock_unlock(&ipcpi.state_lock);
 
-                fd = flow_accept(&ae_name);
+                fd = flow_accept(&ae_name, &qs);
                 if (fd < 0) {
                         LOG_ERR("Failed to accept flow.");
                         continue;

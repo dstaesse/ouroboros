@@ -134,6 +134,7 @@ struct flow {
         struct shm_flow_set * set;
         int                   port_id;
         int                   oflags;
+        enum qos_cube         qos;
 
         pid_t                 api;
 
@@ -315,11 +316,13 @@ void ap_fini()
 }
 
 
-int flow_accept(char ** ae_name)
+int flow_accept(char ** ae_name, struct qos_spec * qos)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int fd = -1;
+
+        (void) qos;
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_api = true;
