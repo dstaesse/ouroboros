@@ -110,7 +110,7 @@ static void * ipcp_local_sdu_loop(void * o)
                 while ((fd = fqueue_next(local_data.fq)) >= 0) {
                         idx = local_flow_read(fd);
 
-                        assert((size_t) idx < (SHM_BUFFER_SIZE));
+                        assert(idx < (SHM_BUFFER_SIZE));
 
                         fd = local_data.in_out[fd];
 
@@ -243,12 +243,12 @@ static int ipcp_local_flow_alloc(int           fd,
 
         pthread_rwlock_wrlock(&local_data.lock);
 
-        flow_set_add(local_data.flows, fd);
-
         out_fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name);
 
         local_data.in_out[fd]  = out_fd;
         local_data.in_out[out_fd] = fd;
+
+        flow_set_add(local_data.flows, fd);
 
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -291,23 +291,21 @@ static int ipcp_local_flow_alloc_resp(int fd, int response)
 
 static int ipcp_local_flow_dealloc(int fd)
 {
-        struct timespec t = {0, 10000};
-
         assert(!(fd < 0));
 
-        flow_set_del(local_data.flows, fd);
-
-        while (flow_dealloc(fd) == -EBUSY)
-                nanosleep(&t, NULL);
+        ipcp_flow_fini(fd);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&local_data.lock);
 
-        flow_cntl(local_data.in_out[fd], FLOW_F_SETFL, FLOW_O_WRONLY);
+        flow_set_del(local_data.flows, fd);
+
         local_data.in_out[fd] = -1;
 
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        flow_dealloc(fd);
 
         LOG_INFO("Flow with fd %d deallocated.", fd);
 

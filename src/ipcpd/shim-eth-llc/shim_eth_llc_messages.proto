@@ -1,9 +1,8 @@
 enum shim_eth_llc_msg_code {
         FLOW_REQ         = 1;
         FLOW_REPLY       = 2;
-        FLOW_DEALLOC     = 3;
-        NAME_QUERY_REQ   = 4;
-        NAME_QUERY_REPLY = 5;
+        NAME_QUERY_REQ   = 3;
+        NAME_QUERY_REPLY = 4;
 };
 
 message shim_eth_llc_msg {

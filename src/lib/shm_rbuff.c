@@ -43,6 +43,8 @@
 #include <stdbool.h>
 
 #define FN_MAX_CHARS 255
+#define RB_CLOSED -1
+#define RB_OPEN 0
 
 #define SHM_RBUFF_FILE_SIZE ((SHM_BUFFER_SIZE) * sizeof(ssize_t)          \
                              + 2 * sizeof(size_t) + sizeof(int8_t)      \
@@ -144,7 +146,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         pthread_cond_init(rb->add, &cattr);
         pthread_cond_init(rb->del, &cattr);
 
-        *rb->acl = 0;
+        *rb->acl = RB_OPEN;
         *rb->head = 0;
         *rb->tail = 0;
 
@@ -291,6 +293,7 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 
         ret = *tail_el_ptr(rb);
         *rb->tail = (*rb->tail + 1) & ((SHM_BUFFER_SIZE) - 1);
+        pthread_cond_broadcast(rb->del);
 
         pthread_mutex_unlock(rb->lock);
 
@@ -353,10 +356,8 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
         return idx;
 }
 
-int shm_rbuff_block(struct shm_rbuff * rb)
+void shm_rbuff_block(struct shm_rbuff * rb)
 {
-        int ret = 0;
-
         assert(rb);
 
 #ifdef __APPLE__
@@ -367,14 +368,9 @@ int shm_rbuff_block(struct shm_rbuff * rb)
                 pthread_mutex_consistent(rb->lock);
         }
 #endif
-        *rb->acl = -1;
-
-        if (!shm_rbuff_empty(rb))
-                ret = -EBUSY;
+        *rb->acl = RB_CLOSED;
 
         pthread_mutex_unlock(rb->lock);
-
-        return ret;
 }
 
 void shm_rbuff_unblock(struct shm_rbuff * rb)
@@ -389,9 +385,38 @@ void shm_rbuff_unblock(struct shm_rbuff * rb)
                 pthread_mutex_consistent(rb->lock);
         }
 #endif
-        *rb->acl = 0; /* open */
+        *rb->acl = RB_OPEN;
 
         pthread_mutex_unlock(rb->lock);
+}
+
+void shm_rbuff_fini(struct shm_rbuff * rb)
+{
+        assert(rb);
+
+#ifdef __APPLE__
+        pthread_mutex_lock(rb->lock);
+#else
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
+                LOG_DBG("Recovering dead mutex.");
+                pthread_mutex_consistent(rb->lock);
+        }
+#endif
+        assert(*rb->acl == RB_CLOSED);
+
+        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
+                             (void *) rb->lock);
+
+        while (!shm_rbuff_empty(rb))
+#ifdef __APPLE__
+                pthread_cond_wait(rb->del, rb->lock);
+#else
+                if (pthread_cond_wait(rb->del, rb->lock) == EOWNERDEAD) {
+                        LOG_DBG("Recovering dead mutex.");
+                        pthread_mutex_consistent(rb->lock);
+                }
+#endif
+        pthread_cleanup_pop(true);
 }
 
 void shm_rbuff_reset(struct shm_rbuff * rb)
