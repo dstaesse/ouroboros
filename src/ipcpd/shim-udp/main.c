@@ -272,6 +272,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         }
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
+        pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         /* reply to IRM */
         fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name);
@@ -282,8 +283,6 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                 close(skfd);
                 return -1;
         }
-
-        pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         udp_data.uf_to_fd[skfd]    = fd;
         udp_data.fd_to_uf[fd].skfd = skfd;
@@ -494,19 +493,16 @@ static void * ipcp_udp_sdu_loop(void * o)
                         pthread_rwlock_rdlock(&ipcpi.state_lock);
                         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
-                        fd = udp_data.fd_to_uf[fd].skfd;
-
-                        pthread_rwlock_unlock(&udp_data.flows_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-
-                        if (send(fd,
+                        if (send(udp_data.fd_to_uf[fd].skfd,
                                  shm_du_buff_head(sdb),
                                  shm_du_buff_tail(sdb) - shm_du_buff_head(sdb),
                                  0) < 0)
                                 LOG_ERR("Failed to send SDU.");
 
-                        ipcp_flow_del(sdb);
-                }
+                        pthread_rwlock_unlock(&udp_data.flows_lock);
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+
+                        ipcp_flow_del(sdb);                }
         }
 
         return (void *) 1;
@@ -1119,9 +1115,12 @@ static int ipcp_udp_flow_dealloc(int fd)
         clr_fd(skfd);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
+        pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         close(skfd);
+
+        pthread_rwlock_unlock(&udp_data.flows_lock);
+        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         flow_dealloc(fd);
 
