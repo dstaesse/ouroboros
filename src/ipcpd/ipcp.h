@@ -50,7 +50,9 @@ struct ipcp {
         pthread_mutex_t    state_mtx;
         pthread_cond_t     state_cond;
 
-        pthread_t          mainloop;
+        int                sockfd;
+        char *             sock_path;
+        pthread_t *        threadpool;
 } ipcpi;
 
 int             ipcp_init(enum ipcp_type type,
