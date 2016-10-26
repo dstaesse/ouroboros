@@ -20,14 +20,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "registry.h"
-#include "utils.h"
-
 #define OUROBOROS_PREFIX "registry"
 
+#include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/irm_config.h>
+
+#include "registry.h"
+#include "utils.h"
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -403,44 +404,6 @@ void registry_del_api(struct list_head * registry,
         }
 
         return;
-}
-
-char * registry_get_dif_for_dst(struct list_head * registry,
-                                char *             dst_name)
-{
-        struct list_head * pos = NULL;
-        struct reg_entry * re =
-                registry_get_entry(registry, dst_name);
-
-        if (re != NULL) { /* local AP */
-                list_for_each(pos, &re->difs) {
-                        struct reg_dif  * rd =
-                                list_entry(pos, struct reg_dif, next);
-                        if (rd->type == IPCP_LOCAL)
-                                return rd->dif_name;
-                }
-
-                list_for_each(pos, &re->difs) {
-                        struct reg_dif * rd =
-                                list_entry(pos, struct reg_dif, next);
-                        if (rd->type == IPCP_NORMAL)
-                                return rd->dif_name;
-                }
-
-                list_for_each(pos, &re->difs) {
-                        struct reg_dif * rd =
-                                list_entry(pos, struct reg_dif, next);
-                        if (rd->type == IPCP_SHIM_UDP)
-                                return rd->dif_name;
-                }
-
-                LOG_DBG("Could not find DIF for %s.", dst_name);
-
-                return NULL;
-        } else {
-                LOG_DBG("No local ap %s found.", dst_name);
-                return NULL;
-        }
 }
 
 int registry_add_name_to_dif(struct list_head * registry,

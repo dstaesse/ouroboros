@@ -21,6 +21,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define OUROBOROS_PREFIX "irmd"
+
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/sockets.h>
@@ -33,9 +35,6 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/qos.h>
 #include <ouroboros/time_utils.h>
-
-#define OUROBOROS_PREFIX "irmd"
-
 #include <ouroboros/logs.h>
 
 #include "utils.h"
@@ -170,52 +169,45 @@ static struct ipcp_entry * get_ipcp_entry_by_api(pid_t api)
         return NULL;
 }
 
-/* FIXME: Check if the name exists anywhere in a DIF. */
+/* Check if the name exists anywhere in a DIF. */
 static pid_t get_ipcp_by_dst_name(char * dst_name)
 {
         struct list_head * p = NULL;
-        char * dif_name =
-                registry_get_dif_for_dst(&irmd->registry, dst_name);
-        if (dif_name == NULL) {
-                list_for_each(p, &irmd->ipcps) {
-                        struct ipcp_entry * e =
-                                list_entry(p, struct ipcp_entry, next);
-                        if (e->type == IPCP_NORMAL) {
-                                dif_name = e->dif_name;
-                                break;
-                        }
-                }
 
-                list_for_each(p, &irmd->ipcps) {
-                        struct ipcp_entry * e =
-                                list_entry(p, struct ipcp_entry, next);
-                        if (e->type == IPCP_SHIM_ETH_LLC) {
-                                dif_name = e->dif_name;
-                                break;
-                        }
-                }
-
-
-                list_for_each(p, &irmd->ipcps) {
-                        struct ipcp_entry * e =
-                                list_entry(p, struct ipcp_entry, next);
-                        if (e->type == IPCP_SHIM_UDP) {
-                                dif_name = e->dif_name;
-                                break;
-                        }
+        list_for_each(p, &irmd->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(p, struct ipcp_entry, next);
+                if (e->type == IPCP_LOCAL) {
+                        if (ipcp_name_query(e->api, dst_name) == 0)
+                                return e->api;
                 }
         }
 
-        if (dif_name == NULL)
-                return -1;
+        list_for_each(p, &irmd->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(p, struct ipcp_entry, next);
+                if (e->type == IPCP_NORMAL) {
+                        if (ipcp_name_query(e->api, dst_name) == 0)
+                                return e->api;
+                }
+        }
 
         list_for_each(p, &irmd->ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->dif_name == NULL)
-                        continue;
+                struct ipcp_entry * e =
+                        list_entry(p, struct ipcp_entry, next);
+                if (e->type == IPCP_SHIM_ETH_LLC) {
+                        if (ipcp_name_query(e->api, dst_name) == 0)
+                                return e->api;
+                }
+        }
 
-                if (strcmp(e->dif_name, dif_name) == 0)
-                        return e->api;
+        list_for_each(p, &irmd->ipcps) {
+                struct ipcp_entry * e =
+                        list_entry(p, struct ipcp_entry, next);
+                if (e->type == IPCP_SHIM_UDP) {
+                        if (ipcp_name_query(e->api, dst_name) == 0)
+                                return e->api;
+                }
         }
 
         return -1;
@@ -1136,6 +1128,18 @@ static struct irm_flow * flow_alloc(pid_t  api,
                 return NULL;
         }
 
+        pthread_rwlock_rdlock(&irmd->reg_lock);
+
+        ipcp = get_ipcp_by_dst_name(dst_name);
+        if (ipcp == -1) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_INFO("Destination unreachable.");
+                return NULL;
+        }
+
+        pthread_rwlock_unlock(&irmd->reg_lock);
+
         f = irm_flow_create();
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd->state_lock);
@@ -1149,17 +1153,6 @@ static struct irm_flow * flow_alloc(pid_t  api,
         if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
                 LOG_WARN("Failed to set timestamp.");
 
-        pthread_rwlock_rdlock(&irmd->reg_lock);
-
-        ipcp = get_ipcp_by_dst_name(dst_name);
-        if (ipcp == -1) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_INFO("Destination unreachable.");
-                return NULL;
-        }
-
-        pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_wrlock(&irmd->flows_lock);
 
         port_id = f->port_id = bmp_allocate(irmd->port_ids);

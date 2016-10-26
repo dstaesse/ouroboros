@@ -20,7 +20,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+
+#define OUROBOROS_PREFIX "ipcpd/ipcp"
+
 #include <ouroboros/config.h>
+#include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/sockets.h>
@@ -28,13 +32,11 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/np1_flow.h>
 
-#define OUROBOROS_PREFIX "ipcpd/ipcp"
-#include <ouroboros/logs.h>
+#include "ipcp.h"
 
 #include <string.h>
 #include <sys/socket.h>
 #include <stdlib.h>
-#include "ipcp.h"
 
 int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
 {
@@ -306,6 +308,15 @@ void * ipcp_main_loop(void * o)
                         ret_msg.has_result = true;
                         ret_msg.result =
                                 ipcpi.ops->ipcp_name_unreg(msg->name);
+                        break;
+                case IPCP_MSG_CODE__IPCP_NAME_QUERY:
+                        if (ipcpi.ops->ipcp_name_query == NULL) {
+                                LOG_ERR("Ap_query unsupported.");
+                                break;
+                        }
+                        ret_msg.has_result = true;
+                        ret_msg.result =
+                                ipcpi.ops->ipcp_name_query(msg->name);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
                         if (ipcpi.ops->ipcp_flow_alloc == NULL) {

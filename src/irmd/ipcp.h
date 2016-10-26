@@ -44,6 +44,8 @@ int   ipcp_name_reg(pid_t  api,
                     char * name);
 int   ipcp_name_unreg(pid_t  api,
                       char * name);
+int   ipcp_name_query(pid_t api,
+                      char * name);
 
 int   ipcp_flow_alloc(pid_t         api,
                       int           port_id,

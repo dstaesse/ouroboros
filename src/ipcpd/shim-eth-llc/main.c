@@ -20,10 +20,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/config.h>
-
 #define _DEFAULT_SOURCE
 
+#define OUROBOROS_PREFIX "ipcpd/shim-eth-llc"
+
+#include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
@@ -32,12 +33,10 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fcntl.h>
 #include <ouroboros/fqueue.h>
-
-#define OUROBOROS_PREFIX "ipcpd/shim-eth-llc"
-
 #include <ouroboros/logs.h>
 
 #include "ipcp.h"
+#include "shim_eth_llc_messages.pb-c.h"
 
 #include <net/if.h>
 #include <signal.h>
@@ -65,8 +64,6 @@
 #include <poll.h>
 #include <sys/mman.h>
 
-#include "shim_eth_llc_messages.pb-c.h"
-
 typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 
 #define THIS_TYPE IPCP_SHIM_ETH_LLC
@@ -80,6 +77,7 @@ typedef ShimEthLlcMsg shim_eth_llc_msg_t;
                         + SHIM_ETH_LLC_MAX_SDU_SIZE)
 
 #define EVENT_WAIT_TIMEOUT 100 /* us */
+#define NAME_QUERY_TIMEOUT 100000000 /* ns */
 
 /* global for trapping signal */
 int irmd_api;
@@ -324,6 +322,7 @@ static int eth_llc_ipcp_sap_alloc(uint8_t * dst_addr,
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
 
         msg.code        = SHIM_ETH_LLC_MSG_CODE__FLOW_REQ;
+        msg.has_ssap    = true;
         msg.ssap        = ssap;
         msg.dst_name    = dst_name;
         msg.src_ae_name = src_ae_name;
@@ -339,6 +338,7 @@ static int eth_llc_ipcp_sap_alloc_resp(uint8_t * dst_addr,
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
 
         msg.code         = SHIM_ETH_LLC_MSG_CODE__FLOW_REPLY;
+        msg.has_ssap     = true;
         msg.ssap         = ssap;
         msg.has_dsap     = true;
         msg.dsap         = dsap;
@@ -352,8 +352,9 @@ static int eth_llc_ipcp_sap_dealloc(uint8_t * dst_addr, uint8_t ssap)
 {
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
 
-        msg.code = SHIM_ETH_LLC_MSG_CODE__FLOW_DEALLOC;
-        msg.ssap = ssap;
+        msg.code     = SHIM_ETH_LLC_MSG_CODE__FLOW_DEALLOC;
+        msg.has_ssap = true;
+        msg.ssap     = ssap;
 
         return eth_llc_ipcp_send_mgmt_frame(&msg, dst_addr);
 }
@@ -449,6 +450,42 @@ static int eth_llc_ipcp_flow_dealloc_req(uint8_t ssap)
         return 0;
 }
 
+static int eth_llc_ipcp_name_query_req(char * name, uint8_t * r_addr)
+{
+        shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
+
+        if (ipcp_data_reg_has(ipcpi.data, name)) {
+                msg.code     = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY;
+                msg.dst_name = name;
+
+                eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
+        }
+
+        return 0;
+}
+
+static int eth_llc_ipcp_name_query_reply(char * name, uint8_t * r_addr)
+{
+        uint64_t address = 0;
+        struct list_head * pos;
+
+        memcpy(&address, r_addr, MAC_SIZE);
+
+        ipcp_data_dir_add_entry(ipcpi.data, name, address);
+
+        pthread_mutex_lock(&ipcpi.data->dir_queries_lock);
+        list_for_each(pos, &ipcpi.data->dir_queries) {
+                struct dir_query * e =
+                        list_entry(pos, struct dir_query, next);
+                if (strcmp(e->name, name) == 0) {
+                        ipcp_data_dir_query_respond(e);
+                }
+        }
+        pthread_mutex_unlock(&ipcpi.data->dir_queries_lock);
+
+        return 0;
+}
+
 static int eth_llc_ipcp_mgmt_frame(uint8_t * buf, size_t len, uint8_t * r_addr)
 {
         shim_eth_llc_msg_t * msg = shim_eth_llc_msg__unpack(NULL, len, buf);
@@ -459,7 +496,7 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf, size_t len, uint8_t * r_addr)
 
         switch (msg->code) {
         case SHIM_ETH_LLC_MSG_CODE__FLOW_REQ:
-                if (ipcp_data_is_in_registry(ipcpi.data, msg->dst_name)) {
+                if (ipcp_data_reg_has(ipcpi.data, msg->dst_name)) {
                         eth_llc_ipcp_sap_req(msg->ssap,
                                              r_addr,
                                              msg->dst_name,
@@ -474,6 +511,12 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf, size_t len, uint8_t * r_addr)
                 break;
         case SHIM_ETH_LLC_MSG_CODE__FLOW_DEALLOC:
                 eth_llc_ipcp_flow_dealloc_req(msg->ssap);
+                break;
+        case SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ:
+                eth_llc_ipcp_name_query_req(msg->dst_name, r_addr);
+                break;
+        case SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY:
+                eth_llc_ipcp_name_query_reply(msg->dst_name, r_addr);
                 break;
         default:
                 LOG_ERR("Unknown message received %d.", msg->code);
@@ -859,7 +902,7 @@ static int eth_llc_ipcp_name_reg(char * name)
 {
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_add_reg_entry(ipcpi.data, name)) {
+        if (ipcp_data_reg_add_entry(ipcpi.data, name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
                 return -1;
@@ -876,11 +919,47 @@ static int eth_llc_ipcp_name_unreg(char * name)
 {
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        ipcp_data_del_reg_entry(ipcpi.data, name);
+        ipcp_data_reg_del_entry(ipcpi.data, name);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
         return 0;
+}
+
+static int eth_llc_ipcp_name_query(char * name)
+{
+        uint8_t r_addr[MAC_SIZE];
+        struct timespec timeout = {0, NAME_QUERY_TIMEOUT};
+        shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
+        struct dir_query * query;
+        int ret;
+
+        if (ipcp_data_dir_has(ipcpi.data, name))
+                return 0;
+
+        msg.code     = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ;
+        msg.dst_name = name;
+
+        memset(r_addr, 0xff, MAC_SIZE);
+
+        query = ipcp_data_dir_query_create(name);
+        if (query == NULL)
+                return -1;
+
+        pthread_mutex_lock(&ipcpi.data->dir_queries_lock);
+        list_add(&query->next, &ipcpi.data->dir_queries);
+        pthread_mutex_unlock(&ipcpi.data->dir_queries_lock);
+
+        eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
+
+        ret = ipcp_data_dir_query_wait(query, &timeout);
+
+        pthread_mutex_lock(&ipcpi.data->dir_queries_lock);
+        list_del(&query->next);
+        ipcp_data_dir_query_destroy(query);
+        pthread_mutex_unlock(&ipcpi.data->dir_queries_lock);
+
+        return ret;
 }
 
 static int eth_llc_ipcp_flow_alloc(int           fd,
@@ -890,6 +969,7 @@ static int eth_llc_ipcp_flow_alloc(int           fd,
 {
         uint8_t ssap = 0;
         uint8_t r_addr[MAC_SIZE];
+        uint64_t addr = 0;
 
         LOG_DBG("Allocating flow to %s.", dst_name);
 
@@ -907,6 +987,13 @@ static int eth_llc_ipcp_flow_alloc(int           fd,
                 return -1; /* -ENOTENROLLED */
         }
 
+        if (!ipcp_data_dir_has(ipcpi.data, dst_name)) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Destination unreachable.");
+                return -1;
+        }
+        addr = ipcp_data_dir_get_addr(ipcpi.data, dst_name);
+
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         ssap =  bmp_allocate(eth_llc_data.saps);
@@ -922,7 +1009,7 @@ static int eth_llc_ipcp_flow_alloc(int           fd,
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        memset(r_addr, 0xff, MAC_SIZE);
+        memcpy(r_addr, &addr, MAC_SIZE);
 
         if (eth_llc_ipcp_sap_alloc(r_addr,
                                    ssap,
@@ -1030,6 +1117,7 @@ static struct ipcp_ops eth_llc_ops = {
         .ipcp_enroll          = NULL,
         .ipcp_name_reg        = eth_llc_ipcp_name_reg,
         .ipcp_name_unreg      = eth_llc_ipcp_name_unreg,
+        .ipcp_name_query      = eth_llc_ipcp_name_query,
         .ipcp_flow_alloc      = eth_llc_ipcp_flow_alloc,
         .ipcp_flow_alloc_resp = eth_llc_ipcp_flow_alloc_resp,
         .ipcp_flow_dealloc    = eth_llc_ipcp_flow_dealloc

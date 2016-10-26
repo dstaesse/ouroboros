@@ -20,17 +20,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define OUROBOROS_PREFIX "ipcpd/local"
+
 #include <ouroboros/config.h>
-#include "ipcp.h"
+#include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/fcntl.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
-#define OUROBOROS_PREFIX "ipcpd/local"
 
-#include <ouroboros/logs.h>
+#include "ipcp.h"
 
 #include <string.h>
 #include <signal.h>
@@ -179,7 +180,7 @@ static int ipcp_local_name_reg(char * name)
 {
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_add_reg_entry(ipcpi.data, name)) {
+        if (ipcp_data_reg_add_entry(ipcpi.data, name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Failed to add %s to local registry.", name);
                 return -1;
@@ -196,13 +197,26 @@ static int ipcp_local_name_unreg(char * name)
 {
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        ipcp_data_del_reg_entry(ipcpi.data, name);
+        ipcp_data_reg_del_entry(ipcpi.data, name);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
         LOG_INFO("Unregistered %s.", name);
 
         return 0;
+}
+
+static int ipcp_local_name_query(char * name)
+{
+        int ret;
+
+        pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+        ret = (ipcp_data_reg_has(ipcpi.data, name) ? 0 : -1);
+
+        pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        return ret;
 }
 
 static int ipcp_local_flow_alloc(int           fd,
@@ -305,6 +319,7 @@ static struct ipcp_ops local_ops = {
         .ipcp_enroll          = NULL,                       /* shim */
         .ipcp_name_reg        = ipcp_local_name_reg,
         .ipcp_name_unreg      = ipcp_local_name_unreg,
+        .ipcp_name_query      = ipcp_local_name_query,
         .ipcp_flow_alloc      = ipcp_local_flow_alloc,
         .ipcp_flow_alloc_resp = ipcp_local_flow_alloc_resp,
         .ipcp_flow_dealloc    = ipcp_local_flow_dealloc

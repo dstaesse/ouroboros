@@ -28,17 +28,17 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/time_utils.h>
 
+#include "fmgr.h"
+#include "ribmgr.h"
+#include "ipcp.h"
+#include "frct.h"
+
 #include <stdbool.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
 #include <errno.h>
-
-#include "fmgr.h"
-#include "ribmgr.h"
-#include "ipcp.h"
-#include "frct.h"
 
 #define THIS_TYPE IPCP_NORMAL
 
@@ -72,7 +72,7 @@ static int normal_ipcp_name_reg(char * name)
 {
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_add_reg_entry(ipcpi.data, name)) {
+        if (ipcp_data_reg_add_entry(ipcpi.data, name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
                 return -1;
@@ -89,11 +89,26 @@ static int normal_ipcp_name_unreg(char * name)
 {
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        ipcp_data_del_reg_entry(ipcpi.data, name);
+        ipcp_data_reg_del_entry(ipcpi.data, name);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
         return 0;
+}
+
+static int normal_ipcp_name_query(char * name)
+{
+        LOG_MISSING;
+
+        (void) name;
+
+        /*
+         * NOTE: For the moment we just return -1,
+         * for testing purposes we may return zero here
+         * for certain names.
+         */
+
+        return -1;
 }
 
 static int normal_ipcp_enroll(char * dif_name)
@@ -165,6 +180,7 @@ static struct ipcp_ops normal_ops = {
         .ipcp_enroll          = normal_ipcp_enroll,
         .ipcp_name_reg        = normal_ipcp_name_reg,
         .ipcp_name_unreg      = normal_ipcp_name_unreg,
+        .ipcp_name_query      = normal_ipcp_name_query,
         .ipcp_flow_alloc      = fmgr_np1_alloc,
         .ipcp_flow_alloc_resp = fmgr_np1_alloc_resp,
         .ipcp_flow_dealloc    = fmgr_np1_dealloc
