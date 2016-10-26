@@ -40,6 +40,7 @@ int do_enroll_ipcp(int argc, char ** argv)
         char * name = NULL;
         char * dif_name = NULL;
         pid_t * apis = NULL;
+        pid_t api;
         ssize_t len = 0;
         int i = 0;
 
@@ -65,8 +66,10 @@ int do_enroll_ipcp(int argc, char ** argv)
 
         len = irm_list_ipcps(name, &apis);
         if (len <= 0) {
-                if (!irm_create_ipcp(name, IPCP_NORMAL))
+                api = irm_create_ipcp(name, IPCP_NORMAL);
+                if (api == 0)
                         return -1;
+                irm_bind_api(api, name);
                 len = irm_list_ipcps(name, &apis);
         }
 

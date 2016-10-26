@@ -590,14 +590,14 @@ static int bind_api(pid_t  api,
         e = api_table_get(&irmd->api_table, api);
         if (e == NULL) {
                 LOG_ERR("AP-I %d does not exist.", api);
-                pthread_rwlock_wrlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return -1;
         }
 
         name_dup = strdup(name);
         if (name_dup == NULL) {
-                pthread_rwlock_wrlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return -ENOMEM;
         }

@@ -78,6 +78,7 @@ static void usage(void)
 int do_bootstrap_ipcp(int argc, char ** argv)
 {
         char * name = NULL;
+        pid_t api;
         struct dif_config conf;
         uint8_t addr_size = DEFAULT_ADDR_SIZE;
         uint8_t cep_id_size = DEFAULT_CEP_ID_SIZE;
@@ -186,8 +187,11 @@ int do_bootstrap_ipcp(int argc, char ** argv)
 
         len = irm_list_ipcps(name, &apis);
         if (len <= 0) {
-                if (!irm_create_ipcp(name, conf.type))
+                api = irm_create_ipcp(name, conf.type);
+                if (api == 0)
                         return -1;
+                if (conf.type == IPCP_NORMAL)
+                        irm_bind_api(api, name);
                 len = irm_list_ipcps(name, &apis);
         }
 
