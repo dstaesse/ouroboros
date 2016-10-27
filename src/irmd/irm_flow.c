@@ -130,7 +130,7 @@ enum flow_state irm_flow_wait_state(struct irm_flow * f, enum flow_state state)
         while (!(f->state == state || f->state == FLOW_DESTROY))
                 pthread_cond_wait(&f->state_cond, &f->state_lock);
 
-        if (state == FLOW_DESTROY) {
+        if (f->state == FLOW_DESTROY) {
                 f->state = FLOW_NULL;
                 pthread_cond_broadcast(&f->state_cond);
         }
