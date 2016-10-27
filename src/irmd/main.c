@@ -1750,16 +1750,19 @@ void * irm_sanitize(void * o)
 
                         if (irm_flow_get_state(f) == FLOW_ALLOC_PENDING
                             && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
-                                LOG_INFO("Pending port_id %d timed out.",
+                                bmp_release(irmd->port_ids, f->port_id);
+                                list_del(&f->next);
+                                LOG_DBG("Pending port_id %d timed out.",
                                          f->port_id);
-                                irm_flow_set_state(f, FLOW_NULL);
+                                ipcp_flow_dealloc(f->n_1_api, f->port_id);
+                                irm_flow_destroy(f);
                                 continue;
                         }
 
                         if (kill(f->n_api, 0) < 0) {
                                 bmp_release(irmd->port_ids, f->port_id);
                                 list_del(&f->next);
-                                LOG_INFO("AP-I %d gone, flow %d deallocated.",
+                                LOG_DBG("AP-I %d gone, flow %d deallocated.",
                                          f->n_api, f->port_id);
                                 ipcp_flow_dealloc(f->n_1_api, f->port_id);
                                 irm_flow_destroy(f);
