@@ -156,7 +156,8 @@ int frct_nm1_post_sdu(struct pci * pci,
         if (pci == NULL || sdb == NULL)
                 return -1;
 
-        if (pci->dst_cep_id == INVALID_CEP_ID) {
+        if (pci->dst_cep_id == INVALID_CEP_ID &&
+            pci->pdu_type == PDU_TYPE_MGMT) {
                 pthread_mutex_lock(&frct.instances_lock);
                 instance = create_frct_i(pci->src_addr,
                                          pci->src_cep_id);
@@ -173,6 +174,25 @@ int frct_nm1_post_sdu(struct pci * pci,
 
                 if (fmgr_np1_post_buf(id, &buf)) {
                         LOG_ERR("Failed to hand buffer to FMGR.");
+                        free(pci);
+                        return -1;
+                }
+        } else if (pci->pdu_type == PDU_TYPE_MGMT) {
+                pthread_mutex_lock(&frct.instances_lock);
+                instance = frct.instances[pci->dst_cep_id];
+                if (instance == NULL) {
+                        pthread_mutex_unlock(&frct.instances_lock);
+                        return -1;
+                }
+                instance->r_cep_id = pci->src_cep_id;
+                instance->state = CONN_ESTABLISHED;
+                pthread_mutex_unlock(&frct.instances_lock);
+
+                buf.len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+                buf.data = shm_du_buff_head(sdb);
+
+                if (fmgr_np1_post_buf(pci->dst_cep_id, &buf)) {
+                        LOG_ERR("Failed to hand buffer to Flow Manager.");
                         free(pci);
                         return -1;
                 }
@@ -356,6 +376,8 @@ int frct_i_write_sdu(cep_id_t             id,
                 LOG_ERR("Failed to hand SDU to FMGR.");
                 return -1;
         }
+
+        pthread_mutex_unlock(&frct.instances_lock);
 
         return 0;
 }

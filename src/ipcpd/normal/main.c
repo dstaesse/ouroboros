@@ -108,6 +108,10 @@ static int normal_ipcp_name_query(char * name)
          * for certain names.
          */
 
+        /* FIXME: Here for testing purposes */
+        if (strcmp(name, "normal.app") == 0)
+                return 0;
+
         return -1;
 }
 
@@ -144,6 +148,12 @@ static int normal_ipcp_enroll(char * dif_name)
         }
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        /* FIXME: Remove once we obtain neighbors during enrollment */
+        if (fmgr_nm1_dt_flow(dif_name, QOS_CUBE_BE)) {
+                LOG_ERR("Failed to establish data transfer flow.");
+                return -1;
+        }
 
         return 0;
 }
