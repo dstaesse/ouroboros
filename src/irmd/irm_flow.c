@@ -26,6 +26,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <assert.h>
 
 struct irm_flow * irm_flow_create()
 {
@@ -59,6 +60,8 @@ struct irm_flow * irm_flow_create()
 
 void irm_flow_destroy(struct irm_flow * f)
 {
+        assert(f);
+
         pthread_mutex_lock(&f->state_lock);
 
         if (f->state == FLOW_DESTROY) {
@@ -91,6 +94,8 @@ enum flow_state irm_flow_get_state(struct irm_flow * f)
 {
         enum flow_state state;
 
+        assert(f);
+
         pthread_mutex_lock(&f->state_lock);
 
         state = f->state;
@@ -102,6 +107,10 @@ enum flow_state irm_flow_get_state(struct irm_flow * f)
 
 void irm_flow_set_state(struct irm_flow * f, enum flow_state state)
 {
+        assert(f);
+        assert(state != FLOW_NULL);
+        assert(state != FLOW_DESTROY);
+
         pthread_mutex_lock(&f->state_lock);
 
         f->state = state;
@@ -112,6 +121,10 @@ void irm_flow_set_state(struct irm_flow * f, enum flow_state state)
 
 enum flow_state irm_flow_wait_state(struct irm_flow * f, enum flow_state state)
 {
+        assert(f);
+        assert(state != FLOW_NULL);
+        assert(state != FLOW_DESTROY);
+
         pthread_mutex_lock(&f->state_lock);
 
         while (!(f->state == state || f->state == FLOW_DESTROY))
