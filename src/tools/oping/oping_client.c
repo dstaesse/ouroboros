@@ -162,6 +162,51 @@ void * writer(void * o)
         return (void *) 0;
 }
 
+static int client_init(void)
+{
+        client.flows = flow_set_create();
+        if (client.flows == NULL)
+                return -ENOMEM;
+
+        client.fq = fqueue_create();
+        if (client.fq == NULL) {
+                flow_set_destroy(client.flows);
+                return -ENOMEM;
+        }
+
+        client.times = malloc(sizeof(struct timespec) * client.count);
+        if (client.times == NULL) {
+                flow_set_destroy(client.flows);
+                fqueue_destroy(client.fq);
+                pthread_mutex_unlock(&client.lock);
+                return -ENOMEM;
+        }
+
+        client.sent = 0;
+        client.rcvd = 0;
+        client.rtt_min = FLT_MAX;
+        client.rtt_max = 0;
+        client.rtt_avg = 0;
+        client.rtt_m2 = 0;
+
+        pthread_mutex_init(&client.lock, NULL);
+        pthread_mutex_lock(&client.lock);
+
+        return 0;
+}
+
+void client_fini(void)
+{
+        if (client.flows != NULL)
+                flow_set_destroy(client.flows);
+
+        if (client.fq != NULL)
+                fqueue_destroy(client.fq);
+
+        if (client.times != NULL)
+                free(client.times);
+}
+
 int client_main(void)
 {
         struct sigaction sig_act;
@@ -170,30 +215,6 @@ int client_main(void)
         struct timespec toc;
 
         int fd;
-
-        client.flows = flow_set_create();
-        if (client.flows == NULL)
-                return -1;
-
-        client.fq = fqueue_create();
-        if (client.fq == NULL) {
-                flow_set_destroy(client.flows);
-                return -1;
-        }
-
-        fd = flow_alloc(client.s_apn, NULL, NULL);
-        if (fd < 0) {
-                printf("Failed to allocate flow.\n");
-                return -1;
-        }
-
-        flow_set_add(client.flows, fd);
-
-        if (flow_alloc_res(fd)) {
-                printf("Flow allocation refused.\n");
-                flow_dealloc(fd);
-                return -1;
-        }
 
         memset(&sig_act, 0, sizeof sig_act);
         sig_act.sa_sigaction = &shutdown_client;
@@ -207,18 +228,27 @@ int client_main(void)
                 return -1;
         }
 
-        pthread_mutex_init(&client.lock, NULL);
-        pthread_mutex_lock(&client.lock);
-        client.sent = 0;
-        client.rcvd = 0;
-        client.rtt_min = FLT_MAX;
-        client.rtt_max = 0;
-        client.rtt_avg = 0;
-        client.rtt_m2 = 0;
-        client.times = malloc(sizeof(struct timespec) * client.count);
-        if (client.times == NULL) {
-                pthread_mutex_unlock(&client.lock);
-                return -ENOMEM;
+        if (client_init()) {
+                printf("Failed to initialize client.\n");
+                return -1;
+        }
+
+        fd = flow_alloc(client.s_apn, NULL, NULL);
+        if (fd < 0) {
+                flow_set_destroy(client.flows);
+                fqueue_destroy(client.fq);
+                printf("Failed to allocate flow.\n");
+                return -1;
+        }
+
+        flow_set_add(client.flows, fd);
+
+        if (flow_alloc_res(fd)) {
+                printf("Flow allocation refused.\n");
+                flow_set_del(client.flows, fd);
+                flow_dealloc(fd);
+                client_fini();
+                return -1;
         }
 
         pthread_mutex_unlock(&client.lock);
@@ -253,14 +283,11 @@ int client_main(void)
                         printf("NaN ms\n");
         }
 
-        pthread_mutex_lock(&client.lock);
-        free(client.times);
-        flow_set_destroy(client.flows);
-        fqueue_destroy(client.fq);
-        pthread_mutex_unlock(&client.lock);
-        pthread_mutex_destroy(&client.lock);
+        flow_set_del(client.flows, fd);
 
         flow_dealloc(fd);
+
+        client_fini();
 
         return 0;
 }
