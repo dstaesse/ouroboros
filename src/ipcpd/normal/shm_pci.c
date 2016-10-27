@@ -34,6 +34,7 @@
 #include "crc32.h"
 #include "ribmgr.h"
 
+#define PDU_TYPE_SIZE 1
 #define QOS_ID_SIZE 1
 #define DEFAULT_TTL 60
 #define TTL_SIZE 1
@@ -43,7 +44,7 @@ static size_t shm_pci_head_size(struct dt_const * dtc)
 {
         size_t len = 0;
 
-        len = dtc->addr_size * 2 + dtc->cep_id_size * 2
+        len = PDU_TYPE_SIZE + dtc->addr_size * 2 + dtc->cep_id_size * 2
                 + dtc->pdu_length_size + dtc->seqno_size + QOS_ID_SIZE;
 
         if (dtc->has_ttl)
@@ -64,7 +65,9 @@ static void ser_pci_head(uint8_t * head,
         int offset = 0;
         uint8_t ttl = DEFAULT_TTL;
 
-        memcpy(head, &pci->dst_addr, dtc->addr_size);
+        memcpy(head, &pci->pdu_type, PDU_TYPE_SIZE);
+        offset += PDU_TYPE_SIZE;
+        memcpy(head + offset, &pci->dst_addr, dtc->addr_size);
         offset += dtc->addr_size;
         memcpy(head + offset, &pci->src_addr, dtc->addr_size);
         offset += dtc->addr_size;
@@ -174,7 +177,9 @@ struct pci * shm_pci_des(struct shm_du_buff * sdb)
         if (pci == NULL)
                 return NULL;
 
-        memcpy(&pci->dst_addr, head, dtc->addr_size);
+        memcpy(&pci->pdu_type, head, PDU_TYPE_SIZE);
+        offset += PDU_TYPE_SIZE;
+        memcpy(&pci->dst_addr, head + offset, dtc->addr_size);
         offset += dtc->addr_size;
         memcpy(&pci->src_addr, head + offset, dtc->addr_size);
         offset += dtc->addr_size;

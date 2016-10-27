@@ -44,7 +44,7 @@
 #include "flow_alloc.pb-c.h"
 typedef FlowAllocMsg flow_alloc_msg_t;
 
-#define FD_UPDATE_TIMEOUT 100 /* microseconds */
+#define FD_UPDATE_TIMEOUT 100000 /* nanoseconds */
 
 struct np1_flow {
         int           fd;
@@ -54,7 +54,6 @@ struct np1_flow {
 
 struct nm1_flow {
         int           fd;
-        char *        ae_name;
         enum qos_cube qos;
 };
 
@@ -63,6 +62,7 @@ struct {
         struct nm1_flow ** nm1_flows;
         pthread_rwlock_t   nm1_flows_lock;
         flow_set_t *       nm1_set;
+        pthread_t          nm1_sdu_reader;
 
         struct np1_flow ** np1_flows;
         struct np1_flow ** np1_flows_cep;
@@ -75,25 +75,22 @@ struct {
 } fmgr;
 
 static int add_nm1_fd(int fd,
-                      char * ae_name,
                       enum qos_cube qos)
 {
         struct nm1_flow * tmp;
-
-        if (ae_name == NULL)
-                return -1;
 
         tmp = malloc(sizeof(*tmp));
         if (tmp == NULL)
                 return -1;
 
         tmp->fd = fd;
-        tmp->ae_name = ae_name;
         tmp->qos = qos;
 
         pthread_rwlock_wrlock(&fmgr.nm1_flows_lock);
         fmgr.nm1_flows[fd] = tmp;
         pthread_rwlock_unlock(&fmgr.nm1_flows_lock);
+
+        flow_set_add(fmgr.nm1_set, fd);
 
         /* FIXME: Temporary, until we have a PFF */
         fmgr.fd = fd;
@@ -116,7 +113,7 @@ static int add_np1_fd(int           fd,
         flow->fd = fd;
 
         fmgr.np1_flows[fd] = flow;
-        fmgr.np1_flows_cep[fd] = flow;
+        fmgr.np1_flows_cep[cep_id] = flow;
 
         return 0;
 }
@@ -170,14 +167,16 @@ static void * fmgr_nm1_acceptor(void * o)
                                 flow_dealloc(fd);
                                 continue;
                         }
+                } else {
+                        /* FIXME: Pass correct QoS cube */
+                        if (add_nm1_fd(fd, QOS_CUBE_BE)) {
+                                LOG_ERR("Failed to add fd to list.");
+                                flow_dealloc(fd);
+                                continue;
+                        }
                 }
 
-                /* FIXME: Pass correct QoS cube */
-                if (add_nm1_fd(fd, ae_name, QOS_CUBE_BE)) {
-                        LOG_ERR("Failed to add file descriptor to list.");
-                        flow_dealloc(fd);
-                        continue;
-                }
+                free(ae_name);
         }
 
         return (void *) 0;
@@ -365,6 +364,7 @@ int fmgr_init()
 
         pthread_create(&fmgr.nm1_flow_acceptor, NULL, fmgr_nm1_acceptor, NULL);
         pthread_create(&fmgr.np1_sdu_reader, NULL, fmgr_np1_sdu_reader, NULL);
+        pthread_create(&fmgr.nm1_sdu_reader, NULL, fmgr_nm1_sdu_reader, NULL);
 
         return 0;
 }
@@ -375,15 +375,15 @@ int fmgr_fini()
 
         pthread_cancel(fmgr.nm1_flow_acceptor);
         pthread_cancel(fmgr.np1_sdu_reader);
+        pthread_cancel(fmgr.nm1_sdu_reader);
 
         pthread_join(fmgr.nm1_flow_acceptor, NULL);
         pthread_join(fmgr.np1_sdu_reader, NULL);
+        pthread_join(fmgr.nm1_sdu_reader, NULL);
 
         for (i = 0; i < IRMD_MAX_FLOWS; i++) {
                 if (fmgr.nm1_flows[i] == NULL)
                         continue;
-                if (fmgr.nm1_flows[i]->ae_name != NULL)
-                        free(fmgr.nm1_flows[i]->ae_name);
                 if (ribmgr_remove_flow(fmgr.nm1_flows[i]->fd))
                     LOG_ERR("Failed to remove management flow.");
         }
@@ -446,8 +446,6 @@ int fmgr_np1_alloc(int           fd,
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
                 return -1;
         }
-
-        free(buf.data);
 
         if (add_np1_fd(fd, cep_id, qos)) {
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
@@ -671,17 +669,11 @@ int fmgr_nm1_mgmt_flow(char * dst_name)
 {
         int fd;
         int result;
-        char * ae_name;
-
-        ae_name = strdup(MGMT_AE);
-        if (ae_name == NULL)
-                return -1;
 
         /* FIXME: Request retransmission. */
         fd = flow_alloc(dst_name, MGMT_AE, NULL);
         if (fd < 0) {
                 LOG_ERR("Failed to allocate flow to %s", dst_name);
-                free(ae_name);
                 return -1;
         }
 
@@ -689,20 +681,11 @@ int fmgr_nm1_mgmt_flow(char * dst_name)
         if (result < 0) {
                 LOG_ERR("Result of flow allocation to %s is %d",
                         dst_name, result);
-                free(ae_name);
                 return -1;
         }
 
         if (ribmgr_add_flow(fd)) {
                 LOG_ERR("Failed to hand file descriptor to RIB manager");
-                flow_dealloc(fd);
-                free(ae_name);
-                return -1;
-        }
-
-        /* FIXME: Pass correct QoS cube */
-        if (add_nm1_fd(fd, ae_name, QOS_CUBE_BE)) {
-                LOG_ERR("Failed to add file descriptor to list.");
                 flow_dealloc(fd);
                 return -1;
         }
@@ -715,17 +698,11 @@ int fmgr_nm1_dt_flow(char * dst_name,
 {
         int fd;
         int result;
-        char * ae_name;
-
-        ae_name = strdup(DT_AE);
-        if (ae_name == NULL)
-                return -1;
 
         /* FIXME: Map qos cube on correct QoS. */
         fd = flow_alloc(dst_name, DT_AE, NULL);
         if (fd < 0) {
                 LOG_ERR("Failed to allocate flow to %s", dst_name);
-                free(ae_name);
                 return -1;
         }
 
@@ -733,14 +710,12 @@ int fmgr_nm1_dt_flow(char * dst_name,
         if (result < 0) {
                 LOG_ERR("Result of flow allocation to %s is %d",
                         dst_name, result);
-                free(ae_name);
                 return -1;
         }
 
-        if (add_nm1_fd(fd, ae_name, qos)) {
+        if (add_nm1_fd(fd, qos)) {
                 LOG_ERR("Failed to add file descriptor to list.");
                 flow_dealloc(fd);
-                free(ae_name);
                 return -1;
         }
 
