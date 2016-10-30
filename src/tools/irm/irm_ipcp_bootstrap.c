@@ -196,8 +196,10 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         }
 
         for (i = 0; i < len; i++)
-                if (irm_bootstrap_ipcp(apis[i], &conf))
+                if (irm_bootstrap_ipcp(apis[i], &conf)) {
+                        free(apis);
                         return -1;
+                }
 
         if (apis != NULL)
                 free(apis);
