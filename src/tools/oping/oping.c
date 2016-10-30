@@ -94,7 +94,7 @@ static void usage(void)
                "  -c, --count               Number of packets (default 1000)\n"
                "  -i, --interval            Interval (ms, default 1000)\n"
                "  -n, --server-apn          Name of the oping server\n"
-               "  -s, --size                Payload size (b, default 64)\n"
+               "  -s, --size                Payload size (B, default 64)\n"
                "      --help                Display this help text and exit\n");
 }
 
@@ -164,11 +164,12 @@ int main(int argc, char ** argv)
                         client.interval = 10000;
                 }
                 if (client.size > OPING_BUF_SIZE) {
-                        printf("Packet size truncated to 1500 bytes.\n");
-                        client.size = 1500;
+                        printf("Packet size truncated to %d bytes.\n",
+                               OPING_BUF_SIZE);
+                        client.size = OPING_BUF_SIZE;
                 }
 
-                if (client.size < 2) {
+                if (client.size < 64) {
                         printf("Packet size set to 64 bytes.\n");
                         client.size = 64;
                 }
