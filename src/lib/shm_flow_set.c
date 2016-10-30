@@ -376,22 +376,20 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
 
         while (shm_set->heads[idx] == 0 && ret != -ETIMEDOUT) {
                 if (timeout != NULL)
-                        ret = pthread_cond_timedwait(shm_set->conds + idx,
-                                                     shm_set->lock,
-                                                     &abstime);
+                        ret = -pthread_cond_timedwait(shm_set->conds + idx,
+                                                      shm_set->lock,
+                                                      &abstime);
                 else
-                        ret = pthread_cond_wait(shm_set->conds + idx,
-                                                shm_set->lock);
+                        ret = -pthread_cond_wait(shm_set->conds + idx,
+                                                 shm_set->lock);
 #ifndef __APPLE__
-                if (ret == EOWNERDEAD) {
+                if (ret == -EOWNERDEAD) {
                         LOG_DBG("Recovering dead mutex.");
                         pthread_mutex_consistent(shm_set->lock);
                 }
 #endif
-                if (ret == ETIMEDOUT) {
-                        ret = -ETIMEDOUT;
+                if (ret == -ETIMEDOUT)
                         break;
-                }
         }
 
         if (ret != -ETIMEDOUT) {
@@ -403,6 +401,8 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
         }
 
         pthread_cleanup_pop(true);
+
+        assert(ret);
 
         return ret;
 }

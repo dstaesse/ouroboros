@@ -974,7 +974,7 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name)
                 pthread_rwlock_rdlock(&irmd->state_lock);
                 if (irmd->state != IRMD_RUNNING) {
                         pthread_rwlock_unlock(&irmd->state_lock);
-                        break;
+                        return NULL;
                 }
                 pthread_rwlock_unlock(&irmd->state_lock);
         }

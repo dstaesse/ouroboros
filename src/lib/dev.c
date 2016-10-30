@@ -1002,12 +1002,16 @@ int flow_event_wait(struct flow_set *       set,
         assert(!fq->next);
 
         ret = shm_flow_set_wait(ai.fqset, set->idx, fq->fqueue, timeout);
-        if (ret == -ETIMEDOUT)
+        if (ret == -ETIMEDOUT) {
+                fq->fqsize = 0;
                 return -ETIMEDOUT;
+        }
 
         fq->fqsize = ret;
 
-        return 0;
+        assert(ret);
+
+        return ret;
 }
 
 /* ipcp-dev functions */
@@ -1295,6 +1299,12 @@ int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
+        if (ai.flows[fd].port_id < 0) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -ENOTALLOC;
+        }
+
         if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
@@ -1356,7 +1366,11 @@ int local_flow_write(int fd, size_t idx)
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
-        assert(ai.flows[fd].tx_rb);
+        if (ai.flows[fd].port_id < 0) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -ENOTALLOC;
+        }
 
         shm_rbuff_write(ai.flows[fd].tx_rb, idx);
 

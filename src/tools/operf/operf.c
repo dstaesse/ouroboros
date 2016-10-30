@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Ouroboros ping application
+ * Ouroboros perf application
  *
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
@@ -32,69 +32,55 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define OPING_BUF_SIZE 1500
+#define OPERF_BUF_SIZE (1024 * 1024)
 
-#define ECHO_REQUEST 0
-#define ECHO_REPLY 1
-
-#define OPING_MAX_FLOWS 256
+#define OPERF_MAX_FLOWS 256
 
 struct c {
         char * s_apn;
-        int    interval;
-        int    count;
         int    size;
+        long   rate;
+        bool   flood;
+        int    duration;
 
-        /* stats */
-        int    sent;
-        int    rcvd;
-        double rtt_min;
-        double rtt_max;
-        double rtt_avg;
-        double rtt_m2;
+        size_t sent;
+        size_t rcvd;
 
         flow_set_t * flows;
         fqueue_t *   fq;
-
-        /* needs locking */
-        struct timespec * times;
-        pthread_mutex_t lock;
 
         pthread_t reader_pt;
         pthread_t writer_pt;
 } client;
 
 struct s {
-        struct timespec   times[OPING_MAX_FLOWS];
-        flow_set_t *      flows;
-        fqueue_t *        fq;
-        pthread_mutex_t   lock;
+        struct timespec  times[OPERF_MAX_FLOWS];
+        flow_set_t *     flows;
+        fqueue_t *       fq;
+        pthread_mutex_t  lock;
+
+        uint8_t          buffer[OPERF_BUF_SIZE];
+        ssize_t          timeout;
 
         pthread_t cleaner_pt;
         pthread_t accept_pt;
         pthread_t server_pt;
 } server;
 
-struct oping_msg {
-        uint32_t type;
-        uint32_t id;
-};
-
-
-#include "oping_client.c"
-#include "oping_server.c"
+#include "operf_client.c"
+#include "operf_server.c"
 
 static void usage(void)
 {
-        printf("Usage: oping [OPTION]...\n"
-               "Checks liveness between a client and a server\n"
-               "and reports the Round Trip Time (RTT)\n\n"
+        printf("Usage: operf [OPTION]...\n"
+               "Measures bandwidth between a client and a server\n"
                "  -l, --listen              Run in server mode\n"
                "\n"
-               "  -c, --count               Number of packets (default 1000)\n"
-               "  -i, --interval            Interval (ms, default 1000)\n"
-               "  -n, --server-apn          Name of the oping server\n"
-               "  -s, --size                Payload size (B, default 64)\n"
+               "  -n, --server-apn          Name of the operf server\n"
+               "  -d, --duration            Test duration (s, default 60)\n"
+               "  -r, --rate                Rate (b/s)\n"
+               "  -s, --size                Payload size (B, default 1500)\n"
+               "  -f, --flood               Send SDUs as fast as possible\n"
                "      --help                Display this help text and exit\n");
 }
 
@@ -109,27 +95,38 @@ int main(int argc, char ** argv)
         argv++;
 
         client.s_apn = NULL;
-        client.interval = 1000;
-        client.size = 64;
-        client.count = 1000;
+        client.size = 1500;
+        client.duration = 60000;
+        server.timeout = 1000; /* ms */
+        client.rate = 1000000;
+        client.flood = false;
 
         while (argc > 0) {
-                if (strcmp(*argv, "-i") == 0 ||
-                    strcmp(*argv, "--interval") == 0) {
-                        client.interval = strtol(*(++argv), &rem, 10);
-                        --argc;
-                } else if (strcmp(*argv, "-n") == 0 ||
+                if (strcmp(*argv, "-n") == 0 ||
                            strcmp(*argv, "--server_apn") == 0) {
                         client.s_apn = *(++argv);
-                        --argc;
-                } else if (strcmp(*argv, "-c") == 0 ||
-                           strcmp(*argv, "--count") == 0) {
-                        client.count = strtol(*(++argv), &rem, 10);
                         --argc;
                 } else if (strcmp(*argv, "-s") == 0 ||
                            strcmp(*argv, "--size") == 0) {
                         client.size = strtol(*(++argv), &rem, 10);
                         --argc;
+                } else if (strcmp(*argv, "-d") == 0 ||
+                           strcmp(*argv, "--duration") == 0) {
+                        client.duration = strtol(*(++argv), &rem, 10) * 1000;
+                        --argc;
+                } else if (strcmp(*argv, "-r") == 0 ||
+                           strcmp(*argv, "--rate") == 0) {
+                        client.rate = strtol(*(++argv), &rem, 10);
+                        if (*rem == 'k')
+                                client.rate *= 1000;
+                        if (*rem == 'M')
+                                client.rate *= MILLION;
+                        if (*rem == 'G')
+                                client.rate *= BILLION;
+                        --argc;
+                } else if (strcmp(*argv, "-f") == 0 ||
+                           strcmp(*argv, "--flood") == 0) {
+                        client.flood = true;
                 } else if (strcmp(*argv, "-l") == 0 ||
                            strcmp(*argv, "--listen") == 0) {
                         serv = true;
@@ -159,24 +156,15 @@ int main(int argc, char ** argv)
                         usage();
                         exit(EXIT_SUCCESS);
                 }
-                if (client.interval > 10000) {
-                        printf("Ping interval truncated to 10s.\n");
-                        client.interval = 10000;
-                }
-                if (client.size > OPING_BUF_SIZE) {
+                if (client.size > OPERF_BUF_SIZE) {
                         printf("Packet size truncated to %d bytes.\n",
-                               OPING_BUF_SIZE);
-                        client.size = OPING_BUF_SIZE;
+                               OPERF_BUF_SIZE);
+                        client.size = OPERF_BUF_SIZE;
                 }
 
                 if (client.size < 64) {
                         printf("Packet size set to 64 bytes.\n");
                         client.size = 64;
-                }
-
-                if (client.count > 1000000) {
-                        printf("Count truncated to 1 million SDUs.\n");
-                        client.count = 1000000;
                 }
 
                 ret = client_main();
