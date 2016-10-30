@@ -671,6 +671,7 @@ int flow_dealloc(int fd)
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         reset_flow(fd);
+        bmp_release(ai.fds, fd);
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
