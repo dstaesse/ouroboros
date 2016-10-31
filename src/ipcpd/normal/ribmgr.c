@@ -34,6 +34,7 @@
 #include <string.h>
 #include <errno.h>
 
+#include "addr_auth.h"
 #include "ribmgr.h"
 #include "dt_const.h"
 #include "frct.h"
@@ -53,15 +54,17 @@ struct mgmt_flow {
 };
 
 struct {
-        struct dt_const  dtc;
+        struct dt_const    dtc;
 
-        uint32_t         address;
+        uint64_t           address;
 
-        struct list_head flows;
-        pthread_rwlock_t flows_lock;
+        struct list_head   flows;
+        pthread_rwlock_t   flows_lock;
 
-        struct list_head cdap_reqs;
-        pthread_mutex_t  cdap_reqs_lock;
+        struct list_head   cdap_reqs;
+        pthread_mutex_t    cdap_reqs_lock;
+
+        struct addr_auth * addr_auth;
 } rib;
 
 /* Call while holding cdap_reqs_lock */
@@ -152,6 +155,9 @@ int ribmgr_fini()
                 free(flow);
         }
         pthread_rwlock_unlock(&rib.flows_lock);
+
+        if (rib.addr_auth != NULL)
+                addr_auth_destroy(rib.addr_auth);
 
         pthread_mutex_destroy(&rib.cdap_reqs_lock);
         pthread_rwlock_destroy(&rib.flows_lock);
@@ -247,7 +253,18 @@ int ribmgr_cdap_write(struct cdap * instance,
                 rib.dtc.min_pdu_size = msg->min_pdu_size;
                 rib.dtc.max_pdu_size = msg->max_pdu_size;
 
-                rib.address = msg->address;
+                rib.addr_auth = addr_auth_create(msg->addr_auth_type);
+                if (rib.addr_auth == NULL) {
+                        ipcp_set_state(IPCP_INIT);
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        cdap_send_reply(instance, invoke_id, -1, NULL, 0);
+                        static_info_msg__free_unpacked(msg, NULL);
+                        LOG_ERR("Failed to create address authority");
+                        return -1;
+                }
+
+                rib.address = rib.addr_auth->address();
+                LOG_DBG("IPCP has address %lu", rib.address);
 
                 if (frct_init()) {
                         ipcp_set_state(IPCP_INIT);
@@ -333,9 +350,7 @@ int ribmgr_cdap_start(struct cdap * instance,
                 stat_info.has_chk = rib.dtc.has_chk;
                 stat_info.min_pdu_size  = rib.dtc.min_pdu_size;
                 stat_info.max_pdu_size = rib.dtc.max_pdu_size;
-
-                /* FIXME: Hand out an address. */
-                stat_info.address = 0;
+                stat_info.addr_auth_type = rib.addr_auth->type;
 
                 len = static_info_msg__get_packed_size(&stat_info);
                 if (len == 0) {
@@ -544,11 +559,18 @@ int ribmgr_bootstrap(struct dif_config * conf)
         rib.dtc.min_pdu_size = conf->min_pdu_size;
         rib.dtc.max_pdu_size = conf->max_pdu_size;
 
-        /* FIXME: Set correct address. */
-        rib.address = 0;
+        rib.addr_auth = addr_auth_create(conf->addr_auth_type);
+        if (rib.addr_auth == NULL) {
+                LOG_ERR("Failed to create address authority.");
+                return -1;
+        }
+
+        rib.address = rib.addr_auth->address();
+        LOG_DBG("IPCP has address %lu", rib.address);
 
         if (frct_init()) {
                 LOG_ERR("Failed to initialize FRCT.");
+                addr_auth_destroy(rib.addr_auth);
                 return -1;
         }
 
@@ -562,7 +584,7 @@ struct dt_const * ribmgr_dt_const()
         return &(rib.dtc);
 }
 
-uint32_t ribmgr_address()
+uint64_t ribmgr_address()
 {
         return rib.address;
 }

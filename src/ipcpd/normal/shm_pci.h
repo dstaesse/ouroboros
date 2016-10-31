@@ -34,6 +34,7 @@
 
 typedef uint32_t cep_id_t;
 #define INVALID_CEP_ID 0
+#define INVALID_ADDR 0
 
 struct pci {
         uint8_t  pdu_type;
