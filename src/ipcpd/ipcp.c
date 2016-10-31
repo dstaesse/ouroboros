@@ -114,7 +114,6 @@ void ipcp_fini()
 
         ipcp_data_destroy(ipcpi.data);
         pthread_cond_destroy(&ipcpi.state_cond);
-        pthread_mutex_destroy(&ipcpi.state_mtx);
         pthread_rwlock_destroy(&ipcpi.state_lock);
 }
 
@@ -349,7 +348,7 @@ void * ipcp_main_loop(void * o)
                         }
                         fd = np1_flow_alloc(msg->api, msg->port_id);
                         if (fd < 0) {
-                                LOG_ERR("Could not get fd for port_id. %d",
+                                LOG_ERR("Failed allocating fd on port_id %d.",
                                         msg->port_id);
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
@@ -362,11 +361,6 @@ void * ipcp_main_loop(void * o)
                                                            msg->dst_name,
                                                            msg->src_ae_name,
                                                            msg->qos_cube);
-                        if (ret_msg.result < 0) {
-                                LOG_DBG("Deallocate failed on port_id %d.",
-                                        msg->port_id);
-                                flow_dealloc(fd);
-                        }
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         if (ipcpi.ops->ipcp_flow_alloc_resp == NULL) {
@@ -375,10 +369,10 @@ void * ipcp_main_loop(void * o)
                         }
 
                         if (!msg->response) {
-                                fd = np1_flow_resp(msg->api, msg->port_id);
+                                fd = np1_flow_resp(msg->port_id);
                                 if (fd < 0) {
-                                        LOG_ERR("Could not get fd for port_id %d.",
-                                                msg->port_id);
+                                        LOG_WARN("Port_id %d is not known.",
+                                                 msg->port_id);
                                         ret_msg.has_result = true;
                                         ret_msg.result = -1;
                                         break;
@@ -397,7 +391,7 @@ void * ipcp_main_loop(void * o)
 
                         fd = np1_flow_dealloc(msg->port_id);
                         if (fd < 0) {
-                                LOG_ERR("Could not deallocate port_id %d.",
+                                LOG_WARN("Could not deallocate port_id %d.",
                                         msg->port_id);
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
