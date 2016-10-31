@@ -388,6 +388,14 @@ int flow_accept(char ** ae_name, struct qos_spec * qos)
                 return -1;
         }
 
+        ai.flows[fd].tx_rb = shm_rbuff_open(recv_msg->api, recv_msg->port_id);
+        if (ai.flows[fd].tx_rb == NULL) {
+                reset_flow(fd);
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -1;
+        }
+
         ai.flows[fd].set = shm_flow_set_open(recv_msg->api);
         if (ai.flows[fd].set == NULL) {
                 reset_flow(fd);
@@ -397,7 +405,6 @@ int flow_accept(char ** ae_name, struct qos_spec * qos)
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
-
 
         if (ae_name != NULL) {
                 *ae_name = strdup(recv_msg->ae_name);
@@ -452,39 +459,33 @@ int flow_alloc_resp(int fd, int response)
         msg.port_id      = ai.flows[fd].port_id;
 
         pthread_rwlock_unlock(&ai.flows_lock);
+        pthread_rwlock_unlock(&ai.data_lock);
 
         msg.has_response = true;
         msg.response     = response;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
-                pthread_rwlock_unlock(&ai.data_lock);
+        if (recv_msg == NULL)
                 return -1;
-        }
 
         if (!recv_msg->has_result) {
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
         ret = recv_msg->result;
 
-        pthread_rwlock_wrlock(&ai.flows_lock);
+        irm_msg__free_unpacked(recv_msg, NULL);
 
-        ai.flows[fd].tx_rb = shm_rbuff_open(ai.flows[fd].api,
-                                            ai.flows[fd].port_id);
-        if (ai.flows[fd].tx_rb == NULL) {
+        if (response) {
+                pthread_rwlock_rdlock(&ai.data_lock);
+                pthread_rwlock_wrlock(&ai.flows_lock);
+
                 reset_flow(fd);
+
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
-                return -1;
         }
-
-        pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
-
-        irm_msg__free_unpacked(recv_msg, NULL);
 
         return ret;
 }
@@ -535,9 +536,6 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
                 return -1;
         }
 
-        ai.flows[fd].port_id = recv_msg->port_id;
-        ai.flows[fd].oflags  = FLOW_O_DEFAULT;
-        ai.flows[fd].api     = recv_msg->api;
         ai.flows[fd].rx_rb   = shm_rbuff_open(ai.api, recv_msg->port_id);
         if (ai.flows[fd].rx_rb == NULL) {
                 reset_flow(fd);
@@ -547,6 +545,25 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
+
+        ai.flows[fd].tx_rb = shm_rbuff_open(recv_msg->api, recv_msg->port_id);
+        if (ai.flows[fd].tx_rb == NULL) {
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -1;
+        }
+
+        ai.flows[fd].set = shm_flow_set_open(recv_msg->api);
+        if (ai.flows[fd].set == NULL) {
+                reset_flow(fd);
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -1;
+        }
+
+        ai.flows[fd].port_id = recv_msg->port_id;
+        ai.flows[fd].oflags  = FLOW_O_DEFAULT;
+        ai.flows[fd].api     = recv_msg->api;
 
         ai.ports[recv_msg->port_id].fd    = fd;
         ai.ports[recv_msg->port_id].state = PORT_ID_ASSIGNED;
@@ -581,22 +598,6 @@ int flow_alloc_res(int fd)
         }
 
         msg.port_id = ai.flows[fd].port_id;
-
-        ai.flows[fd].tx_rb = shm_rbuff_open(ai.flows[fd].api,
-                                            ai.flows[fd].port_id);
-        if (ai.flows[fd].tx_rb == NULL) {
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -1;
-        }
-
-        ai.flows[fd].set = shm_flow_set_open(ai.flows[fd].api);
-        if (ai.flows[fd].set == NULL) {
-                reset_flow(fd);
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -1;
-        }
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
@@ -764,9 +765,13 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                 }
         } else { /* blocking */
                 struct shm_rdrbuff * rdrb = ai.rdrb;
-                pid_t                api  = ai.flows[fd].api;
+                struct shm_rbuff * tx_rb = ai.flows[fd].tx_rb;
+                pid_t api  = ai.flows[fd].api;
+
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
+
+                assert(tx_rb);
 
                 idx = shm_rdrbuff_write_b(rdrb,
                                           api,
@@ -775,15 +780,13 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                                           buf,
                                           count);
 
-                pthread_rwlock_rdlock(&ai.data_lock);
-                pthread_rwlock_rdlock(&ai.flows_lock);
-
-                if (shm_rbuff_write(ai.flows[fd].tx_rb, idx) < 0) {
-                        shm_rdrbuff_remove(ai.rdrb, idx);
-                        pthread_rwlock_unlock(&ai.flows_lock);
-                        pthread_rwlock_unlock(&ai.data_lock);
+                if (shm_rbuff_write(tx_rb, idx) < 0) {
+                        shm_rdrbuff_remove(rdrb, idx);
                         return -ENOTALLOC;
                 }
+
+                pthread_rwlock_rdlock(&ai.data_lock);
+                pthread_rwlock_rdlock(&ai.flows_lock);
         }
 
         shm_flow_set_notify(ai.flows[fd].set, ai.flows[fd].port_id);
@@ -993,7 +996,7 @@ int flow_event_wait(struct flow_set *       set,
 {
         ssize_t ret;
 
-        if (set == NULL)
+        if (set == NULL || fq == NULL)
                 return -EINVAL;
 
         if (fq->fqsize > 0)
@@ -1038,6 +1041,22 @@ int np1_flow_alloc(pid_t n_api, int port_id)
                 return -1;
         }
 
+        ai.flows[fd].tx_rb = shm_rbuff_open(n_api, port_id);
+        if (ai.flows[fd].tx_rb == NULL) {
+                reset_flow(fd);
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -1;
+        }
+
+        ai.flows[fd].set = shm_flow_set_open(n_api);
+        if (ai.flows[fd].set == NULL) {
+                reset_flow(fd);
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -1;
+        }
+
         ai.flows[fd].port_id = port_id;
         ai.flows[fd].oflags  = FLOW_O_DEFAULT;
         ai.flows[fd].api     = n_api;
@@ -1066,8 +1085,7 @@ int np1_flow_dealloc(int port_id)
         return fd;
 }
 
-
-int np1_flow_resp(pid_t n_api, int port_id)
+int np1_flow_resp(int port_id)
 {
         int fd;
 
@@ -1077,28 +1095,6 @@ int np1_flow_resp(pid_t n_api, int port_id)
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         fd = ai.ports[port_id].fd;
-        if (fd < 0) {
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return fd;
-        }
-
-        ai.flows[fd].tx_rb = shm_rbuff_open(n_api, port_id);
-        if (ai.flows[fd].tx_rb == NULL) {
-                reset_flow(fd);
-                port_destroy(&ai.ports[port_id]);
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -1;
-        }
-
-        ai.flows[fd].set = shm_flow_set_open(n_api);
-        if (ai.flows[fd].set == NULL) {
-                reset_flow(fd);
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -1;
-        }
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
@@ -1166,21 +1162,47 @@ int ipcp_flow_req_arr(pid_t  api, char * dst_name, char * src_ae_name)
         if (recv_msg == NULL)
                 return -1;
 
-        if (!recv_msg->has_port_id) {
+        if (!recv_msg->has_port_id || !recv_msg->has_api) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
+        if (recv_msg->has_result && recv_msg->result) {
+                   irm_msg__free_unpacked(recv_msg, NULL);
+                   return -1;
+        }
+
         port_id = recv_msg->port_id;
-        irm_msg__free_unpacked(recv_msg, NULL);
-        if (port_id < 0)
+        if (port_id < 0) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
+        }
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         ai.flows[fd].rx_rb = shm_rbuff_open(ai.api, port_id);
         if (ai.flows[fd].rx_rb == NULL) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                reset_flow(fd);
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -1;
+        }
+
+        ai.flows[fd].tx_rb = shm_rbuff_open(recv_msg->api, port_id);
+        if (ai.flows[fd].tx_rb == NULL) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                reset_flow(fd);
+                port_destroy(&ai.ports[port_id]);
+                pthread_rwlock_unlock(&ai.flows_lock);
+                pthread_rwlock_unlock(&ai.data_lock);
+                return -1;
+        }
+
+        ai.flows[fd].set = shm_flow_set_open(recv_msg->api);
+        if (ai.flows[fd].set == NULL) {
+                irm_msg__free_unpacked(recv_msg, NULL);
                 reset_flow(fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
@@ -1195,6 +1217,8 @@ int ipcp_flow_req_arr(pid_t  api, char * dst_name, char * src_ae_name)
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
+
+        irm_msg__free_unpacked(recv_msg, NULL);
 
         return fd;
 }
@@ -1227,27 +1251,6 @@ int ipcp_flow_alloc_reply(int fd, int response)
         }
 
         ret = recv_msg->result;
-
-        pthread_rwlock_wrlock(&ai.flows_lock);
-
-        ai.flows[fd].tx_rb = shm_rbuff_open(ai.flows[fd].api,
-                                            ai.flows[fd].port_id);
-        if (ai.flows[fd].tx_rb == NULL) {
-                reset_flow(fd);
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -1;
-        }
-
-        ai.flows[fd].set = shm_flow_set_open(ai.flows[fd].api);
-        if (ai.flows[fd].set == NULL) {
-                reset_flow(fd);
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-                return -1;
-        }
-
-        pthread_rwlock_unlock(&ai.flows_lock);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 

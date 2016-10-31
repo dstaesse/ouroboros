@@ -452,7 +452,6 @@ static void * ipcp_udp_sdu_reader(void * o)
                                 continue;
                         flags = fcntl(skfd, F_GETFL, 0);
                         fcntl(skfd, F_SETFL, flags | O_NONBLOCK);
-                        fd = udp_data.uf_to_fd[skfd];
                         n = sizeof(r_saddr);
                         if ((n = recvfrom(skfd,
                                           &buf,
@@ -462,7 +461,14 @@ static void * ipcp_udp_sdu_reader(void * o)
                                           (unsigned *) &n)) <= 0)
                                 continue;
 
+                        pthread_rwlock_rdlock(&ipcpi.state_lock);
+                        pthread_rwlock_rdlock(&udp_data.flows_lock);
+
+                        fd = udp_data.uf_to_fd[skfd];
                         flow_write(fd, buf, n);
+
+                        pthread_rwlock_unlock(&udp_data.flows_lock);
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
         }
 
@@ -477,11 +483,16 @@ static void * ipcp_udp_sdu_loop(void * o)
 
         (void) o;
 
-        while (true) {
-                if (flow_event_wait(udp_data.np1_flows,
-                                    udp_data.fq,
-                                    &timeout)  == -ETIMEDOUT)
-                        continue;
+        while (flow_event_wait(udp_data.np1_flows, udp_data.fq, &timeout)) {
+                pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+                if (ipcp_get_state() != IPCP_ENROLLED) {
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        return (void *) -1; /* -ENOTENROLLED */
+                }
+
+
+                pthread_rwlock_rdlock(&udp_data.flows_lock);
 
                 while ((fd = fqueue_next(udp_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
@@ -489,19 +500,18 @@ static void * ipcp_udp_sdu_loop(void * o)
                                 continue;
                         }
 
-                        pthread_rwlock_rdlock(&ipcpi.state_lock);
-                        pthread_rwlock_rdlock(&udp_data.flows_lock);
-
                         if (send(udp_data.fd_to_uf[fd].skfd,
                                  shm_du_buff_head(sdb),
                                  shm_du_buff_tail(sdb) - shm_du_buff_head(sdb),
                                  0) < 0)
                                 LOG_ERR("Failed to send SDU.");
 
-                        pthread_rwlock_unlock(&udp_data.flows_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        ipcp_flow_del(sdb);
+                }
 
-                        ipcp_flow_del(sdb);                }
+
+                pthread_rwlock_unlock(&udp_data.flows_lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
         }
 
         return (void *) 1;
@@ -948,8 +958,8 @@ static int ipcp_udp_flow_alloc(int           fd,
 
         LOG_DBG("Allocating flow to %s.", dst_name);
 
-        if (dst_name == NULL || src_ae_name == NULL)
-                return -1;
+        assert(dst_name);
+        assert(src_ae_name);
 
         if (strlen(dst_name) > 255
             || strlen(src_ae_name) > 255) {
@@ -1101,10 +1111,17 @@ static int ipcp_udp_flow_dealloc(int fd)
 
         ipcp_flow_fini(fd);
 
-        flow_set_del(udp_data.np1_flows, fd);
-
         pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+        if (ipcp_get_state() != IPCP_ENROLLED) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_DBG("Won't register with non-enrolled IPCP.");
+                return -1; /* -ENOTENROLLED */
+        }
+
         pthread_rwlock_wrlock(&udp_data.flows_lock);
+
+        flow_set_del(udp_data.np1_flows, fd);
 
         skfd = udp_data.fd_to_uf[fd].skfd;
 
@@ -1112,20 +1129,17 @@ static int ipcp_udp_flow_dealloc(int fd)
         udp_data.fd_to_uf[fd].udp  = -1;
         udp_data.fd_to_uf[fd].skfd = -1;
 
+        close(skfd);
+
         pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
         clr_fd(skfd);
 
-        pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_wrlock(&udp_data.flows_lock);
-
-        close(skfd);
+        flow_dealloc(fd);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        flow_dealloc(fd);
 
         LOG_DBG("Flow with fd %d deallocated.", fd);
 

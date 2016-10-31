@@ -28,8 +28,7 @@
 int  np1_flow_alloc(pid_t n_api,
                     int   port_id);
 
-int  np1_flow_resp(pid_t n_api,
-                   int   port_id);
+int  np1_flow_resp(int port_id);
 
 int  np1_flow_dealloc(int port_id);
 

@@ -88,13 +88,9 @@ static void * ipcp_local_sdu_loop(void * o)
 
         (void) o;
 
-        while (true) {
+        while (flow_event_wait(local_data.flows, local_data.fq, &timeout)) {
                 int fd;
                 ssize_t idx;
-
-                if (flow_event_wait(local_data.flows, local_data.fq, &timeout)
-                    == -ETIMEDOUT)
-                        continue;
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -233,7 +229,8 @@ static int ipcp_local_flow_alloc(int           fd,
 
         LOG_DBG("Allocating flow to %s on fd %d.", dst_name, fd);
 
-        assert(dst_name || src_ae_name);
+        assert(dst_name);
+        assert(src_ae_name);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -298,16 +295,23 @@ static int ipcp_local_flow_dealloc(int fd)
         ipcp_flow_fini(fd);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+        if (ipcp_get_state() != IPCP_ENROLLED) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_DBG("Won't register with non-enrolled IPCP.");
+                return -1; /* -ENOTENROLLED */
+        }
+
         pthread_rwlock_wrlock(&local_data.lock);
 
         flow_set_del(local_data.flows, fd);
 
         local_data.in_out[fd] = -1;
 
+        flow_dealloc(fd);
+
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        flow_dealloc(fd);
 
         LOG_INFO("Flow with fd %d deallocated.", fd);
 
