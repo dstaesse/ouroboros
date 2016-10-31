@@ -26,7 +26,6 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
-#include <ouroboros/fcntl.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
@@ -38,7 +37,6 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <sys/wait.h>
-#include <fcntl.h>
 #include <assert.h>
 
 #define EVENT_WAIT_TIMEOUT 100 /* us */

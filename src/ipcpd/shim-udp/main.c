@@ -28,7 +28,6 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
-#include <ouroboros/fcntl.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 

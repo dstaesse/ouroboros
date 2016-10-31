@@ -31,7 +31,6 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
-#include <ouroboros/fcntl.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/logs.h>
 
