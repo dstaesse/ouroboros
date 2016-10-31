@@ -28,7 +28,6 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
-#include <ouroboros/fcntl.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 
@@ -519,7 +518,11 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                 if (info->si_pid == irmd_api) {
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
-                        ipcp_set_state(IPCP_SHUTDOWN);
+                        if (ipcp_get_state() == IPCP_INIT)
+                                ipcp_set_state(IPCP_NULL);
+
+                        if (ipcp_get_state() == IPCP_ENROLLED)
+                                ipcp_set_state(IPCP_SHUTDOWN);
 
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
@@ -538,9 +541,6 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 
         assert(conf);
         assert(conf->type == THIS_TYPE);
-
-        /* this IPCP doesn't need to maintain its dif_name */
-        free(conf->dif_name);
 
         if (inet_ntop(AF_INET,
                       &conf->ip_addr,
@@ -623,6 +623,9 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                        NULL);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        /* this IPCP doesn't need to maintain its dif_name */
+        free(conf->dif_name);
 
         LOG_DBG("Bootstrapped shim IPCP over UDP with api %d.", getpid());
         LOG_DBG("Bound to IP address %s.", ipstr);
@@ -1197,13 +1200,15 @@ int main(int argc, char * argv[])
 
         ipcp_fini();
 
-        pthread_cancel(udp_data.handler);
-        pthread_cancel(udp_data.sdu_reader);
-        pthread_cancel(udp_data.sduloop);
 
-        pthread_join(udp_data.sduloop, NULL);
-        pthread_join(udp_data.handler, NULL);
-        pthread_join(udp_data.sdu_reader, NULL);
+        if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                pthread_cancel(udp_data.handler);
+                pthread_cancel(udp_data.sdu_reader);
+                pthread_cancel(udp_data.sduloop);
+                pthread_join(udp_data.sduloop, NULL);
+                pthread_join(udp_data.handler, NULL);
+                pthread_join(udp_data.sdu_reader, NULL);
+        }
 
         udp_data_fini();
 

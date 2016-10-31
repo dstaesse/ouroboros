@@ -26,7 +26,6 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
-#include <ouroboros/fcntl.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
@@ -38,7 +37,6 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <sys/wait.h>
-#include <fcntl.h>
 #include <assert.h>
 
 #define EVENT_WAIT_TIMEOUT 100 /* us */
@@ -140,7 +138,11 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
-                        ipcp_set_state(IPCP_SHUTDOWN);
+                        if (ipcp_get_state() == IPCP_INIT)
+                                ipcp_set_state(IPCP_NULL);
+
+                        if (ipcp_get_state() == IPCP_ENROLLED)
+                                ipcp_set_state(IPCP_SHUTDOWN);
 
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
@@ -154,9 +156,6 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        /* this IPCP doesn't need to maintain its dif_name */
-        free(conf->dif_name);
-
         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
         if (ipcp_get_state() != IPCP_INIT) {
@@ -164,6 +163,9 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
                 LOG_ERR("IPCP in wrong state.");
                 return -1;
         }
+
+        /* this IPCP doesn't need to maintain its dif_name */
+        free(conf->dif_name);
 
         ipcp_set_state(IPCP_ENROLLED);
 
@@ -382,8 +384,10 @@ int main(int argc, char * argv[])
 
         ipcp_fini();
 
-        pthread_cancel(local_data.sduloop);
-        pthread_join(local_data.sduloop, NULL);
+        if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                pthread_cancel(local_data.sduloop);
+                pthread_join(local_data.sduloop, NULL);
+        }
 
         local_data_fini();
 

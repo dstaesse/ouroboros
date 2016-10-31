@@ -31,7 +31,6 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
-#include <ouroboros/fcntl.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/logs.h>
 
@@ -673,7 +672,11 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
-                        ipcp_set_state(IPCP_SHUTDOWN);
+                        if (ipcp_get_state() == IPCP_INIT)
+                                ipcp_set_state(IPCP_NULL);
+
+                        if (ipcp_get_state() == IPCP_ENROLLED)
+                                ipcp_set_state(IPCP_SHUTDOWN);
 
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
@@ -701,9 +704,6 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         assert(conf);
         assert(conf->type == THIS_TYPE);
-
-        /* this IPCP doesn't need to maintain its dif_name */
-        free(conf->dif_name);
 
         if (conf->if_name == NULL) {
                 LOG_ERR("Interface name is NULL.");
@@ -831,7 +831,6 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         if (ipcp_get_state() != IPCP_INIT) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("IPCP in wrong state.");
-                close(skfd);
                 return -1;
         }
 
@@ -854,6 +853,9 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                        NULL);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        /* this IPCP doesn't need to maintain its dif_name */
+        free(conf->dif_name);
 
         LOG_DBG("Bootstrapped shim IPCP over Ethernet with LLC with api %d.",
                 getpid());
@@ -1135,11 +1137,12 @@ int main(int argc, char * argv[])
 
         ipcp_fini();
 
-        pthread_cancel(eth_llc_data.sdu_reader);
-        pthread_cancel(eth_llc_data.sdu_writer);
-
-        pthread_join(eth_llc_data.sdu_writer, NULL);
-        pthread_join(eth_llc_data.sdu_reader, NULL);
+        if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                pthread_cancel(eth_llc_data.sdu_reader);
+                pthread_cancel(eth_llc_data.sdu_writer);
+                pthread_join(eth_llc_data.sdu_writer, NULL);
+                pthread_join(eth_llc_data.sdu_reader, NULL);
+        }
 
         eth_llc_data_fini();
 
