@@ -165,11 +165,11 @@ int ribmgr_fini()
         return 0;
 }
 
-int ribmgr_cdap_reply(struct cdap * instance,
-                      int           invoke_id,
-                      int           result,
-                      uint8_t *     data,
-                      size_t        len)
+static int ribmgr_cdap_reply(struct cdap * instance,
+                             int           invoke_id,
+                             int           result,
+                             uint8_t *     data,
+                             size_t        len)
 {
         struct list_head * pos, * n = NULL;
 
@@ -206,24 +206,12 @@ int ribmgr_cdap_reply(struct cdap * instance,
         return 0;
 }
 
-int ribmgr_cdap_read(struct cdap * instance,
-                     int           invoke_id,
-                     char *        name)
-{
-        LOG_MISSING;
-        (void) instance;
-        (void) invoke_id;
-        (void) name;
-
-        return -1;
-}
-
-int ribmgr_cdap_write(struct cdap * instance,
-                      int           invoke_id,
-                      char *        name,
-                      uint8_t *     data,
-                      size_t        len,
-                      uint32_t      flags)
+static int ribmgr_cdap_write(struct cdap * instance,
+                             int           invoke_id,
+                             char *        name,
+                             uint8_t *     data,
+                             size_t        len,
+                             uint32_t      flags)
 {
         static_info_msg_t * msg;
         int ret = 0;
@@ -290,41 +278,9 @@ int ribmgr_cdap_write(struct cdap * instance,
         return 0;
 }
 
-int ribmgr_cdap_create(struct cdap * instance,
-                       int           invoke_id,
-                       char *        name,
-                       uint8_t *     data,
-                       size_t        len)
-{
-        LOG_MISSING;
-        (void) instance;
-        (void) invoke_id;
-        (void) name;
-        (void) data;
-        (void) len;
-
-        return -1;
-}
-
-int ribmgr_cdap_delete(struct cdap * instance,
-                       int           invoke_id,
-                       char *        name,
-                       uint8_t *     data,
-                       size_t        len)
-{
-        LOG_MISSING;
-        (void) instance;
-        (void) invoke_id;
-        (void) name;
-        (void) data;
-        (void) len;
-
-        return -1;
-}
-
-int ribmgr_cdap_start(struct cdap * instance,
-                      int           invoke_id,
-                      char *        name)
+static int ribmgr_cdap_start(struct cdap * instance,
+                             int           invoke_id,
+                             char *        name)
 {
         static_info_msg_t stat_info = STATIC_INFO_MSG__INIT;
         uint8_t * data = NULL;
@@ -372,7 +328,8 @@ int ribmgr_cdap_start(struct cdap * instance,
 
                 pthread_mutex_lock(&rib.cdap_reqs_lock);
 
-                iid = cdap_send_write(instance, STATIC_INFO, data, len, 0);
+                iid = cdap_send_request(instance, CDAP_WRITE,
+                                        STATIC_INFO, data, len, 0);
                 if (iid < 0) {
                         pthread_mutex_unlock(&rib.cdap_reqs_lock);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -381,7 +338,8 @@ int ribmgr_cdap_start(struct cdap * instance,
                         return -1;
                 }
 
-                if (cdap_result_wait(instance, WRITE, STATIC_INFO, iid)) {
+                if (cdap_result_wait(instance, CDAP_WRITE,
+                                     STATIC_INFO, iid)) {
                         pthread_mutex_unlock(&rib.cdap_reqs_lock);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         free(data);
@@ -396,7 +354,8 @@ int ribmgr_cdap_start(struct cdap * instance,
 
                 pthread_mutex_lock(&rib.cdap_reqs_lock);
 
-                iid = cdap_send_stop(instance, ENROLLMENT);
+                iid = cdap_send_request(instance, CDAP_STOP, ENROLLMENT,
+                                        NULL, 0, 0);
                 if (iid < 0) {
                         pthread_mutex_unlock(&rib.cdap_reqs_lock);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -405,7 +364,8 @@ int ribmgr_cdap_start(struct cdap * instance,
                         return -1;
                 }
 
-                if (cdap_result_wait(instance, STOP, ENROLLMENT, iid)) {
+                if (cdap_result_wait(instance, CDAP_STOP,
+                                     ENROLLMENT, iid)) {
                         pthread_mutex_unlock(&rib.cdap_reqs_lock);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         free(data);
@@ -427,9 +387,9 @@ int ribmgr_cdap_start(struct cdap * instance,
         return 0;
 }
 
-int ribmgr_cdap_stop(struct cdap * instance,
-                     int           invoke_id,
-                     char *        name)
+static int ribmgr_cdap_stop(struct cdap * instance,
+                            int           invoke_id,
+                            char *        name)
 {
         int ret = 0;
 
@@ -452,14 +412,37 @@ int ribmgr_cdap_stop(struct cdap * instance,
         return 0;
 }
 
+static int ribmgr_cdap_request(struct cdap *    instance,
+                               int              invoke_id,
+                               enum cdap_opcode opcode,
+                               char *           name,
+                               uint8_t *        data,
+                               size_t           len,
+                               uint32_t         flags)
+{
+        switch (opcode) {
+        case CDAP_WRITE:
+                return ribmgr_cdap_write(instance,
+                                         invoke_id,
+                                         name, data,
+                                         len, flags);
+        case CDAP_START:
+                return ribmgr_cdap_start(instance,
+                                         invoke_id,
+                                         name);
+        case CDAP_STOP:
+                return ribmgr_cdap_stop(instance,
+                                        invoke_id,
+                                        name);
+        default:
+                LOG_INFO("Unsupported CDAP opcode received.");
+                return -1;
+        }
+}
+
 static struct cdap_ops ribmgr_ops = {
-        .cdap_reply  = ribmgr_cdap_reply,
-        .cdap_read   = ribmgr_cdap_read,
-        .cdap_write  = ribmgr_cdap_write,
-        .cdap_create = ribmgr_cdap_create,
-        .cdap_delete = ribmgr_cdap_delete,
-        .cdap_start  = ribmgr_cdap_start,
-        .cdap_stop   = ribmgr_cdap_stop
+        .cdap_reply   = ribmgr_cdap_reply,
+        .cdap_request = ribmgr_cdap_request
 };
 
 int ribmgr_add_flow(int fd)
@@ -489,8 +472,10 @@ int ribmgr_add_flow(int fd)
                 ipcp_set_state(IPCP_PENDING_ENROLL);
 
                 pthread_mutex_lock(&rib.cdap_reqs_lock);
-                iid = cdap_send_start(instance,
-                                      ENROLLMENT);
+                iid = cdap_send_request(instance,
+                                        CDAP_START,
+                                        ENROLLMENT,
+                                        NULL, 0, 0);
                 if (iid < 0) {
                         pthread_mutex_unlock(&rib.cdap_reqs_lock);
                         pthread_rwlock_unlock(&rib.flows_lock);
@@ -501,7 +486,8 @@ int ribmgr_add_flow(int fd)
                         return -1;
                 }
 
-                if (cdap_result_wait(instance, START, ENROLLMENT, iid)) {
+                if (cdap_result_wait(instance, CDAP_START,
+                                     ENROLLMENT, iid)) {
                         pthread_mutex_unlock(&rib.cdap_reqs_lock);
                         pthread_rwlock_unlock(&rib.flows_lock);
                         pthread_rwlock_unlock(&ipcpi.state_lock);

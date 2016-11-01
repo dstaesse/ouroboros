@@ -30,15 +30,6 @@
 
 #include <pthread.h>
 
-enum cdap_opcode {
-        READ = 0,
-        WRITE,
-        START,
-        STOP,
-        CREATE,
-        DELETE
-};
-
 enum creq_state {
         REQ_INIT = 0,
         REQ_PENDING,
