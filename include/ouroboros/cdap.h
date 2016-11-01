@@ -30,43 +30,32 @@
 
 #define F_SYNC 0x0001
 
+enum cdap_opcode {
+        CDAP_READ = 0,
+        CDAP_WRITE,
+        CDAP_START,
+        CDAP_STOP,
+        CDAP_CREATE,
+        CDAP_DELETE
+};
+
 struct cdap;
 
 /* Callback functions that work on the application's RIB */
 struct cdap_ops {
+        int (* cdap_request)(struct cdap *    instance,
+                             int              invoke_id,
+                             enum cdap_opcode opcode,
+                             char *           name,
+                             uint8_t *        data,
+                             size_t           len,
+                             uint32_t         flags);
+
         int (* cdap_reply)(struct cdap * instance,
                            int           invoke_id,
                            int           result,
                            uint8_t *     data,
                            size_t        len);
-
-        int (* cdap_read)(struct cdap * instance,
-                          int           invoke_id,
-                          char *        name);
-        int (* cdap_write)(struct cdap * instance,
-                           int           invoke_id,
-                           char *        name,
-                           uint8_t *     data,
-                           size_t        len,
-                           uint32_t      flags);
-
-        int (* cdap_create)(struct cdap * instance,
-                            int           invoke_id,
-                            char *        name,
-                            uint8_t *     data,
-                            size_t        len);
-        int (* cdap_delete)(struct cdap * instance,
-                            int           invoke_id,
-                            char *        name,
-                            uint8_t *     data,
-                            size_t        len);
-
-        int (* cdap_start)(struct cdap * instance,
-                           int           invoke_id,
-                           char *        name);
-        int (* cdap_stop)(struct cdap * instance,
-                          int           invoke_id,
-                          char *        name);
 };
 
 /* Assumes flow is blocking */
@@ -75,27 +64,12 @@ struct cdap * cdap_create(struct cdap_ops * ops,
 int           cdap_destroy(struct cdap * instance);
 
 /* Returns a positive invoke-id on success to be used in the callback */
-int           cdap_send_read(struct cdap * instance,
-                             char *        name);
-int           cdap_send_write(struct cdap * instance,
-                              char *        name,
-                              uint8_t *     data,
-                              size_t        len,
-                              uint32_t      flags);
-
-int           cdap_send_create(struct cdap * instance,
-                               char *        name,
-                               uint8_t *     data,
-                               size_t        len);
-int           cdap_send_delete(struct cdap * instance,
-                               char *        name,
-                               uint8_t *     data,
-                               size_t        len);
-
-int           cdap_send_start(struct cdap * instance,
-                              char *        name);
-int           cdap_send_stop(struct cdap * instance,
-                             char *        name);
+int           cdap_send_request(struct cdap *    instance,
+                                enum cdap_opcode code,
+                                char *           name,
+                                uint8_t *        data,
+                                size_t           len,
+                                uint32_t         flags);
 
 /* Can only be called following a callback function */
 int           cdap_send_reply(struct cdap * instance,
