@@ -119,6 +119,7 @@ int irm_bootstrap_ipcp(pid_t               api,
                 config.has_has_chk = true;
                 config.has_min_pdu_size = true;
                 config.has_max_pdu_size = true;
+                config.has_addr_auth_type = true;
 
                 config.addr_size = conf->addr_size;
                 config.cep_id_size = conf->cep_id_size;
@@ -129,6 +130,7 @@ int irm_bootstrap_ipcp(pid_t               api,
                 config.has_chk = conf->has_chk;
                 config.min_pdu_size = conf->min_pdu_size;
                 config.max_pdu_size = conf->max_pdu_size;
+                config.addr_auth_type = conf->addr_auth_type;
                 break;
         case IPCP_SHIM_UDP:
                 config.has_ip_addr = true;

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * RIB manager of the IPC Process
+ * Policy for flat addresses in a distributed way
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,30 +20,44 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_RIBMGR_H
-#define OUROBOROS_IPCP_RIBMGR_H
+#define OUROBOROS_PREFIX "flat-addr-auth"
 
-#include <ouroboros/irm_config.h>
-#include <ouroboros/utils.h>
+#include <ouroboros/config.h>
+#include <ouroboros/logs.h>
 
-#include "dt_const.h"
+#include <time.h>
+#include <stdlib.h>
+#include <math.h>
 
-int               ribmgr_init(void);
+#include "shm_pci.h"
+#include "ribmgr.h"
 
-int               ribmgr_fini(void);
+int flat_init(void)
+{
+        srand(time(NULL));
 
-int               ribmgr_add_flow(int fd);
+        return 0;
+}
 
-int               ribmgr_remove_flow(int fd);
+int flat_fini(void)
+{
+        return 0;
+}
 
-int               ribmgr_bootstrap(struct dif_config * conf);
+uint64_t flat_address(void)
+{
+        uint64_t addr;
+        uint64_t max_addr;
+        struct dt_const * dtc;
 
-/*
- * FIXME: Should we expose the RIB?
- * Else we may end up with a lot of getters and setters
- */
-struct dt_const * ribmgr_dt_const(void);
+        dtc = ribmgr_dt_const();
+        if (dtc == NULL)
+                return INVALID_ADDR;
 
-uint64_t          ribmgr_address(void);
+        max_addr = (1 << (8 * dtc->addr_size)) - 1;
+        addr = (rand() % (max_addr - 1)) + 1;
 
-#endif
+        /* FIXME: Add check for uniqueness of address */
+
+        return addr;
+}

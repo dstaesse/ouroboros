@@ -7,5 +7,5 @@ message static_info_msg {
         required bool   has_chk         = 6;
         required uint32 min_pdu_size    = 7;
         required uint32 max_pdu_size    = 8;
-        required uint32 address         = 9;
+        required uint32 addr_auth_type  = 9;
 }

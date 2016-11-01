@@ -22,8 +22,10 @@ protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS
 
 set(SOURCE_FILES
         # Add source files here
+        addr_auth.c
         cdap_request.c
         crc32.c
+        flat.c
         fmgr.c
         frct.c
         main.c

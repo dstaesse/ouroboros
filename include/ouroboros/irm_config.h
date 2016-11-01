@@ -39,6 +39,10 @@ enum ipcp_type {
         IPCP_SHIM_ETH_LLC
 };
 
+enum pol_addr_auth {
+        FLAT_RANDOM = 0
+};
+
 struct dif_config {
         char * dif_name;
         enum ipcp_type type;
@@ -58,6 +62,8 @@ struct dif_config {
 
                         uint32_t min_pdu_size;
                         uint32_t max_pdu_size;
+
+                        enum pol_addr_auth addr_auth_type;
                 };
                 /* Shim UDP */
                 struct {

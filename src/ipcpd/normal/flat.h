@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * RIB manager of the IPC Process
+ * Policy for flat addresses in a distributed way
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,30 +20,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_RIBMGR_H
-#define OUROBOROS_IPCP_RIBMGR_H
+#ifndef OUROBOROS_FLAT
+#define OUROBOROS_FLAT
 
-#include <ouroboros/irm_config.h>
-#include <ouroboros/utils.h>
+int      flat_init(void);
+int      flat_fini(void);
+uint64_t flat_address(void);
 
-#include "dt_const.h"
-
-int               ribmgr_init(void);
-
-int               ribmgr_fini(void);
-
-int               ribmgr_add_flow(int fd);
-
-int               ribmgr_remove_flow(int fd);
-
-int               ribmgr_bootstrap(struct dif_config * conf);
-
-/*
- * FIXME: Should we expose the RIB?
- * Else we may end up with a lot of getters and setters
- */
-struct dt_const * ribmgr_dt_const(void);
-
-uint64_t          ribmgr_address(void);
-
-#endif
+#endif /* OUROBOROS_FLAT */
