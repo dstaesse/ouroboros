@@ -28,6 +28,8 @@
 #include <ouroboros/list.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/ipcp-dev.h>
+#include <ouroboros/bitmap.h>
+#include <ouroboros/errno.h>
 
 #include <stdlib.h>
 #include <pthread.h>
@@ -40,12 +42,35 @@
 #include "frct.h"
 #include "ipcp.h"
 #include "cdap_request.h"
+#include "ro.h"
 
 #include "static_info.pb-c.h"
 typedef StaticInfoMsg static_info_msg_t;
 
-#define ENROLLMENT  "enrollment"
-#define STATIC_INFO "static DIF information"
+#define SUBS_SIZE 25
+
+#define ENROLLMENT     "enrollment"
+#define STATIC_INFO    "static DIF information"
+#define PATH_DELIMITER "/"
+
+/* RIB objects */
+struct rnode {
+        char *            name;
+
+        /*
+         * NOTE: Naive implementation for now, could be replaced by
+         * for instance taking a hash of the pathname and using that
+         * as an index in a B-tree
+         */
+
+        /* If there are no children, this is a leaf */
+        struct rnode *    child;
+        struct rnode *    sibling;
+
+        struct ro_props * props;
+        uint8_t *         data;
+        size_t            len;
+};
 
 struct mgmt_flow {
         struct cdap *    instance;
@@ -53,7 +78,21 @@ struct mgmt_flow {
         struct list_head next;
 };
 
+struct ro_sub {
+        int                 sid;
+        char *              name;
+        struct ro_sub_ops * ops;
+        struct list_head    next;
+};
+
 struct {
+        struct rnode *     root;
+        pthread_mutex_t    ro_lock;
+
+        struct list_head   subs;
+        struct bmp *       sids;
+        pthread_mutex_t    subs_lock;
+
         struct dt_const    dtc;
 
         uint64_t           address;
@@ -116,18 +155,70 @@ int ribmgr_init()
 {
         INIT_LIST_HEAD(&rib.flows);
         INIT_LIST_HEAD(&rib.cdap_reqs);
+        INIT_LIST_HEAD(&rib.subs);
+
+        rib.root = malloc(sizeof(*(rib.root)));
+        if (rib.root == NULL)
+                return -1;
+
+        rib.root->name = "root";
+        rib.root->child = NULL;
+        rib.root->sibling = NULL;
 
         if (pthread_rwlock_init(&rib.flows_lock, NULL)) {
                 LOG_ERR("Failed to initialize rwlock.");
+                free(rib.root);
                 return -1;
         }
 
         if (pthread_mutex_init(&rib.cdap_reqs_lock, NULL)) {
                 LOG_ERR("Failed to initialize mutex.");
+                pthread_rwlock_destroy(&rib.flows_lock);
+                free(rib.root);
+                return -1;
+        }
+
+        if (pthread_mutex_init(&rib.ro_lock, NULL)) {
+                LOG_ERR("Failed to initialize mutex.");
+                pthread_rwlock_destroy(&rib.flows_lock);
+                pthread_mutex_destroy(&rib.cdap_reqs_lock);
+                free(rib.root);
+                return -1;
+        }
+
+        if (pthread_mutex_init(&rib.subs_lock, NULL)) {
+                LOG_ERR("Failed to initialize mutex.");
+                pthread_rwlock_destroy(&rib.flows_lock);
+                pthread_mutex_destroy(&rib.cdap_reqs_lock);
+                pthread_mutex_destroy(&rib.ro_lock);
+                free(rib.root);
+                return -1;
+        }
+
+        rib.sids = bmp_create(SUBS_SIZE, 0);
+        if (rib.sids == NULL) {
+                LOG_ERR("Failed to create bitmap.");
+                pthread_rwlock_destroy(&rib.flows_lock);
+                pthread_mutex_destroy(&rib.cdap_reqs_lock);
+                pthread_mutex_destroy(&rib.ro_lock);
+                pthread_mutex_destroy(&rib.subs_lock);
+                free(rib.root);
                 return -1;
         }
 
         return 0;
+}
+
+static void rtree_destroy(struct rnode * node)
+{
+        if (node != NULL) {
+                rtree_destroy(node->child);
+                rtree_destroy(node->sibling);
+                free(node->name);
+                if (node->data != NULL)
+                        free(node->data);
+                free(node);
+        }
 }
 
 int ribmgr_fini()
@@ -159,7 +250,16 @@ int ribmgr_fini()
         if (rib.addr_auth != NULL)
                 addr_auth_destroy(rib.addr_auth);
 
+        pthread_mutex_lock(&rib.ro_lock);
+        rtree_destroy(rib.root->child);
+        free(rib.root);
+        pthread_mutex_unlock(&rib.ro_lock);
+
+        bmp_destroy(rib.sids);
+
+        pthread_mutex_destroy(&rib.subs_lock);
         pthread_mutex_destroy(&rib.cdap_reqs_lock);
+        pthread_mutex_destroy(&rib.ro_lock);
         pthread_rwlock_destroy(&rib.flows_lock);
 
         return 0;
@@ -573,4 +673,412 @@ struct dt_const * ribmgr_dt_const()
 uint64_t ribmgr_address()
 {
         return rib.address;
+}
+
+int ro_create(const char * name,
+              uint8_t *    data,
+              size_t       len)
+{
+        char * str, * str1, * saveptr, * token;
+        struct rnode * node, * new, * prev;
+        bool sibling;
+        struct list_head * p = NULL;
+        size_t len_s, len_n;
+        uint8_t * ro_data;
+
+        str = strdup(name);
+        if (str == NULL)
+                return -1;
+
+        pthread_mutex_lock(&rib.ro_lock);
+        node = rib.root;
+
+        for (str1 = str; ; str1 = NULL) {
+                token = strtok_r(str1, PATH_DELIMITER, &saveptr);
+                if (token == NULL) {
+                        pthread_mutex_unlock(&rib.ro_lock);
+                        LOG_ERR("RO already exists.");
+                        free(str);
+                        return -1;
+                }
+
+                prev = node;
+                node = node->child;
+                sibling = false;
+
+                /* Search horizontally */
+                while (node != NULL) {
+                        if (strcmp(node->name, token) == 0) {
+                                break;
+                        } else {
+                                prev = node;
+                                node = node->sibling;
+                                sibling = true;
+                        }
+                }
+
+                if (node == NULL)
+                        break;
+        }
+
+        token = strtok_r(str1, PATH_DELIMITER, &saveptr);
+        if (token != NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                LOG_ERR("Part of the pathname does not exist.");
+                free(str);
+                return -1;
+        }
+
+        free(str);
+
+        new = malloc(sizeof(*new));
+        if (new == NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                return -1;
+        }
+
+        new->name = strdup(token);
+        if (new->name == NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                free(new);
+                return -1;
+        }
+
+        if (sibling)
+                prev->sibling = new;
+        else
+                prev->child = new;
+
+        new->data = data;
+        new->len = len;
+        new->child = NULL;
+        new->sibling = NULL;
+
+        pthread_mutex_lock(&rib.subs_lock);
+
+        list_for_each(p, &rib.subs) {
+                struct ro_sub * e = list_entry(p, struct ro_sub, next);
+                len_s = strlen(e->name);
+                len_n = strlen(name);
+
+                if (len_n < len_s)
+                        continue;
+
+                if (strncmp(name, e->name, len_s) == 0) {
+                        if (e->ops->ro_created == NULL)
+                                continue;
+
+                        ro_data = malloc(len);
+                        if (ro_data == NULL)
+                                continue;
+
+                        memcpy(ro_data, data, len);
+                        e->ops->ro_created(name, ro_data, len);
+                }
+        }
+
+        pthread_mutex_unlock(&rib.subs_lock);
+        pthread_mutex_unlock(&rib.ro_lock);
+
+        return 0;
+}
+
+int ro_delete(const char * name)
+{
+        char * str, * str1, * saveptr, * token;
+        struct rnode * node, * prev;
+        bool sibling = false;
+        struct list_head * p = NULL;
+        size_t len_s, len_n;
+
+        str = strdup(name);
+        if (str == NULL)
+                return -1;
+
+        pthread_mutex_lock(&rib.ro_lock);
+
+        node = rib.root;
+        prev = NULL;
+
+        for (str1 = str; ; str1 = NULL) {
+                token = strtok_r(str1, PATH_DELIMITER, &saveptr);
+                if (token == NULL)
+                        break;
+
+                prev = node;
+                node = node->child;
+                sibling = false;
+
+                while (node != NULL) {
+                        if (strcmp(node->name, token) == 0) {
+                                break;
+                        } else {
+                                prev = node;
+                                node = node->sibling;
+                                sibling = true;
+                        }
+                }
+
+                if (node == NULL) {
+                        pthread_mutex_unlock(&rib.ro_lock);
+                        free(str);
+                        return -1;
+                }
+        }
+
+        if (node == rib.root) {
+                LOG_ERR("Won't remove root.");
+                free(str);
+                return -1;
+        }
+
+        free(node->name);
+        if (node->data != NULL)
+                free(node->data);
+
+        if (sibling)
+                prev->sibling = node->sibling;
+        else
+                prev->child = node->sibling;
+
+        free(node);
+
+        pthread_mutex_lock(&rib.subs_lock);
+
+        list_for_each(p, &rib.subs) {
+                struct ro_sub * e = list_entry(p, struct ro_sub, next);
+                len_s = strlen(e->name);
+                len_n = strlen(name);
+
+                if (len_n < len_s)
+                        continue;
+
+                if (strncmp(name, e->name, len_s) == 0) {
+                        if (e->ops->ro_deleted == NULL)
+                                continue;
+
+                        e->ops->ro_deleted(name);
+                }
+        }
+
+        pthread_mutex_unlock(&rib.subs_lock);
+        pthread_mutex_unlock(&rib.ro_lock);
+
+        free(str);
+        return 0;
+}
+
+static struct rnode * find_rnode_by_name(const char * name)
+{
+        char * str, * str1, * saveptr, * token;
+        struct rnode * node;
+
+        str = strdup(name);
+        if (str == NULL)
+                return NULL;
+
+        node = rib.root;
+
+        for (str1 = str; ; str1 = NULL) {
+                token = strtok_r(str1, PATH_DELIMITER, &saveptr);
+                if (token == NULL)
+                        break;
+
+                node = node->child;
+
+                while (node != NULL)
+                        if (strcmp(node->name, token) == 0)
+                                break;
+                        else
+                                node = node->sibling;
+
+                if (node == NULL) {
+                        free(str);
+                        return NULL;
+                }
+        }
+
+        free(str);
+        return node;
+}
+
+ssize_t ro_read(const char * name,
+                uint8_t **   data)
+{
+        struct rnode * node;
+        ssize_t        len;
+
+        pthread_mutex_lock(&rib.ro_lock);
+
+        node = find_rnode_by_name(name);
+        if (node == NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                return -1;
+        }
+
+        *data = malloc(node->len);
+        if (*data == NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                return -1;
+        }
+
+        memcpy(*data, node->data, node->len);
+        len = node->len;
+
+        pthread_mutex_unlock(&rib.ro_lock);
+
+        return len;
+}
+
+int ro_write(const char * name,
+             uint8_t *    data,
+             size_t       len)
+{
+        struct rnode * node;
+        struct list_head * p = NULL;
+        size_t len_s, len_n;
+        uint8_t * ro_data;
+
+        pthread_mutex_lock(&rib.ro_lock);
+
+        node = find_rnode_by_name(name);
+        if (node == NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                return -1;
+        }
+
+        free(node->data);
+
+        node->data = data;
+        node->len = len;
+
+        pthread_mutex_lock(&rib.subs_lock);
+
+        list_for_each(p, &rib.subs) {
+                struct ro_sub * e =
+                        list_entry(p, struct ro_sub, next);
+                len_s = strlen(e->name);
+                len_n = strlen(name);
+
+                if (len_n < len_s)
+                        continue;
+
+                if (strncmp(name, e->name, len_s) == 0) {
+                        if (e->ops->ro_updated == NULL)
+                                continue;
+
+                        ro_data = malloc(len);
+                        if (ro_data == NULL)
+                                continue;
+
+                        memcpy(ro_data, data, len);
+                        e->ops->ro_updated(name, ro_data, len);
+                }
+        }
+
+        pthread_mutex_unlock(&rib.subs_lock);
+        pthread_mutex_unlock(&rib.ro_lock);
+
+        return 0;
+}
+
+int ro_props(const char *      name,
+             struct ro_props * props)
+{
+        struct rnode * node;
+
+        pthread_mutex_lock(&rib.ro_lock);
+
+        node = find_rnode_by_name(name);
+        if (node == NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                return -1;
+        }
+
+        if (node->props != NULL) {
+                if (node->props->expiry != NULL)
+                        free(node->props->expiry);
+                free(node->props);
+        }
+
+        node->props = props;
+
+        pthread_mutex_unlock(&rib.ro_lock);
+
+        return 0;
+}
+
+int ro_sync(const char * name)
+{
+        (void) name;
+
+        LOG_MISSING;
+        /* FIXME: We need whatevercast sets first */
+
+        return -1;
+}
+
+int ro_subscribe(const char *        name,
+                 struct ro_sub_ops * ops)
+{
+        struct ro_sub * sub;
+
+        if (name == NULL || ops == NULL)
+                return -EINVAL;
+
+        sub = malloc(sizeof(*sub));
+        if (sub == NULL)
+                return -ENOMEM;
+
+        INIT_LIST_HEAD(&sub->next);
+
+        sub->name = strdup(name);
+        if (sub->name == NULL) {
+                free(sub);
+                return -1;
+        }
+
+        sub->ops = ops;
+
+        pthread_mutex_lock(&rib.subs_lock);
+
+        sub->sid = bmp_allocate(rib.sids);
+        if (sub->sid < 0) {
+                pthread_mutex_unlock(&rib.subs_lock);
+                free(sub->name);
+                free(sub);
+                LOG_ERR("Failed to get sub id.");
+        }
+
+        list_add(&sub->next, &rib.subs);
+
+        pthread_mutex_unlock(&rib.subs_lock);
+
+        return 0;
+}
+
+int ro_unsubscribe(int sid)
+{
+        struct list_head * pos = NULL;
+        struct list_head * n   = NULL;
+
+        pthread_mutex_lock(&rib.subs_lock);
+
+        list_for_each_safe(pos, n, &(rib.subs)) {
+                struct ro_sub * e = list_entry(pos, struct ro_sub, next);
+                if (sid == e->sid) {
+                        bmp_release(rib.sids, sid);
+                        list_del(&e->next);
+                        free(e->name);
+                        free(e);
+                        pthread_mutex_unlock(&rib.subs_lock);
+                        return 0;
+                }
+        }
+
+        pthread_mutex_unlock(&rib.subs_lock);
+
+        LOG_ERR("No such subscription found.");
+
+        return -1;
 }
