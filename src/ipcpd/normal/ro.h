@@ -24,38 +24,33 @@
 #define OUROBOROS_IPCP_RO_H
 
 enum ro_recv_set {
-        ALL_MEMBERS = 0,
-        NEIGHBORS
+        NO_SYNC = 0,
+        NEIGHBORS,
+        ALL_MEMBERS
 };
 
 struct ro_props {
-        bool              enrol_sync;
-        enum ro_recv_set  recv_set;
-        struct timespec * expiry;
+        bool             enrol_sync;
+        enum ro_recv_set recv_set;
+        struct timespec  expiry;
 };
 
 /* All RIB-objects have a pathname, separated by a slash. */
-/* Takes ownership of the data */
-int          ro_create(const char * name,
-                       uint8_t *    data,
-                       size_t       len);
+/* Takes ownership of the data and props */
+int          ro_create(const char *      name,
+                       struct ro_props * props,
+                       uint8_t *         data,
+                       size_t            len);
 
 int          ro_delete(const char * name);
-
-/* Reader takes ownership of data */
-ssize_t      ro_read(const char * name,
-                     uint8_t **   data);
 
 int          ro_write(const char * name,
                       uint8_t *    data,
                       size_t       len);
 
-/* Takes ownership of the props */
-int          ro_props(const char *      name,
-                      struct ro_props * props);
-
-/* Sync changes with other members in the DIF */
-int          ro_sync(const char * name);
+/* Reader takes ownership of data */
+ssize_t      ro_read(const char * name,
+                     uint8_t **   data);
 
 /* Callback passes ownership of the data */
 struct ro_sub_ops {

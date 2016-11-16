@@ -1,0 +1,9 @@
+message ro_msg {
+        required uint64 address    = 1;
+        required uint64 seqno      = 2;
+        required int32  recv_set   = 3;
+        required bool   enrol_sync = 4;
+        required uint32 sec        = 5;
+        required uint64 nsec       = 6;
+        required bytes  value      = 7;
+}
