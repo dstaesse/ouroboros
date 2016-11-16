@@ -1580,7 +1580,6 @@ static void irm_destroy(void)
         list_for_each_safe(p, h, &irmd->irm_flows) {
                 struct irm_flow * f = list_entry(p, struct irm_flow, next);
                 list_del(&f->next);
-                ipcp_flow_dealloc(f->n_1_api, f->port_id);
                 irm_flow_destroy(f);
         }
 
