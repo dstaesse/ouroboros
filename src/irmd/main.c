@@ -1141,49 +1141,21 @@ static struct irm_flow * flow_alloc(pid_t  api,
         }
 
         pthread_rwlock_unlock(&irmd->reg_lock);
-
-        f = irm_flow_create();
-        if (f == NULL) {
-                pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Failed to create irm_flow.");
-                return NULL;
-        }
-
-        f->n_api = api;
-        f->state = FLOW_ALLOC_PENDING;
-
-        if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
-                LOG_WARN("Failed to set timestamp.");
-
         pthread_rwlock_wrlock(&irmd->flows_lock);
-
-        port_id = f->port_id = bmp_allocate(irmd->port_ids);
+        port_id = bmp_allocate(irmd->port_ids);
         if (!bmp_is_id_valid(irmd->port_ids, port_id)) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Could not allocate port_id.");
-                irm_flow_destroy(f);
                 return NULL;
         }
 
-        f->n_1_api = ipcp;
-        f->n_rb = shm_rbuff_create(api, port_id);
-        if (f->n_rb == NULL) {
+        f = irm_flow_create(api, ipcp, port_id);
+        if (f == NULL) {
                 bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not create ringbuffer for AP-I %d.", api);
-                irm_flow_destroy(f);
-                return NULL;
-        }
-
-        f->n_1_rb = shm_rbuff_create(ipcp, port_id);
-        if (f->n_1_rb == NULL) {
-                bmp_release(irmd->port_ids, port_id);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not create ringbuffer for AP-I %d.", ipcp);
-                irm_flow_destroy(f);
+                LOG_ERR("Could not allocate port_id.");
                 return NULL;
         }
 
@@ -1268,7 +1240,7 @@ static int flow_dealloc(pid_t api, int port_id)
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_DBG("Deallocate called for unknown port.");
+                LOG_DBG("Deallocate unknown port %d by %d.", port_id, api);
                 return 0;
         }
 
@@ -1297,10 +1269,11 @@ static int flow_dealloc(pid_t api, int port_id)
         }
 
         pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
 
         if (n_1_api != -1)
                 ret = ipcp_flow_dealloc(n_1_api, port_id);
+
+        pthread_rwlock_unlock(&irmd->state_lock);
 
         return ret;
 }
@@ -1351,20 +1324,10 @@ static struct irm_flow * flow_req_arr(pid_t  api,
 
         struct pid_el * c_api;
         pid_t h_api = -1;
+        int port_id = -1;
 
         LOG_DBGF("Flow req arrived from IPCP %d for %s on AE %s.",
                  api, dst_name, ae_name);
-
-        f = irm_flow_create();
-        if (f == NULL) {
-                LOG_ERR("Failed to create irm_flow.");
-                return NULL;
-        }
-
-        f->state   = FLOW_ALLOC_PENDING;
-        f->n_1_api = api;
-        if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
-                LOG_WARN("Failed to set timestamp.");
 
         pthread_rwlock_rdlock(&irmd->state_lock);
         pthread_rwlock_wrlock(&irmd->reg_lock);
@@ -1374,7 +1337,6 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Unknown name: %s.", dst_name);
-                irm_flow_destroy(f);
                 return NULL;
         }
 
@@ -1387,14 +1349,12 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("No AP's for %s.", dst_name);
-                irm_flow_destroy(f);
                 return NULL;
         case REG_NAME_AUTO_ACCEPT:
                 c_api = malloc(sizeof(*c_api));
                 if (c_api == NULL) {
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
-                        irm_flow_destroy(f);
                         return NULL;
                 }
 
@@ -1412,7 +1372,6 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                         pthread_rwlock_unlock(&irmd->state_lock);
                         LOG_ERR("Could not get start apn for reg_entry %s.",
                                 re->name);
-                        irm_flow_destroy(f);
                         free(c_api);
                         return NULL;
                 }
@@ -1439,7 +1398,6 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                         pthread_mutex_unlock(&re->state_lock);
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
-                        irm_flow_destroy(f);
                         return NULL;
                 }
 
@@ -1447,13 +1405,12 @@ static struct irm_flow * flow_req_arr(pid_t  api,
 
         case REG_NAME_FLOW_ACCEPT:
                 pthread_mutex_lock(&re->state_lock);
-                h_api = f->n_api = reg_entry_get_api(re);
+                h_api = reg_entry_get_api(re);
                 pthread_mutex_unlock(&re->state_lock);
-                if (f->n_api == -1) {
+                if (h_api == -1) {
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
                         LOG_ERR("Invalid api returned.");
-                        irm_flow_destroy(f);
                         return NULL;
                 }
 
@@ -1462,39 +1419,25 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("IRMd in wrong state.");
-                irm_flow_destroy(f);
                 return NULL;
         }
+
 
         pthread_rwlock_unlock(&irmd->reg_lock);
-
         pthread_rwlock_wrlock(&irmd->flows_lock);
-        f->port_id = bmp_allocate(irmd->port_ids);
-        if (!bmp_is_id_valid(irmd->port_ids, f->port_id)) {
+        port_id = bmp_allocate(irmd->port_ids);
+        if (!bmp_is_id_valid(irmd->port_ids, port_id)) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not create ringbuffer for AP-I %d.", f->n_api);
-                irm_flow_destroy(f);
                 return NULL;
         }
 
-        f->n_rb = shm_rbuff_create(f->n_api, f->port_id);
-        if (f->n_rb == NULL) {
-                bmp_release(irmd->port_ids, f->port_id);
+        f = irm_flow_create(h_api, api, port_id);
+        if (f == NULL) {
+                bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not create ringbuffer for AP-I %d.", f->n_api);
-                irm_flow_destroy(f);
-                return NULL;
-        }
-
-        f->n_1_rb = shm_rbuff_create(f->n_1_api, f->port_id);
-        if (f->n_1_rb == NULL) {
-                bmp_release(irmd->port_ids, f->port_id);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not create ringbuffer for AP-I %d.", f->n_1_api);
-                irm_flow_destroy(f);
+                LOG_ERR("Could not allocate port_id.");
                 return NULL;
         }
 
@@ -1515,6 +1458,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_wrlock(&irmd->flows_lock);
                 bmp_release(irmd->port_ids, f->port_id);
+                list_del(&f->next);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Could not get api table entry for %d.", h_api);
