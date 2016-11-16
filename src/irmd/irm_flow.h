@@ -56,7 +56,9 @@ struct irm_flow {
         pthread_mutex_t    state_lock;
 };
 
-struct irm_flow * irm_flow_create(void);
+struct irm_flow * irm_flow_create(pid_t n_api,
+                                  pid_t n_1_api,
+                                  int   port_id);
 
 void              irm_flow_destroy(struct irm_flow * f);
 

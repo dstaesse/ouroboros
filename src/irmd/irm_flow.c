@@ -20,7 +20,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define OUROBOROS_PREFIX "irm_flow"
+
 #include <ouroboros/config.h>
+#include <ouroboros/logs.h>
 
 #include "irm_flow.h"
 
@@ -28,19 +31,11 @@
 #include <stdbool.h>
 #include <assert.h>
 
-struct irm_flow * irm_flow_create()
+struct irm_flow * irm_flow_create(pid_t n_api, pid_t n_1_api, int port_id)
 {
         struct irm_flow * f = malloc(sizeof(*f));
         if (f == NULL)
                 return NULL;
-
-        f->n_api   = -1;
-        f->n_1_api = -1;
-        f->port_id = -1;
-        f->n_rb    = NULL;
-        f->n_1_rb  = NULL;
-
-        f->state   = FLOW_NULL;
 
         if (pthread_cond_init(&f->state_cond, NULL)) {
                 free(f);
@@ -52,8 +47,29 @@ struct irm_flow * irm_flow_create()
                 return NULL;
         }
 
-        f->t0.tv_sec  = 0;
-        f->t0.tv_nsec = 0;
+
+        f->n_api   = n_api;
+        f->n_1_api = n_1_api;
+        f->port_id = port_id;
+
+        f->n_rb = shm_rbuff_create(n_api, port_id);
+        if (f->n_rb == NULL) {
+                LOG_ERR("Could not create ringbuffer for AP-I %d.", n_api);
+                free(f);
+                return NULL;
+        }
+
+        f->n_1_rb = shm_rbuff_create(n_1_api, port_id);
+        if (f->n_1_rb == NULL) {
+                LOG_ERR("Could not create ringbuffer for AP-I %d.", n_1_api);
+                free(f);
+                return NULL;
+        }
+
+        f->state = FLOW_ALLOC_PENDING;
+
+        if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
+                LOG_WARN("Failed to set timestamp.");
 
         return f;
 }
