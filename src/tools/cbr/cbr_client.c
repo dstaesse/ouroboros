@@ -46,7 +46,7 @@ int client_main(char * server,
         int result = 0;
         bool stop = false;
         char buf[size];
-        int seqnr = 0;
+        long seqnr = 0;
         long gap = size * 8.0 * (BILLION / (double) rate);
 
         struct timespec start;
@@ -114,8 +114,8 @@ int client_main(char * server,
         ms = ts_diff_ms(&start, &end);
 
         printf("sent statistics: "
-               "%9d SDUs, %12d bytes in %9d ms, %4.4f Mb/s\n",
-               seqnr, seqnr * size, ms, (seqnr * size * 8.0)/(ms * 1000));
+               "%9ld SDUs, %12ld bytes in %9d ms, %4.4f Mb/s\n",
+               seqnr, seqnr * size, ms, (seqnr / (ms * 1000.0)) * size * 8.0);
 
         flow_dealloc(fd);
 
