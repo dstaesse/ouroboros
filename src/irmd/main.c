@@ -55,6 +55,7 @@
 #include <sys/wait.h>
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
+#define SHM_SAN_HOLDOFF 1000 /* ms */
 
 struct ipcp_entry {
         struct list_head next;
@@ -1612,6 +1613,46 @@ void irmd_sig_handler(int sig, siginfo_t * info, void * c)
         }
 }
 
+void * shm_sanitize(void * o)
+{
+        struct list_head * p = NULL;
+        struct timespec ts = {SHM_SAN_HOLDOFF / 1000,
+                              (SHM_SAN_HOLDOFF % 1000) * MILLION};
+        ssize_t idx;
+
+        (void) o;
+
+        while (true) {
+                shm_rdrbuff_wait_full(irmd->rdrb);
+
+                pthread_rwlock_rdlock(&irmd->state_lock);
+                pthread_rwlock_wrlock(&irmd->flows_lock);
+
+                list_for_each(p, &irmd->irm_flows) {
+                        struct irm_flow * f =
+                                list_entry(p, struct irm_flow, next);
+                        if (kill(f->n_api, 0) < 0) {
+                                while ((idx = shm_rbuff_read(f->n_rb)) >= 0)
+                                        shm_rdrbuff_remove(irmd->rdrb, idx);
+                                continue;
+                        }
+
+                        if (kill(f->n_1_api, 0) < 0) {
+                                while ((idx = shm_rbuff_read(f->n_1_rb)) >= 0)
+                                        shm_rdrbuff_remove(irmd->rdrb, idx);
+                                continue;
+                        }
+                }
+
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+
+                nanosleep(&ts, NULL);
+        }
+
+        return (void *) 0;
+}
+
 void * irm_sanitize(void * o)
 {
         struct timespec now;
@@ -2153,7 +2194,7 @@ int main(int argc, char ** argv)
 
         pthread_create(&irmd->irm_sanitize, NULL, irm_sanitize, NULL);
         pthread_create(&irmd->shm_sanitize, NULL,
-                       shm_rdrbuff_sanitize, irmd->rdrb);
+                       shm_sanitize, irmd->rdrb);
 
         /* wait for (all of them) to return */
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)

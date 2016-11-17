@@ -43,12 +43,12 @@
 #include <stdbool.h>
 
 #define FN_MAX_CHARS 255
-#define RB_CLOSED -1
 #define RB_OPEN 0
+#define RB_CLOSED 1
 
 #define SHM_RBUFF_FILE_SIZE ((SHM_BUFFER_SIZE) * sizeof(ssize_t)          \
-                             + 2 * sizeof(size_t) + sizeof(int8_t)      \
-                             + sizeof(pthread_mutex_t)                  \
+                             + 3 * sizeof(size_t)                         \
+                             + sizeof(pthread_mutex_t)                    \
                              + 2 * sizeof (pthread_cond_t))
 
 #define shm_rbuff_used(rb) ((*rb->head + (SHM_BUFFER_SIZE) - *rb->tail)   \
@@ -62,7 +62,7 @@ struct shm_rbuff {
         ssize_t *         shm_base; /* start of entry                */
         size_t *          head;     /* start of ringbuffer head      */
         size_t *          tail;     /* start of ringbuffer tail      */
-        int8_t *          acl;      /* access control                */
+        size_t *          acl;      /* access control                */
         pthread_mutex_t * lock;     /* lock all free space in shm    */
         pthread_cond_t *  add;      /* SDU arrived                   */
         pthread_cond_t *  del;      /* SDU removed                   */
@@ -126,7 +126,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         rb->shm_base = shm_base;
         rb->head     = (size_t *) (rb->shm_base + (SHM_BUFFER_SIZE));
         rb->tail     = rb->head + 1;
-        rb->acl      = (int8_t *) (rb->tail + 1);
+        rb->acl      = rb->tail + 1;
         rb->lock     = (pthread_mutex_t *) (rb->acl + 1);
         rb->add      = (pthread_cond_t *) (rb->lock + 1);
         rb->del      = rb->add + 1;
@@ -152,9 +152,6 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
 
         rb->api = api;
         rb->port_id = port_id;
-
-        if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
-                LOG_DBG("Couldn't unmap shared memory.");
 
         return rb;
 }
@@ -202,7 +199,7 @@ struct shm_rbuff * shm_rbuff_open(pid_t api, int port_id)
         rb->shm_base = shm_base;
         rb->head     = (size_t *) (rb->shm_base + (SHM_BUFFER_SIZE));
         rb->tail     = rb->head + 1;
-        rb->acl      = (int8_t *) (rb->tail + 1);
+        rb->acl      = rb->tail + 1;
         rb->lock     = (pthread_mutex_t *) (rb->acl + 1);
         rb->add      = (pthread_cond_t *) (rb->lock + 1);
         rb->del      = rb->add + 1;
@@ -225,12 +222,15 @@ void shm_rbuff_close(struct shm_rbuff * rb)
 
 void shm_rbuff_destroy(struct shm_rbuff * rb)
 {
-        char fn[25];
+        char fn[FN_MAX_CHARS];
 
         if (rb == NULL)
                 return;
 
         sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->api, rb->port_id);
+
+        if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
+                LOG_DBG("Couldn't unmap shared memory.");
 
         if (shm_unlink(fn) == -1)
                 LOG_DBG("Failed to unlink shm %s.", fn);
@@ -251,7 +251,7 @@ int shm_rbuff_write(struct shm_rbuff * rb, size_t idx)
                 pthread_mutex_consistent(rb->lock);
         }
 #endif
-        if (*rb->acl) {
+        if (*rb->acl == RB_CLOSED) {
                 pthread_mutex_unlock(rb->lock);
                 return -ENOTALLOC;
         }
