@@ -43,18 +43,16 @@ void                 shm_rdrbuff_close(struct shm_rdrbuff * rdrb);
 
 void                 shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb);
 
-void *               shm_rdrbuff_sanitize(void * o);
+void                 shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb);
 
 /* returns the index of the buffer in the DU map */
 ssize_t              shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
-                                       pid_t                dst_api,
                                        size_t               headspace,
                                        size_t               tailspace,
                                        uint8_t *            data,
                                        size_t               data_len);
 
 ssize_t              shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
-                                         pid_t                dst_api,
                                          size_t               headspace,
                                          size_t               tailspace,
                                          uint8_t *            data,

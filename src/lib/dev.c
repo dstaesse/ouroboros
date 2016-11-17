@@ -536,7 +536,7 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
                 return -1;
         }
 
-        ai.flows[fd].rx_rb   = shm_rbuff_open(ai.api, recv_msg->port_id);
+        ai.flows[fd].rx_rb = shm_rbuff_open(ai.api, recv_msg->port_id);
         if (ai.flows[fd].rx_rb == NULL) {
                 reset_flow(fd);
                 bmp_release(ai.fds, fd);
@@ -746,7 +746,6 @@ ssize_t flow_write(int fd, void * buf, size_t count)
 
         if (ai.flows[fd].oflags & FLOW_O_NONBLOCK) {
                 idx = shm_rdrbuff_write(ai.rdrb,
-                                       ai.flows[fd].api,
                                        DU_BUFF_HEADSPACE,
                                        DU_BUFF_TAILSPACE,
                                        buf,
@@ -766,7 +765,6 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         } else { /* blocking */
                 struct shm_rdrbuff * rdrb = ai.rdrb;
                 struct shm_rbuff * tx_rb = ai.flows[fd].tx_rb;
-                pid_t api  = ai.flows[fd].api;
 
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
@@ -774,7 +772,6 @@ ssize_t flow_write(int fd, void * buf, size_t count)
                 assert(tx_rb);
 
                 idx = shm_rdrbuff_write_b(rdrb,
-                                          api,
                                           DU_BUFF_HEADSPACE,
                                           DU_BUFF_TAILSPACE,
                                           buf,
