@@ -67,13 +67,13 @@ typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 
 #define THIS_TYPE IPCP_SHIM_ETH_LLC
 #define MGMT_SAP 0x01
-#define SHIM_ETH_LLC_MAX_SDU_SIZE 1500
 #define MAC_SIZE 6
 #define LLC_HEADER_SIZE 3
 #define MAX_SAPS 64
 #define ETH_HEADER_SIZE (2 * MAC_SIZE + 2)
 #define ETH_FRAME_SIZE (ETH_HEADER_SIZE + LLC_HEADER_SIZE \
                         + SHIM_ETH_LLC_MAX_SDU_SIZE)
+#define SHIM_ETH_LLC_MAX_SDU_SIZE (1500 - LLC_HEADER_SIZE)
 
 #define EVENT_WAIT_TIMEOUT 100 /* us */
 #define NAME_QUERY_TIMEOUT 100000000 /* ns */
