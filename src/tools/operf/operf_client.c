@@ -36,6 +36,17 @@
 #include <errno.h>
 #include <float.h>
 
+static void busy_wait_until(const struct timespec * deadline)
+{
+        struct timespec now;
+        clock_gettime(CLOCK_REALTIME, &now);
+        while (now.tv_sec < deadline->tv_sec)
+                clock_gettime(CLOCK_REALTIME, &now);
+        while (now.tv_sec == deadline->tv_sec
+               && now.tv_nsec < deadline->tv_nsec)
+                clock_gettime(CLOCK_REALTIME, &now);
+}
+
 void shutdown_client(int signo, siginfo_t * info, void * c)
 {
         (void) info;
@@ -85,6 +96,7 @@ void * writer(void * o)
         struct timespec now;
         struct timespec start;
         struct timespec intv = {(gap / BILLION), gap % BILLION};
+        struct timespec end = {0, 0};
 
         char * buf = malloc(client.size);
         if (buf == NULL)
@@ -123,6 +135,9 @@ void * writer(void * o)
                 }
         } else {
                 while (ts_diff_ms(&start, &now) < client.duration) {
+                        clock_gettime(CLOCK_REALTIME, &now);
+                        ts_add(&now, &intv, &end);
+
                         if (flow_write(*fdp, buf, client.size) == -1) {
                                 printf("Failed to send SDU.\n");
                                 flow_dealloc(*fdp);
@@ -131,10 +146,10 @@ void * writer(void * o)
                         }
 
                         ++client.sent;
-
-                        nanosleep(&intv, NULL);
-
-                        clock_gettime(CLOCK_REALTIME, &now);
+                        if (client.sleep)
+                                nanosleep(&intv, NULL);
+                        else
+                                busy_wait_until(&end);
                 }
         }
 

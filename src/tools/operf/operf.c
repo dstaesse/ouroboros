@@ -41,6 +41,7 @@ struct c {
         int    size;
         long   rate;
         bool   flood;
+        bool   sleep;
         int    duration;
 
         size_t sent;
@@ -81,6 +82,7 @@ static void usage(void)
                "  -r, --rate                Rate (b/s)\n"
                "  -s, --size                Payload size (B, default 1500)\n"
                "  -f, --flood               Send SDUs as fast as possible\n"
+               "      --sleep               Sleep in between sending SDUs\n"
                "      --help                Display this help text and exit\n");
 }
 
@@ -100,6 +102,7 @@ int main(int argc, char ** argv)
         server.timeout = 1000; /* ms */
         client.rate = 1000000;
         client.flood = false;
+        client.sleep = false;
 
         while (argc > 0) {
                 if (strcmp(*argv, "-n") == 0 ||
@@ -127,6 +130,8 @@ int main(int argc, char ** argv)
                 } else if (strcmp(*argv, "-f") == 0 ||
                            strcmp(*argv, "--flood") == 0) {
                         client.flood = true;
+                } else if (strcmp(*argv, "--sleep") == 0) {
+                        client.sleep = true;
                 } else if (strcmp(*argv, "-l") == 0 ||
                            strcmp(*argv, "--listen") == 0) {
                         serv = true;
