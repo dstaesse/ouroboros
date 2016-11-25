@@ -1,8 +1,20 @@
-get_filename_component(tmp ".." ABSOLUTE)
-get_filename_component(src_folder "${tmp}" NAME)
+get_filename_component(CURRENT_SOURCE_PARENT_DIR
+  ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
+get_filename_component(CURRENT_BINARY_PARENT_DIR
+  ${CMAKE_CURRENT_BINARY_DIR} DIRECTORY)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+include_directories(${CURRENT_SOURCE_PARENT_DIR})
+include_directories(${CURRENT_BINARY_PARENT_DIR})
+
+include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_BINARY_DIR}/include)
 
 create_test_sourcelist(${src_folder}_tests test_suite.c
                        # Add new tests here
+                       timerwheel_test.c
 )
 
 add_executable(${src_folder}_test EXCLUDE_FROM_ALL ${${src_folder}_tests})
