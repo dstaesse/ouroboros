@@ -39,7 +39,7 @@ int ts_add(const struct timespec * t,
         nanos = t->tv_nsec + intv->tv_nsec;
 
         res->tv_sec = t->tv_sec + intv->tv_sec;
-        while (nanos > BILLION) {
+        while (nanos >= BILLION) {
                 nanos -= BILLION;
                 ++(res->tv_sec);
         }
@@ -85,7 +85,7 @@ int tv_add(const struct timeval * t,
         micros = t->tv_usec + intv->tv_usec;
 
         res->tv_sec = t->tv_sec + intv->tv_sec;
-        while (micros > MILLION) {
+        while (micros >= MILLION) {
                 micros -= MILLION;
                 --(res->tv_sec);
         }
