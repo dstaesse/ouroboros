@@ -54,16 +54,18 @@ int timerwheel_test(int argc, char ** argv)
         (void) argc;
         (void) argv;
 
-        srand(time(NULL));
-
         total = 0;
+
+        srand(time(NULL));
 
         resolution = rand() % (MAX_RESOLUTION - 1) + 1;
         elements = rand() % (MAX_ELEMENTS - 10) + 10;
 
         tw = timerwheel_create(resolution, resolution * elements);
-        if (tw == NULL)
+        if (tw == NULL) {
+                printf("Failed to create timerwheel.\n");
                 return -1;
+        }
 
         wait.tv_sec = (resolution * elements) / 1000;
         wait.tv_nsec = ((resolution * elements) % 1000) * MILLION;
@@ -74,19 +76,24 @@ int timerwheel_test(int argc, char ** argv)
                 int delay = rand() % (resolution * elements);
                 int var = rand() % 5;
                 check_total += var;
-                timerwheel_add(tw,
-                               (void (*)(void *)) add,
-                               (void *) &var,
-                               sizeof(var),
-                               delay);
+                if (timerwheel_add(tw,
+                                   (void (*)(void *)) add,
+                                   (void *) &var,
+                                   sizeof(var),
+                                   delay)) {
+                        printf("Failed to add function.");
+                        return -1;
+                }
         }
 
         nanosleep(&wait, NULL);
 
         timerwheel_destroy(tw);
 
-        if (total != check_total)
+        if (total != check_total) {
+                printf("Totals do not match.\n");
                 return -1;
+        }
 
         return 0;
 }

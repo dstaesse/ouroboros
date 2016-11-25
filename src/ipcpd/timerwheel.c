@@ -136,10 +136,8 @@ static void * worker(void * o)
 
         while (tw_get_state(tw) == TW_RUNNING) {
                 if (pthread_cond_timedwait(&tw->work, &tw->lock, &dl)
-                    == ETIMEDOUT) {
+                    == ETIMEDOUT)
                         ts_add(&dl, &tw->intv, &dl);
-                        continue;
-                }
 
                 list_for_each_safe(p, h, &tw->wq) {
                         struct tw_f * f = list_entry(p, struct tw_f, next);
@@ -149,6 +147,7 @@ static void * worker(void * o)
                         if (f->arg != NULL)
                                 free(f->arg);
                         free(f);
+
                         pthread_mutex_lock(&tw->lock);
                 }
         }
@@ -162,7 +161,7 @@ static void * movement(void * o)
 {
         struct timerwheel * tw = (struct timerwheel *) o;
         struct timespec now = {0, 0};
-        long ms = (tw->resolution * tw->elements);
+        long ms = tw->resolution * tw->elements;
         struct timespec total = {ms / 1000,
                                  (ms % 1000) * MILLION};
         struct list_head * p;
@@ -170,18 +169,19 @@ static void * movement(void * o)
 
         while (tw_get_state(tw) == TW_RUNNING) {
                 clock_gettime(CLOCK_MONOTONIC, &now);
+
+                pthread_mutex_lock(&tw->lock);
+
                 if (ts_diff_us(&tw->wheel[tw->pos].expiry, &now) < 0) {
+                        pthread_mutex_unlock(&tw->lock);
                         nanosleep(&tw->intv, NULL);
                         continue;
                 }
-
-                pthread_mutex_lock(&tw->lock);
 
                 list_for_each_safe(p, h, &tw->wheel[tw->pos].funcs) {
                         struct tw_f * f = list_entry(p, struct tw_f, next);
                         list_del(&f->next);
                         list_add(&f->next, &tw->wq);
-                        pthread_cond_signal(&tw->work);
                 }
 
                 ts_add(&tw->wheel[tw->pos].expiry,
@@ -189,6 +189,8 @@ static void * movement(void * o)
                        &tw->wheel[tw->pos].expiry);
 
                 tw->pos = (tw->pos + 1) & (tw->elements - 1);
+
+                pthread_cond_signal(&tw->work);
 
                 pthread_mutex_unlock(&tw->lock);
         }
@@ -228,8 +230,8 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
 
         tw->resolution = resolution;
 
-        tw->intv.tv_sec = tw->resolution / (1000 * FRAC);
-        tw->intv.tv_nsec = (tw->resolution % 1000) * (MILLION / FRAC);
+        tw->intv.tv_sec = (tw->resolution / FRAC) / 1000;
+        tw->intv.tv_nsec = ((tw->resolution / FRAC) % 1000) * MILLION;
 
         INIT_LIST_HEAD(&tw->wq);
 
@@ -335,7 +337,7 @@ int timerwheel_add(struct timerwheel * tw,
                    size_t arg_len,
                    unsigned int delay)
 {
-        int pos = (tw->pos + delay / tw->resolution) & (tw->elements - 1);
+        int pos;
         struct tw_f * f = malloc(sizeof(*f));
         if (f == NULL)
                 return -ENOMEM;
@@ -353,6 +355,7 @@ int timerwheel_add(struct timerwheel * tw,
 
         pthread_mutex_lock(&tw->lock);
 
+        pos = (tw->pos + delay / tw->resolution) & (tw->elements - 1);
         list_add(&f->next, &tw->wheel[pos].funcs);
 
         pthread_mutex_unlock(&tw->lock);
