@@ -418,13 +418,3 @@ void shm_rbuff_fini(struct shm_rbuff * rb)
 #endif
         pthread_cleanup_pop(true);
 }
-
-void shm_rbuff_reset(struct shm_rbuff * rb)
-{
-        assert(rb);
-
-        pthread_mutex_lock(rb->lock);
-        *rb->tail = 0;
-        *rb->head = 0;
-        pthread_mutex_unlock(rb->lock);
-}
