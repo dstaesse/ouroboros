@@ -76,8 +76,7 @@ static char * my_name(void)
         return name;
 }
 
-/* FIXME: We should return void */
-static int ro_created(const char * name,
+static void ro_created(const char * name,
                       uint8_t *    data,
                       size_t       len)
 {
@@ -93,13 +92,11 @@ static int ro_created(const char * name,
                 msg->code = FLAT_ADDR_REPLY;
                 ro_write(name, data, len);
         }
-
-        return 0;
 }
 
-static int ro_updated(const char * name,
-                      uint8_t *    data,
-                      size_t       len)
+static void ro_updated(const char * name,
+                       uint8_t *    data,
+                       size_t       len)
 {
         struct flat_addr_msg * msg;
         char * ro_name;
@@ -109,8 +106,10 @@ static int ro_updated(const char * name,
         assert(len >= sizeof(*msg));
 
         ro_name = my_name();
-        if (ro_name == NULL)
-                return -1;
+        if (ro_name == NULL) {
+                free(data);
+                return;
+        }
 
         msg = (struct flat_addr_msg *) data;
         if (msg->code == FLAT_ADDR_REPLY &&
@@ -123,8 +122,6 @@ static int ro_updated(const char * name,
 
         free(data);
         free(ro_name);
-
-        return 0;
 }
 
 static struct ro_sub_ops flat_sub_ops = {
@@ -135,16 +132,13 @@ static struct ro_sub_ops flat_sub_ops = {
 
 int flat_init(void)
 {
-        struct ro_props * props;
+        struct ro_attr     rattr;
         pthread_condattr_t cattr;
 
         srand(time(NULL));
         flat.addr_in_use = false;
 
-        props = malloc(sizeof(*props));
-        if (props == NULL)
-                return -ENOMEM;
-
+        ro_attr_init(&rattr);
         pthread_mutex_init(&flat.lock, NULL);
         pthread_condattr_init(&cattr);
 #ifndef __APPLE__
@@ -158,20 +152,13 @@ int flat_init(void)
                 LOG_ERR("Could not subscribe to RIB.");
                 pthread_cond_destroy(&flat.cond);
                 pthread_mutex_destroy(&flat.lock);
-                free(props);
                 return -1;
         }
 
-        props->enrol_sync = false;
-        props->recv_set = NO_SYNC;
-        props->expiry.tv_sec = 0;
-        props->expiry.tv_nsec = 0;
-
-        if (ro_create(POL_RO_ROOT, props, NULL, 0)) {
+        if (ro_create(POL_RO_ROOT, &rattr, NULL, 0)) {
                 LOG_ERR("Could not create RO.");
                 pthread_cond_destroy(&flat.cond);
                 pthread_mutex_destroy(&flat.lock);
-                free(props);
                 ro_unsubscribe(flat.sid);
                 return -1;
         }
@@ -189,16 +176,16 @@ int flat_fini(void)
 
 uint64_t flat_address(void)
 {
-        int ret = 0;
-        uint64_t max_addr;
-        struct dt_const * dtc;
-        struct timespec timeout = {(TIMEOUT / 1000),
-                                   (TIMEOUT % 1000) * MILLION};
-        struct timespec abstime;
-        struct ro_props * props;
+        int                    ret = 0;
+        uint64_t               max_addr;
+        struct dt_const *      dtc;
+        struct timespec        timeout = {(TIMEOUT / 1000),
+                                          (TIMEOUT % 1000) * MILLION};
+        struct timespec        abstime;
+        struct ro_attr         attr;
         struct flat_addr_msg * msg;
-        uint8_t * buf;
-        char * ro_name;
+        uint8_t *              buf;
+        char *                 ro_name;
 
         dtc = ribmgr_dt_const();
         if (dtc == NULL)
@@ -211,21 +198,14 @@ uint64_t flat_address(void)
                 max_addr = (1 << (8 * dtc->addr_size)) - 1;
                 flat.addr = (rand() % (max_addr - 1)) + 1;
 
-                /* FIXME: We must change this to stack memory */
-                props = malloc(sizeof(*props));
-                if (props == NULL)
-                        return INVALID_ADDR;
-
-                props->enrol_sync = false;
-                props->recv_set = ALL_MEMBERS;
-                props->expiry.tv_sec = TIMEOUT / 1000;
-                props->expiry.tv_nsec = (TIMEOUT % 1000) * MILLION;
+                ro_attr_init(&attr);
+                attr.recv_set = ALL_MEMBERS;
+                attr.expiry.tv_sec = TIMEOUT / 1000;
+                attr.expiry.tv_nsec = (TIMEOUT % 1000) * MILLION;
 
                 buf = malloc(sizeof(*msg));
-                if (buf == NULL) {
-                        free(props);
+                if (buf == NULL)
                         return INVALID_ADDR;
-                }
 
                 msg = (struct flat_addr_msg *) buf;
                 msg->code = FLAT_ADDR_REQ;
@@ -233,15 +213,12 @@ uint64_t flat_address(void)
 
                 /* FIXME: We may require functions to construct pathnames */
                 ro_name = my_name();
-                if (ro_name == NULL) {
-                        free(props);
+                if (ro_name == NULL)
                         return INVALID_ADDR;
-                }
 
                 pthread_mutex_lock(&flat.lock);
-                if (ro_create(ro_name, props, buf, sizeof(*msg))) {
+                if (ro_create(ro_name, &attr, buf, sizeof(*msg))) {
                         pthread_mutex_unlock(&flat.lock);
-                        free(props);
                         free(ro_name);
                         return INVALID_ADDR;
                 }

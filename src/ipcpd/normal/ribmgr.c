@@ -64,9 +64,9 @@ typedef RoMsg ro_msg_t;
 
 /* RIB objects */
 struct rnode {
-        char *            name;
-        char *            full_name;
-        uint64_t          seqno;
+        char *         name;
+        char *         full_name;
+        uint64_t       seqno;
 
         /*
          * NOTE: Naive implementation for now, could be replaced by
@@ -75,12 +75,12 @@ struct rnode {
          */
 
         /* If there are no children, this is a leaf */
-        struct rnode *    child;
-        struct rnode *    sibling;
+        struct rnode * child;
+        struct rnode * sibling;
 
-        struct ro_props * props;
-        uint8_t *         data;
-        size_t            len;
+        struct ro_attr attr;
+        uint8_t *      data;
+        size_t         len;
 };
 
 struct mgmt_flow {
@@ -129,9 +129,9 @@ struct {
         struct addr_auth *  addr_auth;
 } rib;
 
-int ribmgr_ro_created(const char * name,
-                      uint8_t *    data,
-                      size_t       len)
+void ribmgr_ro_created(const char * name,
+                       uint8_t *    data,
+                       size_t       len)
 {
         static_info_msg_t * stat_msg;
 
@@ -145,7 +145,7 @@ int ribmgr_ro_created(const char * name,
                         ipcp_set_state(IPCP_INIT);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         LOG_ERR("Failed to unpack static info message.");
-                        return -1;
+                        return;
                 }
 
                 rib.dtc.addr_size = stat_msg->addr_size;
@@ -163,7 +163,7 @@ int ribmgr_ro_created(const char * name,
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         static_info_msg__free_unpacked(stat_msg, NULL);
                         LOG_ERR("Failed to create address authority");
-                        return -1;
+                        return;
                 }
 
                 rib.address = rib.addr_auth->address();
@@ -174,14 +174,12 @@ int ribmgr_ro_created(const char * name,
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         static_info_msg__free_unpacked(stat_msg, NULL);
                         LOG_ERR("Failed to init FRCT");
-                        return -1;
+                        return;
                 }
 
                 static_info_msg__free_unpacked(stat_msg, NULL);
         }
         pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        return 0;
 }
 
 /* We only have a create operation for now */
@@ -234,10 +232,10 @@ static int ro_msg_create(struct rnode * node,
 {
         msg->address = rib.address;
         msg->seqno = node->seqno;
-        msg->recv_set = node->props->recv_set;
-        msg->enrol_sync = node->props->enrol_sync;
-        msg->sec = node->props->expiry.tv_sec;
-        msg->nsec = node->props->expiry.tv_nsec;
+        msg->recv_set = node->attr.recv_set;
+        msg->enrol_sync = node->attr.enrol_sync;
+        msg->sec = node->attr.expiry.tv_sec;
+        msg->nsec = node->attr.expiry.tv_nsec;
         msg->value.data = node->data;
         msg->value.len = node->len;
 
@@ -319,10 +317,10 @@ static void ro_delete_timer(void * o)
         }
 }
 
-static struct rnode * ribmgr_ro_create(const char *      name,
-                                       struct ro_props * props,
-                                       uint8_t *         data,
-                                       size_t            len)
+static struct rnode * ribmgr_ro_create(const char *   name,
+                                       struct ro_attr attr,
+                                       uint8_t *      data,
+                                       size_t         len)
 {
         char * str;
         char * str1;
@@ -397,7 +395,7 @@ static struct rnode * ribmgr_ro_create(const char *      name,
         }
 
         new->seqno = 0;
-        new->props = props;
+        new->attr = attr;
 
         if (sibling)
                 prev->sibling = new;
@@ -411,10 +409,10 @@ static struct rnode * ribmgr_ro_create(const char *      name,
 
         LOG_DBG("Created RO with name %s.", name);
 
-        if (!(props->expiry.tv_sec == 0 &&
-              props->expiry.tv_nsec == 0)) {
-                timeout = props->expiry.tv_sec * 1000 +
-                        props->expiry.tv_nsec / MILLION;
+        if (!(attr.expiry.tv_sec == 0 &&
+              attr.expiry.tv_nsec == 0)) {
+                timeout = attr.expiry.tv_sec * 1000 +
+                        attr.expiry.tv_nsec / MILLION;
                 if (timerwheel_add(rib.wheel, ro_delete_timer,
                                    new->full_name, strlen(new->full_name),
                                    timeout)) {
@@ -737,18 +735,14 @@ static int ribmgr_cdap_create(struct cdap * instance,
         struct list_head * p = NULL;
         size_t len_s, len_n;
         uint8_t * ro_data;
-        struct ro_props * props;
+        struct ro_attr attr;
         struct rnode * node;
 
-        props = malloc(sizeof(*props));
-        if (props == NULL) {
-                cdap_send_reply(instance, invoke_id, -1, NULL, 0);
-                return -ENOMEM;
-        }
-
-        props->expiry.tv_sec = msg->sec;
-        props->expiry.tv_nsec = msg->nsec;
-        props->enrol_sync = msg->enrol_sync;
+        ro_attr_init(&attr);
+        attr.expiry.tv_sec = msg->sec;
+        attr.expiry.tv_nsec = msg->nsec;
+        attr.enrol_sync = msg->enrol_sync;
+        attr.recv_set = msg->recv_set;
 
         pthread_mutex_lock(&rib.ro_lock);
 
@@ -756,16 +750,14 @@ static int ribmgr_cdap_create(struct cdap * instance,
         if (ro_data == NULL) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 cdap_send_reply(instance, invoke_id, -1, NULL, 0);
-                free(props);
                 return -1;
         }
         memcpy(ro_data, msg->value.data, msg->value.len);
 
-        node = ribmgr_ro_create(name, props, ro_data, msg->value.len);
+        node = ribmgr_ro_create(name, attr, ro_data, msg->value.len);
         if (node == NULL) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 cdap_send_reply(instance, invoke_id, -1, NULL, 0);
-                free(props);
                 free(ro_data);
                 return -1;
         }
@@ -922,7 +914,7 @@ static int ribmgr_enrol_sync(struct cdap * instance,
         int ret = 0;
 
         if (node != NULL) {
-                if (node->props->enrol_sync == true) {
+                if (node->attr.enrol_sync == true) {
                         ro_msg_t msg = RO_MSG__INIT;
 
                         if (ro_msg_create(node, &msg)) {
@@ -1267,7 +1259,7 @@ int ribmgr_bootstrap(struct dif_config * conf)
         static_info_msg_t stat_info = STATIC_INFO_MSG__INIT;
         uint8_t * data = NULL;
         size_t len = 0;
-        struct ro_props * props;
+        struct ro_attr attr;
 
         if (conf == NULL ||
             conf->type != IPCP_NORMAL) {
@@ -1275,20 +1267,11 @@ int ribmgr_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        props = malloc(sizeof(*props));
-        if (props == NULL) {
-                LOG_ERR("Failed to allocate memory.");
-                return -1;
-        }
+        ro_attr_init(&attr);
+        attr.enrol_sync = true;
 
-        props->enrol_sync = true;
-        props->recv_set = NEIGHBORS;
-        props->expiry.tv_sec = 0;
-        props->expiry.tv_nsec = 0;
-
-        if (ribmgr_ro_create(RIBMGR_PREFIX, props, NULL, 0) == NULL) {
+        if (ribmgr_ro_create(RIBMGR_PREFIX, attr, NULL, 0) == NULL) {
                 LOG_ERR("Failed to create RIBMGR RO.");
-                free(props);
                 return -1;
         }
 
@@ -1329,25 +1312,10 @@ int ribmgr_bootstrap(struct dif_config * conf)
 
         static_info_msg__pack(&stat_info, data);
 
-        props = malloc(sizeof(*props));
-        if (props == NULL) {
-                LOG_ERR("Failed to allocate memory.");
-                free(data);
-                addr_auth_destroy(rib.addr_auth);
-                ribmgr_ro_delete(RIBMGR_PREFIX);
-                return -1;
-        }
-
-        props->enrol_sync = true;
-        props->recv_set = NEIGHBORS;
-        props->expiry.tv_sec = 0;
-        props->expiry.tv_nsec = 0;
-
         if (ribmgr_ro_create(RIBMGR_PREFIX STAT_INFO,
-                             props, data, len) == NULL) {
+                             attr, data, len) == NULL) {
                 LOG_ERR("Failed to create static info RO.");
                 free(data);
-                free(props);
                 addr_auth_destroy(rib.addr_auth);
                 ribmgr_ro_delete(RIBMGR_PREFIX);
                 return -1;
@@ -1400,27 +1368,33 @@ static int send_neighbors_ro(char *           name,
         return 0;
 }
 
-int ro_create(const char *      name,
-              struct ro_props * props,
-              uint8_t *         data,
-              size_t            len)
+int ro_create(const char *     name,
+              struct ro_attr * attr,
+              uint8_t *        data,
+              size_t           len)
 {
         struct rnode * node;
         ro_msg_t msg = RO_MSG__INIT;
+        struct ro_attr rattr;
 
-        if (name == NULL || props == NULL)
+        if (name == NULL)
                 return -EINVAL;
+
+        if (attr == NULL) {
+                ro_attr_init(&rattr);
+                attr = &rattr;
+        }
 
         pthread_mutex_lock(&rib.ro_lock);
 
-        node = ribmgr_ro_create(name, props, data, len);
+        node = ribmgr_ro_create(name, *attr, data, len);
         if (node == NULL) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 LOG_ERR("Failed to create RO.");
                 return -1;
         }
 
-        if (node->props->recv_set == NO_SYNC) {
+        if (node->attr.recv_set == NO_SYNC) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 return 0;
         }
@@ -1442,6 +1416,18 @@ int ro_create(const char *      name,
         return 0;
 }
 
+int ro_attr_init(struct ro_attr * attr)
+{
+        assert(attr);
+
+        attr->enrol_sync = false;
+        attr->recv_set = NO_SYNC;
+        attr->expiry.tv_sec = 0;
+        attr->expiry.tv_nsec = 0;
+
+        return 0;
+}
+
 int ro_delete(const char * name)
 {
         struct rnode * node;
@@ -1459,7 +1445,7 @@ int ro_delete(const char * name)
                 return -1;
         }
 
-        if (node->props->recv_set != NO_SYNC) {
+        if (node->attr.recv_set != NO_SYNC) {
                 if (ro_msg_create(node, &msg)) {
                         pthread_mutex_unlock(&rib.ro_lock);
                         LOG_ERR("Failed to create RO msg.");
@@ -1503,7 +1489,7 @@ int ro_write(const char * name,
         }
         node->seqno++;
 
-        if (node->props->recv_set == NO_SYNC) {
+        if (node->attr.recv_set == NO_SYNC) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 return 0;
         }
