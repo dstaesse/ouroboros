@@ -44,6 +44,7 @@
 #include "ipcp.h"
 #include "cdap_request.h"
 #include "ro.h"
+#include "path.h"
 
 #include "static_info.pb-c.h"
 typedef StaticInfoMsg static_info_msg_t;
@@ -58,9 +59,8 @@ typedef RoMsg ro_msg_t;
 
 #define ENROLLMENT       "enrollment"
 
-#define RIBMGR_PREFIX    "/ribmgr"
-#define STAT_INFO        "/statinfo"
-#define PATH_DELIMITER   "/"
+#define RIBMGR_PREFIX    PATH_DELIMITER "ribmgr"
+#define STAT_INFO        PATH_DELIMITER "statinfo"
 
 /* RIB objects */
 struct rnode {

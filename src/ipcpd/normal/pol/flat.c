@@ -36,8 +36,9 @@
 #include "shm_pci.h"
 #include "ribmgr.h"
 #include "ro.h"
+#include "path.h"
 
-#define POL_RO_ROOT "/flat_addr"
+#define POL_RO_ROOT "flat_addr"
 
 #define TIMEOUT  100 /* ms */
 #define STR_SIZE 100
@@ -59,20 +60,18 @@ struct {
         pthread_mutex_t lock;
 } flat;
 
-static char * my_name(void)
+static char * addr_name(void)
 {
         char * name;
-        char addr_name[100];
+        char   addr_name[100];
 
-        name = malloc(STR_SIZE);
+        sprintf(addr_name, "%lu", (unsigned long) flat.addr);
+
+        name = pathname_create(POL_RO_ROOT);
         if (name == NULL)
                 return NULL;
 
-        sprintf(addr_name, "%lu", (unsigned long) flat.addr);
-        strcpy(name, POL_RO_ROOT);
-        strcat(name, "/");
-        strcat(name, addr_name);
-
+        name = pathname_append(name, addr_name);
         return name;
 }
 
@@ -105,7 +104,7 @@ static void ro_updated(const char * name,
         assert(data);
         assert(len >= sizeof(*msg));
 
-        ro_name = my_name();
+        ro_name = addr_name();
         if (ro_name == NULL) {
                 free(data);
                 return;
@@ -134,6 +133,7 @@ int flat_init(void)
 {
         struct ro_attr     rattr;
         pthread_condattr_t cattr;
+        char *             name;
 
         srand(time(NULL));
         flat.addr_in_use = false;
@@ -155,13 +155,23 @@ int flat_init(void)
                 return -1;
         }
 
-        if (ro_create(POL_RO_ROOT, &rattr, NULL, 0)) {
-                LOG_ERR("Could not create RO.");
+        name = pathname_create(POL_RO_ROOT);
+        if (name == NULL) {
                 pthread_cond_destroy(&flat.cond);
                 pthread_mutex_destroy(&flat.lock);
                 ro_unsubscribe(flat.sid);
                 return -1;
         }
+
+        if (ro_create(name, &rattr, NULL, 0)) {
+                LOG_ERR("Could not create RO.");
+                pathname_destroy(name);
+                pthread_cond_destroy(&flat.cond);
+                pthread_mutex_destroy(&flat.lock);
+                ro_unsubscribe(flat.sid);
+                return -1;
+        }
+        pathname_destroy(name);
 
         return 0;
 }
@@ -211,8 +221,7 @@ uint64_t flat_address(void)
                 msg->code = FLAT_ADDR_REQ;
                 msg->addr = flat.addr;
 
-                /* FIXME: We may require functions to construct pathnames */
-                ro_name = my_name();
+                ro_name = addr_name();
                 if (ro_name == NULL)
                         return INVALID_ADDR;
 

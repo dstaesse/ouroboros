@@ -30,6 +30,7 @@ set(SOURCE_FILES
   fmgr.c
   frct.c
   main.c
+  path.c
   ribmgr.c
   shm_pci.c
   # Add policies last
