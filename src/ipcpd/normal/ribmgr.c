@@ -414,7 +414,7 @@ static struct rnode * ribmgr_ro_create(const char *      name,
         if (!(props->expiry.tv_sec == 0 &&
               props->expiry.tv_nsec == 0)) {
                 timeout = props->expiry.tv_sec * 1000 +
-                        props->expiry.tv_nsec * MILLION;
+                        props->expiry.tv_nsec / MILLION;
                 if (timerwheel_add(rib.wheel, ro_delete_timer,
                                    new->full_name, strlen(new->full_name),
                                    timeout)) {

@@ -26,7 +26,7 @@
 #include <ouroboros/logs.h>
 
 #include "addr_auth.h"
-#include "flat.h"
+#include "pol/flat.h"
 
 #include <stdlib.h>
 #include <assert.h>
