@@ -121,6 +121,8 @@ void handle_flow(int fd)
                         ts_add(&iv_start, &intv, &iv_end);
                 }
         }
+
+        flow_dealloc(fd);
 }
 
 void * worker(void * o)

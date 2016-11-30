@@ -224,9 +224,15 @@ void shm_rbuff_destroy(struct shm_rbuff * rb)
 {
         char fn[FN_MAX_CHARS];
 
-        if (rb == NULL)
-                return;
+        assert(rb);
 
+#ifdef CONFIG_OUROBOROS_DEBUG
+        pthread_mutex_lock(rb->lock);
+
+        assert(shm_rbuff_empty(rb));
+
+        pthread_mutex_unlock(rb->lock);
+#endif
         sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->api, rb->port_id);
 
         if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
