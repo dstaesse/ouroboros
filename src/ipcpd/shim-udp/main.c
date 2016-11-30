@@ -486,7 +486,7 @@ static void * ipcp_udp_sdu_loop(void * o)
         while (flow_event_wait(udp_data.np1_flows, udp_data.fq, &timeout)) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-                if (ipcp_get_state() != IPCP_ENROLLED) {
+                if (ipcp_get_state() != IPCP_RUNNING) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         return (void *) -1; /* -ENOTENROLLED */
                 }
@@ -531,7 +531,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         if (ipcp_get_state() == IPCP_INIT)
                                 ipcp_set_state(IPCP_NULL);
 
-                        if (ipcp_get_state() == IPCP_ENROLLED)
+                        if (ipcp_get_state() == IPCP_RUNNING)
                                 ipcp_set_state(IPCP_SHUTDOWN);
 
                         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -616,7 +616,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 
         FD_CLR(udp_data.s_fd, &udp_data.flow_fd_s);
 
-        ipcp_set_state(IPCP_ENROLLED);
+        ipcp_set_state(IPCP_RUNNING);
 
         pthread_create(&udp_data.handler,
                        NULL,
@@ -890,7 +890,7 @@ static int ipcp_udp_name_query(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_ENROLLED) {
+        if (ipcp_get_state() != IPCP_RUNNING) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Won't query a name on a non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
@@ -915,7 +915,7 @@ static int ipcp_udp_name_query(char * name)
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-                if (ipcp_get_state() != IPCP_ENROLLED) {
+                if (ipcp_get_state() != IPCP_RUNNING) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         LOG_DBG("Won't add name to the directory.");
                         return -1; /* -ENOTENROLLED */
@@ -991,7 +991,7 @@ static int ipcp_udp_flow_alloc(int           fd,
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_ENROLLED) {
+        if (ipcp_get_state() != IPCP_RUNNING) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Won't allocate flow with non-enrolled IPCP.");
                 close(skfd);
@@ -1113,7 +1113,7 @@ static int ipcp_udp_flow_dealloc(int fd)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_ENROLLED) {
+        if (ipcp_get_state() != IPCP_RUNNING) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */

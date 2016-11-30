@@ -127,6 +127,7 @@ struct {
         pthread_mutex_t     cdap_reqs_lock;
 
         struct addr_auth *  addr_auth;
+        enum pol_addr_auth  addr_auth_type;
 } rib;
 
 void ribmgr_ro_created(const char * name,
@@ -136,7 +137,7 @@ void ribmgr_ro_created(const char * name,
         static_info_msg_t * stat_msg;
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
-        if (ipcp_get_state() == IPCP_PENDING_ENROLL &&
+        if (ipcp_get_state() == IPCP_CONFIG &&
             strcmp(name, RIBMGR_PREFIX STAT_INFO) == 0) {
                 LOG_DBG("Received static DIF information.");
 
@@ -156,18 +157,7 @@ void ribmgr_ro_created(const char * name,
                 rib.dtc.has_chk = stat_msg->has_chk;
                 rib.dtc.min_pdu_size = stat_msg->min_pdu_size;
                 rib.dtc.max_pdu_size = stat_msg->max_pdu_size;
-
-                rib.addr_auth = addr_auth_create(stat_msg->addr_auth_type);
-                if (rib.addr_auth == NULL) {
-                        ipcp_set_state(IPCP_INIT);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        static_info_msg__free_unpacked(stat_msg, NULL);
-                        LOG_ERR("Failed to create address authority");
-                        return;
-                }
-
-                rib.address = rib.addr_auth->address();
-                LOG_DBG("IPCP has address %lu", rib.address);
+                rib.addr_auth_type = stat_msg->addr_auth_type;
 
                 if (frct_init()) {
                         ipcp_set_state(IPCP_INIT);
@@ -946,7 +936,7 @@ static int ribmgr_cdap_start(struct cdap * instance,
         int iid = 0;
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
-        if (ipcp_get_state() == IPCP_ENROLLED &&
+        if (ipcp_get_state() == IPCP_RUNNING &&
             strcmp(name, ENROLLMENT) == 0) {
                 LOG_DBG("New enrollment request.");
 
@@ -1008,11 +998,11 @@ static int ribmgr_cdap_stop(struct cdap * instance,
         int ret = 0;
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
-        if (ipcp_get_state() == IPCP_PENDING_ENROLL &&
+        if (ipcp_get_state() == IPCP_CONFIG &&
             strcmp(name, ENROLLMENT) == 0) {
                 LOG_DBG("Stop enrollment received.");
 
-                ipcp_set_state(IPCP_ENROLLED);
+                ipcp_set_state(IPCP_BOOTING);
         } else
                 ret = -1;
 
@@ -1175,7 +1165,6 @@ int ribmgr_add_flow(int fd)
 {
         struct cdap * instance = NULL;
         struct mgmt_flow * flow;
-        int iid = 0;
 
         flow = malloc(sizeof(*flow));
         if (flow == NULL)
@@ -1192,42 +1181,9 @@ int ribmgr_add_flow(int fd)
         flow->instance = instance;
         flow->fd = fd;
 
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&rib.flows_lock);
-        if (list_empty(&rib.flows) && ipcp_get_state() == IPCP_INIT) {
-                ipcp_set_state(IPCP_PENDING_ENROLL);
-
-                pthread_mutex_lock(&rib.cdap_reqs_lock);
-                iid = cdap_send_request(instance,
-                                        CDAP_START,
-                                        ENROLLMENT,
-                                        NULL, 0, 0);
-                if (iid < 0) {
-                        pthread_mutex_unlock(&rib.cdap_reqs_lock);
-                        pthread_rwlock_unlock(&rib.flows_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_ERR("Failed to start enrollment.");
-                        cdap_destroy(instance);
-                        free(flow);
-                        return -1;
-                }
-
-                if (cdap_result_wait(instance, CDAP_START,
-                                     ENROLLMENT, iid)) {
-                        pthread_mutex_unlock(&rib.cdap_reqs_lock);
-                        pthread_rwlock_unlock(&rib.flows_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_ERR("Failed to start enrollment.");
-                        cdap_destroy(instance);
-                        free(flow);
-                        return -1;
-                }
-                pthread_mutex_unlock(&rib.cdap_reqs_lock);
-        }
-
         list_add(&flow->next, &rib.flows);
         pthread_rwlock_unlock(&rib.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         return 0;
 }
@@ -1284,15 +1240,7 @@ int ribmgr_bootstrap(struct dif_config * conf)
         stat_info.has_chk = rib.dtc.has_chk = conf->has_chk;
         stat_info.min_pdu_size = rib.dtc.min_pdu_size = conf->min_pdu_size;
         stat_info.max_pdu_size = rib.dtc.max_pdu_size = conf->max_pdu_size;
-
-        rib.addr_auth = addr_auth_create(conf->addr_auth_type);
-        if (rib.addr_auth == NULL) {
-                LOG_ERR("Failed to create address authority.");
-                ro_delete(RIBMGR_PREFIX);
-                return -1;
-        }
-
-        stat_info.addr_auth_type = rib.addr_auth->type;
+        stat_info.addr_auth_type = rib.addr_auth_type = conf->addr_auth_type;
 
         len = static_info_msg__get_packed_size(&stat_info);
         if (len == 0) {
@@ -1321,9 +1269,6 @@ int ribmgr_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        rib.address = rib.addr_auth->address();
-        LOG_DBG("IPCP has address %lu", rib.address);
-
         if (frct_init()) {
                 LOG_ERR("Failed to initialize FRCT.");
                 ribmgr_ro_delete(RIBMGR_PREFIX STAT_INFO);
@@ -1333,6 +1278,84 @@ int ribmgr_bootstrap(struct dif_config * conf)
         }
 
         LOG_DBG("Bootstrapped RIB Manager.");
+
+        return 0;
+}
+
+int ribmgr_enrol(void)
+{
+        struct cdap * instance = NULL;
+        struct mgmt_flow * flow;
+        int iid = 0;
+
+        pthread_rwlock_wrlock(&ipcpi.state_lock);
+
+        if (ipcp_get_state() != IPCP_INIT) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return -1;
+        }
+
+        ipcp_set_state(IPCP_CONFIG);
+
+        pthread_rwlock_wrlock(&rib.flows_lock);
+        if (list_empty(&rib.flows)) {
+                ipcp_set_state(IPCP_INIT);
+                pthread_rwlock_unlock(&rib.flows_lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return -1;
+        }
+
+        flow = list_entry((&rib.flows)->next, struct mgmt_flow, next);
+        instance = flow->instance;
+
+        pthread_mutex_lock(&rib.cdap_reqs_lock);
+        iid = cdap_send_request(instance,
+                                CDAP_START,
+                                ENROLLMENT,
+                                NULL, 0, 0);
+        if (iid < 0) {
+                ipcp_set_state(IPCP_INIT);
+                pthread_mutex_unlock(&rib.cdap_reqs_lock);
+                pthread_rwlock_unlock(&rib.flows_lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to start enrollment.");
+                return -1;
+        }
+
+        if (cdap_result_wait(instance, CDAP_START,
+                             ENROLLMENT, iid)) {
+                ipcp_set_state(IPCP_INIT);
+                pthread_mutex_unlock(&rib.cdap_reqs_lock);
+                pthread_rwlock_unlock(&rib.flows_lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to start enrollment.");
+                return -1;
+        }
+        pthread_mutex_unlock(&rib.cdap_reqs_lock);
+        pthread_rwlock_unlock(&rib.flows_lock);
+        pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        return 0;
+}
+
+int ribmgr_start_policies(void)
+{
+        pthread_rwlock_rdlock(&ipcpi.state_lock);
+        if (ipcp_get_state() != IPCP_BOOTING) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Cannot start policies in wrong state");
+                return -1;
+        }
+        pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        rib.addr_auth = addr_auth_create(rib.addr_auth_type);
+        if (rib.addr_auth == NULL) {
+                LOG_ERR("Failed to create address authority.");
+                return -1;
+        }
+
+        rib.address = rib.addr_auth->address();
+        LOG_DBG("IPCP has address %lu", rib.address);
 
         return 0;
 }
