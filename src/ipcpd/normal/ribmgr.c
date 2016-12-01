@@ -404,7 +404,7 @@ static struct rnode * ribmgr_ro_create(const char *   name,
                 timeout = attr.expiry.tv_sec * 1000 +
                         attr.expiry.tv_nsec / MILLION;
                 if (timerwheel_add(rib.wheel, ro_delete_timer,
-                                   new->full_name, strlen(new->full_name),
+                                   new->full_name, strlen(new->full_name) + 1,
                                    timeout)) {
                         LOG_ERR("Failed to add deletion timer of RO.");
                 }
@@ -1400,8 +1400,7 @@ int ro_create(const char *     name,
         ro_msg_t msg = RO_MSG__INIT;
         struct ro_attr rattr;
 
-        if (name == NULL)
-                return -EINVAL;
+        assert(name);
 
         if (attr == NULL) {
                 ro_attr_init(&rattr);
@@ -1456,8 +1455,7 @@ int ro_delete(const char * name)
         struct rnode * node;
         ro_msg_t msg = RO_MSG__INIT;
 
-        if (name == NULL)
-                return -EINVAL;
+        assert(name);
 
         pthread_mutex_lock(&rib.ro_lock);
 
@@ -1499,8 +1497,8 @@ int ro_write(const char * name,
         struct rnode * node;
         ro_msg_t msg = RO_MSG__INIT;
 
-        if (name == NULL || data == NULL)
-                return -EINVAL;
+        assert(name);
+        assert(data);
 
         pthread_mutex_lock(&rib.ro_lock);
 
@@ -1540,8 +1538,8 @@ ssize_t ro_read(const char * name,
         struct rnode * node;
         ssize_t        len;
 
-        if (name == NULL || data == NULL)
-                return -EINVAL;
+        assert(name);
+        assert(data);
 
         pthread_mutex_lock(&rib.ro_lock);
 
@@ -1570,8 +1568,8 @@ int ro_subscribe(const char *        name,
 {
         struct ro_sub * sub;
 
-        if (name == NULL || ops == NULL)
-                return -EINVAL;
+        assert(name);
+        assert(ops);
 
         sub = malloc(sizeof(*sub));
         if (sub == NULL)

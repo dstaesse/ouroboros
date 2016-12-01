@@ -27,16 +27,16 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/time_utils.h>
 
+#include "shm_pci.h"
+#include "ribmgr.h"
+#include "ro.h"
+#include "path.h"
+
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
 #include <assert.h>
-
-#include "shm_pci.h"
-#include "ribmgr.h"
-#include "ro.h"
-#include "path.h"
 
 #define POL_RO_ROOT "flat_addr"
 
@@ -63,7 +63,8 @@ struct {
 static char * addr_name(void)
 {
         char * name;
-        char   addr_name[100];
+        /* uint64_t as a string has 25 chars */
+        char   addr_name[30];
 
         sprintf(addr_name, "%lu", (unsigned long) flat.addr);
 
@@ -76,8 +77,8 @@ static char * addr_name(void)
 }
 
 static void ro_created(const char * name,
-                      uint8_t *    data,
-                      size_t       len)
+                       uint8_t *    data,
+                       size_t       len)
 {
         struct flat_addr_msg * msg;
 
@@ -86,8 +87,7 @@ static void ro_created(const char * name,
         assert(len >= sizeof(*msg));
 
         msg = (struct flat_addr_msg *) data;
-        if (msg->code == FLAT_ADDR_REQ &&
-            msg->addr == flat.addr) {
+        if (msg->code == FLAT_ADDR_REQ && msg->addr == flat.addr) {
                 msg->code = FLAT_ADDR_REPLY;
                 ro_write(name, data, len);
         }
@@ -146,8 +146,7 @@ int flat_init(void)
 #endif
         pthread_cond_init(&flat.cond, &cattr);
 
-        flat.sid = ro_subscribe(POL_RO_ROOT,
-                                &flat_sub_ops);
+        flat.sid = ro_subscribe(POL_RO_ROOT, &flat_sub_ops);
         if (flat.sid < 0) {
                 LOG_ERR("Could not subscribe to RIB.");
                 pthread_cond_destroy(&flat.cond);
@@ -171,6 +170,7 @@ int flat_init(void)
                 ro_unsubscribe(flat.sid);
                 return -1;
         }
+
         pathname_destroy(name);
 
         return 0;
@@ -201,6 +201,11 @@ uint64_t flat_address(void)
         if (dtc == NULL)
                 return INVALID_ADDR;
 
+        if (dtc->addr_size == 8) {
+                LOG_ERR("Policy cannot be used with 64 bit addresses.");
+                return INVALID_ADDR;
+        }
+
         while (ret != -ETIMEDOUT) {
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
                 ts_add(&abstime, &timeout, &abstime);
@@ -222,13 +227,16 @@ uint64_t flat_address(void)
                 msg->addr = flat.addr;
 
                 ro_name = addr_name();
-                if (ro_name == NULL)
+                if (ro_name == NULL) {
+                        free(buf);
                         return INVALID_ADDR;
+                }
 
                 pthread_mutex_lock(&flat.lock);
                 if (ro_create(ro_name, &attr, buf, sizeof(*msg))) {
                         pthread_mutex_unlock(&flat.lock);
                         free(ro_name);
+                        free(buf);
                         return INVALID_ADDR;
                 }
                 free(ro_name);

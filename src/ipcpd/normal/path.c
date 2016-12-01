@@ -38,7 +38,7 @@ char * pathname_create(const char * name)
 
         assert(name);
 
-        tmp = malloc(strlen(name) + strlen(PATH_DELIMITER));
+        tmp = malloc(strlen(name) + strlen(PATH_DELIMITER) + 1);
         if (tmp == NULL)
                 return NULL;
 
@@ -58,7 +58,7 @@ char * pathname_append(char *       pname,
 
         tmp = malloc(strlen(pname) +
                      strlen(PATH_DELIMITER) +
-                     strlen(name));
+                     strlen(name) + 1);
         if (tmp == NULL)
                 return NULL;
 
