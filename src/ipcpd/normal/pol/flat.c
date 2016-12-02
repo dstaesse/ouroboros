@@ -103,6 +103,7 @@ static void ro_updated(const char * name,
         assert(name);
         assert(data);
         assert(len >= sizeof(*msg));
+        (void) len;
 
         ro_name = addr_name();
         if (ro_name == NULL) {
