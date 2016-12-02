@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Policy for flat addresses in a distributed way
+ * Functions to construct pathnames
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,44 +20,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "flat-addr-auth"
+#ifndef OUROBOROS_IPCPD_NORMAL_PATH_H
+#define OUROBOROS_IPCPD_NORMAL_PATH_H
 
-#include <ouroboros/config.h>
-#include <ouroboros/logs.h>
+#define PATH_DELIMITER "/"
 
-#include <time.h>
-#include <stdlib.h>
-#include <math.h>
+char * pathname_create(const char * name);
 
-#include "shm_pci.h"
-#include "ribmgr.h"
+char * pathname_append(char *       pname,
+                       const char * name);
 
-int flat_init(void)
-{
-        srand(time(NULL));
+void   pathname_destroy(char * pname);
 
-        return 0;
-}
-
-int flat_fini(void)
-{
-        return 0;
-}
-
-uint64_t flat_address(void)
-{
-        uint64_t addr;
-        uint64_t max_addr;
-        struct dt_const * dtc;
-
-        dtc = ribmgr_dt_const();
-        if (dtc == NULL)
-                return INVALID_ADDR;
-
-        max_addr = (1 << (8 * dtc->addr_size)) - 1;
-        addr = (rand() % (max_addr - 1)) + 1;
-
-        /* FIXME: Add check for uniqueness of address */
-
-        return addr;
-}
+#endif /* OUROBOROS_IPCPD_NORMAL_PATH_H */

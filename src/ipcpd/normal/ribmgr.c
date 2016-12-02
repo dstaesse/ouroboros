@@ -44,6 +44,7 @@
 #include "ipcp.h"
 #include "cdap_request.h"
 #include "ro.h"
+#include "path.h"
 
 #include "static_info.pb-c.h"
 typedef StaticInfoMsg static_info_msg_t;
@@ -58,15 +59,14 @@ typedef RoMsg ro_msg_t;
 
 #define ENROLLMENT       "enrollment"
 
-#define RIBMGR_PREFIX    "/ribmgr"
-#define STAT_INFO        "/statinfo"
-#define PATH_DELIMITER   "/"
+#define RIBMGR_PREFIX    PATH_DELIMITER "ribmgr"
+#define STAT_INFO        PATH_DELIMITER "statinfo"
 
 /* RIB objects */
 struct rnode {
-        char *            name;
-        char *            full_name;
-        uint64_t          seqno;
+        char *         name;
+        char *         full_name;
+        uint64_t       seqno;
 
         /*
          * NOTE: Naive implementation for now, could be replaced by
@@ -75,12 +75,12 @@ struct rnode {
          */
 
         /* If there are no children, this is a leaf */
-        struct rnode *    child;
-        struct rnode *    sibling;
+        struct rnode * child;
+        struct rnode * sibling;
 
-        struct ro_props * props;
-        uint8_t *         data;
-        size_t            len;
+        struct ro_attr attr;
+        uint8_t *      data;
+        size_t         len;
 };
 
 struct mgmt_flow {
@@ -127,16 +127,17 @@ struct {
         pthread_mutex_t     cdap_reqs_lock;
 
         struct addr_auth *  addr_auth;
+        enum pol_addr_auth  addr_auth_type;
 } rib;
 
-int ribmgr_ro_created(const char * name,
-                      uint8_t *    data,
-                      size_t       len)
+void ribmgr_ro_created(const char * name,
+                       uint8_t *    data,
+                       size_t       len)
 {
         static_info_msg_t * stat_msg;
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
-        if (ipcp_get_state() == IPCP_PENDING_ENROLL &&
+        if (ipcp_get_state() == IPCP_CONFIG &&
             strcmp(name, RIBMGR_PREFIX STAT_INFO) == 0) {
                 LOG_DBG("Received static DIF information.");
 
@@ -145,7 +146,7 @@ int ribmgr_ro_created(const char * name,
                         ipcp_set_state(IPCP_INIT);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         LOG_ERR("Failed to unpack static info message.");
-                        return -1;
+                        return;
                 }
 
                 rib.dtc.addr_size = stat_msg->addr_size;
@@ -156,32 +157,19 @@ int ribmgr_ro_created(const char * name,
                 rib.dtc.has_chk = stat_msg->has_chk;
                 rib.dtc.min_pdu_size = stat_msg->min_pdu_size;
                 rib.dtc.max_pdu_size = stat_msg->max_pdu_size;
-
-                rib.addr_auth = addr_auth_create(stat_msg->addr_auth_type);
-                if (rib.addr_auth == NULL) {
-                        ipcp_set_state(IPCP_INIT);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        static_info_msg__free_unpacked(stat_msg, NULL);
-                        LOG_ERR("Failed to create address authority");
-                        return -1;
-                }
-
-                rib.address = rib.addr_auth->address();
-                LOG_DBG("IPCP has address %lu", rib.address);
+                rib.addr_auth_type = stat_msg->addr_auth_type;
 
                 if (frct_init()) {
                         ipcp_set_state(IPCP_INIT);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         static_info_msg__free_unpacked(stat_msg, NULL);
                         LOG_ERR("Failed to init FRCT");
-                        return -1;
+                        return;
                 }
 
                 static_info_msg__free_unpacked(stat_msg, NULL);
         }
         pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        return 0;
 }
 
 /* We only have a create operation for now */
@@ -234,10 +222,10 @@ static int ro_msg_create(struct rnode * node,
 {
         msg->address = rib.address;
         msg->seqno = node->seqno;
-        msg->recv_set = node->props->recv_set;
-        msg->enrol_sync = node->props->enrol_sync;
-        msg->sec = node->props->expiry.tv_sec;
-        msg->nsec = node->props->expiry.tv_nsec;
+        msg->recv_set = node->attr.recv_set;
+        msg->enrol_sync = node->attr.enrol_sync;
+        msg->sec = node->attr.expiry.tv_sec;
+        msg->nsec = node->attr.expiry.tv_nsec;
         msg->value.data = node->data;
         msg->value.len = node->len;
 
@@ -319,10 +307,10 @@ static void ro_delete_timer(void * o)
         }
 }
 
-static struct rnode * ribmgr_ro_create(const char *      name,
-                                       struct ro_props * props,
-                                       uint8_t *         data,
-                                       size_t            len)
+static struct rnode * ribmgr_ro_create(const char *   name,
+                                       struct ro_attr attr,
+                                       uint8_t *      data,
+                                       size_t         len)
 {
         char * str;
         char * str1;
@@ -397,7 +385,7 @@ static struct rnode * ribmgr_ro_create(const char *      name,
         }
 
         new->seqno = 0;
-        new->props = props;
+        new->attr = attr;
 
         if (sibling)
                 prev->sibling = new;
@@ -411,12 +399,12 @@ static struct rnode * ribmgr_ro_create(const char *      name,
 
         LOG_DBG("Created RO with name %s.", name);
 
-        if (!(props->expiry.tv_sec == 0 &&
-              props->expiry.tv_nsec == 0)) {
-                timeout = props->expiry.tv_sec * 1000 +
-                        props->expiry.tv_nsec * MILLION;
+        if (!(attr.expiry.tv_sec == 0 &&
+              attr.expiry.tv_nsec == 0)) {
+                timeout = attr.expiry.tv_sec * 1000 +
+                        attr.expiry.tv_nsec / MILLION;
                 if (timerwheel_add(rib.wheel, ro_delete_timer,
-                                   new->full_name, strlen(new->full_name),
+                                   new->full_name, strlen(new->full_name) + 1,
                                    timeout)) {
                         LOG_ERR("Failed to add deletion timer of RO.");
                 }
@@ -737,18 +725,14 @@ static int ribmgr_cdap_create(struct cdap * instance,
         struct list_head * p = NULL;
         size_t len_s, len_n;
         uint8_t * ro_data;
-        struct ro_props * props;
+        struct ro_attr attr;
         struct rnode * node;
 
-        props = malloc(sizeof(*props));
-        if (props == NULL) {
-                cdap_send_reply(instance, invoke_id, -1, NULL, 0);
-                return -ENOMEM;
-        }
-
-        props->expiry.tv_sec = msg->sec;
-        props->expiry.tv_nsec = msg->nsec;
-        props->enrol_sync = msg->enrol_sync;
+        ro_attr_init(&attr);
+        attr.expiry.tv_sec = msg->sec;
+        attr.expiry.tv_nsec = msg->nsec;
+        attr.enrol_sync = msg->enrol_sync;
+        attr.recv_set = msg->recv_set;
 
         pthread_mutex_lock(&rib.ro_lock);
 
@@ -756,16 +740,14 @@ static int ribmgr_cdap_create(struct cdap * instance,
         if (ro_data == NULL) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 cdap_send_reply(instance, invoke_id, -1, NULL, 0);
-                free(props);
                 return -1;
         }
         memcpy(ro_data, msg->value.data, msg->value.len);
 
-        node = ribmgr_ro_create(name, props, ro_data, msg->value.len);
+        node = ribmgr_ro_create(name, attr, ro_data, msg->value.len);
         if (node == NULL) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 cdap_send_reply(instance, invoke_id, -1, NULL, 0);
-                free(props);
                 free(ro_data);
                 return -1;
         }
@@ -922,7 +904,7 @@ static int ribmgr_enrol_sync(struct cdap * instance,
         int ret = 0;
 
         if (node != NULL) {
-                if (node->props->enrol_sync == true) {
+                if (node->attr.enrol_sync == true) {
                         ro_msg_t msg = RO_MSG__INIT;
 
                         if (ro_msg_create(node, &msg)) {
@@ -954,7 +936,7 @@ static int ribmgr_cdap_start(struct cdap * instance,
         int iid = 0;
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
-        if (ipcp_get_state() == IPCP_ENROLLED &&
+        if (ipcp_get_state() == IPCP_RUNNING &&
             strcmp(name, ENROLLMENT) == 0) {
                 LOG_DBG("New enrollment request.");
 
@@ -1016,11 +998,11 @@ static int ribmgr_cdap_stop(struct cdap * instance,
         int ret = 0;
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
-        if (ipcp_get_state() == IPCP_PENDING_ENROLL &&
+        if (ipcp_get_state() == IPCP_CONFIG &&
             strcmp(name, ENROLLMENT) == 0) {
                 LOG_DBG("Stop enrollment received.");
 
-                ipcp_set_state(IPCP_ENROLLED);
+                ipcp_set_state(IPCP_BOOTING);
         } else
                 ret = -1;
 
@@ -1183,7 +1165,6 @@ int ribmgr_add_flow(int fd)
 {
         struct cdap * instance = NULL;
         struct mgmt_flow * flow;
-        int iid = 0;
 
         flow = malloc(sizeof(*flow));
         if (flow == NULL)
@@ -1200,42 +1181,9 @@ int ribmgr_add_flow(int fd)
         flow->instance = instance;
         flow->fd = fd;
 
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&rib.flows_lock);
-        if (list_empty(&rib.flows) && ipcp_get_state() == IPCP_INIT) {
-                ipcp_set_state(IPCP_PENDING_ENROLL);
-
-                pthread_mutex_lock(&rib.cdap_reqs_lock);
-                iid = cdap_send_request(instance,
-                                        CDAP_START,
-                                        ENROLLMENT,
-                                        NULL, 0, 0);
-                if (iid < 0) {
-                        pthread_mutex_unlock(&rib.cdap_reqs_lock);
-                        pthread_rwlock_unlock(&rib.flows_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_ERR("Failed to start enrollment.");
-                        cdap_destroy(instance);
-                        free(flow);
-                        return -1;
-                }
-
-                if (cdap_result_wait(instance, CDAP_START,
-                                     ENROLLMENT, iid)) {
-                        pthread_mutex_unlock(&rib.cdap_reqs_lock);
-                        pthread_rwlock_unlock(&rib.flows_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_ERR("Failed to start enrollment.");
-                        cdap_destroy(instance);
-                        free(flow);
-                        return -1;
-                }
-                pthread_mutex_unlock(&rib.cdap_reqs_lock);
-        }
-
         list_add(&flow->next, &rib.flows);
         pthread_rwlock_unlock(&rib.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         return 0;
 }
@@ -1267,7 +1215,7 @@ int ribmgr_bootstrap(struct dif_config * conf)
         static_info_msg_t stat_info = STATIC_INFO_MSG__INIT;
         uint8_t * data = NULL;
         size_t len = 0;
-        struct ro_props * props;
+        struct ro_attr attr;
 
         if (conf == NULL ||
             conf->type != IPCP_NORMAL) {
@@ -1275,20 +1223,11 @@ int ribmgr_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        props = malloc(sizeof(*props));
-        if (props == NULL) {
-                LOG_ERR("Failed to allocate memory.");
-                return -1;
-        }
+        ro_attr_init(&attr);
+        attr.enrol_sync = true;
 
-        props->enrol_sync = true;
-        props->recv_set = NEIGHBORS;
-        props->expiry.tv_sec = 0;
-        props->expiry.tv_nsec = 0;
-
-        if (ribmgr_ro_create(RIBMGR_PREFIX, props, NULL, 0) == NULL) {
+        if (ribmgr_ro_create(RIBMGR_PREFIX, attr, NULL, 0) == NULL) {
                 LOG_ERR("Failed to create RIBMGR RO.");
-                free(props);
                 return -1;
         }
 
@@ -1301,15 +1240,7 @@ int ribmgr_bootstrap(struct dif_config * conf)
         stat_info.has_chk = rib.dtc.has_chk = conf->has_chk;
         stat_info.min_pdu_size = rib.dtc.min_pdu_size = conf->min_pdu_size;
         stat_info.max_pdu_size = rib.dtc.max_pdu_size = conf->max_pdu_size;
-
-        rib.addr_auth = addr_auth_create(conf->addr_auth_type);
-        if (rib.addr_auth == NULL) {
-                LOG_ERR("Failed to create address authority.");
-                ro_delete(RIBMGR_PREFIX);
-                return -1;
-        }
-
-        stat_info.addr_auth_type = rib.addr_auth->type;
+        stat_info.addr_auth_type = rib.addr_auth_type = conf->addr_auth_type;
 
         len = static_info_msg__get_packed_size(&stat_info);
         if (len == 0) {
@@ -1329,32 +1260,14 @@ int ribmgr_bootstrap(struct dif_config * conf)
 
         static_info_msg__pack(&stat_info, data);
 
-        props = malloc(sizeof(*props));
-        if (props == NULL) {
-                LOG_ERR("Failed to allocate memory.");
-                free(data);
-                addr_auth_destroy(rib.addr_auth);
-                ribmgr_ro_delete(RIBMGR_PREFIX);
-                return -1;
-        }
-
-        props->enrol_sync = true;
-        props->recv_set = NEIGHBORS;
-        props->expiry.tv_sec = 0;
-        props->expiry.tv_nsec = 0;
-
         if (ribmgr_ro_create(RIBMGR_PREFIX STAT_INFO,
-                             props, data, len) == NULL) {
+                             attr, data, len) == NULL) {
                 LOG_ERR("Failed to create static info RO.");
                 free(data);
-                free(props);
                 addr_auth_destroy(rib.addr_auth);
                 ribmgr_ro_delete(RIBMGR_PREFIX);
                 return -1;
         }
-
-        rib.address = rib.addr_auth->address();
-        LOG_DBG("IPCP has address %lu", rib.address);
 
         if (frct_init()) {
                 LOG_ERR("Failed to initialize FRCT.");
@@ -1365,6 +1278,84 @@ int ribmgr_bootstrap(struct dif_config * conf)
         }
 
         LOG_DBG("Bootstrapped RIB Manager.");
+
+        return 0;
+}
+
+int ribmgr_enrol(void)
+{
+        struct cdap * instance = NULL;
+        struct mgmt_flow * flow;
+        int iid = 0;
+
+        pthread_rwlock_wrlock(&ipcpi.state_lock);
+
+        if (ipcp_get_state() != IPCP_INIT) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return -1;
+        }
+
+        ipcp_set_state(IPCP_CONFIG);
+
+        pthread_rwlock_wrlock(&rib.flows_lock);
+        if (list_empty(&rib.flows)) {
+                ipcp_set_state(IPCP_INIT);
+                pthread_rwlock_unlock(&rib.flows_lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return -1;
+        }
+
+        flow = list_entry((&rib.flows)->next, struct mgmt_flow, next);
+        instance = flow->instance;
+
+        pthread_mutex_lock(&rib.cdap_reqs_lock);
+        iid = cdap_send_request(instance,
+                                CDAP_START,
+                                ENROLLMENT,
+                                NULL, 0, 0);
+        if (iid < 0) {
+                ipcp_set_state(IPCP_INIT);
+                pthread_mutex_unlock(&rib.cdap_reqs_lock);
+                pthread_rwlock_unlock(&rib.flows_lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to start enrollment.");
+                return -1;
+        }
+
+        if (cdap_result_wait(instance, CDAP_START,
+                             ENROLLMENT, iid)) {
+                ipcp_set_state(IPCP_INIT);
+                pthread_mutex_unlock(&rib.cdap_reqs_lock);
+                pthread_rwlock_unlock(&rib.flows_lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to start enrollment.");
+                return -1;
+        }
+        pthread_mutex_unlock(&rib.cdap_reqs_lock);
+        pthread_rwlock_unlock(&rib.flows_lock);
+        pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        return 0;
+}
+
+int ribmgr_start_policies(void)
+{
+        pthread_rwlock_rdlock(&ipcpi.state_lock);
+        if (ipcp_get_state() != IPCP_BOOTING) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Cannot start policies in wrong state");
+                return -1;
+        }
+        pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        rib.addr_auth = addr_auth_create(rib.addr_auth_type);
+        if (rib.addr_auth == NULL) {
+                LOG_ERR("Failed to create address authority.");
+                return -1;
+        }
+
+        rib.address = rib.addr_auth->address();
+        LOG_DBG("IPCP has address %lu", rib.address);
 
         return 0;
 }
@@ -1400,27 +1391,32 @@ static int send_neighbors_ro(char *           name,
         return 0;
 }
 
-int ro_create(const char *      name,
-              struct ro_props * props,
-              uint8_t *         data,
-              size_t            len)
+int ro_create(const char *     name,
+              struct ro_attr * attr,
+              uint8_t *        data,
+              size_t           len)
 {
         struct rnode * node;
         ro_msg_t msg = RO_MSG__INIT;
+        struct ro_attr rattr;
 
-        if (name == NULL || props == NULL)
-                return -EINVAL;
+        assert(name);
+
+        if (attr == NULL) {
+                ro_attr_init(&rattr);
+                attr = &rattr;
+        }
 
         pthread_mutex_lock(&rib.ro_lock);
 
-        node = ribmgr_ro_create(name, props, data, len);
+        node = ribmgr_ro_create(name, *attr, data, len);
         if (node == NULL) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 LOG_ERR("Failed to create RO.");
                 return -1;
         }
 
-        if (node->props->recv_set == NO_SYNC) {
+        if (node->attr.recv_set == NO_SYNC) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 return 0;
         }
@@ -1442,13 +1438,24 @@ int ro_create(const char *      name,
         return 0;
 }
 
+int ro_attr_init(struct ro_attr * attr)
+{
+        assert(attr);
+
+        attr->enrol_sync = false;
+        attr->recv_set = NO_SYNC;
+        attr->expiry.tv_sec = 0;
+        attr->expiry.tv_nsec = 0;
+
+        return 0;
+}
+
 int ro_delete(const char * name)
 {
         struct rnode * node;
         ro_msg_t msg = RO_MSG__INIT;
 
-        if (name == NULL)
-                return -EINVAL;
+        assert(name);
 
         pthread_mutex_lock(&rib.ro_lock);
 
@@ -1459,7 +1466,7 @@ int ro_delete(const char * name)
                 return -1;
         }
 
-        if (node->props->recv_set != NO_SYNC) {
+        if (node->attr.recv_set != NO_SYNC) {
                 if (ro_msg_create(node, &msg)) {
                         pthread_mutex_unlock(&rib.ro_lock);
                         LOG_ERR("Failed to create RO msg.");
@@ -1490,8 +1497,8 @@ int ro_write(const char * name,
         struct rnode * node;
         ro_msg_t msg = RO_MSG__INIT;
 
-        if (name == NULL || data == NULL)
-                return -EINVAL;
+        assert(name);
+        assert(data);
 
         pthread_mutex_lock(&rib.ro_lock);
 
@@ -1503,7 +1510,7 @@ int ro_write(const char * name,
         }
         node->seqno++;
 
-        if (node->props->recv_set == NO_SYNC) {
+        if (node->attr.recv_set == NO_SYNC) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 return 0;
         }
@@ -1531,8 +1538,8 @@ ssize_t ro_read(const char * name,
         struct rnode * node;
         ssize_t        len;
 
-        if (name == NULL || data == NULL)
-                return -EINVAL;
+        assert(name);
+        assert(data);
 
         pthread_mutex_lock(&rib.ro_lock);
 
@@ -1561,8 +1568,8 @@ int ro_subscribe(const char *        name,
 {
         struct ro_sub * sub;
 
-        if (name == NULL || ops == NULL)
-                return -EINVAL;
+        assert(name);
+        assert(ops);
 
         sub = malloc(sizeof(*sub));
         if (sub == NULL)

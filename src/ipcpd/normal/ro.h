@@ -29,18 +29,20 @@ enum ro_recv_set {
         ALL_MEMBERS
 };
 
-struct ro_props {
+struct ro_attr {
         bool             enrol_sync;
         enum ro_recv_set recv_set;
         struct timespec  expiry;
 };
 
 /* All RIB-objects have a pathname, separated by a slash. */
-/* Takes ownership of the data and props */
-int          ro_create(const char *      name,
-                       struct ro_props * props,
-                       uint8_t *         data,
-                       size_t            len);
+/* Takes ownership of the data */
+int          ro_create(const char *     name,
+                       struct ro_attr * attr,
+                       uint8_t *        data,
+                       size_t           len);
+
+int          ro_attr_init(struct ro_attr * attr);
 
 int          ro_delete(const char * name);
 
@@ -54,13 +56,13 @@ ssize_t      ro_read(const char * name,
 
 /* Callback passes ownership of the data */
 struct ro_sub_ops {
-        int (* ro_created)(const char * name,
-                           uint8_t *    data,
-                           size_t       len);
-        int (* ro_updated)(const char * name,
-                           uint8_t *    data,
-                           size_t       len);
-        int (* ro_deleted)(const char * name);
+        void (* ro_created)(const char * name,
+                            uint8_t *    data,
+                            size_t       len);
+        void (* ro_updated)(const char * name,
+                            uint8_t *    data,
+                            size_t       len);
+        void (* ro_deleted)(const char * name);
 };
 
 /* Returns subscriber-id */

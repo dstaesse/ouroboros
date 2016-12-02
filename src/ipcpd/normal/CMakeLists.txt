@@ -23,17 +23,19 @@ protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS
 protobuf_generate_c(RO_SRCS RO_HDRS ro.proto)
 
 set(SOURCE_FILES
-        # Add source files here
-        addr_auth.c
-        cdap_request.c
-        crc32.c
-        flat.c
-        fmgr.c
-        frct.c
-        main.c
-        ribmgr.c
-        shm_pci.c
-)
+  # Add source files here
+  addr_auth.c
+  cdap_request.c
+  crc32.c
+  fmgr.c
+  frct.c
+  main.c
+  path.c
+  ribmgr.c
+  shm_pci.c
+  # Add policies last
+  pol/flat.c
+  )
 
 add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
   ${STATIC_INFO_SRCS} ${FLOW_ALLOC_SRCS} ${RO_SRCS})
@@ -41,7 +43,7 @@ target_link_libraries (ipcpd-normal LINK_PUBLIC ouroboros)
 
 include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-   macro_add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
+  macro_add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)

@@ -38,6 +38,10 @@ int               ribmgr_remove_flow(int fd);
 
 int               ribmgr_bootstrap(struct dif_config * conf);
 
+int               ribmgr_enrol(void);
+
+int               ribmgr_start_policies(void);
+
 struct dt_const * ribmgr_dt_const(void);
 
 uint64_t          ribmgr_address(void);

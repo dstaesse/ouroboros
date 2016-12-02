@@ -629,7 +629,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                                &timeout)) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-                if (ipcp_get_state() != IPCP_ENROLLED) {
+                if (ipcp_get_state() != IPCP_RUNNING) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         return (void *) -1; /* -ENOTENROLLED */
                 }
@@ -680,7 +680,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         if (ipcp_get_state() == IPCP_INIT)
                                 ipcp_set_state(IPCP_NULL);
 
-                        if (ipcp_get_state() == IPCP_ENROLLED)
+                        if (ipcp_get_state() == IPCP_RUNNING)
                                 ipcp_set_state(IPCP_SHUTDOWN);
 
                         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -845,7 +845,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         eth_llc_data.tx_offset = 0;
 #endif
 
-        ipcp_set_state(IPCP_ENROLLED);
+        ipcp_set_state(IPCP_RUNNING);
 
         pthread_create(&eth_llc_data.sdu_reader,
                        NULL,
@@ -951,7 +951,7 @@ static int eth_llc_ipcp_flow_alloc(int           fd,
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_ENROLLED) {
+        if (ipcp_get_state() != IPCP_RUNNING) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Won't allocate flow with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
@@ -1051,7 +1051,7 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_ENROLLED) {
+        if (ipcp_get_state() != IPCP_RUNNING) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */

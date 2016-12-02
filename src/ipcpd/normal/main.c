@@ -100,8 +100,6 @@ static int normal_ipcp_name_query(char * name)
 {
         LOG_MISSING;
 
-        (void) name;
-
         /*
          * NOTE: For the moment we just return -1,
          * for testing purposes we may return zero here
@@ -135,18 +133,26 @@ static int normal_ipcp_enroll(char * dif_name)
                 return -1;
         }
 
-        if (ipcp_wait_state(IPCP_ENROLLED, &timeout) == -ETIMEDOUT) {
+        if (ribmgr_enrol()) {
+                LOG_ERR("Failed to enrol IPCP.");
+                return -1;
+        }
+
+        if (ipcp_wait_state(IPCP_BOOTING, &timeout) == -ETIMEDOUT) {
                 LOG_ERR("Enrollment timed out.");
                 return -1;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_ENROLLED) {
+        if (ribmgr_start_policies()) {
+                pthread_rwlock_wrlock(&ipcpi.state_lock);
+                ipcp_set_state(IPCP_INIT);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to start policies.");
                 return -1;
         }
 
+        pthread_rwlock_wrlock(&ipcpi.state_lock);
+        ipcp_set_state(IPCP_RUNNING);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
         /* FIXME: Remove once we obtain neighbors during enrollment */
@@ -174,8 +180,20 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        ipcp_set_state(IPCP_ENROLLED);
+        ipcp_set_state(IPCP_BOOTING);
+        pthread_rwlock_unlock(&ipcpi.state_lock);
 
+        if (ribmgr_start_policies()) {
+                pthread_rwlock_wrlock(&ipcpi.state_lock);
+                ipcp_set_state(IPCP_INIT);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to start policies.");
+                return -1;
+        }
+
+        pthread_rwlock_wrlock(&ipcpi.state_lock);
+
+        ipcp_set_state(IPCP_RUNNING);
         ipcpi.data->dif_name = conf->dif_name;
 
         pthread_rwlock_unlock(&ipcpi.state_lock);

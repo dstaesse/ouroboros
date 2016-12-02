@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Address authority
+ * Functions to construct pathnames
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,59 +20,58 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "addr_auth"
+#define OUROBOROS_PREFIX "pathnames"
 
 #include <ouroboros/config.h>
 #include <ouroboros/logs.h>
-
-#include "addr_auth.h"
-#include "pol/flat.h"
+#include <ouroboros/errno.h>
 
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
-struct addr_auth * addr_auth_create(enum pol_addr_auth type)
-{
-        struct addr_auth * tmp;
+#include "path.h"
 
-        tmp = malloc(sizeof(*tmp));
+char * pathname_create(const char * name)
+{
+        char * tmp;
+
+        assert(name);
+
+        tmp = malloc(strlen(name) + strlen(PATH_DELIMITER) + 1);
         if (tmp == NULL)
                 return NULL;
 
-        switch (type) {
-        case FLAT_RANDOM:
-                if (flat_init()) {
-                        free(tmp);
-                        return NULL;
-                }
-
-                tmp->address = flat_address;
-                tmp->type = type;
-                break;
-        default:
-                LOG_ERR("Unknown address authority type.");
-                free(tmp);
-                return NULL;
-        }
+        strcpy(tmp, PATH_DELIMITER);
+        strcat(tmp, name);
 
         return tmp;
 }
 
-int addr_auth_destroy(struct addr_auth * instance)
+char * pathname_append(char *       pname,
+                       const char * name)
 {
-        assert(instance);
+        char * tmp;
 
-        switch (instance->type) {
-        case FLAT_RANDOM:
-                if (flat_fini()) {
-                        return -1;
-                }
-                break;
-        default:
-                LOG_ERR("Unknown address authority type.");
-        }
+        assert(pname);
+        assert(name);
 
-        free(instance);
+        tmp = malloc(strlen(pname) +
+                     strlen(PATH_DELIMITER) +
+                     strlen(name) + 1);
+        if (tmp == NULL)
+                return NULL;
 
-        return 0;
+        strcpy(tmp, pname);
+        strcat(tmp, PATH_DELIMITER);
+        strcat(tmp, name);
+
+        free(pname);
+
+        return tmp;
+}
+
+void pathname_destroy(char * pname)
+{
+        free(pname);
 }

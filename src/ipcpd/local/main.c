@@ -94,7 +94,7 @@ static void * ipcp_local_sdu_loop(void * o)
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-                if (ipcp_get_state() != IPCP_ENROLLED) {
+                if (ipcp_get_state() != IPCP_RUNNING) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         return (void *) 1; /* -ENOTENROLLED */
                 }
@@ -137,7 +137,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
                         if (ipcp_get_state() == IPCP_INIT)
                                 ipcp_set_state(IPCP_NULL);
 
-                        if (ipcp_get_state() == IPCP_ENROLLED)
+                        if (ipcp_get_state() == IPCP_RUNNING)
                                 ipcp_set_state(IPCP_SHUTDOWN);
 
                         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -163,7 +163,7 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
         /* this IPCP doesn't need to maintain its dif_name */
         free(conf->dif_name);
 
-        ipcp_set_state(IPCP_ENROLLED);
+        ipcp_set_state(IPCP_RUNNING);
 
         pthread_create(&local_data.sduloop, NULL, ipcp_local_sdu_loop, NULL);
 
@@ -234,7 +234,7 @@ static int ipcp_local_flow_alloc(int           fd,
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_ENROLLED) {
+        if (ipcp_get_state() != IPCP_RUNNING) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
@@ -296,7 +296,7 @@ static int ipcp_local_flow_dealloc(int fd)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_ENROLLED) {
+        if (ipcp_get_state() != IPCP_RUNNING) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
