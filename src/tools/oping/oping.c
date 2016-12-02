@@ -40,14 +40,15 @@
 #define OPING_MAX_FLOWS 256
 
 struct c {
-        char * s_apn;
-        int    interval;
-        int    count;
-        int    size;
+        char *   s_apn;
+        int      interval;
+        uint32_t count;
+        int      size;
 
         /* stats */
-        int    sent;
-        int    rcvd;
+        uint32_t sent;
+        uint32_t rcvd;
+
         double rtt_min;
         double rtt_max;
         double rtt_avg;
