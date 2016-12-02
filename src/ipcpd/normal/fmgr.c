@@ -40,6 +40,9 @@
 #include "frct.h"
 #include "ipcp.h"
 #include "shm_pci.h"
+#include "dir.h"
+#include "path.h"
+#include "ro.h"
 
 #include "flow_alloc.pb-c.h"
 typedef FlowAllocMsg flow_alloc_msg_t;
@@ -273,19 +276,22 @@ void * fmgr_nm1_sdu_reader(void * o)
                         if (pci->dst_addr != ribmgr_address()) {
                                 LOG_DBG("PDU needs to be forwarded.");
 
-                                if (pci->ttl == 0) {
-                                        LOG_DBG("TTL was zero.");
-                                        ipcp_flow_del(sdb);
-                                        free(pci);
-                                        continue;
+                                if (ribmgr_dt_const()->has_ttl) {
+                                        if (pci->ttl == 0) {
+                                                LOG_DBG("TTL was zero.");
+                                                ipcp_flow_del(sdb);
+                                                free(pci);
+                                                continue;
+                                        }
+
+                                        if (shm_pci_dec_ttl(sdb)) {
+                                                LOG_ERR("Failed to dec TTL.");
+                                                ipcp_flow_del(sdb);
+                                                free(pci);
+                                                continue;
+                                        }
                                 }
 
-                                if (shm_pci_dec_ttl(sdb)) {
-                                        LOG_ERR("Failed to decrease TTL.");
-                                        ipcp_flow_del(sdb);
-                                        free(pci);
-                                        continue;
-                                }
                                 /*
                                  * FIXME: Dropping for now, since
                                  * we don't have a PFF yet
@@ -401,14 +407,16 @@ int fmgr_fini()
 }
 
 int fmgr_np1_alloc(int           fd,
-                    char *        dst_ap_name,
-                    char *        src_ae_name,
-                    enum qos_cube qos)
+                   char *        dst_ap_name,
+                   char *        src_ae_name,
+                   enum qos_cube qos)
 {
         cep_id_t cep_id;
-        uint32_t address = 0;
         buffer_t buf;
         flow_alloc_msg_t msg = FLOW_ALLOC_MSG__INIT;
+        char * path;
+        uint8_t * ro_data;
+        uint64_t addr;
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -420,7 +428,23 @@ int fmgr_np1_alloc(int           fd,
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        /* FIXME: Obtain correct address here from DIF NSM */
+        path = pathname_create(RO_DIR);
+        if (path == NULL)
+                return -1;
+
+        path = pathname_append(path, dst_ap_name);
+        if (path == NULL) {
+                pathname_destroy(path);
+                return -1;
+        }
+
+        if (ro_read(path, &ro_data) < 0) {
+                pathname_destroy(path);
+                return -1;
+        }
+        addr = *((uint64_t *) ro_data);
+
+        pathname_destroy(path);
 
         msg.code = FLOW_ALLOC_CODE__FLOW_REQ;
         msg.dst_name = dst_ap_name;
@@ -429,23 +453,30 @@ int fmgr_np1_alloc(int           fd,
         msg.has_qos_cube = true;
 
         buf.len = flow_alloc_msg__get_packed_size(&msg);
-        if (buf.len == 0)
+        if (buf.len == 0) {
+                free(ro_data);
                 return -1;
+        }
 
         buf.data = malloc(buf.len);
-        if (buf.data == NULL)
+        if (buf.data == NULL) {
+                free(ro_data);
                 return -1;
+        }
 
         flow_alloc_msg__pack(&msg, buf.data);
 
         pthread_rwlock_wrlock(&fmgr.np1_flows_lock);
 
-        cep_id = frct_i_create(address, &buf, qos);
+        cep_id = frct_i_create(addr, &buf, qos);
         if (cep_id == INVALID_CEP_ID) {
+                free(ro_data);
                 free(buf.data);
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
                 return -1;
         }
+
+        free(ro_data);
 
         if (add_np1_fd(fd, cep_id, qos)) {
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);

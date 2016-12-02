@@ -20,11 +20,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_CRC32_H
-#define OUROBOROS_IPCP_CRC32_H
+#ifndef OUROBOROS_IPCPD_NORMAL_CRC32_H
+#define OUROBOROS_IPCPD_NORMAL_CRC32_H
 
 #include <stdint.h>
 
 void crc32(uint32_t * crc, const uint8_t * buf, size_t len);
 
-#endif /* OUROBOROS_IPCP_CRC32_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_CRC32_H */

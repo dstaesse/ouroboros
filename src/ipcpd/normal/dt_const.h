@@ -21,8 +21,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef IPCP_DT_CONST_H
-#define IPCP_DT_CONST_H
+#ifndef OUROBOROS_IPCPD_NORMAL_DT_CONST_H
+#define OUROBOROS_IPCPD_NORMAL_DT_CONST_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -38,4 +38,4 @@ struct dt_const {
         uint32_t max_pdu_size;
 };
 
-#endif /* IPCP_DT_CONST_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_DT_CONST_H */

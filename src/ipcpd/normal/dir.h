@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * RIB manager of the IPC Process
+ * DIF directory
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
@@ -20,30 +20,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_RIBMGR_H
-#define OUROBOROS_IPCPD_NORMAL_RIBMGR_H
+#ifndef OUROBOROS_IPCPD_NORMAL_DIR_H
+#define OUROBOROS_IPCPD_NORMAL_DIR_H
 
-#include <ouroboros/irm_config.h>
-#include <ouroboros/utils.h>
+#define RO_DIR "directory"
 
-#include "dt_const.h"
+int dir_init(void);
 
-int               ribmgr_init(void);
+int dir_fini(void);
 
-int               ribmgr_fini(void);
+int dir_name_reg(char * name);
 
-int               ribmgr_add_flow(int fd);
+int dir_name_unreg(char * name);
 
-int               ribmgr_remove_flow(int fd);
+int dir_name_query(char * name);
 
-int               ribmgr_bootstrap(struct dif_config * conf);
-
-int               ribmgr_enrol(void);
-
-int               ribmgr_start_policies(void);
-
-struct dt_const * ribmgr_dt_const(void);
-
-uint64_t          ribmgr_address(void);
-
-#endif /* OUROBOROS_IPCPD_NORMAL_RIBMGR_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_DIR_H */

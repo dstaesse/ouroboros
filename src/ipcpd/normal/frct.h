@@ -20,8 +20,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_FRCT_H
-#define OUROBOROS_IPCP_FRCT_H
+#ifndef OUROBOROS_IPCPD_NORMAL_FRCT_H
+#define OUROBOROS_IPCPD_NORMAL_FRCT_H
 
 #include <ouroboros/shared.h>
 #include <ouroboros/utils.h>
@@ -51,4 +51,4 @@ int         frct_i_write_sdu(cep_id_t             id,
 int         frct_nm1_post_sdu(struct pci *         pci,
                               struct shm_du_buff * sdb);
 
-#endif
+#endif /* OUROBOROS_IPCPD_NORMAL_FRCT_H */

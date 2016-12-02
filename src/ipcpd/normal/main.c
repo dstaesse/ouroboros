@@ -32,6 +32,7 @@
 #include "ribmgr.h"
 #include "ipcp.h"
 #include "frct.h"
+#include "dir.h"
 
 #include <stdbool.h>
 #include <signal.h>
@@ -66,51 +67,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         default:
                 return;
         }
-}
-
-static int normal_ipcp_name_reg(char * name)
-{
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_data_reg_add_entry(ipcpi.data, name)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Failed to add %s to local registry.", name);
-                return -1;
-        }
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        LOG_DBG("Registered %s.", name);
-
-        return 0;
-}
-
-static int normal_ipcp_name_unreg(char * name)
-{
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        ipcp_data_reg_del_entry(ipcpi.data, name);
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        return 0;
-}
-
-static int normal_ipcp_name_query(char * name)
-{
-        LOG_MISSING;
-
-        /*
-         * NOTE: For the moment we just return -1,
-         * for testing purposes we may return zero here
-         * for certain names.
-         */
-
-        /* FIXME: Here for testing purposes */
-        if (strcmp(name, "normal.app") == 0)
-                return 0;
-
-        return -1;
 }
 
 static int normal_ipcp_enroll(char * dif_name)
@@ -206,9 +162,9 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
 static struct ipcp_ops normal_ops = {
         .ipcp_bootstrap       = normal_ipcp_bootstrap,
         .ipcp_enroll          = normal_ipcp_enroll,
-        .ipcp_name_reg        = normal_ipcp_name_reg,
-        .ipcp_name_unreg      = normal_ipcp_name_unreg,
-        .ipcp_name_query      = normal_ipcp_name_query,
+        .ipcp_name_reg        = dir_name_reg,
+        .ipcp_name_unreg      = dir_name_unreg,
+        .ipcp_name_query      = dir_name_query,
         .ipcp_flow_alloc      = fmgr_np1_alloc,
         .ipcp_flow_alloc_resp = fmgr_np1_alloc_resp,
         .ipcp_flow_dealloc    = fmgr_np1_dealloc
@@ -291,6 +247,9 @@ int main(int argc, char * argv[])
 
         if (frct_fini())
                 LOG_ERR("Failed to finalize FRCT.");
+
+        if (dir_fini())
+                LOG_ERR("Failed to finalize directory.");
 
         close_logfile();
 

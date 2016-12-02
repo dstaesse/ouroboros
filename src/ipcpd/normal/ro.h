@@ -20,8 +20,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_RO_H
-#define OUROBOROS_IPCP_RO_H
+#ifndef OUROBOROS_IPCPD_NORMAL_RO_H
+#define OUROBOROS_IPCPD_NORMAL_RO_H
 
 enum ro_recv_set {
         NO_SYNC = 0,
@@ -54,6 +54,11 @@ int          ro_write(const char * name,
 ssize_t      ro_read(const char * name,
                      uint8_t **   data);
 
+ssize_t      ro_children(const char * name,
+                         char ***     children);
+
+bool         ro_exists(const char * name);
+
 /* Callback passes ownership of the data */
 struct ro_sub_ops {
         void (* ro_created)(const char * name,
@@ -71,4 +76,4 @@ int          ro_subscribe(const char *        name,
 
 int          ro_unsubscribe(int sid);
 
-#endif
+#endif /* OUROBOROS_IPCPD_NORMAL_RO_H */

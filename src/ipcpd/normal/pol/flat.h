@@ -20,11 +20,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_FLAT
-#define OUROBOROS_FLAT
+#ifndef OUROBOROS_IPCPD_NORMAL_FLAT_H
+#define OUROBOROS_IPCPD_NORMAL_FLAT_H
 
 int      flat_init(void);
 int      flat_fini(void);
 uint64_t flat_address(void);
 
-#endif /* OUROBOROS_FLAT */
+#endif /* OUROBOROS_IPCPD_NORMAL_FLAT_H */

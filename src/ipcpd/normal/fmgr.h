@@ -20,8 +20,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_FMGR_H
-#define OUROBOROS_IPCP_FMGR_H
+#ifndef OUROBOROS_IPCPD_NORMAL_FMGR_H
+#define OUROBOROS_IPCPD_NORMAL_FMGR_H
 
 #include <ouroboros/shared.h>
 
@@ -65,4 +65,4 @@ int fmgr_nm1_write_sdu(struct pci *         pci,
 int fmgr_nm1_write_buf(struct pci * pci,
                        buffer_t *   buf);
 
-#endif
+#endif /* OUROBOROS_IPCPD_NORMAL_FMGR_H */
