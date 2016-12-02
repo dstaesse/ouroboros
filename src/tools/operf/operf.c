@@ -44,8 +44,8 @@ struct c {
         bool   sleep;
         int    duration;
 
-        size_t sent;
-        size_t rcvd;
+        uint64_t sent;
+        uint64_t rcvd;
 
         flow_set_t * flows;
         fqueue_t *   fq;

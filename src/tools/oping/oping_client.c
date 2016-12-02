@@ -81,7 +81,7 @@ void * reader(void * o)
                                 continue;
                         }
 
-                        if (ntohl(msg->id) >= (ssize_t) client.count) {
+                        if (ntohl(msg->id) >= client.count) {
                                 printf("Invalid id.\n");
                                 continue;
                         }
