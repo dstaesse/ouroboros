@@ -20,8 +20,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_ADDR_AUTH
-#define OUROBOROS_ADDR_AUTH
+#ifndef OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H
+#define OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H
 
 #include <ouroboros/irm_config.h>
 
@@ -36,4 +36,4 @@ struct addr_auth * addr_auth_create(enum pol_addr_auth type);
 
 int                addr_auth_destroy(struct addr_auth * instance);
 
-#endif /* OUROBOROS_ADDR_AUTH */
+#endif /* OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H */

@@ -21,8 +21,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCP_SHM_PCI_H
-#define OUROBOROS_IPCP_SHM_PCI_H
+#ifndef OUROBOROS_IPCPD_NORMAL_SHM_PCI_H
+#define OUROBOROS_IPCPD_NORMAL_SHM_PCI_H
 
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/utils.h>
@@ -61,4 +61,4 @@ int          shm_pci_shrink(struct shm_du_buff * sdb);
 
 int          shm_pci_dec_ttl(struct shm_du_buff * sdb);
 
-#endif /* OUROBOROS_IPCP_SHM_PCI_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_SHM_PCI_H */

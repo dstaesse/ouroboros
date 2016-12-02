@@ -45,6 +45,7 @@
 #include "cdap_request.h"
 #include "ro.h"
 #include "path.h"
+#include "dir.h"
 
 #include "static_info.pb-c.h"
 typedef StaticInfoMsg static_info_msg_t;
@@ -1269,8 +1270,17 @@ int ribmgr_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
+        if (dir_init()) {
+                LOG_ERR("Failed to init directory");
+                ribmgr_ro_delete(RIBMGR_PREFIX STAT_INFO);
+                addr_auth_destroy(rib.addr_auth);
+                ribmgr_ro_delete(RIBMGR_PREFIX);
+                return -1;
+        }
+
         if (frct_init()) {
                 LOG_ERR("Failed to initialize FRCT.");
+                dir_fini();
                 ribmgr_ro_delete(RIBMGR_PREFIX STAT_INFO);
                 addr_auth_destroy(rib.addr_auth);
                 ribmgr_ro_delete(RIBMGR_PREFIX);
@@ -1412,7 +1422,6 @@ int ro_create(const char *     name,
         node = ribmgr_ro_create(name, *attr, data, len);
         if (node == NULL) {
                 pthread_mutex_unlock(&rib.ro_lock);
-                LOG_ERR("Failed to create RO.");
                 return -1;
         }
 
@@ -1561,6 +1570,74 @@ ssize_t ro_read(const char * name,
         pthread_mutex_unlock(&rib.ro_lock);
 
         return len;
+}
+
+ssize_t ro_children(const char * name,
+                    char ***     children)
+{
+        struct rnode * node;
+        struct rnode * child;
+        ssize_t len = 0;
+        int i = 0;
+
+        assert(name);
+        assert(children);
+
+        pthread_mutex_lock(&rib.ro_lock);
+
+        node = find_rnode_by_name(name);
+        if (node == NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                return -1;
+        }
+
+        child = node->child;
+        while (child != NULL) {
+                len++;
+                child = child->sibling;
+        }
+        child = node->child;
+
+        **children = malloc(len);
+        if (**children == NULL) {
+                pthread_mutex_unlock(&rib.ro_lock);
+                return -1;
+        }
+
+        for (i = 0; i < len; i++) {
+                (*children)[i] = strdup(child->name);
+                if ((*children)[i] == NULL) {
+                        while (i >= 0) {
+                                free((*children)[i]);
+                                i--;
+                        }
+                        free(**children);
+                        pthread_mutex_unlock(&rib.ro_lock);
+                        return -1;
+                }
+                child = child->sibling;
+        }
+
+        pthread_mutex_unlock(&rib.ro_lock);
+
+        return len;
+}
+
+bool ro_exists(const char * name)
+{
+        struct rnode * node;
+        bool found;
+
+        assert(name);
+
+        pthread_mutex_lock(&rib.ro_lock);
+
+        node = find_rnode_by_name(name);
+        found = (node == NULL) ? false : true;
+
+        pthread_mutex_unlock(&rib.ro_lock);
+
+        return found;
 }
 
 int ro_subscribe(const char *        name,

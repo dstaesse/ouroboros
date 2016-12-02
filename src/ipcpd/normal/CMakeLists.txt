@@ -27,6 +27,7 @@ set(SOURCE_FILES
   addr_auth.c
   cdap_request.c
   crc32.c
+  dir.c
   fmgr.c
   frct.c
   main.c
