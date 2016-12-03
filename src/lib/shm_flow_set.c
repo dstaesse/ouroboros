@@ -27,14 +27,11 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>
 
-#define OUROBOROS_PREFIX "shm_flow_set"
-
-#include <ouroboros/logs.h>
-
 #include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -77,16 +74,13 @@ struct shm_flow_set * shm_flow_set_create()
         sprintf(fn, SHM_FLOW_SET_PREFIX "%d", getpid());
 
         set = malloc(sizeof(*set));
-        if (set == NULL) {
-                LOG_DBG("Could not allocate struct.");
+        if (set == NULL)
                 return NULL;
-        }
 
         mask = umask(0);
 
         shm_fd = shm_open(fn, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (shm_fd == -1) {
-                LOG_DBG("Failed creating flag file.");
                 free(set);
                 return NULL;
         }
@@ -94,7 +88,6 @@ struct shm_flow_set * shm_flow_set_create()
         umask(mask);
 
         if (ftruncate(shm_fd, SHM_FLOW_SET_FILE_SIZE - 1) < 0) {
-                LOG_DBG("Failed to extend flag file.");
                 free(set);
                 close(shm_fd);
                 return NULL;
@@ -110,10 +103,7 @@ struct shm_flow_set * shm_flow_set_create()
         close(shm_fd);
 
         if (shm_base == MAP_FAILED) {
-                LOG_DBG("Failed to map shared memory.");
-                if (shm_unlink(fn) == -1)
-                        LOG_DBG("Failed to remove invalid shm.");
-
+                shm_unlink(fn);
                 free(set);
                 return NULL;
         }
@@ -160,14 +150,11 @@ struct shm_flow_set * shm_flow_set_open(pid_t api)
         sprintf(fn, SHM_FLOW_SET_PREFIX "%d", api);
 
         set = malloc(sizeof(*set));
-        if (set == NULL) {
-                LOG_DBG("Could not allocate struct.");
+        if (set == NULL)
                 return NULL;
-        }
 
         shm_fd = shm_open(fn, O_RDWR, 0666);
         if (shm_fd == -1) {
-                LOG_DBG("%d failed opening shared memory %s.", getpid(), fn);
                 free(set);
                 return NULL;
         }
@@ -182,9 +169,7 @@ struct shm_flow_set * shm_flow_set_open(pid_t api)
         close(shm_fd);
 
         if (shm_base == MAP_FAILED) {
-                LOG_DBG("Failed to map shared memory.");
-                if (shm_unlink(fn) == -1)
-                        LOG_DBG("Failed to remove invalid shm.");
+                shm_unlink(fn);
                 free(set);
                 return NULL;
         }
@@ -210,18 +195,12 @@ void shm_flow_set_destroy(struct shm_flow_set * set)
 
         if (set->api != getpid()) {
                 lf = lockfile_open();
-                if (lf == NULL) {
-                        LOG_ERR("Failed to open lockfile.");
+                if (lf == NULL)
                         return;
-                }
 
                 if (lockfile_owner(lf) == getpid()) {
-                        LOG_DBG("Flow set %d destroyed by IRMd %d.",
-                                set->api, getpid());
                         lockfile_close(lf);
                 } else {
-                        LOG_ERR("AP-I %d tried to destroy flowset owned by %d.",
-                                getpid(), set->api);
                         lockfile_close(lf);
                         return;
                 }
@@ -229,11 +208,8 @@ void shm_flow_set_destroy(struct shm_flow_set * set)
 
         sprintf(fn, SHM_FLOW_SET_PREFIX "%d", set->api);
 
-        if (munmap(set->mtable, SHM_FLOW_SET_FILE_SIZE) == -1)
-                LOG_DBG("Couldn't unmap shared memory.");
-
-        if (shm_unlink(fn) == -1)
-                LOG_DBG("Failed to unlink shm.");
+        munmap(set->mtable, SHM_FLOW_SET_FILE_SIZE);
+        shm_unlink(fn);
 
         free(set);
 }
@@ -242,111 +218,111 @@ void shm_flow_set_close(struct shm_flow_set * set)
 {
         assert(set);
 
-        if (munmap(set->mtable, SHM_FLOW_SET_FILE_SIZE) == -1)
-                LOG_DBG("Couldn't unmap shared memory.");
+        munmap(set->mtable, SHM_FLOW_SET_FILE_SIZE);
 
         free(set);
 }
 
-void shm_flow_set_zero(struct shm_flow_set * shm_set,
+void shm_flow_set_zero(struct shm_flow_set * set,
                        size_t                idx)
 {
         ssize_t i = 0;
 
+        assert(set);
         assert(idx < AP_MAX_FQUEUES);
 
-        pthread_mutex_lock(shm_set->lock);
+        pthread_mutex_lock(set->lock);
 
         for (i = 0; i < IRMD_MAX_FLOWS; ++i)
-                if (shm_set->mtable[i] == (ssize_t) idx)
-                        shm_set->mtable[i] = -1;
+                if (set->mtable[i] == (ssize_t) idx)
+                        set->mtable[i] = -1;
 
-        shm_set->heads[idx] = 0;
+        set->heads[idx] = 0;
 
-        pthread_mutex_unlock(shm_set->lock);
+        pthread_mutex_unlock(set->lock);
 }
 
 
-int shm_flow_set_add(struct shm_flow_set * shm_set,
+int shm_flow_set_add(struct shm_flow_set * set,
                      size_t                idx,
                      int                   port_id)
 {
-        assert(shm_set);
+        assert(set);
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
         assert(idx < AP_MAX_FQUEUES);
 
-        pthread_mutex_lock(shm_set->lock);
+        pthread_mutex_lock(set->lock);
 
-        if (shm_set->mtable[port_id] != -1) {
-                pthread_mutex_unlock(shm_set->lock);
+        if (set->mtable[port_id] != -1) {
+                pthread_mutex_unlock(set->lock);
                 return -EPERM;
         }
 
-        shm_set->mtable[port_id] = idx;
+        set->mtable[port_id] = idx;
 
-        pthread_mutex_unlock(shm_set->lock);
+        pthread_mutex_unlock(set->lock);
 
         return 0;
 }
 
-void shm_flow_set_del(struct shm_flow_set * shm_set,
+void shm_flow_set_del(struct shm_flow_set * set,
                       size_t                idx,
                       int                   port_id)
 {
-        assert(shm_set);
+        assert(set);
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
         assert(idx < AP_MAX_FQUEUES);
 
-        pthread_mutex_lock(shm_set->lock);
+        pthread_mutex_lock(set->lock);
 
-        if (shm_set->mtable[port_id] == (ssize_t) idx)
-                shm_set->mtable[port_id] = -1;
+        if (set->mtable[port_id] == (ssize_t) idx)
+                set->mtable[port_id] = -1;
 
-        pthread_mutex_unlock(shm_set->lock);
+        pthread_mutex_unlock(set->lock);
 }
 
-int shm_flow_set_has(struct shm_flow_set * shm_set,
+int shm_flow_set_has(struct shm_flow_set * set,
                      size_t                idx,
                      int                   port_id)
 {
         int ret = 0;
 
-        assert(shm_set);
+        assert(set);
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
         assert(idx < AP_MAX_FQUEUES);
 
-        pthread_mutex_lock(shm_set->lock);
+        pthread_mutex_lock(set->lock);
 
-        if (shm_set->mtable[port_id] == (ssize_t) idx)
+        if (set->mtable[port_id] == (ssize_t) idx)
                 ret = 1;
 
-        pthread_mutex_unlock(shm_set->lock);
+        pthread_mutex_unlock(set->lock);
 
         return ret;
 }
 
-void shm_flow_set_notify(struct shm_flow_set * shm_set, int port_id)
+void shm_flow_set_notify(struct shm_flow_set * set, int port_id)
 {
-        assert(shm_set);
+        assert(set);
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
 
-        pthread_mutex_lock(shm_set->lock);
+        pthread_mutex_lock(set->lock);
 
-        if (shm_set->mtable[port_id] == -1) {
-                pthread_mutex_unlock(shm_set->lock);
+        if (set->mtable[port_id] == -1) {
+                pthread_mutex_unlock(set->lock);
                 return;
         }
 
-        *(fqueue_ptr(shm_set, shm_set->mtable[port_id]) +
-                     (shm_set->heads[shm_set->mtable[port_id]])++) = port_id;
+        *(fqueue_ptr(set, set->mtable[port_id]) +
+                     (set->heads[set->mtable[port_id]])++) = port_id;
 
-        pthread_cond_signal(&shm_set->conds[shm_set->mtable[port_id]]);
+        pthread_cond_signal(&set->conds[set->mtable[port_id]]);
 
-        pthread_mutex_unlock(shm_set->lock);
+        pthread_mutex_unlock(set->lock);
 }
 
 
-ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
+ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                           size_t                      idx,
                           int *                       fqueue,
                           const struct timespec *     timeout)
@@ -354,17 +330,15 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
         ssize_t ret = 0;
         struct timespec abstime;
 
-        assert(shm_set);
+        assert(set);
         assert(idx < AP_MAX_FQUEUES);
         assert(fqueue);
 
 #ifdef __APPLE__
-        pthread_mutex_lock(shm_set->lock);
+        pthread_mutex_lock(set->lock);
 #else
-        if (pthread_mutex_lock(shm_set->lock) == EOWNERDEAD) {
-                LOG_DBG("Recovering dead mutex.");
-                pthread_mutex_consistent(shm_set->lock);
-        }
+        if (pthread_mutex_lock(set->lock) == EOWNERDEAD)
+                pthread_mutex_consistent(set->lock);
 #endif
         if (timeout != NULL) {
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
@@ -372,21 +346,19 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
         }
 
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void *) shm_set->lock);
+                             (void *) set->lock);
 
-        while (shm_set->heads[idx] == 0 && ret != -ETIMEDOUT) {
+        while (set->heads[idx] == 0 && ret != -ETIMEDOUT) {
                 if (timeout != NULL)
-                        ret = -pthread_cond_timedwait(shm_set->conds + idx,
-                                                      shm_set->lock,
+                        ret = -pthread_cond_timedwait(set->conds + idx,
+                                                      set->lock,
                                                       &abstime);
                 else
-                        ret = -pthread_cond_wait(shm_set->conds + idx,
-                                                 shm_set->lock);
+                        ret = -pthread_cond_wait(set->conds + idx,
+                                                 set->lock);
 #ifndef __APPLE__
-                if (ret == -EOWNERDEAD) {
-                        LOG_DBG("Recovering dead mutex.");
-                        pthread_mutex_consistent(shm_set->lock);
-                }
+                if (ret == -EOWNERDEAD)
+                        pthread_mutex_consistent(set->lock);
 #endif
                 if (ret == -ETIMEDOUT)
                         break;
@@ -394,10 +366,10 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * shm_set,
 
         if (ret != -ETIMEDOUT) {
                 memcpy(fqueue,
-                       fqueue_ptr(shm_set, idx),
-                       shm_set->heads[idx] * sizeof(int));
-                ret = shm_set->heads[idx];
-                shm_set->heads[idx] = 0;
+                       fqueue_ptr(set, idx),
+                       set->heads[idx] * sizeof(int));
+                ret = set->heads[idx];
+                set->heads[idx] = 0;
         }
 
         pthread_cleanup_pop(true);

@@ -32,14 +32,11 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <stdbool.h>
 #include <assert.h>
-
-#define OUROBOROS_PREFIX "shm_rdrbuff"
-
-#include <ouroboros/logs.h>
 
 #define SHM_BLOCKS_SIZE ((SHM_BUFFER_SIZE) * SHM_RDRB_BLOCK_SIZE)
 #define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 2 * sizeof(size_t)                    \
@@ -126,10 +123,8 @@ static char * rdrb_filename(void)
         char * str;
 
         str = malloc(strlen(SHM_RDRB_PREFIX) + 1);
-        if (str == NULL) {
-                LOG_ERR("Failed to create shm_rdrbuff: Out of Memory.");
+        if (str == NULL)
                 return NULL;
-        }
 
         sprintf(str, "%s", SHM_RDRB_PREFIX);
 
@@ -145,22 +140,17 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         pthread_mutexattr_t  mattr;
         pthread_condattr_t   cattr;
         char *               shm_rdrb_fn = rdrb_filename();
-        if (shm_rdrb_fn == NULL) {
-                LOG_ERR("Could not create rdrbuff. Out of Memory");
+        if (shm_rdrb_fn == NULL)
                 return NULL;
-        }
 
         rdrb = malloc(sizeof *rdrb);
-        if (rdrb == NULL) {
-                LOG_DBGF("Could not allocate struct.");
+        if (rdrb == NULL)
                 return NULL;
-        }
 
         mask = umask(0);
 
         shm_fd = shm_open(shm_rdrb_fn, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (shm_fd == -1) {
-                LOG_DBGF("Failed creating shared memory map.");
                 free(shm_rdrb_fn);
                 free(rdrb);
                 return NULL;
@@ -169,7 +159,6 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         umask(mask);
 
         if (ftruncate(shm_fd, SHM_FILE_SIZE - 1) < 0) {
-                LOG_DBGF("Failed to extend shared memory map.");
                 free(shm_rdrb_fn);
                 close(shm_fd);
                 free(rdrb);
@@ -186,9 +175,7 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         close(shm_fd);
 
         if (shm_base == MAP_FAILED) {
-                LOG_DBGF("Failed to map shared memory.");
-                if (shm_unlink(shm_rdrb_fn) == -1)
-                        LOG_DBGF("Failed to remove invalid shm.");
+                shm_unlink(shm_rdrb_fn);
                 free(shm_rdrb_fn);
                 free(rdrb);
                 return NULL;
@@ -233,20 +220,15 @@ struct shm_rdrbuff * shm_rdrbuff_open()
         int                  shm_fd;
         uint8_t *            shm_base;
         char *               shm_rdrb_fn = rdrb_filename();
-        if (shm_rdrb_fn == NULL) {
-                LOG_ERR("Could not create rdrbuff. Out of Memory");
+        if (shm_rdrb_fn == NULL)
                 return NULL;
-        }
 
         rdrb = malloc(sizeof *rdrb);
-        if (rdrb == NULL) {
-                LOG_DBGF("Could not allocate struct.");
+        if (rdrb == NULL)
                 return NULL;
-        }
 
         shm_fd = shm_open(shm_rdrb_fn, O_RDWR, 0666);
         if (shm_fd < 0) {
-                LOG_DBGF("Failed opening shared memory.");
                 free(shm_rdrb_fn);
                 free(rdrb);
                 return NULL;
@@ -262,9 +244,7 @@ struct shm_rdrbuff * shm_rdrbuff_open()
         close(shm_fd);
 
         if (shm_base == MAP_FAILED) {
-                LOG_DBGF("Failed to map shared memory.");
-                if (shm_unlink(shm_rdrb_fn) == -1)
-                        LOG_DBG("Failed to unlink invalid shm.");
+                shm_unlink(shm_rdrb_fn);
                 free(shm_rdrb_fn);
                 free(rdrb);
                 return NULL;
@@ -289,10 +269,8 @@ void shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb)
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_WARN("Recovering dead mutex.");
+        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rdrb->lock);
-        }
 #endif
         pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
                              (void *) rdrb->lock);
@@ -301,10 +279,8 @@ void shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb)
 #ifdef __APPLE__
                 pthread_cond_wait(rdrb->full, rdrb->lock);
 #else
-                if (pthread_cond_wait(rdrb->full, rdrb->lock) == EOWNERDEAD) {
-                        LOG_WARN("Recovering dead mutex.");
+                if (pthread_cond_wait(rdrb->full, rdrb->lock) == EOWNERDEAD)
                         pthread_mutex_consistent(rdrb->lock);
-                }
 #endif
         }
 
@@ -317,9 +293,7 @@ void shm_rdrbuff_close(struct shm_rdrbuff * rdrb)
 {
         assert(rdrb);
 
-        if (munmap(rdrb->shm_base, SHM_FILE_SIZE) == -1)
-                LOG_DBGF("Couldn't unmap shared memory.");
-
+        munmap(rdrb->shm_base, SHM_FILE_SIZE);
         free(rdrb);
 }
 
@@ -329,22 +303,16 @@ void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
 
         assert(rdrb);
 
-        if (getpid() != *rdrb->api && kill(*rdrb->api, 0) == 0) {
-                LOG_DBG("Process %d tried to destroy active rdrb.", getpid());
+        if (getpid() != *rdrb->api && kill(*rdrb->api, 0) == 0)
                 return;
-        }
 
-        if (munmap(rdrb->shm_base, SHM_FILE_SIZE) == -1)
-                LOG_DBG("Couldn't unmap shared memory.");
+        munmap(rdrb->shm_base, SHM_FILE_SIZE);
 
         shm_rdrb_fn = rdrb_filename();
-        if (shm_rdrb_fn == NULL) {
-                LOG_ERR("Could not create rdrbuff. Out of Memory");
+        if (shm_rdrb_fn == NULL)
                 return;
-        }
 
-        if (shm_unlink(shm_rdrb_fn) == -1)
-                LOG_DBG("Failed to unlink shm.");
+        shm_unlink(shm_rdrb_fn);
 
         free(rdrb);
         free(shm_rdrb_fn);
@@ -368,18 +336,14 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         assert(data);
 
 #ifndef SHM_RDRB_MULTI_BLOCK
-        if (sz > SHM_RDRB_BLOCK_SIZE) {
-                LOG_DBGF("Multi-block SDUs disabled. Dropping.");
-                return -1;
-        }
+        if (sz > SHM_RDRB_BLOCK_SIZE)
+                return -EMSGSIZE;
 #endif
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
+        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rdrb->lock);
-        }
 #endif
 #ifdef SHM_RDRB_MULTI_BLOCK
         while (sz > 0) {
@@ -394,10 +358,9 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 #else
         if (!shm_rdrb_free(rdrb, 1)) {
 #endif
-                LOG_DBG("buffer full, idx = %ld.", *rdrb->tail);
                 pthread_cond_broadcast(rdrb->full);
                 pthread_mutex_unlock(rdrb->lock);
-                return -1;
+                return -EAGAIN;
         }
 
 #ifdef SHM_RDRB_MULTI_BLOCK
@@ -452,18 +415,14 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         assert(data);
 
 #ifndef SHM_RDRB_MULTI_BLOCK
-        if (sz > SHM_RDRB_BLOCK_SIZE) {
-                LOG_DBGF("Multi-block SDUs disabled. Dropping.");
-                return -1;
-        }
+        if (sz > SHM_RDRB_BLOCK_SIZE)
+                return -EMSGSIZE;
 #endif
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
+        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rdrb->lock);
-        }
 #endif
         pthread_cleanup_push((void (*) (void *)) pthread_mutex_unlock,
                              (void *) rdrb->lock);
@@ -533,10 +492,8 @@ ssize_t shm_rdrbuff_read(uint8_t **           dst,
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
+        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rdrb->lock);
-        }
 #endif
         if (shm_rdrb_empty(rdrb)) {
                 pthread_mutex_unlock(rdrb->lock);
@@ -562,10 +519,8 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, size_t idx)
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
+        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rdrb->lock);
-        }
 #endif
         if (shm_rdrb_empty(rdrb)) {
                 pthread_mutex_unlock(rdrb->lock);
@@ -587,10 +542,8 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, size_t idx)
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
 #else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD) {
-                LOG_DBGF("Recovering dead mutex.");
+        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rdrb->lock);
-        }
 #endif
         if (shm_rdrb_empty(rdrb)) {
                 pthread_mutex_unlock(rdrb->lock);
@@ -639,10 +592,8 @@ uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
 
         assert(sdb);
 
-        if ((long) (sdb->du_head - size) < 0) {
-                LOG_ERR("Failed to allocate PCI headspace.");
+        if (sdb->du_head < size)
                 return NULL;
-        }
 
         sdb->du_head -= size;
 
@@ -658,10 +609,8 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
 
         assert(sdb);
 
-        if (sdb->du_tail + size >= sdb->size) {
-                LOG_ERR("Failed to allocate PCI tailspace.");
+        if (sdb->du_tail + size >= sdb->size)
                 return NULL;
-        }
 
         buf = (uint8_t *) (sdb + 1) + sdb->du_tail;
 
@@ -675,10 +624,8 @@ int shm_du_buff_head_release(struct shm_du_buff * sdb,
 {
         assert(sdb);
 
-        if (size > sdb->du_tail - sdb->du_head) {
-                LOG_DBGF("Tried to release beyond SDU boundary.");
+        if (size > sdb->du_tail - sdb->du_head)
                 return -EOVERFLOW;
-        }
 
         sdb->du_head += size;
 
@@ -690,10 +637,8 @@ int shm_du_buff_tail_release(struct shm_du_buff * sdb,
 {
         assert(sdb);
 
-        if (size > sdb->du_tail - sdb->du_head) {
-                LOG_ERR("Tried to release beyond SDU boundary.");
+        if (size > sdb->du_tail - sdb->du_head)
                 return -EOVERFLOW;
-        }
 
         sdb->du_tail -= size;
 

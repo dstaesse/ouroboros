@@ -26,15 +26,12 @@
 #include <ouroboros/time_utils.h>
 #include <ouroboros/errno.h>
 
-#define OUROBOROS_PREFIX "shm_rbuff"
-
-#include <ouroboros/logs.h>
-
 #include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <signal.h>
@@ -83,16 +80,13 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", api, port_id);
 
         rb = malloc(sizeof(*rb));
-        if (rb == NULL) {
-                LOG_DBG("Could not allocate struct.");
+        if (rb == NULL)
                 return NULL;
-        }
 
         mask = umask(0);
 
         shm_fd = shm_open(fn, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (shm_fd == -1) {
-                LOG_DBG("Failed creating ring buffer.");
                 free(rb);
                 return NULL;
         }
@@ -100,7 +94,6 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         umask(mask);
 
         if (ftruncate(shm_fd, SHM_RBUFF_FILE_SIZE - 1) < 0) {
-                LOG_DBG("Failed to extend ringbuffer.");
                 free(rb);
                 close(shm_fd);
                 return NULL;
@@ -116,9 +109,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         close(shm_fd);
 
         if (shm_base == MAP_FAILED) {
-                LOG_DBG("Failed to map shared memory.");
-                if (shm_unlink(fn) == -1)
-                        LOG_DBG("Failed to remove invalid shm.");
+                shm_unlink(fn);
                 free(rb);
                 return NULL;
         }
@@ -166,14 +157,11 @@ struct shm_rbuff * shm_rbuff_open(pid_t api, int port_id)
         sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", api, port_id);
 
         rb = malloc(sizeof(*rb));
-        if (rb == NULL) {
-                LOG_DBG("Could not allocate struct.");
+        if (rb == NULL)
                 return NULL;
-        }
 
         shm_fd = shm_open(fn, O_RDWR, 0666);
         if (shm_fd == -1) {
-                LOG_DBG("%d failed opening shared memory %s.", getpid(), fn);
                 free(rb);
                 return NULL;
         }
@@ -188,10 +176,7 @@ struct shm_rbuff * shm_rbuff_open(pid_t api, int port_id)
         close(shm_fd);
 
         if (shm_base == MAP_FAILED) {
-                LOG_DBG("Failed to map shared memory.");
-                if (shm_unlink(fn) == -1)
-                        LOG_DBG("Failed to remove invalid shm.");
-
+                shm_unlink(fn);
                 free(rb);
                 return NULL;
         }
@@ -214,8 +199,7 @@ void shm_rbuff_close(struct shm_rbuff * rb)
 {
         assert(rb);
 
-        if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
-                LOG_DBG("Couldn't unmap shared memory.");
+        munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE);
 
         free(rb);
 }
@@ -235,11 +219,8 @@ void shm_rbuff_destroy(struct shm_rbuff * rb)
 #endif
         sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->api, rb->port_id);
 
-        if (munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE) == -1)
-                LOG_DBG("Couldn't unmap shared memory.");
-
-        if (shm_unlink(fn) == -1)
-                LOG_DBG("Failed to unlink shm %s.", fn);
+        munmap(rb->shm_base, SHM_RBUFF_FILE_SIZE);
+        shm_unlink(fn);
 
         free(rb);
 }
@@ -252,10 +233,8 @@ int shm_rbuff_write(struct shm_rbuff * rb, size_t idx)
 #ifdef __APPLE__
         pthread_mutex_lock(rb->lock);
 #else
-        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
-                LOG_DBG("Recovering dead mutex.");
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rb->lock);
-        }
 #endif
         if (*rb->acl == RB_CLOSED) {
                 pthread_mutex_unlock(rb->lock);
@@ -264,7 +243,7 @@ int shm_rbuff_write(struct shm_rbuff * rb, size_t idx)
 
         if (!shm_rbuff_free(rb)) {
                 pthread_mutex_unlock(rb->lock);
-                return -1;
+                return -EAGAIN;
         }
 
         if (shm_rbuff_empty(rb))
@@ -287,10 +266,8 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 #ifdef __APPLE__
         pthread_mutex_lock(rb->lock);
 #else
-        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
-                LOG_DBG("Recovering dead mutex.");
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rb->lock);
-        }
 #endif
         if (shm_rbuff_empty(rb)) {
                 pthread_mutex_unlock(rb->lock);
@@ -318,10 +295,8 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
 #ifdef __APPLE__
         pthread_mutex_lock(rb->lock);
 #else
-        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
-                LOG_DBG("Recovering dead mutex.");
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rb->lock);
-        }
 #endif
         if (timeout != NULL) {
                 idx = -ETIMEDOUT;
@@ -340,10 +315,8 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
                 else
                         ret = pthread_cond_wait(rb->add, rb->lock);
 #ifndef __APPLE__
-                if (ret == EOWNERDEAD) {
-                        LOG_DBG("Recovering dead mutex.");
+                if (ret == EOWNERDEAD)
                         pthread_mutex_consistent(rb->lock);
-                }
 #endif
                 if (ret == ETIMEDOUT) {
                         idx = -ETIMEDOUT;
@@ -369,10 +342,8 @@ void shm_rbuff_block(struct shm_rbuff * rb)
 #ifdef __APPLE__
         pthread_mutex_lock(rb->lock);
 #else
-        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
-                LOG_DBG("Recovering dead mutex.");
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rb->lock);
-        }
 #endif
         *rb->acl = RB_CLOSED;
 
@@ -386,10 +357,8 @@ void shm_rbuff_unblock(struct shm_rbuff * rb)
 #ifdef __APPLE__
         pthread_mutex_lock(rb->lock);
 #else
-        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
-                LOG_DBG("Recovering dead mutex.");
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rb->lock);
-        }
 #endif
         *rb->acl = RB_OPEN;
 
@@ -403,10 +372,8 @@ void shm_rbuff_fini(struct shm_rbuff * rb)
 #ifdef __APPLE__
         pthread_mutex_lock(rb->lock);
 #else
-        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD) {
-                LOG_DBG("Recovering dead mutex.");
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rb->lock);
-        }
 #endif
         assert(*rb->acl == RB_CLOSED);
 
@@ -417,10 +384,8 @@ void shm_rbuff_fini(struct shm_rbuff * rb)
 #ifdef __APPLE__
                 pthread_cond_wait(rb->del, rb->lock);
 #else
-                if (pthread_cond_wait(rb->del, rb->lock) == EOWNERDEAD) {
-                        LOG_DBG("Recovering dead mutex.");
+                if (pthread_cond_wait(rb->del, rb->lock) == EOWNERDEAD)
                         pthread_mutex_consistent(rb->lock);
-                }
 #endif
         pthread_cleanup_pop(true);
 }
