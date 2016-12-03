@@ -1365,7 +1365,7 @@ int ribmgr_start_policies(void)
         }
 
         rib.address = rib.addr_auth->address();
-        LOG_DBG("IPCP has address %lu", rib.address);
+        LOG_DBG("IPCP has address %lu", (unsigned long) rib.address);
 
         return 0;
 }

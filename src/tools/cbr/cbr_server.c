@@ -113,8 +113,8 @@ void handle_flow(int fd)
                                bytes_read - bytes_read_intv,
                                us / 1000,
                                ((sdus - sdus_intv) / (double) us) * MILLION,
-                               8 * (bytes_read - bytes_read_intv)
-                               / (double)(us));
+                               8 * ((bytes_read - bytes_read_intv)
+                                    / (double)(us)));
                         iv_start = iv_end;
                         sdus_intv = sdus;
                         bytes_read_intv = bytes_read;
