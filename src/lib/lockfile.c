@@ -23,15 +23,12 @@
 #include <ouroboros/config.h>
 #include <ouroboros/lockfile.h>
 
-#define OUROBOROS_PREFIX "lockfile"
-
-#include <ouroboros/logs.h>
-
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <signal.h>
+#include <assert.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
@@ -52,7 +49,6 @@ struct lockfile * lockfile_create() {
 
         fd = shm_open(LOCKFILE_NAME, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (fd == -1) {
-                LOG_DBGF("Could not create lock file.");
                 free(lf);
                 return NULL;
         }
@@ -60,7 +56,6 @@ struct lockfile * lockfile_create() {
         umask(mask);
 
         if (ftruncate(fd, LF_SIZE - 1) < 0) {
-                LOG_DBGF("Failed to extend lockfile.");
                 free(lf);
                 return NULL;
         }
@@ -74,9 +69,7 @@ struct lockfile * lockfile_create() {
         close (fd);
 
         if (lf->api == MAP_FAILED) {
-                LOG_DBGF("Failed to map lockfile.");
-                if (shm_unlink(LOCKFILE_NAME) == -1)
-                        LOG_DBGF("Failed to remove invalid lockfile.");
+                shm_unlink(LOCKFILE_NAME);
                 free(lf);
                 return NULL;
         }
@@ -94,7 +87,6 @@ struct lockfile * lockfile_open() {
 
         fd = shm_open(LOCKFILE_NAME, O_RDWR, 0666);
         if (fd < 0) {
-                LOG_DBGF("Could not open lock file.");
                 free(lf);
                 return NULL;
         }
@@ -108,9 +100,7 @@ struct lockfile * lockfile_open() {
         close(fd);
 
         if (lf->api == MAP_FAILED) {
-                LOG_DBGF("Failed to map lockfile.");
-                if (shm_unlink(LOCKFILE_NAME) == -1)
-                        LOG_DBGF("Failed to remove invalid lockfile.");
+                shm_unlink(LOCKFILE_NAME);
                 free(lf);
                 return NULL;
         }
@@ -120,39 +110,30 @@ struct lockfile * lockfile_open() {
 
 void lockfile_close(struct lockfile * lf)
 {
-        if (lf == NULL) {
-                LOG_DBGF("Bogus input. Bugging out.");
-                return;
-        }
+        assert(lf);
 
-        if (munmap(lf->api, LF_SIZE) == -1)
-                LOG_DBGF("Couldn't unmap lockfile.");
+        munmap(lf->api, LF_SIZE);
 
         free(lf);
 }
 
 void lockfile_destroy(struct lockfile * lf)
 {
-        if (lf == NULL) {
-                LOG_DBGF("Bogus input. Bugging out.");
+        assert(lf);
+
+        if (getpid() != *lf->api && kill(*lf->api, 0) == 0)
                 return;
-        }
 
-        if (getpid() != *lf->api && kill(*lf->api, 0) == 0) {
-                LOG_DBGF("Only IRMd can destroy %s.", LOCKFILE_NAME);
-                return;
-        }
+        munmap(lf->api, LF_SIZE);
 
-        if (munmap(lf->api, LF_SIZE) == -1)
-                LOG_DBGF("Couldn't unmap lockfile.");
-
-        if (shm_unlink(LOCKFILE_NAME) == -1)
-                LOG_DBGF("Failed to remove lockfile.");
+        shm_unlink(LOCKFILE_NAME);
 
         free(lf);
 }
 
 pid_t lockfile_owner(struct lockfile * lf)
 {
+        assert(lf);
+
         return *lf->api;
 }
