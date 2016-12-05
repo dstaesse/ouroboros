@@ -31,6 +31,7 @@
 static void usage(void)
 {
         printf("Usage: irm bind [OPERATION]\n"
+               "\n"
                "where OPERATION = {ap api ipcp help}\n");
 }
 
