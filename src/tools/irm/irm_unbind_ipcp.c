@@ -33,7 +33,8 @@
 static void usage(void)
 {
         printf("Usage: irm unbind ipcp <name>\n"
-               "          [name <name>, omit: remove all information.\n");
+               "                  [name <name> (default: remove all IPCP info)]"
+               "\n");
 }
 
 int do_unbind_ipcp(int argc, char ** argv)

@@ -21,8 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 500
+
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <ouroboros/irm.h>
 #include <ouroboros/errno.h>
@@ -47,6 +51,7 @@ int do_bind_ap(int argc, char ** argv)
         char * ap_name = NULL;
         uint16_t flags = 0;
         int ret = 0;
+        char * temp = NULL;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
@@ -54,8 +59,11 @@ int do_bind_ap(int argc, char ** argv)
                         ++argv;
                         --argc;
                 } else if (matches(*argv, "ap") == 0) {
-                        ap_name = *(argv + 1);
                         ++argv;
+                        temp = realpath(*argv, NULL);
+                        if (temp != NULL)
+                                *argv = temp;
+                        ap_name = *argv;
                         --argc;
                 } else if (strcmp(*argv, "auto") == 0) {
                         flags |= BIND_AP_AUTO;
@@ -91,6 +99,9 @@ int do_bind_ap(int argc, char ** argv)
                         ap_name);
                 return -1;
         }
+
+        if (temp != NULL)
+                free(temp);
 
         return ret;
 }

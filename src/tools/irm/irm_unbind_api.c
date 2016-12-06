@@ -33,7 +33,8 @@
 static void usage(void)
 {
         printf("Usage: irm unbind api <pid>\n"
-               "          [name <name>, omit: remove all AP-I info]\n");
+               "                  [name <name> (default: remove all AP-I info)]"
+               "\n");
 }
 
 int do_unbind_api(int argc, char ** argv)
@@ -41,7 +42,7 @@ int do_unbind_api(int argc, char ** argv)
         pid_t api = -1;
         char * name = NULL;
 
-        while (argc > 0) {
+        while (argc > 1) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                         ++argv;

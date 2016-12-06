@@ -32,7 +32,8 @@
 static void usage(void)
 {
         printf("Usage: irm unbind ap <ap>\n"
-               "          [name <name>, omit: remove all AP info]\n");
+               "                  [name <name> (default: remove all AP info)]"
+               "\n");
 }
 
 int do_unbind_ap(int argc, char ** argv)
