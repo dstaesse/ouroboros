@@ -36,8 +36,7 @@ enum ipcp_state {
         IPCP_INIT,
         IPCP_CONFIG,
         IPCP_BOOTING,
-        IPCP_RUNNING,
-        IPCP_DISCONNECTED,
+        IPCP_OPERATIONAL,
         IPCP_SHUTDOWN
 };
 

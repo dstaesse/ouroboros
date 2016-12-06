@@ -937,7 +937,7 @@ static int ribmgr_cdap_start(struct cdap * instance,
         int iid = 0;
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
-        if (ipcp_get_state() == IPCP_RUNNING &&
+        if (ipcp_get_state() == IPCP_OPERATIONAL &&
             strcmp(name, ENROLLMENT) == 0) {
                 LOG_DBG("New enrollment request.");
 

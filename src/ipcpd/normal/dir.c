@@ -98,7 +98,7 @@ int dir_name_reg(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_RUNNING) {
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("IPCP is not in RUNNING state.");
                 return -1;
@@ -143,7 +143,7 @@ int dir_name_unreg(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_RUNNING) {
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("IPCP is not in RUNNING state.");
                 return -1;
@@ -179,7 +179,7 @@ int dir_name_query(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_RUNNING) {
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
