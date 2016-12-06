@@ -108,7 +108,7 @@ static int normal_ipcp_enroll(char * dif_name)
         }
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
-        ipcp_set_state(IPCP_RUNNING);
+        ipcp_set_state(IPCP_OPERATIONAL);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
         /* FIXME: Remove once we obtain neighbors during enrollment */
@@ -149,7 +149,7 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
-        ipcp_set_state(IPCP_RUNNING);
+        ipcp_set_state(IPCP_OPERATIONAL);
         ipcpi.data->dif_name = conf->dif_name;
 
         pthread_rwlock_unlock(&ipcpi.state_lock);

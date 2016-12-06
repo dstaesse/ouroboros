@@ -130,7 +130,7 @@ static void * fmgr_nm1_acceptor(void * o)
         (void) o;
 
         while (true) {
-                ipcp_wait_state(IPCP_RUNNING, NULL);
+                ipcp_wait_state(IPCP_OPERATIONAL, NULL);
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -420,7 +420,7 @@ int fmgr_np1_alloc(int           fd,
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_RUNNING) {
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("IPCP is not enrolled yet.");
                 return -1; /* -ENOTINIT */
