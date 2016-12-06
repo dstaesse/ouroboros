@@ -1644,6 +1644,7 @@ int ro_subscribe(const char *        name,
                  struct ro_sub_ops * ops)
 {
         struct ro_sub * sub;
+        int sid;
 
         assert(name);
         assert(ops);
@@ -1664,19 +1665,21 @@ int ro_subscribe(const char *        name,
 
         pthread_mutex_lock(&rib.subs_lock);
 
-        sub->sid = bmp_allocate(rib.sids);
-        if (sub->sid < 0) {
+        sid = bmp_allocate(rib.sids);
+        if (sid < 0) {
                 pthread_mutex_unlock(&rib.subs_lock);
                 free(sub->name);
                 free(sub);
                 LOG_ERR("Failed to get sub id.");
+                return -1;
         }
+        sub->sid = sid;
 
         list_add(&sub->next, &rib.subs);
 
         pthread_mutex_unlock(&rib.subs_lock);
 
-        return 0;
+        return sid;
 }
 
 int ro_unsubscribe(int sid)

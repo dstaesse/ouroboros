@@ -163,15 +163,17 @@ int flat_init(void)
                 return -1;
         }
 
-        if (ro_create(name, &rattr, NULL, 0)) {
-                LOG_ERR("Could not create RO.");
-                pathname_destroy(name);
-                pthread_cond_destroy(&flat.cond);
-                pthread_mutex_destroy(&flat.lock);
-                ro_unsubscribe(flat.sid);
-                return -1;
+        if (!ro_exists(name)) {
+                rattr.enrol_sync = true;
+                if (ro_create(name, &rattr, NULL, 0)) {
+                        LOG_ERR("Could not create RO.");
+                        pathname_destroy(name);
+                        pthread_cond_destroy(&flat.cond);
+                        pthread_mutex_destroy(&flat.lock);
+                        ro_unsubscribe(flat.sid);
+                        return -1;
+                }
         }
-
         pathname_destroy(name);
 
         return 0;

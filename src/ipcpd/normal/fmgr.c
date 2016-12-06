@@ -143,7 +143,7 @@ static void * fmgr_nm1_acceptor(void * o)
 
                 fd = flow_accept(&ae_name, &qs);
                 if (fd < 0) {
-                        LOG_ERR("Failed to accept flow.");
+                        LOG_WARN("Flow accept failed.");
                         continue;
                 }
 
@@ -390,8 +390,8 @@ int fmgr_fini()
         for (i = 0; i < IRMD_MAX_FLOWS; i++) {
                 if (fmgr.nm1_flows[i] == NULL)
                         continue;
-                if (ribmgr_remove_flow(fmgr.nm1_flows[i]->fd))
-                    LOG_ERR("Failed to remove management flow.");
+                flow_dealloc(fmgr.nm1_flows[i]->fd);
+                free(fmgr.nm1_flows[i]);
         }
 
         pthread_rwlock_destroy(&fmgr.nm1_flows_lock);

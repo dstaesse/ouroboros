@@ -248,9 +248,6 @@ int main(int argc, char * argv[])
         if (frct_fini())
                 LOG_ERR("Failed to finalize FRCT.");
 
-        if (dir_fini())
-                LOG_ERR("Failed to finalize directory.");
-
         close_logfile();
 
         ap_fini();
