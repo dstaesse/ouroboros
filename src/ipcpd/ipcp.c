@@ -230,6 +230,11 @@ void * ipcp_main_loop(void * o)
         (void) o;
 
         while (true) {
+#ifdef __FreeBSD__
+                fd_set fds;
+                struct timeval timeout = {(IPCP_ACCEPT_TIMEOUT / 1000),
+                                          (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
+#endif
                 int fd = -1;
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
@@ -242,7 +247,12 @@ void * ipcp_main_loop(void * o)
                 pthread_rwlock_unlock(&ipcpi.state_lock);
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
-
+#ifdef __FreeBSD__
+                FD_ZERO(&fds);
+                FD_SET(ipcpi.sockfd, &fds);
+                if (select(ipcpi.sockfd, &fds, NULL, NULL, &timeout) <= 0)
+                        continue;
+#endif
                 lsockfd = accept(ipcpi.sockfd, 0, 0);
                 if (lsockfd < 0)
                         continue;

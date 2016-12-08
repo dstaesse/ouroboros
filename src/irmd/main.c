@@ -1804,6 +1804,11 @@ void * mainloop(void * o)
         (void) o;
 
         while (true) {
+#ifdef __FreeBSD__
+                fd_set fds;
+                struct timeval timeout = {(IRMD_ACCEPT_TIMEOUT / 1000),
+                                          (IRMD_ACCEPT_TIMEOUT % 1000) * 1000};
+#endif
                 int cli_sockfd;
                 irm_msg_t * msg;
                 ssize_t count;
@@ -1822,7 +1827,12 @@ void * mainloop(void * o)
                 pthread_rwlock_unlock(&irmd->state_lock);
 
                 ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
-
+#ifdef __FreeBSD__
+                FD_ZERO(&fds);
+                FD_SET(irmd->sockfd, &fds);
+                if (select(irmd->sockfd, &fds, NULL, NULL, &timeout) <= 0)
+                        continue;
+#endif
                 cli_sockfd = accept(irmd->sockfd, 0, 0);
                 if (cli_sockfd < 0)
                         continue;
