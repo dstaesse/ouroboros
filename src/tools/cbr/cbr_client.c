@@ -24,6 +24,25 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/time_utils.h>
 
+#include <signal.h>
+
+volatile bool stop;
+
+static void shutdown_client(int signo, siginfo_t * info, void * c)
+{
+        (void) info;
+        (void) c;
+
+        switch(signo) {
+        case SIGINT:
+        case SIGTERM:
+        case SIGHUP:
+                stop = true;
+        default:
+                return;
+        }
+}
+
 static void busy_wait_until(const struct timespec * deadline)
 {
         struct timespec now;
@@ -42,9 +61,10 @@ int client_main(char * server,
                 bool flood,
                 bool sleep)
 {
+        struct sigaction sig_act;
+
         int fd = 0;
         int result = 0;
-        bool stop = false;
         char buf[size];
         long seqnr = 0;
         long gap = size * 8.0 * (BILLION / (double) rate);
@@ -53,6 +73,20 @@ int client_main(char * server,
         struct timespec end;
         struct timespec intv = {(gap / BILLION), gap % BILLION};
         int ms;
+
+        stop = false;
+
+        memset(&sig_act, 0, sizeof sig_act);
+        sig_act.sa_sigaction = &shutdown_client;
+        sig_act.sa_flags = 0;
+
+        if (sigaction(SIGINT,  &sig_act, NULL) ||
+            sigaction(SIGTERM, &sig_act, NULL) ||
+            sigaction(SIGHUP,  &sig_act, NULL) ||
+            sigaction(SIGPIPE, &sig_act, NULL)) {
+                printf("Failed to install sighandler.\n");
+                return -1;
+        }
 
         printf("Client started, duration %d, rate %lu b/s, size %d B.\n",
                duration, rate, size);

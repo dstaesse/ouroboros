@@ -46,7 +46,7 @@ int             fds_index = 0;
 pthread_mutex_t fds_lock;
 pthread_cond_t  fds_signal;
 
-void shutdown_server(int signo, siginfo_t * info, void * c)
+static void shutdown_server(int signo, siginfo_t * info, void * c)
 {
         (void) info;
         (void) c;
@@ -61,7 +61,7 @@ void shutdown_server(int signo, siginfo_t * info, void * c)
         }
 }
 
-void handle_flow(int fd)
+static void handle_flow(int fd)
 {
         int count = 0;
         char buf[BUF_SIZE];
@@ -125,7 +125,7 @@ void handle_flow(int fd)
         flow_dealloc(fd);
 }
 
-void * worker(void * o)
+static void * worker(void * o)
 {
         int cli_fd;
 
@@ -153,7 +153,7 @@ void * worker(void * o)
         return 0;
 }
 
-void * listener(void * o)
+static void * listener(void * o)
 {
         int client_fd = 0;
         int response = 0;
