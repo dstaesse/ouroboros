@@ -54,9 +54,6 @@ struct c {
         double rtt_avg;
         double rtt_m2;
 
-        flow_set_t * flows;
-        fqueue_t *   fq;
-
         /* needs locking */
         struct timespec * times;
         pthread_mutex_t lock;

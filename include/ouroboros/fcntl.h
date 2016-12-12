@@ -23,6 +23,8 @@
 #ifndef OUROBOROS_FCNTL_H
 #define OUROBOROS_FCNTL_H
 
+#include <sys/time.h>
+
 /* same values as fcntl.h */
 #define FLOW_O_RDONLY   00000000
 #define FLOW_O_WRONLY   00000001
@@ -34,11 +36,18 @@
 
 #define FLOW_O_INVALID  (FLOW_O_WRONLY | FLOW_O_RDWR)
 
-#define FLOW_F_GETFL    00000001
-#define FLOW_F_SETFL    00000002
+int               flow_set_flags(int fd,
+                                 int flags);
 
-int     flow_cntl(int fd,
-                  int cmd,
-                  int oflags);
+int               flow_get_flags(int fd);
+
+int               flow_set_timeout(int               fd,
+                                   struct timespec * to);
+
+int               flow_get_timeout(int               fd,
+                                   struct timespec * to);
+
+int               flow_get_qosspec(int         fd,
+                                   qosspec_t * spec);
 
 #endif /* OUROBOROS_FCNTL_H */

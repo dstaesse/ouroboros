@@ -287,7 +287,6 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
                          const struct timespec * timeout)
 {
         struct timespec abstime;
-        int ret = 0;
         ssize_t idx = -1;
 
         assert(rb);
@@ -299,7 +298,6 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
                 pthread_mutex_consistent(rb->lock);
 #endif
         if (timeout != NULL) {
-                idx = -ETIMEDOUT;
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
                 ts_add(&abstime, timeout, &abstime);
         }
@@ -307,21 +305,17 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rb->lock);
 
-        while (shm_rbuff_empty(rb) && (ret != ETIMEDOUT)) {
+        while (shm_rbuff_empty(rb) && (idx != -ETIMEDOUT)) {
                 if (timeout != NULL)
-                        ret = pthread_cond_timedwait(rb->add,
-                                                     rb->lock,
-                                                     &abstime);
+                        idx = -pthread_cond_timedwait(rb->add,
+                                                      rb->lock,
+                                                      &abstime);
                 else
-                        ret = pthread_cond_wait(rb->add, rb->lock);
+                        idx = -pthread_cond_wait(rb->add, rb->lock);
 #ifndef __APPLE__
-                if (ret == EOWNERDEAD)
+                if (idx == -EOWNERDEAD)
                         pthread_mutex_consistent(rb->lock);
 #endif
-                if (ret == ETIMEDOUT) {
-                        idx = -ETIMEDOUT;
-                        break;
-                }
         }
 
         if (idx != -ETIMEDOUT) {

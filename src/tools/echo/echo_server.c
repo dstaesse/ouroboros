@@ -40,7 +40,7 @@ int server_main(void)
         int    client_fd = 0;
         char   buf[BUF_SIZE];
         ssize_t count = 0;
-        struct qos_spec qs;
+        qosspec_t qs;
 
         printf("Starting the server.\n");
 

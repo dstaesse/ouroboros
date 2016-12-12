@@ -203,7 +203,7 @@ struct cdap * cdap_create(struct cdap_ops * ops,
             ops->cdap_request == NULL)
                 return NULL;
 
-        flags = flow_cntl(fd, FLOW_F_GETFL, 0);
+        flags = flow_get_flags(fd);
         if (flags & FLOW_O_NONBLOCK)
                 return NULL;
 

@@ -85,7 +85,7 @@ static void handle_flow(int fd)
         alive = iv_start;
         ts_add(&iv_start, &intv, &iv_end);
 
-        flow_cntl(fd, FLOW_F_SETFL, FLOW_O_NONBLOCK);
+        flow_set_flags(fd, FLOW_O_NONBLOCK);
 
         while (!stop) {
                 clock_gettime(CLOCK_REALTIME, &now);
@@ -157,7 +157,7 @@ static void * listener(void * o)
 {
         int client_fd = 0;
         int response = 0;
-        struct qos_spec qs;
+        qosspec_t qs;
 
         (void) o;
 

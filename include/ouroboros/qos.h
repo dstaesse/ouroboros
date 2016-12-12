@@ -26,9 +26,9 @@
 #include <stdint.h>
 
 /* FIXME: may need revision */
-struct qos_spec {
+typedef struct qos_spec {
         uint32_t delay;
         uint32_t jitter;
-};
+} qosspec_t;
 
 #endif

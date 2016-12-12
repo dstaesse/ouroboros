@@ -102,7 +102,7 @@ void * accept_thread(void * o)
 {
         int fd = 0;
         struct timespec now = {0, 0};
-        struct qos_spec qs;
+        qosspec_t qs;
 
         (void) o;
 

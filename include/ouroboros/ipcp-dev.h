@@ -21,10 +21,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <unistd.h>
-#include <time.h>
-
-#include <ouroboros/qos.h>
 #include <ouroboros/shm_rdrbuff.h>
 
 #ifndef OUROBOROS_IPCP_DEV_H
@@ -48,5 +44,8 @@ int  ipcp_flow_write(int                  fd,
 void ipcp_flow_fini(int fd);
 
 void ipcp_flow_del(struct shm_du_buff * sdb);
+
+int  ipcp_flow_get_qoscube(int             fd,
+                           enum qos_cube * cube);
 
 #endif /* OUROBOROS_IPCP_DEV_H */

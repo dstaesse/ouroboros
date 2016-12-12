@@ -1125,16 +1125,16 @@ static int flow_alloc_resp(pid_t n_api,
         return ret;
 }
 
-static struct irm_flow * flow_alloc(pid_t  api,
-                                    char * dst_name,
-                                    char * src_ae_name,
-                                    struct qos_spec * qos)
+static struct irm_flow * flow_alloc(pid_t       api,
+                                    char *      dst_name,
+                                    char *      src_ae_name,
+                                    qosspec_t * qos)
 {
         struct irm_flow * f;
         pid_t ipcp;
         int port_id;
 
-        /* FIXME: Map qos_spec to qos_cube */
+        /* FIXME: Map qosspec to qos_cube */
         (void) qos;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
