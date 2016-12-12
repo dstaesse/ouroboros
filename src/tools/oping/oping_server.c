@@ -115,7 +115,7 @@ void * accept_thread(void * o)
 {
         int fd = 0;
         struct timespec now = {0, 0};
-        struct qos_spec qs;
+        qosspec_t qs;
 
         (void) o;
 
@@ -143,7 +143,7 @@ void * accept_thread(void * o)
                 server.times[fd] = now;
                 pthread_mutex_unlock(&server.lock);
 
-                flow_cntl(fd, FLOW_F_SETFL, FLOW_O_NONBLOCK | FLOW_O_RDWR);
+                flow_set_flags(fd, FLOW_O_NONBLOCK | FLOW_O_RDWR);
         }
 
         return (void *) 0;

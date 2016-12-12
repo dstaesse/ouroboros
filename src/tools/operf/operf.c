@@ -47,9 +47,6 @@ struct c {
         unsigned long sent;
         unsigned long rcvd;
 
-        flow_set_t * flows;
-        fqueue_t *   fq;
-
         pthread_t reader_pt;
         pthread_t writer_pt;
 } client;

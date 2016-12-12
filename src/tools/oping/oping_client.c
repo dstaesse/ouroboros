@@ -60,56 +60,54 @@ void * reader(void * o)
 
         char buf[OPING_BUF_SIZE];
         struct oping_msg * msg = (struct oping_msg *) buf;
-        int fd = 0;
+        int fd = *((int *) o);
         int msg_len = 0;
         double ms = 0;
         double d = 0;
 
-        (void) o;
+        flow_set_timeout(fd, &timeout);
 
-        /* FIXME: use flow timeout option once we have it */
-        while (client.rcvd != client.count
-               && (flow_event_wait(client.flows, client.fq, &timeout)
-                   != -ETIMEDOUT)) {
-                while ((fd = fqueue_next(client.fq)) >= 0) {
-                        msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
-                        if (msg_len < 0)
-                                continue;
+        while (client.rcvd != client.count) {
+                msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
+                if (msg_len == -ETIMEDOUT)
+                        break;
 
-                        if (ntohl(msg->type) != ECHO_REPLY) {
-                                printf("Invalid message on fd %d.\n", fd);
-                                continue;
-                        }
+                if (msg_len < 0)
+                        continue;
 
-                        if (ntohl(msg->id) >= client.count) {
-                                printf("Invalid id.\n");
-                                continue;
-                        }
-
-                        ++client.rcvd;
-
-                        clock_gettime(CLOCK_REALTIME, &now);
-
-                        pthread_mutex_lock(&client.lock);
-                        ms = ts_diff_us(&client.times[ntohl(msg->id)], &now)
-                                / 1000.0;
-                        pthread_mutex_unlock(&client.lock);
-
-                        printf("%d bytes from %s: seq=%d time=%.3f ms\n",
-                               msg_len,
-                               client.s_apn,
-                               ntohl(msg->id),
-                               ms);
-
-                        if (ms < client.rtt_min)
-                                client.rtt_min = ms;
-                        if (ms > client.rtt_max)
-                                client.rtt_max = ms;
-
-                        d = (ms - client.rtt_avg);
-                        client.rtt_avg += d  / (float) client.rcvd;
-                        client.rtt_m2 += d * (ms - client.rtt_avg);
+                if (ntohl(msg->type) != ECHO_REPLY) {
+                        printf("Invalid message on fd %d.\n", fd);
+                        continue;
                 }
+
+                if (ntohl(msg->id) >= client.count) {
+                        printf("Invalid id.\n");
+                        continue;
+                }
+
+                ++client.rcvd;
+
+                clock_gettime(CLOCK_REALTIME, &now);
+
+                pthread_mutex_lock(&client.lock);
+                ms = ts_diff_us(&client.times[ntohl(msg->id)], &now)
+                        / 1000.0;
+                pthread_mutex_unlock(&client.lock);
+
+                printf("%d bytes from %s: seq=%d time=%.3f ms\n",
+                       msg_len,
+                       client.s_apn,
+                       ntohl(msg->id),
+                       ms);
+
+                if (ms < client.rtt_min)
+                        client.rtt_min = ms;
+                if (ms > client.rtt_max)
+                        client.rtt_max = ms;
+
+                d = (ms - client.rtt_avg);
+                client.rtt_avg += d  / (float) client.rcvd;
+                client.rtt_m2 += d * (ms - client.rtt_avg);
         }
 
         return (void *) 0;
@@ -164,20 +162,8 @@ void * writer(void * o)
 
 static int client_init(void)
 {
-        client.flows = flow_set_create();
-        if (client.flows == NULL)
-                return -ENOMEM;
-
-        client.fq = fqueue_create();
-        if (client.fq == NULL) {
-                flow_set_destroy(client.flows);
-                return -ENOMEM;
-        }
-
         client.times = malloc(sizeof(struct timespec) * client.count);
         if (client.times == NULL) {
-                flow_set_destroy(client.flows);
-                fqueue_destroy(client.fq);
                 pthread_mutex_unlock(&client.lock);
                 return -ENOMEM;
         }
@@ -197,12 +183,6 @@ static int client_init(void)
 
 void client_fini(void)
 {
-        if (client.flows != NULL)
-                flow_set_destroy(client.flows);
-
-        if (client.fq != NULL)
-                fqueue_destroy(client.fq);
-
         if (client.times != NULL)
                 free(client.times);
 }
@@ -235,17 +215,12 @@ int client_main(void)
 
         fd = flow_alloc(client.s_apn, NULL, NULL);
         if (fd < 0) {
-                flow_set_destroy(client.flows);
-                fqueue_destroy(client.fq);
                 printf("Failed to allocate flow.\n");
                 return -1;
         }
 
-        flow_set_add(client.flows, fd);
-
         if (flow_alloc_res(fd)) {
                 printf("Flow allocation refused.\n");
-                flow_set_del(client.flows, fd);
                 flow_dealloc(fd);
                 client_fini();
                 return -1;
@@ -255,7 +230,7 @@ int client_main(void)
 
         clock_gettime(CLOCK_REALTIME, &tic);
 
-        pthread_create(&client.reader_pt, NULL, reader, NULL);
+        pthread_create(&client.reader_pt, NULL, reader, &fd);
         pthread_create(&client.writer_pt, NULL, writer, &fd);
 
         pthread_join(client.writer_pt, NULL);
@@ -282,8 +257,6 @@ int client_main(void)
                 else
                         printf("NaN ms\n");
         }
-
-        flow_set_del(client.flows, fd);
 
         flow_dealloc(fd);
 

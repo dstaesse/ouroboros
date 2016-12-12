@@ -123,9 +123,9 @@ static int add_np1_fd(int           fd,
 
 static void * fmgr_nm1_acceptor(void * o)
 {
-        int    fd;
-        char * ae_name;
-        struct qos_spec qs;
+        int       fd;
+        char *    ae_name;
+        qosspec_t qs;
 
         (void) o;
 
