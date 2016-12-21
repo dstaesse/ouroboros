@@ -30,6 +30,7 @@ set(SOURCE_FILES
   bitmap.c
   cdap.c
   dev.c
+  hashtable.c
   irm.c
   list.c
   lockfile.c
