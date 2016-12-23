@@ -932,10 +932,10 @@ static int eth_llc_ipcp_name_query(char * name)
         return ret;
 }
 
-static int eth_llc_ipcp_flow_alloc(int           fd,
-                                   char *        dst_name,
-                                   char *        src_ae_name,
-                                   enum qos_cube qos)
+static int eth_llc_ipcp_flow_alloc(int       fd,
+                                   char *    dst_name,
+                                   char *    src_ae_name,
+                                   qoscube_t qos)
 {
         uint8_t ssap = 0;
         uint8_t r_addr[MAC_SIZE];

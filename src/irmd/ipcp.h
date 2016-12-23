@@ -42,17 +42,20 @@ int   ipcp_bootstrap(pid_t              api,
 
 int   ipcp_name_reg(pid_t  api,
                     char * name);
+
 int   ipcp_name_unreg(pid_t  api,
                       char * name);
+
 int   ipcp_name_query(pid_t api,
                       char * name);
 
-int   ipcp_flow_alloc(pid_t         api,
-                      int           port_id,
-                      pid_t         n_api,
-                      char *        dst_name,
-                      char *        src_ae_name,
-                      enum qos_cube qos);
+int   ipcp_flow_alloc(pid_t     api,
+                      int       port_id,
+                      pid_t     n_api,
+                      char *    dst_name,
+                      char *    src_ae_name,
+                      qoscube_t qos);
+
 int   ipcp_flow_alloc_resp(pid_t api,
                            int   port_id,
                            pid_t n_api,
