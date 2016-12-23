@@ -24,6 +24,7 @@
 #ifndef OUROBOROS_LOGS_H
 #define OUROBOROS_LOGS_H
 
+#include <unistd.h>
 #include <stdio.h>
 
 #ifndef OUROBOROS_PREFIX
@@ -55,8 +56,10 @@ extern FILE * logfile;
                                 FMT ANSI_COLOR_RESET "\n", ##ARGS);     \
                         fflush(logfile);                                \
                 } else {                                                \
-                        printf(CLR OUROBOROS_PREFIX "(" LVL "): "       \
-                               FMT ANSI_COLOR_RESET "\n", ##ARGS);      \
+                        printf(CLR "==%05d== "                          \
+                               OUROBOROS_PREFIX "(" LVL "): "           \
+                               FMT ANSI_COLOR_RESET "\n", getpid(),     \
+                               ##ARGS);                                 \
                 }                                                       \
         } while (0)
 
