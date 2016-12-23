@@ -30,6 +30,8 @@
 
 #define F_SYNC 0x0001
 
+#define INVALID_CDAP_KEY -1
+
 enum cdap_opcode {
         CDAP_READ = 0,
         CDAP_WRITE,
@@ -41,40 +43,36 @@ enum cdap_opcode {
 
 struct cdap;
 
-/* Callback functions that work on the application's RIB */
-struct cdap_ops {
-        int (* cdap_request)(struct cdap *    instance,
-                             int              invoke_id,
-                             enum cdap_opcode opcode,
-                             char *           name,
-                             uint8_t *        data,
-                             size_t           len,
-                             uint32_t         flags);
-
-        int (* cdap_reply)(struct cdap * instance,
-                           int           invoke_id,
-                           int           result,
-                           uint8_t *     data,
-                           size_t        len);
-};
+typedef int32_t cdap_key_t;
 
 /* Assumes flow is blocking */
-struct cdap * cdap_create(struct cdap_ops * ops,
-                          int               fd);
+struct cdap * cdap_create(int fd);
+
 int           cdap_destroy(struct cdap * instance);
 
-/* Returns a positive invoke-id on success to be used in the callback */
-int           cdap_send_request(struct cdap *    instance,
+cdap_key_t    cdap_request_send(struct cdap *    instance,
                                 enum cdap_opcode code,
                                 char *           name,
                                 uint8_t *        data,
                                 size_t           len,
                                 uint32_t         flags);
 
-/* Can only be called following a callback function */
-int           cdap_send_reply(struct cdap * instance,
-                              int           invoke_id,
+int           cdap_reply_wait(struct cdap * instance,
+                              cdap_key_t    key,
+                              uint8_t **    data,
+                              size_t *      len);
+
+cdap_key_t    cdap_request_wait(struct cdap *      instance,
+                                enum cdap_opcode * opcode,
+                                char **            name,
+                                uint8_t **         data,
+                                size_t *           len,
+                                uint32_t *         flags);
+
+int           cdap_reply_send(struct cdap * instance,
+                              cdap_key_t    key,
                               int           result,
                               uint8_t *     data,
                               size_t        len);
-#endif
+
+#endif /* OUROBOROS_CDAP_H */

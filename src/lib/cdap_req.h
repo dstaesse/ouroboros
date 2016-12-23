@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Normal IPCP - RIB Manager - CDAP request
+ * CDAP - CDAP request management
  *
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
@@ -21,12 +21,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_CDAP_REQUEST_H
-#define OUROBOROS_IPCPD_NORMAL_CDAP_REQUEST_H
+#ifndef OUROBOROS_CDAP_REQ_H
+#define OUROBOROS_CDAP_REQ_H
 
 #include <ouroboros/config.h>
 #include <ouroboros/cdap.h>
 #include <ouroboros/list.h>
+#include <ouroboros/utils.h>
 
 #include <pthread.h>
 
@@ -38,31 +39,31 @@ enum creq_state {
         REQ_DESTROY
 };
 
-struct cdap_request {
+struct cdap_req {
         struct list_head next;
 
-        enum cdap_opcode code;
-        char *           name;
-        int              invoke_id;
-        struct cdap *    instance;
+        struct timespec  birth;
 
-        int              result;
+        cdap_key_t       key;
+
+        int              response;
+        buffer_t         data;
 
         enum creq_state  state;
         pthread_cond_t   cond;
         pthread_mutex_t  lock;
 };
 
-struct cdap_request * cdap_request_create(enum cdap_opcode code,
-                                          char *           name,
-                                          int              invoke_id,
-                                          struct cdap *    instance);
+struct cdap_req * cdap_req_create(cdap_key_t key);
 
-void                  cdap_request_destroy(struct cdap_request * creq);
+void              cdap_req_destroy(struct cdap_req * creq);
 
-int                   cdap_request_wait(struct cdap_request * creq);
+int               cdap_req_wait(struct cdap_req * creq);
 
-void                  cdap_request_respond(struct cdap_request * creq,
-                                           int                   response);
+void              cdap_req_respond(struct cdap_req * creq,
+                                   int               response,
+                                   buffer_t          data);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_CDAP_REQUEST_H */
+enum creq_state   cdap_req_get_state(struct cdap_req * creq);
+
+#endif /* OUROBOROS_CDAP_REQ_H */
