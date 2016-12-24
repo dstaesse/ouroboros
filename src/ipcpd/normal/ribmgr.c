@@ -1053,6 +1053,8 @@ static void * cdap_req_handler(void * o)
 
                 ro_msg__free_unpacked(msg, NULL);
         }
+
+        return (void *) 0;
 }
 
 int ribmgr_add_flow(int fd)
