@@ -214,6 +214,7 @@ static void reset_flow(int fd)
         ai.flows[fd].oflags = 0;
         ai.flows[fd].api = -1;
         ai.flows[fd].timesout = false;
+        ai.flows[fd].qos = QOS_CUBE_BE;
 }
 
 int ap_init(char * ap_name)
@@ -268,6 +269,7 @@ int ap_init(char * ap_name)
                 ai.flows[i].oflags   = 0;
                 ai.flows[i].api      = -1;
                 ai.flows[i].timesout = false;
+                ai.flows[i].qos      = QOS_CUBE_BE;
         }
 
         ai.ports = malloc(sizeof(*ai.ports) * IRMD_MAX_FLOWS);
