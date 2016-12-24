@@ -133,9 +133,12 @@ int flat_init(void)
 {
         struct ro_attr     rattr;
         pthread_condattr_t cattr;
+        struct timespec    t;
         char *             name;
 
-        srand(time(NULL));
+        clock_gettime(CLOCK_REALTIME, &t);
+
+        srand(t.tv_nsec);
         flat.addr_in_use = false;
 
         ro_attr_init(&rattr);
