@@ -49,6 +49,7 @@
 #define IRMD_MAX_FLOWS         4096
 #define IRMD_THREADPOOL_SIZE   5
 #define IPCPD_THREADPOOL_SIZE  3
+#define IPCPD_MAX_CONNS        IRMD_MAX_FLOWS
 #define LOG_DIR                "/@LOG_DIR@/"
 #define PTHREAD_COND_CLOCK     CLOCK_MONOTONIC
 #define PFT_SIZE               1 << 12

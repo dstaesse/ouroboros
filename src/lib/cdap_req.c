@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016
  *
- * Normal IPCP - RIB Manager - CDAP request
+ * CDAP - CDAP request management
  *
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
@@ -25,27 +25,25 @@
 #include <ouroboros/time_utils.h>
 #include <ouroboros/errno.h>
 
-#include "cdap_request.h"
+#include "cdap_req.h"
 
 #include <stdlib.h>
+#include <assert.h>
 
-struct cdap_request * cdap_request_create(enum cdap_opcode code,
-                                          char *           name,
-                                          int              invoke_id,
-                                          struct cdap *    instance)
+struct cdap_req * cdap_req_create(cdap_key_t key)
 {
-        struct cdap_request * creq = malloc(sizeof(*creq));
+        struct cdap_req * creq = malloc(sizeof(*creq));
         pthread_condattr_t cattr;
 
         if (creq == NULL)
                 return NULL;
 
-        creq->code = code;
-        creq->name = name;
-        creq->invoke_id = invoke_id;
-        creq->instance = instance;
-        creq->state = REQ_INIT;
-        creq->result = -1;
+        creq->key = key;
+        creq->state     = REQ_INIT;
+
+        creq->response = -1;
+        creq->data.data = NULL;
+        creq->data.len  = 0;
 
         pthread_condattr_init(&cattr);
 #ifndef __APPLE__
@@ -56,13 +54,14 @@ struct cdap_request * cdap_request_create(enum cdap_opcode code,
 
         INIT_LIST_HEAD(&creq->next);
 
+        clock_gettime(PTHREAD_COND_CLOCK, &creq->birth);
+
         return creq;
 }
 
-void cdap_request_destroy(struct cdap_request * creq)
+void cdap_req_destroy(struct cdap_req * creq)
 {
-        if (creq == NULL)
-                return;
+        assert(creq);
 
         pthread_mutex_lock(&creq->lock);
 
@@ -87,24 +86,19 @@ void cdap_request_destroy(struct cdap_request * creq)
         pthread_cond_destroy(&creq->cond);
         pthread_mutex_destroy(&creq->lock);
 
-        if (creq->name != NULL)
-                free(creq->name);
-
         free(creq);
 }
 
-int cdap_request_wait(struct cdap_request * creq)
+int cdap_req_wait(struct cdap_req * creq)
 {
         struct timespec timeout = {(CDAP_REPLY_TIMEOUT / 1000),
                                    (CDAP_REPLY_TIMEOUT % 1000) * MILLION};
         struct timespec abstime;
         int ret = -1;
 
-        if (creq == NULL)
-                return -EINVAL;
+        assert(creq);
 
-        clock_gettime(CLOCK_REALTIME, &abstime);
-        ts_add(&abstime, &timeout, &abstime);
+        ts_add(&creq->birth, &timeout, &abstime);
 
         pthread_mutex_lock(&creq->lock);
 
@@ -118,9 +112,8 @@ int cdap_request_wait(struct cdap_request * creq)
         while (creq->state == REQ_PENDING) {
                 if ((ret = -pthread_cond_timedwait(&creq->cond,
                                                    &creq->lock,
-                                                   &abstime)) == -ETIMEDOUT) {
+                                                   &abstime)) == -ETIMEDOUT)
                         break;
-                }
         }
 
         if (creq->state == REQ_DESTROY)
@@ -134,10 +127,9 @@ int cdap_request_wait(struct cdap_request * creq)
         return ret;
 }
 
-void cdap_request_respond(struct cdap_request * creq, int response)
+void cdap_req_respond(struct cdap_req * creq, int response, buffer_t data)
 {
-        if (creq == NULL)
-                return;
+        assert(creq);
 
         pthread_mutex_lock(&creq->lock);
 
@@ -146,8 +138,10 @@ void cdap_request_respond(struct cdap_request * creq, int response)
                 return;
         }
 
-        creq->state = REQ_RESPONSE;
-        creq->result = response;
+        creq->state    = REQ_RESPONSE;
+        creq->response = response;
+        creq->data     = data;
+
         pthread_cond_broadcast(&creq->cond);
 
         while (creq->state == REQ_RESPONSE)

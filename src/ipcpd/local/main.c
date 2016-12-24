@@ -217,10 +217,10 @@ static int ipcp_local_name_query(char * name)
         return ret;
 }
 
-static int ipcp_local_flow_alloc(int           fd,
-                                 char *        dst_name,
-                                 char *        src_ae_name,
-                                 enum qos_cube qos)
+static int ipcp_local_flow_alloc(int       fd,
+                                 char *    dst_name,
+                                 char *    src_ae_name,
+                                 qoscube_t qos)
 {
         int out_fd = -1;
 

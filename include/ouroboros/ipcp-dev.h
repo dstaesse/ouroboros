@@ -45,7 +45,7 @@ void ipcp_flow_fini(int fd);
 
 void ipcp_flow_del(struct shm_du_buff * sdb);
 
-int  ipcp_flow_get_qoscube(int             fd,
-                           enum qos_cube * cube);
+int  ipcp_flow_get_qoscube(int         fd,
+                           qoscube_t * cube);
 
 #endif /* OUROBOROS_IPCP_DEV_H */

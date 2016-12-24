@@ -945,10 +945,10 @@ static int ipcp_udp_name_query(char * name)
         return 0;
 }
 
-static int ipcp_udp_flow_alloc(int           fd,
-                               char *        dst_name,
-                               char *        src_ae_name,
-                               enum qos_cube qos)
+static int ipcp_udp_flow_alloc(int       fd,
+                               char *    dst_name,
+                               char *    src_ae_name,
+                               qoscube_t qos)
 {
         struct sockaddr_in r_saddr; /* server address */
         struct sockaddr_in f_saddr; /* flow */

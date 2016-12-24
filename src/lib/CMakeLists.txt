@@ -29,6 +29,7 @@ set(SOURCE_FILES
   # Add source files here
   bitmap.c
   cdap.c
+  cdap_req.c
   dev.c
   hashtable.c
   irm.c

@@ -326,12 +326,12 @@ int ipcp_name_query(pid_t api,
         return ret;
 }
 
-int ipcp_flow_alloc(pid_t         api,
-                    int           port_id,
-                    pid_t         n_api,
-                    char *        dst_name,
-                    char *        src_ae_name,
-                    enum qos_cube qos)
+int ipcp_flow_alloc(pid_t     api,
+                    int       port_id,
+                    pid_t     n_api,
+                    char *    dst_name,
+                    char *    src_ae_name,
+                    qoscube_t qos)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;

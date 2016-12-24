@@ -134,7 +134,7 @@ struct flow {
         struct shm_flow_set * set;
         int                   port_id;
         int                   oflags;
-        enum qos_cube         qos;
+        qoscube_t             qos;
 
         pid_t                 api;
 
@@ -654,9 +654,8 @@ int flow_dealloc(int fd)
         pthread_rwlock_unlock(&ai.data_lock);
 
         recv_msg = send_recv_irm_msg_b(&msg);
-        if (recv_msg == NULL) {
+        if (recv_msg == NULL)
                 return -1;
-        }
 
         if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -1435,11 +1434,10 @@ int ipcp_flow_fini(int fd)
         pthread_rwlock_unlock(&ai.data_lock);
 
         shm_rbuff_fini(rb);
-
         return 0;
 }
 
-int ipcp_flow_get_qoscube(int fd, enum qos_cube * cube)
+int ipcp_flow_get_qoscube(int fd, qoscube_t * cube)
 {
         if (fd < 0 || fd >= AP_MAX_FLOWS || cube == NULL)
                 return -EINVAL;
