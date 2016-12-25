@@ -238,12 +238,22 @@ uint64_t flat_address(void)
                 }
 
                 pthread_mutex_lock(&flat.lock);
+
+                if (ro_exists(ro_name)) {
+                        pthread_mutex_unlock(&flat.lock);
+                        free(ro_name);
+                        free(buf);
+                        continue;
+                }
+
+
                 if (ro_create(ro_name, &attr, buf, sizeof(*msg))) {
                         pthread_mutex_unlock(&flat.lock);
                         free(ro_name);
                         free(buf);
                         return INVALID_ADDR;
                 }
+
                 free(ro_name);
 
                 while (flat.addr_in_use == false) {
@@ -253,6 +263,7 @@ uint64_t flat_address(void)
                         if (ret == -ETIMEDOUT)
                                 break;
                 }
+
                 pthread_mutex_unlock(&flat.lock);
         }
 
