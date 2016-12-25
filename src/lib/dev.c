@@ -101,7 +101,7 @@ static void port_set_state(struct port * p, enum port_state state)
         pthread_mutex_unlock(&p->state_lock);
 }
 
-enum port_state port_wait_assign(struct port * p)
+static enum port_state port_wait_assign(struct port * p)
 {
         enum port_state state;
 
@@ -112,7 +112,7 @@ enum port_state port_wait_assign(struct port * p)
                 return -1;
         }
 
-        while (!(p->state == PORT_ID_ASSIGNED || p->state == PORT_DESTROY))
+        while (p->state == PORT_ID_PENDING)
                 pthread_cond_wait(&p->state_cond, &p->state_lock);
 
         if (p->state == PORT_DESTROY) {
@@ -214,6 +214,7 @@ static void reset_flow(int fd)
         ai.flows[fd].oflags = 0;
         ai.flows[fd].api = -1;
         ai.flows[fd].timesout = false;
+        ai.flows[fd].qos = QOS_CUBE_BE;
 }
 
 int ap_init(char * ap_name)
@@ -268,6 +269,7 @@ int ap_init(char * ap_name)
                 ai.flows[i].oflags   = 0;
                 ai.flows[i].api      = -1;
                 ai.flows[i].timesout = false;
+                ai.flows[i].qos      = QOS_CUBE_BE;
         }
 
         ai.ports = malloc(sizeof(*ai.ports) * IRMD_MAX_FLOWS);
@@ -311,16 +313,17 @@ void ap_fini()
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         for (i = 0; i < AP_MAX_FLOWS; ++i) {
-                if (ai.flows[i].rx_rb != NULL) {
+                if (ai.flows[i].port_id != -1) {
                         ssize_t idx;
                         while ((idx = shm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
                                 shm_rdrbuff_remove(ai.rdrb, idx);
+                        port_set_state(&ai.ports[ai.flows[i].port_id],
+                                       PORT_NULL);
+                        reset_flow(i);
                 }
-                reset_flow(i);
         }
 
         for (i = 0; i < IRMD_MAX_FLOWS; ++i) {
-                ai.ports[i].state = PORT_NULL;
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
                 pthread_cond_destroy(&ai.ports[i].state_cond);
         }
@@ -1285,7 +1288,6 @@ int ipcp_flow_req_arr(pid_t  api, char * dst_name, char * src_ae_name)
         if (ai.flows[fd].tx_rb == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 reset_flow(fd);
-                port_destroy(&ai.ports[port_id]);
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 return -1;
