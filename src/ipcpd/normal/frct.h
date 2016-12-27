@@ -33,13 +33,13 @@ int         frct_init(void);
 
 int         frct_fini(void);
 
-cep_id_t    frct_i_create(uint64_t      address,
-                          buffer_t *    buf,
-                          enum qos_cube cube);
+cep_id_t    frct_i_create(uint64_t   address,
+                          buffer_t * buf,
+                          qoscube_t  cube);
 
-int         frct_i_accept(cep_id_t      id,
-                          buffer_t *    buf,
-                          enum qos_cube cube);
+int         frct_i_accept(cep_id_t   id,
+                          buffer_t * buf,
+                          qoscube_t  cube);
 
 int         frct_i_destroy(cep_id_t   id,
                            buffer_t * buf);

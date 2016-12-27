@@ -43,7 +43,7 @@ struct frct_i {
         uint32_t cep_id;
         uint64_t r_address;
         uint32_t r_cep_id;
-        enum qos_cube cube;
+        qoscube_t cube;
         uint64_t seqno;
 
         enum conn_state state;
@@ -217,9 +217,9 @@ static void destroy_frct_i(struct frct_i * instance)
         free(instance);
 }
 
-cep_id_t frct_i_create(uint64_t      address,
-                       buffer_t *    buf,
-                       enum qos_cube cube)
+cep_id_t frct_i_create(uint64_t   address,
+                       buffer_t * buf,
+                       qoscube_t  cube)
 {
         struct frct_i * instance;
         struct pci pci;
@@ -255,9 +255,9 @@ cep_id_t frct_i_create(uint64_t      address,
         return id;
 }
 
-int frct_i_accept(cep_id_t       id,
-                  buffer_t *     buf,
-                  enum qos_cube  cube)
+int frct_i_accept(cep_id_t   id,
+                  buffer_t * buf,
+                  qoscube_t  cube)
 {
         struct pci pci;
         struct frct_i * instance;
