@@ -19,7 +19,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-
 #define OUROBOROS_PREFIX "ipcpd/ipcp"
 
 #include <ouroboros/config.h>
@@ -37,174 +36,7 @@
 #include <sys/socket.h>
 #include <stdlib.h>
 
-int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
-{
-        pthread_condattr_t cattr;
-        int t;
-
-        struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
-                             (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
-
-        ipcpi.irmd_fd = -1;
-        ipcpi.state   = IPCP_INIT;
-
-        ipcpi.threadpool = malloc(sizeof(pthread_t) * IPCPD_THREADPOOL_SIZE);
-        if (ipcpi.threadpool == NULL) {
-                return -ENOMEM;
-        }
-
-        ipcpi.sock_path = ipcp_sock_path(getpid());
-        if (ipcpi.sock_path == NULL) {
-                free(ipcpi.threadpool);
-                return -1;
-        }
-
-        ipcpi.sockfd = server_socket_open(ipcpi.sock_path);
-        if (ipcpi.sockfd < 0) {
-                LOG_ERR("Could not open server socket.");
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                return -1;
-        }
-
-        if (setsockopt(ipcpi.sockfd, SOL_SOCKET, SO_RCVTIMEO,
-                       (void *) &tv, sizeof(tv)))
-                LOG_WARN("Failed to set timeout on socket.");
-
-        ipcpi.ops = ops;
-
-        ipcpi.data = ipcp_data_create();
-        if (ipcpi.data == NULL) {
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                return -ENOMEM;
-        }
-
-        ipcp_data_init(ipcpi.data, type);
-
-        pthread_rwlock_init(&ipcpi.state_lock, NULL);
-        pthread_mutex_init(&ipcpi.state_mtx, NULL);
-        pthread_condattr_init(&cattr);
-#ifndef __APPLE__
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
-#endif
-        pthread_cond_init(&ipcpi.state_cond, &cattr);
-
-        for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
-                pthread_create(&ipcpi.threadpool[t], NULL,
-                               ipcp_main_loop, NULL);
-
-        return 0;
-}
-
-void ipcp_fini()
-{
-        int t;
-
-        for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
-                pthread_join(ipcpi.threadpool[t], NULL);
-
-        close(ipcpi.sockfd);
-        if (unlink(ipcpi.sock_path))
-                LOG_DBG("Could not unlink %s.", ipcpi.sock_path);
-
-        free(ipcpi.sock_path);
-        free(ipcpi.threadpool);
-
-        ipcp_data_destroy(ipcpi.data);
-        pthread_cond_destroy(&ipcpi.state_cond);
-        pthread_rwlock_destroy(&ipcpi.state_lock);
-}
-
-void ipcp_set_state(enum ipcp_state state)
-{
-        pthread_mutex_lock(&ipcpi.state_mtx);
-
-        ipcpi.state = state;
-
-        pthread_cond_broadcast(&ipcpi.state_cond);
-        pthread_mutex_unlock(&ipcpi.state_mtx);
-}
-
-enum ipcp_state ipcp_get_state()
-{
-        enum ipcp_state state;
-
-        pthread_mutex_lock(&ipcpi.state_mtx);
-
-        state = ipcpi.state;
-
-        pthread_mutex_unlock(&ipcpi.state_mtx);
-
-        return state;
-}
-
-int ipcp_wait_state(enum ipcp_state         state,
-                    const struct timespec * timeout)
-{
-        struct timespec abstime;
-        int ret = 0;
-
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-        ts_add(&abstime, timeout, &abstime);
-
-        pthread_mutex_lock(&ipcpi.state_mtx);
-
-        while (ipcpi.state != state && ipcpi.state != IPCP_SHUTDOWN) {
-                if (timeout == NULL)
-                        ret = -pthread_cond_wait(&ipcpi.state_cond,
-                                                 &ipcpi.state_mtx);
-                else
-                        ret = -pthread_cond_timedwait(&ipcpi.state_cond,
-                                                      &ipcpi.state_mtx,
-                                                      &abstime);
-        }
-
-        pthread_mutex_unlock(&ipcpi.state_mtx);
-
-        return ret;
-}
-
-int ipcp_parse_arg(int argc, char * argv[])
-{
-        char * log_file;
-        size_t len = 0;
-
-        if (!(argc == 3 || argc == 2))
-                return -1;
-
-        /* argument 1: api of irmd */
-        if (atoi(argv[1]) == 0)
-                return -1;
-
-        if (argv[2] == NULL)
-                return 0;
-
-        len += strlen(INSTALL_PREFIX);
-        len += strlen(LOG_DIR);
-        len += strlen(argv[2]);
-
-        log_file = malloc(len + 1);
-        if (log_file == NULL) {
-                LOG_ERR("Failed to malloc");
-                return -1;
-        }
-
-        strcpy(log_file, INSTALL_PREFIX);
-        strcat(log_file, LOG_DIR);
-        strcat(log_file, argv[2]);
-        log_file[len] = '\0';
-
-        if (set_logfile(log_file))
-                LOG_ERR("Cannot open %s, falling back to stdout for logs.",
-                        log_file);
-
-        free(log_file);
-
-        return 0;
-}
-
-void * ipcp_main_loop(void * o)
+static void * ipcp_main_loop(void * o)
 {
         int     lsockfd;
         uint8_t buf[IPCP_MSG_BUF_SIZE];
@@ -441,4 +273,172 @@ void * ipcp_main_loop(void * o)
         }
 
         return (void *) 0;
+}
+
+int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
+{
+        pthread_condattr_t cattr;
+        int t;
+
+        struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
+                             (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
+
+        ipcpi.irmd_fd = -1;
+        ipcpi.state   = IPCP_INIT;
+
+        ipcpi.threadpool = malloc(sizeof(pthread_t) * IPCPD_THREADPOOL_SIZE);
+        if (ipcpi.threadpool == NULL) {
+                return -ENOMEM;
+        }
+
+        ipcpi.sock_path = ipcp_sock_path(getpid());
+        if (ipcpi.sock_path == NULL) {
+                free(ipcpi.threadpool);
+                return -1;
+        }
+
+        ipcpi.sockfd = server_socket_open(ipcpi.sock_path);
+        if (ipcpi.sockfd < 0) {
+                LOG_ERR("Could not open server socket.");
+                free(ipcpi.threadpool);
+                free(ipcpi.sock_path);
+                return -1;
+        }
+
+        if (setsockopt(ipcpi.sockfd, SOL_SOCKET, SO_RCVTIMEO,
+                       (void *) &tv, sizeof(tv)))
+                LOG_WARN("Failed to set timeout on socket.");
+
+        ipcpi.ops = ops;
+
+        ipcpi.data = ipcp_data_create();
+        if (ipcpi.data == NULL) {
+                free(ipcpi.threadpool);
+                free(ipcpi.sock_path);
+                return -ENOMEM;
+        }
+
+        ipcp_data_init(ipcpi.data, type);
+
+        pthread_rwlock_init(&ipcpi.state_lock, NULL);
+        pthread_mutex_init(&ipcpi.state_mtx, NULL);
+        pthread_condattr_init(&cattr);
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+        pthread_cond_init(&ipcpi.state_cond, &cattr);
+
+        for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
+                pthread_create(&ipcpi.threadpool[t], NULL,
+                               ipcp_main_loop, NULL);
+
+        return 0;
+}
+
+void ipcp_fini()
+{
+        int t;
+
+        for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
+                pthread_join(ipcpi.threadpool[t], NULL);
+
+        close(ipcpi.sockfd);
+        if (unlink(ipcpi.sock_path))
+                LOG_DBG("Could not unlink %s.", ipcpi.sock_path);
+
+        free(ipcpi.sock_path);
+        free(ipcpi.threadpool);
+
+        ipcp_data_destroy(ipcpi.data);
+
+        pthread_cond_destroy(&ipcpi.state_cond);
+        pthread_rwlock_destroy(&ipcpi.state_lock);
+}
+
+void ipcp_set_state(enum ipcp_state state)
+{
+        pthread_mutex_lock(&ipcpi.state_mtx);
+
+        ipcpi.state = state;
+
+        pthread_cond_broadcast(&ipcpi.state_cond);
+        pthread_mutex_unlock(&ipcpi.state_mtx);
+}
+
+enum ipcp_state ipcp_get_state()
+{
+        enum ipcp_state state;
+
+        pthread_mutex_lock(&ipcpi.state_mtx);
+
+        state = ipcpi.state;
+
+        pthread_mutex_unlock(&ipcpi.state_mtx);
+
+        return state;
+}
+
+int ipcp_wait_state(enum ipcp_state         state,
+                    const struct timespec * timeout)
+{
+        struct timespec abstime;
+        int ret = 0;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, timeout, &abstime);
+
+        pthread_mutex_lock(&ipcpi.state_mtx);
+
+        while (ipcpi.state != state && ipcpi.state != IPCP_SHUTDOWN) {
+                if (timeout == NULL)
+                        ret = -pthread_cond_wait(&ipcpi.state_cond,
+                                                 &ipcpi.state_mtx);
+                else
+                        ret = -pthread_cond_timedwait(&ipcpi.state_cond,
+                                                      &ipcpi.state_mtx,
+                                                      &abstime);
+        }
+
+        pthread_mutex_unlock(&ipcpi.state_mtx);
+
+        return ret;
+}
+
+int ipcp_parse_arg(int argc, char * argv[])
+{
+        char * log_file;
+        size_t len = 0;
+
+        if (!(argc == 3 || argc == 2))
+                return -1;
+
+        /* argument 1: api of irmd */
+        if (atoi(argv[1]) == 0)
+                return -1;
+
+        if (argv[2] == NULL)
+                return 0;
+
+        len += strlen(INSTALL_PREFIX);
+        len += strlen(LOG_DIR);
+        len += strlen(argv[2]);
+
+        log_file = malloc(len + 1);
+        if (log_file == NULL) {
+                LOG_ERR("Failed to malloc");
+                return -1;
+        }
+
+        strcpy(log_file, INSTALL_PREFIX);
+        strcat(log_file, LOG_DIR);
+        strcat(log_file, argv[2]);
+        log_file[len] = '\0';
+
+        if (set_logfile(log_file))
+                LOG_ERR("Cannot open %s, falling back to stdout for logs.",
+                        log_file);
+
+        free(log_file);
+
+        return 0;
 }

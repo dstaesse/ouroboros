@@ -66,8 +66,6 @@ enum ipcp_state ipcp_get_state(void);
 int             ipcp_wait_state(enum ipcp_state         state,
                                 const struct timespec * timeout);
 
-void *          ipcp_main_loop(void * o);
-
 int             ipcp_parse_arg(int argc,
                                char * argv[]);
 
