@@ -20,11 +20,14 @@
  */
 
 #include <ouroboros/irm.h>
-#include <stdio.h>
-#include <string.h>
+#include <ouroboros/errno.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 static void usage(void)
 {
@@ -71,12 +74,23 @@ static int do_cmd(const char * argv0,
         return -1;
 }
 
-int main(int argc, char ** argv) {
+int main(int argc, char ** argv)
+{
+        int ret = 0;
 
         if (argc < 2) {
                 usage();
                 return -1;
         }
 
-        return do_cmd(argv[1], argc - 1, argv + 1);
+        ret = do_cmd(argv[1], argc - 1, argv + 1);
+
+        if (ret == -EIRMD)
+                printf("Failed to communicate with the "
+                       "Ouroboros IPC Resource Manager daemon.\n");
+
+        if (ret)
+                exit(EXIT_FAILURE);
+
+        exit(EXIT_SUCCESS);
 }

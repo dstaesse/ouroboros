@@ -176,7 +176,7 @@ static int api_announce(char * ap_name)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
-                return -1;
+                return -EIRMD;
         }
 
         if (!recv_msg->has_result || (ret = recv_msg->result)) {
@@ -359,7 +359,7 @@ int flow_accept(char ** ae_name, qosspec_t * qos)
 
         recv_msg = send_recv_irm_msg_b(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -465,7 +465,7 @@ int flow_alloc_resp(int fd, int response)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -475,16 +475,6 @@ int flow_alloc_resp(int fd, int response)
         ret = recv_msg->result;
 
         irm_msg__free_unpacked(recv_msg, NULL);
-
-        if (response) {
-                pthread_rwlock_rdlock(&ai.data_lock);
-                pthread_rwlock_wrlock(&ai.flows_lock);
-
-                reset_flow(fd);
-
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-        }
 
         return ret;
 }
@@ -517,7 +507,7 @@ int flow_alloc(char * dst_name, char * src_ae_name, qosspec_t * qos)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -603,26 +593,16 @@ int flow_alloc_res(int fd)
 
         recv_msg = send_recv_irm_msg_b(&msg);
         if (recv_msg == NULL)
-                result = -1;
+                return -EIRMD;
 
         if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
-                result = -1;
+                return -1;
         }
 
         result = recv_msg->result;
 
         irm_msg__free_unpacked(recv_msg, NULL);
-
-        if (result) {
-                pthread_rwlock_rdlock(&ai.data_lock);
-                pthread_rwlock_wrlock(&ai.flows_lock);
-
-                reset_flow(fd);
-
-                pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
-        }
 
         return result;
 }
@@ -655,9 +635,9 @@ int flow_dealloc(int fd)
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
 
-        recv_msg = send_recv_irm_msg_b(&msg);
+        recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -1208,7 +1188,7 @@ int ipcp_create_r(pid_t api)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -1254,7 +1234,7 @@ int ipcp_flow_req_arr(pid_t  api, char * dst_name, char * src_ae_name)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (!recv_msg->has_port_id || !recv_msg->has_api) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -1336,7 +1316,7 @@ int ipcp_flow_alloc_reply(int fd, int response)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
