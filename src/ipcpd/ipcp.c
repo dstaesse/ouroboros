@@ -143,6 +143,7 @@ int ipcp_wait_state(enum ipcp_state         state,
                     const struct timespec * timeout)
 {
         struct timespec abstime;
+        int ret = 0;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, timeout, &abstime);
@@ -150,23 +151,18 @@ int ipcp_wait_state(enum ipcp_state         state,
         pthread_mutex_lock(&ipcpi.state_mtx);
 
         while (ipcpi.state != state && ipcpi.state != IPCP_SHUTDOWN) {
-                int ret;
                 if (timeout == NULL)
-                        ret = pthread_cond_wait(&ipcpi.state_cond,
-                                                &ipcpi.state_mtx);
+                        ret = -pthread_cond_wait(&ipcpi.state_cond,
+                                                 &ipcpi.state_mtx);
                 else
-                        ret = pthread_cond_timedwait(&ipcpi.state_cond,
-                                                     &ipcpi.state_mtx,
-                                                     &abstime);
-                if (ret) {
-                        pthread_mutex_unlock(&ipcpi.state_mtx);
-                        return -ret;
-                }
+                        ret = -pthread_cond_timedwait(&ipcpi.state_cond,
+                                                      &ipcpi.state_mtx,
+                                                      &abstime);
         }
 
         pthread_mutex_unlock(&ipcpi.state_mtx);
 
-        return 0;
+        return ret;
 }
 
 int ipcp_parse_arg(int argc, char * argv[])
