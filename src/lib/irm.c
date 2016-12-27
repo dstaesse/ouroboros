@@ -358,6 +358,9 @@ int irm_bind_ap(char *   ap,
         msg.opts = opts;
 
         recv_msg = send_recv_irm_msg(&msg);
+
+        free(full_ap_name);
+
         if (recv_msg == NULL)
                 return -1;
 
@@ -369,7 +372,6 @@ int irm_bind_ap(char *   ap,
         ret = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
 
-        free(full_ap_name);
         return ret;
 }
 
