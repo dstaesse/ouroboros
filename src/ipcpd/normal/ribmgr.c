@@ -971,18 +971,23 @@ static void * cdap_req_handler(void * o)
                 if (opcode == CDAP_START) {
                         if (ribmgr_cdap_start(instance, key, name))
                                 LOG_WARN("CDAP start failed.");
+                        free(name);
                         continue;
                 }
                 else if (opcode == CDAP_STOP) {
                         if (ribmgr_cdap_stop(instance, key, name))
                                 LOG_WARN("CDAP stop failed.");
+                        free(name);
                         continue;
                 }
+
+                assert(len > 0);
 
                 msg = ro_msg__unpack(NULL, len, data);
                 if (msg == NULL) {
                         cdap_reply_send(instance, key, -1, NULL, 0);
                         LOG_WARN("Failed to unpack RO message");
+                        free(data);
                         continue;
                 }
 
@@ -996,6 +1001,7 @@ static void * cdap_req_handler(void * o)
                                 ro_msg__free_unpacked(msg, NULL);
                                 cdap_reply_send(instance, key, 0, NULL, 0);
                                 LOG_DBG("Already received this RO.");
+                                free(name);
                                 continue;
                         }
                 }
@@ -1005,6 +1011,7 @@ static void * cdap_req_handler(void * o)
                         if (ribmgr_cdap_create(instance, key, name, msg)) {
                                 LOG_WARN("CDAP create failed.");
                                 ro_msg__free_unpacked(msg, NULL);
+                                free(name);
                                 continue;
                         }
                 } else if (opcode == CDAP_WRITE) {
@@ -1012,24 +1019,28 @@ static void * cdap_req_handler(void * o)
                                               msg, flags)) {
                                 LOG_WARN("CDAP write failed.");
                                 ro_msg__free_unpacked(msg, NULL);
+                                free(name);
                                 continue;
                         }
                 } else if (opcode == CDAP_DELETE) {
                         if (ribmgr_cdap_delete(instance, key, name)) {
                                 LOG_WARN("CDAP delete failed.");
                                 ro_msg__free_unpacked(msg, NULL);
+                                free(name);
                                 continue;
                         }
                 } else {
                         LOG_INFO("Unsupported opcode received.");
                         ro_msg__free_unpacked(msg, NULL);
                         cdap_reply_send(instance, key, -1, NULL, 0);
+                        free(name);
                         continue;
                 }
 
                 if (ro_id_create(name, msg)) {
                         LOG_WARN("Failed to create RO id.");
                         ro_msg__free_unpacked(msg, NULL);
+                        free(name);
                         continue;
                 }
 
@@ -1050,6 +1061,7 @@ static void * cdap_req_handler(void * o)
                         pthread_rwlock_unlock(&rib.flows_lock);
                 }
 
+                free(name);
                 ro_msg__free_unpacked(msg, NULL);
         }
 
