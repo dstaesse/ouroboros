@@ -78,16 +78,8 @@ static void * fmgr_nm1_acceptor(void * o)
         (void) o;
 
         while (true) {
-                ipcp_wait_state(IPCP_OPERATIONAL, NULL);
-
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-                if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                if (ipcp_get_state() == IPCP_SHUTDOWN)
                         return 0;
-                }
-
-                pthread_rwlock_unlock(&ipcpi.state_lock);
 
                 fd = flow_accept(&ae_name, &qs);
                 if (fd < 0) {
@@ -594,8 +586,7 @@ int fmgr_np1_post_buf(cep_id_t cep_id, buffer_t * buf)
         return ret;
 }
 
-int fmgr_np1_post_sdu(cep_id_t             cep_id,
-                      struct shm_du_buff * sdb)
+int fmgr_np1_post_sdu(cep_id_t cep_id, struct shm_du_buff * sdb)
 {
         int fd;
 
@@ -687,8 +678,7 @@ int fmgr_nm1_write_sdu(struct pci * pci, struct shm_du_buff * sdb)
         return 0;
 }
 
-int fmgr_nm1_write_buf(struct pci * pci,
-                       buffer_t *   buf)
+int fmgr_nm1_write_buf(struct pci * pci, buffer_t * buf)
 {
         buffer_t * buffer;
 
