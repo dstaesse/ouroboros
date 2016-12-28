@@ -30,7 +30,7 @@ set(SOURCE_FILES
   fmgr.c
   frct.c
   main.c
-  path.c
+  pathname.c
   pff.c
   ribmgr.c
   shm_pci.c

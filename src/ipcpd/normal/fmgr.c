@@ -40,7 +40,7 @@
 #include "ipcp.h"
 #include "shm_pci.h"
 #include "dir.h"
-#include "path.h"
+#include "pathname.h"
 #include "ro.h"
 
 #include "flow_alloc.pb-c.h"

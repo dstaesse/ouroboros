@@ -28,7 +28,7 @@
 #include "dir.h"
 #include "ipcp.h"
 #include "ro.h"
-#include "path.h"
+#include "pathname.h"
 #include "ribmgr.h"
 
 #include <stdlib.h>

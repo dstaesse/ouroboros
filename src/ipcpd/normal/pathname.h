@@ -19,8 +19,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_PATH_H
-#define OUROBOROS_IPCPD_NORMAL_PATH_H
+#ifndef OUROBOROS_IPCPD_NORMAL_PATHNAME_H
+#define OUROBOROS_IPCPD_NORMAL_PATHNAME_H
 
 #define PATH_DELIMITER "/"
 
@@ -31,4 +31,4 @@ char * pathname_append(char *       pname,
 
 void   pathname_destroy(char * pname);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_PATH_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_PATHNAME_H */

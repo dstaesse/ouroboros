@@ -29,7 +29,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "path.h"
+#include "pathname.h"
 
 char * pathname_create(const char * name)
 {

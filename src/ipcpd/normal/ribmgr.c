@@ -42,7 +42,7 @@
 #include "frct.h"
 #include "ipcp.h"
 #include "ro.h"
-#include "path.h"
+#include "pathname.h"
 #include "dir.h"
 
 #include "static_info.pb-c.h"
