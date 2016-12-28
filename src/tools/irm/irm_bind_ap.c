@@ -90,13 +90,13 @@ int do_bind_ap(int argc, char ** argv)
         ret = irm_bind_ap(ap_name, name, flags, argc, argv);
         if (ret == -ENOENT) {
                 printf("%s does not exist.\n", ap_name);
-                return -1;
+                return ret;
         }
 
         if (ret == -EPERM) {
                 printf("Cannot execute %s, please check permissions.\n",
                         ap_name);
-                return -1;
+                return ret;
         }
 
         if (temp != NULL)

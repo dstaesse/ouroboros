@@ -67,46 +67,54 @@ struct reg_entry {
         pthread_mutex_t     state_lock;
 };
 
-int                reg_entry_add_apn(struct reg_entry * e,
-                                     struct apn_entry * a);
+int                 reg_entry_add_apn(struct reg_entry * e,
+                                      struct apn_entry * a);
 
-void               reg_entry_del_apn(struct reg_entry * e,
-                                     char *             apn);
+void                reg_entry_del_apn(struct reg_entry * e,
+                                      char *             apn);
 
-char *             reg_entry_get_apn(struct reg_entry * e);
+char *              reg_entry_get_apn(struct reg_entry * e);
 
 
-int                reg_entry_add_api(struct reg_entry * e,
-                                     pid_t              api);
+int                 reg_entry_add_api(struct reg_entry * e,
+                                      pid_t              api);
 
-void               reg_entry_del_api(struct reg_entry * e,
-                                     pid_t              api);
+void                reg_entry_del_api(struct reg_entry * e,
+                                      pid_t              api);
 
-pid_t              reg_entry_get_api(struct reg_entry * e);
+pid_t               reg_entry_get_api(struct reg_entry * e);
 
-struct reg_entry * registry_add_name(struct list_head * registry,
-                                     char *             name);
+enum reg_name_state reg_entry_get_state(struct reg_entry * e);
 
-void               registry_del_name(struct list_head * registry,
-                                     char *             name);
+int                 reg_entry_set_state(struct reg_entry * e,
+                                        enum reg_name_state state);
 
-void               registry_del_api(struct list_head * registry,
-                                    pid_t              api);
+int                 reg_entry_leave_state(struct reg_entry * e,
+                                          enum reg_name_state state);
 
-void               registry_sanitize_apis(struct list_head * registry);
-
-struct reg_entry * registry_get_entry(struct list_head * registry,
+struct reg_entry *  registry_add_name(struct list_head * registry,
                                       char *             name);
 
-int                registry_add_name_to_dif(struct list_head * registry,
-                                            char *             name,
-                                            char *             dif_name,
-                                            enum ipcp_type     type);
+void                registry_del_name(struct list_head * registry,
+                                      char *             name);
 
-void               registry_del_name_from_dif(struct list_head * registry,
-                                              char *             name,
-                                              char *             dif_name);
+void                registry_del_api(struct list_head * registry,
+                                     pid_t              api);
 
-void               registry_destroy(struct list_head * registry);
+void                registry_sanitize_apis(struct list_head * registry);
+
+struct reg_entry *  registry_get_entry(struct list_head * registry,
+                                       char *             name);
+
+int                 registry_add_name_to_dif(struct list_head * registry,
+                                             char *             name,
+                                             char *             dif_name,
+                                             enum ipcp_type     type);
+
+void                registry_del_name_from_dif(struct list_head * registry,
+                                               char *             name,
+                                               char *             dif_name);
+
+void                registry_destroy(struct list_head * registry);
 
 #endif /* OUROBOROS_IRMD_REGISTRY_H */

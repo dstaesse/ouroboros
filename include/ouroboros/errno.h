@@ -27,5 +27,6 @@
 
 #define ENOTALLOC    1000 /* Flow is not allocated */
 #define EIPCPTYPE    1001 /* Unknown IPCP type */
+#define EIRMD        1002 /* Failed to contact IRMD */
 
 #endif

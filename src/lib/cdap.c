@@ -105,7 +105,8 @@ static int release_invoke_id(struct cdap * instance, int id)
 
 #define cdap_sent_has_key(i, key) (cdap_sent_get_by_key(i, key) != NULL)
 
-struct cdap_req * cdap_sent_get_by_key(struct cdap * instance, cdap_key_t key)
+static struct cdap_req * cdap_sent_get_by_key(struct cdap * instance,
+                                              cdap_key_t    key)
 {
         struct list_head * p = NULL;
         struct cdap_req *  req = NULL;
@@ -128,13 +129,17 @@ struct cdap_req * cdap_sent_get_by_key(struct cdap * instance, cdap_key_t key)
         return NULL;
 }
 
-static int cdap_sent_add(struct cdap * instance, struct cdap_req * req)
+static struct cdap_req * cdap_sent_add(struct cdap * instance, cdap_key_t key)
 {
-        assert (instance);
-        assert (req);
+        struct cdap_req * req;
 
-        if (cdap_sent_has_key(instance, req->key))
-                return -EPERM;
+        assert(instance);
+        assert(key >= 0);
+        assert(!cdap_sent_has_key(instance, key));
+
+        req = cdap_req_create(key);
+        if (req == NULL)
+                return NULL;
 
         pthread_rwlock_wrlock(&instance->sent_lock);
 
@@ -142,7 +147,7 @@ static int cdap_sent_add(struct cdap * instance, struct cdap_req * req)
 
         pthread_rwlock_unlock(&instance->sent_lock);
 
-        return 0;
+        return req;
 }
 
 static void cdap_sent_del(struct cdap * instance, struct cdap_req * req)
@@ -157,6 +162,8 @@ static void cdap_sent_del(struct cdap * instance, struct cdap_req * req)
         list_del(&req->next);
 
         pthread_rwlock_unlock(&instance->sent_lock);
+
+        cdap_req_destroy(req);
 }
 
 static void cdap_sent_destroy(struct cdap * instance)
@@ -249,6 +256,7 @@ static void * sdu_reader(void * o)
                                 free(rcvd);
                                 continue;
                         }
+
                         rcvd->iid   = msg->invoke_id;
                         rcvd->flags = msg->flags;
                         rcvd->name  = strdup(msg->name);
@@ -494,18 +502,15 @@ cdap_key_t cdap_request_send(struct cdap *    instance,
 
         key = invoke_id_to_key(iid);
 
-        req = cdap_req_create(key);
-        if (req == NULL)
-                return INVALID_CDAP_KEY;
-
-        if (cdap_sent_add(instance, req)) {
-                cdap_req_destroy(req);
+        req = cdap_sent_add(instance, key);
+        if (req == NULL) {
+                release_invoke_id(instance, iid);
                 return INVALID_CDAP_KEY;
         }
 
         if (write_msg(instance, &msg)) {
                 cdap_sent_del(instance, req);
-                cdap_req_destroy(req);
+                release_invoke_id(instance, iid);
                 return INVALID_CDAP_KEY;
         }
 

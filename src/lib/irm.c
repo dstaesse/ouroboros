@@ -47,7 +47,7 @@ pid_t irm_create_ipcp(char *         name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -75,7 +75,7 @@ int irm_destroy_ipcp(pid_t api)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -147,9 +147,8 @@ int irm_bootstrap_ipcp(pid_t               api,
         }
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
-                return -1;
-        }
+        if (recv_msg == NULL)
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -179,7 +178,7 @@ ssize_t irm_list_ipcps(char *   name,
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
                 free(msg.dif_name);
-                return -1;
+                return -EIRMD;
         }
 
         if (recv_msg->apis == NULL) {
@@ -227,7 +226,7 @@ int irm_enroll_ipcp(pid_t  api,
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
                 free(msg.dif_name);
-                return -1;
+                return -EIRMD;
         }
 
         if (recv_msg->has_result == false) {
@@ -358,8 +357,11 @@ int irm_bind_ap(char *   ap,
         msg.opts = opts;
 
         recv_msg = send_recv_irm_msg(&msg);
+
+        free(full_ap_name);
+
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -369,7 +371,6 @@ int irm_bind_ap(char *   ap,
         ret = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
 
-        free(full_ap_name);
         return ret;
 }
 
@@ -389,7 +390,7 @@ int irm_bind_api(pid_t api, char * name)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -417,7 +418,7 @@ int irm_unbind_ap(char * ap, char * name)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -446,7 +447,7 @@ int irm_unbind_api(pid_t api, char * name)
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -479,7 +480,7 @@ int irm_reg(char *   name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -513,7 +514,7 @@ int irm_unreg(char *   name,
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -1;
+                return -EIRMD;
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
