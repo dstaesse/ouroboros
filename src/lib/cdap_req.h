@@ -31,7 +31,8 @@
 #include <pthread.h>
 
 enum creq_state {
-        REQ_INIT = 0,
+        REQ_NULL = 0,
+        REQ_INIT,
         REQ_PENDING,
         REQ_RESPONSE,
         REQ_DONE,
