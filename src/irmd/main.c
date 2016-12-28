@@ -973,11 +973,8 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name)
                 struct str_el * s = list_entry(p, struct str_el, next);
                 LOG_DBG("        %s", s->str);
                 re = registry_get_entry(&irmd->registry, s->str);
-                if (re != NULL) {
-                        pthread_mutex_lock(&re->state_lock);
+                if (re != NULL)
                         reg_entry_add_api(re, api);
-                        pthread_mutex_unlock(&re->state_lock);
-                }
         }
 
         pthread_rwlock_unlock(&irmd->reg_lock);
@@ -1015,17 +1012,12 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name)
 
         pthread_mutex_unlock(&e->state_lock);
 
-        pthread_mutex_lock(&re->state_lock);
-
-        if (re->state != REG_NAME_FLOW_ARRIVED) {
-                pthread_mutex_unlock(&re->state_lock);
+        if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return NULL;
         }
-        pthread_mutex_unlock(&re->state_lock);
         pthread_rwlock_unlock(&irmd->reg_lock);
-
         pthread_rwlock_rdlock(&irmd->flows_lock);
 
         f = get_irm_flow_n(api);
@@ -1085,22 +1077,16 @@ static int flow_alloc_resp(pid_t n_api,
                 return -1;
         }
 
-        pthread_mutex_lock(&re->state_lock);
-
-        if (re->state != REG_NAME_FLOW_ARRIVED) {
-                pthread_mutex_unlock(&re->state_lock);
+        if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Name %s has no pending flow request.", re->name);
                 return -1;
         }
 
-        pthread_mutex_unlock(&re->state_lock);
-
         registry_del_api(&irmd->registry, n_api);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
-
         pthread_rwlock_wrlock(&irmd->flows_lock);
 
         f = get_irm_flow(port_id);
@@ -1335,8 +1321,6 @@ static struct irm_flow * flow_req_arr(pid_t  api,
         struct api_entry * e  = NULL;
         struct irm_flow *  f  = NULL;
 
-        enum reg_name_state state;
-
         struct pid_el * c_api;
         pid_t h_api = -1;
         int port_id = -1;
@@ -1355,11 +1339,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 return NULL;
         }
 
-        pthread_mutex_lock(&re->state_lock);
-        state = re->state;
-        pthread_mutex_unlock(&re->state_lock);
-
-        switch (state) {
+        switch (reg_entry_get_state(re)) {
         case REG_NAME_IDLE:
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
@@ -1373,16 +1353,12 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                         return NULL;
                 }
 
-                pthread_mutex_lock(&re->state_lock);
-
-                re->state = REG_NAME_AUTO_EXEC;
+                reg_entry_set_state(re, REG_NAME_AUTO_EXEC);
                 a = apn_table_get_by_apn(&irmd->apn_table,
                                          reg_entry_get_apn(re));
-                pthread_mutex_unlock(&re->state_lock);
+
                 if (a == NULL || (c_api->pid = auto_execute(a->argv)) < 0) {
-                        pthread_mutex_lock(&re->state_lock);
-                        re->state = REG_NAME_AUTO_ACCEPT;
-                        pthread_mutex_unlock(&re->state_lock);
+                        reg_entry_set_state(re, REG_NAME_AUTO_ACCEPT);
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
                         LOG_ERR("Could not get start apn for reg_entry %s.",
@@ -1396,32 +1372,19 @@ static struct irm_flow * flow_req_arr(pid_t  api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
 
-                pthread_mutex_lock(&re->state_lock);
-
-                while (re->state == REG_NAME_AUTO_EXEC)
-                        pthread_cond_wait(&re->state_cond, &re->state_lock);
-
-                pthread_mutex_unlock(&re->state_lock);
+                reg_entry_leave_state(re, REG_NAME_AUTO_EXEC);
 
                 pthread_rwlock_rdlock(&irmd->state_lock);
                 pthread_rwlock_rdlock(&irmd->reg_lock);
 
-                pthread_mutex_lock(&re->state_lock);
-
-                if (re->state == REG_NAME_DESTROY) {
-                        re->state = REG_NAME_NULL;
-                        pthread_mutex_unlock(&re->state_lock);
+                if (reg_entry_get_state(re) == REG_NAME_DESTROY) {
+                        reg_entry_set_state(re, REG_NAME_NULL);
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
                         return NULL;
                 }
-
-                pthread_mutex_unlock(&re->state_lock);
-
         case REG_NAME_FLOW_ACCEPT:
-                pthread_mutex_lock(&re->state_lock);
                 h_api = reg_entry_get_api(re);
-                pthread_mutex_unlock(&re->state_lock);
                 if (h_api == -1) {
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
@@ -1459,14 +1422,10 @@ static struct irm_flow * flow_req_arr(pid_t  api,
         list_add(&f->next, &irmd->irm_flows);
 
         pthread_rwlock_unlock(&irmd->flows_lock);
-
         pthread_rwlock_rdlock(&irmd->reg_lock);
-        pthread_mutex_lock(&re->state_lock);
 
         re->req_ae_name = ae_name;
-        re->state = REG_NAME_FLOW_ARRIVED;
-
-        pthread_mutex_unlock(&re->state_lock);
+        reg_entry_set_state(re, REG_NAME_FLOW_ARRIVED);
 
         e = api_table_get(&irmd->api_table, h_api);
         if (e == NULL) {
@@ -1487,12 +1446,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        pthread_mutex_lock(&re->state_lock);
-
-        while (re->state == REG_NAME_FLOW_ARRIVED)
-                pthread_cond_wait(&re->state_cond, &re->state_lock);
-
-        pthread_mutex_unlock(&re->state_lock);
+        reg_entry_leave_state(re, REG_NAME_FLOW_ARRIVED);
 
         return f;
 }

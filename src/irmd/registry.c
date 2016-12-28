@@ -278,6 +278,9 @@ int reg_entry_add_api(struct reg_entry * e, pid_t api)
                 return -ENOMEM;
 
         i->pid = api;
+
+        pthread_mutex_lock(&e->state_lock);
+
         list_add(&i->next, &e->reg_apis);
 
         if (e->state == REG_NAME_IDLE ||
@@ -286,6 +289,8 @@ int reg_entry_add_api(struct reg_entry * e, pid_t api)
                 e->state = REG_NAME_FLOW_ACCEPT;
                 pthread_cond_signal(&e->state_cond);
         }
+
+        pthread_mutex_unlock(&e->state_lock);
 
         return 0;
 }
@@ -327,6 +332,52 @@ pid_t reg_entry_get_api(struct reg_entry * e)
                 return -1;
 
         return list_first_entry(&e->reg_apis, struct pid_el, next)->pid;
+}
+
+enum reg_name_state reg_entry_get_state(struct reg_entry * e)
+{
+        enum reg_name_state state;
+
+        if (e == NULL)
+                return REG_NAME_NULL;
+
+        pthread_mutex_lock(&e->state_lock);
+
+        state = e->state;
+
+        pthread_mutex_unlock(&e->state_lock);
+
+        return state;
+}
+
+int reg_entry_set_state(struct reg_entry * e, enum reg_name_state state)
+{
+        if (state == REG_NAME_DESTROY)
+                return -EPERM;
+
+        pthread_mutex_lock(&e->state_lock);
+
+        e->state = state;
+        pthread_cond_broadcast(&e->state_cond);
+
+        pthread_mutex_unlock(&e->state_lock);
+
+        return 0;
+}
+
+int reg_entry_leave_state(struct reg_entry * e, enum reg_name_state state)
+{
+        if (e == NULL || state == REG_NAME_DESTROY)
+                return -EINVAL;
+
+        pthread_mutex_lock(&e->state_lock);
+
+        while (e->state == state)
+                pthread_cond_wait(&e->state_cond, &e->state_lock);
+
+        pthread_mutex_unlock(&e->state_lock);
+
+        return 0;
 }
 
 struct reg_entry * registry_get_entry(struct list_head * registry,
