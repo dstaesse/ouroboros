@@ -29,7 +29,7 @@
 #include "shm_pci.h"
 #include "ribmgr.h"
 #include "ro.h"
-#include "path.h"
+#include "pathname.h"
 
 #include <time.h>
 #include <stdlib.h>

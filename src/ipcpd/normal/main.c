@@ -215,12 +215,6 @@ int main(int argc, char * argv[])
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        if (fmgr_init()) {
-                ipcp_fini();
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
-
         if (ribmgr_init()) {
                 fmgr_fini();
                 ipcp_fini();
@@ -231,6 +225,14 @@ int main(int argc, char * argv[])
         if (ipcp_create_r(getpid())) {
                 LOG_ERR("Failed to notify IRMd we are initialized.");
                 fmgr_fini();
+                ipcp_fini();
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
+
+        ipcp_wait_state(IPCP_OPERATIONAL, NULL);
+
+        if (fmgr_init()) {
                 ipcp_fini();
                 close_logfile();
                 exit(EXIT_FAILURE);
