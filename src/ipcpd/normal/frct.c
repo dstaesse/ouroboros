@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * The Flow and Retransmission control component
  *
@@ -40,21 +40,21 @@ enum conn_state {
 };
 
 struct frct_i {
-        uint32_t cep_id;
-        uint64_t r_address;
-        uint32_t r_cep_id;
+        uint32_t  cep_id;
+        uint64_t  r_address;
+        uint32_t  r_cep_id;
         qoscube_t cube;
-        uint64_t seqno;
+        uint64_t  seqno;
 
         enum conn_state state;
 };
 
 struct {
-        pthread_mutex_t instances_lock;
         struct frct_i ** instances;
+        pthread_mutex_t  instances_lock;
 
-        struct bmp * cep_ids;
-        pthread_mutex_t cep_ids_lock;
+        struct bmp *     cep_ids;
+        pthread_mutex_t  cep_ids_lock;
 } frct;
 
 static cep_id_t next_cep_id(void)
@@ -62,9 +62,11 @@ static cep_id_t next_cep_id(void)
         cep_id_t ret;
 
         pthread_mutex_lock(&frct.cep_ids_lock);
+
         ret = bmp_allocate(frct.cep_ids);
         if (!bmp_is_id_valid(frct.cep_ids, ret))
                 ret = INVALID_CEP_ID;
+
         pthread_mutex_unlock(&frct.cep_ids_lock);
 
         return ret;
@@ -75,51 +77,48 @@ static int release_cep_id(cep_id_t id)
         int ret;
 
         pthread_mutex_lock(&frct.cep_ids_lock);
+
         ret = bmp_release(frct.cep_ids, id);
+
         pthread_mutex_unlock(&frct.cep_ids_lock);
 
         return ret;
 }
 
-int frct_init()
+static int init_cep_ids(void)
 {
-        int i;
-
         if (pthread_mutex_init(&frct.cep_ids_lock, NULL))
                 return -1;
 
-        if (pthread_mutex_init(&frct.instances_lock, NULL))
-                return -1;
-
-        frct.instances = malloc(sizeof(*(frct.instances)) * IRMD_MAX_FLOWS);
-        if (frct.instances == NULL)
-                return -1;
-
-        for (i = 0; i < IRMD_MAX_FLOWS; i++)
-                frct.instances[i] = NULL;
-
         frct.cep_ids = bmp_create(IRMD_MAX_FLOWS, (INVALID_CEP_ID + 1));
         if (frct.cep_ids == NULL) {
-                free(frct.instances);
+                pthread_mutex_destroy(&frct.cep_ids_lock);
                 return -1;
         }
 
         return 0;
 }
 
-int frct_fini()
+static int init_instances(void)
 {
-        pthread_mutex_lock(&frct.cep_ids_lock);
-        bmp_destroy(frct.cep_ids);
-        pthread_mutex_unlock(&frct.cep_ids_lock);
+        int i;
 
-        free(frct.instances);
+        if (pthread_mutex_init(&frct.instances_lock, NULL))
+                return -1;
+
+        frct.instances = malloc(sizeof(*(frct.instances)) * IRMD_MAX_FLOWS);
+        if (frct.instances == NULL) {
+                pthread_mutex_destroy(&frct.instances_lock);
+                return -1;
+        }
+
+        for (i = 0; i < IRMD_MAX_FLOWS; i++)
+                frct.instances[i] = NULL;
 
         return 0;
 }
 
-static struct frct_i * create_frct_i(uint64_t address,
-                                     cep_id_t r_cep_id)
+static struct frct_i * create_frct_i(uint64_t address, cep_id_t r_cep_id)
 {
         struct frct_i * instance;
         cep_id_t        id;
@@ -143,6 +142,60 @@ static struct frct_i * create_frct_i(uint64_t address,
         frct.instances[id] = instance;
 
         return instance;
+}
+
+static void destroy_frct_i(struct frct_i * instance)
+{
+        free(instance);
+}
+
+static void fini_cep_ids(void)
+{
+        pthread_mutex_lock(&frct.cep_ids_lock);
+
+        bmp_destroy(frct.cep_ids);
+
+        pthread_mutex_unlock(&frct.cep_ids_lock);
+
+        pthread_mutex_destroy(&frct.cep_ids_lock);
+}
+
+static void fini_instances(void)
+{
+        int i;
+
+        pthread_mutex_lock(&frct.instances_lock);
+
+        for (i = 0; i < IRMD_MAX_FLOWS; i++)
+                if (frct.instances[i] != NULL)
+                        destroy_frct_i(frct.instances[i]);
+
+        pthread_mutex_unlock(&frct.instances_lock);
+
+        pthread_mutex_destroy(&frct.instances_lock);
+
+        free(frct.instances);
+}
+
+int frct_init()
+{
+        if (init_cep_ids())
+                return -1;
+
+        if (init_instances()) {
+                fini_cep_ids();
+                return -1;
+        }
+
+        return 0;
+}
+
+int frct_fini()
+{
+        fini_cep_ids();
+        fini_instances();
+
+        return 0;
 }
 
 int frct_nm1_post_sdu(struct pci * pci,
@@ -207,14 +260,6 @@ int frct_nm1_post_sdu(struct pci * pci,
         free(pci);
 
         return 0;
-}
-
-/* Call under instances lock */
-static void destroy_frct_i(struct frct_i * instance)
-{
-        release_cep_id(instance->cep_id);
-        frct.instances[instance->cep_id] = NULL;
-        free(instance);
 }
 
 cep_id_t frct_i_create(uint64_t   address,
@@ -328,7 +373,11 @@ int frct_i_destroy(cep_id_t   id,
         pci.seqno = 0;
         pci.qos_id = instance->cube;
 
+        frct.instances[id] = NULL;
         destroy_frct_i(instance);
+
+        release_cep_id(instance->cep_id);
+
         pthread_mutex_unlock(&frct.instances_lock);
 
         if (buf != NULL && buf->data != NULL)

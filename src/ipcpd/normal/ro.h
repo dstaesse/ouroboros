@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * RIB objects
  *
@@ -21,6 +21,10 @@
 
 #ifndef OUROBOROS_IPCPD_NORMAL_RO_H
 #define OUROBOROS_IPCPD_NORMAL_RO_H
+
+#include <stdbool.h>
+#include <time.h>
+#include <stdint.h>
 
 enum ro_recv_set {
         NO_SYNC = 0,

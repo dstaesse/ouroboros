@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Shim IPC process over UDP
  *
@@ -1212,7 +1212,6 @@ int main(int argc, char * argv[])
         }
 
         ipcp_fini();
-
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 pthread_cancel(udp_data.handler);

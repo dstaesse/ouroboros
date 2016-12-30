@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * RIB manager of the IPC Process
  *
@@ -31,9 +31,9 @@ int               ribmgr_init(void);
 
 int               ribmgr_fini(void);
 
-int               ribmgr_add_flow(int fd);
+int               ribmgr_add_nm1_flow(int fd);
 
-int               ribmgr_remove_flow(int fd);
+int               ribmgr_nm1_mgt_flow(char * dst_name);
 
 int               ribmgr_bootstrap(struct dif_config * conf);
 

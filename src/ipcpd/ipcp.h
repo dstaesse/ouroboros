@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * IPC process structure
  *
@@ -24,17 +24,15 @@
 
 #include <ouroboros/config.h>
 
-#include <pthread.h>
-#include <time.h>
-
 #include "ipcp-ops.h"
 #include "ipcp-data.h"
+
+#include <pthread.h>
+#include <time.h>
 
 enum ipcp_state {
         IPCP_NULL = 0,
         IPCP_INIT,
-        IPCP_CONFIG,
-        IPCP_BOOTING,
         IPCP_OPERATIONAL,
         IPCP_SHUTDOWN
 };
