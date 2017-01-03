@@ -219,12 +219,9 @@ static int ipcp_local_name_query(char * name)
 static int ipcp_local_flow_alloc(int       fd,
                                  char *    dst_name,
                                  char *    src_ae_name,
-                                 qoscube_t qos)
+                                 qoscube_t cube)
 {
         int out_fd = -1;
-
-        /* This ipcpd has all QoS */
-        (void) qos;
 
         LOG_DBG("Allocating flow to %s on fd %d.", dst_name, fd);
 
@@ -241,7 +238,7 @@ static int ipcp_local_flow_alloc(int       fd,
 
         pthread_rwlock_wrlock(&local_data.lock);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name);
+        out_fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name, cube);
 
         local_data.in_out[fd]  = out_fd;
         local_data.in_out[out_fd] = fd;

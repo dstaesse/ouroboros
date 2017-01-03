@@ -351,7 +351,7 @@ int fmgr_fini()
 int fmgr_np1_alloc(int       fd,
                    char *    dst_ap_name,
                    char *    src_ae_name,
-                   qoscube_t qos)
+                   qoscube_t cube)
 {
         cep_id_t cep_id;
         buffer_t buf;
@@ -391,8 +391,8 @@ int fmgr_np1_alloc(int       fd,
         msg.code = FLOW_ALLOC_CODE__FLOW_REQ;
         msg.dst_name = dst_ap_name;
         msg.src_ae_name = src_ae_name;
-        msg.qos_cube = qos;
-        msg.has_qos_cube = true;
+        msg.has_qoscube = true;
+        msg.qoscube = cube;
 
         buf.len = flow_alloc_msg__get_packed_size(&msg);
         if (buf.len == 0) {
@@ -410,7 +410,7 @@ int fmgr_np1_alloc(int       fd,
 
         pthread_rwlock_wrlock(&fmgr.np1_flows_lock);
 
-        cep_id = frct_i_create(addr, &buf, qos);
+        cep_id = frct_i_create(addr, &buf, cube);
         if (cep_id == INVALID_CEP_ID) {
                 free(ro_data);
                 free(buf.data);
@@ -535,7 +535,8 @@ int fmgr_np1_post_buf(cep_id_t cep_id, buffer_t * buf)
         case FLOW_ALLOC_CODE__FLOW_REQ:
                 fd = ipcp_flow_req_arr(getpid(),
                                        msg->dst_name,
-                                       msg->src_ae_name);
+                                       msg->src_ae_name,
+                                       msg->qoscube);
                 if (fd < 0) {
                         flow_alloc_msg__free_unpacked(msg, NULL);
                         LOG_ERR("Failed to get fd for flow.");

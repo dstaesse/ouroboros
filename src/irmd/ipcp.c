@@ -330,7 +330,7 @@ int ipcp_flow_alloc(pid_t     api,
                     pid_t     n_api,
                     char *    dst_name,
                     char *    src_ae_name,
-                    qoscube_t qos)
+                    qoscube_t cube)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
@@ -346,8 +346,8 @@ int ipcp_flow_alloc(pid_t     api,
         msg.api          = n_api;
         msg.src_ae_name  = src_ae_name;
         msg.dst_name     = dst_name;
-        msg.has_qos_cube = true;
-        msg.qos_cube     = qos;
+        msg.has_qoscube  = true;
+        msg.qoscube      = cube;
 
         recv_msg = send_recv_ipcp_msg(api, &msg);
         if (recv_msg == NULL)

@@ -944,7 +944,9 @@ static int api_announce(pid_t api, char * apn)
         return 0;
 }
 
-static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name)
+static struct irm_flow * flow_accept(pid_t       api,
+                                     char **     dst_ae_name,
+                                     qoscube_t * cube)
 {
         struct irm_flow *  f  = NULL;
         struct api_entry * e  = NULL;
@@ -1028,6 +1030,8 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name)
                 return NULL;
         }
 
+        *cube = re->qos;
+
         if (dst_ae_name != NULL)
                 *dst_ae_name = re->req_ae_name;
 
@@ -1110,17 +1114,14 @@ static int flow_alloc_resp(pid_t n_api,
         return ret;
 }
 
-static struct irm_flow * flow_alloc(pid_t       api,
-                                    char *      dst_name,
-                                    char *      src_ae_name,
-                                    qosspec_t * qos)
+static struct irm_flow * flow_alloc(pid_t     api,
+                                    char *    dst_name,
+                                    char *    src_ae_name,
+                                    qoscube_t cube)
 {
         struct irm_flow * f;
         pid_t ipcp;
         int port_id;
-
-        /* FIXME: Map qosspec to qos_cube */
-        (void) qos;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
 
@@ -1164,7 +1165,7 @@ static struct irm_flow * flow_alloc(pid_t       api,
         pthread_rwlock_unlock(&irmd->state_lock);
 
         if (ipcp_flow_alloc(ipcp, port_id, api,
-                            dst_name, src_ae_name, QOS_CUBE_BE) < 0) {
+                            dst_name, src_ae_name, cube) < 0) {
                 pthread_rwlock_rdlock(&irmd->state_lock);
                 pthread_rwlock_wrlock(&irmd->flows_lock);
                 list_del(&f->next);
@@ -1314,7 +1315,8 @@ static pid_t auto_execute(char ** argv)
 
 static struct irm_flow * flow_req_arr(pid_t  api,
                                       char * dst_name,
-                                      char * ae_name)
+                                      char * ae_name,
+                                      qoscube_t cube)
 {
         struct reg_entry * re = NULL;
         struct apn_entry * a  = NULL;
@@ -1425,6 +1427,7 @@ static struct irm_flow * flow_req_arr(pid_t  api,
         pthread_rwlock_rdlock(&irmd->reg_lock);
 
         re->req_ae_name = ae_name;
+        re->qos = cube;
         reg_entry_set_state(re, REG_NAME_FLOW_ARRIVED);
 
         e = api_table_get(&irmd->api_table, h_api);
@@ -1872,7 +1875,10 @@ void * mainloop(void * o)
                                                     msg->n_dif_name);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
-                        e = flow_accept(msg->api, &ret_msg.ae_name);
+                        ret_msg.has_qoscube = true;
+                        e = flow_accept(msg->api,
+                                        &ret_msg.ae_name,
+                                        (qoscube_t *) &ret_msg.qoscube);
                         if (e == NULL) {
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
@@ -1893,7 +1899,7 @@ void * mainloop(void * o)
                         e = flow_alloc(msg->api,
                                        msg->dst_name,
                                        msg->ae_name,
-                                       NULL);
+                                       msg->qoscube);
                         if (e == NULL) {
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
@@ -1915,7 +1921,8 @@ void * mainloop(void * o)
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->api,
                                          msg->dst_name,
-                                         msg->ae_name);
+                                         msg->ae_name,
+                                         msg->qoscube);
                         if (e == NULL) {
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;

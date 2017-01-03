@@ -133,7 +133,7 @@ struct flow {
         struct shm_flow_set * set;
         int                   port_id;
         int                   oflags;
-        qoscube_t             qos;
+        qoscube_t             cube;
 
         pid_t                 api;
 
@@ -157,6 +157,23 @@ struct {
 
         pthread_rwlock_t      flows_lock;
 } ai;
+
+/* FIXME: translate real spec to cube */
+static qoscube_t spec_to_cube(qosspec_t * spec)
+{
+        if (spec == NULL)
+                return QOS_CUBE_BE;
+
+        return spec->cube;
+}
+
+/* FIXME: fill real spec */
+static void fill_qosspec(qosspec_t * spec, qoscube_t cube)
+{
+        assert(spec);
+
+        spec->cube = cube;
+}
 
 static int api_announce(char * ap_name)
 {
@@ -214,7 +231,7 @@ static void reset_flow(int fd)
         ai.flows[fd].oflags = 0;
         ai.flows[fd].api = -1;
         ai.flows[fd].timesout = false;
-        ai.flows[fd].qos = QOS_CUBE_BE;
+        ai.flows[fd].cube = QOS_CUBE_BE;
 }
 
 int ap_init(char * ap_name)
@@ -269,7 +286,7 @@ int ap_init(char * ap_name)
                 ai.flows[i].oflags   = 0;
                 ai.flows[i].api      = -1;
                 ai.flows[i].timesout = false;
-                ai.flows[i].qos      = QOS_CUBE_BE;
+                ai.flows[i].cube     = QOS_CUBE_BE;
         }
 
         ai.ports = malloc(sizeof(*ai.ports) * IRMD_MAX_FLOWS);
@@ -340,13 +357,11 @@ void ap_fini()
         pthread_rwlock_destroy(&ai.data_lock);
 }
 
-int flow_accept(char ** ae_name, qosspec_t * qos)
+int flow_accept(char ** ae_name, qosspec_t * spec)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int fd = -1;
-
-        (void) qos;
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_api = true;
@@ -420,6 +435,10 @@ int flow_accept(char ** ae_name, qosspec_t * qos)
         ai.flows[fd].port_id = recv_msg->port_id;
         ai.flows[fd].oflags  = FLOW_O_DEFAULT;
         ai.flows[fd].api     = recv_msg->api;
+        ai.flows[fd].cube    = recv_msg->qoscube;
+
+        if (spec != NULL)
+                fill_qosspec(spec, ai.flows[fd].cube);
 
         ai.ports[recv_msg->port_id].fd    = fd;
         ai.ports[recv_msg->port_id].state = PORT_ID_ASSIGNED;
@@ -479,14 +498,11 @@ int flow_alloc_resp(int fd, int response)
         return ret;
 }
 
-int flow_alloc(char * dst_name, char * src_ae_name, qosspec_t * qos)
+int flow_alloc(char * dst_name, char * src_ae_name, qosspec_t * spec)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int fd = -1;
-
-        /*  FIXME: add qos support */
-        (void) qos;
 
         if (dst_name == NULL)
                 return -EINVAL;
@@ -498,6 +514,8 @@ int flow_alloc(char * dst_name, char * src_ae_name, qosspec_t * qos)
         msg.dst_name    = dst_name;
         msg.ae_name     = src_ae_name;
         msg.has_api     = true;
+        msg.has_qoscube = true;
+        msg.qoscube     = spec_to_cube(spec);
 
         pthread_rwlock_rdlock(&ai.data_lock);
 
@@ -553,6 +571,7 @@ int flow_alloc(char * dst_name, char * src_ae_name, qosspec_t * qos)
         ai.flows[fd].port_id = recv_msg->port_id;
         ai.flows[fd].oflags  = FLOW_O_DEFAULT;
         ai.flows[fd].api     = recv_msg->api;
+        ai.flows[fd].cube    = recv_msg->qoscube;
 
         ai.ports[recv_msg->port_id].fd    = fd;
         ai.ports[recv_msg->port_id].state = PORT_ID_ASSIGNED;
@@ -779,7 +798,7 @@ int flow_get_qosspec(int fd, qosspec_t * spec)
                 return -ENOTALLOC;
         }
 
-        /* FIXME: map cube to spec */
+        fill_qosspec(spec, ai.flows[fd].cube);
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
@@ -1201,7 +1220,10 @@ int ipcp_create_r(pid_t api)
         return ret;
 }
 
-int ipcp_flow_req_arr(pid_t  api, char * dst_name, char * src_ae_name)
+int ipcp_flow_req_arr(pid_t     api,
+                      char *    dst_name,
+                      char *    src_ae_name,
+                      qoscube_t cube)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -1211,11 +1233,13 @@ int ipcp_flow_req_arr(pid_t  api, char * dst_name, char * src_ae_name)
         if (dst_name == NULL || src_ae_name == NULL)
                 return -EINVAL;
 
-        msg.code     = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
-        msg.has_api  = true;
-        msg.api      = api;
-        msg.dst_name = dst_name;
-        msg.ae_name  = src_ae_name;
+        msg.code        = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
+        msg.has_api     = true;
+        msg.api         = api;
+        msg.dst_name    = dst_name;
+        msg.ae_name     = src_ae_name;
+        msg.has_qoscube = true;
+        msg.qoscube     = cube;
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
@@ -1432,7 +1456,7 @@ int ipcp_flow_get_qoscube(int fd, qoscube_t * cube)
                 return -ENOTALLOC;
         }
 
-        *cube = ai.flows[fd].qos;
+        *cube = ai.flows[fd].cube;
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);

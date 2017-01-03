@@ -196,10 +196,11 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg, uint32_t dst_ip_addr)
        return 0;
 }
 
-static int ipcp_udp_port_alloc(uint32_t dst_ip_addr,
-                               uint16_t src_udp_port,
-                               char *   dst_name,
-                               char *   src_ae_name)
+static int ipcp_udp_port_alloc(uint32_t  dst_ip_addr,
+                               uint16_t  src_udp_port,
+                               char *    dst_name,
+                               char *    src_ae_name,
+                               qoscube_t cube)
 {
         shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
 
@@ -207,6 +208,8 @@ static int ipcp_udp_port_alloc(uint32_t dst_ip_addr,
         msg.src_udp_port = src_udp_port;
         msg.dst_name     = dst_name;
         msg.src_ae_name  = src_ae_name;
+        msg.has_qoscube  = true;
+        msg.qoscube      = cube;
 
         return send_shim_udp_msg(&msg, dst_ip_addr);
 }
@@ -229,8 +232,9 @@ static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
 }
 
 static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
-                             char * dst_name,
-                             char * src_ae_name)
+                             char *               dst_name,
+                             char *               src_ae_name,
+                             qoscube_t            cube)
 {
         int skfd;
         int fd;
@@ -273,7 +277,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         /* reply to IRM */
-        fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name);
+        fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name, cube);
         if (fd < 0) {
                 pthread_rwlock_unlock(&udp_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -395,7 +399,8 @@ static void * ipcp_udp_listener(void * o)
                         c_saddr.sin_port = msg->src_udp_port;
                         ipcp_udp_port_req(&c_saddr,
                                           msg->dst_name,
-                                          msg->src_ae_name);
+                                          msg->src_ae_name,
+                                          msg->qoscube);
                         break;
                 case SHIM_UDP_MSG_CODE__FLOW_REPLY:
                         ipcp_udp_port_alloc_reply(msg->src_udp_port,
@@ -947,7 +952,7 @@ static int ipcp_udp_name_query(char * name)
 static int ipcp_udp_flow_alloc(int       fd,
                                char *    dst_name,
                                char *    src_ae_name,
-                               qoscube_t qos)
+                               qoscube_t cube)
 {
         struct sockaddr_in r_saddr; /* server address */
         struct sockaddr_in f_saddr; /* flow */
@@ -966,8 +971,10 @@ static int ipcp_udp_flow_alloc(int       fd,
                 return -1;
         }
 
-        if (qos != QOS_CUBE_BE)
-                LOG_DBG("QoS requested. UDP/IP can't do that.");
+        if (cube != QOS_CUBE_BE && cube != QOS_CUBE_FRC) {
+                LOG_DBG("Unsupported QoS requested.");
+                return -1;
+        }
 
         skfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
@@ -1030,7 +1037,8 @@ static int ipcp_udp_flow_alloc(int       fd,
         if (ipcp_udp_port_alloc(ip_addr,
                                 f_saddr.sin_port,
                                 dst_name,
-                                src_ae_name) < 0) {
+                                src_ae_name,
+                                cube) < 0) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&udp_data.flows_lock);
 
