@@ -45,7 +45,7 @@ message ipcp_msg {
         optional sint32 port_id      =  6;
         optional string dst_name     =  7;
         optional string src_ae_name  =  8;
-        optional sint32 qos_cube     =  9;
+        optional sint32 qoscube      =  9;
         optional dif_config_msg conf = 10;
         optional sint32 fd           = 11;
         optional sint32 api          = 12;

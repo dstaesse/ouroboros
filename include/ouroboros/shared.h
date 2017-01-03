@@ -24,7 +24,8 @@
 
 /* FIXME: To be decided which QoS cubes we support */
 typedef enum qos_cube {
-        QOS_CUBE_BE = 0,
+        QOS_CUBE_FRC = 0,
+        QOS_CUBE_BE,
         QOS_CUBE_VIDEO,
         QOS_CUBE_MAX
 } qoscube_t;

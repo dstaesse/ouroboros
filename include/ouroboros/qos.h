@@ -25,10 +25,12 @@
 
 #include <stdint.h>
 
-/* FIXME: may need revision */
 typedef struct qos_spec {
         uint32_t delay;
         uint32_t jitter;
+
+        /* FIXME: define qosspecs */
+        int cube;
 } qosspec_t;
 
 #endif

@@ -25,6 +25,7 @@
 #include <ouroboros/config.h>
 #include <ouroboros/list.h>
 #include <ouroboros/irm_config.h>
+#include <ouroboros/shared.h>
 
 #include "api_table.h"
 #include "apn_table.h"
@@ -62,6 +63,7 @@ struct reg_entry {
 
         enum reg_name_state state;
         char *              req_ae_name;
+        qoscube_t           qos;
         int                 response;
         pthread_cond_t      state_cond;
         pthread_mutex_t     state_lock;

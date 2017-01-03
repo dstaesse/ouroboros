@@ -36,7 +36,7 @@ void    ap_fini(void);
 
 /* Returns flow descriptor (> 0), client AE name and qos spec. */
 int     flow_accept(char **     ae_name,
-                    qosspec_t * qos);
+                    qosspec_t * spec);
 
 int     flow_alloc_resp(int fd,
                         int response);
@@ -47,7 +47,7 @@ int     flow_alloc_resp(int fd,
  */
 int     flow_alloc(char *      dst_name,
                    char *      src_ae_name,
-                   qosspec_t * qos);
+                   qosspec_t * spec);
 
 int     flow_alloc_res(int fd);
 

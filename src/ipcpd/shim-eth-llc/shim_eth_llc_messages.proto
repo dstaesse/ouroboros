@@ -35,5 +35,6 @@ message shim_eth_llc_msg {
         optional string src_ae_name          = 3;
         optional uint32 ssap                 = 4;
         optional uint32 dsap                 = 5;
-        optional sint32 response             = 6;
+        optional uint32 qoscube              = 6;
+        optional sint32 response             = 7;
 };
