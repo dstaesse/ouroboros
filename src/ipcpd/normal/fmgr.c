@@ -507,8 +507,6 @@ int fmgr_np1_post_buf(cep_id_t cep_id, buffer_t * buf)
                 break;
         }
 
-        pthread_rwlock_unlock(&fmgr.np1_flows_lock);
-
         flow_alloc_msg__free_unpacked(msg, NULL);
 
         return ret;
