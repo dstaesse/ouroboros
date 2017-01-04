@@ -45,6 +45,8 @@
 /* global for trapping signal */
 int irmd_api;
 
+pthread_t acceptor;
+
 void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 {
         (void) c;
@@ -54,9 +56,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGTERM:
         case SIGHUP:
                 if (info->si_pid == irmd_api) {
-                        LOG_DBG("IPCP %d terminating by order of %d. Bye.",
-                                getpid(), info->si_pid);
-
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() == IPCP_INIT)
@@ -70,6 +69,51 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         default:
                 return;
         }
+}
+
+static void * flow_acceptor(void * o)
+{
+        int       fd;
+        char *    ae_name;
+        qosspec_t qs;
+
+        (void) o;
+
+        while (true) {
+                pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+                if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        LOG_INFO("Shutting down flow acceptor.");
+                        return 0;
+                }
+
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+
+                fd = flow_accept(&ae_name, &qs);
+                if (fd < 0) {
+                        LOG_WARN("Flow accept failed.");
+                        continue;
+                }
+
+                LOG_DBG("New flow allocation request for AE %s.", ae_name);
+
+                if (strcmp(ae_name, MGMT_AE) == 0) {
+                        ribmgr_add_nm1_flow(fd);
+                } else if (strcmp(ae_name, DT_AE) == 0) {
+                        fmgr_nm1_add_flow(fd);
+                } else {
+                        LOG_DBG("Flow allocation request for unknown AE %s.",
+                                ae_name);
+                        if (flow_alloc_resp(fd, -1))
+                                LOG_WARN("Failed to reply to flow allocation.");
+                        flow_dealloc(fd);
+                }
+
+                free(ae_name);
+        }
+
+        return (void *) 0;
 }
 
 static int normal_ipcp_enroll(char * dst_name)
@@ -136,6 +180,18 @@ static int normal_ipcp_enroll(char * dst_name)
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
+        if (pthread_create(&acceptor, NULL, flow_acceptor, NULL)) {
+                if (frct_fini())
+                        LOG_WARN("Failed to finalize frct.");
+                if (fmgr_fini())
+                        LOG_WARN("Failed to finalize flow manager.");
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to create acceptor thread.");
+                return -1;
+        }
+
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
         /* FIXME: Remove once we obtain neighbors during enrollment */
@@ -143,6 +199,8 @@ static int normal_ipcp_enroll(char * dst_name)
                 LOG_ERR("Failed to establish data transfer flow.");
                 return -1;
         }
+
+        LOG_DBG("Enrolled with %s.", dst_name);
 
         return 0;
 }
@@ -204,6 +262,18 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
+        if (pthread_create(&acceptor, NULL, flow_acceptor, NULL)) {
+                if (frct_fini())
+                        LOG_WARN("Failed to finalize frct.");
+                if (fmgr_fini())
+                        LOG_WARN("Failed to finalize flow manager.");
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to create acceptor thread.");
+                return -1;
+        }
+
         ipcpi.data->dif_name = conf->dif_name;
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -224,56 +294,10 @@ static struct ipcp_ops normal_ops = {
         .ipcp_flow_dealloc    = fmgr_np1_dealloc
 };
 
-static void * flow_acceptor(void * o)
-{
-        int       fd;
-        char *    ae_name;
-        qosspec_t qs;
-
-        (void) o;
-
-        while (true) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_INFO("Shutting down flow acceptor.");
-                        return 0;
-                }
-
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-
-                fd = flow_accept(&ae_name, &qs);
-                if (fd < 0) {
-                        LOG_WARN("Flow accept failed.");
-                        continue;
-                }
-
-                LOG_DBG("New flow allocation request for AE %s.", ae_name);
-
-                if (strcmp(ae_name, MGMT_AE) == 0) {
-                        ribmgr_add_nm1_flow(fd);
-                } else if (strcmp(ae_name, DT_AE) == 0) {
-                        fmgr_nm1_add_flow(fd);
-                } else {
-                        LOG_DBG("Flow allocation request for unknown AE %s.",
-                                ae_name);
-                        if (flow_alloc_resp(fd, -1))
-                                LOG_WARN("Failed to reply to flow allocation.");
-                        flow_dealloc(fd);
-                }
-
-                free(ae_name);
-        }
-
-        return (void *) 0;
-}
-
 int main(int argc, char * argv[])
 {
         struct sigaction sig_act;
         sigset_t sigset;
-        pthread_t acceptor;
 
         if (ap_init(argv[0])) {
                 LOG_ERR("Failed to init AP");
@@ -306,10 +330,16 @@ int main(int argc, char * argv[])
         sigaction(SIGHUP,  &sig_act, NULL);
         sigaction(SIGPIPE, &sig_act, NULL);
 
-        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-
         if (ipcp_init(THIS_TYPE, &normal_ops) < 0) {
                 LOG_ERR("Failed to create instance.");
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
+
+        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
+        if (ipcp_boot() < 0) {
+                LOG_ERR("Failed to boot IPCP.");
                 close_logfile();
                 exit(EXIT_FAILURE);
         }
@@ -323,14 +353,7 @@ int main(int argc, char * argv[])
                 exit(EXIT_FAILURE);
         }
 
-        ipcp_wait_state(IPCP_OPERATIONAL, NULL);
-
-        if (pthread_create(&acceptor, NULL, flow_acceptor, NULL)) {
-                LOG_ERR("Failed to create acceptor thread.");
-                ipcp_set_state(IPCP_SHUTDOWN);
-        }
-
-        ipcp_fini();
+        ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 pthread_cancel(acceptor);
@@ -343,6 +366,8 @@ int main(int argc, char * argv[])
                 if (ribmgr_fini())
                         LOG_WARN("Failed to finalize RIB manager.");
         }
+
+        ipcp_fini();
 
         close_logfile();
 

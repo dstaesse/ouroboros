@@ -676,9 +676,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGTERM:
         case SIGHUP:
                 if (info->si_pid == irmd_api) {
-                        LOG_DBG("IPCP %d terminating by order of %d. Bye.",
-                                getpid(), info->si_pid);
-
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() == IPCP_INIT)
@@ -1115,11 +1112,13 @@ int main(int argc, char * argv[])
         }
 
         if (ap_init(NULL) < 0) {
+                LOG_ERR("Failed to init application.");
                 close_logfile();
                 exit(EXIT_FAILURE);
         }
 
         if (eth_llc_data_init() < 0) {
+                LOG_ERR("Failed to init shim-eth-llc data.");
                 close_logfile();
                 exit(EXIT_FAILURE);
         }
@@ -1139,9 +1138,16 @@ int main(int argc, char * argv[])
         sigaction(SIGHUP,  &sig_act, NULL);
         sigaction(SIGPIPE, &sig_act, NULL);
 
+        if (ipcp_init(THIS_TYPE, &eth_llc_ops) < 0) {
+                LOG_ERR("Failed to init IPCP.");
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
+
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
-        if (ipcp_init(THIS_TYPE, &eth_llc_ops) < 0) {
+        if (ipcp_boot() < 0) {
+                LOG_ERR("Failed to boot IPCP.");
                 close_logfile();
                 exit(EXIT_FAILURE);
         }
@@ -1154,7 +1160,7 @@ int main(int argc, char * argv[])
                 exit(EXIT_FAILURE);
         }
 
-        ipcp_fini();
+        ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 pthread_cancel(eth_llc_data.sdu_reader);
@@ -1162,6 +1168,8 @@ int main(int argc, char * argv[])
                 pthread_join(eth_llc_data.sdu_writer, NULL);
                 pthread_join(eth_llc_data.sdu_reader, NULL);
         }
+
+        ipcp_fini();
 
         eth_llc_data_fini();
 

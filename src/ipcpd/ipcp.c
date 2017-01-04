@@ -279,13 +279,12 @@ static void * ipcp_main_loop(void * o)
 int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
 {
         pthread_condattr_t cattr;
-        int t;
 
         struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
                              (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
 
         ipcpi.irmd_fd = -1;
-        ipcpi.state   = IPCP_INIT;
+        ipcpi.state   = IPCP_NULL;
 
         ipcpi.threadpool = malloc(sizeof(pthread_t) * IPCPD_THREADPOOL_SIZE);
         if (ipcpi.threadpool == NULL) {
@@ -329,20 +328,40 @@ int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
 #endif
         pthread_cond_init(&ipcpi.state_cond, &cattr);
 
-        for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
-                pthread_create(&ipcpi.threadpool[t], NULL,
-                               ipcp_main_loop, NULL);
+        return 0;
+}
+
+int ipcp_boot()
+{
+        int t;
+        for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t) {
+                if (pthread_create(&ipcpi.threadpool[t], NULL,
+                                   ipcp_main_loop, NULL)) {
+                        int i;
+                        LOG_ERR("Failed to create main thread.");
+                        ipcp_set_state(IPCP_NULL);
+                        for (i = 0; i < t; ++i)
+                                pthread_join(ipcpi.threadpool[i], NULL);
+                        return -1;
+                }
+        }
+
+        ipcpi.state   = IPCP_INIT;
 
         return 0;
 }
 
-void ipcp_fini()
+void ipcp_shutdown()
 {
         int t;
-
         for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
                 pthread_join(ipcpi.threadpool[t], NULL);
 
+        LOG_DBG("IPCP %d shutting down. Bye.", getpid());
+}
+
+void ipcp_fini()
+{
         close(ipcpi.sockfd);
         if (unlink(ipcpi.sock_path))
                 LOG_DBG("Could not unlink %s.", ipcpi.sock_path);
@@ -353,6 +372,7 @@ void ipcp_fini()
         ipcp_data_destroy(ipcpi.data);
 
         pthread_cond_destroy(&ipcpi.state_cond);
+        pthread_mutex_destroy(&ipcpi.state_mtx);
         pthread_rwlock_destroy(&ipcpi.state_lock);
 }
 

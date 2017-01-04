@@ -128,9 +128,6 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGHUP:
         case SIGQUIT:
                 if (info->si_pid == irmd_api) {
-                        LOG_DBG("IPCP %d terminating by order of %d. Bye.",
-                                getpid(), info->si_pid);
-
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() == IPCP_INIT)
@@ -367,9 +364,16 @@ int main(int argc, char * argv[])
         sigaction(SIGHUP,  &sig_act, NULL);
         sigaction(SIGPIPE, &sig_act, NULL);
 
+        if (ipcp_init(THIS_TYPE, &local_ops) < 0) {
+                LOG_ERR("Failed to init IPCP.");
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
+
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
-        if (ipcp_init(THIS_TYPE, &local_ops) < 0) {
+        if (ipcp_boot() < 0) {
+                LOG_ERR("Failed to boot IPCP.");
                 close_logfile();
                 exit(EXIT_FAILURE);
         }
@@ -382,12 +386,14 @@ int main(int argc, char * argv[])
                 exit(EXIT_FAILURE);
         }
 
-        ipcp_fini();
+        ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 pthread_cancel(local_data.sduloop);
                 pthread_join(local_data.sduloop, NULL);
         }
+
+        ipcp_fini();
 
         local_data_fini();
 
