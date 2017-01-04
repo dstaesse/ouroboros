@@ -32,6 +32,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 char * create_path(char * name)
 {
@@ -94,6 +95,8 @@ int dir_name_reg(char * name)
         char * path;
         uint64_t * addr;
 
+        assert(name);
+
         ro_attr_init(&attr);
         attr.enrol_sync = true;
         attr.recv_set = ALL_MEMBERS;
@@ -107,10 +110,12 @@ int dir_name_reg(char * name)
                 pathname_destroy(path);
                 return -ENOMEM;
         }
+
         *addr = ribmgr_address();
 
         if (ro_create(path, &attr, (uint8_t *) addr, sizeof(*addr))) {
                 pathname_destroy(path);
+                free(addr);
                 LOG_ERR("Failed to create RIB object.");
                 return -1;
         }
@@ -118,12 +123,16 @@ int dir_name_reg(char * name)
         LOG_DBG("Registered %s.", name);
         pathname_destroy(path);
 
+        free(name);
+
         return 0;
 }
 
 int dir_name_unreg(char * name)
 {
         char * path;
+
+        assert(name);
 
         path = create_path(name);
         if (path == NULL)
