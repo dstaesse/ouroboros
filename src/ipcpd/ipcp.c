@@ -334,6 +334,9 @@ int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
 int ipcp_boot()
 {
         int t;
+
+        ipcp_set_state(IPCP_INIT);
+
         for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t) {
                 if (pthread_create(&ipcpi.threadpool[t], NULL,
                                    ipcp_main_loop, NULL)) {
@@ -345,8 +348,6 @@ int ipcp_boot()
                         return -1;
                 }
         }
-
-        ipcpi.state   = IPCP_INIT;
 
         return 0;
 }
