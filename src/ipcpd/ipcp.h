@@ -55,6 +55,10 @@ struct ipcp {
 int             ipcp_init(enum ipcp_type type,
                           struct ipcp_ops * ops);
 
+int             ipcp_boot(void);
+
+void            ipcp_shutdown(void);
+
 void            ipcp_fini(void);
 
 void            ipcp_set_state(enum ipcp_state state);
