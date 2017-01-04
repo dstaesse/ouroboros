@@ -312,13 +312,13 @@ static struct rnode * ribmgr_ro_create(const char *   name,
 {
         char * str;
         char * str1;
-        char * saveptr;
-        char * token;
+        char * saveptr = NULL;
+        char * token = NULL;
         char * token2;
         struct rnode * node;
         struct rnode * new;
         struct rnode * prev;
-        bool sibling;
+        bool sibling = false;
         int timeout;
 
         str = strdup(name);
@@ -326,6 +326,8 @@ static struct rnode * ribmgr_ro_create(const char *   name,
                 return NULL;
 
         node = rib.root;
+
+        assert(node);
 
         for (str1 = str; node != NULL; str1 = NULL) {
                 token = strtok_r(str1, PATH_DELIMITER, &saveptr);
@@ -350,6 +352,8 @@ static struct rnode * ribmgr_ro_create(const char *   name,
                         }
                 }
         }
+
+        assert(token);
 
         token2 = strtok_r(NULL, PATH_DELIMITER, &saveptr);
         if (token2 != NULL) {
