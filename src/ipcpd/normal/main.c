@@ -187,6 +187,7 @@ static int normal_ipcp_enroll(char * dst_name)
                         LOG_WARN("Failed to finalize flow manager.");
                 if (ribmgr_fini())
                         LOG_WARN("Failed to finalize RIB manager.");
+                ipcp_set_state(IPCP_INIT);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to create acceptor thread.");
                 return -1;
@@ -269,6 +270,7 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
                         LOG_WARN("Failed to finalize flow manager.");
                 if (ribmgr_fini())
                         LOG_WARN("Failed to finalize RIB manager.");
+                ipcp_set_state(IPCP_INIT);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to create acceptor thread.");
                 return -1;
