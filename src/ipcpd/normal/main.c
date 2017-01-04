@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Normal IPC Process
  *
@@ -59,7 +59,11 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
-                        ipcp_set_state(IPCP_SHUTDOWN);
+                        if (ipcp_get_state() == IPCP_INIT)
+                                ipcp_set_state(IPCP_NULL);
+
+                        if (ipcp_get_state() == IPCP_OPERATIONAL)
+                                ipcp_set_state(IPCP_SHUTDOWN);
 
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
@@ -68,12 +72,11 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         }
 }
 
-static int normal_ipcp_enroll(char * dif_name)
+static int normal_ipcp_enroll(char * dst_name)
 {
-        struct timespec timeout = {(ENROLL_TIMEOUT / 1000),
-                                   (ENROLL_TIMEOUT % 1000) * MILLION};
+        int ret;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
+        pthread_rwlock_wrlock(&ipcpi.state_lock);
 
         if (ipcp_get_state() != IPCP_INIT) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -81,37 +84,62 @@ static int normal_ipcp_enroll(char * dif_name)
                 return -1; /* -ENOTINIT */
         }
 
-        pthread_rwlock_unlock(&ipcpi.state_lock);
+        if (ribmgr_init()) {
+                LOG_ERR("Failed to initialise RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return -1;
+        }
 
-        if (fmgr_nm1_mgmt_flow(dif_name)) {
+        if (ribmgr_nm1_mgt_flow(dst_name)) {
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
                 LOG_ERR("Failed to establish management flow.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
-        if (ribmgr_enrol()) {
-                LOG_ERR("Failed to enrol IPCP.");
-                return -1;
-        }
-
-        if (ipcp_wait_state(IPCP_BOOTING, &timeout) == -ETIMEDOUT) {
-                LOG_ERR("Enrollment timed out.");
+        ret = ribmgr_enrol();
+        if (ret < 0) {
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                if (ret == -ETIMEDOUT)
+                        LOG_ERR("Enrollment timed out.");
+                else
+                        LOG_ERR("Failed to enrol IPCP: %d.", ret);
                 return -1;
         }
 
         if (ribmgr_start_policies()) {
-                pthread_rwlock_wrlock(&ipcpi.state_lock);
-                ipcp_set_state(IPCP_INIT);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to start policies.");
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
+        if (fmgr_init()) {
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to start flow manager.");
+                return -1;
+        }
+
+        if (frct_init()) {
+                if (fmgr_fini())
+                        LOG_WARN("Failed to finalize flow manager.");
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to initialize FRCT.");
+                return -1;
+        }
+
         ipcp_set_state(IPCP_OPERATIONAL);
+
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
         /* FIXME: Remove once we obtain neighbors during enrollment */
-        if (fmgr_nm1_dt_flow(dif_name, QOS_CUBE_BE)) {
+        if (fmgr_nm1_dt_flow(dst_name, QOS_CUBE_BE)) {
                 LOG_ERR("Failed to establish data transfer flow.");
                 return -1;
         }
@@ -121,6 +149,11 @@ static int normal_ipcp_enroll(char * dif_name)
 
 static int normal_ipcp_bootstrap(struct dif_config * conf)
 {
+        if (conf == NULL || conf->type != THIS_TYPE) {
+                LOG_ERR("Bad DIF configuration.");
+                return -EINVAL;
+        }
+
         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
         if (ipcp_get_state() != IPCP_INIT) {
@@ -129,26 +162,48 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
                 return -1; /* -ENOTINIT */
         }
 
+        if (ribmgr_init()) {
+                LOG_ERR("Failed to initialise RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return -1;
+        }
+
         if (ribmgr_bootstrap(conf)) {
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to bootstrap RIB manager.");
                 return -1;
         }
 
-        ipcp_set_state(IPCP_BOOTING);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
         if (ribmgr_start_policies()) {
-                pthread_rwlock_wrlock(&ipcpi.state_lock);
-                ipcp_set_state(IPCP_INIT);
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to start policies.");
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
+        if (fmgr_init()) {
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to start flow manager.");
+                return -1;
+        }
+
+        if (frct_init()) {
+                if (fmgr_fini())
+                        LOG_WARN("Failed to finalize flow manager.");
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to initialize FRCT.");
+                return -1;
+        }
 
         ipcp_set_state(IPCP_OPERATIONAL);
+
         ipcpi.data->dif_name = conf->dif_name;
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -169,10 +224,56 @@ static struct ipcp_ops normal_ops = {
         .ipcp_flow_dealloc    = fmgr_np1_dealloc
 };
 
+static void * flow_acceptor(void * o)
+{
+        int       fd;
+        char *    ae_name;
+        qosspec_t qs;
+
+        (void) o;
+
+        while (true) {
+                pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+                if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        LOG_INFO("Shutting down flow acceptor.");
+                        return 0;
+                }
+
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+
+                fd = flow_accept(&ae_name, &qs);
+                if (fd < 0) {
+                        LOG_WARN("Flow accept failed.");
+                        continue;
+                }
+
+                LOG_DBG("New flow allocation request for AE %s.", ae_name);
+
+                if (strcmp(ae_name, MGMT_AE) == 0) {
+                        ribmgr_add_nm1_flow(fd);
+                } else if (strcmp(ae_name, DT_AE) == 0) {
+                        fmgr_nm1_add_flow(fd);
+                } else {
+                        LOG_DBG("Flow allocation request for unknown AE %s.",
+                                ae_name);
+                        if (flow_alloc_resp(fd, -1))
+                                LOG_WARN("Failed to reply to flow allocation.");
+                        flow_dealloc(fd);
+                }
+
+                free(ae_name);
+        }
+
+        return (void *) 0;
+}
+
 int main(int argc, char * argv[])
 {
         struct sigaction sig_act;
         sigset_t sigset;
+        pthread_t acceptor;
 
         if (ap_init(argv[0])) {
                 LOG_ERR("Failed to init AP");
@@ -215,16 +316,8 @@ int main(int argc, char * argv[])
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        if (ribmgr_init()) {
-                fmgr_fini();
-                ipcp_fini();
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
-
         if (ipcp_create_r(getpid())) {
                 LOG_ERR("Failed to notify IRMd we are initialized.");
-                fmgr_fini();
                 ipcp_fini();
                 close_logfile();
                 exit(EXIT_FAILURE);
@@ -232,22 +325,24 @@ int main(int argc, char * argv[])
 
         ipcp_wait_state(IPCP_OPERATIONAL, NULL);
 
-        if (fmgr_init()) {
-                ipcp_fini();
-                close_logfile();
-                exit(EXIT_FAILURE);
+        if (pthread_create(&acceptor, NULL, flow_acceptor, NULL)) {
+                LOG_ERR("Failed to create acceptor thread.");
+                ipcp_set_state(IPCP_SHUTDOWN);
         }
 
         ipcp_fini();
 
-        if (fmgr_fini())
-                LOG_ERR("Failed to finalize flow manager.");
+        if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                pthread_cancel(acceptor);
+                pthread_join(acceptor, NULL);
 
-        if (ribmgr_fini())
-                LOG_ERR("Failed to finalize RIB manager.");
-
-        if (frct_fini())
-                LOG_ERR("Failed to finalize FRCT.");
+                if (frct_fini())
+                        LOG_WARN("Failed to finalize FRCT.");
+                if (fmgr_fini())
+                        LOG_WARN("Failed to finalize flow manager.");
+                if (ribmgr_fini())
+                        LOG_WARN("Failed to finalize RIB manager.");
+        }
 
         close_logfile();
 

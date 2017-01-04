@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Flow manager of the IPC Process
  *
@@ -24,14 +24,8 @@
 
 #include <ouroboros/shared.h>
 
-#include <unistd.h>
-#include <stdint.h>
-#include <sys/types.h>
-
+#include "ae.h"
 #include "frct.h"
-
-#define MGMT_AE "Management"
-#define DT_AE "Data transfer"
 
 int fmgr_init(void);
 
@@ -53,7 +47,7 @@ int fmgr_np1_post_buf(cep_id_t   id,
 int fmgr_np1_post_sdu(cep_id_t             id,
                       struct shm_du_buff * sdb);
 
-int fmgr_nm1_mgmt_flow(char * dst_name);
+int fmgr_nm1_add_flow(int fd);
 
 int fmgr_nm1_dt_flow(char *    dst_name,
                      qoscube_t qos);

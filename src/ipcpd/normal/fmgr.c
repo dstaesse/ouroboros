@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Flow manager of the IPC Process
  *
@@ -60,72 +60,12 @@ struct {
         cep_id_t           np1_fd_to_cep_id[AP_MAX_FLOWS];
         int                np1_cep_id_to_fd[IPCPD_MAX_CONNS];
 
-        pthread_t          nm1_flow_acceptor;
         pthread_t          nm1_sdu_reader;
         pthread_t          np1_sdu_reader;
 
         /* FIXME: Replace with PFF */
         int fd;
 } fmgr;
-
-static void * fmgr_nm1_acceptor(void * o)
-{
-        int       fd;
-        char *    ae_name;
-        qoscube_t cube;
-        qosspec_t qs;
-
-        (void) o;
-
-        while (true) {
-                if (ipcp_get_state() == IPCP_SHUTDOWN)
-                        return 0;
-
-                fd = flow_accept(&ae_name, &qs);
-                if (fd < 0) {
-                        LOG_WARN("Flow accept failed.");
-                        continue;
-                }
-
-                if (!(strcmp(ae_name, MGMT_AE) == 0 ||
-                      strcmp(ae_name, DT_AE) == 0)) {
-                        if (flow_alloc_resp(fd, -1))
-                                LOG_WARN("Failed to reply to flow allocation.");
-                        flow_dealloc(fd);
-                        continue;
-                }
-
-                if (flow_alloc_resp(fd, 0)) {
-                        LOG_WARN("Failed to reply to flow allocation.");
-                        flow_dealloc(fd);
-                        continue;
-                }
-
-                LOG_DBG("Accepted new flow allocation request for AE %s.",
-                        ae_name);
-
-                if (strcmp(ae_name, MGMT_AE) == 0) {
-                        if (ribmgr_add_flow(fd)) {
-                                LOG_WARN("Failed to hand fd to RIB.");
-                                flow_dealloc(fd);
-                                continue;
-                        }
-                } else {
-                        ipcp_flow_get_qoscube(fd, &cube);
-                        if (flow_set_add(fmgr.nm1_set[cube], fd)) {
-                                LOG_WARN("Failed to add fd.");
-                                flow_dealloc(fd);
-                                continue;
-                        }
-                        /* FIXME: Temporary, until we have a PFF */
-                        fmgr.fd = fd;
-                }
-
-                free(ae_name);
-        }
-
-        return (void *) 0;
-}
 
 static void * fmgr_np1_sdu_reader(void * o)
 {
@@ -313,7 +253,6 @@ int fmgr_init()
                 }
         }
 
-        pthread_create(&fmgr.nm1_flow_acceptor, NULL, fmgr_nm1_acceptor, NULL);
         pthread_create(&fmgr.np1_sdu_reader, NULL, fmgr_np1_sdu_reader, NULL);
         pthread_create(&fmgr.nm1_sdu_reader, NULL, fmgr_nm1_sdu_reader, NULL);
 
@@ -325,11 +264,9 @@ int fmgr_fini()
         int i;
         int j;
 
-        pthread_cancel(fmgr.nm1_flow_acceptor);
         pthread_cancel(fmgr.np1_sdu_reader);
         pthread_cancel(fmgr.nm1_sdu_reader);
 
-        pthread_join(fmgr.nm1_flow_acceptor, NULL);
         pthread_join(fmgr.np1_sdu_reader, NULL);
         pthread_join(fmgr.nm1_sdu_reader, NULL);
 
@@ -359,16 +296,6 @@ int fmgr_np1_alloc(int       fd,
         char * path;
         uint8_t * ro_data;
         uint64_t addr;
-
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("IPCP is not enrolled yet.");
-                return -1; /* -ENOTINIT */
-        }
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         path = pathname_create(RO_DIR);
         if (path == NULL)
@@ -605,30 +532,21 @@ int fmgr_np1_post_sdu(cep_id_t cep_id, struct shm_du_buff * sdb)
         return 0;
 }
 
-int fmgr_nm1_mgmt_flow(char * dst_name)
+/* FIXME: do this in a topologymanager instance */
+int fmgr_nm1_add_flow(int fd)
 {
-        int fd;
-        int result;
+        qoscube_t qos;
 
-        /* FIXME: Request retransmission. */
-        fd = flow_alloc(dst_name, MGMT_AE, NULL);
-        if (fd < 0) {
-                LOG_ERR("Failed to allocate flow to %s.", dst_name);
+        if (flow_alloc_resp(fd, 0) < 0) {
+                LOG_ERR("Could not respond to new flow.");
                 return -1;
         }
 
-        result = flow_alloc_res(fd);
-        if (result < 0) {
-                LOG_ERR("Result of flow allocation to %s is %d.",
-                        dst_name, result);
-                return -1;
-        }
+        ipcp_flow_get_qoscube(fd, &qos);
+        flow_set_add(fmgr.nm1_set[qos], fd);
 
-        if (ribmgr_add_flow(fd)) {
-                LOG_ERR("Failed to hand file descriptor to RIB manager.");
-                flow_dealloc(fd);
-                return -1;
-        }
+        /* FIXME: Temporary, until we have a PFF */
+        fmgr.fd = fd;
 
         return 0;
 }

@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * DIF directory
  *
@@ -26,7 +26,6 @@
 #include <ouroboros/errno.h>
 
 #include "dir.h"
-#include "ipcp.h"
 #include "ro.h"
 #include "pathname.h"
 #include "ribmgr.h"
@@ -95,40 +94,26 @@ int dir_name_reg(char * name)
         char * path;
         uint64_t * addr;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("IPCP is not in RUNNING state.");
-                return -1;
-        }
-
         ro_attr_init(&attr);
         attr.enrol_sync = true;
         attr.recv_set = ALL_MEMBERS;
 
         path = create_path(name);
-        if (path == NULL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
+        if (path == NULL)
                 return -ENOMEM;
-        }
 
         addr = malloc(sizeof(*addr));
         if (addr == NULL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 pathname_destroy(path);
                 return -ENOMEM;
         }
         *addr = ribmgr_address();
 
         if (ro_create(path, &attr, (uint8_t *) addr, sizeof(*addr))) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 pathname_destroy(path);
                 LOG_ERR("Failed to create RIB object.");
                 return -1;
         }
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         LOG_DBG("Registered %s.", name);
         pathname_destroy(path);
@@ -140,28 +125,15 @@ int dir_name_unreg(char * name)
 {
         char * path;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("IPCP is not in RUNNING state.");
-                return -1;
-        }
-
         path = create_path(name);
-        if (path == NULL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
+        if (path == NULL)
                 return -ENOMEM;
-        }
 
         if (ro_delete(path)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 pathname_destroy(path);
                 LOG_ERR("No such RIB object exists.");
                 return -1;
         }
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         pathname_destroy(path);
 
@@ -176,18 +148,9 @@ int dir_name_query(char * name)
         uint64_t addr;
         struct dt_const * dtc;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                return -1;
-        }
-
         path = create_path(name);
-        if (path == NULL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                return -1;
-        }
+        if (path == NULL)
+                return -ENOMEM;
 
         if (ro_exists(path)) {
                 if (ro_read(path, &ro_data) < 0) {
@@ -205,8 +168,6 @@ int dir_name_query(char * name)
 
                 ret = (addr == ribmgr_address()) ? -1 : 0;
         }
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         pathname_destroy(path);
 

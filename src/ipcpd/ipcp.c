@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * IPC process main loop
  *
@@ -65,6 +65,7 @@ static void * ipcp_main_loop(void * o)
                 int fd = -1;
 
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
+
                 if (ipcp_get_state() == IPCP_SHUTDOWN
                     || ipcp_get_state() == IPCP_NULL) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -389,7 +390,9 @@ int ipcp_wait_state(enum ipcp_state         state,
 
         pthread_mutex_lock(&ipcpi.state_mtx);
 
-        while (ipcpi.state != state && ipcpi.state != IPCP_SHUTDOWN) {
+        while (ipcpi.state != state
+               && ipcpi.state != IPCP_SHUTDOWN
+               && ipcpi.state != IPCP_NULL) {
                 if (timeout == NULL)
                         ret = -pthread_cond_wait(&ipcpi.state_cond,
                                                  &ipcpi.state_mtx);
