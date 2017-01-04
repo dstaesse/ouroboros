@@ -315,9 +315,9 @@ static struct rnode * ribmgr_ro_create(const char *   name,
         char * saveptr = NULL;
         char * token = NULL;
         char * token2;
-        struct rnode * node;
-        struct rnode * new;
-        struct rnode * prev;
+        struct rnode * node = NULL;
+        struct rnode * new = NULL;
+        struct rnode * prev = NULL;
         bool sibling = false;
         int timeout;
 
@@ -354,6 +354,7 @@ static struct rnode * ribmgr_ro_create(const char *   name,
         }
 
         assert(token);
+        assert(prev);
 
         token2 = strtok_r(NULL, PATH_DELIMITER, &saveptr);
         if (token2 != NULL) {
