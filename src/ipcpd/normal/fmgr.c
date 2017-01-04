@@ -229,7 +229,7 @@ int fmgr_init()
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 fmgr.np1_set[i] = flow_set_create();
-                if (fmgr.np1_set == NULL) {
+                if (fmgr.np1_set[i] == NULL) {
                         fmgr_destroy_flows();
                         return -1;
                 }
@@ -241,7 +241,7 @@ int fmgr_init()
                 }
 
                 fmgr.nm1_set[i] = flow_set_create();
-                if (fmgr.nm1_set == NULL) {
+                if (fmgr.nm1_set[i] == NULL) {
                         fmgr_destroy_flows();
                         return -1;
                 }
