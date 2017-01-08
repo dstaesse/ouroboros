@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Enroll IPC Processes
  *
@@ -68,7 +68,6 @@ int do_enroll_ipcp(int argc, char ** argv)
                 api = irm_create_ipcp(name, IPCP_NORMAL);
                 if (api == 0)
                         return -1;
-                irm_bind_api(api, name);
                 len = irm_list_ipcps(name, &apis);
         }
 

@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Create IPC Processes
  *
@@ -84,9 +84,6 @@ int do_create_ipcp(int argc, char ** argv)
         api = irm_create_ipcp(ipcp_name, type);
         if (api == 0)
                 return -1;
-
-        if (type == IPCP_NORMAL)
-                irm_bind_api(api, ipcp_name);
 
         return 0;
 }

@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Bootstrap IPC Processes
  *
@@ -199,8 +199,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 api = irm_create_ipcp(name, conf.type);
                 if (api == 0)
                         return -1;
-                if (conf.type == IPCP_NORMAL)
-                        irm_bind_api(api, name);
                 len = irm_list_ipcps(name, &apis);
         }
 

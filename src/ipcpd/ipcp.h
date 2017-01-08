@@ -38,6 +38,9 @@ enum ipcp_state {
 };
 
 struct ipcp {
+        int                irmd_api;
+        char *             name;
+
         struct ipcp_data * data;
         struct ipcp_ops *  ops;
         int                irmd_fd;

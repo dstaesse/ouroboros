@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * The IPC Resource Manager
  *
@@ -245,7 +245,7 @@ static pid_t create_ipcp(char * name, enum ipcp_type ipcp_type)
 
         pthread_rwlock_wrlock(&irmd->reg_lock);
 
-        api->pid = ipcp_create(ipcp_type);
+        api->pid = ipcp_create(name, ipcp_type);
         if (api->pid == -1) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);

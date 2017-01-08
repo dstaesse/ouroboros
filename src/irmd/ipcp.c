@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * The API to instruct IPCPs
  *
@@ -100,7 +100,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t api, ipcp_msg_t * msg)
        return recv_msg;
 }
 
-pid_t ipcp_create(enum ipcp_type ipcp_type)
+pid_t ipcp_create(char * name, enum ipcp_type ipcp_type)
 {
         pid_t api = -1;
         char irmd_api[10];
@@ -109,7 +109,7 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
         char * full_name = NULL;
         char * exec_name = NULL;
         char * log_file = NULL;
-        char * argv[4];
+        char * argv[5];
 
         sprintf(irmd_api, "%u", getpid());
 
@@ -119,9 +119,8 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
                 return api;
         }
 
-        if (api != 0) {
+        if (api != 0)
                 return api;
-        }
 
         if (ipcp_type == IPCP_NORMAL)
                 exec_name = IPCP_NORMAL_EXEC;
@@ -162,8 +161,9 @@ pid_t ipcp_create(enum ipcp_type ipcp_type)
         /* log_file to be placed at the end */
         argv[0] = full_name;
         argv[1] = irmd_api;
-        argv[2] = log_file;
-        argv[3] = NULL;
+        argv[2] = name;
+        argv[3] = log_file;
+        argv[4] = NULL;
 
         execv(argv[0], &argv[0]);
 

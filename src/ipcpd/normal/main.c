@@ -26,6 +26,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/irm.h>
 
 #include "fmgr.h"
 #include "ribmgr.h"
@@ -55,7 +56,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                if (info->si_pid == irmd_api) {
+                if (info->si_pid == ipcpi.irmd_api) {
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() == IPCP_INIT)
@@ -195,12 +196,6 @@ static int normal_ipcp_enroll(char * dst_name)
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        /* FIXME: Remove once we obtain neighbors during enrollment */
-        if (fmgr_nm1_dt_flow(dst_name, QOS_CUBE_BE)) {
-                LOG_ERR("Failed to establish data transfer flow.");
-                return -1;
-        }
-
         LOG_DBG("Enrolled with %s.", dst_name);
 
         return 0;
@@ -317,8 +312,11 @@ int main(int argc, char * argv[])
                 exit(EXIT_FAILURE);
         }
 
-        /* store the process id of the irmd */
-        irmd_api = atoi(argv[1]);
+        if (irm_bind_api(getpid(), ipcpi.name)) {
+                LOG_ERR("Failed to bind AP name.");
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));

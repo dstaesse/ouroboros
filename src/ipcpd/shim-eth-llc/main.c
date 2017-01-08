@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Shim IPC process over Ethernet with LLC
  *
@@ -76,9 +76,6 @@ typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 
 #define EVENT_WAIT_TIMEOUT 100 /* us */
 #define NAME_QUERY_TIMEOUT 100000000 /* ns */
-
-/* global for trapping signal */
-int irmd_api;
 
 struct eth_llc_frame {
         uint8_t dst_hwaddr[MAC_SIZE];
@@ -675,7 +672,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                if (info->si_pid == irmd_api) {
+                if (info->si_pid == ipcpi.irmd_api) {
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() == IPCP_INIT)
@@ -1122,9 +1119,6 @@ int main(int argc, char * argv[])
                 close_logfile();
                 exit(EXIT_FAILURE);
         }
-
-        /* store the process id of the irmd */
-        irmd_api = atoi(argv[1]);
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));
