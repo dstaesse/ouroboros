@@ -69,7 +69,7 @@ struct htable * htable_create(uint64_t buckets, bool hash_key)
         }
 
         for (i = 0; i < buckets; i++)
-                INIT_LIST_HEAD(&(tmp->buckets[i]));
+                list_head_init(&(tmp->buckets[i]));
 
         return tmp;
 }
@@ -136,7 +136,7 @@ int htable_insert(struct htable * table, uint64_t key, void * val)
 
         entry->key = key;
         entry->val = val;
-        INIT_LIST_HEAD(&entry->next);
+        list_head_init(&entry->next);
 
         list_add(&entry->next, &(table->buckets[lookup_key]));
 

@@ -63,10 +63,10 @@ static struct reg_entry * reg_entry_init(struct reg_entry * e,
         if (e == NULL || name == NULL)
                 return NULL;
 
-        INIT_LIST_HEAD(&e->next);
-        INIT_LIST_HEAD(&e->difs);
-        INIT_LIST_HEAD(&e->reg_apns);
-        INIT_LIST_HEAD(&e->reg_apis);
+        list_head_init(&e->next);
+        list_head_init(&e->difs);
+        list_head_init(&e->reg_apns);
+        list_head_init(&e->reg_apis);
 
         e->name = name;
 
@@ -228,7 +228,7 @@ void reg_entry_del_apn(struct reg_entry * e, char * apn)
                 }
         }
 
-        if (e->state == REG_NAME_AUTO_ACCEPT && list_empty(&e->reg_apns)) {
+        if (e->state == REG_NAME_AUTO_ACCEPT && list_is_empty(&e->reg_apns)) {
                 e->state = REG_NAME_IDLE;
                 pthread_cond_broadcast(&e->state_cond);
         }
@@ -237,7 +237,7 @@ void reg_entry_del_apn(struct reg_entry * e, char * apn)
 
 char * reg_entry_get_apn(struct reg_entry * e)
 {
-        if (!list_empty(&e->reg_apis) || list_empty(&e->reg_apns))
+        if (!list_is_empty(&e->reg_apis) || list_is_empty(&e->reg_apns))
                 return NULL;
 
         return list_first_entry(&e->reg_apns, struct str_el, next)->str;
@@ -311,8 +311,8 @@ void reg_entry_del_api(struct reg_entry * e, pid_t api)
                 }
         }
 
-        if (list_empty(&e->reg_apis)) {
-                if (!list_empty(&e->reg_apns))
+        if (list_is_empty(&e->reg_apis)) {
+                if (!list_is_empty(&e->reg_apns))
                         e->state = REG_NAME_AUTO_ACCEPT;
                 else
                         e->state = REG_NAME_IDLE;
@@ -328,7 +328,7 @@ pid_t reg_entry_get_api(struct reg_entry * e)
         if (e == NULL)
                 return -1;
 
-        if (list_empty(&e->reg_apis))
+        if (list_is_empty(&e->reg_apis))
                 return -1;
 
         return list_first_entry(&e->reg_apis, struct pid_el, next)->pid;

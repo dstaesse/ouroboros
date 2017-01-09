@@ -51,7 +51,7 @@ struct cdap_req * cdap_req_create(cdap_key_t key)
         pthread_cond_init(&creq->cond, &cattr);
         pthread_mutex_init(&creq->lock, NULL);
 
-        INIT_LIST_HEAD(&creq->next);
+        list_head_init(&creq->next);
 
         clock_gettime(PTHREAD_COND_CLOCK, &creq->birth);
 

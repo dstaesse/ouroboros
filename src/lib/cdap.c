@@ -365,8 +365,8 @@ struct cdap * cdap_create(int fd)
                 return NULL;
         }
 
-        INIT_LIST_HEAD(&instance->sent);
-        INIT_LIST_HEAD(&instance->rcvd);
+        list_head_init(&instance->sent);
+        list_head_init(&instance->rcvd);
 
         instance->fd = fd;
 
@@ -573,7 +573,7 @@ cdap_key_t cdap_request_wait(struct cdap *      instance,
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) &instance->rcvd_lock);
 
-        while (list_empty(&instance->rcvd))
+        while (list_is_empty(&instance->rcvd))
                 pthread_cond_wait(&instance->rcvd_cond, &instance->rcvd_lock);
 
         rcvd = list_first_entry(&instance->rcvd, struct cdap_rcvd, next);
