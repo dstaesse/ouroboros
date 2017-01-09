@@ -23,6 +23,7 @@
 #define OUROBOROS_IPCPD_NORMAL_FMGR_H
 
 #include <ouroboros/shared.h>
+#include <ouroboros/qos.h>
 
 #include "ae.h"
 #include "frct.h"
@@ -47,15 +48,14 @@ int fmgr_np1_post_buf(cep_id_t   id,
 int fmgr_np1_post_sdu(cep_id_t             id,
                       struct shm_du_buff * sdb);
 
-int fmgr_nm1_add_flow(int fd);
-
-int fmgr_nm1_dt_flow(char *    dst_name,
-                     qoscube_t qos);
-
 int fmgr_nm1_write_sdu(struct pci *         pci,
                        struct shm_du_buff * sdb);
 
 int fmgr_nm1_write_buf(struct pci * pci,
                        buffer_t *   buf);
+
+int fmgr_nm1_flow_arr(int       fd,
+                      qosspec_t qs);
+
 
 #endif /* OUROBOROS_IPCPD_NORMAL_FMGR_H */

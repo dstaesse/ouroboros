@@ -48,7 +48,9 @@ int irmd_api;
 
 pthread_t acceptor;
 
-void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
+void ipcp_sig_handler(int         sig,
+                      siginfo_t * info,
+                      void *      c)
 {
         (void) c;
 
@@ -102,7 +104,7 @@ static void * flow_acceptor(void * o)
                 if (strcmp(ae_name, MGMT_AE) == 0) {
                         ribmgr_add_nm1_flow(fd);
                 } else if (strcmp(ae_name, DT_AE) == 0) {
-                        fmgr_nm1_add_flow(fd);
+                        fmgr_nm1_flow_arr(fd, qs);
                 } else {
                         LOG_DBG("Flow allocation request for unknown AE %s.",
                                 ae_name);
@@ -291,10 +293,11 @@ static struct ipcp_ops normal_ops = {
         .ipcp_flow_dealloc    = fmgr_np1_dealloc
 };
 
-int main(int argc, char * argv[])
+int main(int    argc,
+         char * argv[])
 {
         struct sigaction sig_act;
-        sigset_t sigset;
+        sigset_t         sigset;
 
         if (ap_init(argv[0])) {
                 LOG_ERR("Failed to init AP");

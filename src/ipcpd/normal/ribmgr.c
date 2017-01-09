@@ -1577,8 +1577,8 @@ ssize_t ro_children(const char * name, char *** children)
         }
         child = node->child;
 
-        **children = malloc(len);
-        if (**children == NULL) {
+        *children = malloc(len);
+        if (*children == NULL) {
                 pthread_mutex_unlock(&rib.ro_lock);
                 return -1;
         }
@@ -1590,7 +1590,7 @@ ssize_t ro_children(const char * name, char *** children)
                                 free((*children)[i]);
                                 i--;
                         }
-                        free(**children);
+                        free(*children);
                         pthread_mutex_unlock(&rib.ro_lock);
                         return -1;
                 }
