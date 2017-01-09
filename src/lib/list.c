@@ -3,8 +3,8 @@
  *
  * Simple doubly linked list implementation.
  *
- *    Sander Vrijders    <sander.vrijders@intec.ugent.be>
- *    Dimitri Staessense <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
