@@ -8,8 +8,8 @@ protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS irmd_messages.proto)
 protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS ipcpd_messages.proto)
 protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
   dif_config.proto)
-protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS
-  cdap.proto)
+protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS cdap.proto)
+protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
 
 if(NOT APPLE)
   find_library(LIBRT_LIBRARIES rt)
@@ -28,6 +28,7 @@ endif()
 set(SOURCE_FILES
   # Add source files here
   bitmap.c
+  cacep.c
   cdap.c
   cdap_req.c
   dev.c
@@ -45,9 +46,9 @@ set(SOURCE_FILES
   utils.c
   )
 
-add_library(ouroboros SHARED ${SOURCE_FILES}
-  ${IRM_PROTO_SRCS} ${IPCP_PROTO_SRCS}
-  ${DIF_CONFIG_PROTO_SRCS} ${CDAP_PROTO_SRCS})
+add_library(ouroboros SHARED ${SOURCE_FILES} ${IRM_PROTO_SRCS}
+  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS}
+  ${CDAP_PROTO_SRCS} ${CACEP_PROTO_SRCS})
 
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY})
