@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * IPC process utilities
  *
@@ -119,9 +119,9 @@ struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
         dst->dif_name = NULL;
 
         /* init the lists */
-        INIT_LIST_HEAD(&dst->registry);
-        INIT_LIST_HEAD(&dst->directory);
-        INIT_LIST_HEAD(&dst->dir_queries);
+        list_head_init(&dst->registry);
+        list_head_init(&dst->directory);
+        list_head_init(&dst->dir_queries);
 
         /* init the locks */
         pthread_rwlock_init(&dst->reg_lock, NULL);
@@ -437,7 +437,7 @@ struct dir_query * ipcp_data_dir_query_create(char * name)
         pthread_cond_init(&query->cond, &cattr);
         pthread_mutex_init(&query->lock, NULL);
 
-        INIT_LIST_HEAD(&query->next);
+        list_head_init(&query->next);
 
         return query;
 }

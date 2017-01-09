@@ -471,9 +471,9 @@ static int write_ro_msg(struct cdap *    neighbor,
 
 int ribmgr_init()
 {
-        INIT_LIST_HEAD(&rib.flows);
-        INIT_LIST_HEAD(&rib.subs);
-        INIT_LIST_HEAD(&rib.ro_ids);
+        list_head_init(&rib.flows);
+        list_head_init(&rib.subs);
+        list_head_init(&rib.ro_ids);
 
         rib.root = malloc(sizeof(*(rib.root)));
         if (rib.root == NULL)
@@ -993,7 +993,7 @@ static int ro_id_create(char * name, ro_msg_t * msg)
 
         tmp->seqno = msg->seqno;
         tmp->full_name = strdup(name);
-        INIT_LIST_HEAD(&tmp->next);
+        list_head_init(&tmp->next);
 
         if (tmp->full_name == NULL) {
                 free(tmp);
@@ -1154,7 +1154,7 @@ static int ribmgr_add_flow(int fd)
                 return -1;
         }
 
-        INIT_LIST_HEAD(&flow->next);
+        list_head_init(&flow->next);
         flow->instance = instance;
         flow->fd = fd;
 
@@ -1310,7 +1310,7 @@ int ribmgr_enrol()
 
         pthread_rwlock_wrlock(&rib.flows_lock);
 
-        assert(!list_empty(&rib.flows));
+        assert(!list_is_empty(&rib.flows));
 
         flow = list_first_entry((&rib.flows), struct mgmt_flow, next);
         instance = flow->instance;
@@ -1631,7 +1631,7 @@ int ro_subscribe(const char * name, struct ro_sub_ops * ops)
         if (sub == NULL)
                 return -ENOMEM;
 
-        INIT_LIST_HEAD(&sub->next);
+        list_head_init(&sub->next);
 
         sub->name = strdup(name);
         if (sub->name == NULL) {

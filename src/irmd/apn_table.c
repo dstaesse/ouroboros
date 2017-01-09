@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * The IPC Resource Manager - Application Process Table
  *
@@ -41,8 +41,8 @@ struct apn_entry * apn_entry_create(char * apn,
         if (e == NULL)
                 return NULL;
 
-        INIT_LIST_HEAD(&e->next);
-        INIT_LIST_HEAD(&e->names);
+        list_head_init(&e->next);
+        list_head_init(&e->names);
 
         e->apn   = apn;
         e->ap    = ap;

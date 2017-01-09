@@ -150,7 +150,7 @@ static struct ipcp_entry * ipcp_entry_create(void)
         e->name = NULL;
         e->dif_name = NULL;
 
-        INIT_LIST_HEAD(&e->next);
+        list_head_init(&e->next);
 
         return e;
 }
@@ -260,7 +260,7 @@ static pid_t create_ipcp(char * name, enum ipcp_type ipcp_type)
                 return -1;
         }
 
-        INIT_LIST_HEAD(&tmp->next);
+        list_head_init(&tmp->next);
 
         tmp->api = api->pid;
         tmp->name = strdup(name);
@@ -743,7 +743,7 @@ static int name_reg(char * name, char ** difs, size_t len)
 
         pthread_rwlock_wrlock(&irmd->reg_lock);
 
-        if (list_empty(&irmd->ipcps)) {
+        if (list_is_empty(&irmd->ipcps)) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return -1;
@@ -1988,12 +1988,12 @@ static int irm_create(void)
                 return -1;
         }
 
-        INIT_LIST_HEAD(&irmd->ipcps);
-        INIT_LIST_HEAD(&irmd->api_table);
-        INIT_LIST_HEAD(&irmd->apn_table);
-        INIT_LIST_HEAD(&irmd->spawned_apis);
-        INIT_LIST_HEAD(&irmd->registry);
-        INIT_LIST_HEAD(&irmd->irm_flows);
+        list_head_init(&irmd->ipcps);
+        list_head_init(&irmd->api_table);
+        list_head_init(&irmd->apn_table);
+        list_head_init(&irmd->spawned_apis);
+        list_head_init(&irmd->registry);
+        list_head_init(&irmd->irm_flows);
 
         irmd->port_ids = bmp_create(IRMD_MAX_FLOWS, 0);
         if (irmd->port_ids == NULL) {

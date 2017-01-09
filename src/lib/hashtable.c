@@ -1,22 +1,23 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Hash table with separate chaining on collisions
  *
  *    Sander Vrijders <sander.vrijders@intec.ugent.be>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public License
+ * version 2.1 as published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful,
+ * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301 USA
  */
 
 #include <ouroboros/config.h>
@@ -69,7 +70,7 @@ struct htable * htable_create(uint64_t buckets, bool hash_key)
         }
 
         for (i = 0; i < buckets; i++)
-                INIT_LIST_HEAD(&(tmp->buckets[i]));
+                list_head_init(&(tmp->buckets[i]));
 
         return tmp;
 }
@@ -136,7 +137,7 @@ int htable_insert(struct htable * table, uint64_t key, void * val)
 
         entry->key = key;
         entry->val = val;
-        INIT_LIST_HEAD(&entry->next);
+        list_head_init(&entry->next);
 
         list_add(&entry->next, &(table->buckets[lookup_key]));
 
