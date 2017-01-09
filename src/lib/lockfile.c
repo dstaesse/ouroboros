@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Lockfile for ouroboros system
+ * Lockfile for Ouroboros
  *
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
