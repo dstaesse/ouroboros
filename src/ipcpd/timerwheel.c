@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
  * Timerwheel
  *
@@ -232,7 +232,7 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         tw->intv.tv_sec = (tw->resolution / FRAC) / 1000;
         tw->intv.tv_nsec = ((tw->resolution / FRAC) % 1000) * MILLION;
 
-        INIT_LIST_HEAD(&tw->wq);
+        list_head_init(&tw->wq);
 
         if (pthread_mutex_init(&tw->lock, NULL)) {
                 LOG_DBG("Could not init mutex.");
@@ -265,7 +265,7 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         now.tv_nsec -= (now.tv_nsec % MILLION);
 
         for (i = 0; i < tw->elements; ++i) {
-                INIT_LIST_HEAD(&tw->wheel[i].funcs);
+                list_head_init(&tw->wheel[i].funcs);
                 tw->wheel[i].expiry = now;
                 ts_add(&now, &res_ts, &now);
         }
