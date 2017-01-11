@@ -37,6 +37,7 @@ set(SOURCE_FILES
   lockfile.c
   logs.c
   nsm.c
+  sha3.c
   shm_flow_set.c
   shm_rbuff.c
   shm_rdrbuff.c
