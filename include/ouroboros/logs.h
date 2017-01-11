@@ -3,8 +3,9 @@
  *
  * Logging facilities
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders       <sander.vrijders@intec.ugent.be>
  *    Francesco Salvestrini <f.salvestrini@nextworks.it>
+ *    Dimitri Staessens     <dimitri.staessens@intec.ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -26,6 +27,7 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #ifndef OUROBOROS_PREFIX
 #error You must define OUROBOROS_PREFIX before including this file
@@ -48,37 +50,38 @@ void close_logfile(void);
 
 extern FILE * logfile;
 
-#define __LOG(CLR, LVL, FMT, ARGS...)                                   \
+#define __LOG(CLR, FUNC, LVL, ...)                                      \
         do {                                                            \
                 if (logfile != NULL) {                                  \
-                        fprintf(logfile,                                \
-                                OUROBOROS_PREFIX "(" LVL "): "          \
-                                FMT ANSI_COLOR_RESET "\n", ##ARGS);     \
+                        fprintf(logfile, OUROBOROS_PREFIX);             \
+                        fprintf(logfile, "(" LVL "): ");                \
+                        if (FUNC)                                       \
+                                fprintf(logfile, "%s: ", __FUNCTION__); \
+                        fprintf(logfile, __VA_ARGS__);                  \
+                        fprintf(logfile, "\n");                         \
                         fflush(logfile);                                \
                 } else {                                                \
-                        printf(CLR "==%05d== "                          \
-                               OUROBOROS_PREFIX "(" LVL "): "           \
-                               FMT ANSI_COLOR_RESET "\n", getpid(),     \
-                               ##ARGS);                                 \
+                        printf(CLR "==%05d== ", getpid());              \
+                        printf(OUROBOROS_PREFIX "(" LVL "): ");         \
+                        if (FUNC)                                       \
+                                printf("%s: ", __FUNCTION__);           \
+                        printf(__VA_ARGS__);                            \
+                        printf(ANSI_COLOR_RESET "\n");                  \
                 }                                                       \
         } while (0)
 
-#define LOG_ERR(FMT, ARGS...) __LOG(ANSI_COLOR_RED,             \
-                                    ERROR_CODE, FMT, ##ARGS)
-#define LOG_WARN(FMT, ARGS...) __LOG(ANSI_COLOR_YELLOW,         \
-                                     WARN_CODE, FMT, ##ARGS)
-#define LOG_INFO(FMT, ARGS...) __LOG(ANSI_COLOR_GREEN,          \
-                                     INFO_CODE, FMT, ##ARGS)
-#define LOG_NI(FMT, ARGS...) __LOG(ANSI_COLOR_BLUE,             \
-                                   IMPL_CODE,  FMT, ##ARGS)
+#define LOG_ERR(...)  __LOG(ANSI_COLOR_RED, false, ERROR_CODE, __VA_ARGS__)
+#define LOG_WARN(...) __LOG(ANSI_COLOR_YELLOW, false, WARN_CODE, __VA_ARGS__)
+#define LOG_INFO(...) __LOG(ANSI_COLOR_GREEN, false, INFO_CODE, __VA_ARGS__)
+#define LOG_NI(...)   __LOG(ANSI_COLOR_BLUE, false, IMPL_CODE, __VA_ARGS__)
 
 #ifdef CONFIG_OUROBOROS_DEBUG
-#define LOG_DBG(FMT, ARGS...) __LOG("", DEBUG_CODE, FMT, ##ARGS)
+#define LOG_DBG(...)  __LOG("", false, DEBUG_CODE, __VA_ARGS__)
+#define LOG_DBGF(...) __LOG("", true, DEBUG_CODE, __VA_ARGS__)
 #else
-#define LOG_DBG(FMT, ARGS...) do { } while (0)
+#define LOG_DBG(...)  do { } while (0)
+#define LOG_DBGF(...) do { } while (0)
 #endif
-
-#define LOG_DBGF(FMT, ARGS...) LOG_DBG("%s: " FMT, __FUNCTION__, ##ARGS)
 
 #define LOG_MISSING LOG_NI("Missing code in %s:%d",__FILE__, __LINE__)
 
