@@ -104,7 +104,7 @@ struct gam * gam_create(char * ae_name)
         if (tmp == NULL)
                 return NULL;
 
-        INIT_LIST_HEAD(&tmp->gas);
+        list_head_init(&tmp->gas);
 
         tmp->ae_name = strdup(ae_name);
         if (tmp->ae_name == NULL) {
@@ -215,7 +215,7 @@ static int add_ga(struct gam *        instance,
         ga->info = info;
         ga->qs = qs;
 
-        INIT_LIST_HEAD(&ga->next);
+        list_head_init(&ga->next);
 
         pthread_mutex_lock(&instance->gas_lock);
         list_add(&ga->next, &instance->gas);
@@ -316,7 +316,7 @@ int gam_flow_wait(struct gam *         instance,
 
         pthread_mutex_lock(&instance->gas_lock);
 
-        while (list_empty(&instance->gas))
+        while (list_is_empty(&instance->gas))
                 pthread_cond_wait(&instance->gas_cond, &instance->gas_lock);
 
         ga = list_first_entry((&instance->gas), struct ga, next);

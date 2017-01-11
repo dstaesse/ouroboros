@@ -227,7 +227,7 @@ static void * fmgr_nm1_flow_wait(void * o)
         while (true) {
                 if (gam_flow_wait(fmgr.gam, &fd, &info, &qs)) {
                         LOG_ERR("Failed to get next flow descriptor.");
-                        continue;;
+                        continue;
                 }
 
                 ipcp_flow_get_qoscube(fd, &cube);
@@ -248,7 +248,7 @@ static void * fmgr_nm1_flow_wait(void * o)
                 flow->fd = fd;
                 flow->qs = qs;
 
-                INIT_LIST_HEAD(&flow->next);
+                list_head_init(&flow->next);
                 list_add(&flow->next, &fmgr.nm1_flows);
 
                 pthread_rwlock_unlock(&fmgr.nm1_flows_lock);
@@ -312,7 +312,7 @@ int fmgr_init()
                 return -1;
         }
 
-        INIT_LIST_HEAD(&fmgr.nm1_flows);
+        list_head_init(&fmgr.nm1_flows);
 
         pthread_rwlock_init(&fmgr.nm1_flows_lock, NULL);
         pthread_rwlock_init(&fmgr.np1_flows_lock, NULL);
