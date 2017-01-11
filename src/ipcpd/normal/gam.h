@@ -23,8 +23,10 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_GAM_H
 #define OUROBOROS_IPCPD_NORMAL_GAM_H
 
-/* FIXME: Will take a policy */
-struct gam * gam_create(char * ae_name);
+#include <ouroboros/cacep.h>
+
+struct gam * gam_create(enum pol_gam gam_type,
+                        const char * ae_name);
 
 void         gam_destroy(struct gam * instance);
 
@@ -41,4 +43,4 @@ int          gam_flow_wait(struct gam *         instance,
                            struct cacep_info ** info,
                            qosspec_t *          qs);
 
-#endif
+#endif /* OUROBOROS_IPCPD_NORMAL_GAM_H */

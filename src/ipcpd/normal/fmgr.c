@@ -305,7 +305,7 @@ int fmgr_init()
                 }
         }
 
-        fmgr.gam = gam_create(DT_AE);
+        fmgr.gam = gam_create(ribmgr_dt_gam(), DT_AE);
         if (fmgr.gam == NULL) {
                 LOG_ERR("Failed to create graph adjacency manager.");
                 fmgr_destroy_flows();
@@ -617,7 +617,7 @@ int fmgr_nm1_flow_arr(int       fd,
         assert(fmgr.gam);
 
         if (gam_flow_arr(fmgr.gam, fd, qs)) {
-                LOG_ERR("Failed to hand to connectivy manager.");
+                LOG_ERR("Failed to hand to graph adjacency manager.");
                 return -1;
         }
 

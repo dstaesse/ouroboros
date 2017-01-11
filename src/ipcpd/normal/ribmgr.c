@@ -139,6 +139,8 @@ struct {
         struct addr_auth *  addr_auth;
         enum pol_addr_auth  addr_auth_type;
 
+        enum pol_gam        dt_gam_type;
+
         enum ribmgr_state   state;
         pthread_cond_t      state_cond;
         pthread_mutex_t     state_lock;
@@ -168,6 +170,7 @@ void ribmgr_ro_created(const char * name,
                 rib.dtc.min_pdu_size = stat_msg->min_pdu_size;
                 rib.dtc.max_pdu_size = stat_msg->max_pdu_size;
                 rib.addr_auth_type = stat_msg->addr_auth_type;
+                rib.dt_gam_type = stat_msg->dt_gam_type;
 
                 static_info_msg__free_unpacked(stat_msg, NULL);
         }
@@ -1262,6 +1265,7 @@ int ribmgr_bootstrap(struct dif_config * conf)
         stat_info.min_pdu_size = rib.dtc.min_pdu_size = conf->min_pdu_size;
         stat_info.max_pdu_size = rib.dtc.max_pdu_size = conf->max_pdu_size;
         stat_info.addr_auth_type = rib.addr_auth_type = conf->addr_auth_type;
+        stat_info.dt_gam_type = rib.dt_gam_type = conf->dt_gam_type;
 
         len = static_info_msg__get_packed_size(&stat_info);
         if (len == 0) {
@@ -1354,14 +1358,19 @@ int ribmgr_start_policies(void)
         return 0;
 }
 
-struct dt_const * ribmgr_dt_const()
+struct dt_const * ribmgr_dt_const(void)
 {
         return &(rib.dtc);
 }
 
-uint64_t ribmgr_address()
+uint64_t ribmgr_address(void)
 {
         return rib.address;
+}
+
+enum pol_gam ribmgr_dt_gam(void)
+{
+        return rib.dt_gam_type;
 }
 
 static int send_neighbors_ro(char * name, ro_msg_t * msg, enum cdap_opcode code)

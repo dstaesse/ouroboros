@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Static information message
+ * Graph adjacency manager for IPC Process components
  *
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
@@ -20,17 +20,27 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-syntax = "proto2";
+#ifndef OUROBOROS_IPCPD_NORMAL_POL_COMPLETE_H
+#define OUROBOROS_IPCPD_NORMAL_POL_COMPLETE_H
 
-message static_info_msg {
-        required uint32 addr_size       =  1;
-        required uint32 cep_id_size     =  2;
-        required uint32 pdu_length_size =  3;
-        required uint32 seqno_size      =  4;
-        required bool   has_ttl         =  5;
-        required bool   has_chk         =  6;
-        required uint32 min_pdu_size    =  7;
-        required uint32 max_pdu_size    =  8;
-        required uint32 addr_auth_type  =  9;
-        required uint32 dt_gam_type     = 10;
-}
+#include "gam.h"
+#include "pol-gam-ops.h"
+
+void * complete_create(struct gam * instance);
+
+void   complete_destroy(void * o);
+
+int    complete_accept_new_flow(void * o);
+
+int    complete_accept_flow(void *                    o,
+                            qosspec_t                 qs,
+                            const struct cacep_info * info);
+
+struct pol_gam_ops complete_ops = {
+        .create          = complete_create,
+        .destroy         = complete_destroy,
+        .accept_new_flow = complete_accept_new_flow,
+        .accept_flow     = complete_accept_flow
+};
+
+#endif /* OUROBOROS_IPCPD_NORMAL_POL_COMPLETE_H */

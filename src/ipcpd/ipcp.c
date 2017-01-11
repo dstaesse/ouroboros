@@ -128,6 +128,7 @@ static void * ipcp_main_loop(void * o)
                                 conf.min_pdu_size = conf_msg->min_pdu_size;
                                 conf.max_pdu_size = conf_msg->max_pdu_size;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
+                                conf.dt_gam_type = conf_msg->dt_gam_type;
                         }
                         if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
                                 conf.ip_addr  = conf_msg->ip_addr;

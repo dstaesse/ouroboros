@@ -34,9 +34,9 @@ struct cacep_info {
         uint64_t addr;
 };
 
-struct cacep *      cacep_create(int      fd,
-                                 char *   name,
-                                 uint64_t address);
+struct cacep *      cacep_create(int          fd,
+                                 const char * name,
+                                 uint64_t     address);
 
 int                 cacep_destroy(struct cacep * instance);
 

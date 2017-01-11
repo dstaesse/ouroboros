@@ -37,9 +37,10 @@ message dif_config_msg {
         optional uint32 min_pdu_size    = 10;
         optional uint32 max_pdu_size    = 11;
         optional uint32 addr_auth_type  = 12;
+        optional uint32 dt_gam_type     = 13;
         // Config for shim UDP
-        optional uint32 ip_addr         = 13;
-        optional uint32 dns_addr        = 14;
+        optional uint32 ip_addr         = 14;
+        optional uint32 dns_addr        = 15;
         // Config for the shim Ethernet LLC
-        optional string if_name         = 15;
+        optional string if_name         = 16;
 }

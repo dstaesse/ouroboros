@@ -39,9 +39,9 @@ struct cacep {
         uint64_t address;
 };
 
-struct cacep * cacep_create(int      fd,
-                            char *   name,
-                            uint64_t address)
+struct cacep * cacep_create(int          fd,
+                            const char * name,
+                            uint64_t     address)
 {
         struct cacep * tmp;
 

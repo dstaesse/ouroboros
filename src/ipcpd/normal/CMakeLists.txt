@@ -36,6 +36,7 @@ set(SOURCE_FILES
   ribmgr.c
   shm_pci.c
   # Add policies last
+  pol/complete.c
   pol/flat.c
   )
 

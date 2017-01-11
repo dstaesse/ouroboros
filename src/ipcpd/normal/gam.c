@@ -3,7 +3,7 @@
  *
  * Graph adjacency manager for IPC Process components
  *
- *    Dimitri Staeesens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,22 +25,19 @@
 #include <ouroboros/config.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/cacep.h>
 #include <ouroboros/list.h>
 #include <ouroboros/errno.h>
 
 #include "ribmgr.h"
 #include "ipcp.h"
-#include "ro.h"
-#include "pathname.h"
 #include "gam.h"
+#include "pol-gam-ops.h"
+#include "pol/complete.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
-
-#define RO_DIR "neighbors"
 
 struct ga {
         struct list_head    next;
@@ -51,58 +48,33 @@ struct ga {
 };
 
 struct gam {
-        struct list_head gas;
-        pthread_mutex_t  gas_lock;
-        pthread_cond_t   gas_cond;
+        struct list_head     gas;
+        pthread_mutex_t      gas_lock;
+        pthread_cond_t       gas_cond;
 
-        char *           ae_name;
+        char *               ae_name;
 
-        /* FIXME: Keep a list of known members */
-
-        pthread_t        allocator;
+        struct pol_gam_ops * ops;
+        void *               ops_o;
 };
 
-static void * allocator(void * o)
+struct gam * gam_create(enum pol_gam gam_type,
+                        const char * ae_name)
 {
-        qosspec_t    qs;
-        ssize_t      len;
-        char **      children;
-        struct gam * instance;
-        int          i;
-        char *       ro_name;
-
-        instance = (struct gam *) o;
-
-        qs.delay = 0;
-        qs.jitter = 0;
-
-        ro_name = pathname_create(RO_DIR);
-        if (ro_name == NULL)
-                return (void *) -1;
-
-        len = ro_children(ro_name, &children);
-        if (len > 0) {
-                for (i = 0; i < len; i++) {
-                        if (strcmp(children[i], ipcpi.name) == 0)
-                                continue;
-                        gam_flow_alloc(instance, children[i], qs);
-                }
-        }
-
-        pathname_destroy(ro_name);
-
-        return (void *) 0;
-}
-
-struct gam * gam_create(char * ae_name)
-{
-        struct gam *   tmp;
-        struct ro_attr attr;
-        char *         ro_name;
+        struct gam * tmp;
 
         tmp = malloc(sizeof(*tmp));
         if (tmp == NULL)
                 return NULL;
+
+        switch (gam_type) {
+        case COMPLETE:
+                tmp->ops = &complete_ops;
+                break;
+        default:
+                free(tmp);
+                return NULL;
+        }
 
         list_head_init(&tmp->gas);
 
@@ -125,47 +97,8 @@ struct gam * gam_create(char * ae_name)
                 return NULL;
         }
 
-        ro_attr_init(&attr);
-        attr.enrol_sync = true;
-        attr.recv_set = ALL_MEMBERS;
-
-        ro_name = pathname_create(RO_DIR);
-        if (ro_name == NULL) {
-                pthread_mutex_destroy(&tmp->gas_lock);
-                free(tmp->ae_name);
-                free(tmp);
-                return NULL;
-        }
-
-        if (!ro_exists(RO_DIR)) {
-                if (ro_create(ro_name, &attr, NULL, 0)) {
-                        pathname_destroy(ro_name);
-                        pthread_mutex_destroy(&tmp->gas_lock);
-                        free(tmp->ae_name);
-                        free(tmp);
-                        return NULL;
-                }
-        }
-
-        ro_name = pathname_append(ro_name, ipcpi.name);
-        if (ro_name == NULL) {
-                pathname_destroy(ro_name);
-                pthread_mutex_destroy(&tmp->gas_lock);
-                free(tmp->ae_name);
-                free(tmp);
-                return NULL;
-        }
-
-        if (ro_create(ro_name, &attr, NULL, 0)) {
-                pathname_destroy(ro_name);
-                pthread_mutex_destroy(&tmp->gas_lock);
-                free(tmp->ae_name);
-                free(tmp);
-                return NULL;
-        }
-        pathname_destroy(ro_name);
-
-        if (pthread_create(&tmp->allocator, NULL, allocator, (void *) tmp)) {
+        tmp->ops_o = tmp->ops->create(tmp);
+        if (tmp->ops_o == NULL) {
                 pthread_cond_destroy(&tmp->gas_cond);
                 pthread_mutex_destroy(&tmp->gas_lock);
                 free(tmp->ae_name);
@@ -183,8 +116,7 @@ void gam_destroy(struct gam * instance)
 
         assert(instance);
 
-        pthread_cancel(instance->allocator);
-        pthread_join(instance->allocator, NULL);
+        instance->ops->destroy(instance->ops_o);
 
         pthread_mutex_destroy(&instance->gas_lock);
         pthread_cond_destroy(&instance->gas_cond);
@@ -232,7 +164,8 @@ int gam_flow_arr(struct gam * instance,
         struct cacep *      cacep;
         struct cacep_info * info;
 
-        if (flow_alloc_resp(fd, 0) < 0) {
+        if (flow_alloc_resp(fd, instance->ops->accept_new_flow(instance->ops_o))
+            < 0) {
                 LOG_ERR("Could not respond to new flow.");
                 return -1;
         }
@@ -249,7 +182,14 @@ int gam_flow_arr(struct gam * instance,
                 cacep_destroy(cacep);
                 return -1;
         }
+
         cacep_destroy(cacep);
+
+        if (instance->ops->accept_flow(instance->ops_o, qs, info)) {
+                flow_dealloc(fd);
+                free(info);
+                return 0;
+        }
 
         if (add_ga(instance, fd, qs, info)) {
                 LOG_ERR("Failed to add ga to graph adjacency manager list.");
@@ -292,10 +232,17 @@ int gam_flow_alloc(struct gam * instance,
                 cacep_destroy(cacep);
                 return -1;
         }
+
         cacep_destroy(cacep);
 
+        if (instance->ops->accept_flow(instance->ops_o, qs, info)) {
+                flow_dealloc(fd);
+                free(info);
+                return 0;
+        }
+
         if (add_ga(instance, fd, qs, info)) {
-                LOG_ERR("Failed to add ga to graph adjacency manager list.");
+                LOG_ERR("Failed to add GA to graph adjacency manager list.");
                 free(info);
                 return -1;
         }
@@ -322,7 +269,6 @@ int gam_flow_wait(struct gam *         instance,
         ga = list_first_entry((&instance->gas), struct ga, next);
         if (ga == NULL) {
                 pthread_mutex_unlock(&instance->gas_lock);
-                LOG_ERR("Ga was NULL.");
                 return -1;
         }
 
