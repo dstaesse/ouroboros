@@ -1,9 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * SWIG wrapper file
+ * The Common Application Connection Establishment Phase
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -20,29 +21,27 @@
  * 02110-1301 USA
  */
 
-%module ouroboros
-%{
-#include "ouroboros/cacep.h"
-#include "ouroboros/cdap.h"
-#include "ouroboros/dev.h"
-#include "ouroboros/errno.h"
-#include "ouroboros/fcntl.h"
-#include "ouroboros/fqueue.h"
-#include "ouroboros/irm.h"
-#include "ouroboros/irm_config.h"
-#include "ouroboros/nsm.h"
-#include "ouroboros/qos.h"
-%}
+#ifndef OUROBOROS_CACEP_H
+#define OUROBOROS_CACEP_H
 
-typedef int pid_t;
+#include <stdint.h>
+#include <unistd.h>
 
-#include "ouroboros/cacep.h"
-%include "ouroboros/cdap.h"
-%include "ouroboros/dev.h"
-%include "ouroboros/errno.h"
-%include "ouroboros/fcntl.h"
-%include "ouroboros/fqueue.h"
-%include "ouroboros/irm.h"
-%include "ouroboros/irm_config.h"
-%include "ouroboros/nsm.h"
-%include "ouroboros/qos.h"
+struct cacep;
+
+struct cacep_info {
+        char *   name;
+        uint64_t addr;
+};
+
+struct cacep *      cacep_create(int          fd,
+                                 const char * name,
+                                 uint64_t     address);
+
+int                 cacep_destroy(struct cacep * instance);
+
+struct cacep_info * cacep_auth(struct cacep * instance);
+
+struct cacep_info * cacep_auth_wait(struct cacep * instance);
+
+#endif /* OUROBOROS_CACEP_H */

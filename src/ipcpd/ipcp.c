@@ -128,6 +128,7 @@ static void * ipcp_main_loop(void * o)
                                 conf.min_pdu_size = conf_msg->min_pdu_size;
                                 conf.max_pdu_size = conf_msg->max_pdu_size;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
+                                conf.dt_gam_type = conf_msg->dt_gam_type;
                         }
                         if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
                                 conf.ip_addr  = conf_msg->ip_addr;
@@ -440,22 +441,26 @@ int ipcp_parse_arg(int argc, char * argv[])
         if (atoi(argv[1]) == 0)
                 return -1;
 
-        if (argv[2] == NULL)
+        ipcpi.irmd_api = atoi(argv[1]);
+
+        /* argument 2: IPCP name */
+        ipcpi.name = argv[2];
+
+        /* argument 3: logfile name (if any) */
+        if (argv[3] == NULL)
                 return 0;
 
         len += strlen(INSTALL_PREFIX);
         len += strlen(LOG_DIR);
-        len += strlen(argv[2]);
+        len += strlen(argv[3]);
 
         log_file = malloc(len + 1);
-        if (log_file == NULL) {
-                LOG_ERR("Failed to malloc");
+        if (log_file == NULL)
                 return -1;
-        }
 
         strcpy(log_file, INSTALL_PREFIX);
         strcat(log_file, LOG_DIR);
-        strcat(log_file, argv[2]);
+        strcat(log_file, argv[3]);
         log_file[len] = '\0';
 
         if (set_logfile(log_file))

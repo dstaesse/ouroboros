@@ -1,9 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * SWIG wrapper file
+ * CACEP message
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -20,29 +21,9 @@
  * 02110-1301 USA
  */
 
-%module ouroboros
-%{
-#include "ouroboros/cacep.h"
-#include "ouroboros/cdap.h"
-#include "ouroboros/dev.h"
-#include "ouroboros/errno.h"
-#include "ouroboros/fcntl.h"
-#include "ouroboros/fqueue.h"
-#include "ouroboros/irm.h"
-#include "ouroboros/irm_config.h"
-#include "ouroboros/nsm.h"
-#include "ouroboros/qos.h"
-%}
+syntax = "proto2";
 
-typedef int pid_t;
-
-#include "ouroboros/cacep.h"
-%include "ouroboros/cdap.h"
-%include "ouroboros/dev.h"
-%include "ouroboros/errno.h"
-%include "ouroboros/fcntl.h"
-%include "ouroboros/fqueue.h"
-%include "ouroboros/irm.h"
-%include "ouroboros/irm_config.h"
-%include "ouroboros/nsm.h"
-%include "ouroboros/qos.h"
+message cacep {
+        required string name    = 1;
+        required uint64 address = 2;
+}

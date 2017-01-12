@@ -60,9 +60,6 @@ typedef ShimUdpMsg shim_udp_msg_t;
 
 #define UDP_MAX_PORTS 0xFFFF
 
-/* global for trapping signal */
-int irmd_api;
-
 struct uf {
         int                udp;
         int                skfd;
@@ -529,7 +526,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                if (info->si_pid == irmd_api) {
+                if (info->si_pid == ipcpi.irmd_api) {
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() == IPCP_INIT)
@@ -1190,9 +1187,6 @@ int main(int argc, char * argv[])
                 close_logfile();
                 exit(EXIT_FAILURE);
         }
-
-        /* store the process id of the irmd */
-        irmd_api = atoi(argv[1]);
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));

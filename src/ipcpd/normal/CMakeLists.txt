@@ -29,12 +29,14 @@ set(SOURCE_FILES
   dir.c
   fmgr.c
   frct.c
+  gam.c
   main.c
   pathname.c
   pff.c
   ribmgr.c
   shm_pci.c
   # Add policies last
+  pol/complete.c
   pol/flat.c
   )
 

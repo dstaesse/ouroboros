@@ -45,4 +45,6 @@ struct dt_const * ribmgr_dt_const(void);
 
 uint64_t          ribmgr_address(void);
 
+enum pol_gam      ribmgr_dt_gam(void);
+
 #endif /* OUROBOROS_IPCPD_NORMAL_RIBMGR_H */

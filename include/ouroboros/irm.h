@@ -50,10 +50,10 @@ int     irm_bind_ap(char *   ap,
 int     irm_unbind_ap(char * ap,
                       char * name);
 
-int     irm_bind_api(pid_t api,
+int     irm_bind_api(pid_t  api,
                      char * name);
 
-int     irm_unbind_api(pid_t api,
+int     irm_unbind_api(pid_t  api,
                        char * name);
 
 int     irm_reg(char *  name,

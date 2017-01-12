@@ -85,8 +85,5 @@ int do_create_ipcp(int argc, char ** argv)
         if (api == 0)
                 return -1;
 
-        if (type == IPCP_NORMAL)
-                irm_bind_api(api, ipcp_name);
-
         return 0;
 }

@@ -41,9 +41,6 @@
 #define EVENT_WAIT_TIMEOUT 100 /* us */
 #define THIS_TYPE IPCP_LOCAL
 
-/* global for trapping signal */
-int irmd_api;
-
 struct {
         int                   in_out[IRMD_MAX_FLOWS];
         flow_set_t *          flows;
@@ -127,7 +124,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGTERM:
         case SIGHUP:
         case SIGQUIT:
-                if (info->si_pid == irmd_api) {
+                if (info->si_pid == ipcpi.irmd_api) {
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() == IPCP_INIT)
@@ -348,9 +345,6 @@ int main(int argc, char * argv[])
                 close_logfile();
                 exit(EXIT_FAILURE);
         }
-
-        /* store the process id of the irmd */
-        irmd_api = atoi(argv[1]);
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));

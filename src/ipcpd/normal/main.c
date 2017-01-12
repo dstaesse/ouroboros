@@ -26,6 +26,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/irm.h>
 
 #include "fmgr.h"
 #include "ribmgr.h"
@@ -47,7 +48,9 @@ int irmd_api;
 
 pthread_t acceptor;
 
-void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
+void ipcp_sig_handler(int         sig,
+                      siginfo_t * info,
+                      void *      c)
 {
         (void) c;
 
@@ -55,7 +58,7 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                if (info->si_pid == irmd_api) {
+                if (info->si_pid == ipcpi.irmd_api) {
                         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() == IPCP_INIT)
@@ -101,7 +104,7 @@ static void * flow_acceptor(void * o)
                 if (strcmp(ae_name, MGMT_AE) == 0) {
                         ribmgr_add_nm1_flow(fd);
                 } else if (strcmp(ae_name, DT_AE) == 0) {
-                        fmgr_nm1_add_flow(fd);
+                        fmgr_nm1_flow_arr(fd, qs);
                 } else {
                         LOG_DBG("Flow allocation request for unknown AE %s.",
                                 ae_name);
@@ -194,12 +197,6 @@ static int normal_ipcp_enroll(char * dst_name)
         }
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        /* FIXME: Remove once we obtain neighbors during enrollment */
-        if (fmgr_nm1_dt_flow(dst_name, QOS_CUBE_BE)) {
-                LOG_ERR("Failed to establish data transfer flow.");
-                return -1;
-        }
 
         LOG_DBG("Enrolled with %s.", dst_name);
 
@@ -296,10 +293,11 @@ static struct ipcp_ops normal_ops = {
         .ipcp_flow_dealloc    = fmgr_np1_dealloc
 };
 
-int main(int argc, char * argv[])
+int main(int    argc,
+         char * argv[])
 {
         struct sigaction sig_act;
-        sigset_t sigset;
+        sigset_t         sigset;
 
         if (ap_init(argv[0])) {
                 LOG_ERR("Failed to init AP");
@@ -317,8 +315,11 @@ int main(int argc, char * argv[])
                 exit(EXIT_FAILURE);
         }
 
-        /* store the process id of the irmd */
-        irmd_api = atoi(argv[1]);
+        if (irm_bind_api(getpid(), ipcpi.name)) {
+                LOG_ERR("Failed to bind AP name.");
+                close_logfile();
+                exit(EXIT_FAILURE);
+        }
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));

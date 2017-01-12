@@ -28,8 +28,8 @@
 #ifndef OUROBOROS_IPCP_H
 #define OUROBOROS_IPCP_H
 
-/* Returns the process id */
-pid_t ipcp_create(enum ipcp_type ipcp_type);
+pid_t ipcp_create(char *         name,
+                  enum ipcp_type ipcp_type);
 
 int   ipcp_destroy(pid_t api);
 
@@ -45,7 +45,7 @@ int   ipcp_name_reg(pid_t  api,
 int   ipcp_name_unreg(pid_t  api,
                       char * name);
 
-int   ipcp_name_query(pid_t api,
+int   ipcp_name_query(pid_t  api,
                       char * name);
 
 int   ipcp_flow_alloc(pid_t     api,
