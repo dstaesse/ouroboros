@@ -25,7 +25,7 @@
 #include <time.h>
 #include <stdlib.h>
 
-#define MAX_ELEMENTS   500
+#define MAX_ELEMENTS   100
 #define MAX_RESOLUTION 10  /* ms */
 #define MAX_ADDITIONS  1000
 
@@ -86,6 +86,10 @@ int timerwheel_test(int argc, char ** argv)
         }
 
         nanosleep(&wait, NULL);
+
+        /* On some systems and VMs, the scheduler may be too slow. */
+        if (total != check_total)
+                nanosleep(&wait, NULL);
 
         timerwheel_destroy(tw);
 
