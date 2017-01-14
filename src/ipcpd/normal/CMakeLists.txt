@@ -25,7 +25,6 @@ protobuf_generate_c(RO_SRCS RO_HDRS ro.proto)
 set(SOURCE_FILES
   # Add source files here
   addr_auth.c
-  crc32.c
   dir.c
   fmgr.c
   frct.c

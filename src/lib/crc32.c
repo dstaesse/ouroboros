@@ -5,23 +5,22 @@
  *
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public License
+ * version 2.1 as published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful,
+ * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301 USA
  */
 
-#include <stddef.h>
-
-#include "crc32.h"
+#include <ouroboros/crc32.h>
 
 static const uint32_t crc32_table[256] = {
         0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
@@ -69,14 +68,17 @@ static const uint32_t crc32_table[256] = {
         0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
-void crc32(uint32_t * crc, const uint8_t * buf, size_t len)
+void crc32(uint32_t *   crc,
+           const void * buf,
+           size_t       len)
 {
         size_t n;
 
         *crc = *crc ^ 0xffffffff;
 
         for (n = 0; n < len; n++)
-                *crc = crc32_table[(*crc ^ buf[n]) & 0xff] ^ (*crc >> 8);
+                *crc = crc32_table[(*crc ^ ((uint8_t *) buf)[n]) & 0xff]
+                        ^ (*crc >> 8);
 
         *crc = *crc ^ 0xffffffff;
 }
