@@ -24,13 +24,13 @@
 
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/crc32.h>
 
 #include <stdlib.h>
 #include <string.h>
 
 #include "shm_pci.h"
 #include "frct.h"
-#include "crc32.h"
 #include "ribmgr.h"
 
 #define PDU_TYPE_SIZE 1

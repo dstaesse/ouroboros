@@ -31,6 +31,7 @@ set(SOURCE_FILES
   cacep.c
   cdap.c
   cdap_req.c
+  crc32.c
   dev.c
   hashtable.c
   irm.c
