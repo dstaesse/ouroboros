@@ -4,6 +4,7 @@ get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
                        # Add new tests here
                        bitmap_test.c
+                       crc32_test.c
                        hashtable_test.c
                        sha3_test.c
 )
