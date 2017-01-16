@@ -28,6 +28,7 @@ endif()
 set(SOURCE_FILES
   # Add source files here
   bitmap.c
+  btree.c
   cacep.c
   cdap.c
   cdap_req.c
