@@ -59,4 +59,4 @@ int          flow_event_wait(flow_set_t *            set,
                              fqueue_t *              fq,
                              const struct timespec * timeout);
 
-#endif /* OUROBOROS_SELECT_H */
+#endif /* OUROBOROS_FQUEUE_H */
