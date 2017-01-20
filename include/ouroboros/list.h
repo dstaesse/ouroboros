@@ -54,6 +54,9 @@ void list_add_tail(struct list_head * e,
 
 void list_del(struct list_head * e);
 
+void list_move(struct list_head * dst,
+               struct list_head * src);
+
 bool list_is_empty(struct list_head * h);
 
 #endif
