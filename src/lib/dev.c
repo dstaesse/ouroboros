@@ -1094,7 +1094,7 @@ int flow_event_wait(struct flow_set *       set,
                 return -EINVAL;
 
         if (fq->fqsize > 0)
-                return 0;
+                return fq->fqsize;
 
         assert(!fq->next);
 

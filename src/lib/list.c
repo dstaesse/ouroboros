@@ -70,3 +70,14 @@ bool list_is_empty(struct list_head * h)
 {
         return h->nxt == h;
 }
+
+void list_move(struct list_head * dst,
+               struct list_head * src)
+{
+        dst->nxt = src->nxt;
+        dst->prv = src->prv;
+        dst->nxt->prv = src->nxt->prv;
+        dst->prv->nxt = src->prv->nxt;
+
+        list_head_init(src);
+}

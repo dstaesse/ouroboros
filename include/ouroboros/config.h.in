@@ -61,5 +61,6 @@
 #define SOCKET_TIMEOUT         4000
 #define CDAP_REPLY_TIMEOUT     1000
 #define ENROLL_TIMEOUT         2000
+#define RIB_MAX_PATH_LEN       256
 
 #endif
