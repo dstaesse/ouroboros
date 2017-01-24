@@ -919,12 +919,11 @@ ssize_t flow_read(int fd, void * buf, size_t count)
                 pthread_rwlock_rdlock(&ai.data_lock);
         }
 
-        if (idx == -ETIMEDOUT) {
+        if (idx < 0) {
+                assert(idx == -EAGAIN || idx == -ETIMEDOUT);
                 pthread_rwlock_unlock(&ai.data_lock);
-                return -ETIMEDOUT;
+                return idx;
         }
-
-        assert(idx >= 0);
 
         n = shm_rdrbuff_read(&sdu, ai.rdrb, idx);
         if (n < 0) {
