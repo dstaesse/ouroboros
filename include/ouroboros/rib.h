@@ -52,6 +52,9 @@ int     rib_put(const char * path,
 
 bool    rib_has(const char * path);
 
+ssize_t rib_children(const char * path,
+                     char ***     children);
+
 char *  rib_path_append(char *       path,
                         const char * name);
 

@@ -46,6 +46,9 @@ int rib_test(int     argc,
 
         char tmp[RIB_MAX_PATH_LEN];
 
+        char ** kids;
+        ssize_t ch;
+
         struct timespec t = {0, 100 * BILLION};
 
         (void) argc;
@@ -70,6 +73,16 @@ int rib_test(int     argc,
         if (rib_add(RIB_ROOT, "static_info")) {
                 printf("Failed to add element to rib.\n");
                 rib_fini();
+                return -1;
+        }
+
+        ch = rib_children("/static_info", &kids);
+        if (ch != 0) {
+                printf("Wrong number of children returned.\n");
+                rib_fini();
+                while (ch > 0)
+                        free(kids[--ch]);
+                free(kids);
                 return -1;
         }
 
@@ -117,6 +130,17 @@ int rib_test(int     argc,
                 rib_fini();
                 return -1;
         }
+
+        ch = rib_children("/static_info", &kids);
+        if (ch != 2) {
+                printf("Wrong number of children returned.\n");
+                rib_fini();
+                return -1;
+        }
+
+        while (ch > 0)
+                free(kids[--ch]);
+        free(kids);
 
         if (addr_chk != addr_size) {
                 printf("Failed to verify added element contents.\n");
