@@ -635,9 +635,6 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        /* this IPCP doesn't need to maintain its dif_name */
-        free(conf->dif_name);
-
         LOG_DBG("Bootstrapped shim IPCP over UDP with api %d.", getpid());
         LOG_DBG("Bound to IP address %s.", ipstr);
         LOG_DBG("DNS server address is %s.", dnsstr);

@@ -218,6 +218,13 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
                 return -1; /* -ENOTINIT */
         }
 
+        ipcpi.data->dif_name = strdup(conf->dif_name);
+        if (ipcpi.data->dif_name == NULL) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                LOG_ERR("Failed to set DIF name.");
+                return -1;
+        }
+
         if (ribmgr_init()) {
                 LOG_ERR("Failed to initialise RIB manager.");
                 pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -272,8 +279,6 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
                 LOG_ERR("Failed to create acceptor thread.");
                 return -1;
         }
-
-        ipcpi.data->dif_name = conf->dif_name;
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
