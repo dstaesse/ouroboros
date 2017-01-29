@@ -142,6 +142,8 @@ void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
 
 static int ipcp_local_bootstrap(struct dif_config * conf)
 {
+        (void) conf;
+
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
