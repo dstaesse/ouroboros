@@ -392,21 +392,19 @@ static int bootstrap_ipcp(pid_t api, dif_config_msg_t * conf)
                 return -1;
         }
 
-        entry->dif_name = strdup(conf->dif_name);
-        if (entry->dif_name == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Failed to strdup.");
-                return -1;
-        }
-
         if (ipcp_bootstrap(entry->api, conf)) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 LOG_ERR("Could not bootstrap IPCP.");
-                free(entry->dif_name);
-                entry->dif_name = NULL;
                 return -1;
+        }
+
+        entry->dif_name = strdup(conf->dif_name);
+        if (entry->dif_name == NULL) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_WARN("Failed to set name of DIF.");
+                return -ENOMEM;
         }
 
         pthread_rwlock_unlock(&irmd->reg_lock);
