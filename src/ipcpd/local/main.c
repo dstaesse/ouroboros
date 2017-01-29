@@ -153,9 +153,6 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        /* this IPCP doesn't need to maintain its dif_name */
-        free(conf->dif_name);
-
         ipcp_set_state(IPCP_OPERATIONAL);
 
         pthread_create(&local_data.sduloop, NULL, ipcp_local_sdu_loop, NULL);

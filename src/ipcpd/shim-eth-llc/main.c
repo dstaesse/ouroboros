@@ -857,9 +857,6 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        /* this IPCP doesn't need to maintain its dif_name */
-        free(conf->dif_name);
-
         LOG_DBG("Bootstrapped shim IPCP over Ethernet with LLC with api %d.",
                 getpid());
 
