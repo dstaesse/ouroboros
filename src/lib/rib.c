@@ -95,6 +95,7 @@ struct rnode {
 
         struct rnode *   parent;
 
+        size_t           chlen;
         struct list_head children;
 
         struct list_head subs;
@@ -248,6 +249,8 @@ static int rnode_add_child(struct rnode * node,
         c->node = child;
         list_add(&c->next, &node->children);
 
+        ++node->chlen;
+
         return 0;
 }
 
@@ -265,6 +268,7 @@ static void rnode_remove_child(struct rnode * node,
                 if (c->node == child) {
                         list_del(&c->next);
                         free(c);
+                        --node->chlen;
                         return;
                 }
         }
@@ -320,6 +324,8 @@ static struct rnode * rnode_create(struct rnode *  parent,
         node->len = 0;
 
         node->parent = parent;
+
+        node->chlen = 0;
 
         branch_hash(node);
         rnode_throw_event(node, RO_CREATE);
@@ -606,6 +612,13 @@ ssize_t rib_read(const char * path,
                 return -EFBIG;
         }
 
+        if (node->data == NULL) {
+                pthread_rwlock_unlock(&rib.lock);
+                return 0;
+        }
+
+        assert(node->len > 0);
+
         memcpy(data, node->data, node->len);
         rlen = node->len;
 
@@ -679,6 +692,60 @@ bool rib_has(const char * path)
         pthread_rwlock_unlock(&rib.lock);
 
         return node != NULL;
+}
+
+ssize_t rib_children(const char * path,
+                     char ***     children)
+{
+        struct list_head * p;
+
+        struct rnode * node;
+
+        ssize_t i = 0;
+
+        assert(path);
+        assert(children);
+
+        pthread_rwlock_rdlock(&rib.lock);
+
+        node = find_rnode_by_path(path);
+        if (node == NULL) {
+                pthread_rwlock_unlock(&rib.lock);
+                return -EPERM;
+        }
+
+        if (node->chlen == 0) {
+                pthread_rwlock_unlock(&rib.lock);
+                *children = NULL;
+                return 0;
+        }
+
+        *children = malloc(sizeof(**children) * node->chlen);
+        if (*children == NULL) {
+                pthread_rwlock_unlock(&rib.lock);
+                return -ENOMEM;
+        }
+
+        list_for_each(p, &node->children) {
+                struct child * c = list_entry(p, struct child, next);
+                (*children)[i] = strdup(c->node->name);
+                if ((*children)[i] == NULL) {
+                        ssize_t j;
+                        pthread_rwlock_unlock(&rib.lock);
+                        for (j = 0; j < i; ++j)
+                                free((*children)[j]);
+                        free(*children);
+                        return -ENOMEM;
+                }
+                ++i;
+        }
+
+        assert(i > 0);
+        assert((size_t) i == node->chlen);
+
+        pthread_rwlock_unlock(&rib.lock);
+
+        return i;
 }
 
 static struct rib_sub * rib_get_sub(uint32_t sid)
