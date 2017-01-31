@@ -10,6 +10,7 @@ protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
   dif_config.proto)
 protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS cdap.proto)
 protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
+protobuf_generate_c(RO_PROTO_SRCS RO_PROTO_HDRS ro.proto)
 
 if(NOT APPLE)
   find_library(LIBRT_LIBRARIES rt)
@@ -52,7 +53,7 @@ set(SOURCE_FILES
 
 add_library(ouroboros SHARED ${SOURCE_FILES} ${IRM_PROTO_SRCS}
   ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS}
-  ${CDAP_PROTO_SRCS} ${CACEP_PROTO_SRCS})
+  ${CDAP_PROTO_SRCS} ${CACEP_PROTO_SRCS} ${RO_PROTO_SRCS})
 
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY})
