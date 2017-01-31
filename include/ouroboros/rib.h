@@ -25,40 +25,54 @@
 #define OUROBOROS_LIB_RIB_H
 
 #include <sys/types.h>
+#include <stdint.h>
 #include <stdbool.h>
 
 #define RIB_ROOT ""
 
-int     rib_init(void);
+#define PACK_HASH_ROOT  0x0001
+#define PACK_HASH_ALL   0x0002
 
-void    rib_fini(void);
+#define UNPACK_CREATE   0x0001
 
-int     rib_add(const char * parent,
-                const char * name);
+int       rib_init(void);
 
-int     rib_del(char * path);
+void      rib_fini(void);
 
-ssize_t rib_read(const char * path,
-                 void *       data,
-                 size_t       len);
+int       rib_add(const char * parent,
+                  const char * name);
 
-int     rib_write(const char * path,
-                  const void * data,
+int       rib_del(char * path);
+
+ssize_t   rib_read(const char * path,
+                   void *       data,
+                   size_t       len);
+
+int       rib_write(const char * path,
+                    const void * data,
+                    size_t       len);
+
+int       rib_put(const char * path,
+                  void *       data,
                   size_t       len);
 
-int     rib_put(const char * path,
-                void *       data,
-                size_t       len);
+bool      rib_has(const char * path);
 
-bool    rib_has(const char * path);
+ssize_t   rib_children(const char * path,
+                       char ***     children);
 
-ssize_t rib_children(const char * path,
-                     char ***     children);
+char *    rib_path_append(char *       path,
+                          const char * name);
 
-char *  rib_path_append(char *       path,
-                        const char * name);
+char *    rib_name_gen(void * data,
+                       size_t len);
 
-char *  rib_name_gen(void * data,
-                     size_t len);
+ssize_t   rib_pack(const char * path,
+                   uint8_t **   buf,
+                   uint32_t     flags);
+
+int       rib_unpack(uint8_t * packed,
+                     size_t    len,
+                     uint32_t  flags);
 
 #endif /* OUROBOROS_LIB_RIB_H */

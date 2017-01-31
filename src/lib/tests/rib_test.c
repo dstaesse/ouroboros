@@ -49,6 +49,9 @@ int rib_test(int     argc,
         char ** kids;
         ssize_t ch;
 
+        uint8_t * buf;
+        ssize_t   buf_len;
+
         struct timespec t = {0, 100 * BILLION};
 
         (void) argc;
@@ -197,6 +200,42 @@ int rib_test(int     argc,
         }
 
         free(addr_name);
+
+        buf_len = rib_pack("/static_info", &buf, PACK_HASH_ALL);
+        if (buf_len < 0) {
+                printf("Failed pack.\n");
+                rib_fini();
+                return -1;
+        }
+
+        if (rib_del("/static_info")) {
+                printf("Failed to delete.\n");
+                rib_fini();
+                return -1;
+        }
+
+        if (rib_unpack(buf, buf_len, UNPACK_CREATE)) {
+                printf("Failed to unpack.\n");
+                rib_fini();
+                return -1;
+        }
+
+        if (!rib_has("/static_info")) {
+                printf("Failed to find unpacked element.\n");
+                rib_fini();
+                return -1;
+        }
+
+        ch = rib_children("/static_info", &kids);
+        if (ch != 2) {
+                printf("Wrong number of children returned.\n");
+                rib_fini();
+                return -1;
+        }
+
+        while (ch > 0)
+                free(kids[--ch]);
+        free(kids);
 
         set = ro_set_create();
         if (set == NULL) {

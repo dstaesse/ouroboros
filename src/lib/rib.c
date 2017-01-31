@@ -33,6 +33,9 @@
 #include "sha3.h"
 #include "btree.h"
 
+#include "ro.pb-c.h"
+typedef RoMsg ro_msg_t;
+
 #include <pthread.h>
 #include <string.h>
 #include <assert.h>
@@ -238,6 +241,8 @@ static int rnode_add_child(struct rnode * node,
                            struct rnode * child)
 {
         struct child * c;
+        struct list_head * p;
+        struct child * n;
 
         assert(node);
         assert(child);
@@ -247,7 +252,14 @@ static int rnode_add_child(struct rnode * node,
                 return -ENOMEM;
 
         c->node = child;
-        list_add(&c->next, &node->children);
+
+        list_for_each(p, &node->children) {
+                n = list_entry(p, struct child, next);
+                if (strcmp(n->node->name, child->name) > 0)
+                        break;
+        }
+
+        list_add(&c->next, p);
 
         ++node->chlen;
 
@@ -279,6 +291,8 @@ static struct rnode * rnode_create(struct rnode *  parent,
 {
         struct rnode * node;
         char * parent_path;
+
+        uint32_t crc = 0;
 
         assert(name);
 
@@ -327,6 +341,9 @@ static struct rnode * rnode_create(struct rnode *  parent,
 
         node->chlen = 0;
 
+        crc32(&crc, node->path, strlen(node->path));
+        btree_insert(rib.idx, crc, node);
+
         branch_hash(node);
         rnode_throw_event(node, RO_CREATE);
 
@@ -337,6 +354,8 @@ static void destroy_rnode(struct rnode * node)
 {
         struct list_head * p;
         struct list_head * h;
+
+        uint32_t crc = 0;
 
         assert(node);
 
@@ -352,6 +371,9 @@ static void destroy_rnode(struct rnode * node)
                 list_del(&s->next);
                 free(s);
         }
+
+        crc32(&crc, node->path, strlen(node->path));
+        btree_remove(rib.idx, crc);
 
         free(node->path);
         if (node->data != NULL)
@@ -375,9 +397,9 @@ static void destroy_rtree(struct rnode * node)
         destroy_rnode(node);
 }
 
-static int rnode_update(struct rnode *  node,
-                        uint8_t *       data,
-                        size_t          len)
+static void rnode_update(struct rnode *  node,
+                         uint8_t *       data,
+                         size_t          len)
 {
         assert(node);
         assert(!(data == NULL && len != 0));
@@ -392,8 +414,6 @@ static int rnode_update(struct rnode *  node,
         rnode_throw_event(node, RO_MODIFY);
 
         branch_hash(node);
-
-        return 0;
 }
 
 static struct rn_sub * rnode_get_sub(struct rnode *   node,
@@ -470,16 +490,16 @@ int rib_init(void)
         if (rib.root != NULL)
                 return -EPERM;
 
-        rib.root = rnode_create(NULL, "");
-        if (rib.root == NULL)
-                return -ENOMEM;
-
         rib.idx = btree_create(RIB_BTREE_ORDER);
         if (rib.idx == NULL) {
                 destroy_rtree(rib.root);
                 rib.root = NULL;
                 return -1;
         }
+
+        rib.root = rnode_create(NULL, "");
+        if (rib.root == NULL)
+                return -ENOMEM;
 
         rib.sids = bmp_create(32, 1);
         if (rib.sids == NULL) {
@@ -518,12 +538,12 @@ void rib_fini(void)
         if (rib.root == NULL)
                 return;
 
-        btree_destroy(rib.idx);
-
         bmp_destroy(rib.sids);
 
         destroy_rtree(rib.root);
         rib.root = NULL;
+
+        btree_destroy(rib.idx);
 
         pthread_rwlock_destroy(&rib.lock);
 }
@@ -533,8 +553,6 @@ int rib_add(const char * path,
 {
         struct rnode * parent;
         struct rnode * node;
-
-        uint32_t crc = 0;
 
         if (name == NULL)
                 return -EINVAL;
@@ -553,10 +571,6 @@ int rib_add(const char * path,
                 return -ENOMEM;
         }
 
-        crc32(&crc, node->path, strlen(node->path));
-
-        btree_insert(rib.idx, crc, node);
-
         pthread_rwlock_unlock(&rib.lock);
 
         return 0;
@@ -565,7 +579,6 @@ int rib_add(const char * path,
 int rib_del(char * path)
 {
         struct rnode * node;
-        uint32_t crc = 0;
 
         if (path == NULL)
                 return -EINVAL;
@@ -577,10 +590,6 @@ int rib_del(char * path)
                 pthread_rwlock_unlock(&rib.lock);
                 return -EINVAL;
         }
-
-        crc32(&crc, node->path, strlen(node->path));
-
-        btree_remove(rib.idx, crc);
 
         destroy_rtree(node);
 
@@ -634,7 +643,6 @@ int rib_write(const char * path,
               size_t       len)
 {
         struct rnode * node;
-        int            ret = -1;
 
         uint8_t * cdata;
 
@@ -651,11 +659,11 @@ int rib_write(const char * path,
 
         node = find_rnode_by_path(path);
         if (node != NULL)
-                ret = rnode_update(node, cdata, len);
+                rnode_update(node, cdata, len);
 
         pthread_rwlock_unlock(&rib.lock);
 
-        return ret;
+        return 0;
 }
 
 int rib_put(const char * path,
@@ -663,7 +671,6 @@ int rib_put(const char * path,
             size_t       len)
 {
         struct rnode * node;
-        int            ret = -1;
 
         if (path == NULL)
                 return -EINVAL;
@@ -672,11 +679,11 @@ int rib_put(const char * path,
 
         node = find_rnode_by_path(path);
         if (node != NULL)
-                ret = rnode_update(node, (uint8_t *) data, len);
+                rnode_update(node, (uint8_t *) data, len);
 
         pthread_rwlock_unlock(&rib.lock);
 
-        return ret;
+        return 0;
 }
 
 bool rib_has(const char * path)
@@ -1161,4 +1168,220 @@ char * rib_name_gen(void *       data,
         sprintf(name, "%08x", crc);
 
         return name;
+}
+
+static ro_msg_t * rnode_pack(struct rnode * node,
+                             uint32_t       flags,
+                             bool           root)
+{
+        ro_msg_t * msg;
+
+        assert(node);
+
+        if (node->parent == NULL)
+                return NULL;
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                return NULL;
+
+        ro_msg__init(msg);
+
+        msg->name = node->name;
+        if (root) {
+                assert(node->parent->path);
+                msg->parent = node->parent->path;
+        }
+
+        if ((root && (flags & PACK_HASH_ROOT)) ||
+            (flags & PACK_HASH_ALL)) {
+                msg->has_hash  = true;
+                msg->hash.data = node->sha3;
+                msg->hash.len  = sha3_256_hash_size;
+        }
+
+        if (node->data != NULL) {
+                msg->has_data  = true;
+                msg->data.data = node->data;
+                msg->data.len  = node->len;
+        }
+
+        if (node->chlen > 0) {
+                int n = 0;
+                struct list_head * p;
+                ro_msg_t ** msgs = malloc(sizeof(*msgs) * node->chlen);
+                if (msgs == NULL) {
+                        free(msg);
+                        return NULL;
+                }
+
+                msg->n_children = node->chlen;
+                list_for_each(p, &node->children) {
+                        struct child * c = list_entry(p, struct child, next);
+                        msgs[n] = rnode_pack(c->node, flags, false);
+                        if (msgs[n++] == NULL) {
+                                int i;
+                                for (i = 0; i < n; ++i)
+                                        free(msgs[i]);
+                                free(msgs);
+                                free(msg);
+                                return NULL;
+                        }
+                }
+                msg->children = msgs;
+        }
+
+        return msg;
+}
+
+static void free_ro_msg(ro_msg_t * msg)
+{
+        size_t n = 0;
+        while (n < msg->n_children)
+                free_ro_msg(msg->children[n++]);
+
+        free(msg->children);
+        free(msg);
+}
+
+ssize_t rib_pack(const char *   path,
+                 uint8_t **     buf,
+                 uint32_t       flags)
+{
+        struct rnode * node;
+        ro_msg_t * msg;
+        ssize_t len;
+
+        if (path == NULL)
+                return -EINVAL;
+
+        pthread_rwlock_rdlock(&rib.lock);
+
+        node = find_rnode_by_path(path);
+        if (node == NULL) {
+                pthread_rwlock_unlock(&rib.lock);
+                return -EPERM;
+        }
+
+        msg = rnode_pack(node, flags, true);
+
+        pthread_rwlock_unlock(&rib.lock);
+
+        if (msg == NULL) {
+                free_ro_msg(msg);
+                return -EPERM;
+        }
+
+        len = ro_msg__get_packed_size(msg);
+        if (len == 0) {
+                free_ro_msg(msg);
+                return 0;
+        }
+
+        *buf = malloc(len);
+        if (*buf == NULL) {
+                free_ro_msg(msg);
+                return -ENOMEM;
+        }
+
+        ro_msg__pack(msg, *buf);
+
+        free_ro_msg(msg);
+
+        return len;
+}
+
+static struct rnode * rnode_get_child(struct rnode * node,
+                                      const char *   name)
+{
+        struct list_head * p;
+
+        list_for_each(p, &node->children) {
+                struct child * c = list_entry(p, struct child, next);
+                if (strcmp(c->node->name, name) == 0)
+                        return c->node;
+        }
+
+        return NULL;
+}
+
+static int rnode_unpack(ro_msg_t *     msg,
+                        struct rnode * parent,
+                        uint32_t       flags)
+{
+        struct rnode * node;
+
+        size_t i;
+
+        assert(msg);
+        assert(parent);
+
+        node = rnode_get_child(parent, msg->name);
+        if (node == NULL) {
+                if (flags & UNPACK_CREATE)
+                        node = rnode_create(parent, msg->name);
+                else
+                        return -EPERM;
+        }
+
+        if (node == NULL)
+                return -ENOMEM;
+
+        /* Unpack in reverse order for faster insertion */
+        i = msg->n_children;
+        while (i > 0)
+                rnode_unpack(msg->children[--i], node, flags);
+
+        if (msg->has_data) {
+                uint8_t * data = malloc(msg->data.len);
+                if (data == NULL)
+                        return -ENOMEM;
+
+                memcpy(data, msg->data.data, msg->data.len);
+                rnode_update(node, data, msg->data.len);
+        }
+
+        return 0;
+}
+
+int rib_unpack(uint8_t * packed,
+               size_t    len,
+               uint32_t  flags)
+{
+        ro_msg_t * msg;
+        struct rnode * root;
+        int ret;
+
+        if (packed == NULL)
+                return -EINVAL;
+
+        msg = ro_msg__unpack(NULL, len, packed);
+        if (msg == NULL)
+                return -EPERM;
+
+        assert(msg->parent);
+
+        pthread_rwlock_wrlock(&rib.lock);
+
+        root = find_rnode_by_path(msg->parent);
+        if (root == NULL) {
+                pthread_rwlock_unlock(&rib.lock);
+                return -EPERM;
+        }
+
+        ret = rnode_unpack(msg, root, flags);
+
+        pthread_rwlock_unlock(&rib.lock);
+
+        if (ret == 0 && msg->has_hash) {
+                root = rnode_get_child(root, msg->name);
+                if (memcmp(msg->hash.data, root->sha3, sha3_256_hash_size))
+                        ret = -EFAULT;
+        }
+
+        ro_msg__free_unpacked(msg, NULL);
+
+        free(packed);
+
+        return ret;
 }
