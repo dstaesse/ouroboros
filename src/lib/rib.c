@@ -259,7 +259,7 @@ static int rnode_add_child(struct rnode * node,
                         break;
         }
 
-        list_add(&c->next, p);
+        list_add_tail(&c->next, p);
 
         ++node->chlen;
 
@@ -1216,10 +1216,11 @@ static ro_msg_t * rnode_pack(struct rnode * node,
                 }
 
                 msg->n_children = node->chlen;
+
                 list_for_each(p, &node->children) {
                         struct child * c = list_entry(p, struct child, next);
                         msgs[n] = rnode_pack(c->node, flags, false);
-                        if (msgs[n++] == NULL) {
+                        if (msgs[n] == NULL) {
                                 int i;
                                 for (i = 0; i < n; ++i)
                                         free(msgs[i]);
@@ -1227,6 +1228,7 @@ static ro_msg_t * rnode_pack(struct rnode * node,
                                 free(msg);
                                 return NULL;
                         }
+                        ++n;
                 }
                 msg->children = msgs;
         }
@@ -1264,27 +1266,28 @@ ssize_t rib_pack(const char *   path,
         }
 
         msg = rnode_pack(node, flags, true);
-
-        pthread_rwlock_unlock(&rib.lock);
-
         if (msg == NULL) {
-                free_ro_msg(msg);
+                pthread_rwlock_unlock(&rib.lock);
                 return -EPERM;
         }
 
         len = ro_msg__get_packed_size(msg);
         if (len == 0) {
+                pthread_rwlock_unlock(&rib.lock);
                 free_ro_msg(msg);
                 return 0;
         }
 
         *buf = malloc(len);
         if (*buf == NULL) {
+                pthread_rwlock_unlock(&rib.lock);
                 free_ro_msg(msg);
                 return -ENOMEM;
         }
 
         ro_msg__pack(msg, *buf);
+
+        pthread_rwlock_unlock(&rib.lock);
 
         free_ro_msg(msg);
 
@@ -1375,8 +1378,10 @@ int rib_unpack(uint8_t * packed,
 
         if (ret == 0 && msg->has_hash) {
                 root = rnode_get_child(root, msg->name);
-                if (memcmp(msg->hash.data, root->sha3, sha3_256_hash_size))
-                        ret = -EFAULT;
+                if (memcmp(msg->hash.data, root->sha3, sha3_256_hash_size)) {
+                        ro_msg__free_unpacked(msg, NULL);
+                        return -EFAULT;
+                }
         }
 
         ro_msg__free_unpacked(msg, NULL);
