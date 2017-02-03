@@ -690,7 +690,8 @@ bool rib_has(const char * path)
 {
         struct rnode * node;
 
-        assert(path);
+        if (path == NULL)
+                return -EINVAL;
 
         pthread_rwlock_rdlock(&rib.lock);
 
@@ -710,8 +711,8 @@ ssize_t rib_children(const char * path,
 
         ssize_t i = 0;
 
-        assert(path);
-        assert(children);
+        if (path == NULL)
+                return -EINVAL;
 
         pthread_rwlock_rdlock(&rib.lock);
 
@@ -719,6 +720,12 @@ ssize_t rib_children(const char * path,
         if (node == NULL) {
                 pthread_rwlock_unlock(&rib.lock);
                 return -EPERM;
+        }
+
+        if (children == NULL) {
+                pthread_rwlock_unlock(&rib.lock);
+                assert((ssize_t) node->chlen >= 0);
+                return (ssize_t) node->chlen;
         }
 
         if (node->chlen == 0) {
