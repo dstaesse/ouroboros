@@ -49,8 +49,6 @@ static void * ipcp_main_loop(void * o)
         dif_config_msg_t * conf_msg;
         struct dif_config  conf;
 
-        char * msg_name_dup;
-
         struct timeval ltv = {(SOCKET_TIMEOUT / 1000),
                              (SOCKET_TIMEOUT % 1000) * 1000};
 
@@ -154,12 +152,9 @@ static void * ipcp_main_loop(void * o)
                                 LOG_ERR("Ap_reg unsupported.");
                                 break;
                         }
-                        msg_name_dup = strdup(msg->name);
                         ret_msg.has_result = true;
                         ret_msg.result =
-                                ipcpi.ops->ipcp_name_reg(msg_name_dup);
-                        if (ret_msg.result < 0)
-                                free(msg_name_dup);
+                                ipcpi.ops->ipcp_name_reg(msg->name);
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_UNREG:
                         if (ipcpi.ops->ipcp_name_unreg == NULL) {

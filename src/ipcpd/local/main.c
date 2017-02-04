@@ -168,11 +168,18 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
 
 static int ipcp_local_name_reg(char * name)
 {
+        char * name_dup = strdup(name);
+        if (name_dup == NULL) {
+                LOG_ERR("Failed to duplicate name.");
+                return -ENOMEM;
+        }
+
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_reg_add_entry(ipcpi.data, name)) {
+        if (ipcp_data_reg_add_entry(ipcpi.data, name_dup)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Failed to add %s to local registry.", name);
+                free(name_dup);
                 return -1;
         }
 

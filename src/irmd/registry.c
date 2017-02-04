@@ -165,6 +165,7 @@ static void reg_entry_del_local_from_dif(struct reg_entry * e,
                 struct reg_dif * d = list_entry(p, struct reg_dif, next);
                 if (!strcmp(dif_name, d->dif_name)) {
                         list_del(&d->next);
+                        free(d->dif_name);
                         free(d);
                 }
         }

@@ -776,17 +776,25 @@ static int ipcp_udp_name_reg(char * name)
         uint32_t dns_addr;
         uint32_t ip_addr;
 #endif
+        char * name_dup;
 
         if (strlen(name) > 24) {
                 LOG_ERR("DNS names cannot be longer than 24 chars.");
                 return -1;
         }
 
+        name_dup = strdup(name);
+        if (name_dup == NULL) {
+                LOG_ERR("Failed to duplicate name.");
+                return -ENOMEM;
+        }
+
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_reg_add_entry(ipcpi.data, name)) {
+        if (ipcp_data_reg_add_entry(ipcpi.data, name_dup)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
+                free(name_dup);
                 return -1;
         }
 

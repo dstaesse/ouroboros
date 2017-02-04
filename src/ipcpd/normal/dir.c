@@ -123,8 +123,6 @@ int dir_name_reg(char * name)
         LOG_DBG("Registered %s.", name);
         pathname_destroy(path);
 
-        free(name);
-
         return 0;
 }
 
