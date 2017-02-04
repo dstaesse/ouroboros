@@ -296,6 +296,29 @@ int reg_entry_add_api(struct reg_entry * e, pid_t api)
         return 0;
 }
 
+static void reg_entry_check_state(struct reg_entry * e)
+{
+        if (list_is_empty(&e->reg_apis)) {
+                if (!list_is_empty(&e->reg_apns))
+                        e->state = REG_NAME_AUTO_ACCEPT;
+                else
+                        e->state = REG_NAME_IDLE;
+        } else {
+                e->state = REG_NAME_FLOW_ACCEPT;
+        }
+
+        pthread_cond_broadcast(&e->state_cond);
+}
+
+void reg_entry_del_pid_el(struct reg_entry * e,
+                          struct pid_el *    p)
+{
+        list_del(&p->next);
+        free(p);
+
+        reg_entry_check_state(e);
+}
+
 void reg_entry_del_api(struct reg_entry * e, pid_t api)
 {
         struct list_head * p;
@@ -312,16 +335,7 @@ void reg_entry_del_api(struct reg_entry * e, pid_t api)
                 }
         }
 
-        if (list_is_empty(&e->reg_apis)) {
-                if (!list_is_empty(&e->reg_apns))
-                        e->state = REG_NAME_AUTO_ACCEPT;
-                else
-                        e->state = REG_NAME_IDLE;
-        } else {
-                e->state = REG_NAME_FLOW_ACCEPT;
-        }
-
-        pthread_cond_broadcast(&e->state_cond);
+        reg_entry_check_state(e);
 }
 
 pid_t reg_entry_get_api(struct reg_entry * e)
