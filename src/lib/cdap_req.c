@@ -108,6 +108,7 @@ int cdap_req_wait(struct cdap_req * creq)
         }
 
         creq->state = REQ_PENDING;
+        pthread_cond_broadcast(&creq->cond);
 
         while (creq->state == REQ_PENDING) {
                 ret = -pthread_cond_timedwait(&creq->cond,
@@ -131,13 +132,20 @@ int cdap_req_wait(struct cdap_req * creq)
         return ret;
 }
 
-void cdap_req_respond(struct cdap_req * creq, int response, buffer_t data)
+void cdap_req_respond(struct cdap_req * creq,
+                      int               response,
+                      buffer_t          data)
 {
         assert(creq);
 
         pthread_mutex_lock(&creq->lock);
 
+        while (creq->state == REQ_INIT)
+                pthread_cond_wait(&creq->cond, &creq->lock);
+
         if (creq->state != REQ_PENDING) {
+                creq->state = REQ_NULL;
+                pthread_cond_broadcast(&creq->cond);
                 pthread_mutex_unlock(&creq->lock);
                 return;
         }
