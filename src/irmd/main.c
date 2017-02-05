@@ -985,9 +985,9 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
 
         e = api_table_get(&irmd->api_table, api);
         if (e == NULL) {
-                LOG_DBG("Process gone while accepting flow.");
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_DBG("Process gone while accepting flow.");
                 return NULL;
         }
 
@@ -1000,6 +1000,7 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
+                LOG_ERR("Entry in wrong state.");
                 return NULL;
         }
         pthread_rwlock_unlock(&irmd->reg_lock);
@@ -1671,7 +1672,7 @@ void * irm_sanitize(void * o)
                                         continue;
                                 LOG_DBG("Dead AP-I removed from: %d %s.",
                                         a->pid, e->name);
-                                reg_entry_del_api(e, a->pid);
+                                reg_entry_del_pid_el(e, a);
                         }
                 }
 

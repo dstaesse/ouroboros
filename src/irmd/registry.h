@@ -84,6 +84,9 @@ int                 reg_entry_add_api(struct reg_entry * e,
 void                reg_entry_del_api(struct reg_entry * e,
                                       pid_t              api);
 
+void                reg_entry_del_pid_el(struct reg_entry * e,
+                                         struct pid_el *    a);
+
 pid_t               reg_entry_get_api(struct reg_entry * e);
 
 enum reg_name_state reg_entry_get_state(struct reg_entry * e);
