@@ -44,8 +44,6 @@ struct pci {
         uint32_t pdu_length;
         uint64_t seqno;
         uint8_t  ttl;
-        /* FIXME: Deprecate this and the dec_ttl call */
-        int      has_ttl;
 };
 
 int          shm_pci_init(void);
@@ -58,10 +56,9 @@ int          shm_pci_ser(struct shm_du_buff * sdb,
 buffer_t *   shm_pci_ser_buf(buffer_t *   buf,
                              struct pci * pci);
 
-struct pci * shm_pci_des(struct shm_du_buff * sdb);
+void         shm_pci_des(struct shm_du_buff * sdb,
+                         struct pci *         pci);
 
-int          shm_pci_shrink(struct shm_du_buff * sdb);
-
-int          shm_pci_dec_ttl(struct shm_du_buff * sdb);
+void         shm_pci_shrink(struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_SHM_PCI_H */

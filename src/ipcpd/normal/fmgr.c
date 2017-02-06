@@ -129,12 +129,14 @@ void * fmgr_nm1_sdu_reader(void * o)
 {
         struct timespec      timeout = {0, FD_UPDATE_TIMEOUT};
         struct shm_du_buff * sdb;
-        struct pci *         pci;
+        struct pci           pci;
         int                  fd;
         int                  i = 0;
         int                  ret;
 
         (void) o;
+
+        memset(&pci, 0, sizeof(pci));
 
         while (true) {
                 /* FIXME: replace with scheduling policy call */
@@ -157,30 +159,15 @@ void * fmgr_nm1_sdu_reader(void * o)
                                 continue;
                         }
 
-                        pci = shm_pci_des(sdb);
-                        if (pci == NULL) {
-                                LOG_ERR("Failed to get PCI.");
-                                ipcp_flow_del(sdb);
-                                continue;
-                        }
+                        shm_pci_des(sdb, &pci);
 
-                        if (pci->dst_addr != ipcpi.address) {
+                        if (pci.dst_addr != ipcpi.address) {
                                 LOG_DBG("PDU needs to be forwarded.");
 
-                                if (pci->has_ttl) {
-                                        if (pci->ttl == 0) {
-                                                LOG_DBG("TTL was zero.");
-                                                ipcp_flow_del(sdb);
-                                                free(pci);
-                                                continue;
-                                        }
-
-                                        if (shm_pci_dec_ttl(sdb)) {
-                                                LOG_ERR("Failed to dec TTL.");
-                                                ipcp_flow_del(sdb);
-                                                free(pci);
-                                                continue;
-                                        }
+                                if (pci.ttl == 0) {
+                                        LOG_DBG("TTL was zero.");
+                                        ipcp_flow_del(sdb);
+                                        continue;
                                 }
 
                                 /*
@@ -188,21 +175,14 @@ void * fmgr_nm1_sdu_reader(void * o)
                                  * we don't have a PFF yet
                                  */
                                 ipcp_flow_del(sdb);
-                                free(pci);
                                 continue;
                         }
 
-                        if (shm_pci_shrink(sdb)) {
-                                LOG_ERR("Failed to shrink PDU.");
-                                ipcp_flow_del(sdb);
-                                free(pci);
-                                continue;
-                        }
+                        shm_pci_shrink(sdb);
 
-                        if (frct_nm1_post_sdu(pci, sdb)) {
+                        if (frct_nm1_post_sdu(&pci, sdb)) {
                                 LOG_ERR("Failed to hand PDU to FRCT.");
                                 ipcp_flow_del(sdb);
-                                free(pci);
                                 continue;
                         }
                 }
