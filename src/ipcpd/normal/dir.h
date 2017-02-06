@@ -22,8 +22,6 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_DIR_H
 #define OUROBOROS_IPCPD_NORMAL_DIR_H
 
-#define RO_DIR "directory"
-
 int dir_init(void);
 
 int dir_fini(void);

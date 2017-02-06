@@ -23,7 +23,8 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_AE_H
 #define OUROBOROS_IPCPD_NORMAL_AE_H
 
-#define MGMT_AE "Management"
-#define DT_AE   "Data transfer"
+#define MGMT_AE   "Management"
+#define DT_AE     "Data transfer"
+#define ENROLL_AE "Enrollment"
 
 #endif /* OUROBOROS_IPCPD_NORMAL_AE_H */

@@ -3,7 +3,8 @@
  *
  * DIF directory
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,164 +20,119 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "directory"
-
 #include <ouroboros/config.h>
-#include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/rib.h>
 
 #include "dir.h"
-#include "ro.h"
-#include "pathname.h"
-#include "ribmgr.h"
+#include "ipcp.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
-char * create_path(char * name)
-{
-        char * path;
+static char dir_path[RIB_MAX_PATH_LEN + 1];
 
-        path = pathname_create(RO_DIR);
-        if (path == NULL)
-                return NULL;
-
-        path = pathname_append(path, name);
-        if (path == NULL) {
-                pathname_destroy(path);
-                return NULL;
-        }
-
-        return path;
+static void dir_path_reset(void) {
+        dir_path[strlen("/" DIR_NAME)]= '\0';
+        assert(strcmp("/" DIR_NAME, dir_path) == 0);
 }
 
 int dir_init(void)
 {
-        char * path;
-        struct ro_attr attr;
+        /*FIXME: set ribmgr dissemination here */
 
-        ro_attr_init(&attr);
-        attr.enrol_sync = true;
-        attr.recv_set = ALL_MEMBERS;
-
-        path = pathname_create(RO_DIR);
-        if (path == NULL)
+        if (rib_add(RIB_ROOT, DIR_NAME))
                 return -1;
 
-        if (ro_create(path, &attr, NULL, 0)) {
-                pathname_destroy(path);
-                LOG_ERR("Failed to create RIB object.");
-                return -1;
-        }
-
-        pathname_destroy(path);
+        strcpy(dir_path, "/" DIR_NAME);
 
         return 0;
 }
 
 int dir_fini(void)
 {
-        char * path;
+        /* FIXME: remove ribmgr dissemination here*/
 
-        path = pathname_create(RO_DIR);
-        if (path == NULL)
-                return -1;
-
-        ro_delete(path);
-        pathname_destroy(path);
+        dir_path_reset();
+        rib_del(dir_path);
 
         return 0;
 }
 
 int dir_name_reg(char * name)
 {
-        struct ro_attr attr;
-        char * path;
-        uint64_t * addr;
+        int ret;
 
         assert(name);
 
-        ro_attr_init(&attr);
-        attr.enrol_sync = true;
-        attr.recv_set = ALL_MEMBERS;
+        dir_path_reset();
 
-        path = create_path(name);
-        if (path == NULL)
+        ret = rib_add(dir_path, name);
+        if (ret == -ENOMEM)
                 return -ENOMEM;
 
-        addr = malloc(sizeof(*addr));
-        if (addr == NULL) {
-                pathname_destroy(path);
+        rib_path_append(dir_path, name);
+        ret = rib_add(dir_path, ipcpi.name);
+        if (ret == -EPERM)
+                return -EPERM;
+        if (ret == -ENOMEM) {
+                if (rib_children(dir_path, NULL) == 0)
+                        rib_del(dir_path);
                 return -ENOMEM;
         }
-
-        *addr = ribmgr_address();
-
-        if (ro_create(path, &attr, (uint8_t *) addr, sizeof(*addr))) {
-                pathname_destroy(path);
-                free(addr);
-                LOG_ERR("Failed to create RIB object.");
-                return -1;
-        }
-
-        LOG_DBG("Registered %s.", name);
-        pathname_destroy(path);
 
         return 0;
 }
 
 int dir_name_unreg(char * name)
 {
-        char * path;
+        size_t len;
 
         assert(name);
 
-        path = create_path(name);
-        if (path == NULL)
-                return -ENOMEM;
+        dir_path_reset();
 
-        if (ro_delete(path)) {
-                pathname_destroy(path);
-                LOG_ERR("No such RIB object exists.");
-                return -1;
-        }
+        rib_path_append(dir_path, name);
 
-        pathname_destroy(path);
+        if (!rib_has(dir_path))
+                return 0;
+
+        len = strlen(dir_path);
+
+        rib_path_append(dir_path, ipcpi.name);
+
+        rib_del(dir_path);
+
+        dir_path[len] = '\0';
+
+        if (rib_children(dir_path, NULL) == 0)
+                rib_del(dir_path);
 
         return 0;
 }
 
 int dir_name_query(char * name)
 {
-        char * path;
-        int ret = -1;
-        uint8_t * ro_data;
-        uint64_t addr;
-        struct dt_const * dtc;
+        size_t len;
 
-        path = create_path(name);
-        if (path == NULL)
-                return -ENOMEM;
+        dir_path_reset();
 
-        if (ro_exists(path)) {
-                if (ro_read(path, &ro_data) < 0) {
-                        pathname_destroy(path);
+        rib_path_append(dir_path, name);
+
+        if (!rib_has(dir_path))
+                return -1;
+
+        /* FIXME: assert after local IPCP is deprecated */
+        len = strlen(dir_path);
+
+        rib_path_append(dir_path, ipcpi.name);
+
+        if (rib_has(dir_path)) {
+                dir_path[len] = '\0';
+                if (rib_children(dir_path, NULL) == 1)
                         return -1;
-                }
-                addr = *((uint64_t *) ro_data);
-                free(ro_data);
-
-                dtc = ribmgr_dt_const();
-                if (dtc == NULL) {
-                        pathname_destroy(path);
-                        return -1;
-                }
-
-                ret = (addr == ribmgr_address()) ? -1 : 0;
         }
 
-        pathname_destroy(path);
-
-        return ret;
+        return 0;
 }

@@ -41,6 +41,8 @@ struct ipcp {
         int                irmd_api;
         char *             name;
 
+        uint64_t           address;
+
         struct ipcp_data * data;
         struct ipcp_ops *  ops;
         int                irmd_fd;

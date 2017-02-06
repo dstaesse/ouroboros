@@ -26,13 +26,13 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/list.h>
 
+#include "frct.h"
+#include "fmgr.h"
+#include "ipcp.h"
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <pthread.h>
-
-#include "frct.h"
-#include "fmgr.h"
-#include "ribmgr.h"
 
 enum conn_state {
         CONN_PENDING = 0,
@@ -285,7 +285,7 @@ cep_id_t frct_i_create(uint64_t   address,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = address;
-        pci.src_addr = ribmgr_address();
+        pci.src_addr = ipcpi.address;
         pci.dst_cep_id = 0;
         pci.src_cep_id = id;
         pci.seqno = 0;
@@ -330,7 +330,7 @@ int frct_i_accept(cep_id_t   id,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = ribmgr_address();
+        pci.src_addr = ipcpi.address;
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = 0;
@@ -367,7 +367,7 @@ int frct_i_destroy(cep_id_t   id,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = ribmgr_address();
+        pci.src_addr = ipcpi.address;
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = 0;
@@ -413,7 +413,7 @@ int frct_i_write_sdu(cep_id_t             id,
 
         pci.pdu_type = PDU_TYPE_DTP;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = ribmgr_address();
+        pci.src_addr = ipcpi.address;
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = (instance->seqno)++;

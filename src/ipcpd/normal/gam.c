@@ -27,8 +27,8 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/list.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/rib.h>
 
-#include "ribmgr.h"
 #include "ipcp.h"
 #include "gam.h"
 #include "pol-gam-ops.h"
@@ -72,6 +72,7 @@ struct gam * gam_create(enum pol_gam gam_type,
                 tmp->ops = &complete_ops;
                 break;
         default:
+                LOG_ERR("Unknown gam policy: %d.", gam_type);
                 free(tmp);
                 return NULL;
         }
@@ -106,6 +107,14 @@ struct gam * gam_create(enum pol_gam gam_type,
                 return NULL;
         }
 
+        if (tmp->ops->start(tmp->ops_o)) {
+                pthread_cond_destroy(&tmp->gas_cond);
+                pthread_mutex_destroy(&tmp->gas_lock);
+                free(tmp->ae_name);
+                free(tmp);
+                return NULL;
+        }
+
         return tmp;
 }
 
@@ -116,19 +125,25 @@ void gam_destroy(struct gam * instance)
 
         assert(instance);
 
-        instance->ops->destroy(instance->ops_o);
+        instance->ops->stop(instance->ops_o);
 
-        pthread_mutex_destroy(&instance->gas_lock);
-        pthread_cond_destroy(&instance->gas_cond);
+        pthread_mutex_lock(&instance->gas_lock);
 
         list_for_each_safe(p, n, &instance->gas) {
                 struct ga * e = list_entry(p, struct ga, next);
                 list_del(&e->next);
+                free(e->info->name);
                 free(e->info);
                 free(e);
         }
 
+        pthread_mutex_unlock(&instance->gas_lock);
+
+        pthread_mutex_destroy(&instance->gas_lock);
+        pthread_cond_destroy(&instance->gas_cond);
+
         free(instance->ae_name);
+        instance->ops->destroy(instance->ops_o);
         free(instance);
 }
 
@@ -154,6 +169,8 @@ static int add_ga(struct gam *        instance,
         pthread_cond_signal(&instance->gas_cond);
         pthread_mutex_unlock(&instance->gas_lock);
 
+        LOG_INFO("Added %s flow to %s.", instance->ae_name, info->name);
+
         return 0;
 }
 
@@ -170,7 +187,7 @@ int gam_flow_arr(struct gam * instance,
                 return -1;
         }
 
-        cacep = cacep_create(fd, ipcpi.name, ribmgr_address());
+        cacep = cacep_create(fd, ipcpi.name, ipcpi.address);
         if (cacep == NULL) {
                 LOG_ERR("Failed to create CACEP instance.");
                 return -1;
@@ -187,12 +204,14 @@ int gam_flow_arr(struct gam * instance,
 
         if (instance->ops->accept_flow(instance->ops_o, qs, info)) {
                 flow_dealloc(fd);
+                free(info->name);
                 free(info);
                 return 0;
         }
 
         if (add_ga(instance, fd, qs, info)) {
                 LOG_ERR("Failed to add ga to graph adjacency manager list.");
+                free(info->name);
                 free(info);
                 return -1;
         }
@@ -208,6 +227,7 @@ int gam_flow_alloc(struct gam * instance,
         struct cacep_info * info;
         int                 fd;
 
+
         fd = flow_alloc(dst_name, instance->ae_name, NULL);
         if (fd < 0) {
                 LOG_ERR("Failed to allocate flow to %s.", dst_name);
@@ -220,7 +240,7 @@ int gam_flow_alloc(struct gam * instance,
                 return -1;
         }
 
-        cacep = cacep_create(fd, ipcpi.name, ribmgr_address());
+        cacep = cacep_create(fd, ipcpi.name, ipcpi.address);
         if (cacep == NULL) {
                 LOG_ERR("Failed to create CACEP instance.");
                 return -1;

@@ -26,16 +26,14 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/list.h>
 #include <ouroboros/qos.h>
+#include <ouroboros/rib.h>
 
-#include "pathname.h"
-#include "ro.h"
 #include "ipcp.h"
 #include "gam.h"
 
 #include <string.h>
 #include <stdlib.h>
-
-#define RO_DIR "neighbors"
+#include <assert.h>
 
 struct neighbor {
         struct list_head next;
@@ -56,72 +54,38 @@ static void * allocator(void * o)
         qosspec_t         qs;
         ssize_t           len;
         char **           children;
-        int               i;
-        char *            ro_name;
+        ssize_t           i;
         struct complete * complete = (struct complete *) o;
+
+        assert(complete);
+        assert(complete->gam);
 
         qs.delay = 0;
         qs.jitter = 0;
 
-        ro_name = pathname_create(RO_DIR);
-        if (ro_name == NULL)
-                return (void *) -1;
-
-        len = ro_children(ro_name, &children);
-        if (len > 0) {
-                for (i = 0; i < len; i++) {
-                        if (strcmp(children[i], ipcpi.name) == 0)
-                                continue;
+        /* FIXME: subscribe to members to keep the graph complete. */
+        len = rib_children("/" MEMBERS_NAME, &children);
+        for (i = 0; i < len; ++i) {
+                if (strcmp(children[i], ipcpi.name) < 0)
                         gam_flow_alloc(complete->gam, children[i], qs);
-                }
+                free(children[i]);
         }
 
-        pathname_destroy(ro_name);
+        if (len > 0)
+                free(children);
 
         return (void *) 0;
 }
 
 void * complete_create(struct gam * gam)
 {
-        struct ro_attr    attr;
-        char *            ro_name;
         struct complete * complete;
 
-        ro_attr_init(&attr);
-        attr.enrol_sync = true;
-        attr.recv_set = ALL_MEMBERS;
+        assert(gam);
 
         complete = malloc(sizeof(*complete));
         if (complete == NULL)
                 return NULL;
-
-        ro_name = pathname_create(RO_DIR);
-        if (ro_name == NULL) {
-                free(complete);
-                return NULL;
-        }
-
-        if (!ro_exists(RO_DIR)) {
-                if (ro_create(ro_name, &attr, NULL, 0)) {
-                        free(complete);
-                        pathname_destroy(ro_name);
-                        return NULL;
-                }
-        }
-
-        ro_name = pathname_append(ro_name, ipcpi.name);
-        if (ro_name == NULL) {
-                free(complete);
-                pathname_destroy(ro_name);
-                return NULL;
-        }
-
-        if (ro_create(ro_name, &attr, NULL, 0)) {
-                free(complete);
-                pathname_destroy(ro_name);
-                return NULL;
-        }
-        pathname_destroy(ro_name);
 
         list_head_init(&complete->neighbors);
         complete->gam = gam;
@@ -131,14 +95,34 @@ void * complete_create(struct gam * gam)
                 return NULL;
         }
 
+        return (void *) complete;
+}
+
+int complete_start(void * o)
+{
+        struct complete * complete = (struct complete *) o;
+
+        assert(complete);
+        assert(complete->gam);
+
         if (pthread_create(&complete->allocator, NULL,
                            allocator, (void *) complete)) {
-                free(complete);
                 pthread_mutex_destroy(&complete->neighbors_lock);
-                return NULL;
+                free(complete);
+                return -1;
         }
 
-        return (void *) complete;
+        /* FIXME: Handle flooding of the flow allocator before detaching.*/
+        pthread_join(complete->allocator, NULL);
+
+        return 0;
+}
+
+int complete_stop(void * o)
+{
+        (void) o;
+
+        return 0;
 }
 
 void complete_destroy(void * o)
@@ -147,15 +131,16 @@ void complete_destroy(void * o)
         struct list_head * n = NULL;
         struct complete * complete = (struct complete *) o;
 
-        pthread_cancel(complete->allocator);
-        pthread_join(complete->allocator, NULL);
-
         list_for_each_safe(p, n, &complete->neighbors) {
                 struct neighbor * e = list_entry(p, struct neighbor, next);
                 list_del(&e->next);
                 free(e->neighbor);
                 free(e);
         }
+
+        pthread_mutex_destroy(&complete->neighbors_lock);
+
+        free(complete);
 }
 
 int complete_accept_new_flow(void * o)
@@ -175,6 +160,8 @@ int complete_accept_flow(void *                    o,
 
         (void) qs;
 
+        assert(complete);
+
         pthread_mutex_lock(&complete->neighbors_lock);
 
         list_for_each(pos, &complete->neighbors) {
@@ -183,6 +170,10 @@ int complete_accept_flow(void *                    o,
                         pthread_mutex_unlock(&complete->neighbors_lock);
                         return -1;
                 }
+
+                assert(complete);
+                assert(&complete->neighbors_lock);
+                assert(pos->nxt);
         }
 
         n = malloc(sizeof(*n));

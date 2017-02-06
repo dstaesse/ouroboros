@@ -47,6 +47,10 @@ enum pol_gam {
         COMPLETE = 0
 };
 
+enum pol_cacep {
+        NO_AUTH = 0
+};
+
 struct dif_config {
         char *         dif_name;
         enum ipcp_type type;
@@ -57,7 +61,6 @@ struct dif_config {
                         uint8_t            addr_size;
                         uint8_t            cep_id_size;
                         uint8_t            pdu_length_size;
-                        uint8_t            qos_id_size;
                         uint8_t            seqno_size;
 
                         bool               has_ttl;
@@ -68,6 +71,7 @@ struct dif_config {
 
                         enum pol_addr_auth addr_auth_type;
                         enum pol_gam       dt_gam_type;
+                        enum pol_gam       rm_gam_type;
                 };
                 /* Shim UDP */
                 struct {
