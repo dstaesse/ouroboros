@@ -65,6 +65,7 @@ int cacep_destroy(struct cacep * instance)
         if (instance == NULL)
                 return 0;
 
+        free(instance->name);
         free(instance);
 
         return 0;
