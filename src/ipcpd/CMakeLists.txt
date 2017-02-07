@@ -1,7 +1,7 @@
 set(IPCP_SOURCES
         # Add source files here
         ${CMAKE_CURRENT_SOURCE_DIR}/ipcp.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/ipcp-data.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/shim-data.c
         ${CMAKE_CURRENT_SOURCE_DIR}/timerwheel.c
 )
 

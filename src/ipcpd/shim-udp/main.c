@@ -156,7 +156,8 @@ static void clr_fd(int fd)
         pthread_mutex_unlock(&udp_data.fd_set_lock);
 }
 
-static int send_shim_udp_msg(shim_udp_msg_t * msg, uint32_t dst_ip_addr)
+static int send_shim_udp_msg(shim_udp_msg_t * msg,
+                             uint32_t         dst_ip_addr)
 {
        buffer_t           buf;
        struct sockaddr_in r_saddr;
@@ -518,7 +519,9 @@ static void * ipcp_udp_sdu_loop(void * o)
         return (void *) 1;
 }
 
-void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
+void ipcp_sig_handler(int         sig,
+                      siginfo_t * info,
+                      void *      c)
 {
         (void) c;
 
@@ -689,7 +692,8 @@ static int ddns_send(char * cmd)
         return 0;
 }
 
-static uint32_t ddns_resolve(char * name, uint32_t dns_addr)
+static uint32_t ddns_resolve(char *   name,
+                             uint32_t dns_addr)
 {
         pid_t api = -1;
         int wstatus;
@@ -791,7 +795,7 @@ static int ipcp_udp_name_reg(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_reg_add_entry(ipcpi.data, name_dup)) {
+        if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
                 free(name_dup);
@@ -823,7 +827,7 @@ static int ipcp_udp_name_reg(char * name)
 
                 if (ddns_send(cmd)) {
                         pthread_rwlock_rdlock(&ipcpi.state_lock);
-                        ipcp_data_reg_del_entry(ipcpi.data, name);
+                        shim_data_reg_del_entry(ipcpi.shim_data, name);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
                         return -1;
                 }
@@ -872,7 +876,7 @@ static int ipcp_udp_name_unreg(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        ipcp_data_reg_del_entry(ipcpi.data, name);
+        shim_data_reg_del_entry(ipcpi.shim_data, name);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
@@ -902,7 +906,7 @@ static int ipcp_udp_name_query(char * name)
                 return -1; /* -ENOTENROLLED */
         }
 
-        if (ipcp_data_dir_has(ipcpi.data, name)) {
+        if (shim_data_dir_has(ipcpi.shim_data, name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 return 0;
         }
@@ -940,7 +944,7 @@ static int ipcp_udp_name_query(char * name)
         }
 #endif
 
-        if (ipcp_data_dir_add_entry(ipcpi.data, name, ip_addr)) {
+        if (shim_data_dir_add_entry(ipcpi.shim_data, name, ip_addr)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to add directory entry.");
                 return -1;
@@ -1006,13 +1010,13 @@ static int ipcp_udp_flow_alloc(int       fd,
                 return -1; /* -ENOTENROLLED */
         }
 
-        if (!ipcp_data_dir_has(ipcpi.data, dst_name)) {
+        if (!shim_data_dir_has(ipcpi.shim_data, dst_name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Could not resolve destination.");
                 close(skfd);
                 return -1;
         }
-        ip_addr = (uint32_t) ipcp_data_dir_get_addr(ipcpi.data, dst_name);
+        ip_addr = (uint32_t) shim_data_dir_get_addr(ipcpi.shim_data, dst_name);
 
         /* connect to server (store the remote IP address in the fd) */
         memset((char *) &r_saddr, 0, sizeof(r_saddr));
@@ -1060,7 +1064,8 @@ static int ipcp_udp_flow_alloc(int       fd,
         return fd;
 }
 
-static int ipcp_udp_flow_alloc_resp(int fd, int response)
+static int ipcp_udp_flow_alloc_resp(int fd,
+                                    int response)
 {
         int skfd = -1;
         struct sockaddr_in f_saddr;
@@ -1166,7 +1171,8 @@ static struct ipcp_ops udp_ops = {
         .ipcp_flow_dealloc    = ipcp_udp_flow_dealloc
 };
 
-int main(int argc, char * argv[])
+int main(int    argc,
+         char * argv[])
 {
         struct sigaction sig_act;
         sigset_t  sigset;

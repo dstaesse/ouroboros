@@ -20,15 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "ipcp-utils"
-
 #include <ouroboros/config.h>
 #include <ouroboros/list.h>
 #include <ouroboros/time_utils.h>
-#include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 
-#include "ipcp-data.h"
+#include "shim-data.h"
 #include "ipcp.h"
 
 #include <string.h>
@@ -98,40 +95,26 @@ static void dir_entry_destroy(struct dir_entry * entry)
         free(entry);
 }
 
-struct ipcp_data * ipcp_data_create()
+struct shim_data * shim_data_create()
 {
-        struct ipcp_data * data = malloc(sizeof(*data));
-        if (data == NULL)
+        struct shim_data * sd = malloc(sizeof(*sd));
+        if (sd == NULL)
                 return NULL;
-
-        data->type = 0;
-
-        return data;
-}
-
-struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
-                                  enum ipcp_type     ipcp_type)
-{
-        if (dst == NULL)
-                return NULL;
-
-        dst->type  = ipcp_type;
-        dst->dif_name = NULL;
 
         /* init the lists */
-        list_head_init(&dst->registry);
-        list_head_init(&dst->directory);
-        list_head_init(&dst->dir_queries);
+        list_head_init(&sd->registry);
+        list_head_init(&sd->directory);
+        list_head_init(&sd->dir_queries);
 
         /* init the locks */
-        pthread_rwlock_init(&dst->reg_lock, NULL);
-        pthread_rwlock_init(&dst->dir_lock, NULL);
-        pthread_mutex_init(&dst->dir_queries_lock, NULL);
+        pthread_rwlock_init(&sd->reg_lock, NULL);
+        pthread_rwlock_init(&sd->dir_lock, NULL);
+        pthread_mutex_init(&sd->dir_queries_lock, NULL);
 
-        return dst;
+        return sd;
 }
 
-static void clear_registry(struct ipcp_data * data)
+static void clear_registry(struct shim_data * data)
 {
         struct list_head * h;
         struct list_head * t;
@@ -145,7 +128,7 @@ static void clear_registry(struct ipcp_data * data)
         }
 }
 
-static void clear_directory(struct ipcp_data * data)
+static void clear_directory(struct shim_data * data)
 {
         struct list_head * h;
         struct list_head * t;
@@ -159,7 +142,7 @@ static void clear_directory(struct ipcp_data * data)
         }
 }
 
-static void clear_dir_queries(struct ipcp_data * data)
+static void clear_dir_queries(struct shim_data * data)
 {
         struct list_head * h;
         struct list_head * t;
@@ -169,11 +152,11 @@ static void clear_dir_queries(struct ipcp_data * data)
         list_for_each_safe(h, t, &data->dir_queries) {
                 struct dir_query * e = list_entry(h, struct dir_query, next);
                 list_del(&e->next);
-                ipcp_data_dir_query_destroy(e);
+                shim_data_dir_query_destroy(e);
         }
 }
 
-void ipcp_data_destroy(struct ipcp_data * data)
+void shim_data_destroy(struct shim_data * data)
 {
         if (data == NULL)
                 return;
@@ -191,9 +174,6 @@ void ipcp_data_destroy(struct ipcp_data * data)
         clear_dir_queries(data);
         pthread_mutex_unlock(&data->dir_queries_lock);
 
-        if (data->dif_name != NULL)
-                free(data->dif_name);
-
         pthread_rwlock_destroy(&data->dir_lock);
         pthread_rwlock_destroy(&data->reg_lock);
         pthread_mutex_destroy(&data->dir_queries_lock);
@@ -201,7 +181,7 @@ void ipcp_data_destroy(struct ipcp_data * data)
         free(data);
 }
 
-static struct reg_entry * find_reg_entry_by_name(struct ipcp_data * data,
+static struct reg_entry * find_reg_entry_by_name(struct shim_data * data,
                                                  const char *       name)
 {
         struct list_head * h;
@@ -218,7 +198,7 @@ static struct reg_entry * find_reg_entry_by_name(struct ipcp_data * data,
         return NULL;
 }
 
-static struct dir_entry * find_dir_entry(struct ipcp_data * data,
+static struct dir_entry * find_dir_entry(struct shim_data * data,
                                          const char *       name,
                                          uint64_t           addr)
 {
@@ -232,7 +212,7 @@ static struct dir_entry * find_dir_entry(struct ipcp_data * data,
         return NULL;
 }
 
-static struct dir_entry * find_dir_entry_any(struct ipcp_data * data,
+static struct dir_entry * find_dir_entry_any(struct shim_data * data,
                                              const char *       name)
 {
         struct list_head * h;
@@ -245,7 +225,7 @@ static struct dir_entry * find_dir_entry_any(struct ipcp_data * data,
         return NULL;
 }
 
-int ipcp_data_reg_add_entry(struct ipcp_data * data,
+int shim_data_reg_add_entry(struct shim_data * data,
                             char *             name)
 {
         struct reg_entry * entry;
@@ -273,7 +253,7 @@ int ipcp_data_reg_add_entry(struct ipcp_data * data,
         return 0;
 }
 
-int ipcp_data_reg_del_entry(struct ipcp_data * data,
+int shim_data_reg_del_entry(struct shim_data * data,
                             const char *       name)
 {
         struct reg_entry * e;
@@ -297,7 +277,7 @@ int ipcp_data_reg_del_entry(struct ipcp_data * data,
         return 0;
 }
 
-bool ipcp_data_reg_has(struct ipcp_data * data,
+bool shim_data_reg_has(struct shim_data * data,
                        const char *       name)
 {
         bool ret = false;
@@ -314,7 +294,7 @@ bool ipcp_data_reg_has(struct ipcp_data * data,
         return ret;
 }
 
-int ipcp_data_dir_add_entry(struct ipcp_data * data,
+int shim_data_dir_add_entry(struct shim_data * data,
                             char *             name,
                             uint64_t           addr)
 {
@@ -347,12 +327,10 @@ int ipcp_data_dir_add_entry(struct ipcp_data * data,
 
         pthread_rwlock_unlock(&data->dir_lock);
 
-        LOG_DBG("Added directory entry for %s.", entry_name);
-
         return 0;
 }
 
-int ipcp_data_dir_del_entry(struct ipcp_data * data,
+int shim_data_dir_del_entry(struct shim_data * data,
                             const char *       name,
                             uint64_t           addr)
 {
@@ -377,7 +355,7 @@ int ipcp_data_dir_del_entry(struct ipcp_data * data,
         return 0;
 }
 
-bool ipcp_data_dir_has(struct ipcp_data * data,
+bool shim_data_dir_has(struct shim_data * data,
                        const char *       name)
 {
         bool ret = false;
@@ -391,7 +369,7 @@ bool ipcp_data_dir_has(struct ipcp_data * data,
         return ret;
 }
 
-uint64_t ipcp_data_dir_get_addr(struct ipcp_data * data,
+uint64_t shim_data_dir_get_addr(struct shim_data * data,
                                 const char *       name)
 {
         struct dir_entry * entry;
@@ -413,7 +391,7 @@ uint64_t ipcp_data_dir_get_addr(struct ipcp_data * data,
         return addr;
 }
 
-struct dir_query * ipcp_data_dir_query_create(char * name)
+struct dir_query * shim_data_dir_query_create(char * name)
 {
         struct dir_query * query;
         pthread_condattr_t cattr;
@@ -442,7 +420,7 @@ struct dir_query * ipcp_data_dir_query_create(char * name)
         return query;
 }
 
-void ipcp_data_dir_query_respond(struct dir_query * query)
+void shim_data_dir_query_respond(struct dir_query * query)
 {
         assert(query);
 
@@ -462,7 +440,7 @@ void ipcp_data_dir_query_respond(struct dir_query * query)
         pthread_mutex_unlock(&query->lock);
 }
 
-void ipcp_data_dir_query_destroy(struct dir_query * query)
+void shim_data_dir_query_destroy(struct dir_query * query)
 {
         assert(query);
 
@@ -493,7 +471,7 @@ void ipcp_data_dir_query_destroy(struct dir_query * query)
         free(query);
 }
 
-int ipcp_data_dir_query_wait(struct dir_query * query,
+int shim_data_dir_query_wait(struct dir_query *      query,
                              const struct timespec * timeout)
 {
         struct timespec abstime;
