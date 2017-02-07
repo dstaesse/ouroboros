@@ -119,7 +119,6 @@ static void * ipcp_main_loop(void * o)
                                 conf.cep_id_size = conf_msg->cep_id_size;
                                 conf.pdu_length_size =
                                         conf_msg->pdu_length_size;
-                                conf.qos_id_size = conf_msg->qos_id_size;
                                 conf.seqno_size = conf_msg->seqno_size;
                                 conf.has_ttl = conf_msg->has_ttl;
                                 conf.has_chk = conf_msg->has_chk;
@@ -127,6 +126,7 @@ static void * ipcp_main_loop(void * o)
                                 conf.max_pdu_size = conf_msg->max_pdu_size;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
                                 conf.dt_gam_type = conf_msg->dt_gam_type;
+                                conf.rm_gam_type = conf_msg->rm_gam_type;
                         }
                         if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
                                 conf.ip_addr  = conf_msg->ip_addr;

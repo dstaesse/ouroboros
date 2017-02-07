@@ -25,8 +25,7 @@
 
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/utils.h>
-
-#include "dt_const.h"
+#include <ouroboros/qos.h>
 
 #define PDU_TYPE_MGMT 0x40
 #define PDU_TYPE_DTP  0x80
@@ -45,8 +44,11 @@ struct pci {
         uint32_t pdu_length;
         uint64_t seqno;
         uint8_t  ttl;
-        uint8_t  flags;
 };
+
+int          shm_pci_init(void);
+
+void         shm_pci_fini(void);
 
 int          shm_pci_ser(struct shm_du_buff * sdb,
                          struct pci *         pci);
@@ -54,10 +56,9 @@ int          shm_pci_ser(struct shm_du_buff * sdb,
 buffer_t *   shm_pci_ser_buf(buffer_t *   buf,
                              struct pci * pci);
 
-struct pci * shm_pci_des(struct shm_du_buff * sdb);
+void         shm_pci_des(struct shm_du_buff * sdb,
+                         struct pci *         pci);
 
-int          shm_pci_shrink(struct shm_du_buff * sdb);
-
-int          shm_pci_dec_ttl(struct shm_du_buff * sdb);
+void         shm_pci_shrink(struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_SHM_PCI_H */

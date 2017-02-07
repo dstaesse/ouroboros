@@ -30,6 +30,10 @@ void * complete_create(struct gam * instance);
 
 void   complete_destroy(void * o);
 
+int    complete_start(void * o);
+
+int    complete_stop(void * o);
+
 int    complete_accept_new_flow(void * o);
 
 int    complete_accept_flow(void *                    o,
@@ -39,6 +43,8 @@ int    complete_accept_flow(void *                    o,
 struct pol_gam_ops complete_ops = {
         .create          = complete_create,
         .destroy         = complete_destroy,
+        .start           = complete_start,
+        .stop            = complete_stop,
         .accept_new_flow = complete_accept_new_flow,
         .accept_flow     = complete_accept_flow
 };

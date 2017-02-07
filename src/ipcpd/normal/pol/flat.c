@@ -3,7 +3,8 @@
  *
  * Policy for flat addresses in a distributed way
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -25,11 +26,9 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/rib.h>
 
-#include "shm_pci.h"
-#include "ribmgr.h"
-#include "ro.h"
-#include "pathname.h"
+#include "ipcp.h"
 
 #include <time.h>
 #include <stdlib.h>
@@ -37,235 +36,120 @@
 #include <string.h>
 #include <assert.h>
 
-#define POL_RO_ROOT "flat_addr"
+#define NAME_LEN 8
+#define REC_DIF_SIZE 10000
 
-#define TIMEOUT  100 /* ms */
-#define STR_SIZE 100
-
-#define FLAT_ADDR_REQ   0
-#define FLAT_ADDR_REPLY 1
-
-struct flat_addr_msg {
-        uint8_t  code;
-        uint64_t addr;
-};
-
-struct {
-        int      sid;
-        uint64_t addr;
-        bool     addr_in_use;
-
-        pthread_cond_t  cond;
-        pthread_mutex_t lock;
-} flat;
-
-static char * addr_name(void)
+/* convert 32 bit addr to a hex string */
+static void addr_name(char *   name,
+                      uint32_t addr)
 {
-        char * name;
-        /* uint64_t as a string has 25 chars */
-        char   addr_name[30];
-
-        sprintf(addr_name, "%lu", (unsigned long) flat.addr);
-
-        name = pathname_create(POL_RO_ROOT);
-        if (name == NULL)
-                return NULL;
-
-        name = pathname_append(name, addr_name);
-        return name;
+        sprintf(name, "%8x", (uint32_t) (addr));
 }
 
-static void ro_created(const char * name,
-                       uint8_t *    data,
-                       size_t       len)
+#define freepp(type, ptr, len)                          \
+        do {                                            \
+                if (len == 0)                           \
+                        break;                          \
+                while (len > 0)                         \
+                        free(((type **) ptr)[--len]);   \
+                free(ptr);                              \
+        } while (0);
+
+static int addr_taken(char *  name,
+                      char ** members,
+                      size_t  len)
 {
-        struct flat_addr_msg * msg;
+        size_t i;
+        char path[RIB_MAX_PATH_LEN + 1];
 
-        assert(name);
-        assert(data);
-        assert(len >= sizeof(*msg));
+        size_t reset;
+        strcpy(path, "/" MEMBERS_NAME);
 
-        msg = (struct flat_addr_msg *) data;
-        if (msg->code == FLAT_ADDR_REQ && msg->addr == flat.addr) {
-                msg->code = FLAT_ADDR_REPLY;
-                ro_write(name, data, len);
+        reset = strlen(path);
+
+        for (i = 0; i < len; ++i) {
+                ssize_t j;
+                ssize_t c;
+                char ** addrs;
+                rib_path_append(path, members[i]);
+                c = rib_children(path, &addrs);
+                for (j = 0; j < c; ++j)
+                        if (strcmp(addrs[j], name) == 0) {
+                                freepp(char, addrs, c);
+                                return 1;
+                        }
+                freepp(char, addrs, c);
+                path[reset] = '\0';
         }
-}
-
-static void ro_updated(const char * name,
-                       uint8_t *    data,
-                       size_t       len)
-{
-        struct flat_addr_msg * msg;
-        char * ro_name;
-
-        assert(name);
-        assert(data);
-        assert(len >= sizeof(*msg));
-        (void) len;
-
-        ro_name = addr_name();
-        if (ro_name == NULL) {
-                free(data);
-                return;
-        }
-
-        msg = (struct flat_addr_msg *) data;
-        if (msg->code == FLAT_ADDR_REPLY &&
-            strcmp(name, ro_name) == 0) {
-                pthread_mutex_lock(&flat.lock);
-                flat.addr_in_use = true;
-                pthread_cond_broadcast(&flat.cond);
-                pthread_mutex_unlock(&flat.lock);
-        }
-
-        free(data);
-        free(ro_name);
-}
-
-static struct ro_sub_ops flat_sub_ops = {
-        .ro_created = ro_created,
-        .ro_updated = ro_updated,
-        .ro_deleted = NULL
-};
-
-int flat_init(void)
-{
-        struct ro_attr     rattr;
-        pthread_condattr_t cattr;
-        struct timespec    t;
-        char *             name;
-
-        clock_gettime(CLOCK_REALTIME, &t);
-
-        srand(t.tv_nsec);
-        flat.addr_in_use = false;
-
-        ro_attr_init(&rattr);
-        pthread_mutex_init(&flat.lock, NULL);
-        pthread_condattr_init(&cattr);
-#ifndef __APPLE__
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
-#endif
-        pthread_cond_init(&flat.cond, &cattr);
-
-        flat.sid = ro_subscribe(POL_RO_ROOT, &flat_sub_ops);
-        if (flat.sid < 0) {
-                LOG_ERR("Could not subscribe to RIB.");
-                pthread_cond_destroy(&flat.cond);
-                pthread_mutex_destroy(&flat.lock);
-                return -1;
-        }
-
-        name = pathname_create(POL_RO_ROOT);
-        if (name == NULL) {
-                pthread_cond_destroy(&flat.cond);
-                pthread_mutex_destroy(&flat.lock);
-                ro_unsubscribe(flat.sid);
-                return -1;
-        }
-
-        if (!ro_exists(name)) {
-                rattr.enrol_sync = true;
-                if (ro_create(name, &rattr, NULL, 0)) {
-                        LOG_ERR("Could not create RO.");
-                        pathname_destroy(name);
-                        pthread_cond_destroy(&flat.cond);
-                        pthread_mutex_destroy(&flat.lock);
-                        ro_unsubscribe(flat.sid);
-                        return -1;
-                }
-        }
-        pathname_destroy(name);
 
         return 0;
 }
 
-int flat_fini(void)
-{
-        pthread_cond_destroy(&flat.cond);
-        pthread_mutex_destroy(&flat.lock);
-        ro_unsubscribe(flat.sid);
-        return 0;
-}
+#define INVALID_ADDRESS 0
 
 uint64_t flat_address(void)
 {
-        int                    ret = 0;
-        uint64_t               max_addr;
-        struct dt_const *      dtc;
-        struct timespec        timeout = {(TIMEOUT / 1000),
-                                          (TIMEOUT % 1000) * MILLION};
-        struct timespec        abstime;
-        struct ro_attr         attr;
-        struct flat_addr_msg * msg;
-        uint8_t *              buf;
-        char *                 ro_name;
+        struct timespec t;
 
-        dtc = ribmgr_dt_const();
-        if (dtc == NULL)
-                return INVALID_ADDR;
+        char path[RIB_MAX_PATH_LEN];
+        char name[NAME_LEN + 1];
+        uint32_t addr;
+        uint8_t addr_size;
 
-        if (dtc->addr_size == 8) {
-                LOG_ERR("Policy cannot be used with 64 bit addresses.");
-                return INVALID_ADDR;
+        char ** members;
+        ssize_t n_members;
+
+        strcpy(path, "/" MEMBERS_NAME);
+
+        if (!rib_has(path)) {
+                LOG_ERR("Could not read members from RIB.");
+                return INVALID_ADDRESS;
         }
 
-        while (ret != -ETIMEDOUT) {
-                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-                ts_add(&abstime, &timeout, &abstime);
-
-                max_addr = (1 << (8 * dtc->addr_size)) - 1;
-                flat.addr = (rand() % (max_addr - 1)) + 1;
-
-                ro_attr_init(&attr);
-                attr.recv_set = ALL_MEMBERS;
-                attr.expiry.tv_sec = TIMEOUT / 1000;
-                attr.expiry.tv_nsec = (TIMEOUT % 1000) * MILLION;
-
-                buf = malloc(sizeof(*msg));
-                if (buf == NULL)
-                        return INVALID_ADDR;
-
-                msg = (struct flat_addr_msg *) buf;
-                msg->code = FLAT_ADDR_REQ;
-                msg->addr = flat.addr;
-
-                ro_name = addr_name();
-                if (ro_name == NULL) {
-                        free(buf);
-                        return INVALID_ADDR;
-                }
-
-                pthread_mutex_lock(&flat.lock);
-
-                if (ro_exists(ro_name)) {
-                        pthread_mutex_unlock(&flat.lock);
-                        free(ro_name);
-                        free(buf);
-                        continue;
-                }
-
-
-                if (ro_create(ro_name, &attr, buf, sizeof(*msg))) {
-                        pthread_mutex_unlock(&flat.lock);
-                        free(ro_name);
-                        free(buf);
-                        return INVALID_ADDR;
-                }
-
-                free(ro_name);
-
-                while (flat.addr_in_use == false) {
-                        ret = -pthread_cond_timedwait(&flat.cond,
-                                                      &flat.lock,
-                                                      &abstime);
-                        if (ret == -ETIMEDOUT)
-                                break;
-                }
-
-                pthread_mutex_unlock(&flat.lock);
+        if (rib_read("/" BOOT_NAME "/dt/const/addr_size",
+                     &addr_size, sizeof(addr_size)) != sizeof(addr_size)) {
+                LOG_ERR("Failed to read address size.");
+                return INVALID_ADDRESS;
         }
 
-        return flat.addr;
+        if (addr_size != 4) {
+                LOG_ERR("Flat address policy mandates 4 byte addresses.");
+                return INVALID_ADDRESS;
+        }
+
+        n_members = rib_children(path, &members);
+        if (n_members > REC_DIF_SIZE)
+                LOG_WARN("DIF exceeding recommended size for flat addresses.");
+
+        rib_path_append(path, ipcpi.name);
+
+        if (!rib_has(path)) {
+                LOG_ERR("This ipcp is not a member.");
+                freepp(char, members, n_members);
+                return INVALID_ADDRESS;
+        }
+
+        clock_gettime(CLOCK_REALTIME, &t);
+        srand(t.tv_nsec);
+
+        assert(n_members > 0);
+
+        do {
+                addr = (rand() % (RAND_MAX - 1) + 1) & 0xFFFFFFFF;
+                addr_name(name, addr);
+        } while (addr_taken(name, members, n_members));
+
+        freepp(char, members, n_members);
+
+        if (rib_add(path, name)) {
+                LOG_ERR("Failed to add address to RIB.");
+                return INVALID_ADDRESS;
+        }
+
+        if (rib_write(path, &addr, sizeof(addr))) {
+                LOG_ERR("Failed to write address in RIB.");
+                return INVALID_ADDRESS;
+        }
+
+        return addr;
 }

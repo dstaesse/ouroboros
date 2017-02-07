@@ -1,9 +1,9 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Functions to construct pathnames
+ * Enrollment Task
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,16 +19,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_PATHNAME_H
-#define OUROBOROS_IPCPD_NORMAL_PATHNAME_H
+#ifndef OUROBOROS_IPCPD_NORMAL_ENROLL_H
+#define OUROBOROS_IPCPD_NORMAL_ENROLL_H
 
-#define PATH_DELIMITER "/"
+int enroll_handle(int fd);
 
-char * pathname_create(const char * name);
+int enroll_boot(char * dst_name);
 
-char * pathname_append(char *       pname,
-                       const char * name);
-
-void   pathname_destroy(char * pname);
-
-#endif /* OUROBOROS_IPCPD_NORMAL_PATHNAME_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_ENROLL_H */

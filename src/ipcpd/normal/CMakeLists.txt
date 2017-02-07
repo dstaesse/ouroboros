@@ -14,23 +14,18 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 
-protobuf_generate_c(STATIC_INFO_SRCS STATIC_INFO_HDRS
-  static_info.proto)
-
 protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS
   flow_alloc.proto)
-
-protobuf_generate_c(RO_SRCS RO_HDRS ro.proto)
 
 set(SOURCE_FILES
   # Add source files here
   addr_auth.c
   dir.c
+  enroll.c
   fmgr.c
   frct.c
   gam.c
   main.c
-  pathname.c
   pff.c
   ribmgr.c
   shm_pci.c
@@ -40,7 +35,7 @@ set(SOURCE_FILES
   )
 
 add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
-  ${STATIC_INFO_SRCS} ${FLOW_ALLOC_SRCS} ${RO_SRCS})
+  ${FLOW_ALLOC_SRCS})
 target_link_libraries (ipcpd-normal LINK_PUBLIC ouroboros)
 
 include(MacroAddCompileFlags)

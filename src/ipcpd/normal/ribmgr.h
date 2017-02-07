@@ -24,27 +24,29 @@
 
 #include <ouroboros/irm_config.h>
 #include <ouroboros/utils.h>
+#include <ouroboros/qos.h>
 
-#include "dt_const.h"
+enum diss_target {
+        NONE = 0,
+        NEIGHBORS,
+        ALL_MEMBERS
+};
 
-int               ribmgr_init(void);
+enum diss_freq {
+        SINGLE = 0,
+        PERIODIC
+};
 
-int               ribmgr_fini(void);
+int  ribmgr_init(void);
 
-int               ribmgr_add_nm1_flow(int fd);
+void ribmgr_fini(void);
 
-int               ribmgr_nm1_mgt_flow(char * dst_name);
+int  ribmgr_flow_arr(int       fd,
+                     qosspec_t qs);
 
-int               ribmgr_bootstrap(struct dif_config * conf);
-
-int               ribmgr_enrol(void);
-
-int               ribmgr_start_policies(void);
-
-struct dt_const * ribmgr_dt_const(void);
-
-uint64_t          ribmgr_address(void);
-
-enum pol_gam      ribmgr_dt_gam(void);
+int  ribmgr_disseminate(char *           path,
+                        enum diss_target target,
+                        enum diss_freq   freq,
+                        size_t           delay);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_RIBMGR_H */

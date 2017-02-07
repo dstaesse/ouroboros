@@ -619,28 +619,20 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
         return buf;
 }
 
-int shm_du_buff_head_release(struct shm_du_buff * sdb,
-                             size_t               size)
+void shm_du_buff_head_release(struct shm_du_buff * sdb,
+                              size_t               size)
 {
         assert(sdb);
-
-        if (size > sdb->du_tail - sdb->du_head)
-                return -EOVERFLOW;
+        assert(!(size > sdb->du_tail - sdb->du_head));
 
         sdb->du_head += size;
-
-        return 0;
 }
 
-int shm_du_buff_tail_release(struct shm_du_buff * sdb,
-                             size_t               size)
+void shm_du_buff_tail_release(struct shm_du_buff * sdb,
+                              size_t               size)
 {
         assert(sdb);
-
-        if (size > sdb->du_tail - sdb->du_head)
-                return -EOVERFLOW;
+        assert(!(size > sdb->du_tail - sdb->du_head));
 
         sdb->du_tail -= size;
-
-        return 0;
 }

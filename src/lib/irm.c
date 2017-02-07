@@ -113,7 +113,6 @@ int irm_bootstrap_ipcp(pid_t               api,
                 config.has_addr_size = true;
                 config.has_cep_id_size = true;
                 config.has_pdu_length_size = true;
-                config.has_qos_id_size = true;
                 config.has_seqno_size = true;
                 config.has_has_ttl = true;
                 config.has_has_chk = true;
@@ -121,11 +120,11 @@ int irm_bootstrap_ipcp(pid_t               api,
                 config.has_max_pdu_size = true;
                 config.has_addr_auth_type = true;
                 config.has_dt_gam_type = true;
+                config.has_rm_gam_type = true;
 
                 config.addr_size = conf->addr_size;
                 config.cep_id_size = conf->cep_id_size;
                 config.pdu_length_size = conf->pdu_length_size;
-                config.qos_id_size = conf->qos_id_size;
                 config.seqno_size = conf->seqno_size;
                 config.has_ttl = conf->has_ttl;
                 config.has_chk = conf->has_chk;
@@ -133,6 +132,7 @@ int irm_bootstrap_ipcp(pid_t               api,
                 config.max_pdu_size = conf->max_pdu_size;
                 config.addr_auth_type = conf->addr_auth_type;
                 config.dt_gam_type = conf->dt_gam_type;
+                config.rm_gam_type = conf->rm_gam_type;
                 break;
         case IPCP_SHIM_UDP:
                 config.has_ip_addr = true;

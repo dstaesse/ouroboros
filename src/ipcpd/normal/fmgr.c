@@ -29,21 +29,18 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/cacep.h>
+#include <ouroboros/rib.h>
+
+#include "fmgr.h"
+#include "frct.h"
+#include "ipcp.h"
+#include "shm_pci.h"
+#include "gam.h"
 
 #include <stdlib.h>
 #include <stdbool.h>
 #include <pthread.h>
 #include <string.h>
-
-#include "fmgr.h"
-#include "ribmgr.h"
-#include "frct.h"
-#include "ipcp.h"
-#include "shm_pci.h"
-#include "dir.h"
-#include "pathname.h"
-#include "ro.h"
-#include "gam.h"
 
 #include "flow_alloc.pb-c.h"
 typedef FlowAllocMsg flow_alloc_msg_t;
@@ -132,12 +129,14 @@ void * fmgr_nm1_sdu_reader(void * o)
 {
         struct timespec      timeout = {0, FD_UPDATE_TIMEOUT};
         struct shm_du_buff * sdb;
-        struct pci *         pci;
+        struct pci           pci;
         int                  fd;
         int                  i = 0;
         int                  ret;
 
         (void) o;
+
+        memset(&pci, 0, sizeof(pci));
 
         while (true) {
                 /* FIXME: replace with scheduling policy call */
@@ -160,30 +159,15 @@ void * fmgr_nm1_sdu_reader(void * o)
                                 continue;
                         }
 
-                        pci = shm_pci_des(sdb);
-                        if (pci == NULL) {
-                                LOG_ERR("Failed to get PCI.");
-                                ipcp_flow_del(sdb);
-                                continue;
-                        }
+                        shm_pci_des(sdb, &pci);
 
-                        if (pci->dst_addr != ribmgr_address()) {
+                        if (pci.dst_addr != ipcpi.address) {
                                 LOG_DBG("PDU needs to be forwarded.");
 
-                                if (ribmgr_dt_const()->has_ttl) {
-                                        if (pci->ttl == 0) {
-                                                LOG_DBG("TTL was zero.");
-                                                ipcp_flow_del(sdb);
-                                                free(pci);
-                                                continue;
-                                        }
-
-                                        if (shm_pci_dec_ttl(sdb)) {
-                                                LOG_ERR("Failed to dec TTL.");
-                                                ipcp_flow_del(sdb);
-                                                free(pci);
-                                                continue;
-                                        }
+                                if (pci.ttl == 0) {
+                                        LOG_DBG("TTL was zero.");
+                                        ipcp_flow_del(sdb);
+                                        continue;
                                 }
 
                                 /*
@@ -191,21 +175,14 @@ void * fmgr_nm1_sdu_reader(void * o)
                                  * we don't have a PFF yet
                                  */
                                 ipcp_flow_del(sdb);
-                                free(pci);
                                 continue;
                         }
 
-                        if (shm_pci_shrink(sdb)) {
-                                LOG_ERR("Failed to shrink PDU.");
-                                ipcp_flow_del(sdb);
-                                free(pci);
-                                continue;
-                        }
+                        shm_pci_shrink(sdb);
 
-                        if (frct_nm1_post_sdu(pci, sdb)) {
+                        if (frct_nm1_post_sdu(&pci, sdb)) {
                                 LOG_ERR("Failed to hand PDU to FRCT.");
                                 ipcp_flow_del(sdb);
-                                free(pci);
                                 continue;
                         }
                 }
@@ -269,8 +246,11 @@ static void fmgr_destroy_flows(void)
         }
 }
 
-int fmgr_init()
+int fmgr_init(void)
 {
+        enum pol_cacep     pc;
+        enum pol_gam       pg;
+
         int i;
 
         for (i = 0; i < AP_MAX_FLOWS; ++i)
@@ -305,7 +285,22 @@ int fmgr_init()
                 }
         }
 
-        fmgr.gam = gam_create(ribmgr_dt_gam(), DT_AE);
+        if (rib_read("/" BOOT_NAME "/dt/gam/type", &pg, sizeof(pg))
+            != sizeof(pg)) {
+                LOG_ERR("Failed to read policy for ribmgr gam.");
+                return -1;
+        }
+
+        if (rib_read("/" BOOT_NAME "/dt/gam/cacep", &pc, sizeof(pc))
+            != sizeof(pc)) {
+                LOG_ERR("Failed to read CACEP policy for ribmgr gam.");
+                return -1;
+        }
+
+        /* FIXME: Implement cacep policies */
+        (void) pc;
+
+        fmgr.gam = gam_create(pg, DT_AE);
         if (fmgr.gam == NULL) {
                 LOG_ERR("Failed to create graph adjacency manager.");
                 fmgr_destroy_flows();
@@ -324,7 +319,7 @@ int fmgr_init()
         return 0;
 }
 
-int fmgr_fini()
+void fmgr_fini()
 {
         struct list_head * pos = NULL;
         struct list_head * n = NULL;
@@ -359,8 +354,6 @@ int fmgr_fini()
         pthread_rwlock_destroy(&fmgr.np1_flows_lock);
 
         fmgr_destroy_flows();
-
-        return 0;
 }
 
 int fmgr_np1_alloc(int       fd,
@@ -371,27 +364,43 @@ int fmgr_np1_alloc(int       fd,
         cep_id_t         cep_id;
         buffer_t         buf;
         flow_alloc_msg_t msg = FLOW_ALLOC_MSG__INIT;
-        char *           path;
-        uint8_t *        ro_data;
+        char             path[RIB_MAX_PATH_LEN + 1];
         uint64_t         addr;
+        ssize_t          ch;
+        ssize_t          i;
+        char **          children;
+        char *           dst_ipcp = NULL;
 
-        path = pathname_create(RO_DIR);
-        if (path == NULL)
+        assert(strlen(dst_ap_name) + strlen("/" DIR_NAME) + 1
+               < RIB_MAX_PATH_LEN);
+
+        strcpy(path, "/" DIR_NAME);
+
+        rib_path_append(path, dst_ap_name);
+
+        ch = rib_children(path, &children);
+        if (ch <= 0)
                 return -1;
 
-        path = pathname_append(path, dst_ap_name);
-        if (path == NULL) {
-                pathname_destroy(path);
-                return -1;
-        }
+        for (i = 0; i < ch; ++i)
+                if (dst_ipcp == NULL && strcmp(children[i], ipcpi.name) != 0)
+                        dst_ipcp = children[i];
+                else
+                        free(children[i]);
 
-        if (ro_read(path, &ro_data) < 0) {
-                pathname_destroy(path);
-                return -1;
-        }
-        addr = *((uint64_t *) ro_data);
+        free(children);
 
-        pathname_destroy(path);
+        if (dst_ipcp == NULL)
+                return -1;
+
+        strcpy(path, "/" MEMBERS_NAME);
+
+        rib_path_append(path, dst_ipcp);
+
+        free(dst_ipcp);
+
+        if (rib_read(path, &addr, sizeof(addr)) < 0)
+                return -1;
 
         msg.code = FLOW_ALLOC_CODE__FLOW_REQ;
         msg.dst_name = dst_ap_name;
@@ -400,16 +409,12 @@ int fmgr_np1_alloc(int       fd,
         msg.qoscube = cube;
 
         buf.len = flow_alloc_msg__get_packed_size(&msg);
-        if (buf.len == 0) {
-                free(ro_data);
+        if (buf.len == 0)
                 return -1;
-        }
 
         buf.data = malloc(buf.len);
-        if (buf.data == NULL) {
-                free(ro_data);
+        if (buf.data == NULL)
                 return -1;
-        }
 
         flow_alloc_msg__pack(&msg, buf.data);
 
@@ -417,13 +422,10 @@ int fmgr_np1_alloc(int       fd,
 
         cep_id = frct_i_create(addr, &buf, cube);
         if (cep_id == INVALID_CEP_ID) {
-                free(ro_data);
                 free(buf.data);
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
                 return -1;
         }
-
-        free(ro_data);
 
         fmgr.np1_fd_to_cep_id[fd] = cep_id;
         fmgr.np1_cep_id_to_fd[cep_id] = fd;

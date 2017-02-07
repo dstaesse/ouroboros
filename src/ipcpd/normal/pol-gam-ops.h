@@ -30,6 +30,10 @@ struct pol_gam_ops {
 
         void   (* destroy)(void * o);
 
+        int    (* start)(void * o);
+
+        int    (* stop)(void * o);
+
         int    (* accept_new_flow)(void * o);
 
         int    (* accept_flow)(void *                    o,

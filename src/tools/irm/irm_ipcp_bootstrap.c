@@ -46,9 +46,11 @@
 #define DEFAULT_DDNS 0
 #define DEFAULT_ADDR_AUTH FLAT_RANDOM
 #define DEFAULT_DT_GAM COMPLETE
+#define DEFAULT_RM_GAM COMPLETE
 
 #define ADDR_AUTH_FLAT  "flat"
 #define DT_GAM_COMPLETE "complete"
+#define RM_GAM_COMPLETE "complete"
 
 static void usage(void)
 {
@@ -71,6 +73,8 @@ static void usage(void)
                "                [addr_auth <address policy> (default: %s)]\n"
                "                [dt_gam <data transfer graph adjacency manager>"
                "(default: %s)]\n"
+               "                [rm_gam <rib manager graph adjacency manager>"
+               "(default: %s)]\n"
                "if TYPE == " SHIM_UDP "\n"
                "                ip <IP address in dotted notation>\n"
                "                [dns <DDNS IP address in dotted notation>"
@@ -80,7 +84,7 @@ static void usage(void)
                DEFAULT_ADDR_SIZE, DEFAULT_CEP_ID_SIZE,
                DEFAULT_PDU_LEN_SIZE, DEFAULT_SEQ_NO_SIZE,
                DEFAULT_MIN_PDU_SIZE, DEFAULT_MAX_PDU_SIZE,
-               ADDR_AUTH_FLAT, DT_GAM_COMPLETE, DEFAULT_DDNS);
+               ADDR_AUTH_FLAT, DT_GAM_COMPLETE, RM_GAM_COMPLETE, DEFAULT_DDNS);
 }
 
 int do_bootstrap_ipcp(int argc, char ** argv)
@@ -98,6 +102,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         uint32_t max_pdu_size = DEFAULT_MAX_PDU_SIZE;
         enum pol_addr_auth addr_auth_type = DEFAULT_ADDR_AUTH;
         enum pol_gam dt_gam_type = DEFAULT_DT_GAM;
+        enum pol_gam rm_gam_type = DEFAULT_RM_GAM;
         uint32_t ip_addr = 0;
         uint32_t dns_addr = DEFAULT_DDNS;
         char * ipcp_type = NULL;
@@ -152,6 +157,9 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 } else if (matches(*argv, "dt_gam") == 0) {
                         if (strcmp(DT_GAM_COMPLETE, *(argv + 1)) == 0)
                                 dt_gam_type = COMPLETE;
+                } else if (matches(*argv, "rm_gam") == 0) {
+                        if (strcmp(RM_GAM_COMPLETE, *(argv + 1)) == 0)
+                                rm_gam_type = COMPLETE;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "ipcp bootstrap\".\n", *argv);
@@ -181,6 +189,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.max_pdu_size = max_pdu_size;
                 conf.addr_auth_type = addr_auth_type;
                 conf.dt_gam_type = dt_gam_type;
+                conf.rm_gam_type = rm_gam_type;
         } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {
                 conf.type = IPCP_SHIM_UDP;
                 if (ip_addr == 0) {

@@ -78,9 +78,9 @@ uint8_t *            shm_du_buff_head_alloc(struct shm_du_buff * sdb,
 uint8_t *            shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
                                             size_t               size);
 
-int                  shm_du_buff_head_release(struct shm_du_buff * sdb,
+void                 shm_du_buff_head_release(struct shm_du_buff * sdb,
                                               size_t               size);
 
-int                  shm_du_buff_tail_release(struct shm_du_buff * sdb,
+void                 shm_du_buff_tail_release(struct shm_du_buff * sdb,
                                               size_t               size);
 #endif /* OUROBOROS_SHM_RDRBUFF_H */

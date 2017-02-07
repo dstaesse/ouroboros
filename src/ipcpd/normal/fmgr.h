@@ -28,34 +28,34 @@
 #include "ae.h"
 #include "frct.h"
 
-int fmgr_init(void);
+int  fmgr_init(void);
 
-int fmgr_fini(void);
+void fmgr_fini(void);
 
-int fmgr_np1_alloc(int       fd,
-                   char *    dst_ap_name,
-                   char *    src_ae_name,
-                   qoscube_t qos);
+int  fmgr_np1_alloc(int       fd,
+                    char *    dst_ap_name,
+                    char *    src_ae_name,
+                    qoscube_t qos);
 
-int fmgr_np1_alloc_resp(int fd,
-                        int response);
+int  fmgr_np1_alloc_resp(int fd,
+                         int response);
 
-int fmgr_np1_dealloc(int fd);
+int  fmgr_np1_dealloc(int fd);
 
-int fmgr_np1_post_buf(cep_id_t   id,
-                      buffer_t * buf);
+int  fmgr_np1_post_buf(cep_id_t   id,
+                       buffer_t * buf);
 
-int fmgr_np1_post_sdu(cep_id_t             id,
-                      struct shm_du_buff * sdb);
-
-int fmgr_nm1_write_sdu(struct pci *         pci,
+int  fmgr_np1_post_sdu(cep_id_t             id,
                        struct shm_du_buff * sdb);
 
-int fmgr_nm1_write_buf(struct pci * pci,
-                       buffer_t *   buf);
+int  fmgr_nm1_write_sdu(struct pci *         pci,
+                        struct shm_du_buff * sdb);
 
-int fmgr_nm1_flow_arr(int       fd,
-                      qosspec_t qs);
+int  fmgr_nm1_write_buf(struct pci * pci,
+                        buffer_t *   buf);
+
+int  fmgr_nm1_flow_arr(int       fd,
+                       qosspec_t qs);
 
 
 #endif /* OUROBOROS_IPCPD_NORMAL_FMGR_H */
