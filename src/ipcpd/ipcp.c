@@ -270,15 +270,17 @@ static void * ipcp_main_loop(void * o)
         return (void *) 0;
 }
 
-int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
+int ipcp_init(enum ipcp_type    type,
+              struct ipcp_ops * ops)
 {
         pthread_condattr_t cattr;
 
         struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
                              (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
 
-        ipcpi.irmd_fd = -1;
-        ipcpi.state   = IPCP_NULL;
+        ipcpi.irmd_fd   = -1;
+        ipcpi.state     = IPCP_NULL;
+        ipcpi.shim_data = NULL;
 
         ipcpi.threadpool = malloc(sizeof(pthread_t) * IPCPD_THREADPOOL_SIZE);
         if (ipcpi.threadpool == NULL) {
@@ -305,15 +307,6 @@ int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
 
         ipcpi.ops = ops;
 
-        ipcpi.data = ipcp_data_create();
-        if (ipcpi.data == NULL) {
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                return -ENOMEM;
-        }
-
-        ipcp_data_init(ipcpi.data, type);
-
         pthread_rwlock_init(&ipcpi.state_lock, NULL);
         pthread_mutex_init(&ipcpi.state_mtx, NULL);
         pthread_condattr_init(&cattr);
@@ -321,6 +314,16 @@ int ipcp_init(enum ipcp_type type, struct ipcp_ops * ops)
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
         pthread_cond_init(&ipcpi.state_cond, &cattr);
+
+        if (type == IPCP_NORMAL)
+                return 0;
+
+        ipcpi.shim_data = shim_data_create();
+        if (ipcpi.shim_data == NULL) {
+                free(ipcpi.threadpool);
+                free(ipcpi.sock_path);
+                return -ENOMEM;
+        }
 
         return 0;
 }
@@ -364,7 +367,7 @@ void ipcp_fini()
         free(ipcpi.sock_path);
         free(ipcpi.threadpool);
 
-        ipcp_data_destroy(ipcpi.data);
+        shim_data_destroy(ipcpi.shim_data);
 
         pthread_cond_destroy(&ipcpi.state_cond);
         pthread_mutex_destroy(&ipcpi.state_mtx);
@@ -422,7 +425,8 @@ int ipcp_wait_state(enum ipcp_state         state,
         return ret;
 }
 
-int ipcp_parse_arg(int argc, char * argv[])
+int ipcp_parse_arg(int    argc,
+                   char * argv[])
 {
         char * log_file;
         size_t len = 0;

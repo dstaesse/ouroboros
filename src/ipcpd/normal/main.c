@@ -150,8 +150,8 @@ static int boot_components(void)
                 return -1;
         }
 
-        ipcpi.data->dif_name = strdup(buf);
-        if (ipcpi.data->dif_name == NULL) {
+        ipcpi.dif_name = strdup(buf);
+        if (ipcpi.dif_name == NULL) {
                 LOG_ERR("Failed to set DIF name.");
                 return -1;
         }

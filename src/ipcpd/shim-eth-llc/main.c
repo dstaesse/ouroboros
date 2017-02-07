@@ -415,11 +415,12 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
 
 }
 
-static int eth_llc_ipcp_name_query_req(char * name, uint8_t * r_addr)
+static int eth_llc_ipcp_name_query_req(char *    name,
+                                       uint8_t * r_addr)
 {
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
 
-        if (ipcp_data_reg_has(ipcpi.data, name)) {
+        if (shim_data_reg_has(ipcpi.shim_data, name)) {
                 msg.code     = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY;
                 msg.dst_name = name;
 
@@ -429,29 +430,32 @@ static int eth_llc_ipcp_name_query_req(char * name, uint8_t * r_addr)
         return 0;
 }
 
-static int eth_llc_ipcp_name_query_reply(char * name, uint8_t * r_addr)
+static int eth_llc_ipcp_name_query_reply(char *    name,
+                                         uint8_t * r_addr)
 {
         uint64_t address = 0;
         struct list_head * pos;
 
         memcpy(&address, r_addr, MAC_SIZE);
 
-        ipcp_data_dir_add_entry(ipcpi.data, name, address);
+        shim_data_dir_add_entry(ipcpi.shim_data, name, address);
 
-        pthread_mutex_lock(&ipcpi.data->dir_queries_lock);
-        list_for_each(pos, &ipcpi.data->dir_queries) {
+        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
+        list_for_each(pos, &ipcpi.shim_data->dir_queries) {
                 struct dir_query * e =
                         list_entry(pos, struct dir_query, next);
                 if (strcmp(e->name, name) == 0) {
-                        ipcp_data_dir_query_respond(e);
+                        shim_data_dir_query_respond(e);
                 }
         }
-        pthread_mutex_unlock(&ipcpi.data->dir_queries_lock);
+        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
 
         return 0;
 }
 
-static int eth_llc_ipcp_mgmt_frame(uint8_t * buf, size_t len, uint8_t * r_addr)
+static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
+                                   size_t    len,
+                                   uint8_t * r_addr)
 {
         shim_eth_llc_msg_t * msg = shim_eth_llc_msg__unpack(NULL, len, buf);
         if (msg == NULL) {
@@ -461,7 +465,7 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf, size_t len, uint8_t * r_addr)
 
         switch (msg->code) {
         case SHIM_ETH_LLC_MSG_CODE__FLOW_REQ:
-                if (ipcp_data_reg_has(ipcpi.data, msg->dst_name)) {
+                if (shim_data_reg_has(ipcpi.shim_data, msg->dst_name)) {
                         eth_llc_ipcp_sap_req(msg->ssap,
                                              r_addr,
                                              msg->dst_name,
@@ -664,7 +668,9 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
         return (void *) 1;
 }
 
-void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
+void ipcp_sig_handler(int         sig,
+                      siginfo_t * info,
+                      void *      c)
 {
         (void) c;
 
@@ -873,7 +879,7 @@ static int eth_llc_ipcp_name_reg(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_reg_add_entry(ipcpi.data, name_dup)) {
+        if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Failed to add %s to local registry.", name);
                 free(name_dup);
@@ -891,7 +897,7 @@ static int eth_llc_ipcp_name_unreg(char * name)
 {
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        ipcp_data_reg_del_entry(ipcpi.data, name);
+        shim_data_reg_del_entry(ipcpi.shim_data, name);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
@@ -906,7 +912,7 @@ static int eth_llc_ipcp_name_query(char * name)
         struct dir_query * query;
         int ret;
 
-        if (ipcp_data_dir_has(ipcpi.data, name))
+        if (shim_data_dir_has(ipcpi.shim_data, name))
                 return 0;
 
         msg.code     = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ;
@@ -914,22 +920,22 @@ static int eth_llc_ipcp_name_query(char * name)
 
         memset(r_addr, 0xff, MAC_SIZE);
 
-        query = ipcp_data_dir_query_create(name);
+        query = shim_data_dir_query_create(name);
         if (query == NULL)
                 return -1;
 
-        pthread_mutex_lock(&ipcpi.data->dir_queries_lock);
-        list_add(&query->next, &ipcpi.data->dir_queries);
-        pthread_mutex_unlock(&ipcpi.data->dir_queries_lock);
+        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
+        list_add(&query->next, &ipcpi.shim_data->dir_queries);
+        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
 
         eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
 
-        ret = ipcp_data_dir_query_wait(query, &timeout);
+        ret = shim_data_dir_query_wait(query, &timeout);
 
-        pthread_mutex_lock(&ipcpi.data->dir_queries_lock);
+        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
         list_del(&query->next);
-        ipcp_data_dir_query_destroy(query);
-        pthread_mutex_unlock(&ipcpi.data->dir_queries_lock);
+        shim_data_dir_query_destroy(query);
+        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
 
         return ret;
 }
@@ -961,12 +967,12 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
                 return -1; /* -ENOTENROLLED */
         }
 
-        if (!ipcp_data_dir_has(ipcpi.data, dst_name)) {
+        if (!shim_data_dir_has(ipcpi.shim_data, dst_name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_ERR("Destination unreachable.");
                 return -1;
         }
-        addr = ipcp_data_dir_get_addr(ipcpi.data, dst_name);
+        addr = shim_data_dir_get_addr(ipcpi.shim_data, dst_name);
 
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
@@ -1007,7 +1013,8 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
         return 0;
 }
 
-static int eth_llc_ipcp_flow_alloc_resp(int fd, int response)
+static int eth_llc_ipcp_flow_alloc_resp(int fd,
+                                        int response)
 {
         uint8_t ssap = 0;
         uint8_t r_sap = 0;
@@ -1096,7 +1103,8 @@ static struct ipcp_ops eth_llc_ops = {
         .ipcp_flow_dealloc    = eth_llc_ipcp_flow_dealloc
 };
 
-int main(int argc, char * argv[])
+int main(int    argc,
+         char * argv[])
 {
         struct sigaction sig_act;
         sigset_t  sigset;

@@ -115,7 +115,9 @@ static void * ipcp_local_sdu_loop(void * o)
         return (void *) 0;
 }
 
-void ipcp_sig_handler(int sig, siginfo_t * info, void * c)
+void ipcp_sig_handler(int         sig,
+                      siginfo_t * info,
+                      void *      c)
 {
         (void) c;
 
@@ -176,7 +178,7 @@ static int ipcp_local_name_reg(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_data_reg_add_entry(ipcpi.data, name_dup)) {
+        if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 LOG_DBG("Failed to add %s to local registry.", name);
                 free(name_dup);
@@ -194,7 +196,7 @@ static int ipcp_local_name_unreg(char * name)
 {
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        ipcp_data_reg_del_entry(ipcpi.data, name);
+        shim_data_reg_del_entry(ipcpi.shim_data, name);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
@@ -209,7 +211,7 @@ static int ipcp_local_name_query(char * name)
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        ret = (ipcp_data_reg_has(ipcpi.data, name) ? 0 : -1);
+        ret = (shim_data_reg_has(ipcpi.shim_data, name) ? 0 : -1);
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
@@ -253,7 +255,8 @@ static int ipcp_local_flow_alloc(int       fd,
         return 0;
 }
 
-static int ipcp_local_flow_alloc_resp(int fd, int response)
+static int ipcp_local_flow_alloc_resp(int fd,
+                                      int response)
 {
         int out_fd = -1;
         int ret = -1;
@@ -325,7 +328,8 @@ static struct ipcp_ops local_ops = {
         .ipcp_flow_dealloc    = ipcp_local_flow_dealloc
 };
 
-int main(int argc, char * argv[])
+int main(int    argc,
+         char * argv[])
 {
         struct sigaction sig_act;
         sigset_t  sigset;

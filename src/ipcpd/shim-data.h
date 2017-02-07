@@ -26,10 +26,10 @@
 #include <ouroboros/shared.h>
 #include <ouroboros/list.h>
 
-#include "ipcp-ops.h"
-
 #include <sys/types.h>
 #include <pthread.h>
+#include <stdint.h>
+
 
 enum dir_query_state {
         QUERY_INIT = 0,
@@ -48,10 +48,7 @@ struct dir_query {
         pthread_cond_t       cond;
 };
 
-struct ipcp_data {
-        enum ipcp_type      type;
-        char *              dif_name;
-
+struct shim_data {
         struct list_head    registry;
         pthread_rwlock_t    reg_lock;
 
@@ -62,42 +59,39 @@ struct ipcp_data {
         pthread_mutex_t     dir_queries_lock;
 };
 
-struct ipcp_data * ipcp_data_create(void);
+struct shim_data * shim_data_create(void);
 
-struct ipcp_data * ipcp_data_init(struct ipcp_data * dst,
-                                  enum ipcp_type     ipcp_type);
+void               shim_data_destroy(struct shim_data * data);
 
-void               ipcp_data_destroy(struct ipcp_data * data);
-
-int                ipcp_data_reg_add_entry(struct ipcp_data * data,
+int                shim_data_reg_add_entry(struct shim_data * data,
                                            char *             name);
 
-int                ipcp_data_reg_del_entry(struct ipcp_data * data,
+int                shim_data_reg_del_entry(struct shim_data * data,
                                            const char *       name);
 
-bool               ipcp_data_reg_has(struct ipcp_data * data,
+bool               shim_data_reg_has(struct shim_data * data,
                                      const char *       name);
 
-int                ipcp_data_dir_add_entry(struct ipcp_data * data,
+int                shim_data_dir_add_entry(struct shim_data * data,
                                            char *             name,
                                            uint64_t           addr);
 
-int                ipcp_data_dir_del_entry(struct ipcp_data * data,
+int                shim_data_dir_del_entry(struct shim_data * data,
                                            const char *       name,
                                            uint64_t           addr);
 
-bool               ipcp_data_dir_has(struct ipcp_data * data,
+bool               shim_data_dir_has(struct shim_data * data,
                                      const char *       name);
 
-uint64_t           ipcp_data_dir_get_addr(struct ipcp_data * data,
+uint64_t           shim_data_dir_get_addr(struct shim_data * data,
                                           const char *       name);
 
-struct dir_query * ipcp_data_dir_query_create(char * name);
+struct dir_query * shim_data_dir_query_create(char * name);
 
-void               ipcp_data_dir_query_respond(struct dir_query * query);
+void               shim_data_dir_query_respond(struct dir_query * query);
 
-void               ipcp_data_dir_query_destroy(struct dir_query * query);
+void               shim_data_dir_query_destroy(struct dir_query * query);
 
-int                ipcp_data_dir_query_wait(struct dir_query *      query,
+int                shim_data_dir_query_wait(struct dir_query *      query,
                                             const struct timespec * timeout);
-#endif /* IPCPD_IPCP_DATA_H */
+#endif /* IPCPD_SHIM_DATA_H */

@@ -23,9 +23,9 @@
 #define IPCPD_IPCP_H
 
 #include <ouroboros/config.h>
+#include <ouroboros/irm_config.h>
 
-#include "ipcp-ops.h"
-#include "ipcp-data.h"
+#include "shim-data.h"
 
 #include <pthread.h>
 #include <time.h>
@@ -37,15 +37,41 @@ enum ipcp_state {
         IPCP_SHUTDOWN
 };
 
+struct ipcp_ops {
+        int   (* ipcp_bootstrap)(struct dif_config * conf);
+
+        int   (* ipcp_enroll)(char * dif_name);
+
+        int   (* ipcp_name_reg)(char * name);
+
+        int   (* ipcp_name_unreg)(char * name);
+
+        int   (* ipcp_name_query)(char * name);
+
+        int   (* ipcp_flow_alloc)(int       fd,
+                                  char *    dst_ap_name,
+                                  char *    src_ae_name,
+                                  qoscube_t qos);
+
+        int   (* ipcp_flow_alloc_resp)(int fd,
+                                       int response);
+
+        int   (* ipcp_flow_dealloc)(int fd);
+};
+
 struct ipcp {
         int                irmd_api;
         char *             name;
 
+        enum ipcp_type     type;
+        char *             dif_name;
+
         uint64_t           address;
 
-        struct ipcp_data * data;
         struct ipcp_ops *  ops;
         int                irmd_fd;
+
+        struct shim_data * shim_data;
 
         enum ipcp_state    state;
         pthread_rwlock_t   state_lock;
@@ -57,7 +83,7 @@ struct ipcp {
         pthread_t *        threadpool;
 } ipcpi;
 
-int             ipcp_init(enum ipcp_type type,
+int             ipcp_init(enum ipcp_type    type,
                           struct ipcp_ops * ops);
 
 int             ipcp_boot(void);
@@ -73,7 +99,7 @@ enum ipcp_state ipcp_get_state(void);
 int             ipcp_wait_state(enum ipcp_state         state,
                                 const struct timespec * timeout);
 
-int             ipcp_parse_arg(int argc,
+int             ipcp_parse_arg(int    argc,
                                char * argv[]);
 
 #endif
