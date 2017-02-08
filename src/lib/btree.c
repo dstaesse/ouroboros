@@ -388,8 +388,11 @@ int btree_insert(struct btree * tree,
                  void *         val)
 {
         struct btnode * rgt = NULL;
-        struct key_val kv = {key, val};
+        struct key_val kv;
         struct key_val med;
+
+        kv.key = key;
+        kv.val = val;
 
         if (tree == NULL || val == NULL)
                 return -EINVAL;

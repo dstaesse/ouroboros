@@ -55,34 +55,28 @@ struct dif_config {
         char *         dif_name;
         enum ipcp_type type;
 
-        union {
-                /* Normal DIF */
-                struct {
-                        uint8_t            addr_size;
-                        uint8_t            cep_id_size;
-                        uint8_t            pdu_length_size;
-                        uint8_t            seqno_size;
+        /* Normal DIF */
+        uint8_t            addr_size;
+        uint8_t            cep_id_size;
+        uint8_t            pdu_length_size;
+        uint8_t            seqno_size;
 
-                        bool               has_ttl;
-                        bool               has_chk;
+        bool               has_ttl;
+        bool               has_chk;
 
-                        uint32_t           min_pdu_size;
-                        uint32_t           max_pdu_size;
+        uint32_t           min_pdu_size;
+        uint32_t           max_pdu_size;
 
-                        enum pol_addr_auth addr_auth_type;
-                        enum pol_gam       dt_gam_type;
-                        enum pol_gam       rm_gam_type;
-                };
-                /* Shim UDP */
-                struct {
-                        uint32_t           ip_addr;
-                        uint32_t           dns_addr;
-                };
-                /* Shim Ethernet LLC */
-                struct {
-                        char *             if_name;
-                };
-        };
+        enum pol_addr_auth addr_auth_type;
+        enum pol_gam       dt_gam_type;
+        enum pol_gam       rm_gam_type;
+
+        /* Shim UDP */
+        uint32_t           ip_addr;
+        uint32_t           dns_addr;
+
+        /* Shim Ethernet LLC */
+        char *             if_name;
 };
 
 #endif /* OUROBOROS_IRM_CONFIG_H */
