@@ -4,7 +4,7 @@
 
 int main(void)
 {
-        LOG_DBG("Test of the DA");
+        log_dbg("Test of the DA");
 
         return 0;
 }

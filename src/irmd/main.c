@@ -51,7 +51,6 @@
 #include <limits.h>
 #include <pthread.h>
 #include <sys/stat.h>
-#include <dirent.h>
 #include <sys/wait.h>
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
@@ -226,7 +225,8 @@ static pid_t get_ipcp_by_dst_name(char * dst_name)
         return -1;
 }
 
-static pid_t create_ipcp(char * name, enum ipcp_type ipcp_type)
+static pid_t create_ipcp(char *         name,
+                         enum ipcp_type ipcp_type)
 {
         struct pid_el *      api = NULL;
         struct ipcp_entry *  tmp = NULL;
@@ -249,7 +249,7 @@ static pid_t create_ipcp(char * name, enum ipcp_type ipcp_type)
         if (api->pid == -1) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Failed to create IPCP.");
+                log_err("Failed to create IPCP.");
                 return -1;
         }
 
@@ -298,7 +298,7 @@ static pid_t create_ipcp(char * name, enum ipcp_type ipcp_type)
 
         pthread_mutex_unlock(&tmp->init_lock);
 
-        LOG_INFO("Created IPCP %d.", api->pid);
+        log_info("Created IPCP %d.", api->pid);
 
         return api->pid;
 }
@@ -357,11 +357,11 @@ static int destroy_ipcp(pid_t api)
                 if (api == tmp->api) {
                         clear_spawned_api(api);
                         if (ipcp_destroy(api))
-                                LOG_ERR("Could not destroy IPCP.");
+                                log_err("Could not destroy IPCP.");
                         list_del(&tmp->next);
                         ipcp_entry_destroy(tmp);
 
-                        LOG_INFO("Destroyed IPCP %d.", api);
+                        log_info("Destroyed IPCP %d.", api);
                 }
         }
 
@@ -371,7 +371,8 @@ static int destroy_ipcp(pid_t api)
         return 0;
 }
 
-static int bootstrap_ipcp(pid_t api, dif_config_msg_t * conf)
+static int bootstrap_ipcp(pid_t              api,
+                          dif_config_msg_t * conf)
 {
         struct ipcp_entry * entry = NULL;
 
@@ -388,14 +389,14 @@ static int bootstrap_ipcp(pid_t api, dif_config_msg_t * conf)
         if (entry == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("No such IPCP.");
+                log_err("No such IPCP.");
                 return -1;
         }
 
         if (ipcp_bootstrap(entry->api, conf)) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not bootstrap IPCP.");
+                log_err("Could not bootstrap IPCP.");
                 return -1;
         }
 
@@ -403,20 +404,21 @@ static int bootstrap_ipcp(pid_t api, dif_config_msg_t * conf)
         if (entry->dif_name == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_WARN("Failed to set name of DIF.");
+                log_warn("Failed to set name of DIF.");
                 return -ENOMEM;
         }
 
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        LOG_INFO("Bootstrapped IPCP %d in DIF %s.",
+        log_info("Bootstrapped IPCP %d in DIF %s.",
                  entry->api, conf->dif_name);
 
         return 0;
 }
 
-static int enroll_ipcp(pid_t api, char * dif_name)
+static int enroll_ipcp(pid_t  api,
+                       char * dif_name)
 {
         struct ipcp_entry * entry = NULL;
 
@@ -433,14 +435,14 @@ static int enroll_ipcp(pid_t api, char * dif_name)
         if (entry == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("No such IPCP.");
+                log_err("No such IPCP.");
                 return -1;
         }
 
         if (entry->dif_name != NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("IPCP in wrong state");
+                log_err("IPCP in wrong state");
                 return -1;
         }
 
@@ -448,7 +450,7 @@ static int enroll_ipcp(pid_t api, char * dif_name)
         if (entry->dif_name == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Failed to strdup.");
+                log_err("Failed to strdup.");
                 return -1;
         }
 
@@ -462,18 +464,21 @@ static int enroll_ipcp(pid_t api, char * dif_name)
                 entry->dif_name = NULL;
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not enroll IPCP.");
+                log_err("Could not enroll IPCP.");
                 return -1;
         }
 
-        LOG_INFO("Enrolled IPCP %d in DIF %s.",
+        log_info("Enrolled IPCP %d in DIF %s.",
                  api, dif_name);
 
         return 0;
 }
 
-static int bind_ap(char * ap, char * name, uint16_t flags,
-                   int argc, char ** argv)
+static int bind_ap(char *   ap,
+                   char *   name,
+                   uint16_t flags,
+                   int      argc,
+                   char **  argv)
 {
         char * aps;
         char * apn;
@@ -524,7 +529,7 @@ static int bind_ap(char * ap, char * name, uint16_t flags,
                                         pthread_rwlock_unlock(
                                                 &irmd->state_lock);
                                         argvfree(argv_dup);
-                                        LOG_ERR("Failed to bind ap %s to  %s.",
+                                        log_err("Failed to bind ap %s to  %s.",
                                                 ap, name);
                                         free(aps);
                                         free(apn);
@@ -554,7 +559,7 @@ static int bind_ap(char * ap, char * name, uint16_t flags,
         }
 
         if (apn_entry_add_name(e, name_dup)) {
-                LOG_ERR("Failed adding name.");
+                log_err("Failed adding name.");
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 free(name_dup);
@@ -563,17 +568,18 @@ static int bind_ap(char * ap, char * name, uint16_t flags,
 
         re = registry_get_entry(&irmd->registry, name);
         if (re != NULL && reg_entry_add_apn(re, e) < 0)
-                LOG_ERR("Failed adding AP %s for name %s.", ap, name);
+                log_err("Failed adding AP %s for name %s.", ap, name);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        LOG_INFO("Bound AP %s to name %s.", ap, name);
+        log_info("Bound AP %s to name %s.", ap, name);
 
         return 0;
 }
 
-static int bind_api(pid_t api, char * name)
+static int bind_api(pid_t  api,
+                    char * name)
 {
         char * name_dup = NULL;
         struct api_entry * e = NULL;
@@ -593,7 +599,7 @@ static int bind_api(pid_t api, char * name)
 
         e = api_table_get(&irmd->api_table, api);
         if (e == NULL) {
-                LOG_ERR("AP-I %d does not exist.", api);
+                log_err("AP-I %d does not exist.", api);
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return -1;
@@ -609,24 +615,25 @@ static int bind_api(pid_t api, char * name)
         if (api_entry_add_name(e, name_dup)) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Failed to add name %s to api %d.", name, api);
+                log_err("Failed to add name %s to api %d.", name, api);
                 free(name_dup);
                 return -1;
         }
 
         re = registry_get_entry(&irmd->registry, name);
         if (re != NULL && reg_entry_add_api(re, api) < 0)
-                LOG_ERR("Failed adding AP-I %d for name %s.", api, name);
+                log_err("Failed adding AP-I %d for name %s.", api, name);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        LOG_INFO("Bound AP-I %d to name %s.", api, name);
+        log_info("Bound AP-I %d to name %s.", api, name);
 
         return 0;
 }
 
-static int unbind_ap(char * ap, char * name)
+static int unbind_ap(char * ap,
+                     char * name)
 {
         if (ap == NULL)
                 return -EINVAL;
@@ -651,14 +658,15 @@ static int unbind_ap(char * ap, char * name)
         pthread_rwlock_unlock(&irmd->state_lock);
 
         if (name  == NULL)
-                LOG_INFO("AP %s removed.", ap);
+                log_info("AP %s removed.", ap);
         else
-                LOG_INFO("All names matching %s cleared for %s.", name, ap);
+                log_info("All names matching %s cleared for %s.", name, ap);
 
         return 0;
 }
 
-static int unbind_api(pid_t api, char * name)
+static int unbind_api(pid_t  api,
+                      char * name)
 {
         pthread_rwlock_rdlock(&irmd->state_lock);
 
@@ -680,14 +688,15 @@ static int unbind_api(pid_t api, char * name)
         pthread_rwlock_unlock(&irmd->state_lock);
 
         if (name  == NULL)
-                LOG_INFO("AP-I %d removed.", api);
+                log_info("AP-I %d removed.", api);
         else
-                LOG_INFO("All names matching %s cleared for %d.", name, api);
+                log_info("All names matching %s cleared for %d.", name, api);
 
         return 0;
 }
 
-static ssize_t list_ipcps(char * name, pid_t ** apis)
+static ssize_t list_ipcps(char *   name,
+                          pid_t ** apis)
 {
         struct list_head * pos = NULL;
         size_t count = 0;
@@ -723,7 +732,9 @@ static ssize_t list_ipcps(char * name, pid_t ** apis)
         return count;
 }
 
-static int name_reg(char * name, char ** difs, size_t len)
+static int name_reg(char *  name,
+                    char ** difs,
+                    size_t  len)
 {
         size_t i;
         int ret = 0;
@@ -751,7 +762,7 @@ static int name_reg(char * name, char ** difs, size_t len)
                 struct reg_entry * re =
                         registry_add_name(&irmd->registry, strdup(name));
                 if (re == NULL) {
-                        LOG_ERR("Failed creating registry entry for %s.", name);
+                        log_err("Failed creating registry entry for %s.", name);
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
                         return -1;
@@ -793,17 +804,17 @@ static int name_reg(char * name, char ** difs, size_t len)
                                 continue;
 
                         if (ipcp_name_reg(e->api, name)) {
-                                LOG_ERR("Could not register %s in DIF %s.",
+                                log_err("Could not register %s in DIF %s.",
                                         name, e->dif_name);
                         } else {
                                 if (registry_add_name_to_dif(&irmd->registry,
                                                              name,
                                                              e->dif_name,
                                                              e->type) < 0)
-                                        LOG_WARN("Registered unbound name %s. "
+                                        log_warn("Registered unbound name %s. "
                                                  "Registry may be corrupt.",
                                                  name);
-                                LOG_INFO("Registered %s in %s as %s.",
+                                log_info("Registered %s in %s as %s.",
                                          name, e->dif_name, name);
                                 ++ret;
                         }
@@ -816,7 +827,9 @@ static int name_reg(char * name, char ** difs, size_t len)
         return (ret > 0 ? 0 : -1);
 }
 
-static int name_unreg(char * name, char ** difs, size_t len)
+static int name_unreg(char *  name,
+                      char ** difs,
+                      size_t  len)
 {
         size_t i;
         int ret = 0;
@@ -846,13 +859,13 @@ static int name_unreg(char * name, char ** difs, size_t len)
                                 continue;
 
                         if (ipcp_name_unreg(e->api, name)) {
-                                LOG_ERR("Could not unregister %s in DIF %s.",
+                                log_err("Could not unregister %s in DIF %s.",
                                         name, e->dif_name);
                         } else {
                                 registry_del_name_from_dif(&irmd->registry,
                                                            name,
                                                            e->dif_name);
-                                LOG_INFO("Unregistered %s from %s.",
+                                log_info("Unregistered %s from %s.",
                                          name, e->dif_name);
                                 ++ret;
                         }
@@ -865,7 +878,8 @@ static int name_unreg(char * name, char ** difs, size_t len)
         return (ret > 0 ? 0 : -1);
 }
 
-static int api_announce(pid_t api, char * apn)
+static int api_announce(pid_t  api,
+                        char * apn)
 {
         struct api_entry * e = NULL;
         struct apn_entry * a = NULL;
@@ -917,7 +931,7 @@ static int api_announce(pid_t api, char * apn)
                         }
 
                         list_add(&n->next, &e->names);
-                        LOG_DBG("AP-I %d inherits listen name %s from AP %s.",
+                        log_dbg("AP-I %d inherits listen name %s from AP %s.",
                                 api, n->str, e->apn);
                 }
         }
@@ -928,7 +942,8 @@ static int api_announce(pid_t api, char * apn)
         return 0;
 }
 
-static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
+static struct irm_flow * flow_accept(pid_t       api,
+                                     char **     dst_ae_name,
                                      qoscube_t * cube)
 {
         struct irm_flow *  f  = NULL;
@@ -948,15 +963,15 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
         e = api_table_get(&irmd->api_table, api);
         if (e == NULL) {
                 /* Can only happen if server called ap_init(NULL); */
-                LOG_ERR("Unknown instance %d calling accept.", api);
+                log_err("Unknown instance %d calling accept.", api);
                 return NULL;
         }
 
-        LOG_DBG("New instance (%d) of %s added.", api, e->apn);
-        LOG_DBG("This instance accepts flows for:");
+        log_dbg("New instance (%d) of %s added.", api, e->apn);
+        log_dbg("This instance accepts flows for:");
         list_for_each(p, &e->names) {
                 struct str_el * s = list_entry(p, struct str_el, next);
-                LOG_DBG("        %s", s->str);
+                log_dbg("        %s", s->str);
                 re = registry_get_entry(&irmd->registry, s->str);
                 if (re != NULL)
                         reg_entry_add_api(re, api);
@@ -987,7 +1002,7 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
         if (e == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_DBG("Process gone while accepting flow.");
+                log_dbg("Process gone while accepting flow.");
                 return NULL;
         }
 
@@ -1000,7 +1015,7 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Entry in wrong state.");
+                log_err("Entry in wrong state.");
                 return NULL;
         }
         pthread_rwlock_unlock(&irmd->reg_lock);
@@ -1010,7 +1025,7 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Port_id was not created yet.");
+                log_err("Port_id was not created yet.");
                 return NULL;
         }
 
@@ -1019,7 +1034,7 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
         if (dst_ae_name != NULL)
                 *dst_ae_name = re->req_ae_name;
 
-        LOG_INFO("Flow on port_id %d allocated.", f->port_id);
+        log_info("Flow on port_id %d allocated.", f->port_id);
 
         pthread_rwlock_unlock(&irmd->flows_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
@@ -1027,7 +1042,9 @@ static struct irm_flow * flow_accept(pid_t api, char ** dst_ae_name,
         return f;
 }
 
-static int flow_alloc_resp(pid_t n_api, int port_id, int response)
+static int flow_alloc_resp(pid_t n_api,
+                           int   port_id,
+                           int   response)
 {
         struct irm_flow *  f  = NULL;
         struct reg_entry * re = NULL;
@@ -1050,7 +1067,7 @@ static int flow_alloc_resp(pid_t n_api, int port_id, int response)
         if (e == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Unknown AP-I %d responding for port_id %d.",
+                log_err("Unknown AP-I %d responding for port_id %d.",
                         n_api, port_id);
                 return -1;
         }
@@ -1059,14 +1076,14 @@ static int flow_alloc_resp(pid_t n_api, int port_id, int response)
         if (re == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("AP-I %d is not handling a flow request.", n_api);
+                log_err("AP-I %d is not handling a flow request.", n_api);
                 return -1;
         }
 
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Name %s has no pending flow request.", re->name);
+                log_err("Name %s has no pending flow request.", re->name);
                 return -1;
         }
 
@@ -1096,8 +1113,10 @@ static int flow_alloc_resp(pid_t n_api, int port_id, int response)
         return ret;
 }
 
-static struct irm_flow * flow_alloc(pid_t api, char * dst_name,
-                                    char * src_ae_name, qoscube_t cube)
+static struct irm_flow * flow_alloc(pid_t     api,
+                                    char *    dst_name,
+                                    char *    src_ae_name,
+                                    qoscube_t cube)
 {
         struct irm_flow * f;
         pid_t ipcp;
@@ -1116,7 +1135,7 @@ static struct irm_flow * flow_alloc(pid_t api, char * dst_name,
         if (ipcp == -1) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_INFO("Destination unreachable.");
+                log_info("Destination unreachable.");
                 return NULL;
         }
 
@@ -1126,7 +1145,7 @@ static struct irm_flow * flow_alloc(pid_t api, char * dst_name,
         if (!bmp_is_id_valid(irmd->port_ids, port_id)) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not allocate port_id.");
+                log_err("Could not allocate port_id.");
                 return NULL;
         }
 
@@ -1135,7 +1154,7 @@ static struct irm_flow * flow_alloc(pid_t api, char * dst_name,
                 bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not allocate port_id.");
+                log_err("Could not allocate port_id.");
                 return NULL;
         }
 
@@ -1176,19 +1195,19 @@ static int flow_alloc_res(int port_id)
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not find port %d.", port_id);
+                log_err("Could not find port %d.", port_id);
                 return -1;
         }
 
         if (irm_flow_get_state(f) == FLOW_NULL) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_INFO("Port %d is deprecated.", port_id);
+                log_info("Port %d is deprecated.", port_id);
                 return -1;
         }
 
         if (irm_flow_get_state(f) == FLOW_ALLOCATED) {
-                LOG_INFO("Flow on port_id %d allocated.", port_id);
+                log_info("Flow on port_id %d allocated.", port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return 0;
@@ -1198,16 +1217,17 @@ static int flow_alloc_res(int port_id)
         pthread_rwlock_unlock(&irmd->state_lock);
 
         if (irm_flow_wait_state(f, FLOW_ALLOCATED) == FLOW_ALLOCATED) {
-                LOG_INFO("Flow on port_id %d allocated.", port_id);
+                log_info("Flow on port_id %d allocated.", port_id);
                 return 0;
         }
 
-        LOG_INFO("Pending flow on port_id %d torn down.", port_id);
+        log_info("Pending flow on port_id %d torn down.", port_id);
 
         return -1;
 }
 
-static int flow_dealloc(pid_t api, int port_id)
+static int flow_dealloc(pid_t api,
+                        int   port_id)
 {
         pid_t n_1_api = -1;
         int   ret = 0;
@@ -1221,7 +1241,7 @@ static int flow_dealloc(pid_t api, int port_id)
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_DBG("Deallocate unknown port %d by %d.", port_id, api);
+                log_dbg("Deallocate unknown port %d by %d.", port_id, api);
                 return 0;
         }
 
@@ -1233,7 +1253,7 @@ static int flow_dealloc(pid_t api, int port_id)
         } else {
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_DBG("Dealloc called by wrong AP-I.");
+                log_dbg("Dealloc called by wrong AP-I.");
                 return -EPERM;
         }
 
@@ -1242,11 +1262,11 @@ static int flow_dealloc(pid_t api, int port_id)
                 clear_irm_flow(f);
                 irm_flow_destroy(f);
                 bmp_release(irmd->port_ids, port_id);
-                LOG_INFO("Completed deallocation of port_id %d by AP-I %d.",
+                log_info("Completed deallocation of port_id %d by AP-I %d.",
                          port_id, api);
         } else {
                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                LOG_DBG("Partial deallocation of port_id %d by AP-I %d.",
+                log_dbg("Partial deallocation of port_id %d by AP-I %d.",
                         port_id, api);
         }
 
@@ -1266,35 +1286,37 @@ static pid_t auto_execute(char ** argv)
         struct stat s;
 
         if (stat(argv[0], &s) != 0) {
-                LOG_WARN("Application %s does not exist.", argv[0]);
+                log_warn("Application %s does not exist.", argv[0]);
                 return -1;
         }
 
         if (!(s.st_mode & S_IXUSR)) {
-                LOG_WARN("Application %s is not executable.", argv[0]);
+                log_warn("Application %s is not executable.", argv[0]);
                 return -1;
         }
 
         api = fork();
         if (api == -1) {
-                LOG_ERR("Failed to fork");
+                log_err("Failed to fork");
                 return api;
         }
 
         if (api != 0) {
-                LOG_INFO("Instantiated %s as AP-I %d.", argv[0], api);
+                log_info("Instantiated %s as AP-I %d.", argv[0], api);
                 return api;
         }
 
         execv(argv[0], argv);
 
-        LOG_ERR("Failed to execute %s.", argv[0]);
+        log_err("Failed to execute %s.", argv[0]);
 
         exit(EXIT_FAILURE);
 }
 
-static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
-                                      char * ae_name, qoscube_t cube)
+static struct irm_flow * flow_req_arr(pid_t     api,
+                                      char *    dst_name,
+                                      char *    ae_name,
+                                      qoscube_t cube)
 {
         struct reg_entry * re = NULL;
         struct apn_entry * a  = NULL;
@@ -1305,8 +1327,8 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
         pid_t h_api = -1;
         int port_id = -1;
 
-        LOG_DBGF("Flow req arrived from IPCP %d for %s on AE %s.",
-                 api, dst_name, ae_name);
+        log_dbg("Flow req arrived from IPCP %d for %s on AE %s.",
+                api, dst_name, ae_name);
 
         pthread_rwlock_rdlock(&irmd->state_lock);
         pthread_rwlock_wrlock(&irmd->reg_lock);
@@ -1315,7 +1337,7 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
         if (re == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Unknown name: %s.", dst_name);
+                log_err("Unknown name: %s.", dst_name);
                 return NULL;
         }
 
@@ -1323,7 +1345,7 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
         case REG_NAME_IDLE:
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("No APs for %s.", dst_name);
+                log_err("No APs for %s.", dst_name);
                 return NULL;
         case REG_NAME_AUTO_ACCEPT:
                 c_api = malloc(sizeof(*c_api));
@@ -1341,7 +1363,7 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
                         reg_entry_set_state(re, REG_NAME_AUTO_ACCEPT);
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
-                        LOG_ERR("Could not get start apn for reg_entry %s.",
+                        log_err("Could not get start apn for reg_entry %s.",
                                 re->name);
                         free(c_api);
                         return NULL;
@@ -1368,7 +1390,7 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
                 if (h_api == -1) {
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
-                        LOG_ERR("Invalid api returned.");
+                        log_err("Invalid api returned.");
                         return NULL;
                 }
 
@@ -1376,7 +1398,7 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
         default:
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("IRMd in wrong state.");
+                log_err("IRMd in wrong state.");
                 return NULL;
         }
 
@@ -1395,7 +1417,7 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
                 bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not allocate port_id.");
+                log_err("Could not allocate port_id.");
                 return NULL;
         }
 
@@ -1417,7 +1439,7 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
                 list_del(&f->next);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
-                LOG_ERR("Could not get api table entry for %d.", h_api);
+                log_err("Could not get api table entry for %d.", h_api);
                 irm_flow_destroy(f);
                 return NULL;
         }
@@ -1432,7 +1454,8 @@ static struct irm_flow * flow_req_arr(pid_t api, char * dst_name,
         return f;
 }
 
-static int flow_alloc_reply(int port_id, int response)
+static int flow_alloc_reply(int port_id,
+                            int response)
 {
         struct irm_flow * f;
 
@@ -1465,7 +1488,7 @@ static void irm_destroy(void)
         pthread_rwlock_rdlock(&irmd->state_lock);
 
         if (irmd->state != IRMD_NULL)
-                LOG_WARN("Unsafe destroy.");
+                log_warn("Unsafe destroy.");
 
         if (irmd->threadpool != NULL)
                 free(irmd->threadpool);
@@ -1482,7 +1505,7 @@ static void irm_destroy(void)
         close(irmd->sockfd);
 
         if (unlink(IRM_SOCK_PATH))
-                LOG_DBG("Failed to unlink %s.", IRM_SOCK_PATH);
+                log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
 
         pthread_rwlock_wrlock(&irmd->reg_lock);
         /* Clear the lists. */
@@ -1500,9 +1523,9 @@ static void irm_destroy(void)
                 struct pid_el * e = list_entry(p, struct pid_el, next);
                 int status;
                 if (kill(e->pid, SIGTERM))
-                        LOG_DBG("Could not send kill signal to %d.", e->pid);
+                        log_dbg("Could not send kill signal to %d.", e->pid);
                 else if (waitpid(e->pid, &status, 0) < 0)
-                        LOG_DBG("Error waiting for %d to exit.", e->pid);
+                        log_dbg("Error waiting for %d to exit.", e->pid);
                 list_del(&e->next);
                 free(e);
         }
@@ -1540,7 +1563,9 @@ static void irm_destroy(void)
         free(irmd);
 }
 
-void irmd_sig_handler(int sig, siginfo_t * info, void * c)
+void irmd_sig_handler(int         sig,
+                      siginfo_t * info,
+                      void *      c)
 {
         (void) info;
         (void) c;
@@ -1549,7 +1574,7 @@ void irmd_sig_handler(int sig, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                LOG_INFO("IRMd shutting down...");
+                log_info("IRMd shutting down...");
 
                 pthread_rwlock_wrlock(&irmd->state_lock);
 
@@ -1558,7 +1583,7 @@ void irmd_sig_handler(int sig, siginfo_t * info, void * c)
                 pthread_rwlock_unlock(&irmd->state_lock);
                 break;
         case SIGPIPE:
-                LOG_DBG("Ignored SIGPIPE.");
+                log_dbg("Ignored SIGPIPE.");
         default:
                 return;
         }
@@ -1618,7 +1643,7 @@ void * irm_sanitize(void * o)
 
         while (true) {
                 if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
-                        LOG_WARN("Failed to get time.");
+                        log_warn("Failed to get time.");
                 /* Cleanup stale PENDING flows. */
 
                 pthread_rwlock_rdlock(&irmd->state_lock);
@@ -1635,7 +1660,7 @@ void * irm_sanitize(void * o)
                         waitpid(e->pid, &s, WNOHANG);
                         if (kill(e->pid, 0) >= 0)
                                 continue;
-                        LOG_DBG("Child process %d died, error %d.", e->pid, s);
+                        log_dbg("Child process %d died, error %d.", e->pid, s);
                         list_del(&e->next);
                         free(e);
                 }
@@ -1645,7 +1670,7 @@ void * irm_sanitize(void * o)
                                 list_entry(p, struct api_entry, next);
                         if (kill(e->api, 0) >= 0)
                                 continue;
-                        LOG_DBG("Dead AP-I removed: %d.", e->api);
+                        log_dbg("Dead AP-I removed: %d.", e->api);
                         list_del(&e->next);
                         api_entry_destroy(e);
                 }
@@ -1655,7 +1680,7 @@ void * irm_sanitize(void * o)
                                 list_entry(p, struct ipcp_entry, next);
                         if (kill(e->api, 0) >= 0)
                                 continue;
-                        LOG_DBG("Dead IPCP removed: %d.", e->api);
+                        log_dbg("Dead IPCP removed: %d.", e->api);
                         list_del(&e->next);
                         ipcp_entry_destroy(e);
                 }
@@ -1670,7 +1695,7 @@ void * irm_sanitize(void * o)
                                         list_entry(p2, struct pid_el, next);
                                 if (kill(a->pid, 0) >= 0)
                                         continue;
-                                LOG_DBG("Dead AP-I removed from: %d %s.",
+                                log_dbg("Dead AP-I removed from: %d %s.",
                                         a->pid, e->name);
                                 reg_entry_del_pid_el(e, a);
                         }
@@ -1686,7 +1711,7 @@ void * irm_sanitize(void * o)
                         if (irm_flow_get_state(f) == FLOW_ALLOC_PENDING
                             && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
                                 list_del(&f->next);
-                                LOG_DBG("Pending port_id %d timed out.",
+                                log_dbg("Pending port_id %d timed out.",
                                          f->port_id);
                                 clear_irm_flow(f);
                                 ipcp_flow_dealloc(f->n_1_api, f->port_id);
@@ -1697,7 +1722,7 @@ void * irm_sanitize(void * o)
 
                         if (kill(f->n_api, 0) < 0) {
                                 struct shm_flow_set * set;
-                                LOG_DBG("AP-I %d gone, flow %d deallocated.",
+                                log_dbg("AP-I %d gone, flow %d deallocated.",
                                          f->n_api, f->port_id);
                                 set = shm_flow_set_open(f->n_api);
                                 if (set != NULL)
@@ -1712,7 +1737,7 @@ void * irm_sanitize(void * o)
                         if (kill(f->n_1_api, 0) < 0) {
                                 struct shm_flow_set * set;
                                 list_del(&f->next);
-                                LOG_ERR("IPCP %d gone, flow %d removed.",
+                                log_err("IPCP %d gone, flow %d removed.",
                                         f->n_1_api, f->port_id);
                                 set = shm_flow_set_open(f->n_api);
                                 if (set != NULL)
@@ -1773,11 +1798,11 @@ void * mainloop(void * o)
 
                 if (setsockopt(cli_sockfd, SOL_SOCKET, SO_RCVTIMEO,
                                (void *) &tv, sizeof(tv)))
-                        LOG_WARN("Failed to set timeout on socket.");
+                        log_warn("Failed to set timeout on socket.");
 
                 count = read(cli_sockfd, buf, IRM_MSG_BUF_SIZE);
                 if (count <= 0) {
-                        LOG_ERR("Failed to read from socket.");
+                        log_err("Failed to read from socket.");
                         close(cli_sockfd);
                         continue;
                 }
@@ -1917,7 +1942,7 @@ void * mainloop(void * o)
                                                           msg->response);
                         break;
                 default:
-                        LOG_ERR("Don't know that message code.");
+                        log_err("Don't know that message code.");
                         break;
                 }
 
@@ -1925,7 +1950,7 @@ void * mainloop(void * o)
 
                 buffer.len = irm_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
-                        LOG_ERR("Failed to calculate length of reply message.");
+                        log_err("Failed to calculate length of reply message.");
                         if (apis != NULL)
                                 free(apis);
                         close(cli_sockfd);
@@ -1946,7 +1971,7 @@ void * mainloop(void * o)
                         free(apis);
 
                 if (write(cli_sockfd, buffer.data, buffer.len) == -1)
-                        LOG_WARN("Failed to send reply message.");
+                        log_warn("Failed to send reply message.");
 
                 free(buffer.data);
                 close(cli_sockfd);
@@ -1970,19 +1995,19 @@ static int irm_create(void)
         irmd->state = IRMD_NULL;
 
         if (pthread_rwlock_init(&irmd->state_lock, NULL)) {
-                LOG_ERR("Failed to initialize rwlock.");
+                log_err("Failed to initialize rwlock.");
                 free(irmd);
                 return -1;
         }
 
         if (pthread_rwlock_init(&irmd->reg_lock, NULL)) {
-                LOG_ERR("Failed to initialize rwlock.");
+                log_err("Failed to initialize rwlock.");
                 free(irmd);
                 return -1;
         }
 
         if (pthread_rwlock_init(&irmd->flows_lock, NULL)) {
-                LOG_ERR("Failed to initialize rwlock.");
+                log_err("Failed to initialize rwlock.");
                 free(irmd);
                 return -1;
         }
@@ -2008,7 +2033,7 @@ static int irm_create(void)
 
         if (stat(SOCK_PATH, &st) == -1) {
                 if (mkdir(SOCK_PATH, 0777)) {
-                        LOG_ERR("Failed to create sockets directory.");
+                        log_err("Failed to create sockets directory.");
                         irm_destroy();
                         return -1;
                 }
@@ -2022,32 +2047,32 @@ static int irm_create(void)
 
         if (setsockopt(irmd->sockfd, SOL_SOCKET, SO_RCVTIMEO,
                        (char *) &timeout, sizeof(timeout)) < 0) {
-                LOG_ERR("Failed setting socket option.");
+                log_err("Failed setting socket option.");
                 irm_destroy();
                 return -1;
         }
 
         if (chmod(IRM_SOCK_PATH, 0666)) {
-                LOG_ERR("Failed to chmod socket.");
+                log_err("Failed to chmod socket.");
                 irm_destroy();
                 return -1;
         }
 
         if ((irmd->lf = lockfile_create()) == NULL) {
                 if ((irmd->lf = lockfile_open()) == NULL) {
-                        LOG_ERR("Lockfile error.");
+                        log_err("Lockfile error.");
                         irm_destroy();
                         return -1;
                 }
 
                 if (kill(lockfile_owner(irmd->lf), 0) < 0) {
-                        LOG_INFO("IRMd didn't properly shut down last time.");
+                        log_info("IRMd didn't properly shut down last time.");
                         shm_rdrbuff_destroy(shm_rdrbuff_open());
-                        LOG_INFO("Stale resources cleaned.");
+                        log_info("Stale resources cleaned.");
                         lockfile_destroy(irmd->lf);
                         irmd->lf = lockfile_create();
                 } else {
-                        LOG_INFO("IRMd already running (%d), exiting.",
+                        log_info("IRMd already running (%d), exiting.",
                                  lockfile_owner(irmd->lf));
                         lockfile_close(irmd->lf);
                         free(irmd);
@@ -2067,33 +2092,28 @@ static int irm_create(void)
 
         irmd->state = IRMD_RUNNING;
 
-        LOG_INFO("Ouroboros IPC Resource Manager daemon started...");
+        log_info("Ouroboros IPC Resource Manager daemon started...");
 
         return 0;
 }
 
 static void usage(void)
 {
-        LOG_ERR("Usage: irmd \n\n"
+        log_err("Usage: irmd \n\n"
                  "         [--stdout (Print to stdout instead of logs)]\n");
 }
 
-int main(int argc, char ** argv)
+int main(int     argc,
+         char ** argv)
 {
         struct sigaction sig_act;
 
         int t = 0;
 
-        char * log_file = INSTALL_PREFIX LOG_DIR "irmd.log";
-        DIR * log_dir;
-        struct dirent * ent;
-        char * point;
-        char * log_path;
-        size_t len = 0;
         bool use_stdout = false;
 
         if (geteuid() != 0) {
-                LOG_ERR("IPC Resource Manager must be run as root.");
+                log_err("IPC Resource Manager must be run as root.");
                 exit(EXIT_FAILURE);
         }
 
@@ -2109,40 +2129,6 @@ int main(int argc, char ** argv)
                         exit(EXIT_FAILURE);
                 }
         }
-
-        if (!use_stdout &&
-            (log_dir = opendir(INSTALL_PREFIX LOG_DIR)) != NULL) {
-                while ((ent = readdir(log_dir)) != NULL) {
-                        point = strrchr(ent->d_name,'.');
-                        if (point == NULL ||
-                            strcmp(point, ".log") != 0)
-                                continue;
-
-                        len += strlen(INSTALL_PREFIX);
-                        len += strlen(LOG_DIR);
-                        len += strlen(ent->d_name);
-
-                        log_path = malloc(len + 1);
-                        if (log_path == NULL) {
-                                LOG_ERR("Failed to malloc.");
-                                exit(EXIT_FAILURE);
-                        }
-
-                        strcpy(log_path, INSTALL_PREFIX);
-                        strcat(log_path, LOG_DIR);
-                        strcat(log_path, ent->d_name);
-
-                        unlink(log_path);
-
-                        free(log_path);
-                        len = 0;
-                }
-                closedir(log_dir);
-        }
-
-        if (!use_stdout && (set_logfile(log_file) < 0))
-                LOG_ERR("Cannot open %s, falling back to stdout for logs.",
-                        log_file);
 
         /* Init sig_act. */
         memset(&sig_act, 0, sizeof sig_act);
@@ -2160,8 +2146,10 @@ int main(int argc, char ** argv)
         if (sigaction(SIGPIPE, &sig_act, NULL) < 0)
                 exit(EXIT_FAILURE);
 
+        log_init(!use_stdout);
+
         if (irm_create() < 0) {
-                close_logfile();
+                log_fini();
                 exit(EXIT_FAILURE);
         }
 
@@ -2183,9 +2171,9 @@ int main(int argc, char ** argv)
 
         irm_destroy();
 
-        close_logfile();
+        log_fini();
 
-        LOG_INFO("Bye.");
+        log_info("Bye.");
 
         exit(EXIT_SUCCESS);
 }

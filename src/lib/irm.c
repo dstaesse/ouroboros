@@ -20,13 +20,10 @@
  * 02110-1301 USA
  */
 
-#define OUROBOROS_PREFIX "libouroboros-irm"
-
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/utils.h>
-#include <ouroboros/logs.h>
 #include <ouroboros/sockets.h>
 
 #include <stdbool.h>
@@ -220,10 +217,9 @@ int irm_enroll_ipcp(pid_t  api,
         msg.api = api;
         msg.n_dif_name = 1;
         msg.dif_name = malloc(sizeof(*(msg.dif_name)));
-        if (msg.dif_name == NULL) {
-                LOG_ERR("Failed to malloc");
+        if (msg.dif_name == NULL)
                 return -ENOMEM;
-        }
+
         msg.dif_name[0] = dif_name;
 
         recv_msg = send_recv_irm_msg(&msg);

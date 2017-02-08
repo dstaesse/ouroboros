@@ -60,13 +60,13 @@ int ribmgr_init(void)
 
         if (rib_read(BOOT_PATH "/rm/gam/type", &pg, sizeof(pg))
             != sizeof(pg)) {
-                LOG_ERR("Failed to read policy for ribmgr gam.");
+                log_err("Failed to read policy for ribmgr gam.");
                 return -1;
         }
 
         if (rib_read(BOOT_PATH "/rm/gam/cacep", &pc, sizeof(pc))
             != sizeof(pc)) {
-                LOG_ERR("Failed to read CACEP policy for ribmgr gam.");
+                log_err("Failed to read CACEP policy for ribmgr gam.");
                 return -1;
         }
 
@@ -75,20 +75,20 @@ int ribmgr_init(void)
 
         ribmgr.gam = gam_create(pg, MGMT_AE);
         if (ribmgr.gam == NULL) {
-                LOG_ERR("Failed to create gam.");
+                log_err("Failed to create gam.");
                 return -1;
         }
 
         ribmgr.fs = flow_set_create();
         if (ribmgr.fs == NULL) {
-                LOG_ERR("Failed to create flow set.");
+                log_err("Failed to create flow set.");
                 gam_destroy(ribmgr.gam);
                 return -1;
         }
 
         ribmgr.fq = fqueue_create();
         if (ribmgr.fq == NULL) {
-                LOG_ERR("Failed to create fq.");
+                log_err("Failed to create fq.");
                 flow_set_destroy(ribmgr.fs);
                 gam_destroy(ribmgr.gam);
                 return -1;

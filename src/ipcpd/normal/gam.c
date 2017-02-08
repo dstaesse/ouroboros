@@ -72,7 +72,7 @@ struct gam * gam_create(enum pol_gam gam_type,
                 tmp->ops = &complete_ops;
                 break;
         default:
-                LOG_ERR("Unknown gam policy: %d.", gam_type);
+                log_err("Unknown gam policy: %d.", gam_type);
                 free(tmp);
                 return NULL;
         }
@@ -169,7 +169,7 @@ static int add_ga(struct gam *        instance,
         pthread_cond_signal(&instance->gas_cond);
         pthread_mutex_unlock(&instance->gas_lock);
 
-        LOG_INFO("Added %s flow to %s.", instance->ae_name, info->name);
+        log_info("Added %s flow to %s.", instance->ae_name, info->name);
 
         return 0;
 }
@@ -183,19 +183,19 @@ int gam_flow_arr(struct gam * instance,
 
         if (flow_alloc_resp(fd, instance->ops->accept_new_flow(instance->ops_o))
             < 0) {
-                LOG_ERR("Could not respond to new flow.");
+                log_err("Could not respond to new flow.");
                 return -1;
         }
 
         cacep = cacep_create(fd, ipcpi.name, ipcpi.address);
         if (cacep == NULL) {
-                LOG_ERR("Failed to create CACEP instance.");
+                log_err("Failed to create CACEP instance.");
                 return -1;
         }
 
         info = cacep_auth_wait(cacep);
         if (info == NULL) {
-                LOG_ERR("Other side failed to authenticate.");
+                log_err("Other side failed to authenticate.");
                 cacep_destroy(cacep);
                 return -1;
         }
@@ -210,7 +210,7 @@ int gam_flow_arr(struct gam * instance,
         }
 
         if (add_ga(instance, fd, qs, info)) {
-                LOG_ERR("Failed to add ga to graph adjacency manager list.");
+                log_err("Failed to add ga to graph adjacency manager list.");
                 free(info->name);
                 free(info);
                 return -1;
@@ -230,25 +230,25 @@ int gam_flow_alloc(struct gam * instance,
 
         fd = flow_alloc(dst_name, instance->ae_name, NULL);
         if (fd < 0) {
-                LOG_ERR("Failed to allocate flow to %s.", dst_name);
+                log_err("Failed to allocate flow to %s.", dst_name);
                 return -1;
         }
 
         if (flow_alloc_res(fd)) {
-                LOG_ERR("Flow allocation to %s failed.", dst_name);
+                log_err("Flow allocation to %s failed.", dst_name);
                 flow_dealloc(fd);
                 return -1;
         }
 
         cacep = cacep_create(fd, ipcpi.name, ipcpi.address);
         if (cacep == NULL) {
-                LOG_ERR("Failed to create CACEP instance.");
+                log_err("Failed to create CACEP instance.");
                 return -1;
         }
 
         info = cacep_auth(cacep);
         if (info == NULL) {
-                LOG_ERR("Failed to authenticate.");
+                log_err("Failed to authenticate.");
                 cacep_destroy(cacep);
                 return -1;
         }
@@ -262,7 +262,7 @@ int gam_flow_alloc(struct gam * instance,
         }
 
         if (add_ga(instance, fd, qs, info)) {
-                LOG_ERR("Failed to add GA to graph adjacency manager list.");
+                log_err("Failed to add GA to graph adjacency manager list.");
                 free(info);
                 return -1;
         }

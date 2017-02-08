@@ -36,7 +36,7 @@ struct addr_auth * addr_auth_create(enum pol_addr_auth type)
 
         tmp = malloc(sizeof(*tmp));
         if (tmp == NULL) {
-                LOG_ERR("Failed to malloc addr auth.");
+                log_err("Failed to malloc addr auth.");
                 return NULL;
         }
 
@@ -46,7 +46,7 @@ struct addr_auth * addr_auth_create(enum pol_addr_auth type)
                 tmp->type = type;
                 break;
         default:
-                LOG_ERR("Unknown address authority type.");
+                log_err("Unknown address authority type.");
                 free(tmp);
                 return NULL;
         }
@@ -62,7 +62,7 @@ int addr_auth_destroy(struct addr_auth * instance)
         case FLAT_RANDOM:
                 break;
         default:
-                LOG_ERR("Unknown address authority type.");
+                log_err("Unknown address authority type.");
         }
 
         free(instance);

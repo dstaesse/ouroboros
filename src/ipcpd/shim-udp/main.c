@@ -184,7 +184,7 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg,
                   0,
                   (struct sockaddr *) &r_saddr,
                   sizeof(r_saddr)) == -1) {
-               LOG_ERR("Failed to send message.");
+               log_err("Failed to send message.");
                free(buf.data);
                return -1;
        }
@@ -240,11 +240,11 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         struct sockaddr_in f_saddr;
         socklen_t          f_saddr_len = sizeof(f_saddr);
 
-        LOG_DBG("Port request arrived from UDP port %d",
+        log_dbg("Port request arrived from UDP port %d",
                  ntohs(c_saddr->sin_port));
 
         if ((skfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-                LOG_ERR("Could not create UDP socket.");
+                log_err("Could not create UDP socket.");
                 return -1;
         }
 
@@ -254,19 +254,19 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         f_saddr.sin_port        = 0;
 
         if (bind(skfd, (struct sockaddr *) &f_saddr, sizeof(f_saddr)) < 0) {
-                LOG_ERR("Could not bind to socket.");
+                log_err("Could not bind to socket.");
                 close(skfd);
                 return -1;
         }
 
         if (getsockname(skfd, (struct sockaddr *) &f_saddr, &f_saddr_len) < 0) {
-                LOG_ERR("Could not get address from fd.");
+                log_err("Could not get address from fd.");
                 return -1;
         }
 
         /* connect stores the remote address in the file descriptor */
         if (connect(skfd, (struct sockaddr *) c_saddr, sizeof(*c_saddr)) < 0) {
-                LOG_ERR("Could not connect to remote UDP client.");
+                log_err("Could not connect to remote UDP client.");
                 close(skfd);
                 return -1;
         }
@@ -279,7 +279,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         if (fd < 0) {
                 pthread_rwlock_unlock(&udp_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Could not get new flow from IRMd.");
+                log_err("Could not get new flow from IRMd.");
                 close(skfd);
                 return -1;
         }
@@ -291,7 +291,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Pending allocation request, fd %d, UDP port (%d, %d).",
+        log_dbg("Pending allocation request, fd %d, UDP port (%d, %d).",
                 fd, ntohs(f_saddr.sin_port), ntohs(c_saddr->sin_port));
 
         return 0;
@@ -320,7 +320,7 @@ static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
         struct sockaddr_in t_saddr;
         socklen_t          t_saddr_len = sizeof(t_saddr);
 
-        LOG_DBG("Received reply for flow on udp port %d.",
+        log_dbg("Received reply for flow on udp port %d.",
                 ntohs(dst_udp_port));
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
@@ -334,7 +334,7 @@ static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
 
         /* get the original address with the LISTEN PORT */
         if (getpeername(skfd, (struct sockaddr *) &t_saddr, &t_saddr_len) < 0) {
-                LOG_DBG("Flow with fd %d has no peer.", fd);
+                log_dbg("Flow with fd %d has no peer.", fd);
                 return -1;
         }
 
@@ -357,7 +357,7 @@ static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
         if (ipcp_flow_alloc_reply(fd, response) < 0)
                 return -1;
 
-        LOG_DBG("Flow allocation completed, UDP ports: (%d, %d).",
+        log_dbg("Flow allocation completed, UDP ports: (%d, %d).",
                  ntohs(dst_udp_port), ntohs(src_udp_port));
 
         return ret;
@@ -406,7 +406,7 @@ static void * ipcp_udp_listener(void * o)
                                                   msg->response);
                         break;
                 default:
-                        LOG_ERR("Unknown message received %d.", msg->code);
+                        log_err("Unknown message received %d.", msg->code);
                         shim_udp_msg__free_unpacked(msg, NULL);
                         continue;
                 }
@@ -498,7 +498,7 @@ static void * ipcp_udp_sdu_loop(void * o)
 
                 while ((fd = fqueue_next(udp_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
-                                LOG_ERR("Bad read from fd %d.", fd);
+                                log_err("Bad read from fd %d.", fd);
                                 continue;
                         }
 
@@ -506,7 +506,7 @@ static void * ipcp_udp_sdu_loop(void * o)
                                  shm_du_buff_head(sdb),
                                  shm_du_buff_tail(sdb) - shm_du_buff_head(sdb),
                                  0) < 0)
-                                LOG_ERR("Failed to send SDU.");
+                                log_err("Failed to send SDU.");
 
                         ipcp_flow_del(sdb);
                 }
@@ -560,7 +560,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                       &conf->ip_addr,
                       ipstr,
                       INET_ADDRSTRLEN) == NULL) {
-                LOG_ERR("Failed to convert IP address");
+                log_err("Failed to convert IP address");
                 return -1;
         }
 
@@ -569,11 +569,11 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                               &conf->dns_addr,
                               dnsstr,
                               INET_ADDRSTRLEN) == NULL) {
-                        LOG_ERR("Failed to convert DNS address");
+                        log_err("Failed to convert DNS address");
                         return -1;
                 }
 #ifndef CONFIG_OUROBOROS_ENABLE_DNS
-                LOG_WARN("DNS disabled at compile time, address ignored");
+                log_warn("DNS disabled at compile time, address ignored");
 #endif
         } else {
                 strcpy(dnsstr, "not set");
@@ -581,7 +581,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 
         /* UDP listen server */
         if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-                LOG_ERR("Can't create socket.");
+                log_err("Can't create socket.");
                 return -1;
         }
 
@@ -590,7 +590,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                        SO_REUSEADDR,
                        &enable,
                        sizeof(int)) < 0)
-                LOG_WARN("Failed to set SO_REUSEADDR.");
+                log_warn("Failed to set SO_REUSEADDR.");
 
         memset((char *) &s_saddr, 0, sizeof(s_saddr));
         udp_data.s_saddr.sin_family      = AF_INET;
@@ -600,7 +600,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
         if (bind(fd,
                  (struct sockaddr *) &udp_data.s_saddr,
                  sizeof(udp_data.s_saddr)) < 0) {
-                LOG_ERR("Couldn't bind to %s.", ipstr);
+                log_err("Couldn't bind to %s.", ipstr);
                 close(fd);
                 return -1;
         }
@@ -609,7 +609,7 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 
         if (ipcp_get_state() != IPCP_INIT) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("IPCP in wrong state.");
+                log_err("IPCP in wrong state.");
                 close(fd);
                 return -1;
         }
@@ -638,9 +638,9 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Bootstrapped shim IPCP over UDP with api %d.", getpid());
-        LOG_DBG("Bound to IP address %s.", ipstr);
-        LOG_DBG("DNS server address is %s.", dnsstr);
+        log_dbg("Bootstrapped shim IPCP over UDP with api %d.", getpid());
+        log_dbg("Bound to IP address %s.", ipstr);
+        log_dbg("DNS server address is %s.", dnsstr);
 
         return 0;
 }
@@ -657,13 +657,13 @@ static int ddns_send(char * cmd)
         char * envp[] = {0};
 
         if (pipe(pipe_fd)) {
-                LOG_ERR("Failed to create pipe.");
+                log_err("Failed to create pipe.");
                 return -1;
         }
 
         api = fork();
         if (api == -1) {
-                LOG_ERR("Failed to fork.");
+                log_err("Failed to fork.");
                 return -1;
         }
 
@@ -676,7 +676,7 @@ static int ddns_send(char * cmd)
         close(pipe_fd[0]);
 
         if (write(pipe_fd[1], cmd, strlen(cmd)) == -1) {
-                LOG_ERR("Failed to communicate with nsupdate.");
+                log_err("Failed to communicate with nsupdate.");
                 close(pipe_fd[1]);
                 return -1;
         }
@@ -684,9 +684,9 @@ static int ddns_send(char * cmd)
         waitpid(api, &wstatus, 0);
         if (WIFEXITED(wstatus) == true &&
             WEXITSTATUS(wstatus) == 0)
-                LOG_DBG("Succesfully communicated with DNS server.");
+                log_dbg("Succesfully communicated with DNS server.");
         else
-                LOG_ERR("Failed to register with DNS server.");
+                log_err("Failed to register with DNS server.");
 
         close(pipe_fd[1]);
         return 0;
@@ -712,13 +712,13 @@ static uint32_t ddns_resolve(char *   name,
 
 
         if (pipe(pipe_fd)) {
-                LOG_ERR("Failed to create pipe.");
+                log_err("Failed to create pipe.");
                 return 0;
         }
 
         api = fork();
         if (api == -1) {
-                LOG_ERR("Failed to fork.");
+                log_err("Failed to fork.");
                 return 0;
         }
 
@@ -735,7 +735,7 @@ static uint32_t ddns_resolve(char *   name,
 
         count = read(pipe_fd[0], buf, SHIM_UDP_BUF_SIZE);
         if (count <= 0) {
-                LOG_ERR("Failed to communicate with nslookup.");
+                log_err("Failed to communicate with nslookup.");
                 close(pipe_fd[0]);
                 return 0;
         }
@@ -745,9 +745,9 @@ static uint32_t ddns_resolve(char *   name,
         waitpid(api, &wstatus, 0);
         if (WIFEXITED(wstatus) == true &&
             WEXITSTATUS(wstatus) == 0)
-                LOG_DBG("Succesfully communicated with nslookup.");
+                log_dbg("Succesfully communicated with nslookup.");
         else
-                LOG_ERR("Failed to resolve DNS address.");
+                log_err("Failed to resolve DNS address.");
 
         buf[count] = '\0';
         substr = strtok(buf, "\n");
@@ -757,12 +757,12 @@ static uint32_t ddns_resolve(char *   name,
         }
 
         if (strstr(substr2, addr_str) == NULL) {
-                LOG_ERR("Failed to resolve DNS address.");
+                log_err("Failed to resolve DNS address.");
                 return 0;
         }
 
         if (inet_pton(AF_INET, substr2 + strlen(addr_str) + 1, &ip_addr) != 1) {
-                LOG_ERR("Failed to resolve DNS address.");
+                log_err("Failed to resolve DNS address.");
                 return 0;
         }
 
@@ -783,13 +783,13 @@ static int ipcp_udp_name_reg(char * name)
         char * name_dup;
 
         if (strlen(name) > 24) {
-                LOG_ERR("DNS names cannot be longer than 24 chars.");
+                log_err("DNS names cannot be longer than 24 chars.");
                 return -1;
         }
 
         name_dup = strdup(name);
         if (name_dup == NULL) {
-                LOG_ERR("Failed to duplicate name.");
+                log_err("Failed to duplicate name.");
                 return -ENOMEM;
         }
 
@@ -797,7 +797,7 @@ static int ipcp_udp_name_reg(char * name)
 
         if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Failed to add %s to local registry.", name);
+                log_err("Failed to add %s to local registry.", name);
                 free(name_dup);
                 return -1;
         }
@@ -835,7 +835,7 @@ static int ipcp_udp_name_reg(char * name)
 #else
         pthread_rwlock_unlock(&ipcpi.state_lock);
 #endif
-        LOG_DBG("Registered %s.", name);
+        log_dbg("Registered %s.", name);
 
         return 0;
 }
@@ -849,7 +849,7 @@ static int ipcp_udp_name_unreg(char * name)
         uint32_t dns_addr;
 #endif
         if (strlen(name) > 24) {
-                LOG_ERR("DNS names cannot be longer than 24 chars.");
+                log_err("DNS names cannot be longer than 24 chars.");
                 return -1;
         }
 
@@ -894,7 +894,7 @@ static int ipcp_udp_name_query(char * name)
         assert(name);
 
         if (strlen(name) > 24) {
-                LOG_ERR("DNS names cannot be longer than 24 chars.");
+                log_err("DNS names cannot be longer than 24 chars.");
                 return -1;
         }
 
@@ -902,7 +902,7 @@ static int ipcp_udp_name_query(char * name)
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Won't query a name on a non-enrolled IPCP.");
+                log_dbg("Won't query a name on a non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
@@ -919,7 +919,7 @@ static int ipcp_udp_name_query(char * name)
 
                 ip_addr = ddns_resolve(name, dns_addr);
                 if (ip_addr == 0) {
-                        LOG_DBG("Could not resolve %s.", name);
+                        log_dbg("Could not resolve %s.", name);
                         return -1;
                 }
 
@@ -927,7 +927,7 @@ static int ipcp_udp_name_query(char * name)
 
                 if (ipcp_get_state() != IPCP_OPERATIONAL) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_DBG("Won't add name to the directory.");
+                        log_dbg("Won't add name to the directory.");
                         return -1; /* -ENOTENROLLED */
                 }
         } else {
@@ -935,7 +935,7 @@ static int ipcp_udp_name_query(char * name)
                 h = gethostbyname(name);
                 if (h == NULL) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_DBG("Could not resolve %s.", name);
+                        log_dbg("Could not resolve %s.", name);
                         return -1;
                 }
 
@@ -946,7 +946,7 @@ static int ipcp_udp_name_query(char * name)
 
         if (shim_data_dir_add_entry(ipcpi.shim_data, name, ip_addr)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Failed to add directory entry.");
+                log_err("Failed to add directory entry.");
                 return -1;
         }
 
@@ -966,19 +966,19 @@ static int ipcp_udp_flow_alloc(int       fd,
         int                skfd;
         uint32_t           ip_addr = 0;
 
-        LOG_DBG("Allocating flow to %s.", dst_name);
+        log_dbg("Allocating flow to %s.", dst_name);
 
         assert(dst_name);
         assert(src_ae_name);
 
         if (strlen(dst_name) > 255
             || strlen(src_ae_name) > 255) {
-                LOG_ERR("Name too long for this shim.");
+                log_err("Name too long for this shim.");
                 return -1;
         }
 
         if (cube != QOS_CUBE_BE && cube != QOS_CUBE_FRC) {
-                LOG_DBG("Unsupported QoS requested.");
+                log_dbg("Unsupported QoS requested.");
                 return -1;
         }
 
@@ -996,7 +996,7 @@ static int ipcp_udp_flow_alloc(int       fd,
         }
 
         if (getsockname(skfd, (struct sockaddr *) &f_saddr, &f_saddr_len) < 0) {
-                LOG_ERR("Could not get address from fd.");
+                log_err("Could not get address from fd.");
                 close(skfd);
                 return -1;
         }
@@ -1005,14 +1005,14 @@ static int ipcp_udp_flow_alloc(int       fd,
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Won't allocate flow with non-enrolled IPCP.");
+                log_dbg("Won't allocate flow with non-enrolled IPCP.");
                 close(skfd);
                 return -1; /* -ENOTENROLLED */
         }
 
         if (!shim_data_dir_has(ipcpi.shim_data, dst_name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Could not resolve destination.");
+                log_dbg("Could not resolve destination.");
                 close(skfd);
                 return -1;
         }
@@ -1058,7 +1058,7 @@ static int ipcp_udp_flow_alloc(int       fd,
                 return -1;
         }
 
-        LOG_DBG("Flow pending on fd %d, UDP port %d.",
+        log_dbg("Flow pending on fd %d, UDP port %d.",
                 fd, ntohs(f_saddr.sin_port));
 
         return fd;
@@ -1081,12 +1081,12 @@ static int ipcp_udp_flow_alloc_resp(int fd,
         skfd = udp_data.fd_to_uf[fd].skfd;
 
         if (getsockname(skfd, (struct sockaddr *) &f_saddr, &len) < 0) {
-                LOG_DBG("Socket with fd %d has no address.", skfd);
+                log_dbg("Socket with fd %d has no address.", skfd);
                 return -1;
         }
 
         if (getpeername(skfd, (struct sockaddr *) &r_saddr, &len) < 0) {
-                LOG_DBG("Socket with fd %d has no peer.", skfd);
+                log_dbg("Socket with fd %d has no peer.", skfd);
                 return -1;
         }
 
@@ -1113,7 +1113,7 @@ static int ipcp_udp_flow_alloc_resp(int fd,
                 return -1;
         }
 
-        LOG_DBG("Accepted flow, fd %d on UDP port %d.",
+        log_dbg("Accepted flow, fd %d on UDP port %d.",
                 fd, ntohs(f_saddr.sin_port));
 
         return 0;
@@ -1129,7 +1129,7 @@ static int ipcp_udp_flow_dealloc(int fd)
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Won't register with non-enrolled IPCP.");
+                log_dbg("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
@@ -1155,7 +1155,7 @@ static int ipcp_udp_flow_dealloc(int fd)
         pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Flow with fd %d deallocated.", fd);
+        log_dbg("Flow with fd %d deallocated.", fd);
 
         return 0;
 }
@@ -1182,23 +1182,6 @@ int main(int    argc,
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
 
-        if (ipcp_parse_arg(argc, argv)) {
-                LOG_ERR("Failed to parse arguments.");
-                exit(EXIT_FAILURE);
-        }
-
-        if (ap_init(NULL) < 0) {
-                LOG_ERR("Failed to init application.");
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
-
-        if (udp_data_init() < 0) {
-                LOG_ERR("Failed to init shim-udp data.");
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
-
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));
 
@@ -1211,25 +1194,35 @@ int main(int    argc,
         sigaction(SIGHUP,  &sig_act, NULL);
         sigaction(SIGPIPE, &sig_act, NULL);
 
-        if (ipcp_init(THIS_TYPE, &udp_ops) < 0) {
-                LOG_ERR("Failed to init IPCP.");
-                close_logfile();
+        if (ipcp_init(argc, argv, THIS_TYPE, &udp_ops) < 0) {
+                log_err("Failed to init IPCP.");
                 exit(EXIT_FAILURE);
         }
+
+        if (udp_data_init() < 0) {
+                log_err("Failed to init shim-udp data.");
+                ipcp_fini();
+                exit(EXIT_FAILURE);
+        }
+
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (ipcp_boot() < 0) {
-                LOG_ERR("Failed to boot IPCP.");
-                close_logfile();
+                log_err("Failed to boot IPCP.");
+                udp_data_fini();
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         if (ipcp_create_r(getpid())) {
-                LOG_ERR("Failed to notify IRMd we are initialized.");
-                close_logfile();
+                log_err("Failed to notify IRMd we are initialized.");
+                ipcp_set_state(IPCP_NULL);
+                ipcp_shutdown();
+                udp_data_fini();
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
@@ -1244,13 +1237,9 @@ int main(int    argc,
                 pthread_join(udp_data.sdu_reader, NULL);
         }
 
-        ipcp_fini();
-
         udp_data_fini();
 
-        ap_fini();
-
-        close_logfile();
+        ipcp_fini();
 
         exit(EXIT_SUCCESS);
 }

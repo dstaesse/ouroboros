@@ -21,10 +21,7 @@
  * 02110-1301 USA
  */
 
-#define OUROBOROS_PREFIX "bitmap"
-
 #include <ouroboros/bitmap.h>
-#include <ouroboros/logs.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>

@@ -28,61 +28,49 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <syslog.h>
 
 #ifndef OUROBOROS_PREFIX
 #error You must define OUROBOROS_PREFIX before including this file
 #endif
 
-int  set_logfile(char * filename);
-void close_logfile(void);
+void log_init(bool sysout);
 
-#define ANSI_COLOR_RED     "\x1b[31m"
-#define ANSI_COLOR_GREEN   "\x1b[32m"
-#define ANSI_COLOR_YELLOW  "\x1b[33m"
-#define ANSI_COLOR_BLUE    "\x1b[34m"
-#define ANSI_COLOR_RESET   "\x1b[0m"
+void log_fini(void);
+
+#define CLR_RED     "\x1b[31m"
+#define CLR_GREEN   "\x1b[32m"
+#define CLR_YELLOW  "\x1b[33m"
+#define CLR_RESET   "\x1b[0m"
 
 #define DEBUG_CODE "DB"
 #define ERROR_CODE "EE"
 #define WARN_CODE  "WW"
 #define INFO_CODE  "II"
-#define IMPL_CODE  "NI"
 
-extern FILE * logfile;
+extern bool log_syslog;
 
-#define __LOG(CLR, FUNC, LVL, ...)                                      \
+#define __olog(CLR, LVL, SYSLVL, ...)                                   \
         do {                                                            \
-                if (logfile != NULL) {                                  \
-                        fprintf(logfile, OUROBOROS_PREFIX);             \
-                        fprintf(logfile, "(" LVL "): ");                \
-                        if (FUNC)                                       \
-                                fprintf(logfile, "%s: ", __FUNCTION__); \
-                        fprintf(logfile, __VA_ARGS__);                  \
-                        fprintf(logfile, "\n");                         \
-                        fflush(logfile);                                \
+                if (log_syslog) {                                       \
+                        syslog(SYSLVL, OUROBOROS_PREFIX ": "            \
+                               __VA_ARGS__);                            \
                 } else {                                                \
-                        printf(CLR "==%05d== ", getpid());              \
-                        printf(OUROBOROS_PREFIX "(" LVL "): ");         \
-                        if (FUNC)                                       \
-                                printf("%s: ", __FUNCTION__);           \
+                        printf(CLR "==%05d== " OUROBOROS_PREFIX         \
+                               "(" LVL "): ", getpid());                \
                         printf(__VA_ARGS__);                            \
-                        printf(ANSI_COLOR_RESET "\n");                  \
+                        printf(CLR_RESET "\n");                         \
                 }                                                       \
         } while (0)
 
-#define LOG_ERR(...)  __LOG(ANSI_COLOR_RED, false, ERROR_CODE, __VA_ARGS__)
-#define LOG_WARN(...) __LOG(ANSI_COLOR_YELLOW, false, WARN_CODE, __VA_ARGS__)
-#define LOG_INFO(...) __LOG(ANSI_COLOR_GREEN, false, INFO_CODE, __VA_ARGS__)
-#define LOG_NI(...)   __LOG(ANSI_COLOR_BLUE, false, IMPL_CODE, __VA_ARGS__)
+#define log_err(...)  __olog(CLR_RED, ERROR_CODE, LOG_ERR, __VA_ARGS__)
+#define log_warn(...) __olog(CLR_YELLOW, WARN_CODE, LOG_WARNING, __VA_ARGS__)
+#define log_info(...) __olog(CLR_GREEN, INFO_CODE, LOG_INFO, __VA_ARGS__)
 
 #ifdef CONFIG_OUROBOROS_DEBUG
-#define LOG_DBG(...)  __LOG("", false, DEBUG_CODE, __VA_ARGS__)
-#define LOG_DBGF(...) __LOG("", true, DEBUG_CODE, __VA_ARGS__)
+#define log_dbg(...)  __olog("", DEBUG_CODE, LOG_DEBUG, __VA_ARGS__)
 #else
-#define LOG_DBG(...)  do { } while (0)
-#define LOG_DBGF(...) do { } while (0)
+#define log_dbg(...)  do { } while (0)
 #endif
 
-#define LOG_MISSING LOG_NI("Missing code in %s:%d",__FILE__, __LINE__)
-
-#endif
+#endif /* OUROBOROS_LOGS_H */
