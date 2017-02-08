@@ -48,29 +48,29 @@ int shim_udp_test(int argc, char ** argv)
 
         dum = shm_du_map_create();
         if (dum == NULL) {
-                LOG_ERR("Failed to create shared memory.");
+                log_err("Failed to create shared memory.");
                 exit(1);
         }
 
         _ipcp = ipcp_udp_create(ipcp_name);
         if (_ipcp == NULL) {
-                LOG_ERR("Could not instantiate shim IPCP.");
+                log_err("Could not instantiate shim IPCP.");
                 shm_du_map_destroy(dum);
                 exit(1);
         }
 
         if (ipcp_udp_bootstrap(&conf)) {
-                LOG_ERR("Could not bootstrap.");
+                log_err("Could not bootstrap.");
         }
 
         if (ipcp_udp_name_reg("bogus name")) {
-                LOG_ERR("Failed to register application.");
+                log_err("Failed to register application.");
                 shm_du_map_destroy(dum);
                 exit(1);
         }
 
         if (ipcp_udp_name_unreg("bogus name")) {
-                LOG_ERR("Failed to unregister application.");
+                log_err("Failed to unregister application.");
                 shm_du_map_destroy(dum);
                 exit(1);
         }
@@ -78,7 +78,7 @@ int shim_udp_test(int argc, char ** argv)
         for (i = 0; i  < 1000; ++i) {
                 sprintf(bogus, "bogus name %4d", i);
                 if (ipcp_udp_name_reg(bogus)) {
-                         LOG_ERR("Failed to register application %s.", bogus);
+                         log_err("Failed to register application %s.", bogus);
                          shm_du_map_destroy(dum);
                          exit(1);
                 }
@@ -87,7 +87,7 @@ int shim_udp_test(int argc, char ** argv)
         for (i = 0; i  < 1000; ++i) {
                 sprintf(bogus, "bogus name %4d", i);
                 if(ipcp_udp_name_unreg(bogus)) {
-                         LOG_ERR("Failed to unregister application %s.", bogus);
+                         log_err("Failed to unregister application %s.", bogus);
                          shm_du_map_destroy(dum);
                          exit(1);
                 }

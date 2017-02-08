@@ -235,14 +235,14 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         list_head_init(&tw->wq);
 
         if (pthread_mutex_init(&tw->lock, NULL)) {
-                LOG_DBG("Could not init mutex.");
+                log_dbg("Could not init mutex.");
                 free(tw->wheel);
                 free(tw);
                 return NULL;
         }
 
         if (pthread_mutex_init(&tw->s_lock, NULL)) {
-                LOG_DBG("Could not init mutex.");
+                log_dbg("Could not init mutex.");
                 pthread_mutex_destroy(&tw->lock);
                 free(tw->wheel);
                 free(tw);
@@ -250,7 +250,7 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         }
 
         if (pthread_cond_init(&tw->work, NULL)) {
-                LOG_DBG("Could not init cond.");
+                log_dbg("Could not init cond.");
                 pthread_mutex_destroy(&tw->s_lock);
                 pthread_mutex_destroy(&tw->lock);
                 free(tw->wheel);
@@ -271,7 +271,7 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         }
 
         if (pthread_create(&tw->worker, NULL, worker, (void *) tw)) {
-                LOG_DBG("Could not create worker.");
+                log_dbg("Could not create worker.");
                 pthread_cond_destroy(&tw->work);
                 pthread_mutex_destroy(&tw->s_lock);
                 pthread_mutex_destroy(&tw->lock);
@@ -281,7 +281,7 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         }
 
         if (pthread_create(&tw->ticker, NULL, movement, (void *) tw)) {
-                LOG_DBG("Could not create timer.");
+                log_dbg("Could not create timer.");
                 tw_set_state(tw, TW_DESTROY);
                 pthread_join(tw->worker, NULL);
                 pthread_cond_destroy(&tw->work);

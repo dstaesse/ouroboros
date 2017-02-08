@@ -98,13 +98,13 @@ static void * fmgr_np1_sdu_reader(void * o)
                         continue;
 
                 if (ret < 0) {
-                        LOG_WARN("Event error: %d.", ret);
+                        log_warn("Event error: %d.", ret);
                         continue;
                 }
 
                 while ((fd = fqueue_next(fmgr.np1_fqs[i])) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
-                                LOG_WARN("Failed to read SDU from fd %d.", fd);
+                                log_warn("Failed to read SDU from fd %d.", fd);
                                 continue;
                         }
 
@@ -113,7 +113,7 @@ static void * fmgr_np1_sdu_reader(void * o)
                         if (frct_i_write_sdu(fmgr.np1_fd_to_cep_id[fd], sdb)) {
                                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
                                 ipcp_flow_del(sdb);
-                                LOG_WARN("Failed to hand SDU to FRCT.");
+                                log_warn("Failed to hand SDU to FRCT.");
                                 continue;
                         }
 
@@ -149,23 +149,23 @@ void * fmgr_nm1_sdu_reader(void * o)
                         continue;
 
                 if (ret < 0) {
-                        LOG_ERR("Event error: %d.", ret);
+                        log_err("Event error: %d.", ret);
                         continue;
                 }
 
                 while ((fd = fqueue_next(fmgr.nm1_fqs[i])) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
-                                LOG_ERR("Failed to read SDU from fd %d.", fd);
+                                log_err("Failed to read SDU from fd %d.", fd);
                                 continue;
                         }
 
                         shm_pci_des(sdb, &pci);
 
                         if (pci.dst_addr != ipcpi.address) {
-                                LOG_DBG("PDU needs to be forwarded.");
+                                log_dbg("PDU needs to be forwarded.");
 
                                 if (pci.ttl == 0) {
-                                        LOG_DBG("TTL was zero.");
+                                        log_dbg("TTL was zero.");
                                         ipcp_flow_del(sdb);
                                         continue;
                                 }
@@ -181,7 +181,7 @@ void * fmgr_nm1_sdu_reader(void * o)
                         shm_pci_shrink(sdb);
 
                         if (frct_nm1_post_sdu(&pci, sdb)) {
-                                LOG_ERR("Failed to hand PDU to FRCT.");
+                                log_err("Failed to hand PDU to FRCT.");
                                 ipcp_flow_del(sdb);
                                 continue;
                         }
@@ -203,7 +203,7 @@ static void * fmgr_nm1_flow_wait(void * o)
 
         while (true) {
                 if (gam_flow_wait(fmgr.gam, &fd, &info, &qs)) {
-                        LOG_ERR("Failed to get next flow descriptor.");
+                        log_err("Failed to get next flow descriptor.");
                         continue;
                 }
 
@@ -287,13 +287,13 @@ int fmgr_init(void)
 
         if (rib_read("/" BOOT_NAME "/dt/gam/type", &pg, sizeof(pg))
             != sizeof(pg)) {
-                LOG_ERR("Failed to read policy for ribmgr gam.");
+                log_err("Failed to read policy for ribmgr gam.");
                 return -1;
         }
 
         if (rib_read("/" BOOT_NAME "/dt/gam/cacep", &pc, sizeof(pc))
             != sizeof(pc)) {
-                LOG_ERR("Failed to read CACEP policy for ribmgr gam.");
+                log_err("Failed to read CACEP policy for ribmgr gam.");
                 return -1;
         }
 
@@ -302,7 +302,7 @@ int fmgr_init(void)
 
         fmgr.gam = gam_create(pg, DT_AE);
         if (fmgr.gam == NULL) {
-                LOG_ERR("Failed to create graph adjacency manager.");
+                log_err("Failed to create graph adjacency manager.");
                 fmgr_destroy_flows();
                 return -1;
         }
@@ -536,7 +536,7 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
 
         msg = flow_alloc_msg__unpack(NULL, buf->len, buf->data);
         if (msg == NULL) {
-                LOG_ERR("Failed to unpack flow alloc message");
+                log_err("Failed to unpack flow alloc message");
                 return -1;
         }
 
@@ -548,7 +548,7 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
                                        msg->qoscube);
                 if (fd < 0) {
                         flow_alloc_msg__free_unpacked(msg, NULL);
-                        LOG_ERR("Failed to get fd for flow.");
+                        log_err("Failed to get fd for flow.");
                         return -1;
                 }
 
@@ -584,7 +584,7 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
                 ret = flow_dealloc(fd);
                 break;
         default:
-                LOG_ERR("Got an unknown flow allocation message.");
+                log_err("Got an unknown flow allocation message.");
                 ret = -1;
                 break;
         }
@@ -604,7 +604,7 @@ int fmgr_np1_post_sdu(cep_id_t             cep_id,
         fd = fmgr.np1_cep_id_to_fd[cep_id];
         if (ipcp_flow_write(fd, sdb)) {
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
-                LOG_ERR("Failed to hand SDU to N flow.");
+                log_err("Failed to hand SDU to N flow.");
                 return -1;
         }
 
@@ -619,7 +619,7 @@ int fmgr_nm1_flow_arr(int       fd,
         assert(fmgr.gam);
 
         if (gam_flow_arr(fmgr.gam, fd, qs)) {
-                LOG_ERR("Failed to hand to graph adjacency manager.");
+                log_err("Failed to hand to graph adjacency manager.");
                 return -1;
         }
 
@@ -633,13 +633,13 @@ int fmgr_nm1_write_sdu(struct pci *         pci,
                 return -1;
 
         if (shm_pci_ser(sdb, pci)) {
-                LOG_ERR("Failed to serialize PDU.");
+                log_err("Failed to serialize PDU.");
                 ipcp_flow_del(sdb);
                 return -1;
         }
 
         if (ipcp_flow_write(fmgr.fd, sdb)) {
-                LOG_ERR("Failed to write SDU to fd %d.", fmgr.fd);
+                log_err("Failed to write SDU to fd %d.", fmgr.fd);
                 ipcp_flow_del(sdb);
                 return -1;
         }
@@ -657,13 +657,13 @@ int fmgr_nm1_write_buf(struct pci * pci,
 
         buffer = shm_pci_ser_buf(buf, pci);
         if (buffer == NULL) {
-                LOG_ERR("Failed to serialize buffer.");
+                log_err("Failed to serialize buffer.");
                 free(buf->data);
                 return -1;
         }
 
         if (flow_write(fmgr.fd, buffer->data, buffer->len) == -1) {
-                LOG_ERR("Failed to write buffer to fd.");
+                log_err("Failed to write buffer to fd.");
                 free(buffer);
                 return -1;
         }

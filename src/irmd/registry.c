@@ -189,13 +189,13 @@ int reg_entry_add_apn(struct reg_entry * e, struct apn_entry * a)
         struct str_el * n;
 
         if (reg_entry_has_apn(e, a->apn)) {
-                LOG_WARN("AP %s already accepting flows for %s.",
+                log_warn("AP %s already accepting flows for %s.",
                          a->apn, e->name);
                 return 0;
         }
 
         if (!(a->flags & BIND_AP_AUTO)) {
-                LOG_DBG("AP %s cannot be auto-instantiated.", a->apn);
+                log_dbg("AP %s cannot be auto-instantiated.", a->apn);
                 return -EINVAL;
         }
 
@@ -265,12 +265,12 @@ int reg_entry_add_api(struct reg_entry * e, pid_t api)
                 return -EINVAL;
 
         if (reg_entry_has_api(e, api)) {
-                LOG_DBG("Instance already registered with this name.");
+                log_dbg("Instance already registered with this name.");
                 return -EPERM;
         }
 
         if (e->state == REG_NAME_NULL) {
-                LOG_DBG("Tried to add instance in NULL state.");
+                log_dbg("Tried to add instance in NULL state.");
                 return -EPERM;
         }
 
@@ -418,19 +418,19 @@ struct reg_entry * registry_add_name(struct list_head * registry,
                 return NULL;
 
         if (registry_has_name(registry, name)) {
-                LOG_DBG("Name %s already registered.", name);
+                log_dbg("Name %s already registered.", name);
                 return NULL;
         }
 
         e = reg_entry_create();
         if (e == NULL) {
-                LOG_DBG("Could not create registry entry.");
+                log_dbg("Could not create registry entry.");
                 return NULL;
         }
 
         e = reg_entry_init(e, name);
         if (e == NULL) {
-                LOG_DBG("Could not initialize registry entry.");
+                log_dbg("Could not initialize registry entry.");
                 reg_entry_destroy(e);
                 return NULL;
         }

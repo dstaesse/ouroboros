@@ -207,7 +207,7 @@ static int eth_llc_ipcp_send_frame(uint8_t * dst_addr,
         struct eth_llc_frame * llc_frame;
 
         if (payload == NULL) {
-                LOG_ERR("Payload was NULL.");
+                log_err("Payload was NULL.");
                 return -1;
         }
 
@@ -224,7 +224,7 @@ static int eth_llc_ipcp_send_frame(uint8_t * dst_addr,
                 pfd.events = POLLIN | POLLRDNORM | POLLERR;
 
                 if (poll(&pfd, 1, -1) <= 0) {
-                        LOG_ERR("Failed to poll.");
+                        log_err("Failed to poll.");
                         continue;
                 }
 
@@ -261,7 +261,7 @@ static int eth_llc_ipcp_send_frame(uint8_t * dst_addr,
         header->tp_status = TP_STATUS_SEND_REQUEST;
 
         if (send(eth_llc_data.s_fd, NULL, 0, MSG_DONTWAIT) < 0) {
-                LOG_ERR("Failed to write frame into TX_RING.");
+                log_err("Failed to write frame into TX_RING.");
                 return -1;
         }
 
@@ -274,7 +274,7 @@ static int eth_llc_ipcp_send_frame(uint8_t * dst_addr,
                    0,
                    (struct sockaddr *) &eth_llc_data.device,
                    sizeof(eth_llc_data.device)) <= 0) {
-                LOG_ERR("Failed to send message.");
+                log_err("Failed to send message.");
                 return -1;
         }
 #endif
@@ -299,7 +299,7 @@ static int eth_llc_ipcp_send_mgmt_frame(shim_eth_llc_msg_t * msg,
 
         if (eth_llc_ipcp_send_frame(dst_addr, reverse_bits(MGMT_SAP),
                                     reverse_bits(MGMT_SAP), buf, len)) {
-                LOG_ERR("Failed to send management frame.");
+                log_err("Failed to send management frame.");
                 free(buf);
                 return -1;
         }
@@ -362,7 +362,7 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
         if (fd < 0) {
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Could not get new flow from IRMd.");
+                log_err("Could not get new flow from IRMd.");
                 return -1;
         }
 
@@ -372,7 +372,7 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("New flow request, fd %d, remote SAP %d.", fd, r_sap);
+        log_dbg("New flow request, fd %d, remote SAP %d.", fd, r_sap);
 
         return 0;
 }
@@ -392,7 +392,7 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
         if (fd < 0) {
                 pthread_rwlock_unlock(& eth_llc_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("No flow found with that SAP.");
+                log_err("No flow found with that SAP.");
                 return -1; /* -EFLOWNOTFOUND */
         }
 
@@ -406,7 +406,7 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
+        log_dbg("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
 
         if ((ret = ipcp_flow_alloc_reply(fd, response)) < 0)
                 return -1;
@@ -459,7 +459,7 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
 {
         shim_eth_llc_msg_t * msg = shim_eth_llc_msg__unpack(NULL, len, buf);
         if (msg == NULL) {
-                LOG_ERR("Failed to unpack.");
+                log_err("Failed to unpack.");
                 return -1;
         }
 
@@ -486,7 +486,7 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
                 eth_llc_ipcp_name_query_reply(msg->dst_name, r_addr);
                 break;
         default:
-                LOG_ERR("Unknown message received %d.", msg->code);
+                log_err("Unknown message received %d.", msg->code);
                 shim_eth_llc_msg__free_unpacked(msg, NULL);
                 return -1;
         }
@@ -527,7 +527,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         pfd.events = POLLIN | POLLRDNORM | POLLERR;
 
                         if (poll(&pfd, 1, -1) <= 0) {
-                                LOG_ERR("Failed to poll.");
+                                log_err("Failed to poll.");
                                 continue;
                         }
 
@@ -540,7 +540,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 frame_len = recv(eth_llc_data.s_fd, buf,
                                  SHIM_ETH_LLC_MAX_SDU_SIZE, 0);
                 if (frame_len < 0) {
-                        LOG_ERR("Failed to receive frame.");
+                        log_err("Failed to receive frame.");
                         continue;
                 }
 #endif
@@ -641,7 +641,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
 
                 while ((fd = fqueue_next(eth_llc_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
-                                LOG_ERR("Bad read from fd %d.", fd);
+                                log_err("Bad read from fd %d.", fd);
                                 continue;
                         }
 
@@ -715,7 +715,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         assert(conf->type == THIS_TYPE);
 
         if (conf->if_name == NULL) {
-                LOG_ERR("Interface name is NULL.");
+                log_err("Interface name is NULL.");
                 return -1;
         }
 
@@ -725,20 +725,20 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
 #ifdef __FreeBSD__
         if (getifaddrs(&ifaddr) < 0)  {
-                LOG_ERR("Could not get interfaces.");
+                log_err("Could not get interfaces.");
                 return -1;
         }
 
         for (ifa = ifaddr, idx = 0; ifa != NULL; ifa = ifa->ifa_next, ++idx) {
                 if (strcmp(ifa->ifa_name, conf->if_name))
                         continue;
-                LOG_DBG("Interface %s found.", conf->if_name);
+                log_dbg("Interface %s found.", conf->if_name);
                 memcpy(&ifr.ifr_addr, ifa->ifa_addr, sizeof(*ifa->ifa_addr));
                 break;
         }
 
         if (ifa == NULL) {
-                LOG_ERR("Interface not found.");
+                log_err("Interface not found.");
                 freeifaddrs(ifaddr);
                 return -1;
         }
@@ -747,12 +747,12 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 #else
         skfd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (skfd < 0) {
-                LOG_ERR("Failed to open socket.");
+                log_err("Failed to open socket.");
                 return -1;
         }
 
         if (ioctl(skfd, SIOCGIFHWADDR, &ifr)) {
-                LOG_ERR("Failed to ioctl.");
+                log_err("Failed to ioctl.");
                 close(skfd);
                 return -1;
         }
@@ -761,7 +761,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         idx = if_nametoindex(conf->if_name);
         if (idx == 0) {
-                LOG_ERR("Failed to retrieve interface index.");
+                log_err("Failed to retrieve interface index.");
                 close(skfd);
                 return -1;
         }
@@ -785,13 +785,13 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         skfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
 #endif
         if (skfd < 0) {
-                LOG_ERR("Failed to create socket.");
+                log_err("Failed to create socket.");
                 return -1;
         }
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         if (SHIM_ETH_LLC_MAX_SDU_SIZE > SHM_RDRB_BLOCK_SIZE) {
-                LOG_ERR("Max SDU size is bigger than DU map block size.");
+                log_err("Max SDU size is bigger than DU map block size.");
                 close(skfd);
                 return -1;
         }
@@ -803,20 +803,20 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         if (setsockopt(skfd, SOL_PACKET, PACKET_RX_RING,
                        (void *) &req, sizeof(req))) {
-                LOG_ERR("Failed to set sockopt PACKET_RX_RING");
+                log_err("Failed to set sockopt PACKET_RX_RING");
                 close(skfd);
                 return -1;
         }
 
         if (setsockopt(skfd, SOL_PACKET, PACKET_TX_RING,
                        (void *) &req, sizeof(req))) {
-                LOG_ERR("Failed to set sockopt PACKET_TX_RING");
+                log_err("Failed to set sockopt PACKET_TX_RING");
                 close(skfd);
                 return -1;
         }
 #endif
         if (bind(skfd, (struct sockaddr *) &device, sizeof(device))) {
-                LOG_ERR("Failed to bind socket to interface");
+                log_err("Failed to bind socket to interface");
                 close(skfd);
                 return -1;
         }
@@ -827,7 +827,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                                     PROT_READ | PROT_WRITE, MAP_SHARED,
                                     skfd, 0);
         if (eth_llc_data.rx_ring == NULL) {
-                LOG_ERR("Failed to mmap");
+                log_err("Failed to mmap");
                 close(skfd);
                 return -1;
         }
@@ -839,7 +839,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         if (ipcp_get_state() != IPCP_INIT) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("IPCP in wrong state.");
+                log_err("IPCP in wrong state.");
                 return -1;
         }
 
@@ -863,7 +863,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Bootstrapped shim IPCP over Ethernet with LLC with api %d.",
+        log_dbg("Bootstrapped shim IPCP over Ethernet with LLC with api %d.",
                 getpid());
 
         return 0;
@@ -873,7 +873,7 @@ static int eth_llc_ipcp_name_reg(char * name)
 {
         char * name_dup = strdup(name);
         if (name_dup == NULL) {
-                LOG_ERR("Failed to duplicate name.");
+                log_err("Failed to duplicate name.");
                 return -ENOMEM;
         }
 
@@ -881,14 +881,14 @@ static int eth_llc_ipcp_name_reg(char * name)
 
         if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Failed to add %s to local registry.", name);
+                log_err("Failed to add %s to local registry.", name);
                 free(name_dup);
                 return -1;
         }
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Registered %s.", name);
+        log_dbg("Registered %s.", name);
 
         return 0;
 }
@@ -949,13 +949,13 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
         uint8_t r_addr[MAC_SIZE];
         uint64_t addr = 0;
 
-        LOG_DBG("Allocating flow to %s.", dst_name);
+        log_dbg("Allocating flow to %s.", dst_name);
 
         if (dst_name == NULL || src_ae_name == NULL)
                 return -1;
 
         if (cube != QOS_CUBE_BE && cube != QOS_CUBE_FRC) {
-                LOG_DBG("Unsupported QoS requested.");
+                log_dbg("Unsupported QoS requested.");
                 return -1;
         }
 
@@ -963,13 +963,13 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Won't allocate flow with non-enrolled IPCP.");
+                log_dbg("Won't allocate flow with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
         if (!shim_data_dir_has(ipcpi.shim_data, dst_name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Destination unreachable.");
+                log_err("Destination unreachable.");
                 return -1;
         }
         addr = shim_data_dir_get_addr(ipcpi.shim_data, dst_name);
@@ -1008,7 +1008,7 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
 
         flow_set_add(eth_llc_data.np1_flows, fd);
 
-        LOG_DBG("Pending flow with fd %d on SAP %d.", fd, ssap);
+        log_dbg("Pending flow with fd %d on SAP %d.", fd, ssap);
 
         return 0;
 }
@@ -1049,7 +1049,7 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd,
 
         flow_set_add(eth_llc_data.np1_flows, fd);
 
-        LOG_DBG("Accepted flow, fd %d, SAP %d.", fd, (uint8_t)ssap);
+        log_dbg("Accepted flow, fd %d, SAP %d.", fd, (uint8_t)ssap);
 
         return 0;
 }
@@ -1065,7 +1065,7 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Won't register with non-enrolled IPCP.");
+                log_dbg("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
@@ -1087,7 +1087,7 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Flow with fd %d deallocated.", fd);
+        log_dbg("Flow with fd %d deallocated.", fd);
 
         return 0;
 }
@@ -1115,23 +1115,6 @@ int main(int    argc,
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
 
-        if (ipcp_parse_arg(argc, argv)) {
-                LOG_ERR("Failed to parse arguments.");
-                exit(EXIT_FAILURE);
-        }
-
-        if (ap_init(NULL) < 0) {
-                LOG_ERR("Failed to init application.");
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
-
-        if (eth_llc_data_init() < 0) {
-                LOG_ERR("Failed to init shim-eth-llc data.");
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
-
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));
 
@@ -1144,25 +1127,35 @@ int main(int    argc,
         sigaction(SIGHUP,  &sig_act, NULL);
         sigaction(SIGPIPE, &sig_act, NULL);
 
-        if (ipcp_init(THIS_TYPE, &eth_llc_ops) < 0) {
-                LOG_ERR("Failed to init IPCP.");
-                close_logfile();
+        if (ipcp_init(argc, argv, THIS_TYPE, &eth_llc_ops) < 0) {
+                log_err("Failed to init IPCP.");
                 exit(EXIT_FAILURE);
         }
+
+        if (eth_llc_data_init() < 0) {
+                log_err("Failed to init shim-eth-llc data.");
+                ipcp_fini();
+                exit(EXIT_FAILURE);
+        }
+
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (ipcp_boot() < 0) {
-                LOG_ERR("Failed to boot IPCP.");
-                close_logfile();
+                log_err("Failed to boot IPCP.");
+                eth_llc_data_fini();
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         if (ipcp_create_r(getpid())) {
-                LOG_ERR("Failed to notify IRMd we are initialized.");
-                close_logfile();
+                log_err("Failed to notify IRMd we are initialized.");
+                ipcp_set_state(IPCP_NULL);
+                ipcp_shutdown();
+                eth_llc_data_fini();
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
@@ -1175,13 +1168,9 @@ int main(int    argc,
                 pthread_join(eth_llc_data.sdu_reader, NULL);
         }
 
-        ipcp_fini();
-
         eth_llc_data_fini();
 
-        ap_fini();
-
-        close_logfile();
+        ipcp_fini();
 
         exit(EXIT_SUCCESS);
 }

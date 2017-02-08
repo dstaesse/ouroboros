@@ -44,7 +44,8 @@ static void close_ptr(void * o)
         close(*(int *) o);
 }
 
-ipcp_msg_t * send_recv_ipcp_msg(pid_t api, ipcp_msg_t * msg)
+ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
+                                ipcp_msg_t * msg)
 {
        int sockfd = 0;
        buffer_t buf;
@@ -67,7 +68,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t api, ipcp_msg_t * msg)
 
        if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,
                       (void *) &tv, sizeof(tv)))
-               LOG_WARN("Failed to set timeout on socket.");
+               log_warn("Failed to set timeout on socket.");
 
        free(sock_path);
 
@@ -100,7 +101,8 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t api, ipcp_msg_t * msg)
        return recv_msg;
 }
 
-pid_t ipcp_create(char * name, enum ipcp_type ipcp_type)
+pid_t ipcp_create(char *         name,
+                  enum ipcp_type ipcp_type)
 {
         pid_t api = -1;
         char irmd_api[10];
@@ -108,14 +110,13 @@ pid_t ipcp_create(char * name, enum ipcp_type ipcp_type)
         char * ipcp_dir = "/sbin/";
         char * full_name = NULL;
         char * exec_name = NULL;
-        char * log_file = NULL;
         char * argv[5];
 
         sprintf(irmd_api, "%u", getpid());
 
         api = fork();
         if (api == -1) {
-                LOG_ERR("Failed to fork");
+                log_err("Failed to fork");
                 return api;
         }
 
@@ -140,7 +141,7 @@ pid_t ipcp_create(char * name, enum ipcp_type ipcp_type)
 
         full_name = malloc(len + 1);
         if (full_name == NULL) {
-                LOG_ERR("Failed to malloc");
+                log_err("Failed to malloc");
                 exit(EXIT_FAILURE);
         }
 
@@ -149,27 +150,25 @@ pid_t ipcp_create(char * name, enum ipcp_type ipcp_type)
         strcat(full_name, exec_name);
         full_name[len] = '\0';
 
-        if (logfile != NULL) {
-                log_file = malloc(20);
-                if (log_file == NULL) {
-                        LOG_ERR("Failed to malloc.");
-                        exit(EXIT_FAILURE);
-                }
-                sprintf(log_file, "ipcpd-%u.log", getpid());
-        }
 
         /* log_file to be placed at the end */
         argv[0] = full_name;
         argv[1] = irmd_api;
         argv[2] = name;
-        argv[3] = log_file;
+        if (log_syslog) {
+                argv[3] = "1";
+                argv[4] = NULL;
+        } else {
+                argv[3] = NULL;
+        }
+
         argv[4] = NULL;
 
         execv(argv[0], &argv[0]);
 
-        LOG_DBG("%s", strerror(errno));
-        LOG_ERR("Failed to load IPCP daemon");
-        LOG_ERR("Make sure to run the installed version");
+        log_dbg("%s", strerror(errno));
+        log_err("Failed to load IPCP daemon");
+        log_err("Make sure to run the installed version");
         free(full_name);
         exit(EXIT_FAILURE);
 }
@@ -179,12 +178,12 @@ int ipcp_destroy(pid_t api)
         int status;
 
         if (kill(api, SIGTERM)) {
-                LOG_ERR("Failed to destroy IPCP");
+                log_err("Failed to destroy IPCP");
                 return -1;
         }
 
         if (waitpid(api, &status, 0) < 0) {
-                LOG_ERR("Failed to destroy IPCP");
+                log_err("Failed to destroy IPCP");
                 return -1;
         }
 

@@ -3,7 +3,8 @@
  *
  * Logging facilities
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders       <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens     <dimitri.staessens@intec.ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -24,19 +25,18 @@
 
 #include <ouroboros/logs.h>
 
-FILE * logfile = NULL;
+bool log_syslog;
 
-int set_logfile(char * filename)
+void log_init(bool sysout)
 {
-        logfile = fopen(filename, "w");
-        if (logfile == NULL)
-                return -1;
+        log_syslog = sysout;
 
-        return 0;
+        if (log_syslog)
+                openlog(NULL, LOG_PID, LOG_DAEMON);
 }
 
-void close_logfile()
+void log_fini(void)
 {
-        if (logfile != NULL)
-                fclose(logfile);
+        if (log_syslog)
+                closelog();
 }

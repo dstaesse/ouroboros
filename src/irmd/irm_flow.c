@@ -53,14 +53,14 @@ struct irm_flow * irm_flow_create(pid_t n_api, pid_t n_1_api, int port_id)
 
         f->n_rb = shm_rbuff_create(n_api, port_id);
         if (f->n_rb == NULL) {
-                LOG_ERR("Could not create ringbuffer for AP-I %d.", n_api);
+                log_err("Could not create ringbuffer for AP-I %d.", n_api);
                 free(f);
                 return NULL;
         }
 
         f->n_1_rb = shm_rbuff_create(n_1_api, port_id);
         if (f->n_1_rb == NULL) {
-                LOG_ERR("Could not create ringbuffer for AP-I %d.", n_1_api);
+                log_err("Could not create ringbuffer for AP-I %d.", n_1_api);
                 free(f);
                 return NULL;
         }
@@ -68,7 +68,7 @@ struct irm_flow * irm_flow_create(pid_t n_api, pid_t n_1_api, int port_id)
         f->state = FLOW_ALLOC_PENDING;
 
         if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
-                LOG_WARN("Failed to set timestamp.");
+                log_warn("Failed to set timestamp.");
 
         return f;
 }

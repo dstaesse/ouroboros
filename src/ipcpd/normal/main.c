@@ -99,7 +99,7 @@ static void * flow_acceptor(void * o)
 
                 if (ipcp_get_state() != IPCP_OPERATIONAL) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
-                        LOG_INFO("Shutting down flow acceptor.");
+                        log_info("Shutting down flow acceptor.");
                         return 0;
                 }
 
@@ -107,11 +107,11 @@ static void * flow_acceptor(void * o)
 
                 fd = flow_accept(&ae_name, &qs);
                 if (fd < 0) {
-                        LOG_WARN("Flow accept failed.");
+                        log_warn("Flow accept failed.");
                         continue;
                 }
 
-                LOG_DBG("New flow allocation request for AE %s.", ae_name);
+                log_dbg("New flow allocation request for AE %s.", ae_name);
 
                 if (strcmp(ae_name, ENROLL_AE) == 0) {
                         enroll_handle(fd);
@@ -120,10 +120,10 @@ static void * flow_acceptor(void * o)
                 } else if (strcmp(ae_name, DT_AE) == 0) {
                         fmgr_nm1_flow_arr(fd, qs);
                 } else {
-                        LOG_DBG("Flow allocation request for unknown AE %s.",
+                        log_dbg("Flow allocation request for unknown AE %s.",
                                 ae_name);
                         if (flow_alloc_resp(fd, -1))
-                                LOG_WARN("Failed to reply to flow allocation.");
+                                log_warn("Failed to reply to flow allocation.");
                         flow_dealloc(fd);
                 }
 
@@ -146,66 +146,66 @@ static int boot_components(void)
 
         len = rib_read(DIF_PATH, &buf, 256);
         if (len < 0) {
-                LOG_ERR("Failed to read DIF name: %ld.", len);
+                log_err("Failed to read DIF name: %ld.", len);
                 return -1;
         }
 
         ipcpi.dif_name = strdup(buf);
         if (ipcpi.dif_name == NULL) {
-                LOG_ERR("Failed to set DIF name.");
+                log_err("Failed to set DIF name.");
                 return -1;
         }
 
         if (rib_add(MEMBERS_PATH, ipcpi.name)) {
-                LOG_WARN("Failed to add name to " MEMBERS_PATH);
+                log_warn("Failed to add name to " MEMBERS_PATH);
                 return -1;
         }
 
-        LOG_DBG("Starting components.");
+        log_dbg("Starting components.");
 
         if (rib_read(BOOT_PATH "/addr_auth/type", &pa, sizeof(pa))
             != sizeof(pa)) {
-                LOG_ERR("Failed to read policy for address authority.");
+                log_err("Failed to read policy for address authority.");
                 return -1;
         }
 
         normal.auth = addr_auth_create(pa);
         if (normal.auth == NULL) {
-                LOG_ERR("Failed to init address authority.");
+                log_err("Failed to init address authority.");
                 return -1;
         }
 
         ipcpi.address = normal.auth->address();
         if (ipcpi.address == 0) {
-                LOG_ERR("Failed to get a valid address.");
+                log_err("Failed to get a valid address.");
                 addr_auth_destroy(normal.auth);
                 return -1;
         }
 
-        LOG_DBG("IPCP got address %lu.", ipcpi.address);
+        log_dbg("IPCP got address %lu.", ipcpi.address);
 
-        LOG_DBG("Starting ribmgr.");
+        log_dbg("Starting ribmgr.");
 
         if (ribmgr_init()) {
-                LOG_ERR("Failed to initialize RIB manager.");
+                log_err("Failed to initialize RIB manager.");
                 addr_auth_destroy(normal.auth);
                 return -1;
         }
 
         if (dir_init()) {
-                LOG_ERR("Failed to initialize directory.");
+                log_err("Failed to initialize directory.");
                 ribmgr_fini();
                 addr_auth_destroy(normal.auth);
                 return -1;
         }
 
-        LOG_DBG("Ribmgr started.");
+        log_dbg("Ribmgr started.");
 
         if (fmgr_init()) {
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_destroy(normal.auth);
-                LOG_ERR("Failed to start flow manager.");
+                log_err("Failed to start flow manager.");
                 return -1;
         }
 
@@ -214,7 +214,7 @@ static int boot_components(void)
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_destroy(normal.auth);
-                LOG_ERR("Failed to initialize FRCT.");
+                log_err("Failed to initialize FRCT.");
                 return -1;
         }
 
@@ -226,11 +226,27 @@ static int boot_components(void)
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_destroy(normal.auth);
-                LOG_ERR("Failed to create acceptor thread.");
+                log_err("Failed to create acceptor thread.");
                 return -1;
         }
 
         return 0;
+}
+
+void shutdown_components(void)
+{
+        pthread_cancel(normal.acceptor);
+        pthread_join(normal.acceptor, NULL);
+
+        frct_fini();
+
+        fmgr_fini();
+
+        dir_fini();
+
+        ribmgr_fini();
+
+        addr_auth_destroy(normal.auth);
 }
 
 static int normal_ipcp_enroll(char * dst_name)
@@ -239,32 +255,32 @@ static int normal_ipcp_enroll(char * dst_name)
 
         if (ipcp_get_state() != IPCP_INIT) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("IPCP in wrong state.");
+                log_err("IPCP in wrong state.");
                 return -1; /* -ENOTINIT */
         }
 
         if (rib_add(RIB_ROOT, MEMBERS_NAME)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Failed to create members.");
+                log_err("Failed to create members.");
                 return -1;
         }
 
         /* Get boot state from peer */
         if (enroll_boot(dst_name)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Failed to boot IPCP components.");
+                log_err("Failed to boot IPCP components.");
                 return -1;
         }
 
         if (boot_components()) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Failed to boot IPCP components.");
+                log_err("Failed to boot IPCP components.");
                 return -1;
         }
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Enrolled with %s.", dst_name);
+        log_dbg("Enrolled with %s.", dst_name);
 
         return 0;
 }
@@ -314,7 +330,7 @@ int normal_rib_init(void)
 
         for (r = (struct ros *) ros; r->parent; ++r) {
                 if (rib_add(r->parent, r->child)) {
-                        LOG_ERR("Failed to create %s/%s",
+                        log_err("Failed to create %s/%s",
                                 r->parent, r->child);
                         return -1;
                 }
@@ -331,7 +347,7 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
         (void) pol;
 
         if (conf == NULL || conf->type != THIS_TYPE) {
-                LOG_ERR("Bad DIF configuration.");
+                log_err("Bad DIF configuration.");
                 return -EINVAL;
         }
 
@@ -339,13 +355,13 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
 
         if (ipcp_get_state() != IPCP_INIT) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("IPCP in wrong state.");
+                log_err("IPCP in wrong state.");
                 return -1; /* -ENOTINIT */
         }
 
         if (normal_rib_init()) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("Failed to write initial structure to the RIB.");
+                log_err("Failed to write initial structure to the RIB.");
                 return -1;
         }
 
@@ -388,20 +404,20 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
             rib_write(BOOT_PATH "/addr_auth/type",
                       &conf->addr_auth_type,
                       sizeof(conf->addr_auth_type))) {
-                LOG_ERR("Failed to write boot info to RIB.");
+                log_err("Failed to write boot info to RIB.");
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
         if (boot_components()) {
-                LOG_ERR("Failed to boot IPCP components.");
+                log_err("Failed to boot IPCP components.");
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_DBG("Bootstrapped in DIF %s.", conf->dif_name);
+        log_dbg("Bootstrapped in DIF %s.", conf->dif_name);
 
         return 0;
 }
@@ -423,27 +439,11 @@ int main(int    argc,
         struct sigaction sig_act;
         sigset_t         sigset;
 
-        if (ap_init(argv[0])) {
-                LOG_ERR("Failed to init AP");
-                exit(EXIT_FAILURE);
-        }
-
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGINT);
         sigaddset(&sigset, SIGQUIT);
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
-
-        if (ipcp_parse_arg(argc, argv)) {
-                LOG_ERR("Failed to parse arguments.");
-                exit(EXIT_FAILURE);
-        }
-
-        if (irm_bind_api(getpid(), ipcpi.name)) {
-                LOG_ERR("Failed to bind AP name.");
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
 
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));
@@ -457,59 +457,50 @@ int main(int    argc,
         sigaction(SIGHUP,  &sig_act, NULL);
         sigaction(SIGPIPE, &sig_act, NULL);
 
-        if (rib_init()) {
-                LOG_ERR("Failed to initialize RIB.");
-                close_logfile();
+        if (irm_bind_api(getpid(), ipcpi.name)) {
+                log_err("Failed to bind AP name.");
                 exit(EXIT_FAILURE);
         }
 
-        if (ipcp_init(THIS_TYPE, &normal_ops) < 0) {
-                LOG_ERR("Failed to create instance.");
-                rib_fini();
-                close_logfile();
+        if (ipcp_init(argc, argv, THIS_TYPE, &normal_ops) < 0) {
+                log_err("Failed to create instance.");
+                exit(EXIT_FAILURE);
+        }
+
+        if (rib_init()) {
+                log_err("Failed to initialize RIB.");
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (ipcp_boot() < 0) {
-                LOG_ERR("Failed to boot IPCP.");
-                ipcp_fini();
+                log_err("Failed to boot IPCP.");
                 rib_fini();
-                close_logfile();
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         if (ipcp_create_r(getpid())) {
-                LOG_ERR("Failed to notify IRMd we are initialized.");
-                ipcp_fini();
+                log_err("Failed to notify IRMd we are initialized.");
+                ipcp_set_state(IPCP_NULL);
+                ipcp_shutdown();
                 rib_fini();
-                close_logfile();
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
         ipcp_shutdown();
 
-        if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                pthread_cancel(normal.acceptor);
-                pthread_join(normal.acceptor, NULL);
-        }
-
-        ribmgr_fini();
-
-        dir_fini();
-
-        addr_auth_destroy(normal.auth);
+        if (ipcp_get_state() == IPCP_SHUTDOWN)
+                shutdown_components();
 
         rib_fini();
 
         ipcp_fini();
-
-        close_logfile();
-
-        ap_fini();
 
         exit(EXIT_SUCCESS);
 }

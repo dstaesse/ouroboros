@@ -102,29 +102,29 @@ uint64_t flat_address(void)
         strcpy(path, "/" MEMBERS_NAME);
 
         if (!rib_has(path)) {
-                LOG_ERR("Could not read members from RIB.");
+                log_err("Could not read members from RIB.");
                 return INVALID_ADDRESS;
         }
 
         if (rib_read("/" BOOT_NAME "/dt/const/addr_size",
                      &addr_size, sizeof(addr_size)) != sizeof(addr_size)) {
-                LOG_ERR("Failed to read address size.");
+                log_err("Failed to read address size.");
                 return INVALID_ADDRESS;
         }
 
         if (addr_size != 4) {
-                LOG_ERR("Flat address policy mandates 4 byte addresses.");
+                log_err("Flat address policy mandates 4 byte addresses.");
                 return INVALID_ADDRESS;
         }
 
         n_members = rib_children(path, &members);
         if (n_members > REC_DIF_SIZE)
-                LOG_WARN("DIF exceeding recommended size for flat addresses.");
+                log_warn("DIF exceeding recommended size for flat addresses.");
 
         rib_path_append(path, ipcpi.name);
 
         if (!rib_has(path)) {
-                LOG_ERR("This ipcp is not a member.");
+                log_err("This ipcp is not a member.");
                 freepp(char, members, n_members);
                 return INVALID_ADDRESS;
         }
@@ -142,12 +142,12 @@ uint64_t flat_address(void)
         freepp(char, members, n_members);
 
         if (rib_add(path, name)) {
-                LOG_ERR("Failed to add address to RIB.");
+                log_err("Failed to add address to RIB.");
                 return INVALID_ADDRESS;
         }
 
         if (rib_write(path, &addr, sizeof(addr))) {
-                LOG_ERR("Failed to write address in RIB.");
+                log_err("Failed to write address in RIB.");
                 return INVALID_ADDRESS;
         }
 

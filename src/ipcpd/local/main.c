@@ -19,7 +19,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define OUROBOROS_PREFIX "ipcpd/local"
+#define OUROBOROS_PREFIX "ipcpd-local"
 
 #include <ouroboros/config.h>
 #include <ouroboros/logs.h>
@@ -153,7 +153,7 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
 
         if (ipcp_get_state() != IPCP_INIT) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_ERR("IPCP in wrong state.");
+                log_err("IPCP in wrong state.");
                 return -1;
         }
 
@@ -163,7 +163,7 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_INFO("Bootstrapped local IPCP with api %d.", getpid());
+        log_info("Bootstrapped local IPCP with api %d.", getpid());
 
         return 0;
 }
@@ -172,7 +172,7 @@ static int ipcp_local_name_reg(char * name)
 {
         char * name_dup = strdup(name);
         if (name_dup == NULL) {
-                LOG_ERR("Failed to duplicate name.");
+                log_err("Failed to duplicate name.");
                 return -ENOMEM;
         }
 
@@ -180,14 +180,14 @@ static int ipcp_local_name_reg(char * name)
 
         if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Failed to add %s to local registry.", name);
+                log_dbg("Failed to add %s to local registry.", name);
                 free(name_dup);
                 return -1;
         }
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_INFO("Registered %s.", name);
+        log_info("Registered %s.", name);
 
         return 0;
 }
@@ -200,7 +200,7 @@ static int ipcp_local_name_unreg(char * name)
 
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_INFO("Unregistered %s.", name);
+        log_info("Unregistered %s.", name);
 
         return 0;
 }
@@ -225,7 +225,7 @@ static int ipcp_local_flow_alloc(int       fd,
 {
         int out_fd = -1;
 
-        LOG_DBG("Allocating flow to %s on fd %d.", dst_name, fd);
+        log_dbg("Allocating flow to %s on fd %d.", dst_name, fd);
 
         assert(dst_name);
         assert(src_ae_name);
@@ -234,7 +234,7 @@ static int ipcp_local_flow_alloc(int       fd,
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Won't register with non-enrolled IPCP.");
+                log_dbg("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
@@ -250,7 +250,7 @@ static int ipcp_local_flow_alloc(int       fd,
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_INFO("Pending local allocation request on fd %d.", fd);
+        log_info("Pending local allocation request on fd %d.", fd);
 
         return 0;
 }
@@ -282,7 +282,7 @@ static int ipcp_local_flow_alloc_resp(int fd,
         if ((ret = ipcp_flow_alloc_reply(out_fd, response)) < 0)
                 return -1;
 
-        LOG_INFO("Flow allocation completed, fds (%d, %d).", out_fd, fd);
+        log_info("Flow allocation completed, fds (%d, %d).", out_fd, fd);
 
         return ret;
 }
@@ -297,7 +297,7 @@ static int ipcp_local_flow_dealloc(int fd)
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                LOG_DBG("Won't register with non-enrolled IPCP.");
+                log_dbg("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
@@ -312,7 +312,7 @@ static int ipcp_local_flow_dealloc(int fd)
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        LOG_INFO("Flow with fd %d deallocated.", fd);
+        log_info("Flow with fd %d deallocated.", fd);
 
         return 0;
 }
@@ -339,23 +339,6 @@ int main(int    argc,
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
 
-        if (ipcp_parse_arg(argc, argv)) {
-                LOG_ERR("Failed to parse arguments.");
-                exit(EXIT_FAILURE);
-        }
-
-        if (ap_init(NULL) < 0) {
-                LOG_ERR("Failed to init application.");
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
-
-        if (local_data_init() < 0) {
-                LOG_ERR("Failed to init local data.");
-                close_logfile();
-                exit(EXIT_FAILURE);
-        }
-
         /* init sig_act */
         memset(&sig_act, 0, sizeof(sig_act));
 
@@ -368,25 +351,34 @@ int main(int    argc,
         sigaction(SIGHUP,  &sig_act, NULL);
         sigaction(SIGPIPE, &sig_act, NULL);
 
-        if (ipcp_init(THIS_TYPE, &local_ops) < 0) {
-                LOG_ERR("Failed to init IPCP.");
-                close_logfile();
+        if (ipcp_init(argc, argv, THIS_TYPE, &local_ops) < 0) {
+                log_err("Failed to init IPCP.");
+                exit(EXIT_FAILURE);
+        }
+
+        if (local_data_init() < 0) {
+                log_err("Failed to init local data.");
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (ipcp_boot() < 0) {
-                LOG_ERR("Failed to boot IPCP.");
-                close_logfile();
+                log_err("Failed to boot IPCP.");
+                local_data_fini();
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         if (ipcp_create_r(getpid())) {
-                LOG_ERR("Failed to notify IRMd we are initialized.");
-                close_logfile();
+                log_err("Failed to notify IRMd we are initialized.");
+                ipcp_set_state(IPCP_NULL);
+                ipcp_shutdown();
+                local_data_fini();
+                ipcp_fini();
                 exit(EXIT_FAILURE);
         }
 
@@ -397,13 +389,9 @@ int main(int    argc,
                 pthread_join(local_data.sduloop, NULL);
         }
 
-        ipcp_fini();
-
         local_data_fini();
 
-        ap_fini();
-
-        close_logfile();
+        ipcp_fini();
 
         exit(EXIT_SUCCESS);
 }

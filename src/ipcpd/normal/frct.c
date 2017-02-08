@@ -225,7 +225,7 @@ int frct_nm1_post_sdu(struct pci * pci,
                 buf.data = shm_du_buff_head(sdb);
 
                 if (fmgr_np1_post_buf(id, &buf)) {
-                        LOG_ERR("Failed to hand buffer to FMGR.");
+                        log_err("Failed to hand buffer to FMGR.");
                         free(pci);
                         return -1;
                 }
@@ -244,14 +244,14 @@ int frct_nm1_post_sdu(struct pci * pci,
                 buf.data = shm_du_buff_head(sdb);
 
                 if (fmgr_np1_post_buf(pci->dst_cep_id, &buf)) {
-                        LOG_ERR("Failed to hand buffer to Flow Manager.");
+                        log_err("Failed to hand buffer to Flow Manager.");
                         free(pci);
                         return -1;
                 }
         } else {
                 /* FIXME: Known cep-ids are delivered to FMGR (minimal DTP) */
                 if (fmgr_np1_post_sdu(pci->dst_cep_id, sdb)) {
-                        LOG_ERR("Failed to hand SDU to FMGR.");
+                        log_err("Failed to hand SDU to FMGR.");
                         free(pci);
                         return -1;
                 }
@@ -293,7 +293,7 @@ cep_id_t frct_i_create(uint64_t   address,
 
         if (fmgr_nm1_write_buf(&pci, buf)) {
                 free(instance);
-                LOG_ERR("Failed to hand PDU to FMGR.");
+                log_err("Failed to hand PDU to FMGR.");
                 return INVALID_CEP_ID;
         }
 
@@ -315,7 +315,7 @@ int frct_i_accept(cep_id_t   id,
         instance = frct.instances[id];
         if (instance == NULL) {
                 pthread_mutex_unlock(&frct.instances_lock);
-                LOG_ERR("Invalid instance.");
+                log_err("Invalid instance.");
                 return -1;
         }
 
@@ -355,7 +355,7 @@ int frct_i_destroy(cep_id_t   id,
         instance = frct.instances[id];
         if (instance == NULL) {
                 pthread_mutex_unlock(&frct.instances_lock);
-                LOG_ERR("Invalid instance.");
+                log_err("Invalid instance.");
                 return -1;
         }
 
@@ -401,13 +401,13 @@ int frct_i_write_sdu(cep_id_t             id,
         instance = frct.instances[id];
         if (instance == NULL) {
                 pthread_mutex_unlock(&frct.instances_lock);
-                LOG_ERR("Invalid instance.");
+                log_err("Invalid instance.");
                 return -1;
         }
 
         if (instance->state != CONN_ESTABLISHED) {
                 pthread_mutex_unlock(&frct.instances_lock);
-                LOG_ERR("Connection is not established.");
+                log_err("Connection is not established.");
                 return -1;
         }
 
@@ -421,7 +421,7 @@ int frct_i_write_sdu(cep_id_t             id,
 
         if (fmgr_nm1_write_sdu(&pci, sdb)) {
                 pthread_mutex_unlock(&frct.instances_lock);
-                LOG_ERR("Failed to hand SDU to FMGR.");
+                log_err("Failed to hand SDU to FMGR.");
                 return -1;
         }
 

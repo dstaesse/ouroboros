@@ -85,11 +85,11 @@ static void * ipcp_main_loop(void * o)
 
                 if (setsockopt(lsockfd, SOL_SOCKET, SO_RCVTIMEO,
                                (void *) &ltv, sizeof(ltv)))
-                        LOG_WARN("Failed to set timeout on socket.");
+                        log_warn("Failed to set timeout on socket.");
 
                 count = read(lsockfd, buf, IPCP_MSG_BUF_SIZE);
                 if (count <= 0) {
-                        LOG_ERR("Failed to read from socket");
+                        log_err("Failed to read from socket");
                         close(lsockfd);
                         continue;
                 }
@@ -103,7 +103,7 @@ static void * ipcp_main_loop(void * o)
                 switch (msg->code) {
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
                         if (ipcpi.ops->ipcp_bootstrap == NULL) {
-                                LOG_ERR("Bootstrap unsupported.");
+                                log_err("Bootstrap unsupported.");
                                 break;
                         }
                         conf_msg = msg->conf;
@@ -140,7 +140,7 @@ static void * ipcp_main_loop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
                         if (ipcpi.ops->ipcp_enroll == NULL) {
-                                LOG_ERR("Enroll unsupported.");
+                                log_err("Enroll unsupported.");
                                 break;
                         }
                         ret_msg.has_result = true;
@@ -149,7 +149,7 @@ static void * ipcp_main_loop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_REG:
                         if (ipcpi.ops->ipcp_name_reg == NULL) {
-                                LOG_ERR("Ap_reg unsupported.");
+                                log_err("Ap_reg unsupported.");
                                 break;
                         }
                         ret_msg.has_result = true;
@@ -158,7 +158,7 @@ static void * ipcp_main_loop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_UNREG:
                         if (ipcpi.ops->ipcp_name_unreg == NULL) {
-                                LOG_ERR("Ap_unreg unsupported.");
+                                log_err("Ap_unreg unsupported.");
                                 break;
                         }
                         ret_msg.has_result = true;
@@ -167,7 +167,7 @@ static void * ipcp_main_loop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_QUERY:
                         if (ipcpi.ops->ipcp_name_query == NULL) {
-                                LOG_ERR("Ap_query unsupported.");
+                                log_err("Ap_query unsupported.");
                                 break;
                         }
                         ret_msg.has_result = true;
@@ -176,12 +176,12 @@ static void * ipcp_main_loop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
                         if (ipcpi.ops->ipcp_flow_alloc == NULL) {
-                                LOG_ERR("Flow_alloc unsupported.");
+                                log_err("Flow_alloc unsupported.");
                                 break;
                         }
                         fd = np1_flow_alloc(msg->api, msg->port_id);
                         if (fd < 0) {
-                                LOG_ERR("Failed allocating fd on port_id %d.",
+                                log_err("Failed allocating fd on port_id %d.",
                                         msg->port_id);
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
@@ -197,14 +197,14 @@ static void * ipcp_main_loop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         if (ipcpi.ops->ipcp_flow_alloc_resp == NULL) {
-                                LOG_ERR("Flow_alloc_resp unsupported.");
+                                log_err("Flow_alloc_resp unsupported.");
                                 break;
                         }
 
                         if (!msg->response) {
                                 fd = np1_flow_resp(msg->port_id);
                                 if (fd < 0) {
-                                        LOG_WARN("Port_id %d is not known.",
+                                        log_warn("Port_id %d is not known.",
                                                  msg->port_id);
                                         ret_msg.has_result = true;
                                         ret_msg.result = -1;
@@ -218,13 +218,13 @@ static void * ipcp_main_loop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                         if (ipcpi.ops->ipcp_flow_dealloc == NULL) {
-                                LOG_ERR("Flow_dealloc unsupported.");
+                                log_err("Flow_dealloc unsupported.");
                                 break;
                         }
 
                         fd = np1_flow_dealloc(msg->port_id);
                         if (fd < 0) {
-                                LOG_WARN("Could not deallocate port_id %d.",
+                                log_warn("Could not deallocate port_id %d.",
                                         msg->port_id);
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
@@ -236,7 +236,7 @@ static void * ipcp_main_loop(void * o)
                                 ipcpi.ops->ipcp_flow_dealloc(fd);
                         break;
                 default:
-                        LOG_ERR("Don't know that message code");
+                        log_err("Don't know that message code");
                         break;
                 }
 
@@ -244,7 +244,7 @@ static void * ipcp_main_loop(void * o)
 
                 buffer.len = ipcp_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
-                        LOG_ERR("Failed to send reply message");
+                        log_err("Failed to send reply message");
                         close(lsockfd);
                         continue;
                 }
@@ -270,13 +270,60 @@ static void * ipcp_main_loop(void * o)
         return (void *) 0;
 }
 
-int ipcp_init(enum ipcp_type    type,
+static int parse_args(int    argc,
+                      char * argv[],
+                      bool * log)
+{
+        *log = false;
+
+        if (!(argc == 4 || argc == 3))
+                return -1;
+
+        /* argument 1: api of irmd */
+        if (atoi(argv[1]) == 0)
+                return -1;
+
+        ipcpi.irmd_api = atoi(argv[1]);
+
+        /* argument 2: IPCP name */
+        ipcpi.name = argv[2];
+
+        /* argument 3: syslog */
+        if (argv[3] != NULL)
+                *log = true;
+
+        return 0;
+}
+
+int ipcp_init(int               argc,
+              char **           argv,
+              enum ipcp_type    type,
               struct ipcp_ops * ops)
 {
+        bool log;
         pthread_condattr_t cattr;
 
         struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
                              (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
+
+        if (parse_args(argc, argv, &log)) {
+                log_err("Failed to parse arguments.");
+                return -1;
+        }
+
+        log_init(log);
+
+        if (type == IPCP_NORMAL) {
+                if (ap_init(argv[0])) {
+                        log_err("Failed to init normal IPCP.");
+                        return -1;
+                }
+        } else {
+                if (ap_init(NULL)) {
+                        log_err("Failed to init shim IPCP.");
+                        return -1;
+                }
+        }
 
         ipcpi.irmd_fd   = -1;
         ipcpi.state     = IPCP_NULL;
@@ -295,7 +342,7 @@ int ipcp_init(enum ipcp_type    type,
 
         ipcpi.sockfd = server_socket_open(ipcpi.sock_path);
         if (ipcpi.sockfd < 0) {
-                LOG_ERR("Could not open server socket.");
+                log_err("Could not open server socket.");
                 free(ipcpi.threadpool);
                 free(ipcpi.sock_path);
                 return -1;
@@ -303,7 +350,7 @@ int ipcp_init(enum ipcp_type    type,
 
         if (setsockopt(ipcpi.sockfd, SOL_SOCKET, SO_RCVTIMEO,
                        (void *) &tv, sizeof(tv)))
-                LOG_WARN("Failed to set timeout on socket.");
+                log_warn("Failed to set timeout on socket.");
 
         ipcpi.ops = ops;
 
@@ -338,7 +385,7 @@ int ipcp_boot()
                 if (pthread_create(&ipcpi.threadpool[t], NULL,
                                    ipcp_main_loop, NULL)) {
                         int i;
-                        LOG_ERR("Failed to create main thread.");
+                        log_err("Failed to create main thread.");
                         ipcp_set_state(IPCP_NULL);
                         for (i = 0; i < t; ++i)
                                 pthread_join(ipcpi.threadpool[i], NULL);
@@ -355,14 +402,14 @@ void ipcp_shutdown()
         for (t = 0; t < IPCPD_THREADPOOL_SIZE; ++t)
                 pthread_join(ipcpi.threadpool[t], NULL);
 
-        LOG_DBG("IPCP %d shutting down. Bye.", getpid());
+        log_info("IPCP %d shutting down. Bye.", getpid());
 }
 
 void ipcp_fini()
 {
         close(ipcpi.sockfd);
         if (unlink(ipcpi.sock_path))
-                LOG_DBG("Could not unlink %s.", ipcpi.sock_path);
+                log_warn("Could not unlink %s.", ipcpi.sock_path);
 
         free(ipcpi.sock_path);
         free(ipcpi.threadpool);
@@ -372,6 +419,10 @@ void ipcp_fini()
         pthread_cond_destroy(&ipcpi.state_cond);
         pthread_mutex_destroy(&ipcpi.state_mtx);
         pthread_rwlock_destroy(&ipcpi.state_lock);
+
+        log_fini();
+
+        ap_fini();
 }
 
 void ipcp_set_state(enum ipcp_state state)
@@ -423,48 +474,4 @@ int ipcp_wait_state(enum ipcp_state         state,
         pthread_mutex_unlock(&ipcpi.state_mtx);
 
         return ret;
-}
-
-int ipcp_parse_arg(int    argc,
-                   char * argv[])
-{
-        char * log_file;
-        size_t len = 0;
-
-        if (!(argc == 3 || argc == 2))
-                return -1;
-
-        /* argument 1: api of irmd */
-        if (atoi(argv[1]) == 0)
-                return -1;
-
-        ipcpi.irmd_api = atoi(argv[1]);
-
-        /* argument 2: IPCP name */
-        ipcpi.name = argv[2];
-
-        /* argument 3: logfile name (if any) */
-        if (argv[3] == NULL)
-                return 0;
-
-        len += strlen(INSTALL_PREFIX);
-        len += strlen(LOG_DIR);
-        len += strlen(argv[3]);
-
-        log_file = malloc(len + 1);
-        if (log_file == NULL)
-                return -1;
-
-        strcpy(log_file, INSTALL_PREFIX);
-        strcat(log_file, LOG_DIR);
-        strcat(log_file, argv[3]);
-        log_file[len] = '\0';
-
-        if (set_logfile(log_file))
-                LOG_ERR("Cannot open %s, falling back to stdout for logs.",
-                        log_file);
-
-        free(log_file);
-
-        return 0;
 }
