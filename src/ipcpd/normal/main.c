@@ -457,18 +457,20 @@ int main(int    argc,
         sigaction(SIGHUP,  &sig_act, NULL);
         sigaction(SIGPIPE, &sig_act, NULL);
 
-        if (irm_bind_api(getpid(), ipcpi.name)) {
-                log_err("Failed to bind AP name.");
-                exit(EXIT_FAILURE);
-        }
-
         if (ipcp_init(argc, argv, THIS_TYPE, &normal_ops) < 0) {
                 log_err("Failed to create instance.");
                 exit(EXIT_FAILURE);
         }
 
+        if (irm_bind_api(getpid(), ipcpi.name)) {
+                log_err("Failed to bind AP name.");
+                ipcp_fini();
+                exit(EXIT_FAILURE);
+        }
+
         if (rib_init()) {
                 log_err("Failed to initialize RIB.");
+                irm_unbind_api(getpid(), ipcpi.name);
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
@@ -478,6 +480,7 @@ int main(int    argc,
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
                 rib_fini();
+                irm_unbind_api(getpid(), ipcpi.name);
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
@@ -489,6 +492,7 @@ int main(int    argc,
                 ipcp_set_state(IPCP_NULL);
                 ipcp_shutdown();
                 rib_fini();
+                irm_unbind_api(getpid(), ipcpi.name);
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
@@ -499,6 +503,8 @@ int main(int    argc,
                 shutdown_components();
 
         rib_fini();
+
+        irm_unbind_api(getpid(), ipcpi.name);
 
         ipcp_fini();
 
