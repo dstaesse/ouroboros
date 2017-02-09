@@ -52,7 +52,7 @@ int rib_test(int     argc,
         uint8_t * buf;
         ssize_t   buf_len;
 
-        struct timespec t = {0, 100 * BILLION};
+        struct timespec t = {0, 100 * MILLION};
 
         (void) argc;
         (void) argv;
