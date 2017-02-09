@@ -47,8 +47,8 @@ void         flow_set_zero(flow_set_t * set);
 int          flow_set_add(flow_set_t * set,
                           int          fd);
 
-bool         flow_set_has(flow_set_t * set,
-                          int          fd);
+bool         flow_set_has(const flow_set_t * set,
+                          int                fd);
 
 void         flow_set_del(flow_set_t * set,
                           int          fd);

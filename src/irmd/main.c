@@ -303,9 +303,13 @@ static pid_t create_ipcp(char *         name,
         return api->pid;
 }
 
-static int create_ipcp_r(pid_t api)
+static int create_ipcp_r(pid_t api,
+                         int   result)
 {
         struct list_head * pos = NULL;
+
+        if (result != 0)
+                return result;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
         pthread_rwlock_rdlock(&irmd->reg_lock);
@@ -1821,7 +1825,7 @@ void * mainloop(void * o)
                         break;
                 case IRM_MSG_CODE__IPCP_CREATE_R:
                         ret_msg.has_result = true;
-                        ret_msg.result = create_ipcp_r(msg->api);
+                        ret_msg.result = create_ipcp_r(msg->api, msg->result);
                         break;
                 case IRM_MSG_CODE__IRM_DESTROY_IPCP:
                         ret_msg.has_result = true;

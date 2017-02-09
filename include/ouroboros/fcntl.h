@@ -41,8 +41,8 @@ int               flow_set_flags(int fd,
 
 int               flow_get_flags(int fd);
 
-int               flow_set_timeout(int               fd,
-                                   struct timespec * to);
+int               flow_set_timeout(int                     fd,
+                                   const struct timespec * to);
 
 int               flow_get_timeout(int               fd,
                                    struct timespec * to);

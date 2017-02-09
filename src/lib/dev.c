@@ -87,7 +87,8 @@ static void port_destroy(struct port * p)
         pthread_mutex_unlock(&p->state_lock);
 }
 
-static void port_set_state(struct port * p, enum port_state state)
+static void port_set_state(struct port *   p,
+                           enum port_state state)
 {
         pthread_mutex_lock(&p->state_lock);
 
@@ -169,7 +170,8 @@ static qoscube_t spec_to_cube(qosspec_t * spec)
 }
 
 /* FIXME: fill real spec */
-static void fill_qosspec(qosspec_t * spec, qoscube_t cube)
+static void fill_qosspec(qosspec_t * spec,
+                         qoscube_t   cube)
 {
         assert(spec);
 
@@ -235,14 +237,13 @@ static void reset_flow(int fd)
         ai.flows[fd].cube = QOS_CUBE_BE;
 }
 
-int ap_init(char * ap_name)
+int ap_init(const char * ap_name)
 {
         int i = 0;
 
-        ap_name = path_strip(ap_name);
+        assert(ai.ap_name == NULL);
 
         ai.api = getpid();
-        ai.ap_name = ap_name;
         ai.daf_name = NULL;
 
         ai.fds = bmp_create(AP_MAX_FLOWS, 0);
@@ -300,6 +301,28 @@ int ap_init(char * ap_name)
                 return -1;
         }
 
+        if (ap_name != NULL) {
+                ai.ap_name = strdup(path_strip((char *) ap_name));
+                if (ai.ap_name == NULL) {
+                        free(ai.flows);
+                        shm_rdrbuff_close(ai.rdrb);
+                        shm_flow_set_destroy(ai.fqset);
+                        bmp_destroy(ai.fqueues);
+                        bmp_destroy(ai.fds);
+                        return -ENOMEM;
+                }
+
+                if (api_announce((char *) ai.ap_name)) {
+                        free(ai.ap_name);
+                        free(ai.flows);
+                        shm_rdrbuff_close(ai.rdrb);
+                        shm_flow_set_destroy(ai.fqset);
+                        bmp_destroy(ai.fqueues);
+                        bmp_destroy(ai.fds);
+                        return -1;
+                }
+        }
+
         for (i = 0; i < IRMD_MAX_FLOWS; ++i) {
                 ai.ports[i].state = PORT_ID_PENDING;
                 pthread_mutex_init(&ai.ports[i].state_lock, NULL);
@@ -308,9 +331,6 @@ int ap_init(char * ap_name)
 
         pthread_rwlock_init(&ai.flows_lock, NULL);
         pthread_rwlock_init(&ai.data_lock, NULL);
-
-        if (ap_name != NULL)
-                return api_announce(ap_name);
 
         return 0;
 }
@@ -323,10 +343,14 @@ void ap_fini()
 
         bmp_destroy(ai.fds);
         bmp_destroy(ai.fqueues);
+
         shm_flow_set_destroy(ai.fqset);
 
         if (ai.daf_name != NULL)
                 free(ai.daf_name);
+
+        if (ai.ap_name != NULL)
+                free(ai.ap_name);
 
         pthread_rwlock_rdlock(&ai.flows_lock);
 
@@ -358,7 +382,8 @@ void ap_fini()
         pthread_rwlock_destroy(&ai.data_lock);
 }
 
-int flow_accept(char ** ae_name, qosspec_t * spec)
+int flow_accept(char **     ae_name,
+                qosspec_t * spec)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -452,7 +477,8 @@ int flow_accept(char ** ae_name, qosspec_t * spec)
         return fd;
 }
 
-int flow_alloc_resp(int fd, int response)
+int flow_alloc_resp(int fd,
+                    int response)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -499,7 +525,9 @@ int flow_alloc_resp(int fd, int response)
         return ret;
 }
 
-int flow_alloc(char * dst_name, char * src_ae_name, qosspec_t * spec)
+int flow_alloc(const char * dst_name,
+               const char * src_ae_name,
+               qosspec_t *  spec)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -512,8 +540,8 @@ int flow_alloc(char * dst_name, char * src_ae_name, qosspec_t * spec)
                 src_ae_name  = UNKNOWN_AE;
 
         msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
-        msg.dst_name    = dst_name;
-        msg.ae_name     = src_ae_name;
+        msg.dst_name    = (char *) dst_name;
+        msg.ae_name     = (char *) src_ae_name;
         msg.has_api     = true;
         msg.has_qoscube = true;
         msg.qoscube     = spec_to_cube(spec);
@@ -678,7 +706,8 @@ int flow_dealloc(int fd)
         return 0;
 }
 
-int flow_set_flags(int fd, int flags)
+int flow_set_flags(int fd,
+                   int flags)
 {
         int old;
 
@@ -731,7 +760,8 @@ int flow_get_flags(int fd)
         return old;
 }
 
-int flow_get_timeout(int fd, struct timespec * timeo)
+int flow_get_timeout(int               fd,
+                     struct timespec * timeo)
 {
         int ret = 0;
 
@@ -758,7 +788,8 @@ int flow_get_timeout(int fd, struct timespec * timeo)
         return ret;
 }
 
-int flow_set_timeout(int fd, struct timespec * timeo)
+int flow_set_timeout(int                     fd,
+                     const struct timespec * timeo)
 {
         if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EINVAL;
@@ -785,7 +816,8 @@ int flow_set_timeout(int fd, struct timespec * timeo)
         return 0;
 }
 
-int flow_get_qosspec(int fd, qosspec_t * spec)
+int flow_get_qosspec(int         fd,
+                     qosspec_t * spec)
 {
         if (fd < 0 || fd >= AP_MAX_FLOWS || spec == NULL)
                 return -EINVAL;
@@ -807,7 +839,9 @@ int flow_get_qosspec(int fd, qosspec_t * spec)
         return 0;
 }
 
-ssize_t flow_write(int fd, void * buf, size_t count)
+ssize_t flow_write(int          fd,
+                   const void * buf,
+                   size_t       count)
 {
         ssize_t idx;
 
@@ -882,7 +916,9 @@ ssize_t flow_write(int fd, void * buf, size_t count)
         return 0;
 }
 
-ssize_t flow_read(int fd, void * buf, size_t count)
+ssize_t flow_read(int    fd,
+                  void * buf,
+                  size_t count)
 {
         ssize_t idx = -1;
         ssize_t n;
@@ -1002,7 +1038,8 @@ void flow_set_zero(struct flow_set * set)
         pthread_rwlock_unlock(&ai.data_lock);
 }
 
-int flow_set_add(struct flow_set * set, int fd)
+int flow_set_add(struct flow_set * set,
+                 int               fd)
 {
         int ret;
 
@@ -1020,7 +1057,8 @@ int flow_set_add(struct flow_set * set, int fd)
         return ret;
 }
 
-void flow_set_del(struct flow_set * set, int fd)
+void flow_set_del(struct flow_set * set,
+                  int               fd)
 {
         if (set == NULL)
                 return;
@@ -1035,7 +1073,8 @@ void flow_set_del(struct flow_set * set, int fd)
         pthread_rwlock_unlock(&ai.data_lock);
 }
 
-bool flow_set_has(struct flow_set * set, int fd)
+bool flow_set_has(const struct flow_set * set,
+                  int                     fd)
 {
         bool ret = false;
 
@@ -1112,7 +1151,8 @@ int flow_event_wait(struct flow_set *       set,
 
 /* ipcp-dev functions */
 
-int np1_flow_alloc(pid_t n_api, int port_id)
+int np1_flow_alloc(pid_t n_api,
+                   int   port_id)
 {
         int fd;
 
@@ -1195,15 +1235,18 @@ int np1_flow_resp(int port_id)
         return fd;
 }
 
-int ipcp_create_r(pid_t api)
+int ipcp_create_r(pid_t api,
+                  int   result)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        msg.code    = IRM_MSG_CODE__IPCP_CREATE_R;
-        msg.has_api = true;
-        msg.api     = api;
+        msg.code       = IRM_MSG_CODE__IPCP_CREATE_R;
+        msg.has_api    = true;
+        msg.api        = api;
+        msg.has_result = true;
+        msg.result     = result;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -1320,7 +1363,8 @@ int ipcp_flow_req_arr(pid_t     api,
         return fd;
 }
 
-int ipcp_flow_alloc_reply(int fd, int response)
+int ipcp_flow_alloc_reply(int fd,
+                          int response)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -1354,7 +1398,8 @@ int ipcp_flow_alloc_reply(int fd, int response)
         return ret;
 }
 
-int ipcp_flow_read(int fd, struct shm_du_buff ** sdb)
+int ipcp_flow_read(int                   fd,
+                   struct shm_du_buff ** sdb)
 {
         ssize_t idx = -1;
         int port_id = -1;
@@ -1389,7 +1434,8 @@ int ipcp_flow_read(int fd, struct shm_du_buff ** sdb)
         return 0;
 }
 
-int ipcp_flow_write(int fd, struct shm_du_buff * sdb)
+int ipcp_flow_write(int                  fd,
+                    struct shm_du_buff * sdb)
 {
         size_t idx;
 
@@ -1442,7 +1488,8 @@ int ipcp_flow_fini(int fd)
         return 0;
 }
 
-int ipcp_flow_get_qoscube(int fd, qoscube_t * cube)
+int ipcp_flow_get_qoscube(int         fd,
+                          qoscube_t * cube)
 {
         if (fd < 0 || fd >= AP_MAX_FLOWS || cube == NULL)
                 return -EINVAL;
@@ -1479,7 +1526,8 @@ ssize_t local_flow_read(int fd)
         return ret;
 }
 
-int local_flow_write(int fd, size_t idx)
+int local_flow_write(int    fd,
+                     size_t idx)
 {
         if (fd < 0)
                 return -EINVAL;
@@ -1503,7 +1551,8 @@ int local_flow_write(int fd, size_t idx)
         return 0;
 }
 
-int ipcp_read_shim(int fd, struct shm_du_buff ** sdb)
+int ipcp_read_shim(int                   fd,
+                   struct shm_du_buff ** sdb)
 {
         ssize_t idx;
 

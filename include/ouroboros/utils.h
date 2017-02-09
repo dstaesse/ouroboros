@@ -46,4 +46,14 @@ char * strdup(const char * src);
 /* gets the application name */
 char * path_strip(char * src);
 
+/* destroy a ** */
+#define freepp(type, ptr, len)                          \
+        do {                                            \
+                if (len == 0)                           \
+                        break;                          \
+                while (len > 0)                         \
+                        free(((type **) ptr)[--len]);   \
+                free(ptr);                              \
+        } while (0);
+
 #endif /* OUROBOROS_UTILS_H */

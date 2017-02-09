@@ -1129,11 +1129,13 @@ int main(int    argc,
 
         if (ipcp_init(argc, argv, THIS_TYPE, &eth_llc_ops) < 0) {
                 log_err("Failed to init IPCP.");
+                ipcp_create_r(getpid(), -1);
                 exit(EXIT_FAILURE);
         }
 
         if (eth_llc_data_init() < 0) {
                 log_err("Failed to init shim-eth-llc data.");
+                ipcp_create_r(getpid(), -1);
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
@@ -1143,6 +1145,7 @@ int main(int    argc,
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
+                ipcp_create_r(getpid(), -1);
                 eth_llc_data_fini();
                 ipcp_fini();
                 exit(EXIT_FAILURE);
@@ -1150,7 +1153,7 @@ int main(int    argc,
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        if (ipcp_create_r(getpid())) {
+        if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
                 ipcp_shutdown();

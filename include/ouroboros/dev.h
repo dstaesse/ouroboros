@@ -30,7 +30,7 @@
 #define UNKNOWN_AE "__UNKNOWN_AE__"
 
 /* These calls should be removed once we write the ouroboros OS. */
-int     ap_init(char * ap_name);
+int     ap_init(const char * ap_name);
 
 void    ap_fini(void);
 
@@ -43,19 +43,19 @@ int     flow_alloc_resp(int fd,
 
 /*
  * Returns flow descriptor (> 0).
- * On returning, qos will contain the actual supplied QoS.
+ * On returning, spec will contain the actual supplied QoS.
  */
-int     flow_alloc(char *      dst_name,
-                   char *      src_ae_name,
-                   qosspec_t * spec);
+int     flow_alloc(const char * dst_name,
+                   const char * src_ae_name,
+                   qosspec_t *  spec);
 
 int     flow_alloc_res(int fd);
 
 int     flow_dealloc(int fd);
 
-ssize_t flow_write(int    fd,
-                   void * buf,
-                   size_t count);
+ssize_t flow_write(int          fd,
+                   const void * buf,
+                   size_t       count);
 
 ssize_t flow_read(int    fd,
                   void * buf,

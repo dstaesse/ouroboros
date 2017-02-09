@@ -27,6 +27,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/rib.h>
+#include <ouroboros/utils.h>
 
 #include "ipcp.h"
 
@@ -45,15 +46,6 @@ static void addr_name(char *   name,
 {
         sprintf(name, "%8x", (uint32_t) (addr));
 }
-
-#define freepp(type, ptr, len)                          \
-        do {                                            \
-                if (len == 0)                           \
-                        break;                          \
-                while (len > 0)                         \
-                        free(((type **) ptr)[--len]);   \
-                free(ptr);                              \
-        } while (0);
 
 static int addr_taken(char *  name,
                       char ** members,
