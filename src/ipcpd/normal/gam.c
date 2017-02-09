@@ -283,6 +283,9 @@ int gam_flow_wait(struct gam *         instance,
 
         pthread_mutex_lock(&instance->gas_lock);
 
+        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
+                             (void *) &instance->gas_lock);
+
         while (list_is_empty(&instance->gas))
                 pthread_cond_wait(&instance->gas_cond, &instance->gas_lock);
 
@@ -299,7 +302,7 @@ int gam_flow_wait(struct gam *         instance,
         list_del(&ga->next);
         free(ga);
 
-        pthread_mutex_unlock(&instance->gas_lock);
+        pthread_cleanup_pop(true);
 
         return 0;
 }
