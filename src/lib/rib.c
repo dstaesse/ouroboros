@@ -1144,7 +1144,7 @@ int rib_event_wait(ro_set_t *              set,
         if (ret != -ETIMEDOUT)
                 list_move(&rq->events, &sub->events);
 
-        pthread_rwlock_wrlock(&rib.lock);
+        pthread_rwlock_unlock(&rib.lock);
 
         return ret;
 }
