@@ -24,10 +24,6 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 
-#define OUROBOROS_PREFIX "timerwheel"
-
-#include <ouroboros/logs.h>
-
 #include <pthread.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -127,7 +123,7 @@ static void * worker(void * o)
         struct timespec dl;
         struct timespec now;
 
-        clock_gettime(CLOCK_MONOTONIC, &now);
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
 
         ts_add(&now, &tw->intv, &dl);
 
@@ -207,6 +203,8 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
 
         struct timerwheel * tw;
 
+        pthread_condattr_t cattr;
+
         assert(resolution != 0);
 
         tw = malloc(sizeof(*tw));
@@ -235,22 +233,28 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         list_head_init(&tw->wq);
 
         if (pthread_mutex_init(&tw->lock, NULL)) {
-                log_dbg("Could not init mutex.");
                 free(tw->wheel);
                 free(tw);
                 return NULL;
         }
 
         if (pthread_mutex_init(&tw->s_lock, NULL)) {
-                log_dbg("Could not init mutex.");
                 pthread_mutex_destroy(&tw->lock);
                 free(tw->wheel);
                 free(tw);
                 return NULL;
         }
 
-        if (pthread_cond_init(&tw->work, NULL)) {
-                log_dbg("Could not init cond.");
+        if (pthread_condattr_init(&cattr)) {
+                pthread_mutex_destroy(&tw->lock);
+                free(tw->wheel);
+                free(tw);
+                return NULL;
+        }
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+        if (pthread_cond_init(&tw->work, &cattr)) {
                 pthread_mutex_destroy(&tw->s_lock);
                 pthread_mutex_destroy(&tw->lock);
                 free(tw->wheel);
@@ -271,7 +275,6 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         }
 
         if (pthread_create(&tw->worker, NULL, worker, (void *) tw)) {
-                log_dbg("Could not create worker.");
                 pthread_cond_destroy(&tw->work);
                 pthread_mutex_destroy(&tw->s_lock);
                 pthread_mutex_destroy(&tw->lock);
@@ -281,7 +284,6 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
         }
 
         if (pthread_create(&tw->ticker, NULL, movement, (void *) tw)) {
-                log_dbg("Could not create timer.");
                 tw_set_state(tw, TW_DESTROY);
                 pthread_join(tw->worker, NULL);
                 pthread_cond_destroy(&tw->work);

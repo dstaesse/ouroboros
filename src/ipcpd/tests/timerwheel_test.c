@@ -24,6 +24,7 @@
 #include <pthread.h>
 #include <time.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define MAX_ELEMENTS   100
 #define MAX_RESOLUTION 10  /* ms */
