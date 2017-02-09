@@ -26,7 +26,8 @@
 #ifndef OUROBOROS_IPCP_DEV_H
 #define OUROBOROS_IPCP_DEV_H
 
-int  ipcp_create_r(pid_t api);
+int  ipcp_create_r(pid_t api,
+                   int   result);
 
 int  ipcp_flow_req_arr(pid_t  api,
                        char * dst_name,

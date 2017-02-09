@@ -321,7 +321,7 @@ void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
 ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                           size_t               headspace,
                           size_t               tailspace,
-                          uint8_t *            data,
+                          const uint8_t *      data,
                           size_t               len)
 {
         struct shm_du_buff * sdb;
@@ -400,7 +400,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                             size_t               headspace,
                             size_t               tailspace,
-                            uint8_t *            data,
+                            const uint8_t *      data,
                             size_t               len)
 {
         struct shm_du_buff * sdb;

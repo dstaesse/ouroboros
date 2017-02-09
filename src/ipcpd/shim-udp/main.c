@@ -1196,11 +1196,13 @@ int main(int    argc,
 
         if (ipcp_init(argc, argv, THIS_TYPE, &udp_ops) < 0) {
                 log_err("Failed to init IPCP.");
+                ipcp_create_r(getpid(), -1);
                 exit(EXIT_FAILURE);
         }
 
         if (udp_data_init() < 0) {
                 log_err("Failed to init shim-udp data.");
+                ipcp_create_r(getpid(), -1);
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
@@ -1210,6 +1212,7 @@ int main(int    argc,
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
+                ipcp_create_r(getpid(), -1);
                 udp_data_fini();
                 ipcp_fini();
                 exit(EXIT_FAILURE);
@@ -1217,7 +1220,7 @@ int main(int    argc,
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        if (ipcp_create_r(getpid())) {
+        if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
                 ipcp_shutdown();
