@@ -115,7 +115,7 @@ int enroll_handle(int fd)
                         return -1;
                 }
 
-                log_dbg("Packed %s (%lu bytes).", name, len);
+                log_dbg("Packed %s (%zu bytes).", name, len);
 
                 free(name);
 
@@ -186,7 +186,7 @@ int enroll_boot(char * dst_name)
                 return -1;
         }
 
-        log_dbg("Packed information received (%lu bytes).", len);
+        log_dbg("Packed information received (%zu bytes).", len);
 
         if (rib_unpack(data, len, UNPACK_CREATE)) {
                 log_warn("Error unpacking RIB data.");
@@ -214,7 +214,7 @@ int enroll_boot(char * dst_name)
                 return -1;
         }
 
-        log_dbg("Packed information received (%lu bytes).", len);
+        log_dbg("Packed information received (%zu bytes).", len);
 
         if (rib_unpack(data, len, UNPACK_CREATE)) {
                 log_warn("Error unpacking RIB data.");
@@ -242,7 +242,7 @@ int enroll_boot(char * dst_name)
                 return -1;
         }
 
-        log_dbg("Packed information received (%lu bytes).", len);
+        log_dbg("Packed information received (%zu bytes).", len);
 
         if (rib_unpack(data, len, UNPACK_CREATE)) {
                 log_warn("Error unpacking RIB data.");
