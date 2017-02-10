@@ -67,7 +67,7 @@ struct cdap_rcvd {
 
         enum cdap_opcode opcode;
         char *           name;
-        uint8_t *        data;
+        void *           data;
         size_t           len;
         uint32_t         flags;
 };
@@ -89,7 +89,8 @@ static int next_invoke_id(struct cdap * instance)
         return ret;
 }
 
-static int release_invoke_id(struct cdap * instance, int id)
+static int release_invoke_id(struct cdap * instance,
+                             int           id)
 {
         int ret;
 
@@ -130,7 +131,8 @@ static struct cdap_req * cdap_sent_get_by_key(struct cdap * instance,
         return NULL;
 }
 
-static struct cdap_req * cdap_sent_add(struct cdap * instance, cdap_key_t key)
+static struct cdap_req * cdap_sent_add(struct cdap * instance,
+                                       cdap_key_t    key)
 {
         struct cdap_req * req;
 
@@ -151,7 +153,8 @@ static struct cdap_req * cdap_sent_add(struct cdap * instance, cdap_key_t key)
         return req;
 }
 
-static void cdap_sent_del(struct cdap * instance, struct cdap_req * req)
+static void cdap_sent_del(struct cdap *     instance,
+                          struct cdap_req * req)
 {
         assert(instance);
         assert(req);
@@ -405,7 +408,8 @@ int cdap_destroy(struct cdap * instance)
         return 0;
 }
 
-static int write_msg(struct cdap * instance, cdap_t * msg)
+static int write_msg(struct cdap * instance,
+                     cdap_t *      msg)
 {
         int ret;
         uint8_t * data;
@@ -449,8 +453,8 @@ static invoke_id_t key_to_invoke_id(cdap_key_t key)
 
 cdap_key_t cdap_request_send(struct cdap *    instance,
                              enum cdap_opcode code,
-                             char *           name,
-                             uint8_t *        data,
+                             const char *     name,
+                             const void *     data,
                              size_t           len,
                              uint32_t         flags)
 {
@@ -491,13 +495,13 @@ cdap_key_t cdap_request_send(struct cdap *    instance,
                 return -EINVAL;
         }
 
-        msg.name = name;
+        msg.name = (char *) name;
         msg.has_flags = true;
         msg.flags = flags;
         msg.invoke_id = iid;
         if (data != NULL) {
                 msg.has_value = true;
-                msg.value.data = data;
+                msg.value.data = (uint8_t *) data;
                 msg.value.len = len;
         }
 
@@ -599,7 +603,7 @@ cdap_key_t cdap_request_wait(struct cdap *      instance,
 int cdap_reply_send(struct cdap * instance,
                     cdap_key_t    key,
                     int           result,
-                    uint8_t *     data,
+                    const void *  data,
                     size_t        len)
 {
         cdap_t msg = CDAP__INIT;
@@ -615,7 +619,7 @@ int cdap_reply_send(struct cdap * instance,
 
         if (data != NULL) {
                 msg.has_value = true;
-                msg.value.data = data;
+                msg.value.data = (uint8_t *) data;
                 msg.value.len = len;
         }
 
