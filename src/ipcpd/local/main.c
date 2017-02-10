@@ -352,7 +352,6 @@ int main(int    argc,
         sigaction(SIGPIPE, &sig_act, NULL);
 
         if (ipcp_init(argc, argv, THIS_TYPE, &local_ops) < 0) {
-                log_err("Failed to init IPCP.");
                 ipcp_create_r(getpid(), -1);
                 exit(EXIT_FAILURE);
         }

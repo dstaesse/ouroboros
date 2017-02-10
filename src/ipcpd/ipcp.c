@@ -306,10 +306,8 @@ int ipcp_init(int               argc,
         struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
                              (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
 
-        if (parse_args(argc, argv, &log)) {
-                log_err("Failed to parse arguments.");
+        if (parse_args(argc, argv, &log))
                 return -1;
-        }
 
         log_init(log);
 
