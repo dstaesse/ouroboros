@@ -402,6 +402,11 @@ int flow_accept(char **     ae_name,
         if (recv_msg == NULL)
                 return -EIRMD;
 
+        if (recv_msg->has_result) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -EIRMD;
+        }
+
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;

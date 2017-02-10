@@ -1888,7 +1888,7 @@ void * mainloop(void * o)
                                         (qoscube_t *) &ret_msg.qoscube);
                         if (e == NULL) {
                                 ret_msg.has_result = true;
-                                ret_msg.result = -1;
+                                ret_msg.result = -EIRMD;
                                 break;
                         }
                         ret_msg.has_port_id = true;

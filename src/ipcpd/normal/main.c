@@ -30,6 +30,7 @@
 #include <ouroboros/irm.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/irm_config.h>
+#include <ouroboros/errno.h>
 
 #include "addr_auth.h"
 #include "ae.h"
@@ -45,7 +46,6 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
-#include <errno.h>
 #include <assert.h>
 #include <inttypes.h>
 
@@ -108,7 +108,8 @@ static void * flow_acceptor(void * o)
 
                 fd = flow_accept(&ae_name, &qs);
                 if (fd < 0) {
-                        log_warn("Flow accept failed.");
+                        if (fd != -EIRMD)
+                                log_warn("Flow accept failed: %d", fd);
                         continue;
                 }
 
