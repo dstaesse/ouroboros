@@ -773,7 +773,6 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         memcpy(LLADDR(&device), ifr.ifr_addr.sa_data, MAC_SIZE);
         device.sdl_alen = MAC_SIZE;
         /* TODO: replace socket calls with bpf for BSD */
-        LOG_MISSING;
         skfd = socket(AF_LINK, SOCK_RAW, 0);
 #else
         device.sll_ifindex = idx;

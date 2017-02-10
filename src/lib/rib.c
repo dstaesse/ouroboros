@@ -778,11 +778,19 @@ static struct rib_sub * rib_get_sub(uint32_t sid)
 
 static struct rib_sub * rib_sub_create(uint32_t sid)
 {
+        pthread_condattr_t cattr;
         struct rib_sub * sub = malloc(sizeof(*sub));
         if (sub == NULL)
                 return NULL;
 
-        if (pthread_cond_init(&sub->cond, NULL)) {
+        if (pthread_condattr_init(&cattr)) {
+                free(sub);
+                return NULL;
+        }
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+        if (pthread_cond_init(&sub->cond, &cattr)) {
                 free(sub);
                 return NULL;
         }
@@ -1136,7 +1144,7 @@ int rib_event_wait(ro_set_t *              set,
         if (ret != -ETIMEDOUT)
                 list_move(&rq->events, &sub->events);
 
-        pthread_rwlock_wrlock(&rib.lock);
+        pthread_rwlock_unlock(&rib.lock);
 
         return ret;
 }

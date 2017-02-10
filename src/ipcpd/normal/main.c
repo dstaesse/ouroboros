@@ -47,6 +47,7 @@
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
+#include <inttypes.h>
 
 #define DLR          "/"
 #define DIF_PATH     DLR DIF_NAME
@@ -146,7 +147,7 @@ static int boot_components(void)
 
         len = rib_read(DIF_PATH, &buf, 256);
         if (len < 0) {
-                log_err("Failed to read DIF name: %ld.", len);
+                log_err("Failed to read DIF name: %zd.", len);
                 return -1;
         }
 
@@ -182,7 +183,7 @@ static int boot_components(void)
                 return -1;
         }
 
-        log_dbg("IPCP got address %lu.", ipcpi.address);
+        log_dbg("IPCP got address %" PRIu64 ".", ipcpi.address);
 
         log_dbg("Starting ribmgr.");
 
