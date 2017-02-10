@@ -21,10 +21,12 @@
 #define OUROBOROS_PREFIX "enrollment"
 
 #include <ouroboros/config.h>
+#include <ouroboros/time_utils.h>
 #include <ouroboros/cdap.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
+#include <ouroboros/endian.h>
 
 #include "ae.h"
 
@@ -32,10 +34,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Symbolic, will return current time */
+#define TIME_NAME               "localtime"
+#define ENROLL_WARN_TIME_OFFSET 20
+
 #define DLR          "/"
 #define DIF_PATH     DLR DIF_NAME
 #define BOOT_PATH    DLR BOOT_NAME
 #define MEMBERS_PATH DLR MEMBERS_NAME
+#define TIME_PATH    DLR TIME_NAME
 
 int enroll_handle(int fd)
 {
@@ -72,7 +79,6 @@ int enroll_handle(int fd)
         while (!(boot_r && members_r && dif_name_r)) {
                 key = cdap_request_wait(ci, &oc, &name, &data,
                                         (size_t *) &len , &flags);
-
                 assert(key >= 0);
                 assert(name);
 
@@ -96,6 +102,15 @@ int enroll_handle(int fd)
                         members_r = true;
                 } else if (strcmp(name, dif_ro) == 0) {
                         dif_name_r = true;
+                } else if (strcmp(name, TIME_PATH) == 0) {
+                        struct timespec t;
+                        uint64_t buf[2];
+                        clock_gettime(CLOCK_REALTIME, &t);
+                        buf[0] = htonll(t.tv_sec);
+                        buf[1] = htonll(t.tv_nsec);
+                        cdap_reply_send(ci, key, 0, buf, sizeof(buf));
+                        free(name);
+                        continue;
                 } else {
                         log_warn("Illegal read: %s.", name);
                         cdap_reply_send(ci, key, -1, NULL, 0);
@@ -146,6 +161,11 @@ int enroll_boot(char * dst_name)
         size_t        len;
         int           fd;
 
+        struct timespec t0;
+        struct timespec rtt;
+
+        ssize_t delta_t;
+
         char * boot_ro    = BOOT_PATH;
         char * members_ro = MEMBERS_PATH;
         char * dif_ro     = DIF_PATH;
@@ -170,6 +190,37 @@ int enroll_boot(char * dst_name)
         }
 
         log_dbg("Getting boot information from %s.", dst_name);
+
+        clock_gettime(CLOCK_REALTIME, &t0);
+
+        key = cdap_request_send(ci, CDAP_READ, TIME_PATH, NULL, 0, 0);
+        if (key < 0) {
+                log_err("Failed to send CDAP request.");
+                cdap_destroy(ci);
+                flow_dealloc(fd);
+                return -1;
+        }
+
+        if (cdap_reply_wait(ci, key, &data, &len)) {
+                log_err("Failed to get CDAP reply.");
+                cdap_destroy(ci);
+                flow_dealloc(fd);
+                return -1;
+        }
+
+        clock_gettime(CLOCK_REALTIME, &rtt);
+
+        delta_t = ts_diff_ms(&t0, &rtt);
+
+        assert (len == 2 * sizeof (uint64_t));
+
+        rtt.tv_sec  = ntohll(((uint64_t *) data)[0]);
+        rtt.tv_nsec = ntohll(((uint64_t *) data)[1]);
+
+        if (abs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
+                log_warn("Clock offset above threshold.");
+
+        free(data);
 
         key = cdap_request_send(ci, CDAP_READ, boot_ro, NULL, 0, 0);
         if (key < 0) {
