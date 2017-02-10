@@ -257,12 +257,14 @@ int gam_flow_alloc(struct gam * instance,
 
         if (instance->ops->accept_flow(instance->ops_o, qs, info)) {
                 flow_dealloc(fd);
+                free(info->name);
                 free(info);
                 return 0;
         }
 
         if (add_ga(instance, fd, qs, info)) {
                 log_err("Failed to add GA to graph adjacency manager list.");
+                free(info->name);
                 free(info);
                 return -1;
         }

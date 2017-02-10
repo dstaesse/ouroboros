@@ -344,6 +344,7 @@ void fmgr_fini()
                 flow_dealloc(flow->fd);
                 ipcp_flow_get_qoscube(flow->fd, &cube);
                 flow_set_del(fmgr.nm1_set[cube], flow->fd);
+                free(flow->info->name);
                 free(flow->info);
                 free(flow);
         }
