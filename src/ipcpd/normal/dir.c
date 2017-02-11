@@ -31,21 +31,22 @@
 #include <string.h>
 #include <assert.h>
 
+#define DIR_PATH "/" DIR_NAME
+
 static char dir_path[RIB_MAX_PATH_LEN + 1];
 
 static void dir_path_reset(void) {
-        dir_path[strlen("/" DIR_NAME)]= '\0';
-        assert(strcmp("/" DIR_NAME, dir_path) == 0);
+        dir_path[strlen(DIR_PATH)]= '\0';
+        assert(strcmp(DIR_PATH, dir_path) == 0);
 }
 
 int dir_init(void)
 {
         /*FIXME: set ribmgr dissemination here */
-
         if (rib_add(RIB_ROOT, DIR_NAME))
                 return -1;
 
-        strcpy(dir_path, "/" DIR_NAME);
+        strcpy(dir_path, DIR_PATH);
 
         return 0;
 }
@@ -65,6 +66,9 @@ int dir_name_reg(char * name)
         int ret;
 
         assert(name);
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL)
+                return -EPERM;
 
         dir_path_reset();
 
@@ -91,6 +95,9 @@ int dir_name_unreg(char * name)
 
         assert(name);
 
+        if (ipcp_get_state() != IPCP_OPERATIONAL)
+                return -EPERM;
+
         dir_path_reset();
 
         rib_path_append(dir_path, name);
@@ -115,6 +122,9 @@ int dir_name_unreg(char * name)
 int dir_name_query(char * name)
 {
         size_t len;
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL)
+                return -EPERM;
 
         dir_path_reset();
 
