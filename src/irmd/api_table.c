@@ -159,16 +159,15 @@ int api_entry_sleep(struct api_entry * e)
 
         e->state = API_SLEEP;
 
-        while (e->state == API_SLEEP) {
-                if ((ret = -pthread_cond_timedwait(&e->state_cond,
-                                                   &e->state_lock,
-                                                   &dl)) == -ETIMEDOUT) {
-                        break;
-                }
-        }
+        while (e->state == API_SLEEP && ret != -ETIMEDOUT)
+                ret = -pthread_cond_timedwait(&e->state_cond,
+                                              &e->state_lock,
+                                              &dl);
 
-        if (e->state == API_DESTROY)
+        if (e->state == API_DESTROY) {
+                reg_entry_del_api(e->re, e->api);
                 ret = -1;
+        }
 
         e->state = API_INIT;
         pthread_cond_broadcast(&e->state_cond);

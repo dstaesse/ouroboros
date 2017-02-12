@@ -25,6 +25,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/irm_config.h>
+#include <ouroboros/time_utils.h>
 
 #include "registry.h"
 #include "utils.h"
@@ -60,6 +61,8 @@ static struct reg_entry * reg_entry_create(void)
 static struct reg_entry * reg_entry_init(struct reg_entry * e,
                                          char *             name)
 {
+        pthread_condattr_t cattr;
+
         if (e == NULL || name == NULL)
                 return NULL;
 
@@ -70,7 +73,13 @@ static struct reg_entry * reg_entry_init(struct reg_entry * e,
 
         e->name = name;
 
-        if (pthread_cond_init(&e->state_cond, NULL))
+        if (pthread_condattr_init(&cattr))
+                return NULL;
+
+#ifdef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+        if (pthread_cond_init(&e->state_cond, &cattr))
                 return NULL;
 
         if (pthread_mutex_init(&e->state_lock, NULL))
@@ -91,9 +100,21 @@ static void reg_entry_destroy(struct reg_entry * e)
 
         pthread_mutex_lock(&e->state_lock);
 
-        e->state = REG_NAME_DESTROY;
+        if (e->state == REG_NAME_DESTROY) {
+                pthread_mutex_unlock(&e->state_lock);
+                return;
+        }
+
+        if (e->state != REG_NAME_FLOW_ACCEPT)
+                e->state = REG_NAME_NULL;
+        else
+                e->state = REG_NAME_DESTROY;
 
         pthread_cond_broadcast(&e->state_cond);
+
+        while (e->state != REG_NAME_NULL)
+                pthread_cond_wait(&e->state_cond, &e->state_lock);
+
         pthread_mutex_unlock(&e->state_lock);
 
         pthread_cond_destroy(&e->state_cond);
@@ -101,12 +122,6 @@ static void reg_entry_destroy(struct reg_entry * e)
 
         if (e->name != NULL)
                 free(e->name);
-
-        list_for_each_safe(p, h, &e->reg_apis) {
-                struct pid_el * i = list_entry(p, struct pid_el, next);
-                list_del(&i->next);
-                free(i);
-        }
 
         list_for_each_safe(p, h, &e->reg_apns) {
                 struct str_el * a = list_entry(p, struct str_el, next);
@@ -171,7 +186,8 @@ static void reg_entry_del_local_from_dif(struct reg_entry * e,
         }
 }
 
-static bool reg_entry_has_apn(struct reg_entry * e, char * apn)
+static bool reg_entry_has_apn(struct reg_entry * e,
+                              char *             apn)
 {
         struct list_head * p;
 
@@ -184,7 +200,8 @@ static bool reg_entry_has_apn(struct reg_entry * e, char * apn)
         return false;
 }
 
-int reg_entry_add_apn(struct reg_entry * e, struct apn_entry * a)
+int reg_entry_add_apn(struct reg_entry * e,
+                      struct apn_entry * a)
 {
         struct str_el * n;
 
@@ -215,7 +232,8 @@ int reg_entry_add_apn(struct reg_entry * e, struct apn_entry * a)
         return 0;
 }
 
-void reg_entry_del_apn(struct reg_entry * e, char * apn)
+void reg_entry_del_apn(struct reg_entry * e,
+                       char *             apn)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;
@@ -244,7 +262,8 @@ char * reg_entry_get_apn(struct reg_entry * e)
         return list_first_entry(&e->reg_apns, struct str_el, next)->str;
 }
 
-static bool reg_entry_has_api(struct reg_entry * e, pid_t api)
+static bool reg_entry_has_api(struct reg_entry * e,
+                              pid_t              api)
 {
         struct list_head * p;
 
@@ -257,7 +276,8 @@ static bool reg_entry_has_api(struct reg_entry * e, pid_t api)
         return false;
 }
 
-int reg_entry_add_api(struct reg_entry * e, pid_t api)
+int reg_entry_add_api(struct reg_entry * e,
+                      pid_t              api)
 {
         struct pid_el * i;
 
@@ -288,7 +308,7 @@ int reg_entry_add_api(struct reg_entry * e, pid_t api)
             e->state == REG_NAME_AUTO_ACCEPT ||
             e->state == REG_NAME_AUTO_EXEC) {
                 e->state = REG_NAME_FLOW_ACCEPT;
-                pthread_cond_signal(&e->state_cond);
+                pthread_cond_broadcast(&e->state_cond);
         }
 
         pthread_mutex_unlock(&e->state_lock);
@@ -298,6 +318,12 @@ int reg_entry_add_api(struct reg_entry * e, pid_t api)
 
 static void reg_entry_check_state(struct reg_entry * e)
 {
+        if (e->state == REG_NAME_DESTROY) {
+                e->state = REG_NAME_NULL;
+                pthread_cond_broadcast(&e->state_cond);
+                return;
+        }
+
         if (list_is_empty(&e->reg_apis)) {
                 if (!list_is_empty(&e->reg_apns))
                         e->state = REG_NAME_AUTO_ACCEPT;
@@ -319,7 +345,8 @@ void reg_entry_del_pid_el(struct reg_entry * e,
         reg_entry_check_state(e);
 }
 
-void reg_entry_del_api(struct reg_entry * e, pid_t api)
+void reg_entry_del_api(struct reg_entry * e,
+                       pid_t              api)
 {
         struct list_head * p;
         struct list_head * h;
@@ -365,7 +392,8 @@ enum reg_name_state reg_entry_get_state(struct reg_entry * e)
         return state;
 }
 
-int reg_entry_set_state(struct reg_entry * e, enum reg_name_state state)
+int reg_entry_set_state(struct reg_entry *  e,
+                        enum reg_name_state state)
 {
         if (state == REG_NAME_DESTROY)
                 return -EPERM;
@@ -380,19 +408,80 @@ int reg_entry_set_state(struct reg_entry * e, enum reg_name_state state)
         return 0;
 }
 
-int reg_entry_leave_state(struct reg_entry * e, enum reg_name_state state)
+int reg_entry_leave_state(struct reg_entry *  e,
+                          enum reg_name_state state,
+                          struct timespec *   timeout)
 {
+        struct timespec abstime;
+        int ret = 0;
+
         if (e == NULL || state == REG_NAME_DESTROY)
                 return -EINVAL;
 
+        if (timeout != NULL) {
+                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+                ts_add(&abstime, timeout, &abstime);
+        }
+
         pthread_mutex_lock(&e->state_lock);
 
-        while (e->state == state)
-                pthread_cond_wait(&e->state_cond, &e->state_lock);
+        while (e->state == state && ret != -ETIMEDOUT)
+                if (timeout)
+                        ret = -pthread_cond_timedwait(&e->state_cond,
+                                                      &e->state_lock,
+                                                      timeout);
+                else
+                        ret = -pthread_cond_wait(&e->state_cond,
+                                                 &e->state_lock);
+
+        if (e->state == REG_NAME_DESTROY) {
+                ret = -1;
+                e->state = REG_NAME_NULL;
+                pthread_cond_broadcast(&e->state_cond);
+        }
 
         pthread_mutex_unlock(&e->state_lock);
 
-        return 0;
+        return ret;
+}
+
+int reg_entry_wait_state(struct reg_entry *  e,
+                         enum reg_name_state state,
+                         struct timespec *   timeout)
+{
+        struct timespec abstime;
+        int ret = 0;
+
+        if (e == NULL || state == REG_NAME_DESTROY)
+                return -EINVAL;
+
+        if (timeout != NULL) {
+                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+                ts_add(&abstime, timeout, &abstime);
+        }
+
+        pthread_mutex_lock(&e->state_lock);
+
+        while (e->state != state &&
+               e->state != REG_NAME_DESTROY &&
+               ret != -ETIMEDOUT)
+                if (timeout)
+                        ret = -pthread_cond_timedwait(&e->state_cond,
+                                                      &e->state_lock,
+                                                      timeout);
+                else
+                        ret = -pthread_cond_wait(&e->state_cond,
+                                                 &e->state_lock);
+
+        if (e->state == REG_NAME_DESTROY) {
+                ret = -1;
+                e->state = REG_NAME_NULL;
+                pthread_cond_broadcast(&e->state_cond);
+        }
+
+        pthread_mutex_unlock(&e->state_lock);
+
+        return ret;
 }
 
 struct reg_entry * registry_get_entry(struct list_head * registry,

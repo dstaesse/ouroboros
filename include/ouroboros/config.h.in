@@ -54,6 +54,7 @@
 #define PFT_SIZE               1 << 12
 /* Timeout values */
 #define IRMD_ACCEPT_TIMEOUT    100
+#define IRMD_REQ_ARR_TIMEOUT   200
 #define IRMD_FLOW_TIMEOUT      5000
 #define IPCP_ACCEPT_TIMEOUT    100
 #define SOCKET_TIMEOUT         4000

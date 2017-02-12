@@ -91,11 +91,16 @@ pid_t               reg_entry_get_api(struct reg_entry * e);
 
 enum reg_name_state reg_entry_get_state(struct reg_entry * e);
 
-int                 reg_entry_set_state(struct reg_entry * e,
+int                 reg_entry_set_state(struct reg_entry *  e,
                                         enum reg_name_state state);
 
-int                 reg_entry_leave_state(struct reg_entry * e,
-                                          enum reg_name_state state);
+int                 reg_entry_leave_state(struct reg_entry *  e,
+                                          enum reg_name_state state,
+                                          struct timespec *   timeout);
+
+int                 reg_entry_wait_state(struct reg_entry *   e,
+                                         enum reg_name_state  state,
+                                         struct timespec *    timeout);
 
 struct reg_entry *  registry_add_name(struct list_head * registry,
                                       char *             name);
