@@ -132,23 +132,15 @@ static inline uint64_t bswap_64(uint64_t x) {
 #endif
 
 #ifdef CPU_LITTLE_ENDIAN
-#define htonll(x) bswap_64(x)
-#ifndef htonl
-#define htonl(x)  bswap_32(x)
-#endif
-#define ntohll(x) bswap_64(x)
-#ifndef ntohl
-#define ntohl(x)  bswap_32(x)
-#endif
+#define hton64(x) bswap_64(x)
+#define hton32(x) bswap_32(x)
+#define ntoh64(x) bswap_64(x)
+#define ntoh32(x) bswap_32(x)
 #else /* CPU_LITTLE_ENDIAN */
-#define htonll(x) (x)
-#ifndef htonl
-#define htonl(x)  (x)
-#endif
-#define ntohll(x) (x)
-#ifndef ntohl
-#define nothl(x)  (x)
-#endif
+#define hton64(x) (x)
+#define hton32(x) (x)
+#define ntoh64(x) (x)
+#define noth32(x) (x)
 #endif /* CPU_LITTLE_ENDIAN */
 
 #endif /* OUROBOROS_ENDIAN_H */

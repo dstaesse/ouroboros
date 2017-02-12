@@ -106,8 +106,8 @@ int enroll_handle(int fd)
                         struct timespec t;
                         uint64_t buf[2];
                         clock_gettime(CLOCK_REALTIME, &t);
-                        buf[0] = htonll(t.tv_sec);
-                        buf[1] = htonll(t.tv_nsec);
+                        buf[0] = hton64(t.tv_sec);
+                        buf[1] = hton64(t.tv_nsec);
                         cdap_reply_send(ci, key, 0, buf, sizeof(buf));
                         free(name);
                         continue;
@@ -214,8 +214,8 @@ int enroll_boot(char * dst_name)
 
         assert (len == 2 * sizeof (uint64_t));
 
-        rtt.tv_sec  = ntohll(((uint64_t *) data)[0]);
-        rtt.tv_nsec = ntohll(((uint64_t *) data)[1]);
+        rtt.tv_sec  = ntoh64(((uint64_t *) data)[0]);
+        rtt.tv_nsec = ntoh64(((uint64_t *) data)[1]);
 
         if (abs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
                 log_warn("Clock offset above threshold.");
