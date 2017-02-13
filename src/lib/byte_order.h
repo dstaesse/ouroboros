@@ -40,62 +40,10 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  Use this program  at  your own risk!
  */
 
-/* byte_order.h */
 #ifndef OUROBOROS_BYTE_ORDER_H
 #define OUROBOROS_BYTE_ORDER_H
 
-#include <stdint.h>
-#include <unistd.h>
-#include <stdlib.h>
-
-#ifdef __GLIBC__
-#include <endian.h>
-#elif defined(__FreeBSD__)
-#include <sys/endian.h>
-#endif
-
-/* if x86 compatible cpu */
-#if defined(i386) || defined(__i386__) || defined(__i486__) || \
-        defined(__i586__) || defined(__i686__) || defined(__pentium__) || \
-        defined(__pentiumpro__) || defined(__pentium4__) ||             \
-        defined(__nocona__) || defined(prescott) || defined(__core2__) || \
-        defined(__k6__) || defined(__k8__) || defined(__athlon__) ||    \
-        defined(__amd64) || defined(__amd64__) ||                       \
-        defined(__x86_64) || defined(__x86_64__) || defined(_M_IX86) || \
-        defined(_M_AMD64) || defined(_M_IA64) || defined(_M_X64)
-/* detect if x86-64 instruction set is supported */
-# if defined(_LP64) || defined(__LP64__) || defined(__x86_64) || \
-        defined(__x86_64__) || defined(_M_AMD64) || defined(_M_X64)
-#  define CPU_X64
-# else
-#  define CPU_IA32
-# endif
-#endif
-
-/* detect CPU endianness */
-#if (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && \
-     __BYTE_ORDER == __LITTLE_ENDIAN) ||                  \
-        defined(CPU_IA32) || defined(CPU_X64) ||                        \
-        defined(__ia64) || defined(__ia64__) || defined(__alpha__) ||   \
-        defined(_M_ALPHA) || defined(vax) || defined(MIPSEL) ||         \
-        defined(_ARM_) || defined(__arm__)
-#define CPU_LITTLE_ENDIAN
-#define IS_BIG_ENDIAN 0
-#define IS_LITTLE_ENDIAN 1
-#elif (defined(__BYTE_ORDER) && defined(__BIG_ENDIAN) &&                \
-       __BYTE_ORDER == __BIG_ENDIAN) ||                                 \
-        defined(__sparc) || defined(__sparc__) || defined(sparc) ||     \
-        defined(_ARCH_PPC) || defined(_ARCH_PPC64) || defined(_POWER) || \
-        defined(__POWERPC__) || defined(POWERPC) || defined(__powerpc) || \
-        defined(__powerpc__) || defined(__powerpc64__) || defined(__ppc__) || \
-        defined(__hpux)  || defined(_MIPSEB) || defined(mc68000) ||     \
-        defined(__s390__) || defined(__s390x__) || defined(sel)
-#define CPU_BIG_ENDIAN
-#define IS_BIG_ENDIAN 1
-#define IS_LITTLE_ENDIAN 0
-#else
-# error "Can't detect CPU architecture."
-#endif
+#include <ouroboros/endian.h>
 
 #define IS_ALIGNED_32(p) (0 == (3 & ((const char*)(p) - (const char*)0)))
 #define IS_ALIGNED_64(p) (0 == (7 & ((const char*)(p) - (const char*)0)))
@@ -113,41 +61,6 @@
 #define rhash_ctz(x) __builtin_ctz(x)
 #else
 unsigned rhash_ctz(unsigned); /* define as function */
-#endif
-
-#if defined(__GNUC__)  && (__GNUC__ >= 4) &&  \
-        (__GNUC__ > 4 || __GNUC_MINOR__ >= 3)
-/* for GCC >= 4.3 */
-#define bswap_32(x) __builtin_bswap32(x)
-#elif !defined(__STRICT_ANSI__)
-/* general bswap_32 definition */
-static inline uint32_t bswap_32(uint32_t x) {
-        x = ((x << 8) & 0xFF00FF00) | ((x >> 8) & 0x00FF00FF);
-        return (x >> 16) | (x << 16);
-}
-#else
-#define bswap_32(x) ((((x) & 0xff000000) >> 24) | (((x) & 0x00ff0000) >>  8) | \
-                     (((x) & 0x0000ff00) <<  8) | (((x) & 0x000000ff) << 24))
-#endif /* bswap_32 */
-
-#if defined(__GNUC__) && (__GNUC__ >= 4) && \
-        (__GNUC__ > 4 || __GNUC_MINOR__ >= 3)
-#define bswap_64(x) __builtin_bswap64(x)
-#elif !defined (bswap64)
-#if !defined(__STRICT_ANSI__)
-static inline uint64_t bswap_64(uint64_t x) {
-        union {
-                uint64_t ll;
-                uint32_t l[2];
-        } w, r;
-        w.ll = x;
-        r.l[0] = bswap_32(w.l[1]);
-        r.l[1] = bswap_32(w.l[0]);
-        return r.ll;
-}
-#else
-#error "bswap_64 unsupported"
-#endif
 #endif
 
 #ifdef CPU_BIG_ENDIAN

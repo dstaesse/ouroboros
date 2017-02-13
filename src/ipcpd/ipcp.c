@@ -145,7 +145,6 @@ static void * ipcp_main_loop(void * o)
                         }
                         ret_msg.has_result = true;
                         ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dif_name);
-
                         break;
                 case IPCP_MSG_CODE__IPCP_NAME_REG:
                         if (ipcpi.ops->ipcp_name_reg == NULL) {
@@ -459,7 +458,8 @@ int ipcp_wait_state(enum ipcp_state         state,
 
         while (ipcpi.state != state
                && ipcpi.state != IPCP_SHUTDOWN
-               && ipcpi.state != IPCP_NULL) {
+               && ipcpi.state != IPCP_NULL
+               && ret != -ETIMEDOUT) {
                 if (timeout == NULL)
                         ret = -pthread_cond_wait(&ipcpi.state_cond,
                                                  &ipcpi.state_mtx);

@@ -5,6 +5,7 @@ configure_file(
 set(HEADER_FILES
   cdap.h
   dev.h
+  endian.h
   errno.h
   fcntl.h
   fqueue.h

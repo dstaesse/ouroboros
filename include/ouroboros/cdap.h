@@ -52,8 +52,8 @@ int           cdap_destroy(struct cdap * instance);
 
 cdap_key_t    cdap_request_send(struct cdap *    instance,
                                 enum cdap_opcode code,
-                                char *           name,
-                                uint8_t *        data,
+                                const char *     name,
+                                const void *     data,
                                 size_t           len,
                                 uint32_t         flags);
 
@@ -72,7 +72,7 @@ cdap_key_t    cdap_request_wait(struct cdap *      instance,
 int           cdap_reply_send(struct cdap * instance,
                               cdap_key_t    key,
                               int           result,
-                              uint8_t *     data,
+                              const void *  data,
                               size_t        len);
 
 #endif /* OUROBOROS_CDAP_H */

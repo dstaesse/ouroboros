@@ -970,7 +970,6 @@ static struct irm_flow * flow_accept(pid_t       api,
                 log_err("Unknown instance %d calling accept.", api);
                 return NULL;
         }
-
         log_dbg("New instance (%d) of %s added.", api, e->apn);
         log_dbg("This instance accepts flows for:");
         list_for_each(p, &e->names) {
@@ -996,6 +995,7 @@ static struct irm_flow * flow_accept(pid_t       api,
         pthread_rwlock_rdlock(&irmd->state_lock);
 
         if (irmd->state != IRMD_RUNNING) {
+                reg_entry_set_state(re, REG_NAME_NULL);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return NULL;
         }
@@ -1331,11 +1331,14 @@ static struct irm_flow * flow_req_arr(pid_t     api,
         pid_t h_api = -1;
         int port_id = -1;
 
+        struct timespec wt = {IRMD_REQ_ARR_TIMEOUT % 1000,
+                              (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
+
         log_dbg("Flow req arrived from IPCP %d for %s on AE %s.",
                 api, dst_name, ae_name);
 
         pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_rdlock(&irmd->reg_lock);
 
         re = registry_get_entry(&irmd->registry, dst_name);
         if (re == NULL) {
@@ -1344,6 +1347,18 @@ static struct irm_flow * flow_req_arr(pid_t     api,
                 log_err("Unknown name: %s.", dst_name);
                 return NULL;
         }
+
+        pthread_rwlock_unlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
+
+        /* Give the AP a bit of slop time to call accept */
+        if (reg_entry_leave_state(re, REG_NAME_IDLE, &wt) == -1) {
+                log_err("No APs for %s.", dst_name);
+                return NULL;
+        }
+
+        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_wrlock(&irmd->reg_lock);
 
         switch (reg_entry_get_state(re)) {
         case REG_NAME_IDLE:
@@ -1378,17 +1393,12 @@ static struct irm_flow * flow_req_arr(pid_t     api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
 
-                reg_entry_leave_state(re, REG_NAME_AUTO_EXEC);
-
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                pthread_rwlock_rdlock(&irmd->reg_lock);
-
-                if (reg_entry_get_state(re) == REG_NAME_DESTROY) {
-                        reg_entry_set_state(re, REG_NAME_NULL);
+                if (reg_entry_leave_state(re, REG_NAME_AUTO_EXEC, NULL)) {
                         pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
                         return NULL;
                 }
+
         case REG_NAME_FLOW_ACCEPT:
                 h_api = reg_entry_get_api(re);
                 if (h_api == -1) {
@@ -1453,7 +1463,7 @@ static struct irm_flow * flow_req_arr(pid_t     api,
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        reg_entry_leave_state(re, REG_NAME_FLOW_ARRIVED);
+        reg_entry_leave_state(re, REG_NAME_FLOW_ARRIVED, NULL);
 
         return f;
 }
@@ -1518,10 +1528,16 @@ static void irm_destroy(void)
                 list_del(&e->next);
                 ipcp_destroy(e->api);
                 clear_spawned_api(e->api);
+                registry_del_api(&irmd->registry, e->api);
                 ipcp_entry_destroy(e);
         }
 
-        registry_destroy(&irmd->registry);
+        list_for_each_safe(p, h, &irmd->api_table) {
+                struct api_entry * e = list_entry(p, struct api_entry, next);
+                list_del(&e->next);
+                registry_del_api(&irmd->registry, e->api);
+                api_entry_destroy(e);
+        }
 
         list_for_each_safe(p, h, &irmd->spawned_apis) {
                 struct pid_el * e = list_entry(p, struct pid_el, next);
@@ -1531,6 +1547,7 @@ static void irm_destroy(void)
                 else if (waitpid(e->pid, &status, 0) < 0)
                         log_dbg("Error waiting for %d to exit.", e->pid);
                 list_del(&e->next);
+                registry_del_api(&irmd->registry, e->pid);
                 free(e);
         }
 
@@ -1540,11 +1557,7 @@ static void irm_destroy(void)
                 apn_entry_destroy(e);
         }
 
-        list_for_each_safe(p, h, &irmd->api_table) {
-                struct api_entry * e = list_entry(p, struct api_entry, next);
-                list_del(&e->next);
-                api_entry_destroy(e);
-        }
+        registry_destroy(&irmd->registry);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
 
@@ -1888,7 +1901,7 @@ void * mainloop(void * o)
                                         (qoscube_t *) &ret_msg.qoscube);
                         if (e == NULL) {
                                 ret_msg.has_result = true;
-                                ret_msg.result = -1;
+                                ret_msg.result = -EIRMD;
                                 break;
                         }
                         ret_msg.has_port_id = true;
