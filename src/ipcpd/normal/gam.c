@@ -227,7 +227,6 @@ int gam_flow_alloc(struct gam * instance,
         struct cacep_info * info;
         int                 fd;
 
-
         fd = flow_alloc(dst_name, instance->ae_name, NULL);
         if (fd < 0) {
                 log_err("Failed to allocate flow to %s.", dst_name);

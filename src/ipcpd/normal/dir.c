@@ -42,7 +42,7 @@ static void dir_path_reset(void) {
 
 int dir_init(void)
 {
-        /*FIXME: set ribmgr dissemination here */
+        /* FIXME: set ribmgr dissemination here */
         if (rib_add(RIB_ROOT, DIR_NAME))
                 return -1;
 
