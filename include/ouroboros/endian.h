@@ -114,7 +114,9 @@ static inline uint32_t bswap_32(uint32_t x) {
 #if defined(__GNUC__) && (__GNUC__ >= 4) && \
         (__GNUC__ > 4 || __GNUC_MINOR__ >= 3)
 #define bswap_64(x) __builtin_bswap64(x)
-#elif !defined (bswap64)
+#elif defined (bswap64)
+#define bswap_64 bswap64
+#else
 #if !defined(__STRICT_ANSI__)
 static inline uint64_t bswap_64(uint64_t x) {
         union {
