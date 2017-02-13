@@ -217,7 +217,7 @@ int enroll_boot(char * dst_name)
         rtt.tv_sec  = ntoh64(((uint64_t *) data)[0]);
         rtt.tv_nsec = ntoh64(((uint64_t *) data)[1]);
 
-        if (abs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
+        if (labs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
                 log_warn("Clock offset above threshold.");
 
         free(data);
