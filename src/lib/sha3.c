@@ -40,11 +40,16 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  Use this program  at  your own risk!
  */
 
+#include <ouroboros/endian.h>
+
 #include <assert.h>
 #include <string.h>
 
 #include "sha3.h"
-#include "byte_order.h"
+
+#define IS_ALIGNED_64(p) (0 == (7 & ((const char*) (p) - (const char*) 0)))
+#define I64(x) x##LL
+#define ROTL64(qword, n) ((qword) << (n) ^ ((qword) >> (64 - (n))))
 
 #define NumberOfRounds 24
 
@@ -207,40 +212,40 @@ static void rhash_sha3_process_block(uint64_t         hash[25],
                                      size_t           block_size)
 {
         /* expanded loop */
-        hash[ 0] ^= le2me_64(block[ 0]);
-        hash[ 1] ^= le2me_64(block[ 1]);
-        hash[ 2] ^= le2me_64(block[ 2]);
-        hash[ 3] ^= le2me_64(block[ 3]);
-        hash[ 4] ^= le2me_64(block[ 4]);
-        hash[ 5] ^= le2me_64(block[ 5]);
-        hash[ 6] ^= le2me_64(block[ 6]);
-        hash[ 7] ^= le2me_64(block[ 7]);
-        hash[ 8] ^= le2me_64(block[ 8]);
+        hash[ 0] ^= htole64(block[ 0]);
+        hash[ 1] ^= htole64(block[ 1]);
+        hash[ 2] ^= htole64(block[ 2]);
+        hash[ 3] ^= htole64(block[ 3]);
+        hash[ 4] ^= htole64(block[ 4]);
+        hash[ 5] ^= htole64(block[ 5]);
+        hash[ 6] ^= htole64(block[ 6]);
+        hash[ 7] ^= htole64(block[ 7]);
+        hash[ 8] ^= htole64(block[ 8]);
         /* if not sha3-512 */
         if (block_size > 72) {
-                hash[ 9] ^= le2me_64(block[ 9]);
-                hash[10] ^= le2me_64(block[10]);
-                hash[11] ^= le2me_64(block[11]);
-                hash[12] ^= le2me_64(block[12]);
+                hash[ 9] ^= htole64(block[ 9]);
+                hash[10] ^= htole64(block[10]);
+                hash[11] ^= htole64(block[11]);
+                hash[12] ^= htole64(block[12]);
                 /* if not sha3-384 */
                 if (block_size > 104) {
-                        hash[13] ^= le2me_64(block[13]);
-                        hash[14] ^= le2me_64(block[14]);
-                        hash[15] ^= le2me_64(block[15]);
-                        hash[16] ^= le2me_64(block[16]);
+                        hash[13] ^= htole64(block[13]);
+                        hash[14] ^= htole64(block[14]);
+                        hash[15] ^= htole64(block[15]);
+                        hash[16] ^= htole64(block[16]);
                         /* if not sha3-256 */
                         if (block_size > 136) {
-                                hash[17] ^= le2me_64(block[17]);
+                                hash[17] ^= htole64(block[17]);
 #ifdef FULL_SHA3_FAMILY_SUPPORT
                                 /* if not sha3-224 */
                                 if (block_size > 144) {
-                                        hash[18] ^= le2me_64(block[18]);
-                                        hash[19] ^= le2me_64(block[19]);
-                                        hash[20] ^= le2me_64(block[20]);
-                                        hash[21] ^= le2me_64(block[21]);
-                                        hash[22] ^= le2me_64(block[22]);
-                                        hash[23] ^= le2me_64(block[23]);
-                                        hash[24] ^= le2me_64(block[24]);
+                                        hash[18] ^= htole64(block[18]);
+                                        hash[19] ^= htole64(block[19]);
+                                        hash[20] ^= htole64(block[20]);
+                                        hash[21] ^= htole64(block[21]);
+                                        hash[22] ^= htole64(block[22]);
+                                        hash[23] ^= htole64(block[23]);
+                                        hash[24] ^= htole64(block[24]);
                                 }
 #endif
                         }
@@ -301,8 +306,9 @@ void rhash_sha3_update(struct sha3_ctx * ctx,
 void rhash_sha3_final(struct sha3_ctx * ctx,
                       uint8_t *         res)
 {
-        size_t digest_length    = 100 - ctx->block_size / 2;
+        size_t       digest_length = 100 - ctx->block_size / 2;
         const size_t block_size = ctx->block_size;
+        unsigned int i = 0;
 
         if (!(ctx->rest & SHA3_FINALIZED)) {
                 /* clear the rest of the data queue */
@@ -318,6 +324,10 @@ void rhash_sha3_final(struct sha3_ctx * ctx,
 
         assert(block_size > digest_length);
 
-        if (res != NULL)
-                me64_to_le_str(res, ctx->hash, digest_length);
+        if (res != NULL) {
+                for (i = 0; i < digest_length; i++)
+                        ctx->hash[i] = htole64(ctx->hash[i]);
+
+                memcpy(res, ctx->hash, digest_length);
+        }
 }

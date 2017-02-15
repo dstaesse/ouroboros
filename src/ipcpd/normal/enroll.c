@@ -21,12 +21,12 @@
 #define OUROBOROS_PREFIX "enrollment"
 
 #include <ouroboros/config.h>
+#include <ouroboros/endian.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/cdap.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
-#include <ouroboros/endian.h>
 
 #include "ae.h"
 
