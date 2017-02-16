@@ -1393,11 +1393,11 @@ static struct irm_flow * flow_req_arr(pid_t     api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
 
-                if (reg_entry_leave_state(re, REG_NAME_AUTO_EXEC, NULL)) {
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                if (reg_entry_leave_state(re, REG_NAME_AUTO_EXEC, NULL))
                         return NULL;
-                }
+
+                pthread_rwlock_rdlock(&irmd->state_lock);
+                pthread_rwlock_wrlock(&irmd->reg_lock);
 
         case REG_NAME_FLOW_ACCEPT:
                 h_api = reg_entry_get_api(re);
