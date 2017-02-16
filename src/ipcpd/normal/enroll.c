@@ -29,6 +29,7 @@
 #include <ouroboros/rib.h>
 
 #include "ae.h"
+#include "ribconfig.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -36,13 +37,8 @@
 
 /* Symbolic, will return current time */
 #define TIME_NAME               "localtime"
+#define TIME_PATH               DLR TIME_NAME
 #define ENROLL_WARN_TIME_OFFSET 20
-
-#define DLR          "/"
-#define DIF_PATH     DLR DIF_NAME
-#define BOOT_PATH    DLR BOOT_NAME
-#define MEMBERS_PATH DLR MEMBERS_NAME
-#define TIME_PATH    DLR TIME_NAME
 
 int enroll_handle(int fd)
 {

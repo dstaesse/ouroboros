@@ -39,6 +39,7 @@
 #include "fmgr.h"
 #include "frct.h"
 #include "ipcp.h"
+#include "ribconfig.h"
 #include "ribmgr.h"
 
 #include <stdbool.h>
@@ -48,11 +49,6 @@
 #include <string.h>
 #include <assert.h>
 #include <inttypes.h>
-
-#define DLR          "/"
-#define DIF_PATH     DLR DIF_NAME
-#define BOOT_PATH    DLR BOOT_NAME
-#define MEMBERS_PATH DLR MEMBERS_NAME
 
 #define THIS_TYPE    IPCP_NORMAL
 

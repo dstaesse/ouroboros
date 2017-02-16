@@ -29,6 +29,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define RIB_MAX_PATH_LEN 256
+
 int rib_test(int     argc,
              char ** argv)
 {
