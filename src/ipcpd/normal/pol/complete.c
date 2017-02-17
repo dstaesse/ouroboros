@@ -30,6 +30,7 @@
 
 #include "ipcp.h"
 #include "gam.h"
+#include "ribconfig.h"
 
 #include <string.h>
 #include <stdlib.h>

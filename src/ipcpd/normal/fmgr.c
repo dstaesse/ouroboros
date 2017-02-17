@@ -36,6 +36,7 @@
 #include "ipcp.h"
 #include "shm_pci.h"
 #include "gam.h"
+#include "ribconfig.h"
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -285,13 +286,13 @@ int fmgr_init(void)
                 }
         }
 
-        if (rib_read("/" BOOT_NAME "/dt/gam/type", &pg, sizeof(pg))
+        if (rib_read(BOOT_PATH "/dt/gam/type", &pg, sizeof(pg))
             != sizeof(pg)) {
                 log_err("Failed to read policy for ribmgr gam.");
                 return -1;
         }
 
-        if (rib_read("/" BOOT_NAME "/dt/gam/cacep", &pc, sizeof(pc))
+        if (rib_read(BOOT_PATH "/dt/gam/cacep", &pc, sizeof(pc))
             != sizeof(pc)) {
                 log_err("Failed to read CACEP policy for ribmgr gam.");
                 return -1;
@@ -375,7 +376,7 @@ int fmgr_np1_alloc(int       fd,
         assert(strlen(dst_ap_name) + strlen("/" DIR_NAME) + 1
                < RIB_MAX_PATH_LEN);
 
-        strcpy(path, "/" DIR_NAME);
+        strcpy(path, DIR_PATH);
 
         rib_path_append(path, dst_ap_name);
 

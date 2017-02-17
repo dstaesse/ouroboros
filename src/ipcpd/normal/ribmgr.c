@@ -3,7 +3,8 @@
  *
  * RIB manager of the IPC Process
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -32,19 +33,16 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/rib.h>
 
-#include "timerwheel.h"
-#include "addr_auth.h"
-#include "ribmgr.h"
-#include "gam.h"
 #include "ae.h"
+#include "gam.h"
+#include "ribconfig.h"
+#include "ribmgr.h"
 
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
-
-#define BOOT_PATH "/" BOOT_NAME
 
 struct {
         flow_set_t *   fs;

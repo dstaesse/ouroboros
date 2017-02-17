@@ -25,8 +25,9 @@
 #include <ouroboros/crc32.h>
 #include <ouroboros/rib.h>
 
-#include "shm_pci.h"
 #include "dt_const.h"
+#include "shm_pci.h"
+#include "ribconfig.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -37,8 +38,6 @@
 #define DEFAULT_TTL 60
 #define TTL_SIZE 1
 #define CHK_SIZE 4
-
-#define BOOT_PATH "/" BOOT_NAME
 
 struct {
         struct dt_const dtc;

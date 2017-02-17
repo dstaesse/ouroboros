@@ -26,12 +26,11 @@
 
 #include "dir.h"
 #include "ipcp.h"
+#include "ribconfig.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-
-#define DIR_PATH "/" DIR_NAME
 
 static char dir_path[RIB_MAX_PATH_LEN + 1];
 
