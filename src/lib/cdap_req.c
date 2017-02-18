@@ -65,17 +65,21 @@ void cdap_req_destroy(struct cdap_req * creq)
 
         pthread_mutex_lock(&creq->lock);
 
-        if (creq->state == REQ_DESTROY) {
+        switch(creq->state) {
+        case REQ_DESTROY:
                 pthread_mutex_unlock(&creq->lock);
                 return;
-        }
-
-        if (creq->state == REQ_INIT)
+        case REQ_INIT:
                 creq->state = REQ_NULL;
-
-        if (creq->state == REQ_PENDING) {
+                pthread_cond_broadcast(&creq->cond);
+                break;
+        case REQ_PENDING:
+        case REQ_RESPONSE:
                 creq->state = REQ_DESTROY;
                 pthread_cond_broadcast(&creq->cond);
+                break;
+        default:
+                break;
         }
 
         while (creq->state != REQ_NULL)
@@ -110,21 +114,25 @@ int cdap_req_wait(struct cdap_req * creq)
         creq->state = REQ_PENDING;
         pthread_cond_broadcast(&creq->cond);
 
-        while (creq->state == REQ_PENDING) {
+        while (creq->state == REQ_PENDING && ret != -ETIMEDOUT)
                 ret = -pthread_cond_timedwait(&creq->cond,
                                               &creq->lock,
                                               &abstime);
-                if (ret == -ETIMEDOUT)
-                        break;
-        }
 
-        if (creq->state == REQ_DESTROY) {
+        switch(creq->state) {
+        case REQ_DESTROY:
                 ret = -1;
+        case REQ_PENDING:
                 creq->state = REQ_NULL;
                 pthread_cond_broadcast(&creq->cond);
-        } else {
+                break;
+        case REQ_RESPONSE:
                 creq->state = REQ_DONE;
                 pthread_cond_broadcast(&creq->cond);
+                break;
+        default:
+                assert(false);
+                break;
         }
 
         pthread_mutex_unlock(&creq->lock);
