@@ -47,7 +47,8 @@
 
 #include "sha3.h"
 
-#define IS_ALIGNED_64(p) (0 == (7 & ((const char*) (p) - (const char*) 0)))
+#define IS_ALIGNED_64(p) (0 == (7 & ((const uint8_t *) (p)      \
+                                     - (const uint8_t *) 0)))
 #define I64(x) x##LL
 #define ROTL64(qword, n) ((qword) << (n) ^ ((qword) >> (64 - (n))))
 
@@ -307,8 +308,9 @@ void rhash_sha3_final(struct sha3_ctx * ctx,
                       uint8_t *         res)
 {
         size_t       digest_length = 100 - ctx->block_size / 2;
-        const size_t block_size = ctx->block_size;
-        unsigned int i = 0;
+        size_t       digest_words  = digest_length / sizeof(uint64_t);
+        const size_t block_size    = ctx->block_size;
+        size_t i = 0;
 
         if (!(ctx->rest & SHA3_FINALIZED)) {
                 /* clear the rest of the data queue */
@@ -325,7 +327,7 @@ void rhash_sha3_final(struct sha3_ctx * ctx,
         assert(block_size > digest_length);
 
         if (res != NULL) {
-                for (i = 0; i < digest_length; i++)
+                for (i = 0; i < digest_words; i++)
                         ctx->hash[i] = htole64(ctx->hash[i]);
 
                 memcpy(res, ctx->hash, digest_length);
