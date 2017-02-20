@@ -24,24 +24,20 @@
 #ifndef OUROBOROS_CACEP_H
 #define OUROBOROS_CACEP_H
 
-#include <stdint.h>
-#include <unistd.h>
-
-struct cacep;
+#include <ouroboros/irm_config.h>
 
 struct cacep_info {
         char *   name;
         uint64_t addr;
+        void *   data;
 };
 
-struct cacep *      cacep_create(int          fd,
-                                 const char * name,
-                                 uint64_t     address);
+struct cacep_info * cacep_auth(int                       fd,
+                               enum pol_cacep            pc,
+                               const struct cacep_info * info);
 
-int                 cacep_destroy(struct cacep * instance);
-
-struct cacep_info * cacep_auth(struct cacep * instance);
-
-struct cacep_info * cacep_auth_wait(struct cacep * instance);
+struct cacep_info * cacep_auth_wait(int                       fd,
+                                    enum pol_cacep            pc,
+                                    const struct cacep_info * info);
 
 #endif /* OUROBOROS_CACEP_H */

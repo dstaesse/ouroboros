@@ -178,8 +178,12 @@ int gam_flow_arr(struct gam * instance,
                  int          fd,
                  qosspec_t    qs)
 {
-        struct cacep *      cacep;
-        struct cacep_info * info;
+        struct cacep_info * rcv_info;
+        struct cacep_info   snd_info;
+
+        snd_info.name = ipcpi.name;
+        snd_info.addr = ipcpi.address;
+        snd_info.data = NULL;
 
         if (flow_alloc_resp(fd, instance->ops->accept_new_flow(instance->ops_o))
             < 0) {
@@ -187,32 +191,23 @@ int gam_flow_arr(struct gam * instance,
                 return -1;
         }
 
-        cacep = cacep_create(fd, ipcpi.name, ipcpi.address);
-        if (cacep == NULL) {
-                log_err("Failed to create CACEP instance.");
-                return -1;
-        }
-
-        info = cacep_auth_wait(cacep);
-        if (info == NULL) {
+        rcv_info = cacep_auth_wait(fd, SIMPLE_AUTH, &snd_info);
+        if (rcv_info == NULL) {
                 log_err("Other side failed to authenticate.");
-                cacep_destroy(cacep);
                 return -1;
         }
 
-        cacep_destroy(cacep);
-
-        if (instance->ops->accept_flow(instance->ops_o, qs, info)) {
+        if (instance->ops->accept_flow(instance->ops_o, qs, rcv_info)) {
                 flow_dealloc(fd);
-                free(info->name);
-                free(info);
+                free(rcv_info->name);
+                free(rcv_info);
                 return 0;
         }
 
-        if (add_ga(instance, fd, qs, info)) {
+        if (add_ga(instance, fd, qs, rcv_info)) {
                 log_err("Failed to add ga to graph adjacency manager list.");
-                free(info->name);
-                free(info);
+                free(rcv_info->name);
+                free(rcv_info);
                 return -1;
         }
 
@@ -223,9 +218,13 @@ int gam_flow_alloc(struct gam * instance,
                    char *       dst_name,
                    qosspec_t    qs)
 {
-        struct cacep *      cacep;
-        struct cacep_info * info;
+        struct cacep_info * rcv_info;
+        struct cacep_info   snd_info;
         int                 fd;
+
+        snd_info.name = ipcpi.name;
+        snd_info.addr = ipcpi.address;
+        snd_info.data = NULL;
 
         fd = flow_alloc(dst_name, instance->ae_name, NULL);
         if (fd < 0) {
@@ -239,32 +238,23 @@ int gam_flow_alloc(struct gam * instance,
                 return -1;
         }
 
-        cacep = cacep_create(fd, ipcpi.name, ipcpi.address);
-        if (cacep == NULL) {
-                log_err("Failed to create CACEP instance.");
+        rcv_info = cacep_auth(fd, SIMPLE_AUTH, &snd_info);
+        if (rcv_info == NULL) {
+                log_err("Other side failed to authenticate.");
                 return -1;
         }
 
-        info = cacep_auth(cacep);
-        if (info == NULL) {
-                log_err("Failed to authenticate.");
-                cacep_destroy(cacep);
-                return -1;
-        }
-
-        cacep_destroy(cacep);
-
-        if (instance->ops->accept_flow(instance->ops_o, qs, info)) {
+        if (instance->ops->accept_flow(instance->ops_o, qs, rcv_info)) {
                 flow_dealloc(fd);
-                free(info->name);
-                free(info);
+                free(rcv_info->name);
+                free(rcv_info);
                 return 0;
         }
 
-        if (add_ga(instance, fd, qs, info)) {
+        if (add_ga(instance, fd, qs, rcv_info)) {
                 log_err("Failed to add GA to graph adjacency manager list.");
-                free(info->name);
-                free(info);
+                free(rcv_info->name);
+                free(rcv_info);
                 return -1;
         }
 

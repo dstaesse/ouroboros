@@ -1,10 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * CACEP message
+ * Simple authentication policy for CACEP
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
- *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -21,9 +21,13 @@
  * 02110-1301 USA
  */
 
-syntax = "proto2";
+#ifndef OUROBOROS_LIB_CACEP_SIMPLE_AUTH_H
+#define OUROBOROS_LIB_CACEP_SIMPLE_AUTH_H
 
-message cacep {
-        required string name    = 1;
-        required uint64 address = 2;
-}
+struct cacep_info * cacep_simple_auth_auth(int                       fd,
+                                           const struct cacep_info * info);
+
+struct cacep_info * cacep_simple_auth_auth_wait(int                       fd,
+                                                const struct cacep_info * info);
+
+#endif /* OUROBOROS_LIB_CACEP_SIMPLE_AUTH_H */
