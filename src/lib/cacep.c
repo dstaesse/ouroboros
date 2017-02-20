@@ -20,152 +20,52 @@
  * 02110-1301 USA
  */
 
+#define OUROBOROS_PREFIX "cacep"
+
 #include <ouroboros/config.h>
 #include <ouroboros/cacep.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/logs.h>
+
+#include <pol/cacep_anonymous_auth.h>
+#include <pol/cacep_simple_auth.h>
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "cacep.pb-c.h"
-typedef Cacep cacep_t;
-
 #define BUF_SIZE 2048
 
-struct cacep {
-        int      fd;
-        char *   name;
-        uint64_t address;
-};
-
-struct cacep * cacep_create(int          fd,
-                            const char * name,
-                            uint64_t     address)
+struct cacep_info * cacep_auth(int                       fd,
+                               enum pol_cacep            pc,
+                               const struct cacep_info * info)
 {
-        struct cacep * tmp;
-
-        tmp = malloc(sizeof(*tmp));
-        if (tmp == NULL)
-                return NULL;
-
-        tmp->fd = fd;
-        tmp->address = address;
-        tmp->name = strdup(name);
-        if (tmp->name == NULL) {
-                free(tmp);
+        switch (pc) {
+        case ANONYMOUS_AUTH:
+                return cacep_anonymous_auth(fd, info);
+        case SIMPLE_AUTH:
+                if (info == NULL)
+                        return NULL;
+                return cacep_simple_auth_auth(fd, info);
+        default:
+                log_err("Unsupported CACEP policy.");
                 return NULL;
         }
-
-        return tmp;
 }
 
-int cacep_destroy(struct cacep * instance)
+struct cacep_info * cacep_auth_wait(int                       fd,
+                                    enum pol_cacep            pc,
+                                    const struct cacep_info * info)
 {
-        if (instance == NULL)
-                return 0;
-
-        free(instance->name);
-        free(instance);
-
-        return 0;
-}
-
-static struct cacep_info * read_msg(struct cacep * instance)
-{
-        struct cacep_info * tmp;
-        uint8_t             buf[BUF_SIZE];
-        cacep_t *           msg;
-        ssize_t             len;
-
-        len = flow_read(instance->fd, buf, BUF_SIZE);
-        if (len < 0)
-                return NULL;
-
-        msg = cacep__unpack(NULL, len, buf);
-        if (msg == NULL)
-                return NULL;
-
-        tmp = malloc(sizeof(*tmp));
-        if (tmp == NULL) {
-                cacep__free_unpacked(msg, NULL);
+        switch (pc) {
+        case ANONYMOUS_AUTH:
+                 return cacep_anonymous_auth_wait(fd, info);
+        case SIMPLE_AUTH:
+                if (info == NULL)
+                        return NULL;
+                return cacep_simple_auth_auth_wait(fd, info);
+        default:
+                log_err("Unsupported CACEP policy.");
                 return NULL;
         }
-
-        tmp->addr = msg->address;
-        tmp->name = strdup(msg->name);
-        if (tmp->name == NULL) {
-                free(tmp);
-                cacep__free_unpacked(msg, NULL);
-                return NULL;
-        }
-
-        cacep__free_unpacked(msg, NULL);
-
-        return tmp;
-}
-
-static int send_msg(struct cacep * instance)
-{
-        cacep_t   msg = CACEP__INIT;
-        int       ret = 0;
-        uint8_t * data = NULL;
-        size_t    len = 0;
-
-        msg.name = instance->name;
-        msg.address = instance->address;
-
-        len = cacep__get_packed_size(&msg);
-        if (len == 0)
-                return -1;
-
-        data = malloc(len);
-        if (data == NULL)
-                return -ENOMEM;
-
-        cacep__pack(&msg, data);
-
-        if (flow_write(instance->fd, data, len) < 0)
-                ret = -1;
-
-        free(data);
-
-        return ret;
-}
-
-struct cacep_info * cacep_auth(struct cacep * instance)
-{
-        struct cacep_info * tmp;
-
-        if (instance == NULL)
-                return NULL;
-
-        if (send_msg(instance))
-                return NULL;
-
-        tmp = read_msg(instance);
-        if (tmp == NULL)
-                return NULL;
-
-        return tmp;
-}
-
-struct cacep_info * cacep_auth_wait(struct cacep * instance)
-{
-        struct cacep_info * tmp;
-
-        if (instance == NULL)
-                return NULL;
-
-        tmp = read_msg(instance);
-        if (tmp == NULL)
-                return NULL;
-
-        if (send_msg(instance)) {
-                free(tmp->name);
-                free(tmp);
-                return NULL;
-        }
-
-        return tmp;
 }

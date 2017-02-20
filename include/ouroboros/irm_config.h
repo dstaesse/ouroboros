@@ -48,7 +48,8 @@ enum pol_gam {
 };
 
 enum pol_cacep {
-        NO_AUTH = 0
+        ANONYMOUS_AUTH = 0,
+        SIMPLE_AUTH
 };
 
 struct dif_config {

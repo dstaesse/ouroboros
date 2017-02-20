@@ -340,7 +340,7 @@ int normal_rib_init(void)
 static int normal_ipcp_bootstrap(struct dif_config * conf)
 {
         /* FIXME: get CACEP policies from conf */
-        enum pol_cacep pol = NO_AUTH;
+        enum pol_cacep pol = SIMPLE_AUTH;
 
         (void) pol;
 

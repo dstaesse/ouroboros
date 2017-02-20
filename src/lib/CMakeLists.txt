@@ -9,8 +9,9 @@ protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS ipcpd_messages.proto)
 protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
   dif_config.proto)
 protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS cdap.proto)
-protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
 protobuf_generate_c(RO_PROTO_SRCS RO_PROTO_HDRS ro.proto)
+protobuf_generate_c(CACEP_SIMPLE_AUTH_PROTO_SRCS CACEP_SIMPLE_AUTH_PROTO_HDRS
+  pol/cacep_simple_auth.proto)
 
 if(NOT APPLE)
   find_library(LIBRT_LIBRARIES rt)
@@ -49,11 +50,14 @@ set(SOURCE_FILES
   sockets.c
   time_utils.c
   utils.c
+  # Add policies last
+  pol/cacep_anonymous_auth.c
+  pol/cacep_simple_auth.c
   )
 
 add_library(ouroboros SHARED ${SOURCE_FILES} ${IRM_PROTO_SRCS}
-  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS}
-  ${CDAP_PROTO_SRCS} ${CACEP_PROTO_SRCS} ${RO_PROTO_SRCS})
+  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS} ${CDAP_PROTO_SRCS}
+  ${CACEP_SIMPLE_AUTH_PROTO_SRCS} ${RO_PROTO_SRCS})
 
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY})
