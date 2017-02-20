@@ -14,12 +14,12 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 
-protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS
-  flow_alloc.proto)
+protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS flow_alloc.proto)
 
 set(SOURCE_FILES
   # Add source files here
   addr_auth.c
+  cdap_flow.c
   dir.c
   enroll.c
   fmgr.c

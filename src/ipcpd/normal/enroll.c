@@ -23,12 +23,12 @@
 #include <ouroboros/config.h>
 #include <ouroboros/endian.h>
 #include <ouroboros/time_utils.h>
-#include <ouroboros/cdap.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
 
 #include "ae.h"
+#include "cdap_flow.h"
 #include "ribconfig.h"
 
 #include <assert.h>
@@ -42,14 +42,14 @@
 
 int enroll_handle(int fd)
 {
-        struct cdap *    ci;
-        cdap_key_t       key;
-        enum cdap_opcode oc;
-        char *           name;
-        uint8_t *        buf;
-        uint8_t *        data;
-        ssize_t          len;
-        uint32_t         flags;
+        struct cdap_flow * flow;
+        cdap_key_t         key;
+        enum cdap_opcode   oc;
+        char *             name;
+        uint8_t *          buf;
+        uint8_t *          data;
+        ssize_t            len;
+        uint32_t           flags;
 
         bool boot_r     = false;
         bool members_r  = false;
@@ -59,21 +59,15 @@ int enroll_handle(int fd)
         char * members_ro = MEMBERS_PATH;
         char * dif_ro     = DIF_PATH;
 
-        if (flow_alloc_resp(fd, 0) < 0) {
+        flow = cdap_flow_arr(fd, 0, ANONYMOUS_AUTH, NULL);
+        if (flow == NULL) {
+                log_err("Failed to auth enrollment request.");
                 flow_dealloc(fd);
-                log_err("Could not respond to request.");
-                return -1;
-        }
-
-        ci = cdap_create(fd);
-        if (ci == NULL) {
-                flow_dealloc(fd);
-                log_err("Failed to create CDAP instance.");
                 return -1;
         }
 
         while (!(boot_r && members_r && dif_name_r)) {
-                key = cdap_request_wait(ci, &oc, &name, &data,
+                key = cdap_request_wait(flow->ci, &oc, &name, &data,
                                         (size_t *) &len , &flags);
                 assert(key >= 0);
                 assert(name);
@@ -85,9 +79,8 @@ int enroll_handle(int fd)
 
                 if (oc != CDAP_READ) {
                         log_warn("Invalid request.");
-                        cdap_reply_send(ci, key, -1, NULL, 0);
-                        cdap_destroy(ci);
-                        flow_dealloc(fd);
+                        cdap_reply_send(flow->ci, key, -1, NULL, 0);
+                        cdap_flow_dealloc(flow);
                         free(name);
                         return -1;
                 }
@@ -104,14 +97,13 @@ int enroll_handle(int fd)
                         clock_gettime(CLOCK_REALTIME, &t);
                         buf[0] = hton64(t.tv_sec);
                         buf[1] = hton64(t.tv_nsec);
-                        cdap_reply_send(ci, key, 0, buf, sizeof(buf));
+                        cdap_reply_send(flow->ci, key, 0, buf, sizeof(buf));
                         free(name);
                         continue;
                 } else {
                         log_warn("Illegal read: %s.", name);
-                        cdap_reply_send(ci, key, -1, NULL, 0);
-                        cdap_destroy(ci);
-                        flow_dealloc(fd);
+                        cdap_reply_send(flow->ci, key, -1, NULL, 0);
+                        cdap_flow_dealloc(flow);
                         free(name);
                         return -1;
                 }
@@ -119,9 +111,8 @@ int enroll_handle(int fd)
                 len = rib_pack(name, &buf, PACK_HASH_ROOT);
                 if (len < 0) {
                         log_err("Failed to pack %s.", name);
-                        cdap_reply_send(ci, key, -1, NULL, 0);
-                        cdap_destroy(ci);
-                        flow_dealloc(fd);
+                        cdap_reply_send(flow->ci, key, -1, NULL, 0);
+                        cdap_flow_dealloc(flow);
                         free(name);
                         return -1;
                 }
@@ -130,10 +121,9 @@ int enroll_handle(int fd)
 
                 free(name);
 
-                if (cdap_reply_send(ci, key, 0, buf, len)) {
+                if (cdap_reply_send(flow->ci, key, 0, buf, len)) {
                         log_err("Failed to send CDAP reply.");
-                        cdap_destroy(ci);
-                        flow_dealloc(fd);
+                        cdap_flow_dealloc(flow);
                         return -1;
                 }
 
@@ -142,20 +132,17 @@ int enroll_handle(int fd)
 
         log_dbg("Sent boot info to new member.");
 
-        cdap_destroy(ci);
-
-        flow_dealloc(fd);
+        cdap_flow_dealloc(flow);
 
         return 0;
 }
 
 int enroll_boot(char * dst_name)
 {
-        struct cdap * ci;
-        cdap_key_t    key;
-        uint8_t *     data;
-        size_t        len;
-        int           fd;
+        struct cdap_flow * flow;
+        cdap_key_t         key;
+        uint8_t *          data;
+        size_t             len;
 
         struct timespec t0;
         struct timespec rtt;
@@ -166,22 +153,9 @@ int enroll_boot(char * dst_name)
         char * members_ro = MEMBERS_PATH;
         char * dif_ro     = DIF_PATH;
 
-        fd = flow_alloc(dst_name, ENROLL_AE, NULL);
-        if (fd < 0) {
-                log_err("Failed to allocate flow.");
-                return -1;
-        }
-
-        if (flow_alloc_res(fd)) {
-                log_err("Flow allocation failed.");
-                flow_dealloc(fd);
-                return -1;
-        }
-
-        ci = cdap_create(fd);
-        if (ci == NULL) {
-                log_err("Failed to create CDAP instance.");
-                flow_dealloc(fd);
+        flow = cdap_flow_alloc(dst_name, ENROLL_AE, NULL, ANONYMOUS_AUTH, NULL);
+        if (flow == NULL) {
+                log_err("Failed to allocate flow for enrollment request.");
                 return -1;
         }
 
@@ -189,18 +163,16 @@ int enroll_boot(char * dst_name)
 
         clock_gettime(CLOCK_REALTIME, &t0);
 
-        key = cdap_request_send(ci, CDAP_READ, TIME_PATH, NULL, 0, 0);
+        key = cdap_request_send(flow->ci, CDAP_READ, TIME_PATH, NULL, 0, 0);
         if (key < 0) {
                 log_err("Failed to send CDAP request.");
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
-        if (cdap_reply_wait(ci, key, &data, &len)) {
+        if (cdap_reply_wait(flow->ci, key, &data, &len)) {
                 log_err("Failed to get CDAP reply.");
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
@@ -218,18 +190,16 @@ int enroll_boot(char * dst_name)
 
         free(data);
 
-        key = cdap_request_send(ci, CDAP_READ, boot_ro, NULL, 0, 0);
+        key = cdap_request_send(flow->ci, CDAP_READ, boot_ro, NULL, 0, 0);
         if (key < 0) {
                 log_err("Failed to send CDAP request.");
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
-        if (cdap_reply_wait(ci, key, &data, &len)) {
+        if (cdap_reply_wait(flow->ci, key, &data, &len)) {
                 log_err("Failed to get CDAP reply.");
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
@@ -239,25 +209,22 @@ int enroll_boot(char * dst_name)
                 log_warn("Error unpacking RIB data.");
                 rib_del(boot_ro);
                 free(data);
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
         log_dbg("Packed information inserted into RIB.");
 
-        key = cdap_request_send(ci, CDAP_READ, members_ro, NULL, 0, 0);
+        key = cdap_request_send(flow->ci, CDAP_READ, members_ro, NULL, 0, 0);
         if (key < 0) {
                 log_err("Failed to send CDAP request.");
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
-        if (cdap_reply_wait(ci, key, &data, &len)) {
+        if (cdap_reply_wait(flow->ci, key, &data, &len)) {
                 log_err("Failed to get CDAP reply.");
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
@@ -267,25 +234,22 @@ int enroll_boot(char * dst_name)
                 log_warn("Error unpacking RIB data.");
                 rib_del(boot_ro);
                 free(data);
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
         log_dbg("Packed information inserted into RIB.");
 
-        key = cdap_request_send(ci, CDAP_READ, dif_ro, NULL, 0, 0);
+        key = cdap_request_send(flow->ci, CDAP_READ, dif_ro, NULL, 0, 0);
         if (key < 0) {
                 log_err("Failed to send CDAP request.");
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
-        if (cdap_reply_wait(ci, key, &data, &len)) {
+        if (cdap_reply_wait(flow->ci, key, &data, &len)) {
                 log_err("Failed to get CDAP reply.");
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
@@ -295,16 +259,13 @@ int enroll_boot(char * dst_name)
                 log_warn("Error unpacking RIB data.");
                 rib_del(boot_ro);
                 free(data);
-                cdap_destroy(ci);
-                flow_dealloc(fd);
+                cdap_flow_dealloc(flow);
                 return -1;
         }
 
         log_dbg("Packed information inserted into RIB.");
 
-        cdap_destroy(ci);
-
-        flow_dealloc(fd);
+        cdap_flow_dealloc(flow);
 
         return 0;
 }
