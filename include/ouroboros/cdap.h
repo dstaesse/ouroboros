@@ -31,6 +31,7 @@
 #define F_SYNC 0x0001
 
 #define INVALID_CDAP_KEY -1
+#define CDAP_PROTO "CDAP"
 
 enum cdap_opcode {
         CDAP_READ = 0,

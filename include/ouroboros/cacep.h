@@ -26,11 +26,26 @@
 
 #include <ouroboros/irm_config.h>
 
+enum proto_concrete_syntax {
+        PROTO_GPB = 0,
+        PROTO_ASN_1,
+        PROTO_FIXED
+};
+
 struct cacep_info {
+        struct {
+                char *                     protocol;
+                uint32_t                   pref_version;
+                enum proto_concrete_syntax pref_syntax;
+        }        proto;
         char *   name;
         uint64_t addr;
         void *   data;
 };
+
+int                 cacep_info_init(struct cacep_info * info);
+
+void                cacep_info_fini(struct cacep_info * info);
 
 struct cacep_info * cacep_auth(int                       fd,
                                enum pol_cacep            pc,

@@ -10,6 +10,10 @@ protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
   dif_config.proto)
 protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS cdap.proto)
 protobuf_generate_c(RO_PROTO_SRCS RO_PROTO_HDRS ro.proto)
+protobuf_generate_c(CACEP_PROTO_PROTO_SRCS CACEP_CDAP_PROTO_HDRS
+  pol/cacep_proto.proto)
+protobuf_generate_c(CACEP_ANONYMOUS_AUTH_PROTO_SRCS
+  CACEP_ANONYMOUS_AUTH_PROTO_HDRS pol/cacep_anonymous_auth.proto)
 protobuf_generate_c(CACEP_SIMPLE_AUTH_PROTO_SRCS CACEP_SIMPLE_AUTH_PROTO_HDRS
   pol/cacep_simple_auth.proto)
 
@@ -51,12 +55,14 @@ set(SOURCE_FILES
   time_utils.c
   utils.c
   # Add policies last
+  pol/cacep_proto.c
   pol/cacep_anonymous_auth.c
   pol/cacep_simple_auth.c
   )
 
 add_library(ouroboros SHARED ${SOURCE_FILES} ${IRM_PROTO_SRCS}
   ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS} ${CDAP_PROTO_SRCS}
+  ${CACEP_PROTO_PROTO_SRCS} ${CACEP_ANONYMOUS_AUTH_PROTO_SRCS}
   ${CACEP_SIMPLE_AUTH_PROTO_SRCS} ${RO_PROTO_SRCS})
 
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}

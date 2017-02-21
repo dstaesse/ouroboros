@@ -25,8 +25,6 @@ syntax = "proto2";
 
 import "cacep_proto.proto";
 
-message cacep_simple_auth_msg {
+message cacep_anonymous_auth_msg {
         required cacep_proto_msg proto = 1;
-        required string name           = 2;
-        required uint64 addr           = 3;
 }
