@@ -3,7 +3,8 @@
  *
  * Address authority
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -26,13 +27,10 @@
 
 #include <stdint.h>
 
-struct addr_auth {
-        enum pol_addr_auth type;
-        uint64_t (* address)(void);
-};
+int      addr_auth_init(enum pol_addr_auth type);
 
-struct addr_auth * addr_auth_create(enum pol_addr_auth type);
+int      addr_auth_fini(void);
 
-int                addr_auth_destroy(struct addr_auth * instance);
+uint64_t addr_auth_address(void);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H */
