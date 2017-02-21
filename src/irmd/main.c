@@ -2048,6 +2048,28 @@ static int irm_create(void)
                 return -ENOMEM;
         }
 
+        if ((irmd->lf = lockfile_create()) == NULL) {
+                if ((irmd->lf = lockfile_open()) == NULL) {
+                        log_err("Lockfile error.");
+                        irm_destroy();
+                        return -1;
+                }
+
+                if (kill(lockfile_owner(irmd->lf), 0) < 0) {
+                        log_info("IRMd didn't properly shut down last time.");
+                        shm_rdrbuff_destroy(shm_rdrbuff_open());
+                        log_info("Stale resources cleaned.");
+                        lockfile_destroy(irmd->lf);
+                        irmd->lf = lockfile_create();
+                } else {
+                        log_info("IRMd already running (%d), exiting.",
+                                 lockfile_owner(irmd->lf));
+                        lockfile_close(irmd->lf);
+                        free(irmd);
+                        return -1;
+                }
+        }
+
         if (stat(SOCK_PATH, &st) == -1) {
                 if (mkdir(SOCK_PATH, 0777)) {
                         log_err("Failed to create sockets directory.");
@@ -2073,28 +2095,6 @@ static int irm_create(void)
                 log_err("Failed to chmod socket.");
                 irm_destroy();
                 return -1;
-        }
-
-        if ((irmd->lf = lockfile_create()) == NULL) {
-                if ((irmd->lf = lockfile_open()) == NULL) {
-                        log_err("Lockfile error.");
-                        irm_destroy();
-                        return -1;
-                }
-
-                if (kill(lockfile_owner(irmd->lf), 0) < 0) {
-                        log_info("IRMd didn't properly shut down last time.");
-                        shm_rdrbuff_destroy(shm_rdrbuff_open());
-                        log_info("Stale resources cleaned.");
-                        lockfile_destroy(irmd->lf);
-                        irmd->lf = lockfile_create();
-                } else {
-                        log_info("IRMd already running (%d), exiting.",
-                                 lockfile_owner(irmd->lf));
-                        lockfile_close(irmd->lf);
-                        free(irmd);
-                        return -1;
-                }
         }
 
         if (irmd->lf == NULL) {
