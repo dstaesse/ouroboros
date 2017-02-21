@@ -54,7 +54,6 @@
 
 struct {
         pthread_t acceptor;
-        struct addr_auth * auth;
 } normal;
 
 void ipcp_sig_handler(int         sig,
@@ -167,16 +166,15 @@ static int boot_components(void)
                 return -1;
         }
 
-        normal.auth = addr_auth_create(pa);
-        if (normal.auth == NULL) {
+        if (addr_auth_init(pa)) {
                 log_err("Failed to init address authority.");
                 return -1;
         }
 
-        ipcpi.address = normal.auth->address();
+        ipcpi.address = addr_auth_address();
         if (ipcpi.address == 0) {
                 log_err("Failed to get a valid address.");
-                addr_auth_destroy(normal.auth);
+                addr_auth_fini();
                 return -1;
         }
 
@@ -186,14 +184,14 @@ static int boot_components(void)
 
         if (ribmgr_init()) {
                 log_err("Failed to initialize RIB manager.");
-                addr_auth_destroy(normal.auth);
+                addr_auth_fini();
                 return -1;
         }
 
         if (dir_init()) {
                 log_err("Failed to initialize directory.");
                 ribmgr_fini();
-                addr_auth_destroy(normal.auth);
+                addr_auth_fini();
                 return -1;
         }
 
@@ -202,7 +200,7 @@ static int boot_components(void)
         if (fmgr_init()) {
                 dir_fini();
                 ribmgr_fini();
-                addr_auth_destroy(normal.auth);
+                addr_auth_fini();
                 log_err("Failed to start flow manager.");
                 return -1;
         }
@@ -211,7 +209,7 @@ static int boot_components(void)
                 fmgr_fini();
                 dir_fini();
                 ribmgr_fini();
-                addr_auth_destroy(normal.auth);
+                addr_auth_fini();
                 log_err("Failed to initialize FRCT.");
                 return -1;
         }
@@ -223,7 +221,7 @@ static int boot_components(void)
                 fmgr_fini();
                 dir_fini();
                 ribmgr_fini();
-                addr_auth_destroy(normal.auth);
+                addr_auth_fini();
                 log_err("Failed to create acceptor thread.");
                 return -1;
         }
@@ -244,7 +242,7 @@ void shutdown_components(void)
 
         ribmgr_fini();
 
-        addr_auth_destroy(normal.auth);
+        addr_auth_fini();
 }
 
 static int normal_ipcp_enroll(char * dst_name)

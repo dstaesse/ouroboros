@@ -1,9 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Policy for flat addresses in a distributed way
+ * Address authority policy ops
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,19 +20,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_FLAT_H
-#define OUROBOROS_IPCPD_NORMAL_FLAT_H
+#ifndef OUROBOROS_IPCPD_NORMAL_POL_ADDR_AUTH_OPS_H
+#define OUROBOROS_IPCPD_NORMAL_POL_ADDR_AUTH_OPS_H
 
-#include "pol-addr-auth-ops.h"
+struct pol_addr_auth_ops {
+        int      (* init)(void);
 
-int      flat_init(void);
-int      flat_fini(void);
-uint64_t flat_address(void);
+        int      (* fini)(void);
 
-struct pol_addr_auth_ops flat_ops = {
-        .init    = flat_init,
-        .fini    = flat_fini,
-        .address = flat_address
+        uint64_t (* address)(void);
 };
 
-#endif /* OUROBOROS_IPCPD_NORMAL_FLAT_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_POL_ADDR_AUTH_OPS_H */

@@ -3,7 +3,8 @@
  *
  * Address authority
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -25,47 +26,36 @@
 #include <ouroboros/logs.h>
 
 #include "addr_auth.h"
+#include "pol-addr-auth-ops.h"
 #include "pol/flat.h"
 
 #include <stdlib.h>
 #include <assert.h>
 
-struct addr_auth * addr_auth_create(enum pol_addr_auth type)
+struct addr_auth {
+        struct pol_addr_auth_ops * ops;
+} addr_auth;
+
+int addr_auth_init(enum pol_addr_auth type)
 {
-        struct addr_auth * tmp;
-
-        tmp = malloc(sizeof(*tmp));
-        if (tmp == NULL) {
-                log_err("Failed to malloc addr auth.");
-                return NULL;
-        }
-
         switch (type) {
         case FLAT_RANDOM:
-                tmp->address = flat_address;
-                tmp->type = type;
+                addr_auth.ops = &flat_ops;
                 break;
         default:
                 log_err("Unknown address authority type.");
-                free(tmp);
-                return NULL;
+                return -1;
         }
 
-        return tmp;
+        return addr_auth.ops->init();
 }
 
-int addr_auth_destroy(struct addr_auth * instance)
+uint64_t addr_auth_address(void)
 {
-        assert(instance);
+        return addr_auth.ops->address();
+}
 
-        switch (instance->type) {
-        case FLAT_RANDOM:
-                break;
-        default:
-                log_err("Unknown address authority type.");
-        }
-
-        free(instance);
-
-        return 0;
+int addr_auth_fini(void)
+{
+        return addr_auth.ops->fini();
 }

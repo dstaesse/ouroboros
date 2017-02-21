@@ -80,6 +80,16 @@ static int addr_taken(char *  name,
 
 #define INVALID_ADDRESS 0
 
+int flat_init(void)
+{
+        return 0;
+}
+
+int flat_fini(void)
+{
+        return 0;
+}
+
 uint64_t flat_address(void)
 {
         struct timespec t;
