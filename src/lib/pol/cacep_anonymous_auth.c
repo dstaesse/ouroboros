@@ -52,6 +52,8 @@ static struct cacep_info * anonymous_info(void)
         if (info == NULL)
                 return NULL;
 
+        cacep_info_init(info);
+
         info->name = malloc(NAME_LEN + 1);
         if (info->name == NULL) {
                 free(info);
@@ -151,6 +153,8 @@ struct cacep_info * cacep_anonymous_auth(int                       fd,
 {
         struct cacep_info * tmp;
 
+        assert(info);
+
         if (send_msg(fd, info))
                 return NULL;
 
@@ -161,6 +165,7 @@ struct cacep_info * cacep_anonymous_auth(int                       fd,
         if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
             info->proto.pref_version != tmp->proto.pref_version ||
             info->proto.pref_syntax != tmp->proto.pref_syntax) {
+                cacep_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
@@ -176,11 +181,14 @@ struct cacep_info * cacep_anonymous_auth_wait(int                       fd,
 {
         struct cacep_info * tmp;
 
+        assert(info);
+
         tmp = read_msg(fd);
         if (tmp == NULL)
                 return NULL;
 
         if (send_msg(fd, info)) {
+                cacep_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
@@ -188,11 +196,10 @@ struct cacep_info * cacep_anonymous_auth_wait(int                       fd,
         if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
             info->proto.pref_version != tmp->proto.pref_version ||
             info->proto.pref_syntax != tmp->proto.pref_syntax) {
+                cacep_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
-
-        tmp->data = NULL;
 
         return tmp;
 }

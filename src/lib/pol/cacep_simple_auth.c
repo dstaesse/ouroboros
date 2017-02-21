@@ -59,6 +59,8 @@ static struct cacep_info * read_msg(int fd)
                 return NULL;
         }
 
+        cacep_info_init(tmp);
+
         tmp->addr = msg->addr;
         tmp->name = strdup(msg->name);
         if (tmp->name == NULL) {
@@ -78,8 +80,7 @@ static struct cacep_info * read_msg(int fd)
         tmp->proto.pref_version = msg->proto->pref_version;
         tmp->proto.pref_syntax  = code_to_syntax(msg->proto->pref_syntax);
         if (tmp->proto.pref_syntax < 0) {
-                free(tmp->proto.protocol);
-                free(tmp->name);
+                cacep_info_fini(tmp);
                 free(tmp);
                 cacep_simple_auth_msg__free_unpacked(msg, NULL);
                 return NULL;
@@ -144,6 +145,7 @@ struct cacep_info * cacep_simple_auth_auth(int                       fd,
         if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
             info->proto.pref_version != tmp->proto.pref_version ||
             info->proto.pref_syntax != tmp->proto.pref_syntax) {
+                cacep_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
@@ -164,6 +166,7 @@ struct cacep_info * cacep_simple_auth_auth_wait(int                       fd,
                 return NULL;
 
         if (send_msg(fd, info)) {
+                cacep_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
@@ -171,6 +174,7 @@ struct cacep_info * cacep_simple_auth_auth_wait(int                       fd,
         if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
             info->proto.pref_version != tmp->proto.pref_version ||
             info->proto.pref_syntax != tmp->proto.pref_syntax) {
+                cacep_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
