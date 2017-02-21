@@ -37,12 +37,9 @@ static void cdap_flow_destroy(struct cdap_flow * flow)
 
         if (flow->ci != NULL)
                 cdap_destroy(flow->ci);
-
         if (flow->info != NULL) {
-                if (flow->info->name != NULL)
-                        free(flow->info->name);
-                if (flow->info->data != NULL)
-                        free(flow->info->data);
+                cacep_info_fini(flow->info);
+                free(flow->info);
         }
 
         free(flow);

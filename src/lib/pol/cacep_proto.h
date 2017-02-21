@@ -1,10 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Message for no authentication CACEP policy
+ * CACEP - Convert syntax to msg code and back
  *
- *    Dimitri Staessens <dimitri.staessens@ugent.be>
- *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -21,12 +21,16 @@
  * 02110-1301 USA
  */
 
-syntax = "proto2";
+#ifndef OUROBOROS_LIB_CACEP_CDAP_H
+#define OUROBOROS_LIB_CACEP_CDAP_H
 
-import "cacep_proto.proto";
+#include <ouroboros/cacep.h>
+#include <ouroboros/irm_config.h>
 
-message cacep_simple_auth_msg {
-        required cacep_proto_msg proto = 1;
-        required string name           = 2;
-        required uint64 addr           = 3;
-}
+#include "cacep_proto.pb-c.h"
+
+enum proto_concrete_syntax code_to_syntax(int code);
+
+int                        syntax_to_code(enum proto_concrete_syntax stx);
+
+#endif /* OUROBOROS_LIB_CACEP_CDAP_H */

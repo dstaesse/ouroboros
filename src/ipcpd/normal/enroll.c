@@ -26,6 +26,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
+#include <ouroboros/errno.h>
 
 #include "ae.h"
 #include "cdap_flow.h"
@@ -43,6 +44,7 @@
 int enroll_handle(int fd)
 {
         struct cdap_flow * flow;
+        struct cacep_info  info;
         cdap_key_t         key;
         enum cdap_opcode   oc;
         char *             name;
@@ -59,12 +61,26 @@ int enroll_handle(int fd)
         char * members_ro = MEMBERS_PATH;
         char * dif_ro     = DIF_PATH;
 
-        flow = cdap_flow_arr(fd, 0, ANONYMOUS_AUTH, NULL);
+        cacep_info_init(&info);
+
+        info.proto.protocol = strdup(CDAP_PROTO);
+        if (info.proto.protocol == NULL) {
+                cacep_info_fini(&info);
+                return -ENOMEM;
+        }
+
+        info.proto.pref_version = 1;
+        info.proto.pref_syntax  = PROTO_GPB;
+
+        flow = cdap_flow_arr(fd, 0, ANONYMOUS_AUTH, &info);
         if (flow == NULL) {
                 log_err("Failed to auth enrollment request.");
+                cacep_info_fini(&info);
                 flow_dealloc(fd);
                 return -1;
         }
+
+        cacep_info_fini(&info);
 
         while (!(boot_r && members_r && dif_name_r)) {
                 key = cdap_request_wait(flow->ci, &oc, &name, &data,
@@ -140,6 +156,7 @@ int enroll_handle(int fd)
 int enroll_boot(char * dst_name)
 {
         struct cdap_flow * flow;
+        struct cacep_info  info;
         cdap_key_t         key;
         uint8_t *          data;
         size_t             len;
@@ -153,11 +170,26 @@ int enroll_boot(char * dst_name)
         char * members_ro = MEMBERS_PATH;
         char * dif_ro     = DIF_PATH;
 
-        flow = cdap_flow_alloc(dst_name, ENROLL_AE, NULL, ANONYMOUS_AUTH, NULL);
+        cacep_info_init(&info);
+
+        info.proto.protocol = strdup(CDAP_PROTO);
+        if (info.proto.protocol == NULL) {
+                cacep_info_fini(&info);
+                return -ENOMEM;
+        }
+
+        info.proto.pref_version = 1;
+        info.proto.pref_syntax  = PROTO_GPB;
+
+        flow = cdap_flow_alloc(dst_name, ENROLL_AE, NULL, ANONYMOUS_AUTH,
+                               &info);
         if (flow == NULL) {
                 log_err("Failed to allocate flow for enrollment request.");
+                cacep_info_fini(&info);
                 return -1;
         }
+
+        cacep_info_fini(&info);
 
         log_dbg("Getting boot information from %s.", dst_name);
 

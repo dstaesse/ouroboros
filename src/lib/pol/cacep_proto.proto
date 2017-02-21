@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Message for no authentication CACEP policy
+ * Message for setting Protocol information in CACEP
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -23,10 +23,16 @@
 
 syntax = "proto2";
 
-import "cacep_proto.proto";
+enum proto_concrete_syntax_code {
+        GPB   = 1;
+        ASN_1 = 2;
+        FIXED = 3;
+}
 
-message cacep_simple_auth_msg {
-        required cacep_proto_msg proto = 1;
-        required string name           = 2;
-        required uint64 addr           = 3;
+message cacep_proto_msg {
+        required string protocol                        = 1;
+        required int32 pref_version                     = 2;
+        repeated int32 supp_version                     = 3;
+        required proto_concrete_syntax_code pref_syntax = 4;
+        repeated proto_concrete_syntax_code supp_syntax = 5;
 }

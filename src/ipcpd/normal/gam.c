@@ -23,6 +23,7 @@
 #define OUROBOROS_PREFIX "graph-adjacency-manager"
 
 #include <ouroboros/config.h>
+#include <ouroboros/cdap.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/list.h>
@@ -181,32 +182,48 @@ int gam_flow_arr(struct gam * instance,
         struct cacep_info * rcv_info;
         struct cacep_info   snd_info;
 
-        snd_info.name = ipcpi.name;
-        snd_info.addr = ipcpi.address;
-        snd_info.data = NULL;
-
         if (flow_alloc_resp(fd, instance->ops->accept_new_flow(instance->ops_o))
             < 0) {
                 log_err("Could not respond to new flow.");
                 return -1;
         }
 
+        cacep_info_init(&snd_info);
+        snd_info.proto.protocol = strdup(CDAP_PROTO);
+        if (snd_info.proto.protocol == NULL) {
+                cacep_info_fini(&snd_info);
+                return -ENOMEM;
+        }
+
+        snd_info.proto.pref_version = 1;
+        snd_info.proto.pref_syntax = PROTO_GPB;
+        snd_info.addr = ipcpi.address;
+        snd_info.name = strdup(ipcpi.name);
+        if (snd_info.name == NULL) {
+                cacep_info_fini(&snd_info);
+                return -ENOMEM;
+        }
+
         rcv_info = cacep_auth_wait(fd, SIMPLE_AUTH, &snd_info);
         if (rcv_info == NULL) {
                 log_err("Other side failed to authenticate.");
+                cacep_info_fini(&snd_info);
                 return -1;
         }
 
+        cacep_info_fini(&snd_info);
+
         if (instance->ops->accept_flow(instance->ops_o, qs, rcv_info)) {
                 flow_dealloc(fd);
-                free(rcv_info->name);
+                cacep_info_fini(rcv_info);
                 free(rcv_info);
                 return 0;
         }
 
         if (add_ga(instance, fd, qs, rcv_info)) {
                 log_err("Failed to add ga to graph adjacency manager list.");
-                free(rcv_info->name);
+                flow_dealloc(fd);
+                cacep_info_fini(rcv_info);
                 free(rcv_info);
                 return -1;
         }
@@ -222,9 +239,7 @@ int gam_flow_alloc(struct gam * instance,
         struct cacep_info   snd_info;
         int                 fd;
 
-        snd_info.name = ipcpi.name;
-        snd_info.addr = ipcpi.address;
-        snd_info.data = NULL;
+        log_dbg("Allocating flow to %s.", dst_name);
 
         fd = flow_alloc(dst_name, instance->ae_name, NULL);
         if (fd < 0) {
@@ -238,22 +253,42 @@ int gam_flow_alloc(struct gam * instance,
                 return -1;
         }
 
+        cacep_info_init(&snd_info);
+        snd_info.proto.protocol = strdup(CDAP_PROTO);
+        if (snd_info.proto.protocol == NULL) {
+                cacep_info_fini(&snd_info);
+                return -ENOMEM;
+        }
+
+        snd_info.proto.pref_version = 1;
+        snd_info.proto.pref_syntax = PROTO_GPB;
+        snd_info.addr = ipcpi.address;
+        snd_info.name = strdup(ipcpi.name);
+        if (snd_info.name == NULL) {
+                cacep_info_fini(&snd_info);
+                return -ENOMEM;
+        }
+
         rcv_info = cacep_auth(fd, SIMPLE_AUTH, &snd_info);
         if (rcv_info == NULL) {
                 log_err("Other side failed to authenticate.");
+                cacep_info_fini(&snd_info);
                 return -1;
         }
 
+        cacep_info_fini(&snd_info);
+
         if (instance->ops->accept_flow(instance->ops_o, qs, rcv_info)) {
                 flow_dealloc(fd);
-                free(rcv_info->name);
+                cacep_info_fini(rcv_info);
                 free(rcv_info);
                 return 0;
         }
 
         if (add_ga(instance, fd, qs, rcv_info)) {
                 log_err("Failed to add GA to graph adjacency manager list.");
-                free(rcv_info->name);
+                flow_dealloc(fd);
+                cacep_info_fini(rcv_info);
                 free(rcv_info);
                 return -1;
         }

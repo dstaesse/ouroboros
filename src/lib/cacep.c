@@ -36,10 +36,40 @@
 
 #define BUF_SIZE 2048
 
+int cacep_info_init(struct cacep_info * info)
+{
+        if (info == NULL)
+                return -EINVAL;
+
+        info->proto.protocol = NULL;
+        info->name           = NULL;
+        info->data           = NULL;
+
+        return 0;
+}
+
+void cacep_info_fini(struct cacep_info * info)
+{
+        if (info->proto.protocol != NULL)
+                free(info->proto.protocol);
+        if (info->name != NULL)
+                free(info->name);
+        if (info->data != NULL)
+                free(info->data);
+
+        info->name = NULL;
+        info->data = NULL;
+}
+
 struct cacep_info * cacep_auth(int                       fd,
                                enum pol_cacep            pc,
                                const struct cacep_info * info)
 {
+        if (info == NULL) {
+                log_err("No info provided.");
+                return NULL;
+        }
+
         switch (pc) {
         case ANONYMOUS_AUTH:
                 return cacep_anonymous_auth(fd, info);
@@ -57,6 +87,11 @@ struct cacep_info * cacep_auth_wait(int                       fd,
                                     enum pol_cacep            pc,
                                     const struct cacep_info * info)
 {
+        if (info == NULL) {
+                log_err("No info provided.");
+                return NULL;
+        }
+
         switch (pc) {
         case ANONYMOUS_AUTH:
                  return cacep_anonymous_auth_wait(fd, info);

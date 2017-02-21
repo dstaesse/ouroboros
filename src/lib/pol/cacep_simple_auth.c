@@ -26,6 +26,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
 
+#include "cacep_proto.h"
 #include "cacep_simple_auth.h"
 
 #include <stdlib.h>
@@ -33,6 +34,7 @@
 
 #include "cacep_simple_auth.pb-c.h"
 typedef CacepSimpleAuthMsg cacep_simple_auth_msg_t;
+typedef CacepProtoMsg cacep_proto_msg_t;
 
 #define BUF_SIZE 2048
 
@@ -65,6 +67,24 @@ static struct cacep_info * read_msg(int fd)
                 return NULL;
         }
 
+        tmp->proto.protocol = strdup(msg->proto->protocol);
+        if (tmp->proto.protocol == NULL) {
+                free(tmp->name);
+                free(tmp);
+                cacep_simple_auth_msg__free_unpacked(msg, NULL);
+                return NULL;
+        }
+
+        tmp->proto.pref_version = msg->proto->pref_version;
+        tmp->proto.pref_syntax  = code_to_syntax(msg->proto->pref_syntax);
+        if (tmp->proto.pref_syntax < 0) {
+                free(tmp->proto.protocol);
+                free(tmp->name);
+                free(tmp);
+                cacep_simple_auth_msg__free_unpacked(msg, NULL);
+                return NULL;
+        }
+
         cacep_simple_auth_msg__free_unpacked(msg, NULL);
 
         return tmp;
@@ -73,13 +93,21 @@ static struct cacep_info * read_msg(int fd)
 static int send_msg(int                       fd,
                     const struct cacep_info * info)
 {
-        cacep_simple_auth_msg_t msg = CACEP_SIMPLE_AUTH_MSG__INIT;
-        int                     ret = 0;
+        cacep_simple_auth_msg_t msg  = CACEP_SIMPLE_AUTH_MSG__INIT;
+        cacep_proto_msg_t       cmsg = CACEP_PROTO_MSG__INIT;
+        int                     ret  = 0;
         uint8_t *               data = NULL;
-        size_t                  len = 0;
+        size_t                  len  = 0;
 
-        msg.name = info->name;
-        msg.addr = info->addr;
+        cmsg.protocol     = info->proto.protocol;
+        cmsg.pref_version = info->proto.pref_version;
+        cmsg.pref_syntax  = syntax_to_code(info->proto.pref_syntax);
+        if (cmsg.pref_syntax < 0)
+                return -1;
+
+        msg.proto = &cmsg;
+        msg.name  = info->name;
+        msg.addr  = info->addr;
 
         len = cacep_simple_auth_msg__get_packed_size(&msg);
         if (len == 0)
@@ -113,6 +141,13 @@ struct cacep_info * cacep_simple_auth_auth(int                       fd,
         if (tmp == NULL)
                 return NULL;
 
+        if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
+            info->proto.pref_version != tmp->proto.pref_version ||
+            info->proto.pref_syntax != tmp->proto.pref_syntax) {
+                free(tmp);
+                return NULL;
+        }
+
         return tmp;
 }
 
@@ -129,6 +164,13 @@ struct cacep_info * cacep_simple_auth_auth_wait(int                       fd,
                 return NULL;
 
         if (send_msg(fd, info)) {
+                free(tmp);
+                return NULL;
+        }
+
+        if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
+            info->proto.pref_version != tmp->proto.pref_version ||
+            info->proto.pref_syntax != tmp->proto.pref_syntax) {
                 free(tmp);
                 return NULL;
         }
