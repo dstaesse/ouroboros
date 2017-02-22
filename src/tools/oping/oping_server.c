@@ -100,10 +100,8 @@ void * server_thread(void *o)
 
                         msg->type = htonl(ECHO_REPLY);
 
-                        if (flow_write(fd, buf, msg_len) < 0) {
+                        if (flow_write(fd, buf, msg_len) < 0)
                                 printf("Error writing to flow (fd %d).\n", fd);
-                                flow_dealloc(fd);
-                        }
                 }
         }
 
