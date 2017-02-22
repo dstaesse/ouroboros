@@ -397,6 +397,13 @@ static int bootstrap_ipcp(pid_t              api,
                 return -1;
         }
 
+        if (entry->type != (enum ipcp_type) conf->ipcp_type) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                log_err("Configuration does not match IPCP type.");
+                return -1;
+        }
+
         if (ipcp_bootstrap(entry->api, conf)) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
