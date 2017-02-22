@@ -86,7 +86,7 @@ void * reader(void * o)
 
                 ++client.rcvd;
 
-                clock_gettime(CLOCK_REALTIME, &now);
+                clock_gettime(CLOCK_MONOTONIC, &now);
 
                 pthread_mutex_lock(&client.lock);
                 ms = ts_diff_us(&client.times[ntohl(msg->id)], &now)
@@ -105,7 +105,7 @@ void * reader(void * o)
                         client.rtt_max = ms;
 
                 d = (ms - client.rtt_avg);
-                client.rtt_avg += d  / (float) client.rcvd;
+                client.rtt_avg += d / client.rcvd;
                 client.rtt_m2 += d * (ms - client.rtt_avg);
         }
 
@@ -140,18 +140,19 @@ void * writer(void * o)
                 nanosleep(&wait, NULL);
                 msg->type = htonl(ECHO_REQUEST);
                 msg->id = htonl(client.sent);
+
+                clock_gettime(CLOCK_MONOTONIC, &now);
+
+                pthread_mutex_lock(&client.lock);
+                client.times[client.sent++] = now;
+                pthread_mutex_unlock(&client.lock);
+
                 if (flow_write(*fdp, buf, client.size) == -1) {
                         printf("Failed to send SDU.\n");
                         flow_dealloc(*fdp);
                         free(buf);
                         return (void *) -1;
                 }
-
-                clock_gettime(CLOCK_REALTIME, &now);
-
-                pthread_mutex_lock(&client.lock);
-                client.times[client.sent++] = now;
-                pthread_mutex_unlock(&client.lock);
         }
 
         pthread_cleanup_pop(true);
@@ -252,7 +253,7 @@ int client_main(void)
                        client.rtt_max);
                 if (client.rcvd > 1)
                         printf("%.3f ms\n",
-                               sqrt(client.rtt_m2 / (float) (client.rcvd - 1)));
+                               sqrt(client.rtt_m2 / (client.rcvd - 1)));
                 else
                         printf("NaN ms\n");
         }
