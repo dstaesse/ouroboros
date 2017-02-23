@@ -342,10 +342,8 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
 
         (void) pol;
 
-        if (conf == NULL || conf->type != THIS_TYPE) {
-                log_err("Bad DIF configuration.");
-                return -EINVAL;
-        }
+        assert(conf);
+        assert(conf->type == THIS_TYPE);
 
         pthread_rwlock_wrlock(&ipcpi.state_lock);
 
