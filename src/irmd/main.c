@@ -181,6 +181,19 @@ static struct ipcp_entry * get_ipcp_entry_by_api(pid_t api)
         return NULL;
 }
 
+static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
+{
+        struct list_head * p = NULL;
+
+        list_for_each(p, &irmd->ipcps) {
+                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                if (strcmp(name, e->name))
+                        return e;
+        }
+
+        return NULL;
+}
+
 /* Check if the name exists anywhere in a DIF. */
 static pid_t get_ipcp_by_dst_name(char * dst_name)
 {
@@ -228,9 +241,10 @@ static pid_t get_ipcp_by_dst_name(char * dst_name)
 static pid_t create_ipcp(char *         name,
                          enum ipcp_type ipcp_type)
 {
-        struct pid_el *      api = NULL;
-        struct ipcp_entry *  tmp = NULL;
-        struct list_head *   p   = NULL;
+        struct pid_el *     api   = NULL;
+        struct ipcp_entry * tmp   = NULL;
+        struct list_head *  p     = NULL;
+        struct ipcp_entry * entry = NULL;
 
         api = malloc(sizeof(*api));
         if (api == NULL)
@@ -244,6 +258,14 @@ static pid_t create_ipcp(char *         name,
         }
 
         pthread_rwlock_wrlock(&irmd->reg_lock);
+
+        entry = get_ipcp_entry_by_name(name);
+        if (entry != NULL) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                log_err("IPCP by that name already exists.");
+                return -1;
+        }
 
         api->pid = ipcp_create(name, ipcp_type);
         if (api->pid == -1) {
@@ -394,6 +416,13 @@ static int bootstrap_ipcp(pid_t              api,
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 log_err("No such IPCP.");
+                return -1;
+        }
+
+        if (entry->type != (enum ipcp_type) conf->ipcp_type) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                log_err("Configuration does not match IPCP type.");
                 return -1;
         }
 
