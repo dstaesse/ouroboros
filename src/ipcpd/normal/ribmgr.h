@@ -41,9 +41,6 @@ int  ribmgr_init(void);
 
 void ribmgr_fini(void);
 
-int  ribmgr_flow_arr(int       fd,
-                     qosspec_t qs);
-
 int  ribmgr_disseminate(char *           path,
                         enum diss_target target,
                         enum diss_freq   freq,

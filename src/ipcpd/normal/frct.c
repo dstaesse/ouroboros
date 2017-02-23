@@ -198,12 +198,12 @@ int frct_fini()
         return 0;
 }
 
-int frct_nm1_post_sdu(struct pci * pci,
+int frct_nm1_post_sdu(struct pci *         pci,
                       struct shm_du_buff * sdb)
 {
         struct frct_i * instance;
-        buffer_t buf;
-        cep_id_t id;
+        buffer_t        buf;
+        cep_id_t        id;
 
         if (pci == NULL || sdb == NULL)
                 return -1;
@@ -267,8 +267,8 @@ cep_id_t frct_i_create(uint64_t   address,
                        qoscube_t  cube)
 {
         struct frct_i * instance;
-        struct pci pci;
-        cep_id_t id;
+        struct pci      pci;
+        cep_id_t        id;
 
         if (buf == NULL || buf->data == NULL)
                 return INVALID_CEP_ID;
@@ -304,7 +304,7 @@ int frct_i_accept(cep_id_t   id,
                   buffer_t * buf,
                   qoscube_t  cube)
 {
-        struct pci pci;
+        struct pci      pci;
         struct frct_i * instance;
 
         if (buf == NULL || buf->data == NULL)
@@ -347,7 +347,7 @@ int frct_i_accept(cep_id_t   id,
 int frct_i_destroy(cep_id_t   id,
                    buffer_t * buf)
 {
-        struct pci pci;
+        struct pci      pci;
         struct frct_i * instance;
 
         pthread_mutex_lock(&frct.instances_lock);
@@ -390,7 +390,7 @@ int frct_i_destroy(cep_id_t   id,
 int frct_i_write_sdu(cep_id_t             id,
                      struct shm_du_buff * sdb)
 {
-        struct pci pci;
+        struct pci      pci;
         struct frct_i * instance;
 
         if (sdb == NULL)

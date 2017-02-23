@@ -1,10 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Data transfer graph adjacency manager
+ * Routing component of the IPCP
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -20,18 +20,23 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_GAM_H
-#define OUROBOROS_IPCPD_NORMAL_GAM_H
+#ifndef OUROBOROS_IPCPD_NORMAL_ROUTING_H
+#define OUROBOROS_IPCPD_NORMAL_ROUTING_H
 
-#include <ouroboros/cacep.h>
-#include <ouroboros/irm_config.h>
+#include <ouroboros/qos.h>
 
+#include "pff.h"
 #include "neighbors.h"
 
-struct gam * gam_create(enum pol_gam gam_type,
-                        struct nbs * nbs,
-                        struct ae *  ae);
+#include <stdint.h>
 
-void         gam_destroy(struct gam * gam);
+/*
+ * Routing will take a type in the future,
+ * to allow different policies.
+ */
+struct routing * routing_create(struct pff * pff,
+                                struct nbs * nbs);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_GAM_H */
+void             routing_destroy(struct routing * instance);
+
+#endif /* OUROBOROS_IPCPD_NORMAL_ROUTING_H */

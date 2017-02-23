@@ -42,8 +42,6 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define FRCT_PROTO "frct"
-
 struct ae_conn {
         struct list_head next;
         struct conn      conn;
@@ -272,7 +270,7 @@ void connmgr_ae_destroy(struct ae * ae)
 
 int connmgr_alloc(struct ae *   ae,
                   char *        dst_name,
-                  qosspec_t     qs,
+                  qosspec_t *   qs,
                   struct conn * conn)
 {
         assert(ae);
@@ -281,13 +279,13 @@ int connmgr_alloc(struct ae *   ae,
 
         memset(&conn->conn_info, 0, sizeof(conn->conn_info));
 
-        conn->flow_info.fd = flow_alloc(dst_name, &qs);
+        conn->flow_info.fd = flow_alloc(dst_name, qs);
         if (conn->flow_info.fd < 0) {
                 log_err("Failed to allocate flow to %s.", dst_name);
                 return -1;
         }
 
-        conn->flow_info.qs = qs;
+        conn->flow_info.qs = *qs;
 
         if (flow_alloc_res(conn->flow_info.fd)) {
                 log_err("Flow allocation to %s failed.", dst_name);

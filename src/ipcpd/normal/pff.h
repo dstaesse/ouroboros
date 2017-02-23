@@ -25,8 +25,6 @@
 
 #include <stdint.h>
 
-struct pff;
-
 /*
  * PFF will take a type in the future,
  * to allow different policies.
@@ -34,7 +32,7 @@ struct pff;
  */
 struct pff * pff_create(void);
 
-int          pff_destroy(struct pff * instance);
+void         pff_destroy(struct pff * instance);
 
 int          pff_add(struct pff * instance,
                      uint64_t     addr,
