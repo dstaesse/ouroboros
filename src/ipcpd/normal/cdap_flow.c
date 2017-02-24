@@ -38,17 +38,17 @@ static void cdap_flow_destroy(struct cdap_flow * flow)
         if (flow->ci != NULL)
                 cdap_destroy(flow->ci);
         if (flow->info != NULL) {
-                cacep_info_fini(flow->info);
+                conn_info_fini(flow->info);
                 free(flow->info);
         }
 
         free(flow);
 }
 
-struct cdap_flow * cdap_flow_arr(int                       fd,
-                                 int                       resp,
-                                 enum pol_cacep            pc,
-                                 const struct cacep_info * info)
+struct cdap_flow * cdap_flow_arr(int                     fd,
+                                 int                      resp,
+                                 enum pol_cacep           pc,
+                                 const struct conn_info * info)
 {
         struct cdap_flow *  flow;
 
@@ -69,7 +69,7 @@ struct cdap_flow * cdap_flow_arr(int                       fd,
         flow->fd = fd;
         flow->ci = NULL;
 
-        flow->info = cacep_auth_wait(fd, pc, info);
+        flow->info = cacep_auth_wait(fd, pc, info, NULL);
         if (flow->info == NULL) {
                 log_err("Other side failed to authenticate.");
                 cdap_flow_destroy(flow);
@@ -86,11 +86,11 @@ struct cdap_flow * cdap_flow_arr(int                       fd,
         return flow;
 }
 
-struct cdap_flow * cdap_flow_alloc(const char *              dst_name,
-                                   const char *              ae_name,
-                                   qosspec_t *               qs,
-                                   enum pol_cacep            pc,
-                                   const struct cacep_info * info)
+struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
+                                   const char *             ae_name,
+                                   qosspec_t *              qs,
+                                   enum pol_cacep           pc,
+                                   const struct conn_info * info)
 {
         struct cdap_flow *  flow;
         int                 fd;
@@ -123,7 +123,7 @@ struct cdap_flow * cdap_flow_alloc(const char *              dst_name,
         flow->fd = fd;
         flow->ci = NULL;
 
-        flow->info = cacep_auth(fd, pc, info);
+        flow->info = cacep_auth(fd, pc, info, NULL);
         if (flow->info == NULL) {
                 log_err("Failed to authenticate.");
                 cdap_flow_dealloc(flow);

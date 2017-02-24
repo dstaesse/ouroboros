@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_POL_GAM_OPS_H
 #define OUROBOROS_IPCPD_NORMAL_POL_GAM_OPS_H
 
-#include <ouroboros/cacep.h>
+#include "conn.h"
 
 struct pol_gam_ops {
         void * (* create)(struct gam * instance);
@@ -36,9 +36,9 @@ struct pol_gam_ops {
 
         int    (* accept_new_flow)(void * o);
 
-        int    (* accept_flow)(void *                    o,
-                               qosspec_t                 qs,
-                               const struct cacep_info * info);
+        int    (* accept_flow)(void *                   o,
+                               qosspec_t                qs,
+                               const struct conn_info * info);
 };
 
 #endif /* OUROBOROS_IPCPD_NORMAL_POL_GAM_OPS_H */

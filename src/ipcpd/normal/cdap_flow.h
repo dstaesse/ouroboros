@@ -30,19 +30,19 @@
 struct cdap_flow {
         int                 fd;
         struct cdap *       ci;
-        struct cacep_info * info;
+        struct conn_info * info;
 };
 
-struct cdap_flow * cdap_flow_arr(int                       fd,
-                                 int                       resp,
-                                 enum pol_cacep            pc,
-                                 const struct cacep_info * info);
+struct cdap_flow * cdap_flow_arr(int                      fd,
+                                 int                      resp,
+                                 enum pol_cacep           pc,
+                                 const struct conn_info * info);
 
-struct cdap_flow * cdap_flow_alloc(const char *              dst_name,
-                                   const char *              ae_name,
-                                   qosspec_t *               qs,
-                                   enum pol_cacep            pc,
-                                   const struct cacep_info * info);
+struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
+                                   const char *             ae_name,
+                                   qosspec_t *              qs,
+                                   enum pol_cacep           pc,
+                                   const struct conn_info * info);
 
 void               cdap_flow_dealloc(struct cdap_flow * flow);
 

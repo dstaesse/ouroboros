@@ -39,9 +39,9 @@ int          gam_flow_alloc(struct gam * instance,
                             char *       dst_name,
                             qosspec_t    qs);
 
-int          gam_flow_wait(struct gam *         instance,
-                           int *                fd,
-                           struct cacep_info ** info,
-                           qosspec_t *          qs);
+int          gam_flow_wait(struct gam *        instance,
+                           int *               fd,
+                           struct conn_info ** info,
+                           qosspec_t *         qs);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_GAM_H */

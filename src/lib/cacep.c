@@ -28,42 +28,45 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 
-#include <pol/cacep_anonymous_auth.h>
-#include <pol/cacep_simple_auth.h>
+#include "pol/cacep_anonymous_auth.h"
+#include "pol/cacep_simple_auth.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 #define BUF_SIZE 2048
 
-int cacep_info_init(struct cacep_info * info)
+int conn_info_init(struct conn_info * info)
 {
         if (info == NULL)
                 return -EINVAL;
 
         info->proto.protocol = NULL;
-        info->name           = NULL;
-        info->data           = NULL;
+        info->name = NULL;
 
         return 0;
 }
 
-void cacep_info_fini(struct cacep_info * info)
+void conn_info_fini(struct conn_info * info)
 {
-        if (info->proto.protocol != NULL)
-                free(info->proto.protocol);
-        if (info->name != NULL)
-                free(info->name);
-        if (info->data != NULL)
-                free(info->data);
+        if (info == NULL)
+                return;
 
-        info->name = NULL;
-        info->data = NULL;
+        if (info->proto.protocol != NULL) {
+                free(info->proto.protocol);
+                info->proto.protocol = NULL;
+        }
+
+        if (info->name != NULL) {
+                free(info->name);
+                info->name = NULL;
+        }
 }
 
-struct cacep_info * cacep_auth(int                       fd,
-                               enum pol_cacep            pc,
-                               const struct cacep_info * info)
+struct conn_info * cacep_auth(int                      fd,
+                              enum pol_cacep           pc,
+                              const struct conn_info * info,
+                              const void *             auth)
 {
         if (info == NULL) {
                 log_err("No info provided.");
@@ -72,20 +75,21 @@ struct cacep_info * cacep_auth(int                       fd,
 
         switch (pc) {
         case ANONYMOUS_AUTH:
-                return cacep_anonymous_auth(fd, info);
+                return cacep_anonymous_auth(fd, info, auth);
         case SIMPLE_AUTH:
                 if (info == NULL)
                         return NULL;
-                return cacep_simple_auth_auth(fd, info);
+                return cacep_simple_auth_auth(fd, info, auth);
         default:
                 log_err("Unsupported CACEP policy.");
                 return NULL;
         }
 }
 
-struct cacep_info * cacep_auth_wait(int                       fd,
-                                    enum pol_cacep            pc,
-                                    const struct cacep_info * info)
+struct conn_info * cacep_auth_wait(int                      fd,
+                                   enum pol_cacep           pc,
+                                   const struct conn_info * info,
+                                   const void *             auth)
 {
         if (info == NULL) {
                 log_err("No info provided.");
@@ -94,11 +98,11 @@ struct cacep_info * cacep_auth_wait(int                       fd,
 
         switch (pc) {
         case ANONYMOUS_AUTH:
-                 return cacep_anonymous_auth_wait(fd, info);
+                return cacep_anonymous_auth_wait(fd, info, auth);
         case SIMPLE_AUTH:
                 if (info == NULL)
                         return NULL;
-                return cacep_simple_auth_auth_wait(fd, info);
+                return cacep_simple_auth_auth_wait(fd, info, auth);
         default:
                 log_err("Unsupported CACEP policy.");
                 return NULL;

@@ -49,10 +49,10 @@ typedef FlowAllocMsg flow_alloc_msg_t;
 #define FD_UPDATE_TIMEOUT 100000 /* nanoseconds */
 
 struct nm1_flow {
-        struct list_head    next;
-        int                 fd;
-        qosspec_t           qs;
-        struct cacep_info * info;
+        struct list_head   next;
+        int                fd;
+        qosspec_t          qs;
+        struct conn_info * info;
 };
 
 struct {
@@ -194,11 +194,11 @@ void * fmgr_nm1_sdu_reader(void * o)
 
 static void * fmgr_nm1_flow_wait(void * o)
 {
-        qoscube_t           cube;
-        struct cacep_info * info;
-        int                 fd;
-        qosspec_t           qs;
-        struct nm1_flow *   flow;
+        qoscube_t          cube;
+        struct conn_info * info;
+        int                fd;
+        qosspec_t          qs;
+        struct nm1_flow *  flow;
 
         (void) o;
 

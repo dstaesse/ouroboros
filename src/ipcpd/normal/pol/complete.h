@@ -36,9 +36,9 @@ int    complete_stop(void * o);
 
 int    complete_accept_new_flow(void * o);
 
-int    complete_accept_flow(void *                    o,
-                            qosspec_t                 qs,
-                            const struct cacep_info * info);
+int    complete_accept_flow(void *                   o,
+                            qosspec_t                qs,
+                            const struct conn_info * info);
 
 struct pol_gam_ops complete_ops = {
         .create          = complete_create,

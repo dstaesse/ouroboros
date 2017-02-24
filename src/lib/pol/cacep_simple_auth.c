@@ -38,9 +38,9 @@ typedef CacepProtoMsg cacep_proto_msg_t;
 
 #define BUF_SIZE 2048
 
-static struct cacep_info * read_msg(int fd)
+static struct conn_info * read_msg(int fd)
 {
-        struct cacep_info *       tmp;
+        struct conn_info *       tmp;
         uint8_t                   buf[BUF_SIZE];
         cacep_simple_auth_msg_t * msg;
         ssize_t                   len;
@@ -59,7 +59,7 @@ static struct cacep_info * read_msg(int fd)
                 return NULL;
         }
 
-        cacep_info_init(tmp);
+        conn_info_init(tmp);
 
         tmp->addr = msg->addr;
         tmp->name = strdup(msg->name);
@@ -71,7 +71,7 @@ static struct cacep_info * read_msg(int fd)
 
         tmp->proto.protocol = strdup(msg->proto->protocol);
         if (tmp->proto.protocol == NULL) {
-                free(tmp->name);
+                conn_info_fini(tmp);
                 free(tmp);
                 cacep_simple_auth_msg__free_unpacked(msg, NULL);
                 return NULL;
@@ -80,7 +80,7 @@ static struct cacep_info * read_msg(int fd)
         tmp->proto.pref_version = msg->proto->pref_version;
         tmp->proto.pref_syntax  = code_to_syntax(msg->proto->pref_syntax);
         if (tmp->proto.pref_syntax < 0) {
-                cacep_info_fini(tmp);
+                conn_info_fini(tmp);
                 free(tmp);
                 cacep_simple_auth_msg__free_unpacked(msg, NULL);
                 return NULL;
@@ -91,8 +91,8 @@ static struct cacep_info * read_msg(int fd)
         return tmp;
 }
 
-static int send_msg(int                       fd,
-                    const struct cacep_info * info)
+static int send_msg(int                      fd,
+                    const struct conn_info * info)
 {
         cacep_simple_auth_msg_t msg  = CACEP_SIMPLE_AUTH_MSG__INIT;
         cacep_proto_msg_t       cmsg = CACEP_PROTO_MSG__INIT;
@@ -128,12 +128,16 @@ static int send_msg(int                       fd,
         return ret;
 }
 
-struct cacep_info * cacep_simple_auth_auth(int                       fd,
-                                           const struct cacep_info * info)
+struct conn_info * cacep_simple_auth_auth(int                      fd,
+                                          const struct conn_info * info,
+                                          const void *             auth)
 {
-        struct cacep_info * tmp;
+        struct conn_info * tmp;
 
         assert(info);
+
+        /* This policy does not need info to authenticate */
+        (void) auth;
 
         if (send_msg(fd, info))
                 return NULL;
@@ -145,7 +149,7 @@ struct cacep_info * cacep_simple_auth_auth(int                       fd,
         if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
             info->proto.pref_version != tmp->proto.pref_version ||
             info->proto.pref_syntax != tmp->proto.pref_syntax) {
-                cacep_info_fini(tmp);
+                conn_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
@@ -154,19 +158,22 @@ struct cacep_info * cacep_simple_auth_auth(int                       fd,
 }
 
 
-struct cacep_info * cacep_simple_auth_auth_wait(int                       fd,
-                                                const struct cacep_info * info)
+struct conn_info * cacep_simple_auth_auth_wait(int                      fd,
+                                               const struct conn_info * info,
+                                               const void *             auth)
 {
-        struct cacep_info * tmp;
+        struct conn_info * tmp;
 
         assert(info);
+
+        (void) auth;
 
         tmp = read_msg(fd);
         if (tmp == NULL)
                 return NULL;
 
         if (send_msg(fd, info)) {
-                cacep_info_fini(tmp);
+                conn_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
@@ -174,7 +181,7 @@ struct cacep_info * cacep_simple_auth_auth_wait(int                       fd,
         if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
             info->proto.pref_version != tmp->proto.pref_version ||
             info->proto.pref_syntax != tmp->proto.pref_syntax) {
-                cacep_info_fini(tmp);
+                conn_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
