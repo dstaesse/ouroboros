@@ -187,7 +187,7 @@ static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
 
         list_for_each(p, &irmd->ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (strcmp(name, e->name))
+                if (strcmp(name, e->name) == 0)
                         return e;
         }
 
