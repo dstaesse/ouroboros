@@ -328,14 +328,13 @@ int ipcp_flow_alloc(pid_t     api,
                     int       port_id,
                     pid_t     n_api,
                     char *    dst_name,
-                    char *    src_ae_name,
                     qoscube_t cube)
 {
         ipcp_msg_t msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int ret = -1;
 
-        if (dst_name == NULL || src_ae_name == NULL)
+        if (dst_name == NULL)
                 return -EINVAL;
 
         msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
@@ -343,7 +342,6 @@ int ipcp_flow_alloc(pid_t     api,
         msg.port_id      = port_id;
         msg.has_api      = true;
         msg.api          = n_api;
-        msg.src_ae_name  = src_ae_name;
         msg.dst_name     = dst_name;
         msg.has_qoscube  = true;
         msg.qoscube      = cube;

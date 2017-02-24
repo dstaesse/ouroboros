@@ -108,7 +108,7 @@ void * accept_thread(void * o)
         printf("Ouroboros perf server started.\n");
 
         while (true) {
-                fd = flow_accept(NULL, &qs);
+                fd = flow_accept(&qs);
                 if (fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;

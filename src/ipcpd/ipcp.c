@@ -191,7 +191,6 @@ static void * ipcp_main_loop(void * o)
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc(fd,
                                                            msg->dst_name,
-                                                           msg->src_ae_name,
                                                            msg->qoscube);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:

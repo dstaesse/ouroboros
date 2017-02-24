@@ -34,7 +34,6 @@ void fmgr_fini(void);
 
 int  fmgr_np1_alloc(int       fd,
                     char *    dst_ap_name,
-                    char *    src_ae_name,
                     qoscube_t qos);
 
 int  fmgr_np1_alloc_resp(int fd,

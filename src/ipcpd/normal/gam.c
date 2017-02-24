@@ -53,14 +53,11 @@ struct gam {
         pthread_mutex_t      gas_lock;
         pthread_cond_t       gas_cond;
 
-        char *               ae_name;
-
         struct pol_gam_ops * ops;
         void *               ops_o;
 };
 
-struct gam * gam_create(enum pol_gam gam_type,
-                        const char * ae_name)
+struct gam * gam_create(enum pol_gam gam_type)
 {
         struct gam * tmp;
 
@@ -80,21 +77,13 @@ struct gam * gam_create(enum pol_gam gam_type,
 
         list_head_init(&tmp->gas);
 
-        tmp->ae_name = strdup(ae_name);
-        if (tmp->ae_name == NULL) {
-                free(tmp);
-                return NULL;
-        }
-
         if (pthread_mutex_init(&tmp->gas_lock, NULL)) {
-                free(tmp->ae_name);
                 free(tmp);
                 return NULL;
         }
 
         if (pthread_cond_init(&tmp->gas_cond, NULL)) {
                 pthread_mutex_destroy(&tmp->gas_lock);
-                free(tmp->ae_name);
                 free(tmp);
                 return NULL;
         }
@@ -103,7 +92,6 @@ struct gam * gam_create(enum pol_gam gam_type,
         if (tmp->ops_o == NULL) {
                 pthread_cond_destroy(&tmp->gas_cond);
                 pthread_mutex_destroy(&tmp->gas_lock);
-                free(tmp->ae_name);
                 free(tmp);
                 return NULL;
         }
@@ -111,7 +99,6 @@ struct gam * gam_create(enum pol_gam gam_type,
         if (tmp->ops->start(tmp->ops_o)) {
                 pthread_cond_destroy(&tmp->gas_cond);
                 pthread_mutex_destroy(&tmp->gas_lock);
-                free(tmp->ae_name);
                 free(tmp);
                 return NULL;
         }
@@ -143,7 +130,6 @@ void gam_destroy(struct gam * instance)
         pthread_mutex_destroy(&instance->gas_lock);
         pthread_cond_destroy(&instance->gas_cond);
 
-        free(instance->ae_name);
         instance->ops->destroy(instance->ops_o);
         free(instance);
 }
@@ -170,7 +156,7 @@ static int add_ga(struct gam *       instance,
         pthread_cond_signal(&instance->gas_cond);
         pthread_mutex_unlock(&instance->gas_lock);
 
-        log_info("Added %s flow to %s.", instance->ae_name, info->name);
+        log_info("Added flow to %s.", info->name);
 
         return 0;
 }
@@ -241,7 +227,7 @@ int gam_flow_alloc(struct gam * instance,
 
         log_dbg("Allocating flow to %s.", dst_name);
 
-        fd = flow_alloc(dst_name, instance->ae_name, NULL);
+        fd = flow_alloc(dst_name, NULL);
         if (fd < 0) {
                 log_err("Failed to allocate flow to %s.", dst_name);
                 return -1;

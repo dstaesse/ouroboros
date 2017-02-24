@@ -50,7 +50,6 @@ struct ipcp_ops {
 
         int   (* ipcp_flow_alloc)(int       fd,
                                   char *    dst_ap_name,
-                                  char *    src_ae_name,
                                   qoscube_t qos);
 
         int   (* ipcp_flow_alloc_resp)(int fd,

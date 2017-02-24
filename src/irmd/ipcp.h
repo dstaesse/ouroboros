@@ -52,7 +52,6 @@ int   ipcp_flow_alloc(pid_t     api,
                       int       port_id,
                       pid_t     n_api,
                       char *    dst_name,
-                      char *    src_ae_name,
                       qoscube_t qos);
 
 int   ipcp_flow_alloc_resp(pid_t api,

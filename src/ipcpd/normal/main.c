@@ -85,8 +85,9 @@ void ipcp_sig_handler(int         sig,
 static void * flow_acceptor(void * o)
 {
         int       fd;
-        char *    ae_name;
         qosspec_t qs;
+        /* FIXME: Remove once correct AE is known. */
+        char *    ae_name = ENROLL_AE;
 
         (void) o;
 
@@ -101,14 +102,14 @@ static void * flow_acceptor(void * o)
 
                 pthread_rwlock_unlock(&ipcpi.state_lock);
 
-                fd = flow_accept(&ae_name, &qs);
+                fd = flow_accept(&qs);
                 if (fd < 0) {
                         if (fd != -EIRMD)
                                 log_warn("Flow accept failed: %d", fd);
                         continue;
                 }
 
-                log_dbg("New flow allocation request for AE %s.", ae_name);
+                /* FIXME: Perform CACEP at this point */
 
                 if (strcmp(ae_name, ENROLL_AE) == 0) {
                         enroll_handle(fd);
@@ -123,8 +124,6 @@ static void * flow_acceptor(void * o)
                                 log_warn("Failed to reply to flow allocation.");
                         flow_dealloc(fd);
                 }
-
-                free(ae_name);
         }
 
         return (void *) 0;
