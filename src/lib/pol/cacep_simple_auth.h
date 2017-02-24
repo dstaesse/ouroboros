@@ -24,10 +24,12 @@
 #ifndef OUROBOROS_LIB_CACEP_SIMPLE_AUTH_H
 #define OUROBOROS_LIB_CACEP_SIMPLE_AUTH_H
 
-struct cacep_info * cacep_simple_auth_auth(int                       fd,
-                                           const struct cacep_info * info);
+struct conn_info * cacep_simple_auth_auth(int                      fd,
+                                          const struct conn_info * info,
+                                          const void *             auth);
 
-struct cacep_info * cacep_simple_auth_auth_wait(int                       fd,
-                                                const struct cacep_info * info);
+struct conn_info * cacep_simple_auth_auth_wait(int                      fd,
+                                               const struct conn_info * info,
+                                               const void *             auth);
 
 #endif /* OUROBOROS_LIB_CACEP_SIMPLE_AUTH_H */

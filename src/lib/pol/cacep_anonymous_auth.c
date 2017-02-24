@@ -43,16 +43,16 @@ typedef CacepProtoMsg cacep_proto_msg_t;
 #define NAME_LEN 8
 
 /* this policy generates a hex string */
-static struct cacep_info * anonymous_info(void)
+static struct conn_info * anonymous_info(void)
 {
-        struct cacep_info * info;
+        struct conn_info * info;
         struct timespec t;
 
         info = malloc(sizeof(*info));
         if (info == NULL)
                 return NULL;
 
-        cacep_info_init(info);
+        conn_info_init(info);
 
         info->name = malloc(NAME_LEN + 1);
         if (info->name == NULL) {
@@ -71,9 +71,9 @@ static struct cacep_info * anonymous_info(void)
         return info;
 }
 
-static struct cacep_info * read_msg(int fd)
+static struct conn_info * read_msg(int fd)
 {
-        struct cacep_info *          tmp;
+        struct conn_info *           tmp;
         uint8_t                      buf[BUF_SIZE];
         cacep_anonymous_auth_msg_t * msg;
         ssize_t                      len;
@@ -113,8 +113,8 @@ static struct cacep_info * read_msg(int fd)
         return tmp;
 }
 
-static int send_msg(int                       fd,
-                    const struct cacep_info * info)
+static int send_msg(int                      fd,
+                    const struct conn_info * info)
 {
         cacep_anonymous_auth_msg_t msg  = CACEP_ANONYMOUS_AUTH_MSG__INIT;
         cacep_proto_msg_t          cmsg = CACEP_PROTO_MSG__INIT;
@@ -148,12 +148,15 @@ static int send_msg(int                       fd,
         return ret;
 }
 
-struct cacep_info * cacep_anonymous_auth(int                       fd,
-                                         const struct cacep_info * info)
+struct conn_info * cacep_anonymous_auth(int                      fd,
+                                        const struct conn_info * info,
+                                        const void *             auth)
 {
-        struct cacep_info * tmp;
+        struct conn_info * tmp;
 
         assert(info);
+
+        (void) auth;
 
         if (send_msg(fd, info))
                 return NULL;
@@ -165,30 +168,31 @@ struct cacep_info * cacep_anonymous_auth(int                       fd,
         if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
             info->proto.pref_version != tmp->proto.pref_version ||
             info->proto.pref_syntax != tmp->proto.pref_syntax) {
-                cacep_info_fini(tmp);
+                conn_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
-
-        tmp->data = NULL;
 
         return tmp;
 }
 
 
-struct cacep_info * cacep_anonymous_auth_wait(int                       fd,
-                                              const struct cacep_info * info)
+struct conn_info * cacep_anonymous_auth_wait(int                      fd,
+                                             const struct conn_info * info,
+                                             const void *             auth)
 {
-        struct cacep_info * tmp;
+        struct conn_info * tmp;
 
         assert(info);
+
+        (void) auth;
 
         tmp = read_msg(fd);
         if (tmp == NULL)
                 return NULL;
 
         if (send_msg(fd, info)) {
-                cacep_info_fini(tmp);
+                conn_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }
@@ -196,7 +200,7 @@ struct cacep_info * cacep_anonymous_auth_wait(int                       fd,
         if (strcmp(info->proto.protocol, tmp->proto.protocol) ||
             info->proto.pref_version != tmp->proto.pref_version ||
             info->proto.pref_syntax != tmp->proto.pref_syntax) {
-                cacep_info_fini(tmp);
+                conn_info_fini(tmp);
                 free(tmp);
                 return NULL;
         }

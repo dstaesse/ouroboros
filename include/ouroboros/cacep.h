@@ -32,7 +32,7 @@ enum proto_concrete_syntax {
         PROTO_FIXED
 };
 
-struct cacep_info {
+struct conn_info{
         struct {
                 char *                     protocol;
                 uint32_t                   pref_version;
@@ -40,19 +40,20 @@ struct cacep_info {
         }        proto;
         char *   name;
         uint64_t addr;
-        void *   data;
 };
 
-int                 cacep_info_init(struct cacep_info * info);
+int                conn_info_init(struct conn_info * info);
 
-void                cacep_info_fini(struct cacep_info * info);
+void               conn_info_fini(struct conn_info * info);
 
-struct cacep_info * cacep_auth(int                       fd,
-                               enum pol_cacep            pc,
-                               const struct cacep_info * info);
+struct conn_info * cacep_auth(int                      fd,
+                              enum pol_cacep           pc,
+                              const struct conn_info * info,
+                              const void *             auth);
 
-struct cacep_info * cacep_auth_wait(int                       fd,
-                                    enum pol_cacep            pc,
-                                    const struct cacep_info * info);
+struct conn_info * cacep_auth_wait(int                      fd,
+                                   enum pol_cacep           pc,
+                                   const struct conn_info * info,
+                                   const void *             auth);
 
 #endif /* OUROBOROS_CACEP_H */
