@@ -39,7 +39,6 @@ struct cdap_flow * cdap_flow_arr(int                      fd,
                                  const struct conn_info * info);
 
 struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
-                                   const char *             ae_name,
                                    qosspec_t *              qs,
                                    enum pol_cacep           pc,
                                    const struct conn_info * info);

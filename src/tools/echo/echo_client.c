@@ -30,7 +30,7 @@ int client_main(void)
         char * message  = "Client says hi!";
         ssize_t count = 0;
 
-        fd = flow_alloc("echo", NULL, NULL);
+        fd = flow_alloc("echo", NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 return -1;

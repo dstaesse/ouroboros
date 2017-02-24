@@ -71,7 +71,7 @@ int ribmgr_init(void)
         /* FIXME: Implement cacep policies */
         (void) pc;
 
-        ribmgr.gam = gam_create(pg, MGMT_AE);
+        ribmgr.gam = gam_create(pg);
         if (ribmgr.gam == NULL) {
                 log_err("Failed to create gam.");
                 return -1;

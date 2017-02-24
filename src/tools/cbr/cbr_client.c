@@ -90,7 +90,7 @@ int client_main(char * server,
         printf("Client started, duration %d, rate %lu b/s, size %d B.\n",
                duration, rate, size);
 
-        fd = flow_alloc(server, NULL, NULL);
+        fd = flow_alloc(server, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 return -1;

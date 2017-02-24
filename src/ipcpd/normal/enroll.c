@@ -181,8 +181,7 @@ int enroll_boot(char * dst_name)
         info.proto.pref_version = 1;
         info.proto.pref_syntax  = PROTO_GPB;
 
-        flow = cdap_flow_alloc(dst_name, ENROLL_AE, NULL, ANONYMOUS_AUTH,
-                               &info);
+        flow = cdap_flow_alloc(dst_name, NULL, ANONYMOUS_AUTH, &info);
         if (flow == NULL) {
                 log_err("Failed to allocate flow for enrollment request.");
                 conn_info_fini(&info);

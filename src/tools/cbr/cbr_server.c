@@ -164,7 +164,7 @@ static void * listener(void * o)
                server_settings.interval, server_settings.timeout);
 
         while (true) {
-                client_fd = flow_accept(NULL, &qs);
+                client_fd = flow_accept(&qs);
                 if (client_fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;

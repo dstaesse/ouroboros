@@ -220,7 +220,6 @@ static int ipcp_local_name_query(char * name)
 
 static int ipcp_local_flow_alloc(int       fd,
                                  char *    dst_name,
-                                 char *    src_ae_name,
                                  qoscube_t cube)
 {
         int out_fd = -1;
@@ -228,7 +227,6 @@ static int ipcp_local_flow_alloc(int       fd,
         log_dbg("Allocating flow to %s on fd %d.", dst_name, fd);
 
         assert(dst_name);
-        assert(src_ae_name);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -240,7 +238,7 @@ static int ipcp_local_flow_alloc(int       fd,
 
         pthread_rwlock_wrlock(&local_data.lock);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name, cube);
+        out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
 
         local_data.in_out[fd]  = out_fd;
         local_data.in_out[out_fd] = fd;

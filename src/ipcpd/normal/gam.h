@@ -26,8 +26,7 @@
 #include <ouroboros/cacep.h>
 #include <ouroboros/irm_config.h>
 
-struct gam * gam_create(enum pol_gam gam_type,
-                        const char * ae_name);
+struct gam * gam_create(enum pol_gam gam_type);
 
 void         gam_destroy(struct gam * instance);
 

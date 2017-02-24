@@ -301,7 +301,7 @@ int fmgr_init(void)
         /* FIXME: Implement cacep policies */
         (void) pc;
 
-        fmgr.gam = gam_create(pg, DT_AE);
+        fmgr.gam = gam_create(pg);
         if (fmgr.gam == NULL) {
                 log_err("Failed to create graph adjacency manager.");
                 fmgr_destroy_flows();
@@ -360,7 +360,6 @@ void fmgr_fini()
 
 int fmgr_np1_alloc(int       fd,
                    char *    dst_ap_name,
-                   char *    src_ae_name,
                    qoscube_t cube)
 {
         cep_id_t         cep_id;
@@ -406,7 +405,6 @@ int fmgr_np1_alloc(int       fd,
 
         msg.code = FLOW_ALLOC_CODE__FLOW_REQ;
         msg.dst_name = dst_ap_name;
-        msg.src_ae_name = src_ae_name;
         msg.has_qoscube = true;
         msg.qoscube = cube;
 
@@ -546,7 +544,6 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
         case FLOW_ALLOC_CODE__FLOW_REQ:
                 fd = ipcp_flow_req_arr(getpid(),
                                        msg->dst_name,
-                                       msg->src_ae_name,
                                        msg->qoscube);
                 if (fd < 0) {
                         flow_alloc_msg__free_unpacked(msg, NULL);

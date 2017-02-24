@@ -87,7 +87,6 @@ struct cdap_flow * cdap_flow_arr(int                     fd,
 }
 
 struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
-                                   const char *             ae_name,
                                    qosspec_t *              qs,
                                    enum pol_cacep           pc,
                                    const struct conn_info * info)
@@ -97,12 +96,12 @@ struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
 
         log_dbg("Allocating flow to %s.", dst_name);
 
-        if (dst_name == NULL || ae_name == NULL) {
+        if (dst_name == NULL) {
                 log_err("Not enough info to establish flow.");
                 return NULL;
         }
 
-        fd = flow_alloc(dst_name, ae_name, qs);
+        fd = flow_alloc(dst_name, qs);
         if (fd < 0) {
                 log_err("Failed to allocate flow to %s.", dst_name);
                 return NULL;
