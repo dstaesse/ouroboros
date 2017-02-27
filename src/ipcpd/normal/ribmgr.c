@@ -53,7 +53,6 @@ struct {
 
 int ribmgr_init(void)
 {
-        enum pol_cacep pc;
         enum pol_gam   pg;
 
         if (rib_read(BOOT_PATH "/rm/gam/type", &pg, sizeof(pg))
@@ -61,15 +60,6 @@ int ribmgr_init(void)
                 log_err("Failed to read policy for ribmgr gam.");
                 return -1;
         }
-
-        if (rib_read(BOOT_PATH "/rm/gam/cacep", &pc, sizeof(pc))
-            != sizeof(pc)) {
-                log_err("Failed to read CACEP policy for ribmgr gam.");
-                return -1;
-        }
-
-        /* FIXME: Implement cacep policies */
-        (void) pc;
 
         ribmgr.gam = gam_create(pg);
         if (ribmgr.gam == NULL) {

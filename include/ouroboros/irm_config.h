@@ -47,11 +47,6 @@ enum pol_gam {
         COMPLETE = 0
 };
 
-enum pol_cacep {
-        ANONYMOUS_AUTH = 0,
-        SIMPLE_AUTH
-};
-
 struct dif_config {
         char *         dif_name;
         enum ipcp_type type;

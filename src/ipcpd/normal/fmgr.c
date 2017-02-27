@@ -249,7 +249,6 @@ static void fmgr_destroy_flows(void)
 
 int fmgr_init(void)
 {
-        enum pol_cacep     pc;
         enum pol_gam       pg;
 
         int i;
@@ -291,15 +290,6 @@ int fmgr_init(void)
                 log_err("Failed to read policy for ribmgr gam.");
                 return -1;
         }
-
-        if (rib_read(BOOT_PATH "/dt/gam/cacep", &pc, sizeof(pc))
-            != sizeof(pc)) {
-                log_err("Failed to read CACEP policy for ribmgr gam.");
-                return -1;
-        }
-
-        /* FIXME: Implement cacep policies */
-        (void) pc;
 
         fmgr.gam = gam_create(pg);
         if (fmgr.gam == NULL) {
@@ -345,7 +335,6 @@ void fmgr_fini()
                 flow_dealloc(flow->fd);
                 ipcp_flow_get_qoscube(flow->fd, &cube);
                 flow_set_del(fmgr.nm1_set[cube], flow->fd);
-                free(flow->info->name);
                 free(flow->info);
                 free(flow);
         }

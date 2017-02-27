@@ -29,6 +29,7 @@
 #include "cdap_flow.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 static void cdap_flow_destroy(struct cdap_flow * flow)
@@ -37,20 +38,15 @@ static void cdap_flow_destroy(struct cdap_flow * flow)
 
         if (flow->ci != NULL)
                 cdap_destroy(flow->ci);
-        if (flow->info != NULL) {
-                conn_info_fini(flow->info);
-                free(flow->info);
-        }
 
         free(flow);
 }
 
-struct cdap_flow * cdap_flow_arr(int                     fd,
+struct cdap_flow * cdap_flow_arr(int                      fd,
                                  int                      resp,
-                                 enum pol_cacep           pc,
                                  const struct conn_info * info)
 {
-        struct cdap_flow *  flow;
+        struct cdap_flow * flow;
 
         if (flow_alloc_resp(fd, resp) < 0) {
                 log_err("Could not respond to new flow.");
@@ -66,12 +62,13 @@ struct cdap_flow * cdap_flow_arr(int                     fd,
                 return NULL;
         }
 
+        memset(&flow->info, 0, sizeof(flow->info));
+
         flow->fd = fd;
         flow->ci = NULL;
 
-        flow->info = cacep_auth_wait(fd, pc, info, NULL);
-        if (flow->info == NULL) {
-                log_err("Other side failed to authenticate.");
+        if (cacep_listen(fd, info, &flow->info)) {
+                log_err("Error establishing application connection.");
                 cdap_flow_destroy(flow);
                 return NULL;
         }
@@ -88,7 +85,6 @@ struct cdap_flow * cdap_flow_arr(int                     fd,
 
 struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
                                    qosspec_t *              qs,
-                                   enum pol_cacep           pc,
                                    const struct conn_info * info)
 {
         struct cdap_flow *  flow;
@@ -119,12 +115,13 @@ struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
                 return NULL;
         }
 
+        memset(&flow->info, 0, sizeof(flow->info));
+
         flow->fd = fd;
         flow->ci = NULL;
 
-        flow->info = cacep_auth(fd, pc, info, NULL);
-        if (flow->info == NULL) {
-                log_err("Failed to authenticate.");
+        if (cacep_connect(fd, info, &flow->info)) {
+                log_err("Failed to connect to application.");
                 cdap_flow_dealloc(flow);
                 return NULL;
         }

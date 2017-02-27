@@ -120,7 +120,6 @@ void gam_destroy(struct gam * instance)
         list_for_each_safe(p, n, &instance->gas) {
                 struct ga * e = list_entry(p, struct ga, next);
                 list_del(&e->next);
-                free(e->info->name);
                 free(e->info);
                 free(e);
         }
@@ -156,7 +155,7 @@ static int add_ga(struct gam *       instance,
         pthread_cond_signal(&instance->gas_cond);
         pthread_mutex_unlock(&instance->gas_lock);
 
-        log_info("Added flow to %s.", info->name);
+        log_info("Added flow.");
 
         return 0;
 }
@@ -166,7 +165,7 @@ int gam_flow_arr(struct gam * instance,
                  qosspec_t    qs)
 {
         struct conn_info * rcv_info;
-        struct conn_info   snd_info;
+        struct conn_info snd_info;
 
         if (flow_alloc_resp(fd, instance->ops->accept_new_flow(instance->ops_o))
             < 0) {
@@ -174,34 +173,29 @@ int gam_flow_arr(struct gam * instance,
                 return -1;
         }
 
-        conn_info_init(&snd_info);
-        snd_info.proto.protocol = strdup(CDAP_PROTO);
-        if (snd_info.proto.protocol == NULL) {
-                conn_info_fini(&snd_info);
+        rcv_info = malloc(sizeof(*rcv_info));
+        if (rcv_info == NULL)
                 return -ENOMEM;
-        }
 
-        snd_info.proto.pref_version = 1;
-        snd_info.proto.pref_syntax = PROTO_GPB;
-        snd_info.addr = ipcpi.address;
-        snd_info.name = strdup(ipcpi.name);
-        if (snd_info.name == NULL) {
-                conn_info_fini(&snd_info);
-                return -ENOMEM;
-        }
+        memset(&snd_info, 0, sizeof(snd_info));
+        memset(rcv_info, 0, sizeof(*rcv_info));
 
-        rcv_info = cacep_auth_wait(fd, SIMPLE_AUTH, &snd_info, NULL);
-        if (rcv_info == NULL) {
-                log_err("Other side failed to authenticate.");
-                conn_info_fini(&snd_info);
+        /* FIXME: send correct AE */
+        strcpy(snd_info.ae_name, "FIXME:CORRECT_AE");
+        strcpy(snd_info.protocol, CDAP_PROTO);
+        snd_info.pref_version = 1;
+        snd_info.pref_syntax = PROTO_GPB;
+        snd_info.ae.addr = ipcpi.address;
+
+        if (cacep_listen(fd, &snd_info, rcv_info)) {
+                log_err("Failed to create application connection.");
+                flow_dealloc(fd);
+                free(rcv_info);
                 return -1;
         }
 
-        conn_info_fini(&snd_info);
-
         if (instance->ops->accept_flow(instance->ops_o, qs, rcv_info)) {
                 flow_dealloc(fd);
-                conn_info_fini(rcv_info);
                 free(rcv_info);
                 return 0;
         }
@@ -209,7 +203,6 @@ int gam_flow_arr(struct gam * instance,
         if (add_ga(instance, fd, qs, rcv_info)) {
                 log_err("Failed to add ga to graph adjacency manager list.");
                 flow_dealloc(fd);
-                conn_info_fini(rcv_info);
                 free(rcv_info);
                 return -1;
         }
@@ -222,10 +215,14 @@ int gam_flow_alloc(struct gam * instance,
                    qosspec_t    qs)
 {
         struct conn_info * rcv_info;
-        struct conn_info   snd_info;
+        struct conn_info snd_info;
         int                 fd;
 
         log_dbg("Allocating flow to %s.", dst_name);
+
+        rcv_info = malloc(sizeof(*rcv_info));
+        if (rcv_info == NULL)
+                return -ENOMEM;
 
         fd = flow_alloc(dst_name, NULL);
         if (fd < 0) {
@@ -239,34 +236,25 @@ int gam_flow_alloc(struct gam * instance,
                 return -1;
         }
 
-        conn_info_init(&snd_info);
-        snd_info.proto.protocol = strdup(CDAP_PROTO);
-        if (snd_info.proto.protocol == NULL) {
-                conn_info_fini(&snd_info);
-                return -ENOMEM;
-        }
+        memset(&snd_info, 0, sizeof(snd_info));
+        memset(rcv_info, 0, sizeof(*rcv_info));
 
-        snd_info.proto.pref_version = 1;
-        snd_info.proto.pref_syntax = PROTO_GPB;
-        snd_info.addr = ipcpi.address;
-        snd_info.name = strdup(ipcpi.name);
-        if (snd_info.name == NULL) {
-                conn_info_fini(&snd_info);
-                return -ENOMEM;
-        }
+        /* FIXME: send correct AE */
+        strcpy(snd_info.ae_name, "FIXME:CORRECT_AE");
+        strcpy(snd_info.protocol, CDAP_PROTO);
+        snd_info.pref_version = 1;
+        snd_info.pref_syntax = PROTO_GPB;
+        snd_info.ae.addr = ipcpi.address;
 
-        rcv_info = cacep_auth(fd, SIMPLE_AUTH, &snd_info, NULL);
-        if (rcv_info == NULL) {
-                log_err("Other side failed to authenticate.");
-                conn_info_fini(&snd_info);
+        if (cacep_connect(fd, &snd_info, rcv_info)) {
+                log_err("Failed to create application connection.");
+                flow_dealloc(fd);
+                free(rcv_info);
                 return -1;
         }
 
-        conn_info_fini(&snd_info);
-
         if (instance->ops->accept_flow(instance->ops_o, qs, rcv_info)) {
                 flow_dealloc(fd);
-                conn_info_fini(rcv_info);
                 free(rcv_info);
                 return 0;
         }
@@ -274,7 +262,6 @@ int gam_flow_alloc(struct gam * instance,
         if (add_ga(instance, fd, qs, rcv_info)) {
                 log_err("Failed to add GA to graph adjacency manager list.");
                 flow_dealloc(fd);
-                conn_info_fini(rcv_info);
                 free(rcv_info);
                 return -1;
         }
@@ -282,10 +269,10 @@ int gam_flow_alloc(struct gam * instance,
         return 0;
 }
 
-int gam_flow_wait(struct gam *         instance,
-                  int *                fd,
+int gam_flow_wait(struct gam *        instance,
+                  int *               fd,
                   struct conn_info ** info,
-                  qosspec_t *          qs)
+                  qosspec_t *         qs)
 {
         struct ga * ga;
 

@@ -336,11 +336,6 @@ int normal_rib_init(void)
 
 static int normal_ipcp_bootstrap(struct dif_config * conf)
 {
-        /* FIXME: get CACEP policies from conf */
-        enum pol_cacep pol = SIMPLE_AUTH;
-
-        (void) pol;
-
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
@@ -388,12 +383,6 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
             rib_write(BOOT_PATH "/rm/gam/type",
                       &conf->rm_gam_type,
                       sizeof(conf->rm_gam_type)) ||
-            rib_write(BOOT_PATH "/rm/gam/cacep",
-                      &pol,
-                      sizeof(pol)) ||
-            rib_write(BOOT_PATH "/dt/gam/cacep",
-                      &pol,
-                      sizeof(pol)) ||
             rib_write(BOOT_PATH "/addr_auth/type",
                       &conf->addr_auth_type,
                       sizeof(conf->addr_auth_type))) {

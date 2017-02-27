@@ -1,9 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * The Common Application Connection Establishment Phase
+ * The Common Application Connection Establishment Protocol
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -20,91 +21,118 @@
  * 02110-1301 USA
  */
 
-#define OUROBOROS_PREFIX "cacep"
-
 #include <ouroboros/config.h>
 #include <ouroboros/cacep.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
-#include <ouroboros/logs.h>
-
-#include "pol/cacep_anonymous_auth.h"
-#include "pol/cacep_simple_auth.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#define BUF_SIZE 2048
+#include "cacep.pb-c.h"
+typedef CacepMsg cacep_msg_t;
 
-int conn_info_init(struct conn_info * info)
+#define BUF_SIZE 64
+
+int read_msg(int                fd,
+             struct conn_info * info)
 {
-        if (info == NULL)
-                return -EINVAL;
+        uint8_t                      buf[BUF_SIZE];
+        cacep_msg_t *                msg;
+        ssize_t                      len;
 
-        info->proto.protocol = NULL;
-        info->name = NULL;
+        len = flow_read(fd, buf, BUF_SIZE);
+        if (len < 0)
+                return -1;
+
+        msg = cacep_msg__unpack(NULL, len, buf);
+        if (msg == NULL)
+                return -1;
+
+        strcpy(info->protocol, msg->protocol);
+
+        info->pref_version = msg->pref_version;
+        info->pref_syntax  = msg->pref_syntax;
+
+        cacep_msg__free_unpacked(msg, NULL);
 
         return 0;
 }
 
-void conn_info_fini(struct conn_info * info)
+static int send_msg(int                      fd,
+                    const struct conn_info * info)
 {
-        if (info == NULL)
-                return;
+        cacep_msg_t msg = CACEP_MSG__INIT;
+        uint8_t *   data = NULL;
+        size_t      len  = 0;
 
-        if (info->proto.protocol != NULL) {
-                free(info->proto.protocol);
-                info->proto.protocol = NULL;
+        msg.ae_name      = (char *) info->ae_name;
+        msg.protocol     = (char *) info->protocol;
+        msg.pref_version = info->pref_version;
+        msg.pref_syntax  = info->pref_syntax;
+        if (msg.pref_syntax < 0)
+                return -1;
+
+        len = cacep_msg__get_packed_size(&msg);
+        if (len == 0)
+                return -1;
+
+        data = malloc(len);
+        if (data == NULL)
+                return -ENOMEM;
+
+        cacep_msg__pack(&msg, data);
+
+        if (flow_write(fd, data, len) < 0) {
+                free(data);
+                return -1;
         }
 
-        if (info->name != NULL) {
-                free(info->name);
-                info->name = NULL;
-        }
+        free(data);
+
+        return 0;
 }
 
-struct conn_info * cacep_auth(int                      fd,
-                              enum pol_cacep           pc,
-                              const struct conn_info * info,
-                              const void *             auth)
+int cacep_connect(int                      fd,
+                  const struct conn_info * in,
+                  struct conn_info *       out)
 {
-        if (info == NULL) {
-                log_err("No info provided.");
-                return NULL;
-        }
+        if (in == NULL || out == NULL)
+                return -EINVAL;
 
-        switch (pc) {
-        case ANONYMOUS_AUTH:
-                return cacep_anonymous_auth(fd, info, auth);
-        case SIMPLE_AUTH:
-                if (info == NULL)
-                        return NULL;
-                return cacep_simple_auth_auth(fd, info, auth);
-        default:
-                log_err("Unsupported CACEP policy.");
-                return NULL;
-        }
+        if (send_msg(fd, in))
+                return -1;
+
+        if (read_msg(fd, out))
+                return -1;
+
+        if (strcmp(in->ae_name, out->ae_name) ||
+            strcmp(in->protocol, out->protocol) ||
+            in->pref_version != out->pref_version ||
+            in->pref_syntax != out->pref_syntax)
+                return -EPROTO;
+
+        return 0;
 }
 
-struct conn_info * cacep_auth_wait(int                      fd,
-                                   enum pol_cacep           pc,
-                                   const struct conn_info * info,
-                                   const void *             auth)
+int cacep_listen(int                      fd,
+                 const struct conn_info * in,
+                 struct conn_info *       out)
 {
-        if (info == NULL) {
-                log_err("No info provided.");
-                return NULL;
-        }
+        if (in == NULL || out == NULL)
+                return -EINVAL;
 
-        switch (pc) {
-        case ANONYMOUS_AUTH:
-                return cacep_anonymous_auth_wait(fd, info, auth);
-        case SIMPLE_AUTH:
-                if (info == NULL)
-                        return NULL;
-                return cacep_simple_auth_auth_wait(fd, info, auth);
-        default:
-                log_err("Unsupported CACEP policy.");
-                return NULL;
-        }
+        if (send_msg(fd, in))
+                return -1;
+
+        if (read_msg(fd, out))
+                return -1;
+
+        if (strcmp(in->ae_name, out->ae_name) ||
+            strcmp(in->protocol, out->protocol) ||
+            in->pref_version != out->pref_version ||
+            in->pref_syntax != out->pref_syntax)
+                return -EPROTO;
+
+        return 0;
 }

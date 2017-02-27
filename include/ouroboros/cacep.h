@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * The Common Application Connection Establishment Phase
+ * The Common Application Connection Establishment Protocol
  *
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
@@ -24,7 +24,7 @@
 #ifndef OUROBOROS_CACEP_H
 #define OUROBOROS_CACEP_H
 
-#include <ouroboros/irm_config.h>
+#include <stdint.h>
 
 enum proto_concrete_syntax {
         PROTO_GPB = 0,
@@ -33,27 +33,22 @@ enum proto_concrete_syntax {
 };
 
 struct conn_info{
-        struct {
-                char *                     protocol;
-                uint32_t                   pref_version;
-                enum proto_concrete_syntax pref_syntax;
-        }        proto;
-        char *   name;
-        uint64_t addr;
+        char                       ae_name[64];
+        char                       protocol[64];
+        uint32_t                   pref_version;
+        enum proto_concrete_syntax pref_syntax;
+        union {
+                char     name[64];
+                uint64_t addr;
+        } ae;
 };
 
-int                conn_info_init(struct conn_info * info);
+int  cacep_connect(int                      fd,
+                   const struct conn_info * in,
+                   struct conn_info *       out);
 
-void               conn_info_fini(struct conn_info * info);
-
-struct conn_info * cacep_auth(int                      fd,
-                              enum pol_cacep           pc,
-                              const struct conn_info * info,
-                              const void *             auth);
-
-struct conn_info * cacep_auth_wait(int                      fd,
-                                   enum pol_cacep           pc,
-                                   const struct conn_info * info,
-                                   const void *             auth);
+int  cacep_listen(int                      fd,
+                  const struct conn_info * in,
+                  struct conn_info *       out);
 
 #endif /* OUROBOROS_CACEP_H */

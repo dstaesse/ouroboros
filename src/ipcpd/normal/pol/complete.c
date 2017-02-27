@@ -167,7 +167,8 @@ int complete_accept_flow(void *                    o,
 
         list_for_each(pos, &complete->neighbors) {
                 struct neighbor * e = list_entry(pos, struct neighbor, next);
-                if (strcmp(e->neighbor, info->name) == 0) {
+                /* FIXME: figure out union type and check name or address */
+                if (strcmp(e->neighbor, info->ae.name) == 0) {
                         pthread_mutex_unlock(&complete->neighbors_lock);
                         return -1;
                 }
@@ -185,7 +186,8 @@ int complete_accept_flow(void *                    o,
 
         list_head_init(&n->next);
 
-        n->neighbor = strdup(info->name);
+        /* FIXME: figure out union type and check name or address */
+        n->neighbor = strdup(info->ae.name);
         if (n->neighbor == NULL) {
                 pthread_mutex_unlock(&complete->neighbors_lock);
                 free(n);
