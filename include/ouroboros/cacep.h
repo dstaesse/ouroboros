@@ -43,12 +43,10 @@ struct conn_info{
         } ae;
 };
 
-int  cacep_connect(int                      fd,
-                   const struct conn_info * in,
-                   struct conn_info *       out);
+int cacep_snd(int                      fd,
+              const struct conn_info * in);
 
-int  cacep_listen(int                      fd,
-                  const struct conn_info * in,
-                  struct conn_info *       out);
+int cacep_rcv(int                fd,
+              struct conn_info * out);
 
 #endif /* OUROBOROS_CACEP_H */
