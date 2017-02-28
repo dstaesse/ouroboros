@@ -67,8 +67,28 @@ struct cdap_flow * cdap_flow_arr(int                      fd,
         flow->fd = fd;
         flow->ci = NULL;
 
-        if (cacep_listen(fd, info, &flow->info)) {
+        if (cacep_rcv(fd, &flow->info)) {
                 log_err("Error establishing application connection.");
+                cdap_flow_destroy(flow);
+                return NULL;
+        }
+
+        if (cacep_snd(fd, info)) {
+                log_err("Failed to respond to application connection request.");
+                cdap_flow_destroy(flow);
+                return NULL;
+        }
+
+        if (strcmp(flow->info.ae_name, info->ae_name)) {
+                log_err("Received connection for wrong AE.");
+                cdap_flow_destroy(flow);
+                return NULL;
+        }
+
+        if (strcmp(flow->info.protocol, info->protocol) ||
+            flow->info.pref_version != info->pref_version ||
+            flow->info.pref_syntax != info->pref_syntax) {
+                log_err("Unknown protocol.");
                 cdap_flow_destroy(flow);
                 return NULL;
         }
@@ -87,8 +107,8 @@ struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
                                    qosspec_t *              qs,
                                    const struct conn_info * info)
 {
-        struct cdap_flow *  flow;
-        int                 fd;
+        struct cdap_flow * flow;
+        int                fd;
 
         log_dbg("Allocating flow to %s.", dst_name);
 
@@ -120,9 +140,29 @@ struct cdap_flow * cdap_flow_alloc(const char *             dst_name,
         flow->fd = fd;
         flow->ci = NULL;
 
-        if (cacep_connect(fd, info, &flow->info)) {
+        if (cacep_snd(fd, info)) {
+                log_err("Failed to send connection request.");
+                cdap_flow_dealloc(flow);
+                return NULL;
+        }
+
+        if (cacep_rcv(fd, &flow->info)) {
                 log_err("Failed to connect to application.");
                 cdap_flow_dealloc(flow);
+                return NULL;
+        }
+
+        if (strcmp(flow->info.ae_name, info->ae_name)) {
+                log_err("Received connection for wrong AE.");
+                cdap_flow_destroy(flow);
+                return NULL;
+        }
+
+        if (strcmp(flow->info.protocol, info->protocol) ||
+            flow->info.pref_version != info->pref_version ||
+            flow->info.pref_syntax != info->pref_syntax) {
+                log_err("Unknown protocol.");
+                cdap_flow_destroy(flow);
                 return NULL;
         }
 

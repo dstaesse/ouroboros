@@ -187,8 +187,30 @@ int gam_flow_arr(struct gam * instance,
         snd_info.pref_syntax = PROTO_GPB;
         snd_info.ae.addr = ipcpi.address;
 
-        if (cacep_listen(fd, &snd_info, rcv_info)) {
-                log_err("Failed to create application connection.");
+        if (cacep_rcv(fd, rcv_info)) {
+                log_err("Error establishing application connection.");
+                flow_dealloc(fd);
+                free(rcv_info);
+                return -1;
+        }
+
+        if (cacep_snd(fd, &snd_info)) {
+                log_err("Failed to respond to application connection request.");
+                flow_dealloc(fd);
+                free(rcv_info);
+                return -1;
+        }
+
+        if (strcmp(snd_info.ae_name, rcv_info->ae_name)) {
+                log_err("Received connection for wrong AE.");
+                flow_dealloc(fd);
+                free(rcv_info);
+                return -1;
+        }
+
+        if (strcmp(snd_info.protocol, rcv_info->protocol) ||
+            snd_info.pref_version != rcv_info->pref_version ||
+            snd_info.pref_syntax != rcv_info->pref_syntax) {
                 flow_dealloc(fd);
                 free(rcv_info);
                 return -1;
@@ -246,8 +268,23 @@ int gam_flow_alloc(struct gam * instance,
         snd_info.pref_syntax = PROTO_GPB;
         snd_info.ae.addr = ipcpi.address;
 
-        if (cacep_connect(fd, &snd_info, rcv_info)) {
+        if (cacep_snd(fd, &snd_info)) {
                 log_err("Failed to create application connection.");
+                flow_dealloc(fd);
+                free(rcv_info);
+                return -1;
+        }
+
+        if (cacep_rcv(fd, rcv_info)) {
+                log_err("Failed to connect to application.");
+                flow_dealloc(fd);
+                free(rcv_info);
+                return -1;
+        }
+
+        if (strcmp(snd_info.protocol, rcv_info->protocol) ||
+            snd_info.pref_version != rcv_info->pref_version ||
+            snd_info.pref_syntax != rcv_info->pref_syntax) {
                 flow_dealloc(fd);
                 free(rcv_info);
                 return -1;

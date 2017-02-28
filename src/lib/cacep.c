@@ -93,46 +93,26 @@ static int send_msg(int                      fd,
         return 0;
 }
 
-int cacep_connect(int                      fd,
-                  const struct conn_info * in,
-                  struct conn_info *       out)
+int cacep_snd(int                      fd,
+              const struct conn_info * in)
 {
-        if (in == NULL || out == NULL)
+        if (in == NULL)
                 return -EINVAL;
 
         if (send_msg(fd, in))
                 return -1;
-
-        if (read_msg(fd, out))
-                return -1;
-
-        if (strcmp(in->ae_name, out->ae_name) ||
-            strcmp(in->protocol, out->protocol) ||
-            in->pref_version != out->pref_version ||
-            in->pref_syntax != out->pref_syntax)
-                return -EPROTO;
 
         return 0;
 }
 
-int cacep_listen(int                      fd,
-                 const struct conn_info * in,
-                 struct conn_info *       out)
+int cacep_rcv(int                fd,
+              struct conn_info * out)
 {
-        if (in == NULL || out == NULL)
+        if (out == NULL)
                 return -EINVAL;
-
-        if (send_msg(fd, in))
-                return -1;
 
         if (read_msg(fd, out))
                 return -1;
-
-        if (strcmp(in->ae_name, out->ae_name) ||
-            strcmp(in->protocol, out->protocol) ||
-            in->pref_version != out->pref_version ||
-            in->pref_syntax != out->pref_syntax)
-                return -EPROTO;
 
         return 0;
 }
