@@ -30,4 +30,5 @@ message cacep_msg {
         repeated int32 supp_version = 4;
         required int32 pref_syntax  = 5;
         repeated int32 supp_syntax  = 6;
+        required uint64 address     = 7;
 }

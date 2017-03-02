@@ -24,7 +24,6 @@
 
 #include <ouroboros/config.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/irm.h>
@@ -33,11 +32,10 @@
 #include <ouroboros/errno.h>
 
 #include "addr_auth.h"
-#include "ae.h"
+#include "connmgr.h"
 #include "dir.h"
 #include "enroll.h"
 #include "fmgr.h"
-#include "frct.h"
 #include "ipcp.h"
 #include "ribconfig.h"
 #include "ribmgr.h"
@@ -45,16 +43,11 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <string.h>
 #include <assert.h>
 #include <inttypes.h>
 
-#define THIS_TYPE    IPCP_NORMAL
-
-struct {
-        pthread_t acceptor;
-} normal;
+#define THIS_TYPE IPCP_NORMAL
 
 void ipcp_sig_handler(int         sig,
                       siginfo_t * info,
@@ -82,53 +75,6 @@ void ipcp_sig_handler(int         sig,
         }
 }
 
-static void * flow_acceptor(void * o)
-{
-        int       fd;
-        qosspec_t qs;
-        /* FIXME: Remove once correct AE is known. */
-        char *    ae_name = ENROLL_AE;
-
-        (void) o;
-
-        while (true) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        log_info("Shutting down flow acceptor.");
-                        return 0;
-                }
-
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-
-                fd = flow_accept(&qs);
-                if (fd < 0) {
-                        if (fd != -EIRMD)
-                                log_warn("Flow accept failed: %d", fd);
-                        continue;
-                }
-
-                /* FIXME: Perform CACEP at this point */
-
-                if (strcmp(ae_name, ENROLL_AE) == 0) {
-                        enroll_handle(fd);
-                } else if (strcmp(ae_name, MGMT_AE) == 0) {
-                        ribmgr_flow_arr(fd, qs);
-                } else if (strcmp(ae_name, DT_AE) == 0) {
-                        fmgr_nm1_flow_arr(fd, qs);
-                } else {
-                        log_dbg("Flow allocation request for unknown AE %s.",
-                                ae_name);
-                        if (flow_alloc_resp(fd, -1))
-                                log_warn("Failed to reply to flow allocation.");
-                        flow_dealloc(fd);
-                }
-        }
-
-        return (void *) 0;
-}
-
 /*
  * Boots the IPCP off information in the rib.
  * Common function after bootstrap or enroll.
@@ -153,15 +99,21 @@ static int boot_components(void)
         }
 
         if (rib_add(MEMBERS_PATH, ipcpi.name)) {
-                log_warn("Failed to add name to " MEMBERS_PATH);
+                log_err("Failed to add name to " MEMBERS_PATH);
                 return -1;
         }
 
         log_dbg("Starting components.");
 
+        if (connmgr_init()) {
+                log_err("Failed to init ap connection manager");
+                return -1;
+        }
+
         if (rib_read(BOOT_PATH "/addr_auth/type", &pa, sizeof(pa))
             != sizeof(pa)) {
                 log_err("Failed to read policy for address authority.");
+                connmgr_fini();
                 return -1;
         }
 
@@ -170,20 +122,22 @@ static int boot_components(void)
                 return -1;
         }
 
-        ipcpi.address = addr_auth_address();
-        if (ipcpi.address == 0) {
+        ipcpi.dt_addr = addr_auth_address();
+        if (ipcpi.dt_addr == 0) {
                 log_err("Failed to get a valid address.");
                 addr_auth_fini();
+                connmgr_fini();
                 return -1;
         }
 
-        log_dbg("IPCP got address %" PRIu64 ".", ipcpi.address);
+        log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
 
         log_dbg("Starting ribmgr.");
 
         if (ribmgr_init()) {
                 log_err("Failed to initialize RIB manager.");
                 addr_auth_fini();
+                connmgr_fini();
                 return -1;
         }
 
@@ -191,6 +145,7 @@ static int boot_components(void)
                 log_err("Failed to initialize directory.");
                 ribmgr_fini();
                 addr_auth_fini();
+                connmgr_fini();
                 return -1;
         }
 
@@ -200,6 +155,7 @@ static int boot_components(void)
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
+                connmgr_fini();
                 log_err("Failed to start flow manager.");
                 return -1;
         }
@@ -209,19 +165,21 @@ static int boot_components(void)
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
+                connmgr_fini();
                 log_err("Failed to initialize FRCT.");
                 return -1;
         }
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        if (pthread_create(&normal.acceptor, NULL, flow_acceptor, NULL)) {
+        if (connmgr_start()) {
                 ipcp_set_state(IPCP_INIT);
                 fmgr_fini();
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
-                log_err("Failed to create acceptor thread.");
+                connmgr_fini();
+                log_err("Failed to start AP connection manager.");
                 return -1;
         }
 
@@ -230,8 +188,7 @@ static int boot_components(void)
 
 void shutdown_components(void)
 {
-        pthread_cancel(normal.acceptor);
-        pthread_join(normal.acceptor, NULL);
+        connmgr_stop();
 
         frct_fini();
 
@@ -242,6 +199,8 @@ void shutdown_components(void)
         ribmgr_fini();
 
         addr_auth_fini();
+
+        connmgr_fini();
 }
 
 static int normal_ipcp_enroll(char * dst_name)
@@ -410,9 +369,9 @@ static struct ipcp_ops normal_ops = {
         .ipcp_name_reg        = dir_name_reg,
         .ipcp_name_unreg      = dir_name_unreg,
         .ipcp_name_query      = dir_name_query,
-        .ipcp_flow_alloc      = NULL, /* fmgr_np1_alloc, */
-        .ipcp_flow_alloc_resp = NULL, /* fmgr_np1_alloc_resp, */
-        .ipcp_flow_dealloc    = NULL, /* fmgr_np1_dealloc */
+        .ipcp_flow_alloc      = fmgr_np1_alloc,
+        .ipcp_flow_alloc_resp = fmgr_np1_alloc_resp,
+        .ipcp_flow_dealloc    = fmgr_np1_dealloc
 };
 
 int main(int    argc,

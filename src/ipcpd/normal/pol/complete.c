@@ -38,7 +38,7 @@
 
 struct neighbor {
         struct list_head next;
-        char *           neighbor;
+        uint64_t         neighbor;
 };
 
 struct complete {
@@ -135,7 +135,6 @@ void complete_destroy(void * o)
         list_for_each_safe(p, n, &complete->neighbors) {
                 struct neighbor * e = list_entry(p, struct neighbor, next);
                 list_del(&e->next);
-                free(e->neighbor);
                 free(e);
         }
 
@@ -168,7 +167,7 @@ int complete_accept_flow(void *                    o,
         list_for_each(pos, &complete->neighbors) {
                 struct neighbor * e = list_entry(pos, struct neighbor, next);
                 /* FIXME: figure out union type and check name or address */
-                if (strcmp(e->neighbor, info->ae.name) == 0) {
+                if (e->neighbor == info->addr) {
                         pthread_mutex_unlock(&complete->neighbors_lock);
                         return -1;
                 }
@@ -186,13 +185,7 @@ int complete_accept_flow(void *                    o,
 
         list_head_init(&n->next);
 
-        /* FIXME: figure out union type and check name or address */
-        n->neighbor = strdup(info->ae.name);
-        if (n->neighbor == NULL) {
-                pthread_mutex_unlock(&complete->neighbors_lock);
-                free(n);
-                return -1;
-        }
+        n->neighbor = info->addr;
 
         list_add(&n->next, &complete->neighbors);
 

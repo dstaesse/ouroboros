@@ -65,7 +65,7 @@ struct ipcp {
         enum ipcp_type     type;
         char *             dif_name;
 
-        uint64_t           address;
+        uint64_t           dt_addr;
 
         struct ipcp_ops *  ops;
         int                irmd_fd;

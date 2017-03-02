@@ -185,7 +185,7 @@ int gam_flow_arr(struct gam * instance,
         strcpy(snd_info.protocol, CDAP_PROTO);
         snd_info.pref_version = 1;
         snd_info.pref_syntax = PROTO_GPB;
-        snd_info.ae.addr = ipcpi.address;
+        snd_info.addr = ipcpi.dt_addr;
 
         if (cacep_rcv(fd, rcv_info)) {
                 log_err("Error establishing application connection.");
@@ -266,7 +266,7 @@ int gam_flow_alloc(struct gam * instance,
         strcpy(snd_info.protocol, CDAP_PROTO);
         snd_info.pref_version = 1;
         snd_info.pref_syntax = PROTO_GPB;
-        snd_info.ae.addr = ipcpi.address;
+        snd_info.addr = ipcpi.dt_addr;
 
         if (cacep_snd(fd, &snd_info)) {
                 log_err("Failed to create application connection.");

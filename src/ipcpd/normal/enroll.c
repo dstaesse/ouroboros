@@ -197,7 +197,7 @@ int enroll_boot(char * dst_name)
 
         delta_t = ts_diff_ms(&t0, &rtt);
 
-        assert (len == 2 * sizeof (uint64_t));
+        assert(len == 2 * sizeof (uint64_t));
 
         rtt.tv_sec  = ntoh64(((uint64_t *) data)[0]);
         rtt.tv_nsec = ntoh64(((uint64_t *) data)[1]);

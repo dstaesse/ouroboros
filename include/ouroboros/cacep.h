@@ -32,15 +32,12 @@ enum proto_concrete_syntax {
         PROTO_FIXED
 };
 
-struct conn_info{
+struct conn_info {
         char                       ae_name[64];
         char                       protocol[64];
         uint32_t                   pref_version;
         enum proto_concrete_syntax pref_syntax;
-        union {
-                char     name[64];
-                uint64_t addr;
-        } ae;
+        uint64_t                   addr;
 };
 
 int cacep_snd(int                      fd,

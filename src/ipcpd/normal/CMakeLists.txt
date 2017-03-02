@@ -20,6 +20,7 @@ set(SOURCE_FILES
   # Add source files here
   addr_auth.c
   cdap_flow.c
+  connmgr.c
   dir.c
   enroll.c
   fmgr.c
