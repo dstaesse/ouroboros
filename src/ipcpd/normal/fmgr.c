@@ -162,7 +162,7 @@ void * fmgr_nm1_sdu_reader(void * o)
 
                         shm_pci_des(sdb, &pci);
 
-                        if (pci.dst_addr != ipcpi.address) {
+                        if (pci.dst_addr != ipcpi.dt_addr) {
                                 log_dbg("PDU needs to be forwarded.");
 
                                 if (pci.ttl == 0) {
