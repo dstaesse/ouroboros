@@ -78,9 +78,16 @@ static void * enroll_handle(void * o)
                         continue;
                 }
 
-                cdap = cdap_create(conn.flow_info.fd);
+                cdap = cdap_create();
                 if (cdap == NULL) {
                         log_err("Failed to instantiate CDAP.");
+                        flow_dealloc(conn.flow_info.fd);
+                        continue;
+                }
+
+                if (cdap_add_flow(cdap, conn.flow_info.fd)) {
+                        log_warn("Failed to add flow to CDAP.");
+                        cdap_destroy(cdap);
                         flow_dealloc(conn.flow_info.fd);
                         continue;
                 }
@@ -167,7 +174,7 @@ static void * enroll_handle(void * o)
 int enroll_boot(char * dst_name)
 {
         struct cdap * cdap;
-        cdap_key_t    key;
+        cdap_key_t *  key;
         uint8_t *     data;
         size_t        len;
         struct conn   conn;
@@ -186,9 +193,16 @@ int enroll_boot(char * dst_name)
                 return -1;
         }
 
-        cdap = cdap_create(conn.flow_info.fd);
+        cdap = cdap_create();
         if (cdap == NULL) {
                 log_err("Failed to instantiate CDAP.");
+                return -1;
+        }
+
+        if (cdap_add_flow(cdap, conn.flow_info.fd)) {
+                log_warn("Failed to add flow to CDAP.");
+                cdap_destroy(cdap);
+                flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
 
@@ -197,19 +211,22 @@ int enroll_boot(char * dst_name)
         clock_gettime(CLOCK_REALTIME, &t0);
 
         key = cdap_request_send(cdap, CDAP_READ, TIME_PATH, NULL, 0, 0);
-        if (key < 0) {
+        if (key == NULL) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
 
-        if (cdap_reply_wait(cdap, key, &data, &len)) {
+        if (cdap_reply_wait(cdap, key[0], &data, &len)) {
                 log_err("Failed to get CDAP reply.");
+                free(key);
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
+
+        free(key);
 
         clock_gettime(CLOCK_REALTIME, &rtt);
 
@@ -226,19 +243,22 @@ int enroll_boot(char * dst_name)
         free(data);
 
         key = cdap_request_send(cdap, CDAP_READ, boot_ro, NULL, 0, 0);
-        if (key < 0) {
+        if (key == NULL) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
 
-        if (cdap_reply_wait(cdap, key, &data, &len)) {
+        if (cdap_reply_wait(cdap, key[0], &data, &len)) {
                 log_err("Failed to get CDAP reply.");
+                free(key);
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
+
+        free(key);
 
         log_dbg("Packed information received (%zu bytes).", len);
 
@@ -254,19 +274,22 @@ int enroll_boot(char * dst_name)
         log_dbg("Packed information inserted into RIB.");
 
         key = cdap_request_send(cdap, CDAP_READ, members_ro, NULL, 0, 0);
-        if (key < 0) {
+        if (key == NULL) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
 
-        if (cdap_reply_wait(cdap, key, &data, &len)) {
+        if (cdap_reply_wait(cdap, key[0], &data, &len)) {
                 log_err("Failed to get CDAP reply.");
+                free(key);
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
+
+        free(key);
 
         log_dbg("Packed information received (%zu bytes).", len);
 
@@ -282,19 +305,22 @@ int enroll_boot(char * dst_name)
         log_dbg("Packed information inserted into RIB.");
 
         key = cdap_request_send(cdap, CDAP_READ, dif_ro, NULL, 0, 0);
-        if (key < 0) {
+        if (key == NULL) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
 
-        if (cdap_reply_wait(cdap, key, &data, &len)) {
+        if (cdap_reply_wait(cdap, key[0], &data, &len)) {
                 log_err("Failed to get CDAP reply.");
+                free(key);
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
                 return -1;
         }
+
+        free(key);
 
         log_dbg("Packed information received (%zu bytes).", len);
 
