@@ -297,7 +297,7 @@ static void * sdu_reader(void * o)
                                         cdap__free_unpacked(msg, NULL);
                                         continue;
                                 }
-                                memcpy(data.data, msg->value.data Iata.len);
+                                memcpy(data.data, msg->value.data, data.len);
                         } else {
                                 data.len = 0;
                                 data.data = NULL;
@@ -606,12 +606,12 @@ cdap_key_t * cdap_request_send(struct cdap *    instance,
                                 struct cdap_req * r =
                                         cdap_sent_get_by_key(instance,
                                                              *(--key));
-                                release_invoke_id(instance, iid);
                                 cdap_sent_del(instance, r);
                                 release_invoke_id(instance,
                                                   key_to_invoke_id(r->key));
                                 cdap_req_destroy(r);
                         }
+                        release_invoke_id(instance, iid);
                         free(keys);
                         return NULL;
                 }
