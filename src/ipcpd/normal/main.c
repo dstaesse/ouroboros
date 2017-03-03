@@ -105,11 +105,6 @@ static int boot_components(void)
 
         log_dbg("Starting components.");
 
-        if (connmgr_init()) {
-                log_err("Failed to init ap connection manager");
-                return -1;
-        }
-
         if (rib_read(BOOT_PATH "/addr_auth/type", &pa, sizeof(pa))
             != sizeof(pa)) {
                 log_err("Failed to read policy for address authority.");
@@ -126,7 +121,6 @@ static int boot_components(void)
         if (ipcpi.dt_addr == 0) {
                 log_err("Failed to get a valid address.");
                 addr_auth_fini();
-                connmgr_fini();
                 return -1;
         }
 
@@ -137,7 +131,6 @@ static int boot_components(void)
         if (ribmgr_init()) {
                 log_err("Failed to initialize RIB manager.");
                 addr_auth_fini();
-                connmgr_fini();
                 return -1;
         }
 
@@ -145,7 +138,6 @@ static int boot_components(void)
                 log_err("Failed to initialize directory.");
                 ribmgr_fini();
                 addr_auth_fini();
-                connmgr_fini();
                 return -1;
         }
 
@@ -155,7 +147,6 @@ static int boot_components(void)
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
-                connmgr_fini();
                 log_err("Failed to start flow manager.");
                 return -1;
         }
@@ -165,8 +156,16 @@ static int boot_components(void)
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
-                connmgr_fini();
                 log_err("Failed to initialize FRCT.");
+                return -1;
+        }
+
+        if (enroll_start()) {
+                fmgr_fini();
+                dir_fini();
+                ribmgr_fini();
+                addr_auth_fini();
+                log_err("Failed to start enroll.");
                 return -1;
         }
 
@@ -174,11 +173,12 @@ static int boot_components(void)
 
         if (connmgr_start()) {
                 ipcp_set_state(IPCP_INIT);
+                enroll_stop();
+                frct_fini();
                 fmgr_fini();
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
-                connmgr_fini();
                 log_err("Failed to start AP connection manager.");
                 return -1;
         }
@@ -190,6 +190,8 @@ void shutdown_components(void)
 {
         connmgr_stop();
 
+        enroll_stop();
+
         frct_fini();
 
         fmgr_fini();
@@ -199,8 +201,6 @@ void shutdown_components(void)
         ribmgr_fini();
 
         addr_auth_fini();
-
-        connmgr_fini();
 }
 
 static int normal_ipcp_enroll(char * dst_name)
@@ -418,11 +418,33 @@ int main(int    argc,
                 exit(EXIT_FAILURE);
         }
 
+
+        if (connmgr_init()) {
+                log_err("Failed to initialize connection manager.");
+                ipcp_create_r(getpid(), -1);
+                rib_fini();
+                irm_unbind_api(getpid(), ipcpi.name);
+                ipcp_fini();
+                exit(EXIT_FAILURE);
+        }
+
+        if (enroll_init()) {
+                log_err("Failed to initialize enroll component.");
+                ipcp_create_r(getpid(), -1);
+                connmgr_fini();
+                rib_fini();
+                irm_unbind_api(getpid(), ipcpi.name);
+                ipcp_fini();
+                exit(EXIT_FAILURE);
+        }
+
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
                 ipcp_create_r(getpid(), -1);
+                enroll_fini();
+                connmgr_fini();
                 rib_fini();
                 irm_unbind_api(getpid(), ipcpi.name);
                 ipcp_fini();
@@ -435,6 +457,8 @@ int main(int    argc,
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
                 ipcp_shutdown();
+                enroll_fini();
+                connmgr_fini();
                 rib_fini();
                 irm_unbind_api(getpid(), ipcpi.name);
                 ipcp_fini();
@@ -447,6 +471,10 @@ int main(int    argc,
                 shutdown_components();
 
         rib_fini();
+
+        connmgr_fini();
+
+        enroll_fini();
 
         irm_unbind_api(getpid(), ipcpi.name);
 

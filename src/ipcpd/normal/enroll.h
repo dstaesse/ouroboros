@@ -22,8 +22,14 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_ENROLL_H
 #define OUROBOROS_IPCPD_NORMAL_ENROLL_H
 
-int enroll_handle(int fd);
+int  enroll_init(void);
 
-int enroll_boot(char * dst_name);
+void enroll_fini(void);
+
+int  enroll_start(void);
+
+void enroll_stop(void);
+
+int  enroll_boot(char * dst_name);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_ENROLL_H */

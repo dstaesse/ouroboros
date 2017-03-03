@@ -27,6 +27,8 @@
 
 #include "shm_pci.h"
 
+#define FRCT_PROTO "FRCT"
+
 struct frct_i;
 
 int         frct_init(void);

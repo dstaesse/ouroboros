@@ -53,8 +53,4 @@ int  fmgr_nm1_write_sdu(struct pci *         pci,
 int  fmgr_nm1_write_buf(struct pci * pci,
                         buffer_t *   buf);
 
-int  fmgr_nm1_flow_arr(int       fd,
-                       qosspec_t qs);
-
-
 #endif /* OUROBOROS_IPCPD_NORMAL_FMGR_H */

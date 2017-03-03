@@ -48,7 +48,7 @@ void        connmgr_ae_destroy(struct ae * ae);
 
 int         connmgr_alloc(struct ae *   ae,
                           char *        dst_name,
-                          qosspec_t     qs,
+                          qosspec_t *   qs,
                           struct conn * conn);
 
 int         connmgr_wait(struct ae *   ae,

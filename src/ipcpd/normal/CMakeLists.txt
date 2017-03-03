@@ -27,8 +27,10 @@ set(SOURCE_FILES
   frct.c
   gam.c
   main.c
+  neighbors.c
   pff.c
   ribmgr.c
+  routing.c
   shm_pci.c
   # Add policies last
   pol/complete.c

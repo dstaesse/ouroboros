@@ -31,9 +31,11 @@
 #define MEMBERS_NAME     "members"
 #define DIF_NAME         "dif_name"
 #define DIR_NAME         "directory"
+#define ROUTING_NAME     "fsdb"
 #define DIF_PATH         DLR DIF_NAME
 #define DIR_PATH         DLR DIR_NAME
 #define BOOT_PATH        DLR BOOT_NAME
 #define MEMBERS_PATH     DLR MEMBERS_NAME
+#define ROUTING_PATH     DLR ROUTING_NAME
 
 #endif /* OUROBOROS_IPCPD_NORMAL_RIB_CONFIG_H */

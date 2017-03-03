@@ -24,21 +24,13 @@
 #define OUROBOROS_IPCPD_NORMAL_POL_GAM_OPS_H
 
 #include <ouroboros/cacep.h>
+#include <ouroboros/qos.h>
 
 struct pol_gam_ops {
-        void * (* create)(struct gam * instance);
+        void * (* create)(struct nbs * nbs,
+                          struct ae *  ae);
 
         void   (* destroy)(void * o);
-
-        int    (* start)(void * o);
-
-        int    (* stop)(void * o);
-
-        int    (* accept_new_flow)(void * o);
-
-        int    (* accept_flow)(void *                   o,
-                               qosspec_t                qs,
-                               const struct conn_info * info);
 };
 
 #endif /* OUROBOROS_IPCPD_NORMAL_POL_GAM_OPS_H */
