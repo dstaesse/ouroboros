@@ -5,9 +5,9 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(SOURCE_FILES
-        # Add source files here
-        echo.c
-)
+  # Add source files here
+  echo.c
+  )
 
 add_executable(echo-app ${SOURCE_FILES})
 

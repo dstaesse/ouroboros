@@ -3,9 +3,8 @@
  *
  * Logging facilities
  *
- *    Sander Vrijders       <sander.vrijders@intec.ugent.be>
- *    Francesco Salvestrini <f.salvestrini@nextworks.it>
- *    Dimitri Staessens     <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License

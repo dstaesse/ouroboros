@@ -9,7 +9,7 @@ function(test_and_set_c_compiler_flag_global _flag)
     message(STATUS "Compiler supports flag ${_flag}, added globally")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${_flag}" PARENT_SCOPE)
   else(${_retval})
-      message(STATUS "Compiler does not support flag ${_flag}, discarded")
+    message(STATUS "Compiler does not support flag ${_flag}, discarded")
   endif()
 
 endfunction(test_and_set_c_compiler_flag_global)

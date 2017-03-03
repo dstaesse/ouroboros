@@ -10,9 +10,9 @@ if(NOT LIBM_LIBRARIES)
 endif()
 
 set(SOURCE_FILES
-        # Add source files here
-        oping.c
-)
+  # Add source files here
+  oping.c
+  )
 
 add_executable(oping ${SOURCE_FILES})
 

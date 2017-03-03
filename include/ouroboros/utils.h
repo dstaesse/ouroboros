@@ -3,7 +3,8 @@
  *
  * Handy utilities
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -39,9 +40,6 @@ typedef struct {
  * need when represented as a string
  */
 int n_digits(unsigned i);
-
-/* Returns a copy of the source string */
-char * strdup(const char * src);
 
 /* gets the application name */
 char * path_strip(char * src);

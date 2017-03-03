@@ -3,7 +3,8 @@
  *
  * Functions of the IRM tool that are one level deep
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,19 +20,47 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-int ipcp_cmd(int argc, char ** argv);
-int do_create_ipcp(int argc, char ** argv);
-int do_destroy_ipcp(int argc, char ** argv);
-int do_bootstrap_ipcp(int argc, char ** argv);
-int do_enroll_ipcp(int argc, char ** argv);
+int ipcp_cmd(int     argc,
+             char ** argv);
 
-int bind_cmd(int argc, char ** argv);
-int do_bind_ap(int argc, char ** argv);
-int do_bind_api(int argc, char ** argv);
-int do_bind_ipcp(int argc, char ** argv);
-int unbind_cmd(int argc, char ** argv);
-int do_unbind_ap(int argc, char ** argv);
-int do_unbind_api(int argc, char ** argv);
-int do_unbind_ipcp(int argc, char ** argv);
-int do_register(int argc, char ** argv);
-int do_unregister(int argc, char ** argv);
+int do_create_ipcp(int     argc,
+                   char ** argv);
+
+int do_destroy_ipcp(int     argc,
+                    char ** argv);
+
+int do_bootstrap_ipcp(int     argc,
+                      char ** argv);
+
+int do_enroll_ipcp(int     argc,
+                   char ** argv);
+
+int bind_cmd(int     argc,
+             char ** argv);
+
+int do_bind_ap(int     argc,
+               char ** argv);
+
+int do_bind_api(int     argc,
+                char ** argv);
+
+int do_bind_ipcp(int     argc,
+                 char ** argv);
+
+int unbind_cmd(int     argc,
+               char ** argv);
+
+int do_unbind_ap(int     argc,
+                 char ** argv);
+
+int do_unbind_api(int     argc,
+                  char ** argv);
+
+int do_unbind_ipcp(int     argc,
+                   char ** argv);
+
+int do_register(int     argc,
+                char ** argv);
+
+int do_unregister(int     argc,
+                  char ** argv);
