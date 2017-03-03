@@ -43,8 +43,8 @@ enum creq_state {
 struct cdap_req {
         struct list_head next;
 
+        int              fd;
         struct timespec  birth;
-
         cdap_key_t       key;
 
         int              response;
@@ -55,7 +55,8 @@ struct cdap_req {
         pthread_mutex_t  lock;
 };
 
-struct cdap_req * cdap_req_create(cdap_key_t key);
+struct cdap_req * cdap_req_create(int        fd,
+                                  cdap_key_t key);
 
 void              cdap_req_destroy(struct cdap_req * creq);
 

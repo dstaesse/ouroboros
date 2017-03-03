@@ -23,18 +23,8 @@
 
 syntax = "proto2";
 
-enum opcode {
-        CREATE = 1;
-        DELETE = 2;
-        READ   = 3;
-        WRITE  = 4;
-        START  = 5;
-        STOP   = 6;
-        REPLY  = 7;
-}
-
 message cdap {
-        required opcode opcode    = 1;
+        required uint32 opcode    = 1;
         required uint32 invoke_id = 2;
         optional uint32 flags     = 3;
         optional string name      = 4;

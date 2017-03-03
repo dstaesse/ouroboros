@@ -46,12 +46,17 @@ struct cdap;
 
 typedef int32_t cdap_key_t;
 
-/* Assumes flow is blocking */
-struct cdap * cdap_create(int fd);
+struct cdap * cdap_create(void);
 
 int           cdap_destroy(struct cdap * instance);
 
-cdap_key_t    cdap_request_send(struct cdap *    instance,
+int           cdap_add_flow(struct cdap * instance,
+                            int           fd);
+
+int           cdap_del_flow(struct cdap * instance,
+                            int           fd);
+
+cdap_key_t *  cdap_request_send(struct cdap *    instance,
                                 enum cdap_opcode code,
                                 const char *     name,
                                 const void *     data,
