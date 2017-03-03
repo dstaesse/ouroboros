@@ -19,15 +19,15 @@ configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/shim_udp_config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/shim_udp_config.h")
 
-SET(IPCP_SHIM_UDP_TARGET ipcpd-shim-udp CACHE STRING "IPCP_SHIM_UDP_TARGET")
+set(IPCP_SHIM_UDP_TARGET ipcpd-shim-udp CACHE STRING "IPCP_SHIM_UDP_TARGET")
 
 set(SHIM_UDP_SOURCES
   # Add source files here
   ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
 
-add_executable (ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES}
+add_executable(ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES}
   ${SHIM_UDP_PROTO_SRCS} "${CMAKE_CURRENT_BINARY_DIR}/shim_udp_config.h")
-target_link_libraries (ipcpd-shim-udp LINK_PUBLIC ouroboros
+target_link_libraries(ipcpd-shim-udp LINK_PUBLIC ouroboros
   ${PROTOBUF_C_LIBRARY})
 
 # Find the nsupdate executable
@@ -40,6 +40,7 @@ find_program(NSLOOKUP_EXECUTABLE
   NAMES nslookup
   DOC "The nslookup tool that resolves DNS names")
 
+include(AddCompileFlags)
 if (${NSUPDATE_EXECUTABLE} STREQUAL "NSUPDATE_EXECUTABLE-NOTFOUND")
   message("-- Could not find nsupdate. Disabling DDNS functionality.")
 elseif (${NSLOOKUP_EXECUTABLE} STREQUAL "NSLOOKUP_EXECUTABLE-NOTFOUND")
@@ -47,12 +48,11 @@ elseif (${NSLOOKUP_EXECUTABLE} STREQUAL "NSLOOKUP_EXECUTABLE-NOTFOUND")
 else ()
   message("-- Found nsupdate: ${NSUPDATE_EXECUTABLE}")
   message("-- Found nslookup: ${NSLOOKUP_EXECUTABLE}")
-  MACRO_ADD_COMPILE_FLAGS(ipcpd-shim-udp -DCONFIG_OUROBOROS_ENABLE_DNS)
-endif()
+  add_compile_flags(ipcpd-shim-udp -DCONFIG_OUROBOROS_ENABLE_DNS)
+endif ()
 
-include(MacroAddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-  MACRO_ADD_COMPILE_FLAGS(ipcpd-shim-udp -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ipcpd-shim-udp -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ipcpd-shim-udp RUNTIME DESTINATION sbin)

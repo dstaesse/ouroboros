@@ -36,13 +36,13 @@ set(SOURCE_FILES
   pol/flat.c
   )
 
-add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
+add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
   ${FLOW_ALLOC_SRCS})
-target_link_libraries (ipcpd-normal LINK_PUBLIC ouroboros)
+target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros)
 
-include(MacroAddCompileFlags)
+include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-  macro_add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
