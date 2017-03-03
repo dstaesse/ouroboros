@@ -3,7 +3,8 @@
  *
  * Ring buffer for incoming SDUs
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -31,8 +32,8 @@ void                timerwheel_destroy(struct timerwheel * tw);
 
 int                 timerwheel_add(struct timerwheel * tw,
                                    void (* func)(void *),
-                                   void *       arg,
-                                   size_t       arg_len,
-                                   unsigned int delay); /* ms */
+                                   void *              arg,
+                                   size_t              arg_len,
+                                   unsigned int        delay); /* ms */
 
 #endif /* OUROBOROS_IPCPD_TIMERWHEEL_H */

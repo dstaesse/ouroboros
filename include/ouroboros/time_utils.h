@@ -3,7 +3,8 @@
  *
  * Time utilities
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -97,7 +98,8 @@ int ts_to_tv(const struct timespec * src,
 #define CLOCKS_MASK                     (CLOCK_REALTIME | CLOCK_MONOTONIC)
 #define CLOCKS_MONO                     CLOCK_MONOTONIC
 
-int clock_gettime(int clock, struct timespec * t);
+int clock_gettime(int               clock,
+                  struct timespec * t);
 #endif
 
 #endif /* OUROBOROS_TIME_UTILS_H */

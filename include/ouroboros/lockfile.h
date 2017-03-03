@@ -3,7 +3,8 @@
  *
  * Lockfile for Ouroboros
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -28,8 +29,11 @@
 struct lockfile;
 
 struct lockfile * lockfile_create(void);
+
 struct lockfile * lockfile_open(void);
+
 void              lockfile_close(struct lockfile * lf);
+
 void              lockfile_destroy(struct lockfile * lf);
 
 pid_t             lockfile_owner(struct lockfile * lf);
