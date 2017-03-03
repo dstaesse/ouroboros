@@ -19,7 +19,6 @@ protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS flow_alloc.proto)
 set(SOURCE_FILES
   # Add source files here
   addr_auth.c
-  cdap_flow.c
   connmgr.c
   dir.c
   enroll.c
