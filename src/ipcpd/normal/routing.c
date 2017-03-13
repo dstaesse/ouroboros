@@ -26,17 +26,26 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/rib.h>
 
 #include "routing.h"
 #include "ribmgr.h"
+#include "ribconfig.h"
+#include "ipcp.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <string.h>
+
+#define ADDR_SIZE 30
 
 struct edge {
-        struct vertex * ep;
-        qosspec_t       qs;
+        struct list_head next;
+
+        uint64_t         addr;
+
+        qosspec_t        qs;
 };
 
 struct vertex {
@@ -47,34 +56,16 @@ struct vertex {
         struct list_head edges;
 };
 
-struct routing {
-        struct pff *       pff;
-        struct nbs *       nbs;
-
-        struct nb_notifier nb_notifier;
-
-        struct list_head   vertices;
+struct routing_i {
+        struct pff *     pff;
+        struct list_head vertices;
 };
 
-static int routing_neighbor_event(enum nb_event event,
-                                  struct conn   conn)
-{
-        (void) conn;
-
-        /* FIXME: React to events here */
-        switch (event) {
-        case NEIGHBOR_ADDED:
-                break;
-        case NEIGHBOR_REMOVED:
-                break;
-        case NEIGHBOR_QOS_CHANGE:
-                break;
-        default:
-                break;
-        }
-
-        return 0;
-}
+struct {
+        struct nbs *       nbs;
+        struct nb_notifier nb_notifier;
+        char               fso_path[RIB_MAX_PATH_LEN + 1];
+} routing;
 
 #if 0
 /* FIXME: If zeroed since it is not used currently */
@@ -97,10 +88,9 @@ static int add_vertex(struct routing * instance,
 }
 #endif
 
-struct routing * routing_create(struct pff * pff,
-                                struct nbs * nbs)
+struct routing_i * routing_i_create(struct pff * pff)
 {
-        struct routing * tmp;
+        struct routing_i * tmp;
 
         assert(pff);
 
@@ -109,24 +99,99 @@ struct routing * routing_create(struct pff * pff,
                 return NULL;
 
         tmp->pff = pff;
-        tmp->nbs = nbs;
 
         list_head_init(&tmp->vertices);
-
-        tmp->nb_notifier.notify_call = routing_neighbor_event;
-        if (nbs_reg_notifier(tmp->nbs, &tmp->nb_notifier)) {
-                free(tmp);
-                return NULL;
-        }
 
         return tmp;
 }
 
-void routing_destroy(struct routing * instance)
+void routing_i_destroy(struct routing_i * instance)
 {
         assert(instance);
 
-        nbs_unreg_notifier(instance->nbs, &instance->nb_notifier);
-
         free(instance);
+}
+
+static int routing_neighbor_event(enum nb_event event,
+                                  struct conn   conn)
+{
+        char addr[ADDR_SIZE];
+        char path[RIB_MAX_PATH_LEN + 1];
+
+        strcpy(path, routing.fso_path);
+        snprintf(addr, ADDR_SIZE, "%" PRIx64, conn.conn_info.addr);
+        rib_path_append(path, addr);
+
+        switch (event) {
+        case NEIGHBOR_ADDED:
+                if (rib_add(routing.fso_path, addr)) {
+                        log_err("Failed to add FSO.");
+                        return -1;
+                }
+
+                if (rib_write(path, &conn.flow_info.qs,
+                              sizeof(conn.flow_info.qs))) {
+                        log_err("Failed to write qosspec to FSO.");
+                        rib_del(path);
+                        return -1;
+                }
+
+                break;
+        case NEIGHBOR_REMOVED:
+                if (rib_del(path)) {
+                        log_err("Failed to remove FSO.");
+                        return -1;
+                }
+
+                break;
+        case NEIGHBOR_QOS_CHANGE:
+                if (rib_write(path, &conn.flow_info.qs,
+                              sizeof(conn.flow_info.qs))) {
+                        log_err("Failed to write qosspec to FSO.");
+                        return -1;
+                }
+
+                break;
+        default:
+                log_info("Unsupported event for routing.");
+                break;
+        }
+
+        return 0;
+}
+
+int routing_init(struct nbs * nbs)
+{
+        char addr[ADDR_SIZE];
+
+        if (rib_add(RIB_ROOT, ROUTING_NAME))
+                return -1;
+
+        rib_path_append(routing.fso_path, ROUTING_NAME);
+
+        snprintf(addr, ADDR_SIZE, "%" PRIx64, ipcpi.dt_addr);
+
+        if (rib_add(routing.fso_path, addr)) {
+                rib_del(ROUTING_PATH);
+                return -1;
+        }
+
+        rib_path_append(routing.fso_path, addr);
+
+        routing.nbs = nbs;
+
+        routing.nb_notifier.notify_call = routing_neighbor_event;
+        if (nbs_reg_notifier(routing.nbs, &routing.nb_notifier)) {
+                rib_del(ROUTING_PATH);
+                return -1;
+        }
+
+        return 0;
+}
+
+void routing_fini(void)
+{
+        rib_del(ROUTING_PATH);
+
+        nbs_unreg_notifier(routing.nbs, &routing.nb_notifier);
 }

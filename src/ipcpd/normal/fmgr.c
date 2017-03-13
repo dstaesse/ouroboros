@@ -68,7 +68,7 @@ struct {
         pthread_t          nm1_sdu_reader;
 
         struct pff *       pff[QOS_CUBE_MAX];
-        struct routing *   routing[QOS_CUBE_MAX];
+        struct routing_i * routing[QOS_CUBE_MAX];
 
         struct gam *       gam;
         struct nbs *       nbs;
@@ -238,7 +238,7 @@ static void fmgr_destroy_routing(void)
         int i;
 
         for (i = 0; i < QOS_CUBE_MAX; ++i)
-                routing_destroy(fmgr.routing[i]);
+                routing_i_destroy(fmgr.routing[i]);
 }
 
 static void fmgr_destroy_pff(void)
@@ -316,9 +316,18 @@ int fmgr_init(void)
                 return -1;
         }
 
+        if (routing_init(fmgr.nbs)) {
+                log_err("Failed to init routing.");
+                nbs_destroy(fmgr.nbs);
+                fmgr_destroy_flows();
+                connmgr_ae_destroy(fmgr.ae);
+                return -1;
+        }
+
         fmgr.nb_notifier.notify_call = fmgr_neighbor_event;
         if (nbs_reg_notifier(fmgr.nbs, &fmgr.nb_notifier)) {
                 log_err("Failed to register notifier.");
+                routing_fini();
                 nbs_destroy(fmgr.nbs);
                 fmgr_destroy_flows();
                 connmgr_ae_destroy(fmgr.ae);
@@ -328,6 +337,7 @@ int fmgr_init(void)
         if (pthread_rwlock_init(&fmgr.np1_flows_lock, NULL)) {
                 gam_destroy(fmgr.gam);
                 nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
+                routing_fini();
                 nbs_destroy(fmgr.nbs);
                 fmgr_destroy_flows();
                 connmgr_ae_destroy(fmgr.ae);
@@ -341,19 +351,21 @@ int fmgr_init(void)
                                 pff_destroy(fmgr.pff[j]);
                         pthread_rwlock_destroy(&fmgr.np1_flows_lock);
                         nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
+                        routing_fini();
                         nbs_destroy(fmgr.nbs);
                         fmgr_destroy_flows();
                         connmgr_ae_destroy(fmgr.ae);
                         return -1;
                 }
 
-                fmgr.routing[i] = routing_create(fmgr.pff[i], fmgr.nbs);
+                fmgr.routing[i] = routing_i_create(fmgr.pff[i]);
                 if (fmgr.routing[i] == NULL) {
                         for (j = 0; j < i; ++j)
-                                routing_destroy(fmgr.routing[j]);
+                                routing_i_destroy(fmgr.routing[j]);
                         fmgr_destroy_pff();
                         pthread_rwlock_destroy(&fmgr.np1_flows_lock);
                         nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
+                        routing_fini();
                         nbs_destroy(fmgr.nbs);
                         fmgr_destroy_flows();
                         connmgr_ae_destroy(fmgr.ae);
@@ -368,6 +380,7 @@ int fmgr_init(void)
                 fmgr_destroy_pff();
                 pthread_rwlock_destroy(&fmgr.np1_flows_lock);
                 nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
+                routing_fini();
                 nbs_destroy(fmgr.nbs);
                 fmgr_destroy_flows();
                 connmgr_ae_destroy(fmgr.ae);
@@ -395,6 +408,8 @@ void fmgr_fini()
         fmgr_destroy_routing();
 
         fmgr_destroy_pff();
+
+        routing_fini();
 
         fmgr_destroy_flows();
 
