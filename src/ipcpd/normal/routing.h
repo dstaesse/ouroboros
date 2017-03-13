@@ -34,9 +34,13 @@
  * Routing will take a type in the future,
  * to allow different policies.
  */
-struct routing * routing_create(struct pff * pff,
-                                struct nbs * nbs);
 
-void             routing_destroy(struct routing * instance);
+int                routing_init(struct nbs * nbs);
+
+void               routing_fini(void);
+
+struct routing_i * routing_i_create(struct pff * pff);
+
+void               routing_i_destroy(struct routing_i * instance);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_ROUTING_H */
