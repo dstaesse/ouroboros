@@ -32,6 +32,7 @@
 #include "ribmgr.h"
 #include "ribconfig.h"
 #include "ipcp.h"
+#include "graph.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -40,53 +41,25 @@
 
 #define ADDR_SIZE 30
 
-struct edge {
+struct routing_table_entry {
         struct list_head next;
-
-        uint64_t         addr;
-
-        qosspec_t        qs;
-};
-
-struct vertex {
-        struct list_head next;
-
-        uint64_t         addr;
-
-        struct list_head edges;
+        uint64_t         dst;
+        uint64_t         nhop;
 };
 
 struct routing_i {
         struct pff *     pff;
-        struct list_head vertices;
+        struct list_head routing_table;
 };
 
 struct {
         struct nbs *       nbs;
         struct nb_notifier nb_notifier;
+
         char               fso_path[RIB_MAX_PATH_LEN + 1];
+
+        struct graph *     graph;
 } routing;
-
-#if 0
-/* FIXME: If zeroed since it is not used currently */
-static int add_vertex(struct routing * instance,
-                      uint64_t         addr)
-{
-        struct vertex *  vertex;
-
-        vertex = malloc(sizeof(*vertex));
-        if (vertex == NULL)
-                return -1;
-
-        list_head_init(&vertex->next);
-        list_head_init(&vertex->edges);
-        vertex->addr = addr;
-
-        list_add(&vertex->next, &instance->vertices);
-
-        return 0;
-}
-#endif
 
 struct routing_i * routing_i_create(struct pff * pff)
 {
@@ -100,7 +73,7 @@ struct routing_i * routing_i_create(struct pff * pff)
 
         tmp->pff = pff;
 
-        list_head_init(&tmp->vertices);
+        list_head_init(&tmp->routing_table);
 
         return tmp;
 }
@@ -164,14 +137,21 @@ int routing_init(struct nbs * nbs)
 {
         char addr[ADDR_SIZE];
 
-        if (rib_add(RIB_ROOT, ROUTING_NAME))
+        routing.graph = graph_create();
+        if (routing.graph == NULL)
                 return -1;
+
+        if (rib_add(RIB_ROOT, ROUTING_NAME)) {
+                graph_destroy(routing.graph);
+                return -1;
+        }
 
         rib_path_append(routing.fso_path, ROUTING_NAME);
 
         snprintf(addr, ADDR_SIZE, "%" PRIx64, ipcpi.dt_addr);
 
         if (rib_add(routing.fso_path, addr)) {
+                graph_destroy(routing.graph);
                 rib_del(ROUTING_PATH);
                 return -1;
         }
@@ -182,6 +162,7 @@ int routing_init(struct nbs * nbs)
 
         routing.nb_notifier.notify_call = routing_neighbor_event;
         if (nbs_reg_notifier(routing.nbs, &routing.nb_notifier)) {
+                graph_destroy(routing.graph);
                 rib_del(ROUTING_PATH);
                 return -1;
         }
@@ -191,6 +172,8 @@ int routing_init(struct nbs * nbs)
 
 void routing_fini(void)
 {
+        graph_destroy(routing.graph);
+
         rib_del(ROUTING_PATH);
 
         nbs_unreg_notifier(routing.nbs, &routing.nb_notifier);

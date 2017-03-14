@@ -34,7 +34,6 @@
  * Routing will take a type in the future,
  * to allow different policies.
  */
-
 int                routing_init(struct nbs * nbs);
 
 void               routing_fini(void);

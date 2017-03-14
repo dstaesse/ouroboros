@@ -25,6 +25,7 @@ set(SOURCE_FILES
   fmgr.c
   frct.c
   gam.c
+  graph.c
   main.c
   neighbors.c
   pff.c
