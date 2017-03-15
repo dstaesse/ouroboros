@@ -106,8 +106,6 @@ static void * enroll_handle(void * o)
                         if (oc != CDAP_READ) {
                                 log_warn("Invalid request.");
                                 cdap_reply_send(cdap, key, -1, NULL, 0);
-                                cdap_destroy(cdap);
-                                flow_dealloc(conn.flow_info.fd);
                                 free(name);
                                 continue;
                         }
@@ -126,14 +124,10 @@ static void * enroll_handle(void * o)
                                 buf[1] = hton64(t.tv_nsec);
                                 cdap_reply_send(cdap, key, 0, buf, sizeof(buf));
                                 free(name);
-                                cdap_destroy(cdap);
-                                flow_dealloc(conn.flow_info.fd);
                                 continue;
                         } else {
                                 log_warn("Illegal read: %s.", name);
                                 cdap_reply_send(cdap, key, -1, NULL, 0);
-                                cdap_destroy(cdap);
-                                flow_dealloc(conn.flow_info.fd);
                                 free(name);
                                 continue;
                         }
@@ -142,8 +136,6 @@ static void * enroll_handle(void * o)
                         if (len < 0) {
                                 log_err("Failed to pack %s.", name);
                                 cdap_reply_send(cdap, key, -1, NULL, 0);
-                                cdap_destroy(cdap);
-                                flow_dealloc(conn.flow_info.fd);
                                 free(name);
                                 continue;
                         }
@@ -154,8 +146,7 @@ static void * enroll_handle(void * o)
 
                         if (cdap_reply_send(cdap, key, 0, buf, len)) {
                                 log_err("Failed to send CDAP reply.");
-                                cdap_destroy(cdap);
-                                flow_dealloc(conn.flow_info.fd);
+                                free(buf);
                                 continue;
                         }
 

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Handles the different AP connections
+ * Handles AE connections
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -285,7 +285,10 @@ int connmgr_alloc(struct ae *   ae,
                 return -1;
         }
 
-        conn->flow_info.qs = *qs;
+        if (qs != NULL)
+                conn->flow_info.qs = *qs;
+        else
+                memset(&conn->flow_info.qs, 0, sizeof(conn->flow_info.qs));
 
         if (flow_alloc_res(conn->flow_info.fd)) {
                 log_err("Flow allocation to %s failed.", dst_name);
