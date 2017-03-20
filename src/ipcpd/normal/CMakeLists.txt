@@ -15,6 +15,7 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 set(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 
 protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS flow_alloc.proto)
+protobuf_generate_c(FSO_SRCS FSO_HDRS fso.proto)
 
 set(SOURCE_FILES
   # Add source files here
@@ -25,6 +26,7 @@ set(SOURCE_FILES
   fmgr.c
   frct.c
   gam.c
+  graph.c
   main.c
   neighbors.c
   pff.c
@@ -37,7 +39,7 @@ set(SOURCE_FILES
   )
 
 add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
-  ${FLOW_ALLOC_SRCS})
+  ${FLOW_ALLOC_SRCS} ${FSO_SRCS})
 target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros)
 
 include(AddCompileFlags)

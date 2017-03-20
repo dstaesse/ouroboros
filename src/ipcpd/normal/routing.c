@@ -27,66 +27,44 @@
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
+#include <ouroboros/rqueue.h>
 
 #include "routing.h"
 #include "ribmgr.h"
 #include "ribconfig.h"
 #include "ipcp.h"
+#include "graph.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <inttypes.h>
 #include <string.h>
 
-#define ADDR_SIZE 30
+#include "fso.pb-c.h"
+typedef Fso fso_t;
 
-struct edge {
+#define BUF_SIZE 256
+
+struct routing_table_entry {
         struct list_head next;
-
-        uint64_t         addr;
-
-        qosspec_t        qs;
-};
-
-struct vertex {
-        struct list_head next;
-
-        uint64_t         addr;
-
-        struct list_head edges;
+        uint64_t         dst;
+        uint64_t         nhop;
 };
 
 struct routing_i {
-        struct pff *     pff;
-        struct list_head vertices;
+        struct pff * pff;
 };
 
 struct {
         struct nbs *       nbs;
         struct nb_notifier nb_notifier;
-        char               fso_path[RIB_MAX_PATH_LEN + 1];
+
+        struct graph *     graph;
+
+        ro_set_t *         set;
+        rqueue_t *         queue;
+        pthread_t          rib_listener;
 } routing;
-
-#if 0
-/* FIXME: If zeroed since it is not used currently */
-static int add_vertex(struct routing * instance,
-                      uint64_t         addr)
-{
-        struct vertex *  vertex;
-
-        vertex = malloc(sizeof(*vertex));
-        if (vertex == NULL)
-                return -1;
-
-        list_head_init(&vertex->next);
-        list_head_init(&vertex->edges);
-        vertex->addr = addr;
-
-        list_add(&vertex->next, &instance->vertices);
-
-        return 0;
-}
-#endif
 
 struct routing_i * routing_i_create(struct pff * pff)
 {
@@ -99,8 +77,6 @@ struct routing_i * routing_i_create(struct pff * pff)
                 return NULL;
 
         tmp->pff = pff;
-
-        list_head_init(&tmp->vertices);
 
         return tmp;
 }
@@ -115,24 +91,41 @@ void routing_i_destroy(struct routing_i * instance)
 static int routing_neighbor_event(enum nb_event event,
                                   struct conn   conn)
 {
-        char addr[ADDR_SIZE];
-        char path[RIB_MAX_PATH_LEN + 1];
+        char      path[RIB_MAX_PATH_LEN + 1];
+        char      fso_name[RIB_MAX_PATH_LEN + 1];
+        fso_t     fso = FSO__INIT;
+        size_t    len;
+        uint8_t * data;
 
-        strcpy(path, routing.fso_path);
-        snprintf(addr, ADDR_SIZE, "%" PRIx64, conn.conn_info.addr);
-        rib_path_append(path, addr);
+        sprintf(fso_name, "%" PRIx64 "-%" PRIx64,
+                ipcpi.dt_addr, conn.conn_info.addr);
+        rib_path_append(rib_path_append(path, ROUTING_PATH), fso_name);
 
         switch (event) {
         case NEIGHBOR_ADDED:
-                if (rib_add(routing.fso_path, addr)) {
+                fso.s_addr = ipcpi.dt_addr;
+                fso.d_addr = conn.conn_info.addr;
+
+                len = fso__get_packed_size(&fso);
+                if (len == 0)
+                        return -1;
+
+                data = malloc(len);
+                if (data == NULL)
+                        return -1;
+
+                fso__pack(&fso, data);
+
+                if (rib_add(ROUTING_PATH, fso_name)) {
                         log_err("Failed to add FSO.");
+                        free(data);
                         return -1;
                 }
 
-                if (rib_write(path, &conn.flow_info.qs,
-                              sizeof(conn.flow_info.qs))) {
-                        log_err("Failed to write qosspec to FSO.");
+                if (rib_put(path, data, len)) {
+                        log_err("Failed to put FSO in RIB.");
                         rib_del(path);
+                        free(data);
                         return -1;
                 }
 
@@ -145,12 +138,7 @@ static int routing_neighbor_event(enum nb_event event,
 
                 break;
         case NEIGHBOR_QOS_CHANGE:
-                if (rib_write(path, &conn.flow_info.qs,
-                              sizeof(conn.flow_info.qs))) {
-                        log_err("Failed to write qosspec to FSO.");
-                        return -1;
-                }
-
+                log_info("Not currently supported.");
                 break;
         default:
                 log_info("Unsupported event for routing.");
@@ -160,37 +148,150 @@ static int routing_neighbor_event(enum nb_event event,
         return 0;
 }
 
-int routing_init(struct nbs * nbs)
+static int read_fso(char *  path,
+                    int32_t flag)
 {
-        char addr[ADDR_SIZE];
+        ssize_t   len;
+        uint8_t   ro[BUF_SIZE];
+        fso_t *   fso;
+        qosspec_t qs;
 
-        if (rib_add(RIB_ROOT, ROUTING_NAME))
-                return -1;
-
-        rib_path_append(routing.fso_path, ROUTING_NAME);
-
-        snprintf(addr, ADDR_SIZE, "%" PRIx64, ipcpi.dt_addr);
-
-        if (rib_add(routing.fso_path, addr)) {
-                rib_del(ROUTING_PATH);
+        len = rib_read(path, ro, BUF_SIZE);
+        if (len < 0) {
+                log_err("Failed to read FSO.");
                 return -1;
         }
 
-        rib_path_append(routing.fso_path, addr);
+        fso = fso__unpack(NULL, len, ro);
+        if (fso == NULL) {
+                log_err("Failed to unpack.");
+                return -1;
+        }
+
+        if (flag & RO_CREATE) {
+                if (graph_add_edge(routing.graph,
+                                   fso->s_addr, fso->d_addr, qs)) {
+                        log_err("Failed to add edge to graph.");
+                        fso__free_unpacked(fso, NULL);
+                        return -1;
+                }
+        } else if (flag & RO_MODIFY) {
+                if (graph_update_edge(routing.graph,
+                                      fso->s_addr, fso->d_addr, qs)) {
+                        log_err("Failed to update edge of graph.");
+                        fso__free_unpacked(fso, NULL);
+                        return -1;
+                }
+        } else if (flag & RO_DELETE) {
+                if (graph_del_edge(routing.graph, fso->s_addr, fso->d_addr)) {
+                        log_err("Failed to del edge of graph.");
+                        fso__free_unpacked(fso, NULL);
+                        return -1;
+                }
+        }
+
+        fso__free_unpacked(fso, NULL);
+
+        return 0;
+}
+
+static void * rib_listener(void * o)
+{
+        int32_t flag;
+        char    path[RIB_MAX_PATH_LEN + 1];
+        char ** children;
+        ssize_t len;
+        int     i;
+
+        (void) o;
+
+        if (ro_set_add(routing.set, ROUTING_PATH,
+                       RO_MODIFY | RO_CREATE | RO_DELETE)) {
+                log_err("Failed to add to RO set");
+                return (void * ) -1;
+        }
+
+        len = rib_children(ROUTING_PATH, &children);
+        if (len < 0) {
+                log_err("Failed to retrieve children.");
+                return (void *) -1;
+        }
+
+        for (i = 0; i < len; i++) {
+                if (read_fso(children[i], RO_CREATE)) {
+                        log_err("Failed to parse FSO.");
+                        continue;
+                }
+        }
+
+        while (rib_event_wait(routing.set, routing.queue, NULL)) {
+                flag = rqueue_next(routing.queue, path);
+                if (flag < 0)
+                        continue;
+
+                if (read_fso(children[i], flag)) {
+                        log_err("Failed to parse FSO.");
+                        continue;
+                }
+        }
+
+        return (void *) 0;
+}
+
+int routing_init(struct nbs * nbs)
+{
+        routing.graph = graph_create();
+        if (routing.graph == NULL)
+                return -1;
+
+        if (rib_add(RIB_ROOT, ROUTING_NAME)) {
+                graph_destroy(routing.graph);
+                return -1;
+        }
 
         routing.nbs = nbs;
 
         routing.nb_notifier.notify_call = routing_neighbor_event;
         if (nbs_reg_notifier(routing.nbs, &routing.nb_notifier)) {
+                graph_destroy(routing.graph);
                 rib_del(ROUTING_PATH);
                 return -1;
         }
+
+        routing.set = ro_set_create();
+        if (routing.set == NULL) {
+                nbs_unreg_notifier(routing.nbs, &routing.nb_notifier);
+                graph_destroy(routing.graph);
+                rib_del(ROUTING_PATH);
+                return -1;
+        }
+
+        routing.queue = rqueue_create();
+        if (routing.queue == NULL) {
+                ro_set_destroy(routing.set);
+                nbs_unreg_notifier(routing.nbs, &routing.nb_notifier);
+                graph_destroy(routing.graph);
+                rib_del(ROUTING_PATH);
+                return -1;
+        }
+
+        pthread_create(&routing.rib_listener, NULL, rib_listener, NULL);
 
         return 0;
 }
 
 void routing_fini(void)
 {
+        pthread_cancel(routing.rib_listener);
+
+        pthread_join(routing.rib_listener, NULL);
+
+        rqueue_destroy(routing.queue);
+
+        ro_set_destroy(routing.set);
+
+        graph_destroy(routing.graph);
+
         rib_del(ROUTING_PATH);
 
         nbs_unreg_notifier(routing.nbs, &routing.nb_notifier);
