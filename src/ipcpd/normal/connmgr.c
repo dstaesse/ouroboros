@@ -192,6 +192,27 @@ void connmgr_stop(void)
         pthread_join(connmgr.acceptor, NULL);
 }
 
+static void destroy_ae(struct ae * ae)
+{
+        struct list_head * p = NULL;
+        struct list_head * h = NULL;
+
+        pthread_mutex_lock(&ae->conn_lock);
+
+        list_for_each_safe(p, h, &ae->conn_list) {
+                struct ae_conn * e = list_entry(p, struct ae_conn, next);
+                list_del(&e->next);
+                free(e);
+        }
+
+        pthread_mutex_unlock(&ae->conn_lock);
+
+        pthread_cond_destroy(&ae->conn_cond);
+        pthread_mutex_destroy(&ae->conn_lock);
+
+        free(ae);
+}
+
 void connmgr_fini(void)
 {
         struct list_head * p = NULL;
@@ -201,7 +222,8 @@ void connmgr_fini(void)
 
         list_for_each_safe(p, n, &connmgr.aes) {
                 struct ae * e = list_entry(p, struct ae, next);
-                connmgr_ae_destroy(e);
+                list_del(&e->next);
+                destroy_ae(e);
         }
 
         pthread_mutex_unlock(&connmgr.aes_lock);
@@ -242,30 +264,15 @@ struct ae * connmgr_ae_create(struct conn_info info)
 
 void connmgr_ae_destroy(struct ae * ae)
 {
-        struct list_head * p = NULL;
-        struct list_head * n = NULL;
-
         assert(ae);
 
         pthread_mutex_lock(&connmgr.aes_lock);
-        pthread_mutex_lock(&ae->conn_lock);
-
-        list_for_each_safe(p, n, &ae->conn_list) {
-                struct ae_conn * e = list_entry(p, struct ae_conn, next);
-                list_del(&e->next);
-                free(e);
-        }
-
-        pthread_mutex_unlock(&ae->conn_lock);
-
-        pthread_cond_destroy(&ae->conn_cond);
-        pthread_mutex_destroy(&ae->conn_lock);
 
         list_del(&ae->next);
 
-        pthread_mutex_unlock(&connmgr.aes_lock);
+        destroy_ae(ae);
 
-        free(ae);
+        pthread_mutex_unlock(&connmgr.aes_lock);
 }
 
 int connmgr_alloc(struct ae *   ae,

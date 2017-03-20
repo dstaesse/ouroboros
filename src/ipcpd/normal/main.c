@@ -472,9 +472,9 @@ int main(int    argc,
 
         rib_fini();
 
-        connmgr_fini();
-
         enroll_fini();
+
+        connmgr_fini();
 
         irm_unbind_api(getpid(), ipcpi.name);
 
