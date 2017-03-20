@@ -73,15 +73,15 @@ static void * enroll_handle(void * o)
         (void) o;
 
         while (true) {
-                if (connmgr_wait(enroll.ae, &conn)) {
-                        log_err("Failed to get next connection.");
-                        continue;
-                }
-
                 cdap = cdap_create();
                 if (cdap == NULL) {
                         log_err("Failed to instantiate CDAP.");
-                        flow_dealloc(conn.flow_info.fd);
+                        continue;
+                }
+
+                if (connmgr_wait(enroll.ae, &conn)) {
+                        log_err("Failed to get next connection.");
+                        cdap_destroy(cdap);
                         continue;
                 }
 
@@ -179,14 +179,15 @@ int enroll_boot(char * dst_name)
         char * members_ro = MEMBERS_PATH;
         char * dif_ro     = DIF_PATH;
 
-        if (connmgr_alloc(enroll.ae, dst_name, NULL, &conn)) {
-                log_err("Failed to get connection.");
-                return -1;
-        }
-
         cdap = cdap_create();
         if (cdap == NULL) {
                 log_err("Failed to instantiate CDAP.");
+                return -1;
+        }
+
+        if (connmgr_alloc(enroll.ae, dst_name, NULL, &conn)) {
+                log_err("Failed to get connection.");
+                cdap_destroy(cdap);
                 return -1;
         }
 
