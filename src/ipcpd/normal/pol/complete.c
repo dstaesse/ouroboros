@@ -131,6 +131,8 @@ void * complete_create(struct nbs * nbs,
                            allocator, (void *) complete))
                 return NULL;
 
+        pthread_join(complete->allocator, NULL);
+
         if (pthread_create(&complete->listener, NULL,
                            listener, (void *) complete))
                 return NULL;

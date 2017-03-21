@@ -97,9 +97,10 @@ static int routing_neighbor_event(enum nb_event event,
         size_t    len;
         uint8_t * data;
 
-        sprintf(fso_name, "%" PRIx64 "-%" PRIx64,
+        path[0] = '\0';
+        sprintf(fso_name, "%" PRIu64 "-%" PRIu64,
                 ipcpi.dt_addr, conn.conn_info.addr);
-        rib_path_append(rib_path_append(path, ROUTING_PATH), fso_name);
+        rib_path_append(rib_path_append(path, ROUTING_NAME), fso_name);
 
         switch (event) {
         case NEIGHBOR_ADDED:

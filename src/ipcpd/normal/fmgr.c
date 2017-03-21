@@ -399,7 +399,6 @@ int fmgr_start(void)
         fmgr.gam = gam_create(pg, fmgr.nbs, fmgr.ae);
         if (fmgr.gam == NULL) {
                 log_err("Failed to init dt graph adjacency manager.");
-                nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
                 return -1;
         }
 

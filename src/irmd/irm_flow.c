@@ -31,7 +31,9 @@
 #include <stdbool.h>
 #include <assert.h>
 
-struct irm_flow * irm_flow_create(pid_t n_api, pid_t n_1_api, int port_id)
+struct irm_flow * irm_flow_create(pid_t n_api,
+                                  pid_t n_1_api,
+                                  int   port_id)
 {
         struct irm_flow * f = malloc(sizeof(*f));
         if (f == NULL)
@@ -46,7 +48,6 @@ struct irm_flow * irm_flow_create(pid_t n_api, pid_t n_1_api, int port_id)
                 free(f);
                 return NULL;
         }
-
 
         f->n_api   = n_api;
         f->n_1_api = n_1_api;
