@@ -33,6 +33,10 @@ int  fmgr_init(void);
 
 void fmgr_fini(void);
 
+int  fmgr_start(void);
+
+void fmgr_stop(void);
+
 int  fmgr_np1_alloc(int       fd,
                     char *    dst_ap_name,
                     qoscube_t qos);
