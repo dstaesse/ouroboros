@@ -29,8 +29,8 @@
 int  ipcp_create_r(pid_t api,
                    int   result);
 
-int  ipcp_flow_req_arr(pid_t  api,
-                       char * dst_name,
+int  ipcp_flow_req_arr(pid_t     api,
+                       char *    dst_name,
                        qoscube_t cube);
 
 int  ipcp_flow_alloc_reply(int fd,
