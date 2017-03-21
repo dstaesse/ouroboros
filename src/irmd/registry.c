@@ -76,7 +76,7 @@ static struct reg_entry * reg_entry_init(struct reg_entry * e,
         if (pthread_condattr_init(&cattr))
                 return NULL;
 
-#ifdef __APPLE__
+#ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
         if (pthread_cond_init(&e->state_cond, &cattr))
@@ -429,7 +429,7 @@ int reg_entry_leave_state(struct reg_entry *  e,
                 if (timeout)
                         ret = -pthread_cond_timedwait(&e->state_cond,
                                                       &e->state_lock,
-                                                      timeout);
+                                                      &abstime);
                 else
                         ret = -pthread_cond_wait(&e->state_cond,
                                                  &e->state_lock);
@@ -468,7 +468,7 @@ int reg_entry_wait_state(struct reg_entry *  e,
                 if (timeout)
                         ret = -pthread_cond_timedwait(&e->state_cond,
                                                       &e->state_lock,
-                                                      timeout);
+                                                      &abstime);
                 else
                         ret = -pthread_cond_wait(&e->state_cond,
                                                  &e->state_lock);

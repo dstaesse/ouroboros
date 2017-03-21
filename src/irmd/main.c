@@ -1360,7 +1360,7 @@ static struct irm_flow * flow_req_arr(pid_t     api,
         pid_t h_api = -1;
         int port_id = -1;
 
-        struct timespec wt = {IRMD_REQ_ARR_TIMEOUT % 1000,
+        struct timespec wt = {IRMD_REQ_ARR_TIMEOUT / 1000,
                               (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
 
         log_dbg("Flow req arrived from IPCP %d for %s on AE %s.",

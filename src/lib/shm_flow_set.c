@@ -360,8 +360,6 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                 if (ret == -EOWNERDEAD)
                         pthread_mutex_consistent(set->lock);
 #endif
-                if (ret == -ETIMEDOUT)
-                        break;
         }
 
         if (ret != -ETIMEDOUT) {
