@@ -114,8 +114,8 @@ int nbs_add(struct nbs * nbs,
 
         pthread_mutex_unlock(&nbs->list_lock);
 
-        log_info("Added neighbor with address %" PRIu64 " to list.",
-                 conn.conn_info.addr);
+        log_info("Added neighbor with fd %d and address %" PRIu64 " to list.",
+                 conn.flow_info.fd, conn.conn_info.addr);
 
         return 0;
 }

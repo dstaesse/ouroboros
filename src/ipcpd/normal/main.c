@@ -143,16 +143,7 @@ static int boot_components(void)
 
         log_dbg("Ribmgr started.");
 
-        if (fmgr_init()) {
-                dir_fini();
-                ribmgr_fini();
-                addr_auth_fini();
-                log_err("Failed to start flow manager.");
-                return -1;
-        }
-
         if (frct_init()) {
-                fmgr_fini();
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
@@ -160,8 +151,19 @@ static int boot_components(void)
                 return -1;
         }
 
+        if (fmgr_start()) {
+                frct_fini();
+                dir_fini();
+                ribmgr_fini();
+                addr_auth_fini();
+                log_err("Failed to start flow manager.");
+                return -1;
+        }
+
+
         if (enroll_start()) {
-                fmgr_fini();
+                fmgr_stop();
+                frct_fini();
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
@@ -174,8 +176,8 @@ static int boot_components(void)
         if (connmgr_start()) {
                 ipcp_set_state(IPCP_INIT);
                 enroll_stop();
+                fmgr_stop();
                 frct_fini();
-                fmgr_fini();
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
@@ -194,7 +196,7 @@ void shutdown_components(void)
 
         frct_fini();
 
-        fmgr_fini();
+        fmgr_stop();
 
         dir_fini();
 
@@ -418,7 +420,6 @@ int main(int    argc,
                 exit(EXIT_FAILURE);
         }
 
-
         if (connmgr_init()) {
                 log_err("Failed to initialize connection manager.");
                 ipcp_create_r(getpid(), -1);
@@ -438,11 +439,23 @@ int main(int    argc,
                 exit(EXIT_FAILURE);
         }
 
+        if (fmgr_init()) {
+                log_err("Failed to initialize flow manager component.");
+                ipcp_create_r(getpid(), -1);
+                enroll_fini();
+                connmgr_fini();
+                rib_fini();
+                irm_unbind_api(getpid(), ipcpi.name);
+                ipcp_fini();
+                exit(EXIT_FAILURE);
+        }
+
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
                 ipcp_create_r(getpid(), -1);
+                fmgr_fini();
                 enroll_fini();
                 connmgr_fini();
                 rib_fini();
@@ -457,6 +470,7 @@ int main(int    argc,
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
                 ipcp_shutdown();
+                fmgr_fini();
                 enroll_fini();
                 connmgr_fini();
                 rib_fini();
@@ -470,11 +484,13 @@ int main(int    argc,
         if (ipcp_get_state() == IPCP_SHUTDOWN)
                 shutdown_components();
 
-        rib_fini();
+        fmgr_fini();
 
         enroll_fini();
 
         connmgr_fini();
+
+        rib_fini();
 
         irm_unbind_api(getpid(), ipcpi.name);
 

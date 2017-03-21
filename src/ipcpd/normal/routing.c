@@ -129,12 +129,16 @@ static int routing_neighbor_event(enum nb_event event,
                         return -1;
                 }
 
+                log_dbg("Added %s to RIB.", path);
+
                 break;
         case NEIGHBOR_REMOVED:
                 if (rib_del(path)) {
                         log_err("Failed to remove FSO.");
                         return -1;
                 }
+
+                log_dbg("Removed %s from RIB.", path);
 
                 break;
         case NEIGHBOR_QOS_CHANGE:

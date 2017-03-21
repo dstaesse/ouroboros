@@ -87,10 +87,12 @@ static int fmgr_neighbor_event(enum nb_event event,
         case NEIGHBOR_ADDED:
                 ipcp_flow_get_qoscube(conn.flow_info.fd, &cube);
                 flow_set_add(fmgr.nm1_set[cube], conn.flow_info.fd);
+                log_dbg("Added fd %d to flow set.", conn.flow_info.fd);
                 break;
         case NEIGHBOR_REMOVED:
                 ipcp_flow_get_qoscube(conn.flow_info.fd, &cube);
                 flow_set_del(fmgr.nm1_set[cube], conn.flow_info.fd);
+                log_dbg("Removed fd %d from flow set.", conn.flow_info.fd);
                 break;
         default:
                 break;
@@ -251,7 +253,6 @@ static void fmgr_destroy_pff(void)
 
 int fmgr_init(void)
 {
-        enum pol_gam     pg;
         int              i;
         int              j;
         struct conn_info info;
@@ -288,13 +289,6 @@ int fmgr_init(void)
                 }
         }
 
-        if (rib_read(BOOT_PATH "/dt/gam/type", &pg, sizeof(pg))
-            != sizeof(pg)) {
-                log_err("Failed to read policy for ribmgr gam.");
-                fmgr_destroy_flows();
-                return -1;
-        }
-
         strcpy(info.ae_name, DT_AE);
         strcpy(info.protocol, FRCT_PROTO);
         info.pref_version = 1;
@@ -316,18 +310,18 @@ int fmgr_init(void)
                 return -1;
         }
 
-        if (routing_init(fmgr.nbs)) {
-                log_err("Failed to init routing.");
+        fmgr.nb_notifier.notify_call = fmgr_neighbor_event;
+        if (nbs_reg_notifier(fmgr.nbs, &fmgr.nb_notifier)) {
+                log_err("Failed to register notifier.");
                 nbs_destroy(fmgr.nbs);
                 fmgr_destroy_flows();
                 connmgr_ae_destroy(fmgr.ae);
                 return -1;
         }
 
-        fmgr.nb_notifier.notify_call = fmgr_neighbor_event;
-        if (nbs_reg_notifier(fmgr.nbs, &fmgr.nb_notifier)) {
-                log_err("Failed to register notifier.");
-                routing_fini();
+        if (routing_init(fmgr.nbs)) {
+                log_err("Failed to init routing.");
+                nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
                 nbs_destroy(fmgr.nbs);
                 fmgr_destroy_flows();
                 connmgr_ae_destroy(fmgr.ae);
@@ -335,9 +329,8 @@ int fmgr_init(void)
         }
 
         if (pthread_rwlock_init(&fmgr.np1_flows_lock, NULL)) {
-                gam_destroy(fmgr.gam);
-                nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
                 routing_fini();
+                nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
                 nbs_destroy(fmgr.nbs);
                 fmgr_destroy_flows();
                 connmgr_ae_destroy(fmgr.ae);
@@ -350,8 +343,8 @@ int fmgr_init(void)
                         for (j = 0; j < i; ++j)
                                 pff_destroy(fmgr.pff[j]);
                         pthread_rwlock_destroy(&fmgr.np1_flows_lock);
-                        nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
                         routing_fini();
+                        nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
                         nbs_destroy(fmgr.nbs);
                         fmgr_destroy_flows();
                         connmgr_ae_destroy(fmgr.ae);
@@ -364,8 +357,8 @@ int fmgr_init(void)
                                 routing_i_destroy(fmgr.routing[j]);
                         fmgr_destroy_pff();
                         pthread_rwlock_destroy(&fmgr.np1_flows_lock);
-                        nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
                         routing_fini();
+                        nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
                         nbs_destroy(fmgr.nbs);
                         fmgr_destroy_flows();
                         connmgr_ae_destroy(fmgr.ae);
@@ -373,37 +366,12 @@ int fmgr_init(void)
                 }
         }
 
-        fmgr.gam = gam_create(pg, fmgr.nbs, fmgr.ae);
-        if (fmgr.gam == NULL) {
-                log_err("Failed to init dt graph adjacency manager.");
-                fmgr_destroy_routing();
-                fmgr_destroy_pff();
-                pthread_rwlock_destroy(&fmgr.np1_flows_lock);
-                nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
-                routing_fini();
-                nbs_destroy(fmgr.nbs);
-                fmgr_destroy_flows();
-                connmgr_ae_destroy(fmgr.ae);
-                return -1;
-        }
-
-        pthread_create(&fmgr.np1_sdu_reader, NULL, fmgr_np1_sdu_reader, NULL);
-        pthread_create(&fmgr.nm1_sdu_reader, NULL, fmgr_nm1_sdu_reader, NULL);
-
         return 0;
 }
 
 void fmgr_fini()
 {
-        pthread_cancel(fmgr.np1_sdu_reader);
-        pthread_cancel(fmgr.nm1_sdu_reader);
-
-        pthread_join(fmgr.np1_sdu_reader, NULL);
-        pthread_join(fmgr.nm1_sdu_reader, NULL);
-
         nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
-
-        gam_destroy(fmgr.gam);
 
         fmgr_destroy_routing();
 
@@ -416,6 +384,40 @@ void fmgr_fini()
         connmgr_ae_destroy(fmgr.ae);
 
         nbs_destroy(fmgr.nbs);
+}
+
+int fmgr_start(void)
+{
+        enum pol_gam pg;
+
+        if (rib_read(BOOT_PATH "/dt/gam/type", &pg, sizeof(pg))
+            != sizeof(pg)) {
+                log_err("Failed to read policy for ribmgr gam.");
+                return -1;
+        }
+
+        fmgr.gam = gam_create(pg, fmgr.nbs, fmgr.ae);
+        if (fmgr.gam == NULL) {
+                log_err("Failed to init dt graph adjacency manager.");
+                nbs_unreg_notifier(fmgr.nbs, &fmgr.nb_notifier);
+                return -1;
+        }
+
+        pthread_create(&fmgr.np1_sdu_reader, NULL, fmgr_np1_sdu_reader, NULL);
+        pthread_create(&fmgr.nm1_sdu_reader, NULL, fmgr_nm1_sdu_reader, NULL);
+
+        return 0;
+}
+
+void fmgr_stop(void)
+{
+        pthread_cancel(fmgr.np1_sdu_reader);
+        pthread_cancel(fmgr.nm1_sdu_reader);
+
+        pthread_join(fmgr.np1_sdu_reader, NULL);
+        pthread_join(fmgr.nm1_sdu_reader, NULL);
+
+        gam_destroy(fmgr.gam);
 }
 
 int fmgr_np1_alloc(int       fd,
