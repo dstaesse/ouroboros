@@ -3,7 +3,8 @@
  *
  * Shim IPC process over Ethernet with LLC
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -334,7 +335,6 @@ static int eth_llc_ipcp_send_mgmt_frame(shim_eth_llc_msg_t * msg,
 static int eth_llc_ipcp_sap_alloc(uint8_t * dst_addr,
                                   uint8_t   ssap,
                                   char *    dst_name,
-                                  char *    src_ae_name,
                                   qoscube_t cube)
 {
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
@@ -343,7 +343,6 @@ static int eth_llc_ipcp_sap_alloc(uint8_t * dst_addr,
         msg.has_ssap    = true;
         msg.ssap        = ssap;
         msg.dst_name    = dst_name;
-        msg.src_ae_name = src_ae_name;
         msg.has_qoscube = true;
         msg.qoscube     = cube;
 
@@ -371,7 +370,6 @@ static int eth_llc_ipcp_sap_alloc_resp(uint8_t * dst_addr,
 static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
                                 uint8_t * r_addr,
                                 char *    dst_name,
-                                char *    src_ae_name,
                                 qoscube_t cube)
 {
         int fd;
@@ -380,7 +378,7 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         /* reply to IRM */
-        fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name, cube);
+        fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (fd < 0) {
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -491,7 +489,6 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
                         eth_llc_ipcp_sap_req(msg->ssap,
                                              r_addr,
                                              msg->dst_name,
-                                             msg->src_ae_name,
                                              msg->qoscube);
                 }
                 break;
@@ -989,7 +986,6 @@ static int eth_llc_ipcp_name_query(char * name)
 
 static int eth_llc_ipcp_flow_alloc(int       fd,
                                    char *    dst_name,
-                                   char *    src_ae_name,
                                    qoscube_t cube)
 {
         uint8_t ssap = 0;
@@ -998,7 +994,7 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
 
         log_dbg("Allocating flow to %s.", dst_name);
 
-        if (dst_name == NULL || src_ae_name == NULL)
+        if (dst_name == NULL)
                 return -1;
 
         if (cube != QOS_CUBE_BE && cube != QOS_CUBE_FRC) {
@@ -1038,11 +1034,7 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
 
         memcpy(r_addr, &addr, MAC_SIZE);
 
-        if (eth_llc_ipcp_sap_alloc(r_addr,
-                                   ssap,
-                                   dst_name,
-                                   src_ae_name,
-                                   cube) < 0) {
+        if (eth_llc_ipcp_sap_alloc(r_addr, ssap, dst_name, cube) < 0) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
                 bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);

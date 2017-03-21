@@ -3,7 +3,8 @@
  *
  * PDU Forwarding Function
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -55,15 +56,16 @@ struct pff * pff_create(void)
         return tmp;
 }
 
-int pff_destroy(struct pff * instance)
+void pff_destroy(struct pff * instance)
 {
         assert(instance);
 
+        pthread_mutex_lock(&instance->lock);
         htable_destroy(instance->table);
+        pthread_mutex_unlock(&instance->lock);
+
         pthread_mutex_destroy(&instance->lock);
         free(instance);
-
-        return 0;
 }
 
 int pff_add(struct pff * instance, uint64_t addr, int fd)

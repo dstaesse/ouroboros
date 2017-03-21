@@ -3,7 +3,8 @@
  *
  * The Flow and Retransmission control component
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -198,12 +199,12 @@ int frct_fini()
         return 0;
 }
 
-int frct_nm1_post_sdu(struct pci * pci,
+int frct_nm1_post_sdu(struct pci *         pci,
                       struct shm_du_buff * sdb)
 {
         struct frct_i * instance;
-        buffer_t buf;
-        cep_id_t id;
+        buffer_t        buf;
+        cep_id_t        id;
 
         if (pci == NULL || sdb == NULL)
                 return -1;
@@ -267,8 +268,8 @@ cep_id_t frct_i_create(uint64_t   address,
                        qoscube_t  cube)
 {
         struct frct_i * instance;
-        struct pci pci;
-        cep_id_t id;
+        struct pci      pci;
+        cep_id_t        id;
 
         if (buf == NULL || buf->data == NULL)
                 return INVALID_CEP_ID;
@@ -285,7 +286,7 @@ cep_id_t frct_i_create(uint64_t   address,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = address;
-        pci.src_addr = ipcpi.address;
+        pci.src_addr = ipcpi.dt_addr;
         pci.dst_cep_id = 0;
         pci.src_cep_id = id;
         pci.seqno = 0;
@@ -304,7 +305,7 @@ int frct_i_accept(cep_id_t   id,
                   buffer_t * buf,
                   qoscube_t  cube)
 {
-        struct pci pci;
+        struct pci      pci;
         struct frct_i * instance;
 
         if (buf == NULL || buf->data == NULL)
@@ -330,7 +331,7 @@ int frct_i_accept(cep_id_t   id,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = ipcpi.address;
+        pci.src_addr = ipcpi.dt_addr;
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = 0;
@@ -347,7 +348,7 @@ int frct_i_accept(cep_id_t   id,
 int frct_i_destroy(cep_id_t   id,
                    buffer_t * buf)
 {
-        struct pci pci;
+        struct pci      pci;
         struct frct_i * instance;
 
         pthread_mutex_lock(&frct.instances_lock);
@@ -367,7 +368,7 @@ int frct_i_destroy(cep_id_t   id,
 
         pci.pdu_type = PDU_TYPE_MGMT;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = ipcpi.address;
+        pci.src_addr = ipcpi.dt_addr;
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = 0;
@@ -390,7 +391,7 @@ int frct_i_destroy(cep_id_t   id,
 int frct_i_write_sdu(cep_id_t             id,
                      struct shm_du_buff * sdb)
 {
-        struct pci pci;
+        struct pci      pci;
         struct frct_i * instance;
 
         if (sdb == NULL)
@@ -413,7 +414,7 @@ int frct_i_write_sdu(cep_id_t             id,
 
         pci.pdu_type = PDU_TYPE_DTP;
         pci.dst_addr = instance->r_address;
-        pci.src_addr = ipcpi.address;
+        pci.src_addr = ipcpi.dt_addr;
         pci.dst_cep_id = instance->r_cep_id;
         pci.src_cep_id = instance->cep_id;
         pci.seqno = (instance->seqno)++;

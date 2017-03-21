@@ -15,32 +15,36 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 set(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 
 protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS flow_alloc.proto)
+protobuf_generate_c(FSO_SRCS FSO_HDRS fso.proto)
 
 set(SOURCE_FILES
   # Add source files here
   addr_auth.c
-  cdap_flow.c
+  connmgr.c
   dir.c
   enroll.c
   fmgr.c
   frct.c
   gam.c
+  graph.c
   main.c
+  neighbors.c
   pff.c
   ribmgr.c
+  routing.c
   shm_pci.c
   # Add policies last
   pol/complete.c
   pol/flat.c
   )
 
-add_executable (ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
-  ${FLOW_ALLOC_SRCS})
-target_link_libraries (ipcpd-normal LINK_PUBLIC ouroboros)
+add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
+  ${FLOW_ALLOC_SRCS} ${FSO_SRCS})
+target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros)
 
-include(MacroAddCompileFlags)
+include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-  macro_add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)

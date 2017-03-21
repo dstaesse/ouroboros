@@ -3,7 +3,8 @@
  *
  * A simple echo application
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -30,7 +31,7 @@ int client_main(void)
         char * message  = "Client says hi!";
         ssize_t count = 0;
 
-        fd = flow_alloc("echo", NULL, NULL);
+        fd = flow_alloc("echo", NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 return -1;

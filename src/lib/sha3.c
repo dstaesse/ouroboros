@@ -3,6 +3,9 @@
  *
  * SHA3 algorithm
  *
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *
  * This implementation is adapted and redistributed from the RHASH
  * project
  *

@@ -3,7 +3,8 @@
  *
  * Local IPC process
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -220,7 +221,6 @@ static int ipcp_local_name_query(char * name)
 
 static int ipcp_local_flow_alloc(int       fd,
                                  char *    dst_name,
-                                 char *    src_ae_name,
                                  qoscube_t cube)
 {
         int out_fd = -1;
@@ -228,7 +228,6 @@ static int ipcp_local_flow_alloc(int       fd,
         log_dbg("Allocating flow to %s on fd %d.", dst_name, fd);
 
         assert(dst_name);
-        assert(src_ae_name);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
@@ -240,7 +239,7 @@ static int ipcp_local_flow_alloc(int       fd,
 
         pthread_rwlock_wrlock(&local_data.lock);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name, cube);
+        out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
 
         local_data.in_out[fd]  = out_fd;
         local_data.in_out[out_fd] = fd;

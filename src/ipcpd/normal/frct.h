@@ -3,7 +3,8 @@
  *
  * The Flow and Retransmission control component
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -26,6 +27,8 @@
 #include <ouroboros/utils.h>
 
 #include "shm_pci.h"
+
+#define FRCT_PROTO "FRCT"
 
 struct frct_i;
 

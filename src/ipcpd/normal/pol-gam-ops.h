@@ -3,8 +3,8 @@
  *
  * Graph adjacency manager policy ops
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
- *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -24,21 +24,13 @@
 #define OUROBOROS_IPCPD_NORMAL_POL_GAM_OPS_H
 
 #include <ouroboros/cacep.h>
+#include <ouroboros/qos.h>
 
 struct pol_gam_ops {
-        void * (* create)(struct gam * instance);
+        void * (* create)(struct nbs * nbs,
+                          struct ae *  ae);
 
         void   (* destroy)(void * o);
-
-        int    (* start)(void * o);
-
-        int    (* stop)(void * o);
-
-        int    (* accept_new_flow)(void * o);
-
-        int    (* accept_flow)(void *                    o,
-                               qosspec_t                 qs,
-                               const struct cacep_info * info);
 };
 
 #endif /* OUROBOROS_IPCPD_NORMAL_POL_GAM_OPS_H */

@@ -3,7 +3,8 @@
  *
  * Utils of the IPC Resource Manager
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -44,6 +45,7 @@ int     wildcard_match(const char * pattern,
 
 /* functions for copying and destroying arguments list */
 char ** argvdup(char ** argv);
+
 void    argvfree(char ** argv);
 
 #endif /* OUROBOROS_IRM_UTILS_H */

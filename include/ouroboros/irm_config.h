@@ -3,7 +3,8 @@
  *
  * Configuration information for the IPC Resource Manager
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -45,11 +46,6 @@ enum pol_addr_auth {
 
 enum pol_gam {
         COMPLETE = 0
-};
-
-enum pol_cacep {
-        ANONYMOUS_AUTH = 0,
-        SIMPLE_AUTH
 };
 
 struct dif_config {

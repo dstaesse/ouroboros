@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * IPC process ops
+ * Flow State Object message
  *
  *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
  *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
@@ -20,32 +20,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef IPCPD_IPCP_OPS_H
-#define IPCPD_IPCP_OPS_H
+syntax = "proto2";
 
-#include <ouroboros/irm_config.h>
-#include <ouroboros/shared.h>
-
-struct ipcp_ops {
-        int   (* ipcp_bootstrap)(struct dif_config * conf);
-
-        int   (* ipcp_enroll)(char * dif_name);
-
-        int   (* ipcp_name_reg)(char * name);
-
-        int   (* ipcp_name_unreg)(char * name);
-
-        int   (* ipcp_name_query)(char * name);
-
-        int   (* ipcp_flow_alloc)(int       fd,
-                                  char *    dst_ap_name,
-                                  char *    src_ae_name,
-                                  qoscube_t qos);
-
-        int   (* ipcp_flow_alloc_resp)(int fd,
-                                       int response);
-
-        int   (* ipcp_flow_dealloc)(int fd);
+message fso {
+        required uint64 s_addr = 1;
+        required uint64 d_addr = 2;
+        /* Add QoS parameters of link here */
 };
-
-#endif /* IPCPD_IPCP_OPS_H */

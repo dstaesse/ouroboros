@@ -3,7 +3,8 @@
  *
  * Ring buffer for incoming SDUs
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -28,9 +29,11 @@
 
 struct shm_rbuff;
 
-struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id);
+struct shm_rbuff * shm_rbuff_create(pid_t api,
+                                    int   port_id);
 
-struct shm_rbuff * shm_rbuff_open(pid_t api, int port_id);
+struct shm_rbuff * shm_rbuff_open(pid_t api,
+                                  int   port_id);
 
 void               shm_rbuff_close(struct shm_rbuff * rb);
 
@@ -49,5 +52,7 @@ ssize_t            shm_rbuff_read(struct shm_rbuff * rb);
 
 ssize_t            shm_rbuff_read_b(struct shm_rbuff *      rb,
                                     const struct timespec * timeout);
+
+size_t             shm_rbuff_queued(struct shm_rbuff * rb);
 
 #endif /* OUROBOROS_SHM_RBUFF_H */

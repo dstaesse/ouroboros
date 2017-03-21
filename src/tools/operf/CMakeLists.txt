@@ -10,9 +10,9 @@ if(NOT LIBM_LIBRARIES)
 endif()
 
 set(SOURCE_FILES
-        # Add source files here
-        operf.c
-)
+  # Add source files here
+  operf.c
+  )
 
 add_executable(operf ${SOURCE_FILES})
 

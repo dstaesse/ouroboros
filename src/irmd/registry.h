@@ -3,7 +3,8 @@
  *
  * The IPC Resource Manager - Registry
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -62,7 +63,6 @@ struct reg_entry {
         struct list_head    reg_apis;
 
         enum reg_name_state state;
-        char *              req_ae_name;
         qoscube_t           qos;
         int                 response;
         pthread_cond_t      state_cond;

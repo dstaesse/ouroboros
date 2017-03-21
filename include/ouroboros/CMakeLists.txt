@@ -3,6 +3,7 @@ configure_file(
   "${CMAKE_CURRENT_BINARY_DIR}/config.h")
 
 set(HEADER_FILES
+  cacep.h
   cdap.h
   dev.h
   endian.h

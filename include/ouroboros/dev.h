@@ -3,7 +3,8 @@
  *
  * API for applications
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -27,16 +28,13 @@
 #ifndef OUROBOROS_DEV_H
 #define OUROBOROS_DEV_H
 
-#define UNKNOWN_AE "__UNKNOWN_AE__"
-
 /* These calls should be removed once we write the ouroboros OS. */
 int     ap_init(const char * ap_name);
 
 void    ap_fini(void);
 
-/* Returns flow descriptor (> 0), client AE name and qos spec. */
-int     flow_accept(char **     ae_name,
-                    qosspec_t * spec);
+/* Returns flow descriptor (> 0) and qos spec. */
+int     flow_accept(qosspec_t * spec);
 
 int     flow_alloc_resp(int fd,
                         int response);
@@ -46,7 +44,6 @@ int     flow_alloc_resp(int fd,
  * On returning, spec will contain the actual supplied QoS.
  */
 int     flow_alloc(const char * dst_name,
-                   const char * src_ae_name,
                    qosspec_t *  spec);
 
 int     flow_alloc_res(int fd);

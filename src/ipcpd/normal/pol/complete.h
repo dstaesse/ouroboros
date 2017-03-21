@@ -1,10 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Graph adjacency manager for IPC Process components
+ * Sets up a complete graph
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
- *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -23,30 +23,19 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_POL_COMPLETE_H
 #define OUROBOROS_IPCPD_NORMAL_POL_COMPLETE_H
 
-#include "gam.h"
+#include <ouroboros/irm_config.h>
+#include <ouroboros/qos.h>
+
 #include "pol-gam-ops.h"
 
-void * complete_create(struct gam * instance);
+void * complete_create(struct nbs * nbs,
+                       struct ae *  ae);
 
-void   complete_destroy(void * o);
-
-int    complete_start(void * o);
-
-int    complete_stop(void * o);
-
-int    complete_accept_new_flow(void * o);
-
-int    complete_accept_flow(void *                    o,
-                            qosspec_t                 qs,
-                            const struct cacep_info * info);
+void   complete_destroy(void * ops_o);
 
 struct pol_gam_ops complete_ops = {
-        .create          = complete_create,
-        .destroy         = complete_destroy,
-        .start           = complete_start,
-        .stop            = complete_stop,
-        .accept_new_flow = complete_accept_new_flow,
-        .accept_flow     = complete_accept_flow
+        .create   = complete_create,
+        .destroy  = complete_destroy
 };
 
 #endif /* OUROBOROS_IPCPD_NORMAL_POL_COMPLETE_H */

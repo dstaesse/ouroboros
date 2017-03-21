@@ -3,8 +3,8 @@
  *
  * Additional API for IPCPs
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
- *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -31,7 +31,6 @@ int  ipcp_create_r(pid_t api,
 
 int  ipcp_flow_req_arr(pid_t  api,
                        char * dst_name,
-                       char * src_ae_name,
                        qoscube_t cube);
 
 int  ipcp_flow_alloc_reply(int fd,

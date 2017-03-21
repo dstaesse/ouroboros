@@ -3,7 +3,8 @@
  *
  * IPC process structure
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -50,7 +51,6 @@ struct ipcp_ops {
 
         int   (* ipcp_flow_alloc)(int       fd,
                                   char *    dst_ap_name,
-                                  char *    src_ae_name,
                                   qoscube_t qos);
 
         int   (* ipcp_flow_alloc_resp)(int fd,
@@ -66,7 +66,7 @@ struct ipcp {
         enum ipcp_type     type;
         char *             dif_name;
 
-        uint64_t           address;
+        uint64_t           dt_addr;
 
         struct ipcp_ops *  ops;
         int                irmd_fd;

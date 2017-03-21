@@ -3,8 +3,8 @@
  *
  * A simple CBR generator
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
- *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -164,7 +164,7 @@ static void * listener(void * o)
                server_settings.interval, server_settings.timeout);
 
         while (true) {
-                client_fd = flow_accept(NULL, &qs);
+                client_fd = flow_accept(&qs);
                 if (client_fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;

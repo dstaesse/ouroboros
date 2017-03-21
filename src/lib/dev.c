@@ -3,8 +3,8 @@
  *
  * API for applications
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
- *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -382,8 +382,7 @@ void ap_fini()
         pthread_rwlock_destroy(&ai.data_lock);
 }
 
-int flow_accept(char **     ae_name,
-                qosspec_t * spec)
+int flow_accept(qosspec_t * spec)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -449,18 +448,6 @@ int flow_accept(char **     ae_name,
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
-        }
-
-        if (ae_name != NULL) {
-                *ae_name = strdup(recv_msg->ae_name);
-                if (*ae_name == NULL) {
-                        reset_flow(fd);
-                        bmp_release(ai.fds, fd);
-                        pthread_rwlock_unlock(&ai.flows_lock);
-                        pthread_rwlock_unlock(&ai.data_lock);
-                        irm_msg__free_unpacked(recv_msg, NULL);
-                        return -ENOMEM;
-                }
         }
 
         ai.flows[fd].port_id = recv_msg->port_id;
@@ -531,7 +518,6 @@ int flow_alloc_resp(int fd,
 }
 
 int flow_alloc(const char * dst_name,
-               const char * src_ae_name,
                qosspec_t *  spec)
 {
         irm_msg_t msg = IRM_MSG__INIT;
@@ -541,12 +527,8 @@ int flow_alloc(const char * dst_name,
         if (dst_name == NULL)
                 return -EINVAL;
 
-        if (src_ae_name == NULL)
-                src_ae_name  = UNKNOWN_AE;
-
         msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst_name    = (char *) dst_name;
-        msg.ae_name     = (char *) src_ae_name;
         msg.has_api     = true;
         msg.has_qoscube = true;
         msg.qoscube     = spec_to_cube(spec);
@@ -1047,6 +1029,8 @@ int flow_set_add(struct flow_set * set,
                  int               fd)
 {
         int ret;
+        size_t sdus;
+        size_t i;
 
         if (set == NULL)
                 return -EINVAL;
@@ -1055,6 +1039,10 @@ int flow_set_add(struct flow_set * set,
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].port_id);
+
+        sdus = shm_rbuff_queued(ai.flows[fd].rx_rb);
+        for (i = 0; i < sdus; i++)
+                shm_flow_set_notify(ai.fqset, ai.flows[fd].port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
@@ -1270,7 +1258,6 @@ int ipcp_create_r(pid_t api,
 
 int ipcp_flow_req_arr(pid_t     api,
                       char *    dst_name,
-                      char *    src_ae_name,
                       qoscube_t cube)
 {
         irm_msg_t msg = IRM_MSG__INIT;
@@ -1278,14 +1265,13 @@ int ipcp_flow_req_arr(pid_t     api,
         int port_id = -1;
         int fd = -1;
 
-        if (dst_name == NULL || src_ae_name == NULL)
+        if (dst_name == NULL)
                 return -EINVAL;
 
         msg.code        = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
         msg.has_api     = true;
         msg.api         = api;
         msg.dst_name    = dst_name;
-        msg.ae_name     = src_ae_name;
         msg.has_qoscube = true;
         msg.qoscube     = cube;
 

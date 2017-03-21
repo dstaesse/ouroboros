@@ -3,7 +3,8 @@
  *
  * Shim IPC process over UDP
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -197,7 +198,6 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg,
 static int ipcp_udp_port_alloc(uint32_t  dst_ip_addr,
                                uint16_t  src_udp_port,
                                char *    dst_name,
-                               char *    src_ae_name,
                                qoscube_t cube)
 {
         shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
@@ -205,7 +205,6 @@ static int ipcp_udp_port_alloc(uint32_t  dst_ip_addr,
         msg.code         = SHIM_UDP_MSG_CODE__FLOW_REQ;
         msg.src_udp_port = src_udp_port;
         msg.dst_name     = dst_name;
-        msg.src_ae_name  = src_ae_name;
         msg.has_qoscube  = true;
         msg.qoscube      = cube;
 
@@ -231,7 +230,6 @@ static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
 
 static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                              char *               dst_name,
-                             char *               src_ae_name,
                              qoscube_t            cube)
 {
         int skfd;
@@ -275,7 +273,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         /* reply to IRM */
-        fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name, cube);
+        fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (fd < 0) {
                 pthread_rwlock_unlock(&udp_data.flows_lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
@@ -397,7 +395,6 @@ static void * ipcp_udp_listener(void * o)
                         c_saddr.sin_port = msg->src_udp_port;
                         ipcp_udp_port_req(&c_saddr,
                                           msg->dst_name,
-                                          msg->src_ae_name,
                                           msg->qoscube);
                         break;
                 case SHIM_UDP_MSG_CODE__FLOW_REPLY:
@@ -957,7 +954,6 @@ static int ipcp_udp_name_query(char * name)
 
 static int ipcp_udp_flow_alloc(int       fd,
                                char *    dst_name,
-                               char *    src_ae_name,
                                qoscube_t cube)
 {
         struct sockaddr_in r_saddr; /* server address */
@@ -969,10 +965,8 @@ static int ipcp_udp_flow_alloc(int       fd,
         log_dbg("Allocating flow to %s.", dst_name);
 
         assert(dst_name);
-        assert(src_ae_name);
 
-        if (strlen(dst_name) > 255
-            || strlen(src_ae_name) > 255) {
+        if (strlen(dst_name) > 255) {
                 log_err("Name too long for this shim.");
                 return -1;
         }
@@ -1043,7 +1037,6 @@ static int ipcp_udp_flow_alloc(int       fd,
         if (ipcp_udp_port_alloc(ip_addr,
                                 f_saddr.sin_port,
                                 dst_name,
-                                src_ae_name,
                                 cube) < 0) {
                 pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&udp_data.flows_lock);

@@ -10,26 +10,21 @@ protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
   dif_config.proto)
 protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS cdap.proto)
 protobuf_generate_c(RO_PROTO_SRCS RO_PROTO_HDRS ro.proto)
-protobuf_generate_c(CACEP_PROTO_PROTO_SRCS CACEP_CDAP_PROTO_HDRS
-  pol/cacep_proto.proto)
-protobuf_generate_c(CACEP_ANONYMOUS_AUTH_PROTO_SRCS
-  CACEP_ANONYMOUS_AUTH_PROTO_HDRS pol/cacep_anonymous_auth.proto)
-protobuf_generate_c(CACEP_SIMPLE_AUTH_PROTO_SRCS CACEP_SIMPLE_AUTH_PROTO_HDRS
-  pol/cacep_simple_auth.proto)
+protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
 
-if(NOT APPLE)
+if (NOT APPLE)
   find_library(LIBRT_LIBRARIES rt)
-  if(NOT LIBRT_LIBRARIES)
+  if (NOT LIBRT_LIBRARIES)
     message(FATAL_ERROR "librt not found")
-  endif()
-else()
+  endif ()
+else ()
   set(LIBRT_LIBRARIES "")
-endif()
+endif ()
 
 find_library(LIBPTHREAD_LIBRARIES pthread)
-if(NOT LIBPTHREAD_LIBRARIES)
+if (NOT LIBPTHREAD_LIBRARIES)
   message(FATAL_ERROR "libpthread not found")
-endif()
+endif ()
 
 set(SOURCE_FILES
   # Add source files here
@@ -54,23 +49,18 @@ set(SOURCE_FILES
   sockets.c
   time_utils.c
   utils.c
-  # Add policies last
-  pol/cacep_proto.c
-  pol/cacep_anonymous_auth.c
-  pol/cacep_simple_auth.c
   )
 
 add_library(ouroboros SHARED ${SOURCE_FILES} ${IRM_PROTO_SRCS}
   ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS} ${CDAP_PROTO_SRCS}
-  ${CACEP_PROTO_PROTO_SRCS} ${CACEP_ANONYMOUS_AUTH_PROTO_SRCS}
-  ${CACEP_SIMPLE_AUTH_PROTO_SRCS} ${RO_PROTO_SRCS})
+  ${CACEP_PROTO_SRCS} ${RO_PROTO_SRCS})
 
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY})
 
-include(MacroAddCompileFlags)
+include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-  MACRO_ADD_COMPILE_FLAGS(ouroboros -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ouroboros -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ouroboros LIBRARY DESTINATION usr/lib)

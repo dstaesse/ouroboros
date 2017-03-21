@@ -3,7 +3,8 @@
  *
  * RIB manager of the IPC Process
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -40,9 +41,6 @@ enum diss_freq {
 int  ribmgr_init(void);
 
 void ribmgr_fini(void);
-
-int  ribmgr_flow_arr(int       fd,
-                     qosspec_t qs);
 
 int  ribmgr_disseminate(char *           path,
                         enum diss_target target,

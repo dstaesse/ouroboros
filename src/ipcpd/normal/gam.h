@@ -1,10 +1,10 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Graph adjacency manager for IPC Process components
+ * Data transfer graph adjacency manager
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
- *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -26,22 +26,12 @@
 #include <ouroboros/cacep.h>
 #include <ouroboros/irm_config.h>
 
+#include "neighbors.h"
+
 struct gam * gam_create(enum pol_gam gam_type,
-                        const char * ae_name);
+                        struct nbs * nbs,
+                        struct ae *  ae);
 
-void         gam_destroy(struct gam * instance);
-
-int          gam_flow_arr(struct gam * instance,
-                          int          fd,
-                          qosspec_t    qs);
-
-int          gam_flow_alloc(struct gam * instance,
-                            char *       dst_name,
-                            qosspec_t    qs);
-
-int          gam_flow_wait(struct gam *         instance,
-                           int *                fd,
-                           struct cacep_info ** info,
-                           qosspec_t *          qs);
+void         gam_destroy(struct gam * gam);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_GAM_H */

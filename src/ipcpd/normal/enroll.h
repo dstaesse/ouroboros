@@ -3,7 +3,8 @@
  *
  * Enrollment Task
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -22,8 +23,14 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_ENROLL_H
 #define OUROBOROS_IPCPD_NORMAL_ENROLL_H
 
-int enroll_handle(int fd);
+int  enroll_init(void);
 
-int enroll_boot(char * dst_name);
+void enroll_fini(void);
+
+int  enroll_start(void);
+
+void enroll_stop(void);
+
+int  enroll_boot(char * dst_name);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_ENROLL_H */

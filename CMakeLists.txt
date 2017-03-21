@@ -5,7 +5,7 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 project(ouroboros C)
 
 include(GitVersionGen)
-GIT_VERSION_GEN()
+git_version_gen()
 
 include(GNUInstallDirs)
 
@@ -23,11 +23,11 @@ set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
+list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
   "${CMAKE_INSTALL_PREFIX}/usr/lib" isSystemDir)
-IF("${isSystemDir}" STREQUAL "-1")
-   set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/usr/lib")
-ENDIF("${isSystemDir}" STREQUAL "-1")
+IF ("${isSystemDir}" STREQUAL "-1")
+  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/usr/lib")
+ENDIF ("${isSystemDir}" STREQUAL "-1")
 
 message(STATUS "Package name is:            ${PACKAGE_NAME}")
 message(STATUS "Package description is:     ${PACKAGE_DESCRIPTION}")
@@ -86,12 +86,12 @@ add_subdirectory(include)
 
 # Uninstall target
 configure_file(
-  "${CMAKE_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
-  "${CMAKE_BINARY_DIR}/cmake/cmake_uninstall.cmake"
+  "${CMAKE_SOURCE_DIR}/cmake/CmakeUninstall.cmake.in"
+  "${CMAKE_BINARY_DIR}/cmake/CmakeUninstall.cmake"
   IMMEDIATE @ONLY)
 
 add_custom_target(uninstall
-  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/cmake/cmake_uninstall.cmake)
+  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/cmake/CmakeUninstall.cmake)
 
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PACKAGE_DESCRIPTION}")
 set(CPACK_PACKAGE_DESCRIPTION_FILE    "${CMAKE_CURRENT_SOURCE_DIR}/README")

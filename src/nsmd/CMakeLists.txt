@@ -5,17 +5,17 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(SOURCE_FILES
-        # Add source files here
-        main.c
-)
+  # Add source files here
+  main.c
+  )
 
-add_executable (nsmd ${SOURCE_FILES})
+add_executable(nsmd ${SOURCE_FILES})
 
-target_link_libraries (nsmd LINK_PUBLIC ouroboros)
+target_link_libraries(nsmd LINK_PUBLIC ouroboros)
 
-include(MacroAddCompileFlags)
+include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-   MACRO_ADD_COMPILE_FLAGS(nsmd -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(nsmd -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS nsmd RUNTIME DESTINATION sbin)

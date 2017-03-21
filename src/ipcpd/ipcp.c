@@ -3,7 +3,8 @@
  *
  * IPC process main loop
  *
- *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -191,7 +192,6 @@ static void * ipcp_main_loop(void * o)
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc(fd,
                                                            msg->dst_name,
-                                                           msg->src_ae_name,
                                                            msg->qoscube);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
