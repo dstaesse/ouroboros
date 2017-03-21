@@ -492,12 +492,10 @@ int shim_data_dir_query_wait(struct dir_query *      query,
 
         query->state = QUERY_PENDING;
 
-        while (query->state == QUERY_PENDING) {
-                if ((ret = -pthread_cond_timedwait(&query->cond,
-                                                   &query->lock,
-                                                   &abstime)) == -ETIMEDOUT)
-                        break;
-        }
+        while (query->state == QUERY_PENDING && ret != -ETIMEDOUT)
+                ret = -pthread_cond_timedwait(&query->cond,
+                                              &query->lock,
+                                              &abstime);
 
         if (query->state == QUERY_DESTROY)
                 ret = -1;
