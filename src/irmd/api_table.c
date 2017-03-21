@@ -34,6 +34,7 @@
 struct api_entry * api_entry_create(pid_t api, char * apn)
 {
         struct api_entry * e;
+        pthread_condattr_t cattr;
 
         if (apn == NULL)
                 return NULL;
@@ -53,8 +54,26 @@ struct api_entry * api_entry_create(pid_t api, char * apn)
 
         e->state    = API_INIT;
 
-        pthread_mutex_init(&e->state_lock, NULL);
-        pthread_cond_init(&e->state_cond, NULL);
+        if (pthread_condattr_init(&cattr)) {
+                free(e);
+                return NULL;
+        }
+
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+
+        if (pthread_mutex_init(&e->state_lock, NULL)) {
+                free(e);
+                return NULL;
+        }
+
+
+        if (pthread_cond_init(&e->state_cond, &cattr)) {
+                pthread_mutex_destroy(&e->state_lock);
+                free(e);
+                return NULL;
+        }
 
         return e;
 }
