@@ -384,3 +384,23 @@ void shm_rbuff_fini(struct shm_rbuff * rb)
 #endif
         pthread_cleanup_pop(true);
 }
+
+size_t shm_rbuff_queued(struct shm_rbuff * rb)
+{
+        size_t ret;
+
+        assert(rb);
+
+#ifdef __APPLE__
+        pthread_mutex_lock(rb->lock);
+#else
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
+                pthread_mutex_consistent(rb->lock);
+#endif
+
+        ret = shm_rbuff_used(rb);
+
+        pthread_mutex_unlock(rb->lock);
+
+        return ret;
+}

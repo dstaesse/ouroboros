@@ -1029,6 +1029,8 @@ int flow_set_add(struct flow_set * set,
                  int               fd)
 {
         int ret;
+        size_t sdus;
+        size_t i;
 
         if (set == NULL)
                 return -EINVAL;
@@ -1037,6 +1039,10 @@ int flow_set_add(struct flow_set * set,
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].port_id);
+
+        sdus = shm_rbuff_queued(ai.flows[fd].rx_rb);
+        for (i = 0; i < sdus; i++)
+                shm_flow_set_notify(ai.fqset, ai.flows[fd].port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);

@@ -53,4 +53,6 @@ ssize_t            shm_rbuff_read(struct shm_rbuff * rb);
 ssize_t            shm_rbuff_read_b(struct shm_rbuff *      rb,
                                     const struct timespec * timeout);
 
+size_t             shm_rbuff_queued(struct shm_rbuff * rb);
+
 #endif /* OUROBOROS_SHM_RBUFF_H */
