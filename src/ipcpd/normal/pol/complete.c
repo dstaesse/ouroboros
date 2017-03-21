@@ -83,6 +83,9 @@ static void * allocator(void * o)
         qs.delay = 0;
         qs.jitter = 0;
 
+        /* FIXME: implement QoS specs */
+        qs.cube = QOS_CUBE_BE;
+
         /* FIXME: subscribe to members to keep the graph complete. */
         len = rib_children("/" MEMBERS_NAME, &children);
         for (i = 0; i < len; ++i) {
