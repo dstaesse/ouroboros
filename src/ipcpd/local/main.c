@@ -234,13 +234,19 @@ static int ipcp_local_flow_alloc(int       fd,
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_dbg("Won't register with non-enrolled IPCP.");
+                log_dbg("Won't allocate over non-operational IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
         pthread_rwlock_wrlock(&local_data.lock);
 
         out_fd = ipcp_flow_req_arr(getpid(), dst_name, src_ae_name, cube);
+        if (out_fd < 0) {
+                log_dbg("Flow allocation failed.");
+                pthread_rwlock_unlock(&local_data.lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return -1;
+        }
 
         local_data.in_out[fd]  = out_fd;
         local_data.in_out[out_fd] = fd;
