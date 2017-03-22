@@ -328,7 +328,7 @@ int connmgr_alloc(struct ae *   ae,
 int connmgr_wait(struct ae *   ae,
                  struct conn * conn)
 {
-        struct ae_conn * ae_conn;
+        struct ae_conn * ae_conn = NULL;
 
         assert(ae);
         assert(conn);
@@ -341,6 +341,8 @@ int connmgr_wait(struct ae *   ae,
         while (list_is_empty(&ae->conn_list))
                 pthread_cond_wait(&ae->conn_cond, &ae->conn_lock);
 
+        pthread_cleanup_pop(false);
+
         ae_conn = list_first_entry((&ae->conn_list), struct ae_conn, next);
         if (ae_conn == NULL) {
                 pthread_mutex_unlock(&ae->conn_lock);
@@ -352,7 +354,7 @@ int connmgr_wait(struct ae *   ae,
         list_del(&ae_conn->next);
         free(ae_conn);
 
-        pthread_cleanup_pop(true);
+        pthread_mutex_unlock(&ae->conn_lock);
 
         return 0;
 }
