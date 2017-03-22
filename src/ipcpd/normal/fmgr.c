@@ -289,6 +289,8 @@ int fmgr_init(void)
                 }
         }
 
+        memset(&info, 0, sizeof(info));
+
         strcpy(info.ae_name, DT_AE);
         strcpy(info.protocol, FRCT_PROTO);
         info.pref_version = 1;

@@ -78,6 +78,8 @@ int ribmgr_init(void)
         enum pol_gam     pg;
         struct conn_info info;
 
+        memset(&info, 0, sizeof(info));
+
         strcpy(info.ae_name, MGMT_AE);
         strcpy(info.protocol, CDAP_PROTO);
         info.pref_version = 1;
