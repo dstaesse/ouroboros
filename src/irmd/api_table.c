@@ -167,7 +167,7 @@ int api_entry_sleep(struct api_entry * e)
 
         e->re = NULL;
 
-        clock_gettime(CLOCK_REALTIME, &now);
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
 
         ts_add(&now, &timeout, &dl);
 
