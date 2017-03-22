@@ -161,6 +161,8 @@ static int read_fso(char *  path,
         fso_t *   fso;
         qosspec_t qs;
 
+        memset(&qs, 0, sizeof(qs));
+
         len = rib_read(path, ro, BUF_SIZE);
         if (len < 0) {
                 log_err("Failed to read FSO.");
