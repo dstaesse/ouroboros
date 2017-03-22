@@ -89,6 +89,8 @@ void nbs_destroy(struct nbs * nbs)
 
         pthread_mutex_destroy(&nbs->list_lock);
         pthread_mutex_destroy(&nbs->notifiers_lock);
+
+        free(nbs);
 }
 
 int nbs_add(struct nbs * nbs,
