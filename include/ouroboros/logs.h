@@ -59,6 +59,7 @@ extern bool log_syslog;
                                "(" LVL "): ", getpid());                \
                         printf(__VA_ARGS__);                            \
                         printf(CLR_RESET "\n");                         \
+                        fflush(stdout);                                 \
                 }                                                       \
         } while (0)
 

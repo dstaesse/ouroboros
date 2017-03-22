@@ -46,8 +46,9 @@
 #define ENROLL_WARN_TIME_OFFSET 20
 
 struct {
-        struct ae * ae;
-        pthread_t   listener;
+        struct ae *   ae;
+        struct cdap * cdap;
+        pthread_t     listener;
 } enroll;
 
 static void * enroll_handle(void * o)
@@ -70,24 +71,18 @@ static void * enroll_handle(void * o)
         char * members_ro = MEMBERS_PATH;
         char * dif_ro     = DIF_PATH;
 
-        (void) o;
+        cdap = (struct cdap *) o;
+
+        assert(cdap);
 
         while (true) {
-                cdap = cdap_create();
-                if (cdap == NULL) {
-                        log_err("Failed to instantiate CDAP.");
-                        continue;
-                }
-
                 if (connmgr_wait(enroll.ae, &conn)) {
                         log_err("Failed to get next connection.");
-                        cdap_destroy(cdap);
                         continue;
                 }
 
                 if (cdap_add_flow(cdap, conn.flow_info.fd)) {
                         log_warn("Failed to add flow to CDAP.");
-                        cdap_destroy(cdap);
                         flow_dealloc(conn.flow_info.fd);
                         continue;
                 }
@@ -155,7 +150,7 @@ static void * enroll_handle(void * o)
 
                 log_dbg("Sent boot info to new member.");
 
-                cdap_destroy(cdap);
+                cdap_del_flow(cdap, conn.flow_info.fd);
                 flow_dealloc(conn.flow_info.fd);
         }
 
@@ -337,6 +332,12 @@ int enroll_init(void)
 {
         struct conn_info info;
 
+        enroll.cdap = cdap_create();
+        if (enroll.cdap == NULL) {
+                log_err("Failed to instantiate CDAP.");
+                return -1;
+        }
+
         memset(&info, 0, sizeof(info));
 
         strcpy(info.ae_name, ENROLL_AE);
@@ -345,20 +346,23 @@ int enroll_init(void)
         info.pref_syntax  = PROTO_GPB;
 
         enroll.ae = connmgr_ae_create(info);
-        if (enroll.ae == NULL)
+        if (enroll.ae == NULL) {
+                cdap_destroy(enroll.cdap);
                 return -1;
+        }
 
         return 0;
 }
 
 void enroll_fini(void)
 {
+        cdap_destroy(enroll.cdap);
         connmgr_ae_destroy(enroll.ae);
 }
 
 int enroll_start(void)
 {
-        if (pthread_create(&enroll.listener, NULL, enroll_handle, NULL))
+        if (pthread_create(&enroll.listener, NULL, enroll_handle, enroll.cdap))
                 return -1;
 
         return 0;
