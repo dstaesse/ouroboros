@@ -167,6 +167,8 @@ void graph_destroy(struct graph * graph)
         pthread_mutex_unlock(&graph->lock);
 
         pthread_mutex_destroy(&graph->lock);
+
+        free(graph);
 }
 
 int graph_add_edge(struct graph * graph,

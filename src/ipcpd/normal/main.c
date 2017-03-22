@@ -217,6 +217,8 @@ void shutdown_components(void)
         ribmgr_fini();
 
         addr_auth_fini();
+
+        free(ipcpi.dif_name);
 }
 
 static int normal_ipcp_enroll(char * dst_name)
