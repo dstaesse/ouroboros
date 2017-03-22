@@ -587,6 +587,7 @@ static int bind_ap(char *   ap,
 
         name_dup = strdup(name);
         if (name_dup == NULL) {
+                pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 return -ENOMEM;
         }
@@ -995,6 +996,8 @@ static struct irm_flow * flow_accept(pid_t       api,
         e = api_table_get(&irmd->api_table, api);
         if (e == NULL) {
                 /* Can only happen if server called ap_init(NULL); */
+                pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
                 log_err("Unknown instance %d calling accept.", api);
                 return NULL;
         }
