@@ -28,22 +28,9 @@
 
 #include <inttypes.h>
 
-struct edge {
-        struct list_head next;
-        uint64_t         dst_addr;
-        qosspec_t        qs;
-};
-
-struct vertex {
-        struct list_head next;
-        uint64_t         addr;
-        struct list_head edges;
-};
-
-struct graph {
-        size_t           nr_vertices;
-        struct list_head vertices;
-        pthread_mutex_t  lock;
+struct routing_table {
+        uint64_t dst;
+        uint64_t nhop;
 };
 
 struct graph * graph_create(void);
@@ -63,5 +50,9 @@ int            graph_update_edge(struct graph * graph,
 int            graph_del_edge(struct graph * graph,
                               uint64_t       s_addr,
                               uint64_t       d_addr);
+
+ssize_t        graph_routing_table(struct graph *           graph,
+                                   uint64_t                 s_addr,
+                                   struct routing_table *** table);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_GRAPH_H */

@@ -44,15 +44,11 @@
 typedef Fso fso_t;
 
 #define BUF_SIZE 256
-
-struct routing_table_entry {
-        struct list_head next;
-        uint64_t         dst;
-        uint64_t         nhop;
-};
+#define RECALC_TIME 4
 
 struct routing_i {
         struct pff * pff;
+        pthread_t    calculator;
 };
 
 struct {
@@ -66,6 +62,34 @@ struct {
         pthread_t          rib_listener;
 } routing;
 
+static void * calculate_pff(void * o)
+{
+        struct routing_table ** table;
+        ssize_t                 i;
+        int                     j;
+
+        (void) o;
+
+        while (true) {
+                i = graph_routing_table(routing.graph, ipcpi.dt_addr, &table);
+                if (table != NULL) {
+                        /*
+                         * FIXME: Calculate address to fd here
+                         * and fill in PFF
+                         */
+                }
+
+                for (j = 0; j < i; j++) {
+                        free(table[j]);
+                }
+                free(table);
+
+                sleep(RECALC_TIME);
+        }
+
+        return (void *) 0;
+}
+
 struct routing_i * routing_i_create(struct pff * pff)
 {
         struct routing_i * tmp;
@@ -78,12 +102,18 @@ struct routing_i * routing_i_create(struct pff * pff)
 
         tmp->pff = pff;
 
+        pthread_create(&tmp->calculator, NULL, calculate_pff, NULL);
+
         return tmp;
 }
 
 void routing_i_destroy(struct routing_i * instance)
 {
         assert(instance);
+
+        pthread_cancel(instance->calculator);
+
+        pthread_join(instance->calculator, NULL);
 
         free(instance);
 }
