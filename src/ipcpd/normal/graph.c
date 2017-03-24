@@ -235,6 +235,8 @@ int graph_add_edge(struct graph * graph,
 
         pthread_mutex_unlock(&graph->lock);
 
+        log_dbg("Added an edge to the graph.");
+
         return 0;
 }
 
@@ -267,6 +269,8 @@ int graph_update_edge(struct graph * graph,
         e->qs = qs;
 
         pthread_mutex_unlock(&graph->lock);
+
+        log_dbg("Updated an edge of the graph.");
 
         return 0;
 }
@@ -314,6 +318,8 @@ int graph_del_edge(struct graph * graph,
                del_vertex(graph, v);
 
         pthread_mutex_unlock(&graph->lock);
+
+        log_dbg("Removed an edge of the graph.");
 
         return 0;
 }
@@ -452,6 +458,11 @@ ssize_t graph_routing_table(struct graph *           graph,
         struct vertex *    v;
 
         pthread_mutex_lock(&graph->lock);
+
+        if (graph->nr_vertices == 0) {
+                pthread_mutex_unlock(&graph->lock);
+                return 0;
+        }
 
         prevs = dijkstra(graph, s_addr);
         if (prevs == NULL) {
