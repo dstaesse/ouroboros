@@ -396,6 +396,7 @@ static struct vertex ** dijkstra(struct graph * graph,
         if (prev == NULL)
                 return NULL;
 
+        /* Init the data structures */
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
                 vertices[i] = v;
@@ -407,6 +408,7 @@ static struct vertex ** dijkstra(struct graph * graph,
                 i++;
         }
 
+        /* Perform actual Dijkstra */
         i = get_min_vertex(vertices, graph->nr_vertices, dist, &v);
         while (v != NULL) {
                 list_for_each(p, &v->edges) {
@@ -429,6 +431,7 @@ static struct vertex ** dijkstra(struct graph * graph,
                                 prev[j] = v;
                         }
                 }
+                i = get_min_vertex(vertices, graph->nr_vertices, dist, &v);
         }
 
         return prev;
@@ -463,6 +466,10 @@ ssize_t graph_routing_table(struct graph *           graph,
                 return -1;
         }
 
+        /*
+         * Now loop through the list of predecessors
+         * to construct the routing table
+         */
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
                 prev = prevs[i];
