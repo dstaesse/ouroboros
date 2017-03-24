@@ -340,7 +340,8 @@ static int get_min_vertex(struct vertex ** vertices,
                 }
         }
 
-        vertices[index] = NULL;
+        if (index != -1)
+                vertices[index] = NULL;
 
         return index;
 }
