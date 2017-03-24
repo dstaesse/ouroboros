@@ -28,6 +28,7 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/rqueue.h>
+#include <ouroboros/utils.h>
 
 #include "routing.h"
 #include "ribmgr.h"
@@ -65,25 +66,24 @@ struct {
 static void * calculate_pff(void * o)
 {
         struct routing_table ** table;
-        ssize_t                 i;
-        int                     j;
+        ssize_t                 n_table;
 
         (void) o;
 
         while (true) {
-                i = graph_routing_table(routing.graph, ipcpi.dt_addr, &table);
-                if (table != NULL) {
-                        /*
-                         * FIXME: Calculate address to fd here
-                         * and fill in PFF
-                         */
+                n_table = graph_routing_table(routing.graph,
+                                              ipcpi.dt_addr, &table);
+                if (table == NULL) {
+                        sleep(RECALC_TIME);
+                        continue;
                 }
 
-                for (j = 0; j < i; j++) {
-                        free(table[j]);
-                }
-                free(table);
+                /*
+                 * FIXME: Calculate address to fd here
+                 * and fill in PFF
+                 */
 
+                freepp(struct routing_table, table, n_table);
                 sleep(RECALC_TIME);
         }
 
