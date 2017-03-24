@@ -35,6 +35,7 @@
 #include "ribconfig.h"
 #include "ipcp.h"
 #include "graph.h"
+#include "neighbors.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -63,14 +64,32 @@ struct {
         pthread_t          rib_listener;
 } routing;
 
+/* Take under neighbors lock */
+static int addr_to_fd(uint64_t addr)
+{
+        struct list_head * p = NULL;
+
+        list_for_each(p, &routing.nbs->list) {
+                struct nb * e = list_entry(p, struct nb, next);
+                if (e->conn.conn_info.addr == addr)
+                        return e->conn.flow_info.fd;
+        }
+
+        return -1;
+}
+
 static void * calculate_pff(void * o)
 {
+        struct routing_i *      instance;
         struct routing_table ** table;
         ssize_t                 n_table;
+        int                     i;
+        int                     fd;
 
-        (void) o;
+        instance = (struct routing_i *) o;
 
         while (true) {
+                table = NULL;
                 n_table = graph_routing_table(routing.graph,
                                               ipcpi.dt_addr, &table);
                 if (table == NULL) {
@@ -78,10 +97,21 @@ static void * calculate_pff(void * o)
                         continue;
                 }
 
-                /*
-                 * FIXME: Calculate address to fd here
-                 * and fill in PFF
-                 */
+                pthread_mutex_lock(&routing.nbs->list_lock);
+                pff_lock(instance->pff);
+
+                pff_flush(instance->pff);
+
+                for (i = 0; i < n_table; i++) {
+                        fd = addr_to_fd(table[i]->nhop);
+                        if (fd == -1)
+                                continue;
+
+                        pff_add(instance->pff, table[i]->dst, fd);
+                }
+
+                pff_unlock(instance->pff);
+                pthread_mutex_unlock(&routing.nbs->list_lock);
 
                 freepp(struct routing_table, table, n_table);
                 sleep(RECALC_TIME);
@@ -102,7 +132,7 @@ struct routing_i * routing_i_create(struct pff * pff)
 
         tmp->pff = pff;
 
-        pthread_create(&tmp->calculator, NULL, calculate_pff, NULL);
+        pthread_create(&tmp->calculator, NULL, calculate_pff, (void *) tmp);
 
         return tmp;
 }

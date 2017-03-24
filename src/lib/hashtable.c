@@ -76,7 +76,17 @@ struct htable * htable_create(uint64_t buckets, bool hash_key)
         return tmp;
 }
 
-int htable_destroy(struct htable * table)
+void htable_destroy(struct htable * table)
+{
+        assert(table);
+        assert(table->buckets);
+
+        htable_flush(table);
+        free(table->buckets);
+        free(table);
+}
+
+void htable_flush(struct htable * table)
 {
         unsigned int          i;
         struct list_head *    pos = NULL;
@@ -88,15 +98,11 @@ int htable_destroy(struct htable * table)
         for (i = 0; i < table->buckets_size; i++) {
                 list_for_each_safe(pos, n, &(table->buckets[i])) {
                         entry = list_entry(pos, struct htable_entry, next);
+                        list_del(&entry->next);
                         free(entry->val);
                         free(entry);
                 }
         }
-
-        free(table->buckets);
-        free(table);
-
-        return 0;
 }
 
 static uint64_t hash(uint64_t x)
