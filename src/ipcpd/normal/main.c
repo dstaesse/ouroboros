@@ -202,6 +202,8 @@ static int boot_components(void)
 
 void shutdown_components(void)
 {
+        ribmgr_fini();
+
         connmgr_stop();
 
         enroll_stop();
@@ -213,8 +215,6 @@ void shutdown_components(void)
         fmgr_fini();
 
         dir_fini();
-
-        ribmgr_fini();
 
         addr_auth_fini();
 
