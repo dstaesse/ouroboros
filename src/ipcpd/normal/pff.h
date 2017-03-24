@@ -34,6 +34,10 @@ struct pff * pff_create(void);
 
 void         pff_destroy(struct pff * instance);
 
+void         pff_lock(struct pff * instance);
+
+void         pff_unlock(struct pff * instance);
+
 int          pff_add(struct pff * instance,
                      uint64_t     addr,
                      int          fd);
@@ -44,6 +48,8 @@ int          pff_update(struct pff * instance,
 
 int          pff_remove(struct pff * instance,
                         uint64_t     addr);
+
+void         pff_flush(struct pff * instance);
 
 /* Returns fd towards next hop */
 int          pff_nhop(struct pff * instance,

@@ -34,7 +34,9 @@ struct htable;
 struct htable * htable_create(uint64_t buckets,
                               bool     hash_key);
 
-int             htable_destroy(struct htable * table);
+void            htable_destroy(struct htable * table);
+
+void            htable_flush(struct htable * table);
 
 /* Passes ownership of the block of memory */
 int             htable_insert(struct htable * table,

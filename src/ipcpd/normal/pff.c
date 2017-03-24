@@ -68,6 +68,16 @@ void pff_destroy(struct pff * instance)
         free(instance);
 }
 
+void pff_lock(struct pff * instance)
+{
+        pthread_mutex_lock(&instance->lock);
+}
+
+void pff_unlock(struct pff * instance)
+{
+        pthread_mutex_unlock(&instance->lock);
+}
+
 int pff_add(struct pff * instance, uint64_t addr, int fd)
 {
         int * val;
@@ -130,6 +140,15 @@ int pff_remove(struct pff * instance, uint64_t addr)
         pthread_mutex_unlock(&instance->lock);
 
         return 0;
+}
+
+void pff_flush(struct pff * instance)
+{
+        assert(instance);
+
+        pthread_mutex_lock(&instance->lock);
+        htable_flush(instance->table);
+        pthread_mutex_unlock(&instance->lock);
 }
 
 int pff_nhop(struct pff * instance, uint64_t addr)

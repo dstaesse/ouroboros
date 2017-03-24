@@ -42,10 +42,7 @@ int hashtable_test(int argc, char ** argv)
                 return -1;
         }
 
-        if (htable_destroy(table)) {
-                printf("Failed to destroy.\n");
-                return -1;
-        }
+        htable_destroy(table);
 
         table = htable_create(HASHTABLE_SIZE, false);
         if (table == NULL) {
@@ -124,10 +121,7 @@ int hashtable_test(int argc, char ** argv)
                 return -1;
         }
 
-        if (htable_destroy(table)) {
-                printf("Failed to destroy.\n");
-                return -1;
-        }
+        htable_destroy(table);
 
         return 0;
 }
