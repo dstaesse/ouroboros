@@ -188,8 +188,6 @@ buffer_t * shm_pci_ser_buf(buffer_t *   buf,
         memcpy(buffer->data + pci_info.head_size,
                buf->data, buf->len);
 
-        free(buf->data);
-
         if (pci_info.dtc.has_chk)
                 crc32((uint32_t *) (buffer->data +
                                     pci_info.head_size + buf->len),

@@ -280,6 +280,7 @@ cep_id_t frct_i_create(uint64_t   address,
                 pthread_mutex_unlock(&frct.instances_lock);
                 return INVALID_CEP_ID;
         }
+
         id = instance->cep_id;
         instance->cube = cube;
         pthread_mutex_unlock(&frct.instances_lock);
