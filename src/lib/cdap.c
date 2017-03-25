@@ -300,6 +300,7 @@ static void * sdu_reader(void * o)
                                 rcvd->data = malloc(rcvd->len);
                                 if (rcvd->data == NULL) {
                                         cdap__free_unpacked(msg, NULL);
+                                        free(rcvd->name);
                                         free(rcvd);
                                         continue;
                                 }
@@ -339,8 +340,8 @@ static void * sdu_reader(void * o)
                 }
 
                 cdap__free_unpacked(msg, NULL);
-
         }
+
         return (void *) 0;
 }
 
@@ -631,16 +632,7 @@ cdap_key_t * cdap_request_send(struct cdap *    instance,
                 iid = next_invoke_id(instance);
                 if (iid == INVALID_INVOKE_ID) {
                         pthread_rwlock_unlock(&instance->flows_lock);
-                        while(key > keys) {
-                                struct cdap_req * r =
-                                        cdap_sent_get_by_key(instance,
-                                                             *(--key));
-                                cdap_sent_del(instance, r);
-                                cdap_req_destroy(r);
-                        }
-
-                        free(keys);
-                        return NULL;
+                        return keys;
                 }
 
                 msg.invoke_id = iid;
@@ -652,39 +644,21 @@ cdap_key_t * cdap_request_send(struct cdap *    instance,
                 req = cdap_sent_add(instance, e->fd, *key);
                 if (req == NULL) {
                         pthread_rwlock_unlock(&instance->flows_lock);
-                        while(key > keys) {
-                                struct cdap_req * r =
-                                        cdap_sent_get_by_key(instance,
-                                                             *(--key));
-                                cdap_sent_del(instance, r);
-                                release_invoke_id(instance,
-                                                  key_to_invoke_id(r->key));
-                                cdap_req_destroy(r);
-                        }
                         release_invoke_id(instance, iid);
-                        free(keys);
-                        return NULL;
+                        return keys;
                 }
 
                 ret = write_msg(e->fd, &msg);
                 if (ret == -ENOMEM) {
                         pthread_rwlock_unlock(&instance->flows_lock);
-                        while(key >= keys) {
-                                struct cdap_req * r =
-                                        cdap_sent_get_by_key(instance, *key);
-                                cdap_sent_del(instance, r);
-                                release_invoke_id(instance,
-                                                  key_to_invoke_id(r->key));
-                                cdap_req_destroy(r);
-                        }
-
-                        free(keys);
-                        return NULL;
+                        cdap_sent_del(instance, req);
+                        release_invoke_id(instance, iid);
+                        return keys;
                 }
 
                 if (ret < 0) {
-                        release_invoke_id(instance, iid);
                         cdap_sent_del(instance, req);
+                        release_invoke_id(instance, iid);
                 }
 
                 ++key;
@@ -704,7 +678,8 @@ int cdap_reply_wait(struct cdap * instance,
         struct cdap_req * r;
         invoke_id_t iid = key_to_invoke_id(key);
 
-        if (instance == NULL || iid == INVALID_INVOKE_ID)
+        if (instance == NULL || iid == INVALID_INVOKE_ID
+            || (data != NULL && len == NULL))
                 return -EINVAL;
 
         r = cdap_sent_get_by_key(instance, key);
@@ -712,11 +687,11 @@ int cdap_reply_wait(struct cdap * instance,
                 return -EINVAL;
 
         ret = cdap_req_wait(r);
-        if (ret < 0)
+        if (ret < 0) {
+                cdap_sent_del(instance, r);
+                release_invoke_id(instance, iid);
                 return ret;
-
-        if (r->response)
-                return r->response;
+        }
 
         assert(ret == 0);
 
@@ -725,11 +700,12 @@ int cdap_reply_wait(struct cdap * instance,
                 *len  = r->data.len;
         }
 
-        cdap_sent_del(instance, r);
+        ret = r->response;
 
+        cdap_sent_del(instance, r);
         release_invoke_id(instance, iid);
 
-        return 0;
+        return ret;
 }
 
 cdap_key_t cdap_request_wait(struct cdap *      instance,
@@ -764,6 +740,7 @@ cdap_key_t cdap_request_wait(struct cdap *      instance,
         *flags  = rcvd->flags;
 
         rcvd->name = NULL;
+        rcvd->data = NULL;
 
         return invoke_id_to_key(rcvd->iid);
 }
