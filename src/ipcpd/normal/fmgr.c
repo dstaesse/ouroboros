@@ -494,7 +494,7 @@ int fmgr_np1_alloc(int       fd,
                 return -1;
         }
 
-        free(buf->data);
+        free(buf.data);
 
         fmgr.np1_fd_to_cep_id[fd] = cep_id;
         fmgr.np1_cep_id_to_fd[cep_id] = fd;
