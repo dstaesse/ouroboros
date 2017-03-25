@@ -489,10 +489,12 @@ int fmgr_np1_alloc(int       fd,
 
         cep_id = frct_i_create(addr, &buf, cube);
         if (cep_id == INVALID_CEP_ID) {
-                free(buf.data);
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
+                free(buf.data);
                 return -1;
         }
+
+        free(buf->data);
 
         fmgr.np1_fd_to_cep_id[fd] = cep_id;
         fmgr.np1_cep_id_to_fd[cep_id] = fd;
@@ -721,14 +723,12 @@ int fmgr_nm1_write_buf(struct pci * pci,
         fd = pff_nhop(fmgr.pff[pci->qos_id], pci->dst_addr);
         if (fd < 0) {
                 log_err("Could not get nhop for address %lu", pci->dst_addr);
-                free(buf->data);
                 return -1;
         }
 
         buffer = shm_pci_ser_buf(buf, pci);
         if (buffer == NULL) {
                 log_err("Failed to serialize buffer.");
-                free(buf->data);
                 return -1;
         }
 
