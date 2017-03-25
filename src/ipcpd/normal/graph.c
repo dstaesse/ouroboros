@@ -106,15 +106,15 @@ static void del_edge(struct edge * edge)
        free(edge);
 }
 
-static int add_vertex(struct graph * graph,
-                      uint64_t       addr)
+static struct vertex * add_vertex(struct graph * graph,
+                                  uint64_t       addr)
 {
         struct vertex *    vertex;
         struct list_head * p;
 
         vertex = malloc(sizeof(*vertex));
         if (vertex == NULL)
-                return -1;
+                return NULL;
 
         list_head_init(&vertex->next);
         list_head_init(&vertex->edges);
@@ -130,7 +130,7 @@ static int add_vertex(struct graph * graph,
 
         graph->nr_vertices++;
 
-        return 0;
+        return vertex;
 }
 
 static void del_vertex(struct graph * graph,
@@ -206,7 +206,8 @@ int graph_add_edge(struct graph * graph,
 
         v = find_vertex_by_addr(graph, s_addr);
         if (v == NULL) {
-                if (add_vertex(graph, s_addr)) {
+                v = add_vertex(graph, s_addr);
+                if (v == NULL) {
                         pthread_mutex_unlock(&graph->lock);
                         return -ENOMEM;
                 }
@@ -221,7 +222,8 @@ int graph_add_edge(struct graph * graph,
 
         nb = find_vertex_by_addr(graph, d_addr);
         if (nb == NULL) {
-                if (add_vertex(graph, d_addr)) {
+                nb = add_vertex(graph, d_addr);
+                if (nb == NULL) {
                         pthread_mutex_unlock(&graph->lock);
                         return -ENOMEM;
                 }

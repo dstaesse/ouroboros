@@ -291,12 +291,12 @@ static void * rib_listener(void * o)
                 }
         }
 
-        while (rib_event_wait(routing.set, routing.queue, NULL)) {
+        while (rib_event_wait(routing.set, routing.queue, NULL) == 0) {
                 flag = rqueue_next(routing.queue, path);
                 if (flag < 0)
                         continue;
 
-                if (read_fso(children[i], flag)) {
+                if (read_fso(path, flag)) {
                         log_err("Failed to parse FSO.");
                         continue;
                 }
