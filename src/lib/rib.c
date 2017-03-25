@@ -177,6 +177,8 @@ static struct revent * revent_dup(struct revent * ev)
 
         re->flags = ev->flags;
 
+        list_head_init(&re->next);
+
         return re;
 }
 
@@ -196,7 +198,13 @@ static void rnode_notify_subs(struct rnode *  node,
                 struct rn_sub * s = list_entry(p, struct rn_sub, next);
                 if (s->flags & ev->flags) {
                         struct revent * e = revent_dup(ev);
+                        if (e == NULL)
+                                continue;
+
+                        pthread_mutex_lock(&s->sub->lock);
                         list_add_tail(&e->next, &s->sub->events);
+                        pthread_cond_signal(&s->sub->cond);
+                        pthread_mutex_unlock(&s->sub->lock);
                 }
 
                 if (ev->flags & RO_DELETE)
@@ -1130,7 +1138,7 @@ int rib_event_wait(ro_set_t *              set,
 
         while (list_is_empty(&sub->events) && ret != -ETIMEDOUT) {
                 if (timeout != NULL)
-                        ret = -pthread_cond_timedwait(&sub->cond ,
+                        ret = -pthread_cond_timedwait(&sub->cond,
                                                       &sub->lock,
                                                       &abstime);
                 else
