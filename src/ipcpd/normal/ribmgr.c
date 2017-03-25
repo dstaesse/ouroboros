@@ -168,6 +168,7 @@ static void * reader(void * o)
                                 break;
                         case -EFAULT:
                                 log_warn("Hash mismatch, not in sync.");
+                                free(data);
                                 break;
                         default:
                                 log_warn("Error unpacking %s.", name);
@@ -194,6 +195,7 @@ static void * reader(void * o)
                                 break;
                         case -EFAULT:
                                 log_warn("Hash mismatch, not yet in sync.");
+                                free(data);
                                 break;
                         default:
                                 log_warn("Error unpacking %s.", name);
@@ -223,7 +225,6 @@ static void * reader(void * o)
                                 log_err("Failed to send CDAP reply.");
                                 continue;
                         }
-
                         break;
                 case CDAP_START:
                 case CDAP_STOP:
@@ -343,18 +344,9 @@ int ribmgr_init(void)
                 return -1;
         }
 
-        ribmgr.gam = gam_create(pg, ribmgr.nbs, ribmgr.ae);
-        if (ribmgr.gam == NULL) {
-                log_err("Failed to create gam.");
-                connmgr_ae_destroy(ribmgr.ae);
-                nbs_destroy(ribmgr.nbs);
-                return -1;
-        }
-
         ribmgr.cdap = cdap_create();
         if (ribmgr.cdap == NULL) {
                 log_err("Failed to create CDAP instance.");
-                gam_destroy(ribmgr.gam);
                 connmgr_ae_destroy(ribmgr.ae);
                 nbs_destroy(ribmgr.nbs);
                 return -1;
@@ -364,7 +356,16 @@ int ribmgr_init(void)
         if (nbs_reg_notifier(ribmgr.nbs, &ribmgr.nb_notifier)) {
                 log_err("Failed to register notifier.");
                 cdap_destroy(ribmgr.cdap);
-                gam_destroy(ribmgr.gam);
+                connmgr_ae_destroy(ribmgr.ae);
+                nbs_destroy(ribmgr.nbs);
+                return -1;
+        }
+
+        ribmgr.gam = gam_create(pg, ribmgr.nbs, ribmgr.ae);
+        if (ribmgr.gam == NULL) {
+                log_err("Failed to create gam.");
+                nbs_unreg_notifier(ribmgr.nbs, &ribmgr.nb_notifier);
+                cdap_destroy(ribmgr.cdap);
                 connmgr_ae_destroy(ribmgr.ae);
                 nbs_destroy(ribmgr.nbs);
                 return -1;
