@@ -88,30 +88,32 @@ int shm_pci_init(void)
         /* read dt constants from the RIB */
         if (rib_read(BOOT_PATH "/dt/const/addr_size",
                      &pci_info.dtc.addr_size,
-                     sizeof(pci_info.dtc.addr_size)) ||
+                     sizeof(pci_info.dtc.addr_size)) < 0 ||
             rib_read(BOOT_PATH "/dt/const/cep_id_size",
                       &pci_info.dtc.cep_id_size,
-                      sizeof(pci_info.dtc.cep_id_size)) ||
+                      sizeof(pci_info.dtc.cep_id_size)) < 0 ||
             rib_read(BOOT_PATH "/dt/const/seqno_size",
                       &pci_info.dtc.seqno_size,
-                      sizeof(pci_info.dtc.seqno_size)) ||
+                     sizeof(pci_info.dtc.seqno_size)) < 0 ||
+            rib_read(BOOT_PATH "/dt/const/pdu_length_size",
+                      &pci_info.dtc.pdu_length_size,
+                      sizeof(pci_info.dtc.pdu_length_size)) < 0 ||
             rib_read(BOOT_PATH "/dt/const/has_ttl",
                       &pci_info.dtc.has_ttl,
-                      sizeof(pci_info.dtc.has_ttl)) ||
+                      sizeof(pci_info.dtc.has_ttl)) < 0 ||
             rib_read(BOOT_PATH "/dt/const/has_chk",
                       &pci_info.dtc.has_chk,
-                      sizeof(pci_info.dtc.has_chk)) ||
+                      sizeof(pci_info.dtc.has_chk)) < 0 ||
             rib_read(BOOT_PATH "/dt/const/min_pdu_size",
                       &pci_info.dtc.min_pdu_size,
-                      sizeof(pci_info.dtc.min_pdu_size)) ||
+                      sizeof(pci_info.dtc.min_pdu_size)) < 0 ||
             rib_read(BOOT_PATH "/dt/const/max_pdu_size",
                       &pci_info.dtc.max_pdu_size,
-                      sizeof(pci_info.dtc.max_pdu_size)))
+                     sizeof(pci_info.dtc.max_pdu_size)) < 0)
                 return -1;
 
         pci_info.dst_addr_o = PDU_TYPE_SIZE;
         pci_info.src_addr_o = pci_info.dst_addr_o + pci_info.dtc.addr_size;
-        pci_info.dst_cep_id_o = pci_info.dst_addr_o + pci_info.dtc.addr_size;
         pci_info.dst_cep_id_o = pci_info.src_addr_o + pci_info.dtc.addr_size;
         pci_info.src_cep_id_o = pci_info.dst_cep_id_o
                 + pci_info.dtc.cep_id_size;
@@ -132,7 +134,7 @@ int shm_pci_init(void)
 }
 
 void shm_pci_fini(void) {
-        return ;
+        return;
 }
 
 int shm_pci_ser(struct shm_du_buff * sdb,

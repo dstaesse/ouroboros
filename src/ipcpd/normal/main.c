@@ -85,6 +85,7 @@ static int boot_components(void)
         char buf[256];
         ssize_t len;
         enum pol_addr_auth pa;
+        char path[RIB_MAX_PATH_LEN + 1];
 
         len = rib_read(DIF_PATH, &buf, 256);
         if (len < 0) {
@@ -108,7 +109,6 @@ static int boot_components(void)
         if (rib_read(BOOT_PATH "/addr_auth/type", &pa, sizeof(pa))
             != sizeof(pa)) {
                 log_err("Failed to read policy for address authority.");
-                connmgr_fini();
                 return -1;
         }
 
@@ -120,6 +120,14 @@ static int boot_components(void)
         ipcpi.dt_addr = addr_auth_address();
         if (ipcpi.dt_addr == 0) {
                 log_err("Failed to get a valid address.");
+                addr_auth_fini();
+                return -1;
+        }
+
+        path[0] = '\0';
+        rib_path_append(rib_path_append(path, MEMBERS_NAME), ipcpi.name);
+        if (rib_write(path, &ipcpi.dt_addr, sizeof(&ipcpi.dt_addr))) {
+                log_err("Failed to write address to member object.");
                 addr_auth_fini();
                 return -1;
         }
@@ -342,6 +350,9 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
             rib_write(BOOT_PATH "/dt/const/seqno_size",
                       &conf->seqno_size,
                       sizeof(conf->seqno_size)) ||
+            rib_write(BOOT_PATH "/dt/const/pdu_length_size",
+                      &conf->pdu_length_size,
+                      sizeof(conf->pdu_length_size)) ||
             rib_write(BOOT_PATH "/dt/const/has_ttl",
                       &conf->has_ttl,
                       sizeof(conf->has_ttl)) ||

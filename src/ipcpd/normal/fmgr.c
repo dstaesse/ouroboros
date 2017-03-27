@@ -296,6 +296,12 @@ int fmgr_init(void)
                 }
         }
 
+        if (shm_pci_init()) {
+                log_err("Failed to init shm pci.");
+                fmgr_destroy_flows();
+                return -1;
+        }
+
         memset(&info, 0, sizeof(info));
 
         strcpy(info.ae_name, DT_AE);
