@@ -227,7 +227,6 @@ int frct_nm1_post_sdu(struct pci *         pci,
 
                 if (fmgr_np1_post_buf(id, &buf)) {
                         log_err("Failed to hand buffer to FMGR.");
-                        free(pci);
                         return -1;
                 }
         } else if (pci->pdu_type == PDU_TYPE_MGMT) {
@@ -246,19 +245,15 @@ int frct_nm1_post_sdu(struct pci *         pci,
 
                 if (fmgr_np1_post_buf(pci->dst_cep_id, &buf)) {
                         log_err("Failed to hand buffer to Flow Manager.");
-                        free(pci);
                         return -1;
                 }
         } else {
                 /* FIXME: Known cep-ids are delivered to FMGR (minimal DTP) */
                 if (fmgr_np1_post_sdu(pci->dst_cep_id, sdb)) {
                         log_err("Failed to hand SDU to FMGR.");
-                        free(pci);
                         return -1;
                 }
         }
-
-        free(pci);
 
         return 0;
 }
