@@ -475,7 +475,7 @@ ssize_t graph_routing_table(struct graph *           graph,
                         index = get_vertex_index(graph, prev);
                 }
 
-                (*table)[++j] = malloc(sizeof(***table));
+                (*table)[j] = malloc(sizeof(***table));
                 if ((*table)[j] == NULL) {
                         pthread_mutex_unlock(&graph->lock);
                         for (k = 0; k < j; ++k)
@@ -487,7 +487,7 @@ ssize_t graph_routing_table(struct graph *           graph,
 
                 (*table)[j]->dst = v->addr;
                 (*table)[j]->nhop = nhop->addr;
-
+                j++;
                 i++;
         }
 
