@@ -81,29 +81,31 @@ static struct vertex * find_vertex_by_addr(struct graph * graph,
         return NULL;
 }
 
-static int add_edge(struct vertex * vertex,
-                    struct vertex * nb,
-                    qosspec_t       qs)
+static struct edge * add_edge(struct vertex * vertex,
+                              struct vertex * nb)
 {
         struct edge * edge;
 
         edge = malloc(sizeof(*edge));
         if (edge == NULL)
-                return -ENOMEM;
+                return NULL;
 
         list_head_init(&edge->next);
         edge->nb = nb;
-        edge->qs = qs;
 
         list_add(&edge->next, &vertex->edges);
 
-        return 0;
+        log_dbg("Added a new edge to the graph.");
+
+        return edge;
 }
 
 static void del_edge(struct edge * edge)
 {
        list_del(&edge->next);
        free(edge);
+
+       log_dbg("Removed an edge of the graph.");
 }
 
 static struct vertex * add_vertex(struct graph * graph,
@@ -130,6 +132,8 @@ static struct vertex * add_vertex(struct graph * graph,
 
         graph->nr_vertices++;
 
+        log_dbg("Added new vertex.");
+
         return vertex;
 }
 
@@ -147,6 +151,8 @@ static void del_vertex(struct graph * graph,
         }
 
         free(vertex);
+
+        log_dbg("Removed a vertex from the graph.");
 
         graph->nr_vertices--;
 }
@@ -191,10 +197,10 @@ void graph_destroy(struct graph * graph)
         free(graph);
 }
 
-int graph_add_edge(struct graph * graph,
-                   uint64_t       s_addr,
-                   uint64_t       d_addr,
-                   qosspec_t      qs)
+int graph_update_edge(struct graph * graph,
+                      uint64_t       s_addr,
+                      uint64_t       d_addr,
+                      qosspec_t      qs)
 {
         struct vertex * v;
         struct edge *   e;
@@ -209,70 +215,40 @@ int graph_add_edge(struct graph * graph,
                 v = add_vertex(graph, s_addr);
                 if (v == NULL) {
                         pthread_mutex_unlock(&graph->lock);
+                        log_err("Failed to add vertex.");
                         return -ENOMEM;
                 }
-        }
-
-        e = find_edge_by_addr(v, d_addr);
-        if (e != NULL) {
-                pthread_mutex_unlock(&graph->lock);
-                log_err("Edge already exists.");
-                return -1;
         }
 
         nb = find_vertex_by_addr(graph, d_addr);
         if (nb == NULL) {
                 nb = add_vertex(graph, d_addr);
                 if (nb == NULL) {
+                        if (list_is_empty(&v->edges))
+                                del_vertex(graph, v);
                         pthread_mutex_unlock(&graph->lock);
+                        log_err("Failed to add vertex.");
                         return -ENOMEM;
                 }
         }
 
-        if (add_edge(v, nb, qs)) {
-                pthread_mutex_unlock(&graph->lock);
-                log_err("Failed to add edge.");
-                return -1;
-        }
-
-        pthread_mutex_unlock(&graph->lock);
-
-        log_dbg("Added an edge to the graph.");
-
-        return 0;
-}
-
-int graph_update_edge(struct graph * graph,
-                      uint64_t       s_addr,
-                      uint64_t       d_addr,
-                      qosspec_t      qs)
-{
-        struct vertex * v;
-        struct edge * e;
-
-        assert(graph);
-
-        pthread_mutex_lock(&graph->lock);
-
-        v = find_vertex_by_addr(graph, s_addr);
-        if (v == NULL) {
-                pthread_mutex_unlock(&graph->lock);
-                log_err("No such vertex.");
-                return -1;
-        }
-
         e = find_edge_by_addr(v, d_addr);
         if (e == NULL) {
-                pthread_mutex_unlock(&graph->lock);
-                log_err("No such edge.");
-                return -1;
+                e = add_edge(v, nb);
+                if (e == NULL) {
+                        if (list_is_empty(&v->edges))
+                                del_vertex(graph, v);
+                        if (list_is_empty(&nb->edges))
+                                del_vertex(graph, v);
+                        pthread_mutex_unlock(&graph->lock);
+                        log_err("Failed to add edge.");
+                        return -ENOMEM;
+                }
         }
 
         e->qs = qs;
 
         pthread_mutex_unlock(&graph->lock);
-
-        log_dbg("Updated an edge of the graph.");
 
         return 0;
 }
@@ -320,8 +296,6 @@ int graph_del_edge(struct graph * graph,
                del_vertex(graph, v);
 
         pthread_mutex_unlock(&graph->lock);
-
-        log_dbg("Removed an edge of the graph.");
 
         return 0;
 }

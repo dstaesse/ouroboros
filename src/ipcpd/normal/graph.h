@@ -37,11 +37,6 @@ struct graph * graph_create(void);
 
 void           graph_destroy(struct graph * graph);
 
-int            graph_add_edge(struct graph * graph,
-                              uint64_t       s_addr,
-                              uint64_t       d_addr,
-                              qosspec_t      qs);
-
 int            graph_update_edge(struct graph * graph,
                                  uint64_t       s_addr,
                                  uint64_t       d_addr,
