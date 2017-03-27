@@ -198,13 +198,16 @@ void * fmgr_nm1_sdu_reader(void * o)
                                         continue;
                                 }
 
+                                pff_lock(fmgr.pff[i]);
                                 fd = pff_nhop(fmgr.pff[i], pci.dst_addr);
                                 if (fd < 0) {
+                                        pff_unlock(fmgr.pff[i]);
                                         log_err("No next hop for %lu",
                                                 pci.dst_addr);
                                         ipcp_flow_del(sdb);
                                         continue;
                                 }
+                                pff_unlock(fmgr.pff[i]);
 
                                 if (ipcp_flow_write(fd, sdb)) {
                                         log_err("Failed to write SDU to fd %d.",
@@ -689,12 +692,15 @@ int fmgr_nm1_write_sdu(struct pci *         pci,
         if (pci == NULL || sdb == NULL)
                 return -EINVAL;
 
+        pff_lock(fmgr.pff[pci->qos_id]);
         fd = pff_nhop(fmgr.pff[pci->qos_id], pci->dst_addr);
         if (fd < 0) {
+                pff_unlock(fmgr.pff[pci->qos_id]);
                 log_err("Could not get nhop for address %lu", pci->dst_addr);
                 ipcp_flow_del(sdb);
                 return -1;
         }
+        pff_unlock(fmgr.pff[pci->qos_id]);
 
         if (shm_pci_ser(sdb, pci)) {
                 log_err("Failed to serialize PDU.");
@@ -720,11 +726,14 @@ int fmgr_nm1_write_buf(struct pci * pci,
         if (pci == NULL || buf == NULL || buf->data == NULL)
                 return -EINVAL;
 
+        pff_lock(fmgr.pff[pci->qos_id]);
         fd = pff_nhop(fmgr.pff[pci->qos_id], pci->dst_addr);
         if (fd < 0) {
+                pff_unlock(fmgr.pff[pci->qos_id]);
                 log_err("Could not get nhop for address %lu", pci->dst_addr);
                 return -1;
         }
+        pff_unlock(fmgr.pff[pci->qos_id]);
 
         buffer = shm_pci_ser_buf(buf, pci);
         if (buffer == NULL) {
