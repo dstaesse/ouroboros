@@ -371,9 +371,10 @@ int frct_i_destroy(cep_id_t   id,
         pci.qos_id = instance->cube;
 
         frct.instances[id] = NULL;
-        destroy_frct_i(instance);
 
         release_cep_id(instance->cep_id);
+
+        destroy_frct_i(instance);
 
         pthread_mutex_unlock(&frct.instances_lock);
 
