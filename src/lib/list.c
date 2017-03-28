@@ -75,5 +75,5 @@ void list_move(struct list_head * n,
                struct list_head * h)
 {
         del_list(n->prv, n->nxt);
-        list_add(n, h);
+        add_list(n, h, h->nxt);
 }
