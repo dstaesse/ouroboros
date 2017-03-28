@@ -1114,6 +1114,7 @@ int rib_event_wait(ro_set_t *              set,
 {
         struct rib_sub * sub;
         struct timespec abstime;
+        struct revent * ev;
 
         ssize_t ret = 0;
 
@@ -1136,6 +1137,9 @@ int rib_event_wait(ro_set_t *              set,
 
         pthread_mutex_lock(&sub->lock);
 
+        pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+                             (void *) &sub->lock);
+
         while (list_is_empty(&sub->events) && ret != -ETIMEDOUT) {
                 if (timeout != NULL)
                         ret = -pthread_cond_timedwait(&sub->cond,
@@ -1145,12 +1149,14 @@ int rib_event_wait(ro_set_t *              set,
                         ret = -pthread_cond_wait(&sub->cond, &sub->lock);
         }
 
-        pthread_mutex_unlock(&sub->lock);
+        pthread_cleanup_pop(true);
 
         pthread_rwlock_wrlock(&rib.lock);
 
-        if (ret != -ETIMEDOUT)
-                list_move(&rq->events, &sub->events);
+        if (ret != -ETIMEDOUT) {
+                ev = list_first_entry(&sub->events, struct revent, next);
+                list_move(&ev->next, &rq->events);
+        }
 
         pthread_rwlock_unlock(&rib.lock);
 

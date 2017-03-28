@@ -235,23 +235,14 @@ static int read_fso(char *  path,
                 return -1;
         }
 
-        if (flag & RO_CREATE) {
-                if (graph_add_edge(routing.graph,
-                                   fso->s_addr, fso->d_addr, qs)) {
-                        log_err("Failed to add edge to graph.");
-                        fso__free_unpacked(fso, NULL);
-                        return -1;
-                }
-        } else if (flag & RO_MODIFY) {
+        if (flag & RO_MODIFY) {
                 if (graph_update_edge(routing.graph,
                                       fso->s_addr, fso->d_addr, qs)) {
-                        log_err("Failed to update edge of graph.");
                         fso__free_unpacked(fso, NULL);
                         return -1;
                 }
         } else if (flag & RO_DELETE) {
                 if (graph_del_edge(routing.graph, fso->s_addr, fso->d_addr)) {
-                        log_err("Failed to del edge of graph.");
                         fso__free_unpacked(fso, NULL);
                         return -1;
                 }
@@ -272,8 +263,7 @@ static void * rib_listener(void * o)
 
         (void) o;
 
-        if (ro_set_add(routing.set, ROUTING_PATH,
-                       RO_MODIFY | RO_CREATE | RO_DELETE)) {
+        if (ro_set_add(routing.set, ROUTING_PATH, RO_MODIFY | RO_DELETE)) {
                 log_err("Failed to add to RO set");
                 return (void * ) -1;
         }
@@ -292,6 +282,7 @@ static void * rib_listener(void * o)
         }
 
         while (rib_event_wait(routing.set, routing.queue, NULL) == 0) {
+                path[0] = '\0';
                 flag = rqueue_next(routing.queue, path);
                 if (flag < 0)
                         continue;

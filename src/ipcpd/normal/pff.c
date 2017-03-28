@@ -60,9 +60,7 @@ void pff_destroy(struct pff * instance)
 {
         assert(instance);
 
-        pthread_mutex_lock(&instance->lock);
         htable_destroy(instance->table);
-        pthread_mutex_unlock(&instance->lock);
 
         pthread_mutex_destroy(&instance->lock);
         free(instance);
@@ -89,13 +87,10 @@ int pff_add(struct pff * instance, uint64_t addr, int fd)
                 return -ENOMEM;
         *val = fd;
 
-        pthread_mutex_lock(&instance->lock);
         if (htable_insert(instance->table, addr, val)) {
-                pthread_mutex_unlock(&instance->lock);
                 free(val);
                 return -1;
         }
-        pthread_mutex_unlock(&instance->lock);
 
         return 0;
 }
@@ -111,19 +106,15 @@ int pff_update(struct pff * instance, uint64_t addr, int fd)
                 return -ENOMEM;
         *val = fd;
 
-        pthread_mutex_lock(&instance->lock);
         if (htable_delete(instance->table, addr)) {
-                pthread_mutex_unlock(&instance->lock);
                 free(val);
                 return -1;
         }
 
         if (htable_insert(instance->table, addr, val)) {
-                pthread_mutex_unlock(&instance->lock);
                 free(val);
                 return -1;
         }
-        pthread_mutex_unlock(&instance->lock);
 
         return 0;
 }
@@ -132,12 +123,8 @@ int pff_remove(struct pff * instance, uint64_t addr)
 {
         assert(instance);
 
-        pthread_mutex_lock(&instance->lock);
-        if (htable_delete(instance->table, addr)) {
-                pthread_mutex_unlock(&instance->lock);
+        if (htable_delete(instance->table, addr))
                 return -1;
-        }
-        pthread_mutex_unlock(&instance->lock);
 
         return 0;
 }
@@ -146,9 +133,7 @@ void pff_flush(struct pff * instance)
 {
         assert(instance);
 
-        pthread_mutex_lock(&instance->lock);
         htable_flush(instance->table);
-        pthread_mutex_unlock(&instance->lock);
 }
 
 int pff_nhop(struct pff * instance, uint64_t addr)
@@ -158,14 +143,11 @@ int pff_nhop(struct pff * instance, uint64_t addr)
 
         assert(instance);
 
-        pthread_mutex_lock(&instance->lock);
         j = (int *) htable_lookup(instance->table, addr);
         if (j == NULL) {
-                pthread_mutex_unlock(&instance->lock);
                 return -1;
         }
         fd = *j;
-        pthread_mutex_unlock(&instance->lock);
 
         return fd;
 }
