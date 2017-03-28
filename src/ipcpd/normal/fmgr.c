@@ -579,12 +579,15 @@ int fmgr_np1_alloc_resp(int fd,
                 ipcp_flow_get_qoscube(fd, &cube);
                 if (frct_i_accept(fmgr.np1_fd_to_cep_id[fd], &buf, cube)) {
                         pthread_rwlock_unlock(&fmgr.np1_flows_lock);
+                        free(buf.data);
                         return -1;
                 }
                 flow_set_add(fmgr.np1_set[cube], fd);
         }
 
         pthread_rwlock_unlock(&fmgr.np1_flows_lock);
+
+        free(buf.data);
 
         return 0;
 }
@@ -753,6 +756,7 @@ int fmgr_nm1_write_buf(struct pci * pci,
                 return -1;
         }
 
+        free(buffer->data);
         free(buffer);
         return 0;
 }
