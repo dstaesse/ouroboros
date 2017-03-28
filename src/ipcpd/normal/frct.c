@@ -26,6 +26,8 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/list.h>
+#include <ouroboros/ipcp-dev.h>
+#include <ouroboros/errno.h>
 
 #include "frct.h"
 #include "fmgr.h"
@@ -34,6 +36,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <assert.h>
 
 enum conn_state {
         CONN_PENDING = 0,
@@ -119,7 +122,8 @@ static int init_instances(void)
         return 0;
 }
 
-static struct frct_i * create_frct_i(uint64_t address, cep_id_t r_cep_id)
+static struct frct_i * create_frct_i(uint64_t address,
+                                     cep_id_t r_cep_id)
 {
         struct frct_i * instance;
         cep_id_t        id;
@@ -206,51 +210,47 @@ int frct_nm1_post_sdu(struct pci *         pci,
         buffer_t        buf;
         cep_id_t        id;
 
-        if (pci == NULL || sdb == NULL)
-                return -1;
+        assert(pci);
+        assert(sdb);
 
-        if (pci->dst_cep_id == INVALID_CEP_ID &&
-            pci->pdu_type == PDU_TYPE_MGMT) {
+        if (pci->pdu_type == PDU_TYPE_MGMT) {
                 pthread_mutex_lock(&frct.instances_lock);
-                instance = create_frct_i(pci->src_addr,
-                                         pci->src_cep_id);
-                if (instance == NULL) {
-                        pthread_mutex_unlock(&frct.instances_lock);
-                        return -1;
+
+                if (pci->dst_cep_id == INVALID_CEP_ID) {
+                        instance = create_frct_i(pci->src_addr,
+                                                 pci->src_cep_id);
+                        if (instance == NULL) {
+                                pthread_mutex_unlock(&frct.instances_lock);
+                                ipcp_flow_del(sdb);
+                                return -ENOMEM;
+                        }
+                        id = instance->cep_id;
+                } else {
+                        instance = frct.instances[pci->dst_cep_id];
+                        assert(instance);
+                        id = pci->dst_cep_id;
+                        instance->state = CONN_ESTABLISHED;
                 }
-                id = instance->cep_id;
+
                 instance->r_cep_id = pci->src_cep_id;
+
                 pthread_mutex_unlock(&frct.instances_lock);
 
                 buf.len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
                 buf.data = shm_du_buff_head(sdb);
 
                 if (fmgr_np1_post_buf(id, &buf)) {
-                        log_err("Failed to hand buffer to FMGR.");
-                        return -1;
-                }
-        } else if (pci->pdu_type == PDU_TYPE_MGMT) {
-                pthread_mutex_lock(&frct.instances_lock);
-                instance = frct.instances[pci->dst_cep_id];
-                if (instance == NULL) {
-                        pthread_mutex_unlock(&frct.instances_lock);
-                        return -1;
-                }
-                instance->r_cep_id = pci->src_cep_id;
-                instance->state = CONN_ESTABLISHED;
-                pthread_mutex_unlock(&frct.instances_lock);
-
-                buf.len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
-                buf.data = shm_du_buff_head(sdb);
-
-                if (fmgr_np1_post_buf(pci->dst_cep_id, &buf)) {
                         log_err("Failed to hand buffer to Flow Manager.");
+                        ipcp_flow_del(sdb);
                         return -1;
                 }
+
+                ipcp_flow_del(sdb);
         } else {
                 /* FIXME: Known cep-ids are delivered to FMGR (minimal DTP) */
                 if (fmgr_np1_post_sdu(pci->dst_cep_id, sdb)) {
                         log_err("Failed to hand SDU to FMGR.");
+                        ipcp_flow_del(sdb);
                         return -1;
                 }
         }
@@ -266,10 +266,11 @@ cep_id_t frct_i_create(uint64_t   address,
         struct pci      pci;
         cep_id_t        id;
 
-        if (buf == NULL || buf->data == NULL)
-                return INVALID_CEP_ID;
+        assert(buf);
+        assert(buf->data);
 
         pthread_mutex_lock(&frct.instances_lock);
+
         instance = create_frct_i(address, INVALID_CEP_ID);
         if (instance == NULL) {
                 pthread_mutex_unlock(&frct.instances_lock);
@@ -278,6 +279,7 @@ cep_id_t frct_i_create(uint64_t   address,
 
         id = instance->cep_id;
         instance->cube = cube;
+
         pthread_mutex_unlock(&frct.instances_lock);
 
         pci.pdu_type = PDU_TYPE_MGMT;
@@ -304,8 +306,8 @@ int frct_i_accept(cep_id_t   id,
         struct pci      pci;
         struct frct_i * instance;
 
-        if (buf == NULL || buf->data == NULL)
-                return -1;
+        assert(buf);
+        assert(buf->data);
 
         pthread_mutex_lock(&frct.instances_lock);
 
@@ -391,8 +393,7 @@ int frct_i_write_sdu(cep_id_t             id,
         struct pci      pci;
         struct frct_i * instance;
 
-        if (sdb == NULL)
-                return -1;
+        assert(sdb);
 
         pthread_mutex_lock(&frct.instances_lock);
 
