@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Graph structure
+ * Undirected graph structure
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>

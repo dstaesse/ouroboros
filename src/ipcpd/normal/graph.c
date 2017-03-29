@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Graph structure
+ * Undirected graph structure
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -205,6 +205,7 @@ int graph_update_edge(struct graph * graph,
         struct vertex * v;
         struct edge *   e;
         struct vertex * nb;
+        struct edge *   nb_e;
 
         assert(graph);
 
@@ -237,9 +238,9 @@ int graph_update_edge(struct graph * graph,
                 e = add_edge(v, nb);
                 if (e == NULL) {
                         if (list_is_empty(&v->edges))
-                                del_vertex(graph, v);
+                            del_vertex(graph, v);
                         if (list_is_empty(&nb->edges))
-                                del_vertex(graph, v);
+                                del_vertex(graph, nb);
                         pthread_mutex_unlock(&graph->lock);
                         log_err("Failed to add edge.");
                         return -ENOMEM;
@@ -247,6 +248,23 @@ int graph_update_edge(struct graph * graph,
         }
 
         e->qs = qs;
+
+        nb_e = find_edge_by_addr(nb, s_addr);
+        if (nb_e == NULL) {
+                nb_e = add_edge(nb, v);
+                if (nb_e == NULL) {
+                        del_edge(e);
+                        if (list_is_empty(&v->edges))
+                                del_vertex(graph, v);
+                        if (list_is_empty(&nb->edges))
+                                del_vertex(graph, nb);
+                        pthread_mutex_unlock(&graph->lock);
+                        log_err("Failed to add edge.");
+                        return -ENOMEM;
+                }
+        }
+
+        nb_e->qs = qs;
 
         pthread_mutex_unlock(&graph->lock);
 
@@ -260,6 +278,7 @@ int graph_del_edge(struct graph * graph,
         struct vertex * v;
         struct edge *   e;
         struct vertex * nb;
+        struct edge *   nb_e;
 
         assert(graph);
 
@@ -286,14 +305,21 @@ int graph_del_edge(struct graph * graph,
                 return -1;
         }
 
+        nb_e = find_edge_by_addr(nb, s_addr);
+        if (nb_e == NULL) {
+                pthread_mutex_unlock(&graph->lock);
+                log_err("No such edge.");
+                return -1;
+        }
+
         del_edge(e);
+        del_edge(nb_e);
 
         /* Removing vertex if it was the last edge */
         if (list_is_empty(&v->edges))
-               del_vertex(graph, v);
-
+                del_vertex(graph, v);
         if (list_is_empty(&nb->edges))
-               del_vertex(graph, v);
+                del_vertex(graph, nb);
 
         pthread_mutex_unlock(&graph->lock);
 
