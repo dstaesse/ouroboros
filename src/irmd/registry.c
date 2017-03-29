@@ -594,6 +594,7 @@ void registry_destroy(struct list_head * registry)
         list_for_each_safe(p, h, registry) {
                 struct reg_entry * e = list_entry(p, struct reg_entry, next);
                 list_del(&e->next);
+                reg_entry_set_state(e, REG_NAME_NULL);
                 reg_entry_destroy(e);
         }
 }
