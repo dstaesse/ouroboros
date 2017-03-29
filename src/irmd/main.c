@@ -1536,12 +1536,10 @@ static void irm_destroy(void)
 
         pthread_rwlock_wrlock(&irmd->flows_lock);
 
-        list_for_each_safe(p, h, &irmd->irm_flows) {
-                struct irm_flow * f = list_entry(p, struct irm_flow, next);
-                list_del(&f->next);
-                clear_irm_flow(f);
-                irm_flow_destroy(f);
-        }
+        if (irmd->port_ids != NULL)
+                bmp_destroy(irmd->port_ids);
+
+        pthread_rwlock_unlock(&irmd->flows_lock);
 
         close(irmd->sockfd);
 
@@ -1557,13 +1555,6 @@ static void irm_destroy(void)
                 clear_spawned_api(e->api);
                 registry_del_api(&irmd->registry, e->api);
                 ipcp_entry_destroy(e);
-        }
-
-        list_for_each_safe(p, h, &irmd->api_table) {
-                struct api_entry * e = list_entry(p, struct api_entry, next);
-                list_del(&e->next);
-                registry_del_api(&irmd->registry, e->api);
-                api_entry_destroy(e);
         }
 
         list_for_each_safe(p, h, &irmd->spawned_apis) {
@@ -1587,11 +1578,6 @@ static void irm_destroy(void)
         registry_destroy(&irmd->registry);
 
         pthread_rwlock_unlock(&irmd->reg_lock);
-
-        if (irmd->port_ids != NULL)
-                bmp_destroy(irmd->port_ids);
-
-        pthread_rwlock_unlock(&irmd->flows_lock);
 
         if (irmd->rdrb != NULL)
                 shm_rdrbuff_destroy(irmd->rdrb);
@@ -1688,11 +1674,30 @@ void * irm_sanitize(void * o)
         while (true) {
                 if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
                         log_warn("Failed to get time.");
-                /* Cleanup stale PENDING flows. */
 
                 pthread_rwlock_rdlock(&irmd->state_lock);
 
                 if (irmd->state != IRMD_RUNNING) {
+                        /* Clean up all flows first to kill mainloops */
+                        pthread_rwlock_wrlock(&irmd->flows_lock);
+                        list_for_each_safe(p, h, &irmd->irm_flows) {
+                                struct irm_flow * f =
+                                        list_entry(p, struct irm_flow, next);
+                                list_del(&f->next);
+                                irm_flow_set_state(f, FLOW_NULL);
+                                clear_irm_flow(f);
+                                irm_flow_destroy(f);
+                        }
+                        pthread_rwlock_unlock(&irmd->flows_lock);
+                        pthread_rwlock_wrlock(&irmd->reg_lock);
+                        /* Clean up api entries as well */
+                        list_for_each_safe(p, h, &irmd->api_table) {
+                                struct api_entry * e =
+                                        list_entry(p, struct api_entry, next);
+                                list_del(&e->next);
+                                api_entry_destroy(e);
+                        }
+                        pthread_rwlock_unlock(&irmd->reg_lock);
                         pthread_rwlock_unlock(&irmd->state_lock);
                         return (void *) 0;
                 }
@@ -2198,8 +2203,7 @@ int main(int     argc,
                 pthread_create(&irmd->threadpool[t], NULL, mainloop, NULL);
 
         pthread_create(&irmd->irm_sanitize, NULL, irm_sanitize, NULL);
-        pthread_create(&irmd->shm_sanitize, NULL,
-                       shm_sanitize, irmd->rdrb);
+        pthread_create(&irmd->shm_sanitize, NULL, shm_sanitize, irmd->rdrb);
 
         /* Wait for (all of them) to return. */
         for (t = 0; t < IRMD_THREADPOOL_SIZE; ++t)
