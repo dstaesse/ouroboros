@@ -125,7 +125,6 @@ enum flow_state irm_flow_get_state(struct irm_flow * f)
 void irm_flow_set_state(struct irm_flow * f, enum flow_state state)
 {
         assert(f);
-        assert(state != FLOW_NULL);
         assert(state != FLOW_DESTROY);
 
         pthread_mutex_lock(&f->state_lock);

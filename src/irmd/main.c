@@ -1205,6 +1205,7 @@ static struct irm_flow * flow_alloc(pid_t     api,
                 bmp_release(irmd->port_ids, f->port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
+                irm_flow_set_state(f, FLOW_NULL);
                 irm_flow_destroy(f);
                 return NULL;
         }
