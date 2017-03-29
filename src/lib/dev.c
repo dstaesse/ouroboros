@@ -1394,6 +1394,7 @@ int ipcp_flow_read(int                   fd,
 {
         ssize_t idx = -1;
         int port_id = -1;
+        struct shm_rbuff * rb;
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
@@ -1404,22 +1405,19 @@ int ipcp_flow_read(int                   fd,
                 return -ENOTALLOC;
         }
 
+        rb = ai.flows[fd].rx_rb;
+
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
 
-        idx = shm_rbuff_read(ai.flows[fd].rx_rb);
-        if (idx < 0) {
-                pthread_rwlock_rdlock(&ai.data_lock);
-                pthread_rwlock_rdlock(&ai.flows_lock);
+        idx = shm_rbuff_read(rb);
+        if (idx < 0)
                 return idx;
-        }
 
         pthread_rwlock_rdlock(&ai.data_lock);
-        pthread_rwlock_rdlock(&ai.flows_lock);
 
         *sdb = shm_rdrbuff_get(ai.rdrb, idx);
 
-        pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
