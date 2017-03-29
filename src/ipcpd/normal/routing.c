@@ -92,7 +92,7 @@ static void * calculate_pff(void * o)
                 table = NULL;
                 n_table = graph_routing_table(routing.graph,
                                               ipcpi.dt_addr, &table);
-                if (table == NULL) {
+                if (n_table < 0) {
                         sleep(RECALC_TIME);
                         continue;
                 }

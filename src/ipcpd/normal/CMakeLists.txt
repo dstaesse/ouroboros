@@ -50,4 +50,4 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
 
 # Enable once ipcp-normal has tests
-# add_subdirectory(tests)
+add_subdirectory(tests)
