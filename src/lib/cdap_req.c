@@ -30,8 +30,9 @@
 #include <stdlib.h>
 #include <assert.h>
 
-struct cdap_req * cdap_req_create(int        fd,
-                                  cdap_key_t key)
+struct cdap_req * cdap_req_create(int         fd,
+                                  invoke_id_t iid,
+                                  cdap_key_t  key)
 {
         struct cdap_req * creq = malloc(sizeof(*creq));
         pthread_condattr_t cattr;
@@ -40,6 +41,7 @@ struct cdap_req * cdap_req_create(int        fd,
                 return NULL;
 
         creq->fd        = fd;
+        creq->iid       = iid;
         creq->key       = key;
         creq->state     = REQ_INIT;
         creq->response  = -1;

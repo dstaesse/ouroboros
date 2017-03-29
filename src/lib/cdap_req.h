@@ -31,6 +31,8 @@
 
 #include <pthread.h>
 
+typedef cdap_key_t invoke_id_t;
+
 enum creq_state {
         REQ_NULL = 0,
         REQ_INIT,
@@ -46,6 +48,7 @@ struct cdap_req {
         int              fd;
         struct timespec  birth;
         cdap_key_t       key;
+        invoke_id_t      iid;
 
         int              response;
         buffer_t         data;
@@ -55,8 +58,9 @@ struct cdap_req {
         pthread_mutex_t  lock;
 };
 
-struct cdap_req * cdap_req_create(int        fd,
-                                  cdap_key_t key);
+struct cdap_req * cdap_req_create(int         fd,
+                                  cdap_key_t  key,
+                                  invoke_id_t iid);
 
 void              cdap_req_destroy(struct cdap_req * creq);
 
