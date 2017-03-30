@@ -149,8 +149,15 @@ static struct frct_i * create_frct_i(uint64_t address,
         return instance;
 }
 
-static void destroy_frct_i(struct frct_i * instance)
+static void destroy_frct_i(cep_id_t id)
 {
+        struct frct_i * instance;
+
+        instance = frct.instances[id];
+        frct.instances[id] = NULL;
+
+        release_cep_id(instance->cep_id);
+
         free(instance);
 }
 
@@ -173,7 +180,7 @@ static void fini_instances(void)
 
         for (i = 0; i < IRMD_MAX_FLOWS; i++)
                 if (frct.instances[i] != NULL)
-                        destroy_frct_i(frct.instances[i]);
+                        destroy_frct_i(i);
 
         pthread_mutex_unlock(&frct.instances_lock);
 
@@ -197,8 +204,8 @@ int frct_init()
 
 int frct_fini()
 {
-        fini_cep_ids();
         fini_instances();
+        fini_cep_ids();
 
         return 0;
 }
@@ -291,7 +298,9 @@ cep_id_t frct_i_create(uint64_t   address,
         pci.qos_id = cube;
 
         if (fmgr_nm1_write_buf(&pci, buf)) {
-                free(instance);
+                pthread_mutex_lock(&frct.instances_lock);
+                destroy_frct_i(id);
+                pthread_mutex_unlock(&frct.instances_lock);
                 log_err("Failed to hand PDU to FMGR.");
                 return INVALID_CEP_ID;
         }
@@ -372,11 +381,7 @@ int frct_i_destroy(cep_id_t   id,
         pci.seqno = 0;
         pci.qos_id = instance->cube;
 
-        frct.instances[id] = NULL;
-
-        release_cep_id(instance->cep_id);
-
-        destroy_frct_i(instance);
+        destroy_frct_i(id);
 
         pthread_mutex_unlock(&frct.instances_lock);
 
