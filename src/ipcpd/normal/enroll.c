@@ -152,6 +152,8 @@ static void * enroll_handle(void * o)
 
                 cdap_del_flow(cdap, conn.flow_info.fd);
                 flow_dealloc(conn.flow_info.fd);
+
+                boot_r = members_r = dif_name_r = false;
         }
 
         return 0;
