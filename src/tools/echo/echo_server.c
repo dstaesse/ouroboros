@@ -37,7 +37,7 @@ void shutdown_server(int signo)
 
 int server_main(void)
 {
-        int    client_fd = 0;
+        int    fd = 0;
         char   buf[BUF_SIZE];
         ssize_t count = 0;
         qosspec_t qs;
@@ -51,36 +51,30 @@ int server_main(void)
         }
 
         while (true) {
-                client_fd = flow_accept(&qs);
-                if (client_fd < 0) {
+                fd = flow_accept(&qs, NULL);
+                if (fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;
                 }
 
                 printf("New flow.\n");
 
-                if (flow_alloc_resp(client_fd, 0)) {
-                        printf("Failed to give an allocate response.\n");
-                        flow_dealloc(client_fd);
-                        continue;
-                }
-
-                count = flow_read(client_fd, &buf, BUF_SIZE);
+                count = flow_read(fd, &buf, BUF_SIZE);
                 if (count < 0) {
                         printf("Failed to read SDU.\n");
-                        flow_dealloc(client_fd);
+                        flow_dealloc(fd);
                         continue;
                 }
 
                 printf("Message from client is %.*s.\n", (int) count, buf);
 
-                if (flow_write(client_fd, buf, count) == -1) {
+                if (flow_write(fd, buf, count) == -1) {
                         printf("Failed to write SDU.\n");
-                        flow_dealloc(client_fd);
+                        flow_dealloc(fd);
                         continue;
                 }
 
-                flow_dealloc(client_fd);
+                flow_dealloc(fd);
         }
 
         return 0;

@@ -182,15 +182,9 @@ int client_main(void)
         client.sent = 0;
         client.rcvd = 0;
 
-        fd = flow_alloc(client.s_apn, NULL);
+        fd = flow_alloc(client.s_apn, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
-                return -1;
-        }
-
-        if (flow_alloc_res(fd)) {
-                printf("Flow allocation refused.\n");
-                flow_dealloc(fd);
                 return -1;
         }
 

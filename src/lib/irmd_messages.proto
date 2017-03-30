@@ -39,14 +39,12 @@ enum irm_msg_code {
         IRM_UNBIND_API        = 11;
         IRM_REG               = 12;
         IRM_UNREG             = 13;
-        IRM_FLOW_ACCEPT       = 14;
-        IRM_FLOW_ALLOC_RESP   = 15;
-        IRM_FLOW_ALLOC        = 16;
-        IRM_FLOW_ALLOC_RES    = 17;
-        IRM_FLOW_DEALLOC      = 18;
-        IPCP_FLOW_REQ_ARR     = 19;
-        IPCP_FLOW_ALLOC_REPLY = 20;
-        IRM_REPLY             = 21;
+        IRM_FLOW_ALLOC        = 14;
+        IRM_FLOW_ACCEPT       = 15;
+        IRM_FLOW_DEALLOC      = 16;
+        IPCP_FLOW_REQ_ARR     = 17;
+        IPCP_FLOW_ALLOC_REPLY = 18;
+        IRM_REPLY             = 19;
 };
 
 message irm_msg {
@@ -63,5 +61,7 @@ message irm_msg {
         optional dif_config_msg conf = 11;
         optional uint32 opts         = 12;
         repeated sint32 apis         = 13;
-        optional sint32 result       = 14;
+        optional uint32 timeo_sec    = 14;
+        optional uint32 timeo_usec   = 15;
+        optional sint32 result       = 16;
 };

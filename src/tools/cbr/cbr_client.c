@@ -63,7 +63,6 @@ int client_main(char * server,
         struct sigaction sig_act;
 
         int fd = 0;
-        int result = 0;
         char buf[size];
         long seqnr = 0;
         long gap = size * 8.0 * (BILLION / (double) rate);
@@ -90,16 +89,9 @@ int client_main(char * server,
         printf("Client started, duration %d, rate %lu b/s, size %d B.\n",
                duration, rate, size);
 
-        fd = flow_alloc(server, NULL);
+        fd = flow_alloc(server, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
-                return -1;
-        }
-
-        result = flow_alloc_res(fd);
-        if (result < 0) {
-                printf("Flow allocation refused.\n");
-                flow_dealloc(fd);
                 return -1;
         }
 

@@ -176,7 +176,6 @@ static int client_init(void)
         client.rtt_m2 = 0;
 
         pthread_mutex_init(&client.lock, NULL);
-        pthread_mutex_lock(&client.lock);
 
         return 0;
 }
@@ -213,20 +212,12 @@ int client_main(void)
                 return -1;
         }
 
-        fd = flow_alloc(client.s_apn, NULL);
+        fd = flow_alloc(client.s_apn, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
-                return -1;
-        }
-
-        if (flow_alloc_res(fd)) {
-                printf("Flow allocation refused.\n");
-                flow_dealloc(fd);
                 client_fini();
                 return -1;
         }
-
-        pthread_mutex_unlock(&client.lock);
 
         clock_gettime(CLOCK_REALTIME, &tic);
 
