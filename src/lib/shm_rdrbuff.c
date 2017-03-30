@@ -376,23 +376,23 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                 *rdrb->head = 0;
         }
 #endif
-        sdb          = get_head_ptr(rdrb);
-        sdb->size    = size;
-        sdb->flags   = SDB_VALID;
-        sdb->du_head = headspace;
-        sdb->du_tail = sdb->du_head + len;
-#ifdef  SHM_RDRB_MULTI_BLOCK
-        sdb->blocks  = blocks;
-#endif
-        memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
-
-        sdb->idx = *rdrb->head;
+        sdb        = get_head_ptr(rdrb);
+        sdb->flags = SDB_VALID;
+        sdb->idx   = *rdrb->head;
 #ifdef SHM_RDRB_MULTI_BLOCK
         *rdrb->head = (*rdrb->head + blocks) & ((SHM_BUFFER_SIZE) - 1);
 #else
         *rdrb->head = (*rdrb->head + 1) & ((SHM_BUFFER_SIZE) - 1);
 #endif
         pthread_mutex_unlock(rdrb->lock);
+
+        sdb->size    = size;
+        sdb->du_head = headspace;
+        sdb->du_tail = sdb->du_head + len;
+#ifdef  SHM_RDRB_MULTI_BLOCK
+        sdb->blocks  = blocks;
+#endif
+        memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
 
         return sdb->idx;
 }
@@ -457,9 +457,17 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
                 *rdrb->head = 0;
         }
 #endif
-        sdb          = get_head_ptr(rdrb);
+        sdb        = get_head_ptr(rdrb);
+        sdb->flags = SDB_VALID;
+        sdb->idx   = *rdrb->head;
+#ifdef SHM_RDRB_MULTI_BLOCK
+        *rdrb->head = (*rdrb->head + blocks) & ((SHM_BUFFER_SIZE) - 1);
+#else
+        *rdrb->head = (*rdrb->head + 1) & ((SHM_BUFFER_SIZE) - 1);
+#endif
+        pthread_cleanup_pop(true);
+
         sdb->size    = size;
-        sdb->flags   = SDB_VALID;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
 #ifdef  SHM_RDRB_MULTI_BLOCK
@@ -467,13 +475,6 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
 #endif
         memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
 
-        sdb->idx = *rdrb->head;
-#ifdef SHM_RDRB_MULTI_BLOCK
-        *rdrb->head = (*rdrb->head + blocks) & ((SHM_BUFFER_SIZE) - 1);
-#else
-        *rdrb->head = (*rdrb->head + 1) & ((SHM_BUFFER_SIZE) - 1);
-#endif
-        pthread_cleanup_pop(true);
 
         return sdb->idx;
 }
@@ -489,22 +490,9 @@ ssize_t shm_rdrbuff_read(uint8_t **           dst,
         assert(rdrb);
         assert(idx < (SHM_BUFFER_SIZE));
 
-#ifdef __APPLE__
-        pthread_mutex_lock(rdrb->lock);
-#else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
-                pthread_mutex_consistent(rdrb->lock);
-#endif
-        if (shm_rdrb_empty(rdrb)) {
-                pthread_mutex_unlock(rdrb->lock);
-                return -1;
-        }
-
         sdb = idx_to_du_buff_ptr(rdrb, idx);
         len = (ssize_t) (sdb->du_tail - sdb->du_head);
         *dst = ((uint8_t *) (sdb + 1)) + sdb->du_head;
-
-        pthread_mutex_unlock(rdrb->lock);
 
         return len;
 }
@@ -516,20 +504,7 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, size_t idx)
         assert(rdrb);
         assert(idx < (SHM_BUFFER_SIZE));
 
-#ifdef __APPLE__
-        pthread_mutex_lock(rdrb->lock);
-#else
-        if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
-                pthread_mutex_consistent(rdrb->lock);
-#endif
-        if (shm_rdrb_empty(rdrb)) {
-                pthread_mutex_unlock(rdrb->lock);
-                return NULL;
-        }
-
         sdb = idx_to_du_buff_ptr(rdrb, idx);
-
-        pthread_mutex_unlock(rdrb->lock);
 
         return sdb;
 }
