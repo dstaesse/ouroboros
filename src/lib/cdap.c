@@ -727,8 +727,8 @@ int cdap_reply_wait(struct cdap * instance,
 
         ret = r->response;
 
-        cdap_sent_del(instance, r);
         release_id(instance, r->iid);
+        cdap_sent_del(instance, r);
 
         return ret;
 }
