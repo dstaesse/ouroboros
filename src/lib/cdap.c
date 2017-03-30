@@ -703,6 +703,7 @@ int cdap_reply_wait(struct cdap * instance,
 {
         int ret;
         struct cdap_req * r;
+        invoke_id_t iid;
 
         if (instance == NULL || (data != NULL && len == NULL))
                 return -EINVAL;
@@ -711,10 +712,12 @@ int cdap_reply_wait(struct cdap * instance,
         if (r == NULL)
                 return -EINVAL;
 
+        iid = r->iid;
+
         ret = cdap_req_wait(r);
         if (ret < 0) {
                 cdap_sent_del(instance, r);
-                release_id(instance, r->iid);
+                release_id(instance, iid);
                 return ret;
         }
 
@@ -727,8 +730,8 @@ int cdap_reply_wait(struct cdap * instance,
 
         ret = r->response;
 
-        release_id(instance, r->iid);
         cdap_sent_del(instance, r);
+        release_id(instance, iid);
 
         return ret;
 }
