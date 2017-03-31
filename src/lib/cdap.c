@@ -183,8 +183,8 @@ static struct cdap_rcvd * cdap_rcvd_get_by_key(struct cdap * instance,
         list_for_each_safe(p, h, &instance->rcvd) {
                 rcvd = list_entry(p, struct cdap_rcvd, next);
                 if (rcvd->key == key) {
-                        pthread_mutex_unlock(&instance->rcvd_lock);
                         list_del(&rcvd->next);
+                        pthread_mutex_unlock(&instance->rcvd_lock);
                         return rcvd;
                 }
         }
@@ -669,6 +669,7 @@ cdap_key_t * cdap_request_send(struct cdap *    instance,
                         pthread_rwlock_unlock(&instance->flows_lock);
                         release_id(instance, *key);
                         release_id(instance, iid);
+                        *key = INVALID_CDAP_KEY;
                         return keys;
                 }
 
@@ -678,13 +679,17 @@ cdap_key_t * cdap_request_send(struct cdap *    instance,
                         cdap_sent_del(instance, req);
                         release_id(instance, *key);
                         release_id(instance, iid);
+                        *key = INVALID_CDAP_KEY;
                         return keys;
                 }
 
                 if (ret < 0) {
+                        pthread_rwlock_unlock(&instance->flows_lock);
                         cdap_sent_del(instance, req);
                         release_id(instance, *key);
                         release_id(instance, iid);
+                        *key = INVALID_CDAP_KEY;
+                        return keys;
                 }
 
                 ++key;
@@ -717,6 +722,7 @@ int cdap_reply_wait(struct cdap * instance,
         if (ret < 0) {
                 cdap_sent_del(instance, r);
                 release_id(instance, iid);
+                release_id(instance, key);
                 return ret;
         }
 
@@ -731,6 +737,7 @@ int cdap_reply_wait(struct cdap * instance,
 
         cdap_sent_del(instance, r);
         release_id(instance, iid);
+        release_id(instance, key);
 
         return ret;
 }
@@ -765,6 +772,8 @@ cdap_key_t cdap_request_wait(struct cdap *      instance,
                                           &instance->rcvd_lock);
                 }
         }
+
+        assert(rcv->proc == false);
 
         rcv->proc = true;
         list_del(&rcv->next);
