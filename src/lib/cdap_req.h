@@ -36,6 +36,7 @@ typedef cdap_key_t invoke_id_t;
 enum creq_state {
         REQ_NULL = 0,
         REQ_INIT,
+        REQ_INIT_PENDING,
         REQ_PENDING,
         REQ_RESPONSE,
         REQ_DONE,
