@@ -380,6 +380,8 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         sdb->flags = SDB_VALID;
         sdb->idx   = *rdrb->head;
 #ifdef SHM_RDRB_MULTI_BLOCK
+        sdb->blocks  = blocks;
+
         *rdrb->head = (*rdrb->head + blocks) & ((SHM_BUFFER_SIZE) - 1);
 #else
         *rdrb->head = (*rdrb->head + 1) & ((SHM_BUFFER_SIZE) - 1);
@@ -389,9 +391,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         sdb->size    = size;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
-#ifdef  SHM_RDRB_MULTI_BLOCK
-        sdb->blocks  = blocks;
-#endif
+
         memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
 
         return sdb->idx;
@@ -461,6 +461,8 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         sdb->flags = SDB_VALID;
         sdb->idx   = *rdrb->head;
 #ifdef SHM_RDRB_MULTI_BLOCK
+        sdb->blocks  = blocks;
+
         *rdrb->head = (*rdrb->head + blocks) & ((SHM_BUFFER_SIZE) - 1);
 #else
         *rdrb->head = (*rdrb->head + 1) & ((SHM_BUFFER_SIZE) - 1);
@@ -470,11 +472,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         sdb->size    = size;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
-#ifdef  SHM_RDRB_MULTI_BLOCK
-        sdb->blocks  = blocks;
-#endif
         memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
-
 
         return sdb->idx;
 }
