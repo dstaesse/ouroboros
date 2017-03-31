@@ -26,25 +26,17 @@
 int client_main(void)
 {
         int fd = 0;
-        int result = 0;
         char buf[BUF_SIZE];
         char * message  = "Client says hi!";
         ssize_t count = 0;
 
-        fd = flow_alloc("echo", NULL);
+        fd = flow_alloc("echo", NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 return -1;
         }
 
-        result = flow_alloc_res(fd);
-        if (result < 0) {
-                printf("Flow allocation refused.\n");
-                flow_dealloc(fd);
-                return -1;
-        }
-
-        if (flow_write(fd, message, strlen(message) + 1) == -1) {
+        if (flow_write(fd, message, strlen(message) + 1) < 0) {
                 printf("Failed to write SDU.\n");
                 flow_dealloc(fd);
                 return -1;

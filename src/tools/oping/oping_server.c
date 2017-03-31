@@ -57,6 +57,7 @@ void * cleaner_thread(void * o)
                 for (i = 0; i < OPING_MAX_FLOWS; ++i)
                         if (flow_set_has(server.flows, i) &&
                             ts_diff_ms(&server.times[i], &now) > deadline_ms) {
+                                printf("Flow %d timed out.\n", i);
                                 flow_set_del(server.flows, i);
                                 flow_dealloc(i);
                         }
@@ -110,8 +111,8 @@ void * server_thread(void *o)
 
 void * accept_thread(void * o)
 {
-        int fd = 0;
-        struct timespec now = {0, 0};
+        int fd;
+        struct timespec now;
         qosspec_t qs;
 
         (void) o;
@@ -119,19 +120,13 @@ void * accept_thread(void * o)
         printf("Ouroboros ping server started.\n");
 
         while (true) {
-                fd = flow_accept(&qs);
+                fd = flow_accept(&qs, NULL);
                 if (fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;
                 }
 
                 printf("New flow %d.\n", fd);
-
-                if (flow_alloc_resp(fd, 0)) {
-                        printf("Failed to give an allocate response.\n");
-                        flow_dealloc(fd);
-                        continue;
-                }
 
                 clock_gettime(CLOCK_REALTIME, &now);
 

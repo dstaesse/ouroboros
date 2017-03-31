@@ -108,19 +108,13 @@ void * accept_thread(void * o)
         printf("Ouroboros perf server started.\n");
 
         while (true) {
-                fd = flow_accept(&qs);
+                fd = flow_accept(&qs, NULL);
                 if (fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;
                 }
 
                 printf("New flow %d.\n", fd);
-
-                if (flow_alloc_resp(fd, 0)) {
-                        printf("Failed to give an allocate response.\n");
-                        flow_dealloc(fd);
-                        continue;
-                }
 
                 clock_gettime(CLOCK_REALTIME, &now);
 

@@ -126,15 +126,10 @@ static void * flow_acceptor(void * o)
 
                 pthread_rwlock_unlock(&ipcpi.state_lock);
 
-                fd = flow_accept(&qs);
+                fd = flow_accept(&qs, NULL);
                 if (fd < 0) {
                         if (fd != -EIRMD)
                                 log_warn("Flow accept failed: %d", fd);
-                        continue;
-                }
-
-                if (flow_alloc_resp(fd, 0)) {
-                        log_err("Failed to respond to flow alloc request.");
                         continue;
                 }
 
@@ -286,7 +281,7 @@ int connmgr_alloc(struct ae *   ae,
 
         memset(&conn->conn_info, 0, sizeof(conn->conn_info));
 
-        conn->flow_info.fd = flow_alloc(dst_name, qs);
+        conn->flow_info.fd = flow_alloc(dst_name, qs, NULL);
         if (conn->flow_info.fd < 0) {
                 log_err("Failed to allocate flow to %s.", dst_name);
                 return -1;
@@ -296,12 +291,6 @@ int connmgr_alloc(struct ae *   ae,
                 conn->flow_info.qs = *qs;
         else
                 memset(&conn->flow_info.qs, 0, sizeof(conn->flow_info.qs));
-
-        if (flow_alloc_res(conn->flow_info.fd)) {
-                log_err("Flow allocation to %s failed.", dst_name);
-                flow_dealloc(conn->flow_info.fd);
-                return -1;
-        }
 
         if (cacep_snd(conn->flow_info.fd, &ae->info)) {
                 log_err("Failed to create application connection.");

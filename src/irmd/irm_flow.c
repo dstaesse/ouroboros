@@ -45,6 +45,7 @@ struct irm_flow * irm_flow_create(pid_t n_api,
         }
 
         if (pthread_mutex_init(&f->state_lock, NULL)) {
+                pthread_cond_destroy(&f->state_cond);
                 free(f);
                 return NULL;
         }
@@ -63,6 +64,9 @@ struct irm_flow * irm_flow_create(pid_t n_api,
         f->n_1_rb = shm_rbuff_create(n_1_api, port_id);
         if (f->n_1_rb == NULL) {
                 log_err("Could not create ringbuffer for AP-I %d.", n_1_api);
+                shm_rbuff_destroy(f->n_rb);
+                pthread_mutex_destroy(&f->state_lock);
+                pthread_cond_destroy(&f->state_cond);
                 free(f);
                 return NULL;
         }
@@ -122,7 +126,8 @@ enum flow_state irm_flow_get_state(struct irm_flow * f)
         return state;
 }
 
-void irm_flow_set_state(struct irm_flow * f, enum flow_state state)
+void irm_flow_set_state(struct irm_flow * f,
+                        enum flow_state   state)
 {
         assert(f);
         assert(state != FLOW_DESTROY);
@@ -135,13 +140,16 @@ void irm_flow_set_state(struct irm_flow * f, enum flow_state state)
         pthread_mutex_unlock(&f->state_lock);
 }
 
-enum flow_state irm_flow_wait_state(struct irm_flow * f, enum flow_state state)
+enum flow_state irm_flow_wait_state(struct irm_flow * f,
+                                    enum flow_state   state)
 {
         assert(f);
         assert(state != FLOW_NULL);
         assert(state != FLOW_DESTROY);
 
         pthread_mutex_lock(&f->state_lock);
+
+        assert(f->state != FLOW_NULL);
 
         while (!(f->state == state || f->state == FLOW_DESTROY))
                 pthread_cond_wait(&f->state_cond, &f->state_lock);

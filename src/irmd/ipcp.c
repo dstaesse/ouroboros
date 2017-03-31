@@ -176,14 +176,7 @@ pid_t ipcp_create(char *         name,
 
 int ipcp_destroy(pid_t api)
 {
-        int status;
-
         if (kill(api, SIGTERM)) {
-                log_err("Failed to destroy IPCP");
-                return -1;
-        }
-
-        if (waitpid(api, &status, 0) < 0) {
                 log_err("Failed to destroy IPCP");
                 return -1;
         }

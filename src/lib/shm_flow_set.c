@@ -302,7 +302,8 @@ int shm_flow_set_has(struct shm_flow_set * set,
         return ret;
 }
 
-void shm_flow_set_notify(struct shm_flow_set * set, int port_id)
+void shm_flow_set_notify(struct shm_flow_set * set,
+                         int                   port_id)
 {
         assert(set);
         assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);

@@ -146,6 +146,8 @@ static void * worker(void * o)
 
                 pthread_mutex_lock(&fds_lock);
                 fds_count--;
+
+                pthread_cond_signal(&fds_signal);
                 pthread_mutex_unlock(&fds_lock);
         }
 
@@ -154,8 +156,7 @@ static void * worker(void * o)
 
 static void * listener(void * o)
 {
-        int client_fd = 0;
-        int response = 0;
+        int fd = 0;
         qosspec_t qs;
 
         (void) o;
@@ -164,8 +165,19 @@ static void * listener(void * o)
                server_settings.interval, server_settings.timeout);
 
         while (true) {
-                client_fd = flow_accept(&qs);
-                if (client_fd < 0) {
+                pthread_mutex_lock(&fds_lock);
+                pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+                                     (void *) &fds_lock);
+
+                while (fds_count == THREADS_SIZE) {
+                        printf("Can't accept any more flows, waiting.\n");
+                        pthread_cond_wait(&fds_signal, &fds_lock);
+                }
+
+                pthread_cleanup_pop(true);
+
+                fd = flow_accept(&qs, NULL);
+                if (fd < 0) {
                         printf("Failed to accept flow.\n");
                         break;
                 }
@@ -174,26 +186,12 @@ static void * listener(void * o)
 
                 pthread_mutex_lock(&fds_lock);
 
-                response = (fds_count < THREADS_SIZE) ? 0 : -1;
-
-                if (flow_alloc_resp(client_fd, response)) {
-                        printf("Failed to give an allocate response.\n");
-                        flow_dealloc(client_fd);
-                        pthread_mutex_unlock(&fds_lock);
-                        continue;
-                }
-
-                if (response) {
-                        printf("Can't accept any more flows, denying.\n");
-                        continue;
-                }
-
                 fds_count++;
                 fds_index = (fds_index + 1) % THREADS_SIZE;
-                fds[fds_index] = client_fd;
+                fds[fds_index] = fd;
 
-                pthread_mutex_unlock(&fds_lock);
                 pthread_cond_signal(&fds_signal);
+                pthread_mutex_unlock(&fds_lock);
         }
 
         return 0;

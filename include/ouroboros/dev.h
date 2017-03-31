@@ -24,6 +24,7 @@
 #include <ouroboros/qos.h>
 
 #include <unistd.h>
+#include <time.h>
 
 #ifndef OUROBOROS_DEV_H
 #define OUROBOROS_DEV_H
@@ -33,20 +34,14 @@ int     ap_init(const char * ap_name);
 
 void    ap_fini(void);
 
-/* Returns flow descriptor (> 0) and qos spec. */
-int     flow_accept(qosspec_t * spec);
+/* Returns flow descriptor, qs updates to supplied QoS. */
+int     flow_alloc(const char *      dst_name,
+                   qosspec_t *       qs,
+                   struct timespec * timeo);
 
-int     flow_alloc_resp(int fd,
-                        int response);
-
-/*
- * Returns flow descriptor (> 0).
- * On returning, spec will contain the actual supplied QoS.
- */
-int     flow_alloc(const char * dst_name,
-                   qosspec_t *  spec);
-
-int     flow_alloc_res(int fd);
+/* Returns flow descriptor, qs updates to supplied QoS. */
+int     flow_accept(qosspec_t *       qs,
+                    struct timespec * timeo);
 
 int     flow_dealloc(int fd);
 
@@ -58,4 +53,4 @@ ssize_t flow_read(int    fd,
                   void * buf,
                   size_t count);
 
-#endif
+#endif /* OUROBOROS_DEV_H */

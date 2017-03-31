@@ -133,7 +133,8 @@ static struct irm_flow * get_irm_flow_n(pid_t n_api)
 
         list_for_each(pos, &irmd->irm_flows) {
                 struct irm_flow * e = list_entry(pos, struct irm_flow, next);
-                if (e->n_api == n_api)
+                if (e->n_api == n_api &&
+                    irm_flow_get_state(e) == FLOW_ALLOC_PENDING)
                         return e;
         }
 
@@ -982,7 +983,12 @@ static struct irm_flow * flow_accept(pid_t       api,
         struct irm_flow *  f  = NULL;
         struct api_entry * e  = NULL;
         struct reg_entry * re = NULL;
-        struct list_head * p;
+        struct list_head * p  = NULL;
+
+        pid_t api_n1;
+        pid_t api_n;
+        int   port_id;
+        int   ret;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
 
@@ -1016,13 +1022,18 @@ static struct irm_flow * flow_accept(pid_t       api,
         pthread_rwlock_unlock(&irmd->reg_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
-        while (api_entry_sleep(e) == -ETIMEDOUT) {
+        while ((ret = api_entry_sleep(e)) == -ETIMEDOUT) {
                 pthread_rwlock_rdlock(&irmd->state_lock);
                 if (irmd->state != IRMD_RUNNING) {
                         pthread_rwlock_unlock(&irmd->state_lock);
                         return NULL;
                 }
                 pthread_rwlock_unlock(&irmd->state_lock);
+        }
+
+        if (ret == -1) {
+                /* The process died, we can exit here. */
+                return NULL;
         }
 
         pthread_rwlock_rdlock(&irmd->state_lock);
@@ -1033,12 +1044,32 @@ static struct irm_flow * flow_accept(pid_t       api,
                 return NULL;
         }
 
+        pthread_rwlock_rdlock(&irmd->flows_lock);
+
+        f = get_irm_flow_n(api);
+        if (f == NULL) {
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                log_warn("Port_id was not created yet.");
+                return NULL;
+        }
+
+        *cube = re->qos;
+
+        api_n   = f->n_api;
+        api_n1  = f->n_1_api;
+        port_id = f->port_id;
+
+        log_info("Flow on port_id %d allocated.", f->port_id);
+
+        pthread_rwlock_unlock(&irmd->flows_lock);
         pthread_rwlock_rdlock(&irmd->reg_lock);
 
         e = api_table_get(&irmd->api_table, api);
         if (e == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
+                ipcp_flow_alloc_resp(api_n1, port_id, api_n, -1);
                 log_dbg("Process gone while accepting flow.");
                 return NULL;
         }
@@ -1052,99 +1083,24 @@ static struct irm_flow * flow_accept(pid_t       api,
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
+                ipcp_flow_alloc_resp(api_n1, port_id, api_n, -1);
                 log_err("Entry in wrong state.");
                 return NULL;
         }
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_rdlock(&irmd->flows_lock);
 
-        f = get_irm_flow_n(api);
-        if (f == NULL) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                log_err("Port_id was not created yet.");
+        registry_del_api(&irmd->registry, api);
+
+        pthread_rwlock_unlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
+
+        if (ipcp_flow_alloc_resp(api_n1, port_id, api_n, 0)) {
+                log_dbg("Failed to respond to alloc.");
                 return NULL;
         }
 
-        *cube = re->qos;
-
-        log_info("Flow on port_id %d allocated.", f->port_id);
-
-        pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        irm_flow_set_state(f, FLOW_ALLOCATED);
 
         return f;
-}
-
-static int flow_alloc_resp(pid_t n_api,
-                           int   port_id,
-                           int   response)
-{
-        struct irm_flow *  f  = NULL;
-        struct reg_entry * re = NULL;
-        struct api_entry * e  = NULL;
-        int ret = -1;
-
-        pid_t api_n1;
-        pid_t api_n;
-
-        pthread_rwlock_rdlock(&irmd->state_lock);
-
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
-                return -1;
-        }
-
-        pthread_rwlock_wrlock(&irmd->reg_lock);
-
-        e = api_table_get(&irmd->api_table, n_api);
-        if (e == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                log_err("Unknown AP-I %d responding for port_id %d.",
-                        n_api, port_id);
-                return -1;
-        }
-
-        re = e->re;
-        if (re == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                log_err("AP-I %d is not handling a flow request.", n_api);
-                return -1;
-        }
-
-        if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                log_err("Name %s has no pending flow request.", re->name);
-                return -1;
-        }
-
-        registry_del_api(&irmd->registry, n_api);
-
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_wrlock(&irmd->flows_lock);
-
-        f = get_irm_flow(port_id);
-        if (f == NULL) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                return -1;
-        }
-
-        api_n  = f->n_api;
-        api_n1 = f->n_1_api;
-
-        pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
-
-        ret = ipcp_flow_alloc_resp(api_n1, port_id, api_n, response);
-
-        if (!(response || ret))
-                irm_flow_set_state(f, FLOW_ALLOCATED);
-
-        return ret;
 }
 
 static struct irm_flow * flow_alloc(pid_t     api,
@@ -1196,6 +1152,8 @@ static struct irm_flow * flow_alloc(pid_t     api,
         pthread_rwlock_unlock(&irmd->flows_lock);
         pthread_rwlock_unlock(&irmd->state_lock);
 
+        assert(irm_flow_get_state(f) == FLOW_ALLOC_PENDING);
+
         if (ipcp_flow_alloc(ipcp, port_id, api,
                             dst_name, cube) < 0) {
                 pthread_rwlock_rdlock(&irmd->state_lock);
@@ -1210,54 +1168,16 @@ static struct irm_flow * flow_alloc(pid_t     api,
                 return NULL;
         }
 
+        if (irm_flow_wait_state(f, FLOW_ALLOCATED) != FLOW_ALLOCATED) {
+                log_info("Pending flow on port_id %d torn down.", port_id);
+                return NULL;
+        }
+
+        assert(irm_flow_get_state(f) == FLOW_ALLOCATED);
+
+        log_info("Flow on port_id %d allocated.", port_id);
+
         return f;
-}
-
-static int flow_alloc_res(int port_id)
-{
-        struct irm_flow * f;
-
-        pthread_rwlock_rdlock(&irmd->state_lock);
-
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
-                return -1;
-        }
-        pthread_rwlock_rdlock(&irmd->flows_lock);
-
-        f = get_irm_flow(port_id);
-        if (f == NULL) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                log_err("Could not find port %d.", port_id);
-                return -1;
-        }
-
-        if (irm_flow_get_state(f) == FLOW_NULL) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                log_info("Port %d is deprecated.", port_id);
-                return -1;
-        }
-
-        if (irm_flow_get_state(f) == FLOW_ALLOCATED) {
-                log_info("Flow on port_id %d allocated.", port_id);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                return 0;
-        }
-
-        pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
-
-        if (irm_flow_wait_state(f, FLOW_ALLOCATED) == FLOW_ALLOCATED) {
-                log_info("Flow on port_id %d allocated.", port_id);
-                return 0;
-        }
-
-        log_info("Pending flow on port_id %d torn down.", port_id);
-
-        return -1;
 }
 
 static int flow_dealloc(pid_t api,
@@ -1293,6 +1213,9 @@ static int flow_dealloc(pid_t api,
 
         if (irm_flow_get_state(f) == FLOW_DEALLOC_PENDING) {
                 list_del(&f->next);
+                if ((kill(f->n_api, 0) < 0 && f->n_1_api == -1) ||
+                    (kill (f->n_1_api, 0) < 0 && f->n_api == -1))
+                        irm_flow_set_state(f, FLOW_NULL);
                 clear_irm_flow(f);
                 irm_flow_destroy(f);
                 bmp_release(irmd->port_ids, port_id);
@@ -1305,11 +1228,10 @@ static int flow_dealloc(pid_t api,
         }
 
         pthread_rwlock_unlock(&irmd->flows_lock);
+        pthread_rwlock_unlock(&irmd->state_lock);
 
         if (n_1_api != -1)
                 ret = ipcp_flow_dealloc(n_1_api, port_id);
-
-        pthread_rwlock_unlock(&irmd->state_lock);
 
         return ret;
 }
@@ -1501,7 +1423,7 @@ static int flow_alloc_reply(int port_id,
         struct irm_flow * f;
 
         pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_wrlock(&irmd->flows_lock);
+        pthread_rwlock_rdlock(&irmd->flows_lock);
 
         f = get_irm_flow(port_id);
         if (f == NULL) {
@@ -1551,18 +1473,19 @@ static void irm_destroy(void)
         list_for_each_safe(p, h, &irmd->ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 list_del(&e->next);
-                ipcp_destroy(e->api);
-                clear_spawned_api(e->api);
-                registry_del_api(&irmd->registry, e->api);
                 ipcp_entry_destroy(e);
+        }
+
+        list_for_each(p, &irmd->spawned_apis) {
+                struct pid_el * e = list_entry(p, struct pid_el, next);
+                if (kill(e->pid, SIGTERM))
+                        log_dbg("Could not send kill signal to %d.", e->pid);
         }
 
         list_for_each_safe(p, h, &irmd->spawned_apis) {
                 struct pid_el * e = list_entry(p, struct pid_el, next);
                 int status;
-                if (kill(e->pid, SIGTERM))
-                        log_dbg("Could not send kill signal to %d.", e->pid);
-                else if (waitpid(e->pid, &status, 0) < 0)
+                if (waitpid(e->pid, &status, 0) < 0)
                         log_dbg("Error waiting for %d to exit.", e->pid);
                 list_del(&e->next);
                 registry_del_api(&irmd->registry, e->pid);
@@ -1940,12 +1863,6 @@ void * mainloop(void * o)
                         ret_msg.has_api     = true;
                         ret_msg.api         = e->n_1_api;
                         break;
-                case IRM_MSG_CODE__IRM_FLOW_ALLOC_RESP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = flow_alloc_resp(msg->api,
-                                                         msg->port_id,
-                                                         msg->response);
-                        break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
                         e = flow_alloc(msg->api,
                                        msg->dst_name,
@@ -1959,10 +1876,6 @@ void * mainloop(void * o)
                         ret_msg.port_id     = e->port_id;
                         ret_msg.has_api     = true;
                         ret_msg.api         = e->n_1_api;
-                        break;
-                case IRM_MSG_CODE__IRM_FLOW_ALLOC_RES:
-                        ret_msg.has_result = true;
-                        ret_msg.result = flow_alloc_res(msg->port_id);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
                         ret_msg.has_result = true;
