@@ -39,8 +39,6 @@
 #include "cdap.pb-c.h"
 typedef Cdap cdap_t;
 
-typedef cdap_key_t invoke_id_t;
-
 #define CDAP_REPLY (CDAP_DELETE + 1)
 
 #define INVALID_ID -1
