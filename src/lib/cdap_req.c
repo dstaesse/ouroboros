@@ -175,3 +175,16 @@ void cdap_req_respond(struct cdap_req * creq,
 
         pthread_mutex_unlock(&creq->lock);
 }
+
+
+void cdap_req_cancel(struct cdap_req * creq)
+{
+        assert(creq);
+
+        pthread_mutex_lock(&creq->lock);
+
+        creq->state = REQ_NULL;
+        pthread_cond_broadcast(&creq->cond);
+
+        pthread_mutex_unlock(&creq->lock);
+}
