@@ -555,6 +555,7 @@ int flow_alloc(const char *      dst_name,
         ai.flows[fd].api     = recv_msg->api;
         ai.flows[fd].cube    = recv_msg->qoscube;
 
+        ai.ports[recv_msg->port_id].fd    = fd;
         ai.ports[recv_msg->port_id].state = PORT_ID_ASSIGNED;
 
         pthread_rwlock_unlock(&ai.flows_lock);
@@ -921,7 +922,7 @@ struct fqueue * fqueue_create()
         if (fq == NULL)
                 return NULL;
 
-        memset(fq->fqueue, -1, SHM_BUFFER_SIZE);
+        memset(fq->fqueue, -1, (SHM_BUFFER_SIZE) * sizeof(*fq->fqueue));
         fq->fqsize = 0;
         fq->next   = 0;
 
@@ -1021,11 +1022,8 @@ int fqueue_next(struct fqueue * fq)
         if (fq == NULL)
                 return -EINVAL;
 
-        if (fq->next == fq->fqsize) {
-                fq->fqsize = 0;
-                fq->next = 0;
+        if (fq->fqsize == 0)
                 return -EPERM;
-        }
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
@@ -1034,6 +1032,11 @@ int fqueue_next(struct fqueue * fq)
 
         pthread_rwlock_unlock(&ai.flows_lock);
         pthread_rwlock_unlock(&ai.data_lock);
+
+        if (fq->next == fq->fqsize) {
+                fq->fqsize = 0;
+                fq->next = 0;
+        }
 
         return fd;
 }
@@ -1319,6 +1322,9 @@ int ipcp_flow_read(int                   fd,
         int port_id = -1;
         struct shm_rbuff * rb;
 
+        assert(fd >=0);
+        assert(sdb);
+
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
@@ -1426,6 +1432,8 @@ int ipcp_flow_get_qoscube(int         fd,
 ssize_t local_flow_read(int fd)
 {
         ssize_t ret;
+
+        assert(fd >= 0);
 
         pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
