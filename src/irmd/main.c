@@ -1054,8 +1054,6 @@ static struct irm_flow * flow_accept(pid_t       api,
                 return NULL;
         }
 
-        *cube = re->qos;
-
         api_n   = f->n_api;
         api_n1  = f->n_1_api;
         port_id = f->port_id;
@@ -1077,6 +1075,8 @@ static struct irm_flow * flow_accept(pid_t       api,
         pthread_mutex_lock(&e->state_lock);
 
         re = e->re;
+
+        *cube = re->qos;
 
         pthread_mutex_unlock(&e->state_lock);
 
