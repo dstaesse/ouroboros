@@ -200,7 +200,7 @@ int enroll_boot(char * dst_name)
         clock_gettime(CLOCK_REALTIME, &t0);
 
         key = cdap_request_send(cdap, CDAP_READ, TIME_PATH, NULL, 0, 0);
-        if (key == NULL) {
+        if (key == NULL || key[0] == INVALID_CDAP_KEY) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
@@ -232,7 +232,7 @@ int enroll_boot(char * dst_name)
         free(data);
 
         key = cdap_request_send(cdap, CDAP_READ, boot_ro, NULL, 0, 0);
-        if (key == NULL) {
+        if (key == NULL || key[0] == INVALID_CDAP_KEY) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
@@ -263,7 +263,7 @@ int enroll_boot(char * dst_name)
         log_dbg("Packed information inserted into RIB.");
 
         key = cdap_request_send(cdap, CDAP_READ, members_ro, NULL, 0, 0);
-        if (key == NULL) {
+        if (key == NULL || key[0] == INVALID_CDAP_KEY) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
@@ -294,7 +294,7 @@ int enroll_boot(char * dst_name)
         log_dbg("Packed information inserted into RIB.");
 
         key = cdap_request_send(cdap, CDAP_READ, dif_ro, NULL, 0, 0);
-        if (key == NULL) {
+        if (key == NULL || key[0] == INVALID_CDAP_KEY) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);
                 flow_dealloc(conn.flow_info.fd);
