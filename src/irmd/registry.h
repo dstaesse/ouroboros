@@ -64,7 +64,6 @@ struct reg_entry {
 
         enum reg_name_state state;
         qoscube_t           qos;
-        int                 response;
         pthread_cond_t      state_cond;
         pthread_mutex_t     state_lock;
 };

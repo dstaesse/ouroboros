@@ -25,6 +25,7 @@
 
 #include <ouroboros/list.h>
 #include <ouroboros/shm_rbuff.h>
+#include <ouroboros/shared.h>
 
 #include <sys/types.h>
 #include <pthread.h>
@@ -42,6 +43,7 @@ struct irm_flow {
         struct list_head   next;
 
         int                port_id;
+        qoscube_t          qc;
 
         pid_t              n_api;
         pid_t              n_1_api;
@@ -56,9 +58,10 @@ struct irm_flow {
         pthread_mutex_t    state_lock;
 };
 
-struct irm_flow * irm_flow_create(pid_t n_api,
-                                  pid_t n_1_api,
-                                  int   port_id);
+struct irm_flow * irm_flow_create(pid_t     n_api,
+                                  pid_t     n_1_api,
+                                  int       port_id,
+                                  qoscube_t qc);
 
 void              irm_flow_destroy(struct irm_flow * f);
 

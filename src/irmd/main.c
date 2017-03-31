@@ -977,8 +977,7 @@ static int api_announce(pid_t  api,
         return 0;
 }
 
-static struct irm_flow * flow_accept(pid_t       api,
-                                     qoscube_t * cube)
+static struct irm_flow * flow_accept(pid_t api)
 {
         struct irm_flow *  f  = NULL;
         struct api_entry * e  = NULL;
@@ -1076,8 +1075,6 @@ static struct irm_flow * flow_accept(pid_t       api,
 
         re = e->re;
 
-        *cube = re->qos;
-
         pthread_mutex_unlock(&e->state_lock);
 
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
@@ -1138,7 +1135,7 @@ static struct irm_flow * flow_alloc(pid_t     api,
                 return NULL;
         }
 
-        f = irm_flow_create(api, ipcp, port_id);
+        f = irm_flow_create(api, ipcp, port_id, cube);
         if (f == NULL) {
                 bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
@@ -1376,7 +1373,7 @@ static struct irm_flow * flow_req_arr(pid_t     api,
                 return NULL;
         }
 
-        f = irm_flow_create(h_api, api, port_id);
+        f = irm_flow_create(h_api, api, port_id, cube);
         if (f == NULL) {
                 bmp_release(irmd->port_ids, port_id);
                 pthread_rwlock_unlock(&irmd->flows_lock);
@@ -1390,7 +1387,6 @@ static struct irm_flow * flow_req_arr(pid_t     api,
         pthread_rwlock_unlock(&irmd->flows_lock);
         pthread_rwlock_rdlock(&irmd->reg_lock);
 
-        re->qos = cube;
         reg_entry_set_state(re, REG_NAME_FLOW_ARRIVED);
 
         e = api_table_get(&irmd->api_table, h_api);
@@ -1850,9 +1846,7 @@ void * mainloop(void * o)
                                                     msg->n_dif_name);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
-                        ret_msg.has_qoscube = true;
-                        e = flow_accept(msg->api,
-                                        (qoscube_t *) &ret_msg.qoscube);
+                        e = flow_accept(msg->api);
                         if (e == NULL) {
                                 ret_msg.has_result = true;
                                 ret_msg.result = -EIRMD;
@@ -1862,6 +1856,8 @@ void * mainloop(void * o)
                         ret_msg.port_id     = e->port_id;
                         ret_msg.has_api     = true;
                         ret_msg.api         = e->n_1_api;
+                        ret_msg.has_qoscube = true;
+                        ret_msg.qoscube     = e->qc;
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
                         e = flow_alloc(msg->api,
