@@ -47,6 +47,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "flow_alloc.pb-c.h"
 typedef FlowAllocMsg flow_alloc_msg_t;
@@ -202,7 +203,7 @@ void * fmgr_nm1_sdu_reader(void * o)
                                 fd = pff_nhop(fmgr.pff[i], pci.dst_addr);
                                 if (fd < 0) {
                                         pff_unlock(fmgr.pff[i]);
-                                        log_err("No next hop for %lu",
+                                        log_err("No next hop for %" PRIu64,
                                                 pci.dst_addr);
                                         ipcp_flow_del(sdb);
                                         continue;
@@ -705,7 +706,8 @@ int fmgr_nm1_write_sdu(struct pci *         pci,
         fd = pff_nhop(fmgr.pff[pci->qos_id], pci->dst_addr);
         if (fd < 0) {
                 pff_unlock(fmgr.pff[pci->qos_id]);
-                log_err("Could not get nhop for address %lu", pci->dst_addr);
+                log_err("Could not get nhop for address %" PRIu64,
+                        pci->dst_addr);
                 ipcp_flow_del(sdb);
                 return -1;
         }
@@ -739,7 +741,8 @@ int fmgr_nm1_write_buf(struct pci * pci,
         fd = pff_nhop(fmgr.pff[pci->qos_id], pci->dst_addr);
         if (fd < 0) {
                 pff_unlock(fmgr.pff[pci->qos_id]);
-                log_err("Could not get nhop for address %lu", pci->dst_addr);
+                log_err("Could not get nhop for address %" PRIu64,
+                        pci->dst_addr);
                 return -1;
         }
         pff_unlock(fmgr.pff[pci->qos_id]);

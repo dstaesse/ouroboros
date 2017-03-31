@@ -95,8 +95,6 @@ static struct edge * add_edge(struct vertex * vertex,
 
         list_add(&edge->next, &vertex->edges);
 
-        log_dbg("Added a new edge to the graph.");
-
         return edge;
 }
 
@@ -104,8 +102,6 @@ static void del_edge(struct edge * edge)
 {
        list_del(&edge->next);
        free(edge);
-
-       log_dbg("Removed an edge of the graph.");
 }
 
 static struct vertex * add_vertex(struct graph * graph,
@@ -132,8 +128,6 @@ static struct vertex * add_vertex(struct graph * graph,
 
         graph->nr_vertices++;
 
-        log_dbg("Added new vertex.");
-
         return vertex;
 }
 
@@ -151,8 +145,6 @@ static void del_vertex(struct graph * graph,
         }
 
         free(vertex);
-
-        log_dbg("Removed a vertex from the graph.");
 
         graph->nr_vertices--;
 }
