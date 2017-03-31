@@ -53,8 +53,6 @@ static struct reg_entry * reg_entry_create(void)
         e->name         = NULL;
         e->state        = REG_NAME_NULL;
 
-        e->response     = -1;
-
         return e;
 }
 

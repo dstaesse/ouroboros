@@ -31,9 +31,10 @@
 #include <stdbool.h>
 #include <assert.h>
 
-struct irm_flow * irm_flow_create(pid_t n_api,
-                                  pid_t n_1_api,
-                                  int   port_id)
+struct irm_flow * irm_flow_create(pid_t     n_api,
+                                  pid_t     n_1_api,
+                                  int       port_id,
+                                  qoscube_t qc)
 {
         struct irm_flow * f = malloc(sizeof(*f));
         if (f == NULL)
@@ -53,6 +54,7 @@ struct irm_flow * irm_flow_create(pid_t n_api,
         f->n_api   = n_api;
         f->n_1_api = n_1_api;
         f->port_id = port_id;
+        f->qc      = qc;
 
         f->n_rb = shm_rbuff_create(n_api, port_id);
         if (f->n_rb == NULL) {
