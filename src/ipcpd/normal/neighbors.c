@@ -40,12 +40,16 @@ static void notify_listeners(enum nb_event event,
 {
         struct list_head * p = NULL;
 
+        pthread_mutex_lock(&nbs->notifiers_lock);
+
         list_for_each(p, &nbs->notifiers) {
                 struct nb_notifier * e =
                         list_entry(p, struct nb_notifier, next);
                 if (e->notify_call(event, nb->conn))
                         log_err("Listener reported an error.");
         }
+
+        pthread_mutex_unlock(&nbs->notifiers_lock);
 }
 
 struct nbs * nbs_create(void)
@@ -105,8 +109,6 @@ int nbs_add(struct nbs * nbs,
                 return -ENOMEM;
 
         nb->conn = conn;
-
-        list_head_init(&nb->next);
 
         pthread_mutex_lock(&nbs->list_lock);
 
@@ -183,7 +185,6 @@ int nbs_reg_notifier(struct nbs *         nbs,
 
         pthread_mutex_lock(&nbs->notifiers_lock);
 
-        list_head_init(&notify->next);
         list_add(&notify->next, &nbs->notifiers);
 
         pthread_mutex_unlock(&nbs->notifiers_lock);
