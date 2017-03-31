@@ -76,6 +76,7 @@ void cdap_req_destroy(struct cdap_req * creq)
                 creq->state = REQ_NULL;
                 pthread_cond_broadcast(&creq->cond);
                 break;
+        case REQ_INIT_PENDING:
         case REQ_PENDING:
         case REQ_RESPONSE:
                 creq->state = REQ_DESTROY;
@@ -151,7 +152,10 @@ void cdap_req_respond(struct cdap_req * creq,
 
         pthread_mutex_lock(&creq->lock);
 
-        while (creq->state == REQ_INIT)
+        if (creq->state == REQ_INIT)
+                creq->state = REQ_INIT_PENDING;
+
+        while (creq->state == REQ_INIT_PENDING)
                 pthread_cond_wait(&creq->cond, &creq->lock);
 
         if (creq->state != REQ_PENDING) {
