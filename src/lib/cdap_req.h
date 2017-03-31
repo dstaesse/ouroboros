@@ -70,6 +70,6 @@ void              cdap_req_respond(struct cdap_req * creq,
                                    int               response,
                                    buffer_t          data);
 
-enum creq_state   cdap_req_get_state(struct cdap_req * creq);
+void              cdap_req_cancel(struct cdap_req * creq);
 
 #endif /* OUROBOROS_CDAP_REQ_H */

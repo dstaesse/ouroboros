@@ -250,6 +250,7 @@ static void cdap_sent_destroy(struct cdap * instance)
         list_for_each_safe(p, h, &instance->sent) {
                 struct cdap_req * req = list_entry(p, struct cdap_req, next);
                 list_del(&req->next);
+                cdap_req_cancel(req);
                 cdap_req_destroy(req);
         }
 
