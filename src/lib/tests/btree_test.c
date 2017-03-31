@@ -25,6 +25,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define MAX_BTREE_KEY 10000
 
@@ -33,10 +34,14 @@ int btree_test(int     argc,
 {
         struct btree * tree;
 
+        int vals[MAX_BTREE_KEY];
         int i;
+        int j;
 
         (void) argc;
         (void) argv;
+
+        memset(vals, 0, MAX_BTREE_KEY * sizeof(int));
 
         tree = btree_create(32);
         if (tree == NULL)
@@ -47,33 +52,52 @@ int btree_test(int     argc,
                 return -1;
         }
 
-        for(i = 0; i < MAX_BTREE_KEY; ++i)
+        for (i = 0; i < MAX_BTREE_KEY; ++i)
                 if (btree_insert(tree, i, &argv)) {
                         printf("Failed to add element.\n");
                         btree_destroy(tree);
                         return -1;
                 }
 
-        for (i = 0; i < MAX_BTREE_KEY / 10; ++i)
+        for (i = 0; i < MAX_BTREE_KEY; ++i)
                 if (btree_search(tree, rand() % MAX_BTREE_KEY) != &argv) {
                         printf("Added element not in tree.\n");
                         btree_destroy(tree);
                         return -1;
                 }
 
-        for (i = 0; i < MAX_BTREE_KEY / 10; ++i)
+        for (i = 0; i < MAX_BTREE_KEY; ++i)
                 if (btree_remove(tree, i)) {
-                        printf("Failed to remove element.\n");
+                        printf("Failed to remove element %d.\n", i);
                         btree_destroy(tree);
                         return -1;
                 }
 
         for (i = 0; i < MAX_BTREE_KEY / 10; ++i)
-                if (btree_search(tree, rand() % MAX_BTREE_KEY / 10) != &argv) {
+                if (btree_search(tree, rand() % MAX_BTREE_KEY / 10) != NULL) {
                         printf("Removed element found in tree.\n");
                         btree_destroy(tree);
                         return -1;
                 }
+
+        for (i = 0; i < MAX_BTREE_KEY; ++i)
+                if (btree_insert(tree, i, &argv)) {
+                        printf("Failed to add element.\n");
+                        btree_destroy(tree);
+                        return -1;
+                }
+
+        for (i = 0; i < MAX_BTREE_KEY; ++i) {
+                j = rand() % MAX_BTREE_KEY;
+                if (vals[j] != -1) {
+                        if (btree_remove(tree, j)) {
+                                printf("Failed to remove element %d.\n", j);
+                                btree_destroy(tree);
+                                return -1;
+                        }
+                }
+                vals[j] = -1;
+        }
 
         btree_destroy(tree);
 

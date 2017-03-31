@@ -115,16 +115,21 @@ static struct btnode * btnode_create(size_t k)
 
 static void btnode_destroy(struct btnode * node)
 {
-        size_t i = 0;
-
         assert(node);
-
-        for (i = 0; !node->leaf && i <= node->used; ++i)
-                btnode_destroy(node->children[i]);
 
         free(node->children);
         free(node->keyvals);
         free(node);
+}
+
+static void btnode_destroy_subtree(struct btnode * node)
+{
+        size_t i;
+
+        for (i = 0; !node->leaf && i <= node->used; ++i)
+                btnode_destroy_subtree(node->children[i]);
+
+        btnode_destroy(node);
 }
 
 static int btnode_insert(struct btnode *  node,
@@ -211,15 +216,15 @@ void merge(struct btnode * node,
         if (!chld->leaf)
                 memmove(&chld->children[node->k / 2],
                         &next->children[0],
-                        sizeof(*next->children) * next->used + 1);
+                        sizeof(*next->children) * (next->used + 1));
 
         memmove(&node->keyvals[i],
                 &node->keyvals[i + 1],
-                sizeof(*node->keyvals) * node->used - i - 1);
+                sizeof(*node->keyvals) * (node->used - i - 1));
 
         memmove(&node->children[i + 1],
                 &node->children[i + 2],
-                sizeof(*node->children) * node->used - i);
+                sizeof(*node->children) * (node->used - i));
 
         chld->used += next->used + 1;
         node->used--;
@@ -262,6 +267,7 @@ static void fill(struct btnode * node,
         /* Feed from next sibling. */
         if (i != node->used && node->children[i + 1]->used >= node->k / 2) {
                 struct btnode * next = node->children[i + 1];
+
                 chld->keyvals[chld->used] = node->keyvals[i];
 
                 if (!chld->leaf)
@@ -294,11 +300,11 @@ static void fill(struct btnode * node,
 static struct key_val btnode_pred(struct btnode * node,
                                   size_t          i)
 {
-        struct btnode * pred = node->children[i - 1];
+        struct btnode * pred = node->children[i];
         while (!pred->leaf)
                 pred = pred->children[pred->used];
 
-        return pred->keyvals[pred->used -1];
+        return pred->keyvals[pred->used - 1];
 }
 
 static struct key_val btnode_succ(struct btnode * node,
@@ -314,6 +320,7 @@ static int btnode_delete(struct btnode * node,
                          uint32_t        key)
 {
         size_t i;
+        int ret = 0;
 
         assert(node);
 
@@ -329,15 +336,15 @@ static int btnode_delete(struct btnode * node,
                 } else {
                         if (node->children[i]->used >= node->k / 2) {
                                 node->keyvals[i] = btnode_pred(node, i);
-                                btnode_delete(node->children[i],
-                                              node->keyvals[i].key);
+                                ret = btnode_delete(node->children[i],
+                                                    node->keyvals[i].key);
                         } else if (node->children[i + 1]->used >= node->k / 2) {
                                 node->keyvals[i] = btnode_succ(node, i);
-                                btnode_delete(node->children[i + 1],
-                                              node->keyvals[i].key);
+                                ret = btnode_delete(node->children[i + 1],
+                                                    node->keyvals[i].key);
                         } else {
                                 merge(node, i);
-                                btnode_delete(node, key);
+                                ret = btnode_delete(node, key);
                         }
                 }
         } else {
@@ -345,16 +352,16 @@ static int btnode_delete(struct btnode * node,
                         return -1; /* value not in tree */
                 } else {
                         bool flag = (i == node->used ? true : false);
-                        if (node->children[i]->used > node->children[i]->k / 2)
+                        if (node->children[i]->used < node->children[i]->k / 2)
                                 fill(node, i);
                         if (flag && i > node->used)
-                                btnode_delete(node->children[i - 1], key);
+                                ret = btnode_delete(node->children[i - 1], key);
                         else
-                                btnode_delete(node->children[i + 1], key);
+                                ret = btnode_delete(node->children[i], key);
                 }
         }
 
-        return 0;
+        return ret;
 }
 
 struct btree * btree_create(size_t k)
@@ -378,7 +385,7 @@ void btree_destroy(struct btree * tree)
                 return;
 
         if (tree->root != NULL)
-                btnode_destroy(tree->root);
+                btnode_destroy_subtree(tree->root);
 
         free(tree);
 }
@@ -435,20 +442,25 @@ int btree_insert(struct btree * tree,
 int btree_remove(struct btree * tree,
                  uint32_t       key)
 {
+        struct btnode * prev_root;
+
         if (tree == NULL)
                 return -EINVAL;
 
         if (tree->root == NULL)
                 return 0;
 
-        btnode_delete(tree->root, key);
+        if (btnode_delete(tree->root, key))
+                return -1;
 
         if (tree->root->used == 0) {
                 if (tree->root->leaf) {
                         btnode_destroy(tree->root);
                         tree->root = NULL;
                 } else {
+                        prev_root = tree->root;
                         tree->root = tree->root->children[0];
+                        btnode_destroy(prev_root);
                 }
         }
 
