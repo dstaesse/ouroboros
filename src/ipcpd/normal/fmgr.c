@@ -52,11 +52,7 @@
 #include "flow_alloc.pb-c.h"
 typedef FlowAllocMsg flow_alloc_msg_t;
 
-/*
- * NOTE: setting this too low may lead to missed pthread
- * cancellations when using glibc 2.25. Bug reported to glibc.
- */
-#define FD_UPDATE_TIMEOUT 10000000 /* nanoseconds */
+#define FD_UPDATE_TIMEOUT 10000 /* nanoseconds */
 
 struct {
         flow_set_t *       np1_set[QOS_CUBE_MAX];
@@ -147,7 +143,6 @@ static void * fmgr_np1_sdu_reader(void * o)
                         }
 
                         pthread_rwlock_unlock(&fmgr.np1_flows_lock);
-
                 }
         }
 
