@@ -37,18 +37,18 @@
 
 #define FLOW_O_INVALID  (FLOW_O_WRONLY | FLOW_O_RDWR)
 
-int               flow_set_flags(int fd,
-                                 int flags);
+int flow_set_flags(int fd,
+                   int flags);
 
-int               flow_get_flags(int fd);
+int flow_get_flags(int fd);
 
-int               flow_set_timeout(int                     fd,
-                                   const struct timespec * to);
+int flow_set_timeout(int                     fd,
+                     const struct timespec * to);
 
-int               flow_get_timeout(int               fd,
-                                   struct timespec * to);
+int flow_get_timeout(int               fd,
+                     struct timespec * to);
 
-int               flow_get_qosspec(int         fd,
-                                   qosspec_t * spec);
+int flow_get_qosspec(int         fd,
+                     qosspec_t * qs);
 
 #endif /* OUROBOROS_FCNTL_H */
