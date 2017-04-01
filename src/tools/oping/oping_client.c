@@ -234,7 +234,7 @@ int client_main(void)
         printf("%d SDUs transmitted, ", client.sent);
         printf("%d received, ", client.rcvd);
         printf("%d%% packet loss, ", client.sent == 0 ? 0 :
-               100 - ((100 * client.rcvd) / client.sent));
+               100 - (100 * (client.rcvd / client.sent)));
         printf("time: %.3f ms\n", ts_diff_us(&tic, &toc) / 1000.0);
 
         if (client.rcvd > 0) {
