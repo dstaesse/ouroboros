@@ -228,6 +228,8 @@ int shm_rbuff_write(struct shm_rbuff * rb,
         size_t ohead;
         size_t nhead;
 
+        bool was_empty = false;
+
         assert(rb);
         assert(idx < SHM_BUFFER_SIZE);
 
@@ -238,17 +240,20 @@ int shm_rbuff_write(struct shm_rbuff * rb,
                 return -EAGAIN;
 
         if (shm_rbuff_empty(rb))
-                pthread_cond_broadcast(rb->add);
+                was_empty = true;
 
-        ohead = RB_HEAD;
-
-        *head_el_ptr(rb) = (ssize_t) idx;
+        nhead = RB_HEAD;
 
         do {
                 ohead = nhead;
                 nhead = (ohead + 1) & ((SHM_BUFFER_SIZE) - 1);
                 nhead = __sync_val_compare_and_swap(rb->head, ohead, nhead);
         } while (nhead != ohead);
+
+        *(rb->shm_base + nhead) = (ssize_t) idx;
+
+        if (was_empty)
+                pthread_cond_broadcast(rb->add);
 
         return 0;
 }
@@ -263,7 +268,7 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
         if (shm_rbuff_empty(rb))
                 return -EAGAIN;
 
-        otail = RB_TAIL;
+        ntail = RB_TAIL;
 
         do {
                 otail = ntail;
@@ -273,7 +278,7 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 
         pthread_cond_broadcast(rb->del);
 
-        return *tail_el_ptr(rb);
+        return *(rb->shm_base + ntail);
 }
 
 ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
@@ -348,7 +353,7 @@ void shm_rbuff_fini(struct shm_rbuff * rb)
 
         assert(__sync_fetch_and_add(rb->acl, 0) == RB_CLOSED);
 
-        if (shm_rbuff_empty)
+        if (shm_rbuff_empty(rb))
                 return;
 
 #ifdef __APPLE__
