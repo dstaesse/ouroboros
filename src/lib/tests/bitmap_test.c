@@ -23,6 +23,7 @@
 #include "bitmap.c"
 #include <time.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define BITMAP_SIZE 200
 
@@ -41,40 +42,56 @@ int bitmap_test(int argc, char ** argv)
         srand(time(NULL));
 
         bmp = bmp_create(bits, offset);
-        if (bmp == NULL)
+        if (bmp == NULL) {
+                printf("Failed to create bmp.\n");
                 return -1;
+        }
 
-        if (bmp_destroy(bmp))
-                return -1;
+        bmp_destroy(bmp);
 
         bmp = bmp_create(bits, offset);
-        if (bmp == NULL)
+        if (bmp == NULL) {
+                printf("Failed to re-create bmp.\n");
                 return -1;
+        }
 
         for (i = offset; i < BITMAP_SIZE + 5 + offset; i++) {
                 id = bmp_allocate(bmp);
                 if (!bmp_is_id_valid(bmp, id))
                         continue;
 
-                if (id != i)
+                if (!bmp_is_id_used(bmp, id)) {
+                        printf("ID not marked in use.\n");
+                        bmp_destroy(bmp);
                         return -1;
+                }
+
+                if (id != i) {
+                        printf("Wrong ID returned.\n");
+                        bmp_destroy(bmp);
+                        return -1;
+                }
         }
 
         for (i = 0; i < BITMAP_SIZE + 5; i++) {
                 r = (ssize_t) (rand() % BITMAP_SIZE) + offset;
 
-                if (bmp_release(bmp, r))
+                if (bmp_release(bmp, r)) {
+                        printf("Failed to release ID.\n");
                         return -1;
+                }
 
                 id = bmp_allocate(bmp);
                 if (!bmp_is_id_valid(bmp, id))
                         continue;
-                if (id != r)
+                if (id != r) {
+                        printf("Wrong prev ID returned.\n");
+                        bmp_destroy(bmp);
                         return -1;
+                }
         }
 
-        if (bmp_destroy(bmp))
-                return -1;
+        bmp_destroy(bmp);
 
         return 0;
 }
