@@ -80,7 +80,16 @@ struct ipcp {
 
         int                sockfd;
         char *             sock_path;
+
         pthread_t *        threadpool;
+
+        struct bmp *       thread_ids;
+        size_t             max_threads;
+        size_t             threads;
+        pthread_cond_t     threads_cond;
+        pthread_mutex_t    threads_lock;
+
+        pthread_t          tpm;
 } ipcpi;
 
 int             ipcp_init(int               argc,
