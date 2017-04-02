@@ -2278,11 +2278,11 @@ int main(int     argc,
         }
 
         pthread_create(&irmd->tpm, NULL, threadpoolmgr, NULL);
-        pthread_join(irmd->tpm, NULL);
 
         pthread_create(&irmd->irm_sanitize, NULL, irm_sanitize, NULL);
         pthread_create(&irmd->shm_sanitize, NULL, shm_sanitize, irmd->rdrb);
 
+        pthread_join(irmd->tpm, NULL);
         pthread_join(irmd->irm_sanitize, NULL);
 
         pthread_cancel(irmd->shm_sanitize);
