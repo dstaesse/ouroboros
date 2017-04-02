@@ -148,15 +148,18 @@ enum flow_state irm_flow_wait_state(struct irm_flow * f,
         assert(f);
         assert(state != FLOW_NULL);
         assert(state != FLOW_DESTROY);
+        assert(state != FLOW_DEALLOC_PENDING);
 
         pthread_mutex_lock(&f->state_lock);
 
         assert(f->state != FLOW_NULL);
 
-        while (!(f->state == state || f->state == FLOW_DESTROY))
+        while (!(f->state == state ||
+                 f->state == FLOW_DESTROY ||
+                 f->state == FLOW_DEALLOC_PENDING))
                 pthread_cond_wait(&f->state_cond, &f->state_lock);
 
-        if (f->state == FLOW_DESTROY) {
+        if (f->state == FLOW_DESTROY || f->state == FLOW_DEALLOC_PENDING) {
                 f->state = FLOW_NULL;
                 pthread_cond_broadcast(&f->state_cond);
         }
