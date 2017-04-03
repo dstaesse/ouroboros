@@ -269,18 +269,16 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                 return -1;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-        pthread_rwlock_wrlock(&udp_data.flows_lock);
-
         /* reply to IRM */
         fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (fd < 0) {
-                pthread_rwlock_unlock(&udp_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("Could not get new flow from IRMd.");
                 close(skfd);
                 return -1;
         }
+
+        pthread_rwlock_rdlock(&ipcpi.state_lock);
+        pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         udp_data.uf_to_fd[skfd]    = fd;
         udp_data.fd_to_uf[fd].skfd = skfd;
@@ -464,10 +462,11 @@ static void * ipcp_udp_sdu_reader(void * o)
                         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
                         fd = udp_data.uf_to_fd[skfd];
-                        flow_write(fd, buf, n);
 
                         pthread_rwlock_unlock(&udp_data.flows_lock);
                         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+                        flow_write(fd, buf, n);
                 }
         }
 
@@ -483,34 +482,34 @@ static void * ipcp_udp_sdu_loop(void * o)
         (void) o;
 
         while (flow_event_wait(udp_data.np1_flows, udp_data.fq, &timeout)) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        return (void *) -1; /* -ENOTENROLLED */
-                }
-
-
-                pthread_rwlock_rdlock(&udp_data.flows_lock);
-
                 while ((fd = fqueue_next(udp_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_err("Bad read from fd %d.", fd);
                                 continue;
                         }
 
-                        if (send(udp_data.fd_to_uf[fd].skfd,
-                                 shm_du_buff_head(sdb),
+                        pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+                        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                                pthread_rwlock_unlock(&ipcpi.state_lock);
+                                ipcp_flow_del(sdb);
+                                return (void *) -1; /* -ENOTENROLLED */
+                        }
+
+                        pthread_rwlock_rdlock(&udp_data.flows_lock);
+
+                        fd = udp_data.fd_to_uf[fd].skfd;
+
+                        pthread_rwlock_unlock(&udp_data.flows_lock);
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+
+                        if (send(fd, shm_du_buff_head(sdb),
                                  shm_du_buff_tail(sdb) - shm_du_buff_head(sdb),
                                  0) < 0)
                                 log_err("Failed to send SDU.");
 
                         ipcp_flow_del(sdb);
                 }
-
-
-                pthread_rwlock_unlock(&udp_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
         }
 
         return (void *) 1;
@@ -1143,10 +1142,10 @@ static int ipcp_udp_flow_dealloc(int fd)
 
         clr_fd(skfd);
 
-        flow_dealloc(fd);
-
         pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        flow_dealloc(fd);
 
         log_dbg("Flow with fd %d deallocated.", fd);
 

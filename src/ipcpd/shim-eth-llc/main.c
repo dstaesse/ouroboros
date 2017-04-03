@@ -374,17 +374,15 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
 {
         int fd;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
-
         /* reply to IRM */
         fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (fd < 0) {
-                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("Could not get new flow from IRMd.");
                 return -1;
         }
+
+        pthread_rwlock_rdlock(&ipcpi.state_lock);
+        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         eth_llc_data.fd_to_ef[fd].r_sap = r_sap;
         memcpy(eth_llc_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
@@ -677,17 +675,18 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
         while (flow_event_wait(eth_llc_data.np1_flows,
                                eth_llc_data.fq,
                                &timeout)) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        return (void *) -1; /* -ENOTENROLLED */
-                }
-
                 while ((fd = fqueue_next(eth_llc_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_err("Bad read from fd %d.", fd);
                                 continue;
+                        }
+
+                        pthread_rwlock_rdlock(&ipcpi.state_lock);
+
+                        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                                pthread_rwlock_unlock(&ipcpi.state_lock);
+                                ipcp_flow_del(sdb);
+                                return (void *) -1; /* -ENOTENROLLED */
                         }
 
                         pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
@@ -699,6 +698,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                                MAC_SIZE);
 
                         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
 
                         eth_llc_ipcp_send_frame(r_addr, dsap, ssap,
                                                 shm_du_buff_head(sdb),
@@ -706,8 +706,6 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                                                 - shm_du_buff_head(sdb));
                         ipcp_flow_del(sdb);
                 }
-
-                pthread_rwlock_unlock(&ipcpi.state_lock);
         }
 
         return (void *) 1;
@@ -1121,10 +1119,10 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 
         eth_llc_data.ef_to_fd[sap] = -1;
 
-        flow_dealloc(fd);
-
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        flow_dealloc(fd);
 
         log_dbg("Flow with fd %d deallocated.", fd);
 
