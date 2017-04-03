@@ -229,6 +229,12 @@ static int ipcp_local_flow_alloc(int       fd,
 
         assert(dst_name);
 
+        out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
+        if (out_fd < 0) {
+                log_dbg("Flow allocation failed.");
+                return -1;
+        }
+
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
@@ -238,14 +244,6 @@ static int ipcp_local_flow_alloc(int       fd,
         }
 
         pthread_rwlock_wrlock(&local_data.lock);
-
-        out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
-        if (out_fd < 0) {
-                log_dbg("Flow allocation failed.");
-                pthread_rwlock_unlock(&local_data.lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                return -1;
-        }
 
         local_data.in_out[fd]  = out_fd;
         local_data.in_out[out_fd] = fd;
