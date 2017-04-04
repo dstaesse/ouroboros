@@ -106,7 +106,7 @@ struct irm {
         pthread_t            tpm;          /* threadpool manager         */
         pthread_t            irm_sanitize; /* clean up irmd resources    */
         pthread_t            shm_sanitize; /* keep track of rdrbuff use  */
-} * irmd;
+} irmd;
 
 static void clear_irm_flow(struct irm_flow * f) {
         ssize_t idx;
@@ -114,17 +114,17 @@ static void clear_irm_flow(struct irm_flow * f) {
         assert(f);
 
         while ((idx = shm_rbuff_read(f->n_rb)) >= 0)
-                shm_rdrbuff_remove(irmd->rdrb, idx);
+                shm_rdrbuff_remove(irmd.rdrb, idx);
 
         while ((idx = shm_rbuff_read(f->n_1_rb)) >= 0)
-                shm_rdrbuff_remove(irmd->rdrb, idx);
+                shm_rdrbuff_remove(irmd.rdrb, idx);
 }
 
 static struct irm_flow * get_irm_flow(int port_id)
 {
         struct list_head * pos = NULL;
 
-        list_for_each(pos, &irmd->irm_flows) {
+        list_for_each(pos, &irmd.irm_flows) {
                 struct irm_flow * e = list_entry(pos, struct irm_flow, next);
                 if (e->port_id == port_id)
                         return e;
@@ -137,7 +137,7 @@ static struct irm_flow * get_irm_flow_n(pid_t n_api)
 {
         struct list_head * pos = NULL;
 
-        list_for_each(pos, &irmd->irm_flows) {
+        list_for_each(pos, &irmd.irm_flows) {
                 struct irm_flow * e = list_entry(pos, struct irm_flow, next);
                 if (e->n_api == n_api &&
                     irm_flow_get_state(e) == FLOW_ALLOC_PENDING)
@@ -179,7 +179,7 @@ static struct ipcp_entry * get_ipcp_entry_by_api(pid_t api)
 {
         struct list_head * p = NULL;
 
-        list_for_each(p, &irmd->ipcps) {
+        list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 if (api == e->api)
                         return e;
@@ -192,7 +192,7 @@ static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
 {
         struct list_head * p = NULL;
 
-        list_for_each(p, &irmd->ipcps) {
+        list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 if (strcmp(name, e->name) == 0)
                         return e;
@@ -206,7 +206,7 @@ static pid_t get_ipcp_by_dst_name(char * dst_name)
 {
         struct list_head * p = NULL;
 
-        list_for_each(p, &irmd->ipcps) {
+        list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e =
                         list_entry(p, struct ipcp_entry, next);
                 if (e->type == IPCP_LOCAL) {
@@ -215,7 +215,7 @@ static pid_t get_ipcp_by_dst_name(char * dst_name)
                 }
         }
 
-        list_for_each(p, &irmd->ipcps) {
+        list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e =
                         list_entry(p, struct ipcp_entry, next);
                 if (e->type == IPCP_NORMAL) {
@@ -224,7 +224,7 @@ static pid_t get_ipcp_by_dst_name(char * dst_name)
                 }
         }
 
-        list_for_each(p, &irmd->ipcps) {
+        list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e =
                         list_entry(p, struct ipcp_entry, next);
                 if (e->type == IPCP_SHIM_ETH_LLC) {
@@ -233,7 +233,7 @@ static pid_t get_ipcp_by_dst_name(char * dst_name)
                 }
         }
 
-        list_for_each(p, &irmd->ipcps) {
+        list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e =
                         list_entry(p, struct ipcp_entry, next);
                 if (e->type == IPCP_SHIM_UDP) {
@@ -257,35 +257,35 @@ static pid_t create_ipcp(char *         name,
         if (api == NULL)
                 return -ENOMEM;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         entry = get_ipcp_entry_by_name(name);
         if (entry != NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("IPCP by that name already exists.");
                 return -1;
         }
 
         api->pid = ipcp_create(name, ipcp_type);
         if (api->pid == -1) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Failed to create IPCP.");
                 return -1;
         }
 
         tmp = ipcp_entry_create();
         if (tmp == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
@@ -295,8 +295,8 @@ static pid_t create_ipcp(char *         name,
         tmp->name = strdup(name);
         if (tmp->name  == NULL) {
                 ipcp_entry_destroy(tmp);
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
@@ -307,20 +307,20 @@ static pid_t create_ipcp(char *         name,
         tmp->type = ipcp_type;
         tmp->init = false;
 
-        list_for_each(p, &irmd->ipcps) {
+        list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 if (e->type < ipcp_type)
                         break;
         }
 
-        list_add(&tmp->next, &irmd->ipcps);
+        list_add(&tmp->next, &irmd.ipcps);
 
-        list_add(&api->next, &irmd->spawned_apis);
+        list_add(&api->next, &irmd.spawned_apis);
 
         pthread_mutex_lock(&tmp->init_lock);
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         while (tmp->init == false)
                 pthread_cond_wait(&tmp->init_cond, &tmp->init_lock);
@@ -340,10 +340,10 @@ static int create_ipcp_r(pid_t api,
         if (result != 0)
                 return result;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_rdlock(&irmd->reg_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
+        pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        list_for_each(pos, &irmd->ipcps) {
+        list_for_each(pos, &irmd.ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
 
@@ -355,8 +355,8 @@ static int create_ipcp_r(pid_t api,
                 }
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         return 0;
 }
@@ -366,7 +366,7 @@ static void clear_spawned_api(pid_t api)
         struct list_head * pos = NULL;
         struct list_head * n   = NULL;
 
-        list_for_each_safe(pos, n, &(irmd->spawned_apis)) {
+        list_for_each_safe(pos, n, &(irmd.spawned_apis)) {
                 struct pid_el * a = list_entry(pos, struct pid_el, next);
                 if (api == a->pid) {
                         list_del(&a->next);
@@ -380,10 +380,10 @@ static int destroy_ipcp(pid_t api)
         struct list_head * pos = NULL;
         struct list_head * n   = NULL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        list_for_each_safe(pos, n, &(irmd->ipcps)) {
+        list_for_each_safe(pos, n, &(irmd.ipcps)) {
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
 
@@ -398,8 +398,8 @@ static int destroy_ipcp(pid_t api)
                 }
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         return 0;
 }
@@ -409,47 +409,47 @@ static int bootstrap_ipcp(pid_t              api,
 {
         struct ipcp_entry * entry = NULL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         entry = get_ipcp_entry_by_api(api);
         if (entry == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("No such IPCP.");
                 return -1;
         }
 
         if (entry->type != (enum ipcp_type) conf->ipcp_type) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Configuration does not match IPCP type.");
                 return -1;
         }
 
         if (ipcp_bootstrap(entry->api, conf)) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Could not bootstrap IPCP.");
                 return -1;
         }
 
         entry->dif_name = strdup(conf->dif_name);
         if (entry->dif_name == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_warn("Failed to set name of DIF.");
                 return -ENOMEM;
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         log_info("Bootstrapped IPCP %d in DIF %s.",
                  entry->api, conf->dif_name);
@@ -462,48 +462,48 @@ static int enroll_ipcp(pid_t  api,
 {
         struct ipcp_entry * entry = NULL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         entry = get_ipcp_entry_by_api(api);
         if (entry == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("No such IPCP.");
                 return -1;
         }
 
         if (entry->dif_name != NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("IPCP in wrong state");
                 return -1;
         }
 
         entry->dif_name = strdup(dif_name);
         if (entry->dif_name == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Failed to strdup.");
                 return -1;
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         if (ipcp_enroll(api, dif_name)) {
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                pthread_rwlock_wrlock(&irmd->reg_lock);
+                pthread_rwlock_rdlock(&irmd.state_lock);
+                pthread_rwlock_wrlock(&irmd.reg_lock);
                 free(entry->dif_name);
                 entry->dif_name = NULL;
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Could not enroll IPCP.");
                 return -1;
         }
@@ -531,29 +531,29 @@ static int bind_ap(char *   ap,
         if (ap == NULL || name == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        e = apn_table_get(&irmd->apn_table, path_strip(ap));
+        e = apn_table_get(&irmd.apn_table, path_strip(ap));
 
         if (e == NULL) {
                 aps = strdup(path_strip(ap));
                 if (aps == NULL) {
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         return -ENOMEM;
                 }
 
                 apn = strdup(name);
                 if (apn == NULL) {
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         free(aps);
                         return -ENOMEM;
                 }
@@ -565,9 +565,9 @@ static int bind_ap(char *   ap,
                         for (i = 1; i <= argc; ++i) {
                                 argv_dup[i] = strdup(argv[i - 1]);
                                 if (argv_dup[i] == NULL) {
-                                        pthread_rwlock_unlock(&irmd->reg_lock);
+                                        pthread_rwlock_unlock(&irmd.reg_lock);
                                         pthread_rwlock_unlock(
-                                                &irmd->state_lock);
+                                                &irmd.state_lock);
                                         argvfree(argv_dup);
                                         log_err("Failed to bind ap %s to  %s.",
                                                 ap, name);
@@ -580,39 +580,39 @@ static int bind_ap(char *   ap,
                 }
                 e = apn_entry_create(apn, aps, flags, argv_dup);
                 if (e == NULL) {
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         free(aps);
                         free(apn);
                         argvfree(argv_dup);
                         return -ENOMEM;
                 }
 
-                apn_table_add(&irmd->apn_table, e);
+                apn_table_add(&irmd.apn_table, e);
 
         }
 
         name_dup = strdup(name);
         if (name_dup == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -ENOMEM;
         }
 
         if (apn_entry_add_name(e, name_dup)) {
                 log_err("Failed adding name.");
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 free(name_dup);
                 return -ENOMEM;
         }
 
-        re = registry_get_entry(&irmd->registry, name);
+        re = registry_get_entry(&irmd.registry, name);
         if (re != NULL && reg_entry_add_apn(re, e) < 0)
                 log_err("Failed adding AP %s for name %s.", ap, name);
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         log_info("Bound AP %s to name %s.", ap, name);
 
@@ -629,44 +629,44 @@ static int bind_api(pid_t  api,
         if (name == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        e = api_table_get(&irmd->api_table, api);
+        e = api_table_get(&irmd.api_table, api);
         if (e == NULL) {
                 log_err("AP-I %d does not exist.", api);
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
         name_dup = strdup(name);
         if (name_dup == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -ENOMEM;
         }
 
         if (api_entry_add_name(e, name_dup)) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Failed to add name %s to api %d.", name, api);
                 free(name_dup);
                 return -1;
         }
 
-        re = registry_get_entry(&irmd->registry, name);
+        re = registry_get_entry(&irmd.registry, name);
         if (re != NULL && reg_entry_add_api(re, api) < 0)
                 log_err("Failed adding AP-I %d for name %s.", api, name);
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         log_info("Bound AP-I %d to name %s.", api, name);
 
@@ -679,24 +679,24 @@ static int unbind_ap(char * ap,
         if (ap == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         if (name == NULL)
-                apn_table_del(&irmd->apn_table, ap);
+                apn_table_del(&irmd.apn_table, ap);
         else {
-                struct apn_entry * e = apn_table_get(&irmd->apn_table, ap);
+                struct apn_entry * e = apn_table_get(&irmd.apn_table, ap);
                 apn_entry_del_name(e, name);
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         if (name  == NULL)
                 log_info("AP %s removed.", ap);
@@ -709,24 +709,24 @@ static int unbind_ap(char * ap,
 static int unbind_api(pid_t  api,
                       char * name)
 {
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         if (name == NULL)
-                api_table_del(&irmd->api_table, api);
+                api_table_del(&irmd.api_table, api);
         else {
-                struct api_entry * e = api_table_get(&irmd->api_table, api);
+                struct api_entry * e = api_table_get(&irmd.api_table, api);
                 api_entry_del_name(e, name);
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         if (name  == NULL)
                 log_info("AP-I %d removed.", api);
@@ -743,10 +743,10 @@ static ssize_t list_ipcps(char *   name,
         size_t count = 0;
         int i = 0;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_rdlock(&irmd->reg_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
+        pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        list_for_each(pos, &irmd->ipcps) {
+        list_for_each(pos, &irmd.ipcps) {
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
                 if (wildcard_match(name, tmp->name) == 0)
@@ -755,20 +755,20 @@ static ssize_t list_ipcps(char *   name,
 
         *apis = malloc(count * sizeof(pid_t));
         if (*apis == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        list_for_each(pos, &irmd->ipcps) {
+        list_for_each(pos, &irmd.ipcps) {
                 struct ipcp_entry * tmp =
                         list_entry(pos, struct ipcp_entry, next);
                 if (wildcard_match(name, tmp->name) == 0)
                         (*apis)[i++] = tmp->api;
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         return count;
 }
@@ -784,33 +784,33 @@ static int name_reg(char *  name,
         if (name == NULL || difs == NULL || len == 0 || difs[0] == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        if (list_is_empty(&irmd->ipcps)) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (list_is_empty(&irmd.ipcps)) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        if (!registry_has_name(&irmd->registry, name)) {
+        if (!registry_has_name(&irmd.registry, name)) {
                 struct reg_entry * re =
-                        registry_add_name(&irmd->registry, strdup(name));
+                        registry_add_name(&irmd.registry, strdup(name));
                 if (re == NULL) {
                         log_err("Failed creating registry entry for %s.", name);
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         return -1;
                 }
 
                 /* check the tables for client APs */
-                list_for_each(p, &irmd->api_table) {
+                list_for_each(p, &irmd.api_table) {
                         struct list_head * q;
                         struct api_entry * e =
                                 list_entry(p, struct api_entry, next);
@@ -822,7 +822,7 @@ static int name_reg(char *  name,
                         }
                 }
 
-                list_for_each(p, &irmd->apn_table) {
+                list_for_each(p, &irmd.apn_table) {
                         struct list_head * q;
                         struct apn_entry * e =
                                 list_entry(p, struct apn_entry, next);
@@ -835,7 +835,7 @@ static int name_reg(char *  name,
                 }
         }
 
-        list_for_each(p, &irmd->ipcps) {
+        list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 if (e->dif_name == NULL)
                         continue;
@@ -848,7 +848,7 @@ static int name_reg(char *  name,
                                 log_err("Could not register %s in DIF %s.",
                                         name, e->dif_name);
                         } else {
-                                if (registry_add_name_to_dif(&irmd->registry,
+                                if (registry_add_name_to_dif(&irmd.registry,
                                                              name,
                                                              e->dif_name,
                                                              e->type) < 0)
@@ -862,8 +862,8 @@ static int name_reg(char *  name,
                 }
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         return (ret > 0 ? 0 : -1);
 }
@@ -879,16 +879,16 @@ static int name_unreg(char *  name,
         if (name == NULL || len == 0 || difs == NULL || difs[0] == NULL)
                 return -1;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        list_for_each(pos, &irmd->ipcps) {
+        list_for_each(pos, &irmd.ipcps) {
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
 
@@ -903,7 +903,7 @@ static int name_unreg(char *  name,
                                 log_err("Could not unregister %s in DIF %s.",
                                         name, e->dif_name);
                         } else {
-                                registry_del_name_from_dif(&irmd->registry,
+                                registry_del_name_from_dif(&irmd.registry,
                                                            name,
                                                            e->dif_name);
                                 log_info("Unregistered %s from %s.",
@@ -913,8 +913,8 @@ static int name_unreg(char *  name,
                 }
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         return (ret > 0 ? 0 : -1);
 }
@@ -928,46 +928,46 @@ static int api_announce(pid_t  api,
         if (apn == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -EPERM;
         }
 
         apn_dup = strdup(apn);
         if (apn_dup == NULL) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -ENOMEM;
         }
 
         e = api_entry_create(api, apn_dup);
         if (e == NULL) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -ENOMEM;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        api_table_add(&irmd->api_table, e);
+        api_table_add(&irmd.api_table, e);
 
         /* Copy listen names from apn if it exists. */
 
-        a = apn_table_get(&irmd->apn_table, e->apn);
+        a = apn_table_get(&irmd.apn_table, e->apn);
         if (a != NULL) {
                 struct list_head * p;
                 list_for_each(p, &a->names) {
                         struct str_el * s = list_entry(p, struct str_el, next);
                         struct str_el * n = malloc(sizeof(*n));
                         if (n == NULL) {
-                                pthread_rwlock_unlock(&irmd->reg_lock);
-                                pthread_rwlock_unlock(&irmd->state_lock);
+                                pthread_rwlock_unlock(&irmd.reg_lock);
+                                pthread_rwlock_unlock(&irmd.state_lock);
                                 return -ENOMEM;
                         }
                         n->str = strdup(s->str);
                         if (n->str == NULL) {
-                                pthread_rwlock_unlock(&irmd->reg_lock);
-                                pthread_rwlock_unlock(&irmd->state_lock);
+                                pthread_rwlock_unlock(&irmd.reg_lock);
+                                pthread_rwlock_unlock(&irmd.state_lock);
                                 free(n);
                         }
 
@@ -977,8 +977,8 @@ static int api_announce(pid_t  api,
                 }
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         return 0;
 }
@@ -995,20 +995,20 @@ static struct irm_flow * flow_accept(pid_t api)
         int   port_id;
         int   ret;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return NULL;
         }
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        e = api_table_get(&irmd->api_table, api);
+        e = api_table_get(&irmd.api_table, api);
         if (e == NULL) {
                 /* Can only happen if server called ap_init(NULL); */
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Unknown instance %d calling accept.", api);
                 return NULL;
         }
@@ -1019,21 +1019,21 @@ static struct irm_flow * flow_accept(pid_t api)
         list_for_each(p, &e->names) {
                 struct str_el * s = list_entry(p, struct str_el, next);
                 log_dbg("        %s", s->str);
-                re = registry_get_entry(&irmd->registry, s->str);
+                re = registry_get_entry(&irmd.registry, s->str);
                 if (re != NULL)
                         reg_entry_add_api(re, api);
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         while ((ret = api_entry_sleep(e)) == -ETIMEDOUT) {
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                if (irmd->state != IRMD_RUNNING) {
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_rdlock(&irmd.state_lock);
+                if (irmd.state != IRMD_RUNNING) {
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         return NULL;
                 }
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
         }
 
         if (ret == -1) {
@@ -1041,20 +1041,20 @@ static struct irm_flow * flow_accept(pid_t api)
                 return NULL;
         }
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
+        if (irmd.state != IRMD_RUNNING) {
                 reg_entry_set_state(re, REG_NAME_NULL);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return NULL;
         }
 
-        pthread_rwlock_rdlock(&irmd->flows_lock);
+        pthread_rwlock_rdlock(&irmd.flows_lock);
 
         f = get_irm_flow_n(api);
         if (f == NULL) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_warn("Port_id was not created yet.");
                 return NULL;
         }
@@ -1063,17 +1063,17 @@ static struct irm_flow * flow_accept(pid_t api)
         api_n1  = f->n_1_api;
         port_id = f->port_id;
 
-        pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_rdlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        e = api_table_get(&irmd->api_table, api);
+        e = api_table_get(&irmd.api_table, api);
         if (e == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_wrlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
-                bmp_release(irmd->port_ids, f->port_id);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                bmp_release(irmd.port_ids, f->port_id);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 ipcp_flow_alloc_resp(api_n1, port_id, api_n, -1);
                 clear_irm_flow(f);
                 irm_flow_set_state(f, FLOW_NULL);
@@ -1089,12 +1089,12 @@ static struct irm_flow * flow_accept(pid_t api)
         pthread_mutex_unlock(&e->state_lock);
 
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_wrlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
-                bmp_release(irmd->port_ids, f->port_id);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                bmp_release(irmd.port_ids, f->port_id);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 ipcp_flow_alloc_resp(api_n1, port_id, api_n, -1);
                 clear_irm_flow(f);
                 irm_flow_set_state(f, FLOW_NULL);
@@ -1103,17 +1103,17 @@ static struct irm_flow * flow_accept(pid_t api)
                 return NULL;
         }
 
-        registry_del_api(&irmd->registry, api);
+        registry_del_api(&irmd.registry, api);
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         if (ipcp_flow_alloc_resp(api_n1, port_id, api_n, 0)) {
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                pthread_rwlock_wrlock(&irmd->flows_lock);
+                pthread_rwlock_rdlock(&irmd.state_lock);
+                pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_dbg("Failed to respond to alloc. Port_id invalidated.");
                 clear_irm_flow(f);
                 irm_flow_set_state(f, FLOW_NULL);
@@ -1136,46 +1136,46 @@ static struct irm_flow * flow_alloc(pid_t     api,
         pid_t ipcp;
         int port_id;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_RUNNING) {
-                pthread_rwlock_unlock(&irmd->state_lock);
+        if (irmd.state != IRMD_RUNNING) {
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return NULL;
         }
 
-        pthread_rwlock_rdlock(&irmd->reg_lock);
+        pthread_rwlock_rdlock(&irmd.reg_lock);
 
         ipcp = get_ipcp_by_dst_name(dst_name);
         if (ipcp == -1) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_info("Destination unreachable.");
                 return NULL;
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_wrlock(&irmd->flows_lock);
-        port_id = bmp_allocate(irmd->port_ids);
-        if (!bmp_is_id_valid(irmd->port_ids, port_id)) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_wrlock(&irmd.flows_lock);
+        port_id = bmp_allocate(irmd.port_ids);
+        if (!bmp_is_id_valid(irmd.port_ids, port_id)) {
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Could not allocate port_id.");
                 return NULL;
         }
 
         f = irm_flow_create(api, ipcp, port_id, cube);
         if (f == NULL) {
-                bmp_release(irmd->port_ids, port_id);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                bmp_release(irmd.port_ids, port_id);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Could not allocate port_id.");
                 return NULL;
         }
 
-        list_add(&f->next, &irmd->irm_flows);
+        list_add(&f->next, &irmd.irm_flows);
 
-        pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         assert(irm_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
@@ -1205,13 +1205,13 @@ static int flow_dealloc(pid_t api,
 
         struct irm_flow * f = NULL;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_wrlock(&irmd->flows_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
+        pthread_rwlock_wrlock(&irmd.flows_lock);
 
         f = get_irm_flow(port_id);
         if (f == NULL) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_dbg("Deallocate unknown port %d by %d.", port_id, api);
                 return 0;
         }
@@ -1222,8 +1222,8 @@ static int flow_dealloc(pid_t api,
         } else if (api == f->n_1_api) {
                 f->n_1_api = -1;
         } else {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_dbg("Dealloc called by wrong AP-I.");
                 return -EPERM;
         }
@@ -1235,7 +1235,7 @@ static int flow_dealloc(pid_t api,
                         irm_flow_set_state(f, FLOW_NULL);
                 clear_irm_flow(f);
                 irm_flow_destroy(f);
-                bmp_release(irmd->port_ids, port_id);
+                bmp_release(irmd.port_ids, port_id);
                 log_info("Completed deallocation of port_id %d by AP-I %d.",
                          port_id, api);
         } else {
@@ -1244,8 +1244,8 @@ static int flow_dealloc(pid_t api,
                         port_id, api);
         }
 
-        pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         if (n_1_api != -1)
                 ret = ipcp_flow_dealloc(n_1_api, port_id);
@@ -1304,19 +1304,19 @@ static struct irm_flow * flow_req_arr(pid_t     api,
 
         log_dbg("Flow req arrived from IPCP %d for %s.", api, dst_name);
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_rdlock(&irmd->reg_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
+        pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        re = registry_get_entry(&irmd->registry, dst_name);
+        re = registry_get_entry(&irmd.registry, dst_name);
         if (re == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Unknown name: %s.", dst_name);
                 return NULL;
         }
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         /* Give the AP a bit of slop time to call accept */
         if (reg_entry_leave_state(re, REG_NAME_IDLE, &wt) == -1) {
@@ -1324,99 +1324,99 @@ static struct irm_flow * flow_req_arr(pid_t     api,
                 return NULL;
         }
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         switch (reg_entry_get_state(re)) {
         case REG_NAME_IDLE:
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("No APs for %s.", dst_name);
                 return NULL;
         case REG_NAME_AUTO_ACCEPT:
                 c_api = malloc(sizeof(*c_api));
                 if (c_api == NULL) {
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         return NULL;
                 }
 
                 reg_entry_set_state(re, REG_NAME_AUTO_EXEC);
-                a = apn_table_get_by_apn(&irmd->apn_table,
+                a = apn_table_get_by_apn(&irmd.apn_table,
                                          reg_entry_get_apn(re));
 
                 if (a == NULL || (c_api->pid = auto_execute(a->argv)) < 0) {
                         reg_entry_set_state(re, REG_NAME_AUTO_ACCEPT);
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         log_err("Could not get start apn for reg_entry %s.",
                                 re->name);
                         free(c_api);
                         return NULL;
                 }
 
-                list_add(&c_api->next, &irmd->spawned_apis);
+                list_add(&c_api->next, &irmd.spawned_apis);
 
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
 
                 if (reg_entry_leave_state(re, REG_NAME_AUTO_EXEC, NULL))
                         return NULL;
 
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                pthread_rwlock_wrlock(&irmd->reg_lock);
+                pthread_rwlock_rdlock(&irmd.state_lock);
+                pthread_rwlock_wrlock(&irmd.reg_lock);
         case REG_NAME_FLOW_ACCEPT:
                 h_api = reg_entry_get_api(re);
                 if (h_api == -1) {
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         log_err("Invalid api returned.");
                         return NULL;
                 }
 
                 break;
         default:
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("IRMd in wrong state.");
                 return NULL;
         }
 
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_wrlock(&irmd->flows_lock);
-        port_id = bmp_allocate(irmd->port_ids);
-        if (!bmp_is_id_valid(irmd->port_ids, port_id)) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_wrlock(&irmd.flows_lock);
+        port_id = bmp_allocate(irmd.port_ids);
+        if (!bmp_is_id_valid(irmd.port_ids, port_id)) {
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return NULL;
         }
 
         f = irm_flow_create(h_api, api, port_id, cube);
         if (f == NULL) {
-                bmp_release(irmd->port_ids, port_id);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                bmp_release(irmd.port_ids, port_id);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Could not allocate port_id.");
                 return NULL;
         }
 
-        list_add(&f->next, &irmd->irm_flows);
+        list_add(&f->next, &irmd.irm_flows);
 
-        pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_rdlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_rdlock(&irmd.reg_lock);
 
         reg_entry_set_state(re, REG_NAME_FLOW_ARRIVED);
 
-        e = api_table_get(&irmd->api_table, h_api);
+        e = api_table_get(&irmd.api_table, h_api);
         if (e == NULL) {
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_wrlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_wrlock(&irmd.flows_lock);
                 clear_irm_flow(f);
-                bmp_release(irmd->port_ids, f->port_id);
+                bmp_release(irmd.port_ids, f->port_id);
                 list_del(&f->next);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 log_err("Could not get api table entry for %d.", h_api);
                 irm_flow_destroy(f);
                 return NULL;
@@ -1424,8 +1424,8 @@ static struct irm_flow * flow_req_arr(pid_t     api,
 
         api_entry_wake(e, re);
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         reg_entry_leave_state(re, REG_NAME_FLOW_ARRIVED, NULL);
 
@@ -1437,13 +1437,13 @@ static int flow_alloc_reply(int port_id,
 {
         struct irm_flow * f;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
-        pthread_rwlock_rdlock(&irmd->flows_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
+        pthread_rwlock_rdlock(&irmd.flows_lock);
 
         f = get_irm_flow(port_id);
         if (f == NULL) {
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 return -1;
         }
 
@@ -1452,90 +1452,88 @@ static int flow_alloc_reply(int port_id,
         else
                 irm_flow_set_state(f, FLOW_NULL);
 
-        pthread_rwlock_unlock(&irmd->flows_lock);
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
         return 0;
 }
 
-static void irm_destroy(void)
+static void irm_fini(void)
 {
         struct list_head * p;
         struct list_head * h;
 
-        pthread_rwlock_rdlock(&irmd->state_lock);
+        pthread_rwlock_rdlock(&irmd.state_lock);
 
-        if (irmd->state != IRMD_NULL)
+        if (irmd.state != IRMD_NULL)
                 log_warn("Unsafe destroy.");
 
-        pthread_mutex_lock(&irmd->threads_lock);
+        pthread_mutex_lock(&irmd.threads_lock);
 
-        if (irmd->thread_ids != NULL)
-                bmp_destroy(irmd->thread_ids);
+        if (irmd.thread_ids != NULL)
+                bmp_destroy(irmd.thread_ids);
 
-        pthread_mutex_unlock(&irmd->threads_lock);
+        pthread_mutex_unlock(&irmd.threads_lock);
 
-        if (irmd->threadpool != NULL)
-                free(irmd->threadpool);
+        if (irmd.threadpool != NULL)
+                free(irmd.threadpool);
 
-        pthread_rwlock_wrlock(&irmd->flows_lock);
+        pthread_rwlock_wrlock(&irmd.flows_lock);
 
-        if (irmd->port_ids != NULL)
-                bmp_destroy(irmd->port_ids);
+        if (irmd.port_ids != NULL)
+                bmp_destroy(irmd.port_ids);
 
-        pthread_rwlock_unlock(&irmd->flows_lock);
+        pthread_rwlock_unlock(&irmd.flows_lock);
 
-        close(irmd->sockfd);
+        close(irmd.sockfd);
 
         if (unlink(IRM_SOCK_PATH))
                 log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
 
-        pthread_rwlock_wrlock(&irmd->reg_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
         /* Clear the lists. */
-        list_for_each_safe(p, h, &irmd->ipcps) {
+        list_for_each_safe(p, h, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 list_del(&e->next);
                 ipcp_entry_destroy(e);
         }
 
-        list_for_each(p, &irmd->spawned_apis) {
+        list_for_each(p, &irmd.spawned_apis) {
                 struct pid_el * e = list_entry(p, struct pid_el, next);
                 if (kill(e->pid, SIGTERM))
                         log_dbg("Could not send kill signal to %d.", e->pid);
         }
 
-        list_for_each_safe(p, h, &irmd->spawned_apis) {
+        list_for_each_safe(p, h, &irmd.spawned_apis) {
                 struct pid_el * e = list_entry(p, struct pid_el, next);
                 int status;
                 if (waitpid(e->pid, &status, 0) < 0)
                         log_dbg("Error waiting for %d to exit.", e->pid);
                 list_del(&e->next);
-                registry_del_api(&irmd->registry, e->pid);
+                registry_del_api(&irmd.registry, e->pid);
                 free(e);
         }
 
-        list_for_each_safe(p, h, &irmd->apn_table) {
+        list_for_each_safe(p, h, &irmd.apn_table) {
                 struct apn_entry * e = list_entry(p, struct apn_entry, next);
                 list_del(&e->next);
                 apn_entry_destroy(e);
         }
 
-        registry_destroy(&irmd->registry);
+        registry_destroy(&irmd.registry);
 
-        pthread_rwlock_unlock(&irmd->reg_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
-        if (irmd->rdrb != NULL)
-                shm_rdrbuff_destroy(irmd->rdrb);
+        if (irmd.rdrb != NULL)
+                shm_rdrbuff_destroy(irmd.rdrb);
 
-        if (irmd->lf != NULL)
-                lockfile_destroy(irmd->lf);
+        if (irmd.lf != NULL)
+                lockfile_destroy(irmd.lf);
 
-        pthread_rwlock_unlock(&irmd->state_lock);
+        pthread_rwlock_unlock(&irmd.state_lock);
 
-        pthread_rwlock_destroy(&irmd->reg_lock);
-        pthread_rwlock_destroy(&irmd->state_lock);
-
-        free(irmd);
+        pthread_rwlock_destroy(&irmd.reg_lock);
+        pthread_rwlock_destroy(&irmd.state_lock);
 }
 
 void irmd_sig_handler(int         sig,
@@ -1551,11 +1549,11 @@ void irmd_sig_handler(int         sig,
         case SIGHUP:
                 log_info("IRMd shutting down...");
 
-                pthread_rwlock_wrlock(&irmd->state_lock);
+                pthread_rwlock_wrlock(&irmd.state_lock);
 
-                irmd->state = IRMD_NULL;
+                irmd.state = IRMD_NULL;
 
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
                 break;
         case SIGPIPE:
                 log_dbg("Ignored SIGPIPE.");
@@ -1574,29 +1572,29 @@ void * shm_sanitize(void * o)
         (void) o;
 
         while (true) {
-                shm_rdrbuff_wait_full(irmd->rdrb);
+                shm_rdrbuff_wait_full(irmd.rdrb);
 
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                pthread_rwlock_wrlock(&irmd->flows_lock);
+                pthread_rwlock_rdlock(&irmd.state_lock);
+                pthread_rwlock_wrlock(&irmd.flows_lock);
 
-                list_for_each(p, &irmd->irm_flows) {
+                list_for_each(p, &irmd.irm_flows) {
                         struct irm_flow * f =
                                 list_entry(p, struct irm_flow, next);
                         if (kill(f->n_api, 0) < 0) {
                                 while ((idx = shm_rbuff_read(f->n_rb)) >= 0)
-                                        shm_rdrbuff_remove(irmd->rdrb, idx);
+                                        shm_rdrbuff_remove(irmd.rdrb, idx);
                                 continue;
                         }
 
                         if (kill(f->n_1_api, 0) < 0) {
                                 while ((idx = shm_rbuff_read(f->n_1_rb)) >= 0)
-                                        shm_rdrbuff_remove(irmd->rdrb, idx);
+                                        shm_rdrbuff_remove(irmd.rdrb, idx);
                                 continue;
                         }
                 }
 
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
 
                 nanosleep(&ts, NULL);
         }
@@ -1620,12 +1618,12 @@ void * irm_sanitize(void * o)
                 if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
                         log_warn("Failed to get time.");
 
-                pthread_rwlock_rdlock(&irmd->state_lock);
+                pthread_rwlock_rdlock(&irmd.state_lock);
 
-                if (irmd->state != IRMD_RUNNING) {
+                if (irmd.state != IRMD_RUNNING) {
                         /* Clean up all flows first to kill mainloops */
-                        pthread_rwlock_wrlock(&irmd->flows_lock);
-                        list_for_each_safe(p, h, &irmd->irm_flows) {
+                        pthread_rwlock_wrlock(&irmd.flows_lock);
+                        list_for_each_safe(p, h, &irmd.irm_flows) {
                                 struct irm_flow * f =
                                         list_entry(p, struct irm_flow, next);
                                 list_del(&f->next);
@@ -1633,23 +1631,23 @@ void * irm_sanitize(void * o)
                                 clear_irm_flow(f);
                                 irm_flow_destroy(f);
                         }
-                        pthread_rwlock_unlock(&irmd->flows_lock);
-                        pthread_rwlock_wrlock(&irmd->reg_lock);
+                        pthread_rwlock_unlock(&irmd.flows_lock);
+                        pthread_rwlock_wrlock(&irmd.reg_lock);
                         /* Clean up api entries as well */
-                        list_for_each_safe(p, h, &irmd->api_table) {
+                        list_for_each_safe(p, h, &irmd.api_table) {
                                 struct api_entry * e =
                                         list_entry(p, struct api_entry, next);
                                 list_del(&e->next);
                                 api_entry_destroy(e);
                         }
-                        pthread_rwlock_unlock(&irmd->reg_lock);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         return (void *) 0;
                 }
 
-                pthread_rwlock_wrlock(&irmd->reg_lock);
+                pthread_rwlock_wrlock(&irmd.reg_lock);
 
-                list_for_each_safe(p, h, &irmd->spawned_apis) {
+                list_for_each_safe(p, h, &irmd.spawned_apis) {
                         struct pid_el * e = list_entry(p, struct pid_el, next);
                         waitpid(e->pid, &s, WNOHANG);
                         if (kill(e->pid, 0) >= 0)
@@ -1659,7 +1657,7 @@ void * irm_sanitize(void * o)
                         free(e);
                 }
 
-                list_for_each_safe(p, h, &irmd->api_table) {
+                list_for_each_safe(p, h, &irmd.api_table) {
                         struct api_entry * e =
                                 list_entry(p, struct api_entry, next);
                         if (kill(e->api, 0) >= 0)
@@ -1669,7 +1667,7 @@ void * irm_sanitize(void * o)
                         api_entry_destroy(e);
                 }
 
-                list_for_each_safe(p, h, &irmd->ipcps) {
+                list_for_each_safe(p, h, &irmd.ipcps) {
                         struct ipcp_entry * e =
                                 list_entry(p, struct ipcp_entry, next);
                         if (kill(e->api, 0) >= 0)
@@ -1679,7 +1677,7 @@ void * irm_sanitize(void * o)
                         ipcp_entry_destroy(e);
                 }
 
-                list_for_each_safe(p, h, &irmd->registry) {
+                list_for_each_safe(p, h, &irmd.registry) {
                         struct list_head * p2;
                         struct list_head * h2;
                         struct reg_entry * e =
@@ -1695,10 +1693,10 @@ void * irm_sanitize(void * o)
                         }
                 }
 
-                pthread_rwlock_unlock(&irmd->reg_lock);
-                pthread_rwlock_wrlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_rwlock_wrlock(&irmd.flows_lock);
 
-                list_for_each_safe(p, h, &irmd->irm_flows) {
+                list_for_each_safe(p, h, &irmd.irm_flows) {
                         struct irm_flow * f =
                                 list_entry(p, struct irm_flow, next);
 
@@ -1737,8 +1735,8 @@ void * irm_sanitize(void * o)
                         }
                 }
 
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
 
                 nanosleep(&timeout, NULL);
         }
@@ -1746,46 +1744,46 @@ void * irm_sanitize(void * o)
 
 static void thread_inc(void)
 {
-        pthread_mutex_lock(&irmd->threads_lock);
+        pthread_mutex_lock(&irmd.threads_lock);
 
-        ++irmd->threads;
-        pthread_cond_signal(&irmd->threads_cond);
+        ++irmd.threads;
+        pthread_cond_signal(&irmd.threads_cond);
 
-        pthread_mutex_unlock(&irmd->threads_lock);
+        pthread_mutex_unlock(&irmd.threads_lock);
 }
 
 static void thread_dec(void)
 {
-        pthread_mutex_lock(&irmd->threads_lock);
+        pthread_mutex_lock(&irmd.threads_lock);
 
-        --irmd->threads;
-        pthread_cond_signal(&irmd->threads_cond);
+        --irmd.threads;
+        pthread_cond_signal(&irmd.threads_cond);
 
-        pthread_mutex_unlock(&irmd->threads_lock);
+        pthread_mutex_unlock(&irmd.threads_lock);
 }
 
 static bool thread_check(void)
 {
         int ret;
 
-        pthread_mutex_lock(&irmd->threads_lock);
+        pthread_mutex_lock(&irmd.threads_lock);
 
-        ret = irmd->threads > irmd->max_threads;
+        ret = irmd.threads > irmd.max_threads;
 
-        pthread_mutex_unlock(&irmd->threads_lock);
+        pthread_mutex_unlock(&irmd.threads_lock);
 
         return ret;
 }
 
 static void thread_exit(ssize_t id)
 {
-        pthread_mutex_lock(&irmd->threads_lock);
-        bmp_release(irmd->thread_ids, id);
+        pthread_mutex_lock(&irmd.threads_lock);
+        bmp_release(irmd.thread_ids, id);
 
-        --irmd->threads;
-        pthread_cond_signal(&irmd->threads_cond);
+        --irmd.threads;
+        pthread_cond_signal(&irmd.threads_cond);
 
-        pthread_mutex_unlock(&irmd->threads_lock);
+        pthread_mutex_unlock(&irmd.threads_lock);
 }
 
 void * mainloop(void * o)
@@ -1810,25 +1808,25 @@ void * mainloop(void * o)
                 struct timeval tv = {(SOCKET_TIMEOUT / 1000),
                                      (SOCKET_TIMEOUT % 1000) * 1000};
 
-                pthread_rwlock_rdlock(&irmd->state_lock);
+                pthread_rwlock_rdlock(&irmd.state_lock);
 
-                if (irmd->state != IRMD_RUNNING || thread_check()) {
+                if (irmd.state != IRMD_RUNNING || thread_check()) {
                         thread_exit(id);
-                        pthread_rwlock_unlock(&irmd->state_lock);
+                        pthread_rwlock_unlock(&irmd.state_lock);
                         break;
                 }
 
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
 
                 ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
 #ifdef __FreeBSD__
                 FD_ZERO(&fds);
-                FD_SET(irmd->sockfd, &fds);
-                if (select(irmd->sockfd, &fds, NULL, NULL, &timeout) <= 0)
+                FD_SET(irmd.sockfd, &fds);
+                if (select(irmd.sockfd, &fds, NULL, NULL, &timeout) <= 0)
                         continue;
 #endif
 
-                cli_sockfd = accept(irmd->sockfd, 0, 0);
+                cli_sockfd = accept(irmd.sockfd, 0, 0);
                 if (cli_sockfd < 0)
                         continue;
 
@@ -2009,233 +2007,232 @@ void * mainloop(void * o)
         return (void *) 0;
 }
 
-static bool is_thread_alive(ssize_t id)
-{
-        bool ret;
-        pthread_mutex_lock(&irmd->threads_lock);
-
-        ret = bmp_is_id_used(irmd->thread_ids, id);
-
-        pthread_mutex_unlock(&irmd->threads_lock);
-
-        return ret;
-}
-
 void * threadpoolmgr(void * o)
 {
+        pthread_attr_t  pattr;
+        struct timespec dl;
         struct timespec to = {(IRMD_TPM_TIMEOUT / 1000),
                               (IRMD_TPM_TIMEOUT % 1000) * MILLION};
-        struct timespec dl;
-        size_t t;
-
         (void) o;
+
+        if (pthread_attr_init(&pattr))
+                return (void *) -1;
+
+        pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
 
         while (true) {
                 clock_gettime(PTHREAD_COND_CLOCK, &dl);
                 ts_add(&dl, &to, &dl);
 
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                if (irmd->state != IRMD_RUNNING) {
-                        pthread_rwlock_unlock(&irmd->state_lock);
-                        log_dbg("Threadpool manager exiting.");
-                        for (t = 0; t < IRMD_MAX_THREADS; ++t)
-                                if (is_thread_alive(t)) {
-                                        log_dbg("Waiting for thread %zd.", t);
-                                        pthread_join(irmd->threadpool[t], NULL);
-                                }
-
+                pthread_rwlock_rdlock(&irmd.state_lock);
+                if (irmd.state != IRMD_RUNNING) {
+                        pthread_rwlock_unlock(&irmd.state_lock);
+                        pthread_attr_destroy(&pattr);
+                        log_dbg("Waiting for threads to exit.");
+                        pthread_mutex_lock(&irmd.threads_lock);
+                        while (irmd.threads > 0)
+                                pthread_cond_wait(&irmd.threads_cond,
+                                                  &irmd.threads_lock);
+                        pthread_mutex_unlock(&irmd.threads_lock);
                         log_dbg("Threadpool manager done.");
                         break;
                 }
 
-                pthread_rwlock_unlock(&irmd->state_lock);
+                pthread_rwlock_unlock(&irmd.state_lock);
 
-                pthread_mutex_lock(&irmd->threads_lock);
+                pthread_mutex_lock(&irmd.threads_lock);
 
-                if (irmd->threads < IRMD_MIN_AV_THREADS) {
+                if (irmd.threads < IRMD_MIN_AV_THREADS) {
                         log_dbg("Increasing threadpool.");
-                        irmd->max_threads = IRMD_MAX_AV_THREADS;
+                        irmd.max_threads = IRMD_MAX_AV_THREADS;
 
-                        while (irmd->threads < irmd->max_threads) {
-                                ssize_t id = bmp_allocate(irmd->thread_ids);
-                                if (!bmp_is_id_valid(irmd->thread_ids, id)) {
+                        while (irmd.threads < irmd.max_threads) {
+                                ssize_t id = bmp_allocate(irmd.thread_ids);
+                                if (!bmp_is_id_valid(irmd.thread_ids, id)) {
                                         log_warn("IRMd threadpool exhausted.");
                                         break;
                                 }
 
-                                if (pthread_create(&irmd->threadpool[id],
-                                                   NULL, mainloop, (void *) id))
+                                if (pthread_create(&irmd.threadpool[id],
+                                                   &pattr, mainloop,
+                                                   (void *) id))
                                         log_warn("Failed to start new thread.");
                                 else
-                                        ++irmd->threads;
+                                        ++irmd.threads;
                         }
                 }
 
-                if (pthread_cond_timedwait(&irmd->threads_cond,
-                                           &irmd->threads_lock,
+                if (pthread_cond_timedwait(&irmd.threads_cond,
+                                           &irmd.threads_lock,
                                            &dl) == ETIMEDOUT)
-                        if (irmd->threads > IRMD_MIN_AV_THREADS)
-                                --irmd->max_threads;
+                        if (irmd.threads > IRMD_MIN_AV_THREADS)
+                                --irmd.max_threads;
 
-                pthread_mutex_unlock(&irmd->threads_lock);
+                pthread_mutex_unlock(&irmd.threads_lock);
         }
 
         return (void *) 0;
 }
 
-static int irm_create(void)
+static int irm_init(void)
 {
         struct stat st;
         pthread_condattr_t cattr;
         struct timeval timeout = {(IRMD_ACCEPT_TIMEOUT / 1000),
                                   (IRMD_ACCEPT_TIMEOUT % 1000) * 1000};
 
-        irmd = malloc(sizeof(*irmd));
-        if (irmd == NULL)
-                return -ENOMEM;
-
-        memset(irmd, 0, sizeof(*irmd));
-
         memset(&st, 0, sizeof(st));
 
-        irmd->state = IRMD_NULL;
+        irmd.state = IRMD_NULL;
 
-        if (pthread_rwlock_init(&irmd->state_lock, NULL)) {
+        if (pthread_rwlock_init(&irmd.state_lock, NULL)) {
                 log_err("Failed to initialize rwlock.");
-                free(irmd);
-                return -1;
+                goto fail_state_lock;
         }
 
-        if (pthread_rwlock_init(&irmd->reg_lock, NULL)) {
+        if (pthread_rwlock_init(&irmd.reg_lock, NULL)) {
                 log_err("Failed to initialize rwlock.");
-                free(irmd);
-                return -1;
+                goto fail_reg_lock;
         }
 
-        if (pthread_rwlock_init(&irmd->flows_lock, NULL)) {
+        if (pthread_rwlock_init(&irmd.flows_lock, NULL)) {
                 log_err("Failed to initialize rwlock.");
-                free(irmd);
-                return -1;
+                goto fail_flows_lock;
         }
 
-        if (pthread_mutex_init(&irmd->threads_lock, NULL)) {
+        if (pthread_mutex_init(&irmd.threads_lock, NULL)) {
                 log_err("Failed to initialize mutex.");
-                free(irmd);
-                return -1;
+                goto fail_threads_lock;
         }
 
         if (pthread_condattr_init(&cattr)) {
                 log_err("Failed to initialize condattr.");
-                free(irmd);
-                return -1;
+                goto fail_cattr;
         }
 
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        if (pthread_cond_init(&irmd->threads_cond, &cattr)) {
+        if (pthread_cond_init(&irmd.threads_cond, &cattr)) {
                 log_err("Failed to initialize cond.");
-                free(irmd);
-                return -1;
+                goto fail_threads_cond;
         }
 
-        list_head_init(&irmd->ipcps);
-        list_head_init(&irmd->api_table);
-        list_head_init(&irmd->apn_table);
-        list_head_init(&irmd->spawned_apis);
-        list_head_init(&irmd->registry);
-        list_head_init(&irmd->irm_flows);
+        list_head_init(&irmd.ipcps);
+        list_head_init(&irmd.api_table);
+        list_head_init(&irmd.apn_table);
+        list_head_init(&irmd.spawned_apis);
+        list_head_init(&irmd.registry);
+        list_head_init(&irmd.irm_flows);
 
-        irmd->port_ids = bmp_create(IRMD_MAX_FLOWS, 0);
-        if (irmd->port_ids == NULL) {
-                irm_destroy();
-                return -ENOMEM;
+        irmd.port_ids = bmp_create(IRMD_MAX_FLOWS, 0);
+        if (irmd.port_ids == NULL) {
+                log_err("Failed to create port_ids bitmap.");
+                goto fail_port_ids;
         }
 
-        irmd->thread_ids = bmp_create(IRMD_MAX_THREADS, 0);
-        if (irmd->thread_ids == NULL) {
-                irm_destroy();
-                return -ENOMEM;
+        irmd.thread_ids = bmp_create(IRMD_MAX_THREADS, 0);
+        if (irmd.thread_ids == NULL) {
+                log_err("Failed to thread thread_ids bitmap.");
+                goto fail_thread_ids;
         }
 
-        irmd->threadpool = malloc(sizeof(pthread_t) * IRMD_MAX_THREADS);
-        if (irmd->threadpool == NULL) {
-                irm_destroy();
-                return -ENOMEM;
+        irmd.threadpool = malloc(sizeof(pthread_t) * IRMD_MAX_THREADS);
+        if (irmd.threadpool == NULL) {
+                log_err("Failed to malloc threadpool");
+                goto fail_thrpool;
         }
 
-        if ((irmd->lf = lockfile_create()) == NULL) {
-                if ((irmd->lf = lockfile_open()) == NULL) {
+        if ((irmd.lf = lockfile_create()) == NULL) {
+                if ((irmd.lf = lockfile_open()) == NULL) {
                         log_err("Lockfile error.");
-                        free(irmd->threadpool);
-                        bmp_destroy(irmd->thread_ids);
-                        bmp_destroy(irmd->port_ids);
-                        free(irmd);
-                        return -1;
+                        goto fail_lockfile;
                 }
 
-                if (kill(lockfile_owner(irmd->lf), 0) < 0) {
+                if (kill(lockfile_owner(irmd.lf), 0) < 0) {
                         log_info("IRMd didn't properly shut down last time.");
                         shm_rdrbuff_destroy(shm_rdrbuff_open());
                         log_info("Stale resources cleaned.");
-                        lockfile_destroy(irmd->lf);
-                        irmd->lf = lockfile_create();
+                        lockfile_destroy(irmd.lf);
+                        irmd.lf = lockfile_create();
                 } else {
                         log_info("IRMd already running (%d), exiting.",
-                                 lockfile_owner(irmd->lf));
-                        lockfile_close(irmd->lf);
-                        free(irmd->threadpool);
-                        bmp_destroy(irmd->thread_ids);
-                        bmp_destroy(irmd->port_ids);
-                        free(irmd);
-                        return -1;
+                                 lockfile_owner(irmd.lf));
+                        lockfile_close(irmd.lf);
+                        goto fail_lockfile;
                 }
         }
 
         if (stat(SOCK_PATH, &st) == -1) {
                 if (mkdir(SOCK_PATH, 0777)) {
                         log_err("Failed to create sockets directory.");
-                        irm_destroy();
-                        return -1;
+                        goto fail_stat;
                 }
         }
 
-        irmd->sockfd = server_socket_open(IRM_SOCK_PATH);
-        if (irmd->sockfd < 0) {
-                irm_destroy();
-                return -1;
+        irmd.sockfd = server_socket_open(IRM_SOCK_PATH);
+        if (irmd.sockfd < 0) {
+                log_err("Failed to open server socket.");
+                goto fail_sock_path;
         }
 
-        if (setsockopt(irmd->sockfd, SOL_SOCKET, SO_RCVTIMEO,
+        if (setsockopt(irmd.sockfd, SOL_SOCKET, SO_RCVTIMEO,
                        (char *) &timeout, sizeof(timeout)) < 0) {
                 log_err("Failed setting socket option.");
-                irm_destroy();
-                return -1;
+                goto fail_sock_opt;
         }
 
         if (chmod(IRM_SOCK_PATH, 0666)) {
                 log_err("Failed to chmod socket.");
-                irm_destroy();
-                return -1;
+                goto fail_sock_opt;
         }
 
-        if (irmd->lf == NULL) {
-                irm_destroy();
-                return -1;
+        if (irmd.lf == NULL) {
+                log_err("Failed to create lockfile.");
+                goto fail_sock_opt;
         }
 
-        if ((irmd->rdrb = shm_rdrbuff_create()) == NULL) {
-                irm_destroy();
-                return -1;
+        if ((irmd.rdrb = shm_rdrbuff_create()) == NULL) {
+                log_err("Failed to create rdrbuff.");
+                goto fail_rdrbuff;
         }
 
-        irmd->threads     = 0;
-        irmd->max_threads = IRMD_MIN_AV_THREADS;
-        irmd->state       = IRMD_RUNNING;
+        irmd.threads     = 0;
+        irmd.max_threads = IRMD_MIN_AV_THREADS;
+        irmd.state       = IRMD_RUNNING;
 
         log_info("Ouroboros IPC Resource Manager daemon started...");
 
         return 0;
+
+fail_rdrbuff:
+        shm_rdrbuff_destroy(irmd.rdrb);
+fail_sock_opt:
+        close(irmd.sockfd);
+fail_sock_path:
+        unlink(IRM_SOCK_PATH);
+fail_stat:
+        lockfile_destroy(irmd.lf);
+fail_lockfile:
+        free(irmd.threadpool);
+fail_thrpool:
+        bmp_destroy(irmd.thread_ids);
+fail_thread_ids:
+        bmp_destroy(irmd.port_ids);
+fail_port_ids:
+        pthread_cond_destroy(&irmd.threads_cond);
+fail_threads_cond:
+        pthread_condattr_destroy(&cattr);
+fail_cattr:
+        pthread_mutex_destroy(&irmd.threads_lock);
+fail_threads_lock:
+        pthread_rwlock_destroy(&irmd.flows_lock);
+fail_flows_lock:
+        pthread_rwlock_destroy(&irmd.reg_lock);
+fail_reg_lock:
+        pthread_rwlock_destroy(&irmd.state_lock);
+fail_state_lock:
+        return -1;
 }
 
 static void usage(void)
@@ -2287,23 +2284,23 @@ int main(int     argc,
 
         log_init(!use_stdout);
 
-        if (irm_create() < 0) {
+        if (irm_init() < 0) {
                 log_fini();
                 exit(EXIT_FAILURE);
         }
 
-        pthread_create(&irmd->tpm, NULL, threadpoolmgr, NULL);
+        pthread_create(&irmd.tpm, NULL, threadpoolmgr, NULL);
 
-        pthread_create(&irmd->irm_sanitize, NULL, irm_sanitize, NULL);
-        pthread_create(&irmd->shm_sanitize, NULL, shm_sanitize, irmd->rdrb);
+        pthread_create(&irmd.irm_sanitize, NULL, irm_sanitize, NULL);
+        pthread_create(&irmd.shm_sanitize, NULL, shm_sanitize, irmd.rdrb);
 
-        pthread_join(irmd->tpm, NULL);
-        pthread_join(irmd->irm_sanitize, NULL);
+        pthread_join(irmd.tpm, NULL);
+        pthread_join(irmd.irm_sanitize, NULL);
 
-        pthread_cancel(irmd->shm_sanitize);
-        pthread_join(irmd->shm_sanitize, NULL);
+        pthread_cancel(irmd.shm_sanitize);
+        pthread_join(irmd.shm_sanitize, NULL);
 
-        irm_destroy();
+        irm_fini();
 
         log_fini();
 
