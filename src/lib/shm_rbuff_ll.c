@@ -244,13 +244,13 @@ int shm_rbuff_write(struct shm_rbuff * rb,
 
         nhead = RB_HEAD;
 
+        *(rb->shm_base + nhead) = (ssize_t) idx;
+
         do {
                 ohead = nhead;
                 nhead = (ohead + 1) & ((SHM_BUFFER_SIZE) - 1);
                 nhead = __sync_val_compare_and_swap(rb->head, ohead, nhead);
         } while (nhead != ohead);
-
-        *(rb->shm_base + nhead) = (ssize_t) idx;
 
         if (was_empty)
                 pthread_cond_broadcast(rb->add);
