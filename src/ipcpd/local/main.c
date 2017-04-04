@@ -85,7 +85,7 @@ static void * ipcp_local_sdu_loop(void * o)
 
         (void) o;
 
-        while (flow_event_wait(local_data.flows, local_data.fq, &timeout)) {
+        while (true) {
                 int fd;
                 ssize_t idx;
 
@@ -96,9 +96,14 @@ static void * ipcp_local_sdu_loop(void * o)
                         return (void *) 1; /* -ENOTENROLLED */
                 }
 
-                pthread_rwlock_rdlock(&local_data.lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+
+                flow_event_wait(local_data.flows, local_data.fq, &timeout);
 
                 while ((fd = fqueue_next(local_data.fq)) >= 0) {
+                        pthread_rwlock_rdlock(&ipcpi.state_lock);
+                        pthread_rwlock_rdlock(&local_data.lock);
+
                         idx = local_flow_read(fd);
 
                         assert(idx < (SHM_BUFFER_SIZE));
@@ -107,10 +112,11 @@ static void * ipcp_local_sdu_loop(void * o)
 
                         if (fd != -1)
                                 local_flow_write(fd, idx);
+
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        pthread_rwlock_unlock(&local_data.lock);
                 }
 
-                pthread_rwlock_unlock(&local_data.lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
         }
 
         return (void *) 0;
@@ -229,12 +235,6 @@ static int ipcp_local_flow_alloc(int       fd,
 
         assert(dst_name);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
-        if (out_fd < 0) {
-                log_dbg("Flow allocation failed.");
-                return -1;
-        }
-
         pthread_rwlock_rdlock(&ipcpi.state_lock);
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
@@ -243,15 +243,36 @@ static int ipcp_local_flow_alloc(int       fd,
                 return -1; /* -ENOTENROLLED */
         }
 
+        /*
+         * This function needs to return completely before
+         * flow_resp. Taking the wrlock on the data is the simplest
+         * way to achieve this.
+         */
+
         pthread_rwlock_wrlock(&local_data.lock);
 
-        local_data.in_out[fd]  = out_fd;
-        local_data.in_out[out_fd] = fd;
+        out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
+        if (out_fd < 0) {
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                log_dbg("Flow allocation failed: %d", out_fd);
+                return -1;
+        }
 
-        flow_set_add(local_data.flows, fd);
+        /*
+         * The idea of the port_wait_assign in dev.c was to do the
+         * above synchronisation. But if the lock is not taken, the
+         * resp() function may be called before a lock would be taken
+         * here. This shim will be deprecated, but ideally the sync is
+         * fixed in ipcp.c.
+         */
+
+        local_data.in_out[fd] = out_fd;
+        local_data.in_out[out_fd] = fd;
 
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        flow_set_add(local_data.flows, fd);
 
         log_info("Pending local allocation request on fd %d.", fd);
 
@@ -264,23 +285,29 @@ static int ipcp_local_flow_alloc_resp(int fd,
         int out_fd = -1;
         int ret = -1;
 
-        if (response)
-                return 0;
-
         pthread_rwlock_rdlock(&ipcpi.state_lock);
-        pthread_rwlock_rdlock(&local_data.lock);
+        pthread_rwlock_wrlock(&local_data.lock);
+
+        if (response) {
+                if (local_data.in_out[fd] != -1)
+                        local_data.in_out[local_data.in_out[fd]] = fd;
+                local_data.in_out[fd] = -1;
+                pthread_rwlock_unlock(&local_data.lock);
+                pthread_rwlock_unlock(&ipcpi.state_lock);
+                return 0;
+        }
 
         out_fd = local_data.in_out[fd];
-        if (out_fd < 0) {
+        if (out_fd == -1) {
                 pthread_rwlock_unlock(&local_data.lock);
                 pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
-        flow_set_add(local_data.flows, fd);
-
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        flow_set_add(local_data.flows, fd);
 
         if ((ret = ipcp_flow_alloc_reply(out_fd, response)) < 0)
                 return -1;
@@ -297,23 +324,16 @@ static int ipcp_local_flow_dealloc(int fd)
         ipcp_flow_fini(fd);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_dbg("Won't register with non-enrolled IPCP.");
-                return -1; /* -ENOTENROLLED */
-        }
-
         pthread_rwlock_wrlock(&local_data.lock);
 
         flow_set_del(local_data.flows, fd);
 
         local_data.in_out[fd] = -1;
 
-        flow_dealloc(fd);
-
         pthread_rwlock_unlock(&local_data.lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
+
+        flow_dealloc(fd);
 
         log_info("Flow with fd %d deallocated.", fd);
 

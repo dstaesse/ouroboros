@@ -37,6 +37,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <limits.h>
+#include <assert.h>
 
 struct reg_dif {
         struct list_head next;
@@ -120,6 +121,12 @@ static void reg_entry_destroy(struct reg_entry * e)
 
         if (e->name != NULL)
                 free(e->name);
+
+        list_for_each_safe(p, h, &e->reg_apis) {
+                struct pid_el * pe = list_entry(p, struct pid_el, next);
+                list_del(&pe->next);
+                free(pe);
+        }
 
         list_for_each_safe(p, h, &e->reg_apns) {
                 struct str_el * a = list_entry(p, struct str_el, next);
@@ -224,8 +231,12 @@ int reg_entry_add_apn(struct reg_entry * e,
 
         list_add(&n->next, &e->reg_apns);
 
+        pthread_mutex_lock(&e->state_lock);
+
         if (e->state == REG_NAME_IDLE)
                 e->state = REG_NAME_AUTO_ACCEPT;
+
+        pthread_mutex_unlock(&e->state_lock);
 
         return 0;
 }
@@ -245,11 +256,14 @@ void reg_entry_del_apn(struct reg_entry * e,
                 }
         }
 
+        pthread_mutex_lock(&e->state_lock);
+
         if (e->state == REG_NAME_AUTO_ACCEPT && list_is_empty(&e->reg_apns)) {
                 e->state = REG_NAME_IDLE;
                 pthread_cond_broadcast(&e->state_cond);
         }
 
+        pthread_mutex_unlock(&e->state_lock);
 }
 
 char * reg_entry_get_apn(struct reg_entry * e)
@@ -279,26 +293,28 @@ int reg_entry_add_api(struct reg_entry * e,
 {
         struct pid_el * i;
 
-        if (e == NULL)
-                return -EINVAL;
+        assert(e);
 
         if (reg_entry_has_api(e, api)) {
                 log_dbg("Instance already registered with this name.");
                 return -EPERM;
         }
 
+        pthread_mutex_lock(&e->state_lock);
+
         if (e->state == REG_NAME_NULL) {
+                pthread_mutex_unlock(&e->state_lock);
                 log_dbg("Tried to add instance in NULL state.");
                 return -EPERM;
         }
 
         i = malloc(sizeof(*i));
-        if (i == NULL)
+        if (i == NULL) {
+                pthread_mutex_unlock(&e->state_lock);
                 return -ENOMEM;
+        }
 
         i->pid = api;
-
-        pthread_mutex_lock(&e->state_lock);
 
         list_add(&i->next, &e->reg_apis);
 
@@ -316,6 +332,8 @@ int reg_entry_add_api(struct reg_entry * e,
 
 static void reg_entry_check_state(struct reg_entry * e)
 {
+        assert(e);
+
         if (e->state == REG_NAME_DESTROY) {
                 e->state = REG_NAME_NULL;
                 pthread_cond_broadcast(&e->state_cond);
@@ -337,6 +355,9 @@ static void reg_entry_check_state(struct reg_entry * e)
 void reg_entry_del_pid_el(struct reg_entry * e,
                           struct pid_el *    p)
 {
+        assert(e);
+        assert(p);
+
         list_del(&p->next);
         free(p);
 
@@ -348,6 +369,8 @@ void reg_entry_del_api(struct reg_entry * e,
 {
         struct list_head * p;
         struct list_head * h;
+
+        assert(e);
 
         if (e == NULL)
                 return;
@@ -378,8 +401,7 @@ enum reg_name_state reg_entry_get_state(struct reg_entry * e)
 {
         enum reg_name_state state;
 
-        if (e == NULL)
-                return REG_NAME_NULL;
+        assert(e);
 
         pthread_mutex_lock(&e->state_lock);
 
@@ -393,8 +415,7 @@ enum reg_name_state reg_entry_get_state(struct reg_entry * e)
 int reg_entry_set_state(struct reg_entry *  e,
                         enum reg_name_state state)
 {
-        if (state == REG_NAME_DESTROY)
-                return -EPERM;
+        assert(state != REG_NAME_DESTROY);
 
         pthread_mutex_lock(&e->state_lock);
 
@@ -413,8 +434,8 @@ int reg_entry_leave_state(struct reg_entry *  e,
         struct timespec abstime;
         int ret = 0;
 
-        if (e == NULL || state == REG_NAME_DESTROY)
-                return -EINVAL;
+        assert(e);
+        assert(state != REG_NAME_DESTROY);
 
         if (timeout != NULL) {
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
@@ -450,8 +471,8 @@ int reg_entry_wait_state(struct reg_entry *  e,
         struct timespec abstime;
         int ret = 0;
 
-        if (e == NULL || state == REG_NAME_DESTROY)
-                return -EINVAL;
+        assert(e);
+        assert(state != REG_NAME_DESTROY);
 
         if (timeout != NULL) {
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
@@ -487,6 +508,8 @@ struct reg_entry * registry_get_entry(struct list_head * registry,
 {
         struct list_head * p   = NULL;
 
+        assert(registry);
+
         list_for_each(p, registry) {
                 struct reg_entry * e = list_entry(p, struct reg_entry, next);
                 if (!wildcard_match(name, e->name))
@@ -501,8 +524,8 @@ struct reg_entry * registry_add_name(struct list_head * registry,
 {
         struct reg_entry * e = NULL;
 
-        if (name == NULL)
-                return NULL;
+        assert(registry);
+        assert(name);
 
         if (registry_has_name(registry, name)) {
                 log_dbg("Name %s already registered.", name);
@@ -545,12 +568,13 @@ void registry_del_api(struct list_head * registry,
 {
         struct list_head * p;
 
-        if ( api == -1)
-                return;
+        assert(registry);
+        assert(api > 0);
 
         list_for_each(p, registry) {
                 struct reg_entry * e = list_entry(p, struct reg_entry, next);
                 pthread_mutex_lock(&e->state_lock);
+                assert(e);
                 reg_entry_del_api(e, api);
                 pthread_mutex_unlock(&e->state_lock);
         }
@@ -586,8 +610,7 @@ void registry_destroy(struct list_head * registry)
         struct list_head * p = NULL;
         struct list_head * h = NULL;
 
-        if (registry == NULL)
-                return;
+        assert(registry);
 
         list_for_each_safe(p, h, registry) {
                 struct reg_entry * e = list_entry(p, struct reg_entry, next);

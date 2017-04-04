@@ -1063,16 +1063,21 @@ static struct irm_flow * flow_accept(pid_t api)
         api_n1  = f->n_1_api;
         port_id = f->port_id;
 
-        log_info("Flow on port_id %d allocated.", f->port_id);
-
         pthread_rwlock_unlock(&irmd->flows_lock);
         pthread_rwlock_rdlock(&irmd->reg_lock);
 
         e = api_table_get(&irmd->api_table, api);
         if (e == NULL) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_wrlock(&irmd->flows_lock);
+                list_del(&f->next);
+                bmp_release(irmd->port_ids, f->port_id);
+                pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 ipcp_flow_alloc_resp(api_n1, port_id, api_n, -1);
+                clear_irm_flow(f);
+                irm_flow_set_state(f, FLOW_NULL);
+                irm_flow_destroy(f);
                 log_dbg("Process gone while accepting flow.");
                 return NULL;
         }
@@ -1085,8 +1090,15 @@ static struct irm_flow * flow_accept(pid_t api)
 
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd->reg_lock);
+                pthread_rwlock_wrlock(&irmd->flows_lock);
+                list_del(&f->next);
+                bmp_release(irmd->port_ids, f->port_id);
+                pthread_rwlock_unlock(&irmd->flows_lock);
                 pthread_rwlock_unlock(&irmd->state_lock);
                 ipcp_flow_alloc_resp(api_n1, port_id, api_n, -1);
+                clear_irm_flow(f);
+                irm_flow_set_state(f, FLOW_NULL);
+                irm_flow_destroy(f);
                 log_err("Entry in wrong state.");
                 return NULL;
         }
@@ -1097,11 +1109,21 @@ static struct irm_flow * flow_accept(pid_t api)
         pthread_rwlock_unlock(&irmd->state_lock);
 
         if (ipcp_flow_alloc_resp(api_n1, port_id, api_n, 0)) {
-                log_dbg("Failed to respond to alloc.");
+                pthread_rwlock_rdlock(&irmd->state_lock);
+                pthread_rwlock_wrlock(&irmd->flows_lock);
+                list_del(&f->next);
+                pthread_rwlock_unlock(&irmd->flows_lock);
+                pthread_rwlock_unlock(&irmd->state_lock);
+                log_dbg("Failed to respond to alloc. Port_id invalidated.");
+                clear_irm_flow(f);
+                irm_flow_set_state(f, FLOW_NULL);
+                irm_flow_destroy(f);
                 return NULL;
         }
 
         irm_flow_set_state(f, FLOW_ALLOCATED);
+
+        log_info("Flow on port_id %d allocated.", f->port_id);
 
         return f;
 }
@@ -1157,17 +1179,9 @@ static struct irm_flow * flow_alloc(pid_t     api,
 
         assert(irm_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
-        if (ipcp_flow_alloc(ipcp, port_id, api,
-                            dst_name, cube) < 0) {
-                pthread_rwlock_rdlock(&irmd->state_lock);
-                pthread_rwlock_wrlock(&irmd->flows_lock);
-                list_del(&f->next);
-                clear_irm_flow(f);
-                bmp_release(irmd->port_ids, f->port_id);
-                pthread_rwlock_unlock(&irmd->flows_lock);
-                pthread_rwlock_unlock(&irmd->state_lock);
-                irm_flow_set_state(f, FLOW_NULL);
-                irm_flow_destroy(f);
+        if (ipcp_flow_alloc(ipcp, port_id, api, dst_name, cube) < 0) {
+                /* sanitizer cleans this */
+                log_info("Failed to respond to alloc.");
                 return NULL;
         }
 
@@ -1351,7 +1365,6 @@ static struct irm_flow * flow_req_arr(pid_t     api,
 
                 pthread_rwlock_rdlock(&irmd->state_lock);
                 pthread_rwlock_wrlock(&irmd->reg_lock);
-
         case REG_NAME_FLOW_ACCEPT:
                 h_api = reg_entry_get_api(re);
                 if (h_api == -1) {
@@ -1691,19 +1704,17 @@ void * irm_sanitize(void * o)
 
                         if (irm_flow_get_state(f) == FLOW_ALLOC_PENDING
                             && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
-                                list_del(&f->next);
                                 log_dbg("Pending port_id %d timed out.",
                                          f->port_id);
-                                clear_irm_flow(f);
+                                f->n_1_api = -1;
+                                irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 ipcp_flow_dealloc(f->n_1_api, f->port_id);
-                                bmp_release(irmd->port_ids, f->port_id);
-                                irm_flow_destroy(f);
                                 continue;
                         }
 
                         if (kill(f->n_api, 0) < 0) {
                                 struct shm_flow_set * set;
-                                log_dbg("AP-I %d gone, flow %d deallocated.",
+                                log_dbg("AP-I %d gone, deallocating flow %d.",
                                          f->n_api, f->port_id);
                                 set = shm_flow_set_open(f->n_api);
                                 if (set != NULL)
@@ -1711,22 +1722,18 @@ void * irm_sanitize(void * o)
                                 f->n_api = -1;
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 ipcp_flow_dealloc(f->n_1_api, f->port_id);
-                                clear_irm_flow(f);
                                 continue;
                         }
 
                         if (kill(f->n_1_api, 0) < 0) {
                                 struct shm_flow_set * set;
-                                list_del(&f->next);
                                 log_err("IPCP %d gone, flow %d removed.",
                                         f->n_1_api, f->port_id);
                                 set = shm_flow_set_open(f->n_api);
                                 if (set != NULL)
                                         shm_flow_set_destroy(set);
-
-                                clear_irm_flow(f);
-                                bmp_release(irmd->port_ids, f->port_id);
-                                irm_flow_destroy(f);
+                                f->n_1_api = -1;
+                                irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
                         }
                 }
 
@@ -2087,6 +2094,8 @@ static int irm_create(void)
         if (irmd == NULL)
                 return -ENOMEM;
 
+        memset(irmd, 0, sizeof(*irmd));
+
         memset(&st, 0, sizeof(st));
 
         irmd->state = IRMD_NULL;
@@ -2158,7 +2167,10 @@ static int irm_create(void)
         if ((irmd->lf = lockfile_create()) == NULL) {
                 if ((irmd->lf = lockfile_open()) == NULL) {
                         log_err("Lockfile error.");
-                        irm_destroy();
+                        free(irmd->threadpool);
+                        bmp_destroy(irmd->thread_ids);
+                        bmp_destroy(irmd->port_ids);
+                        free(irmd);
                         return -1;
                 }
 
@@ -2172,6 +2184,9 @@ static int irm_create(void)
                         log_info("IRMd already running (%d), exiting.",
                                  lockfile_owner(irmd->lf));
                         lockfile_close(irmd->lf);
+                        free(irmd->threadpool);
+                        bmp_destroy(irmd->thread_ids);
+                        bmp_destroy(irmd->port_ids);
                         free(irmd);
                         return -1;
                 }
