@@ -113,8 +113,8 @@ static void * ipcp_local_sdu_loop(void * o)
                         if (fd != -1)
                                 local_flow_write(fd, idx);
 
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
                         pthread_rwlock_unlock(&local_data.lock);
+                        pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
 
         }
