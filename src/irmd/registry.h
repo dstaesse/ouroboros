@@ -63,7 +63,6 @@ struct reg_entry {
         struct list_head    reg_apis;
 
         enum reg_name_state state;
-        qoscube_t           qos;
         pthread_cond_t      state_cond;
         pthread_mutex_t     state_lock;
 };

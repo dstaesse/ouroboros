@@ -185,7 +185,8 @@ int api_entry_sleep(struct api_entry * e)
                                               &dl);
 
         if (e->state == API_DESTROY) {
-                reg_entry_del_api(e->re, e->api);
+                if (e->re != NULL)
+                        reg_entry_del_api(e->re, e->api);
                 ret = -1;
         }
 
