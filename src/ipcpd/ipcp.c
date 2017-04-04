@@ -522,26 +522,18 @@ int ipcp_init(int               argc,
         return 0;
 }
 
-static bool is_thread_alive(ssize_t id)
-{
-        bool ret;
-        pthread_mutex_lock(&ipcpi.threads_lock);
-
-        ret = bmp_is_id_used(ipcpi.thread_ids, id);
-
-        pthread_mutex_unlock(&ipcpi.threads_lock);
-
-        return ret;
-}
-
 void * threadpoolmgr(void * o)
 {
-        struct timespec to = {(IPCP_TPM_TIMEOUT / 1000),
-                              (IPCP_TPM_TIMEOUT % 1000) * MILLION};
+        pthread_attr_t  pattr;
         struct timespec dl;
-        size_t t;
-
+        struct timespec to = {(IRMD_TPM_TIMEOUT / 1000),
+                              (IRMD_TPM_TIMEOUT % 1000) * MILLION};
         (void) o;
+
+        if (pthread_attr_init(&pattr))
+                return (void *) -1;
+
+        pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
 
         while (true) {
                 clock_gettime(PTHREAD_COND_CLOCK, &dl);
@@ -551,12 +543,13 @@ void * threadpoolmgr(void * o)
                 if (ipcp_get_state() == IPCP_SHUTDOWN ||
                     ipcp_get_state() == IPCP_NULL) {
                         pthread_rwlock_unlock(&ipcpi.state_lock);
-                        log_dbg("Threadpool manager exiting.");
-                        for (t = 0; t < IPCP_MAX_THREADS; ++t)
-                                if (is_thread_alive(t)) {
-                                        log_dbg("Waiting for thread %zd.", t);
-                                        pthread_join(ipcpi.threadpool[t], NULL);
-                                }
+                        pthread_attr_destroy(&pattr);
+                        log_dbg("Waiting for threads to exit.");
+                        pthread_mutex_lock(&ipcpi.threads_lock);
+                        while (ipcpi.threads > 0)
+                                pthread_cond_wait(&ipcpi.threads_cond,
+                                                  &ipcpi.threads_lock);
+                        pthread_mutex_unlock(&ipcpi.threads_lock);
 
                         log_dbg("Threadpool manager done.");
                         break;
@@ -578,7 +571,7 @@ void * threadpoolmgr(void * o)
                                 }
 
                                 if (pthread_create(&ipcpi.threadpool[id],
-                                                   NULL, ipcp_main_loop,
+                                                   &pattr, ipcp_main_loop,
                                                    (void *) id))
                                         log_warn("Failed to start new thread.");
                                 else

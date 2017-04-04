@@ -1815,6 +1815,7 @@ void * mainloop(void * o)
                 if (irmd->state != IRMD_RUNNING || thread_check()) {
                         thread_exit(id);
                         pthread_rwlock_unlock(&irmd->state_lock);
+                        log_dbg("Thread %zd exited.", id);
                         break;
                 }
 
@@ -2009,26 +2010,18 @@ void * mainloop(void * o)
         return (void *) 0;
 }
 
-static bool is_thread_alive(ssize_t id)
-{
-        bool ret;
-        pthread_mutex_lock(&irmd->threads_lock);
-
-        ret = bmp_is_id_used(irmd->thread_ids, id);
-
-        pthread_mutex_unlock(&irmd->threads_lock);
-
-        return ret;
-}
-
 void * threadpoolmgr(void * o)
 {
+        pthread_attr_t  pattr;
+        struct timespec dl;
         struct timespec to = {(IRMD_TPM_TIMEOUT / 1000),
                               (IRMD_TPM_TIMEOUT % 1000) * MILLION};
-        struct timespec dl;
-        size_t t;
-
         (void) o;
+
+        if (pthread_attr_init(&pattr))
+                return (void *) -1;
+
+        pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
 
         while (true) {
                 clock_gettime(PTHREAD_COND_CLOCK, &dl);
@@ -2037,13 +2030,13 @@ void * threadpoolmgr(void * o)
                 pthread_rwlock_rdlock(&irmd->state_lock);
                 if (irmd->state != IRMD_RUNNING) {
                         pthread_rwlock_unlock(&irmd->state_lock);
-                        log_dbg("Threadpool manager exiting.");
-                        for (t = 0; t < IRMD_MAX_THREADS; ++t)
-                                if (is_thread_alive(t)) {
-                                        log_dbg("Waiting for thread %zd.", t);
-                                        pthread_join(irmd->threadpool[t], NULL);
-                                }
-
+                        pthread_attr_destroy(&pattr);
+                        log_dbg("Waiting for threads exit.");
+                        pthread_mutex_lock(&irmd->threads_lock);
+                        while (irmd->threads > 0)
+                                pthread_cond_wait(&irmd->threads_cond,
+                                                  &irmd->threads_lock);
+                        pthread_mutex_unlock(&irmd->threads_lock);
                         log_dbg("Threadpool manager done.");
                         break;
                 }
@@ -2064,7 +2057,8 @@ void * threadpoolmgr(void * o)
                                 }
 
                                 if (pthread_create(&irmd->threadpool[id],
-                                                   NULL, mainloop, (void *) id))
+                                                   &pattr, mainloop,
+                                                   (void *) id))
                                         log_warn("Failed to start new thread.");
                                 else
                                         ++irmd->threads;
