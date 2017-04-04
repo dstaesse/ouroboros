@@ -89,19 +89,12 @@ static void * ipcp_local_sdu_loop(void * o)
                 int fd;
                 ssize_t idx;
 
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                if (ipcp_get_state() != IPCP_OPERATIONAL)
                         return (void *) 1; /* -ENOTENROLLED */
-                }
-
-                pthread_rwlock_unlock(&ipcpi.state_lock);
 
                 flow_event_wait(local_data.flows, local_data.fq, &timeout);
 
                 while ((fd = fqueue_next(local_data.fq)) >= 0) {
-                        pthread_rwlock_rdlock(&ipcpi.state_lock);
                         pthread_rwlock_rdlock(&local_data.lock);
 
                         idx = local_flow_read(fd);
@@ -114,7 +107,6 @@ static void * ipcp_local_sdu_loop(void * o)
                                 local_flow_write(fd, idx);
 
                         pthread_rwlock_unlock(&local_data.lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
 
         }
@@ -134,15 +126,11 @@ void ipcp_sig_handler(int         sig,
         case SIGHUP:
         case SIGQUIT:
                 if (info->si_pid == ipcpi.irmd_api) {
-                        pthread_rwlock_wrlock(&ipcpi.state_lock);
-
                         if (ipcp_get_state() == IPCP_INIT)
                                 ipcp_set_state(IPCP_NULL);
 
                         if (ipcp_get_state() == IPCP_OPERATIONAL)
                                 ipcp_set_state(IPCP_SHUTDOWN);
-
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
         default:
                 return;
@@ -156,10 +144,7 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
-
         if (ipcp_get_state() != IPCP_INIT) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("IPCP in wrong state.");
                 return -1;
         }
@@ -167,8 +152,6 @@ static int ipcp_local_bootstrap(struct dif_config * conf)
         ipcp_set_state(IPCP_OPERATIONAL);
 
         pthread_create(&local_data.sduloop, NULL, ipcp_local_sdu_loop, NULL);
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         log_info("Bootstrapped local IPCP with api %d.", getpid());
 
@@ -235,10 +218,7 @@ static int ipcp_local_flow_alloc(int       fd,
 
         assert(dst_name);
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_dbg("Won't allocate over non-operational IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
@@ -253,7 +233,7 @@ static int ipcp_local_flow_alloc(int       fd,
 
         out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (out_fd < 0) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
+                pthread_rwlock_unlock(&local_data.lock);
                 log_dbg("Flow allocation failed: %d", out_fd);
                 return -1;
         }
@@ -270,7 +250,6 @@ static int ipcp_local_flow_alloc(int       fd,
         local_data.in_out[out_fd] = fd;
 
         pthread_rwlock_unlock(&local_data.lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         flow_set_add(local_data.flows, fd);
 
@@ -285,7 +264,6 @@ static int ipcp_local_flow_alloc_resp(int fd,
         int out_fd = -1;
         int ret = -1;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&local_data.lock);
 
         if (response) {
@@ -293,19 +271,16 @@ static int ipcp_local_flow_alloc_resp(int fd,
                         local_data.in_out[local_data.in_out[fd]] = fd;
                 local_data.in_out[fd] = -1;
                 pthread_rwlock_unlock(&local_data.lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return 0;
         }
 
         out_fd = local_data.in_out[fd];
         if (out_fd == -1) {
                 pthread_rwlock_unlock(&local_data.lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
         pthread_rwlock_unlock(&local_data.lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         flow_set_add(local_data.flows, fd);
 
@@ -323,7 +298,6 @@ static int ipcp_local_flow_dealloc(int fd)
 
         ipcp_flow_fini(fd);
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&local_data.lock);
 
         flow_set_del(local_data.flows, fd);
@@ -331,7 +305,6 @@ static int ipcp_local_flow_dealloc(int fd)
         local_data.in_out[fd] = -1;
 
         pthread_rwlock_unlock(&local_data.lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         flow_dealloc(fd);
 
@@ -409,10 +382,8 @@ int main(int    argc,
 
         ipcp_shutdown();
 
-        if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                pthread_cancel(local_data.sduloop);
+        if (ipcp_get_state() == IPCP_SHUTDOWN)
                 pthread_join(local_data.sduloop, NULL);
-        }
 
         local_data_fini();
 
