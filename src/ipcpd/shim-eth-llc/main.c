@@ -126,8 +126,9 @@ struct {
 
 static int eth_llc_data_init(void)
 {
-        int i;
-        int ret = -1;
+        int                i;
+        int                ret = -1;
+        pthread_condattr_t cattr;
 
         eth_llc_data.fd_to_ef = malloc(sizeof(struct ef) * IRMD_MAX_FLOWS);
         if (eth_llc_data.fd_to_ef == NULL)
@@ -172,7 +173,14 @@ static int eth_llc_data_init(void)
         if (pthread_mutex_init(&eth_llc_data.mgmt_lock, NULL))
                 goto flow_lock_destroy;
 
-        if (pthread_cond_init(&eth_llc_data.mgmt_cond, NULL))
+        if (pthread_condattr_init(&cattr))
+                goto mgmt_lock_destroy;;
+
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+
+        if (pthread_cond_init(&eth_llc_data.mgmt_cond, &cattr))
                 goto mgmt_lock_destroy;
 
         return 0;
@@ -339,7 +347,6 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
 {
         int fd;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         /* reply to IRM, called under lock to prevent race */
@@ -353,7 +360,6 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
         memcpy(eth_llc_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         log_dbg("New flow request, fd %d, remote SAP %d.", fd, r_sap);
 
@@ -368,13 +374,11 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
         int ret = 0;
         int fd = -1;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-        pthread_rwlock_wrlock(& eth_llc_data.flows_lock);
+        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         fd = eth_llc_data.ef_to_fd[dsap];
         if (fd < 0) {
                 pthread_rwlock_unlock(& eth_llc_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("No flow found with that SAP.");
                 return -1; /* -EFLOWNOTFOUND */
         }
@@ -387,7 +391,6 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
         }
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         log_dbg("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
 
@@ -484,29 +487,28 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
         int             ret;
         struct timespec timeout = {(MGMT_TIMEOUT / 1000),
                                    (MGMT_TIMEOUT % 1000) * MILLION};
+        struct timespec abstime;
 
         (void) o;
 
         while (true) {
                 ret = 0;
 
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                if (ipcp_get_state() != IPCP_OPERATIONAL)
                         return (void *) 0;
-                }
+
+                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+                ts_add(&abstime, &timeout, &abstime);
 
                 pthread_mutex_lock(&eth_llc_data.mgmt_lock);
 
-                while (eth_llc_data.mgmt_arrived == false &&
-                       ret != -ETIMEDOUT)
+                while (!eth_llc_data.mgmt_arrived && ret != -ETIMEDOUT)
                         ret = -pthread_cond_timedwait(&eth_llc_data.mgmt_cond,
                                                       &eth_llc_data.mgmt_lock,
-                                                      &timeout);
+                                                      &abstime);
 
                 if (ret == -ETIMEDOUT) {
                         pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
                         continue;
                 }
 
@@ -515,7 +517,6 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
                                         eth_llc_data.mgmt_r_addr);
                 eth_llc_data.mgmt_arrived = false;
                 pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
         }
 }
 
@@ -540,11 +541,8 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 if (frame_len < 0)
                         continue;
 
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                if (ipcp_get_state() != IPCP_OPERATIONAL)
                         return (void *) 0;
-                }
 
                 llc_frame = (struct eth_llc_frame *) buf;
 
@@ -555,18 +553,14 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 #endif
                            llc_frame->dst_hwaddr,
                            MAC_SIZE) &&
-                           memcmp(br_addr, llc_frame->dst_hwaddr, MAC_SIZE)) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                           memcmp(br_addr, llc_frame->dst_hwaddr, MAC_SIZE))
                         continue;
-                }
 
                 memcpy(&length, &llc_frame->length, sizeof(length));
                 length = ntohs(length);
 
-                if (length > 0x05FF) {  /* DIX */
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                if (length > 0x05FF) /* DIX */
                         continue;
-                }
 
                 length -= LLC_HEADER_SIZE;
 
@@ -591,7 +585,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         fd = eth_llc_data.ef_to_fd[dsap];
                         if (fd < 0) {
                                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                                pthread_rwlock_unlock(&ipcpi.state_lock);
                                 continue;
                         }
 
@@ -599,7 +592,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                             || memcmp(eth_llc_data.fd_to_ef[fd].r_addr,
                                       llc_frame->src_hwaddr, MAC_SIZE)) {
                                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                                pthread_rwlock_unlock(&ipcpi.state_lock);
                                 continue;
                         }
 
@@ -607,8 +599,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                         flow_write(fd, &llc_frame->payload, length);
                 }
-
-                pthread_rwlock_unlock(&ipcpi.state_lock);
         }
 
         return (void *) 0;
@@ -629,12 +619,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                                eth_llc_data.fq,
                                &timeout)) {
 
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                if (ipcp_get_state() != IPCP_OPERATIONAL)
                         return (void *) 0;
-                }
 
                 pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
                 while ((fd = fqueue_next(eth_llc_data.fq)) >= 0) {
@@ -656,7 +642,6 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                         ipcp_flow_del(sdb);
                 }
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
         }
 
         return (void *) 1;
@@ -673,15 +658,11 @@ void ipcp_sig_handler(int         sig,
         case SIGTERM:
         case SIGHUP:
                 if (info->si_pid == ipcpi.irmd_api) {
-                        pthread_rwlock_wrlock(&ipcpi.state_lock);
-
                         if (ipcp_get_state() == IPCP_INIT)
                                 ipcp_set_state(IPCP_NULL);
 
                         if (ipcp_get_state() == IPCP_OPERATIONAL)
                                 ipcp_set_state(IPCP_SHUTDOWN);
-
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
                 }
         default:
                 return;
@@ -792,10 +773,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
-
         if (ipcp_get_state() != IPCP_INIT) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("IPCP in wrong state.");
                 close(skfd);
                 return -1;
@@ -821,8 +799,6 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
                        eth_llc_ipcp_sdu_writer,
                        NULL);
 
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
         log_dbg("Bootstrapped shim IPCP over Ethernet with LLC with api %d.",
                 getpid());
 
@@ -839,16 +815,11 @@ static int eth_llc_ipcp_name_reg(char * name)
                 return -ENOMEM;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
         if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("Failed to add %s to local registry.", name);
                 free(name_dup);
                 return -1;
         }
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         log_dbg("Registered %s.", name);
 
@@ -857,11 +828,7 @@ static int eth_llc_ipcp_name_reg(char * name)
 
 static int eth_llc_ipcp_name_unreg(char * name)
 {
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
         shim_data_reg_del_entry(ipcpi.shim_data, name);
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         return 0;
 }
@@ -920,16 +887,12 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
                 return -1;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_dbg("Won't allocate flow with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
 
         if (!shim_data_dir_has(ipcpi.shim_data, dst_name)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("Destination unreachable.");
                 return -1;
         }
@@ -940,7 +903,6 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
         ssap =  bmp_allocate(eth_llc_data.saps);
         if (!bmp_is_id_valid(eth_llc_data.saps, ssap)) {
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
@@ -948,18 +910,15 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
         eth_llc_data.ef_to_fd[ssap]   = fd;
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         memcpy(r_addr, &addr, MAC_SIZE);
 
         if (eth_llc_ipcp_sap_alloc(r_addr, ssap, dst_name, cube) < 0) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
                 bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
                 eth_llc_data.fd_to_ef[fd].sap = -1;
                 eth_llc_data.ef_to_fd[ssap]   = -1;
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
@@ -977,13 +936,11 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd,
         uint8_t r_sap = 0;
         uint8_t r_addr[MAC_SIZE];
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         ssap = bmp_allocate(eth_llc_data.saps);
         if (!bmp_is_id_valid(eth_llc_data.saps, ssap)) {
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
@@ -993,14 +950,11 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd,
         eth_llc_data.ef_to_fd[ssap] = fd;
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         if (eth_llc_ipcp_sap_alloc_resp(r_addr, ssap, r_sap, response) < 0) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
                 bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
@@ -1018,10 +972,7 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 
         ipcp_flow_fini(fd);
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_dbg("Won't register with non-enrolled IPCP.");
                 return -1; /* -ENOTENROLLED */
         }
@@ -1040,7 +991,6 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
         eth_llc_data.ef_to_fd[sap] = -1;
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         flow_dealloc(fd);
 
