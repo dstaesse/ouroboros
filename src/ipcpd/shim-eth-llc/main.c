@@ -117,11 +117,21 @@ struct {
 
         pthread_t          sdu_writer;
         pthread_t          sdu_reader;
+
+        /* Handle mgmt frames in a different thread */
+        pthread_t          mgmt_frame_handler;
+        pthread_mutex_t    mgmt_frame_lock;
+        pthread_cond_t     mgmt_frame_cond;
+        uint8_t            mgmt_frame_r_addr[MAC_SIZE];
+        uint8_t            mgmt_frame_buf[ETH_FRAME_SIZE];
+        size_t             mgmt_frame_len;
+        bool               mgmt_frame_arrived;
 } eth_llc_data;
 
 static int eth_llc_data_init(void)
 {
         int i;
+        int ret = -1;
 
         eth_llc_data.fd_to_ef = malloc(sizeof(struct ef) * IRMD_MAX_FLOWS);
         if (eth_llc_data.fd_to_ef == NULL)
@@ -129,32 +139,26 @@ static int eth_llc_data_init(void)
 
         eth_llc_data.ef_to_fd = malloc(sizeof(struct ef) * MAX_SAPS);
         if (eth_llc_data.ef_to_fd == NULL) {
-                free(eth_llc_data.fd_to_ef);
-                return -ENOMEM;
+                ret = -ENOMEM;
+                goto free_fd_to_ef;
         }
 
         eth_llc_data.saps = bmp_create(MAX_SAPS, 2);
         if (eth_llc_data.saps == NULL) {
-                free(eth_llc_data.ef_to_fd);
-                free(eth_llc_data.fd_to_ef);
-                return -ENOMEM;
+                ret = -ENOMEM;
+                goto free_ef_to_fd;
         }
 
         eth_llc_data.np1_flows = flow_set_create();
         if (eth_llc_data.np1_flows == NULL) {
-                bmp_destroy(eth_llc_data.saps);
-                free(eth_llc_data.ef_to_fd);
-                free(eth_llc_data.fd_to_ef);
-                return -ENOMEM;
+                ret = -ENOMEM;
+                goto bmp_destroy;
         }
 
         eth_llc_data.fq = fqueue_create();
         if (eth_llc_data.fq == NULL) {
-                flow_set_destroy(eth_llc_data.np1_flows);
-                bmp_destroy(eth_llc_data.saps);
-                free(eth_llc_data.ef_to_fd);
-                free(eth_llc_data.fd_to_ef);
-                return -ENOMEM;
+                ret = -ENOMEM;
+                goto flow_set_destroy;
         }
 
         for (i = 0; i < MAX_SAPS; ++i)
@@ -166,26 +170,57 @@ static int eth_llc_data_init(void)
                 memset(&eth_llc_data.fd_to_ef[i].r_addr, 0, MAC_SIZE);
         }
 
-        pthread_rwlock_init(&eth_llc_data.flows_lock, NULL);
+        if (pthread_rwlock_init(&eth_llc_data.flows_lock, NULL))
+                goto fqueue_destroy;
+
+        if (pthread_mutex_init(&eth_llc_data.mgmt_frame_lock, NULL))
+                goto flow_lock_destroy;
+
+        if (pthread_cond_init(&eth_llc_data.mgmt_frame_cond, NULL))
+                goto mgmt_frame_lock_destroy;
 
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
-        pthread_mutex_init(&eth_llc_data.tx_lock, NULL);
+        if (pthread_mutex_init(&eth_llc_data.tx_lock, NULL))
+                goto mgmt_frame_cond_destroy;
 #endif
 
         return 0;
+
+#if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
+ mgmt_frame_cond_destroy:
+        pthread_cond_destroy(&eth_llc_data.mgmt_frame_cond);
+#endif
+ mgmt_frame_lock_destroy:
+        pthread_mutex_destroy(&eth_llc_data.mgmt_frame_lock);
+ flow_lock_destroy:
+        pthread_rwlock_destroy(&eth_llc_data.flows_lock);
+ fqueue_destroy:
+        fqueue_destroy(eth_llc_data.fq);
+ flow_set_destroy:
+        flow_set_destroy(eth_llc_data.np1_flows);
+ bmp_destroy:
+        bmp_destroy(eth_llc_data.saps);
+ free_ef_to_fd:
+        free(eth_llc_data.ef_to_fd);
+ free_fd_to_ef:
+        free(eth_llc_data.fd_to_ef);
+
+        return ret;
 }
 
 void eth_llc_data_fini(void)
 {
-        bmp_destroy(eth_llc_data.saps);
-        flow_set_destroy(eth_llc_data.np1_flows);
-        fqueue_destroy(eth_llc_data.fq);
-        free(eth_llc_data.fd_to_ef);
-        free(eth_llc_data.ef_to_fd);
-        pthread_rwlock_destroy(&eth_llc_data.flows_lock);
 #if defined(PACKET_RX_RING) && defined(PACKET_TX_RING)
         pthread_mutex_destroy(&eth_llc_data.tx_lock);
 #endif
+        pthread_cond_destroy(&eth_llc_data.mgmt_frame_cond);
+        pthread_mutex_destroy(&eth_llc_data.mgmt_frame_lock);
+        pthread_rwlock_destroy(&eth_llc_data.flows_lock);
+        fqueue_destroy(eth_llc_data.fq);
+        flow_set_destroy(eth_llc_data.np1_flows);
+        bmp_destroy(eth_llc_data.saps);
+        free(eth_llc_data.fd_to_ef);
+        free(eth_llc_data.ef_to_fd);
 }
 
 static uint8_t reverse_bits(uint8_t b)
@@ -374,15 +409,15 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
 {
         int fd;
 
-        /* reply to IRM */
+        pthread_rwlock_rdlock(&ipcpi.state_lock);
+        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
+
+        /* reply to IRM, called under lock to prevent race */
         fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (fd < 0) {
                 log_err("Could not get new flow from IRMd.");
                 return -1;
         }
-
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         eth_llc_data.fd_to_ef[fd].r_sap = r_sap;
         memcpy(eth_llc_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
@@ -512,6 +547,28 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
         return 0;
 }
 
+static void * eth_llc_ipcp_mgmt_frame_handler(void * o)
+{
+        (void) o;
+
+         while (true) {
+                pthread_mutex_lock(&eth_llc_data.mgmt_frame_lock);
+
+                pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
+                                     (void *) &eth_llc_data.mgmt_frame_lock);
+
+                while (eth_llc_data.mgmt_frame_arrived == false)
+                        pthread_cond_wait(&eth_llc_data.mgmt_frame_cond,
+                                          &eth_llc_data.mgmt_frame_lock);
+
+                eth_llc_ipcp_mgmt_frame(eth_llc_data.mgmt_frame_buf,
+                                        eth_llc_data.mgmt_frame_len,
+                                        eth_llc_data.mgmt_frame_r_addr);
+                eth_llc_data.mgmt_frame_arrived = false;
+                pthread_cleanup_pop(true);
+        }
+}
+
 static void * eth_llc_ipcp_sdu_reader(void * o)
 {
         uint8_t br_addr[MAC_SIZE];
@@ -609,9 +666,17 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 ssap = reverse_bits(llc_frame->ssap);
 
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
-                        eth_llc_ipcp_mgmt_frame(&llc_frame->payload,
-                                                length,
-                                                llc_frame->src_hwaddr);
+                        pthread_mutex_lock(&eth_llc_data.mgmt_frame_lock);
+                        memcpy(eth_llc_data.mgmt_frame_buf,
+                               &llc_frame->payload,
+                               length);
+                        memcpy(eth_llc_data.mgmt_frame_r_addr,
+                               llc_frame->src_hwaddr,
+                               MAC_SIZE);
+                        eth_llc_data.mgmt_frame_len = length;
+                        eth_llc_data.mgmt_frame_arrived = true;
+                        pthread_cond_signal(&eth_llc_data.mgmt_frame_cond);
+                        pthread_mutex_unlock(&eth_llc_data.mgmt_frame_lock);
                 } else {
                         pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
 
@@ -892,6 +957,11 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 #endif
 
         ipcp_set_state(IPCP_OPERATIONAL);
+
+        pthread_create(&eth_llc_data.mgmt_frame_handler,
+                       NULL,
+                       eth_llc_ipcp_mgmt_frame_handler,
+                       NULL);
 
         pthread_create(&eth_llc_data.sdu_reader,
                        NULL,
@@ -1203,8 +1273,10 @@ int main(int    argc,
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 pthread_cancel(eth_llc_data.sdu_reader);
                 pthread_cancel(eth_llc_data.sdu_writer);
+                pthread_cancel(eth_llc_data.mgmt_frame_handler);
                 pthread_join(eth_llc_data.sdu_writer, NULL);
                 pthread_join(eth_llc_data.sdu_reader, NULL);
+                pthread_join(eth_llc_data.mgmt_frame_handler, NULL);
         }
 
         eth_llc_data_fini();
