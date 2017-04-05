@@ -347,19 +347,23 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
 {
         int fd;
 
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
+        pthread_mutex_lock(&ipcpi.alloc_lock);
 
         /* reply to IRM, called under lock to prevent race */
         fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (fd < 0) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
                 return -1;
         }
+
+        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         eth_llc_data.fd_to_ef[fd].r_sap = r_sap;
         memcpy(eth_llc_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         log_dbg("New flow request, fd %d, remote SAP %d.", fd, r_sap);
 
