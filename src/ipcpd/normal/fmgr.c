@@ -186,8 +186,6 @@ void * fmgr_nm1_sdu_reader(void * o)
                         shm_pci_des(sdb, &pci);
 
                         if (pci.dst_addr != ipcpi.dt_addr) {
-                                log_dbg("PDU needs to be forwarded.");
-
                                 if (pci.ttl == 0) {
                                         log_dbg("TTL was zero.");
                                         ipcp_flow_del(sdb);
@@ -211,14 +209,13 @@ void * fmgr_nm1_sdu_reader(void * o)
                                         ipcp_flow_del(sdb);
                                         continue;
                                 }
-                        }
+                        } else {
+                                shm_pci_shrink(sdb);
 
-                        shm_pci_shrink(sdb);
-
-                        if (frct_nm1_post_sdu(&pci, sdb)) {
-                                log_err("Failed to hand PDU to FRCT.");
-                                ipcp_flow_del(sdb);
-                                continue;
+                                if (frct_nm1_post_sdu(&pci, sdb)) {
+                                        log_err("Failed to hand PDU to FRCT.");
+                                        continue;
+                                }
                         }
                 }
         }
