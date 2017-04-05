@@ -89,7 +89,7 @@ static void * allocator(void * o)
         /* FIXME: subscribe to members to keep the graph complete. */
         len = rib_children("/" MEMBERS_NAME, &children);
         for (i = 0; i < len; ++i) {
-                if (strcmp(children[i], ipcpi.name) < 0) {
+                if (strcmp(children[i], ipcpi.name) != 0) {
                         if (connmgr_alloc(complete->ae,
                                           children[i],
                                           &qs,
