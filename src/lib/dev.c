@@ -276,7 +276,7 @@ int ap_init(const char * ap_name)
                 shm_flow_set_destroy(ai.fqset);
                 bmp_destroy(ai.fqueues);
                 bmp_destroy(ai.fds);
-                return -1;
+                return -EIRMD;
         }
 
         ai.flows = malloc(sizeof(*ai.flows) * AP_MAX_FLOWS);
@@ -393,9 +393,9 @@ int flow_accept(qosspec_t *       qs,
 
         if (timeo != NULL) {
                 msg.has_timeo_sec = true;
-                msg.has_timeo_usec = true;
+                msg.has_timeo_nsec = true;
                 msg.timeo_sec  = timeo->tv_sec;
-                msg.timeo_usec = timeo->tv_nsec / 1000;
+                msg.timeo_nsec = timeo->tv_nsec;
         }
 
         pthread_rwlock_rdlock(&ai.data_lock);
@@ -404,13 +404,19 @@ int flow_accept(qosspec_t *       qs,
 
         pthread_rwlock_unlock(&ai.data_lock);
 
-        recv_msg = send_recv_irm_msg_b(&msg);
+        recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
+        }
+
+        if (recv_msg->result !=  0) {
+                int res =  recv_msg->result;
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return res;
         }
 
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
@@ -496,9 +502,9 @@ int flow_alloc(const char *      dst_name,
 
         if (timeo != NULL) {
                 msg.has_timeo_sec = true;
-                msg.has_timeo_usec = true;
+                msg.has_timeo_nsec = true;
                 msg.timeo_sec  = timeo->tv_sec;
-                msg.timeo_usec = timeo->tv_nsec / 1000;
+                msg.timeo_nsec = timeo->tv_nsec;
         }
 
         pthread_rwlock_rdlock(&ai.data_lock);
@@ -510,6 +516,17 @@ int flow_alloc(const char *      dst_name,
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
+
+        if (!recv_msg->has_result) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -EIRMD;
+        }
+
+        if (recv_msg->result !=  0) {
+                int res =  recv_msg->result;
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return res;
+        }
 
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);

@@ -61,6 +61,8 @@ int                api_entry_sleep(struct api_entry * e);
 void               api_entry_wake(struct api_entry * e,
                                   struct reg_entry * re);
 
+void               api_entry_cancel(struct api_entry * e);
+
 int                api_entry_add_name(struct api_entry * e,
                                       char *             name);
 

@@ -71,7 +71,8 @@ enum flow_state   irm_flow_get_state(struct irm_flow * f);
 void              irm_flow_set_state(struct irm_flow * f,
                                      enum flow_state   state);
 
-enum flow_state   irm_flow_wait_state(struct irm_flow * f,
-                                      enum flow_state   state);
+int               irm_flow_wait_state(struct irm_flow * f,
+                                      enum flow_state   state,
+                                      struct timespec * timeo);
 
 #endif /* OUROBOROS_IRMD_IRM_FLOW_H */

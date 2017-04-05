@@ -296,7 +296,7 @@ static void * ipcp_main_loop(void * o)
 
                 buffer.len = ipcp_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
-                        log_err("Failed to send reply message");
+                        log_err("Failed to pack reply message");
                         close(lsockfd);
                         thread_inc();
                         continue;
@@ -304,6 +304,7 @@ static void * ipcp_main_loop(void * o)
 
                 buffer.data = malloc(buffer.len);
                 if (buffer.data == NULL) {
+                        log_err("Failed to create reply buffer.");
                         close(lsockfd);
                         thread_inc();
                         continue;
@@ -312,6 +313,7 @@ static void * ipcp_main_loop(void * o)
                 ipcp_msg__pack(&ret_msg, buffer.data);
 
                 if (write(lsockfd, buffer.data, buffer.len) == -1) {
+                        log_err("Failed to send reply message");
                         free(buffer.data);
                         close(lsockfd);
                         thread_inc();
