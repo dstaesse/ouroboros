@@ -96,6 +96,13 @@ struct ef {
         uint8_t r_addr[MAC_SIZE];
 };
 
+struct mgmt_frame {
+        struct list_head next;
+        uint8_t          r_addr[MAC_SIZE];
+        uint8_t          buf[ETH_FRAME_SIZE];
+        size_t           len;
+};
+
 struct {
 #ifdef __FreeBSD__
         struct sockaddr_dl device;
@@ -118,10 +125,8 @@ struct {
         pthread_t          mgmt_handler;
         pthread_mutex_t    mgmt_lock;
         pthread_cond_t     mgmt_cond;
-        uint8_t            mgmt_r_addr[MAC_SIZE];
-        uint8_t            mgmt_buf[ETH_FRAME_SIZE];
-        size_t             mgmt_len;
-        bool               mgmt_arrived;
+        struct list_head   mgmt_frames;
+
 } eth_llc_data;
 
 static int eth_llc_data_init(void)
@@ -182,6 +187,8 @@ static int eth_llc_data_init(void)
 
         if (pthread_cond_init(&eth_llc_data.mgmt_cond, &cattr))
                 goto mgmt_lock_destroy;
+
+        list_head_init(&eth_llc_data.mgmt_frames);
 
         return 0;
 
@@ -488,10 +495,11 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
 
 static void * eth_llc_ipcp_mgmt_handler(void * o)
 {
-        int             ret;
-        struct timespec timeout = {(MGMT_TIMEOUT / 1000),
-                                   (MGMT_TIMEOUT % 1000) * MILLION};
-        struct timespec abstime;
+        int                 ret;
+        struct timespec     timeout = {(MGMT_TIMEOUT / 1000),
+                                       (MGMT_TIMEOUT % 1000) * MILLION};
+        struct timespec     abstime;
+        struct mgmt_frame * frame;
 
         (void) o;
 
@@ -506,7 +514,8 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
 
                 pthread_mutex_lock(&eth_llc_data.mgmt_lock);
 
-                while (!eth_llc_data.mgmt_arrived && ret != -ETIMEDOUT)
+                while (list_is_empty(&eth_llc_data.mgmt_frames) &&
+                       ret != -ETIMEDOUT)
                         ret = -pthread_cond_timedwait(&eth_llc_data.mgmt_cond,
                                                       &eth_llc_data.mgmt_lock,
                                                       &abstime);
@@ -516,10 +525,18 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
                         continue;
                 }
 
-                eth_llc_ipcp_mgmt_frame(eth_llc_data.mgmt_buf,
-                                        eth_llc_data.mgmt_len,
-                                        eth_llc_data.mgmt_r_addr);
-                eth_llc_data.mgmt_arrived = false;
+                frame = list_first_entry((&eth_llc_data.mgmt_frames),
+                                         struct mgmt_frame, next);
+                if (frame == NULL) {
+                        pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
+                        continue;
+                }
+
+                eth_llc_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_addr);
+
+                list_del(&frame->next);
+                free(frame);
+
                 pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
         }
 }
@@ -534,6 +551,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         uint8_t                buf[ETH_FRAME_SIZE];
         int                    frame_len = 0;
         struct eth_llc_frame * llc_frame;
+        struct mgmt_frame *    frame;
 
         (void) o;
 
@@ -573,14 +591,17 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
                         pthread_mutex_lock(&eth_llc_data.mgmt_lock);
-                        memcpy(eth_llc_data.mgmt_buf,
-                               &llc_frame->payload,
-                               length);
-                        memcpy(eth_llc_data.mgmt_r_addr,
-                               llc_frame->src_hwaddr,
-                               MAC_SIZE);
-                        eth_llc_data.mgmt_len = length;
-                        eth_llc_data.mgmt_arrived = true;
+
+                        frame = malloc(sizeof(*frame));
+                        if (frame == NULL) {
+                                pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
+                                continue;
+                        }
+
+                        memcpy(frame->buf, &llc_frame->payload, length);
+                        memcpy(frame->r_addr, llc_frame->src_hwaddr, MAC_SIZE);
+                        frame->len = length;
+                        list_add(&frame->next, &eth_llc_data.mgmt_frames);
                         pthread_cond_signal(&eth_llc_data.mgmt_cond);
                         pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
                 } else {
