@@ -536,13 +536,13 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         memset(br_addr, 0xff, MAC_SIZE * sizeof(uint8_t));
 
         while (true) {
+                if (ipcp_get_state() != IPCP_OPERATIONAL)
+                        return (void *) 0;
+
                 frame_len = recv(eth_llc_data.s_fd, buf,
                                  SHIM_ETH_LLC_MAX_SDU_SIZE, 0);
                 if (frame_len < 0)
                         continue;
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL)
-                        return (void *) 0;
 
                 llc_frame = (struct eth_llc_frame *) buf;
 
