@@ -269,9 +269,12 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                 return -1;
         }
 
+        pthread_mutex_lock(&ipcpi.alloc_lock);
+
         /* reply to IRM */
         fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (fd < 0) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
                 close(skfd);
                 return -1;
@@ -286,6 +289,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         log_dbg("Pending allocation request, fd %d, UDP port (%d, %d).",
                 fd, ntohs(f_saddr.sin_port), ntohs(c_saddr->sin_port));

@@ -223,33 +223,22 @@ static int ipcp_local_flow_alloc(int       fd,
                 return -1; /* -ENOTENROLLED */
         }
 
-        /*
-         * This function needs to return completely before
-         * flow_resp. Taking the wrlock on the data is the simplest
-         * way to achieve this.
-         */
-
-        pthread_rwlock_wrlock(&local_data.lock);
+        pthread_mutex_lock(&ipcpi.alloc_lock);
 
         out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (out_fd < 0) {
-                pthread_rwlock_unlock(&local_data.lock);
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Flow allocation failed: %d", out_fd);
                 return -1;
         }
 
-        /*
-         * The idea of the port_wait_assign in dev.c was to do the
-         * above synchronisation. But if the lock is not taken, the
-         * resp() function may be called before a lock would be taken
-         * here. This shim will be deprecated, but ideally the sync is
-         * fixed in ipcp.c.
-         */
+        pthread_rwlock_wrlock(&local_data.lock);
 
         local_data.in_out[fd] = out_fd;
         local_data.in_out[out_fd] = fd;
 
         pthread_rwlock_unlock(&local_data.lock);
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         flow_set_add(local_data.flows, fd);
 

@@ -619,10 +619,12 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
 
         switch (msg->code) {
         case FLOW_ALLOC_CODE__FLOW_REQ:
+                pthread_mutex_lock(&ipcpi.alloc_lock);
                 fd = ipcp_flow_req_arr(getpid(),
                                        msg->dst_name,
                                        msg->qoscube);
                 if (fd < 0) {
+                        pthread_mutex_unlock(&ipcpi.alloc_lock);
                         flow_alloc_msg__free_unpacked(msg, NULL);
                         log_err("Failed to get fd for flow.");
                         return -1;
@@ -634,6 +636,7 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
                 fmgr.np1_cep_id_to_fd[cep_id] = fd;
 
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
 
                 break;
         case FLOW_ALLOC_CODE__FLOW_REPLY:

@@ -261,9 +261,12 @@ static void * ipcp_main_loop(void * o)
                                 }
                         }
                         ret_msg.has_result = true;
+
+                        pthread_mutex_lock(&ipcpi.alloc_lock);
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc_resp(fd,
                                                                 msg->response);
+                        pthread_mutex_unlock(&ipcpi.alloc_lock);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                         if (ipcpi.ops->ipcp_flow_dealloc == NULL) {
@@ -354,11 +357,11 @@ int ipcp_init(int               argc,
               enum ipcp_type    type,
               struct ipcp_ops * ops)
 {
-        bool log;
+        bool               log;
         pthread_condattr_t cattr;
-
-        struct timeval tv = {(IPCP_ACCEPT_TIMEOUT / 1000),
-                             (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
+        struct timeval     tv  = {(IPCP_ACCEPT_TIMEOUT / 1000),
+                                  (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
+        int                ret = -1;
 
         if (parse_args(argc, argv, &log))
                 return -1;
@@ -383,27 +386,21 @@ int ipcp_init(int               argc,
 
         ipcpi.threadpool = malloc(sizeof(pthread_t) * IPCP_MAX_THREADS);
         if (ipcpi.threadpool == NULL) {
-                ap_fini();
-                return -ENOMEM;
+                ret = -ENOMEM;
+                goto fail_thr;
         }
 
         ipcpi.threads = 0;
         ipcpi.max_threads = IPCP_MIN_AV_THREADS;
 
         ipcpi.sock_path = ipcp_sock_path(getpid());
-        if (ipcpi.sock_path == NULL) {
-                free(ipcpi.threadpool);
-                ap_fini();
-                return -1;
-        }
+        if (ipcpi.sock_path == NULL)
+                goto fail_sock_path;
 
         ipcpi.sockfd = server_socket_open(ipcpi.sock_path);
         if (ipcpi.sockfd < 0) {
                 log_err("Could not open server socket.");
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -1;
+                goto fail_serv_sock;
         }
 
         if (setsockopt(ipcpi.sockfd, SOL_SOCKET, SO_RCVTIMEO,
@@ -414,112 +411,89 @@ int ipcp_init(int               argc,
 
         if (pthread_rwlock_init(&ipcpi.state_lock, NULL)) {
                 log_err("Could not create rwlock.");
-                close(ipcpi.sockfd);
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -1;
+                goto fail_state_rwlock;
         }
 
         if (pthread_mutex_init(&ipcpi.state_mtx, NULL)) {
                 log_err("Could not create mutex.");
-                pthread_rwlock_destroy(&ipcpi.state_lock);
-                close(ipcpi.sockfd);
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -1;
+                goto fail_state_mtx;
         }
 
         if (pthread_mutex_init(&ipcpi.threads_lock, NULL)) {
                 log_err("Could not create mutex.");
-                pthread_mutex_destroy(&ipcpi.state_mtx);
-                pthread_rwlock_destroy(&ipcpi.state_lock);
-                close(ipcpi.sockfd);
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -1;
+                goto fail_thread_lock;
         }
 
         if (pthread_condattr_init(&cattr)) {
                 log_err("Could not create condattr.");
-                pthread_mutex_destroy(&ipcpi.threads_lock);
-                pthread_mutex_destroy(&ipcpi.state_mtx);
-                pthread_rwlock_destroy(&ipcpi.state_lock);
-                close(ipcpi.sockfd);
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -1;
+                goto fail_cond_attr;
         }
-                ;
+
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
         if (pthread_cond_init(&ipcpi.state_cond, &cattr)) {
                 log_err("Could not init condvar.");
-                pthread_condattr_destroy(&cattr);
-                pthread_mutex_destroy(&ipcpi.threads_lock);
-                pthread_mutex_destroy(&ipcpi.state_mtx);
-                pthread_rwlock_destroy(&ipcpi.state_lock);
-                close(ipcpi.sockfd);
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -1;
+                goto fail_state_cond;
         }
 
         if (pthread_cond_init(&ipcpi.threads_cond, &cattr)) {
                 log_err("Could not init condvar.");
-                pthread_cond_destroy(&ipcpi.state_cond);
-                pthread_condattr_destroy(&cattr);
-                pthread_mutex_destroy(&ipcpi.threads_lock);
-                pthread_mutex_destroy(&ipcpi.state_mtx);
-                pthread_rwlock_destroy(&ipcpi.state_lock);
-                close(ipcpi.sockfd);
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -1;
-        };
-
-
-        pthread_condattr_destroy(&cattr);
+                goto fail_thread_cond;
+        }
 
         ipcpi.thread_ids = bmp_create(IPCP_MAX_THREADS, 0);
         if (ipcpi.thread_ids == NULL) {
                 log_err("Could not init condvar.");
-                pthread_cond_destroy(&ipcpi.threads_cond);
-                pthread_cond_destroy(&ipcpi.state_cond);
-                pthread_mutex_destroy(&ipcpi.threads_lock);
-                pthread_mutex_destroy(&ipcpi.state_mtx);
-                pthread_rwlock_destroy(&ipcpi.state_lock);
-                close(ipcpi.sockfd);
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -1;
-        };
+                goto fail_bmp;
+        }
 
-        if (type == IPCP_NORMAL)
+        if (pthread_mutex_init(&ipcpi.alloc_lock, NULL)) {
+                log_err("Failed to init mutex.");
+                goto fail_alloc_lock;
+        }
+
+        if (type == IPCP_NORMAL) {
+                pthread_condattr_destroy(&cattr);
                 return 0;
+        }
 
         ipcpi.shim_data = shim_data_create();
         if (ipcpi.shim_data == NULL) {
-                bmp_destroy(ipcpi.thread_ids);
-                pthread_cond_destroy(&ipcpi.threads_cond);
-                pthread_cond_destroy(&ipcpi.state_cond);
-                pthread_mutex_destroy(&ipcpi.state_mtx);
-                pthread_rwlock_destroy(&ipcpi.state_lock);
-                close(ipcpi.sockfd);
-                free(ipcpi.threadpool);
-                free(ipcpi.sock_path);
-                ap_fini();
-                return -ENOMEM;
+                ret = -ENOMEM;
+                goto fail_shim_data;
         }
 
+        pthread_condattr_destroy(&cattr);
+
         return 0;
+
+ fail_shim_data:
+        pthread_mutex_destroy(&ipcpi.alloc_lock);
+ fail_alloc_lock:
+        bmp_destroy(ipcpi.thread_ids);
+ fail_bmp:
+        pthread_cond_destroy(&ipcpi.threads_cond);
+ fail_thread_cond:
+        pthread_cond_destroy(&ipcpi.state_cond);
+ fail_state_cond:
+        pthread_condattr_destroy(&cattr);
+ fail_cond_attr:
+        pthread_mutex_destroy(&ipcpi.threads_lock);
+ fail_thread_lock:
+        pthread_mutex_destroy(&ipcpi.state_mtx);
+ fail_state_mtx:
+        pthread_rwlock_destroy(&ipcpi.state_lock);
+ fail_state_rwlock:
+        close(ipcpi.sockfd);
+ fail_serv_sock:
+        free(ipcpi.sock_path);
+ fail_sock_path:
+        free(ipcpi.threadpool);
+ fail_thr:
+        ap_fini();
+
+        return ret;
 }
 
 void * threadpoolmgr(void * o)
