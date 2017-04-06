@@ -234,7 +234,11 @@ int frct_nm1_post_sdu(struct pci *         pci,
                         id = instance->cep_id;
                 } else {
                         instance = frct.instances[pci->dst_cep_id];
-                        assert(instance);
+                        if (instance == NULL) {
+                                pthread_mutex_unlock(&frct.instances_lock);
+                                ipcp_flow_del(sdb);
+                                return -1;
+                        }
                         id = pci->dst_cep_id;
                         instance->state = CONN_ESTABLISHED;
                 }
