@@ -262,11 +262,9 @@ static void * ipcp_main_loop(void * o)
                         }
                         ret_msg.has_result = true;
 
-                        pthread_mutex_lock(&ipcpi.alloc_lock);
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc_resp(fd,
                                                                 msg->response);
-                        pthread_mutex_unlock(&ipcpi.alloc_lock);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                         if (ipcpi.ops->ipcp_flow_dealloc == NULL) {
@@ -455,6 +453,13 @@ int ipcp_init(int               argc,
                 goto fail_alloc_lock;
         }
 
+        if (pthread_cond_init(&ipcpi.alloc_cond, NULL)) {
+                log_err("Failed to init convar.");
+                goto fail_alloc_cond;
+        }
+
+        ipcpi.alloc_id = -1;
+
         if (type == IPCP_NORMAL) {
                 pthread_condattr_destroy(&cattr);
                 return 0;
@@ -471,6 +476,8 @@ int ipcp_init(int               argc,
         return 0;
 
  fail_shim_data:
+        pthread_cond_destroy(&ipcpi.alloc_cond);
+ fail_alloc_cond:
         pthread_mutex_destroy(&ipcpi.alloc_lock);
  fail_alloc_lock:
         bmp_destroy(ipcpi.thread_ids);
@@ -601,6 +608,8 @@ void ipcp_fini()
         pthread_mutex_destroy(&ipcpi.threads_lock);
         pthread_mutex_destroy(&ipcpi.state_mtx);
         pthread_rwlock_destroy(&ipcpi.state_lock);
+        pthread_cond_destroy(&ipcpi.alloc_cond);
+        pthread_mutex_destroy(&ipcpi.alloc_lock);
 
         log_fini();
 

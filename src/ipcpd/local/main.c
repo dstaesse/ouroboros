@@ -72,8 +72,7 @@ static int local_data_init(void)
         return 0;
 }
 
-static void local_data_fini(void)
-{
+static void local_data_fini(void){
         flow_set_destroy(local_data.flows);
         fqueue_destroy(local_data.fq);
         pthread_rwlock_destroy(&local_data.lock);
@@ -212,18 +211,27 @@ static int ipcp_local_flow_alloc(int       fd,
                                  char *    dst_name,
                                  qoscube_t cube)
 {
-        int out_fd = -1;
+        struct timespec ts     = {0, EVENT_WAIT_TIMEOUT * 1000};
+        int             out_fd = -1;
 
         log_dbg("Allocating flow to %s on fd %d.", dst_name, fd);
 
         assert(dst_name);
 
+        pthread_mutex_lock(&ipcpi.alloc_lock);
+
+        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL)
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &ts);
+
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_dbg("Won't allocate over non-operational IPCP.");
-                return -1; /* -ENOTENROLLED */
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                return -1;
         }
 
-        pthread_mutex_lock(&ipcpi.alloc_lock);
+        assert(ipcpi.alloc_id == -1);
 
         out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (out_fd < 0) {
@@ -238,6 +246,10 @@ static int ipcp_local_flow_alloc(int       fd,
         local_data.in_out[out_fd] = fd;
 
         pthread_rwlock_unlock(&local_data.lock);
+
+        ipcpi.alloc_id = out_fd;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
+
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         flow_set_add(local_data.flows, fd);
@@ -250,8 +262,26 @@ static int ipcp_local_flow_alloc(int       fd,
 static int ipcp_local_flow_alloc_resp(int fd,
                                       int response)
 {
-        int out_fd = -1;
-        int ret = -1;
+        struct timespec ts     = {0, EVENT_WAIT_TIMEOUT * 1000};
+        int             out_fd = -1;
+        int             ret    = -1;
+
+        pthread_mutex_lock(&ipcpi.alloc_lock);
+
+        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL)
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &ts);
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                return -1;
+        }
+
+        ipcpi.alloc_id = -1;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
+
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         pthread_rwlock_wrlock(&local_data.lock);
 
@@ -278,7 +308,7 @@ static int ipcp_local_flow_alloc_resp(int fd,
 
         log_info("Flow allocation completed, fds (%d, %d).", out_fd, fd);
 
-        return ret;
+        return 0;
 }
 
 static int ipcp_local_flow_dealloc(int fd)
