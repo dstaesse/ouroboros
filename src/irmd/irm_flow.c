@@ -23,7 +23,9 @@
 #define OUROBOROS_PREFIX "irm_flow"
 
 #include <ouroboros/config.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/time_utils.h>
 
 #include "irm_flow.h"
 
@@ -142,13 +144,24 @@ void irm_flow_set_state(struct irm_flow * f,
         pthread_mutex_unlock(&f->state_lock);
 }
 
-enum flow_state irm_flow_wait_state(struct irm_flow * f,
-                                    enum flow_state   state)
+int irm_flow_wait_state(struct irm_flow * f,
+                        enum flow_state   state,
+                        struct timespec * timeo)
 {
+        int ret = 0;
+        int s;
+
+        struct timespec dl;
+
         assert(f);
         assert(state != FLOW_NULL);
         assert(state != FLOW_DESTROY);
         assert(state != FLOW_DEALLOC_PENDING);
+
+        if (timeo != NULL) {
+                clock_gettime(PTHREAD_COND_CLOCK, &dl);
+                ts_add(&dl, timeo, &dl);
+        }
 
         pthread_mutex_lock(&f->state_lock);
 
@@ -156,17 +169,27 @@ enum flow_state irm_flow_wait_state(struct irm_flow * f,
 
         while (!(f->state == state ||
                  f->state == FLOW_DESTROY ||
-                 f->state == FLOW_DEALLOC_PENDING))
-                pthread_cond_wait(&f->state_cond, &f->state_lock);
+                 f->state == FLOW_DEALLOC_PENDING) &&
+               ret != -ETIMEDOUT) {
+                if (timeo == NULL)
+                        ret = -pthread_cond_wait(&f->state_cond,
+                                                 &f->state_lock);
+                else
+                        ret = -pthread_cond_timedwait(&f->state_cond,
+                                                      &f->state_lock,
+                                                      &dl);
+        }
 
-        if (f->state == FLOW_DESTROY || f->state == FLOW_DEALLOC_PENDING) {
+        if (f->state == FLOW_DESTROY ||
+            f->state == FLOW_DEALLOC_PENDING ||
+            ret == -ETIMEDOUT) {
                 f->state = FLOW_NULL;
                 pthread_cond_broadcast(&f->state_cond);
         }
 
-        state = f->state;
+        s = f->state;
 
         pthread_mutex_unlock(&f->state_lock);
 
-        return state;
+        return ret ? ret : s;
 }

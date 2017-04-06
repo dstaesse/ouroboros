@@ -177,10 +177,8 @@ ssize_t irm_list_ipcps(const char * name,
         msg.dst_name = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
-                free(msg.dif_name);
+        if (recv_msg == NULL)
                 return -EIRMD;
-        }
 
         if (recv_msg->apis == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);

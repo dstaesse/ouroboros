@@ -95,22 +95,16 @@ static void close_ptr(void * o)
         close(*(int *) o);
 }
 
-static irm_msg_t * send_recv_irm_msg_timed(irm_msg_t * msg, bool timed)
+irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 {
         int sockfd;
         buffer_t buf;
         ssize_t count = 0;
         irm_msg_t * recv_msg = NULL;
-        struct timeval tv = {(SOCKET_TIMEOUT / 1000),
-                             (SOCKET_TIMEOUT % 1000) * 1000};
 
         sockfd = client_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0)
                 return NULL;
-
-        if (timed)
-                setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,
-                           (void *) &tv, sizeof(tv));
 
         buf.len = irm_msg__get_packed_size(msg);
         if (buf.len == 0) {
@@ -140,12 +134,6 @@ static irm_msg_t * send_recv_irm_msg_timed(irm_msg_t * msg, bool timed)
 
         return recv_msg;
 }
-
-irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
-{ return send_recv_irm_msg_timed(msg, true); }
-
-irm_msg_t * send_recv_irm_msg_b(irm_msg_t * msg)
-{ return send_recv_irm_msg_timed(msg, false); }
 
 char * ipcp_sock_path(pid_t api)
 {

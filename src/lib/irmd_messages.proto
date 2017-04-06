@@ -62,6 +62,6 @@ message irm_msg {
         optional uint32 opts         = 12;
         repeated sint32 apis         = 13;
         optional uint32 timeo_sec    = 14;
-        optional uint32 timeo_usec   = 15;
+        optional uint32 timeo_nsec   = 15;
         optional sint32 result       = 16;
 };
