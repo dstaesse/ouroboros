@@ -81,6 +81,8 @@ struct ipcp {
         int                sockfd;
         char *             sock_path;
 
+        int                alloc_id;
+        pthread_cond_t     alloc_cond;
         pthread_mutex_t    alloc_lock;
 
         pthread_t *        threadpool;

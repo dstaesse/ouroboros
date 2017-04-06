@@ -542,12 +542,30 @@ static int np1_flow_dealloc(int fd)
 int fmgr_np1_alloc_resp(int fd,
                         int response)
 {
+        struct timespec ts = {0, FD_UPDATE_TIMEOUT * 1000};
         flow_alloc_msg_t msg = FLOW_ALLOC_MSG__INIT;
         buffer_t         buf;
 
         msg.code = FLOW_ALLOC_CODE__FLOW_REPLY;
         msg.response = response;
         msg.has_response = true;
+
+        pthread_mutex_lock(&ipcpi.alloc_lock);
+
+        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL)
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &ts);
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                return -1;
+        }
+
+        ipcpi.alloc_id = -1;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
+
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         buf.len = flow_alloc_msg__get_packed_size(&msg);
         if (buf.len == 0)
@@ -601,10 +619,11 @@ int fmgr_np1_dealloc(int fd)
 int fmgr_np1_post_buf(cep_id_t   cep_id,
                       buffer_t * buf)
 {
-        int ret = 0;
-        int fd;
+        struct timespec    ts  = {0, FD_UPDATE_TIMEOUT * 1000};
+        int                ret = 0;
+        int                fd;
         flow_alloc_msg_t * msg;
-        qoscube_t cube;
+        qoscube_t          cube;
 
         /* Depending on the message call the function in ipcp-dev.h */
 
@@ -617,6 +636,21 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
         switch (msg->code) {
         case FLOW_ALLOC_CODE__FLOW_REQ:
                 pthread_mutex_lock(&ipcpi.alloc_lock);
+
+                while (ipcpi.alloc_id != -1 &&
+                       ipcp_get_state() == IPCP_OPERATIONAL)
+                        pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                               &ipcpi.alloc_lock,
+                                               &ts);
+
+                if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                        log_dbg("Won't allocate over non-operational IPCP.");
+                        pthread_mutex_unlock(&ipcpi.alloc_lock);
+                        return -1;
+                }
+
+                assert(ipcpi.alloc_id == -1);
+
                 fd = ipcp_flow_req_arr(getpid(),
                                        msg->dst_name,
                                        msg->qoscube);
@@ -633,6 +667,10 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
                 fmgr.np1_cep_id_to_fd[cep_id] = fd;
 
                 pthread_rwlock_unlock(&fmgr.np1_flows_lock);
+
+                ipcpi.alloc_id = fd;
+                pthread_cond_broadcast(&ipcpi.alloc_cond);
+
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
 
                 break;

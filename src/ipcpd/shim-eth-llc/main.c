@@ -352,9 +352,21 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
                                 char *    dst_name,
                                 qoscube_t cube)
 {
-        int fd;
+        struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 1000};
+        int             fd;
 
         pthread_mutex_lock(&ipcpi.alloc_lock);
+
+        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL)
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &ts);
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                log_dbg("Won't allocate over non-operational IPCP.");
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                return -1;
+        }
 
         /* reply to IRM, called under lock to prevent race */
         fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
@@ -368,6 +380,9 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
 
         eth_llc_data.fd_to_ef[fd].r_sap = r_sap;
         memcpy(eth_llc_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
+
+        ipcpi.alloc_id = fd;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
 
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_mutex_unlock(&ipcpi.alloc_lock);
@@ -630,12 +645,12 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
 static void * eth_llc_ipcp_sdu_writer(void * o)
 {
+        struct timespec      timeout = {0, EVENT_WAIT_TIMEOUT * 1000};
         int                  fd;
         struct shm_du_buff * sdb;
         uint8_t              ssap;
         uint8_t              dsap;
         uint8_t              r_addr[MAC_SIZE];
-        struct timespec      timeout = {0, EVENT_WAIT_TIMEOUT * 1000};
 
         (void) o;
 
@@ -956,9 +971,27 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
 static int eth_llc_ipcp_flow_alloc_resp(int fd,
                                         int response)
 {
-        uint8_t ssap = 0;
-        uint8_t r_sap = 0;
-        uint8_t r_addr[MAC_SIZE];
+        struct timespec ts    = {0, EVENT_WAIT_TIMEOUT * 1000};
+        uint8_t         ssap  = 0;
+        uint8_t         r_sap = 0;
+        uint8_t         r_addr[MAC_SIZE];
+
+        pthread_mutex_lock(&ipcpi.alloc_lock);
+
+        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL)
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &ts);
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                return -1;
+        }
+
+        ipcpi.alloc_id = -1;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
+
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 

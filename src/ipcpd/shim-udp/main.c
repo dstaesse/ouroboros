@@ -232,11 +232,11 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                              char *               dst_name,
                              qoscube_t            cube)
 {
-        int skfd;
-        int fd;
-
+        struct timespec    ts          = {0, FD_UPDATE_TIMEOUT * 1000};
         struct sockaddr_in f_saddr;
         socklen_t          f_saddr_len = sizeof(f_saddr);
+        int                skfd;
+        int                fd;
 
         log_dbg("Port request arrived from UDP port %d",
                  ntohs(c_saddr->sin_port));
@@ -271,6 +271,17 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
 
         pthread_mutex_lock(&ipcpi.alloc_lock);
 
+        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL)
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &ts);
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                log_dbg("Won't allocate over non-operational IPCP.");
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                return -1;
+        }
+
         /* reply to IRM */
         fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
         if (fd < 0) {
@@ -290,6 +301,9 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_unlock(&ipcpi.state_lock);
         pthread_mutex_unlock(&ipcpi.alloc_lock);
+
+        ipcpi.alloc_id = fd;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
 
         log_dbg("Pending allocation request, fd %d, UDP port (%d, %d).",
                 fd, ntohs(f_saddr.sin_port), ntohs(c_saddr->sin_port));
@@ -1063,13 +1077,31 @@ static int ipcp_udp_flow_alloc(int       fd,
 static int ipcp_udp_flow_alloc_resp(int fd,
                                     int response)
 {
-        int skfd = -1;
+        struct timespec    ts   = {0, FD_UPDATE_TIMEOUT * 1000};
+        int                skfd = -1;
         struct sockaddr_in f_saddr;
         struct sockaddr_in r_saddr;
-        socklen_t len = sizeof(r_saddr);
+        socklen_t          len  = sizeof(r_saddr);
 
         if (response)
                 return 0;
+
+        pthread_mutex_lock(&ipcpi.alloc_lock);
+
+        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL)
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &ts);
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                return -1;
+        }
+
+        ipcpi.alloc_id = -1;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
+
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&udp_data.flows_lock);
