@@ -1584,6 +1584,14 @@ void irmd_sig_handler(int         sig,
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
+                pthread_rwlock_rdlock(&irmd.state_lock);
+                if (irmd.state == IRMD_NULL) {
+                        log_info("Patience is bitter, but its fruit is sweet.");
+                        pthread_rwlock_unlock(&irmd.state_lock);
+                        return;
+                }
+                pthread_rwlock_unlock(&irmd.state_lock);
+
                 log_info("IRMd shutting down...");
 
                 pthread_rwlock_wrlock(&irmd.state_lock);
@@ -2293,6 +2301,12 @@ int main(int     argc,
          char ** argv)
 {
         struct sigaction sig_act;
+        sigset_t  sigset;
+        sigemptyset(&sigset);
+        sigaddset(&sigset, SIGINT);
+        sigaddset(&sigset, SIGQUIT);
+        sigaddset(&sigset, SIGHUP);
+        sigaddset(&sigset, SIGPIPE);
 
         bool use_stdout = false;
 
@@ -2348,7 +2362,11 @@ int main(int     argc,
         pthread_cancel(irmd.shm_sanitize);
         pthread_join(irmd.shm_sanitize, NULL);
 
+        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
         irm_fini();
+
+        pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         log_fini();
 
