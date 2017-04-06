@@ -532,12 +532,11 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
                         continue;
                 }
 
-                eth_llc_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_addr);
-
                 list_del(&frame->next);
-                free(frame);
-
                 pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
+
+                eth_llc_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_addr);
+                free(frame);
         }
 }
 
