@@ -17,7 +17,7 @@ else ()
     include_directories(${PYTHON_INCLUDE_PATH})
 
     # Python assumes C99 since Python 3.6
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99")
+    test_and_set_c_compiler_flag_global(-std=c99)
 
     swig_add_module(ouroboros python ouroboros.i)
     swig_link_libraries(ouroboros ${PYTHON_LIBRARIES} ouroboros)

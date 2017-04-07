@@ -12,6 +12,11 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
+find_path(NETMAP_C_INCLUDE_DIR
+  net/netmap_user.h
+  HINTS /usr/include /usr/local/include
+  )
+
 protobuf_generate_c(SHIM_ETH_LLC_PROTO_SRCS SHIM_ETH_LLC_PROTO_HDRS
   shim_eth_llc_messages.proto)
 
@@ -26,6 +31,15 @@ add_executable(ipcpd-shim-eth-llc ${SHIM_ETH_LLC_SOURCES} ${IPCP_SOURCES}
   ${SHIM_ETH_LLC_PROTO_SRCS})
 target_link_libraries(ipcpd-shim-eth-llc LINK_PUBLIC ouroboros
   ${PROTOBUF_C_LIBRARY})
+
+if (${NETMAP_C_INCLUDE_DIR} STREQUAL "NETMAP_C_INCLUDE_DIR-NOTFOUND")
+  message("-- Could not find netmap. Install for better performance.")
+else ()
+  message("-- Found netmap headers in ${NETMAP_C_INCLUDE_DIR}")
+  include_directories(${NETMAP_C_INCLUDE_DIR})
+  add_compile_flags(ipcpd-shim-eth-llc -DHAVE_NETMAP)
+  test_and_set_c_compiler_flag_global(-std=c99)
+endif ()
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
