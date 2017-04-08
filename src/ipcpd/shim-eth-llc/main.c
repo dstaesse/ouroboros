@@ -766,7 +766,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         int              skfd;
     #endif
 #else
-        struct timeval   tv = {0, EVENT_WAIT_TIMEOUT * MILLION};
+        struct timeval   tv = {0, EVENT_WAIT_TIMEOUT * 1000};
     #ifdef __FreeBSD__
         struct ifaddrs * ifaddr;
         struct ifaddrs * ifa;
@@ -873,7 +873,6 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         memcpy(eth_llc_data.device.sll_addr, ifr.ifr_hwaddr.sa_data, MAC_SIZE);
         eth_llc_data.device.sll_halen    = MAC_SIZE;
         eth_llc_data.device.sll_protocol = htons(ETH_P_ALL);
-
         eth_llc_data.s_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
 
         log_info("Using raw socket device.");
@@ -893,7 +892,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
 
         if (setsockopt(eth_llc_data.s_fd, SOL_SOCKET, SO_RCVTIMEO,
                        (void *) &tv, sizeof(tv))) {
-                log_err("Failed to set socket timeout");
+                log_err("Failed to set socket timeout.");
                 close(eth_llc_data.s_fd);
                 return -1;
         }
