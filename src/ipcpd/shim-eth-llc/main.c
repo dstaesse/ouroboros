@@ -82,7 +82,7 @@ typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 #define SHIM_ETH_LLC_MAX_SDU_SIZE (1500 - LLC_HEADER_SIZE)
 
 #define EVENT_WAIT_TIMEOUT 100 /* us */
-#define NAME_QUERY_TIMEOUT 100000000 /* ns */
+#define NAME_QUERY_TIMEOUT 2000 /* ms */
 #define MGMT_TIMEOUT 100 /* ms */
 
 struct eth_llc_frame {
@@ -855,6 +855,8 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         eth_llc_data.poll_in.events  = POLLIN;
         eth_llc_data.poll_out.fd     = NETMAP_FD(eth_llc_data.nmd);
         eth_llc_data.poll_out.events = POLLOUT;
+
+        log_info("Using netmap device.");
 #else /* !HAVE_NETMAP */
         memset(&(eth_llc_data.device), 0, sizeof(eth_llc_data.device));
     #ifdef __FreeBSD__
@@ -863,6 +865,8 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         memcpy(LLADDR(&eth_llc_data.device), ifr.ifr_addr.sa_data, MAC_SIZE);
         eth_llc_data.device.sdl_alen   = MAC_SIZE;
         eth_llc_data.s_fd              = socket(AF_LINK, SOCK_RAW, 0);
+
+        log_info("Using berkeley packet filter."); /* TODO */
     #else
         eth_llc_data.device.sll_ifindex  = idx;
         eth_llc_data.device.sll_family   = AF_PACKET;
@@ -871,6 +875,8 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         eth_llc_data.device.sll_protocol = htons(ETH_P_ALL);
 
         eth_llc_data.s_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
+
+        log_info("Using raw socket device.");
     #endif /* __FreeBSD__ */
 
         if (eth_llc_data.s_fd < 0) {
@@ -947,7 +953,8 @@ static int eth_llc_ipcp_name_unreg(char * name)
 static int eth_llc_ipcp_name_query(char * name)
 {
         uint8_t            r_addr[MAC_SIZE];
-        struct timespec    timeout = {0, NAME_QUERY_TIMEOUT};
+        struct timespec    timeout = {(NAME_QUERY_TIMEOUT / 1000),
+                                      (NAME_QUERY_TIMEOUT % 1000) * MILLION};
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
         struct dir_query * query;
         int                ret;
