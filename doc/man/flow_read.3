@@ -1,0 +1,74 @@
+.\" Ouroboros man pages (C) 2017
+.\" Dimitri Staessens <dimitri.staessens@ugent.be>
+.\" Sander Vrijders <sander.vrijders@ugent.be>
+
+.TH FLOW_READ 3 2017-04-10 GNU "Ouroboros Programmer's Manual"
+
+.SH NAME
+
+flow_read, flow_write \- read and write from/to a flow
+
+.SH SYNOPSIS
+
+.B #include <ouroboros/dev.h>
+
+\fBint flow_read(int \fIfd\fB, void * \fIbuf\fB, size_t \fIcount\fB);\fR
+
+\fBint flow_write(int \fIfd\fB, const void * \fIbuf\fB, size_t \fIcount\fB);\fR
+
+Compile and link with \fI-louroboros\fR.
+
+.SH DESCRIPTION
+
+The \fBflow_read\fR() function attempts to read at most \fIcount\fR
+bytes from the flow associated with the allocated flow descriptor
+\fIfd\fR into the buffer pointed to by buf.
+
+The \fBflow_write\fR() function attempts to write \fIcount\fR bytes
+from the supplied buffer \fIbuf\fR to the flow specified by \fIfd\fR.
+
+.SH RETURN VALUE
+
+On success, \fBflow_read\fR() returns the number of bytes read. On
+failure, a negative value indicating the error will be returned.
+
+On success, \fBflow_write\fR() returns 0. On failure, a negative value
+indicating the error will be returned. Passing a NULL pointer for
+\fIbuf\fR returns 0 with no other effects.
+
+.SH ERRORS
+
+.B -EINVAL
+An invalid argument was passed.
+
+.B -EIRMD
+Failed to contact an IRMd instance.
+
+.B -EBADF
+Invalid flow descriptor passed.
+
+.B -ENOTALLOC
+The flow was not allocated.
+
+.SH ATTRIBUTES
+
+For an explanation of the terms used in this section, see \fBattributes\fR(7).
+
+.TS
+box, tab(&);
+LB|LB|LB
+L|L|L.
+Interface & Attribute & Value
+_
+\fBflow_read\fR() & Thread safety & MT-Safe
+_
+\fBflow_write\fR() & Thread safety & MT-Safe
+.TE
+
+.SH SEE ALSO
+
+.BR flow_alloc "(3), " flow_dealloc (3)
+
+.SH COLOPHON
+This page is part of the Ouroboros project, found at
+https://bitbucket.org/ouroboros-rina/ouroboros
