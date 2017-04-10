@@ -35,13 +35,13 @@ int     ap_init(const char * ap_name);
 void    ap_fini(void);
 
 /* Returns flow descriptor, qs updates to supplied QoS. */
-int     flow_alloc(const char *      dst_name,
-                   qosspec_t *       qs,
-                   struct timespec * timeo);
+int     flow_alloc(const char *            dst_name,
+                   qosspec_t *             qs,
+                   const struct timespec * timeo);
 
 /* Returns flow descriptor, qs updates to supplied QoS. */
-int     flow_accept(qosspec_t *       qs,
-                    struct timespec * timeo);
+int     flow_accept(qosspec_t *             qs,
+                    const struct timespec * timeo);
 
 int     flow_dealloc(int fd);
 

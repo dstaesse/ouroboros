@@ -381,8 +381,8 @@ void ap_fini()
         pthread_rwlock_destroy(&ai.data_lock);
 }
 
-int flow_accept(qosspec_t *       qs,
-                struct timespec * timeo)
+int flow_accept(qosspec_t *             qs,
+                const struct timespec * timeo)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -421,7 +421,7 @@ int flow_accept(qosspec_t *       qs,
 
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -EIRMD;
         }
 
         pthread_rwlock_rdlock(&ai.data_lock);
@@ -432,7 +432,7 @@ int flow_accept(qosspec_t *       qs,
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -EBADF;
         }
 
         ai.flows[fd].rx_rb = shm_rbuff_open(ai.api, recv_msg->port_id);
@@ -441,7 +441,7 @@ int flow_accept(qosspec_t *       qs,
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -ENOMEM;
         }
 
         ai.flows[fd].tx_rb = shm_rbuff_open(recv_msg->api, recv_msg->port_id);
@@ -451,7 +451,7 @@ int flow_accept(qosspec_t *       qs,
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -ENOMEM;
         }
 
         ai.flows[fd].set = shm_flow_set_open(recv_msg->api);
@@ -461,7 +461,7 @@ int flow_accept(qosspec_t *       qs,
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -ENOMEM;
         }
 
         ai.flows[fd].port_id = recv_msg->port_id;
@@ -485,9 +485,9 @@ int flow_accept(qosspec_t *       qs,
         return fd;
 }
 
-int flow_alloc(const char *      dst_name,
-               qosspec_t *       qs,
-               struct timespec * timeo)
+int flow_alloc(const char *            dst_name,
+               qosspec_t *             qs,
+               const struct timespec * timeo)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -530,7 +530,7 @@ int flow_alloc(const char *      dst_name,
 
         if (!recv_msg->has_api || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -EIRMD;
         }
 
         pthread_rwlock_rdlock(&ai.data_lock);
@@ -541,7 +541,7 @@ int flow_alloc(const char *      dst_name,
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -EBADF;
         }
 
         ai.flows[fd].rx_rb = shm_rbuff_open(ai.api, recv_msg->port_id);
@@ -550,7 +550,7 @@ int flow_alloc(const char *      dst_name,
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -ENOMEM;
         }
 
         ai.flows[fd].tx_rb = shm_rbuff_open(recv_msg->api, recv_msg->port_id);
@@ -560,7 +560,7 @@ int flow_alloc(const char *      dst_name,
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -ENOMEM;
         }
 
         ai.flows[fd].set = shm_flow_set_open(recv_msg->api);
@@ -570,7 +570,7 @@ int flow_alloc(const char *      dst_name,
                 pthread_rwlock_unlock(&ai.flows_lock);
                 pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -ENOMEM;
         }
 
         ai.flows[fd].port_id = recv_msg->port_id;
