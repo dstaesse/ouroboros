@@ -381,8 +381,8 @@ void ap_fini()
         pthread_rwlock_destroy(&ai.data_lock);
 }
 
-int flow_accept(qosspec_t *       qs,
-                struct timespec * timeo)
+int flow_accept(qosspec_t *             qs,
+                const struct timespec * timeo)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -485,9 +485,9 @@ int flow_accept(qosspec_t *       qs,
         return fd;
 }
 
-int flow_alloc(const char *      dst_name,
-               qosspec_t *       qs,
-               struct timespec * timeo)
+int flow_alloc(const char *            dst_name,
+               qosspec_t *             qs,
+               const struct timespec * timeo)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
