@@ -2131,13 +2131,13 @@ int main(int     argc,
 {
         struct sigaction sig_act;
         sigset_t  sigset;
+        bool use_stdout = false;
+
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGINT);
         sigaddset(&sigset, SIGQUIT);
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
-
-        bool use_stdout = false;
 
         if (geteuid() != 0) {
                 log_err("IPC Resource Manager must be run as root.");
