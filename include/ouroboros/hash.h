@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Additional API for IPCPs
+ * Hashing functions
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -21,33 +21,21 @@
  * 02110-1301 USA
  */
 
-#include <ouroboros/shm_rdrbuff.h>
+#ifndef OUROBOROS_LIB_HASH_H
+#define OUROBOROS_LIB_HASH_H
 
-#ifndef OUROBOROS_IPCP_DEV_H
-#define OUROBOROS_IPCP_DEV_H
+#include <ouroboros/sha3.h>
+#include <ouroboros/crc32.h>
 
-int  ipcp_create_r(pid_t api,
-                   int   result);
+#define HASH_FMT "%02x%02x%02x%02x"
+#define HASH_VAL(hash)                                \
+        ((*(unsigned int *) hash) & 0xFF000000) >> 24, \
+        ((*(unsigned int *) hash) & 0x00FF0000) >> 16, \
+        ((*(unsigned int *) hash) & 0x0000FF00) >> 8,  \
+        ((*(unsigned int *) hash) & 0x000000FF)
 
-int  ipcp_flow_req_arr(pid_t           api,
-                       const uint8_t * dst,
-                       size_t          len,
-                       qoscube_t       cube);
+/* FIXME: Implement specifying algorithm */
+void get_hash(uint8_t      buf[],
+              const char * name);
 
-int  ipcp_flow_alloc_reply(int fd,
-                           int response);
-
-int  ipcp_flow_read(int                   fd,
-                    struct shm_du_buff ** sdb);
-
-int  ipcp_flow_write(int                  fd,
-                     struct shm_du_buff * sdb);
-
-void ipcp_flow_fini(int fd);
-
-void ipcp_flow_del(struct shm_du_buff * sdb);
-
-int  ipcp_flow_get_qoscube(int         fd,
-                           qoscube_t * cube);
-
-#endif /* OUROBOROS_IPCP_DEV_H */
+#endif /* OUROBOROS_LIB_HASH_H */

@@ -31,6 +31,6 @@ int  enroll_start(void);
 
 void enroll_stop(void);
 
-int  enroll_boot(char * dst_name);
+int  enroll_boot(const char * dst);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_ENROLL_H */

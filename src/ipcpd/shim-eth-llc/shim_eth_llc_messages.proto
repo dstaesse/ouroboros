@@ -31,7 +31,7 @@ enum shim_eth_llc_msg_code {
 
 message shim_eth_llc_msg {
         required shim_eth_llc_msg_code code  = 1;
-        optional string dst_name             = 2;
+        optional bytes hash                  = 2;
         optional uint32 ssap                 = 3;
         optional uint32 dsap                 = 4;
         optional uint32 qoscube              = 5;

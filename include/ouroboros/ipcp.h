@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Configuration information for the IPC Resource Manager
+ * IPCP definitions and policies
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -21,25 +21,25 @@
  * 02110-1301 USA
  */
 
+#ifndef OUROBOROS_IPCP_H
+#define OUROBOROS_IPCP_H
+
 #include <stdint.h>
 #include <unistd.h>
 #include <stdbool.h>
 
-#ifndef OUROBOROS_IRM_CONFIG_H
-#define OUROBOROS_IRM_CONFIG_H
-
-/* Name binding options */
-
-#define BIND_AP_AUTO   0x01
-#define BIND_AP_UNIQUE 0x02
-
+/*
+ * NOTE: the IRMd uses this order to select an IPCP
+ * for flow allocation
+ */
 enum ipcp_type {
-        IPCP_NORMAL = 0,
-        IPCP_LOCAL,
+        IPCP_LOCAL = 0,
+        IPCP_SHIM_ETH_LLC,
         IPCP_SHIM_UDP,
-        IPCP_SHIM_ETH_LLC
+        IPCP_NORMAL
 };
 
+/* IPCP policies */
 enum pol_addr_auth {
         FLAT_RANDOM = 0
 };
@@ -48,9 +48,10 @@ enum pol_gam {
         COMPLETE = 0
 };
 
-struct dif_config {
-        char *         dif_name;
-        enum ipcp_type type;
+struct ipcp_config {
+        char *             dif_name;
+        enum ipcp_type     type;
+        uint16_t           dir_hash_len;
 
         /* Normal DIF */
         uint8_t            addr_size;
@@ -76,4 +77,4 @@ struct dif_config {
         char *             if_name;
 };
 
-#endif /* OUROBOROS_IRM_CONFIG_H */
+#endif /* OUROBOROS_IPCP_H */

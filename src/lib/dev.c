@@ -1210,7 +1210,8 @@ int ipcp_create_r(pid_t api,
 }
 
 int ipcp_flow_req_arr(pid_t     api,
-                      char *    dst_name,
+                      uint8_t * dst,
+                      size_t    len,
                       qoscube_t cube)
 {
         irm_msg_t msg = IRM_MSG__INIT;
@@ -1218,13 +1219,15 @@ int ipcp_flow_req_arr(pid_t     api,
         int port_id = -1;
         int fd = -1;
 
-        if (dst_name == NULL)
+        if (dst == NULL)
                 return -EINVAL;
 
         msg.code        = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
         msg.has_api     = true;
         msg.api         = api;
-        msg.dst_name    = dst_name;
+        msg.has_hash    = true;
+        msg.hash.len    = len;
+        msg.hash.data   = dst;
         msg.has_qoscube = true;
         msg.qoscube     = cube;
 

@@ -29,10 +29,9 @@ enum shim_udp_msg_code {
 
 message shim_udp_msg {
         required shim_udp_msg_code code = 1;
-        optional string dst_name        = 2;
-        optional string src_ae_name     = 4;
-        required uint32 src_udp_port    = 5;
-        optional uint32 dst_udp_port    = 6;
-        optional uint32 qoscube         = 7;
-        optional sint32 response        = 8;
+        optional bytes hash             = 2;
+        required uint32 src_udp_port    = 3;
+        optional uint32 dst_udp_port    = 4;
+        optional uint32 qoscube         = 5;
+        optional sint32 response        = 6;
 };

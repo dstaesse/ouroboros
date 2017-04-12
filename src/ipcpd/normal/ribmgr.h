@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_RIBMGR_H
 #define OUROBOROS_IPCPD_NORMAL_RIBMGR_H
 
-#include <ouroboros/irm_config.h>
+#include <ouroboros/ipcp.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/qos.h>
 

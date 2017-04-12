@@ -116,15 +116,10 @@ static void * flow_acceptor(void * o)
         memset(&fail_info, 0, sizeof(fail_info));
 
         while (true) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
                 if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
                         log_info("Shutting down flow acceptor.");
                         return 0;
                 }
-
-                pthread_rwlock_unlock(&ipcpi.state_lock);
 
                 fd = flow_accept(&qs, NULL);
                 if (fd < 0) {
@@ -271,7 +266,7 @@ void connmgr_ae_destroy(struct ae * ae)
 }
 
 int connmgr_alloc(struct ae *   ae,
-                  char *        dst_name,
+                  const char *  dst_name,
                   qosspec_t *   qs,
                   struct conn * conn)
 {

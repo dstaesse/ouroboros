@@ -47,7 +47,7 @@ struct ae * connmgr_ae_create(struct conn_info info);
 void        connmgr_ae_destroy(struct ae * ae);
 
 int         connmgr_alloc(struct ae *   ae,
-                          char *        dst_name,
+                          const char *  dst,
                           qosspec_t *   qs,
                           struct conn * conn);
 

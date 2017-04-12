@@ -24,8 +24,8 @@
 #define OUROBOROS_IRMD_REGISTRY_H
 
 #include <ouroboros/config.h>
+#include <ouroboros/ipcp.h>
 #include <ouroboros/list.h>
-#include <ouroboros/irm_config.h>
 #include <ouroboros/shared.h>
 
 #include "api_table.h"
@@ -71,7 +71,7 @@ int                 reg_entry_add_apn(struct reg_entry * e,
                                       struct apn_entry * a);
 
 void                reg_entry_del_apn(struct reg_entry * e,
-                                      char *             apn);
+                                      const char *       apn);
 
 char *              reg_entry_get_apn(struct reg_entry * e);
 
@@ -101,10 +101,10 @@ int                 reg_entry_wait_state(struct reg_entry *   e,
                                          struct timespec *    timeout);
 
 struct reg_entry *  registry_add_name(struct list_head * registry,
-                                      char *             name);
+                                      const char *       name);
 
 void                registry_del_name(struct list_head * registry,
-                                      char *             name);
+                                      const char *       name);
 
 void                registry_del_api(struct list_head * registry,
                                      pid_t              api);
@@ -112,16 +112,20 @@ void                registry_del_api(struct list_head * registry,
 void                registry_sanitize_apis(struct list_head * registry);
 
 struct reg_entry *  registry_get_entry(struct list_head * registry,
-                                       char *             name);
+                                       const char *       name);
+
+struct reg_entry *  registry_get_entry_by_hash(struct list_head * registry,
+                                               const uint8_t *    hash,
+                                               size_t             len);
 
 int                 registry_add_name_to_dif(struct list_head * registry,
-                                             char *             name,
-                                             char *             dif_name,
+                                             const char *       name,
+                                             const char *       dif_name,
                                              enum ipcp_type     type);
 
 void                registry_del_name_from_dif(struct list_head * registry,
-                                               char *             name,
-                                               char *             dif_name);
+                                               const char *       name,
+                                               const char *       dif_name);
 
 void                registry_destroy(struct list_head * registry);
 

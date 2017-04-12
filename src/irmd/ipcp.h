@@ -20,40 +20,44 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <ouroboros/irm_config.h>
+#include <ouroboros/ipcp.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/shared.h>
 
 #include <sys/types.h>
 
-#ifndef OUROBOROS_IPCP_H
-#define OUROBOROS_IPCP_H
+#ifndef OUROBOROS_IRMD_IPCP_H
+#define OUROBOROS_IRMD_IPCP_H
 
-pid_t ipcp_create(char *         name,
+pid_t ipcp_create(const char *   name,
                   enum ipcp_type ipcp_type);
 
 int   ipcp_destroy(pid_t api);
 
-int   ipcp_enroll(pid_t  api,
-                  char * dif_name);
+int   ipcp_enroll(pid_t        api,
+                  const char * dst);
 
 int   ipcp_bootstrap(pid_t              api,
-                     dif_config_msg_t * conf);
+                     ipcp_config_msg_t * conf);
 
-int   ipcp_name_reg(pid_t  api,
-                    char * name);
+int   ipcp_reg(pid_t           api,
+               const uint8_t * hash,
+               size_t          len);
 
-int   ipcp_name_unreg(pid_t  api,
-                      char * name);
+int   ipcp_unreg(pid_t           api,
+                 const uint8_t * hash,
+                 size_t          len);
 
-int   ipcp_name_query(pid_t  api,
-                      char * name);
+int   ipcp_query(pid_t           api,
+                 const uint8_t * hash,
+                 size_t          len);
 
-int   ipcp_flow_alloc(pid_t     api,
-                      int       port_id,
-                      pid_t     n_api,
-                      char *    dst_name,
-                      qoscube_t qos);
+int   ipcp_flow_alloc(pid_t           api,
+                      int             port_id,
+                      pid_t           n_api,
+                      const uint8_t * dst,
+                      size_t          len,
+                      qoscube_t       qos);
 
 int   ipcp_flow_alloc_resp(pid_t api,
                            int   port_id,
@@ -63,4 +67,4 @@ int   ipcp_flow_alloc_resp(pid_t api,
 int   ipcp_flow_dealloc(pid_t api,
                         int   port_id);
 
-#endif /* OUROBOROS_IPCP_H */
+#endif /* OUROBOROS_IRMD_IPCP_H */

@@ -87,13 +87,13 @@ int irm_destroy_ipcp(pid_t api)
         return ret;
 }
 
-int irm_bootstrap_ipcp(pid_t                     api,
-                       const struct dif_config * conf)
+int irm_bootstrap_ipcp(pid_t                      api,
+                       const struct ipcp_config * conf)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
-        dif_config_msg_t config = DIF_CONFIG_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int ret = -1;
+        irm_msg_t         msg      = IRM_MSG__INIT;
+        ipcp_config_msg_t config   = IPCP_CONFIG_MSG__INIT;
+        irm_msg_t *       recv_msg = NULL;
+        int               ret      = -1;
 
         if (api == -1 || conf == NULL)
                 return -EINVAL;
@@ -105,6 +105,7 @@ int irm_bootstrap_ipcp(pid_t                     api,
         msg.conf = &config;
         config.dif_name = conf->dif_name;
         config.ipcp_type = conf->type;
+        config.dir_hash_len = (uint16_t) conf->dir_hash_len;
 
         switch (conf->type) {
         case IPCP_NORMAL:

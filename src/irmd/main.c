@@ -27,7 +27,8 @@
 #include <ouroboros/sockets.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
-#include <ouroboros/irm_config.h>
+#include <ouroboros/hash.h>
+#include <ouroboros/irm.h>
 #include <ouroboros/lockfile.h>
 #include <ouroboros/shm_flow_set.h>
 #include <ouroboros/shm_rbuff.h>
@@ -36,6 +37,7 @@
 #include <ouroboros/qos.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/sha3.h>
 
 #include "utils.h"
 #include "registry.h"
@@ -62,6 +64,8 @@ struct ipcp_entry {
         char *           name;
         pid_t            api;
         enum ipcp_type   type;
+        uint16_t         dir_hash_len;
+        /* FIXME: add an enum to specify hash algo */
         char *           dif_name;
 
         pthread_cond_t   init_cond;
@@ -223,48 +227,33 @@ static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
         return NULL;
 }
 
-/* Check if the name exists anywhere in a DIF. */
-static pid_t get_ipcp_by_dst_name(char * dst_name)
+/*
+ * Check if the hash is reachable anywhere in a DIF.
+ * FIXME: specify algorithm used
+ */
+static struct ipcp_entry * get_ipcp_by_dst_name(const char * name)
 {
         struct list_head * p = NULL;
+        uint8_t * hash;
 
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e =
                         list_entry(p, struct ipcp_entry, next);
-                if (e->type == IPCP_LOCAL) {
-                        if (ipcp_name_query(e->api, dst_name) == 0)
-                                return e->api;
+                hash = malloc(e->dir_hash_len);
+                if  (hash == NULL)
+                        return NULL;
+
+                get_hash(hash, name);
+
+                if (ipcp_query(e->api, hash, e->dir_hash_len) == 0) {
+                        free(hash);
+                        return e;
                 }
+
+                free(hash);
         }
 
-        list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(p, struct ipcp_entry, next);
-                if (e->type == IPCP_NORMAL) {
-                        if (ipcp_name_query(e->api, dst_name) == 0)
-                                return e->api;
-                }
-        }
-
-        list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(p, struct ipcp_entry, next);
-                if (e->type == IPCP_SHIM_ETH_LLC) {
-                        if (ipcp_name_query(e->api, dst_name) == 0)
-                                return e->api;
-                }
-        }
-
-        list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(p, struct ipcp_entry, next);
-                if (e->type == IPCP_SHIM_UDP) {
-                        if (ipcp_name_query(e->api, dst_name) == 0)
-                                return e->api;
-                }
-        }
-
-        return -1;
+        return NULL;
 }
 
 static pid_t create_ipcp(char *         name,
@@ -317,14 +306,16 @@ static pid_t create_ipcp(char *         name,
         tmp->dif_name = NULL;
         tmp->type = ipcp_type;
         tmp->init = false;
+        /* FIXME: ipcp dir_hash_len should be configurable */
+        tmp->dir_hash_len = SHA3_256_HASH_LEN;
 
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->type < ipcp_type)
+                if (e->type > ipcp_type)
                         break;
         }
 
-        list_add(&tmp->next, &irmd.ipcps);
+        list_add_tail(&tmp->next, &irmd.ipcps);
 
         list_add(&api->next, &irmd.spawned_apis);
 
@@ -411,7 +402,7 @@ static int destroy_ipcp(pid_t api)
 }
 
 static int bootstrap_ipcp(pid_t              api,
-                          dif_config_msg_t * conf)
+                          ipcp_config_msg_t * conf)
 {
         struct ipcp_entry * entry = NULL;
 
@@ -709,16 +700,18 @@ static ssize_t list_ipcps(char *   name,
         return count;
 }
 
-static int name_reg(char *  name,
-                    char ** difs,
-                    size_t  len)
+static int name_reg(const char *  name,
+                    char **       difs,
+                    size_t        len)
 {
         size_t i;
         int ret = 0;
         struct list_head * p = NULL;
 
-        if (name == NULL || difs == NULL || len == 0 || difs[0] == NULL)
-                return -EINVAL;
+        assert(name);
+        assert(len);
+        assert(difs);
+        assert(difs[0]);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -729,7 +722,7 @@ static int name_reg(char *  name,
 
         if (!registry_has_name(&irmd.registry, name)) {
                 struct reg_entry * re =
-                        registry_add_name(&irmd.registry, strdup(name));
+                        registry_add_name(&irmd.registry, name);
                 if (re == NULL) {
                         log_err("Failed creating registry entry for %s.", name);
                         pthread_rwlock_unlock(&irmd.reg_lock);
@@ -768,12 +761,21 @@ static int name_reg(char *  name,
                         continue;
 
                 for (i = 0; i < len; ++i) {
+                        uint8_t * hash;
+
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
 
-                        if (ipcp_name_reg(e->api, name)) {
-                                log_err("Could not register %s in DIF %s.",
-                                        name, e->dif_name);
+                        hash = malloc(e->dir_hash_len);
+                        if  (hash == NULL)
+                                break;
+
+                        get_hash(hash, name);
+
+                        if (ipcp_reg(e->api, hash, e->dir_hash_len)) {
+                                log_err("Could not register " HASH_FMT
+                                        " in DIF %s.",
+                                        HASH_VAL(hash), e->dif_name);
                         } else {
                                 if (registry_add_name_to_dif(&irmd.registry,
                                                              name,
@@ -782,10 +784,12 @@ static int name_reg(char *  name,
                                         log_warn("Registered unbound name %s. "
                                                  "Registry may be corrupt.",
                                                  name);
-                                log_info("Registered %s in %s as %s.",
-                                         name, e->dif_name, name);
+                                log_info("Registered %s in %s as " HASH_FMT ".",
+                                         name, e->dif_name, HASH_VAL(hash));
                                 ++ret;
                         }
+
+                        free(hash);
                 }
         }
 
@@ -794,16 +798,18 @@ static int name_reg(char *  name,
         return (ret > 0 ? 0 : -1);
 }
 
-static int name_unreg(char *  name,
-                      char ** difs,
-                      size_t  len)
+static int name_unreg(const char *  name,
+                      char **       difs,
+                      size_t        len)
 {
         size_t i;
         int ret = 0;
         struct list_head * pos = NULL;
 
-        if (name == NULL || len == 0 || difs == NULL || difs[0] == NULL)
-                return -1;
+        assert(name);
+        assert(len);
+        assert(difs);
+        assert(difs[0]);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -815,10 +821,18 @@ static int name_unreg(char *  name,
                         continue;
 
                 for (i = 0; i < len; ++i) {
+                        uint8_t * hash;
+
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
 
-                        if (ipcp_name_unreg(e->api, name)) {
+                        hash = malloc(e->dir_hash_len);
+                        if  (hash == NULL)
+                                break;
+
+                        get_hash(hash, name);
+
+                        if (ipcp_unreg(e->api, hash, e->dir_hash_len)) {
                                 log_err("Could not unregister %s in DIF %s.",
                                         name, e->dif_name);
                         } else {
@@ -829,6 +843,8 @@ static int name_unreg(char *  name,
                                          name, e->dif_name);
                                 ++ret;
                         }
+
+                        free(hash);
                 }
         }
 
@@ -1038,22 +1054,23 @@ static int flow_accept(pid_t              api,
 }
 
 static int flow_alloc(pid_t              api,
-                      char *             dst_name,
+                      const char *       dst,
                       qoscube_t          cube,
                       struct timespec *  timeo,
                       struct irm_flow ** e)
 {
-        struct irm_flow * f;
-        pid_t             ipcp;
-        int               port_id;
-        int               state;
+        struct irm_flow *   f;
+        struct ipcp_entry * ipcp;
+        int                 port_id;
+        int                 state;
+        uint8_t *           hash;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        ipcp = get_ipcp_by_dst_name(dst_name);
-        if (ipcp == -1) {
+        ipcp = get_ipcp_by_dst_name(dst);
+        if (ipcp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_info("Destination unreachable.");
+                log_info("Destination %s unreachable.", dst);
                 return -1;
         }
 
@@ -1066,7 +1083,7 @@ static int flow_alloc(pid_t              api,
                 return -EBADF;
         }
 
-        f = irm_flow_create(api, ipcp, port_id, cube);
+        f = irm_flow_create(api, ipcp->api, port_id, cube);
         if (f == NULL) {
                 bmp_release(irmd.port_ids, port_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1080,11 +1097,23 @@ static int flow_alloc(pid_t              api,
 
         assert(irm_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
-        if (ipcp_flow_alloc(ipcp, port_id, api, dst_name, cube)) {
+        hash = malloc(ipcp->dir_hash_len);
+        if  (hash == NULL) {
+                /* sanitizer cleans this */
+                return -ENOMEM;
+        }
+
+        get_hash(hash, dst);
+
+        if (ipcp_flow_alloc(ipcp->api, port_id, api, hash,
+                            ipcp->dir_hash_len, cube)) {
                 /* sanitizer cleans this */
                 log_info("Flow_allocation failed.");
+                free(hash);
                 return -EAGAIN;
         }
+
+        free(hash);
 
         state = irm_flow_wait_state(f, FLOW_ALLOCATED, timeo);
         if (state != FLOW_ALLOCATED) {
@@ -1093,7 +1122,7 @@ static int flow_alloc(pid_t              api,
                         return -ETIMEDOUT;
                 }
 
-                log_info("Pending flow to %s torn down.", dst_name);
+                log_info("Pending flow to %s torn down.", dst);
                 return -EPIPE;
         }
 
@@ -1191,38 +1220,49 @@ static pid_t auto_execute(char ** argv)
         exit(EXIT_FAILURE);
 }
 
-static struct irm_flow * flow_req_arr(pid_t     api,
-                                      char *    dst_name,
-                                      qoscube_t cube)
+static struct irm_flow * flow_req_arr(pid_t           api,
+                                      const uint8_t * hash,
+                                      qoscube_t       cube)
 {
         struct reg_entry * re = NULL;
         struct apn_entry * a  = NULL;
         struct api_entry * e  = NULL;
         struct irm_flow *  f  = NULL;
 
-        struct pid_el * c_api;
-        pid_t h_api = -1;
-        int port_id = -1;
+        struct pid_el *     c_api;
+        struct ipcp_entry * ipcp;
+        pid_t               h_api   = -1;
+        int                 port_id = -1;
 
         struct timespec wt = {IRMD_REQ_ARR_TIMEOUT / 1000,
                               (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
 
-        log_dbg("Flow req arrived from IPCP %d for %s.", api, dst_name);
+        log_dbg("Flow req arrived from IPCP %d for " HASH_FMT ".",
+                api, HASH_VAL(hash));
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        re = registry_get_entry(&irmd.registry, dst_name);
-        if (re == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Unknown name: %s.", dst_name);
+        ipcp = get_ipcp_entry_by_api(api);
+        if (ipcp == NULL) {
+                log_err("IPCP died.");
                 return NULL;
         }
+
+        re = registry_get_entry_by_hash(&irmd.registry, hash,
+                                        ipcp->dir_hash_len);
+        if (re == NULL) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("Unknown hash: " HASH_FMT ".", HASH_VAL(hash));
+                return NULL;
+        }
+
+        log_info("Flow request arrived for %s.", re->name);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         /* Give the AP a bit of slop time to call accept */
         if (reg_entry_leave_state(re, REG_NAME_IDLE, &wt) == -1) {
-                log_err("No APs for %s.", dst_name);
+                log_err("No APs for " HASH_FMT ".", HASH_VAL(hash));
                 return NULL;
         }
 
@@ -1231,7 +1271,7 @@ static struct irm_flow * flow_req_arr(pid_t     api,
         switch (reg_entry_get_state(re)) {
         case REG_NAME_IDLE:
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("No APs for %s.", dst_name);
+                log_err("No APs for " HASH_FMT ".", HASH_VAL(hash));
                 return NULL;
         case REG_NAME_AUTO_ACCEPT:
                 c_api = malloc(sizeof(*c_api));
@@ -1830,7 +1870,7 @@ void * mainloop(void * o)
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->api,
-                                         msg->dst_name,
+                                         msg->hash.data,
                                          msg->qoscube);
                         ret_msg.has_result = true;
                         if (e == NULL) {

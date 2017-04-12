@@ -427,9 +427,9 @@ void fmgr_stop(void)
         gam_destroy(fmgr.gam);
 }
 
-int fmgr_np1_alloc(int       fd,
-                   char *    dst_ap_name,
-                   qoscube_t cube)
+int fmgr_np1_alloc(int             fd,
+                   const uint8_t * dst,
+                   qoscube_t       cube)
 {
         cep_id_t         cep_id;
         buffer_t         buf;
@@ -439,14 +439,17 @@ int fmgr_np1_alloc(int       fd,
         ssize_t          ch;
         ssize_t          i;
         char **          children;
+        char             hashstr[DIR_HASH_STRLEN + 1];
         char *           dst_ipcp = NULL;
 
-        assert(strlen(dst_ap_name) + strlen("/" DIR_NAME) + 1
+        ipcp_hash_str(hashstr, dst);
+
+        assert(strlen(hashstr) + strlen(DIR_PATH) + 1
                < RIB_MAX_PATH_LEN);
 
         strcpy(path, DIR_PATH);
 
-        rib_path_append(path, dst_ap_name);
+        rib_path_append(path, hashstr);
 
         ch = rib_children(path, &children);
         if (ch <= 0)
@@ -463,7 +466,7 @@ int fmgr_np1_alloc(int       fd,
         if (dst_ipcp == NULL)
                 return -1;
 
-        strcpy(path, "/" MEMBERS_NAME);
+        strcpy(path, MEMBERS_PATH);
 
         rib_path_append(path, dst_ipcp);
 
@@ -472,10 +475,12 @@ int fmgr_np1_alloc(int       fd,
         if (rib_read(path, &addr, sizeof(addr)) < 0)
                 return -1;
 
-        msg.code = FLOW_ALLOC_CODE__FLOW_REQ;
-        msg.dst_name = dst_ap_name;
+        msg.code        = FLOW_ALLOC_CODE__FLOW_REQ;
+        msg.has_hash    = true;
+        msg.hash.len    = ipcpi.dir_hash_len;
+        msg.hash.data   = (uint8_t *) dst;
         msg.has_qoscube = true;
-        msg.qoscube = cube;
+        msg.qoscube     = cube;
 
         buf.len = flow_alloc_msg__get_packed_size(&msg);
         if (buf.len == 0)
@@ -637,6 +642,11 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
         case FLOW_ALLOC_CODE__FLOW_REQ:
                 pthread_mutex_lock(&ipcpi.alloc_lock);
 
+                if (!msg->has_hash) {
+                        log_err("Bad flow request.");
+                        return -1;
+                }
+
                 while (ipcpi.alloc_id != -1 &&
                        ipcp_get_state() == IPCP_OPERATIONAL)
                         pthread_cond_timedwait(&ipcpi.alloc_cond,
@@ -652,7 +662,8 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
                 assert(ipcpi.alloc_id == -1);
 
                 fd = ipcp_flow_req_arr(getpid(),
-                                       msg->dst_name,
+                                       msg->hash.data,
+                                       ipcpi.dir_hash_len,
                                        msg->qoscube);
                 if (fd < 0) {
                         pthread_mutex_unlock(&ipcpi.alloc_lock);

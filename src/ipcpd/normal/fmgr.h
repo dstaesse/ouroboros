@@ -37,9 +37,9 @@ int  fmgr_start(void);
 
 void fmgr_stop(void);
 
-int  fmgr_np1_alloc(int       fd,
-                    char *    dst_ap_name,
-                    qoscube_t qos);
+int  fmgr_np1_alloc(int             fd,
+                    const uint8_t * dst,
+                    qoscube_t       qos);
 
 int  fmgr_np1_alloc_resp(int fd,
                          int response);

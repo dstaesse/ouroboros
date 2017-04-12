@@ -44,24 +44,24 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  Use this program  at  your own risk!
  */
 
-#ifndef OUROBOROS_LIB_SHA3_H
-#define OUROBOROS_LIB_SHA3_H
+#ifndef OUROBOROS_SHA3_H
+#define OUROBOROS_SHA3_H
 
 #include <unistd.h>
 #include <stdint.h>
 
-#define sha3_224_hash_size        28
-#define sha3_256_hash_size        32
-#define sha3_384_hash_size        48
-#define sha3_512_hash_size        64
-#define sha3_max_permutation_size 25
-#define sha3_max_rate_in_qwords   24
+#define SHA3_224_HASH_LEN         28
+#define SHA3_256_HASH_LEN         32
+#define SHA3_384_HASH_LEN         48
+#define SHA3_512_HASH_LEN         64
+#define SHA3_MAX_PERMUTATION_SIZE 25
+#define SHA3_MAX_RATE_IN_QWORDS   24
 
 struct sha3_ctx {
         /* 1600 bits algorithm hashing state */
-        uint64_t hash[sha3_max_permutation_size];
+        uint64_t hash[SHA3_MAX_PERMUTATION_SIZE];
         /* 1536-bit buffer for leftovers */
-        uint64_t message[sha3_max_rate_in_qwords];
+        uint64_t message[SHA3_MAX_RATE_IN_QWORDS];
         /* count of bytes in the message[] buffer */
         unsigned rest;
         /* size of a message block processed at once */
@@ -77,10 +77,10 @@ void rhash_sha3_384_init(struct sha3_ctx * ctx);
 void rhash_sha3_512_init(struct sha3_ctx * ctx);
 
 void rhash_sha3_update(struct sha3_ctx * ctx,
-                       const uint8_t *   msg,
+                       const void    *   msg,
                        size_t            size);
 
 void rhash_sha3_final(struct sha3_ctx * ctx,
                       uint8_t *         res);
 
-#endif /* OUROBOROS_LIB_SHA3_H */
+#endif /* OUROBOROS_SHA3_H */

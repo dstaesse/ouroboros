@@ -34,6 +34,7 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/hash.h>
 
 #include "ipcp.h"
 #include "shim_eth_llc_messages.pb-c.h"
@@ -248,11 +249,11 @@ static uint8_t reverse_bits(uint8_t b)
         return b;
 }
 
-static int eth_llc_ipcp_send_frame(uint8_t * dst_addr,
-                                   uint8_t   dsap,
-                                   uint8_t   ssap,
-                                   uint8_t * payload,
-                                   size_t    len)
+static int eth_llc_ipcp_send_frame(const uint8_t * dst_addr,
+                                   uint8_t         dsap,
+                                   uint8_t         ssap,
+                                   const uint8_t * payload,
+                                   size_t          len)
 {
         uint32_t               frame_len = 0;
         uint8_t                cf = 0x03;
@@ -311,7 +312,7 @@ static int eth_llc_ipcp_send_frame(uint8_t * dst_addr,
 }
 
 static int eth_llc_ipcp_send_mgmt_frame(shim_eth_llc_msg_t * msg,
-                                        uint8_t *            dst_addr)
+                                        const uint8_t *      dst_addr)
 {
         size_t    len;
         uint8_t * buf;
@@ -338,17 +339,19 @@ static int eth_llc_ipcp_send_mgmt_frame(shim_eth_llc_msg_t * msg,
         return 0;
 }
 
-static int eth_llc_ipcp_sap_alloc(uint8_t * dst_addr,
-                                  uint8_t   ssap,
-                                  char *    dst_name,
-                                  qoscube_t cube)
+static int eth_llc_ipcp_sap_alloc(const uint8_t * dst_addr,
+                                  uint8_t         ssap,
+                                  const uint8_t * hash,
+                                  qoscube_t       cube)
 {
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
 
         msg.code        = SHIM_ETH_LLC_MSG_CODE__FLOW_REQ;
         msg.has_ssap    = true;
         msg.ssap        = ssap;
-        msg.dst_name    = dst_name;
+        msg.has_hash    = true;
+        msg.hash.len    = ipcpi.dir_hash_len;
+        msg.hash.data   = (uint8_t *) hash;
         msg.has_qoscube = true;
         msg.qoscube     = cube;
 
@@ -373,10 +376,10 @@ static int eth_llc_ipcp_sap_alloc_resp(uint8_t * dst_addr,
         return eth_llc_ipcp_send_mgmt_frame(&msg, dst_addr);
 }
 
-static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
-                                uint8_t * r_addr,
-                                char *    dst_name,
-                                qoscube_t cube)
+static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
+                                uint8_t *       r_addr,
+                                const uint8_t * dst,
+                                qoscube_t       cube)
 {
         struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 1000};
         int             fd;
@@ -395,7 +398,7 @@ static int eth_llc_ipcp_sap_req(uint8_t   r_sap,
         }
 
         /* reply to IRM, called under lock to prevent race */
-        fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
+        fd = ipcp_flow_req_arr(getpid(), dst, ipcpi.dir_hash_len, cube);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -453,14 +456,16 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
 
 }
 
-static int eth_llc_ipcp_name_query_req(char *    name,
-                                       uint8_t * r_addr)
+static int eth_llc_ipcp_name_query_req(const uint8_t * hash,
+                                       uint8_t *       r_addr)
 {
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
 
-        if (shim_data_reg_has(ipcpi.shim_data, name)) {
-                msg.code     = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY;
-                msg.dst_name = name;
+        if (shim_data_reg_has(ipcpi.shim_data, hash)) {
+                msg.code      = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY;
+                msg.has_hash  = true;
+                msg.hash.len  = ipcpi.dir_hash_len;
+                msg.hash.data = (uint8_t *) hash;
 
                 eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
         }
@@ -468,21 +473,21 @@ static int eth_llc_ipcp_name_query_req(char *    name,
         return 0;
 }
 
-static int eth_llc_ipcp_name_query_reply(char *    name,
-                                         uint8_t * r_addr)
+static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
+                                         uint8_t *       r_addr)
 {
         uint64_t           address = 0;
         struct list_head * pos;
 
         memcpy(&address, r_addr, MAC_SIZE);
 
-        shim_data_dir_add_entry(ipcpi.shim_data, name, address);
+        shim_data_dir_add_entry(ipcpi.shim_data, hash, address);
 
         pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
         list_for_each(pos, &ipcpi.shim_data->dir_queries) {
                 struct dir_query * e =
                         list_entry(pos, struct dir_query, next);
-                if (strcmp(e->name, name) == 0) {
+                if (memcmp(e->hash, hash, ipcpi.dir_hash_len) == 0) {
                         shim_data_dir_query_respond(e);
                 }
         }
@@ -491,9 +496,9 @@ static int eth_llc_ipcp_name_query_reply(char *    name,
         return 0;
 }
 
-static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
-                                   size_t    len,
-                                   uint8_t * r_addr)
+static int eth_llc_ipcp_mgmt_frame(const uint8_t * buf,
+                                   size_t          len,
+                                   uint8_t *       r_addr)
 {
         shim_eth_llc_msg_t * msg;
 
@@ -505,10 +510,10 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
 
         switch (msg->code) {
         case SHIM_ETH_LLC_MSG_CODE__FLOW_REQ:
-                if (shim_data_reg_has(ipcpi.shim_data, msg->dst_name)) {
+                if (shim_data_reg_has(ipcpi.shim_data, msg->hash.data)) {
                         eth_llc_ipcp_sap_req(msg->ssap,
                                              r_addr,
-                                             msg->dst_name,
+                                             msg->hash.data,
                                              msg->qoscube);
                 }
                 break;
@@ -519,10 +524,10 @@ static int eth_llc_ipcp_mgmt_frame(uint8_t * buf,
                                              msg->response);
                 break;
         case SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ:
-                eth_llc_ipcp_name_query_req(msg->dst_name, r_addr);
+                eth_llc_ipcp_name_query_req(msg->hash.data, r_addr);
                 break;
         case SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY:
-                eth_llc_ipcp_name_query_reply(msg->dst_name, r_addr);
+                eth_llc_ipcp_name_query_reply(msg->hash.data, r_addr);
                 break;
         default:
                 log_err("Unknown message received %d.", msg->code);
@@ -734,29 +739,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
         return (void *) 1;
 }
 
-void ipcp_sig_handler(int         sig,
-                      siginfo_t * info,
-                      void *      c)
-{
-        (void) c;
-
-        switch(sig) {
-        case SIGINT:
-        case SIGTERM:
-        case SIGHUP:
-                if (info->si_pid == ipcpi.irmd_api) {
-                        if (ipcp_get_state() == IPCP_INIT)
-                                ipcp_set_state(IPCP_NULL);
-
-                        if (ipcp_get_state() == IPCP_OPERATIONAL)
-                                ipcp_set_state(IPCP_SHUTDOWN);
-                }
-        default:
-                return;
-        }
-}
-
-static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
+static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
 {
         int              idx;
         struct ifreq     ifr;
@@ -777,10 +760,7 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        if (ipcp_get_state() != IPCP_INIT) {
-                log_err("IPCP in wrong state.");
-                return -1;
-        }
+        ipcpi.dir_hash_len = conf->dir_hash_len;
 
         if (conf->if_name == NULL) {
                 log_err("Interface name is NULL.");
@@ -921,35 +901,36 @@ static int eth_llc_ipcp_bootstrap(struct dif_config * conf)
         return 0;
 }
 
-static int eth_llc_ipcp_name_reg(char * name)
+static int eth_llc_ipcp_reg(const uint8_t * hash)
 {
-        char * name_dup;
+        uint8_t * hash_dup;
 
-        name_dup = strdup(name);
-        if (name_dup == NULL) {
-                log_err("Failed to duplicate name.");
+        hash_dup = ipcp_hash_dup(hash);
+        if (hash_dup == NULL) {
+                log_err("Failed to duplicate hash.");
                 return -ENOMEM;
         }
 
-        if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
-                log_err("Failed to add %s to local registry.", name);
-                free(name_dup);
+        if (shim_data_reg_add_entry(ipcpi.shim_data, hash_dup)) {
+                log_err("Failed to add " HASH_FMT " to local registry.",
+                        HASH_VAL(hash));
+                free(hash_dup);
                 return -1;
         }
 
-        log_dbg("Registered %s.", name);
+        log_dbg("Registered " HASH_FMT ".", HASH_VAL(hash));
 
         return 0;
 }
 
-static int eth_llc_ipcp_name_unreg(char * name)
+static int eth_llc_ipcp_unreg(const uint8_t * hash)
 {
-        shim_data_reg_del_entry(ipcpi.shim_data, name);
+        shim_data_reg_del_entry(ipcpi.shim_data, hash);
 
         return 0;
 }
 
-static int eth_llc_ipcp_name_query(char * name)
+static int eth_llc_ipcp_query(const uint8_t * hash)
 {
         uint8_t            r_addr[MAC_SIZE];
         struct timespec    timeout = {(NAME_QUERY_TIMEOUT / 1000),
@@ -958,15 +939,17 @@ static int eth_llc_ipcp_name_query(char * name)
         struct dir_query * query;
         int                ret;
 
-        if (shim_data_dir_has(ipcpi.shim_data, name))
+        if (shim_data_dir_has(ipcpi.shim_data, hash))
                 return 0;
 
-        msg.code     = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ;
-        msg.dst_name = name;
+        msg.code      = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ;
+        msg.has_hash  = true;
+        msg.hash.len  = ipcpi.dir_hash_len;
+        msg.hash.data = (uint8_t *) hash;
 
         memset(r_addr, 0xff, MAC_SIZE);
 
-        query = shim_data_dir_query_create(name);
+        query = shim_data_dir_query_create(hash);
         if (query == NULL)
                 return -1;
 
@@ -986,34 +969,28 @@ static int eth_llc_ipcp_name_query(char * name)
         return ret;
 }
 
-static int eth_llc_ipcp_flow_alloc(int       fd,
-                                   char *    dst_name,
-                                   qoscube_t cube)
+static int eth_llc_ipcp_flow_alloc(int             fd,
+                                   const uint8_t * hash,
+                                   qoscube_t       cube)
 {
         uint8_t  ssap = 0;
         uint8_t  r_addr[MAC_SIZE];
         uint64_t addr = 0;
 
-        log_dbg("Allocating flow to %s.", dst_name);
+        log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(hash));
 
-        if (dst_name == NULL)
-                return -1;
+        assert(hash);
 
         if (cube != QOS_CUBE_BE && cube != QOS_CUBE_FRC) {
                 log_dbg("Unsupported QoS requested.");
                 return -1;
         }
 
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                log_dbg("Won't allocate flow with non-enrolled IPCP.");
-                return -1; /* -ENOTENROLLED */
-        }
-
-        if (!shim_data_dir_has(ipcpi.shim_data, dst_name)) {
+        if (!shim_data_dir_has(ipcpi.shim_data, hash)) {
                 log_err("Destination unreachable.");
                 return -1;
         }
-        addr = shim_data_dir_get_addr(ipcpi.shim_data, dst_name);
+        addr = shim_data_dir_get_addr(ipcpi.shim_data, hash);
 
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
@@ -1030,7 +1007,7 @@ static int eth_llc_ipcp_flow_alloc(int       fd,
 
         memcpy(r_addr, &addr, MAC_SIZE);
 
-        if (eth_llc_ipcp_sap_alloc(r_addr, ssap, dst_name, cube) < 0) {
+        if (eth_llc_ipcp_sap_alloc(r_addr, ssap, hash, cube) < 0) {
                 pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
                 bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
                 eth_llc_data.fd_to_ef[fd].sap = -1;
@@ -1107,11 +1084,6 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 
         ipcp_flow_fini(fd);
 
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                log_dbg("Won't register with non-enrolled IPCP.");
-                return -1; /* -ENOTENROLLED */
-        }
-
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
         flow_set_del(eth_llc_data.np1_flows, fd);
@@ -1137,9 +1109,9 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 static struct ipcp_ops eth_llc_ops = {
         .ipcp_bootstrap       = eth_llc_ipcp_bootstrap,
         .ipcp_enroll          = NULL,
-        .ipcp_name_reg        = eth_llc_ipcp_name_reg,
-        .ipcp_name_unreg      = eth_llc_ipcp_name_unreg,
-        .ipcp_name_query      = eth_llc_ipcp_name_query,
+        .ipcp_reg             = eth_llc_ipcp_reg,
+        .ipcp_unreg           = eth_llc_ipcp_unreg,
+        .ipcp_query           = eth_llc_ipcp_query,
         .ipcp_flow_alloc      = eth_llc_ipcp_flow_alloc,
         .ipcp_flow_alloc_resp = eth_llc_ipcp_flow_alloc_resp,
         .ipcp_flow_dealloc    = eth_llc_ipcp_flow_dealloc
@@ -1148,27 +1120,6 @@ static struct ipcp_ops eth_llc_ops = {
 int main(int    argc,
          char * argv[])
 {
-        struct sigaction sig_act;
-        sigset_t  sigset;
-
-        sigemptyset(&sigset);
-        sigaddset(&sigset, SIGINT);
-        sigaddset(&sigset, SIGQUIT);
-        sigaddset(&sigset, SIGHUP);
-        sigaddset(&sigset, SIGPIPE);
-
-        /* init sig_act */
-        memset(&sig_act, 0, sizeof(sig_act));
-
-        /* install signal traps */
-        sig_act.sa_sigaction = &ipcp_sig_handler;
-        sig_act.sa_flags     = SA_SIGINFO;
-
-        sigaction(SIGINT,  &sig_act, NULL);
-        sigaction(SIGTERM, &sig_act, NULL);
-        sigaction(SIGHUP,  &sig_act, NULL);
-        sigaction(SIGPIPE, &sig_act, NULL);
-
         if (ipcp_init(argc, argv, THIS_TYPE, &eth_llc_ops) < 0) {
                 ipcp_create_r(getpid(), -1);
                 exit(EXIT_FAILURE);
@@ -1181,9 +1132,6 @@ int main(int    argc,
                 exit(EXIT_FAILURE);
         }
 
-
-        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
                 ipcp_create_r(getpid(), -1);
@@ -1191,8 +1139,6 @@ int main(int    argc,
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
-
-        pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");

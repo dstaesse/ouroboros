@@ -34,26 +34,24 @@
 
 struct reg_entry {
         struct list_head list;
-        char *           name;
+        uint8_t *        hash;
 };
 
 struct dir_entry {
         struct list_head list;
-        char *           name;
+        uint8_t *        hash;
         uint64_t         addr;
 };
 
-static struct reg_entry * reg_entry_create(char * name)
+static struct reg_entry * reg_entry_create(uint8_t * hash)
 {
         struct reg_entry * entry = malloc(sizeof(*entry));
         if (entry == NULL)
                 return NULL;
 
-        assert(name);
+        assert(hash);
 
-        entry->name = name;
-        if (entry->name == NULL)
-                return NULL;
+        entry->hash = hash;
 
         return entry;
 }
@@ -62,25 +60,23 @@ static void reg_entry_destroy(struct reg_entry * entry)
 {
         assert(entry);
 
-        if (entry->name != NULL)
-                free(entry->name);
+        if (entry->hash != NULL)
+                free(entry->hash);
 
         free(entry);
 }
 
-static struct dir_entry * dir_entry_create(char *   name,
-                                           uint64_t addr)
+static struct dir_entry * dir_entry_create(uint8_t * hash,
+                                           uint64_t  addr)
 {
         struct dir_entry * entry = malloc(sizeof(*entry));
         if (entry == NULL)
                 return NULL;
 
-        assert(name);
+        assert(hash);
 
-        entry->addr    = addr;
-        entry->name = name;
-        if (entry->name == NULL)
-                return NULL;
+        entry->addr = addr;
+        entry->hash = hash;
 
         return entry;
 }
@@ -89,8 +85,8 @@ static void dir_entry_destroy(struct dir_entry * entry)
 {
         assert(entry);
 
-        if (entry->name != NULL)
-                free(entry->name);
+        if (entry->hash != NULL)
+                free(entry->hash);
 
         free(entry);
 }
@@ -181,17 +177,17 @@ void shim_data_destroy(struct shim_data * data)
         free(data);
 }
 
-static struct reg_entry * find_reg_entry_by_name(struct shim_data * data,
-                                                 const char *       name)
+static struct reg_entry * find_reg_entry_by_hash(struct shim_data * data,
+                                                 const uint8_t *    hash)
 {
         struct list_head * h;
 
         assert(data);
-        assert(name);
+        assert(hash);
 
         list_for_each(h, &data->registry) {
                 struct reg_entry * e = list_entry(h, struct reg_entry, list);
-                if (!strcmp(e->name, name))
+                if (!memcmp(e->hash, hash, ipcpi.dir_hash_len))
                         return e;
         }
 
@@ -199,13 +195,14 @@ static struct reg_entry * find_reg_entry_by_name(struct shim_data * data,
 }
 
 static struct dir_entry * find_dir_entry(struct shim_data * data,
-                                         const char *       name,
+                                         const uint8_t *    hash,
                                          uint64_t           addr)
 {
         struct list_head * h;
         list_for_each(h, &data->directory) {
                 struct dir_entry * e = list_entry(h, struct dir_entry, list);
-                if (e->addr == addr && !strcmp(e->name, name))
+                if (e->addr == addr &&
+                    !memcmp(e->hash, hash, ipcpi.dir_hash_len))
                         return e;
         }
 
@@ -213,12 +210,12 @@ static struct dir_entry * find_dir_entry(struct shim_data * data,
 }
 
 static struct dir_entry * find_dir_entry_any(struct shim_data * data,
-                                             const char *       name)
+                                             const uint8_t *    hash)
 {
         struct list_head * h;
         list_for_each(h, &data->directory) {
                 struct dir_entry * e = list_entry(h, struct dir_entry, list);
-                if (!strcmp(e->name, name))
+                if (!memcmp(e->hash, hash, ipcpi.dir_hash_len))
                         return e;
         }
 
@@ -226,21 +223,21 @@ static struct dir_entry * find_dir_entry_any(struct shim_data * data,
 }
 
 int shim_data_reg_add_entry(struct shim_data * data,
-                            char *             name)
+                            uint8_t *          hash)
 {
         struct reg_entry * entry;
 
-        if (data == NULL || name == NULL)
-                return -1;
+        assert(data);
+        assert(hash);
 
         pthread_rwlock_wrlock(&data->reg_lock);
 
-        if (find_reg_entry_by_name(data, name)) {
+        if (find_reg_entry_by_hash(data, hash)) {
                 pthread_rwlock_unlock(&data->reg_lock);
                 return -1;
         }
 
-        entry = reg_entry_create(name);
+        entry = reg_entry_create(hash);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&data->reg_lock);
                 return -1;
@@ -254,7 +251,7 @@ int shim_data_reg_add_entry(struct shim_data * data,
 }
 
 int shim_data_reg_del_entry(struct shim_data * data,
-                            const char *       name)
+                            const uint8_t *    hash)
 {
         struct reg_entry * e;
         if (data == NULL)
@@ -262,7 +259,7 @@ int shim_data_reg_del_entry(struct shim_data * data,
 
         pthread_rwlock_wrlock(&data->reg_lock);
 
-        e = find_reg_entry_by_name(data, name);
+        e = find_reg_entry_by_hash(data, hash);
         if (e == NULL) {
                 pthread_rwlock_unlock(&data->reg_lock);
                 return 0; /* nothing to do */
@@ -278,16 +275,16 @@ int shim_data_reg_del_entry(struct shim_data * data,
 }
 
 bool shim_data_reg_has(struct shim_data * data,
-                       const char *       name)
+                       const uint8_t *    hash)
 {
         bool ret = false;
 
-        if (data == NULL || name == NULL)
-                return false;
+        assert(data);
+        assert(hash);
 
         pthread_rwlock_rdlock(&data->reg_lock);
 
-        ret = (find_reg_entry_by_name(data, name) != NULL);
+        ret = (find_reg_entry_by_hash(data, hash) != NULL);
 
         pthread_rwlock_unlock(&data->reg_lock);
 
@@ -295,29 +292,29 @@ bool shim_data_reg_has(struct shim_data * data,
 }
 
 int shim_data_dir_add_entry(struct shim_data * data,
-                            char *             name,
+                            const uint8_t *    hash,
                             uint64_t           addr)
 {
         struct dir_entry * entry;
-        char * entry_name;
+        uint8_t * entry_hash;
 
-        if (data == NULL || name == NULL)
-                return -1;
+        assert(data);
+        assert(hash);
 
         pthread_rwlock_wrlock(&data->dir_lock);
 
-        if (find_dir_entry(data, name, addr) != NULL) {
+        if (find_dir_entry(data, hash, addr) != NULL) {
                 pthread_rwlock_unlock(&data->dir_lock);
                 return -1;
         }
 
-        entry_name = strdup(name);
-        if (entry_name == NULL) {
+        entry_hash = ipcp_hash_dup(hash);
+        if (entry_hash == NULL) {
                 pthread_rwlock_unlock(&data->dir_lock);
                 return -1;
         }
 
-        entry = dir_entry_create(entry_name, addr);
+        entry = dir_entry_create(entry_hash, addr);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&data->dir_lock);
                 return -1;
@@ -331,7 +328,7 @@ int shim_data_dir_add_entry(struct shim_data * data,
 }
 
 int shim_data_dir_del_entry(struct shim_data * data,
-                            const char *       name,
+                            const uint8_t *    hash,
                             uint64_t           addr)
 {
         struct dir_entry * e;
@@ -340,7 +337,7 @@ int shim_data_dir_del_entry(struct shim_data * data,
 
         pthread_rwlock_wrlock(&data->dir_lock);
 
-        e = find_dir_entry(data, name, addr);
+        e = find_dir_entry(data, hash, addr);
         if (e == NULL) {
                 pthread_rwlock_unlock(&data->dir_lock);
                 return 0; /* nothing to do */
@@ -356,13 +353,13 @@ int shim_data_dir_del_entry(struct shim_data * data,
 }
 
 bool shim_data_dir_has(struct shim_data * data,
-                       const char *       name)
+                       const uint8_t *    hash)
 {
         bool ret = false;
 
         pthread_rwlock_rdlock(&data->dir_lock);
 
-        ret = (find_dir_entry_any(data, name) != NULL);
+        ret = (find_dir_entry_any(data, hash) != NULL);
 
         pthread_rwlock_unlock(&data->dir_lock);
 
@@ -370,14 +367,14 @@ bool shim_data_dir_has(struct shim_data * data,
 }
 
 uint64_t shim_data_dir_get_addr(struct shim_data * data,
-                                const char *       name)
+                                const uint8_t *    hash)
 {
         struct dir_entry * entry;
         uint64_t           addr;
 
         pthread_rwlock_rdlock(&data->dir_lock);
 
-        entry = find_dir_entry_any(data, name);
+        entry = find_dir_entry_any(data, hash);
 
         if (entry == NULL) {
                 pthread_rwlock_unlock(&data->dir_lock);
@@ -391,7 +388,7 @@ uint64_t shim_data_dir_get_addr(struct shim_data * data,
         return addr;
 }
 
-struct dir_query * shim_data_dir_query_create(char * name)
+struct dir_query * shim_data_dir_query_create(const uint8_t * hash)
 {
         struct dir_query * query;
         pthread_condattr_t cattr;
@@ -400,8 +397,8 @@ struct dir_query * shim_data_dir_query_create(char * name)
         if (query == NULL)
                 return NULL;
 
-        query->name = strdup(name);
-        if (query->name == NULL) {
+        query->hash = ipcp_hash_dup(hash);
+        if (query->hash == NULL) {
                 free(query);
                 return NULL;
         }
@@ -467,7 +464,7 @@ void shim_data_dir_query_destroy(struct dir_query * query)
         pthread_cond_destroy(&query->cond);
         pthread_mutex_destroy(&query->lock);
 
-        free(query->name);
+        free(query->hash);
         free(query);
 }
 

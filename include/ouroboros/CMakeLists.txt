@@ -6,12 +6,10 @@ set(HEADER_FILES
   cacep.h
   cdap.h
   dev.h
-  endian.h
   errno.h
   fcntl.h
   fqueue.h
   irm.h
-  irm_config.h
   nsm.h
   qos.h)
 

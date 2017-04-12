@@ -30,7 +30,7 @@ enum flow_alloc_code {
 
 message flow_alloc_msg {
         required flow_alloc_code code  = 1;
-        optional string dst_name       = 2;
+        optional bytes hash            = 2;
         optional uint32 qoscube        = 3;
         optional sint32 response       = 4;
 };

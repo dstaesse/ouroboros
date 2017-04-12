@@ -7,7 +7,7 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS irmd_messages.proto)
 protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS ipcpd_messages.proto)
 protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
-  dif_config.proto)
+  ipcp_config.proto)
 protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS cdap.proto)
 protobuf_generate_c(RO_PROTO_SRCS RO_PROTO_HDRS ro.proto)
 protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
@@ -35,6 +35,7 @@ set(SOURCE_FILES
   cdap_req.c
   crc32.c
   dev.c
+  hash.c
   hashtable.c
   irm.c
   list.c

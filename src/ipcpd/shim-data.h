@@ -30,7 +30,6 @@
 #include <pthread.h>
 #include <stdint.h>
 
-
 enum dir_query_state {
         QUERY_INIT = 0,
         QUERY_PENDING,
@@ -41,7 +40,7 @@ enum dir_query_state {
 
 struct dir_query {
         struct list_head     next;
-        char *               name;
+        uint8_t *            hash;
         enum dir_query_state state;
 
         pthread_mutex_t      lock;
@@ -49,14 +48,14 @@ struct dir_query {
 };
 
 struct shim_data {
-        struct list_head    registry;
-        pthread_rwlock_t    reg_lock;
+        struct list_head registry;
+        pthread_rwlock_t reg_lock;
 
-        struct list_head    directory;
-        pthread_rwlock_t    dir_lock;
+        struct list_head directory;
+        pthread_rwlock_t dir_lock;
 
-        struct list_head    dir_queries;
-        pthread_mutex_t     dir_queries_lock;
+        struct list_head dir_queries;
+        pthread_mutex_t  dir_queries_lock;
 };
 
 struct shim_data * shim_data_create(void);
@@ -64,29 +63,29 @@ struct shim_data * shim_data_create(void);
 void               shim_data_destroy(struct shim_data * data);
 
 int                shim_data_reg_add_entry(struct shim_data * data,
-                                           char *             name);
+                                           uint8_t *          hash);
 
 int                shim_data_reg_del_entry(struct shim_data * data,
-                                           const char *       name);
+                                           const uint8_t *    hash);
 
 bool               shim_data_reg_has(struct shim_data * data,
-                                     const char *       name);
+                                     const uint8_t *    hash);
 
 int                shim_data_dir_add_entry(struct shim_data * data,
-                                           char *             name,
+                                           const uint8_t *    hash,
                                            uint64_t           addr);
 
 int                shim_data_dir_del_entry(struct shim_data * data,
-                                           const char *       name,
+                                           const uint8_t *    hash,
                                            uint64_t           addr);
 
 bool               shim_data_dir_has(struct shim_data * data,
-                                     const char *       name);
+                                     const uint8_t *    hash);
 
 uint64_t           shim_data_dir_get_addr(struct shim_data * data,
-                                          const char *       name);
+                                          const uint8_t *    hash);
 
-struct dir_query * shim_data_dir_query_create(char * name);
+struct dir_query * shim_data_dir_query_create(const uint8_t * hash);
 
 void               shim_data_dir_query_respond(struct dir_query * query);
 

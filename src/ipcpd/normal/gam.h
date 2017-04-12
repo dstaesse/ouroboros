@@ -23,8 +23,8 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_GAM_H
 #define OUROBOROS_IPCPD_NORMAL_GAM_H
 
+#include <ouroboros/ipcp.h>
 #include <ouroboros/cacep.h>
-#include <ouroboros/irm_config.h>
 
 #include "neighbors.h"
 

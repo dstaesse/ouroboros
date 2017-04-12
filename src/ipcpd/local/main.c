@@ -27,13 +27,14 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/fqueue.h>
+#include <ouroboros/ipcp.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
+#include <ouroboros/hash.h>
 
 #include "ipcp.h"
 
 #include <string.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <sys/wait.h>
@@ -113,110 +114,74 @@ static void * ipcp_local_sdu_loop(void * o)
         return (void *) 0;
 }
 
-void ipcp_sig_handler(int         sig,
-                      siginfo_t * info,
-                      void *      c)
+static int ipcp_local_bootstrap(const struct ipcp_config * conf)
 {
-        (void) c;
-
-        switch(sig) {
-        case SIGINT:
-        case SIGTERM:
-        case SIGHUP:
-        case SIGQUIT:
-                if (info->si_pid == ipcpi.irmd_api) {
-                        if (ipcp_get_state() == IPCP_INIT)
-                                ipcp_set_state(IPCP_NULL);
-
-                        if (ipcp_get_state() == IPCP_OPERATIONAL)
-                                ipcp_set_state(IPCP_SHUTDOWN);
-                }
-        default:
-                return;
-        }
-}
-
-static int ipcp_local_bootstrap(struct dif_config * conf)
-{
-        (void) conf;
-
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        if (ipcp_get_state() != IPCP_INIT) {
-                log_err("IPCP in wrong state.");
-                return -1;
-        }
+        ipcpi.dir_hash_len = conf->dir_hash_len;
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        pthread_create(&local_data.sduloop, NULL, ipcp_local_sdu_loop, NULL);
+        if (pthread_create(&local_data.sduloop, NULL,
+                           ipcp_local_sdu_loop, NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                return -1;
+        }
 
         log_info("Bootstrapped local IPCP with api %d.", getpid());
 
         return 0;
 }
 
-static int ipcp_local_name_reg(char * name)
+static int ipcp_local_reg(const uint8_t * hash)
 {
-        char * name_dup = strdup(name);
-        if (name_dup == NULL) {
-                log_err("Failed to duplicate name.");
+        uint8_t * hash_dup = ipcp_hash_dup(hash);
+        if (hash_dup == NULL) {
+                log_err("Failed to duplicate hash.");
                 return -ENOMEM;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_dbg("Failed to add %s to local registry.", name);
-                free(name_dup);
+        if (shim_data_reg_add_entry(ipcpi.shim_data, hash_dup)) {
+                log_dbg("Failed to add " HASH_FMT " to local registry.",
+                        HASH_VAL(hash));
+                free(hash_dup);
                 return -1;
         }
 
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        log_info("Registered %s.", name);
+        log_info("Registered " HASH_FMT ".", HASH_VAL(hash));
 
         return 0;
 }
 
-static int ipcp_local_name_unreg(char * name)
+static int ipcp_local_unreg(const uint8_t * hash)
 {
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
+        shim_data_reg_del_entry(ipcpi.shim_data, hash);
 
-        shim_data_reg_del_entry(ipcpi.shim_data, name);
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        log_info("Unregistered %s.", name);
+        log_info("Unregistered " HASH_FMT ".",  HASH_VAL(hash));
 
         return 0;
 }
 
-static int ipcp_local_name_query(char * name)
+static int ipcp_local_query(const uint8_t * hash)
 {
         int ret;
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        ret = (shim_data_reg_has(ipcpi.shim_data, name) ? 0 : -1);
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
+        ret = (shim_data_reg_has(ipcpi.shim_data, hash) ? 0 : -1);
 
         return ret;
 }
 
-static int ipcp_local_flow_alloc(int       fd,
-                                 char *    dst_name,
-                                 qoscube_t cube)
+static int ipcp_local_flow_alloc(int             fd,
+                                 const uint8_t * dst,
+                                 qoscube_t       cube)
 {
         struct timespec ts     = {0, EVENT_WAIT_TIMEOUT * 1000};
         int             out_fd = -1;
 
-        log_dbg("Allocating flow to %s on fd %d.", dst_name, fd);
+        log_dbg("Allocating flow to " HASH_FMT " on fd %d.", HASH_VAL(dst), fd);
 
-        assert(dst_name);
+        assert(dst);
 
         pthread_mutex_lock(&ipcpi.alloc_lock);
 
@@ -233,7 +198,7 @@ static int ipcp_local_flow_alloc(int       fd,
 
         assert(ipcpi.alloc_id == -1);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
+        out_fd = ipcp_flow_req_arr(getpid(), dst, ipcpi.dir_hash_len, cube);
         if (out_fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Flow allocation failed: %d", out_fd);
@@ -335,9 +300,9 @@ static int ipcp_local_flow_dealloc(int fd)
 static struct ipcp_ops local_ops = {
         .ipcp_bootstrap       = ipcp_local_bootstrap,
         .ipcp_enroll          = NULL,                       /* shim */
-        .ipcp_name_reg        = ipcp_local_name_reg,
-        .ipcp_name_unreg      = ipcp_local_name_unreg,
-        .ipcp_name_query      = ipcp_local_name_query,
+        .ipcp_reg             = ipcp_local_reg,
+        .ipcp_unreg           = ipcp_local_unreg,
+        .ipcp_query           = ipcp_local_query,
         .ipcp_flow_alloc      = ipcp_local_flow_alloc,
         .ipcp_flow_alloc_resp = ipcp_local_flow_alloc_resp,
         .ipcp_flow_dealloc    = ipcp_local_flow_dealloc
@@ -346,26 +311,6 @@ static struct ipcp_ops local_ops = {
 int main(int    argc,
          char * argv[])
 {
-        struct sigaction sig_act;
-        sigset_t  sigset;
-        sigemptyset(&sigset);
-        sigaddset(&sigset, SIGINT);
-        sigaddset(&sigset, SIGQUIT);
-        sigaddset(&sigset, SIGHUP);
-        sigaddset(&sigset, SIGPIPE);
-
-        /* init sig_act */
-        memset(&sig_act, 0, sizeof(sig_act));
-
-        /* install signal traps */
-        sig_act.sa_sigaction = &ipcp_sig_handler;
-        sig_act.sa_flags     = SA_SIGINFO;
-
-        sigaction(SIGINT,  &sig_act, NULL);
-        sigaction(SIGTERM, &sig_act, NULL);
-        sigaction(SIGHUP,  &sig_act, NULL);
-        sigaction(SIGPIPE, &sig_act, NULL);
-
         if (ipcp_init(argc, argv, THIS_TYPE, &local_ops) < 0) {
                 ipcp_create_r(getpid(), -1);
                 exit(EXIT_FAILURE);
@@ -378,8 +323,6 @@ int main(int    argc,
                 exit(EXIT_FAILURE);
         }
 
-        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
                 ipcp_create_r(getpid(), -1);
@@ -387,8 +330,6 @@ int main(int    argc,
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
-
-        pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");
