@@ -33,9 +33,9 @@ target_link_libraries(ipcpd-shim-eth-llc LINK_PUBLIC ouroboros
   ${PROTOBUF_C_LIBRARY})
 
 if (${NETMAP_C_INCLUDE_DIR} STREQUAL "NETMAP_C_INCLUDE_DIR-NOTFOUND")
-  message("-- Could not find netmap. Install for better performance.")
+  message(STATUS "Could not find netmap. Install for better performance.")
 else ()
-  message("-- Found netmap headers in ${NETMAP_C_INCLUDE_DIR}")
+  message(STATUS "Found netmap headers in ${NETMAP_C_INCLUDE_DIR}")
   include_directories(${NETMAP_C_INCLUDE_DIR})
   add_compile_flags(ipcpd-shim-eth-llc -DHAVE_NETMAP)
   test_and_set_c_compiler_flag_global(-std=c99)

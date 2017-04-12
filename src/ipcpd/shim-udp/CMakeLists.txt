@@ -42,12 +42,12 @@ find_program(NSLOOKUP_EXECUTABLE
 
 include(AddCompileFlags)
 if (${NSUPDATE_EXECUTABLE} STREQUAL "NSUPDATE_EXECUTABLE-NOTFOUND")
-  message("-- Could not find nsupdate. Disabling DDNS functionality.")
+  message(STATUS "Could not find nsupdate. Disabling DDNS functionality.")
 elseif (${NSLOOKUP_EXECUTABLE} STREQUAL "NSLOOKUP_EXECUTABLE-NOTFOUND")
-  message("-- Could not find nslookup. Disabling DNS lookups.")
+  message(STATUS "Could not find nslookup. Disabling DNS lookups.")
 else ()
-  message("-- Found nsupdate: ${NSUPDATE_EXECUTABLE}")
-  message("-- Found nslookup: ${NSLOOKUP_EXECUTABLE}")
+  message(STATUS "Found nsupdate: ${NSUPDATE_EXECUTABLE}")
+  message(STATUS "Found nslookup: ${NSLOOKUP_EXECUTABLE}")
   add_compile_flags(ipcpd-shim-udp -DCONFIG_OUROBOROS_ENABLE_DNS)
 endif ()
 
