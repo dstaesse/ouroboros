@@ -268,7 +268,7 @@ int ap_init(const char * ap_name)
         if (ai.fqset == NULL) {
                 bmp_destroy(ai.fqueues);
                 bmp_destroy(ai.fds);
-                return -1;
+                return -ENOMEM;
         }
 
         ai.rdrb = shm_rdrbuff_open();
@@ -285,7 +285,7 @@ int ap_init(const char * ap_name)
                 shm_flow_set_destroy(ai.fqset);
                 bmp_destroy(ai.fqueues);
                 bmp_destroy(ai.fds);
-                return -1;
+                return -ENOMEM;
         }
 
         for (i = 0; i < AP_MAX_FLOWS; ++i)
@@ -298,7 +298,7 @@ int ap_init(const char * ap_name)
                 shm_flow_set_destroy(ai.fqset);
                 bmp_destroy(ai.fqueues);
                 bmp_destroy(ai.fds);
-                return -1;
+                return -ENOMEM;
         }
 
         if (ap_name != NULL) {
@@ -319,7 +319,7 @@ int ap_init(const char * ap_name)
                         shm_flow_set_destroy(ai.fqset);
                         bmp_destroy(ai.fqueues);
                         bmp_destroy(ai.fds);
-                        return -1;
+                        return -EIRMD;
                 }
         }
 
