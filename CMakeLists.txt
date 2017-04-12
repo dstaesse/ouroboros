@@ -83,6 +83,7 @@ include_directories(${PROTOBUF_C_INCLUDE_DIRS})
 
 add_subdirectory(src)
 add_subdirectory(include)
+add_subdirectory(doc)
 
 # Uninstall target
 configure_file(
