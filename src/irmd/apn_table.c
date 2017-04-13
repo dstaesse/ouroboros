@@ -21,7 +21,7 @@
  */
 
 #include <ouroboros/errno.h>
-#include <ouroboros/irm_config.h>
+#include <ouroboros/irm.h>
 
 #include "apn_table.h"
 #include "utils.h"

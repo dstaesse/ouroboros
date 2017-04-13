@@ -27,10 +27,10 @@ int dir_init(void);
 
 int dir_fini(void);
 
-int dir_name_reg(char * name);
+int dir_reg(const uint8_t * hash);
 
-int dir_name_unreg(char * name);
+int dir_unreg(const uint8_t * hash);
 
-int dir_name_query(char * name);
+int dir_query(const uint8_t * hash);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_DIR_H */

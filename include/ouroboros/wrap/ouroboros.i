@@ -29,7 +29,7 @@
 #include "ouroboros/fcntl.h"
 #include "ouroboros/fqueue.h"
 #include "ouroboros/irm.h"
-#include "ouroboros/irm_config.h"
+#include "ouroboros/ipcp.h"
 #include "ouroboros/nsm.h"
 #include "ouroboros/qos.h"
 %}
@@ -43,6 +43,6 @@ typedef int pid_t;
 %include "ouroboros/fcntl.h"
 %include "ouroboros/fqueue.h"
 %include "ouroboros/irm.h"
-%include "ouroboros/irm_config.h"
+%include "ouroboros/ipcp.h"
 %include "ouroboros/nsm.h"
 %include "ouroboros/qos.h"

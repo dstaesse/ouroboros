@@ -21,7 +21,7 @@
  */
 
 #include <ouroboros/config.h>
-#include <ouroboros/dif_config.h>
+#include <ouroboros/ipcp.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/shm_du_map.h>
 #include <sys/types.h>
@@ -41,7 +41,7 @@ int shim_udp_test(int argc, char ** argv)
         char bogus[16];
         memset(&bogus, 0, 16);
 
-        struct dif_config conf;
+        struct ipcp_config conf;
         memset(&conf, 0, sizeof conf);
         conf.dif_name = strdup("test-dif");
         conf.type = IPCP_SHIM_UDP;

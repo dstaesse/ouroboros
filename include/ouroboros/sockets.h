@@ -26,8 +26,8 @@
 
 #include <sys/types.h>
 
-#include "dif_config.pb-c.h"
-typedef DifConfigMsg dif_config_msg_t;
+#include "ipcp_config.pb-c.h"
+typedef IpcpConfigMsg ipcp_config_msg_t;
 
 #include "irmd_messages.pb-c.h"
 typedef IrmMsg irm_msg_t;

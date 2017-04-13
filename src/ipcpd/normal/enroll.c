@@ -65,11 +65,9 @@ static void * enroll_handle(void * o)
 
         bool boot_r     = false;
         bool members_r  = false;
-        bool dif_name_r = false;
 
         char * boot_ro    = BOOT_PATH;
         char * members_ro = MEMBERS_PATH;
-        char * dif_ro     = DIF_PATH;
 
         cdap = (struct cdap *) o;
 
@@ -87,7 +85,7 @@ static void * enroll_handle(void * o)
                         continue;
                 }
 
-                while (!(boot_r && members_r && dif_name_r)) {
+                while (!(boot_r && members_r)) {
                         key = cdap_request_wait(cdap, &oc, &name, &data,
                                                 (size_t *) &len , &flags);
                         assert(key >= 0);
@@ -109,8 +107,6 @@ static void * enroll_handle(void * o)
                                 boot_r = true;
                         } else if (strcmp(name, members_ro) == 0) {
                                 members_r = true;
-                        } else if (strcmp(name, dif_ro) == 0) {
-                                dif_name_r = true;
                         } else if (strcmp(name, TIME_PATH) == 0) {
                                 struct timespec t;
                                 uint64_t buf[2];
@@ -153,13 +149,13 @@ static void * enroll_handle(void * o)
                 cdap_del_flow(cdap, conn.flow_info.fd);
                 flow_dealloc(conn.flow_info.fd);
 
-                boot_r = members_r = dif_name_r = false;
+                boot_r = members_r = false;
         }
 
         return 0;
 }
 
-int enroll_boot(char * dst_name)
+int enroll_boot(const char * dst)
 {
         struct cdap * cdap;
         cdap_key_t *  key;
@@ -174,7 +170,6 @@ int enroll_boot(char * dst_name)
 
         char * boot_ro    = BOOT_PATH;
         char * members_ro = MEMBERS_PATH;
-        char * dif_ro     = DIF_PATH;
 
         cdap = cdap_create();
         if (cdap == NULL) {
@@ -182,7 +177,7 @@ int enroll_boot(char * dst_name)
                 return -1;
         }
 
-        if (connmgr_alloc(enroll.ae, dst_name, NULL, &conn)) {
+        if (connmgr_alloc(enroll.ae, dst, NULL, &conn)) {
                 log_err("Failed to get connection.");
                 cdap_destroy(cdap);
                 return -1;
@@ -195,7 +190,7 @@ int enroll_boot(char * dst_name)
                 return -1;
         }
 
-        log_dbg("Getting boot information from %s.", dst_name);
+        log_dbg("Getting boot information from %s.", dst);
 
         clock_gettime(CLOCK_REALTIME, &t0);
 
@@ -263,37 +258,6 @@ int enroll_boot(char * dst_name)
         log_dbg("Packed information inserted into RIB.");
 
         key = cdap_request_send(cdap, CDAP_READ, members_ro, NULL, 0, 0);
-        if (key == NULL || key[0] == INVALID_CDAP_KEY) {
-                log_err("Failed to send CDAP request.");
-                cdap_destroy(cdap);
-                flow_dealloc(conn.flow_info.fd);
-                return -1;
-        }
-
-        if (cdap_reply_wait(cdap, key[0], &data, &len)) {
-                log_err("Failed to get CDAP reply.");
-                free(key);
-                cdap_destroy(cdap);
-                flow_dealloc(conn.flow_info.fd);
-                return -1;
-        }
-
-        free(key);
-
-        log_dbg("Packed information received (%zu bytes).", len);
-
-        if (rib_unpack(data, len, UNPACK_CREATE)) {
-                log_warn("Error unpacking RIB data.");
-                rib_del(boot_ro);
-                free(data);
-                cdap_destroy(cdap);
-                flow_dealloc(conn.flow_info.fd);
-                return -1;
-        }
-
-        log_dbg("Packed information inserted into RIB.");
-
-        key = cdap_request_send(cdap, CDAP_READ, dif_ro, NULL, 0, 0);
         if (key == NULL || key[0] == INVALID_CDAP_KEY) {
                 log_err("Failed to send CDAP request.");
                 cdap_destroy(cdap);

@@ -1,10 +1,13 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Additional API for IPCPs
+ * Hashing
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *
+ * This implementation is adapted and redistributed from the RHASH
+ * project
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -21,33 +24,20 @@
  * 02110-1301 USA
  */
 
-#include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/config.h>
+#include <ouroboros/hash.h>
 
-#ifndef OUROBOROS_IPCP_DEV_H
-#define OUROBOROS_IPCP_DEV_H
+#include <string.h>
 
-int  ipcp_create_r(pid_t api,
-                   int   result);
+void get_hash(uint8_t      buf[],
+              const char * name)
+{
+        /* currently we only support 256 bit SHA-3 */
+        struct sha3_ctx ctx;
 
-int  ipcp_flow_req_arr(pid_t           api,
-                       const uint8_t * dst,
-                       size_t          len,
-                       qoscube_t       cube);
+        rhash_sha3_256_init(&ctx);
 
-int  ipcp_flow_alloc_reply(int fd,
-                           int response);
+        rhash_sha3_update(&ctx, name, strlen(name));
 
-int  ipcp_flow_read(int                   fd,
-                    struct shm_du_buff ** sdb);
-
-int  ipcp_flow_write(int                  fd,
-                     struct shm_du_buff * sdb);
-
-void ipcp_flow_fini(int fd);
-
-void ipcp_flow_del(struct shm_du_buff * sdb);
-
-int  ipcp_flow_get_qoscube(int         fd,
-                           qoscube_t * cube);
-
-#endif /* OUROBOROS_IPCP_DEV_H */
+        rhash_sha3_final(&ctx, buf);
+}

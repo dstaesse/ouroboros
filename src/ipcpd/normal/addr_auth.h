@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H
 #define OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H
 
-#include <ouroboros/irm_config.h>
+#include <ouroboros/ipcp.h>
 
 #include <stdint.h>
 

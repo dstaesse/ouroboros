@@ -24,8 +24,14 @@
 #ifndef OUROBOROS_IRM_H
 #define OUROBOROS_IRM_H
 
-#include <ouroboros/irm_config.h>
+#include <ouroboros/ipcp.h>
+
 #include <sys/types.h>
+
+/* Name binding options */
+
+#define BIND_AP_AUTO   0x01
+#define BIND_AP_UNIQUE 0x02
 
 pid_t   irm_create_ipcp(const char *   name,
                         enum ipcp_type ipcp_type);
@@ -39,8 +45,8 @@ ssize_t irm_list_ipcps(const char * name,
 int     irm_enroll_ipcp(pid_t        api,
                         const char * dif_name);
 
-int     irm_bootstrap_ipcp(pid_t                     api,
-                           const struct dif_config * conf);
+int     irm_bootstrap_ipcp(pid_t                      api,
+                           const struct ipcp_config * conf);
 
 int     irm_bind_ap(const char * ap,
                     const char * name,

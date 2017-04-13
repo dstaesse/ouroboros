@@ -30,6 +30,7 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/hash.h>
 
 #include "shim_udp_messages.pb-c.h"
 #include "ipcp.h"
@@ -197,14 +198,16 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg,
 
 static int ipcp_udp_port_alloc(uint32_t  dst_ip_addr,
                                uint16_t  src_udp_port,
-                               char *    dst_name,
+                               const uint8_t * dst,
                                qoscube_t cube)
 {
         shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
 
         msg.code         = SHIM_UDP_MSG_CODE__FLOW_REQ;
         msg.src_udp_port = src_udp_port;
-        msg.dst_name     = dst_name;
+        msg.has_hash     = true;
+        msg.hash.len     = ipcpi.dir_hash_len;
+        msg.hash.data    = (uint8_t *) dst;
         msg.has_qoscube  = true;
         msg.qoscube      = cube;
 
@@ -229,7 +232,7 @@ static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
 }
 
 static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
-                             char *               dst_name,
+                             const uint8_t *      dst,
                              qoscube_t            cube)
 {
         struct timespec    ts          = {0, FD_UPDATE_TIMEOUT * 1000};
@@ -283,7 +286,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         }
 
         /* reply to IRM */
-        fd = ipcp_flow_req_arr(getpid(), dst_name, cube);
+        fd = ipcp_flow_req_arr(getpid(), dst, ipcpi.dir_hash_len, cube);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -291,7 +294,6 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                 return -1;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         udp_data.uf_to_fd[skfd]    = fd;
@@ -299,7 +301,6 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         udp_data.fd_to_uf[fd].udp  = f_saddr.sin_port;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         ipcpi.alloc_id = fd;
@@ -337,14 +338,12 @@ static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
         log_dbg("Received reply for flow on udp port %d.",
                 ntohs(dst_udp_port));
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
         fd = udp_port_to_fd(dst_udp_port);
         skfd = udp_data.fd_to_uf[fd].skfd;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         /* get the original address with the LISTEN PORT */
         if (getpeername(skfd, (struct sockaddr *) &t_saddr, &t_saddr_len) < 0) {
@@ -360,13 +359,11 @@ static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
                 return -1;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
         set_fd(skfd);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         if (ipcp_flow_alloc_reply(fd, response) < 0)
                 return -1;
@@ -410,7 +407,7 @@ static void * ipcp_udp_listener(void * o)
                 case SHIM_UDP_MSG_CODE__FLOW_REQ:
                         c_saddr.sin_port = msg->src_udp_port;
                         ipcp_udp_port_req(&c_saddr,
-                                          msg->dst_name,
+                                          msg->hash.data,
                                           msg->qoscube);
                         break;
                 case SHIM_UDP_MSG_CODE__FLOW_REPLY:
@@ -447,7 +444,6 @@ static void * ipcp_udp_sdu_reader(void * o)
         (void) o;
 
         while (true) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_rdlock(&udp_data.flows_lock);
                 pthread_mutex_lock(&udp_data.fd_set_lock);
 
@@ -457,7 +453,6 @@ static void * ipcp_udp_sdu_reader(void * o)
 
                 pthread_mutex_unlock(&udp_data.fd_set_lock);
                 pthread_rwlock_unlock(&udp_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
 
                 if (select(FD_SETSIZE, &read_fds, NULL, NULL, &tv) <= 0)
                         continue;
@@ -476,13 +471,11 @@ static void * ipcp_udp_sdu_reader(void * o)
                                           (unsigned *) &n)) <= 0)
                                 continue;
 
-                        pthread_rwlock_rdlock(&ipcpi.state_lock);
                         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
                         fd = udp_data.uf_to_fd[skfd];
 
                         pthread_rwlock_unlock(&udp_data.flows_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
 
                         flow_write(fd, buf, n);
                 }
@@ -506,12 +499,10 @@ static void * ipcp_udp_sdu_loop(void * o)
                                 continue;
                         }
 
-                        pthread_rwlock_rdlock(&ipcpi.state_lock);
 
                         if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                                pthread_rwlock_unlock(&ipcpi.state_lock);
                                 ipcp_flow_del(sdb);
-                                return (void *) -1; /* -ENOTENROLLED */
+                                return (void *) 0; /* -ENOTENROLLED */
                         }
 
                         pthread_rwlock_rdlock(&udp_data.flows_lock);
@@ -519,7 +510,6 @@ static void * ipcp_udp_sdu_loop(void * o)
                         fd = udp_data.fd_to_uf[fd].skfd;
 
                         pthread_rwlock_unlock(&udp_data.flows_lock);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
 
                         if (send(fd, shm_du_buff_head(sdb),
                                  shm_du_buff_tail(sdb) - shm_du_buff_head(sdb),
@@ -533,33 +523,7 @@ static void * ipcp_udp_sdu_loop(void * o)
         return (void *) 1;
 }
 
-void ipcp_sig_handler(int         sig,
-                      siginfo_t * info,
-                      void *      c)
-{
-        (void) c;
-
-        switch(sig) {
-        case SIGINT:
-        case SIGTERM:
-        case SIGHUP:
-                if (info->si_pid == ipcpi.irmd_api) {
-                        pthread_rwlock_wrlock(&ipcpi.state_lock);
-
-                        if (ipcp_get_state() == IPCP_INIT)
-                                ipcp_set_state(IPCP_NULL);
-
-                        if (ipcp_get_state() == IPCP_OPERATIONAL)
-                                ipcp_set_state(IPCP_SHUTDOWN);
-
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                }
-        default:
-                return;
-        }
-}
-
-static int ipcp_udp_bootstrap(struct dif_config * conf)
+static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
 {
         struct sockaddr_in s_saddr;
         char ipstr[INET_ADDRSTRLEN];
@@ -569,6 +533,8 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
 
         assert(conf);
         assert(conf->type == THIS_TYPE);
+
+        ipcpi.dir_hash_len = conf->dir_hash_len;
 
         if (inet_ntop(AF_INET,
                       &conf->ip_addr,
@@ -619,15 +585,6 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_INIT) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_err("IPCP in wrong state.");
-                close(fd);
-                return -1;
-        }
-
         udp_data.s_fd     = fd;
         udp_data.ip_addr  = conf->ip_addr;
         udp_data.dns_addr = conf->dns_addr;
@@ -649,8 +606,6 @@ static int ipcp_udp_bootstrap(struct dif_config * conf)
                        NULL,
                        ipcp_udp_sdu_loop,
                        NULL);
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         log_dbg("Bootstrapped shim IPCP over UDP with api %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
@@ -784,7 +739,7 @@ static uint32_t ddns_resolve(char *   name,
 }
 #endif
 
-static int ipcp_udp_name_reg(char * name)
+static int ipcp_udp_reg(const uint8_t * hash)
 {
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         char ipstr[INET_ADDRSTRLEN];
@@ -794,25 +749,23 @@ static int ipcp_udp_name_reg(char * name)
         uint32_t dns_addr;
         uint32_t ip_addr;
 #endif
-        char * name_dup;
+        char hashstr[DIR_HASH_STRLEN + 1];
+        uint8_t * hash_dup;
 
-        if (strlen(name) > 24) {
-                log_err("DNS names cannot be longer than 24 chars.");
-                return -1;
-        }
+        assert(hash);
 
-        name_dup = strdup(name);
-        if (name_dup == NULL) {
-                log_err("Failed to duplicate name.");
+        ipcp_hash_str(hashstr, hash);
+
+        hash_dup = ipcp_hash_dup(hash);
+        if (hash_dup == NULL) {
+                log_err("Failed to duplicate hash.");
                 return -ENOMEM;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (shim_data_reg_add_entry(ipcpi.shim_data, name_dup)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_err("Failed to add %s to local registry.", name);
-                free(name_dup);
+        if (shim_data_reg_add_entry(ipcpi.shim_data, hash_dup)) {
+                log_err("Failed to add " HASH_FMT " to local registry.",
+                        HASH_VAL(hash));
+                free(hash_dup);
                 return -1;
         }
 
@@ -820,8 +773,6 @@ static int ipcp_udp_name_reg(char * name)
         /* register application with DNS server */
 
         dns_addr = udp_data.dns_addr;
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         if (dns_addr != 0) {
                 ip_addr = udp_data.ip_addr;
@@ -837,24 +788,20 @@ static int ipcp_udp_name_reg(char * name)
                 }
 
                 sprintf(cmd, "server %s\nupdate add %s %d A %s\nsend\nquit\n",
-                        dnsstr, name, DNS_TTL, ipstr);
+                        dnsstr, hashstr, DNS_TTL, ipstr);
 
                 if (ddns_send(cmd)) {
-                        pthread_rwlock_rdlock(&ipcpi.state_lock);
-                        shim_data_reg_del_entry(ipcpi.shim_data, name);
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
+                        shim_data_reg_del_entry(ipcpi.shim_data, hash_dup);
                         return -1;
                 }
         }
-#else
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 #endif
-        log_dbg("Registered %s.", name);
+        log_dbg("Registered " HASH_FMT ".", HASH_VAL(hash));
 
         return 0;
 }
 
-static int ipcp_udp_name_unreg(char * name)
+static int ipcp_udp_unreg(const uint8_t * hash)
 {
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         char dnsstr[INET_ADDRSTRLEN];
@@ -862,19 +809,16 @@ static int ipcp_udp_name_unreg(char * name)
         char cmd[100];
         uint32_t dns_addr;
 #endif
-        if (strlen(name) > 24) {
-                log_err("DNS names cannot be longer than 24 chars.");
-                return -1;
-        }
+        char hashstr[DIR_HASH_STRLEN + 1];
+
+        assert(hash);
+
+        ipcp_hash_str(hashstr, hash);
 
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         /* unregister application with DNS server */
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
         dns_addr = udp_data.dns_addr;
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         if (dns_addr != 0) {
                 if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN)
@@ -882,74 +826,49 @@ static int ipcp_udp_name_unreg(char * name)
                         return -1;
                 }
                 sprintf(cmd, "server %s\nupdate delete %s A\nsend\nquit\n",
-                        dnsstr, name);
+                        dnsstr, hashstr);
 
                 ddns_send(cmd);
         }
 #endif
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
+        shim_data_reg_del_entry(ipcpi.shim_data, hash);
 
-        shim_data_reg_del_entry(ipcpi.shim_data, name);
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
+        log_dbg("Unregistered " HASH_FMT ".", HASH_VAL(hash));
 
         return 0;
 }
 
-static int ipcp_udp_name_query(char * name)
+static int ipcp_udp_query(const uint8_t * hash)
 {
         uint32_t           ip_addr = 0;
         struct hostent *   h;
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         uint32_t           dns_addr = 0;
 #endif
+        char hashstr[DIR_HASH_STRLEN + 1];
 
-        assert(name);
+        assert(hash);
 
-        if (strlen(name) > 24) {
-                log_err("DNS names cannot be longer than 24 chars.");
-                return -1;
-        }
+        ipcp_hash_str(hashstr, hash);
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_dbg("Won't query a name on a non-enrolled IPCP.");
-                return -1; /* -ENOTENROLLED */
-        }
-
-        if (shim_data_dir_has(ipcpi.shim_data, name)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
+        if (shim_data_dir_has(ipcpi.shim_data, hash))
                 return 0;
-        }
 
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         dns_addr = udp_data.dns_addr;
 
         if (dns_addr != 0) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-
-                ip_addr = ddns_resolve(name, dns_addr);
+                ip_addr = ddns_resolve(hashstr, dns_addr);
                 if (ip_addr == 0) {
-                        log_dbg("Could not resolve %s.", name);
+                        log_dbg("Could not resolve %s.", hashstr);
                         return -1;
-                }
-
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        log_dbg("Won't add name to the directory.");
-                        return -1; /* -ENOTENROLLED */
                 }
         } else {
 #endif
-                h = gethostbyname(name);
+                h = gethostbyname(hashstr);
                 if (h == NULL) {
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                        log_dbg("Could not resolve %s.", name);
+                        log_dbg("Could not resolve %s.", hashstr);
                         return -1;
                 }
 
@@ -958,20 +877,17 @@ static int ipcp_udp_name_query(char * name)
         }
 #endif
 
-        if (shim_data_dir_add_entry(ipcpi.shim_data, name, ip_addr)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
+        if (shim_data_dir_add_entry(ipcpi.shim_data, hash, ip_addr)) {
                 log_err("Failed to add directory entry.");
                 return -1;
         }
 
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
         return 0;
 }
 
-static int ipcp_udp_flow_alloc(int       fd,
-                               char *    dst_name,
-                               qoscube_t cube)
+static int ipcp_udp_flow_alloc(int             fd,
+                               const uint8_t * dst,
+                               qoscube_t       cube)
 {
         struct sockaddr_in r_saddr; /* server address */
         struct sockaddr_in f_saddr; /* flow */
@@ -979,14 +895,9 @@ static int ipcp_udp_flow_alloc(int       fd,
         int                skfd;
         uint32_t           ip_addr = 0;
 
-        log_dbg("Allocating flow to %s.", dst_name);
+        log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(dst));
 
-        assert(dst_name);
-
-        if (strlen(dst_name) > 255) {
-                log_err("Name too long for this shim.");
-                return -1;
-        }
+        assert(dst);
 
         if (cube != QOS_CUBE_BE && cube != QOS_CUBE_FRC) {
                 log_dbg("Unsupported QoS requested.");
@@ -1012,22 +923,13 @@ static int ipcp_udp_flow_alloc(int       fd,
                 return -1;
         }
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
 
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_dbg("Won't allocate flow with non-enrolled IPCP.");
-                close(skfd);
-                return -1; /* -ENOTENROLLED */
-        }
-
-        if (!shim_data_dir_has(ipcpi.shim_data, dst_name)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
+        if (!shim_data_dir_has(ipcpi.shim_data, dst)) {
                 log_dbg("Could not resolve destination.");
                 close(skfd);
                 return -1;
         }
-        ip_addr = (uint32_t) shim_data_dir_get_addr(ipcpi.shim_data, dst_name);
+        ip_addr = (uint32_t) shim_data_dir_get_addr(ipcpi.shim_data, dst);
 
         /* connect to server (store the remote IP address in the fd) */
         memset((char *) &r_saddr, 0, sizeof(r_saddr));
@@ -1049,13 +951,11 @@ static int ipcp_udp_flow_alloc(int       fd,
         flow_set_add(udp_data.np1_flows, fd);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         if (ipcp_udp_port_alloc(ip_addr,
                                 f_saddr.sin_port,
-                                dst_name,
+                                dst,
                                 cube) < 0) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
                 pthread_rwlock_wrlock(&udp_data.flows_lock);
 
                 udp_data.fd_to_uf[fd].udp  = -1;
@@ -1063,7 +963,6 @@ static int ipcp_udp_flow_alloc(int       fd,
                 udp_data.uf_to_fd[skfd]    = -1;
 
                 pthread_rwlock_unlock(&udp_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 close(skfd);
                 return -1;
         }
@@ -1103,10 +1002,11 @@ static int ipcp_udp_flow_alloc_resp(int fd,
 
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-        pthread_rwlock_wrlock(&udp_data.flows_lock);
+        pthread_rwlock_rdlock(&udp_data.flows_lock);
 
         skfd = udp_data.fd_to_uf[fd].skfd;
+
+        pthread_rwlock_unlock(&udp_data.flows_lock);
 
         if (getsockname(skfd, (struct sockaddr *) &f_saddr, &len) < 0) {
                 log_dbg("Socket with fd %d has no address.", skfd);
@@ -1118,7 +1018,6 @@ static int ipcp_udp_flow_alloc_resp(int fd,
                 return -1;
         }
 
-        pthread_rwlock_unlock(&udp_data.flows_lock);
         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
         set_fd(skfd);
@@ -1126,18 +1025,12 @@ static int ipcp_udp_flow_alloc_resp(int fd,
         flow_set_add(udp_data.np1_flows, fd);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
-        if (ipcp_udp_port_alloc_resp(r_saddr.sin_addr.s_addr,
-                                     f_saddr.sin_port,
-                                     r_saddr.sin_port,
-                                     response) < 0) {
-                pthread_rwlock_rdlock(&ipcpi.state_lock);
+        if (ipcp_udp_port_alloc_resp(r_saddr.sin_addr.s_addr, f_saddr.sin_port,
+                                     r_saddr.sin_port, response) < 0) {
                 pthread_rwlock_rdlock(&udp_data.flows_lock);
                 clr_fd(skfd);
                 pthread_rwlock_unlock(&udp_data.flows_lock);
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-
                 return -1;
         }
 
@@ -1152,14 +1045,6 @@ static int ipcp_udp_flow_dealloc(int fd)
         int skfd = -1;
 
         ipcp_flow_fini(fd);
-
-        pthread_rwlock_rdlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_dbg("Won't register with non-enrolled IPCP.");
-                return -1; /* -ENOTENROLLED */
-        }
 
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
@@ -1179,7 +1064,6 @@ static int ipcp_udp_flow_dealloc(int fd)
         clr_fd(skfd);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         flow_dealloc(fd);
 
@@ -1191,9 +1075,9 @@ static int ipcp_udp_flow_dealloc(int fd)
 static struct ipcp_ops udp_ops = {
         .ipcp_bootstrap       = ipcp_udp_bootstrap,
         .ipcp_enroll          = NULL,                       /* shim */
-        .ipcp_name_reg        = ipcp_udp_name_reg,
-        .ipcp_name_unreg      = ipcp_udp_name_unreg,
-        .ipcp_name_query      = ipcp_udp_name_query,
+        .ipcp_reg             = ipcp_udp_reg,
+        .ipcp_unreg           = ipcp_udp_unreg,
+        .ipcp_query           = ipcp_udp_query,
         .ipcp_flow_alloc      = ipcp_udp_flow_alloc,
         .ipcp_flow_alloc_resp = ipcp_udp_flow_alloc_resp,
         .ipcp_flow_dealloc    = ipcp_udp_flow_dealloc
@@ -1202,26 +1086,6 @@ static struct ipcp_ops udp_ops = {
 int main(int    argc,
          char * argv[])
 {
-        struct sigaction sig_act;
-        sigset_t  sigset;
-        sigemptyset(&sigset);
-        sigaddset(&sigset, SIGINT);
-        sigaddset(&sigset, SIGQUIT);
-        sigaddset(&sigset, SIGHUP);
-        sigaddset(&sigset, SIGPIPE);
-
-        /* init sig_act */
-        memset(&sig_act, 0, sizeof(sig_act));
-
-        /* install signal traps */
-        sig_act.sa_sigaction = &ipcp_sig_handler;
-        sig_act.sa_flags     = SA_SIGINFO;
-
-        sigaction(SIGINT,  &sig_act, NULL);
-        sigaction(SIGTERM, &sig_act, NULL);
-        sigaction(SIGHUP,  &sig_act, NULL);
-        sigaction(SIGPIPE, &sig_act, NULL);
-
         if (ipcp_init(argc, argv, THIS_TYPE, &udp_ops) < 0) {
                 ipcp_create_r(getpid(), -1);
                 exit(EXIT_FAILURE);
@@ -1234,9 +1098,6 @@ int main(int    argc,
                 exit(EXIT_FAILURE);
         }
 
-
-        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
                 ipcp_create_r(getpid(), -1);
@@ -1244,8 +1105,6 @@ int main(int    argc,
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
-
-        pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");

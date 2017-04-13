@@ -23,14 +23,14 @@
 
 syntax = "proto2";
 
-import "dif_config.proto";
+import "ipcp_config.proto";
 
 enum ipcp_msg_code {
         IPCP_BOOTSTRAP       =  1;
         IPCP_ENROLL          =  2;
-        IPCP_NAME_REG        =  3;
-        IPCP_NAME_UNREG      =  4;
-        IPCP_NAME_QUERY      =  5;
+        IPCP_REG             =  3;
+        IPCP_UNREG           =  4;
+        IPCP_QUERY           =  5;
         IPCP_FLOW_ALLOC      =  6;
         IPCP_FLOW_ALLOC_RESP =  7;
         IPCP_FLOW_DEALLOC    =  8;
@@ -38,17 +38,14 @@ enum ipcp_msg_code {
 };
 
 message ipcp_msg {
-        required ipcp_msg_code code  =  1;
-        optional string dif_name     =  2;
-        repeated string dif_names    =  3;
-        optional int32  len          =  4;
-        optional string name         =  5;
-        optional sint32 port_id      =  6;
-        optional string dst_name     =  7;
-        optional sint32 qoscube      =  8;
-        optional dif_config_msg conf =  9;
-        optional sint32 fd           = 10;
-        optional sint32 api          = 11;
-        optional sint32 response     = 12;
-        optional sint32 result       = 13;
+        required ipcp_msg_code code   =  1;
+        optional string name          =  2;
+        optional bytes hash           =  3;
+        optional int32 port_id        =  4;
+        optional string dst_name      =  5;
+        optional uint32 qoscube       =  6;
+        optional ipcp_config_msg conf =  7;
+        optional int32 api            =  8;
+        optional int32 response       =  9;
+        optional int32 result         = 10;
 };

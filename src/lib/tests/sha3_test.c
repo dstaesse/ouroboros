@@ -20,7 +20,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include "sha3.h"
+#include <ouroboros/sha3.h>
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -84,7 +84,7 @@ int sha3_test(int     argc,
         struct sha3_ctx ctx;
 
         /* Storage for result. */
-        uint8_t res[sha3_512_hash_size];
+        uint8_t res[SHA3_512_HASH_LEN];
 
         /* SHA3 test vectors */
         char * str1_inp = "abc";
@@ -172,124 +172,124 @@ int sha3_test(int     argc,
         printf("test: %s.\n\n", str1_inp);
 
         rhash_sha3_224_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str1_inp, strlen(str1_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str1_inp, strlen(str1_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str1_224, res, sha3_224_hash_size))
+        if (check_hash(str1_224, res, SHA3_224_HASH_LEN))
                 return -1;
 
         rhash_sha3_256_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str1_inp, strlen(str1_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str1_inp, strlen(str1_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str1_256, res, sha3_256_hash_size))
+        if (check_hash(str1_256, res, SHA3_256_HASH_LEN))
                 return -1;
 
         rhash_sha3_384_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str1_inp, strlen(str1_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str1_inp, strlen(str1_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str1_384, res, sha3_384_hash_size))
+        if (check_hash(str1_384, res, SHA3_384_HASH_LEN))
                 return -1;
 
         rhash_sha3_512_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str1_inp, strlen(str1_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str1_inp, strlen(str1_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str1_512, res, sha3_512_hash_size))
+        if (check_hash(str1_512, res, SHA3_512_HASH_LEN))
                 return -1;
 
         /* 2nd input string. */
         printf("test: <empty string>.\n\n");
 
         rhash_sha3_224_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str2_inp, strlen(str2_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str2_inp, strlen(str2_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str2_224, res, sha3_224_hash_size))
+        if (check_hash(str2_224, res, SHA3_224_HASH_LEN))
                 return -1;
 
         rhash_sha3_256_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str2_inp, strlen(str2_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str2_inp, strlen(str2_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str2_256, res, sha3_256_hash_size))
+        if (check_hash(str2_256, res, SHA3_256_HASH_LEN))
                 return -1;
 
         rhash_sha3_384_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str2_inp, strlen(str2_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str2_inp, strlen(str2_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str2_384, res, sha3_384_hash_size))
+        if (check_hash(str2_384, res, SHA3_384_HASH_LEN))
                 return -1;
 
         rhash_sha3_512_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str2_inp, strlen(str2_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str2_inp, strlen(str2_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str2_512, res, sha3_512_hash_size))
+        if (check_hash(str2_512, res, SHA3_512_HASH_LEN))
                 return -1;
 
         /* 3rd input string */
         printf("test: %s.\n\n", str3_inp);
 
         rhash_sha3_224_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str3_inp, strlen(str3_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str3_inp, strlen(str3_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str3_224, res, sha3_224_hash_size))
+        if (check_hash(str3_224, res, SHA3_224_HASH_LEN))
                 return -1;
 
         rhash_sha3_256_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str3_inp, strlen(str3_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str3_inp, strlen(str3_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str3_256, res, sha3_256_hash_size))
+        if (check_hash(str3_256, res, SHA3_256_HASH_LEN))
                 return -1;
 
         rhash_sha3_384_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str3_inp, strlen(str3_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str3_inp, strlen(str3_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str3_384, res, sha3_384_hash_size))
+        if (check_hash(str3_384, res, SHA3_384_HASH_LEN))
                 return -1;
 
         rhash_sha3_512_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str3_inp, strlen(str3_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str3_inp, strlen(str3_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str3_512, res, sha3_512_hash_size))
+        if (check_hash(str3_512, res, SHA3_512_HASH_LEN))
                 return -1;
 
         /* 4th input string. */
         printf("test: %s.\n\n", str4_inp);
 
         rhash_sha3_224_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str4_inp, strlen(str4_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str4_inp, strlen(str4_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str4_224, res, sha3_224_hash_size))
+        if (check_hash(str4_224, res, SHA3_224_HASH_LEN))
                 return -1;
 
         rhash_sha3_256_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str4_inp, strlen(str4_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str4_inp, strlen(str4_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str4_256, res, sha3_256_hash_size))
+        if (check_hash(str4_256, res, SHA3_256_HASH_LEN))
                 return -1;
 
         rhash_sha3_384_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str4_inp, strlen(str4_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str4_inp, strlen(str4_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str4_384, res, sha3_384_hash_size))
+        if (check_hash(str4_384, res, SHA3_384_HASH_LEN))
                 return -1;
 
         rhash_sha3_512_init(&ctx);
-        rhash_sha3_update(&ctx, (uint8_t *) str4_inp, strlen(str4_inp));
-        rhash_sha3_final(&ctx, (uint8_t *) res);
+        rhash_sha3_update(&ctx, str4_inp, strlen(str4_inp));
+        rhash_sha3_final(&ctx, res);
 
-        if (check_hash(str4_512, res, sha3_512_hash_size))
+        if (check_hash(str4_512, res, SHA3_512_HASH_LEN))
                 return -1;
 
         return 0;

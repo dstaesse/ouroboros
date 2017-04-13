@@ -28,7 +28,8 @@
 #include <sys/socket.h>
 #endif
 #include <ouroboros/irm.h>
-#include <ouroboros/irm_config.h>
+#include <ouroboros/ipcp.h>
+#include <ouroboros/hash.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
@@ -55,11 +56,12 @@
 
 static void usage(void)
 {
-        /* FIXME: Add dif_config stuff */
+        /* FIXME: Add ipcp_config stuff */
         printf("Usage: irm ipcp bootstrap\n"
                "                name <ipcp name>\n"
                "                dif <DIF name>\n"
-               "                type [TYPE]\n\n"
+               "                type [TYPE]\n"
+/* FIXME: add option to set hash algorithm and length for directory */
                "where TYPE = {" NORMAL " " LOCAL " "
                SHIM_UDP " " SHIM_ETH_LLC"}\n\n"
                "if TYPE == " NORMAL "\n"
@@ -92,7 +94,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
 {
         char * name = NULL;
         pid_t api;
-        struct dif_config conf;
+        struct ipcp_config conf;
         uint8_t addr_size = DEFAULT_ADDR_SIZE;
         uint8_t cep_id_size = DEFAULT_CEP_ID_SIZE;
         uint8_t pdu_length_size = DEFAULT_PDU_LEN_SIZE;
@@ -112,6 +114,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         pid_t * apis = NULL;
         ssize_t len = 0;
         int i = 0;
+        uint16_t dir_hash_len =  SHA3_256_HASH_LEN;
 
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {
@@ -177,6 +180,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         }
 
         conf.dif_name = dif_name;
+        conf.dir_hash_len = dir_hash_len;
 
         if (strcmp(ipcp_type, NORMAL) == 0) {
                 conf.type = IPCP_NORMAL;

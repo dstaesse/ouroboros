@@ -22,8 +22,7 @@
  */
 
 #include <ouroboros/errno.h>
-
-#include "btree.h"
+#include <ouroboros/btree.h>
 
 #include <stdlib.h>
 #include <stdbool.h>

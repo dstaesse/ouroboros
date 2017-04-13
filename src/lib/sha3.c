@@ -44,11 +44,10 @@
  */
 
 #include <ouroboros/endian.h>
+#include <ouroboros/sha3.h>
 
 #include <assert.h>
 #include <string.h>
-
-#include "sha3.h"
 
 #define IS_ALIGNED_64(p) (0 == (7 & ((const uint8_t *) (p)      \
                                      - (const uint8_t *) 0)))
@@ -262,11 +261,12 @@ static void rhash_sha3_process_block(uint64_t         hash[25],
 #define SHA3_FINALIZED 0x80000000
 
 void rhash_sha3_update(struct sha3_ctx * ctx,
-                       const uint8_t *   msg,
+                       const void *      pmsg,
                        size_t            size)
 {
         size_t idx        = (size_t) ctx->rest;
         size_t block_size = (size_t) ctx->block_size;
+        uint8_t * msg     = (uint8_t *) pmsg;
 
         if (ctx->rest & SHA3_FINALIZED) return;
         ctx->rest = (unsigned) ((ctx->rest + size) % block_size);

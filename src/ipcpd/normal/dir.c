@@ -60,22 +60,23 @@ int dir_fini(void)
         return 0;
 }
 
-int dir_name_reg(char * name)
+int dir_reg(const uint8_t * hash)
 {
+        char hashstr[DIR_HASH_STRLEN + 1];
         int ret;
 
-        assert(name);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL)
-                return -EPERM;
+        assert(hash);
 
         dir_path_reset();
 
-        ret = rib_add(dir_path, name);
-        if (ret == -ENOMEM)
-                return -ENOMEM;
+        ipcp_hash_str(hashstr, hash);
 
-        rib_path_append(dir_path, name);
+        ret = rib_add(dir_path, hashstr);
+        if (ret == -ENOMEM)
+                 return -ENOMEM;
+
+        rib_path_append(dir_path, hashstr);
+
         ret = rib_add(dir_path, ipcpi.name);
         if (ret == -EPERM)
                 return -EPERM;
@@ -88,18 +89,16 @@ int dir_name_reg(char * name)
         return 0;
 }
 
-int dir_name_unreg(char * name)
+int dir_unreg(const uint8_t * hash)
 {
+        char hashstr[DIR_HASH_STRLEN + 1];
         size_t len;
 
-        assert(name);
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL)
-                return -EPERM;
+        assert(hash);
 
         dir_path_reset();
 
-        rib_path_append(dir_path, name);
+        rib_path_append(dir_path, hashstr);
 
         if (!rib_has(dir_path))
                 return 0;
@@ -118,16 +117,16 @@ int dir_name_unreg(char * name)
         return 0;
 }
 
-int dir_name_query(char * name)
+int dir_query(const uint8_t * hash)
 {
+        char hashstr[DIR_HASH_STRLEN + 1];
         size_t len;
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL)
-                return -EPERM;
 
         dir_path_reset();
 
-        rib_path_append(dir_path, name);
+        ipcp_hash_str(hashstr, hash);
+
+        rib_path_append(dir_path, hashstr);
 
         if (!rib_has(dir_path))
                 return -1;

@@ -29,9 +29,8 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/crc32.h>
 #include <ouroboros/time_utils.h>
-
-#include "sha3.h"
-#include "btree.h"
+#include <ouroboros/sha3.h>
+#include <ouroboros/btree.h>
 
 #include "ro.pb-c.h"
 typedef RoMsg ro_msg_t;
@@ -94,7 +93,7 @@ struct rnode {
         uint8_t *        data;
         size_t           len;
 
-        uint8_t          sha3[sha3_256_hash_size];
+        uint8_t          sha3[SHA3_256_HASH_LEN];
 
         struct rnode *   parent;
 
@@ -142,7 +141,7 @@ static void rnode_hash(struct rnode * node)
 
         list_for_each(p, &node->children) {
                 struct child * c = list_entry(p, struct child, next);
-                rhash_sha3_update(&ctx, c->node->sha3, sha3_256_hash_size);
+                rhash_sha3_update(&ctx, c->node->sha3, SHA3_256_HASH_LEN);
         }
 
         rhash_sha3_final(&ctx, node->sha3);
@@ -654,7 +653,7 @@ int rib_write(const char * path,
 
         uint8_t * cdata;
 
-        if (path == NULL)
+        if (path == NULL || data == NULL || len == 0)
                 return -EINVAL;
 
         cdata = malloc(len);
@@ -666,8 +665,13 @@ int rib_write(const char * path,
         pthread_rwlock_rdlock(&rib.lock);
 
         node = find_rnode_by_path(path);
-        if (node != NULL)
-                rnode_update(node, cdata, len);
+        if (node == NULL) {
+                pthread_rwlock_unlock(&rib.lock);
+                free(cdata);
+                return -1;
+        }
+
+        rnode_update(node, cdata, len);
 
         pthread_rwlock_unlock(&rib.lock);
 
@@ -1226,7 +1230,7 @@ static ro_msg_t * rnode_pack(struct rnode * node,
             (flags & PACK_HASH_ALL)) {
                 msg->has_hash  = true;
                 msg->hash.data = node->sha3;
-                msg->hash.len  = sha3_256_hash_size;
+                msg->hash.len  = SHA3_256_HASH_LEN;
         }
 
         if (node->data != NULL) {
@@ -1407,7 +1411,7 @@ int rib_unpack(uint8_t * packed,
 
         if (ret == 0 && msg->has_hash) {
                 root = rnode_get_child(root, msg->name);
-                if (memcmp(msg->hash.data, root->sha3, sha3_256_hash_size)) {
+                if (memcmp(msg->hash.data, root->sha3, SHA3_256_HASH_LEN)) {
                         ro_msg__free_unpacked(msg, NULL);
                         return -EFAULT;
                 }

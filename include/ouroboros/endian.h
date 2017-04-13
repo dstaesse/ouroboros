@@ -84,5 +84,7 @@
 #define hton32(x) htobe32(x)
 #define ntoh64(x) betoh64(x)
 #define noth32(x) betoh32(x)
+#define hton16(x) htobe16(x)
+#define ntoh16(x) betoh16(x)
 
 #endif /* OUROBOROS_ENDIAN_H */

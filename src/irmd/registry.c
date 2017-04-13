@@ -25,8 +25,9 @@
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/irm_config.h>
+#include <ouroboros/irm.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/hash.h>
 
 #include "registry.h"
 #include "utils.h"
@@ -145,7 +146,8 @@ static void reg_entry_destroy(struct reg_entry * e)
         free(e);
 }
 
-static bool reg_entry_is_local_in_dif(struct reg_entry * e, char * dif_name)
+static bool reg_entry_is_local_in_dif(struct reg_entry * e,
+                                      const char *       dif_name)
 {
         struct list_head * p = NULL;
 
@@ -159,7 +161,7 @@ static bool reg_entry_is_local_in_dif(struct reg_entry * e, char * dif_name)
 }
 
 static int reg_entry_add_local_in_dif(struct reg_entry * e,
-                                      char *             dif_name,
+                                      const char *       dif_name,
                                       enum ipcp_type     type)
 {
         if (!reg_entry_is_local_in_dif(e, dif_name)) {
@@ -176,7 +178,7 @@ static int reg_entry_add_local_in_dif(struct reg_entry * e,
 }
 
 static void reg_entry_del_local_from_dif(struct reg_entry * e,
-                                         char *             dif_name)
+                                         const char *       dif_name)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;
@@ -192,7 +194,7 @@ static void reg_entry_del_local_from_dif(struct reg_entry * e,
 }
 
 static bool reg_entry_has_apn(struct reg_entry * e,
-                              char *             apn)
+                              const char *       apn)
 {
         struct list_head * p;
 
@@ -242,7 +244,7 @@ int reg_entry_add_apn(struct reg_entry * e,
 }
 
 void reg_entry_del_apn(struct reg_entry * e,
-                       char *             apn)
+                       const char *       apn)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;
@@ -504,9 +506,9 @@ int reg_entry_wait_state(struct reg_entry *  e,
 }
 
 struct reg_entry * registry_get_entry(struct list_head * registry,
-                                      char *             name)
+                                      const char *       name)
 {
-        struct list_head * p   = NULL;
+        struct list_head * p = NULL;
 
         assert(registry);
 
@@ -519,8 +521,33 @@ struct reg_entry * registry_get_entry(struct list_head * registry,
         return NULL;
 }
 
+struct reg_entry * registry_get_entry_by_hash(struct list_head * registry,
+                                              const uint8_t *    hash,
+                                              size_t             len)
+{
+        struct list_head * p = NULL;
+        uint8_t * thash;
+
+        thash = malloc(len);
+        if (thash == NULL)
+                return NULL;
+
+        assert(registry);
+
+        list_for_each(p, registry) {
+                struct reg_entry * e = list_entry(p, struct reg_entry, next);
+                get_hash(thash, e->name);
+                if (memcmp(thash, hash, len) == 0) {
+                        free(thash);
+                        return e;
+                }
+        }
+
+        return NULL;
+}
+
 struct reg_entry * registry_add_name(struct list_head * registry,
-                                     char *             name)
+                                     const char *       name)
 {
         struct reg_entry * e = NULL;
 
@@ -538,7 +565,7 @@ struct reg_entry * registry_add_name(struct list_head * registry,
                 return NULL;
         }
 
-        e = reg_entry_init(e, name);
+        e = reg_entry_init(e, strdup(name));
         if (e == NULL) {
                 log_dbg("Could not initialize registry entry.");
                 reg_entry_destroy(e);
@@ -551,7 +578,7 @@ struct reg_entry * registry_add_name(struct list_head * registry,
 }
 
 void registry_del_name(struct list_head * registry,
-                       char *             name)
+                       const char *       name)
 {
         struct reg_entry * e = registry_get_entry(registry, name);
         if (e == NULL)
@@ -583,8 +610,8 @@ void registry_del_api(struct list_head * registry,
 }
 
 int registry_add_name_to_dif(struct list_head * registry,
-                             char *             name,
-                             char *             dif_name,
+                             const char *       name,
+                             const char *       dif_name,
                              enum ipcp_type     type)
 {
         struct reg_entry * re = registry_get_entry(registry, name);
@@ -595,8 +622,8 @@ int registry_add_name_to_dif(struct list_head * registry,
 }
 
 void registry_del_name_from_dif(struct list_head * registry,
-                                char *             name,
-                                char *             dif_name)
+                                const char *       name,
+                                const char *       dif_name)
 {
         struct reg_entry * re = registry_get_entry(registry, name);
         if (re == NULL)

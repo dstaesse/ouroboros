@@ -23,12 +23,13 @@
 #define OUROBOROS_PREFIX "normal-ipcp"
 
 #include <ouroboros/config.h>
+#include <ouroboros/endian.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/rib.h>
-#include <ouroboros/irm_config.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 
 #include "addr_auth.h"
@@ -49,37 +50,6 @@
 
 #define THIS_TYPE IPCP_NORMAL
 
-void ipcp_sig_handler(int         sig,
-                      siginfo_t * info,
-                      void *      c)
-{
-        (void) c;
-
-        switch(sig) {
-        case SIGINT:
-        case SIGTERM:
-        case SIGHUP:
-                if (info->si_pid == ipcpi.irmd_api) {
-                        pthread_rwlock_wrlock(&ipcpi.state_lock);
-
-                        if (ipcp_get_state() == IPCP_INIT)
-                                ipcp_set_state(IPCP_NULL);
-
-                        if (ipcp_get_state() == IPCP_OPERATIONAL)
-                                ipcp_set_state(IPCP_SHUTDOWN);
-
-                        pthread_rwlock_unlock(&ipcpi.state_lock);
-                }
-        default:
-                return;
-        }
-}
-
-/*
- * Boots the IPCP off information in the rib.
- * Common function after bootstrap or enroll.
- * Call under ipcpi.state_lock
- */
 static int boot_components(void)
 {
         char buf[256];
@@ -87,7 +57,7 @@ static int boot_components(void)
         enum pol_addr_auth pa;
         char path[RIB_MAX_PATH_LEN + 1];
 
-        len = rib_read(DIF_PATH, &buf, 256);
+        len = rib_read(BOOT_PATH "/general/dif_name", buf, 256);
         if (len < 0) {
                 log_err("Failed to read DIF name: %zd.", len);
                 return -1;
@@ -98,6 +68,17 @@ static int boot_components(void)
                 log_err("Failed to set DIF name.");
                 return -1;
         }
+
+        len = rib_read(BOOT_PATH "/general/dir_hash_len",
+                       &ipcpi.dir_hash_len, sizeof(ipcpi.dir_hash_len));
+        if (len < 0) {
+                log_err("Failed to read hash length: %zd.", len);
+                return -1;
+        }
+
+        ipcpi.dir_hash_len = ntoh16(ipcpi.dir_hash_len);
+
+        assert(ipcpi.dir_hash_len != 0);
 
         if (rib_add(MEMBERS_PATH, ipcpi.name)) {
                 log_err("Failed to add name to " MEMBERS_PATH);
@@ -160,12 +141,11 @@ static int boot_components(void)
         }
 
         if (fmgr_init()) {
-                log_err("Failed to initialize flow manager component.");
                 frct_fini();
                 dir_fini();
                 ribmgr_fini();
                 addr_auth_fini();
-                log_err("Failed to start flow manager.");
+                log_err("Failed to initialize flow manager component.");
                 return -1;
         }
 
@@ -229,38 +209,25 @@ void shutdown_components(void)
         free(ipcpi.dif_name);
 }
 
-static int normal_ipcp_enroll(char * dst_name)
+static int normal_ipcp_enroll(const char * dst)
 {
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
-
-        if (ipcp_get_state() != IPCP_INIT) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_err("IPCP in wrong state.");
-                return -1; /* -ENOTINIT */
-        }
-
         if (rib_add(RIB_ROOT, MEMBERS_NAME)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("Failed to create members.");
                 return -1;
         }
 
         /* Get boot state from peer */
-        if (enroll_boot(dst_name)) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
+        if (enroll_boot(dst)) {
                 log_err("Failed to boot IPCP components.");
                 return -1;
         }
 
         if (boot_components()) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("Failed to boot IPCP components.");
                 return -1;
         }
 
-        pthread_rwlock_unlock(&ipcpi.state_lock);
-
-        log_dbg("Enrolled with %s.", dst_name);
+        log_dbg("Enrolled with " HASH_FMT, HASH_VAL(dst));
 
         return 0;
 }
@@ -269,12 +236,17 @@ const struct ros {
         char * parent;
         char * child;
 } ros[] = {
-        /* GENERAL IPCP INFO */
-        {RIB_ROOT, DIF_NAME},
         /* BOOT INFO */
         {RIB_ROOT, BOOT_NAME},
         /* OTHER RIB STRUCTURES */
         {RIB_ROOT, MEMBERS_NAME},
+
+        /* GENERAL IPCP INFO */
+        {BOOT_PATH, "general"},
+
+        {BOOT_PATH "/general", "dif_name"},
+        {BOOT_PATH "/general", "dir_hash_len"},
+
         /* DT COMPONENT */
         {BOOT_PATH, "dt"},
 
@@ -319,28 +291,28 @@ int normal_rib_init(void)
         return 0;
 }
 
-static int normal_ipcp_bootstrap(struct dif_config * conf)
+static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
 {
+        uint16_t hash_len;
+
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        pthread_rwlock_wrlock(&ipcpi.state_lock);
+        hash_len = hton16((uint16_t) conf->dir_hash_len);
 
-        if (ipcp_get_state() != IPCP_INIT) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
-                log_err("IPCP in wrong state.");
-                return -1; /* -ENOTINIT */
-        }
+        assert(ntoh16(hash_len) != 0);
 
         if (normal_rib_init()) {
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 log_err("Failed to write initial structure to the RIB.");
                 return -1;
         }
 
-        if (rib_write(DIF_PATH,
+        if (rib_write(BOOT_PATH "/general/dif_name",
                       conf->dif_name,
                       strlen(conf->dif_name) + 1) ||
+            rib_write(BOOT_PATH "/general/dir_hash_len",
+                      &hash_len,
+                      sizeof(hash_len)) ||
             rib_write(BOOT_PATH "/dt/const/addr_size",
                       &conf->addr_size,
                       sizeof(conf->addr_size)) ||
@@ -375,17 +347,13 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
                       &conf->addr_auth_type,
                       sizeof(conf->addr_auth_type))) {
                 log_err("Failed to write boot info to RIB.");
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
 
         if (boot_components()) {
                 log_err("Failed to boot IPCP components.");
-                pthread_rwlock_unlock(&ipcpi.state_lock);
                 return -1;
         }
-
-        pthread_rwlock_unlock(&ipcpi.state_lock);
 
         log_dbg("Bootstrapped in DIF %s.", conf->dif_name);
 
@@ -395,9 +363,9 @@ static int normal_ipcp_bootstrap(struct dif_config * conf)
 static struct ipcp_ops normal_ops = {
         .ipcp_bootstrap       = normal_ipcp_bootstrap,
         .ipcp_enroll          = normal_ipcp_enroll,
-        .ipcp_name_reg        = dir_name_reg,
-        .ipcp_name_unreg      = dir_name_unreg,
-        .ipcp_name_query      = dir_name_query,
+        .ipcp_reg             = dir_reg,
+        .ipcp_unreg           = dir_unreg,
+        .ipcp_query           = dir_query,
         .ipcp_flow_alloc      = fmgr_np1_alloc,
         .ipcp_flow_alloc_resp = fmgr_np1_alloc_resp,
         .ipcp_flow_dealloc    = fmgr_np1_dealloc
@@ -406,27 +374,6 @@ static struct ipcp_ops normal_ops = {
 int main(int    argc,
          char * argv[])
 {
-        struct sigaction sig_act;
-        sigset_t         sigset;
-
-        sigemptyset(&sigset);
-        sigaddset(&sigset, SIGINT);
-        sigaddset(&sigset, SIGQUIT);
-        sigaddset(&sigset, SIGHUP);
-        sigaddset(&sigset, SIGPIPE);
-
-        /* init sig_act */
-        memset(&sig_act, 0, sizeof(sig_act));
-
-        /* install signal traps */
-        sig_act.sa_sigaction = &ipcp_sig_handler;
-        sig_act.sa_flags     = SA_SIGINFO;
-
-        sigaction(SIGINT,  &sig_act, NULL);
-        sigaction(SIGTERM, &sig_act, NULL);
-        sigaction(SIGHUP,  &sig_act, NULL);
-        sigaction(SIGPIPE, &sig_act, NULL);
-
         if (ipcp_init(argc, argv, THIS_TYPE, &normal_ops) < 0) {
                 ipcp_create_r(getpid(), -1);
                 exit(EXIT_FAILURE);
@@ -466,7 +413,6 @@ int main(int    argc,
                 exit(EXIT_FAILURE);
         }
 
-        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
@@ -478,8 +424,6 @@ int main(int    argc,
                 ipcp_fini();
                 exit(EXIT_FAILURE);
         }
-
-        pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");

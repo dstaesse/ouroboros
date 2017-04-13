@@ -28,6 +28,8 @@
 
 #define ENOTALLOC    1000 /* Flow is not allocated */
 #define EIPCPTYPE    1001 /* Unknown IPCP type */
-#define EIRMD        1002 /* Failed to contact IRMD */
+#define EIRMD        1002 /* Failed to communicate with IRMD */
+#define EIPCP        1003 /* Failed to communicate with IPCP */
+#define EIPCPSTATE   1004 /* Target in wrong state */
 
-#endif
+#endif /* OUROBOROS_ERRNO_H */

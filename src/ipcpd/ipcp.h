@@ -24,12 +24,13 @@
 #define IPCPD_IPCP_H
 
 #include <ouroboros/config.h>
-#include <ouroboros/irm_config.h>
+#include <ouroboros/ipcp.h>
 
 #include "shim-data.h"
 
 #include <pthread.h>
 #include <time.h>
+#include <signal.h>
 
 enum ipcp_state {
         IPCP_NULL = 0,
@@ -39,25 +40,27 @@ enum ipcp_state {
 };
 
 struct ipcp_ops {
-        int   (* ipcp_bootstrap)(struct dif_config * conf);
+        int   (* ipcp_bootstrap)(const struct ipcp_config * conf);
 
-        int   (* ipcp_enroll)(char * dif_name);
+        int   (* ipcp_enroll)(const char * dst);
 
-        int   (* ipcp_name_reg)(char * name);
+        int   (* ipcp_reg)(const uint8_t * hash);
 
-        int   (* ipcp_name_unreg)(char * name);
+        int   (* ipcp_unreg)(const uint8_t * hash);
 
-        int   (* ipcp_name_query)(char * name);
+        int   (* ipcp_query)(const uint8_t * hash);
 
-        int   (* ipcp_flow_alloc)(int       fd,
-                                  char *    dst_ap_name,
-                                  qoscube_t qos);
+        int   (* ipcp_flow_alloc)(int             fd,
+                                  const uint8_t * dst,
+                                  qoscube_t       qos);
 
         int   (* ipcp_flow_alloc_resp)(int fd,
                                        int response);
 
         int   (* ipcp_flow_dealloc)(int fd);
 };
+
+#define DIR_HASH_STRLEN (ipcpi.dir_hash_len * 2)
 
 struct ipcp {
         int                irmd_api;
@@ -67,6 +70,7 @@ struct ipcp {
         char *             dif_name;
 
         uint64_t           dt_addr;
+        uint16_t           dir_hash_len;
 
         struct ipcp_ops *  ops;
         int                irmd_fd;
@@ -116,5 +120,16 @@ int             ipcp_wait_state(enum ipcp_state         state,
 
 int             ipcp_parse_arg(int    argc,
                                char * argv[]);
+
+/* Handle shutdown of IPCP */
+void            ipcp_sig_handler(int         sig,
+                                 siginfo_t * info,
+                                 void *      c);
+
+/* Helper functions for directory entries, could be moved */
+uint8_t *       ipcp_hash_dup(const uint8_t * hash);
+
+void            ipcp_hash_str(char            buf[],
+                              const uint8_t * hash);
 
 #endif
