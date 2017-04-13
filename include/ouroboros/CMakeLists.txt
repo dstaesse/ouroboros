@@ -5,6 +5,7 @@ configure_file(
 set(HEADER_FILES
   cacep.h
   cdap.h
+  cdefs.h
   dev.h
   errno.h
   fcntl.h

@@ -24,6 +24,8 @@
 #ifndef OUROBOROS_FQUEUE_H
 #define OUROBOROS_FQUEUE_H
 
+#include <ouroboros/cdefs.h>
+
 #include <stdbool.h>
 #include <time.h>
 
@@ -33,6 +35,8 @@ struct fqueue;
 
 typedef struct flow_set flow_set_t;
 typedef struct fqueue fqueue_t;
+
+__BEGIN_DECLS
 
 flow_set_t * flow_set_create(void);
 
@@ -58,5 +62,7 @@ int          fqueue_next(fqueue_t * fq);
 int          flow_event_wait(flow_set_t *            set,
                              fqueue_t *              fq,
                              const struct timespec * timeout);
+
+__END_DECLS
 
 #endif /* OUROBOROS_FQUEUE_H */

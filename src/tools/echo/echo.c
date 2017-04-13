@@ -59,20 +59,20 @@ int main(int argc, char ** argv)
         }
 
         if (server) {
-                if (ap_init(argv_dup[0])) {
+                if (ouroboros_init(argv_dup[0])) {
                         printf("Failed to init AP.\n");
                         return -1;
                 }
                 ret = server_main();
         } else {
-                if (ap_init(NULL)) {
+                if (ouroboros_init(NULL)) {
                         printf("Failed to init AP.\n");
                         return -1;
                 }
                 ret = client_main();
         }
 
-        ap_fini();
+        ouroboros_fini();
 
         return ret;
 }

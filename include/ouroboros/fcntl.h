@@ -24,6 +24,8 @@
 #ifndef OUROBOROS_FCNTL_H
 #define OUROBOROS_FCNTL_H
 
+#include <ouroboros/cdefs.h>
+
 #include <sys/time.h>
 
 /* same values as fcntl.h */
@@ -36,6 +38,8 @@
 #define FLOW_O_DEFAULT  00000002
 
 #define FLOW_O_INVALID  (FLOW_O_WRONLY | FLOW_O_RDWR)
+
+__BEGIN_DECLS
 
 int flow_set_flags(int fd,
                    int flags);
@@ -50,5 +54,7 @@ int flow_get_timeout(int               fd,
 
 int flow_get_qosspec(int         fd,
                      qosspec_t * qs);
+
+__END_DECLS
 
 #endif /* OUROBOROS_FCNTL_H */
