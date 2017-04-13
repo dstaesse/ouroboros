@@ -22,6 +22,7 @@
 
 %module ouroboros
 %{
+#include "ouroboros/cdefs.h"
 #include "ouroboros/cacep.h"
 #include "ouroboros/cdap.h"
 #include "ouroboros/dev.h"
@@ -36,7 +37,8 @@
 
 typedef int pid_t;
 
-#include "ouroboros/cacep.h"
+%include "ouroboros/cdefs.h"
+%include "ouroboros/cacep.h"
 %include "ouroboros/cdap.h"
 %include "ouroboros/dev.h"
 %include "ouroboros/errno.h"
