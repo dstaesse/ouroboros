@@ -21,13 +21,16 @@
  * 02110-1301 USA
  */
 
+#ifndef OUROBOROS_DEV_H
+#define OUROBOROS_DEV_H
+
+#include <ouroboros/cdefs.h>
 #include <ouroboros/qos.h>
 
 #include <unistd.h>
 #include <time.h>
 
-#ifndef OUROBOROS_DEV_H
-#define OUROBOROS_DEV_H
+__BEGIN_DECLS
 
 /* These calls should be removed once we write the ouroboros OS. */
 int     ouroboros_init(const char * ap_name);
@@ -52,5 +55,7 @@ ssize_t flow_write(int          fd,
 ssize_t flow_read(int    fd,
                   void * buf,
                   size_t count);
+
+__END_DECLS
 
 #endif /* OUROBOROS_DEV_H */

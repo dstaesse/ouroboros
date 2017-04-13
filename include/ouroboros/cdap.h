@@ -24,6 +24,8 @@
 #ifndef OUROBOROS_CDAP_H
 #define OUROBOROS_CDAP_H
 
+#include <ouroboros/cdefs.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -45,6 +47,8 @@ enum cdap_opcode {
 struct cdap;
 
 typedef int32_t cdap_key_t;
+
+__BEGIN_DECLS
 
 struct cdap * cdap_create(void);
 
@@ -80,5 +84,7 @@ int           cdap_reply_send(struct cdap * instance,
                               int           result,
                               const void *  data,
                               size_t        len);
+
+__END_DECLS
 
 #endif /* OUROBOROS_CDAP_H */

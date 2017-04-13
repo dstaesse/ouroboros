@@ -24,6 +24,7 @@
 #ifndef OUROBOROS_IRM_H
 #define OUROBOROS_IRM_H
 
+#include <ouroboros/cdefs.h>
 #include <ouroboros/ipcp.h>
 
 #include <sys/types.h>
@@ -32,6 +33,8 @@
 
 #define BIND_AP_AUTO   0x01
 #define BIND_AP_UNIQUE 0x02
+
+__BEGIN_DECLS
 
 pid_t   irm_create_ipcp(const char *   name,
                         enum ipcp_type ipcp_type);
@@ -70,5 +73,7 @@ int     irm_reg(const char *  name,
 int     irm_unreg(const char * name,
                   char **      difs,
                   size_t       len);
+
+__END_DECLS
 
 #endif /* OUROBOROS_IRM_H */

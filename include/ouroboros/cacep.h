@@ -24,6 +24,8 @@
 #ifndef OUROBOROS_CACEP_H
 #define OUROBOROS_CACEP_H
 
+#include <ouroboros/cdefs.h>
+
 #include <stdint.h>
 
 enum proto_concrete_syntax {
@@ -40,10 +42,14 @@ struct conn_info {
         uint64_t                   addr;
 };
 
+__BEGIN_DECLS
+
 int cacep_snd(int                      fd,
               const struct conn_info * in);
 
 int cacep_rcv(int                fd,
               struct conn_info * out);
+
+__END_DECLS
 
 #endif /* OUROBOROS_CACEP_H */
