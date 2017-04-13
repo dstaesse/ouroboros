@@ -98,6 +98,8 @@ int dir_unreg(const uint8_t * hash)
 
         dir_path_reset();
 
+        ipcp_hash_str(hashstr, hash);
+
         rib_path_append(dir_path, hashstr);
 
         if (!rib_has(dir_path))
