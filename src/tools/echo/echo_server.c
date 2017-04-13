@@ -31,7 +31,7 @@ void shutdown_server(int signo)
 {
         (void) signo;
 
-        ap_fini();
+        ouroboros_fini();
         exit(EXIT_SUCCESS);
 }
 

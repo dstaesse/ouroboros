@@ -245,7 +245,7 @@ static void reset_flow(int fd)
         init_flow(fd);
 }
 
-int ap_init(const char * ap_name)
+int ouroboros_init(const char * ap_name)
 {
         int i = 0;
 
@@ -335,7 +335,7 @@ int ap_init(const char * ap_name)
         return 0;
 }
 
-void ap_fini()
+void ouroboros_fini()
 {
         int i = 0;
 

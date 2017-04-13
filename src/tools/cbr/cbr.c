@@ -129,14 +129,14 @@ int main(int argc, char ** argv)
         }
 
         if (server) {
-                if (ap_init(argv_dup[0]) < 0) {
+                if (ouroboros_init(argv_dup[0]) < 0) {
                         printf("Failed to init.\n");
                         exit(EXIT_FAILURE);
                 }
 
                 ret = server_main();
         } else {
-                if (ap_init(NULL) < 0) {
+                if (ouroboros_init(NULL) < 0) {
                         printf("Failed to init.\n");
                         exit(EXIT_FAILURE);
                 }
@@ -150,7 +150,7 @@ int main(int argc, char ** argv)
                 ret = client_main(s_apn, duration, size, rate, flood, sleep);
         }
 
-        ap_fini();
+        ouroboros_fini();
 
         return ret;
 }

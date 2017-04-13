@@ -476,12 +476,12 @@ int ipcp_init(int               argc,
         log_init(log);
 
         if (type == IPCP_NORMAL) {
-                if (ap_init(argv[0])) {
+                if (ouroboros_init(argv[0])) {
                         log_err("Failed to init normal IPCPI.");
                         return -1;
                 }
         } else {
-                if (ap_init(NULL)) {
+                if (ouroboros_init(NULL)) {
                         log_err("Failed to init shim IPCPI.");
                         return -1;
                 }
@@ -600,7 +600,7 @@ int ipcp_init(int               argc,
  fail_sock_path:
         free(ipcpi.threadpool);
  fail_thr:
-        ap_fini();
+        ouroboros_fini();
 
         return ret;
 }
@@ -732,7 +732,7 @@ void ipcp_fini()
 
         log_fini();
 
-        ap_fini();
+        ouroboros_fini();
 
         log_info("IPCP %d out.", getpid());
 }

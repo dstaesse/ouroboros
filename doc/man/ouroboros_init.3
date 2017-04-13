@@ -1,0 +1,69 @@
+.\" Ouroboros man pages (C) 2017
+.\" Dimitri Staessens <dimitri.staessens@ugent.be>
+.\" Sander Vrijders <sander.vrijders@ugent.be>
+
+.TH OUROBOROS_INIT 3 2017-04-10 GNU "Ouroboros Programmer's Manual"
+
+.SH NAME
+
+ouroboros_init, ouroboros_fini \- initialize and finalize an
+application for using Ouroboros
+
+.SH SYNOPSIS
+
+.B #include <ouroboros/dev.h>
+
+\fBint ouroboros_init(char * \fIapn\fB);\fR
+
+\fBvoid ouroboros_fini(void);\fR
+
+Compile and link with \fI-louroboros\fR.
+
+.SH DESCRIPTION
+
+The \fBouroboros_init\fR() call initializes an application process
+instance for using the Ouroboros IPC infrastructure. If the
+application is a server or peer, a \fBchar * \fIapn\fR has to be
+provided indicating the application process that this instance belongs
+to. This is usually argv[0]. A client application may pass NULL. The
+\fBouroboros_fini\fR() call will release all resources allocated by
+\fBouroboros_fini\fR().
+
+\fBouroboros_init\fR() and \fBouroboros_fini\fR() should be called
+only once in the application.
+
+.SH RETURN VALUE
+
+On success, \fBouroboros_init\fR() returns 0. On failure, a negative
+value indicating the error will be returned. The
+\fBouroboros_fini\fR() function has no return value.
+
+.SH ERRORS
+
+\fBouroboros_init\fR() can return the following errors:
+
+.B -EIRMD
+Failed to contact an IRMd instance.
+
+.B -ENOMEM
+Insufficient system resources to intialize the application.
+
+.SH ATTRIBUTES
+
+For an explanation of the terms used in this section, see
+\fBattributes\fR(7).
+
+.TS
+box, tab(&);
+LB|LB|LB
+L|L|L.
+Interface & Attribute & Value
+_
+\fBouroboros_init\fR() & Thread safety & MT-Safe
+_
+\fBouroboros_fini\fR() & Thread safety & MT-Safe
+.TE
+
+.SH COLOPHON
+This page is part of the Ouroboros project, found at
+https://bitbucket.org/ouroboros-rina/ouroboros
