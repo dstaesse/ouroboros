@@ -745,18 +745,16 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         struct ifreq     ifr;
 #ifdef HAVE_NETMAP
         char             ifn[IFNAMSIZ];
-    #ifndef __FreeBSD__
-        int              skfd;
-    #endif
 #else
         struct timeval   tv = {0, EVENT_WAIT_TIMEOUT * 1000};
-    #ifdef __FreeBSD__
-        struct ifaddrs * ifaddr;
-        struct ifaddrs * ifa;
-    #endif
-        int              skfd;
 #endif /* HAVE_NETMAP */
 
+#ifdef __FreeBSD__
+        struct ifaddrs * ifaddr;
+        struct ifaddrs * ifa;
+#else
+        int              skfd;
+#endif
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
