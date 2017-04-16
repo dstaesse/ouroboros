@@ -24,11 +24,12 @@
 #ifndef OUROBOROS_LIB_HASH_H
 #define OUROBOROS_LIB_HASH_H
 
-#include <ouroboros/sha3.h>
 #include <ouroboros/crc32.h>
+#include <ouroboros/md5.h>
+#include <ouroboros/sha3.h>
 
 #define HASH_FMT "%02x%02x%02x%02x"
-#define HASH_VAL(hash)                                \
+#define HASH_VAL(hash)                                 \
         ((*(unsigned int *) hash) & 0xFF000000) >> 24, \
         ((*(unsigned int *) hash) & 0x00FF0000) >> 16, \
         ((*(unsigned int *) hash) & 0x0000FF00) >> 8,  \
