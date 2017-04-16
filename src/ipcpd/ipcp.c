@@ -63,23 +63,23 @@ void ipcp_sig_handler(int         sig,
 
 uint8_t * ipcp_hash_dup(const uint8_t * hash)
 {
-        uint8_t * dup = malloc(ipcpi.dir_hash_len);
+        uint8_t * dup = malloc(hash_len(ipcpi.dir_hash_algo));
         if (dup == NULL)
                 return NULL;
 
-        memcpy(dup, hash, ipcpi.dir_hash_len);
+        memcpy(dup, hash, ipcp_dir_hash_len());
 
         return dup;
 }
 
-void ipcp_hash_str(char            buf[DIR_HASH_STRLEN + 1],
+void ipcp_hash_str(char *          buf,
                    const uint8_t * hash)
 {
         size_t i;
 
         char * HEX = "0123456789abcdef";
 
-        for (i = 0; i < ipcpi.dir_hash_len; ++i) {
+        for (i = 0; i < ipcp_dir_hash_len(); ++i) {
                 buf[i * 2]     = HEX[(hash[i] & 0xF0) >> 4];
                 buf[i * 2 + 1] = HEX[hash[i] & 0x0F];
         }
@@ -212,7 +212,7 @@ static void * ipcp_main_loop(void * o)
 
                         conf_msg = msg->conf;
                         conf.type = conf_msg->ipcp_type;
-                        conf.dir_hash_len = conf_msg->dir_hash_len;
+                        conf.dir_hash_algo = conf_msg->dir_hash_algo;
                         conf.dif_name = conf_msg->dif_name;
                         if (conf.dif_name == NULL) {
                                 ret_msg.has_result = true;
@@ -270,7 +270,7 @@ static void * ipcp_main_loop(void * o)
                                 break;
                         }
 
-                        assert(msg->hash.len == ipcpi.dir_hash_len);
+                        assert(msg->hash.len == ipcp_dir_hash_len());
 
                         ret_msg.result =
                                 ipcpi.ops->ipcp_reg(msg->hash.data);
@@ -284,7 +284,7 @@ static void * ipcp_main_loop(void * o)
                                 break;
                         }
 
-                        assert(msg->hash.len == ipcpi.dir_hash_len);
+                        assert(msg->hash.len == ipcp_dir_hash_len());
 
                         ret_msg.result =
                                 ipcpi.ops->ipcp_unreg(msg->hash.data);
@@ -298,7 +298,7 @@ static void * ipcp_main_loop(void * o)
                                 break;
                         }
 
-                        assert(msg->hash.len == ipcpi.dir_hash_len);
+                        assert(msg->hash.len == ipcp_dir_hash_len());
 
                         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                                 log_err("IPCP in wrong state.");
@@ -318,7 +318,7 @@ static void * ipcp_main_loop(void * o)
                                 break;
                         }
 
-                        assert(msg->hash.len == ipcpi.dir_hash_len);
+                        assert(msg->hash.len == ipcp_dir_hash_len());
 
                         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                                 log_err("IPCP in wrong state.");

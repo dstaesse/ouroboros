@@ -27,6 +27,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define CRC32_HASH_LEN 4
+
 void crc32(uint32_t *   crc,
            const void * buf,
            size_t       len);

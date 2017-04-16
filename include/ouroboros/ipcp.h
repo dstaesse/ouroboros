@@ -24,6 +24,8 @@
 #ifndef OUROBOROS_IPCP_H
 #define OUROBOROS_IPCP_H
 
+#include <ouroboros/hash.h>
+
 #include <stdint.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -51,7 +53,7 @@ enum pol_gam {
 struct ipcp_config {
         char *             dif_name;
         enum ipcp_type     type;
-        uint16_t           dir_hash_len;
+        enum hash_algo     dir_hash_algo;
 
         /* Normal DIF */
         uint8_t            addr_size;

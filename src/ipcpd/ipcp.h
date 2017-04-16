@@ -24,6 +24,7 @@
 #define IPCPD_IPCP_H
 
 #include <ouroboros/config.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 
 #include "shim-data.h"
@@ -60,7 +61,8 @@ struct ipcp_ops {
         int   (* ipcp_flow_dealloc)(int fd);
 };
 
-#define DIR_HASH_STRLEN (ipcpi.dir_hash_len * 2)
+#define ipcp_dir_hash_strlen() (hash_len(ipcpi.dir_hash_algo) * 2)
+#define ipcp_dir_hash_len() (hash_len(ipcpi.dir_hash_algo))
 
 struct ipcp {
         int                irmd_api;
@@ -70,7 +72,8 @@ struct ipcp {
         char *             dif_name;
 
         uint64_t           dt_addr;
-        uint16_t           dir_hash_len;
+
+        enum hash_algo     dir_hash_algo;
 
         struct ipcp_ops *  ops;
         int                irmd_fd;

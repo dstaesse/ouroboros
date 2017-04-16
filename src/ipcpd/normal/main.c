@@ -69,16 +69,16 @@ static int boot_components(void)
                 return -1;
         }
 
-        len = rib_read(BOOT_PATH "/general/dir_hash_len",
-                       &ipcpi.dir_hash_len, sizeof(ipcpi.dir_hash_len));
+        len = rib_read(BOOT_PATH "/general/dir_hash_algo",
+                       &ipcpi.dir_hash_algo, sizeof(ipcpi.dir_hash_algo));
         if (len < 0) {
                 log_err("Failed to read hash length: %zd.", len);
                 return -1;
         }
 
-        ipcpi.dir_hash_len = ntoh16(ipcpi.dir_hash_len);
+        ipcpi.dir_hash_algo = ntoh32(ipcpi.dir_hash_algo);
 
-        assert(ipcpi.dir_hash_len != 0);
+        assert(ipcp_dir_hash_len() != 0);
 
         if (rib_add(MEMBERS_PATH, ipcpi.name)) {
                 log_err("Failed to add name to " MEMBERS_PATH);
@@ -229,7 +229,7 @@ static int normal_ipcp_enroll(const char * dst)
 
         log_dbg("Enrolled with " HASH_FMT, HASH_VAL(dst));
 
-        return 0;
+        return ipcpi.dir_hash_algo;
 }
 
 const struct ros {
@@ -245,7 +245,7 @@ const struct ros {
         {BOOT_PATH, "general"},
 
         {BOOT_PATH "/general", "dif_name"},
-        {BOOT_PATH "/general", "dir_hash_len"},
+        {BOOT_PATH "/general", "dir_hash_algo"},
 
         /* DT COMPONENT */
         {BOOT_PATH, "dt"},
@@ -293,14 +293,14 @@ int normal_rib_init(void)
 
 static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
 {
-        uint16_t hash_len;
+        uint32_t hash_algo;
 
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        hash_len = hton16((uint16_t) conf->dir_hash_len);
+        hash_algo = hton32((uint32_t) conf->dir_hash_algo);
 
-        assert(ntoh16(hash_len) != 0);
+        assert(ntoh32(hash_algo) != 0);
 
         if (normal_rib_init()) {
                 log_err("Failed to write initial structure to the RIB.");
@@ -310,9 +310,9 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
         if (rib_write(BOOT_PATH "/general/dif_name",
                       conf->dif_name,
                       strlen(conf->dif_name) + 1) ||
-            rib_write(BOOT_PATH "/general/dir_hash_len",
-                      &hash_len,
-                      sizeof(hash_len)) ||
+            rib_write(BOOT_PATH "/general/dir_hash_algo",
+                      &hash_algo,
+                      sizeof(hash_algo)) ||
             rib_write(BOOT_PATH "/dt/const/addr_size",
                       &conf->addr_size,
                       sizeof(conf->addr_size)) ||

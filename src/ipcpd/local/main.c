@@ -119,7 +119,7 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        ipcpi.dir_hash_len = conf->dir_hash_len;
+        ipcpi.dir_hash_algo = conf->dir_hash_algo;
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
@@ -198,7 +198,7 @@ static int ipcp_local_flow_alloc(int             fd,
 
         assert(ipcpi.alloc_id == -1);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst, ipcpi.dir_hash_len, cube);
+        out_fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), cube);
         if (out_fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Flow allocation failed: %d", out_fd);

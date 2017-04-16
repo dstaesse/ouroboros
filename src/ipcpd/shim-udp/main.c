@@ -206,7 +206,7 @@ static int ipcp_udp_port_alloc(uint32_t  dst_ip_addr,
         msg.code         = SHIM_UDP_MSG_CODE__FLOW_REQ;
         msg.src_udp_port = src_udp_port;
         msg.has_hash     = true;
-        msg.hash.len     = ipcpi.dir_hash_len;
+        msg.hash.len     = ipcp_dir_hash_len();
         msg.hash.data    = (uint8_t *) dst;
         msg.has_qoscube  = true;
         msg.qoscube      = cube;
@@ -286,7 +286,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         }
 
         /* reply to IRM */
-        fd = ipcp_flow_req_arr(getpid(), dst, ipcpi.dir_hash_len, cube);
+        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), cube);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -534,7 +534,7 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        ipcpi.dir_hash_len = conf->dir_hash_len;
+        ipcpi.dir_hash_algo = conf->dir_hash_algo;
 
         if (inet_ntop(AF_INET,
                       &conf->ip_addr,
@@ -749,7 +749,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
         uint32_t dns_addr;
         uint32_t ip_addr;
 #endif
-        char hashstr[DIR_HASH_STRLEN + 1];
+        char hashstr[ipcp_dir_hash_strlen() + 1];
         uint8_t * hash_dup;
 
         assert(hash);
@@ -809,7 +809,7 @@ static int ipcp_udp_unreg(const uint8_t * hash)
         char cmd[100];
         uint32_t dns_addr;
 #endif
-        char hashstr[DIR_HASH_STRLEN + 1];
+        char hashstr[ipcp_dir_hash_strlen() + 1];
 
         assert(hash);
 
@@ -846,7 +846,7 @@ static int ipcp_udp_query(const uint8_t * hash)
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         uint32_t           dns_addr = 0;
 #endif
-        char hashstr[DIR_HASH_STRLEN + 1];
+        char hashstr[ipcp_dir_hash_strlen() + 1];
 
         assert(hash);
 

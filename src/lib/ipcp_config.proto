@@ -25,7 +25,7 @@ syntax = "proto2";
 
 message ipcp_config_msg {
         required string dif_name        =  1;
-        required uint32 dir_hash_len    =  2;
+        required uint32 dir_hash_algo   =  2;
         required int32 ipcp_type        =  3;
         // Config for normal IPCP
         optional uint32 addr_size       =  4;

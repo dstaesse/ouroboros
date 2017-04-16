@@ -62,7 +62,7 @@ int dir_fini(void)
 
 int dir_reg(const uint8_t * hash)
 {
-        char hashstr[DIR_HASH_STRLEN + 1];
+        char hashstr[ipcp_dir_hash_strlen() + 1];
         int ret;
 
         assert(hash);
@@ -91,7 +91,7 @@ int dir_reg(const uint8_t * hash)
 
 int dir_unreg(const uint8_t * hash)
 {
-        char hashstr[DIR_HASH_STRLEN + 1];
+        char hashstr[ipcp_dir_hash_strlen() + 1];
         size_t len;
 
         assert(hash);
@@ -121,7 +121,7 @@ int dir_unreg(const uint8_t * hash)
 
 int dir_query(const uint8_t * hash)
 {
-        char hashstr[DIR_HASH_STRLEN + 1];
+        char hashstr[ipcp_dir_hash_strlen() + 1];
         size_t len;
 
         dir_path_reset();

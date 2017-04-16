@@ -27,7 +27,6 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/time_utils.h>
-#include <ouroboros/hash.h>
 
 #include "registry.h"
 #include "utils.h"
@@ -522,6 +521,7 @@ struct reg_entry * registry_get_entry(struct list_head * registry,
 }
 
 struct reg_entry * registry_get_entry_by_hash(struct list_head * registry,
+                                              enum hash_algo     algo,
                                               const uint8_t *    hash,
                                               size_t             len)
 {
@@ -536,7 +536,7 @@ struct reg_entry * registry_get_entry_by_hash(struct list_head * registry,
 
         list_for_each(p, registry) {
                 struct reg_entry * e = list_entry(p, struct reg_entry, next);
-                get_hash(thash, e->name);
+                str_hash(algo, thash, e->name);
                 if (memcmp(thash, hash, len) == 0) {
                         free(thash);
                         return e;

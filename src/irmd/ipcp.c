@@ -212,6 +212,7 @@ int ipcp_bootstrap(pid_t              api,
         return ret;
 }
 
+/* return the hash algorithm */
 int ipcp_enroll(pid_t        api,
                 const char * dst)
 {

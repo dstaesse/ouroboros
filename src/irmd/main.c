@@ -37,7 +37,6 @@
 #include <ouroboros/qos.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/sha3.h>
 
 #include "utils.h"
 #include "registry.h"
@@ -57,6 +56,7 @@
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 #define SHM_SAN_HOLDOFF 1000 /* ms */
+#define IPCP_HASH_LEN(e) (hash_len(e->dir_hash_algo))
 
 struct ipcp_entry {
         struct list_head next;
@@ -64,8 +64,7 @@ struct ipcp_entry {
         char *           name;
         pid_t            api;
         enum ipcp_type   type;
-        uint16_t         dir_hash_len;
-        /* FIXME: add an enum to specify hash algo */
+        enum hash_algo   dir_hash_algo;
         char *           dif_name;
 
         pthread_cond_t   init_cond;
@@ -239,13 +238,15 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name)
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e =
                         list_entry(p, struct ipcp_entry, next);
-                hash = malloc(e->dir_hash_len);
+                if (e->dir_hash_algo < 0)
+                        continue;
+                hash = malloc(IPCP_HASH_LEN(e));
                 if  (hash == NULL)
                         return NULL;
 
-                get_hash(hash, name);
+                str_hash(e->dir_hash_algo, hash, name);
 
-                if (ipcp_query(e->api, hash, e->dir_hash_len) == 0) {
+                if (ipcp_query(e->api, hash, hash_len(e->dir_hash_algo)) == 0) {
                         free(hash);
                         return e;
                 }
@@ -306,8 +307,7 @@ static pid_t create_ipcp(char *         name,
         tmp->dif_name = NULL;
         tmp->type = ipcp_type;
         tmp->init = false;
-        /* FIXME: ipcp dir_hash_len should be configurable */
-        tmp->dir_hash_len = SHA3_256_HASH_LEN;
+        tmp->dir_hash_algo = -1;
 
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
@@ -434,6 +434,8 @@ static int bootstrap_ipcp(pid_t              api,
                 return -ENOMEM;
         }
 
+        entry->dir_hash_algo = conf->dir_hash_algo;
+
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Bootstrapped IPCP %d in DIF %s.",
@@ -471,7 +473,8 @@ static int enroll_ipcp(pid_t  api,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        if (ipcp_enroll(api, dif_name)) {
+        entry->dir_hash_algo = ipcp_enroll(api, dif_name);
+        if (entry->dir_hash_algo < 0) {
                 pthread_rwlock_wrlock(&irmd.reg_lock);
                 free(entry->dif_name);
                 entry->dif_name = NULL;
@@ -766,13 +769,13 @@ static int name_reg(const char *  name,
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
 
-                        hash = malloc(e->dir_hash_len);
+                        hash = malloc(IPCP_HASH_LEN(e));
                         if  (hash == NULL)
                                 break;
 
-                        get_hash(hash, name);
+                        str_hash(e->dir_hash_algo, hash, name);
 
-                        if (ipcp_reg(e->api, hash, e->dir_hash_len)) {
+                        if (ipcp_reg(e->api, hash, IPCP_HASH_LEN(e))) {
                                 log_err("Could not register " HASH_FMT
                                         " in DIF %s.",
                                         HASH_VAL(hash), e->dif_name);
@@ -826,13 +829,13 @@ static int name_unreg(const char *  name,
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
 
-                        hash = malloc(e->dir_hash_len);
+                        hash = malloc(IPCP_HASH_LEN(e));
                         if  (hash == NULL)
                                 break;
 
-                        get_hash(hash, name);
+                        str_hash(e->dir_hash_algo, hash, name);
 
-                        if (ipcp_unreg(e->api, hash, e->dir_hash_len)) {
+                        if (ipcp_unreg(e->api, hash, IPCP_HASH_LEN(e))) {
                                 log_err("Could not unregister %s in DIF %s.",
                                         name, e->dif_name);
                         } else {
@@ -1097,16 +1100,16 @@ static int flow_alloc(pid_t              api,
 
         assert(irm_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
-        hash = malloc(ipcp->dir_hash_len);
+        hash = malloc(IPCP_HASH_LEN(ipcp));
         if  (hash == NULL) {
                 /* sanitizer cleans this */
                 return -ENOMEM;
         }
 
-        get_hash(hash, dst);
+        str_hash(ipcp->dir_hash_algo, hash, dst);
 
         if (ipcp_flow_alloc(ipcp->api, port_id, api, hash,
-                            ipcp->dir_hash_len, cube)) {
+                            IPCP_HASH_LEN(ipcp), cube)) {
                 /* sanitizer cleans this */
                 log_info("Flow_allocation failed.");
                 free(hash);
@@ -1248,8 +1251,8 @@ static struct irm_flow * flow_req_arr(pid_t           api,
                 return NULL;
         }
 
-        re = registry_get_entry_by_hash(&irmd.registry, hash,
-                                        ipcp->dir_hash_len);
+        re = registry_get_entry_by_hash(&irmd.registry, ipcp->dir_hash_algo,
+                                        hash, IPCP_HASH_LEN(ipcp));
         if (re == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Unknown hash: " HASH_FMT ".", HASH_VAL(hash));
