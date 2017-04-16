@@ -34,25 +34,34 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define NORMAL "normal"
-#define SHIM_UDP "shim-udp"
-#define SHIM_ETH_LLC "shim-eth-llc"
-#define LOCAL "local"
+#define NORMAL               "normal"
+#define SHIM_UDP             "shim-udp"
+#define SHIM_ETH_LLC         "shim-eth-llc"
+#define LOCAL                "local"
 
-#define DEFAULT_ADDR_SIZE 4
-#define DEFAULT_CEP_ID_SIZE 2
+#define CRC32                "CRC32"
+#define MD5                  "MD5"
+#define SHA3_224             "SHA3_224"
+#define SHA3_256             "SHA3_256"
+#define SHA3_384             "SHA3_384"
+#define SHA3_512             "SHA3_512"
+
+#define DEFAULT_HASH_ALGO    HASH_SHA3_256
+#define DEFAULT_HASH_STR     SHA3_256
+#define DEFAULT_ADDR_SIZE    4
+#define DEFAULT_CEP_ID_SIZE  2
 #define DEFAULT_PDU_LEN_SIZE 2
-#define DEFAULT_SEQ_NO_SIZE 4
+#define DEFAULT_SEQ_NO_SIZE  4
 #define DEFAULT_MIN_PDU_SIZE 0
 #define DEFAULT_MAX_PDU_SIZE 9000
-#define DEFAULT_DDNS 0
-#define DEFAULT_ADDR_AUTH FLAT_RANDOM
-#define DEFAULT_DT_GAM COMPLETE
-#define DEFAULT_RM_GAM COMPLETE
+#define DEFAULT_DDNS         0
+#define DEFAULT_ADDR_AUTH    FLAT_RANDOM
+#define DEFAULT_DT_GAM       COMPLETE
+#define DEFAULT_RM_GAM       COMPLETE
+#define ADDR_AUTH_FLAT       "flat"
 
-#define ADDR_AUTH_FLAT  "flat"
-#define DT_GAM_COMPLETE "complete"
-#define RM_GAM_COMPLETE "complete"
+#define DT_GAM_COMPLETE      "complete"
+#define RM_GAM_COMPLETE      "complete"
 
 static void usage(void)
 {
@@ -61,9 +70,11 @@ static void usage(void)
                "                name <ipcp name>\n"
                "                dif <DIF name>\n"
                "                type [TYPE]\n"
-/* FIXME: add option to set hash algorithm and length for directory */
+               "                [hash [ALGORITHM] (default: %s)]\n"
                "where TYPE = {" NORMAL " " LOCAL " "
-               SHIM_UDP " " SHIM_ETH_LLC"}\n\n"
+               SHIM_UDP " " SHIM_ETH_LLC"},\n"
+               "      ALGORITHM = { " CRC32 " " MD5 " "
+               SHA3_224 " " SHA3_256 " " SHA3_384 " " SHA3_512 "}.\n\n"
                "if TYPE == " NORMAL "\n"
                "                [addr <address size> (default: %d)]\n"
                "                [cep_id <CEP-id size> (default: %d)]\n"
@@ -75,16 +86,16 @@ static void usage(void)
                "                [max_pdu <maximum PDU size> (default: %d)]\n"
                "                [addr_auth <address policy> (default: %s)]\n"
                "                [dt_gam <data transfer graph adjacency manager>"
-               "(default: %s)]\n"
+               " (default: %s)]\n"
                "                [rm_gam <rib manager graph adjacency manager>"
-               "(default: %s)]\n"
+               " (default: %s)]\n"
                "if TYPE == " SHIM_UDP "\n"
                "                ip <IP address in dotted notation>\n"
                "                [dns <DDNS IP address in dotted notation>"
                " (default = none: %d)]\n"
                "if TYPE == " SHIM_ETH_LLC "\n"
                "                if_name <interface name>\n",
-               DEFAULT_ADDR_SIZE, DEFAULT_CEP_ID_SIZE,
+               DEFAULT_HASH_STR, DEFAULT_ADDR_SIZE, DEFAULT_CEP_ID_SIZE,
                DEFAULT_PDU_LEN_SIZE, DEFAULT_SEQ_NO_SIZE,
                DEFAULT_MIN_PDU_SIZE, DEFAULT_MAX_PDU_SIZE,
                ADDR_AUTH_FLAT, DT_GAM_COMPLETE, RM_GAM_COMPLETE, DEFAULT_DDNS);
@@ -92,29 +103,29 @@ static void usage(void)
 
 int do_bootstrap_ipcp(int argc, char ** argv)
 {
-        char * name = NULL;
-        pid_t api;
+        char *             name            = NULL;
+        char *             hash            = DEFAULT_HASH_STR;
+        pid_t              api;
         struct ipcp_config conf;
-        uint8_t addr_size = DEFAULT_ADDR_SIZE;
-        uint8_t cep_id_size = DEFAULT_CEP_ID_SIZE;
-        uint8_t pdu_length_size = DEFAULT_PDU_LEN_SIZE;
-        uint8_t seqno_size = DEFAULT_SEQ_NO_SIZE;
-        bool has_ttl = false;
-        bool has_chk = false;
-        uint32_t min_pdu_size = DEFAULT_MIN_PDU_SIZE;
-        uint32_t max_pdu_size = DEFAULT_MAX_PDU_SIZE;
-        enum pol_addr_auth addr_auth_type = DEFAULT_ADDR_AUTH;
-        enum pol_gam dt_gam_type = DEFAULT_DT_GAM;
-        enum pol_gam rm_gam_type = DEFAULT_RM_GAM;
-        uint32_t ip_addr = 0;
-        uint32_t dns_addr = DEFAULT_DDNS;
-        char * ipcp_type = NULL;
-        char * dif_name = NULL;
-        char * if_name = NULL;
-        pid_t * apis = NULL;
-        ssize_t len = 0;
-        int i = 0;
-        uint16_t dir_hash_len =  SHA3_256_HASH_LEN;
+        uint8_t            addr_size       = DEFAULT_ADDR_SIZE;
+        uint8_t            cep_id_size     = DEFAULT_CEP_ID_SIZE;
+        uint8_t            pdu_length_size = DEFAULT_PDU_LEN_SIZE;
+        uint8_t            seqno_size      = DEFAULT_SEQ_NO_SIZE;
+        bool               has_ttl         = false;
+        bool               has_chk         = false;
+        uint32_t           min_pdu_size    = DEFAULT_MIN_PDU_SIZE;
+        uint32_t           max_pdu_size    = DEFAULT_MAX_PDU_SIZE;
+        enum pol_addr_auth addr_auth_type  = DEFAULT_ADDR_AUTH;
+        enum pol_gam       dt_gam_type     = DEFAULT_DT_GAM;
+        enum pol_gam       rm_gam_type     = DEFAULT_RM_GAM;
+        uint32_t           ip_addr         = 0;
+        uint32_t           dns_addr        = DEFAULT_DDNS;
+        char *             ipcp_type       = NULL;
+        char *             dif_name        = NULL;
+        char *             if_name         = NULL;
+        pid_t *            apis            = NULL;
+        ssize_t            len             = 0;
+        int                i               = 0;
 
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {
@@ -123,6 +134,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         dif_name = *(argv + 1);
                 } else if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
+                } else if (matches(*argv, "hash") == 0) {
+                        hash = *(argv + 1);
                 } else if (matches(*argv, "ip") == 0) {
                         if (inet_pton (AF_INET, *(argv + 1), &ip_addr) != 1) {
                                 usage();
@@ -180,7 +193,23 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         }
 
         conf.dif_name = dif_name;
-        conf.dir_hash_len = dir_hash_len;
+
+        if (strcmp(hash, CRC32) == 0) {
+                conf.dir_hash_algo = HASH_CRC32;
+        } else if (strcmp(hash, MD5) == 0) {
+                conf.dir_hash_algo = HASH_MD5;
+        } else if (strcmp(hash, SHA3_224) == 0) {
+                conf.dir_hash_algo = HASH_SHA3_224;
+        } else if (strcmp(hash, SHA3_256) == 0) {
+                conf.dir_hash_algo = HASH_SHA3_256;
+        } else if (strcmp(hash, SHA3_384) == 0) {
+                conf.dir_hash_algo = HASH_SHA3_384;
+        } else if (strcmp(hash, SHA3_512) == 0) {
+                conf.dir_hash_algo = HASH_SHA3_512;
+        } else {
+                usage();
+                return -1;
+        }
 
         if (strcmp(ipcp_type, NORMAL) == 0) {
                 conf.type = IPCP_NORMAL;

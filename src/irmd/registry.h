@@ -24,6 +24,7 @@
 #define OUROBOROS_IRMD_REGISTRY_H
 
 #include <ouroboros/config.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/list.h>
 #include <ouroboros/shared.h>
@@ -115,6 +116,7 @@ struct reg_entry *  registry_get_entry(struct list_head * registry,
                                        const char *       name);
 
 struct reg_entry *  registry_get_entry_by_hash(struct list_head * registry,
+                                               enum hash_algo     algo,
                                                const uint8_t *    hash,
                                                size_t             len);
 

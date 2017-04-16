@@ -23,6 +23,7 @@
 
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/sockets.h>
@@ -105,7 +106,7 @@ int irm_bootstrap_ipcp(pid_t                      api,
         msg.conf = &config;
         config.dif_name = conf->dif_name;
         config.ipcp_type = conf->type;
-        config.dir_hash_len = (uint16_t) conf->dir_hash_len;
+        config.dir_hash_algo = (enum hash_algo) conf->dir_hash_algo;
 
         switch (conf->type) {
         case IPCP_NORMAL:

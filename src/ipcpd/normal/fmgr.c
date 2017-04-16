@@ -439,7 +439,7 @@ int fmgr_np1_alloc(int             fd,
         ssize_t          ch;
         ssize_t          i;
         char **          children;
-        char             hashstr[DIR_HASH_STRLEN + 1];
+        char             hashstr[ipcp_dir_hash_strlen() + 1];
         char *           dst_ipcp = NULL;
 
         ipcp_hash_str(hashstr, dst);
@@ -477,7 +477,7 @@ int fmgr_np1_alloc(int             fd,
 
         msg.code        = FLOW_ALLOC_CODE__FLOW_REQ;
         msg.has_hash    = true;
-        msg.hash.len    = ipcpi.dir_hash_len;
+        msg.hash.len    = ipcp_dir_hash_len();
         msg.hash.data   = (uint8_t *) dst;
         msg.has_qoscube = true;
         msg.qoscube     = cube;
@@ -663,7 +663,7 @@ int fmgr_np1_post_buf(cep_id_t   cep_id,
 
                 fd = ipcp_flow_req_arr(getpid(),
                                        msg->hash.data,
-                                       ipcpi.dir_hash_len,
+                                       ipcp_dir_hash_len(),
                                        msg->qoscube);
                 if (fd < 0) {
                         pthread_mutex_unlock(&ipcpi.alloc_lock);

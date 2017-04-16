@@ -41,6 +41,7 @@ set(SOURCE_FILES
   list.c
   lockfile.c
   logs.c
+  md5.c
   nsm.c
   rib.c
   sha3.c

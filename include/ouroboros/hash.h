@@ -24,18 +24,30 @@
 #ifndef OUROBOROS_LIB_HASH_H
 #define OUROBOROS_LIB_HASH_H
 
-#include <ouroboros/sha3.h>
 #include <ouroboros/crc32.h>
+#include <ouroboros/md5.h>
+#include <ouroboros/sha3.h>
+
+enum hash_algo {
+        HASH_CRC32 = 0,
+        HASH_MD5,
+        HASH_SHA3_224,
+        HASH_SHA3_256,
+        HASH_SHA3_384,
+        HASH_SHA3_512
+};
 
 #define HASH_FMT "%02x%02x%02x%02x"
-#define HASH_VAL(hash)                                \
+#define HASH_VAL(hash)                                 \
         ((*(unsigned int *) hash) & 0xFF000000) >> 24, \
         ((*(unsigned int *) hash) & 0x00FF0000) >> 16, \
         ((*(unsigned int *) hash) & 0x0000FF00) >> 8,  \
         ((*(unsigned int *) hash) & 0x000000FF)
 
-/* FIXME: Implement specifying algorithm */
-void get_hash(uint8_t      buf[],
-              const char * name);
+uint16_t hash_len(enum hash_algo algo);
+
+void str_hash(enum hash_algo algo,
+              void *         buf,
+              const char *   str);
 
 #endif /* OUROBOROS_LIB_HASH_H */

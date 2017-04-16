@@ -350,7 +350,7 @@ static int eth_llc_ipcp_sap_alloc(const uint8_t * dst_addr,
         msg.has_ssap    = true;
         msg.ssap        = ssap;
         msg.has_hash    = true;
-        msg.hash.len    = ipcpi.dir_hash_len;
+        msg.hash.len    = ipcp_dir_hash_len();
         msg.hash.data   = (uint8_t *) hash;
         msg.has_qoscube = true;
         msg.qoscube     = cube;
@@ -398,7 +398,7 @@ static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
         }
 
         /* reply to IRM, called under lock to prevent race */
-        fd = ipcp_flow_req_arr(getpid(), dst, ipcpi.dir_hash_len, cube);
+        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), cube);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -464,7 +464,7 @@ static int eth_llc_ipcp_name_query_req(const uint8_t * hash,
         if (shim_data_reg_has(ipcpi.shim_data, hash)) {
                 msg.code      = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY;
                 msg.has_hash  = true;
-                msg.hash.len  = ipcpi.dir_hash_len;
+                msg.hash.len  = ipcp_dir_hash_len();
                 msg.hash.data = (uint8_t *) hash;
 
                 eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
@@ -487,7 +487,7 @@ static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
         list_for_each(pos, &ipcpi.shim_data->dir_queries) {
                 struct dir_query * e =
                         list_entry(pos, struct dir_query, next);
-                if (memcmp(e->hash, hash, ipcpi.dir_hash_len) == 0) {
+                if (memcmp(e->hash, hash, ipcp_dir_hash_len()) == 0) {
                         shim_data_dir_query_respond(e);
                 }
         }
@@ -758,7 +758,7 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        ipcpi.dir_hash_len = conf->dir_hash_len;
+        ipcpi.dir_hash_algo = conf->dir_hash_algo;
 
         if (conf->if_name == NULL) {
                 log_err("Interface name is NULL.");
@@ -942,7 +942,7 @@ static int eth_llc_ipcp_query(const uint8_t * hash)
 
         msg.code      = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ;
         msg.has_hash  = true;
-        msg.hash.len  = ipcpi.dir_hash_len;
+        msg.hash.len  = ipcp_dir_hash_len();
         msg.hash.data = (uint8_t *) hash;
 
         memset(r_addr, 0xff, MAC_SIZE);

@@ -187,7 +187,7 @@ static struct reg_entry * find_reg_entry_by_hash(struct shim_data * data,
 
         list_for_each(h, &data->registry) {
                 struct reg_entry * e = list_entry(h, struct reg_entry, list);
-                if (!memcmp(e->hash, hash, ipcpi.dir_hash_len))
+                if (!memcmp(e->hash, hash, ipcp_dir_hash_len()))
                         return e;
         }
 
@@ -202,7 +202,7 @@ static struct dir_entry * find_dir_entry(struct shim_data * data,
         list_for_each(h, &data->directory) {
                 struct dir_entry * e = list_entry(h, struct dir_entry, list);
                 if (e->addr == addr &&
-                    !memcmp(e->hash, hash, ipcpi.dir_hash_len))
+                    !memcmp(e->hash, hash, ipcp_dir_hash_len()))
                         return e;
         }
 
@@ -215,7 +215,7 @@ static struct dir_entry * find_dir_entry_any(struct shim_data * data,
         struct list_head * h;
         list_for_each(h, &data->directory) {
                 struct dir_entry * e = list_entry(h, struct dir_entry, list);
-                if (!memcmp(e->hash, hash, ipcpi.dir_hash_len))
+                if (!memcmp(e->hash, hash, ipcp_dir_hash_len()))
                         return e;
         }
 

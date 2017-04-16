@@ -149,6 +149,12 @@ int sha3_test(int     argc,
                 "ijklmnopjklmnopqklmnopqrlmnopqrs"
                 "mnopqrstnopqrstu";
 
+        char * str4_inp2 =
+                " abcdefghbcdefghicdefghijdefghijk"
+                "efghijklfghijklmghijklmnhijklmno"
+                "ijklmnopjklmnopqklmnopqrlmnopqrs"
+                "mnopqrstnopqrstu";
+
         char * str4_224 =
                 "543e6868e1666c1a643630df77367ae5"
                 "a62a85070a51c14cbf665cbc";
@@ -287,6 +293,37 @@ int sha3_test(int     argc,
 
         rhash_sha3_512_init(&ctx);
         rhash_sha3_update(&ctx, str4_inp, strlen(str4_inp));
+        rhash_sha3_final(&ctx, res);
+
+        if (check_hash(str4_512, res, SHA3_512_HASH_LEN))
+                return -1;
+
+        /* unaligned 4th input string. */
+        printf("test: %s.\n\n", str4_inp2 + 1);
+
+        rhash_sha3_224_init(&ctx);
+        rhash_sha3_update(&ctx, str4_inp2 + 1, strlen(str4_inp2 + 1));
+        rhash_sha3_final(&ctx, res);
+
+        if (check_hash(str4_224, res, SHA3_224_HASH_LEN))
+                return -1;
+
+        rhash_sha3_256_init(&ctx);
+        rhash_sha3_update(&ctx, str4_inp2 + 1, strlen(str4_inp2 + 1));
+        rhash_sha3_final(&ctx, res);
+
+        if (check_hash(str4_256, res, SHA3_256_HASH_LEN))
+                return -1;
+
+        rhash_sha3_384_init(&ctx);
+        rhash_sha3_update(&ctx, str4_inp2 + 1, strlen(str4_inp2 + 1));
+        rhash_sha3_final(&ctx, res);
+
+        if (check_hash(str4_384, res, SHA3_384_HASH_LEN))
+                return -1;
+
+        rhash_sha3_512_init(&ctx);
+        rhash_sha3_update(&ctx, str4_inp2 + 1, strlen(str4_inp2 + 1));
         rhash_sha3_final(&ctx, res);
 
         if (check_hash(str4_512, res, SHA3_512_HASH_LEN))
