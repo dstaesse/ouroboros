@@ -268,7 +268,9 @@ void rhash_sha3_update(struct sha3_ctx * ctx,
         size_t block_size = (size_t) ctx->block_size;
         uint8_t * msg     = (uint8_t *) pmsg;
 
-        if (ctx->rest & SHA3_FINALIZED) return;
+        if (ctx->rest & SHA3_FINALIZED)
+                return;
+
         ctx->rest = (unsigned) ((ctx->rest + size) % block_size);
 
         /* fill partial block */

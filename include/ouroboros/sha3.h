@@ -44,8 +44,8 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  Use this program  at  your own risk!
  */
 
-#ifndef OUROBOROS_SHA3_H
-#define OUROBOROS_SHA3_H
+#ifndef OUROBOROS_LIB_SHA3_H
+#define OUROBOROS_LIB_SHA3_H
 
 #include <unistd.h>
 #include <stdint.h>
@@ -83,4 +83,4 @@ void rhash_sha3_update(struct sha3_ctx * ctx,
 void rhash_sha3_final(struct sha3_ctx * ctx,
                       uint8_t *         res);
 
-#endif /* OUROBOROS_SHA3_H */
+#endif /* OUROBOROS_LIB_SHA3_H */
