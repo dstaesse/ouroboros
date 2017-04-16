@@ -168,7 +168,7 @@ static void * ipcp_main_loop(void * o)
 #ifdef __FreeBSD__
                 FD_ZERO(&fds);
                 FD_SET(ipcpi.sockfd, &fds);
-                if (select(ipcpi.sockfd, &fds, NULL, NULL, &timeout) <= 0)
+                if (select(ipcpi.sockfd + 1, &fds, NULL, NULL, &timeout) <= 0)
                         continue;
 #endif
                 lsockfd = accept(ipcpi.sockfd, 0, 0);

@@ -1736,7 +1736,7 @@ void * mainloop(void * o)
 #ifdef __FreeBSD__
                 FD_ZERO(&fds);
                 FD_SET(irmd.sockfd, &fds);
-                if (select(irmd.sockfd, &fds, NULL, NULL, &timeout) <= 0)
+                if (select(irmd.sockfd + 1, &fds, NULL, NULL, &timeout) <= 0)
                         continue;
 #endif
 
