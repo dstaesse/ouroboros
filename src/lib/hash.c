@@ -50,6 +50,8 @@ uint16_t hash_len(enum hash_algo algo)
                 assert(false);
                 break;
         }
+
+        return 0;
 }
 
 void str_hash(enum hash_algo algo,
