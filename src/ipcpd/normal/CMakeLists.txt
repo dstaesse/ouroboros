@@ -32,6 +32,7 @@ set(SOURCE_FILES
   pff.c
   ribmgr.c
   routing.c
+  sdu_sched.c
   shm_pci.c
   # Add policies last
   pol/complete.c
