@@ -72,6 +72,9 @@ int          nbs_update_qos(struct nbs * nbs,
 int          nbs_del(struct nbs * nbs,
                      int          fd);
 
+bool         nbs_has(struct nbs * nbs,
+                     uint64_t     addr);
+
 int          nbs_reg_notifier(struct nbs *         nbs,
                               struct nb_notifier * notify);
 

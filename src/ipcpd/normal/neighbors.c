@@ -177,6 +177,28 @@ int nbs_del(struct nbs * nbs,
         return -1;
 }
 
+bool nbs_has(struct nbs * nbs,
+             uint64_t     addr)
+{
+        struct list_head * p = NULL;
+
+        assert(nbs);
+
+        pthread_mutex_lock(&nbs->list_lock);
+
+        list_for_each(p, &nbs->list) {
+                struct nb * e = list_entry(p, struct nb, next);
+                if (e->conn.conn_info.addr == addr) {
+                        pthread_mutex_unlock(&nbs->list_lock);
+                        return true;
+                }
+        }
+
+        pthread_mutex_unlock(&nbs->list_lock);
+
+        return false;
+}
+
 int nbs_reg_notifier(struct nbs *         nbs,
                      struct nb_notifier * notify)
 {

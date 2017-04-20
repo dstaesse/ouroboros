@@ -37,6 +37,7 @@
 #include "gam.h"
 #include "ribconfig.h"
 #include "ribmgr.h"
+#include "ipcp.h"
 
 #include <stdlib.h>
 #include <pthread.h>
@@ -322,6 +323,8 @@ int ribmgr_init(void)
         strcpy(info.protocol, CDAP_PROTO);
         info.pref_version = 1;
         info.pref_syntax = PROTO_GPB;
+        /* NOTE: Use the same name as the DT AE of this IPCP */
+        info.addr = ipcpi.dt_addr;
 
         ribmgr.nbs = nbs_create();
         if (ribmgr.nbs == NULL) {

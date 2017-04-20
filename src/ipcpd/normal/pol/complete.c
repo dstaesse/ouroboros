@@ -40,6 +40,8 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#define COMPLETE_REFRESH 1000 /* ms */
+
 struct complete {
         struct nbs * nbs;
         struct ae *  ae;
@@ -69,6 +71,11 @@ static void * listener(void * o)
         return (void *) 0;
 }
 
+static void path_reset(char * path)
+{
+        path[strlen(MEMBERS_PATH)] = '\0';
+}
+
 static void * allocator(void * o)
 {
         qosspec_t         qs;
@@ -77,6 +84,12 @@ static void * allocator(void * o)
         ssize_t           i;
         struct complete * complete;
         struct conn       conn;
+        uint64_t          addr;
+        char              path[RIB_MAX_PATH_LEN];
+        struct timespec   to = {(COMPLETE_REFRESH / 1000),
+                                (COMPLETE_REFRESH % 1000) * 1000000};
+
+        strcpy(path, MEMBERS_PATH);
 
         complete = (struct complete *) o;
 
@@ -86,31 +99,47 @@ static void * allocator(void * o)
         /* FIXME: implement QoS specs */
         qs.cube = QOS_CUBE_BE;
 
-        /* FIXME: subscribe to members to keep the graph complete. */
-        len = rib_children("/" MEMBERS_NAME, &children);
-        for (i = 0; i < len; ++i) {
-                if (strcmp(children[i], ipcpi.name) != 0) {
-                        if (connmgr_alloc(complete->ae,
-                                          children[i],
-                                          &qs,
-                                          &conn)) {
-                                log_warn("Failed to get a conn to neighbor.");
-                                free(children[i]);
-                                continue;
+        while (true) {
+                len = rib_children(MEMBERS_PATH, &children);
+                for (i = 0; i < len; ++i) {
+                        if (strcmp(children[i], ipcpi.name) != 0) {
+                                path_reset(path);
+                                rib_path_append(path, children[i]);
+                                if (rib_read(path, &addr,
+                                             sizeof(addr)) !=
+                                    sizeof(addr)) {
+                                        log_err("Failed to read address.");
+                                        free(children[i]);
+                                        continue;
+                                }
+
+                                if (nbs_has(complete->nbs, addr)) {
+                                        free(children[i]);
+                                        continue;
+                                }
+
+                                if (connmgr_alloc(complete->ae, children[i],
+                                                  &qs, &conn)) {
+                                        log_warn("Failed conn to neighbor.");
+                                        free(children[i]);
+                                        continue;
+                                }
+
+                                if (nbs_add(complete->nbs, conn)) {
+                                        log_err("Failed to add neighbor.");
+                                        free(children[i]);
+                                        continue;
+                                }
                         }
 
-                        if (nbs_add(complete->nbs, conn)) {
-                                log_err("Failed to add neighbor.");
-                                free(children[i]);
-                                continue;
-                        }
-
+                        free(children[i]);
                 }
-                free(children[i]);
-        }
 
-        if (len > 0)
-                free(children);
+                if (len > 0)
+                        free(children);
+
+                nanosleep(&to, NULL);
+        }
 
         return (void *) 0;
 }
