@@ -1407,15 +1407,16 @@ int rib_unpack(uint8_t * packed,
 
         ret = rnode_unpack(msg, root, flags);
 
-        pthread_rwlock_unlock(&rib.lock);
-
         if (ret == 0 && msg->has_hash) {
                 root = rnode_get_child(root, msg->name);
                 if (memcmp(msg->hash.data, root->sha3, SHA3_256_HASH_LEN)) {
                         ro_msg__free_unpacked(msg, NULL);
+                        pthread_rwlock_unlock(&rib.lock);
                         return -EFAULT;
                 }
         }
+
+        pthread_rwlock_unlock(&rib.lock);
 
         ro_msg__free_unpacked(msg, NULL);
 
