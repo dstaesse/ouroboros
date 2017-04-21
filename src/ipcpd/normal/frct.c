@@ -30,8 +30,9 @@
 #include <ouroboros/errno.h>
 
 #include "frct.h"
-#include "fmgr.h"
 #include "ipcp.h"
+#include "dt.h"
+#include "fa.h"
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -210,8 +211,8 @@ int frct_fini()
         return 0;
 }
 
-int frct_nm1_post_sdu(struct pci *         pci,
-                      struct shm_du_buff * sdb)
+int frct_post_sdu(struct pci *         pci,
+                  struct shm_du_buff * sdb)
 {
         struct frct_i * instance;
         buffer_t        buf;
@@ -250,17 +251,17 @@ int frct_nm1_post_sdu(struct pci *         pci,
                 buf.len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
                 buf.data = shm_du_buff_head(sdb);
 
-                if (fmgr_np1_post_buf(id, &buf)) {
-                        log_err("Failed to hand buffer to Flow Manager.");
+                if (fa_post_buf(id, &buf)) {
+                        log_err("Failed to hand buffer to FA.");
                         ipcp_flow_del(sdb);
                         return -1;
                 }
 
                 ipcp_flow_del(sdb);
         } else {
-                /* FIXME: Known cep-ids are delivered to FMGR (minimal DTP) */
-                if (fmgr_np1_post_sdu(pci->dst_cep_id, sdb)) {
-                        log_err("Failed to hand SDU to FMGR.");
+                /* FIXME: Known cep-ids are delivered to FA (minimal DTP) */
+                if (fa_post_sdu(pci->dst_cep_id, sdb)) {
+                        log_err("Failed to hand SDU to FA.");
                         ipcp_flow_del(sdb);
                         return -1;
                 }
@@ -301,11 +302,11 @@ cep_id_t frct_i_create(uint64_t   address,
         pci.seqno = 0;
         pci.qos_id = cube;
 
-        if (fmgr_nm1_write_buf(&pci, buf)) {
+        if (dt_write_buf(&pci, buf)) {
                 pthread_mutex_lock(&frct.instances_lock);
                 destroy_frct_i(id);
                 pthread_mutex_unlock(&frct.instances_lock);
-                log_err("Failed to hand PDU to FMGR.");
+                log_err("Failed to hand PDU to DT.");
                 return INVALID_CEP_ID;
         }
 
@@ -350,7 +351,7 @@ int frct_i_accept(cep_id_t   id,
 
         pthread_mutex_unlock(&frct.instances_lock);
 
-        if (fmgr_nm1_write_buf(&pci, buf))
+        if (dt_write_buf(&pci, buf))
                 return -1;
 
         return 0;
@@ -390,7 +391,7 @@ int frct_i_destroy(cep_id_t   id,
         pthread_mutex_unlock(&frct.instances_lock);
 
         if (buf != NULL && buf->data != NULL)
-                if (fmgr_nm1_write_buf(&pci, buf))
+                if (dt_write_buf(&pci, buf))
                         return -1;
 
         return 0;
@@ -427,9 +428,9 @@ int frct_i_write_sdu(cep_id_t             id,
         pci.seqno = (instance->seqno)++;
         pci.qos_id = instance->cube;
 
-        if (fmgr_nm1_write_sdu(&pci, sdb)) {
+        if (dt_write_sdu(&pci, sdb)) {
                 pthread_mutex_unlock(&frct.instances_lock);
-                log_err("Failed to hand SDU to FMGR.");
+                log_err("Failed to hand SDU to DT.");
                 return -1;
         }
 

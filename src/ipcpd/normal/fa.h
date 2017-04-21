@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * The Flow and Retransmission control component
+ * Flow allocator of the IPC Process
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,37 +20,35 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_FRCT_H
-#define OUROBOROS_IPCPD_NORMAL_FRCT_H
+#ifndef OUROBOROS_IPCPD_NORMAL_FA_H
+#define OUROBOROS_IPCPD_NORMAL_FA_H
 
 #include <ouroboros/shared.h>
 #include <ouroboros/utils.h>
 
-#include "shm_pci.h"
+#include "frct.h"
 
-#define FRCT_PROTO "FRCT"
+int  fa_init(void);
 
-struct frct_i;
+void fa_fini(void);
 
-int         frct_init(void);
+int  fa_start(void);
 
-int         frct_fini(void);
+void fa_stop(void);
 
-cep_id_t    frct_i_create(uint64_t   address,
-                          buffer_t * buf,
-                          qoscube_t  cube);
+int  fa_alloc(int             fd,
+              const uint8_t * dst,
+              qoscube_t       qos);
 
-int         frct_i_accept(cep_id_t   id,
-                          buffer_t * buf,
-                          qoscube_t  cube);
+int  fa_alloc_resp(int fd,
+                   int response);
 
-int         frct_i_destroy(cep_id_t   id,
-                           buffer_t * buf);
+int  fa_dealloc(int fd);
 
-int         frct_i_write_sdu(cep_id_t             id,
-                             struct shm_du_buff * sdb);
+int  fa_post_buf(cep_id_t   cep_id,
+                 buffer_t * buf);
 
-int         frct_post_sdu(struct pci *         pci,
-                          struct shm_du_buff * sdb);
+int  fa_post_sdu(cep_id_t             cep_id,
+                 struct shm_du_buff * sdb);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_FRCT_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_FA_H */

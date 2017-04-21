@@ -36,7 +36,8 @@
 #include "connmgr.h"
 #include "dir.h"
 #include "enroll.h"
-#include "fmgr.h"
+#include "fa.h"
+#include "dt.h"
 #include "ipcp.h"
 #include "ribconfig.h"
 #include "ribmgr.h"
@@ -73,7 +74,7 @@ static int boot_components(void)
                        &ipcpi.dir_hash_algo, sizeof(ipcpi.dir_hash_algo));
         if (len < 0) {
                 log_err("Failed to read hash length: %zd.", len);
-                return -1;
+                goto fail_name;
         }
 
         ipcpi.dir_hash_algo = ntoh32(ipcpi.dir_hash_algo);
@@ -82,7 +83,7 @@ static int boot_components(void)
 
         if (rib_add(MEMBERS_PATH, ipcpi.name)) {
                 log_err("Failed to add name to " MEMBERS_PATH);
-                return -1;
+                goto fail_name;
         }
 
         log_dbg("Starting components.");
@@ -90,27 +91,25 @@ static int boot_components(void)
         if (rib_read(BOOT_PATH "/addr_auth/type", &pa, sizeof(pa))
             != sizeof(pa)) {
                 log_err("Failed to read policy for address authority.");
-                return -1;
+                goto fail_name;
         }
 
         if (addr_auth_init(pa)) {
                 log_err("Failed to init address authority.");
-                return -1;
+                goto fail_name;
         }
 
         ipcpi.dt_addr = addr_auth_address();
         if (ipcpi.dt_addr == 0) {
                 log_err("Failed to get a valid address.");
-                addr_auth_fini();
-                return -1;
+                goto fail_addr_auth;
         }
 
         path[0] = '\0';
         rib_path_append(rib_path_append(path, MEMBERS_NAME), ipcpi.name);
         if (rib_write(path, &ipcpi.dt_addr, sizeof(&ipcpi.dt_addr))) {
                 log_err("Failed to write address to member object.");
-                addr_auth_fini();
-                return -1;
+                goto fail_addr_auth;
         }
 
         log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
@@ -119,90 +118,99 @@ static int boot_components(void)
 
         if (ribmgr_init()) {
                 log_err("Failed to initialize RIB manager.");
-                addr_auth_fini();
-                return -1;
+                goto fail_addr_auth;
         }
 
         if (dir_init()) {
                 log_err("Failed to initialize directory.");
-                ribmgr_fini();
-                addr_auth_fini();
-                return -1;
+                goto fail_ribmgr;
         }
 
         log_dbg("Ribmgr started.");
 
         if (frct_init()) {
-                dir_fini();
-                ribmgr_fini();
-                addr_auth_fini();
                 log_err("Failed to initialize FRCT.");
-                return -1;
+                goto fail_dir;
         }
 
-        if (fmgr_init()) {
-                frct_fini();
-                dir_fini();
-                ribmgr_fini();
-                addr_auth_fini();
-                log_err("Failed to initialize flow manager component.");
-                return -1;
+        if (fa_init()) {
+                log_err("Failed to initialize flow allocator ae.");
+                goto fail_frct;
         }
 
-        if (fmgr_start()) {
-                fmgr_fini();
-                frct_fini();
-                dir_fini();
-                ribmgr_fini();
-                addr_auth_fini();
-                log_err("Failed to start flow manager.");
-                return -1;
+        if (dt_init()) {
+                log_err("Failed to initialize data transfer ae.");
+                goto fail_fa;
+        }
+
+        if (fa_start()) {
+                log_err("Failed to start flow allocator.");
+                goto fail_dt;
+        }
+
+        if (dt_start()) {
+                log_err("Failed to start data transfer ae.");
+                goto fail_fa_start;
         }
 
         if (enroll_start()) {
-                fmgr_stop();
-                fmgr_fini();
-                frct_fini();
-                dir_fini();
-                ribmgr_fini();
-                addr_auth_fini();
                 log_err("Failed to start enroll.");
-                return -1;
+                goto fail_dt_start;
         }
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
         if (connmgr_start()) {
-                ipcp_set_state(IPCP_INIT);
-                enroll_stop();
-                fmgr_stop();
-                fmgr_fini();
-                frct_fini();
-                dir_fini();
-                ribmgr_fini();
-                addr_auth_fini();
                 log_err("Failed to start AP connection manager.");
-                return -1;
+                goto fail_enroll;
         }
 
         return 0;
+
+ fail_enroll:
+        ipcp_set_state(IPCP_INIT);
+        enroll_stop();
+ fail_dt_start:
+        dt_stop();
+ fail_fa_start:
+        fa_stop();
+ fail_dt:
+        dt_fini();
+ fail_fa:
+        fa_fini();
+ fail_frct:
+        frct_fini();
+ fail_dir:
+        dir_fini();
+ fail_ribmgr:
+        ribmgr_fini();
+ fail_addr_auth:
+        addr_auth_fini();
+ fail_name:
+        free(ipcpi.dif_name);
+
+        return -1;
 }
 
 void shutdown_components(void)
 {
-        ribmgr_fini();
-
         connmgr_stop();
 
         enroll_stop();
 
+        dt_stop();
+
+        fa_stop();
+
+        dt_fini();
+
+        fa_fini();
+
         frct_fini();
 
-        fmgr_stop();
-
-        fmgr_fini();
-
         dir_fini();
+
+        ribmgr_fini();
 
         addr_auth_fini();
 
@@ -366,9 +374,9 @@ static struct ipcp_ops normal_ops = {
         .ipcp_reg             = dir_reg,
         .ipcp_unreg           = dir_unreg,
         .ipcp_query           = dir_query,
-        .ipcp_flow_alloc      = fmgr_np1_alloc,
-        .ipcp_flow_alloc_resp = fmgr_np1_alloc_resp,
-        .ipcp_flow_dealloc    = fmgr_np1_dealloc
+        .ipcp_flow_alloc      = fa_alloc,
+        .ipcp_flow_alloc_resp = fa_alloc_resp,
+        .ipcp_flow_dealloc    = fa_dealloc
 };
 
 int main(int    argc,
