@@ -22,8 +22,9 @@ set(SOURCE_FILES
   addr_auth.c
   connmgr.c
   dir.c
+  dt.c
   enroll.c
-  fmgr.c
+  fa.c
   frct.c
   gam.c
   graph.c
