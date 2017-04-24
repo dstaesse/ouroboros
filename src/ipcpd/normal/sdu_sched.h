@@ -30,9 +30,14 @@ typedef int (* next_sdu_t)(int                  fd,
                            qoscube_t            qc,
                            struct shm_du_buff * sdb);
 
-struct sdu_sched * sdu_sched_create(flow_set_t * set[QOS_CUBE_MAX],
-                                    next_sdu_t   callback);
+struct sdu_sched * sdu_sched_create(next_sdu_t callback);
 
 void               sdu_sched_destroy(struct sdu_sched * sdu_sched);
+
+void               sdu_sched_add(struct sdu_sched * sdu_sched,
+                                 int                fd);
+
+void               sdu_sched_del(struct sdu_sched * sdu_sched,
+                                 int                fd);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_SDU_SCHED_H */

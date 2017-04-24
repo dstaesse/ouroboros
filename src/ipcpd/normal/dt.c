@@ -48,7 +48,6 @@
 #include <assert.h>
 
 struct {
-        flow_set_t *       set[QOS_CUBE_MAX];
         struct sdu_sched * sdu_sched;
 
         struct pff *       pff[QOS_CUBE_MAX];
@@ -64,19 +63,15 @@ struct {
 static int dt_neighbor_event(enum nb_event event,
                              struct conn   conn)
 {
-        qoscube_t cube;
-
         /* We are only interested in neighbors being added and removed. */
         switch (event) {
         case NEIGHBOR_ADDED:
-                ipcp_flow_get_qoscube(conn.flow_info.fd, &cube);
-                flow_set_add(dt.set[cube], conn.flow_info.fd);
-                log_dbg("Added fd %d to flow set.", conn.flow_info.fd);
+                sdu_sched_add(dt.sdu_sched, conn.flow_info.fd);
+                log_dbg("Added fd %d to SDU scheduler.", conn.flow_info.fd);
                 break;
         case NEIGHBOR_REMOVED:
-                ipcp_flow_get_qoscube(conn.flow_info.fd, &cube);
-                flow_set_del(dt.set[cube], conn.flow_info.fd);
-                log_dbg("Removed fd %d from flow set.", conn.flow_info.fd);
+                sdu_sched_del(dt.sdu_sched, conn.flow_info.fd);
+                log_dbg("Removed fd %d from SDU scheduler.", conn.flow_info.fd);
                 break;
         default:
                 break;
@@ -137,17 +132,8 @@ int dt_init(void)
         int              j;
         struct conn_info info;
 
-        for (i = 0; i < QOS_CUBE_MAX; ++i) {
-                dt.set[i] = flow_set_create();
-                if (dt.set[i] == NULL) {
-                        goto fail_flows;
-                        return -1;
-                }
-        }
-
         if (shm_pci_init()) {
                 log_err("Failed to init shm pci.");
-                goto fail_flows;
                 return -1;
         }
 
@@ -162,7 +148,7 @@ int dt_init(void)
         dt.ae = connmgr_ae_create(info);
         if (dt.ae == NULL) {
                 log_err("Failed to create AE struct.");
-                goto fail_flows;
+                return -1;
         }
 
         dt.nbs = nbs_create();
@@ -212,10 +198,6 @@ int dt_init(void)
         nbs_destroy(dt.nbs);
  fail_connmgr:
         connmgr_ae_destroy(dt.ae);
- fail_flows:
-        for (i = 0; i < QOS_CUBE_MAX; ++i)
-                flow_set_destroy(dt.set[i]);
-
         return -1;
 }
 
@@ -236,9 +218,6 @@ void dt_fini(void)
         nbs_destroy(dt.nbs);
 
         connmgr_ae_destroy(dt.ae);
-
-        for (i = 0; i < QOS_CUBE_MAX; ++i)
-                flow_set_destroy(dt.set[i]);
 }
 
 int dt_start(void)
@@ -257,7 +236,7 @@ int dt_start(void)
                 return -1;
         }
 
-        dt.sdu_sched = sdu_sched_create(dt.set, sdu_handler);
+        dt.sdu_sched = sdu_sched_create(sdu_handler);
         if (dt.sdu_sched == NULL) {
                 log_err("Failed to create N-1 SDU scheduler.");
                 gam_destroy(dt.gam);

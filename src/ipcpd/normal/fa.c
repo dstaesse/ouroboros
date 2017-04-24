@@ -48,7 +48,6 @@ struct {
         cep_id_t           fd_to_cep_id[AP_MAX_FLOWS];
         int                cep_id_to_fd[IPCPD_MAX_CONNS];
 
-        flow_set_t *       set[QOS_CUBE_MAX];
         struct sdu_sched * sdu_sched;
 } fa;
 
@@ -82,36 +81,20 @@ int fa_init(void)
         for (i = 0; i < IPCPD_MAX_CONNS; ++i)
                 fa.cep_id_to_fd[i] = -1;
 
-        for (i = 0; i < QOS_CUBE_MAX; ++i) {
-                fa.set[i] = flow_set_create();
-                if (fa.set[i] == NULL)
-                        goto fail_flows;
-        }
-
         if (pthread_rwlock_init(&fa.flows_lock, NULL))
-                goto fail_flows;
+                return -1;
 
         return 0;
-fail_flows:
-        for (i = 0; i < QOS_CUBE_MAX; ++i)
-                flow_set_destroy(fa.set[i]);
-
-        return -1;
 }
 
 void fa_fini(void)
 {
-        int i;
-
-        for (i = 0; i < QOS_CUBE_MAX; ++i)
-                flow_set_destroy(fa.set[i]);
-
         pthread_rwlock_destroy(&fa.flows_lock);
 }
 
 int fa_start(void)
 {
-        fa.sdu_sched = sdu_sched_create(fa.set, sdu_handler);
+        fa.sdu_sched = sdu_sched_create(sdu_handler);
         if (fa.sdu_sched == NULL) {
                 log_err("Failed to create SDU scheduler.");
                 return -1;
@@ -215,10 +198,8 @@ static int fa_flow_dealloc(int fd)
         flow_alloc_msg_t msg = FLOW_ALLOC_MSG__INIT;
         buffer_t         buf;
         int              ret;
-        qoscube_t        qc;
 
-        ipcp_flow_get_qoscube(fd, &qc);
-        flow_set_del(fa.set[qc], fd);
+        sdu_sched_del(fa.sdu_sched, fd);
 
         msg.code = FLOW_ALLOC_CODE__FLOW_DEALLOC;
 
@@ -296,7 +277,7 @@ int fa_alloc_resp(int fd,
                         free(buf.data);
                         return -1;
                 }
-                flow_set_add(fa.set[qc], fd);
+                sdu_sched_add(fa.sdu_sched, fd);
         }
 
         pthread_rwlock_unlock(&fa.flows_lock);
@@ -326,7 +307,6 @@ int fa_post_buf(cep_id_t   cep_id,
         int                ret = 0;
         int                fd;
         flow_alloc_msg_t * msg;
-        qoscube_t          qc;
 
         /* Depending on the message call the function in ipcp-dev.h */
 
@@ -393,9 +373,7 @@ int fa_post_buf(cep_id_t   cep_id,
                         fa.fd_to_cep_id[fd] = INVALID_CEP_ID;
                         fa.cep_id_to_fd[cep_id] = -1;
                 } else {
-                        ipcp_flow_get_qoscube(fd, &qc);
-                        flow_set_add(fa.set[qc],
-                                     fa.cep_id_to_fd[cep_id]);
+                        sdu_sched_add(fa.sdu_sched, fa.cep_id_to_fd[cep_id]);
                 }
 
                 pthread_rwlock_unlock(&fa.flows_lock);
@@ -403,8 +381,7 @@ int fa_post_buf(cep_id_t   cep_id,
                 break;
         case FLOW_ALLOC_CODE__FLOW_DEALLOC:
                 fd = fa.cep_id_to_fd[cep_id];
-                ipcp_flow_get_qoscube(fd, &qc);
-                flow_set_del(fa.set[qc], fd);
+                sdu_sched_del(fa.sdu_sched, fd);
                 ret = flow_dealloc(fd);
                 break;
         default:

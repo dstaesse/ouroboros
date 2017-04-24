@@ -81,8 +81,7 @@ static void * sdu_reader(void * o)
         return (void *) 0;
 }
 
-struct sdu_sched * sdu_sched_create(flow_set_t * set[QOS_CUBE_MAX],
-                                    next_sdu_t   callback)
+struct sdu_sched * sdu_sched_create(next_sdu_t callback)
 {
         struct sdu_sched * sdu_sched;
         int                i;
@@ -95,14 +94,20 @@ struct sdu_sched * sdu_sched_create(flow_set_t * set[QOS_CUBE_MAX],
         sdu_sched->callback = callback;
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
-                sdu_sched->set[i] = set[i];
+                sdu_sched->set[i] = flow_set_create();
+                if (sdu_sched->set[i] == NULL) {
+                        for (j = 0; j < i; ++j)
+                                flow_set_destroy(sdu_sched->set[j]);
+                        goto fail_sdu_sched;
+                }
+        }
 
+        for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 sdu_sched->fqs[i] = fqueue_create();
                 if (sdu_sched->fqs[i] == NULL) {
-                        for (j = i; j >= 0; --j)
+                        for (j = 0; j < i; ++j)
                                 fqueue_destroy(sdu_sched->fqs[j]);
-                        free(sdu_sched);
-                        return NULL;
+                        goto fail_flow_set;
                 }
         }
 
@@ -112,6 +117,13 @@ struct sdu_sched * sdu_sched_create(flow_set_t * set[QOS_CUBE_MAX],
                        (void *) sdu_sched);
 
         return sdu_sched;
+
+ fail_flow_set:
+        for (i = 0; i < QOS_CUBE_MAX; ++i)
+                flow_set_destroy(sdu_sched->set[i]);
+ fail_sdu_sched:
+         free(sdu_sched);
+         return NULL;
 }
 
 void sdu_sched_destroy(struct sdu_sched * sdu_sched)
@@ -124,8 +136,28 @@ void sdu_sched_destroy(struct sdu_sched * sdu_sched)
 
         pthread_join(sdu_sched->sdu_reader, NULL);
 
-        for (i = 0; i < QOS_CUBE_MAX; ++i)
+        for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 fqueue_destroy(sdu_sched->fqs[i]);
+                flow_set_destroy(sdu_sched->set[i]);
+        }
 
         free(sdu_sched);
+}
+
+void sdu_sched_add(struct sdu_sched * sdu_sched,
+                   int                fd)
+{
+        qoscube_t qc;
+
+        ipcp_flow_get_qoscube(fd, &qc);
+        flow_set_add(sdu_sched->set[qc], fd);
+}
+
+void sdu_sched_del(struct sdu_sched * sdu_sched,
+                   int                fd)
+{
+        qoscube_t qc;
+
+        ipcp_flow_get_qoscube(fd, &qc);
+        flow_set_del(sdu_sched->set[qc], fd);
 }
