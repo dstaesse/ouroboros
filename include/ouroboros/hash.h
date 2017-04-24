@@ -24,18 +24,12 @@
 #ifndef OUROBOROS_LIB_HASH_H
 #define OUROBOROS_LIB_HASH_H
 
+#include <ouroboros/ipcp.h>
+
 #include <ouroboros/crc32.h>
 #include <ouroboros/md5.h>
 #include <ouroboros/sha3.h>
 
-enum hash_algo {
-        HASH_CRC32 = 0,
-        HASH_MD5,
-        HASH_SHA3_224,
-        HASH_SHA3_256,
-        HASH_SHA3_384,
-        HASH_SHA3_512
-};
 
 #define HASH_FMT "%02x%02x%02x%02x"
 #define HASH_VAL(hash)                                 \

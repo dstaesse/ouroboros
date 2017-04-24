@@ -10,6 +10,7 @@ set(HEADER_FILES
   errno.h
   fcntl.h
   fqueue.h
+  ipcp.h
   irm.h
   nsm.h
   qos.h)

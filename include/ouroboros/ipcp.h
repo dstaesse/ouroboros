@@ -24,8 +24,6 @@
 #ifndef OUROBOROS_IPCP_H
 #define OUROBOROS_IPCP_H
 
-#include <ouroboros/hash.h>
-
 #include <stdint.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -48,6 +46,15 @@ enum pol_addr_auth {
 
 enum pol_gam {
         COMPLETE = 0
+};
+
+enum hash_algo {
+        HASH_CRC32 = 0,
+        HASH_MD5,
+        HASH_SHA3_224,
+        HASH_SHA3_256,
+        HASH_SHA3_384,
+        HASH_SHA3_512
 };
 
 struct ipcp_config {
