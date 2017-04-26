@@ -501,7 +501,7 @@ static void * ipcp_udp_sdu_loop(void * o)
 
 
                         if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                                ipcp_flow_del(sdb);
+                                ipcp_sdb_release(sdb);
                                 return (void *) 0; /* -ENOTENROLLED */
                         }
 
@@ -516,7 +516,7 @@ static void * ipcp_udp_sdu_loop(void * o)
                                  0) < 0)
                                 log_err("Failed to send SDU.");
 
-                        ipcp_flow_del(sdb);
+                        ipcp_sdb_release(sdb);
                 }
         }
 

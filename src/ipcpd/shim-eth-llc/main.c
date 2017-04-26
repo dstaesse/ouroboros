@@ -731,7 +731,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
                                                 shm_du_buff_head(sdb),
                                                 shm_du_buff_tail(sdb)
                                                 - shm_du_buff_head(sdb));
-                        ipcp_flow_del(sdb);
+                        ipcp_sdb_release(sdb);
                 }
                 pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         }

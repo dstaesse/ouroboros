@@ -93,7 +93,7 @@ static int sdu_handler(int                  fd,
         if (pci.dst_addr != ipcpi.dt_addr) {
                 if (pci.ttl == 0) {
                         log_dbg("TTL was zero.");
-                        ipcp_flow_del(sdb);
+                        ipcp_sdb_release(sdb);
                         return 0;
                 }
 
@@ -103,7 +103,7 @@ static int sdu_handler(int                  fd,
                 if (fd < 0) {
                         pff_unlock(dt.pff[qc]);
                         log_err("No next hop for %" PRIu64, pci.dst_addr);
-                        ipcp_flow_del(sdb);
+                        ipcp_sdb_release(sdb);
                         return -1;
                 }
 
@@ -111,7 +111,7 @@ static int sdu_handler(int                  fd,
 
                 if (ipcp_flow_write(fd, sdb)) {
                         log_err("Failed to write SDU to fd %d.", fd);
-                        ipcp_flow_del(sdb);
+                        ipcp_sdb_release(sdb);
                         return -1;
                 }
         } else {
@@ -268,7 +268,7 @@ int dt_write_sdu(struct pci *         pci,
                 pff_unlock(dt.pff[pci->qos_id]);
                 log_err("Could not get nhop for address %" PRIu64,
                         pci->dst_addr);
-                ipcp_flow_del(sdb);
+                ipcp_sdb_release(sdb);
                 return -1;
         }
 
@@ -276,13 +276,13 @@ int dt_write_sdu(struct pci *         pci,
 
         if (shm_pci_ser(sdb, pci)) {
                 log_err("Failed to serialize PDU.");
-                ipcp_flow_del(sdb);
+                ipcp_sdb_release(sdb);
                 return -1;
         }
 
         if (ipcp_flow_write(fd, sdb)) {
                 log_err("Failed to write SDU to fd %d.", fd);
-                ipcp_flow_del(sdb);
+                ipcp_sdb_release(sdb);
                 return -1;
         }
 

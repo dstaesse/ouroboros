@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_SHM_PCI_H
 #define OUROBOROS_IPCPD_NORMAL_SHM_PCI_H
 
-#include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/shm_du_buff.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/qos.h>
 

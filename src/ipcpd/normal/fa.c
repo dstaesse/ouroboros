@@ -61,7 +61,7 @@ static int sdu_handler(int                  fd,
 
         if (frct_i_write_sdu(fa.fd_to_cep_id[fd], sdb)) {
                 pthread_rwlock_unlock(&fa.flows_lock);
-                ipcp_flow_del(sdb);
+                ipcp_sdb_release(sdb);
                 log_warn("Failed to hand SDU to FRCT.");
                 return -1;
         }

@@ -1430,6 +1430,32 @@ int ipcp_flow_write(int                  fd,
         return 0;
 }
 
+int ipcp_sdb_reserve(struct shm_du_buff ** sdb,
+                     size_t                len)
+{
+        struct shm_rdrbuff * rdrb;
+        ssize_t              idx;
+
+        pthread_rwlock_rdlock(&ai.data_lock);
+
+        rdrb = ai.rdrb;
+
+        pthread_rwlock_unlock(&ai.data_lock);
+
+        idx = shm_rdrbuff_write_b(rdrb,
+                                  DU_BUFF_HEADSPACE,
+                                  DU_BUFF_TAILSPACE,
+                                  NULL,
+                                  len);
+
+        if (idx < 0)
+                return -1;
+
+        *sdb = shm_rdrbuff_get(rdrb, idx);
+
+        return 0;
+}
+
 int ipcp_flow_fini(int fd)
 {
         struct shm_rbuff * rx_rb;
@@ -1539,7 +1565,7 @@ int ipcp_read_shim(int                   fd,
         return 0;
 }
 
-void ipcp_flow_del(struct shm_du_buff * sdb)
+void ipcp_sdb_release(struct shm_du_buff * sdb)
 {
         shm_rdrbuff_remove(ai.rdrb, shm_du_buff_get_idx(sdb));
 }
