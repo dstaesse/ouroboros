@@ -34,10 +34,11 @@ pid_t ipcp_create(const char *   name,
 
 int   ipcp_destroy(pid_t api);
 
-int   ipcp_enroll(pid_t        api,
-                  const char * dst);
+int   ipcp_enroll(pid_t             api,
+                  const char *      dst,
+                  struct dif_info * info);
 
-int   ipcp_bootstrap(pid_t              api,
+int   ipcp_bootstrap(pid_t               api,
                      ipcp_config_msg_t * conf);
 
 int   ipcp_reg(pid_t           api,

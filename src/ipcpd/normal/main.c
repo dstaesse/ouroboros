@@ -116,21 +116,21 @@ static int boot_components(void)
 
         log_dbg("Starting ribmgr.");
 
-        if (ribmgr_init()) {
-                log_err("Failed to initialize RIB manager.");
+        if (dir_init()) {
+                log_err("Failed to initialize directory.");
                 goto fail_addr_auth;
         }
 
-        if (dir_init()) {
-                log_err("Failed to initialize directory.");
-                goto fail_ribmgr;
+        if (ribmgr_init()) {
+                log_err("Failed to initialize RIB manager.");
+                goto fail_dir;
         }
 
         log_dbg("Ribmgr started.");
 
         if (frct_init()) {
                 log_err("Failed to initialize FRCT.");
-                goto fail_dir;
+                goto fail_ribmgr;
         }
 
         if (fa_init()) {
@@ -180,10 +180,10 @@ static int boot_components(void)
         fa_fini();
  fail_frct:
         frct_fini();
- fail_dir:
-        dir_fini();
  fail_ribmgr:
         ribmgr_fini();
+ fail_dir:
+        dir_fini();
  fail_addr_auth:
         addr_auth_fini();
  fail_name:
@@ -208,16 +208,17 @@ void shutdown_components(void)
 
         frct_fini();
 
-        dir_fini();
-
         ribmgr_fini();
+
+        dir_fini();
 
         addr_auth_fini();
 
         free(ipcpi.dif_name);
 }
 
-static int normal_ipcp_enroll(const char * dst)
+static int normal_ipcp_enroll(const char *      dst,
+                              struct dif_info * info)
 {
         if (rib_add(RIB_ROOT, MEMBERS_NAME)) {
                 log_err("Failed to create members.");
@@ -237,7 +238,11 @@ static int normal_ipcp_enroll(const char * dst)
 
         log_dbg("Enrolled with " HASH_FMT, HASH_VAL(dst));
 
-        return ipcpi.dir_hash_algo;
+        info->algo = ipcpi.dir_hash_algo;
+
+        strcpy(info->dif_name, ipcpi.dif_name);
+
+        return 0;
 }
 
 const struct ros {

@@ -56,7 +56,7 @@
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 #define SHM_SAN_HOLDOFF 1000 /* ms */
-#define IPCP_HASH_LEN(e) (hash_len(e->dir_hash_algo))
+#define IPCP_HASH_LEN(e) hash_len(e->dir_hash_algo)
 
 struct ipcp_entry {
         struct list_head next;
@@ -226,27 +226,26 @@ static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
         return NULL;
 }
 
-/*
- * Check if the hash is reachable anywhere in a DIF.
- * FIXME: specify algorithm used
- */
 static struct ipcp_entry * get_ipcp_by_dst_name(const char * name)
 {
         struct list_head * p = NULL;
         uint8_t * hash;
 
         list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(p, struct ipcp_entry, next);
-                if (e->dir_hash_algo < 0)
+                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                if (e->dif_name == NULL)
                         continue;
+
+                log_dbg("IPCP %s found for name %s with hash enum %d.",
+                        e->dif_name, name, e->dir_hash_algo);
+
                 hash = malloc(IPCP_HASH_LEN(e));
                 if  (hash == NULL)
                         return NULL;
 
                 str_hash(e->dir_hash_algo, hash, name);
 
-                if (ipcp_query(e->api, hash, hash_len(e->dir_hash_algo)) == 0) {
+                if (ipcp_query(e->api, hash, IPCP_HASH_LEN(e)) == 0) {
                         free(hash);
                         return e;
                 }
@@ -319,9 +318,9 @@ static pid_t create_ipcp(char *         name,
 
         list_add(&api->next, &irmd.spawned_apis);
 
-        pthread_mutex_lock(&tmp->init_lock);
-
         pthread_rwlock_unlock(&irmd.reg_lock);
+
+        pthread_mutex_lock(&tmp->init_lock);
 
         while (tmp->init == false)
                 pthread_cond_wait(&tmp->init_cond, &tmp->init_lock);
@@ -401,7 +400,7 @@ static int destroy_ipcp(pid_t api)
         return 0;
 }
 
-static int bootstrap_ipcp(pid_t              api,
+static int bootstrap_ipcp(pid_t               api,
                           ipcp_config_msg_t * conf)
 {
         struct ipcp_entry * entry = NULL;
@@ -445,9 +444,10 @@ static int bootstrap_ipcp(pid_t              api,
 }
 
 static int enroll_ipcp(pid_t  api,
-                       char * dif_name)
+                       char * dst_name)
 {
         struct ipcp_entry * entry = NULL;
+        struct dif_info info;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -464,27 +464,35 @@ static int enroll_ipcp(pid_t  api,
                 return -1;
         }
 
-        entry->dif_name = strdup(dif_name);
-        if (entry->dif_name == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Failed to strdup.");
-                return -1;
-        }
-
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        entry->dir_hash_algo = ipcp_enroll(api, dif_name);
-        if (entry->dir_hash_algo < 0) {
-                pthread_rwlock_wrlock(&irmd.reg_lock);
-                free(entry->dif_name);
-                entry->dif_name = NULL;
-                pthread_rwlock_unlock(&irmd.reg_lock);
+        if (ipcp_enroll(api, dst_name, &info) < 0) {
                 log_err("Could not enroll IPCP.");
                 return -1;
         }
 
+        pthread_rwlock_wrlock(&irmd.reg_lock);
+
+        entry = get_ipcp_entry_by_api(api);
+        if (entry == NULL) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("No such IPCP.");
+                return -1;
+        }
+
+        entry->dif_name = strdup(info.dif_name);
+        if (entry->dif_name == NULL) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("Failed to strdup dif_name.");
+                return -ENOMEM;
+        }
+
+        entry->dir_hash_algo = info.algo;
+
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
         log_info("Enrolled IPCP %d in DIF %s.",
-                 api, dif_name);
+                 api, info.dif_name);
 
         return 0;
 }
@@ -768,6 +776,9 @@ static int name_reg(const char *  name,
 
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
+
+                        log_dbg("gonna register %s in dif %s.",
+                                name, e->dif_name);
 
                         hash = malloc(IPCP_HASH_LEN(e));
                         if  (hash == NULL)
@@ -1101,10 +1112,9 @@ static int flow_alloc(pid_t              api,
         assert(irm_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
         hash = malloc(IPCP_HASH_LEN(ipcp));
-        if  (hash == NULL) {
+        if  (hash == NULL)
                 /* sanitizer cleans this */
                 return -ENOMEM;
-        }
 
         str_hash(ipcp->dir_hash_algo, hash, dst);
 

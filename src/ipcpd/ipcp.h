@@ -43,7 +43,8 @@ enum ipcp_state {
 struct ipcp_ops {
         int   (* ipcp_bootstrap)(const struct ipcp_config * conf);
 
-        int   (* ipcp_enroll)(const char * dst);
+        int   (* ipcp_enroll)(const char *      dst,
+                              struct dif_info * info);
 
         int   (* ipcp_reg)(const uint8_t * hash);
 
