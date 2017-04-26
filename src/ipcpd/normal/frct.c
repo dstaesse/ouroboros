@@ -229,7 +229,7 @@ int frct_post_sdu(struct pci *         pci,
                                                  pci->src_cep_id);
                         if (instance == NULL) {
                                 pthread_mutex_unlock(&frct.instances_lock);
-                                ipcp_flow_del(sdb);
+                                ipcp_sdb_release(sdb);
                                 return -ENOMEM;
                         }
                         id = instance->cep_id;
@@ -237,7 +237,7 @@ int frct_post_sdu(struct pci *         pci,
                         instance = frct.instances[pci->dst_cep_id];
                         if (instance == NULL) {
                                 pthread_mutex_unlock(&frct.instances_lock);
-                                ipcp_flow_del(sdb);
+                                ipcp_sdb_release(sdb);
                                 return -1;
                         }
                         id = pci->dst_cep_id;
@@ -253,16 +253,16 @@ int frct_post_sdu(struct pci *         pci,
 
                 if (fa_post_buf(id, &buf)) {
                         log_err("Failed to hand buffer to FA.");
-                        ipcp_flow_del(sdb);
+                        ipcp_sdb_release(sdb);
                         return -1;
                 }
 
-                ipcp_flow_del(sdb);
+                ipcp_sdb_release(sdb);
         } else {
                 /* FIXME: Known cep-ids are delivered to FA (minimal DTP) */
                 if (fa_post_sdu(pci->dst_cep_id, sdb)) {
                         log_err("Failed to hand SDU to FA.");
-                        ipcp_flow_del(sdb);
+                        ipcp_sdb_release(sdb);
                         return -1;
                 }
         }

@@ -24,16 +24,14 @@
 #ifndef OUROBOROS_SHM_RDRBUFF_H
 #define OUROBOROS_SHM_RDRBUFF_H
 
+#include <ouroboros/shm_du_buff.h>
 #include <ouroboros/shared.h>
 
 #include <stdint.h>
 #include <pthread.h>
 #include <sys/types.h>
 
-struct shm_du_buff;
 struct shm_rdrbuff;
-
-size_t               shm_du_buff_get_idx(struct shm_du_buff * sdb);
 
 struct shm_rdrbuff * shm_rdrbuff_create(void);
 
@@ -68,19 +66,4 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb,
 int                  shm_rdrbuff_remove(struct shm_rdrbuff  * rdrb,
                                         size_t                idx);
 
-uint8_t *            shm_du_buff_head(struct shm_du_buff * sdb);
-
-uint8_t *            shm_du_buff_tail(struct shm_du_buff * sdb);
-
-uint8_t *            shm_du_buff_head_alloc(struct shm_du_buff * sdb,
-                                            size_t               size);
-
-uint8_t *            shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
-                                            size_t               size);
-
-void                 shm_du_buff_head_release(struct shm_du_buff * sdb,
-                                              size_t               size);
-
-void                 shm_du_buff_tail_release(struct shm_du_buff * sdb,
-                                              size_t               size);
 #endif /* OUROBOROS_SHM_RDRBUFF_H */

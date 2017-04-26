@@ -24,6 +24,7 @@
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/shm_du_buff.h>
 #include <ouroboros/time_utils.h>
 
 #include <pthread.h>
@@ -333,7 +334,6 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         ssize_t              sz = size + sizeof(*sdb);
 
         assert(rdrb);
-        assert(data);
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE)
@@ -392,7 +392,8 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
 
-        memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
+        if (data != NULL)
+                memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
 
         return sdb->idx;
 }
@@ -412,7 +413,6 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         ssize_t              sz = size + sizeof(*sdb);
 
         assert(rdrb);
-        assert(data);
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE)
@@ -472,7 +472,9 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         sdb->size    = size;
         sdb->du_head = headspace;
         sdb->du_tail = sdb->du_head + len;
-        memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
+
+        if (data != NULL)
+                memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
 
         return sdb->idx;
 }
@@ -495,7 +497,8 @@ ssize_t shm_rdrbuff_read(uint8_t **           dst,
         return len;
 }
 
-struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, size_t idx)
+struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb,
+                                     size_t               idx)
 {
         struct shm_du_buff * sdb;
 
@@ -507,7 +510,8 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb, size_t idx)
         return sdb;
 }
 
-int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb, size_t idx)
+int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb,
+                       size_t               idx)
 {
         assert(rdrb);
         assert(idx < (SHM_BUFFER_SIZE));
@@ -608,4 +612,13 @@ void shm_du_buff_tail_release(struct shm_du_buff * sdb,
         assert(!(size > sdb->du_tail - sdb->du_head));
 
         sdb->du_tail -= size;
+}
+
+void shm_du_buff_truncate(struct shm_du_buff * sdb,
+                          size_t               len)
+{
+        assert(sdb);
+        assert(len <= sdb->size);
+
+        sdb->du_tail -= sdb->size - len;
 }
