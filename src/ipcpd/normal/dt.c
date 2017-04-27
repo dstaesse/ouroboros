@@ -230,16 +230,16 @@ int dt_start(void)
                 return -1;
         }
 
-        dt.gam = gam_create(pg, dt.nbs, dt.ae);
-        if (dt.gam == NULL) {
-                log_err("Failed to init dt graph adjacency manager.");
-                return -1;
-        }
-
         dt.sdu_sched = sdu_sched_create(sdu_handler);
         if (dt.sdu_sched == NULL) {
                 log_err("Failed to create N-1 SDU scheduler.");
-                gam_destroy(dt.gam);
+                return -1;
+        }
+
+        dt.gam = gam_create(pg, dt.nbs, dt.ae);
+        if (dt.gam == NULL) {
+                log_err("Failed to init dt graph adjacency manager.");
+                sdu_sched_destroy(dt.sdu_sched);
                 return -1;
         }
 
@@ -248,9 +248,9 @@ int dt_start(void)
 
 void dt_stop(void)
 {
-        sdu_sched_destroy(dt.sdu_sched);
-
         gam_destroy(dt.gam);
+
+        sdu_sched_destroy(dt.sdu_sched);
 }
 
 int dt_write_sdu(struct pci *         pci,
