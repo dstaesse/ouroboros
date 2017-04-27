@@ -30,7 +30,7 @@
 #include "dt.h"
 #include "connmgr.h"
 #include "ipcp.h"
-#include "shm_pci.h"
+#include "dt_pci.h"
 #include "pff.h"
 #include "neighbors.h"
 #include "gam.h"
@@ -39,6 +39,7 @@
 #include "frct.h"
 #include "ae.h"
 #include "ribconfig.h"
+#include "fa.h"
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -84,14 +85,14 @@ static int sdu_handler(int                  fd,
                        qoscube_t            qc,
                        struct shm_du_buff * sdb)
 {
-        struct pci pci;
+        struct dt_pci dt_pci;
 
-        memset(&pci, 0, sizeof(pci));
+        memset(&dt_pci, 0, sizeof(dt_pci));
 
-        shm_pci_des(sdb, &pci);
+        dt_pci_des(sdb, &dt_pci);
 
-        if (pci.dst_addr != ipcpi.dt_addr) {
-                if (pci.ttl == 0) {
+        if (dt_pci.dst_addr != ipcpi.dt_addr) {
+                if (dt_pci.ttl == 0) {
                         log_dbg("TTL was zero.");
                         ipcp_sdb_release(sdb);
                         return 0;
@@ -99,10 +100,10 @@ static int sdu_handler(int                  fd,
 
                 pff_lock(dt.pff[qc]);
 
-                fd = pff_nhop(dt.pff[qc], pci.dst_addr);
+                fd = pff_nhop(dt.pff[qc], dt_pci.dst_addr);
                 if (fd < 0) {
                         pff_unlock(dt.pff[qc]);
-                        log_err("No next hop for %" PRIu64, pci.dst_addr);
+                        log_err("No next hop for %" PRIu64, dt_pci.dst_addr);
                         ipcp_sdb_release(sdb);
                         return -1;
                 }
@@ -115,12 +116,27 @@ static int sdu_handler(int                  fd,
                         return -1;
                 }
         } else {
-                shm_pci_shrink(sdb);
+                dt_pci_shrink(sdb);
 
-                if (frct_post_sdu(&pci, sdb)) {
-                        log_err("Failed to hand PDU to FRCT.");
+                switch (dt_pci.pdu_type) {
+                case PDU_TYPE_FRCT:
+                        if (frct_post_sdu(sdb)) {
+                                ipcp_sdb_release(sdb);
+                                return -1;
+                        }
+                        break;
+                case PDU_TYPE_FA:
+                        if (fa_post_sdu(sdb)) {
+                                ipcp_sdb_release(sdb);
+                                return -1;
+                        }
+                        break;
+                default:
+                        log_err("Unknown PDU type received.");
+                        ipcp_sdb_release(sdb);
                         return -1;
                 }
+
         }
 
         return 0;
@@ -132,8 +148,8 @@ int dt_init(void)
         int              j;
         struct conn_info info;
 
-        if (shm_pci_init()) {
-                log_err("Failed to init shm pci.");
+        if (dt_pci_init()) {
+                log_err("Failed to init shm dt_pci.");
                 return -1;
         }
 
@@ -253,78 +269,40 @@ void dt_stop(void)
         sdu_sched_destroy(dt.sdu_sched);
 }
 
-int dt_write_sdu(struct pci *         pci,
+int dt_write_sdu(uint64_t             dst_addr,
+                 qoscube_t            qc,
+                 uint8_t              pdu_type,
                  struct shm_du_buff * sdb)
 {
-        int fd;
+        int           fd;
+        struct dt_pci dt_pci;
 
-        assert(pci);
         assert(sdb);
 
-        pff_lock(dt.pff[pci->qos_id]);
+        pff_lock(dt.pff[qc]);
 
-        fd = pff_nhop(dt.pff[pci->qos_id], pci->dst_addr);
+        fd = pff_nhop(dt.pff[qc], dst_addr);
         if (fd < 0) {
-                pff_unlock(dt.pff[pci->qos_id]);
-                log_err("Could not get nhop for address %" PRIu64,
-                        pci->dst_addr);
-                ipcp_sdb_release(sdb);
+                pff_unlock(dt.pff[qc]);
+                log_err("Could not get nhop for address %" PRIu64, dst_addr);
                 return -1;
         }
 
-        pff_unlock(dt.pff[pci->qos_id]);
+        pff_unlock(dt.pff[qc]);
 
-        if (shm_pci_ser(sdb, pci)) {
+        dt_pci.dst_addr = dst_addr;
+        dt_pci.qc = qc;
+        dt_pci.pdu_type = pdu_type;
+
+        if (dt_pci_ser(sdb, &dt_pci)) {
                 log_err("Failed to serialize PDU.");
-                ipcp_sdb_release(sdb);
                 return -1;
         }
 
         if (ipcp_flow_write(fd, sdb)) {
                 log_err("Failed to write SDU to fd %d.", fd);
-                ipcp_sdb_release(sdb);
                 return -1;
         }
-
-        return 0;
-}
-
-int dt_write_buf(struct pci * pci,
-                 buffer_t *   buf)
-{
-        buffer_t * buffer;
-        int        fd;
-
-        assert(pci);
-        assert(buf);
-        assert(buf->data);
-
-        pff_lock(dt.pff[pci->qos_id]);
-
-        fd = pff_nhop(dt.pff[pci->qos_id], pci->dst_addr);
-        if (fd < 0) {
-                pff_unlock(dt.pff[pci->qos_id]);
-                log_err("Could not get nhop for address %" PRIu64,
-                        pci->dst_addr);
-                return -1;
-        }
-
-        pff_unlock(dt.pff[pci->qos_id]);
-
-        buffer = shm_pci_ser_buf(buf, pci);
-        if (buffer == NULL) {
-                log_err("Failed to serialize buffer.");
-                return -1;
-        }
-
-        if (flow_write(fd, buffer->data, buffer->len) == -1) {
-                log_err("Failed to write buffer to fd.");
-                free(buffer);
-                return -1;
-        }
-
-        free(buffer->data);
-        free(buffer);
 
         return 0;
 }

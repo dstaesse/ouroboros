@@ -23,9 +23,11 @@ set(SOURCE_FILES
   connmgr.c
   dir.c
   dt.c
+  dt_pci.c
   enroll.c
   fa.c
   frct.c
+  frct_pci.c
   gam.c
   graph.c
   main.c
@@ -34,7 +36,6 @@ set(SOURCE_FILES
   ribmgr.c
   routing.c
   sdu_sched.c
-  shm_pci.c
   # Add policies last
   pol/complete.c
   pol/flat.c

@@ -264,7 +264,6 @@ const struct ros {
         {BOOT_PATH "/dt", "const"},
         {BOOT_PATH "/dt/const", "addr_size"},
         {BOOT_PATH "/dt/const", "cep_id_size"},
-        {BOOT_PATH "/dt/const", "pdu_length_size"},
         {BOOT_PATH "/dt/const", "seqno_size"},
         {BOOT_PATH "/dt/const", "has_ttl"},
         {BOOT_PATH "/dt/const", "has_chk"},
@@ -330,9 +329,6 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
             rib_write(BOOT_PATH "/dt/const/seqno_size",
                       &conf->seqno_size,
                       sizeof(conf->seqno_size)) ||
-            rib_write(BOOT_PATH "/dt/const/pdu_length_size",
-                      &conf->pdu_length_size,
-                      sizeof(conf->pdu_length_size)) ||
             rib_write(BOOT_PATH "/dt/const/has_ttl",
                       &conf->has_ttl,
                       sizeof(conf->has_ttl)) ||

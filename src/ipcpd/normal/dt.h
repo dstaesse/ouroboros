@@ -24,9 +24,8 @@
 #define OUROBOROS_IPCPD_NORMAL_DT_H
 
 #include <ouroboros/shm_rdrbuff.h>
-#include <ouroboros/utils.h>
 
-#include "shm_pci.h"
+#include "dt_pci.h"
 
 int  dt_init(void);
 
@@ -36,10 +35,9 @@ int  dt_start(void);
 
 void dt_stop(void);
 
-int  dt_write_sdu(struct pci *         pci,
+int  dt_write_sdu(uint64_t             dst_addr,
+                  qoscube_t            qc,
+                  uint8_t              pdu_type,
                   struct shm_du_buff * sdb);
-
-int  dt_write_buf(struct pci * pci,
-                  buffer_t *   buf);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_DT_H */
