@@ -46,6 +46,8 @@ message ipcp_msg {
         optional uint32 qoscube       =  6;
         optional ipcp_config_msg conf =  7;
         optional int32 api            =  8;
-        optional int32 response       =  9;
-        optional int32 result         = 10;
+        optional int32 dir_hash_algo  =  9;
+        optional string dif_name      = 10;
+        optional int32 response       = 11;
+        optional int32 result         = 12;
 };

@@ -143,9 +143,10 @@ static void * ipcp_main_loop(void * o)
 
         ipcp_config_msg_t * conf_msg;
         struct ipcp_config  conf;
+        struct dif_info     info;
 
         struct timeval ltv = {(SOCKET_TIMEOUT / 1000),
-                             (SOCKET_TIMEOUT % 1000) * 1000};
+                              (SOCKET_TIMEOUT % 1000) * 1000};
 
         ssize_t id = (ssize_t)  o;
 
@@ -259,7 +260,14 @@ static void * ipcp_main_loop(void * o)
                                 break;
                         }
 
-                        ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dst_name);
+                        ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dst_name,
+                                                                &info);
+
+                        if (ret_msg.result == 0) {
+                                ret_msg.has_dir_hash_algo = true;
+                                ret_msg.dir_hash_algo     = info.algo;
+                                ret_msg.dif_name          = info.dif_name;
+                        }
                         break;
                 case IPCP_MSG_CODE__IPCP_REG:
                         ret_msg.has_result = true;

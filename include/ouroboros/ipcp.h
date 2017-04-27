@@ -86,4 +86,12 @@ struct ipcp_config {
         char *             if_name;
 };
 
+#define DIF_NAME_SIZE 256
+
+/* capability report of a DIF */
+struct dif_info {
+        enum hash_algo algo;
+        char           dif_name[DIF_NAME_SIZE];
+};
+
 #endif /* OUROBOROS_IPCP_H */

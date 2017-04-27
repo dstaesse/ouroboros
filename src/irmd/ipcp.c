@@ -212,13 +212,13 @@ int ipcp_bootstrap(pid_t              api,
         return ret;
 }
 
-/* return the hash algorithm */
-int ipcp_enroll(pid_t        api,
-                const char * dst)
+int ipcp_enroll(pid_t             api,
+                const char *      dst,
+                struct dif_info * info)
 {
-        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int          ret      = -1;
 
         if (dst == NULL)
                 return -EINVAL;
@@ -236,9 +236,23 @@ int ipcp_enroll(pid_t        api,
         }
 
         ret = recv_msg->result;
+        if (ret != 0) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return ret;
+        }
+
+        if (!recv_msg->has_dir_hash_algo || recv_msg->dif_name == NULL) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        info->algo = recv_msg->dir_hash_algo;
+
+        strcpy(info->dif_name, recv_msg->dif_name);
+
         ipcp_msg__free_unpacked(recv_msg, NULL);
 
-        return ret;
+        return 0;
 }
 
 int ipcp_reg(pid_t           api,
