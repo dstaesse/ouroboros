@@ -98,17 +98,12 @@ static int sdu_handler(int                  fd,
                         return 0;
                 }
 
-                pff_lock(dt.pff[qc]);
-
                 fd = pff_nhop(dt.pff[qc], dt_pci.dst_addr);
                 if (fd < 0) {
-                        pff_unlock(dt.pff[qc]);
                         log_err("No next hop for %" PRIu64, dt_pci.dst_addr);
                         ipcp_sdb_release(sdb);
                         return -1;
                 }
-
-                pff_unlock(dt.pff[qc]);
 
                 if (ipcp_flow_write(fd, sdb)) {
                         log_err("Failed to write SDU to fd %d.", fd);
@@ -136,7 +131,6 @@ static int sdu_handler(int                  fd,
                         ipcp_sdb_release(sdb);
                         return -1;
                 }
-
         }
 
         return 0;
@@ -279,16 +273,11 @@ int dt_write_sdu(uint64_t             dst_addr,
 
         assert(sdb);
 
-        pff_lock(dt.pff[qc]);
-
         fd = pff_nhop(dt.pff[qc], dst_addr);
         if (fd < 0) {
-                pff_unlock(dt.pff[qc]);
                 log_err("Could not get nhop for address %" PRIu64, dst_addr);
                 return -1;
         }
-
-        pff_unlock(dt.pff[qc]);
 
         dt_pci.dst_addr = dst_addr;
         dt_pci.qc = qc;

@@ -33,8 +33,8 @@
 #include "pff.h"
 
 struct pff {
-        struct htable * table;
-        pthread_mutex_t lock;
+        struct htable *  table;
+        pthread_rwlock_t lock;
 };
 
 struct pff * pff_create(void)
@@ -45,13 +45,17 @@ struct pff * pff_create(void)
         if (tmp == NULL)
                 return NULL;
 
-        tmp->table = htable_create(PFT_SIZE, false);
-        if (tmp->table == NULL) {
+        if (pthread_rwlock_init(&tmp->lock, NULL)) {
                 free(tmp);
                 return NULL;
         }
 
-        pthread_mutex_init(&tmp->lock, NULL);
+        tmp->table = htable_create(PFT_SIZE, false);
+        if (tmp->table == NULL) {
+                pthread_rwlock_destroy(&tmp->lock);
+                free(tmp);
+                return NULL;
+        }
 
         return tmp;
 }
@@ -62,21 +66,23 @@ void pff_destroy(struct pff * instance)
 
         htable_destroy(instance->table);
 
-        pthread_mutex_destroy(&instance->lock);
+        pthread_rwlock_destroy(&instance->lock);
         free(instance);
 }
 
 void pff_lock(struct pff * instance)
 {
-        pthread_mutex_lock(&instance->lock);
+        pthread_rwlock_wrlock(&instance->lock);
 }
 
 void pff_unlock(struct pff * instance)
 {
-        pthread_mutex_unlock(&instance->lock);
+        pthread_rwlock_unlock(&instance->lock);
 }
 
-int pff_add(struct pff * instance, uint64_t addr, int fd)
+int pff_add(struct pff * instance,
+            uint64_t     addr,
+            int          fd)
 {
         int * val;
 
@@ -85,6 +91,7 @@ int pff_add(struct pff * instance, uint64_t addr, int fd)
         val = malloc(sizeof(*val));
         if (val == NULL)
                 return -ENOMEM;
+
         *val = fd;
 
         if (htable_insert(instance->table, addr, val)) {
@@ -95,7 +102,9 @@ int pff_add(struct pff * instance, uint64_t addr, int fd)
         return 0;
 }
 
-int pff_update(struct pff * instance, uint64_t addr, int fd)
+int pff_update(struct pff * instance,
+               uint64_t     addr,
+               int          fd)
 {
         int * val;
 
@@ -119,7 +128,8 @@ int pff_update(struct pff * instance, uint64_t addr, int fd)
         return 0;
 }
 
-int pff_remove(struct pff * instance, uint64_t addr)
+int pff_remove(struct pff * instance,
+               uint64_t     addr)
 {
         assert(instance);
 
@@ -136,18 +146,21 @@ void pff_flush(struct pff * instance)
         htable_flush(instance->table);
 }
 
-int pff_nhop(struct pff * instance, uint64_t addr)
+int pff_nhop(struct pff * instance,
+             uint64_t     addr)
 {
         int * j;
-        int   fd;
+        int   fd = -1;
 
         assert(instance);
 
+        pthread_rwlock_rdlock(&instance->lock);
+
         j = (int *) htable_lookup(instance->table, addr);
-        if (j == NULL) {
-                return -1;
-        }
-        fd = *j;
+        if (j != NULL)
+                fd = *j;
+
+        pthread_rwlock_unlock(&instance->lock);
 
         return fd;
 }
