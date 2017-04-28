@@ -236,9 +236,6 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name)
                 if (e->dif_name == NULL)
                         continue;
 
-                log_dbg("IPCP %s found for name %s with hash enum %d.",
-                        e->dif_name, name, e->dir_hash_algo);
-
                 hash = malloc(IPCP_HASH_LEN(e));
                 if  (hash == NULL)
                         return NULL;
@@ -776,9 +773,6 @@ static int name_reg(const char *  name,
 
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
-
-                        log_dbg("gonna register %s in dif %s.",
-                                name, e->dif_name);
 
                         hash = malloc(IPCP_HASH_LEN(e));
                         if  (hash == NULL)
