@@ -156,7 +156,6 @@ struct {
 
         struct shm_rdrbuff *  rdrb;
         struct shm_flow_set * fqset;
-        pthread_rwlock_t      data_lock;
 
         struct bmp *          fds;
         struct bmp *          fqueues;
@@ -193,12 +192,8 @@ static int api_announce(char * ap_name)
         msg.code    = IRM_MSG_CODE__IRM_API_ANNOUNCE;
         msg.has_api = true;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
-
         msg.api = ai.api;
         msg.ap_name = ap_name;
-
-        pthread_rwlock_unlock(&ai.data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
@@ -330,7 +325,6 @@ int ouroboros_init(const char * ap_name)
         }
 
         pthread_rwlock_init(&ai.flows_lock, NULL);
-        pthread_rwlock_init(&ai.data_lock, NULL);
 
         return 0;
 }
@@ -338,8 +332,6 @@ int ouroboros_init(const char * ap_name)
 void ouroboros_fini()
 {
         int i = 0;
-
-        pthread_rwlock_wrlock(&ai.data_lock);
 
         bmp_destroy(ai.fds);
         bmp_destroy(ai.fqueues);
@@ -375,10 +367,8 @@ void ouroboros_fini()
         free(ai.ports);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         pthread_rwlock_destroy(&ai.flows_lock);
-        pthread_rwlock_destroy(&ai.data_lock);
 }
 
 int flow_accept(qosspec_t *             qs,
@@ -398,11 +388,7 @@ int flow_accept(qosspec_t *             qs,
                 msg.timeo_nsec = timeo->tv_nsec;
         }
 
-        pthread_rwlock_rdlock(&ai.data_lock);
-
         msg.api     = ai.api;
-
-        pthread_rwlock_unlock(&ai.data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -424,13 +410,11 @@ int flow_accept(qosspec_t *             qs,
                 return -EIRMD;
         }
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         fd = bmp_allocate(ai.fds);
         if (!bmp_is_id_valid(ai.fds, fd)) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EBADF;
         }
@@ -439,7 +423,6 @@ int flow_accept(qosspec_t *             qs,
         if (ai.flows[fd].rx_rb == NULL) {
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
         }
@@ -449,7 +432,6 @@ int flow_accept(qosspec_t *             qs,
                 reset_flow(fd);
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
         }
@@ -459,7 +441,6 @@ int flow_accept(qosspec_t *             qs,
                 reset_flow(fd);
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
         }
@@ -478,7 +459,6 @@ int flow_accept(qosspec_t *             qs,
         ai.ports[recv_msg->port_id].state = PORT_ID_ASSIGNED;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -499,6 +479,7 @@ int flow_alloc(const char *            dst_name,
         msg.has_api     = true;
         msg.has_qoscube = true;
         msg.qoscube     = spec_to_cube(qs);
+        msg.api         = ai.api;
 
         if (timeo != NULL) {
                 msg.has_timeo_sec = true;
@@ -507,11 +488,6 @@ int flow_alloc(const char *            dst_name,
                 msg.timeo_nsec = timeo->tv_nsec;
         }
 
-        pthread_rwlock_rdlock(&ai.data_lock);
-
-        msg.api         = ai.api;
-
-        pthread_rwlock_unlock(&ai.data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -533,13 +509,11 @@ int flow_alloc(const char *            dst_name,
                 return -EIRMD;
         }
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         fd = bmp_allocate(ai.fds);
         if (!bmp_is_id_valid(ai.fds, fd)) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EBADF;
         }
@@ -548,7 +522,6 @@ int flow_alloc(const char *            dst_name,
         if (ai.flows[fd].rx_rb == NULL) {
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
         }
@@ -558,7 +531,6 @@ int flow_alloc(const char *            dst_name,
                 reset_flow(fd);
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
         }
@@ -568,7 +540,6 @@ int flow_alloc(const char *            dst_name,
                 reset_flow(fd);
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
         }
@@ -584,7 +555,6 @@ int flow_alloc(const char *            dst_name,
         ai.ports[recv_msg->port_id].state = PORT_ID_ASSIGNED;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -604,20 +574,17 @@ int flow_dealloc(int fd)
         msg.has_api      = true;
         msg.api          = ai.api;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 bmp_release(ai.fds, fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return 0;
         }
 
         msg.port_id = ai.flows[fd].port_id;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -631,14 +598,12 @@ int flow_dealloc(int fd)
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         reset_flow(fd);
         bmp_release(ai.fds, fd);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -651,12 +616,10 @@ int flow_set_flags(int fd,
         if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
@@ -667,8 +630,8 @@ int flow_set_flags(int fd,
                 shm_rbuff_block(ai.flows[fd].rx_rb);
         if (flags & FLOW_O_RDWR)
                 shm_rbuff_unblock(ai.flows[fd].rx_rb);
+
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return old;
 }
@@ -680,19 +643,16 @@ int flow_get_flags(int fd)
         if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
         old = ai.flows[fd].oflags;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return old;
 }
@@ -705,12 +665,10 @@ int flow_get_timeout(int               fd,
         if (fd < 0 || fd >= AP_MAX_FLOWS || timeo == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
@@ -720,7 +678,6 @@ int flow_get_timeout(int               fd,
                 ret = -EPERM;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return ret;
 }
@@ -731,12 +688,10 @@ int flow_set_timeout(int                     fd,
         if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
@@ -748,7 +703,6 @@ int flow_set_timeout(int                     fd,
         }
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -759,19 +713,16 @@ int flow_get_qosspec(int         fd,
         if (fd < 0 || fd >= AP_MAX_FLOWS || qs == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
         fill_qosspec(qs, ai.flows[fd].cube);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -788,18 +739,15 @@ ssize_t flow_write(int          fd,
         if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
         if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -EPERM;
         }
 
@@ -811,14 +759,12 @@ ssize_t flow_write(int          fd,
                                        count);
                 if (idx < 0) {
                         pthread_rwlock_unlock(&ai.flows_lock);
-                        pthread_rwlock_unlock(&ai.data_lock);
                         return idx;
                 }
 
                 if (shm_rbuff_write(ai.flows[fd].tx_rb, idx) < 0) {
                         shm_rdrbuff_remove(ai.rdrb, idx);
                         pthread_rwlock_unlock(&ai.flows_lock);
-                        pthread_rwlock_unlock(&ai.data_lock);
                         return -ENOTALLOC;
                 }
         } else { /* blocking */
@@ -826,7 +772,6 @@ ssize_t flow_write(int          fd,
                 struct shm_rbuff * tx_rb  = ai.flows[fd].tx_rb;
 
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
 
                 assert(tx_rb);
 
@@ -841,14 +786,12 @@ ssize_t flow_write(int          fd,
                         return -ENOTALLOC;
                 }
 
-                pthread_rwlock_rdlock(&ai.data_lock);
                 pthread_rwlock_rdlock(&ai.flows_lock);
         }
 
         shm_flow_set_notify(ai.flows[fd].set, ai.flows[fd].port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -864,12 +807,10 @@ ssize_t flow_read(int    fd,
         if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
@@ -882,33 +823,25 @@ ssize_t flow_read(int    fd,
                 struct timespec timeout = ai.flows[fd].rcv_timeo;
 
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
 
                 if (timeo)
                         idx = shm_rbuff_read_b(rb, &timeout);
                 else
                         idx = shm_rbuff_read_b(rb, NULL);
-
-                pthread_rwlock_rdlock(&ai.data_lock);
         }
 
         if (idx < 0) {
                 assert(idx == -EAGAIN || idx == -ETIMEDOUT);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return idx;
         }
 
         n = shm_rdrbuff_read(&sdu, ai.rdrb, idx);
-        if (n < 0) {
-                pthread_rwlock_unlock(&ai.data_lock);
+        if (n < 0)
                 return -1;
-        }
 
         memcpy(buf, sdu, MIN((size_t) n, count));
 
         shm_rdrbuff_remove(ai.rdrb, idx);
-
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return n;
 }
@@ -968,11 +901,7 @@ void flow_set_zero(struct flow_set * set)
         if (set == NULL)
                 return;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
-
         shm_flow_set_zero(ai.fqset, set->idx);
-
-        pthread_rwlock_unlock(&ai.data_lock);
 }
 
 int flow_set_add(struct flow_set * set,
@@ -985,7 +914,6 @@ int flow_set_add(struct flow_set * set,
         if (set == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].port_id);
@@ -995,7 +923,6 @@ int flow_set_add(struct flow_set * set,
                 shm_flow_set_notify(ai.fqset, ai.flows[fd].port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return ret;
 }
@@ -1006,14 +933,12 @@ void flow_set_del(struct flow_set * set,
         if (set == NULL)
                 return;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id >= 0)
                 shm_flow_set_del(ai.fqset, set->idx, ai.flows[fd].port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 }
 
 bool flow_set_has(const struct flow_set * set,
@@ -1024,19 +949,16 @@ bool flow_set_has(const struct flow_set * set,
         if (set == NULL || fd < 0)
                 return false;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return false;
         }
 
         ret = (shm_flow_set_has(ai.fqset, set->idx, ai.flows[fd].port_id) == 1);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return ret;
 }
@@ -1051,13 +973,11 @@ int fqueue_next(struct fqueue * fq)
         if (fq->fqsize == 0)
                 return -EPERM;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         fd = ai.ports[fq->fqueue[fq->next++]].fd;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         if (fq->next == fq->fqsize) {
                 fq->fqsize = 0;
@@ -1101,13 +1021,11 @@ int np1_flow_alloc(pid_t n_api,
 {
         int fd;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         fd = bmp_allocate(ai.fds);
         if (!bmp_is_id_valid(ai.fds, fd)) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -1;
         }
 
@@ -1115,7 +1033,6 @@ int np1_flow_alloc(pid_t n_api,
         if (ai.flows[fd].rx_rb == NULL) {
                 reset_flow(fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -1;
         }
 
@@ -1123,7 +1040,6 @@ int np1_flow_alloc(pid_t n_api,
         if (ai.flows[fd].tx_rb == NULL) {
                 reset_flow(fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -1;
         }
 
@@ -1131,7 +1047,6 @@ int np1_flow_alloc(pid_t n_api,
         if (ai.flows[fd].set == NULL) {
                 reset_flow(fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -1;
         }
 
@@ -1143,7 +1058,6 @@ int np1_flow_alloc(pid_t n_api,
         ai.ports[port_id].state = PORT_ID_ASSIGNED;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return fd;
 }
@@ -1152,13 +1066,11 @@ int np1_flow_dealloc(int port_id)
 {
         int fd;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         fd = ai.ports[port_id].fd;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return fd;
 }
@@ -1170,13 +1082,11 @@ int np1_flow_resp(int port_id)
         if (port_wait_assign(&ai.ports[port_id]) != PORT_ID_ASSIGNED)
                 return -1;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         fd = ai.ports[port_id].fd;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return fd;
 }
@@ -1231,35 +1141,29 @@ int ipcp_flow_req_arr(pid_t     api,
         msg.has_qoscube = true;
         msg.qoscube     = cube;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         fd = bmp_allocate(ai.fds);
         if (!bmp_is_id_valid(ai.fds, fd)) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -1; /* -ENOMOREFDS */
         }
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         recv_msg = send_recv_irm_msg(&msg);
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         if (recv_msg == NULL) {
                 ai.ports[fd].state = PORT_INIT;
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -EIRMD;
         }
 
         if (!recv_msg->has_port_id || !recv_msg->has_api) {
                 ai.ports[fd].state = PORT_INIT;
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -1267,7 +1171,6 @@ int ipcp_flow_req_arr(pid_t     api,
         if (recv_msg->has_result && recv_msg->result) {
                 ai.ports[fd].state = PORT_INIT;
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -1276,7 +1179,6 @@ int ipcp_flow_req_arr(pid_t     api,
         if (port_id < 0) {
                 ai.ports[fd].state = PORT_INIT;
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -1285,7 +1187,6 @@ int ipcp_flow_req_arr(pid_t     api,
         if (ai.flows[fd].rx_rb == NULL) {
                 reset_flow(fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -1294,7 +1195,6 @@ int ipcp_flow_req_arr(pid_t     api,
         if (ai.flows[fd].tx_rb == NULL) {
                 reset_flow(fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -1303,7 +1203,6 @@ int ipcp_flow_req_arr(pid_t     api,
         if (ai.flows[fd].set == NULL) {
                 reset_flow(fd);
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -1315,7 +1214,6 @@ int ipcp_flow_req_arr(pid_t     api,
         port_set_state(&ai.ports[port_id], PORT_ID_ASSIGNED);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -1332,11 +1230,11 @@ int ipcp_flow_alloc_reply(int fd,
         msg.code         = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
         msg.has_port_id  = true;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
+
         msg.port_id = ai.flows[fd].port_id;
+
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         msg.has_response = true;
         msg.response     = response;
@@ -1367,29 +1265,22 @@ int ipcp_flow_read(int                   fd,
         assert(fd >=0);
         assert(sdb);
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         if ((port_id = ai.flows[fd].port_id) < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
         rb = ai.flows[fd].rx_rb;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         idx = shm_rbuff_read(rb);
         if (idx < 0)
                 return idx;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
-
         *sdb = shm_rdrbuff_get(ai.rdrb, idx);
-
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -1402,18 +1293,15 @@ int ipcp_flow_write(int                  fd,
         if (sdb == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
         if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -EPERM;
         }
 
@@ -1425,7 +1313,6 @@ int ipcp_flow_write(int                  fd,
         shm_flow_set_notify(ai.flows[fd].set, ai.flows[fd].port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -1436,11 +1323,7 @@ int ipcp_sdb_reserve(struct shm_du_buff ** sdb,
         struct shm_rdrbuff * rdrb;
         ssize_t              idx;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
-
         rdrb = ai.rdrb;
-
-        pthread_rwlock_unlock(&ai.data_lock);
 
         idx = shm_rdrbuff_write_b(rdrb,
                                   DU_BUFF_HEADSPACE,
@@ -1462,13 +1345,11 @@ int ipcp_flow_fini(int fd)
 
         flow_set_flags(fd, FLOW_O_WRONLY);
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         rx_rb = ai.flows[fd].rx_rb;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         shm_rbuff_fini(rx_rb);
 
@@ -1481,19 +1362,16 @@ int ipcp_flow_get_qoscube(int         fd,
         if (fd < 0 || fd >= AP_MAX_FLOWS || cube == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_wrlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
         *cube = ai.flows[fd].cube;
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -1504,13 +1382,11 @@ ssize_t local_flow_read(int fd)
 
         assert(fd >= 0);
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         ret = shm_rbuff_read(ai.flows[fd].rx_rb);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return ret;
 }
@@ -1521,12 +1397,10 @@ int local_flow_write(int    fd,
         if (fd < 0)
                 return -EINVAL;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -ENOTALLOC;
         }
 
@@ -1535,7 +1409,6 @@ int local_flow_write(int    fd,
         shm_flow_set_notify(ai.flows[fd].set, ai.flows[fd].port_id);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
@@ -1545,7 +1418,6 @@ int ipcp_read_shim(int                   fd,
 {
         ssize_t idx;
 
-        pthread_rwlock_rdlock(&ai.data_lock);
         pthread_rwlock_rdlock(&ai.flows_lock);
 
         assert(ai.flows[fd].rx_rb);
@@ -1553,14 +1425,12 @@ int ipcp_read_shim(int                   fd,
         idx = shm_rbuff_read(ai.flows[fd].rx_rb);
         if (idx < 0) {
                 pthread_rwlock_unlock(&ai.flows_lock);
-                pthread_rwlock_unlock(&ai.data_lock);
                 return -EAGAIN;
         }
 
         *sdb = shm_rdrbuff_get(ai.rdrb, idx);
 
         pthread_rwlock_unlock(&ai.flows_lock);
-        pthread_rwlock_unlock(&ai.data_lock);
 
         return 0;
 }
