@@ -29,7 +29,6 @@
 struct dt_const {
         uint8_t  addr_size;
         uint8_t  cep_id_size;
-        uint8_t  pdu_length_size;
         uint8_t  seqno_size;
         bool     has_ttl;
         bool     has_chk;

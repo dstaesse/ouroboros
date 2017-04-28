@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * The Flow and Retransmission control component
+ * Protocol Control Information of Data Transfer AE
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,37 +20,34 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_FRCT_H
-#define OUROBOROS_IPCPD_NORMAL_FRCT_H
+#ifndef OUROBOROS_IPCPD_NORMAL_DT_PCI_H
+#define OUROBOROS_IPCPD_NORMAL_DT_PCI_H
 
+#include <ouroboros/shm_du_buff.h>
 #include <ouroboros/shared.h>
-#include <ouroboros/utils.h>
 
-#include "frct_pci.h"
+#define PDU_TYPE_FA   0x40
+#define PDU_TYPE_FRCT 0x80
 
-#define FRCT_PROTO "FRCT"
+#define INVALID_ADDR 0
 
-struct frct_i;
+struct dt_pci {
+        uint64_t  dst_addr;
+        qoscube_t qc;
+        uint8_t   ttl;
+        uint8_t   pdu_type;
+};
 
-int         frct_init(void);
+int   dt_pci_init(void);
 
-int         frct_fini(void);
+void  dt_pci_fini(void);
 
-cep_id_t    frct_i_create(uint64_t  address,
-                          qoscube_t cube);
+int   dt_pci_ser(struct shm_du_buff * sdb,
+                 struct dt_pci *      dt_pci);
 
-int         frct_i_destroy(cep_id_t cep_id);
+void  dt_pci_des(struct shm_du_buff * sdb,
+                 struct dt_pci *      dt_pci);
 
-int         frct_i_set_id(cep_id_t cep_id,
-                          cep_id_t r_cep_id);
+void  dt_pci_shrink(struct shm_du_buff * sdb);
 
-cep_id_t    frct_i_get_id(cep_id_t cep_id);
-
-uint64_t    frct_i_get_addr(cep_id_t cep_id);
-
-int         frct_i_write_sdu(cep_id_t             id,
-                             struct shm_du_buff * sdb);
-
-int         frct_post_sdu(struct shm_du_buff * sdb);
-
-#endif /* OUROBOROS_IPCPD_NORMAL_FRCT_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_DT_PCI_H */
