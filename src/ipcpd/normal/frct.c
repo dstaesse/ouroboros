@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <string.h>
 #include <assert.h>
 
 enum conn_state {
@@ -128,9 +129,11 @@ int frct_init()
 
 int frct_fini()
 {
+        size_t len = IRMD_MAX_FLOWS;
+
         pthread_mutex_destroy(&frct.instances_lock);
 
-        free(frct.instances);
+        freepp(struct frct_i, frct.instances, len);
 
         bmp_destroy(frct.cep_ids);
 
@@ -139,8 +142,8 @@ int frct_fini()
         return 0;
 }
 
-cep_id_t frct_i_create(uint64_t   address,
-                       qoscube_t  cube)
+cep_id_t frct_i_create(uint64_t  address,
+                       qoscube_t qc)
 {
         struct frct_i * instance;
         cep_id_t        id;
@@ -161,7 +164,7 @@ cep_id_t frct_i_create(uint64_t   address,
         instance->cep_id = id;
         instance->state = CONN_PENDING;
         instance->seqno = 0;
-        instance->cube = cube;
+        instance->cube = qc;
 
         frct.instances[id] = instance;
 
@@ -170,7 +173,7 @@ cep_id_t frct_i_create(uint64_t   address,
         return id;
 }
 
-int frct_i_destroy(cep_id_t   cep_id)
+int frct_i_destroy(cep_id_t cep_id)
 {
         struct frct_i * instance;
 
@@ -261,6 +264,8 @@ int frct_post_sdu(struct shm_du_buff * sdb)
         struct frct_i * instance;
 
         assert(sdb);
+
+        memset(&frct_pci, 0, sizeof(frct_pci));
 
         frct_pci_des(sdb, &frct_pci);
 
