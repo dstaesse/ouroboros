@@ -275,7 +275,7 @@ int dt_write_sdu(uint64_t             dst_addr,
 
         fd = pff_nhop(dt.pff[qc], dst_addr);
         if (fd < 0) {
-                log_err("Could not get nhop for address %" PRIu64, dst_addr);
+                log_err("Could not get nhop for addr %" PRIu64 ".", dst_addr);
                 return -1;
         }
 
