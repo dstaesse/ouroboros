@@ -128,6 +128,7 @@ static struct shm_du_buff * create_fa_sdb(flow_alloc_msg_t * msg)
         return sdb;
 }
 
+/* FIXME: Revise when Delta-t is fully implemented */
 static void destroy_conn(int      fd,
                          cep_id_t cep_id)
 {
@@ -181,7 +182,7 @@ int fa_alloc(int             fd,
 
         free(dst_ipcp);
 
-        if (rib_read(path, &addr, sizeof(addr)) < 0)
+        if (rib_read(path, &addr, sizeof(addr)) != sizeof(addr))
                 return -1;
 
         cep_id = frct_i_create(addr, qc);
@@ -280,6 +281,7 @@ int fa_alloc_resp(int fd,
                          PDU_TYPE_FA,
                          sdb)) {
                 destroy_conn(fd, fa.fd_to_cep_id[fd]);
+                pthread_rwlock_unlock(&fa.flows_lock);
                 ipcp_sdb_release(sdb);
                 return -1;
         }
@@ -294,6 +296,33 @@ int fa_dealloc(int fd)
         flow_alloc_msg_t     msg = FLOW_ALLOC_MSG__INIT;
         struct shm_du_buff * sdb;
         qoscube_t            qc;
+        uint64_t             addr;
+
+        msg.code       = FLOW_ALLOC_CODE__FLOW_DEALLOC;
+        msg.has_cep_id = true;
+
+        pthread_rwlock_rdlock(&fa.flows_lock);
+
+        msg.cep_id     = frct_i_get_id(fa.fd_to_cep_id[fd]);
+
+        addr = frct_i_get_addr(fa.fd_to_cep_id[fd]);
+
+        pthread_rwlock_unlock(&fa.flows_lock);
+
+        sdb = create_fa_sdb(&msg);
+        if (sdb == NULL)
+                return -1;
+
+        ipcp_flow_get_qoscube(fd, &qc);
+
+        assert(qc >= 0 && qc < QOS_CUBE_MAX);
+
+        if (dt_write_sdu(addr, qc, PDU_TYPE_FA, sdb)) {
+                ipcp_sdb_release(sdb);
+                log_warn("Failed to send dealloc message.");
+        }
+
+        ipcp_flow_fini(fd);
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
@@ -301,29 +330,9 @@ int fa_dealloc(int fd)
 
         destroy_conn(fd, fa.fd_to_cep_id[fd]);
 
-        msg.code       = FLOW_ALLOC_CODE__FLOW_DEALLOC;
-        msg.has_cep_id = true;
-        msg.cep_id     = frct_i_get_id(fa.fd_to_cep_id[fd]);
-
-        sdb = create_fa_sdb(&msg);
-        if (sdb == NULL) {
-                pthread_rwlock_unlock(&fa.flows_lock);
-                return -1;
-        }
-
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        ipcp_flow_get_qoscube(fd, &qc);
-
-        assert(qc >= 0 && qc < QOS_CUBE_MAX);
-
-        if (dt_write_sdu(frct_i_get_addr(fa.fd_to_cep_id[fd]),
-                         qc,
-                         PDU_TYPE_FA,
-                         sdb)) {
-                ipcp_sdb_release(sdb);
-                return -1;
-        }
+        flow_dealloc(fd);
 
         return 0;
 }
@@ -430,7 +439,11 @@ int fa_post_sdu(struct shm_du_buff * sdb)
 
                 break;
         case FLOW_ALLOC_CODE__FLOW_DEALLOC:
+                /* FIXME: mark flow and wait for frct_i to time out */
+                pthread_rwlock_rdlock(&fa.flows_lock);
                 fd = fa.cep_id_to_fd[msg->cep_id];
+                pthread_rwlock_unlock(&fa.flows_lock);
+                ipcp_flow_fini(fd);
                 sdu_sched_del(fa.sdu_sched, fd);
                 flow_dealloc(fd);
                 break;
