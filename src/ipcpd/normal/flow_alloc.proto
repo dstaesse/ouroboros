@@ -25,7 +25,6 @@ syntax = "proto2";
 enum flow_alloc_code {
         FLOW_REQ     = 1;
         FLOW_REPLY   = 2;
-        FLOW_DEALLOC = 3;
 };
 
 message flow_alloc_msg {
