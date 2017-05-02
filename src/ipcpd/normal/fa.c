@@ -293,35 +293,6 @@ int fa_alloc_resp(int fd,
 
 int fa_dealloc(int fd)
 {
-        flow_alloc_msg_t     msg = FLOW_ALLOC_MSG__INIT;
-        struct shm_du_buff * sdb;
-        qoscube_t            qc;
-        uint64_t             addr;
-
-        msg.code       = FLOW_ALLOC_CODE__FLOW_DEALLOC;
-        msg.has_cep_id = true;
-
-        pthread_rwlock_rdlock(&fa.flows_lock);
-
-        msg.cep_id     = frct_i_get_id(fa.fd_to_cep_id[fd]);
-
-        addr = frct_i_get_addr(fa.fd_to_cep_id[fd]);
-
-        pthread_rwlock_unlock(&fa.flows_lock);
-
-        sdb = create_fa_sdb(&msg);
-        if (sdb == NULL)
-                return -1;
-
-        ipcp_flow_get_qoscube(fd, &qc);
-
-        assert(qc >= 0 && qc < QOS_CUBE_MAX);
-
-        if (dt_write_sdu(addr, qc, PDU_TYPE_FA, sdb)) {
-                ipcp_sdb_release(sdb);
-                log_warn("Failed to send dealloc message.");
-        }
-
         ipcp_flow_fini(fd);
 
         pthread_rwlock_wrlock(&fa.flows_lock);
@@ -437,15 +408,6 @@ int fa_post_sdu(struct shm_du_buff * sdb)
 
                 pthread_rwlock_unlock(&fa.flows_lock);
 
-                break;
-        case FLOW_ALLOC_CODE__FLOW_DEALLOC:
-                /* FIXME: mark flow and wait for frct_i to time out */
-                pthread_rwlock_rdlock(&fa.flows_lock);
-                fd = fa.cep_id_to_fd[msg->cep_id];
-                pthread_rwlock_unlock(&fa.flows_lock);
-                ipcp_flow_fini(fd);
-                sdu_sched_del(fa.sdu_sched, fd);
-                flow_dealloc(fd);
                 break;
         default:
                 log_err("Got an unknown flow allocation message.");
