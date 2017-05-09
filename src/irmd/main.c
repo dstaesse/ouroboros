@@ -630,6 +630,8 @@ static int bind_api(pid_t  api,
 static int unbind_ap(char * ap,
                      char * name)
 {
+        struct reg_entry * e;
+
         if (ap == NULL)
                 return -EINVAL;
 
@@ -642,6 +644,10 @@ static int unbind_ap(char * ap,
                 apn_entry_del_name(e, name);
         }
 
+        e = registry_get_entry(&irmd.registry, name);
+        if (e != NULL)
+                reg_entry_del_apn(e, ap);
+
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         if (name  == NULL)
@@ -652,9 +658,11 @@ static int unbind_ap(char * ap,
         return 0;
 }
 
-static int unbind_api(pid_t  api,
-                      char * name)
+static int unbind_api(pid_t        api,
+                      const char * name)
 {
+        struct reg_entry * e;
+
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
         if (name == NULL)
@@ -663,6 +671,10 @@ static int unbind_api(pid_t  api,
                 struct api_entry * e = api_table_get(&irmd.api_table, api);
                 api_entry_del_name(e, name);
         }
+
+        e = registry_get_entry(&irmd.registry, name);
+        if (e != NULL)
+                reg_entry_del_api(e, api);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 

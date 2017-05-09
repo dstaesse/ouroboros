@@ -142,7 +142,7 @@ int api_entry_add_name(struct api_entry * e,
 }
 
 void api_entry_del_name(struct api_entry * e,
-                        char *             name)
+                        const char *       name)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;

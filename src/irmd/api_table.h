@@ -67,7 +67,7 @@ int                api_entry_add_name(struct api_entry * e,
                                       char *             name);
 
 void               api_entry_del_name(struct api_entry * e,
-                                      char *             name);
+                                      const char *       name);
 
 int                api_table_add(struct list_head * api_table,
                                  struct api_entry * e);
