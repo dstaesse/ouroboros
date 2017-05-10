@@ -47,7 +47,7 @@ struct {
         /* offsets */
         size_t          qc_o;
         size_t          ttl_o;
-        size_t          type_o;
+        size_t          fd_o;
 } dt_pci_info;
 
 int dt_pci_init(void)
@@ -67,11 +67,11 @@ int dt_pci_init(void)
         dt_pci_info.qc_o = dt_pci_info.dtc.addr_size;
         dt_pci_info.ttl_o = dt_pci_info.qc_o + QC_SIZE;
         if (dt_pci_info.dtc.has_ttl)
-                dt_pci_info.type_o = dt_pci_info.ttl_o + TTL_SIZE;
+                dt_pci_info.fd_o = dt_pci_info.ttl_o + TTL_SIZE;
         else
-                dt_pci_info.type_o = dt_pci_info.ttl_o;
+                dt_pci_info.fd_o = dt_pci_info.ttl_o;
 
-        dt_pci_info.head_size = dt_pci_info.type_o + PDU_TYPE_SIZE;
+        dt_pci_info.head_size = dt_pci_info.fd_o + PDU_TYPE_SIZE;
         dt_pci_info.tail_size = dt_pci_info.dtc.has_chk ? CHK_SIZE : 0;
 
         return 0;
@@ -100,7 +100,7 @@ int dt_pci_ser(struct shm_du_buff * sdb,
         memcpy(head + dt_pci_info.qc_o, &dt_pci->qc, QC_SIZE);
         if (dt_pci_info.dtc.has_ttl)
                 memcpy(head + dt_pci_info.ttl_o, &ttl, TTL_SIZE);
-        memcpy(head + dt_pci_info.type_o, &dt_pci->pdu_type, PDU_TYPE_SIZE);
+        memcpy(head + dt_pci_info.fd_o, &dt_pci->fd, PDU_TYPE_SIZE);
 
         if (dt_pci_info.dtc.has_chk) {
                 tail = shm_du_buff_tail_alloc(sdb, dt_pci_info.tail_size);
@@ -137,7 +137,7 @@ void dt_pci_des(struct shm_du_buff * sdb,
                 dt_pci->ttl = 1;
         }
 
-        memcpy(&dt_pci->pdu_type, head + dt_pci_info.type_o, PDU_TYPE_SIZE);
+        memcpy(&dt_pci->fd, head + dt_pci_info.fd_o, PDU_TYPE_SIZE);
 }
 
 void dt_pci_shrink(struct shm_du_buff * sdb)

@@ -249,7 +249,7 @@ int ouroboros_init(const char * ap_name)
         ai.api = getpid();
         ai.daf_name = NULL;
 
-        ai.fds = bmp_create(AP_MAX_FLOWS, 0);
+        ai.fds = bmp_create(AP_MAX_FLOWS, AP_RES_FDS + 1);
         if (ai.fds == NULL)
                 return -ENOMEM;
 

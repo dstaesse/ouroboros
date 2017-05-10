@@ -36,7 +36,6 @@
 #include "gam.h"
 #include "routing.h"
 #include "sdu_sched.h"
-#include "frct.h"
 #include "ae.h"
 #include "ribconfig.h"
 #include "fa.h"
@@ -113,19 +112,21 @@ static int sdu_handler(int                  fd,
         } else {
                 dt_pci_shrink(sdb);
 
-                switch (dt_pci.pdu_type) {
-                case PDU_TYPE_FRCT:
-                        if (frct_post_sdu(sdb)) {
+                if (dt_pci.fd > AP_RES_FDS) {
+                        if (ipcp_flow_write(dt_pci.fd, sdb)) {
                                 ipcp_sdb_release(sdb);
                                 return -1;
                         }
-                        break;
-                case PDU_TYPE_FA:
+                        return 0;
+                }
+
+                switch (dt_pci.fd) {
+                case FD_FA:
                         if (fa_post_sdu(sdb)) {
                                 ipcp_sdb_release(sdb);
                                 return -1;
                         }
-                        break;
+                        return 0;
                 default:
                         log_err("Unknown PDU type received.");
                         ipcp_sdb_release(sdb);
@@ -133,6 +134,7 @@ static int sdu_handler(int                  fd,
                 }
         }
 
+        /* silence compiler */
         return 0;
 }
 
@@ -150,7 +152,7 @@ int dt_init(void)
         memset(&info, 0, sizeof(info));
 
         strcpy(info.ae_name, DT_AE);
-        strcpy(info.protocol, FRCT_PROTO);
+        strcpy(info.protocol, DT_PROTO);
         info.pref_version = 1;
         info.pref_syntax = PROTO_FIXED;
         info.addr = ipcpi.dt_addr;
@@ -265,7 +267,7 @@ void dt_stop(void)
 
 int dt_write_sdu(uint64_t             dst_addr,
                  qoscube_t            qc,
-                 uint8_t              pdu_type,
+                 int                  np1_fd,
                  struct shm_du_buff * sdb)
 {
         int           fd;
@@ -280,8 +282,8 @@ int dt_write_sdu(uint64_t             dst_addr,
         }
 
         dt_pci.dst_addr = dst_addr;
-        dt_pci.qc = qc;
-        dt_pci.pdu_type = pdu_type;
+        dt_pci.qc       = qc;
+        dt_pci.fd       = np1_fd;
 
         if (dt_pci_ser(sdb, &dt_pci)) {
                 log_err("Failed to serialize PDU.");

@@ -31,7 +31,6 @@
 #include <ouroboros/cacep.h>
 
 #include "neighbors.h"
-#include "frct.h"
 #include "ribconfig.h"
 #include "ipcp.h"
 #include "ae.h"

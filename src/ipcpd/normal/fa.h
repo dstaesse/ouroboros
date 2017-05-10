@@ -26,8 +26,6 @@
 #include <ouroboros/shared.h>
 #include <ouroboros/utils.h>
 
-#include "frct.h"
-
 int  fa_init(void);
 
 void fa_fini(void);
@@ -46,8 +44,5 @@ int  fa_alloc_resp(int fd,
 int  fa_dealloc(int fd);
 
 int  fa_post_sdu(struct shm_du_buff * sdb);
-
-int  fa_post_sdu_user(cep_id_t             cep_id,
-                      struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_FA_H */

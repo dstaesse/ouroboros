@@ -36,6 +36,7 @@
 #define IPCP_NORMAL_EXEC       "@IPCP_NORMAL_TARGET@"
 #define IPCP_LOCAL_EXEC        "@IPCP_LOCAL_TARGET@"
 #define AP_MAX_FLOWS           2048
+#define AP_RES_FDS             64
 #define AP_MAX_FQUEUES         64
 #define SHM_RDRB_BLOCK_SIZE    sysconf(_SC_PAGESIZE)
 #define SHM_RDRB_MULTI_BLOCK
