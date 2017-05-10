@@ -27,6 +27,14 @@
 
 #include "dt_pci.h"
 
+#define INVALID_ADDR 0
+
+#define DT_PROTO "dt"
+#define FD_FA    1
+#define FD_DHT   2
+
+typedef uint32_t dt_cep_id_t;
+
 int  dt_init(void);
 
 void dt_fini(void);
@@ -37,7 +45,7 @@ void dt_stop(void);
 
 int  dt_write_sdu(uint64_t             dst_addr,
                   qoscube_t            qc,
-                  uint8_t              pdu_type,
+                  int                  np1_fd,
                   struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_DT_H */

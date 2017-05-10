@@ -26,8 +26,6 @@ set(SOURCE_FILES
   dt_pci.c
   enroll.c
   fa.c
-  frct.c
-  frct_pci.c
   gam.c
   graph.c
   main.c

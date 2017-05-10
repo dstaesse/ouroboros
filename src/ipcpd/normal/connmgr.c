@@ -32,7 +32,6 @@
 #include "ae.h"
 #include "connmgr.h"
 #include "enroll.h"
-#include "frct.h"
 #include "ipcp.h"
 #include "ribmgr.h"
 

@@ -74,7 +74,7 @@ static int boot_components(void)
                        &ipcpi.dir_hash_algo, sizeof(ipcpi.dir_hash_algo));
         if (len < 0) {
                 log_err("Failed to read hash length: %zd.", len);
-                goto fail_name;
+                goto fail_addr_auth;
         }
 
         ipcpi.dir_hash_algo = ntoh32(ipcpi.dir_hash_algo);
@@ -83,7 +83,7 @@ static int boot_components(void)
 
         if (rib_add(MEMBERS_PATH, ipcpi.name)) {
                 log_err("Failed to add name to " MEMBERS_PATH);
-                goto fail_name;
+                goto fail_addr_auth;
         }
 
         log_dbg("Starting components.");
@@ -91,25 +91,25 @@ static int boot_components(void)
         if (rib_read(BOOT_PATH "/addr_auth/type", &pa, sizeof(pa))
             != sizeof(pa)) {
                 log_err("Failed to read policy for address authority.");
-                goto fail_name;
+                goto fail_addr_auth;
         }
 
         if (addr_auth_init(pa)) {
                 log_err("Failed to init address authority.");
-                goto fail_name;
+                goto fail_addr_auth;
         }
 
         ipcpi.dt_addr = addr_auth_address();
         if (ipcpi.dt_addr == 0) {
                 log_err("Failed to get a valid address.");
-                goto fail_addr_auth;
+                goto fail_dir;
         }
 
         path[0] = '\0';
         rib_path_append(rib_path_append(path, MEMBERS_NAME), ipcpi.name);
         if (rib_write(path, &ipcpi.dt_addr, sizeof(&ipcpi.dt_addr))) {
                 log_err("Failed to write address to member object.");
-                goto fail_addr_auth;
+                goto fail_dir;
         }
 
         log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
@@ -118,75 +118,68 @@ static int boot_components(void)
 
         if (dir_init()) {
                 log_err("Failed to initialize directory.");
-                goto fail_addr_auth;
+                goto fail_dir;
         }
 
         if (ribmgr_init()) {
                 log_err("Failed to initialize RIB manager.");
-                goto fail_dir;
+                goto fail_ribmgr;
         }
 
         log_dbg("Ribmgr started.");
 
-        if (frct_init()) {
-                log_err("Failed to initialize FRCT.");
-                goto fail_ribmgr;
-        }
-
         if (fa_init()) {
                 log_err("Failed to initialize flow allocator ae.");
-                goto fail_frct;
+                goto fail_fa;
         }
 
         if (dt_init()) {
                 log_err("Failed to initialize data transfer ae.");
-                goto fail_fa;
+                goto fail_dt;
         }
 
         if (fa_start()) {
                 log_err("Failed to start flow allocator.");
-                goto fail_dt;
+                goto fail_fa_start;
         }
 
         if (dt_start()) {
                 log_err("Failed to start data transfer ae.");
-                goto fail_fa_start;
+                goto fail_dt_start;
         }
 
         if (enroll_start()) {
                 log_err("Failed to start enroll.");
-                goto fail_dt_start;
+                goto fail_enroll_start;
         }
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
         if (connmgr_start()) {
                 log_err("Failed to start AP connection manager.");
-                goto fail_enroll;
+                goto fail_connmgr_start;
         }
 
         return 0;
 
- fail_enroll:
+ fail_connmgr_start:
         ipcp_set_state(IPCP_INIT);
         enroll_stop();
- fail_dt_start:
+ fail_enroll_start:
         dt_stop();
- fail_fa_start:
+ fail_dt_start:
         fa_stop();
- fail_dt:
+ fail_fa_start:
         dt_fini();
- fail_fa:
+ fail_dt:
         fa_fini();
- fail_frct:
-        frct_fini();
- fail_ribmgr:
+ fail_fa:
         ribmgr_fini();
- fail_dir:
+ fail_ribmgr:
         dir_fini();
- fail_addr_auth:
+ fail_dir:
         addr_auth_fini();
- fail_name:
+ fail_addr_auth:
         free(ipcpi.dif_name);
 
         return -1;
@@ -205,8 +198,6 @@ void shutdown_components(void)
         dt_fini();
 
         fa_fini();
-
-        frct_fini();
 
         ribmgr_fini();
 
