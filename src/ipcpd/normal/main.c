@@ -229,7 +229,7 @@ static int normal_ipcp_enroll(const char *      dst,
 
         log_dbg("Enrolled with " HASH_FMT, HASH_VAL(dst));
 
-        info->algo = ipcpi.dir_hash_algo;
+        info->dir_hash_algo = ipcpi.dir_hash_algo;
 
         strcpy(info->dif_name, ipcpi.dif_name);
 
@@ -259,12 +259,8 @@ const struct ros {
         {BOOT_PATH "/dt/gam", "cacep"},
         {BOOT_PATH "/dt", "const"},
         {BOOT_PATH "/dt/const", "addr_size"},
-        {BOOT_PATH "/dt/const", "cep_id_size"},
-        {BOOT_PATH "/dt/const", "seqno_size"},
+        {BOOT_PATH "/dt/const", "fd_size"},
         {BOOT_PATH "/dt/const", "has_ttl"},
-        {BOOT_PATH "/dt/const", "has_chk"},
-        {BOOT_PATH "/dt/const", "min_pdu_size"},
-        {BOOT_PATH "/dt/const", "max_pdu_size"},
 
         /* RIB MGR COMPONENT */
         {BOOT_PATH, "rm"},
@@ -301,7 +297,7 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        hash_algo = hton32((uint32_t) conf->dir_hash_algo);
+        hash_algo = hton32((uint32_t) conf->dif_info.dir_hash_algo);
 
         assert(ntoh32(hash_algo) != 0);
 
@@ -311,32 +307,20 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         if (rib_write(BOOT_PATH "/general/dif_name",
-                      conf->dif_name,
-                      strlen(conf->dif_name) + 1) ||
+                      conf->dif_info.dif_name,
+                      strlen(conf->dif_info.dif_name) + 1) ||
             rib_write(BOOT_PATH "/general/dir_hash_algo",
                       &hash_algo,
                       sizeof(hash_algo)) ||
             rib_write(BOOT_PATH "/dt/const/addr_size",
                       &conf->addr_size,
                       sizeof(conf->addr_size)) ||
-            rib_write(BOOT_PATH "/dt/const/cep_id_size",
-                      &conf->cep_id_size,
-                      sizeof(conf->cep_id_size)) ||
-            rib_write(BOOT_PATH "/dt/const/seqno_size",
-                      &conf->seqno_size,
-                      sizeof(conf->seqno_size)) ||
+            rib_write(BOOT_PATH "/dt/const/fd_size",
+                      &conf->fd_size,
+                      sizeof(conf->fd_size)) ||
             rib_write(BOOT_PATH "/dt/const/has_ttl",
                       &conf->has_ttl,
                       sizeof(conf->has_ttl)) ||
-            rib_write(BOOT_PATH "/dt/const/has_chk",
-                      &conf->has_chk,
-                      sizeof(conf->has_chk)) ||
-            rib_write(BOOT_PATH "/dt/const/min_pdu_size",
-                      &conf->min_pdu_size,
-                      sizeof(conf->min_pdu_size)) ||
-            rib_write(BOOT_PATH "/dt/const/max_pdu_size",
-                      &conf->max_pdu_size,
-                      sizeof(conf->max_pdu_size)) ||
             rib_write(BOOT_PATH "/dt/gam/type",
                       &conf->dt_gam_type,
                       sizeof(conf->dt_gam_type)) ||
@@ -355,7 +339,7 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
                 return -1;
         }
 
-        log_dbg("Bootstrapped in DIF %s.", conf->dif_name);
+        log_dbg("Bootstrapped in DIF %s.", conf->dif_info.dif_name);
 
         return 0;
 }

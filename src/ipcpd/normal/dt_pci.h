@@ -24,7 +24,30 @@
 #define OUROBOROS_IPCPD_NORMAL_DT_PCI_H
 
 #include <ouroboros/shm_du_buff.h>
+#include <ouroboros/proto.h>
 #include <ouroboros/shared.h>
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#define DT_PROTO "dt"
+#define FD_FA    1
+#define FD_DHT   2
+
+/* Abstract syntax */
+enum dtp_fields {
+        DTP_DST = 0,   /* DST ADDRESS */
+        DTP_QOS,       /* QOS ID      */
+        DTP_DFD,       /* DEST FD     */
+        DTP_TTL,       /* TTL FIELD   */
+        DTP_NUM_FIELDS /* number of fields */
+};
+
+/* Default field lengths */
+#define TTL_LEN 1
+#define QOS_LEN 1
+#define DFD_LEN 1
+#define DST_LEN 2
 
 struct dt_pci {
         uint64_t  dst_addr;

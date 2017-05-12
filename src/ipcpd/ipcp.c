@@ -133,22 +133,21 @@ static void thread_exit(ssize_t id)
 
 static void * ipcp_main_loop(void * o)
 {
-        int     lsockfd;
-        uint8_t buf[IPCP_MSG_BUF_SIZE];
-
-        ipcp_msg_t * msg;
-        ssize_t      count;
-        buffer_t     buffer;
-        ipcp_msg_t   ret_msg = IPCP_MSG__INIT;
-
-        ipcp_config_msg_t * conf_msg;
+        int                 lsockfd;
+        uint8_t             buf[IPCP_MSG_BUF_SIZE];
+        ssize_t             count;
+        buffer_t            buffer;
         struct ipcp_config  conf;
         struct dif_info     info;
 
-        struct timeval ltv = {(SOCKET_TIMEOUT / 1000),
-                              (SOCKET_TIMEOUT % 1000) * 1000};
+        ipcp_config_msg_t * conf_msg;
+        ipcp_msg_t *        msg;
+        ipcp_msg_t          ret_msg  = IPCP_MSG__INIT;
+        dif_info_msg_t      dif_info = DIF_INFO_MSG__INIT;
+        struct timeval      ltv      = {(SOCKET_TIMEOUT / 1000),
+                                        (SOCKET_TIMEOUT % 1000) * 1000};
 
-        ssize_t id = (ssize_t)  o;
+        ssize_t             id       = (ssize_t)  o;
 
         while (true) {
 #ifdef __FreeBSD__
@@ -213,23 +212,19 @@ static void * ipcp_main_loop(void * o)
 
                         conf_msg = msg->conf;
                         conf.type = conf_msg->ipcp_type;
-                        conf.dir_hash_algo = conf_msg->dir_hash_algo;
-                        conf.dif_name = conf_msg->dif_name;
-                        if (conf.dif_name == NULL) {
+                        conf.dif_info.dir_hash_algo =
+                                conf_msg->dif_info->dir_hash_algo;
+                        strcpy(conf.dif_info.dif_name,
+                               conf_msg->dif_info->dif_name);
+                        if (conf.dif_info.dif_name == NULL) {
                                 ret_msg.has_result = true;
                                 ret_msg.result = -1;
                                 break;
                         }
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
                                 conf.addr_size = conf_msg->addr_size;
-                                conf.cep_id_size = conf_msg->cep_id_size;
-                                conf.pdu_length_size =
-                                        conf_msg->pdu_length_size;
-                                conf.seqno_size = conf_msg->seqno_size;
+                                conf.fd_size = conf_msg->fd_size;
                                 conf.has_ttl = conf_msg->has_ttl;
-                                conf.has_chk = conf_msg->has_chk;
-                                conf.min_pdu_size = conf_msg->min_pdu_size;
-                                conf.max_pdu_size = conf_msg->max_pdu_size;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
                                 conf.dt_gam_type = conf_msg->dt_gam_type;
                                 conf.rm_gam_type = conf_msg->rm_gam_type;
@@ -264,9 +259,9 @@ static void * ipcp_main_loop(void * o)
                                                                 &info);
 
                         if (ret_msg.result == 0) {
-                                ret_msg.has_dir_hash_algo = true;
-                                ret_msg.dir_hash_algo     = info.algo;
-                                ret_msg.dif_name          = info.dif_name;
+                                ret_msg.dif_info = &dif_info;
+                                dif_info.dir_hash_algo = info.dir_hash_algo;
+                                dif_info.dif_name      = info.dif_name;
                         }
                         break;
                 case IPCP_MSG_CODE__IPCP_REG:

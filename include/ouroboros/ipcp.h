@@ -57,22 +57,22 @@ enum hash_algo {
         HASH_SHA3_512
 };
 
+#define DIF_NAME_SIZE 256
+
+struct dif_info {
+        char           dif_name[DIF_NAME_SIZE];
+        enum hash_algo dir_hash_algo;
+};
+
 struct ipcp_config {
-        char *             dif_name;
+        struct dif_info    dif_info;
+
         enum ipcp_type     type;
-        enum hash_algo     dir_hash_algo;
 
-        /* Normal DIF */
+        /* DT syntax */
         uint8_t            addr_size;
-        uint8_t            cep_id_size;
-        uint8_t            pdu_length_size;
-        uint8_t            seqno_size;
-
+        uint8_t            fd_size;
         bool               has_ttl;
-        bool               has_chk;
-
-        uint32_t           min_pdu_size;
-        uint32_t           max_pdu_size;
 
         enum pol_addr_auth addr_auth_type;
         enum pol_gam       dt_gam_type;
@@ -84,14 +84,6 @@ struct ipcp_config {
 
         /* Shim Ethernet LLC */
         char *             if_name;
-};
-
-#define DIF_NAME_SIZE 256
-
-/* capability report of a DIF */
-struct dif_info {
-        enum hash_algo algo;
-        char           dif_name[DIF_NAME_SIZE];
 };
 
 #endif /* OUROBOROS_IPCP_H */

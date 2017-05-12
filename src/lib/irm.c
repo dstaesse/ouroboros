@@ -93,6 +93,7 @@ int irm_bootstrap_ipcp(pid_t                      api,
 {
         irm_msg_t         msg      = IRM_MSG__INIT;
         ipcp_config_msg_t config   = IPCP_CONFIG_MSG__INIT;
+        dif_info_msg_t    dif_info = DIF_INFO_MSG__INIT;
         irm_msg_t *       recv_msg = NULL;
         int               ret      = -1;
 
@@ -103,42 +104,34 @@ int irm_bootstrap_ipcp(pid_t                      api,
         msg.has_api = true;
         msg.api     = api;
 
+        config.dif_info = &dif_info;
         msg.conf = &config;
-        config.dif_name = conf->dif_name;
+
+        dif_info.dif_name = (char *) conf->dif_info.dif_name;
+        dif_info.dir_hash_algo = conf->dif_info.dir_hash_algo;
+
         config.ipcp_type = conf->type;
-        config.dir_hash_algo = (enum hash_algo) conf->dir_hash_algo;
 
         switch (conf->type) {
         case IPCP_NORMAL:
-                config.has_addr_size = true;
-                config.has_cep_id_size = true;
-                config.has_pdu_length_size = true;
-                config.has_seqno_size = true;
-                config.has_has_ttl = true;
-                config.has_has_chk = true;
-                config.has_min_pdu_size = true;
-                config.has_max_pdu_size = true;
+                config.has_addr_size      = true;
+                config.addr_size          = conf->addr_size;
+                config.has_fd_size        = true;
+                config.fd_size            = conf->fd_size;
+                config.has_has_ttl        = true;
+                config.has_ttl            = conf->has_ttl;
                 config.has_addr_auth_type = true;
-                config.has_dt_gam_type = true;
-                config.has_rm_gam_type = true;
-
-                config.addr_size = conf->addr_size;
-                config.cep_id_size = conf->cep_id_size;
-                config.pdu_length_size = conf->pdu_length_size;
-                config.seqno_size = conf->seqno_size;
-                config.has_ttl = conf->has_ttl;
-                config.has_chk = conf->has_chk;
-                config.min_pdu_size = conf->min_pdu_size;
-                config.max_pdu_size = conf->max_pdu_size;
-                config.addr_auth_type = conf->addr_auth_type;
-                config.dt_gam_type = conf->dt_gam_type;
-                config.rm_gam_type = conf->rm_gam_type;
+                config.addr_auth_type     = conf->addr_auth_type;
+                config.has_dt_gam_type    = true;
+                config.dt_gam_type        = conf->dt_gam_type;
+                config.has_rm_gam_type    = true;
+                config.rm_gam_type        = conf->rm_gam_type;
                 break;
         case IPCP_SHIM_UDP:
-                config.has_ip_addr = true;
-                config.ip_addr = conf->ip_addr;
+                config.has_ip_addr  = true;
+                config.ip_addr      = conf->ip_addr;
                 config.has_dns_addr = true;
-                config.dns_addr = conf->dns_addr;
+                config.dns_addr     = conf->dns_addr;
                 break;
         case IPCP_LOCAL:
                 break;

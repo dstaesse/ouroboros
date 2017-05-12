@@ -25,21 +25,19 @@
 #define OUROBOROS_CACEP_H
 
 #include <ouroboros/cdefs.h>
+#include <ouroboros/proto.h>
 
 #include <stdint.h>
-
-enum proto_concrete_syntax {
-        PROTO_GPB = 0,
-        PROTO_ASN_1,
-        PROTO_FIXED
-};
+#include <sys/types.h>
 
 struct conn_info {
         char                       ae_name[64];
         char                       protocol[64];
         uint32_t                   pref_version;
         enum proto_concrete_syntax pref_syntax;
-        uint64_t                   addr;
+        struct proto_field         fixed_conc_syntax[PROTO_MAX_FIELDS];
+        size_t                     num_fields;
+        uint64_t                   addr; /* AE-I name */
 };
 
 __BEGIN_DECLS

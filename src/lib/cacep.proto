@@ -23,12 +23,18 @@
 
 syntax = "proto2";
 
+message fixed_conc_syntax_msg {
+        repeated uint32 fids = 1;
+        repeated uint32 lens = 2;
+}
+
 message cacep_msg {
-        required string ae_name     = 1;
-        required string protocol    = 2;
-        required int32 pref_version = 3;
-        repeated int32 supp_version = 4;
-        required int32 pref_syntax  = 5;
-        repeated int32 supp_syntax  = 6;
-        required uint64 address     = 7;
+        required string ae_name                    = 1;
+        required string protocol                   = 2;
+        required int32 pref_version                = 3;
+        repeated int32 supp_version                = 4;
+        required int32 pref_syntax                 = 5;
+        repeated int32 supp_syntax                 = 6;
+        optional fixed_conc_syntax_msg syntax_spec = 7;
+        required uint64 address                    = 8;
 }
