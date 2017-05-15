@@ -29,12 +29,6 @@
 
 #define INVALID_ADDR 0
 
-#define DT_PROTO "dt"
-#define FD_FA    1
-#define FD_DHT   2
-
-typedef uint32_t dt_cep_id_t;
-
 int  dt_init(void);
 
 void dt_fini(void);

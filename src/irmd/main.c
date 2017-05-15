@@ -423,19 +423,19 @@ static int bootstrap_ipcp(pid_t               api,
                 return -1;
         }
 
-        entry->dif_name = strdup(conf->dif_name);
+        entry->dif_name = strdup(conf->dif_info->dif_name);
         if (entry->dif_name == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Failed to set name of DIF.");
                 return -ENOMEM;
         }
 
-        entry->dir_hash_algo = conf->dir_hash_algo;
+        entry->dir_hash_algo = conf->dif_info->dir_hash_algo;
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Bootstrapped IPCP %d in DIF %s.",
-                 entry->api, conf->dif_name);
+                 entry->api, conf->dif_info->dif_name);
 
         return 0;
 }
@@ -484,7 +484,7 @@ static int enroll_ipcp(pid_t  api,
                 return -ENOMEM;
         }
 
-        entry->dir_hash_algo = info.algo;
+        entry->dir_hash_algo = info.dir_hash_algo;
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 

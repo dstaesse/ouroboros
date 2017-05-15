@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * The sockets layer to communicate between daemons
+ * Protocol syntax definitions
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -21,37 +21,24 @@
  * 02110-1301 USA
  */
 
-#ifndef OUROBOROS_SOCKETS_H
-#define OUROBOROS_SOCKETS_H
+#ifndef OUROBOROS_PROTO_H
+#define OUROBOROS_PROTO_H
 
 #include <sys/types.h>
 
-#include "ipcp_config.pb-c.h"
-typedef IpcpConfigMsg ipcp_config_msg_t;
-typedef DifInfoMsg dif_info_msg_t;
+#define PROTO_FIELD_ABSENT   -1
+#define PROTO_FIELD_VARIABLE  0
+#define PROTO_MAX_FIELDS      128
 
-#include "irmd_messages.pb-c.h"
-typedef IrmMsg irm_msg_t;
+enum proto_concrete_syntax {
+        PROTO_GPB = 0,
+        PROTO_ASN_1,
+        PROTO_FIXED
+};
 
-#include "ipcpd_messages.pb-c.h"
-typedef IpcpMsg ipcp_msg_t;
+struct proto_field {
+        size_t  fid; /* an ID for the protocol field */
+        ssize_t len; /* 0 variable, -1 not present   */
+};
 
-#define SOCK_PATH "/var/run/ouroboros/"
-#define SOCK_PATH_SUFFIX ".sock"
-
-#define IRM_SOCK_PATH SOCK_PATH "irm" SOCK_PATH_SUFFIX
-#define IRM_MSG_BUF_SIZE 256
-
-#define IPCP_SOCK_PATH_PREFIX SOCK_PATH "ipcp"
-#define IPCP_MSG_BUF_SIZE IRM_MSG_BUF_SIZE
-
-/* Returns the full socket path of an IPCP */
-char *      ipcp_sock_path(pid_t api);
-
-int         server_socket_open(char * file_name);
-
-int         client_socket_open(char * file_name);
-
-irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
-
-#endif
+#endif /* OUROBOROS_PROTO_H */

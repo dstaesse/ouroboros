@@ -25,7 +25,6 @@
 #include <ouroboros/crc32.h>
 #include <ouroboros/rib.h>
 
-#include "dt_const.h"
 #include "dt_pci.h"
 #include "ribconfig.h"
 
@@ -33,16 +32,13 @@
 #include <string.h>
 #include <assert.h>
 
-#define PDU_TYPE_SIZE 1
-#define QC_SIZE       1
 #define DEFAULT_TTL   60
-#define TTL_SIZE      1
-#define CHK_SIZE      4
 
 struct {
-        struct dt_const dtc;
+        uint8_t         addr_size;
+        uint8_t         fd_size;
+        bool            has_ttl;
         size_t          head_size;
-        size_t          tail_size;
 
         /* offsets */
         size_t          qc_o;
@@ -50,29 +46,28 @@ struct {
         size_t          fd_o;
 } dt_pci_info;
 
-int dt_pci_init(void)
+int dt_pci_init()
 {
         /* read dt constants from the RIB */
         if (rib_read(BOOT_PATH "/dt/const/addr_size",
-                     &dt_pci_info.dtc.addr_size,
-                     sizeof(dt_pci_info.dtc.addr_size)) < 0 ||
+                     &dt_pci_info.addr_size,
+                     sizeof(dt_pci_info.addr_size)) < 0 ||
+            rib_read(BOOT_PATH "/dt/const/fd_size",
+                     &dt_pci_info.fd_size,
+                     sizeof(dt_pci_info.fd_size)) < 0 ||
             rib_read(BOOT_PATH "/dt/const/has_ttl",
-                     &dt_pci_info.dtc.has_ttl,
-                     sizeof(dt_pci_info.dtc.has_ttl)) < 0 ||
-            rib_read(BOOT_PATH "/dt/const/has_chk",
-                     &dt_pci_info.dtc.has_chk,
-                     sizeof(dt_pci_info.dtc.has_chk)) < 0)
+                     &dt_pci_info.has_ttl,
+                     sizeof(dt_pci_info.has_ttl)) < 0)
                 return -1;
 
-        dt_pci_info.qc_o = dt_pci_info.dtc.addr_size;
-        dt_pci_info.ttl_o = dt_pci_info.qc_o + QC_SIZE;
-        if (dt_pci_info.dtc.has_ttl)
-                dt_pci_info.fd_o = dt_pci_info.ttl_o + TTL_SIZE;
+        dt_pci_info.qc_o = dt_pci_info.addr_size;
+        dt_pci_info.ttl_o = dt_pci_info.qc_o + QOS_LEN;
+        if (dt_pci_info.has_ttl)
+                dt_pci_info.fd_o = dt_pci_info.ttl_o + TTL_LEN;
         else
                 dt_pci_info.fd_o = dt_pci_info.ttl_o;
 
-        dt_pci_info.head_size = dt_pci_info.fd_o + PDU_TYPE_SIZE;
-        dt_pci_info.tail_size = dt_pci_info.dtc.has_chk ? CHK_SIZE : 0;
+        dt_pci_info.head_size = dt_pci_info.fd_o + dt_pci_info.fd_size;
 
         return 0;
 }
@@ -85,7 +80,6 @@ int dt_pci_ser(struct shm_du_buff * sdb,
                struct dt_pci *      dt_pci)
 {
         uint8_t * head;
-        uint8_t * tail;
         uint8_t ttl = DEFAULT_TTL;
 
         assert(sdb);
@@ -96,22 +90,11 @@ int dt_pci_ser(struct shm_du_buff * sdb,
                 return -EPERM;
 
         /* FIXME: Add check and operations for Big Endian machines */
-        memcpy(head, &dt_pci->dst_addr, dt_pci_info.dtc.addr_size);
-        memcpy(head + dt_pci_info.qc_o, &dt_pci->qc, QC_SIZE);
-        if (dt_pci_info.dtc.has_ttl)
-                memcpy(head + dt_pci_info.ttl_o, &ttl, TTL_SIZE);
-        memcpy(head + dt_pci_info.fd_o, &dt_pci->fd, PDU_TYPE_SIZE);
-
-        if (dt_pci_info.dtc.has_chk) {
-                tail = shm_du_buff_tail_alloc(sdb, dt_pci_info.tail_size);
-                if (tail == NULL) {
-                        shm_du_buff_head_release(sdb, dt_pci_info.head_size);
-                        return -EPERM;
-                }
-
-                *((uint32_t *) tail) = 0;
-                crc32((uint32_t *) tail, head, tail - head);
-        }
+        memcpy(head, &dt_pci->dst_addr, dt_pci_info.addr_size);
+        memcpy(head + dt_pci_info.qc_o, &dt_pci->qc, QOS_LEN);
+        if (dt_pci_info.has_ttl)
+                memcpy(head + dt_pci_info.ttl_o, &ttl, TTL_LEN);
+        memcpy(head + dt_pci_info.fd_o, &dt_pci->fd, dt_pci_info.fd_size);
 
         return 0;
 }
@@ -127,17 +110,17 @@ void dt_pci_des(struct shm_du_buff * sdb,
         head = shm_du_buff_head(sdb);
 
         /* FIXME: Add check and operations for Big Endian machines */
-        memcpy(&dt_pci->dst_addr, head, dt_pci_info.dtc.addr_size);
-        memcpy(&dt_pci->qc, head + dt_pci_info.qc_o, QC_SIZE);
+        memcpy(&dt_pci->dst_addr, head, dt_pci_info.addr_size);
+        memcpy(&dt_pci->qc, head + dt_pci_info.qc_o, QOS_LEN);
 
-        if (dt_pci_info.dtc.has_ttl) {
+        if (dt_pci_info.has_ttl) {
                 --*(head + dt_pci_info.ttl_o); /* decrease TTL */
-                memcpy(&dt_pci->ttl, head + dt_pci_info.ttl_o, TTL_SIZE);
+                memcpy(&dt_pci->ttl, head + dt_pci_info.ttl_o, TTL_LEN);
         } else {
                 dt_pci->ttl = 1;
         }
 
-        memcpy(&dt_pci->fd, head + dt_pci_info.fd_o, PDU_TYPE_SIZE);
+        memcpy(&dt_pci->fd, head + dt_pci_info.fd_o, dt_pci_info.fd_size);
 }
 
 void dt_pci_shrink(struct shm_du_buff * sdb)
@@ -145,5 +128,4 @@ void dt_pci_shrink(struct shm_du_buff * sdb)
         assert(sdb);
 
         shm_du_buff_head_release(sdb, dt_pci_info.head_size);
-        shm_du_buff_tail_release(sdb, dt_pci_info.tail_size);
 }

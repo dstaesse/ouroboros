@@ -241,14 +241,14 @@ int ipcp_enroll(pid_t             api,
                 return ret;
         }
 
-        if (!recv_msg->has_dir_hash_algo || recv_msg->dif_name == NULL) {
+        if (recv_msg->dif_info == NULL) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
                 return -EIPCP;
         }
 
-        info->algo = recv_msg->dir_hash_algo;
+        info->dir_hash_algo = recv_msg->dif_info->dir_hash_algo;
 
-        strcpy(info->dif_name, recv_msg->dif_name);
+        strcpy(info->dif_name, recv_msg->dif_info->dif_name);
 
         ipcp_msg__free_unpacked(recv_msg, NULL);
 

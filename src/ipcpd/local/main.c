@@ -119,7 +119,7 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        ipcpi.dir_hash_algo = conf->dir_hash_algo;
+        ipcpi.dir_hash_algo = conf->dif_info.dir_hash_algo;
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
