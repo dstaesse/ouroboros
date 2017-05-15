@@ -23,6 +23,7 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_ROUTING_H
 #define OUROBOROS_IPCPD_NORMAL_ROUTING_H
 
+#include <ouroboros/ipcp.h>
 #include <ouroboros/qos.h>
 
 #include "pff.h"
@@ -30,11 +31,8 @@
 
 #include <stdint.h>
 
-/*
- * Routing will take a type in the future,
- * to allow different policies.
- */
-int                routing_init(struct nbs * nbs);
+int                routing_init(enum pol_routing pr,
+                                struct nbs *     nbs);
 
 void               routing_fini(void);
 

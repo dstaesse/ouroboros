@@ -88,7 +88,7 @@ static int boot_components(void)
 
         log_dbg("Starting components.");
 
-        if (rib_read(BOOT_PATH "/addr_auth/type", &pa, sizeof(pa))
+        if (rib_read(BOOT_PATH "/dt/addr_auth/type", &pa, sizeof(pa))
             != sizeof(pa)) {
                 log_err("Failed to read policy for address authority.");
                 goto fail_addr_auth;
@@ -261,17 +261,17 @@ const struct ros {
         {BOOT_PATH "/dt/const", "addr_size"},
         {BOOT_PATH "/dt/const", "fd_size"},
         {BOOT_PATH "/dt/const", "has_ttl"},
+        {BOOT_PATH "/dt", "addr_auth"},
+        {BOOT_PATH "/dt/addr_auth", "type"},
+        {BOOT_PATH "/dt", "routing"},
+        {BOOT_PATH "/dt/routing", "type"},
 
         /* RIB MGR COMPONENT */
         {BOOT_PATH, "rm"},
-
         {BOOT_PATH "/rm","gam"},
         {BOOT_PATH "/rm/gam", "type"},
         {BOOT_PATH "/rm/gam", "cacep"},
 
-        /* ADDR AUTH COMPONENT */
-        {BOOT_PATH, "addr_auth"},
-        {BOOT_PATH "/addr_auth", "type"},
         {NULL, NULL}
 };
 
@@ -327,9 +327,12 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
             rib_write(BOOT_PATH "/rm/gam/type",
                       &conf->rm_gam_type,
                       sizeof(conf->rm_gam_type)) ||
-            rib_write(BOOT_PATH "/addr_auth/type",
+            rib_write(BOOT_PATH "/dt/addr_auth/type",
                       &conf->addr_auth_type,
-                      sizeof(conf->addr_auth_type))) {
+                      sizeof(conf->addr_auth_type)) ||
+            rib_write(BOOT_PATH "/dt/routing/type",
+                      &conf->routing_type,
+                      sizeof(conf->routing_type))) {
                 log_err("Failed to write boot info to RIB.");
                 return -1;
         }

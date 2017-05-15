@@ -126,6 +126,8 @@ int irm_bootstrap_ipcp(pid_t                      api,
                 config.dt_gam_type        = conf->dt_gam_type;
                 config.has_rm_gam_type    = true;
                 config.rm_gam_type        = conf->rm_gam_type;
+                config.has_routing_type   = true;
+                config.routing_type       = conf->routing_type;
                 break;
         case IPCP_SHIM_UDP:
                 config.has_ip_addr  = true;

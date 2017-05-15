@@ -46,18 +46,19 @@
 #define SHA3_384          "SHA3_384"
 #define SHA3_512          "SHA3_512"
 
-#define DEFAULT_HASH_ALGO HASH_SHA3_256
-#define DEFAULT_HASH_STR  SHA3_256
-#define DEFAULT_ADDR_SIZE 4
-#define DEFAULT_FD_SIZE   2
-#define DEFAULT_DDNS      0
-#define DEFAULT_ADDR_AUTH FLAT_RANDOM
-#define DEFAULT_DT_GAM    COMPLETE
-#define DEFAULT_RM_GAM    COMPLETE
-#define ADDR_AUTH_FLAT    "flat"
-
-#define DT_GAM_COMPLETE   "complete"
-#define RM_GAM_COMPLETE   "complete"
+#define DEFAULT_HASH_ALGO  HASH_SHA3_256
+#define DEFAULT_HASH_STR   SHA3_256
+#define DEFAULT_ADDR_SIZE  4
+#define DEFAULT_FD_SIZE    2
+#define DEFAULT_DDNS       0
+#define DEFAULT_ADDR_AUTH  FLAT_RANDOM
+#define DEFAULT_DT_GAM     COMPLETE
+#define DEFAULT_RM_GAM     COMPLETE
+#define DEFAULT_ROUTING    LINK_STATE
+#define ADDR_AUTH_FLAT     "flat"
+#define DT_GAM_COMPLETE    "complete"
+#define RM_GAM_COMPLETE    "complete"
+#define ROUTING_LINK_STATE "link_state"
 
 static void usage(void)
 {
@@ -80,6 +81,7 @@ static void usage(void)
                " (default: %s)]\n"
                "                [rm_gam <rib manager graph adjacency manager>"
                " (default: %s)]\n"
+               "                [routing <routing policy> (default: %s)]\n"
                "if TYPE == " SHIM_UDP "\n"
                "                ip <IP address in dotted notation>\n"
                "                [dns <DDNS IP address in dotted notation>"
@@ -87,7 +89,8 @@ static void usage(void)
                "if TYPE == " SHIM_ETH_LLC "\n"
                "                if_name <interface name>\n",
                DEFAULT_HASH_STR, DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE,
-               ADDR_AUTH_FLAT, DT_GAM_COMPLETE, RM_GAM_COMPLETE, DEFAULT_DDNS);
+               ADDR_AUTH_FLAT, DT_GAM_COMPLETE, RM_GAM_COMPLETE,
+               ROUTING_LINK_STATE, DEFAULT_DDNS);
 }
 
 int do_bootstrap_ipcp(int argc, char ** argv)
@@ -102,6 +105,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         enum pol_addr_auth addr_auth_type = DEFAULT_ADDR_AUTH;
         enum pol_gam       dt_gam_type    = DEFAULT_DT_GAM;
         enum pol_gam       rm_gam_type    = DEFAULT_RM_GAM;
+        enum pol_routing   routing_type   = DEFAULT_ROUTING;
         uint32_t           ip_addr        = 0;
         uint32_t           dns_addr       = DEFAULT_DDNS;
         char *             ipcp_type      = NULL;
@@ -149,6 +153,9 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 } else if (matches(*argv, "rm_gam") == 0) {
                         if (strcmp(RM_GAM_COMPLETE, *(argv + 1)) == 0)
                                 rm_gam_type = COMPLETE;
+                } else if (matches(*argv, "routing") == 0) {
+                        if (strcmp(ROUTING_LINK_STATE, *(argv + 1)) == 0)
+                                routing_type = LINK_STATE;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "ipcp bootstrap\".\n", *argv);
@@ -191,6 +198,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.addr_auth_type = addr_auth_type;
                 conf.dt_gam_type = dt_gam_type;
                 conf.rm_gam_type = rm_gam_type;
+                conf.routing_type = routing_type;
         } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {
                 conf.type = IPCP_SHIM_UDP;
                 if (ip_addr == 0) {

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Normal IPC Process - RIB configuration
+ * Routing policy ops
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,20 +20,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_RIB_CONFIG_H
-#define OUROBOROS_IPCPD_NORMAL_RIB_CONFIG_H
+#ifndef OUROBOROS_IPCPD_NORMAL_POL_ROUTING_OPS_H
+#define OUROBOROS_IPCPD_NORMAL_POL_ROUTING_OPS_H
 
-/* RIB configuration for normal */
-#define RIB_MAX_PATH_LEN 256
+#include "pff.h"
 
-#define DLR          "/"
-#define BOOT_NAME    "boot"
-#define MEMBERS_NAME "members"
-#define DIR_NAME     "directory"
-#define ROUTING_NAME "fsdb"
-#define DIR_PATH     DLR DIR_NAME
-#define BOOT_PATH    DLR BOOT_NAME
-#define MEMBERS_PATH DLR MEMBERS_NAME
-#define ROUTING_PATH DLR ROUTING_NAME
+struct pol_routing_ops {
+        int                (* init)(struct nbs * nbs);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_RIB_CONFIG_H */
+        void               (* fini)(void);
+
+        struct routing_i * (* routing_i_create)(struct pff * pff);
+
+        void               (* routing_i_destroy)(struct routing_i * instance);
+};
+
+#endif /* OUROBOROS_IPCPD_NORMAL_POL_ROUTING_OPS_H */

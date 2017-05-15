@@ -15,7 +15,8 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 set(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 
 protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS flow_alloc.proto)
-protobuf_generate_c(FSO_SRCS FSO_HDRS fso.proto)
+# Add GPB sources of policies last
+protobuf_generate_c(FSO_SRCS FSO_HDRS pol/fso.proto)
 
 set(SOURCE_FILES
   # Add source files here
@@ -27,7 +28,6 @@ set(SOURCE_FILES
   enroll.c
   fa.c
   gam.c
-  graph.c
   main.c
   neighbors.c
   pff.c
@@ -37,6 +37,8 @@ set(SOURCE_FILES
   # Add policies last
   pol/complete.c
   pol/flat.c
+  pol/link_state.c
+  pol/graph.c
   )
 
 add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
@@ -50,5 +52,4 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
 
-# Enable once ipcp-normal has tests
-add_subdirectory(tests)
+add_subdirectory(pol/tests)
