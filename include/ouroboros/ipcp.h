@@ -48,6 +48,10 @@ enum pol_gam {
         COMPLETE = 0
 };
 
+enum pol_routing {
+        LINK_STATE = 0
+};
+
 enum hash_algo {
         HASH_CRC32 = 0,
         HASH_MD5,
@@ -77,6 +81,7 @@ struct ipcp_config {
         enum pol_addr_auth addr_auth_type;
         enum pol_gam       dt_gam_type;
         enum pol_gam       rm_gam_type;
+        enum pol_routing   routing_type;
 
         /* Shim UDP */
         uint32_t           ip_addr;

@@ -143,6 +143,13 @@ int dt_init(void)
         int              i;
         int              j;
         struct conn_info info;
+        enum pol_routing pr;
+
+        if (rib_read(BOOT_PATH "/dt/routing/type", &pr, sizeof(pr))
+            != sizeof(pr)) {
+                log_err("Failed to read policy for routing.");
+                return -1;
+        }
 
         if (dt_pci_init()) {
                 log_err("Failed to init shm dt_pci.");
@@ -175,7 +182,7 @@ int dt_init(void)
                 goto fail_nbs;
         }
 
-        if (routing_init(dt.nbs)) {
+        if (routing_init(pr, dt.nbs)) {
                 log_err("Failed to init routing.");
                 goto fail_nbs_notifier;
         }

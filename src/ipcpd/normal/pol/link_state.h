@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Normal IPC Process - RIB configuration
+ * Link state routing policy
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,20 +20,24 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_RIB_CONFIG_H
-#define OUROBOROS_IPCPD_NORMAL_RIB_CONFIG_H
+#ifndef OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H
+#define OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H
 
-/* RIB configuration for normal */
-#define RIB_MAX_PATH_LEN 256
+#include "pol-routing-ops.h"
 
-#define DLR          "/"
-#define BOOT_NAME    "boot"
-#define MEMBERS_NAME "members"
-#define DIR_NAME     "directory"
-#define ROUTING_NAME "fsdb"
-#define DIR_PATH     DLR DIR_NAME
-#define BOOT_PATH    DLR BOOT_NAME
-#define MEMBERS_PATH DLR MEMBERS_NAME
-#define ROUTING_PATH DLR ROUTING_NAME
+int                link_state_init(struct nbs * nbs);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_RIB_CONFIG_H */
+void               link_state_fini(void);
+
+struct routing_i * link_state_routing_i_create(struct pff * pff);
+
+void               link_state_routing_i_destroy(struct routing_i * instance);
+
+struct pol_routing_ops link_state_ops = {
+        .init              = link_state_init,
+        .fini              = link_state_fini,
+        .routing_i_create  = link_state_routing_i_create,
+        .routing_i_destroy = link_state_routing_i_destroy
+};
+
+#endif /* OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H */
