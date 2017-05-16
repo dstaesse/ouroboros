@@ -19,7 +19,17 @@ else ()
     # Python assumes C99 since Python 3.6
     test_and_set_c_compiler_flag_global(-std=c99)
 
-    swig_add_module(ouroboros python ouroboros.i)
+    # CMake > 3.8 deprecates swig_add_module
+    if (CMAKE_MAKOR_VERSION VERSION_LESS 3 AND
+        CMAKE_MINOR_VERSION VERSION_LESS 8)
+      swig_add_module(ouroboros python ouroboros.i)
+    else ()
+      swig_add_library(ouroboros
+        LANGUAGE python
+        SOURCES ouroboros.i
+        TYPE MODULE)
+    endif()
+
     swig_link_libraries(ouroboros ${PYTHON_LIBRARIES} ouroboros)
 
     # Installation directives
