@@ -20,8 +20,7 @@ else ()
     test_and_set_c_compiler_flag_global(-std=c99)
 
     # CMake > 3.8 deprecates swig_add_module
-    if (CMAKE_MAKOR_VERSION VERSION_LESS 3 AND
-        CMAKE_MINOR_VERSION VERSION_LESS 8)
+    if (${CMAKE_VERSION} VERSION_LESS 3.8.0)
       swig_add_module(ouroboros python ouroboros.i)
     else ()
       swig_add_library(ouroboros
