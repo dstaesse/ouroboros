@@ -23,13 +23,15 @@
 #define OUROBOROS_PREFIX "dt-ae"
 
 #include <ouroboros/config.h>
+#include <ouroboros/bitmap.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/dev.h>
 
-#include "dt.h"
 #include "connmgr.h"
 #include "ipcp.h"
+#include "dt.h"
 #include "dt_pci.h"
 #include "pff.h"
 #include "neighbors.h"
@@ -47,11 +49,20 @@
 #include <inttypes.h>
 #include <assert.h>
 
+struct ae_info {
+        int    (*post_sdu)(void * ae, struct shm_du_buff * sdb);
+        void * ae;
+};
+
 struct {
         struct sdu_sched * sdu_sched;
 
         struct pff *       pff[QOS_CUBE_MAX];
         struct routing_i * routing[QOS_CUBE_MAX];
+
+        struct bmp *       res_fds;
+        struct ae_info     aes[AP_RES_FDS];
+        pthread_rwlock_t   lock;
 
         struct gam *       gam;
         struct nbs *       nbs;
@@ -120,18 +131,12 @@ static int sdu_handler(int                  fd,
                         return 0;
                 }
 
-                switch (dt_pci.fd) {
-                case FD_FA:
-                        if (fa_post_sdu(sdb)) {
-                                ipcp_sdb_release(sdb);
-                                return -1;
-                        }
-                        return 0;
-                default:
-                        log_err("Unknown PDU type received.");
+                if (dt.aes[dt_pci.fd].post_sdu(dt.aes[dt_pci.fd].ae, sdb)) {
                         ipcp_sdb_release(sdb);
                         return -1;
                 }
+
+                return 0;
         }
 
         /* silence compiler */
@@ -167,24 +172,24 @@ int dt_init(void)
         dt.ae = connmgr_ae_create(info);
         if (dt.ae == NULL) {
                 log_err("Failed to create AE struct.");
-                return -1;
+                goto fail_connmgr;
         }
 
         dt.nbs = nbs_create();
         if (dt.nbs == NULL) {
                 log_err("Failed to create neighbors struct.");
-                goto fail_connmgr;
+                goto fail_nbs;
         }
 
         dt.nb_notifier.notify_call = dt_neighbor_event;
         if (nbs_reg_notifier(dt.nbs, &dt.nb_notifier)) {
                 log_err("Failed to register notifier.");
-                goto fail_nbs;
+                goto fail_nbs_notifier;
         }
 
         if (routing_init(pr, dt.nbs)) {
                 log_err("Failed to init routing.");
-                goto fail_nbs_notifier;
+                goto fail_routing;
         }
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
@@ -192,7 +197,7 @@ int dt_init(void)
                 if (dt.pff[i] == NULL) {
                         for (j = 0; j < i; ++j)
                                 pff_destroy(dt.pff[j]);
-                        goto fail_routing;
+                        goto fail_pff;
                 }
         }
 
@@ -201,22 +206,39 @@ int dt_init(void)
                 if (dt.routing[i] == NULL) {
                         for (j = 0; j < i; ++j)
                                 routing_i_destroy(dt.routing[j]);
-                        goto fail_pff;
+                        goto fail_routing_i;
                 }
         }
 
+        if (pthread_rwlock_init(&dt.lock, NULL)) {
+                log_err("Failed to init rwlock.");
+                goto fail_rwlock_init;
+        }
+
+        dt.res_fds = bmp_create(AP_RES_FDS, 0);
+        if (dt.res_fds == NULL)
+                goto fail_res_fds;
+
         return 0;
- fail_pff:
+
+ fail_res_fds:
+        pthread_rwlock_destroy(&dt.lock);
+ fail_rwlock_init:
+        for (j = 0; j < QOS_CUBE_MAX; ++j)
+                routing_i_destroy(dt.routing[j]);
+ fail_routing_i:
         for (i = 0; i < QOS_CUBE_MAX; ++i)
                 pff_destroy(dt.pff[i]);
- fail_routing:
+ fail_pff:
         routing_fini();
- fail_nbs_notifier:
+ fail_routing:
         nbs_unreg_notifier(dt.nbs, &dt.nb_notifier);
- fail_nbs:
+ fail_nbs_notifier:
         nbs_destroy(dt.nbs);
- fail_connmgr:
+ fail_nbs:
         connmgr_ae_destroy(dt.ae);
+ fail_connmgr:
+        dt_pci_fini();
         return -1;
 }
 
@@ -270,6 +292,33 @@ void dt_stop(void)
         gam_destroy(dt.gam);
 
         sdu_sched_destroy(dt.sdu_sched);
+}
+
+int dt_reg_ae(void * ae,
+              int (* func)(void * func, struct shm_du_buff *))
+{
+        int res_fd;
+
+        assert(func);
+
+        pthread_rwlock_wrlock(&dt.lock);
+
+        res_fd = bmp_allocate(dt.res_fds);
+        if (!bmp_is_id_valid(dt.res_fds, res_fd)) {
+                log_warn("Reserved fds depleted.");
+                pthread_rwlock_unlock(&dt.lock);
+                return -EBADF;
+        }
+
+        assert(dt.aes[res_fd].post_sdu == NULL);
+        assert(dt.aes[res_fd].ae == NULL);
+
+        dt.aes[res_fd].post_sdu = func;
+        dt.aes[res_fd].ae = ae;
+
+        pthread_rwlock_unlock(&dt.lock);
+
+        return res_fd;
 }
 
 int dt_write_sdu(uint64_t             dst_addr,
