@@ -43,6 +43,4 @@ int  fa_alloc_resp(int fd,
 
 int  fa_dealloc(int fd);
 
-int  fa_post_sdu(struct shm_du_buff * sdb);
-
 #endif /* OUROBOROS_IPCPD_NORMAL_FA_H */

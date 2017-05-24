@@ -37,9 +37,12 @@ int  dt_start(void);
 
 void dt_stop(void);
 
+int  dt_reg_ae(void * ae,
+               int (* func)(void * ae, struct shm_du_buff * sdb));
+
 int  dt_write_sdu(uint64_t             dst_addr,
                   qoscube_t            qc,
-                  int                  np1_fd,
+                  int                  res_fd,
                   struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_DT_H */

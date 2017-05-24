@@ -50,6 +50,7 @@ struct {
         pthread_rwlock_t   flows_lock;
         int                r_fd[AP_MAX_FLOWS];
         uint64_t           r_addr[AP_MAX_FLOWS];
+        int                fd;
 
         struct sdu_sched * sdu_sched;
 } fa;
@@ -78,6 +79,104 @@ static void destroy_conn(int fd)
         fa.r_addr[fd] = INVALID_ADDR;
 }
 
+static int fa_post_sdu(void *               ae,
+                       struct shm_du_buff * sdb)
+{
+        struct timespec    ts  = {0, TIMEOUT * 1000};
+        int                fd;
+        flow_alloc_msg_t * msg;
+
+        (void) ae;
+
+        assert(ae == &fa);
+        assert(sdb);
+
+        /* Depending on the message call the function in ipcp-dev.h */
+
+        msg = flow_alloc_msg__unpack(NULL,
+                                     shm_du_buff_tail(sdb) -
+                                     shm_du_buff_head(sdb),
+                                     shm_du_buff_head(sdb));
+        if (msg == NULL) {
+                log_err("Failed to unpack flow alloc message.");
+                return -1;
+        }
+
+        switch (msg->code) {
+        case FLOW_ALLOC_CODE__FLOW_REQ:
+                pthread_mutex_lock(&ipcpi.alloc_lock);
+
+                if (!msg->has_hash || !msg->has_s_fd || !msg->has_s_addr) {
+                        log_err("Bad flow request.");
+                        pthread_mutex_unlock(&ipcpi.alloc_lock);
+                        flow_alloc_msg__free_unpacked(msg, NULL);
+                        return -1;
+                }
+
+                while (ipcpi.alloc_id != -1 &&
+                       ipcp_get_state() == IPCP_OPERATIONAL)
+                        pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                               &ipcpi.alloc_lock,
+                                               &ts);
+
+                if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                        log_dbg("Won't allocate over non-operational IPCP.");
+                        pthread_mutex_unlock(&ipcpi.alloc_lock);
+                        flow_alloc_msg__free_unpacked(msg, NULL);
+                        return -1;
+                }
+
+                assert(ipcpi.alloc_id == -1);
+
+                fd = ipcp_flow_req_arr(getpid(),
+                                       msg->hash.data,
+                                       ipcp_dir_hash_len(),
+                                       msg->qc);
+                if (fd < 0) {
+                        pthread_mutex_unlock(&ipcpi.alloc_lock);
+                        flow_alloc_msg__free_unpacked(msg, NULL);
+                        log_err("Failed to get fd for flow.");
+                        return -1;
+                }
+
+                pthread_rwlock_wrlock(&fa.flows_lock);
+
+                fa.r_fd[fd]   = msg->s_fd;
+                fa.r_addr[fd] = msg->s_addr;
+
+                pthread_rwlock_unlock(&fa.flows_lock);
+
+                ipcpi.alloc_id = fd;
+                pthread_cond_broadcast(&ipcpi.alloc_cond);
+
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+
+                break;
+        case FLOW_ALLOC_CODE__FLOW_REPLY:
+                pthread_rwlock_wrlock(&fa.flows_lock);
+
+                ipcp_flow_alloc_reply(msg->r_fd, msg->response);
+
+                if (msg->response < 0)
+                        destroy_conn(msg->r_fd);
+                else
+                        sdu_sched_add(fa.sdu_sched, fa.r_fd[msg->r_fd]);
+
+                pthread_rwlock_unlock(&fa.flows_lock);
+
+                break;
+        default:
+                log_err("Got an unknown flow allocation message.");
+                flow_alloc_msg__free_unpacked(msg, NULL);
+                return -1;
+        }
+
+        flow_alloc_msg__free_unpacked(msg, NULL);
+        ipcp_sdb_release(sdb);
+
+        return 0;
+}
+
 int fa_init(void)
 {
         int i;
@@ -87,6 +186,8 @@ int fa_init(void)
 
         if (pthread_rwlock_init(&fa.flows_lock, NULL))
                 return -1;
+
+        fa.fd = dt_reg_ae(&fa, &fa_post_sdu);
 
         return 0;
 }
@@ -191,7 +292,7 @@ int fa_alloc(int             fd,
         if (sdb == NULL)
                 return -1;
 
-        if (dt_write_sdu(addr, qc, FD_FA, sdb)) {
+        if (dt_write_sdu(addr, qc, fa.fd, sdb)) {
                 ipcp_sdb_release(sdb);
                 return -1;
         }
@@ -284,100 +385,6 @@ int fa_dealloc(int fd)
         pthread_rwlock_unlock(&fa.flows_lock);
 
         flow_dealloc(fd);
-
-        return 0;
-}
-
-int fa_post_sdu(struct shm_du_buff * sdb)
-{
-        struct timespec    ts  = {0, TIMEOUT * 1000};
-        int                fd;
-        flow_alloc_msg_t * msg;
-
-        assert(sdb);
-
-        /* Depending on the message call the function in ipcp-dev.h */
-
-        msg = flow_alloc_msg__unpack(NULL,
-                                     shm_du_buff_tail(sdb) -
-                                     shm_du_buff_head(sdb),
-                                     shm_du_buff_head(sdb));
-        if (msg == NULL) {
-                log_err("Failed to unpack flow alloc message");
-                return -1;
-        }
-
-        switch (msg->code) {
-        case FLOW_ALLOC_CODE__FLOW_REQ:
-                pthread_mutex_lock(&ipcpi.alloc_lock);
-
-                if (!msg->has_hash || !msg->has_s_fd || !msg->has_s_addr) {
-                        log_err("Bad flow request.");
-                        pthread_mutex_unlock(&ipcpi.alloc_lock);
-                        flow_alloc_msg__free_unpacked(msg, NULL);
-                        return -1;
-                }
-
-                while (ipcpi.alloc_id != -1 &&
-                       ipcp_get_state() == IPCP_OPERATIONAL)
-                        pthread_cond_timedwait(&ipcpi.alloc_cond,
-                                               &ipcpi.alloc_lock,
-                                               &ts);
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                        log_dbg("Won't allocate over non-operational IPCP.");
-                        pthread_mutex_unlock(&ipcpi.alloc_lock);
-                        flow_alloc_msg__free_unpacked(msg, NULL);
-                        return -1;
-                }
-
-                assert(ipcpi.alloc_id == -1);
-
-                fd = ipcp_flow_req_arr(getpid(),
-                                       msg->hash.data,
-                                       ipcp_dir_hash_len(),
-                                       msg->qc);
-                if (fd < 0) {
-                        pthread_mutex_unlock(&ipcpi.alloc_lock);
-                        flow_alloc_msg__free_unpacked(msg, NULL);
-                        log_err("Failed to get fd for flow.");
-                        return -1;
-                }
-
-                pthread_rwlock_wrlock(&fa.flows_lock);
-
-                fa.r_fd[fd]   = msg->s_fd;
-                fa.r_addr[fd] = msg->s_addr;
-
-                pthread_rwlock_unlock(&fa.flows_lock);
-
-                ipcpi.alloc_id = fd;
-                pthread_cond_broadcast(&ipcpi.alloc_cond);
-
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
-
-                break;
-        case FLOW_ALLOC_CODE__FLOW_REPLY:
-                pthread_rwlock_wrlock(&fa.flows_lock);
-
-                ipcp_flow_alloc_reply(msg->r_fd, msg->response);
-
-                if (msg->response < 0)
-                        destroy_conn(msg->r_fd);
-                else
-                        sdu_sched_add(fa.sdu_sched, fa.r_fd[msg->r_fd]);
-
-                pthread_rwlock_unlock(&fa.flows_lock);
-
-                break;
-        default:
-                log_err("Got an unknown flow allocation message.");
-                flow_alloc_msg__free_unpacked(msg, NULL);
-                return -1;
-        }
-
-        flow_alloc_msg__free_unpacked(msg, NULL);
-        ipcp_sdb_release(sdb);
 
         return 0;
 }
