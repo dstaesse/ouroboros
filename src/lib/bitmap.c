@@ -50,7 +50,7 @@ static size_t find_next_zero_bit(const size_t * addr,
         tmp = ~addr[start];
         while (!tmp) {
                 start++;
-                if (start >= (nbits / BITS_PER_LONG))
+                if (start >= DIV_ROUND_UP(nbits, BITS_PER_LONG))
                         return nbits;
 
                 tmp = ~addr[start];
@@ -69,8 +69,7 @@ static size_t find_next_zero_bit(const size_t * addr,
 static void bitmap_zero(size_t * dst,
                         size_t   nbits)
 {
-        size_t len = BITS_TO_LONGS(nbits) * sizeof(size_t);
-        memset(dst, 0, len);
+        memset(dst, 0, BITS_TO_LONGS(nbits) * sizeof(size_t));
 }
 
 static void bitmap_clear(size_t * map,
@@ -92,8 +91,8 @@ static void bitmap_set(size_t * map,
 }
 
 struct bmp {
-        ssize_t offset;
-        size_t size;
+        ssize_t  offset;
+        size_t   size;
 
         size_t * bitmap;
 };
@@ -116,7 +115,7 @@ struct bmp * bmp_create(size_t  bits,
                 return NULL;
         }
 
-        tmp->size = bits;
+        tmp->size   = bits;
         tmp->offset = offset;
         bitmap_zero(tmp->bitmap, bits);
 

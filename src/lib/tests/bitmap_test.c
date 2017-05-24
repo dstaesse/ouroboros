@@ -30,7 +30,7 @@
 int bitmap_test(int argc, char ** argv)
 {
         struct bmp * bmp;
-        size_t bits = BITMAP_SIZE;
+        ssize_t bits = BITMAP_SIZE;
         ssize_t id;
         int i;
         ssize_t r;
@@ -57,8 +57,19 @@ int bitmap_test(int argc, char ** argv)
 
         for (i = offset; i < BITMAP_SIZE + 5 + offset; i++) {
                 id = bmp_allocate(bmp);
-                if (!bmp_is_id_valid(bmp, id))
+                if (!bmp_is_id_valid(bmp, id)) {
+                        if (i < BITMAP_SIZE + offset) {
+                                printf("Failed valid ID %d (%zd).\n", i, id);
+                                bmp_destroy(bmp);
+                                return -1;
+                        }
+                        if (id >= offset && id < bits + offset) {
+                                printf("Valid ID %zd returned invalid.\n", id);
+                                bmp_destroy(bmp);
+                                return -1;
+                        }
                         continue;
+                }
 
                 if (!bmp_is_id_used(bmp, id)) {
                         printf("ID not marked in use.\n");
