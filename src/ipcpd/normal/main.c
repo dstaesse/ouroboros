@@ -128,24 +128,24 @@ static int boot_components(void)
 
         log_dbg("Ribmgr started.");
 
-        if (fa_init()) {
-                log_err("Failed to initialize flow allocator ae.");
-                goto fail_fa;
-        }
-
         if (dt_init()) {
                 log_err("Failed to initialize data transfer ae.");
                 goto fail_dt;
         }
 
-        if (fa_start()) {
-                log_err("Failed to start flow allocator.");
-                goto fail_fa_start;
+        if (fa_init()) {
+                log_err("Failed to initialize flow allocator ae.");
+                goto fail_fa;
         }
 
         if (dt_start()) {
                 log_err("Failed to start data transfer ae.");
                 goto fail_dt_start;
+        }
+
+        if (fa_start()) {
+                log_err("Failed to start flow allocator.");
+                goto fail_fa_start;
         }
 
         if (enroll_start()) {
@@ -166,14 +166,14 @@ static int boot_components(void)
         ipcp_set_state(IPCP_INIT);
         enroll_stop();
  fail_enroll_start:
-        dt_stop();
- fail_dt_start:
         fa_stop();
  fail_fa_start:
-        dt_fini();
- fail_dt:
+        dt_stop();
+ fail_dt_start:
         fa_fini();
  fail_fa:
+        dt_fini();
+ fail_dt:
         ribmgr_fini();
  fail_ribmgr:
         dir_fini();
@@ -191,13 +191,13 @@ void shutdown_components(void)
 
         enroll_stop();
 
-        dt_stop();
-
         fa_stop();
 
-        dt_fini();
+        dt_stop();
 
         fa_fini();
+
+        dt_fini();
 
         ribmgr_fini();
 
