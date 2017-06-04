@@ -23,6 +23,7 @@
 #define OUROBOROS_PREFIX "ipcpd-local"
 
 #include <ouroboros/config.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
@@ -30,7 +31,6 @@
 #include <ouroboros/ipcp.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
-#include <ouroboros/hash.h>
 
 #include "ipcp.h"
 

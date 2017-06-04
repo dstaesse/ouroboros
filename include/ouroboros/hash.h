@@ -24,6 +24,7 @@
 #ifndef OUROBOROS_LIB_HASH_H
 #define OUROBOROS_LIB_HASH_H
 
+#include <ouroboros/endian.h>
 #include <ouroboros/ipcp.h>
 
 #include <ouroboros/crc32.h>
@@ -32,11 +33,11 @@
 
 
 #define HASH_FMT "%02x%02x%02x%02x"
-#define HASH_VAL(hash)                                 \
-        ((*(unsigned int *) hash) & 0xFF000000) >> 24, \
-        ((*(unsigned int *) hash) & 0x00FF0000) >> 16, \
-        ((*(unsigned int *) hash) & 0x0000FF00) >> 8,  \
-        ((*(unsigned int *) hash) & 0x000000FF)
+#define HASH_VAL(hash)                                    \
+        (betoh32(*(uint32_t *) hash) & 0xFF000000) >> 24, \
+        (betoh32(*(uint32_t *) hash) & 0x00FF0000) >> 16, \
+        (betoh32(*(uint32_t *) hash) & 0x0000FF00) >> 8,  \
+        (betoh32(*(uint32_t *) hash) & 0x000000FF)
 
 uint16_t hash_len(enum hash_algo algo);
 

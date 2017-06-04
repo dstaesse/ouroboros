@@ -25,6 +25,7 @@
 #define OUROBOROS_PREFIX "ipcpd/shim-eth-llc"
 
 #include <ouroboros/config.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
@@ -34,7 +35,6 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
-#include <ouroboros/hash.h>
 
 #include "ipcp.h"
 #include "shim_eth_llc_messages.pb-c.h"
