@@ -126,6 +126,7 @@ int cdap_req_wait(struct cdap_req * creq)
         switch(creq->state) {
         case REQ_DESTROY:
                 ret = -1;
+                /* FALLTHRU */
         case REQ_PENDING:
                 creq->state = REQ_NULL;
                 pthread_cond_broadcast(&creq->cond);
