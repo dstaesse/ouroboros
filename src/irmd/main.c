@@ -1320,6 +1320,7 @@ static struct irm_flow * flow_req_arr(pid_t           api,
                         return NULL;
 
                 pthread_rwlock_wrlock(&irmd.reg_lock);
+                /* FALLTHRU */
         case REG_NAME_FLOW_ACCEPT:
                 h_api = reg_entry_get_api(re);
                 if (h_api == -1) {
