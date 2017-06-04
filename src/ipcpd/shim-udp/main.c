@@ -970,7 +970,7 @@ static int ipcp_udp_flow_alloc(int             fd,
         log_dbg("Flow pending on fd %d, UDP port %d.",
                 fd, ntohs(f_saddr.sin_port));
 
-        return fd;
+        return 0;
 }
 
 static int ipcp_udp_flow_alloc_resp(int fd,
