@@ -26,9 +26,15 @@
 
 #if defined(__linux__) || defined(__CYGWIN__)
 
+#ifndef _BSD_SOURCE
 #define _BSD_SOURCE
+#endif
+#ifndef __USE_BSD
 #define __USE_BSD
+#endif
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
+#endif
 
 #include <endian.h>
 #include <features.h>

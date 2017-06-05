@@ -23,11 +23,11 @@
 #define OUROBOROS_PREFIX "irmd"
 
 #include <ouroboros/config.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
-#include <ouroboros/hash.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/lockfile.h>
 #include <ouroboros/shm_flow_set.h>

@@ -23,6 +23,7 @@
 #define OUROBOROS_PREFIX "ipcpd/shim-udp"
 
 #include <ouroboros/config.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/dev.h>
@@ -30,7 +31,6 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/hash.h>
 
 #include "shim_udp_messages.pb-c.h"
 #include "ipcp.h"
