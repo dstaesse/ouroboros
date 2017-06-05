@@ -222,12 +222,13 @@ static void * ipcp_main_loop(void * o)
                                 break;
                         }
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
-                                conf.addr_size = conf_msg->addr_size;
-                                conf.fd_size = conf_msg->fd_size;
-                                conf.has_ttl = conf_msg->has_ttl;
+                                conf.addr_size      = conf_msg->addr_size;
+                                conf.fd_size        = conf_msg->fd_size;
+                                conf.has_ttl        = conf_msg->has_ttl;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
-                                conf.dt_gam_type = conf_msg->dt_gam_type;
-                                conf.rm_gam_type = conf_msg->rm_gam_type;
+                                conf.dt_gam_type    = conf_msg->dt_gam_type;
+                                conf.rm_gam_type    = conf_msg->rm_gam_type;
+                                conf.routing_type   = conf_msg->routing_type;
                         }
 
                         if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
