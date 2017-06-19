@@ -31,8 +31,6 @@
 #include <stdbool.h>
 
 #define DT_PROTO "dt"
-#define FD_FA    1
-#define FD_DHT   2
 
 /* Abstract syntax */
 enum dtp_fields {

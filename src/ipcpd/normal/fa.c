@@ -360,7 +360,7 @@ int fa_alloc_resp(int fd,
 
         assert(qc >= 0 && qc < QOS_CUBE_MAX);
 
-        if (dt_write_sdu(fa.r_addr[fd], qc, FD_FA, sdb)) {
+        if (dt_write_sdu(fa.r_addr[fd], qc, fa.fd, sdb)) {
                 destroy_conn(fd);
                 pthread_rwlock_unlock(&fa.flows_lock);
                 ipcp_sdb_release(sdb);
