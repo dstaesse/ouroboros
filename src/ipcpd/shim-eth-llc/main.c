@@ -979,7 +979,7 @@ static int eth_llc_ipcp_flow_alloc(int             fd,
 
         assert(hash);
 
-        if (cube != QOS_CUBE_BE && cube != QOS_CUBE_FRC) {
+        if (cube != QOS_CUBE_BE) {
                 log_dbg("Unsupported QoS requested.");
                 return -1;
         }

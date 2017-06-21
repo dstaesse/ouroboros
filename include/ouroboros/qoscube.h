@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Quality of Service specification
+ * Quality of Service cubes
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -21,26 +21,19 @@
  * 02110-1301 USA
  */
 
-#ifndef OUROBOROS_QOS_H
-#define OUROBOROS_QOS_H
+#ifndef OUROBOROS_QOSCUBE_H
+#define OUROBOROS_QOSCUBE_H
 
-#include <stdint.h>
-#include <stdbool.h>
+#include <ouroboros/qos.h>
 
-typedef struct qos_spec {
-        uint32_t delay;                /* In ms */
-        uint64_t bandwidth;            /* In bits/s */
-        uint8_t  availability;         /* Class of 9s */
-        uint32_t maximum_interruption; /* In ms */
+typedef enum qos_cube {
+        QOS_CUBE_BE = 0,
+        QOS_CUBE_VIDEO,
+        QOS_CUBE_VOICE,
+        QOS_CUBE_MAX
+} qoscube_t;
 
-        bool     resource_control;     /* Feedback from receiver */
-        bool     reliable;             /* Reliable flow */
-        bool     error_check;          /* Check for errors */
-        bool     ordered;              /* Ordered delivery */
-        bool     partial;              /* Allow partial delivery */
-} qosspec_t;
-
-int qosspec_init(qosspec_t * qs);
-int qosspec_fini(qosspec_t * qs);
+qoscube_t qos_spec_to_cube(qosspec_t qs);
+qosspec_t qos_cube_to_spec(qoscube_t qc);
 
 #endif

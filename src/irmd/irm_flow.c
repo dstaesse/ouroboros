@@ -61,6 +61,8 @@ struct irm_flow * irm_flow_create(pid_t     n_api,
         f->n_rb = shm_rbuff_create(n_api, port_id);
         if (f->n_rb == NULL) {
                 log_err("Could not create ringbuffer for AP-I %d.", n_api);
+                pthread_mutex_destroy(&f->state_lock);
+                pthread_cond_destroy(&f->state_cond);
                 free(f);
                 return NULL;
         }

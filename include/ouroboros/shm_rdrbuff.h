@@ -25,7 +25,7 @@
 #define OUROBOROS_SHM_RDRBUFF_H
 
 #include <ouroboros/shm_du_buff.h>
-#include <ouroboros/shared.h>
+#include <ouroboros/qoscube.h>
 
 #include <stdint.h>
 #include <pthread.h>

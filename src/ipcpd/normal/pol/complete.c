@@ -23,7 +23,7 @@
 #define OUROBOROS_PREFIX "complete"
 
 #include <ouroboros/config.h>
-#include <ouroboros/shared.h>
+#include <ouroboros/qoscube.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
@@ -92,11 +92,7 @@ static void * allocator(void * o)
 
         complete = (struct complete *) o;
 
-        qs.delay = 0;
-        qs.jitter = 0;
-
-        /* FIXME: implement QoS specs */
-        qs.cube = QOS_CUBE_BE;
+        qosspec_init(&qs);
 
         while (true) {
                 len = rib_children(MEMBERS_PATH, &children);

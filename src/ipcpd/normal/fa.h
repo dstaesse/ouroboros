@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_FA_H
 #define OUROBOROS_IPCPD_NORMAL_FA_H
 
-#include <ouroboros/shared.h>
+#include <ouroboros/qoscube.h>
 #include <ouroboros/utils.h>
 
 int  fa_init(void);

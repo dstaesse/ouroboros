@@ -196,10 +196,10 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg,
        return 0;
 }
 
-static int ipcp_udp_port_alloc(uint32_t  dst_ip_addr,
-                               uint16_t  src_udp_port,
+static int ipcp_udp_port_alloc(uint32_t        dst_ip_addr,
+                               uint16_t        src_udp_port,
                                const uint8_t * dst,
-                               qoscube_t cube)
+                               qoscube_t       cube)
 {
         shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
 
@@ -899,7 +899,7 @@ static int ipcp_udp_flow_alloc(int             fd,
 
         assert(dst);
 
-        if (cube != QOS_CUBE_BE && cube != QOS_CUBE_FRC) {
+        if (cube != QOS_CUBE_BE) {
                 log_dbg("Unsupported QoS requested.");
                 return -1;
         }
@@ -922,7 +922,6 @@ static int ipcp_udp_flow_alloc(int             fd,
                 close(skfd);
                 return -1;
         }
-
 
         if (!shim_data_dir_has(ipcpi.shim_data, dst)) {
                 log_dbg("Could not resolve destination.");
@@ -952,10 +951,7 @@ static int ipcp_udp_flow_alloc(int             fd,
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        if (ipcp_udp_port_alloc(ip_addr,
-                                f_saddr.sin_port,
-                                dst,
-                                cube) < 0) {
+        if (ipcp_udp_port_alloc(ip_addr, f_saddr.sin_port, dst, cube) < 0) {
                 pthread_rwlock_wrlock(&udp_data.flows_lock);
 
                 udp_data.fd_to_uf[fd].udp  = -1;

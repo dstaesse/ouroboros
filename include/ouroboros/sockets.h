@@ -30,6 +30,9 @@
 typedef IpcpConfigMsg ipcp_config_msg_t;
 typedef DifInfoMsg dif_info_msg_t;
 
+#include "frct_enroll.pb-c.h"
+typedef FrctEnrollMsg frct_enroll_msg_t;
+
 #include "irmd_messages.pb-c.h"
 typedef IrmMsg irm_msg_t;
 
