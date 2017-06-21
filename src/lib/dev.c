@@ -24,6 +24,8 @@
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/ipcp-dev.h>
+#include <ouroboros/local-dev.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/fcntl.h>
 #include <ouroboros/bitmap.h>
@@ -1122,10 +1124,10 @@ int ipcp_create_r(pid_t api,
         return ret;
 }
 
-int ipcp_flow_req_arr(pid_t     api,
-                      uint8_t * dst,
-                      size_t    len,
-                      qoscube_t cube)
+int ipcp_flow_req_arr(pid_t           api,
+                      const uint8_t * dst,
+                      size_t          len,
+                      qoscube_t       cube)
 {
         irm_msg_t msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -1140,7 +1142,7 @@ int ipcp_flow_req_arr(pid_t     api,
         msg.api         = api;
         msg.has_hash    = true;
         msg.hash.len    = len;
-        msg.hash.data   = dst;
+        msg.hash.data   = (uint8_t *) dst;
         msg.has_qoscube = true;
         msg.qoscube     = cube;
 
@@ -1349,7 +1351,7 @@ int ipcp_sdb_reserve(struct shm_du_buff ** sdb,
         return 0;
 }
 
-int ipcp_flow_fini(int fd)
+void ipcp_flow_fini(int fd)
 {
         struct shm_rbuff * rx_rb;
 
@@ -1362,8 +1364,6 @@ int ipcp_flow_fini(int fd)
         pthread_rwlock_unlock(&ai.flows_lock);
 
         shm_rbuff_fini(rx_rb);
-
-        return 0;
 }
 
 int ipcp_flow_get_qoscube(int         fd,
