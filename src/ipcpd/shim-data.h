@@ -23,7 +23,7 @@
 #ifndef IPCPD_IPCP_DATA_H
 #define IPCPD_IPCP_DATA_H
 
-#include <ouroboros/shared.h>
+#include <ouroboros/qoscube.h>
 #include <ouroboros/list.h>
 
 #include <sys/types.h>

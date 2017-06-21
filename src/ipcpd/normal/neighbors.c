@@ -23,7 +23,7 @@
 #define OUROBOROS_PREFIX "neighbors"
 
 #include <ouroboros/config.h>
-#include <ouroboros/shared.h>
+#include <ouroboros/qoscube.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>

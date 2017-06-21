@@ -25,7 +25,7 @@
 
 #include <ouroboros/shm_du_buff.h>
 #include <ouroboros/proto.h>
-#include <ouroboros/shared.h>
+#include <ouroboros/qoscube.h>
 
 #include <stdint.h>
 #include <stdbool.h>

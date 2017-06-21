@@ -25,7 +25,7 @@
 
 #include <ouroboros/list.h>
 #include <ouroboros/shm_rbuff.h>
-#include <ouroboros/shared.h>
+#include <ouroboros/qoscube.h>
 
 #include <sys/types.h>
 #include <pthread.h>

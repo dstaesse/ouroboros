@@ -27,7 +27,7 @@
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/list.h>
-#include <ouroboros/shared.h>
+#include <ouroboros/qoscube.h>
 
 #include "api_table.h"
 #include "apn_table.h"
