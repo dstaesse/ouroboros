@@ -613,8 +613,11 @@ int flow_alloc(const char *            dst_name,
         ret = flow_write(fd, data, len);
         if (ret < 0) {
                 flow_dealloc(fd);
+                free(data);
                 return ret;
         }
+
+        free(data);
 
         return fd;
 }
