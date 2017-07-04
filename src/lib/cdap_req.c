@@ -48,12 +48,23 @@ struct cdap_req * cdap_req_create(int         fd,
         creq->data.data = NULL;
         creq->data.len  = 0;
 
+        if (pthread_mutex_init(&creq->lock, NULL)) {
+                free(creq);
+                return NULL;
+        }
+
         pthread_condattr_init(&cattr);
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        pthread_cond_init(&creq->cond, &cattr);
-        pthread_mutex_init(&creq->lock, NULL);
+        if (pthread_cond_init(&creq->cond, &cattr)) {
+                pthread_condattr_destroy(&cattr);
+                pthread_mutex_destroy(&creq->lock);
+                free(creq);
+                return NULL;
+        }
+
+        pthread_condattr_destroy(&cattr);
 
         list_head_init(&creq->next);
 
