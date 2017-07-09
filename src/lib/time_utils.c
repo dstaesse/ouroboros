@@ -32,7 +32,7 @@ int ts_add(const struct timespec * t,
            const struct timespec * intv,
            struct timespec *       res)
 {
-        long nanos = 0;
+        time_t nanos = 0;
 
         if (t == NULL || intv == NULL || res == NULL)
                 return -1;
@@ -44,6 +44,7 @@ int ts_add(const struct timespec * t,
                 nanos -= BILLION;
                 ++(res->tv_sec);
         }
+
         res->tv_nsec = nanos;
 
         return 0;
@@ -54,7 +55,7 @@ int ts_diff(const struct timespec * t,
             const struct timespec * intv,
             struct timespec *       res)
 {
-        long nanos = 0;
+        time_t nanos = 0;
 
         if (t == NULL || intv == NULL || res == NULL)
                 return -1;
@@ -78,7 +79,7 @@ int tv_add(const struct timeval * t,
            const struct timeval * intv,
            struct timeval *       res)
 {
-        long micros = 0;
+        time_t micros = 0;
 
         if (t == NULL || intv == NULL || res == NULL)
                 return -1;
@@ -88,7 +89,7 @@ int tv_add(const struct timeval * t,
         res->tv_sec = t->tv_sec + intv->tv_sec;
         while (micros >= MILLION) {
                 micros -= MILLION;
-                --(res->tv_sec);
+                ++(res->tv_sec);
         }
         res->tv_usec = micros;
 
@@ -100,7 +101,7 @@ int tv_diff(const struct timeval * t,
             const struct timeval * intv,
             struct timeval       * res)
 {
-        long micros = 0;
+        time_t micros = 0;
 
         if (t == NULL || intv == NULL || res == NULL)
                 return -1;
@@ -143,7 +144,8 @@ int ts_to_tv(const struct timespec * src,
 }
 
 #ifdef __APPLE__
-int clock_gettime(int clock, struct timespec * t)
+int clock_gettime(int               clock,
+                  struct timespec * t)
 {
         struct timeval tv;
         int ret = gettimeofday(&tv, NULL);
