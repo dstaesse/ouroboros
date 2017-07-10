@@ -31,7 +31,6 @@
 #include <ouroboros/md5.h>
 #include <ouroboros/sha3.h>
 
-
 #define HASH_FMT "%02x%02x%02x%02x"
 #define HASH_VAL(hash)                                    \
         (betoh32(*(uint32_t *) hash) & 0xFF000000) >> 24, \

@@ -21,28 +21,32 @@
  * 02110-1301 USA
  */
 
-#ifndef OUROBOROS_LIST_H
-#define OUROBOROS_LIST_H
+#ifndef OUROBOROS_LIB_LIST_H
+#define OUROBOROS_LIB_LIST_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 struct list_head {
-        struct list_head * nxt, * prv;
+        struct list_head * nxt;
+        struct list_head * prv;
 };
 
 #define list_entry(ptr, type, mbr)                              \
-        ((type *)((char *)(ptr)-(size_t)(&((type *)0)->mbr)))
+        ((type *)((uint8_t *)(ptr)-(size_t)(&((type *)0)->mbr)))
 
-#define list_first_entry(ptr, type, mbr)        \
+#define list_first_entry(ptr, type, mbr)                        \
         list_entry((ptr)->nxt, type, mbr)
 
-#define list_for_each(p, h)                             \
+#define list_last_entry(ptr, type, mbr)                         \
+        list_entry((ptr)->prv, type, mbr)
+
+#define list_for_each(p, h)                                     \
         for (p = (h)->nxt; p != (h); p = p->nxt)
 
-#define list_for_each_safe(p, t, h)               \
-        for (p = (h)->nxt, t = p->nxt; p != (h);  \
-             p = t, t = p->nxt)
+#define list_for_each_safe(p, t, h)                             \
+        for (p = (h)->nxt, t = p->nxt; p != (h); p = t, t = p->nxt)
 
 void list_head_init(struct list_head * h);
 
@@ -59,4 +63,4 @@ void list_move(struct list_head * dst,
 
 bool list_is_empty(struct list_head * h);
 
-#endif
+#endif /* OUROBOROS_LIB_LIST_H */
