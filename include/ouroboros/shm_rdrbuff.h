@@ -26,6 +26,7 @@
 
 #include <ouroboros/shm_du_buff.h>
 #include <ouroboros/qoscube.h>
+#include <ouroboros/time_utils.h>
 
 #include <stdint.h>
 #include <pthread.h>
@@ -41,7 +42,8 @@ void                 shm_rdrbuff_close(struct shm_rdrbuff * rdrb);
 
 void                 shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb);
 
-void                 shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb);
+int                  shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb,
+                                           struct timespec *    timeo);
 
 /* returns the index of the buffer in the DU map */
 ssize_t              shm_rdrbuff_write(struct shm_rdrbuff * rdrb,

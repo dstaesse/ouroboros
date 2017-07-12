@@ -264,8 +264,15 @@ struct shm_rdrbuff * shm_rdrbuff_open()
         return rdrb;
 }
 
-void shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb)
+int shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb,
+                          struct timespec *    timeo)
 {
+        struct timespec abstime;
+
+        if (timeo != NULL) {
+                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+                ts_add(&abstime, timeo, &abstime);
+        }
 
 #ifdef __APPLE__
         pthread_mutex_lock(rdrb->lock);
@@ -273,21 +280,33 @@ void shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb)
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rdrb->lock);
 #endif
-        pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
-                             (void *) rdrb->lock);
 
         while (shm_rdrb_free(rdrb, WAIT_BLOCKS)) {
 #ifdef __APPLE__
-                pthread_cond_wait(rdrb->full, rdrb->lock);
+                if (pthread_cond_timedwait(rdrb->full,
+                                           rdrb->lock
+                                           &abstime) == ETIMEDOUT) {
+                        pthread_mutex_unlock(rdrb->lock);
+                        return -ETIMEDOUT;
+                }
 #else
-                if (pthread_cond_wait(rdrb->full, rdrb->lock) == EOWNERDEAD)
+                int ret = pthread_cond_timedwait(rdrb->full,
+                                                 rdrb->lock,
+                                                 &abstime);
+                if (ret == EOWNERDEAD)
                         pthread_mutex_consistent(rdrb->lock);
+                if (ret == ETIMEDOUT) {
+                        pthread_mutex_unlock(rdrb->lock);
+                        return -ETIMEDOUT;
+                }
 #endif
         }
 
         garbage_collect(rdrb);
 
-        pthread_cleanup_pop(true);
+        pthread_mutex_unlock(rdrb->lock);
+
+        return 0;
 }
 
 void shm_rdrbuff_close(struct shm_rdrbuff * rdrb)

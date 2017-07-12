@@ -1514,8 +1514,9 @@ void * shm_sanitize(void * o)
 
         (void) o;
 
-        while (true) {
-                shm_rdrbuff_wait_full(irmd.rdrb);
+        while (irmd_get_state() == IRMD_RUNNING) {
+                if (shm_rdrbuff_wait_full(irmd.rdrb, &ts) == -ETIMEDOUT)
+                        continue;
 
                 pthread_rwlock_wrlock(&irmd.flows_lock);
 
@@ -1536,8 +1537,6 @@ void * shm_sanitize(void * o)
                 }
 
                 pthread_rwlock_unlock(&irmd.flows_lock);
-
-                nanosleep(&ts, NULL);
         }
 
         return (void *) 0;
@@ -2247,8 +2246,6 @@ int main(int     argc,
 
         pthread_join(irmd.tpm, NULL);
         pthread_join(irmd.irm_sanitize, NULL);
-
-        pthread_cancel(irmd.shm_sanitize);
         pthread_join(irmd.shm_sanitize, NULL);
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
