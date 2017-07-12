@@ -108,7 +108,6 @@ int irm_bootstrap_ipcp(pid_t                      api,
         msg.conf = &config;
 
         dif_info.dif_name = (char *) conf->dif_info.dif_name;
-        dif_info.dir_hash_algo = conf->dif_info.dir_hash_algo;
 
         config.ipcp_type = conf->type;
 
@@ -128,6 +127,7 @@ int irm_bootstrap_ipcp(pid_t                      api,
                 config.rm_gam_type        = conf->rm_gam_type;
                 config.has_routing_type   = true;
                 config.routing_type       = conf->routing_type;
+                dif_info.dir_hash_algo    = conf->dif_info.dir_hash_algo;
                 break;
         case IPCP_SHIM_UDP:
                 config.has_ip_addr  = true;

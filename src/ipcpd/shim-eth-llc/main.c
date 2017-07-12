@@ -758,8 +758,6 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        ipcpi.dir_hash_algo = conf->dif_info.dir_hash_algo;
-
         if (conf->if_name == NULL) {
                 log_err("Interface name is NULL.");
                 return -1;

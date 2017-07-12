@@ -58,6 +58,10 @@
 #define SHM_SAN_HOLDOFF 1000 /* ms */
 #define IPCP_HASH_LEN(e) hash_len(e->dir_hash_algo)
 
+#define SHIM_ETH_LLC_HASH_ALGO HASH_SHA3_256
+#define SHIM_UDP_HASH_ALGO     HASH_MD5
+#define LOCAL_HASH_ALGO        HASH_SHA3_256
+
 struct ipcp_entry {
         struct list_head next;
 
@@ -417,6 +421,18 @@ static int bootstrap_ipcp(pid_t               api,
                 return -1;
         }
 
+        if (entry->type == IPCP_LOCAL)
+                entry->dir_hash_algo = conf->dif_info->dir_hash_algo
+                        = LOCAL_HASH_ALGO;
+        else if (entry->type == IPCP_SHIM_ETH_LLC)
+                entry->dir_hash_algo = conf->dif_info->dir_hash_algo
+                        = SHIM_ETH_LLC_HASH_ALGO;
+        else if (entry->type == IPCP_SHIM_UDP)
+                entry->dir_hash_algo = conf->dif_info->dir_hash_algo
+                        = SHIM_UDP_HASH_ALGO;
+        else
+                entry->dir_hash_algo = conf->dif_info->dir_hash_algo;
+
         if (ipcp_bootstrap(entry->api, conf)) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not bootstrap IPCP.");
@@ -429,8 +445,6 @@ static int bootstrap_ipcp(pid_t               api,
                 log_warn("Failed to set name of DIF.");
                 return -ENOMEM;
         }
-
-        entry->dir_hash_algo = conf->dif_info->dir_hash_algo;
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 

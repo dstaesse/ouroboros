@@ -39,7 +39,7 @@ enum ipcp_type {
         IPCP_NORMAL
 };
 
-/* IPCP policies */
+/* Normal IPCP policies */
 enum pol_addr_auth {
         FLAT_RANDOM = 0
 };
@@ -52,6 +52,7 @@ enum pol_routing {
         LINK_STATE = 0
 };
 
+/* Hash algorithms */
 enum hash_algo {
         HASH_CRC32 = 0,
         HASH_MD5,
@@ -63,17 +64,19 @@ enum hash_algo {
 
 #define DIF_NAME_SIZE 256
 
+/* Info reported back to the IRMd about the DIF on enrollment */
 struct dif_info {
         char           dif_name[DIF_NAME_SIZE];
         enum hash_algo dir_hash_algo;
 };
 
+/* Structure to configure the first IPCP */
 struct ipcp_config {
         struct dif_info    dif_info;
 
         enum ipcp_type     type;
 
-        /* DT syntax */
+        /* Normal */
         uint8_t            addr_size;
         uint8_t            fd_size;
         bool               has_ttl;
