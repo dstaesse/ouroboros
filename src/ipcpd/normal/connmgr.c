@@ -169,7 +169,8 @@ int connmgr_init(void)
 
 int connmgr_start(void)
 {
-        pthread_create(&connmgr.acceptor, NULL, flow_acceptor, NULL);
+        if (pthread_create(&connmgr.acceptor, NULL, flow_acceptor, NULL))
+                return -1;
 
         return 0;
 }

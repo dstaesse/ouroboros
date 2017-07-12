@@ -34,8 +34,8 @@ typedef CacepMsg cacep_msg_t;
 
 #define BUF_SIZE 64
 
-int read_msg(int                fd,
-             struct conn_info * info)
+static int read_msg(int                fd,
+                    struct conn_info * info)
 {
         uint8_t                      buf[BUF_SIZE];
         cacep_msg_t *                msg;

@@ -376,14 +376,20 @@ static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
 
 static void * ipcp_udp_listener(void * o)
 {
-        uint8_t buf[SHIM_UDP_MSG_SIZE];
-        ssize_t  n = 0;
+        uint8_t            buf[SHIM_UDP_MSG_SIZE];
+        ssize_t            n   = 0;
         struct sockaddr_in c_saddr;
-        int sfd = udp_data.s_fd;
+        int                sfd = udp_data.s_fd;
+        struct timeval     ltv = {(SOCKET_TIMEOUT / 1000),
+                                  (SOCKET_TIMEOUT % 1000) * 1000};
 
         (void) o;
 
-        while (true) {
+        if (setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO,
+                       (void *) &ltv, sizeof(ltv)))
+                log_warn("Failed to set timeout on socket.");
+
+        while (ipcp_get_state() == IPCP_OPERATIONAL) {
                 shim_udp_msg_t * msg = NULL;
 
                 memset(&buf, 0, SHIM_UDP_MSG_SIZE);
@@ -443,7 +449,7 @@ static void * ipcp_udp_sdu_reader(void * o)
 
         (void) o;
 
-        while (true) {
+        while (ipcp_get_state() == IPCP_OPERATIONAL) {
                 pthread_rwlock_rdlock(&udp_data.flows_lock);
                 pthread_mutex_lock(&udp_data.fd_set_lock);
 
@@ -492,17 +498,12 @@ static void * ipcp_udp_sdu_loop(void * o)
 
         (void) o;
 
-        while (flow_event_wait(udp_data.np1_flows, udp_data.fq, &timeout)) {
+        while (ipcp_get_state() == IPCP_OPERATIONAL) {
+                flow_event_wait(udp_data.np1_flows, udp_data.fq, &timeout);
                 while ((fd = fqueue_next(udp_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_err("Bad read from fd %d.", fd);
                                 continue;
-                        }
-
-
-                        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                                ipcp_sdb_release(sdb);
-                                return (void *) 0; /* -ENOTENROLLED */
                         }
 
                         pthread_rwlock_rdlock(&udp_data.flows_lock);
@@ -744,8 +745,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
         char ipstr[INET_ADDRSTRLEN];
         char dnsstr[INET_ADDRSTRLEN];
-        /* max DNS name length + max IP length + command length */
-        char cmd[100];
+        char cmd[1000];
         uint32_t dns_addr;
         uint32_t ip_addr;
 #endif
@@ -1114,9 +1114,6 @@ int main(int    argc,
         ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                pthread_cancel(udp_data.handler);
-                pthread_cancel(udp_data.sdu_reader);
-                pthread_cancel(udp_data.sduloop);
                 pthread_join(udp_data.sduloop, NULL);
                 pthread_join(udp_data.handler, NULL);
                 pthread_join(udp_data.sdu_reader, NULL);
