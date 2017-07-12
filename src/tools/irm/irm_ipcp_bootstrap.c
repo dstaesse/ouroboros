@@ -46,8 +46,6 @@
 #define SHA3_384          "SHA3_384"
 #define SHA3_512          "SHA3_512"
 
-#define DEFAULT_HASH_ALGO  HASH_SHA3_256
-#define DEFAULT_HASH_STR   SHA3_256
 #define DEFAULT_ADDR_SIZE  4
 #define DEFAULT_FD_SIZE    2
 #define DEFAULT_DDNS       0
@@ -55,6 +53,7 @@
 #define DEFAULT_DT_GAM     COMPLETE
 #define DEFAULT_RM_GAM     COMPLETE
 #define DEFAULT_ROUTING    LINK_STATE
+#define DEFAULT_HASH_ALGO  HASH_SHA3_256
 #define ADDR_AUTH_FLAT     "flat"
 #define DT_GAM_COMPLETE    "complete"
 #define RM_GAM_COMPLETE    "complete"
@@ -67,36 +66,35 @@ static void usage(void)
                "                name <ipcp name>\n"
                "                dif <DIF name>\n"
                "                type [TYPE]\n"
-               "                [hash [ALGORITHM] (default: %s)]\n"
                "where TYPE = {" NORMAL " " LOCAL " "
-               SHIM_UDP " " SHIM_ETH_LLC"},\n"
-               "      ALGORITHM = { " CRC32 " " MD5 " "
-               SHA3_224 " " SHA3_256 " " SHA3_384 " " SHA3_512 "}.\n\n"
+               SHIM_UDP " " SHIM_ETH_LLC"},\n\n"
                "if TYPE == " NORMAL "\n"
                "                [addr <address size> (default: %d)]\n"
                "                [fd <fd size> (default: %d)]\n"
-               "                [ttl <add time to live value in the PCI>]\n"
+               "                [ttl (add time to live value in the PCI)]\n"
                "                [addr_auth <address policy> (default: %s)]\n"
                "                [dt_gam <data transfer graph adjacency manager>"
                " (default: %s)]\n"
                "                [rm_gam <rib manager graph adjacency manager>"
                " (default: %s)]\n"
                "                [routing <routing policy> (default: %s)]\n"
+               "                [hash [ALGORITHM] (default: %s)]\n"
+               "where ALGORITHM = {" CRC32 " " MD5 " "
+               SHA3_224 " " SHA3_256 " " SHA3_384 " " SHA3_512 "}\n"
                "if TYPE == " SHIM_UDP "\n"
                "                ip <IP address in dotted notation>\n"
                "                [dns <DDNS IP address in dotted notation>"
-               " (default = none: %d)]\n"
+               " (default: none)]\n"
                "if TYPE == " SHIM_ETH_LLC "\n"
                "                if_name <interface name>\n",
-               DEFAULT_HASH_STR, DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE,
+               DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE,
                ADDR_AUTH_FLAT, DT_GAM_COMPLETE, RM_GAM_COMPLETE,
-               ROUTING_LINK_STATE, DEFAULT_DDNS);
+               ROUTING_LINK_STATE, SHA3_256);
 }
 
 int do_bootstrap_ipcp(int argc, char ** argv)
 {
         char *             name           = NULL;
-        char *             hash           = DEFAULT_HASH_STR;
         pid_t              api;
         struct ipcp_config conf;
         uint8_t            addr_size      = DEFAULT_ADDR_SIZE;
@@ -106,6 +104,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         enum pol_gam       dt_gam_type    = DEFAULT_DT_GAM;
         enum pol_gam       rm_gam_type    = DEFAULT_RM_GAM;
         enum pol_routing   routing_type   = DEFAULT_ROUTING;
+        enum hash_algo     hash_algo      = DEFAULT_HASH_ALGO;
         uint32_t           ip_addr        = 0;
         uint32_t           dns_addr       = DEFAULT_DDNS;
         char *             ipcp_type      = NULL;
@@ -123,17 +122,26 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 } else if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                 } else if (matches(*argv, "hash") == 0) {
-                        hash = *(argv + 1);
+                        if (strcmp(*(argv + 1), CRC32) == 0)
+                                hash_algo = HASH_CRC32;
+                        else if (strcmp(*(argv + 1), MD5) == 0)
+                                hash_algo = HASH_MD5;
+                        else if (strcmp(*(argv + 1), SHA3_224) == 0)
+                                hash_algo = HASH_SHA3_224;
+                        else if (strcmp(*(argv + 1), SHA3_256) == 0)
+                                hash_algo = HASH_SHA3_256;
+                        else if (strcmp(*(argv + 1), SHA3_384) == 0)
+                                hash_algo = HASH_SHA3_384;
+                        else if (strcmp(*(argv + 1), SHA3_512) == 0)
+                                hash_algo = HASH_SHA3_512;
+                        else
+                                goto unknown_param;
                 } else if (matches(*argv, "ip") == 0) {
-                        if (inet_pton (AF_INET, *(argv + 1), &ip_addr) != 1) {
-                                usage();
-                                return -1;
-                        }
+                        if (inet_pton (AF_INET, *(argv + 1), &ip_addr) != 1)
+                                goto unknown_param;
                 } else if (matches(*argv, "dns") == 0) {
-                        if (inet_pton(AF_INET, *(argv + 1), &dns_addr) != 1) {
-                                usage();
-                                return -1;
-                        }
+                        if (inet_pton(AF_INET, *(argv + 1), &dns_addr) != 1)
+                                goto unknown_param;
                 } else if (matches(*argv, "if_name") == 0) {
                         if_name = *(argv + 1);
                 } else if (matches(*argv, "addr") == 0) {
@@ -147,18 +155,25 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 } else if (matches(*argv, "addr_auth") == 0) {
                         if (strcmp(ADDR_AUTH_FLAT, *(argv + 1)) == 0)
                                 addr_auth_type = FLAT_RANDOM;
+                        else
+                                goto unknown_param;
                 } else if (matches(*argv, "dt_gam") == 0) {
                         if (strcmp(DT_GAM_COMPLETE, *(argv + 1)) == 0)
                                 dt_gam_type = COMPLETE;
+                        else
+                                goto unknown_param;
                 } else if (matches(*argv, "rm_gam") == 0) {
                         if (strcmp(RM_GAM_COMPLETE, *(argv + 1)) == 0)
                                 rm_gam_type = COMPLETE;
+                        else
+                                goto unknown_param;
                 } else if (matches(*argv, "routing") == 0) {
                         if (strcmp(ROUTING_LINK_STATE, *(argv + 1)) == 0)
                                 routing_type = LINK_STATE;
+                        else
+                                goto unknown_param;
                 } else {
-                        printf("\"%s\" is unknown, try \"irm "
-                               "ipcp bootstrap\".\n", *argv);
+                        printf("Unknown option: \"%s\".\n", *argv);
                         return -1;
                 }
 
@@ -173,23 +188,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
 
         strcpy(conf.dif_info.dif_name, dif_name);
 
-        if (strcmp(hash, CRC32) == 0) {
-                conf.dif_info.dir_hash_algo = HASH_CRC32;
-        } else if (strcmp(hash, MD5) == 0) {
-                conf.dif_info.dir_hash_algo = HASH_MD5;
-        } else if (strcmp(hash, SHA3_224) == 0) {
-                conf.dif_info.dir_hash_algo = HASH_SHA3_224;
-        } else if (strcmp(hash, SHA3_256) == 0) {
-                conf.dif_info.dir_hash_algo = HASH_SHA3_256;
-        } else if (strcmp(hash, SHA3_384) == 0) {
-                conf.dif_info.dir_hash_algo = HASH_SHA3_384;
-        } else if (strcmp(hash, SHA3_512) == 0) {
-                conf.dif_info.dir_hash_algo = HASH_SHA3_512;
-        } else {
-                usage();
-                return -1;
-        }
-
         if (strcmp(ipcp_type, NORMAL) == 0) {
                 conf.type = IPCP_NORMAL;
                 conf.addr_size = addr_size;
@@ -199,6 +197,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.dt_gam_type = dt_gam_type;
                 conf.rm_gam_type = rm_gam_type;
                 conf.routing_type = routing_type;
+                conf.dif_info.dir_hash_algo = hash_algo;
         } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {
                 conf.type = IPCP_SHIM_UDP;
                 if (ip_addr == 0) {
@@ -239,4 +238,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 free(apis);
 
         return 0;
+
+ unknown_param:
+        printf("Unknown parameter for %s: \"%s\".\n", *argv, *(argv + 1));
+        return -1;
 }

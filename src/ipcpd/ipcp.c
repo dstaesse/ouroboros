@@ -212,8 +212,6 @@ static void * ipcp_main_loop(void * o)
 
                         conf_msg = msg->conf;
                         conf.type = conf_msg->ipcp_type;
-                        conf.dif_info.dir_hash_algo =
-                                conf_msg->dif_info->dir_hash_algo;
                         strcpy(conf.dif_info.dif_name,
                                conf_msg->dif_info->dif_name);
                         if (conf.dif_info.dif_name == NULL) {
@@ -229,6 +227,8 @@ static void * ipcp_main_loop(void * o)
                                 conf.dt_gam_type    = conf_msg->dt_gam_type;
                                 conf.rm_gam_type    = conf_msg->rm_gam_type;
                                 conf.routing_type   = conf_msg->routing_type;
+                                conf.dif_info.dir_hash_algo =
+                                        conf_msg->dif_info->dir_hash_algo;
                         }
 
                         if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
@@ -238,6 +238,8 @@ static void * ipcp_main_loop(void * o)
 
                         if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC)
                                 conf.if_name = conf_msg->if_name;
+
+                        ipcpi.dir_hash_algo = conf_msg->dif_info->dir_hash_algo;
 
                         ret_msg.result = ipcpi.ops->ipcp_bootstrap(&conf);
                         break;
