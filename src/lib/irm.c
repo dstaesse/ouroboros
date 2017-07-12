@@ -189,9 +189,8 @@ ssize_t irm_list_ipcps(const char * name,
                 return -ENOMEM;
         }
 
-        for (i = 0; i < nr; i++) {
+        for (i = 0; i < nr; i++)
                 (*apis)[i] = recv_msg->apis[i];
-        }
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
