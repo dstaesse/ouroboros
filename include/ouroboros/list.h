@@ -26,6 +26,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <sys/types.h>
 
 struct list_head {
@@ -34,7 +35,7 @@ struct list_head {
 };
 
 #define list_entry(ptr, type, mbr)                              \
-        ((type *)((uint8_t *)(ptr)-(size_t)(&((type *)0)->mbr)))
+        ((type *)((uint8_t *)(ptr) - offsetof(type, mbr)))
 
 #define list_first_entry(ptr, type, mbr)                        \
         list_entry((ptr)->nxt, type, mbr)
