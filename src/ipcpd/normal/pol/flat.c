@@ -56,7 +56,7 @@ static int addr_taken(char *  name,
         char path[RIB_MAX_PATH_LEN + 1];
 
         size_t reset;
-        strcpy(path, "/" MEMBERS_NAME);
+        strcpy(path, MEMBERS_PATH);
 
         reset = strlen(path);
 
@@ -102,7 +102,7 @@ uint64_t flat_address(void)
         char ** members;
         ssize_t n_members;
 
-        strcpy(path, "/" MEMBERS_NAME);
+        strcpy(path, MEMBERS_PATH);
 
         if (!rib_has(path)) {
                 log_err("Could not read members from RIB.");

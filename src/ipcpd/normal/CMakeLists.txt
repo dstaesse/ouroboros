@@ -15,6 +15,8 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 set(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
 
 protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS flow_alloc.proto)
+protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS kademlia.proto)
+
 # Add GPB sources of policies last
 protobuf_generate_c(FSO_SRCS FSO_HDRS pol/fso.proto)
 
@@ -22,6 +24,7 @@ set(SOURCE_FILES
   # Add source files here
   addr_auth.c
   connmgr.c
+  dht.c
   dir.c
   dt.c
   dt_pci.c
@@ -42,7 +45,7 @@ set(SOURCE_FILES
   )
 
 add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
-  ${FLOW_ALLOC_SRCS} ${FSO_SRCS})
+  ${FLOW_ALLOC_SRCS} ${FSO_SRCS} ${KAD_PROTO_SRCS})
 target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros)
 
 include(AddCompileFlags)
@@ -53,3 +56,4 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
 
 add_subdirectory(pol/tests)
+add_subdirectory(tests)

@@ -20,129 +20,130 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define OUROBOROS_PREFIX "directory"
+
 #include <ouroboros/config.h>
+#include <ouroboros/endian.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
+#include <ouroboros/utils.h>
 
 #include "dir.h"
+#include "dht.h"
 #include "ipcp.h"
 #include "ribconfig.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <inttypes.h>
 
-static char dir_path[RIB_MAX_PATH_LEN + 1];
+#define KAD_B (hash_len(ipcpi.dir_hash_algo) * CHAR_BIT)
+#define ENROL_RETR 6
+#define ENROL_INTV 1
 
-static void dir_path_reset(void) {
-        dir_path[strlen(DIR_PATH)]= '\0';
-        assert(strcmp(DIR_PATH, dir_path) == 0);
-}
+struct dht * dht;
 
-int dir_init(void)
+static uint64_t find_peer_addr(void)
 {
-        /* FIXME: set ribmgr dissemination here */
-        if (rib_add(RIB_ROOT, DIR_NAME))
-                return -1;
+        ssize_t  i;
+        char ** members;
+        ssize_t n_members;
+        size_t  reset;
+        char    path[RIB_MAX_PATH_LEN + 1];
 
-        strcpy(dir_path, DIR_PATH);
+        strcpy(path, MEMBERS_PATH);
+
+        reset = strlen(path);
+
+        n_members = rib_children(path, &members);
+        if (n_members == 1) {
+                freepp(ssize_t, members, n_members);
+                return 0;
+        }
+
+        for (i = 0; i < n_members; ++i) {
+                uint64_t addr;
+                rib_path_append(path, members[i]);
+                if (rib_read(path, &addr, sizeof(addr)) != sizeof(addr)) {
+                        log_err("Failed to read address from RIB.");
+                        freepp(ssize_t, members, n_members);
+                        return ipcpi.dt_addr;
+                }
+
+                if (addr != ipcpi.dt_addr) {
+                        freepp(ssize_t, members, n_members);
+                        return addr;
+                }
+
+                path[reset] = '\0';
+        }
+
+        freepp(ssize_t, members, n_members);
 
         return 0;
 }
 
-int dir_fini(void)
+int dir_init()
 {
-        /* FIXME: remove ribmgr dissemination here*/
+        uint64_t addr;
 
-        dir_path_reset();
-        rib_del(dir_path);
+        dht = dht_create(ipcpi.dt_addr);
+        if (dht == NULL)
+                return -ENOMEM;
 
-        return 0;
-}
-
-int dir_reg(const uint8_t * hash)
-{
-        char hashstr[ipcp_dir_hash_strlen() + 1];
-        int ret;
-
-        assert(hash);
-
-        dir_path_reset();
-
-        ipcp_hash_str(hashstr, hash);
-
-        ret = rib_add(dir_path, hashstr);
-        if (ret == -ENOMEM)
-                 return -ENOMEM;
-
-        rib_path_append(dir_path, hashstr);
-
-        ret = rib_add(dir_path, ipcpi.name);
-        if (ret == -EPERM)
+        addr = find_peer_addr();
+        if (addr == ipcpi.dt_addr) {
+                log_err("Failed to get peer address.");
+                dht_destroy(dht);
                 return -EPERM;
-        if (ret == -ENOMEM) {
-                if (rib_children(dir_path, NULL) == 0)
-                        rib_del(dir_path);
+        }
+
+        if (addr != 0) {
+                size_t retr = 0;
+                log_dbg("Enrolling directory with peer %" PRIu64 ".", addr);
+                /* NOTE: we could try other members if dht_enroll times out. */
+                while (dht_enroll(dht, addr)) {
+                        if (retr++ == ENROL_RETR) {
+                                dht_destroy(dht);
+                                return -EPERM;
+                        }
+
+                        log_dbg("Directory enrollment failed, retrying...");
+                        sleep(ENROL_INTV);
+                }
+
+                return 0;
+        }
+
+        log_dbg("Bootstrapping DHT.");
+
+        /* TODO: get parameters for bootstrap from IRM tool. */
+        if (dht_bootstrap(dht, KAD_B, 86400)) {
+                dht_destroy(dht);
                 return -ENOMEM;
         }
 
         return 0;
 }
 
-int dir_unreg(const uint8_t * hash)
+void dir_fini(void)
 {
-        char hashstr[ipcp_dir_hash_strlen() + 1];
-        size_t len;
-
-        assert(hash);
-
-        dir_path_reset();
-
-        ipcp_hash_str(hashstr, hash);
-
-        rib_path_append(dir_path, hashstr);
-
-        if (!rib_has(dir_path))
-                return 0;
-
-        len = strlen(dir_path);
-
-        rib_path_append(dir_path, ipcpi.name);
-
-        rib_del(dir_path);
-
-        dir_path[len] = '\0';
-
-        if (rib_children(dir_path, NULL) == 0)
-                rib_del(dir_path);
-
-        return 0;
+        dht_destroy(dht);
 }
 
-int dir_query(const uint8_t * hash)
+int dir_reg(const uint8_t * hash)
 {
-        char hashstr[ipcp_dir_hash_strlen() + 1];
-        size_t len;
+        return dht_reg(dht, hash);
+}
 
-        dir_path_reset();
+int dir_unreg(const uint8_t * hash)
+{
+        return dht_unreg(dht, hash);
+}
 
-        ipcp_hash_str(hashstr, hash);
-
-        rib_path_append(dir_path, hashstr);
-
-        if (!rib_has(dir_path))
-                return -1;
-
-        /* FIXME: assert after local IPCP is deprecated */
-        len = strlen(dir_path);
-
-        rib_path_append(dir_path, ipcpi.name);
-
-        if (rib_has(dir_path)) {
-                dir_path[len] = '\0';
-                if (rib_children(dir_path, NULL) == 1)
-                        return -1;
-        }
-
-        return 0;
+uint64_t dir_query(const uint8_t * hash)
+{
+        return dht_query(dht, hash);
 }

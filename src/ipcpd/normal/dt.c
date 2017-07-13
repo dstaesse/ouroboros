@@ -50,7 +50,7 @@
 #include <assert.h>
 
 struct ae_info {
-        int    (*post_sdu)(void * ae, struct shm_du_buff * sdb);
+        void   (* post_sdu)(void * ae, struct shm_du_buff * sdb);
         void * ae;
 };
 
@@ -131,10 +131,13 @@ static int sdu_handler(int                  fd,
                         return 0;
                 }
 
-                if (dt.aes[dt_pci.fd].post_sdu(dt.aes[dt_pci.fd].ae, sdb)) {
+                if (dt.aes[dt_pci.fd].post_sdu == NULL) {
+                        log_err("No registered AE on fd %d.", dt_pci.fd);
                         ipcp_sdb_release(sdb);
-                        return -1;
+                        return -EPERM;
                 }
+
+                dt.aes[dt_pci.fd].post_sdu(dt.aes[dt_pci.fd].ae, sdb);
 
                 return 0;
         }
@@ -295,7 +298,7 @@ void dt_stop(void)
 }
 
 int dt_reg_ae(void * ae,
-              int (* func)(void * func, struct shm_du_buff *))
+              void (* func)(void * func, struct shm_du_buff *))
 {
         int res_fd;
 
@@ -330,10 +333,11 @@ int dt_write_sdu(uint64_t             dst_addr,
         struct dt_pci dt_pci;
 
         assert(sdb);
+        assert(dst_addr != ipcpi.dt_addr);
 
         fd = pff_nhop(dt.pff[qc], dst_addr);
         if (fd < 0) {
-                log_err("Could not get nhop for addr %" PRIu64 ".", dst_addr);
+                log_dbg("Could not get nhop for addr %" PRIu64 ".", dst_addr);
                 return -1;
         }
 

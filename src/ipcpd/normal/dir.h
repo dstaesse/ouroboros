@@ -23,14 +23,14 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_DIR_H
 #define OUROBOROS_IPCPD_NORMAL_DIR_H
 
-int dir_init(void);
+int      dir_init(void);
 
-int dir_fini(void);
+void     dir_fini(void);
 
-int dir_reg(const uint8_t * hash);
+int      dir_reg(const uint8_t * hash);
 
-int dir_unreg(const uint8_t * hash);
+int      dir_unreg(const uint8_t * hash);
 
-int dir_query(const uint8_t * hash);
+uint64_t dir_query(const uint8_t * hash);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_DIR_H */

@@ -3,7 +3,8 @@
  *
  * Configuration information
  *
- *    Sander Vrijders <sander.vrijders@intec.ugent.be>
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -68,7 +69,7 @@
 #define IRMD_REQ_ARR_TIMEOUT   500
 #define IRMD_FLOW_TIMEOUT      5000
 #define IPCP_ACCEPT_TIMEOUT    100
-#define SOCKET_TIMEOUT         4000
+#define SOCKET_TIMEOUT         10000
 #define CDAP_REPLY_TIMEOUT     1000
 #define ENROLL_TIMEOUT         2000
 

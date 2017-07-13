@@ -1,0 +1,46 @@
+/*
+ * Ouroboros - Copyright (C) 2016 - 2017
+ *
+ * KAD protocol
+ *
+ *    Dimitri Staessens <dimitri.staessens@intec.ugent.be>
+ *    Sander Vrijders   <sander.vrijders@intec.ugent.be>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public License
+ * version 2.1 as published by the Free Software Foundation.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301 USA
+ */
+
+syntax = "proto2";
+
+message kad_contact_msg {
+        required bytes  id   = 1;
+        required uint64 addr = 2;
+};
+
+message kad_msg {
+        required uint32 code              =  1;
+        required uint32 cookie            =  2;
+        required uint64 s_addr            =  3;
+        optional bytes  s_id              =  4;
+        optional bytes  key               =  5;
+        repeated uint64 addrs             =  6;
+        repeated kad_contact_msg contacts =  7;
+        // enrolment parameters
+        optional uint32 alpha             =  8;
+        optional uint32 b                 =  9;
+        optional uint32 k                 = 10;
+        optional uint32 t_expire          = 11;
+        optional uint32 t_refresh         = 12;
+        optional uint32 t_replicate       = 13;
+};
