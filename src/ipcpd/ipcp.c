@@ -736,11 +736,11 @@ void ipcp_fini()
         pthread_cond_destroy(&ipcpi.alloc_cond);
         pthread_mutex_destroy(&ipcpi.alloc_lock);
 
+        log_info("IPCP %d out.", getpid());
+
         log_fini();
 
         ouroboros_fini();
-
-        log_info("IPCP %d out.", getpid());
 }
 
 void ipcp_set_state(enum ipcp_state state)
