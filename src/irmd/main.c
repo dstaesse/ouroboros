@@ -315,7 +315,7 @@ static pid_t create_ipcp(char *         name,
                         break;
         }
 
-        list_add_tail(&tmp->next, &irmd.ipcps);
+        list_add_tail(&tmp->next, p);
 
         list_add(&api->next, &irmd.spawned_apis);
 
