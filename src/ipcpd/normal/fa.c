@@ -30,6 +30,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 
+#include "dir.h"
 #include "dt_pci.h"
 #include "fa.h"
 #include "sdu_sched.h"
@@ -79,8 +80,8 @@ static void destroy_conn(int fd)
         fa.r_addr[fd] = INVALID_ADDR;
 }
 
-static int fa_post_sdu(void *               ae,
-                       struct shm_du_buff * sdb)
+static void fa_post_sdu(void *               ae,
+                        struct shm_du_buff * sdb)
 {
         struct timespec    ts  = {0, TIMEOUT * 1000};
         int                fd;
@@ -99,7 +100,8 @@ static int fa_post_sdu(void *               ae,
                                      shm_du_buff_head(sdb));
         if (msg == NULL) {
                 log_err("Failed to unpack flow alloc message.");
-                return -1;
+                ipcp_sdb_release(sdb);
+                return;
         }
 
         switch (msg->code) {
@@ -110,7 +112,8 @@ static int fa_post_sdu(void *               ae,
                         log_err("Bad flow request.");
                         pthread_mutex_unlock(&ipcpi.alloc_lock);
                         flow_alloc_msg__free_unpacked(msg, NULL);
-                        return -1;
+                        ipcp_sdb_release(sdb);
+                        return;
                 }
 
                 while (ipcpi.alloc_id != -1 &&
@@ -123,7 +126,8 @@ static int fa_post_sdu(void *               ae,
                         log_dbg("Won't allocate over non-operational IPCP.");
                         pthread_mutex_unlock(&ipcpi.alloc_lock);
                         flow_alloc_msg__free_unpacked(msg, NULL);
-                        return -1;
+                        ipcp_sdb_release(sdb);
+                        return;
                 }
 
                 assert(ipcpi.alloc_id == -1);
@@ -136,7 +140,8 @@ static int fa_post_sdu(void *               ae,
                         pthread_mutex_unlock(&ipcpi.alloc_lock);
                         flow_alloc_msg__free_unpacked(msg, NULL);
                         log_err("Failed to get fd for flow.");
-                        return -1;
+                        ipcp_sdb_release(sdb);
+                        return;
                 }
 
                 pthread_rwlock_wrlock(&fa.flows_lock);
@@ -168,13 +173,12 @@ static int fa_post_sdu(void *               ae,
         default:
                 log_err("Got an unknown flow allocation message.");
                 flow_alloc_msg__free_unpacked(msg, NULL);
-                return -1;
+                ipcp_sdb_release(sdb);
+                return;
         }
 
         flow_alloc_msg__free_unpacked(msg, NULL);
         ipcp_sdb_release(sdb);
-
-        return 0;
 }
 
 int fa_init(void)
@@ -235,47 +239,10 @@ int fa_alloc(int             fd,
              qoscube_t       qc)
 {
         flow_alloc_msg_t     msg = FLOW_ALLOC_MSG__INIT;
-        char                 path[RIB_MAX_PATH_LEN + 1];
         uint64_t             addr;
-        ssize_t              ch;
-        ssize_t              i;
-        char **              children;
-        char                 hashstr[ipcp_dir_hash_strlen() + 1];
-        char *               dst_ipcp = NULL;
         struct shm_du_buff * sdb;
 
-        ipcp_hash_str(hashstr, dst);
-
-        assert(strlen(hashstr) + strlen(DIR_PATH) + 1
-               < RIB_MAX_PATH_LEN);
-
-        strcpy(path, DIR_PATH);
-
-        rib_path_append(path, hashstr);
-
-        ch = rib_children(path, &children);
-        if (ch <= 0)
-                return -1;
-
-        for (i = 0; i < ch; ++i)
-                if (dst_ipcp == NULL && strcmp(children[i], ipcpi.name) != 0)
-                        dst_ipcp = children[i];
-                else
-                        free(children[i]);
-
-        free(children);
-
-        if (dst_ipcp == NULL)
-                return -1;
-
-        strcpy(path, MEMBERS_PATH);
-
-        rib_path_append(path, dst_ipcp);
-
-        free(dst_ipcp);
-
-        if (rib_read(path, &addr, sizeof(addr)) != sizeof(addr))
-                return -1;
+        addr = dir_query(dst);
 
         msg.code         = FLOW_ALLOC_CODE__FLOW_REQ;
         msg.has_hash     = true;

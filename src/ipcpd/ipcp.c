@@ -260,7 +260,6 @@ static void * ipcp_main_loop(void * o)
 
                         ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dst_name,
                                                                 &info);
-
                         if (ret_msg.result == 0) {
                                 ret_msg.dif_info = &dif_info;
                                 dif_info.dir_hash_algo = info.dir_hash_algo;

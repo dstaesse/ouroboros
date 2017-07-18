@@ -116,11 +116,6 @@ static int boot_components(void)
 
         log_dbg("Starting ribmgr.");
 
-        if (dir_init()) {
-                log_err("Failed to initialize directory.");
-                goto fail_dir;
-        }
-
         if (ribmgr_init()) {
                 log_err("Failed to initialize RIB manager.");
                 goto fail_ribmgr;
@@ -148,6 +143,11 @@ static int boot_components(void)
                 goto fail_fa_start;
         }
 
+        if (dir_init()) {
+                log_err("Failed to initialize directory.");
+                goto fail_dir;
+        }
+
         if (enroll_start()) {
                 log_err("Failed to start enroll.");
                 goto fail_enroll_start;
@@ -166,6 +166,8 @@ static int boot_components(void)
         ipcp_set_state(IPCP_INIT);
         enroll_stop();
  fail_enroll_start:
+        dir_fini();
+ fail_dir:
         fa_stop();
  fail_fa_start:
         dt_stop();
@@ -176,8 +178,6 @@ static int boot_components(void)
  fail_dt:
         ribmgr_fini();
  fail_ribmgr:
-        dir_fini();
- fail_dir:
         addr_auth_fini();
  fail_addr_auth:
         free(ipcpi.dif_name);
@@ -191,6 +191,8 @@ void shutdown_components(void)
 
         enroll_stop();
 
+        dir_fini();
+
         fa_stop();
 
         dt_stop();
@@ -200,8 +202,6 @@ void shutdown_components(void)
         dt_fini();
 
         ribmgr_fini();
-
-        dir_fini();
 
         addr_auth_fini();
 
@@ -227,10 +227,9 @@ static int normal_ipcp_enroll(const char *      dst,
                 return -1;
         }
 
-        log_dbg("Enrolled with " HASH_FMT, HASH_VAL(dst));
+        log_dbg("Enrolled with %s.", dst);
 
         info->dir_hash_algo = ipcpi.dir_hash_algo;
-
         strcpy(info->dif_name, ipcpi.dif_name);
 
         return 0;
@@ -347,12 +346,17 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
         return 0;
 }
 
+static int normal_ipcp_query(const uint8_t * dst)
+{
+        return dir_query(dst) ? 0 : -1;
+}
+
 static struct ipcp_ops normal_ops = {
         .ipcp_bootstrap       = normal_ipcp_bootstrap,
         .ipcp_enroll          = normal_ipcp_enroll,
         .ipcp_reg             = dir_reg,
         .ipcp_unreg           = dir_unreg,
-        .ipcp_query           = dir_query,
+        .ipcp_query           = normal_ipcp_query,
         .ipcp_flow_alloc      = fa_alloc,
         .ipcp_flow_alloc_resp = fa_alloc_resp,
         .ipcp_flow_dealloc    = fa_dealloc

@@ -299,9 +299,8 @@ static void * sync_rib(void *o)
                         rib_path_append(path, children[--ch]);
                         free(children[ch]);
 
-                        /* Only sync fsdb, members and directory */
+                        /* Only sync fsdb and members */
                         if (strcmp(path, MEMBERS_PATH) == 0
-                            || strcmp(path, DIR_PATH) == 0
                             || strcmp(path, ROUTING_PATH) == 0)
                                 ribmgr_sync(path);
                 }
