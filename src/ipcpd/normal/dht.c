@@ -702,7 +702,8 @@ static void lookup_update(struct dht *    dht,
                         e = list_entry(p, struct contact, next);
                         if (!memcmp(e->id, c->id, dht->b)) {
                                 contact_destroy(c);
-                                goto finish_node;
+                                c = NULL;
+                                break;
                         }
 
                         if (dist(c->id, lu->key) > dist(e->id, lu->key))
@@ -710,20 +711,24 @@ static void lookup_update(struct dht *    dht,
                         pos++;
                 }
 
+                if (c == NULL)
+                        continue;
+
+                if (lu->n_contacts < dht->k) {
+                        list_add_tail(&c->next, p);
+                        ++lu->n_contacts;
+                } else if (pos == dht->k) {
+                        contact_destroy(c);
+                        continue;
+                } else {
+                        struct contact * d;
+                        list_add_tail(&c->next, p);
+                        d = list_last_entry(&lu->contacts, struct contact, next);
+                        list_del(&d->next);
+                        contact_destroy(d);
+                }
         }
 
-        if (pos == dht->k) {
-                contact_destroy(c);
-                goto finish_node;
-        } else {
-                struct contact * d;
-                d = list_last_entry(&lu->contacts, struct contact, next);
-                list_del(&d->next);
-                list_add_tail(&c->next, p);
-                contact_destroy(d);
-        }
-
- finish_node:
         lu->state = LU_UPDATE;
         pthread_cond_signal(&lu->cond);
         pthread_mutex_unlock(&lu->lock);
@@ -771,11 +776,11 @@ static ssize_t lookup_contact_addrs(struct lookup * lu,
         return n;
 }
 
-static ssize_t lookup_new_addrs(struct lookup * lu,
+static void lookup_new_addrs(struct lookup * lu,
                                 uint64_t *      addrs)
 {
         struct list_head * p;
-        ssize_t            n = 0;
+        size_t             n = 0;
 
         assert(lu);
         assert(addrs);
@@ -795,14 +800,14 @@ static ssize_t lookup_new_addrs(struct lookup * lu,
                         break;
         }
 
+        assert(n <= KAD_ALPHA);
+
+        addrs[n] = 0;
+
         if (n == 0)
                 lu->state = LU_DONE;
 
         pthread_mutex_unlock(&lu->lock);
-
-        assert(n <= KAD_ALPHA);
-
-        return n;
 }
 
 static enum lookup_state lookup_wait(struct lookup * lu)
@@ -1475,7 +1480,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
         if (lu == NULL)
                 return NULL;
 
-        addrs[lookup_new_addrs(lu, addrs)] = 0;
+        lookup_new_addrs(lu, addrs);
 
         if (addrs[0] == 0) {
                 pthread_rwlock_wrlock(&dht->lock);
@@ -1496,7 +1501,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
         while ((state = lookup_wait(lu)) != LU_COMPLETE) {
                 switch (state) {
                 case LU_UPDATE:
-                        addrs[lookup_new_addrs(lu, addrs)] = 0;
+                        lookup_new_addrs(lu, addrs);
                         if (addrs[0] == 0) {
                                 pthread_rwlock_wrlock(&dht->lock);
                                 list_del(&lu->next);
