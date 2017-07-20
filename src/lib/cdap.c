@@ -268,7 +268,7 @@ static void cdap_rcvd_destroy(struct cdap * instance)
 
         pthread_mutex_lock(&instance->rcvd_lock);
 
-        list_for_each_safe(p, h, &instance->sent) {
+        list_for_each_safe(p, h, &instance->rcvd) {
                 struct cdap_rcvd * r = list_entry(p, struct cdap_rcvd, next);
                 list_del(&r->next);
                 if (r->data != NULL)
@@ -578,14 +578,7 @@ int cdap_del_flow(struct cdap * instance,
 
         pthread_rwlock_wrlock(&instance->flows_lock);
 
-        pthread_mutex_lock(&instance->mtx);
-
-        while (instance->proc)
-                pthread_cond_wait(&instance->cond, &instance->mtx);
-
         flow_set_del(instance->set, fd);
-
-        pthread_mutex_unlock(&instance->mtx);
 
         list_for_each_safe(p, h, &instance->flows) {
                 struct fd_el * e = list_entry(p, struct fd_el, next);
@@ -599,6 +592,16 @@ int cdap_del_flow(struct cdap * instance,
         --instance->n_flows;
 
         pthread_rwlock_unlock(&instance->flows_lock);
+
+        pthread_mutex_lock(&instance->mtx);
+
+        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
+                             (void *) &instance->mtx);
+
+        while (instance->proc)
+                pthread_cond_wait(&instance->cond, &instance->mtx);
+
+        pthread_cleanup_pop(true);
 
         return 0;
 }
