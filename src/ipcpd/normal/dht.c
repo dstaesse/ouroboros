@@ -56,6 +56,7 @@ typedef KadContactMsg kad_contact_msg_t;
 #define KAD_R_PING    2    /* Ping retries before declaring peer dead.   */
 #define KAD_QUEER     15   /* Time to declare peer questionable.         */
 #define KAD_BETA      8    /* Bucket split factor, must be 1, 2, 4 or 8. */
+#define KAD_RESP_RETR 6    /* Number of retries on sending a response.   */
 
 enum dht_state {
         DHT_INIT = 0,
@@ -1272,6 +1273,10 @@ static int send_msg(struct dht * dht,
         struct shm_du_buff * sdb;
         struct kad_req *     req;
         size_t               len;
+        int                  retr = 0;
+
+        if (msg->code == KAD_RESPONSE)
+                retr = KAD_RESP_RETR;
 
         pthread_rwlock_wrlock(&dht->lock);
 
@@ -1299,10 +1304,19 @@ static int send_msg(struct dht * dht,
         kad_msg__pack(msg, shm_du_buff_head(sdb));
 
 #ifndef __DHT_TEST__
-        if (dt_write_sdu(addr, QOS_CUBE_BE, dht->fd, sdb))
+        while (retr >= 0) {
+                if (dt_write_sdu(addr, QOS_CUBE_BE, dht->fd, sdb))
+                        retr--;
+                else
+                        break;
+                sleep(1);
+        }
+
+        if (retr < 0)
                 goto fail_write;
 #else
         (void) addr;
+        (void) retr;
         ipcp_sdb_release(sdb);
 #endif /* __DHT_TEST__ */
 
@@ -1598,9 +1612,7 @@ static int kad_join(struct dht * dht,
         pthread_rwlock_unlock(&dht->lock);
 
         lu = kad_lookup(dht, dht->id, KAD_FIND_NODE);
-        if (lu == NULL)
-                log_warn("Join response not yet added.");
-        else
+        if (lu != NULL)
                 lookup_destroy(lu);
 
         return 0;
