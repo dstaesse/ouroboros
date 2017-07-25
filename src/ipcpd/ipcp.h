@@ -93,15 +93,6 @@ struct ipcp {
         pthread_cond_t     alloc_cond;
         pthread_mutex_t    alloc_lock;
 
-        pthread_t *        threadpool;
-
-        struct bmp *       thread_ids;
-        size_t             max_threads;
-        size_t             threads;
-        pthread_cond_t     threads_cond;
-        pthread_mutex_t    threads_lock;
-
-        pthread_t          tpm;
 } ipcpi;
 
 int             ipcp_init(int               argc,
