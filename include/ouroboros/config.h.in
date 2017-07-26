@@ -51,20 +51,16 @@
 #define SHM_FLOW_SET_PREFIX    "/ouroboros.sets."
 #define IRMD_MAX_FLOWS         4096
 /* IRMD dynamic threadpooling */
-#define IRMD_MIN_AV_THREADS    16
-#define IRMD_MAX_AV_THREADS    64
-#define IRMD_MAX_THREADS       256
+#define IRMD_MIN_THREADS       16
+#define IRMD_ADD_THREADS       32
 /* IPCP dynamic threadpooling */
-#define IPCP_MIN_AV_THREADS    4
-#define IPCP_MAX_AV_THREADS    32
-#define IPCP_MAX_THREADS       64
+#define IPCP_MIN_THREADS       4
+#define IPCP_ADD_THREADS       16
 
 #define IPCPD_MAX_CONNS        IRMD_MAX_FLOWS
 #define PTHREAD_COND_CLOCK     CLOCK_MONOTONIC
 #define PFT_SIZE               1 << 12
 /* Timeout values */
-#define IRMD_TPM_TIMEOUT       1000
-#define IPCP_TPM_TIMEOUT       1000
 #define IRMD_ACCEPT_TIMEOUT    100
 #define IRMD_REQ_ARR_TIMEOUT   500
 #define IRMD_FLOW_TIMEOUT      5000
