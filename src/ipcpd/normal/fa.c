@@ -98,9 +98,11 @@ static void fa_post_sdu(void *               ae,
                                      shm_du_buff_tail(sdb) -
                                      shm_du_buff_head(sdb),
                                      shm_du_buff_head(sdb));
+
+        ipcp_sdb_release(sdb);
+
         if (msg == NULL) {
                 log_err("Failed to unpack flow alloc message.");
-                ipcp_sdb_release(sdb);
                 return;
         }
 
@@ -112,7 +114,6 @@ static void fa_post_sdu(void *               ae,
                         log_err("Bad flow request.");
                         pthread_mutex_unlock(&ipcpi.alloc_lock);
                         flow_alloc_msg__free_unpacked(msg, NULL);
-                        ipcp_sdb_release(sdb);
                         return;
                 }
 
@@ -126,7 +127,6 @@ static void fa_post_sdu(void *               ae,
                         log_dbg("Won't allocate over non-operational IPCP.");
                         pthread_mutex_unlock(&ipcpi.alloc_lock);
                         flow_alloc_msg__free_unpacked(msg, NULL);
-                        ipcp_sdb_release(sdb);
                         return;
                 }
 
@@ -140,7 +140,6 @@ static void fa_post_sdu(void *               ae,
                         pthread_mutex_unlock(&ipcpi.alloc_lock);
                         flow_alloc_msg__free_unpacked(msg, NULL);
                         log_err("Failed to get fd for flow.");
-                        ipcp_sdb_release(sdb);
                         return;
                 }
 
@@ -173,12 +172,10 @@ static void fa_post_sdu(void *               ae,
         default:
                 log_err("Got an unknown flow allocation message.");
                 flow_alloc_msg__free_unpacked(msg, NULL);
-                ipcp_sdb_release(sdb);
                 return;
         }
 
         flow_alloc_msg__free_unpacked(msg, NULL);
-        ipcp_sdb_release(sdb);
 }
 
 int fa_init(void)
