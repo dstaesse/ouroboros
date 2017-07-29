@@ -827,13 +827,6 @@ static enum lookup_state lookup_wait(struct lookup * lu)
 
         pthread_cleanup_pop(false);
 
-        if (lu->state == LU_DESTROY) {
-                lu->state = LU_NULL;
-                pthread_cond_signal(&lu->cond);
-                pthread_mutex_unlock(&lu->lock);
-                return -1;
-        }
-
         state = lu->state;
 
         pthread_mutex_unlock(&lu->lock);
@@ -1320,7 +1313,7 @@ static int send_msg(struct dht * dht,
         ipcp_sdb_release(sdb);
 #endif /* __DHT_TEST__ */
 
-        if (msg->code < KAD_STORE) {
+        if (msg->code < KAD_STORE && dht->state != DHT_SHUTDOWN) {
                 req = kad_req_create(dht, msg, addr);
                 if (req != NULL)
                         list_add(&req->next, &dht->requests);
@@ -1478,6 +1471,7 @@ static void lookup_set_state(struct lookup *   lu,
         pthread_mutex_lock(&lu->lock);
 
         lu->state = state;
+        pthread_cond_signal(&lu->cond);
 
         pthread_mutex_unlock(&lu->lock);
 }
@@ -1526,6 +1520,9 @@ static struct lookup * kad_lookup(struct dht *    dht,
                         kad_find(dht, id, addrs, code);
                         break;
                 case LU_DESTROY:
+                        pthread_rwlock_wrlock(&dht->lock);
+                        list_del(&lu->next);
+                        pthread_rwlock_unlock(&dht->lock);
                         lookup_set_state(lu, LU_NULL);
                         return NULL;
                 default:
@@ -1932,7 +1929,6 @@ static int kad_handle_find_resp(struct dht *     dht,
 
         lu = dht_find_lookup(dht, req->key);
         if (lu == NULL) {
-                log_dbg("Response for unknown lookup.");
                 pthread_rwlock_unlock(&dht->lock);
                 return -1;
         }
@@ -1974,8 +1970,7 @@ static void kad_handle_response(struct dht * dht,
         case KAD_FIND_NODE:
                 if (dht_get_state(dht) != DHT_RUNNING)
                         return;
-                if (kad_handle_find_resp(dht, req, msg))
-                        log_dbg("Invalid or outdated response.");
+                kad_handle_find_resp(dht, req, msg);
                 break;
         default:
                 break;
@@ -2265,8 +2260,10 @@ void dht_post_sdu(void *               ae,
                 pthread_rwlock_unlock(&dht->lock);
         }
 
-        if (msg->code < KAD_STORE)
-                send_msg(dht, &resp_msg, addr);
+        if (msg->code < KAD_STORE) {
+                if (send_msg(dht, &resp_msg, addr))
+                        log_warn("Failed to send response.");
+        }
 
         kad_msg__free_unpacked(msg, NULL);
 
