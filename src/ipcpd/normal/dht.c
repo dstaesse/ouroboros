@@ -1357,7 +1357,7 @@ static int kad_add(struct dht *              dht,
 
         pthread_rwlock_wrlock(&dht->lock);
 
-        while (--n >= 0) {
+        while (n-- > 0) {
                 if (contacts[n].id.len != dht->b)
                         log_warn("Bad key length in contact data.");
 
@@ -1557,7 +1557,7 @@ static void kad_publish(struct dht *    dht,
 
         n = lookup_contact_addrs(lu, addrs);
 
-        while (--n > 0) {
+        while (n-- > 0) {
                 if (addrs[n] == dht->addr) {
                         kad_contact_msg_t msg = KAD_CONTACT_MSG__INIT;
                         msg.id.data = (uint8_t *) key;
