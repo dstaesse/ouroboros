@@ -114,16 +114,20 @@ int dir_init()
                         sleep(ENROL_INTV);
                 }
 
+                log_dbg("Directory enrolled.");
+
                 return 0;
         }
 
-        log_dbg("Bootstrapping DHT.");
+        log_dbg("Bootstrapping directory.");
 
         /* TODO: get parameters for bootstrap from IRM tool. */
         if (dht_bootstrap(dht, KAD_B, 86400)) {
                 dht_destroy(dht);
                 return -ENOMEM;
         }
+
+        log_dbg("Directory bootstrapped.");
 
         return 0;
 }
