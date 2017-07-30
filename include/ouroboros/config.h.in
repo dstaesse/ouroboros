@@ -56,7 +56,7 @@
 /* IPCP dynamic threadpooling */
 #define IPCP_MIN_THREADS       4
 #define IPCP_ADD_THREADS       16
-
+#define IPCP_SCHED_THREADS     8
 #define IPCPD_MAX_CONNS        IRMD_MAX_FLOWS
 #define PTHREAD_COND_CLOCK     CLOCK_MONOTONIC
 #define PFT_SIZE               1 << 12
