@@ -24,10 +24,13 @@
 #ifndef OUROBOROS_NP1_FLOW_H
 #define OUROBOROS_NP1_FLOW_H
 
+#include <ouroboros/qoscube.h>
+
 #include <unistd.h>
 
-int  np1_flow_alloc(pid_t n_api,
-                    int   port_id);
+int  np1_flow_alloc(pid_t     n_api,
+                    int       port_id,
+                    qoscube_t qc);
 
 int  np1_flow_resp(int port_id);
 

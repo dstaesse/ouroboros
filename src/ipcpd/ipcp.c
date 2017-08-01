@@ -290,7 +290,9 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        fd = np1_flow_alloc(msg->api, msg->port_id);
+                        fd = np1_flow_alloc(msg->api,
+                                            msg->port_id,
+                                            msg->qoscube);
                         if (fd < 0) {
                                 log_err("Failed allocating fd on port_id %d.",
                                         msg->port_id);
