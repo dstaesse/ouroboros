@@ -11,7 +11,6 @@ protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
 protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS cdap.proto)
 protobuf_generate_c(RO_PROTO_SRCS RO_PROTO_HDRS ro.proto)
 protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
-protobuf_generate_c(FRCT_ENROLL_SRCS FRCT_ENROLL_HDRS frct_enroll.proto)
 
 if (NOT APPLE)
   find_library(LIBRT_LIBRARIES rt)
@@ -65,7 +64,7 @@ set(SOURCE_FILES
 
 add_library(ouroboros SHARED ${SOURCE_FILES} ${IRM_PROTO_SRCS}
   ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS} ${CDAP_PROTO_SRCS}
-  ${CACEP_PROTO_SRCS} ${RO_PROTO_SRCS} ${FRCT_ENROLL_SRCS})
+  ${CACEP_PROTO_SRCS} ${RO_PROTO_SRCS})
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
