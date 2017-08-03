@@ -117,7 +117,7 @@ struct shm_flow_set * shm_flow_set_create()
                 (set->fqueues + AP_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
         pthread_mutexattr_init(&mattr);
-#ifndef __APPLE__
+#ifdef HAVE_ROBUST_MUTEX
         pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
 #endif
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
@@ -336,7 +336,7 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
         assert(idx < AP_MAX_FQUEUES);
         assert(fqueue);
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(set->lock);
 #else
         if (pthread_mutex_lock(set->lock) == EOWNERDEAD)
@@ -358,7 +358,7 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                 else
                         ret = -pthread_cond_wait(set->conds + idx,
                                                  set->lock);
-#ifndef __APPLE__
+#ifdef HAVE_ROBUST_MUTEX
                 if (ret == -EOWNERDEAD)
                         pthread_mutex_consistent(set->lock);
 #endif

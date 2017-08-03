@@ -8,7 +8,7 @@ set(IPCP_SOURCES
 add_subdirectory(local)
 add_subdirectory(normal)
 add_subdirectory(shim-udp)
-if (NOT APPLE)
+if (NOT APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL GNU)
   add_subdirectory(shim-eth-llc)
 endif ()
 add_subdirectory(tests)

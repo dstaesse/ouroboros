@@ -36,6 +36,7 @@
 #define IPCP_SHIM_ETH_LLC_EXEC "@IPCP_SHIM_ETH_LLC_TARGET@"
 #define IPCP_NORMAL_EXEC       "@IPCP_NORMAL_TARGET@"
 #define IPCP_LOCAL_EXEC        "@IPCP_LOCAL_TARGET@"
+#cmakedefine HAVE_ROBUST_MUTEX
 #define AP_MAX_FLOWS           2048
 #define AP_RES_FDS             64
 #define AP_MAX_FQUEUES         64
