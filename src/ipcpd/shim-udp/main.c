@@ -236,6 +236,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                              qoscube_t            cube)
 {
         struct timespec    ts          = {0, FD_UPDATE_TIMEOUT * 1000};
+        struct timespec    abstime;
         struct sockaddr_in f_saddr;
         socklen_t          f_saddr_len = sizeof(f_saddr);
         int                skfd;
@@ -272,12 +273,16 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                 return -1;
         }
 
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
         pthread_mutex_lock(&ipcpi.alloc_lock);
 
-        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL)
+        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL) {
+                ts_add(&abstime, &ts, &abstime);
                 pthread_cond_timedwait(&ipcpi.alloc_cond,
                                        &ipcpi.alloc_lock,
-                                       &ts);
+                                       &abstime);
+        }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_dbg("Won't allocate over non-operational IPCP.");
@@ -971,6 +976,7 @@ static int ipcp_udp_flow_alloc_resp(int fd,
                                     int response)
 {
         struct timespec    ts   = {0, FD_UPDATE_TIMEOUT * 1000};
+        struct timespec    abstime;
         int                skfd = -1;
         struct sockaddr_in f_saddr;
         struct sockaddr_in r_saddr;
@@ -979,12 +985,16 @@ static int ipcp_udp_flow_alloc_resp(int fd,
         if (response)
                 return 0;
 
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
         pthread_mutex_lock(&ipcpi.alloc_lock);
 
-        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL)
+        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
+                ts_add(&abstime, &ts, &abstime);
                 pthread_cond_timedwait(&ipcpi.alloc_cond,
                                        &ipcpi.alloc_lock,
-                                       &ts);
+                                       &abstime);
+        }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
