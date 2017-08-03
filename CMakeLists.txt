@@ -81,6 +81,12 @@ add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 find_package(ProtobufC REQUIRED)
 include_directories(${PROTOBUF_C_INCLUDE_DIRS})
 
+include(CheckSymbolExists)
+list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_POSIX_C_SOURCE=200809L)
+list(APPEND CMAKE_REQUIRED_DEFINITIONS -D__XSI_VISIBLE=500)
+list(APPEND CMAKE_REQUIRED_LIBRARIES pthread)
+check_symbol_exists(pthread_mutexattr_setrobust pthread.h HAVE_ROBUST_MUTEX)
+
 add_subdirectory(src)
 add_subdirectory(include)
 add_subdirectory(doc)

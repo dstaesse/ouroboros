@@ -124,7 +124,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         rb->del      = rb->add + 1;
 
         pthread_mutexattr_init(&mattr);
-#ifndef __APPLE__
+#ifdef HAVE_ROBUST_MUTEX
         pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
 #endif
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
@@ -231,7 +231,7 @@ int shm_rbuff_write(struct shm_rbuff * rb, size_t idx)
         assert(rb);
         assert(idx < SHM_BUFFER_SIZE);
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
 #else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
@@ -264,7 +264,7 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 
         assert(rb);
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
 #else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
@@ -297,7 +297,7 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
                 ts_add(&abstime, timeout, &abstime);
         }
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
 #else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
@@ -313,7 +313,7 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
                                                       &abstime);
                 else
                         idx = -pthread_cond_wait(rb->add, rb->lock);
-#ifndef __APPLE__
+#ifdef HAVE_ROBUST_MUTEX
                 if (idx == -EOWNERDEAD)
                         pthread_mutex_consistent(rb->lock);
 #endif
@@ -334,7 +334,7 @@ void shm_rbuff_block(struct shm_rbuff * rb)
 {
         assert(rb);
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
 #else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
@@ -349,7 +349,7 @@ void shm_rbuff_unblock(struct shm_rbuff * rb)
 {
         assert(rb);
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
 #else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
@@ -364,7 +364,7 @@ void shm_rbuff_fini(struct shm_rbuff * rb)
 {
         assert(rb);
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
 #else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
@@ -376,7 +376,7 @@ void shm_rbuff_fini(struct shm_rbuff * rb)
                              (void *) rb->lock);
 
         while (!shm_rbuff_empty(rb))
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
                 pthread_cond_wait(rb->del, rb->lock);
 #else
                 if (pthread_cond_wait(rb->del, rb->lock) == EOWNERDEAD)
@@ -391,7 +391,7 @@ size_t shm_rbuff_queued(struct shm_rbuff * rb)
 
         assert(rb);
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
 #else
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)

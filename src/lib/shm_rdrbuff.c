@@ -192,7 +192,7 @@ struct shm_rdrbuff * shm_rdrbuff_create()
 
         pthread_mutexattr_init(&mattr);
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
-#ifndef __APPLE__
+#ifdef HAVE_ROBUST_MUTEX
         pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
 #endif
         pthread_mutex_init(rdrb->lock, &mattr);
@@ -274,7 +274,7 @@ int shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb,
                 ts_add(&abstime, timeo, &abstime);
         }
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rdrb->lock);
 #else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
@@ -282,9 +282,9 @@ int shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb,
 #endif
 
         while (shm_rdrb_free(rdrb, WAIT_BLOCKS)) {
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
                 if (pthread_cond_timedwait(rdrb->full,
-                                           rdrb->lock
+                                           rdrb->lock,
                                            &abstime) == ETIMEDOUT) {
                         pthread_mutex_unlock(rdrb->lock);
                         return -ETIMEDOUT;
@@ -358,7 +358,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         if (sz > SHM_RDRB_BLOCK_SIZE)
                 return -EMSGSIZE;
 #endif
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rdrb->lock);
 #else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
@@ -437,7 +437,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         if (sz > SHM_RDRB_BLOCK_SIZE)
                 return -EMSGSIZE;
 #endif
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rdrb->lock);
 #else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
@@ -535,7 +535,7 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb,
         assert(rdrb);
         assert(idx < (SHM_BUFFER_SIZE));
 
-#ifdef __APPLE__
+#ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rdrb->lock);
 #else
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
