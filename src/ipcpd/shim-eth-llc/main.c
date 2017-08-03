@@ -382,14 +382,19 @@ static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
                                 qoscube_t       cube)
 {
         struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 1000};
+        struct timespec abstime;
         int             fd;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
         pthread_mutex_lock(&ipcpi.alloc_lock);
 
-        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL)
+        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL) {
+                ts_add(&abstime, &ts, &abstime);
                 pthread_cond_timedwait(&ipcpi.alloc_cond,
                                        &ipcpi.alloc_lock,
-                                       &ts);
+                                       &abstime);
+        }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_dbg("Won't allocate over non-operational IPCP.");
@@ -1023,16 +1028,21 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd,
                                         int response)
 {
         struct timespec ts    = {0, EVENT_WAIT_TIMEOUT * 1000};
+        struct timespec abstime;
         uint8_t         ssap  = 0;
         uint8_t         r_sap = 0;
         uint8_t         r_addr[MAC_SIZE];
 
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
         pthread_mutex_lock(&ipcpi.alloc_lock);
 
-        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL)
+        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL){
+                ts_add(&abstime, &ts, &abstime);
                 pthread_cond_timedwait(&ipcpi.alloc_cond,
                                        &ipcpi.alloc_lock,
-                                       &ts);
+                                       &abstime);
+        }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
