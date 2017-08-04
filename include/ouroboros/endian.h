@@ -24,7 +24,7 @@
 #ifndef OUROBOROS_ENDIAN_H
 #define OUROBOROS_ENDIAN_H
 
-#if defined(__linux__) || defined(__CYGWIN__)
+#if defined(__linux__) || defined(__CYGWIN__) || defined(__MACH__)
 
 #ifndef _BSD_SOURCE
 #define _BSD_SOURCE

@@ -1037,7 +1037,7 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd,
 
         pthread_mutex_lock(&ipcpi.alloc_lock);
 
-        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL){
+        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
                 ts_add(&abstime, &ts, &abstime);
                 pthread_cond_timedwait(&ipcpi.alloc_cond,
                                        &ipcpi.alloc_lock,
