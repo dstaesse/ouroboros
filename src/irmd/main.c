@@ -232,10 +232,14 @@ static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
 
 static struct ipcp_entry * get_ipcp_by_dst_name(const char * name)
 {
-        struct list_head * p = NULL;
-        uint8_t * hash;
+        struct list_head * p;
+        struct list_head * h;
+        uint8_t *          hash;
+        pid_t              api;
 
-        list_for_each(p, &irmd.ipcps) {
+        pthread_rwlock_rdlock(&irmd.reg_lock);
+
+        list_for_each_safe(p, h, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 if (e->dif_name == NULL)
                         continue;
@@ -246,13 +250,21 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name)
 
                 str_hash(e->dir_hash_algo, hash, name);
 
-                if (ipcp_query(e->api, hash, IPCP_HASH_LEN(e)) == 0) {
+                api = e->api;
+
+                pthread_rwlock_unlock(&irmd.reg_lock);
+
+                if (ipcp_query(api, hash, IPCP_HASH_LEN(e)) == 0) {
                         free(hash);
                         return e;
                 }
 
                 free(hash);
+
+                pthread_rwlock_rdlock(&irmd.reg_lock);
         }
+
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
         return NULL;
 }
@@ -1099,16 +1111,12 @@ static int flow_alloc(pid_t              api,
         int                 state;
         uint8_t *           hash;
 
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
         ipcp = get_ipcp_by_dst_name(dst);
         if (ipcp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_info("Destination %s unreachable.", dst);
                 return -1;
         }
 
-        pthread_rwlock_unlock(&irmd.reg_lock);
         pthread_rwlock_wrlock(&irmd.flows_lock);
         port_id = bmp_allocate(irmd.port_ids);
         if (!bmp_is_id_valid(irmd.port_ids, port_id)) {
