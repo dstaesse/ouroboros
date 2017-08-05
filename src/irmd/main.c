@@ -222,7 +222,8 @@ static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
         return NULL;
 }
 
-static struct ipcp_entry * get_ipcp_by_dst_name(const char * name)
+static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
+                                                pid_t        src)
 {
         struct list_head * p;
         struct list_head * h;
@@ -233,7 +234,7 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name)
 
         list_for_each_safe(p, h, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->dif_name == NULL)
+                if (e->dif_name == NULL || e->api == src)
                         continue;
 
                 hash = malloc(IPCP_HASH_LEN(e));
@@ -1103,7 +1104,7 @@ static int flow_alloc(pid_t              api,
         int                 state;
         uint8_t *           hash;
 
-        ipcp = get_ipcp_by_dst_name(dst);
+        ipcp = get_ipcp_by_dst_name(dst, api);
         if (ipcp == NULL) {
                 log_info("Destination %s unreachable.", dst);
                 return -1;
@@ -1199,7 +1200,7 @@ static int flow_dealloc(pid_t api,
         if (irm_flow_get_state(f) == FLOW_DEALLOC_PENDING) {
                 list_del(&f->next);
                 if ((kill(f->n_api, 0) < 0 && f->n_1_api == -1) ||
-                    (kill (f->n_1_api, 0) < 0 && f->n_api == -1))
+                    (kill(f->n_1_api, 0) < 0 && f->n_api == -1))
                         irm_flow_set_state(f, FLOW_NULL);
                 clear_irm_flow(f);
                 irm_flow_destroy(f);
