@@ -66,8 +66,11 @@
 #define IRMD_REQ_ARR_TIMEOUT   500
 #define IRMD_FLOW_TIMEOUT      5000
 #define IPCP_ACCEPT_TIMEOUT    100
-#define SOCKET_TIMEOUT         10000
+#define SOCKET_TIMEOUT         1000
+#define BOOTSTRAP_TIMEOUT      5000
+#define ENROLL_TIMEOUT         60000
+#define REG_TIMEOUT            10000
+#define QUERY_TIMEOUT          3000
 #define CDAP_REPLY_TIMEOUT     1000
-#define ENROLL_TIMEOUT         2000
 
 #endif /* OUROBOROS_CONFIG */
