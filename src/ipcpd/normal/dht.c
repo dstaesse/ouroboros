@@ -813,7 +813,14 @@ static void lookup_new_addrs(struct lookup * lu,
 
 static enum lookup_state lookup_wait(struct lookup * lu)
 {
+        struct timespec   timeo = {KAD_T_RESP, 0};
+        struct timespec   abs;
         enum lookup_state state;
+        int               ret = 0;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abs);
+
+        ts_add(&abs, &timeo, &abs);
 
         pthread_mutex_lock(&lu->lock);
 
@@ -823,11 +830,14 @@ static enum lookup_state lookup_wait(struct lookup * lu)
         pthread_cleanup_push((void (*)(void *)) lookup_destroy, (void *) lu);
 
         while (lu->state == LU_PENDING)
-                pthread_cond_wait(&lu->cond, &lu->lock);
+                ret = -pthread_cond_timedwait(&lu->cond, &lu->lock, &abs);
 
         pthread_cleanup_pop(false);
 
-        state = lu->state;
+        if (ret == -ETIMEDOUT)
+                state = LU_COMPLETE;
+        else
+                state = lu->state;
 
         pthread_mutex_unlock(&lu->lock);
 
@@ -1483,6 +1493,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
         uint64_t          addrs[KAD_ALPHA + 1];
         enum lookup_state state;
         struct lookup *   lu;
+        size_t            out = 0;
 
         lu = lookup_create(dht, id);
         if (lu == NULL)
@@ -1498,7 +1509,8 @@ static struct lookup * kad_lookup(struct dht *    dht,
                 return NULL;
         }
 
-        if (kad_find(dht, id, addrs, code) == 0) {
+        out += kad_find(dht, id, addrs, code);
+        if (out == 0) {
                 pthread_rwlock_wrlock(&dht->lock);
                 list_del(&lu->next);
                 pthread_rwlock_unlock(&dht->lock);
@@ -1507,17 +1519,18 @@ static struct lookup * kad_lookup(struct dht *    dht,
         }
 
         while ((state = lookup_wait(lu)) != LU_COMPLETE) {
+                --out;
                 switch (state) {
                 case LU_UPDATE:
                         lookup_new_addrs(lu, addrs);
-                        if (addrs[0] == 0) {
+                        if (addrs[0] == 0 && out == 0) {
                                 pthread_rwlock_wrlock(&dht->lock);
                                 list_del(&lu->next);
                                 pthread_rwlock_unlock(&dht->lock);
                                 return lu;
                         }
 
-                        kad_find(dht, id, addrs, code);
+                        out += kad_find(dht, id, addrs, code);
                         break;
                 case LU_DESTROY:
                         pthread_rwlock_wrlock(&dht->lock);
