@@ -1638,6 +1638,8 @@ void * irm_sanitize(void * o)
                 pthread_rwlock_wrlock(&irmd.flows_lock);
 
                 list_for_each_safe(p, h, &irmd.irm_flows) {
+                        int ipcpi;
+                        int port_id;
                         struct irm_flow * f =
                                 list_entry(p, struct irm_flow, next);
 
@@ -1645,9 +1647,13 @@ void * irm_sanitize(void * o)
                             && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
                                 log_dbg("Pending port_id %d timed out.",
                                          f->port_id);
-                                f->n_1_api = -1;
+                                f->n_api = -1;
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                                ipcp_flow_dealloc(f->n_1_api, f->port_id);
+                                ipcpi   = f->n_1_api;
+                                port_id = f->port_id;
+                                pthread_rwlock_unlock(&irmd.flows_lock);
+                                ipcp_flow_dealloc(ipcpi, port_id);
+                                pthread_rwlock_wrlock(&irmd.flows_lock);
                                 continue;
                         }
 
@@ -1660,7 +1666,11 @@ void * irm_sanitize(void * o)
                                         shm_flow_set_destroy(set);
                                 f->n_api = -1;
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                                ipcp_flow_dealloc(f->n_1_api, f->port_id);
+                                ipcpi   = f->n_1_api;
+                                port_id = f->port_id;
+                                pthread_rwlock_unlock(&irmd.flows_lock);
+                                ipcp_flow_dealloc(ipcpi, port_id);
+                                pthread_rwlock_wrlock(&irmd.flows_lock);
                                 continue;
                         }
 
