@@ -48,13 +48,12 @@ static void close_ptr(void * o)
 ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
                                 ipcp_msg_t * msg)
 {
-       int sockfd = 0;
-       buffer_t buf;
-       char * sock_path = NULL;
-       ssize_t count = 0;
-       ipcp_msg_t * recv_msg = NULL;
-       struct timeval tv = {(SOCKET_TIMEOUT / 1000),
-                            (SOCKET_TIMEOUT % 1000) * 1000};
+       int            sockfd    = 0;
+       buffer_t       buf;
+       char *         sock_path = NULL;
+       ssize_t        count     = 0;
+       ipcp_msg_t *   recv_msg  = NULL;
+       struct timeval tv;
 
        if (kill(api, 0) < 0)
                return NULL;
@@ -81,6 +80,29 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
        if (buf.data == NULL) {
                close(sockfd);
                return NULL;
+       }
+
+       switch (msg->code) {
+       case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
+               tv.tv_sec  = BOOTSTRAP_TIMEOUT / 1000;
+               tv.tv_usec = (BOOTSTRAP_TIMEOUT % 1000) * 1000;
+               break;
+       case IPCP_MSG_CODE__IPCP_ENROLL:
+               tv.tv_sec  = ENROLL_TIMEOUT / 1000;
+               tv.tv_usec = (ENROLL_TIMEOUT % 1000) * 1000;
+               break;
+       case IPCP_MSG_CODE__IPCP_REG:
+               tv.tv_sec  = REG_TIMEOUT / 1000;
+               tv.tv_usec = (REG_TIMEOUT % 1000) * 1000;
+               break;
+       case IPCP_MSG_CODE__IPCP_QUERY:
+               tv.tv_sec  = QUERY_TIMEOUT / 1000;
+               tv.tv_usec = (QUERY_TIMEOUT % 1000) * 1000;
+               break;
+       default:
+               tv.tv_sec  = SOCKET_TIMEOUT / 1000;
+               tv.tv_usec = (SOCKET_TIMEOUT % 1000) * 1000;
+               break;
        }
 
        if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,
@@ -187,9 +209,9 @@ int ipcp_destroy(pid_t api)
 int ipcp_bootstrap(pid_t              api,
                    ipcp_config_msg_t * conf)
 {
-        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int          ret      = -1;
 
         if (conf == NULL)
                 return -EINVAL;
@@ -223,7 +245,7 @@ int ipcp_enroll(pid_t             api,
         if (dst == NULL)
                 return -EINVAL;
 
-        msg.code = IPCP_MSG_CODE__IPCP_ENROLL;
+        msg.code     = IPCP_MSG_CODE__IPCP_ENROLL;
         msg.dst_name = (char *) dst;
 
         recv_msg = send_recv_ipcp_msg(api, &msg);
@@ -259,9 +281,9 @@ int ipcp_reg(pid_t           api,
              const uint8_t * hash,
              size_t          len)
 {
-        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int          ret      = -1;
 
         assert(hash);
 
@@ -289,9 +311,9 @@ int ipcp_unreg(pid_t           api,
                const uint8_t * hash,
                size_t          len)
 {
-        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int          ret      = -1;
 
         msg.code      = IPCP_MSG_CODE__IPCP_UNREG;
         msg.has_hash  = true;
@@ -317,9 +339,9 @@ int ipcp_query(pid_t           api,
                const uint8_t * hash,
                size_t          len)
 {
-        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int          ret      = -1;
 
         msg.code      = IPCP_MSG_CODE__IPCP_QUERY;
         msg.has_hash  = true;
@@ -348,9 +370,9 @@ int ipcp_flow_alloc(pid_t           api,
                     size_t          len,
                     qoscube_t       cube)
 {
-        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int          ret      = -1;
 
         assert(dst);
 
@@ -385,9 +407,9 @@ int ipcp_flow_alloc_resp(pid_t api,
                          pid_t n_api,
                          int   response)
 {
-        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int          ret      = -1;
 
         msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP;
         msg.has_port_id  = true;
@@ -415,9 +437,9 @@ int ipcp_flow_alloc_resp(pid_t api,
 int ipcp_flow_dealloc(pid_t api,
                       int   port_id)
 {
-        ipcp_msg_t msg = IPCP_MSG__INIT;
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int          ret      = -1;
 
         msg.code        = IPCP_MSG_CODE__IPCP_FLOW_DEALLOC;
         msg.has_port_id = true;
