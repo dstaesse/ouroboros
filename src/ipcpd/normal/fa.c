@@ -164,12 +164,14 @@ static void fa_post_sdu(void *               ae,
         case FLOW_ALLOC_CODE__FLOW_REPLY:
                 pthread_rwlock_wrlock(&fa.flows_lock);
 
+                fa.r_fd[msg->r_fd] = msg->s_fd;
+
                 ipcp_flow_alloc_reply(msg->r_fd, msg->response);
 
                 if (msg->response < 0)
                         destroy_conn(msg->r_fd);
                 else
-                        sdu_sched_add(fa.sdu_sched, fa.r_fd[msg->r_fd]);
+                        sdu_sched_add(fa.sdu_sched, msg->r_fd);
 
                 pthread_rwlock_unlock(&fa.flows_lock);
 
@@ -268,7 +270,7 @@ int fa_alloc(int             fd,
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
-        fa.r_fd[fd] = fd;
+        assert(fa.r_fd[fd] == -1);
         fa.r_addr[fd] = addr;
 
         pthread_rwlock_unlock(&fa.flows_lock);
