@@ -37,6 +37,10 @@
 #define IPCP_NORMAL_EXEC       "@IPCP_NORMAL_TARGET@"
 #define IPCP_LOCAL_EXEC        "@IPCP_LOCAL_TARGET@"
 #cmakedefine HAVE_ROBUST_MUTEX
+#cmakedefine HAVE_SYS_RANDOM
+#cmakedefine HAVE_LIBGCRYPT
+#cmakedefine HAVE_OPENSSL
+#cmakedefine HAVE_NETMAP
 #define AP_MAX_FLOWS           2048
 #define AP_RES_FDS             64
 #define AP_MAX_FQUEUES         64

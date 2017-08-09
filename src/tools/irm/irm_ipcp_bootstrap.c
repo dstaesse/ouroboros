@@ -39,7 +39,6 @@
 #define SHIM_ETH_LLC      "shim-eth-llc"
 #define LOCAL             "local"
 
-#define CRC32             "CRC32"
 #define MD5               "MD5"
 #define SHA3_224          "SHA3_224"
 #define SHA3_256          "SHA3_256"
@@ -79,8 +78,8 @@ static void usage(void)
                " (default: %s)]\n"
                "                [routing <routing policy> (default: %s)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
-               "where ALGORITHM = {" CRC32 " " MD5 " "
-               SHA3_224 " " SHA3_256 " " SHA3_384 " " SHA3_512 "}\n"
+               "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
+               SHA3_384 " " SHA3_512 "}\n"
                "if TYPE == " SHIM_UDP "\n"
                "                ip <IP address in dotted notation>\n"
                "                [dns <DDNS IP address in dotted notation>"
@@ -104,7 +103,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         enum pol_gam       dt_gam_type    = DEFAULT_DT_GAM;
         enum pol_gam       rm_gam_type    = DEFAULT_RM_GAM;
         enum pol_routing   routing_type   = DEFAULT_ROUTING;
-        enum hash_algo     hash_algo      = DEFAULT_HASH_ALGO;
+        enum pol_dir_hash  hash_algo      = DEFAULT_HASH_ALGO;
         uint32_t           ip_addr        = 0;
         uint32_t           dns_addr       = DEFAULT_DDNS;
         char *             ipcp_type      = NULL;
@@ -122,11 +121,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 } else if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                 } else if (matches(*argv, "hash") == 0) {
-                        if (strcmp(*(argv + 1), CRC32) == 0)
-                                hash_algo = HASH_CRC32;
-                        else if (strcmp(*(argv + 1), MD5) == 0)
-                                hash_algo = HASH_MD5;
-                        else if (strcmp(*(argv + 1), SHA3_224) == 0)
+                        if (strcmp(*(argv + 1), SHA3_224) == 0)
                                 hash_algo = HASH_SHA3_224;
                         else if (strcmp(*(argv + 1), SHA3_256) == 0)
                                 hash_algo = HASH_SHA3_256;

@@ -21,10 +21,13 @@
  * 02110-1301 USA
  */
 
+#include <ouroboros/config.h>
 #include <ouroboros/random.h>
 
 #if defined(HAVE_SYS_RANDOM)
 #include <sys/random.h>
+#elif defined(HAVE_LIBGCRYPT)
+#include <grypt.h>
 #elif defined(__FreeBSD__)
 #include <stdlib.h>
 #elif defined(HAVE_OPENSSL)
@@ -36,16 +39,14 @@ int random_buffer(void * buf,
                   size_t len)
 {
 #if defined(HAVE_SYS_RANDOM)
-        return getrandom(buf, len, GRND_NONBLOCK); /* also in glibc 2.25 */
+        return getrandom(buf, len, GRND_NONBLOCK); /* glibc 2.25 */
+#elif defined(HAVE_LIBGCRYPT)
+        return gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
 #elif defined(__FreeBSD__)
         return arc4random_buf(buf, len);
 #elif defined(HAVE_OPENSSL)
         if (len > 0 && len < INT_MAX)
                 return RAND_bytes((unsigned char *) buf, (int) len);
-        return -1;
-#else
-        (void) buf;
-        (void) len;
         return -1;
 #endif
 }

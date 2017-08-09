@@ -23,6 +23,7 @@
 #define OUROBOROS_PREFIX "ipcpd/ipcp"
 
 #include <ouroboros/config.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/utils.h>
@@ -174,7 +175,7 @@ static void * mainloop(void * o)
                         strcpy(conf.dif_info.dif_name,
                                conf_msg->dif_info->dif_name);
                         if (conf.dif_info.dif_name == NULL) {
-                                ret_msg.has_result = true;
+                                log_err("No DIF name provided.");
                                 ret_msg.result = -1;
                                 break;
                         }
@@ -186,21 +187,55 @@ static void * mainloop(void * o)
                                 conf.dt_gam_type    = conf_msg->dt_gam_type;
                                 conf.rm_gam_type    = conf_msg->rm_gam_type;
                                 conf.routing_type   = conf_msg->routing_type;
-                                conf.dif_info.dir_hash_algo =
-                                        conf_msg->dif_info->dir_hash_algo;
+
+                                switch(conf_msg->dif_info->dir_hash_algo) {
+                                case DIR_HASH_SHA3_224:
+                                        conf.dif_info.dir_hash_algo
+                                                = HASH_SHA3_224;
+                                        break;
+                                case DIR_HASH_SHA3_256:
+                                        conf.dif_info.dir_hash_algo
+                                                = HASH_SHA3_256;
+                                        break;
+                                case DIR_HASH_SHA3_384:
+                                        conf.dif_info.dir_hash_algo
+                                                = HASH_SHA3_384;
+                                        break;
+                                case DIR_HASH_SHA3_512:
+                                        conf.dif_info.dir_hash_algo
+                                                = HASH_SHA3_512;
+                                        break;
+                                default:
+                                        assert(false);
+                                }
+
+                                dif_info.dir_hash_algo =
+                                        conf.dif_info.dir_hash_algo;
                         }
 
                         if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
-                                conf.ip_addr  = conf_msg->ip_addr;
-                                conf.dns_addr = conf_msg->dns_addr;
+                                conf.ip_addr           = conf_msg->ip_addr;
+                                conf.dns_addr          = conf_msg->dns_addr;
+                                dif_info.dir_hash_algo = HASH_MD5;
+                                ipcpi.dir_hash_algo    = HASH_MD5;
                         }
 
-                        if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC)
-                                conf.if_name = conf_msg->if_name;
+                        if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC) {
+                                conf.if_name           = conf_msg->if_name;
+                                dif_info.dir_hash_algo = HASH_SHA3_256;
+                                ipcpi.dir_hash_algo    = HASH_SHA3_256;
+                        }
 
-                        ipcpi.dir_hash_algo = conf_msg->dif_info->dir_hash_algo;
+                        if (conf_msg->ipcp_type == IPCP_LOCAL) {
+                                dif_info.dir_hash_algo = HASH_SHA3_256;
+                                ipcpi.dir_hash_algo    = HASH_SHA3_256;
+                        }
 
                         ret_msg.result = ipcpi.ops->ipcp_bootstrap(&conf);
+                        if (ret_msg.result == 0) {
+                                ret_msg.dif_info       = &dif_info;
+                                dif_info.dif_name      = conf.dif_info.dif_name;
+                        }
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
                         ret_msg.has_result = true;
@@ -220,7 +255,7 @@ static void * mainloop(void * o)
                         ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dst_name,
                                                                 &info);
                         if (ret_msg.result == 0) {
-                                ret_msg.dif_info = &dif_info;
+                                ret_msg.dif_info       = &dif_info;
                                 dif_info.dir_hash_algo = info.dir_hash_algo;
                                 dif_info.dif_name      = info.dif_name;
                         }

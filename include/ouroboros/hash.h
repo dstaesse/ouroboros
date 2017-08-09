@@ -25,11 +25,30 @@
 #define OUROBOROS_LIB_HASH_H
 
 #include <ouroboros/endian.h>
-#include <ouroboros/ipcp.h>
 
-#include <ouroboros/crc32.h>
-#include <ouroboros/md5.h>
-#include <ouroboros/sha3.h>
+#ifdef HAVE_LIBGCRYPT
+#include <gcrypt.h>
+#endif
+#include <stdint.h>
+
+/* Hash algorithms */
+enum hash_algo {
+#ifdef HAVE_LIBGCRYPT
+        HASH_CRC32    = GCRY_MD_CRC32,
+        HASH_MD5      = GCRY_MD_MD5,
+        HASH_SHA3_224 = GCRY_MD_SHA3_224,
+        HASH_SHA3_256 = GCRY_MD_SHA3_256,
+        HASH_SHA3_384 = GCRY_MD_SHA3_384,
+        HASH_SHA3_512 = GCRY_MD_SHA3_512
+#else
+        HASH_CRC32 = 0,
+        HASH_MD5,
+        HASH_SHA3_224,
+        HASH_SHA3_256,
+        HASH_SHA3_384,
+        HASH_SHA3_512
+#endif
+};
 
 #define HASH_FMT "%02x%02x%02x%02x"
 #define HASH_VAL(hash)                                    \

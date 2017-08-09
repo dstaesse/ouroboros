@@ -32,12 +32,10 @@ add_executable(ipcpd-shim-eth-llc ${SHIM_ETH_LLC_SOURCES} ${IPCP_SOURCES}
 target_link_libraries(ipcpd-shim-eth-llc LINK_PUBLIC ouroboros
   ${PROTOBUF_C_LIBRARY})
 
-if (${NETMAP_C_INCLUDE_DIR} STREQUAL "NETMAP_C_INCLUDE_DIR-NOTFOUND")
-  message(STATUS "Could not find netmap. Install for better performance.")
-else ()
+if (NOT ${NETMAP_C_INCLUDE_DIR} STREQUAL "NETMAP_C_INCLUDE_DIR-NOTFOUND")
   message(STATUS "Found netmap headers in ${NETMAP_C_INCLUDE_DIR}")
   include_directories(${NETMAP_C_INCLUDE_DIR})
-  add_compile_flags(ipcpd-shim-eth-llc -DHAVE_NETMAP)
+  set(HAVE_NETMAP "1" CACHE STRING "Have netmap")
   test_and_set_c_compiler_flag_global(-std=c99)
 endif ()
 
