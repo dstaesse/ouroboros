@@ -52,22 +52,19 @@ enum pol_routing {
         LINK_STATE = 0
 };
 
-/* Hash algorithms */
-enum hash_algo {
-        HASH_CRC32 = 0,
-        HASH_MD5,
-        HASH_SHA3_224,
-        HASH_SHA3_256,
-        HASH_SHA3_384,
-        HASH_SHA3_512
+enum pol_dir_hash {
+        DIR_HASH_SHA3_224 = 0,
+        DIR_HASH_SHA3_256,
+        DIR_HASH_SHA3_384,
+        DIR_HASH_SHA3_512
 };
 
 #define DIF_NAME_SIZE 256
 
 /* Info reported back to the IRMd about the DIF on enrollment */
 struct dif_info {
-        char           dif_name[DIF_NAME_SIZE];
-        enum hash_algo dir_hash_algo;
+        char              dif_name[DIF_NAME_SIZE];
+        enum pol_dir_hash dir_hash_algo;
 };
 
 /* Structure to configure the first IPCP */

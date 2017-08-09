@@ -59,10 +59,6 @@
 #define SHM_SAN_HOLDOFF 1000 /* ms */
 #define IPCP_HASH_LEN(e) hash_len(e->dir_hash_algo)
 
-#define SHIM_ETH_LLC_HASH_ALGO HASH_SHA3_256
-#define SHIM_UDP_HASH_ALGO     HASH_MD5
-#define LOCAL_HASH_ALGO        HASH_SHA3_256
-
 struct ipcp_entry {
         struct list_head next;
 
@@ -410,6 +406,7 @@ static int bootstrap_ipcp(pid_t               api,
                           ipcp_config_msg_t * conf)
 {
         struct ipcp_entry * entry = NULL;
+        struct dif_info     info;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -426,30 +423,20 @@ static int bootstrap_ipcp(pid_t               api,
                 return -1;
         }
 
-        if (entry->type == IPCP_LOCAL)
-                entry->dir_hash_algo = conf->dif_info->dir_hash_algo
-                        = LOCAL_HASH_ALGO;
-        else if (entry->type == IPCP_SHIM_ETH_LLC)
-                entry->dir_hash_algo = conf->dif_info->dir_hash_algo
-                        = SHIM_ETH_LLC_HASH_ALGO;
-        else if (entry->type == IPCP_SHIM_UDP)
-                entry->dir_hash_algo = conf->dif_info->dir_hash_algo
-                        = SHIM_UDP_HASH_ALGO;
-        else
-                entry->dir_hash_algo = conf->dif_info->dir_hash_algo;
-
-        if (ipcp_bootstrap(entry->api, conf)) {
+        if (ipcp_bootstrap(entry->api, conf, &info)) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not bootstrap IPCP.");
                 return -1;
         }
 
-        entry->dif_name = strdup(conf->dif_info->dif_name);
+        entry->dif_name = strdup(info.dif_name);
         if (entry->dif_name == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Failed to set name of DIF.");
                 return -ENOMEM;
         }
+
+        entry->dir_hash_algo = info.dir_hash_algo;
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -463,7 +450,7 @@ static int enroll_ipcp(pid_t  api,
                        char * dst_name)
 {
         struct ipcp_entry * entry = NULL;
-        struct dif_info info;
+        struct dif_info     info;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -813,8 +800,8 @@ static int name_reg(const char *  name,
 
                         if (ipcp_reg(e->api, hash, IPCP_HASH_LEN(e))) {
                                 log_err("Could not register " HASH_FMT
-                                        " in DIF %s.",
-                                        HASH_VAL(hash), e->dif_name);
+                                        " in DIF %s (IPCP %d).",
+                                        HASH_VAL(hash), e->dif_name, e->api);
                         } else {
                                 if (registry_add_name_to_dif(&irmd.registry,
                                                              name,

@@ -27,12 +27,22 @@
 #include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 
+#ifndef HAVE_LIBGCRYPT
+#include <ouroboros/crc32.h>
+#include <ouroboros/md5.h>
+#include <ouroboros/sha3.h>
+#else
+#include <gcrypt.h>
+#endif
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
 
 uint16_t hash_len(enum hash_algo algo)
 {
+#ifdef HAVE_LIBGCRYPT
+        return (uint16_t) gcry_md_get_algo_dlen(algo);
+#else
         switch (algo) {
         case HASH_CRC32:
                 return CRC32_HASH_LEN;
@@ -52,12 +62,16 @@ uint16_t hash_len(enum hash_algo algo)
         }
 
         return 0;
+#endif
 }
 
 void str_hash(enum hash_algo algo,
               void *         buf,
               const char *   str)
 {
+#ifdef HAVE_LIBGCRYPT
+        gcry_md_hash_buffer(algo, buf, str, strlen(str));
+#else
         struct sha3_ctx sha3_ctx;
         struct md5_ctx md5_ctx;
 
@@ -95,4 +109,5 @@ void str_hash(enum hash_algo algo,
                 assert(false);
                 break;
         }
+#endif
 }

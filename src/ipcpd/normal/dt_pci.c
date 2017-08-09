@@ -22,7 +22,6 @@
 
 #include <ouroboros/config.h>
 #include <ouroboros/errno.h>
-#include <ouroboros/crc32.h>
 #include <ouroboros/rib.h>
 
 #include "dt_pci.h"

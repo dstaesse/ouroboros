@@ -206,8 +206,9 @@ int ipcp_destroy(pid_t api)
         return 0;
 }
 
-int ipcp_bootstrap(pid_t              api,
-                   ipcp_config_msg_t * conf)
+int ipcp_bootstrap(pid_t               api,
+                   ipcp_config_msg_t * conf,
+                   struct dif_info   * info)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
@@ -227,6 +228,20 @@ int ipcp_bootstrap(pid_t              api,
                 ipcp_msg__free_unpacked(recv_msg, NULL);
                 return -EIPCP;
         }
+
+        ret = recv_msg->result;
+        if (ret != 0) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return ret;
+        }
+
+        if (recv_msg->dif_info == NULL) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        info->dir_hash_algo = recv_msg->dif_info->dir_hash_algo;
+        strcpy(info->dif_name, recv_msg->dif_info->dif_name);
 
         ret = recv_msg->result;
         ipcp_msg__free_unpacked(recv_msg, NULL);
@@ -269,7 +284,6 @@ int ipcp_enroll(pid_t             api,
         }
 
         info->dir_hash_algo = recv_msg->dif_info->dir_hash_algo;
-
         strcpy(info->dif_name, recv_msg->dif_info->dif_name);
 
         ipcp_msg__free_unpacked(recv_msg, NULL);

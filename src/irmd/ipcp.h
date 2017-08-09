@@ -39,7 +39,8 @@ int   ipcp_enroll(pid_t             api,
                   struct dif_info * info);
 
 int   ipcp_bootstrap(pid_t               api,
-                     ipcp_config_msg_t * conf);
+                     ipcp_config_msg_t * conf,
+                     struct dif_info *   info);
 
 int   ipcp_reg(pid_t           api,
                const uint8_t * hash,

@@ -26,10 +26,48 @@ if (NOT LIBPTHREAD_LIBRARIES)
   message(FATAL_ERROR "Could not find libpthread.")
 endif ()
 
-find_path(LINUX_RND_HDR
-  sys/random.h
-  HINTS /usr/include /usr/local/include
-  )
+include(CheckSymbolExists)
+list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_POSIX_C_SOURCE=200809L)
+list(APPEND CMAKE_REQUIRED_DEFINITIONS -D__XSI_VISIBLE=500)
+list(APPEND CMAKE_REQUIRED_LIBRARIES pthread)
+check_symbol_exists(pthread_mutexattr_setrobust pthread.h HAVE_ROBUST_MUTEX)
+set(HAVE_ROBUST_MUTEX CACHE STRING "Have robust mutexes")
+
+find_library(LIBGCRYPT_LIBRARIES gcrypt)
+if (LIBGCRYPT_LIBRARIES)
+  find_path(GCRYPT_INCLUDE_DIR gcrypt.h HINTS /usr/include /usr/local/include)
+  if (NOT ${GCRYPT_INCLUDE_DIR} STREQUAL "GRYPT_INCLUDE_DIR-NOTFOUND")
+    file(STRINGS ${GCRYPT_INCLUDE_DIR}/gcrypt.h GCSTR
+      REGEX "^#define GCRYPT_VERSION ")
+    string(REGEX REPLACE "^#define GCRYPT_VERSION \"(.*)\".*$" "\\1"
+      GCVER "${GCSTR}")
+    message(STATUS "Found libgcrypt: ${LIBGCRYPT_LIBRARIES} (found version \"${GCVER}\")")
+    if (NOT GCVER VERSION_LESS "1.7.0")
+      include_directories(${GCRYPT_INCLUDE_DIR})
+      set(HAVE_LIBGCRYPT "1" CACHE STRING "Have libgcrypt")
+    endif()
+  endif ()
+endif ()
+
+find_package(OpenSSL)
+if (OPENSSL_FOUND)
+  include_directories(${OPENSSL_INCLUDE_DIR})
+  set(HAVE_OPENSSL "1" CACHE STRING "Have OpenSSL")
+endif ()
+
+find_path(LINUX_RND_HDR sys/random.h HINTS /usr/include/ /usr/local/include/)
+if (NOT ${LINUX_RND_HDR} STREQUAL "LINUX_RND_HDR-NOTFOUND")
+  message(STATUS "Found sys/random.h in ${LINUX_RND_HDR}")
+  include_directories(${LINUX_RND_HDR})
+  set(HAVE_SYS_RANDOM "1" CACHE STRING "Have Random Header")
+endif ()
+
+if (NOT ((CMAKE_SYSTEM_NAME STREQUAL "FreeBSD") OR
+  HAVE_SYS_RANDOM OR HAVE_OPENSSL OR HAVE_LIBGCRYPT))
+  message(FATAL_ERROR "No secure random generator found, "
+                      "please install libgcrypt (> 1.7.0) or OpenSSL"
+    )
+endif ()
 
 set(SOURCE_FILES
   # Add source files here
@@ -71,26 +109,9 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   add_compile_flags(ouroboros -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-if (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
-  message(STATUS "Found FreeBSD, using arc4random.")
-else()
-  if (${LINUX_RND_HDR} STREQUAL "LINUX_RND_HDR-NOTFOUND")
-    find_package(OpenSSL)
-    if (NOT OPENSSL_FOUND)
-      message(FATAL_ERROR "No secure random generation, please install libssl.")
-    else()
-      include_directories($OPENSSL_INCLUDE_DIR})
-      add_compile_flags(ouroboros -DHAVE_OPENSSL)
-    endif()
-  else ()
-    message(STATUS "Found linux random header in ${LINUX_RND_HDR}.")
-    include_directories(${LINUX_RND_HDR})
-    add_compile_flags(ouroboros -DHAVE_SYS_RANDOM)
-  endif ()
-endif()
-
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
-  ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY} ${OPENSSL_LIBRARIES})
+  ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY} ${OPENSSL_LIBRARIES}
+  ${LIBGCRYPT_LIBRARIES})
 
 install(TARGETS ouroboros LIBRARY DESTINATION usr/lib)
 
