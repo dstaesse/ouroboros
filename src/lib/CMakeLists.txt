@@ -47,6 +47,8 @@ if (LIBGCRYPT_LIBRARIES)
       set(HAVE_LIBGCRYPT "1" CACHE STRING "Have libgcrypt")
     endif()
   endif ()
+else ()
+     set(LIBGCRYPT_LIBRARIES "")
 endif ()
 
 find_package(OpenSSL)
