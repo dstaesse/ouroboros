@@ -21,7 +21,6 @@
  * 02110-1301 USA
  */
 
-#include <ouroboros/config.h>
 #include <ouroboros/hashtable.h>
 #include <ouroboros/list.h>
 #include <ouroboros/errno.h>

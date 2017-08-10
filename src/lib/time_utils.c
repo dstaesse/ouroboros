@@ -142,16 +142,3 @@ int ts_to_tv(const struct timespec * src,
 
         return 0;
 }
-
-#ifdef __APPLE__
-int clock_gettime(int               clock,
-                  struct timespec * t)
-{
-        struct timeval tv;
-        int ret = gettimeofday(&tv, NULL);
-        t->tv_sec  = tv.tv_sec;
-        t->tv_nsec = tv.tv_usec * 1000;
-        (void) clock;
-        return ret;
-}
-#endif

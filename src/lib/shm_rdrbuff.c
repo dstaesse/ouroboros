@@ -123,11 +123,11 @@ static char * rdrb_filename(void)
 {
         char * str;
 
-        str = malloc(strlen(SHM_RDRB_PREFIX) + 1);
+        str = malloc(strlen(SHM_RDRB_NAME) + 1);
         if (str == NULL)
                 return NULL;
 
-        sprintf(str, "%s", SHM_RDRB_PREFIX);
+        sprintf(str, "%s", SHM_RDRB_NAME);
 
         return str;
 }

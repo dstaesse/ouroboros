@@ -19,6 +19,10 @@ set(PACKAGE_BUGREPORT   "None"
 set(PACKAGE_VERSION     "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}"
   CACHE STRING          "Package version")
 
+if (APPLE)
+  set(CMAKE_MACOSX_RPATH 1)
+endif()
+
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -72,8 +76,11 @@ configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.pc.in"
   "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
   @ONLY)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
-  DESTINATION "/usr/lib/pkgconfig")
+
+if (NOT APPLE)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
+    DESTINATION "/usr/lib/pkgconfig")
+endif ()
 
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
