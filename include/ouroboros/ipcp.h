@@ -63,8 +63,8 @@ enum pol_dir_hash {
 
 /* Info reported back to the IRMd about the DIF on enrollment */
 struct dif_info {
-        char              dif_name[DIF_NAME_SIZE];
-        enum pol_dir_hash dir_hash_algo;
+        char dif_name[DIF_NAME_SIZE];
+        int  dir_hash_algo;
 };
 
 /* Structure to configure the first IPCP */

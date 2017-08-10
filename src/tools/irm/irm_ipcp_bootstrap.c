@@ -29,7 +29,6 @@
 #endif
 #include <ouroboros/irm.h>
 #include <ouroboros/ipcp.h>
-#include <ouroboros/hash.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
@@ -52,7 +51,7 @@
 #define DEFAULT_DT_GAM     COMPLETE
 #define DEFAULT_RM_GAM     COMPLETE
 #define DEFAULT_ROUTING    LINK_STATE
-#define DEFAULT_HASH_ALGO  HASH_SHA3_256
+#define DEFAULT_HASH_ALGO  DIR_HASH_SHA3_256
 #define ADDR_AUTH_FLAT     "flat"
 #define DT_GAM_COMPLETE    "complete"
 #define RM_GAM_COMPLETE    "complete"
@@ -122,13 +121,13 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         name = *(argv + 1);
                 } else if (matches(*argv, "hash") == 0) {
                         if (strcmp(*(argv + 1), SHA3_224) == 0)
-                                hash_algo = HASH_SHA3_224;
+                                hash_algo = DIR_HASH_SHA3_224;
                         else if (strcmp(*(argv + 1), SHA3_256) == 0)
-                                hash_algo = HASH_SHA3_256;
+                                hash_algo = DIR_HASH_SHA3_256;
                         else if (strcmp(*(argv + 1), SHA3_384) == 0)
-                                hash_algo = HASH_SHA3_384;
+                                hash_algo = DIR_HASH_SHA3_384;
                         else if (strcmp(*(argv + 1), SHA3_512) == 0)
-                                hash_algo = HASH_SHA3_512;
+                                hash_algo = DIR_HASH_SHA3_512;
                         else
                                 goto unknown_param;
                 } else if (matches(*argv, "ip") == 0) {

@@ -630,7 +630,7 @@ static void lookup_destroy(struct lookup * lu)
         case LU_DONE:
         case LU_UPDATE:
         case LU_COMPLETE:
-                lu->state = REQ_NULL;
+                lu->state = LU_NULL;
                 break;
         case LU_NULL:
         default:

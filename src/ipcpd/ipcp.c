@@ -174,11 +174,6 @@ static void * mainloop(void * o)
                         conf.type = conf_msg->ipcp_type;
                         strcpy(conf.dif_info.dif_name,
                                conf_msg->dif_info->dif_name);
-                        if (conf.dif_info.dif_name == NULL) {
-                                log_err("No DIF name provided.");
-                                ret_msg.result = -1;
-                                break;
-                        }
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
                                 conf.addr_size      = conf_msg->addr_size;
                                 conf.fd_size        = conf_msg->fd_size;
