@@ -46,6 +46,10 @@
 typedef KadMsg kad_msg_t;
 typedef KadContactMsg kad_contact_msg_t;
 
+#ifndef CLOCK_REALTIME_COARSE
+#define CLOCK_REALTIME_COARSE CLOCK_REALTIME
+#endif
+
 #define DHT_MAX_REQS  2048 /* KAD recommends rnd(), bmp can be changed.  */
 #define KAD_ALPHA     3    /* Parallel factor, proven optimal value.     */
 #define KAD_K         8    /* Replication factor, MDHT value.            */

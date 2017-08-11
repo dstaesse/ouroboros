@@ -33,7 +33,7 @@ static void ts_print(struct timespec * s)
 
 static void tv_print(struct timeval * v)
 {
-        printf("timeval is %zd:%ld.\n", (ssize_t) v->tv_sec, v->tv_usec);
+        printf("timeval is %zd:%zu.\n", (ssize_t) v->tv_sec, (size_t) v->tv_usec);
 }
 
 static void ts_init(struct timespec * s,

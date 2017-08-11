@@ -24,10 +24,20 @@
 #include <ouroboros/config.h>
 #include <ouroboros/random.h>
 
-#if defined(HAVE_SYS_RANDOM)
+#if defined(__APPLE__) /* Barf */
+#undef __OSX_AVAILABLE
+#define __OSX_AVAILABLE(arg)
+#undef __IOS_AVAILABLE
+#define __IOS_AVAILABLE(arg)
+#undef __TVOS_AVAILABLE
+#define __TVOS_AVAILABLE(arg)
+#undef __WATCHOS_AVAILABLE
+#define __WATCHOS_AVAILABLE(arg)
+#include <sys/random.h>
+#elif defined(HAVE_SYS_RANDOM)
 #include <sys/random.h>
 #elif defined(HAVE_LIBGCRYPT)
-#include <grypt.h>
+#include <gcrypt.h>
 #elif defined(__FreeBSD__)
 #include <stdlib.h>
 #elif defined(HAVE_OPENSSL)
@@ -43,10 +53,13 @@ int random_buffer(void * buf,
 #elif defined(HAVE_LIBGCRYPT)
         return gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
 #elif defined(__FreeBSD__)
-        return arc4random_buf(buf, len);
+        arc4random_buf(buf, len);
+        return 0;
 #elif defined(HAVE_OPENSSL)
         if (len > 0 && len < INT_MAX)
                 return RAND_bytes((unsigned char *) buf, (int) len);
         return -1;
+#elif defined(__APPLE__)
+        return getentropy(buf, len);
 #endif
 }

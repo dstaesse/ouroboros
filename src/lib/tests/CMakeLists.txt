@@ -14,6 +14,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   )
 
 add_executable(${PARENT_DIR}_test EXCLUDE_FROM_ALL ${${PARENT_DIR}_tests})
+
 target_link_libraries(${PARENT_DIR}_test ouroboros)
 
 add_dependencies(check ${PARENT_DIR}_test)

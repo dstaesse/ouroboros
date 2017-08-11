@@ -35,36 +35,42 @@ set(HAVE_ROBUST_MUTEX CACHE STRING "Have robust mutexes")
 
 find_library(LIBGCRYPT_LIBRARIES gcrypt)
 if (LIBGCRYPT_LIBRARIES)
-  find_path(GCRYPT_INCLUDE_DIR gcrypt.h HINTS /usr/include /usr/local/include)
-  if (NOT ${GCRYPT_INCLUDE_DIR} STREQUAL "GRYPT_INCLUDE_DIR-NOTFOUND")
-    file(STRINGS ${GCRYPT_INCLUDE_DIR}/gcrypt.h GCSTR
+  find_path(LIBGCRYPT_INCLUDE_DIR gcrypt.h HINTS /usr/include /usr/local/include)
+  if (NOT LIBGCRYPT_INCLUDE_DIR STREQUAL "GRYPT_INCLUDE_DIR-NOTFOUND")
+    file(STRINGS ${LIBGCRYPT_INCLUDE_DIR}/gcrypt.h GCSTR
       REGEX "^#define GCRYPT_VERSION ")
     string(REGEX REPLACE "^#define GCRYPT_VERSION \"(.*)\".*$" "\\1"
       GCVER "${GCSTR}")
     message(STATUS "Found libgcrypt: ${LIBGCRYPT_LIBRARIES} (found version \"${GCVER}\")")
     if (NOT GCVER VERSION_LESS "1.7.0")
-      include_directories(${GCRYPT_INCLUDE_DIR})
       set(HAVE_LIBGCRYPT "1" CACHE STRING "Have libgcrypt")
     endif()
   endif ()
 else ()
-     set(LIBGCRYPT_LIBRARIES "")
+  set(LIBGCRYPT_LIBRARIES "")
+  set(LIBGCRYPT_INCLUDE_DIR "")
 endif ()
 
 find_package(OpenSSL)
 if (OPENSSL_FOUND)
-  include_directories(${OPENSSL_INCLUDE_DIR})
   set(HAVE_OPENSSL "1" CACHE STRING "Have OpenSSL")
+else ()
+  set (OPENSSL_INCLUDE_DIR "")
 endif ()
 
-find_path(LINUX_RND_HDR sys/random.h HINTS /usr/include/ /usr/local/include/)
-if (NOT ${LINUX_RND_HDR} STREQUAL "LINUX_RND_HDR-NOTFOUND")
-  message(STATUS "Found sys/random.h in ${LINUX_RND_HDR}")
-  include_directories(${LINUX_RND_HDR})
-  set(HAVE_SYS_RANDOM "1" CACHE STRING "Have Random Header")
-endif ()
+if (APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+  set(SYS_RND_HDR "")
+else ()
+  find_path(SYS_RND_HDR sys/random.h PATH /usr/include/ /usr/local/include/)
+  if (NOT SYS_RND_HDR STREQUAL "SYS_RND_HDR-NOTFOUND")
+    message(STATUS "Found sys/random.h in ${SYS_RND_HDR}")
+    set(HAVE_SYS_RANDOM "1" CACHE STRING "Have random header")
+  else ()
+    set(SYS_RND_HDR "")
+  endif ()
+endif()
 
-if (NOT ((CMAKE_SYSTEM_NAME STREQUAL "FreeBSD") OR
+if (NOT ((CMAKE_SYSTEM_NAME STREQUAL "FreeBSD") OR APPLE OR
   HAVE_SYS_RANDOM OR HAVE_OPENSSL OR HAVE_LIBGCRYPT))
   message(FATAL_ERROR "No secure random generator found, "
                       "please install libgcrypt (> 1.7.0) or OpenSSL"
@@ -117,6 +123,7 @@ target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
 
 install(TARGETS ouroboros LIBRARY DESTINATION usr/lib)
 
-target_include_directories(ouroboros PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(ouroboros PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
+  ${SYS_RND_HDR} ${LIBGCRYPT_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
 
 add_subdirectory(tests)
