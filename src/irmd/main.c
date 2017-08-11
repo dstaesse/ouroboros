@@ -1687,7 +1687,7 @@ void * mainloop(void * o)
         (void) o;
 
         while (true) {
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__APPLE__)
                 fd_set fds;
                 struct timeval timeout = {(IRMD_ACCEPT_TIMEOUT / 1000),
                                           (IRMD_ACCEPT_TIMEOUT % 1000) * 1000};
@@ -1710,7 +1710,7 @@ void * mainloop(void * o)
                 }
 
                 ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__APPLE__) 
                 FD_ZERO(&fds);
                 FD_SET(irmd.sockfd, &fds);
                 if (select(irmd.sockfd + 1, &fds, NULL, NULL, &timeout) <= 0)
