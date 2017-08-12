@@ -29,6 +29,7 @@
 
 #include <pthread.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #define TPM_TIMEOUT 1000
 
@@ -36,6 +37,7 @@ struct pthr_el {
         struct list_head next;
 
         bool             join;
+        bool             kill;
 
         pthread_t        thr;
 };
@@ -49,8 +51,8 @@ enum tpm_state {
 struct {
         size_t           min;
         size_t           inc;
-        size_t           max;
         size_t           cur;
+        size_t           wrk;
 
         void * (* func)(void *);
 
@@ -71,14 +73,50 @@ static void tpm_join(void)
 
         list_for_each_safe(p, h, &tpm.pool) {
                 struct pthr_el * e = list_entry(p, struct pthr_el, next);
-                if (tpm.state != TPM_RUNNING)
+                if (tpm.state != TPM_RUNNING) {
+                        if (!e->kill) {
+                                e->kill = true;
+                                --tpm.cur;
+                        }
                         while (!e->join)
                                 pthread_cond_wait(&tpm.cond, &tpm.lock);
+                }
 
                 if (e->join) {
                         pthread_join(e->thr, NULL);
                         list_del(&e->next);
                         free(e);
+                }
+        }
+}
+
+static struct pthr_el * tpm_pthr_el(pthread_t thr)
+{
+        struct list_head * p;
+        struct pthr_el *   e;
+
+        list_for_each(p, &tpm.pool) {
+                e = list_entry(p, struct pthr_el, next);
+                if (e->thr == thr)
+                        return e;
+
+        }
+
+        assert(false);
+
+        return NULL;
+}
+
+static void tpm_kill(void)
+{
+        struct list_head * p;
+
+        list_for_each(p, &tpm.pool) {
+                struct pthr_el * e = list_entry(p, struct pthr_el, next);
+                if (!e->kill) {
+                        e->kill = true;
+                        --tpm.cur;
+                        return;
                 }
         }
 }
@@ -96,39 +134,40 @@ static void * tpmgr(void * o)
 
                 pthread_mutex_lock(&tpm.lock);
 
-                tpm_join();
-
                 if (tpm.state != TPM_RUNNING) {
-                        tpm.max = 0;
                         tpm_join();
                         pthread_mutex_unlock(&tpm.lock);
                         break;
                 }
 
-                if (tpm.cur < tpm.min) {
-                        tpm.max = tpm.inc;
+                tpm_join();
 
-                        while (tpm.cur < tpm.max) {
+                if (tpm.cur - tpm.wrk < tpm.min) {
+                        size_t i;
+                        for (i = 0; i < tpm.inc; ++i) {
                                 struct pthr_el * e = malloc(sizeof(*e));
                                 if (e == NULL)
                                         break;
 
                                 e->join = false;
+                                e->kill = false;
 
                                 if (pthread_create(&e->thr, NULL,
                                                    tpm.func, NULL)) {
                                         free(e);
-                                } else {
-                                        list_add(&e->next, &tpm.pool);
-                                        ++tpm.cur;
+                                        break;
                                 }
+
+                                list_add(&e->next, &tpm.pool);
                         }
+
+                        tpm.cur += tpm.inc;
                 }
 
                 if (pthread_cond_timedwait(&tpm.cond, &tpm.lock, &dl)
                     == ETIMEDOUT)
-                        if (tpm.cur > tpm.min )
-                                --tpm.max;
+                        if (tpm.cur > tpm.min)
+                                tpm_kill();
 
                 pthread_mutex_unlock(&tpm.lock);
         }
@@ -162,8 +201,8 @@ int tpm_init(size_t min,
         tpm.func  = func;
         tpm.min   = min;
         tpm.inc   = inc;
-        tpm.max   = 0;
         tpm.cur   = 0;
+        tpm.wrk   = 0;
 
         return 0;
 
@@ -214,7 +253,7 @@ bool tpm_check(void)
 
         pthread_mutex_lock(&tpm.lock);
 
-        ret = tpm.cur > tpm.max;
+        ret = tpm_pthr_el(pthread_self())->kill;
 
         pthread_mutex_unlock(&tpm.lock);
 
@@ -225,7 +264,7 @@ void tpm_inc(void)
 {
         pthread_mutex_lock(&tpm.lock);
 
-        ++tpm.cur;
+        --tpm.wrk;
 
         pthread_mutex_unlock(&tpm.lock);
 }
@@ -234,7 +273,7 @@ void tpm_dec(void)
 {
         pthread_mutex_lock(&tpm.lock);
 
-        --tpm.cur;
+        ++tpm.wrk;
 
         pthread_cond_signal(&tpm.cond);
 
@@ -243,22 +282,9 @@ void tpm_dec(void)
 
 void tpm_exit(void)
 {
-        struct list_head * p;
-        pthread_t          id;
-
-        id = pthread_self();
-
         pthread_mutex_lock(&tpm.lock);
 
-        --tpm.cur;
-
-        list_for_each(p, &tpm.pool) {
-                struct pthr_el * e = list_entry(p, struct pthr_el, next);
-                if (e->thr == id) {
-                        e->join = true;
-                        break;
-                }
-        }
+        tpm_pthr_el(pthread_self())->join = true;
 
         pthread_cond_signal(&tpm.cond);
 
