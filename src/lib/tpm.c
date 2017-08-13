@@ -161,7 +161,7 @@ static void * tpmgr(void * o)
                                 list_add(&e->next, &tpm.pool);
                         }
 
-                        tpm.cur += tpm.inc;
+                        tpm.cur += i;
                 }
 
                 if (pthread_cond_timedwait(&tpm.cond, &tpm.lock, &dl)
