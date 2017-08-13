@@ -119,6 +119,8 @@ struct lookup {
         struct list_head  contacts;
         size_t            n_contacts;
 
+        size_t            out;
+
         uint64_t *        addrs;
         size_t            n_addrs;
 
@@ -575,6 +577,7 @@ static struct lookup * lookup_create(struct dht *    dht,
         lu->state   = LU_INIT;
         lu->addrs   = NULL;
         lu->n_addrs = 0;
+        lu->out     = 0;
         lu->key     = dht_dup_key(id, dht->b);
         if (lu->key == NULL)
                 goto fail_id;
@@ -611,6 +614,16 @@ static struct lookup * lookup_create(struct dht *    dht,
         free(lu);
  fail_malloc:
         return NULL;
+}
+
+static void lookup_add_out(struct lookup * lu,
+                           size_t          n)
+{
+        pthread_mutex_lock(&lu->lock);
+
+        lu->out += n;
+
+        pthread_mutex_unlock(&lu->lock);
 }
 
 static void lookup_destroy(struct lookup * lu)
@@ -680,6 +693,8 @@ static void lookup_update(struct dht *    dht,
 
         pthread_mutex_lock(&lu->lock);
 
+        --lu->out;
+
         if (msg->n_addrs > 0) {
                 if (lu->addrs == NULL) {
                         lu->addrs = malloc(sizeof(*lu->addrs) * msg->n_addrs);
@@ -734,7 +749,11 @@ static void lookup_update(struct dht *    dht,
                 }
         }
 
-        lu->state = LU_UPDATE;
+        if (lu->out == 0)
+                lu->state = LU_COMPLETE;
+        else
+                lu->state = LU_UPDATE;
+
         pthread_cond_signal(&lu->cond);
         pthread_mutex_unlock(&lu->lock);
         return;
@@ -833,7 +852,7 @@ static enum lookup_state lookup_wait(struct lookup * lu)
 
         pthread_cleanup_push((void (*)(void *)) lookup_destroy, (void *) lu);
 
-        while (lu->state == LU_PENDING)
+        while (lu->state == LU_PENDING && ret != -ETIMEDOUT)
                 ret = -pthread_cond_timedwait(&lu->cond, &lu->lock, &abs);
 
         pthread_cleanup_pop(false);
@@ -1497,7 +1516,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
         uint64_t          addrs[KAD_ALPHA + 1];
         enum lookup_state state;
         struct lookup *   lu;
-        size_t            out = 0;
+        size_t            out;
 
         lu = lookup_create(dht, id);
         if (lu == NULL)
@@ -1513,7 +1532,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
                 return NULL;
         }
 
-        out += kad_find(dht, id, addrs, code);
+        out = kad_find(dht, id, addrs, code);
         if (out == 0) {
                 pthread_rwlock_wrlock(&dht->lock);
                 list_del(&lu->next);
@@ -1522,19 +1541,21 @@ static struct lookup * kad_lookup(struct dht *    dht,
                 return lu;
         }
 
+        lookup_add_out(lu, out);
+
         while ((state = lookup_wait(lu)) != LU_COMPLETE) {
-                --out;
                 switch (state) {
                 case LU_UPDATE:
                         lookup_new_addrs(lu, addrs);
-                        if (addrs[0] == 0 && out == 0) {
+                        if (addrs[0] == 0) {
                                 pthread_rwlock_wrlock(&dht->lock);
                                 list_del(&lu->next);
                                 pthread_rwlock_unlock(&dht->lock);
                                 return lu;
                         }
 
-                        out += kad_find(dht, id, addrs, code);
+                        out = kad_find(dht, id, addrs, code);
+                        lookup_add_out(lu, out);
                         break;
                 case LU_DESTROY:
                         pthread_rwlock_wrlock(&dht->lock);
