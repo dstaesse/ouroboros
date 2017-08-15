@@ -26,6 +26,7 @@
 #include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
+#include <ouroboros/sockets.h>
 
 #include "shim-data.h"
 
@@ -89,10 +90,17 @@ struct ipcp {
         int                sockfd;
         char *             sock_path;
 
+        uint8_t            cbuf[IPCP_MSG_BUF_SIZE];
+        size_t             cmd_len;
+        int                csockfd;
+        pthread_cond_t     cmd_cond;
+        pthread_mutex_t    cmd_lock;
+
         int                alloc_id;
         pthread_cond_t     alloc_cond;
         pthread_mutex_t    alloc_lock;
 
+        pthread_t          acceptor;
 } ipcpi;
 
 int             ipcp_init(int               argc,
