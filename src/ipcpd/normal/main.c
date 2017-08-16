@@ -366,66 +366,39 @@ int main(int    argc,
          char * argv[])
 {
         if (ipcp_init(argc, argv, THIS_TYPE, &normal_ops) < 0) {
-                ipcp_create_r(getpid(), -1);
-                exit(EXIT_FAILURE);
+                log_err("Failed to init IPCP.");
+                goto fail_init;
         }
 
         if (irm_bind_api(getpid(), ipcpi.name)) {
                 log_err("Failed to bind AP name.");
-                ipcp_create_r(getpid(), -1);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_bind_api;
         }
 
         if (rib_init()) {
                 log_err("Failed to initialize RIB.");
-                ipcp_create_r(getpid(), -1);
-                irm_unbind_api(getpid(), ipcpi.name);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_rib_init;
         }
 
         if (connmgr_init()) {
                 log_err("Failed to initialize connection manager.");
-                ipcp_create_r(getpid(), -1);
-                rib_fini();
-                irm_unbind_api(getpid(), ipcpi.name);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_connmgr_init;
         }
 
         if (enroll_init()) {
                 log_err("Failed to initialize enroll component.");
-                ipcp_create_r(getpid(), -1);
-                connmgr_fini();
-                rib_fini();
-                irm_unbind_api(getpid(), ipcpi.name);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_enroll_init;
         }
-
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
-                ipcp_create_r(getpid(), -1);
-                enroll_fini();
-                connmgr_fini();
-                rib_fini();
-                irm_unbind_api(getpid(), ipcpi.name);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_boot;
         }
 
         if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
-                ipcp_shutdown();
-                enroll_fini();
-                connmgr_fini();
-                rib_fini();
-                irm_unbind_api(getpid(), ipcpi.name);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_create_r;
         }
 
         ipcp_shutdown();
@@ -444,4 +417,20 @@ int main(int    argc,
         ipcp_fini();
 
         exit(EXIT_SUCCESS);
+
+ fail_create_r:
+        ipcp_shutdown();
+ fail_boot:
+        enroll_fini();
+ fail_enroll_init:
+        connmgr_fini();
+ fail_connmgr_init:
+        rib_fini();
+ fail_rib_init:
+        irm_unbind_api(getpid(), ipcpi.name);
+ fail_bind_api:
+       ipcp_fini();
+ fail_init:
+        ipcp_create_r(getpid(), -1);
+        exit(EXIT_FAILURE);
 }

@@ -287,6 +287,8 @@ int fa_alloc_resp(int fd,
         struct shm_du_buff * sdb;
         qoscube_t            qc;
 
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
         pthread_mutex_lock(&ipcpi.alloc_lock);
 
         while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
