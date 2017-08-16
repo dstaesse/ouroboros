@@ -101,6 +101,7 @@ struct {
         uint8_t              cbuf[IB_LEN]; /* cmd message buffer         */
         size_t               cmd_len;      /* length of cmd in cbuf      */
         int                  csockfd;      /* cmd UNIX socket            */
+        pthread_cond_t       acc_cond;     /* cmd accepted condvar       */
         pthread_cond_t       cmd_cond;     /* cmd signal condvar         */
         pthread_mutex_t      cmd_lock;     /* cmd signal lock            */
 
@@ -1476,6 +1477,7 @@ static void irm_fini(void)
                 lockfile_destroy(irmd.lf);
 
         pthread_mutex_destroy(&irmd.cmd_lock);
+        pthread_cond_destroy(&irmd.acc_cond);
         pthread_cond_destroy(&irmd.cmd_cond);
         pthread_rwlock_destroy(&irmd.reg_lock);
         pthread_rwlock_destroy(&irmd.state_lock);
@@ -1737,7 +1739,7 @@ static void * acceptloop(void * o)
                 pthread_cond_signal(&irmd.cmd_cond);
 
                 while(irmd.csockfd != -1)
-                        pthread_cond_wait(&irmd.cmd_cond, &irmd.cmd_lock);
+                        pthread_cond_wait(&irmd.acc_cond, &irmd.cmd_lock);
 
                 pthread_mutex_unlock(&irmd.cmd_lock);
         }
@@ -1762,7 +1764,7 @@ void * mainloop(void * o)
                 struct irm_flow * e       = NULL;
                 pid_t *           apis    = NULL;
                 struct timespec * timeo   = NULL;
-                struct timespec   ts      = {0,0};
+                struct timespec   ts      = {0, 0};
 
                 ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
 
@@ -1788,7 +1790,7 @@ void * mainloop(void * o)
                         continue;
                 }
 
-                pthread_cond_broadcast(&irmd.cmd_cond);
+                pthread_cond_signal(&irmd.acc_cond);
 
                 msg = irm_msg__unpack(NULL, irmd.cmd_len, irmd.cbuf);
                 if (msg == NULL) {
@@ -2013,6 +2015,12 @@ static int irm_init(void)
                 goto fail_cmd_cond;
         }
 
+        if (pthread_cond_init(&irmd.acc_cond, &cattr)) {
+                log_err("Failed to initialize condvar.");
+                pthread_condattr_destroy(&cattr);
+                goto fail_acc_cond;
+        }
+
         pthread_condattr_destroy(&cattr);
 
         list_head_init(&irmd.ipcps);
@@ -2100,6 +2108,8 @@ static int irm_init(void)
  fail_lockfile:
         bmp_destroy(irmd.port_ids);
  fail_port_ids:
+        pthread_cond_destroy(&irmd.acc_cond);
+ fail_acc_cond:
         pthread_cond_destroy(&irmd.cmd_cond);
  fail_cmd_cond:
         pthread_mutex_destroy(&irmd.cmd_lock);

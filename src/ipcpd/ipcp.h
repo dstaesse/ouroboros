@@ -93,6 +93,7 @@ struct ipcp {
         uint8_t            cbuf[IPCP_MSG_BUF_SIZE];
         size_t             cmd_len;
         int                csockfd;
+        pthread_cond_t     acc_cond;
         pthread_cond_t     cmd_cond;
         pthread_mutex_t    cmd_lock;
 
