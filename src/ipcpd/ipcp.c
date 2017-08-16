@@ -138,7 +138,7 @@ static void * acceptloop(void * o)
                 pthread_cond_signal(&ipcpi.cmd_cond);
 
                 while (ipcpi.csockfd != -1)
-                        pthread_cond_wait(&ipcpi.cmd_cond, &ipcpi.cmd_lock);
+                        pthread_cond_wait(&ipcpi.acc_cond, &ipcpi.cmd_lock);
 
                 pthread_mutex_unlock(&ipcpi.cmd_lock);
         }
@@ -189,7 +189,7 @@ static void * mainloop(void * o)
                         continue;
                 }
 
-                pthread_cond_broadcast(&ipcpi.cmd_cond);
+                pthread_cond_signal(&ipcpi.acc_cond);
 
                 msg = ipcp_msg__unpack(NULL, ipcpi.cmd_len, ipcpi.cbuf);
                 if (msg == NULL) {
@@ -591,6 +591,11 @@ int ipcp_init(int               argc,
                 goto fail_cmd_cond;
         }
 
+        if (pthread_cond_init(&ipcpi.acc_cond, &cattr)) {
+                log_err("Failed to init convar.");
+                goto fail_acc_cond;
+        }
+
         ipcpi.alloc_id = -1;
         ipcpi.csockfd  = -1;
 
@@ -607,6 +612,8 @@ int ipcp_init(int               argc,
         return 0;
 
  fail_shim_data:
+        pthread_cond_destroy(&ipcpi.acc_cond);
+ fail_acc_cond:
         pthread_cond_destroy(&ipcpi.cmd_cond);
  fail_cmd_cond:
         pthread_mutex_destroy(&ipcpi.cmd_lock);
@@ -702,6 +709,7 @@ void ipcp_fini()
         pthread_mutex_destroy(&ipcpi.state_mtx);
         pthread_cond_destroy(&ipcpi.alloc_cond);
         pthread_mutex_destroy(&ipcpi.alloc_lock);
+        pthread_cond_destroy(&ipcpi.acc_cond);
         pthread_cond_destroy(&ipcpi.cmd_cond);
         pthread_mutex_destroy(&ipcpi.cmd_lock);
 
