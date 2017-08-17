@@ -130,12 +130,33 @@ pid_t ipcp_create(const char *   name,
                   enum ipcp_type ipcp_type)
 {
         pid_t  api       = -1;
-        size_t len       = 0;
         char * ipcp_dir  = "/sbin/";
-        char * full_name = NULL;
         char * exec_name = NULL;
         char   irmd_api[10];
+        char   full_name[256];
         char * argv[5];
+
+        switch(ipcp_type) {
+        case IPCP_NORMAL:
+                exec_name = IPCP_NORMAL_EXEC;
+                break;
+        case IPCP_SHIM_UDP:
+                exec_name = IPCP_SHIM_UDP_EXEC;
+                break;
+        case IPCP_SHIM_ETH_LLC:
+                exec_name = IPCP_SHIM_ETH_LLC_EXEC;
+                break;
+        case IPCP_LOCAL:
+                exec_name = IPCP_LOCAL_EXEC;
+                break;
+        default:
+                return -1;
+        }
+
+        if (strlen(exec_name) == 0) {
+                log_err("IPCP type not installed.");
+                return -1;
+        }
 
         sprintf(irmd_api, "%u", getpid());
 
@@ -148,33 +169,9 @@ pid_t ipcp_create(const char *   name,
         if (api != 0)
                 return api;
 
-        if (ipcp_type == IPCP_NORMAL)
-                exec_name = IPCP_NORMAL_EXEC;
-        else if (ipcp_type == IPCP_SHIM_UDP)
-                exec_name = IPCP_SHIM_UDP_EXEC;
-        else if (ipcp_type == IPCP_SHIM_ETH_LLC)
-                exec_name = IPCP_SHIM_ETH_LLC_EXEC;
-        else if (ipcp_type == IPCP_LOCAL)
-                exec_name = IPCP_LOCAL_EXEC;
-        else
-                exit(EXIT_FAILURE);
-
-        len += strlen(INSTALL_PREFIX);
-        len += strlen(ipcp_dir);
-        len += strlen(exec_name);
-        len += 1;
-
-        full_name = malloc(len + 1);
-        if (full_name == NULL) {
-                log_err("Failed to malloc");
-                exit(EXIT_FAILURE);
-        }
-
         strcpy(full_name, INSTALL_PREFIX);
         strcat(full_name, ipcp_dir);
         strcat(full_name, exec_name);
-        full_name[len] = '\0';
-
 
         /* log_file to be placed at the end */
         argv[0] = full_name;
@@ -190,9 +187,7 @@ pid_t ipcp_create(const char *   name,
         execv(argv[0], &argv[0]);
 
         log_dbg("%s", strerror(errno));
-        log_err("Failed to load IPCP daemon");
-        log_err("Make sure to run the installed version");
-        free(full_name);
+        log_err("Failed to load IPCP daemon.");
         exit(EXIT_FAILURE);
 }
 

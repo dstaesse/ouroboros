@@ -20,8 +20,6 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define _DEFAULT_SOURCE
-
 #define OUROBOROS_PREFIX "ipcpd/shim-eth-llc"
 
 #include <ouroboros/config.h>
@@ -39,7 +37,6 @@
 #include "ipcp.h"
 #include "shim_eth_llc_messages.pb-c.h"
 
-#include <net/if.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -49,6 +46,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+
+#include <net/if.h>
 #include <netinet/in.h>
 
 #ifdef __linux__
@@ -62,29 +61,37 @@
 #include <ifaddrs.h>
 #endif
 
+#ifdef __APPLE__
+#include <net/if_dl.h>
+#include <ifaddrs.h>
+#endif
+
 #include <poll.h>
 #include <sys/mman.h>
 
-#ifdef HAVE_NETMAP
+#if defined(HAVE_NETMAP)
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
+#elif defined(HAVE_BPF)
+#define BPF_DEV_MAX               256
+#define BPF_BLEN                  sysconf(_SC_PAGESIZE)
+#include <net/bpf.h>
 #endif
 
-typedef ShimEthLlcMsg shim_eth_llc_msg_t;
-
-#define THIS_TYPE IPCP_SHIM_ETH_LLC
-#define MGMT_SAP 0x01
-#define MAC_SIZE 6
-#define LLC_HEADER_SIZE 3
-#define MAX_SAPS 64
-#define ETH_HEADER_SIZE (2 * MAC_SIZE + 2)
-#define ETH_FRAME_SIZE (ETH_HEADER_SIZE + LLC_HEADER_SIZE \
-                        + SHIM_ETH_LLC_MAX_SDU_SIZE)
+#define THIS_TYPE                 IPCP_SHIM_ETH_LLC
+#define MGMT_SAP                  0x01
+#define MAC_SIZE                  6
+#define LLC_HEADER_SIZE           3
+#define MAX_SAPS                  64
+#define ETH_HEADER_SIZE           (2 * MAC_SIZE + 2)
+#define ETH_FRAME_SIZE            (ETH_HEADER_SIZE + LLC_HEADER_SIZE \
+                                   + SHIM_ETH_LLC_MAX_SDU_SIZE)
 #define SHIM_ETH_LLC_MAX_SDU_SIZE (1500 - LLC_HEADER_SIZE)
+#define EVENT_WAIT_TIMEOUT        10000 /* us */
+#define NAME_QUERY_TIMEOUT        2000  /* ms */
+#define MGMT_TIMEOUT              100   /* ms */
 
-#define EVENT_WAIT_TIMEOUT 100 /* us */
-#define NAME_QUERY_TIMEOUT 2000 /* ms */
-#define MGMT_TIMEOUT 100 /* ms */
+typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 
 struct eth_llc_frame {
         uint8_t dst_hwaddr[MAC_SIZE];
@@ -110,18 +117,17 @@ struct mgmt_frame {
 };
 
 struct {
-#ifdef HAVE_NETMAP
+#if defined(HAVE_NETMAP)
         struct nm_desc *   nmd;
         uint8_t            hw_addr[MAC_SIZE];
         struct pollfd      poll_in;
         struct pollfd      poll_out;
-#else
+#elif defined(HAVE_BPF)
+        int                bpf;
+        uint8_t            hw_addr[MAC_SIZE];
+#elif defined __linux__
         int                s_fd;
-    #ifdef __FreeBSD__
-        struct sockaddr_dl device;
-    #else
         struct sockaddr_ll device;
-    #endif
 #endif /* HAVE_NETMAP */
 
         struct bmp *       saps;
@@ -145,36 +151,28 @@ struct {
 static int eth_llc_data_init(void)
 {
         int                i;
-        int                ret = -1;
+        int                ret = -ENOMEM;
         pthread_condattr_t cattr;
 
         eth_llc_data.fd_to_ef = malloc(sizeof(struct ef) * IRMD_MAX_FLOWS);
         if (eth_llc_data.fd_to_ef == NULL)
-                return -ENOMEM;
+                goto fail_fd_to_ef;
 
         eth_llc_data.ef_to_fd = malloc(sizeof(struct ef) * MAX_SAPS);
-        if (eth_llc_data.ef_to_fd == NULL) {
-                ret = -ENOMEM;
-                goto free_fd_to_ef;
-        }
+        if (eth_llc_data.ef_to_fd == NULL)
+                goto fail_ef_to_fd;
 
         eth_llc_data.saps = bmp_create(MAX_SAPS, 2);
-        if (eth_llc_data.saps == NULL) {
-                ret = -ENOMEM;
-                goto free_ef_to_fd;
-        }
+        if (eth_llc_data.saps == NULL)
+                goto fail_saps;
 
         eth_llc_data.np1_flows = flow_set_create();
-        if (eth_llc_data.np1_flows == NULL) {
-                ret = -ENOMEM;
-                goto bmp_destroy;
-        }
+        if (eth_llc_data.np1_flows == NULL)
+                goto fail_np1_flows;
 
         eth_llc_data.fq = fqueue_create();
-        if (eth_llc_data.fq == NULL) {
-                ret = -ENOMEM;
-                goto flow_set_destroy;
-        }
+        if (eth_llc_data.fq == NULL)
+                goto fail_fq;
 
         for (i = 0; i < MAX_SAPS; ++i)
                 eth_llc_data.ef_to_fd[i] = -1;
@@ -185,49 +183,56 @@ static int eth_llc_data_init(void)
                 memset(&eth_llc_data.fd_to_ef[i].r_addr, 0, MAC_SIZE);
         }
 
+        ret = -1;
+
         if (pthread_rwlock_init(&eth_llc_data.flows_lock, NULL))
-                goto fqueue_destroy;
+                goto fail_flows_lock;
 
         if (pthread_mutex_init(&eth_llc_data.mgmt_lock, NULL))
-                goto flow_lock_destroy;
+                goto fail_mgmt_lock;
 
         if (pthread_condattr_init(&cattr))
-                goto mgmt_lock_destroy;;
+                goto fail_condattr;
 
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
 
         if (pthread_cond_init(&eth_llc_data.mgmt_cond, &cattr))
-                goto mgmt_lock_destroy;
+                goto fail_mgmt_cond;
+
+        pthread_condattr_destroy(&cattr);
 
         list_head_init(&eth_llc_data.mgmt_frames);
 
         return 0;
-
- mgmt_lock_destroy:
+ fail_mgmt_cond:
+        pthread_condattr_destroy(&cattr);
+ fail_condattr:
         pthread_mutex_destroy(&eth_llc_data.mgmt_lock);
- flow_lock_destroy:
+ fail_mgmt_lock:
         pthread_rwlock_destroy(&eth_llc_data.flows_lock);
- fqueue_destroy:
+ fail_flows_lock:
         fqueue_destroy(eth_llc_data.fq);
- flow_set_destroy:
+ fail_fq:
         flow_set_destroy(eth_llc_data.np1_flows);
- bmp_destroy:
+ fail_np1_flows:
         bmp_destroy(eth_llc_data.saps);
- free_ef_to_fd:
+ fail_saps:
         free(eth_llc_data.ef_to_fd);
- free_fd_to_ef:
+ fail_ef_to_fd:
         free(eth_llc_data.fd_to_ef);
-
+ fail_fd_to_ef:
         return ret;
 }
 
 void eth_llc_data_fini(void)
 {
-#ifdef HAVE_NETMAP
+#if defined(HAVE_NETMAP)
         nm_close(eth_llc_data.nmd);
-#else
+#elif defined(HAVE_BPF)
+        close(eth_llc_data.bpf);
+#elif defined(__linux__)
         close(eth_llc_data.s_fd);
 #endif
         pthread_cond_destroy(&eth_llc_data.mgmt_cond);
@@ -273,11 +278,9 @@ static int eth_llc_ipcp_send_frame(const uint8_t * dst_addr,
 
         memcpy(llc_frame->dst_hwaddr, dst_addr, MAC_SIZE);
         memcpy(llc_frame->src_hwaddr,
-#ifdef HAVE_NETMAP
+#if defined(HAVE_NETMAP) || defined(HAVE_BPF)
                eth_llc_data.hw_addr,
-#elif defined ( __FreeBSD__ )
-               LLADDR(&eth_llc_data.device),
-#else
+#elif defined(__linux__)
                eth_llc_data.device.sll_addr,
 #endif /* HAVE_NETMAP */
                MAC_SIZE);
@@ -289,22 +292,28 @@ static int eth_llc_ipcp_send_frame(const uint8_t * dst_addr,
         memcpy(&llc_frame->payload, payload, len);
 
         frame_len = ETH_HEADER_SIZE + LLC_HEADER_SIZE + len;
-#ifdef HAVE_NETMAP
+#if defined(HAVE_NETMAP)
         if (poll(&eth_llc_data.poll_out, 1, -1) < 0)
                 return -1;
 
         if (nm_inject(eth_llc_data.nmd, frame, frame_len) != (int) frame_len) {
-                log_err("Failed to send message.");
+                log_dbg("Failed to send message.");
                 return -1;
         }
-#else
+#elif defined(HAVE_BPF)
+        if (write(eth_llc_data.bpf, frame, frame_len) < 0) {
+                log_dbg("Failed to send message.");
+                return -1;
+        }
+
+#elif defined(__linux__)
         if (sendto(eth_llc_data.s_fd,
                    frame,
                    frame_len,
                    0,
                    (struct sockaddr *) &eth_llc_data.device,
                    sizeof(eth_llc_data.device)) <= 0) {
-                log_err("Failed to send message.");
+                log_dbg("Failed to send message.");
                 return -1;
         }
 #endif /* HAVE_NETMAP */
@@ -381,7 +390,7 @@ static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
                                 const uint8_t * dst,
                                 qoscube_t       cube)
 {
-        struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 1000};
+        struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 100};
         struct timespec abstime;
         int             fd;
 
@@ -489,6 +498,7 @@ static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
         shim_data_dir_add_entry(ipcpi.shim_data, hash, address);
 
         pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
+
         list_for_each(pos, &ipcpi.shim_data->dir_queries) {
                 struct dir_query * e =
                         list_entry(pos, struct dir_query, next);
@@ -496,6 +506,7 @@ static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
                         shim_data_dir_query_respond(e);
                 }
         }
+
         pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
 
         return 0;
@@ -598,17 +609,17 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         uint8_t                dsap;
         uint8_t                ssap;
         int                    fd;
-#ifdef HAVE_NETMAP
+#if defined(HAVE_NETMAP)
         uint8_t *              buf;
-#else
+        struct nm_pkthdr       hdr;
+#elif defined(HAVE_BPF)
+        uint8_t                buf[BPF_BLEN];
+#elif defined(__linux__)
         uint8_t                buf[ETH_FRAME_SIZE];
 #endif
         int                    frame_len = 0;
         struct eth_llc_frame * llc_frame;
         struct mgmt_frame *    frame;
-#ifdef HAVE_NETMAP
-        struct nm_pkthdr       hdr;
-#endif
 
         (void) o;
 
@@ -617,8 +628,8 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         while (true) {
                 if (ipcp_get_state() != IPCP_OPERATIONAL)
                         return (void *) 0;
-#ifdef HAVE_NETMAP
-                if (poll(&eth_llc_data.poll_in, 1, EVENT_WAIT_TIMEOUT) < 0)
+#if defined(HAVE_NETMAP)
+                if (poll(&eth_llc_data.poll_in, 1, EVENT_WAIT_TIMEOUT / 1000) < 0)
                         continue;
                 if (eth_llc_data.poll_in.revents == 0) /* TIMED OUT */
                         continue;
@@ -628,28 +639,34 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                         log_err("Bad read from netmap device.");
                         continue;
                 }
-#else
+#elif defined(HAVE_BPF)
+                frame_len = read(eth_llc_data.bpf, buf, BPF_BLEN);
+#elif defined(__linux__)
                 frame_len = recv(eth_llc_data.s_fd, buf,
                                  SHIM_ETH_LLC_MAX_SDU_SIZE, 0);
 #endif
-                if (frame_len < 0)
+                if (frame_len <= 0)
                         continue;
 
-                llc_frame = (struct eth_llc_frame *) buf;
-
-                assert(llc_frame->dst_hwaddr);
-#ifdef HAVE_NETMAP
-                if (memcmp(eth_llc_data.hw_addr,
-#elif defined ( __FreeBSD__ )
-                if (memcmp(LLADDR(&eth_llc_data.device),
+#if defined(HAVE_BPF) && !defined(HAVE_NETMAP)
+                llc_frame = (struct eth_llc_frame *)
+                        (buf + ((struct bpf_hdr *) buf)->bh_hdrlen);
 #else
+                llc_frame = (struct eth_llc_frame *) buf;
+#endif
+                assert(llc_frame->dst_hwaddr);
+
+#if !defined(HAVE_BPF)
+    #if defined(HAVE_NETMAP)
+                if (memcmp(eth_llc_data.hw_addr,
+    #elif defined(__linux__)
                 if (memcmp(eth_llc_data.device.sll_addr,
-#endif /* HAVE_NETMAP */
+    #endif /* HAVE_NETMAP */
                            llc_frame->dst_hwaddr,
                            MAC_SIZE) &&
-                           memcmp(br_addr, llc_frame->dst_hwaddr, MAC_SIZE))
-                        continue;
-
+                    memcmp(br_addr, llc_frame->dst_hwaddr, MAC_SIZE)) {
+                }
+#endif
                 memcpy(&length, &llc_frame->length, sizeof(length));
                 length = ntohs(length);
 
@@ -744,20 +761,45 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
         return (void *) 1;
 }
 
+#if defined (HAVE_BPF) && !defined(HAVE_NETMAP)
+static int open_bpf_device(void)
+{
+        char   dev[32];
+        size_t i = 0;
+
+        for (i = 0; i < BPF_DEV_MAX; i++) {
+                int fd = -1;
+
+                snprintf(dev, sizeof(dev), "/dev/bpf%zu", i);
+
+                fd = open(dev, O_RDWR);
+                if (fd > -1)
+                        return fd;
+        }
+
+        return -1;
+}
+#endif
+
 static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
 {
         int              idx;
         struct ifreq     ifr;
-#ifdef HAVE_NETMAP
+#if defined(HAVE_NETMAP)
         char             ifn[IFNAMSIZ];
-#else
-        struct timeval   tv = {0, EVENT_WAIT_TIMEOUT * 1000};
+#elif defined(HAVE_BPF)
+        int              enable  = 1;
+        int              disable = 0;
+        int              blen;
+        struct timeval   tv = {0, EVENT_WAIT_TIMEOUT};
+#elif defined(__linux__)
+        struct timeval   tv = {0, EVENT_WAIT_TIMEOUT};
 #endif /* HAVE_NETMAP */
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__APPLE__)
         struct ifaddrs * ifaddr;
         struct ifaddrs * ifa;
-#else
+#elif defined(__linux__)
         int              skfd;
 #endif
         assert(conf);
@@ -771,7 +813,7 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         memset(&ifr, 0, sizeof(ifr));
         memcpy(ifr.ifr_name, conf->if_name, strlen(conf->if_name));
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__APPLE__)
         if (getifaddrs(&ifaddr) < 0)  {
                 log_err("Could not get interfaces.");
                 return -1;
@@ -781,7 +823,12 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
                 if (strcmp(ifa->ifa_name, conf->if_name))
                         continue;
                 log_dbg("Interface %s found.", conf->if_name);
+
+    #if defined(HAVE_NETMAP) || defined(HAVE_BPF)
+                memcpy(eth_llc_data.hw_addr, LLADDR((struct sockaddr_dl *)(ifa)->ifa_addr), MAC_SIZE);
+    #else
                 memcpy(&ifr.ifr_addr, ifa->ifa_addr, sizeof(*ifa->ifa_addr));
+    #endif
                 break;
         }
 
@@ -792,7 +839,7 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         freeifaddrs(ifaddr);
-#else
+#elif defined(__linux__)
         skfd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (skfd < 0) {
                 log_err("Failed to open socket.");
@@ -815,14 +862,10 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 #endif /* __FreeBSD__ */
 
-#ifdef HAVE_NETMAP
+#if defined(HAVE_NETMAP)
         strcpy(ifn, "netmap:");
         strcat(ifn, conf->if_name);
-    #ifdef __FreeBSD__
-        memcpy(eth_llc_data.hw_addr, ifr.ifr_addr.sa_data, MAC_SIZE);
-    #else
-        memcpy(eth_llc_data.hw_addr, ifr.ifr_hwaddr.sa_data, MAC_SIZE);
-    #endif /* __FreeBSD__ */
+
         eth_llc_data.nmd = nm_open(ifn, NULL, 0, NULL);
         if (eth_llc_data.nmd == NULL) {
                 log_err("Failed to open netmap device.");
@@ -838,17 +881,54 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         eth_llc_data.poll_out.events = POLLOUT;
 
         log_info("Using netmap device.");
-#else /* !HAVE_NETMAP */
-        memset(&(eth_llc_data.device), 0, sizeof(eth_llc_data.device));
-    #ifdef __FreeBSD__
-        eth_llc_data.device.sdl_index  = idx;
-        eth_llc_data.device.sdl_family = AF_LINK;
-        memcpy(LLADDR(&eth_llc_data.device), ifr.ifr_addr.sa_data, MAC_SIZE);
-        eth_llc_data.device.sdl_alen   = MAC_SIZE;
-        eth_llc_data.s_fd              = socket(AF_LINK, SOCK_RAW, 0);
+#elif defined(HAVE_BPF) /* !HAVE_NETMAP */
+        eth_llc_data.bpf = open_bpf_device();
+        if (eth_llc_data.bpf < 0) {
+                log_err("Failed to open bpf device.");
+                return -1;
+        }
 
-        log_info("Using berkeley packet filter."); /* TODO */
-    #else
+        ioctl(eth_llc_data.bpf, BIOCGBLEN, &blen);
+        if (BPF_BLEN < blen) {
+                log_err("BPF buffer too small (is: %ld must be: %d).",
+                        BPF_BLEN, blen);
+                close(eth_llc_data.bpf);
+                return -1;
+        }
+
+        if (ioctl(eth_llc_data.bpf, BIOCSETIF, &ifr) < 0) {
+                log_err("Failed to set interface.");
+                close(eth_llc_data.bpf);
+                return -1;
+        }
+
+        if (ioctl(eth_llc_data.bpf, BIOCSHDRCMPLT, &enable) < 0) {
+                log_err("Failed to set BIOCSHDRCMPLT.");
+                close(eth_llc_data.bpf);
+                return -1;
+        }
+
+        if (ioctl(eth_llc_data.bpf, BIOCSSEESENT, &disable) < 0) {
+                log_err("Failed to set BIOCSSEESENT.");
+                close(eth_llc_data.bpf);
+                return -1;
+        }
+
+        if (ioctl(eth_llc_data.bpf, BIOCSRTIMEOUT, &tv) < 0) {
+                log_err("Failed to set BIOCSRTIMEOUT.");
+                close(eth_llc_data.bpf);
+                return -1;
+        }
+
+        if (ioctl(eth_llc_data.bpf, BIOCIMMEDIATE, &enable) < 0) {
+                log_err("Failed to set BIOCIMMEDIATE.");
+                close(eth_llc_data.bpf);
+                return -1;
+        }
+
+        log_info("Using Berkeley Packet Filter.");
+#elif defined(__linux__)
+        memset(&(eth_llc_data.device), 0, sizeof(eth_llc_data.device));
         eth_llc_data.device.sll_ifindex  = idx;
         eth_llc_data.device.sll_family   = AF_PACKET;
         memcpy(eth_llc_data.device.sll_addr, ifr.ifr_hwaddr.sa_data, MAC_SIZE);
@@ -857,7 +937,6 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         eth_llc_data.s_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
 
         log_info("Using raw socket device.");
-    #endif /* __FreeBSD__ */
 
         if (eth_llc_data.s_fd < 0) {
                 log_err("Failed to create socket.");
@@ -872,8 +951,8 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         if (setsockopt(eth_llc_data.s_fd, SOL_SOCKET, SO_RCVTIMEO,
-                       (void *) &tv, sizeof(tv))) {
-                log_err("Failed to set socket timeout.");
+                       &tv, sizeof(tv))) {
+                log_err("Failed to set socket timeout: %s.", strerror(errno));
                 close(eth_llc_data.s_fd);
                 return -1;
         }
@@ -1027,7 +1106,7 @@ static int eth_llc_ipcp_flow_alloc(int             fd,
 static int eth_llc_ipcp_flow_alloc_resp(int fd,
                                         int response)
 {
-        struct timespec ts    = {0, EVENT_WAIT_TIMEOUT * 1000};
+        struct timespec ts    = {0, EVENT_WAIT_TIMEOUT * 100};
         struct timespec abstime;
         uint8_t         ssap  = 0;
         uint8_t         r_sap = 0;
@@ -1126,33 +1205,23 @@ static struct ipcp_ops eth_llc_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, THIS_TYPE, &eth_llc_ops) < 0) {
-                ipcp_create_r(getpid(), -1);
-                exit(EXIT_FAILURE);
-        }
+        if (ipcp_init(argc, argv, THIS_TYPE, &eth_llc_ops) < 0)
+                goto fail_init;
 
         if (eth_llc_data_init() < 0) {
                 log_err("Failed to init shim-eth-llc data.");
-                ipcp_create_r(getpid(), -1);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_data_init;
         }
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
-                ipcp_create_r(getpid(), -1);
-                eth_llc_data_fini();
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_boot;
         }
 
         if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
-                ipcp_shutdown();
-                eth_llc_data_fini();
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_create_r;
         }
 
         ipcp_shutdown();
@@ -1168,4 +1237,15 @@ int main(int    argc,
         ipcp_fini();
 
         exit(EXIT_SUCCESS);
+
+ fail_create_r:
+        ipcp_shutdown();
+ fail_boot:
+        eth_llc_data_fini();
+ fail_data_init:
+        ipcp_fini();
+ fail_init:
+        ipcp_create_r(getpid(), -1);
+        exit(EXIT_FAILURE);
+
 }

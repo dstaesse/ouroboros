@@ -47,18 +47,18 @@
 int random_buffer(void * buf,
                   size_t len)
 {
-#if defined(HAVE_SYS_RANDOM)
-        return getrandom(buf, len, GRND_NONBLOCK); /* glibc 2.25 */
-#elif defined(HAVE_LIBGCRYPT)
-        return gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
+#if defined(__APPLE__)
+        return getentropy(buf, len);
 #elif defined(__FreeBSD__)
         arc4random_buf(buf, len);
         return 0;
+#elif defined(HAVE_SYS_RANDOM)
+        return getrandom(buf, len, GRND_NONBLOCK); /* glibc 2.25 */
+#elif defined(HAVE_LIBGCRYPT)
+        return gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
 #elif defined(HAVE_OPENSSL)
         if (len > 0 && len < INT_MAX)
                 return RAND_bytes((unsigned char *) buf, (int) len);
         return -1;
-#elif defined(__APPLE__)
-        return getentropy(buf, len);
 #endif
 }
