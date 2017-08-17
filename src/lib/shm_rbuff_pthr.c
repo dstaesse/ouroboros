@@ -284,17 +284,11 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 }
 
 ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
-                         const struct timespec * timeout)
+                         const struct timespec * abstime)
 {
-        struct timespec abstime;
         ssize_t idx = -1;
 
         assert(rb);
-
-        if (timeout != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-                ts_add(&abstime, timeout, &abstime);
-        }
 
 #ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
@@ -306,10 +300,10 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
                              (void *) rb->lock);
 
         while (shm_rbuff_empty(rb) && (idx != -ETIMEDOUT)) {
-                if (timeout != NULL)
+                if (abstime != NULL)
                         idx = -pthread_cond_timedwait(rb->add,
                                                       rb->lock,
-                                                      &abstime);
+                                                      abstime);
                 else
                         idx = -pthread_cond_wait(rb->add, rb->lock);
 #ifdef HAVE_ROBUST_MUTEX

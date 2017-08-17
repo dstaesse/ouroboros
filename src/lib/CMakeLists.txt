@@ -86,6 +86,7 @@ set(SOURCE_FILES
   cdap_req.c
   crc32.c
   dev.c
+  frct_pci.c
   hash.c
   hashtable.c
   irm.c
@@ -104,6 +105,7 @@ set(SOURCE_FILES
   shm_rdrbuff.c
   sockets.c
   time_utils.c
+  timerwheel.c
   tpm.c
   utils.c
   )
