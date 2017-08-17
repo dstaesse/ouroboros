@@ -31,6 +31,10 @@
 #ifdef __FreeBSD__
 #define __BSD_VISIBLE          1
 #endif
+#ifdef __APPLE__
+#define _BSD_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
 #define IPCP_SHIM_UDP_EXEC     "@IPCP_SHIM_UDP_TARGET@"
 #define IPCP_SHIM_ETH_LLC_EXEC "@IPCP_SHIM_ETH_LLC_TARGET@"
 #define IPCP_NORMAL_EXEC       "@IPCP_NORMAL_TARGET@"
@@ -40,6 +44,7 @@
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL
 #cmakedefine HAVE_NETMAP
+#cmakedefine HAVE_BPF
 #define AP_MAX_FLOWS           2048
 #define AP_RES_FDS             64
 #define AP_MAX_FQUEUES         64
@@ -60,9 +65,13 @@
 /* IPCP dynamic threadpooling */
 #define IPCP_MIN_THREADS       4
 #define IPCP_ADD_THREADS       16
-#define IPCP_SCHED_THREADS     8
+#define IPCP_SCHED_THREADS     2
 #define IPCPD_MAX_CONNS        IRMD_MAX_FLOWS
+#ifdef __APPLE__
+#define PTHREAD_COND_CLOCK     CLOCK_REALTIME
+#else
 #define PTHREAD_COND_CLOCK     CLOCK_MONOTONIC
+#endif
 #define PFT_SIZE               1 << 12
 /* Timeout values */
 #define IRMD_ACCEPT_TIMEOUT    100
