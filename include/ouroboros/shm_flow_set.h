@@ -58,6 +58,6 @@ void                  shm_flow_set_notify(struct shm_flow_set * set,
 ssize_t               shm_flow_set_wait(const struct shm_flow_set * shm_set,
                                         size_t                      idx,
                                         int *                       fqueue,
-                                        const struct timespec *     timeout);
+                                        const struct timespec *     abstime);
 
 #endif /* OUROBOROS_SHM_FLOW_SET_H */

@@ -64,49 +64,57 @@ uint16_t hash_len(enum hash_algo algo)
 #endif
 }
 
-void str_hash(enum hash_algo algo,
-              void *         buf,
-              const char *   str)
+void mem_hash(enum hash_algo  algo,
+              void *          dst,
+              const uint8_t * buf,
+              size_t          len)
 {
 #ifdef HAVE_LIBGCRYPT
-        gcry_md_hash_buffer(algo, buf, str, strlen(str));
+        gcry_md_hash_buffer(algo, dst, buf, len);
 #else
         struct sha3_ctx sha3_ctx;
         struct md5_ctx md5_ctx;
 
         switch (algo) {
         case HASH_CRC32:
-                memset(buf, 0, CRC32_HASH_LEN);
-                crc32((uint32_t *) buf, str, strlen(str));
+                memset(dst, 0, CRC32_HASH_LEN);
+                crc32((uint32_t *) dst, buf, len);
                 break;
         case HASH_MD5:
                 rhash_md5_init(&md5_ctx);
-                rhash_md5_update(&md5_ctx, str, strlen(str));
-                rhash_md5_final(&md5_ctx, (uint8_t *) buf);
+                rhash_md5_update(&md5_ctx, buf, len);
+                rhash_md5_final(&md5_ctx, (uint8_t *) dst);
                 break;
         case HASH_SHA3_224:
                 rhash_sha3_224_init(&sha3_ctx);
-                rhash_sha3_update(&sha3_ctx, str, strlen(str));
-                rhash_sha3_final(&sha3_ctx, (uint8_t *) buf);
+                rhash_sha3_update(&sha3_ctx, buf, len);
+                rhash_sha3_final(&sha3_ctx, (uint8_t *) dst);
                 break;
         case HASH_SHA3_256:
                 rhash_sha3_256_init(&sha3_ctx);
-                rhash_sha3_update(&sha3_ctx, str, strlen(str));
-                rhash_sha3_final(&sha3_ctx, (uint8_t *) buf);
+                rhash_sha3_update(&sha3_ctx, buf, len);
+                rhash_sha3_final(&sha3_ctx, (uint8_t *) dst);
                 break;
         case HASH_SHA3_384:
                 rhash_sha3_384_init(&sha3_ctx);
-                rhash_sha3_update(&sha3_ctx, str, strlen(str));
-                rhash_sha3_final(&sha3_ctx, (uint8_t *) buf);
+                rhash_sha3_update(&sha3_ctx, buf, len);
+                rhash_sha3_final(&sha3_ctx, (uint8_t *) dst);
                 break;
         case HASH_SHA3_512:
                 rhash_sha3_512_init(&sha3_ctx);
-                rhash_sha3_update(&sha3_ctx, str, strlen(str));
-                rhash_sha3_final(&sha3_ctx, (uint8_t *) buf);
+                rhash_sha3_update(&sha3_ctx, buf, len);
+                rhash_sha3_final(&sha3_ctx, (uint8_t *) dst);
                 break;
         default:
                 assert(false);
                 break;
         }
 #endif
+}
+
+void str_hash(enum hash_algo algo,
+              void *         dst,
+              const char *   str)
+{
+        return mem_hash(algo, dst, (const uint8_t *) str, strlen(str));
 }

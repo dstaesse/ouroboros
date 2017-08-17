@@ -50,7 +50,7 @@ int                shm_rbuff_write(struct shm_rbuff * rb,
 ssize_t            shm_rbuff_read(struct shm_rbuff * rb);
 
 ssize_t            shm_rbuff_read_b(struct shm_rbuff *      rb,
-                                    const struct timespec * timeout);
+                                    const struct timespec * abstime);
 
 size_t             shm_rbuff_queued(struct shm_rbuff * rb);
 

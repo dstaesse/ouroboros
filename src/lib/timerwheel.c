@@ -6,17 +6,17 @@
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public License
+ * version 2.1 as published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful,
+ * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
@@ -83,8 +83,6 @@ static void tw_el_fini(struct tw_el * e)
         list_for_each_safe(p, h, &e->funcs) {
                 struct tw_f * f = list_entry(p, struct tw_f, next);
                 list_del(&f->next);
-                if (f->arg != NULL)
-                        free(f->arg);
         }
 }
 
@@ -140,8 +138,6 @@ static void * worker(void * o)
                         list_del(&f->next);
                         pthread_mutex_unlock(&tw->lock);
                         f->func(f->arg);
-                        if (f->arg != NULL)
-                                free(f->arg);
                         free(f);
 
                         pthread_mutex_lock(&tw->lock);
@@ -194,8 +190,8 @@ static void * movement(void * o)
         return (void *) 0;
 }
 
-struct timerwheel * timerwheel_create(unsigned int resolution,
-                                      unsigned int max_delay)
+struct timerwheel * timerwheel_create(time_t resolution,
+                                      time_t max_delay)
 {
         struct timespec now = {0, 0};
         struct timespec res_ts = {resolution / 1000,
@@ -221,10 +217,8 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
                 tw->elements <<= 1;
 
         tw->wheel = malloc(sizeof(*tw->wheel) * tw->elements);
-        if (tw->wheel == NULL) {
-                free(tw);
-                return NULL;
-        }
+        if (tw->wheel == NULL)
+                goto fail_wheel_malloc;
 
         tw->resolution = resolution;
 
@@ -233,35 +227,20 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
 
         list_head_init(&tw->wq);
 
-        if (pthread_mutex_init(&tw->lock, NULL)) {
-                free(tw->wheel);
-                free(tw);
-                return NULL;
-        }
+        if (pthread_mutex_init(&tw->lock, NULL))
+                goto fail_lock_init;
 
-        if (pthread_mutex_init(&tw->s_lock, NULL)) {
-                pthread_mutex_destroy(&tw->lock);
-                free(tw->wheel);
-                free(tw);
-                return NULL;
-        }
+        if (pthread_mutex_init(&tw->s_lock, NULL))
+                goto fail_s_lock_init;
 
-        if (pthread_condattr_init(&cattr)) {
-                pthread_mutex_destroy(&tw->lock);
-                free(tw->wheel);
-                free(tw);
-                return NULL;
-        }
+        if (pthread_condattr_init(&cattr))
+                goto fail_cond_init;
+
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        if (pthread_cond_init(&tw->work, &cattr)) {
-                pthread_mutex_destroy(&tw->s_lock);
-                pthread_mutex_destroy(&tw->lock);
-                free(tw->wheel);
-                free(tw);
-                return NULL;
-        }
+        if (pthread_cond_init(&tw->work, &cattr))
+                goto fail_cond_init;
 
         tw->pos = 0;
         tw->state = TW_RUNNING;
@@ -275,27 +254,29 @@ struct timerwheel * timerwheel_create(unsigned int resolution,
                 ts_add(&now, &res_ts, &now);
         }
 
-        if (pthread_create(&tw->worker, NULL, worker, (void *) tw)) {
-                pthread_cond_destroy(&tw->work);
-                pthread_mutex_destroy(&tw->s_lock);
-                pthread_mutex_destroy(&tw->lock);
-                free(tw->wheel);
-                free(tw);
-                return NULL;
-        }
+        if (pthread_create(&tw->worker, NULL, worker, (void *) tw))
+                goto fail_worker_create;
 
         if (pthread_create(&tw->ticker, NULL, movement, (void *) tw)) {
                 tw_set_state(tw, TW_DESTROY);
-                pthread_join(tw->worker, NULL);
-                pthread_cond_destroy(&tw->work);
-                pthread_mutex_destroy(&tw->s_lock);
-                pthread_mutex_destroy(&tw->lock);
-                free(tw->wheel);
-                free(tw);
-                return NULL;
+                goto fail_ticker_create;
         }
 
         return tw;
+
+ fail_ticker_create:
+         pthread_join(tw->worker, NULL);
+ fail_worker_create:
+         pthread_cond_destroy(&tw->work);
+ fail_cond_init:
+         pthread_mutex_destroy(&tw->s_lock);
+ fail_s_lock_init:
+         pthread_mutex_destroy(&tw->lock);
+ fail_lock_init:
+         free(tw->wheel);
+ fail_wheel_malloc:
+         free(tw);
+         return NULL;
 }
 
 void timerwheel_destroy(struct timerwheel * tw)
@@ -318,8 +299,6 @@ void timerwheel_destroy(struct timerwheel * tw)
         list_for_each_safe(p, h, &tw->wq) {
                 struct tw_f * f = list_entry(p, struct tw_f, next);
                 list_del(&f->next);
-                if (f->arg != NULL)
-                        free(f->arg);
                 free(f);
         }
 
@@ -333,25 +312,18 @@ void timerwheel_destroy(struct timerwheel * tw)
         free(tw);
 }
 
-int timerwheel_add(struct timerwheel * tw,
-                   void (* func)(void *),
-                   void * arg,
-                   size_t arg_len,
-                   unsigned int delay)
+struct tw_f * timerwheel_start(struct timerwheel * tw,
+                               void (* func)(void *),
+                               void *              arg,
+                               time_t              delay)
 {
         int pos;
         struct tw_f * f = malloc(sizeof(*f));
         if (f == NULL)
-                return -ENOMEM;
+                return NULL;
 
         f->func = func;
-        f->arg = malloc(arg_len);
-        if (f->arg == NULL) {
-                free(f);
-                return -ENOMEM;
-        }
-
-        memcpy(f->arg, arg, arg_len);
+        f->arg = arg;
 
         assert(delay < tw->elements * tw->resolution);
 
@@ -362,5 +334,38 @@ int timerwheel_add(struct timerwheel * tw,
 
         pthread_mutex_unlock(&tw->lock);
 
+        return f;
+}
+
+int timerwheel_restart(struct timerwheel * tw,
+                       struct tw_f *       f,
+                       time_t              delay)
+{
+        int pos;
+
+        assert(tw);
+        assert(delay < tw->elements * tw->resolution);
+
+        pthread_mutex_lock(&tw->lock);
+
+        list_del(&f->next);
+        pos = (tw->pos + delay / tw->resolution) & (tw->elements - 1);
+        list_add(&f->next, &tw->wheel[pos].funcs);
+
+        pthread_mutex_unlock(&tw->lock);
+
         return 0;
+}
+
+void timerwheel_stop(struct timerwheel * tw,
+                     struct tw_f *       f)
+{
+        assert(tw);
+
+        pthread_mutex_lock(&tw->lock);
+
+        list_del(&f->next);
+        free(f);
+
+        pthread_mutex_unlock(&tw->lock);
 }

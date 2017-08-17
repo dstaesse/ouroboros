@@ -51,6 +51,9 @@ int timerwheel_test(int argc, char ** argv)
         int check_total = 0;
 
         int i;
+        int var = 5;
+
+        struct tw_f * f;
 
         (void) argc;
         (void) argv;
@@ -75,13 +78,12 @@ int timerwheel_test(int argc, char ** argv)
 
         for (i = 0; i < additions; ++i) {
                 int delay = rand() % (resolution * elements);
-                int var = rand() % 5;
                 check_total += var;
-                if (timerwheel_add(tw,
-                                   (void (*)(void *)) add,
-                                   (void *) &var,
-                                   sizeof(var),
-                                   delay)) {
+                f = timerwheel_start(tw,
+                                     (void (*)(void *)) add,
+                                     (void *) &var,
+                                     delay);
+                if (f == NULL) {
                         printf("Failed to add function.");
                         return -1;
                 }

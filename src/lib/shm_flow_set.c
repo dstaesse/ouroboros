@@ -326,10 +326,9 @@ void shm_flow_set_notify(struct shm_flow_set * set,
 ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                           size_t                      idx,
                           int *                       fqueue,
-                          const struct timespec *     timeout)
+                          const struct timespec *     abstime)
 {
         ssize_t ret = 0;
-        struct timespec abstime;
 
         assert(set);
         assert(idx < AP_MAX_FQUEUES);
@@ -341,19 +340,15 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
         if (pthread_mutex_lock(set->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(set->lock);
 #endif
-        if (timeout != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-                ts_add(&abstime, timeout, &abstime);
-        }
 
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) set->lock);
 
         while (set->heads[idx] == 0 && ret != -ETIMEDOUT) {
-                if (timeout != NULL)
+                if (abstime != NULL)
                         ret = -pthread_cond_timedwait(set->conds + idx,
                                                       set->lock,
-                                                      &abstime);
+                                                      abstime);
                 else
                         ret = -pthread_cond_wait(set->conds + idx,
                                                  set->lock);
