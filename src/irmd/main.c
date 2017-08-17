@@ -275,6 +275,11 @@ static pid_t create_ipcp(char *         name,
         struct ipcp_entry * tmp   = NULL;
         struct list_head *  p     = NULL;
         struct ipcp_entry * entry = NULL;
+        int                 ret   = 0;
+        pthread_condattr_t  cattr;
+        struct timespec     dl;
+        struct timespec     to = {SOCKET_TIMEOUT / 1000,
+                                  (SOCKET_TIMEOUT % 1000) * MILLION};
 
         api = malloc(sizeof(*api));
         if (api == NULL)
@@ -311,13 +316,20 @@ static pid_t create_ipcp(char *         name,
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 return -1;
         }
+        pthread_condattr_init(&cattr);
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
 
-        pthread_cond_init(&tmp->init_cond, NULL);
+        pthread_cond_init(&tmp->init_cond, &cattr);
+
+        pthread_condattr_destroy(&cattr);
+
         pthread_mutex_init(&tmp->init_lock, NULL);
 
-        tmp->dif_name = NULL;
-        tmp->type = ipcp_type;
-        tmp->init = false;
+        tmp->dif_name      = NULL;
+        tmp->type          = ipcp_type;
+        tmp->init          = false;
         tmp->dir_hash_algo = -1;
 
         list_for_each(p, &irmd.ipcps) {
@@ -334,10 +346,20 @@ static pid_t create_ipcp(char *         name,
 
         pthread_mutex_lock(&tmp->init_lock);
 
-        while (tmp->init == false)
-                pthread_cond_wait(&tmp->init_cond, &tmp->init_lock);
+        clock_gettime(PTHREAD_COND_CLOCK, &dl);
+        ts_add(&dl, &to, &dl);
 
+        while (tmp->init == false && ret != -ETIMEDOUT)
+                ret = -pthread_cond_timedwait(&tmp->init_cond,
+                                              &tmp->init_lock,
+                                              &dl);
         pthread_mutex_unlock(&tmp->init_lock);
+
+        if (ret == -ETIMEDOUT) {
+                log_err("Process %d failed to respond.", api->pid);
+                kill(api->pid, SIGKILL);
+                return -1;
+        }
 
         log_info("Created IPCP %d.", api->pid);
 
