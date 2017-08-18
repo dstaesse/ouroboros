@@ -24,10 +24,6 @@
 #include <ouroboros/fcntl.h>
 #include <ouroboros/time_utils.h>
 
-#ifdef __FreeBSD__
-#define __XSI_VISIBLE 500
-#endif
-
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/time.h>

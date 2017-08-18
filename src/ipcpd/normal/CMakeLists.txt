@@ -12,13 +12,17 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-set(IPCP_NORMAL_TARGET ipcpd-normal CACHE STRING "IPCP_NORMAL_TARGET")
+set(IPCP_NORMAL_TARGET ipcpd-normal CACHE INTERNAL "")
 
 protobuf_generate_c(FLOW_ALLOC_SRCS FLOW_ALLOC_HDRS flow_alloc.proto)
 protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS kademlia.proto)
 
 # Add GPB sources of policies last
 protobuf_generate_c(FSO_SRCS FSO_HDRS pol/fso.proto)
+
+math(EXPR PFT_EXPR "1 << 12")
+set(PFT_SIZE ${PFT_EXPR} CACHE STRING
+  "Size of the PDU forwarding table")
 
 set(SOURCE_FILES
   # Add source files here
@@ -56,4 +60,7 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
 
 add_subdirectory(pol/tests)
-add_subdirectory(tests)
+
+if (NOT GNU)
+  add_subdirectory(tests)
+endif ()

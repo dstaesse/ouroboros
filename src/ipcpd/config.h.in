@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Normal IPC Process
+ * IPC process configuration
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,13 +20,30 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define OUROBOROS_PREFIX "nsmd"
+#define PTHREAD_COND_CLOCK  @PTHREAD_COND_CLOCK@
 
-#include <ouroboros/logs.h>
+#define SYS_MAX_FLOWS       @SYS_MAX_FLOWS@
+#define AP_RES_FDS          @AP_RES_FDS@
+#define AP_MAX_FLOWS        @AP_MAX_FLOWS@
 
-int main(void)
-{
-        log_dbg("Test of the NSMd");
+#define IPCP_ACCEPT_TIMEOUT @IPCP_ACCEPT_TIMEOUT@
 
-        return 0;
-}
+#define SOCKET_TIMEOUT      @SOCKET_TIMEOUT@
+
+#define SHM_BUFFER_SIZE     @SHM_BUFFER_SIZE@
+
+#define IPCP_MIN_THREADS    @IPCP_MIN_THREADS@
+#define IPCP_ADD_THREADS    @IPCP_ADD_THREADS@
+
+/* normal IPCP */
+#define IPCP_SCHED_THREADS  @IPCP_SCHED_THREADS@
+#define PFT_SIZE            @PFT_SIZE@
+
+/* shim-udp */
+#define NSUPDATE_EXEC       "@NSUPDATE_EXECUTABLE@"
+#define NSLOOKUP_EXEC       "@NSLOOKUP_EXECUTABLE@"
+
+/* shim-eth-llc */
+#cmakedefine HAVE_NETMAP
+#cmakedefine HAVE_BPF
+#cmakedefine HAVE_RAW_SOCKETS

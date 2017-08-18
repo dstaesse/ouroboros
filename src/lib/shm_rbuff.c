@@ -19,9 +19,12 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
-#include <ouroboros/config.h>
 
-#if ((SHM_RBUFF_LOCKLESS > 0) &&                        \
+#define _POSIX_C_SOURCE 200809L
+
+#include "config.h"
+
+#if (defined(SHM_RBUFF_LOCKLESS) &&                            \
      (defined(__GNUC__) || defined (__clang__)))
 #include "shm_rbuff_ll.c"
 #else

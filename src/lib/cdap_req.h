@@ -23,7 +23,6 @@
 #ifndef OUROBOROS_CDAP_REQ_H
 #define OUROBOROS_CDAP_REQ_H
 
-#include <ouroboros/config.h>
 #include <ouroboros/cdap.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>

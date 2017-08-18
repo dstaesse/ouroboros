@@ -10,14 +10,10 @@ git_version_gen()
 include(GNUInstallDirs)
 
 set(PACKAGE_NAME        "${CMAKE_PROJECT_NAME}")
-set(PACKAGE_DESCRIPTION "The Ouroboros prototype"
-  CACHE STRING          "Package description")
-set(PACKAGE_URL         "None"
-  CACHE STRING          "Package URL")
-set(PACKAGE_BUGREPORT   "None"
-  CACHE STRING          "Packaged bug-report email")
-set(PACKAGE_VERSION     "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}"
-  CACHE STRING          "Package version")
+set(PACKAGE_DESCRIPTION "The Ouroboros prototype")
+set(PACKAGE_URL         "None")
+set(PACKAGE_BUGREPORT   "None")
+set(PACKAGE_VERSION     "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}")
 
 if (APPLE)
   set(CMAKE_MACOSX_RPATH 1)
@@ -72,15 +68,11 @@ test_and_set_c_compiler_flag_global(-Wunreachable-code)
 test_and_set_c_compiler_flag_global(-Wdeclaration-after-statement)
 test_and_set_c_compiler_flag_global(-fmax-errors=5)
 
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.pc.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
-  @ONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.pc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc" @ONLY)
 
-if (NOT APPLE)
-  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
-    DESTINATION "/usr/lib/pkgconfig")
-endif ()
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
+  DESTINATION "usr/lib/pkgconfig")
 
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
@@ -88,15 +80,13 @@ add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 find_package(ProtobufC REQUIRED)
 include_directories(${PROTOBUF_C_INCLUDE_DIRS})
 
-add_subdirectory(src)
 add_subdirectory(include)
+add_subdirectory(src)
 add_subdirectory(doc)
 
 # Uninstall target
-configure_file(
-  "${CMAKE_SOURCE_DIR}/cmake/CmakeUninstall.cmake.in"
-  "${CMAKE_BINARY_DIR}/cmake/CmakeUninstall.cmake"
-  IMMEDIATE @ONLY)
+configure_file("${CMAKE_SOURCE_DIR}/cmake/CmakeUninstall.cmake.in"
+  "${CMAKE_BINARY_DIR}/cmake/CmakeUninstall.cmake" IMMEDIATE @ONLY)
 
 add_custom_target(uninstall
   COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/cmake/CmakeUninstall.cmake)

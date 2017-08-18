@@ -1,10 +1,9 @@
-find_package(SWIG)
-
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
+find_package(SWIG)
 if (NOT SWIG_FOUND)
-  message(STATUS "SWIG not found: Bindings for other languages disabled.")
+  message(STATUS "SWIG not found: Bindings for other languages disabled")
 else ()
   include(${SWIG_USE_FILE})
   include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -12,7 +11,7 @@ else ()
 
   find_package(PythonLibs)
   if (NOT PYTHONLIBS_FOUND)
-    message(STATUS "Python not found: Python bindings will not be built.")
+    message(STATUS "Python not found: Python bindings will not be built")
   else ()
     include_directories(${PYTHON_INCLUDE_PATH})
 
@@ -55,3 +54,5 @@ else ()
       DESTINATION ${PYTHON_MODULE_PATH})
   endif ()
 endif ()
+
+mark_as_advanced(SWIG_EXECUTABLE)

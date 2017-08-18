@@ -20,9 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "dht"
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/errno.h>

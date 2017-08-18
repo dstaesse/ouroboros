@@ -20,9 +20,19 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+
+
+#ifdef __APPLE__
+#define _BSD_SOURCE
+#define _DARWIN_C_SOURCE
+#else
+#define _POSIX_C_SOURCE 200112L
+#endif
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "ipcpd/shim-eth-llc"
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
@@ -35,6 +45,7 @@
 #include <ouroboros/time_utils.h>
 
 #include "ipcp.h"
+#include "shim-data.h"
 #include "shim_eth_llc_messages.pb-c.h"
 
 #include <signal.h>
@@ -78,7 +89,6 @@
 #include <net/bpf.h>
 #endif
 
-#define THIS_TYPE                 IPCP_SHIM_ETH_LLC
 #define MGMT_SAP                  0x01
 #define MAC_SIZE                  6
 #define LLC_HEADER_SIZE           3
@@ -117,6 +127,8 @@ struct mgmt_frame {
 };
 
 struct {
+        struct shim_data * shim_data;
+
 #if defined(HAVE_NETMAP)
         struct nm_desc *   nmd;
         uint8_t            hw_addr[MAC_SIZE];
@@ -125,7 +137,7 @@ struct {
 #elif defined(HAVE_BPF)
         int                bpf;
         uint8_t            hw_addr[MAC_SIZE];
-#elif defined __linux__
+#elif defined HAVE_RAW_SOCKETS
         int                s_fd;
         struct sockaddr_ll device;
 #endif /* HAVE_NETMAP */
@@ -154,7 +166,7 @@ static int eth_llc_data_init(void)
         int                ret = -ENOMEM;
         pthread_condattr_t cattr;
 
-        eth_llc_data.fd_to_ef = malloc(sizeof(struct ef) * IRMD_MAX_FLOWS);
+        eth_llc_data.fd_to_ef = malloc(sizeof(struct ef) * SYS_MAX_FLOWS);
         if (eth_llc_data.fd_to_ef == NULL)
                 goto fail_fd_to_ef;
 
@@ -177,11 +189,15 @@ static int eth_llc_data_init(void)
         for (i = 0; i < MAX_SAPS; ++i)
                 eth_llc_data.ef_to_fd[i] = -1;
 
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i) {
+        for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 eth_llc_data.fd_to_ef[i].sap   = -1;
                 eth_llc_data.fd_to_ef[i].r_sap = -1;
                 memset(&eth_llc_data.fd_to_ef[i].r_addr, 0, MAC_SIZE);
         }
+
+        eth_llc_data.shim_data = shim_data_create();
+        if (eth_llc_data.shim_data == NULL)
+                goto fail_shim_data;
 
         ret = -1;
 
@@ -206,6 +222,7 @@ static int eth_llc_data_init(void)
         list_head_init(&eth_llc_data.mgmt_frames);
 
         return 0;
+
  fail_mgmt_cond:
         pthread_condattr_destroy(&cattr);
  fail_condattr:
@@ -213,6 +230,8 @@ static int eth_llc_data_init(void)
  fail_mgmt_lock:
         pthread_rwlock_destroy(&eth_llc_data.flows_lock);
  fail_flows_lock:
+        shim_data_destroy(eth_llc_data.shim_data);
+ fail_shim_data:
         fqueue_destroy(eth_llc_data.fq);
  fail_fq:
         flow_set_destroy(eth_llc_data.np1_flows);
@@ -232,12 +251,13 @@ void eth_llc_data_fini(void)
         nm_close(eth_llc_data.nmd);
 #elif defined(HAVE_BPF)
         close(eth_llc_data.bpf);
-#elif defined(__linux__)
+#elif defined(HAVE_RAW_SOCKETS)
         close(eth_llc_data.s_fd);
 #endif
         pthread_cond_destroy(&eth_llc_data.mgmt_cond);
         pthread_mutex_destroy(&eth_llc_data.mgmt_lock);
         pthread_rwlock_destroy(&eth_llc_data.flows_lock);
+        shim_data_destroy(eth_llc_data.shim_data);
         fqueue_destroy(eth_llc_data.fq);
         flow_set_destroy(eth_llc_data.np1_flows);
         bmp_destroy(eth_llc_data.saps);
@@ -280,7 +300,7 @@ static int eth_llc_ipcp_send_frame(const uint8_t * dst_addr,
         memcpy(llc_frame->src_hwaddr,
 #if defined(HAVE_NETMAP) || defined(HAVE_BPF)
                eth_llc_data.hw_addr,
-#elif defined(__linux__)
+#elif defined(HAVE_RAW_SOCKETS)
                eth_llc_data.device.sll_addr,
 #endif /* HAVE_NETMAP */
                MAC_SIZE);
@@ -306,7 +326,7 @@ static int eth_llc_ipcp_send_frame(const uint8_t * dst_addr,
                 return -1;
         }
 
-#elif defined(__linux__)
+#elif defined(HAVE_RAW_SOCKETS)
         if (sendto(eth_llc_data.s_fd,
                    frame,
                    frame_len,
@@ -475,7 +495,7 @@ static int eth_llc_ipcp_name_query_req(const uint8_t * hash,
 {
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
 
-        if (shim_data_reg_has(ipcpi.shim_data, hash)) {
+        if (shim_data_reg_has(eth_llc_data.shim_data, hash)) {
                 msg.code      = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY;
                 msg.has_hash  = true;
                 msg.hash.len  = ipcp_dir_hash_len();
@@ -495,11 +515,11 @@ static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
 
         memcpy(&address, r_addr, MAC_SIZE);
 
-        shim_data_dir_add_entry(ipcpi.shim_data, hash, address);
+        shim_data_dir_add_entry(eth_llc_data.shim_data, hash, address);
 
-        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
+        pthread_mutex_lock(&eth_llc_data.shim_data->dir_queries_lock);
 
-        list_for_each(pos, &ipcpi.shim_data->dir_queries) {
+        list_for_each(pos, &eth_llc_data.shim_data->dir_queries) {
                 struct dir_query * e =
                         list_entry(pos, struct dir_query, next);
                 if (memcmp(e->hash, hash, ipcp_dir_hash_len()) == 0) {
@@ -507,7 +527,7 @@ static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
                 }
         }
 
-        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
+        pthread_mutex_unlock(&eth_llc_data.shim_data->dir_queries_lock);
 
         return 0;
 }
@@ -526,7 +546,7 @@ static int eth_llc_ipcp_mgmt_frame(const uint8_t * buf,
 
         switch (msg->code) {
         case SHIM_ETH_LLC_MSG_CODE__FLOW_REQ:
-                if (shim_data_reg_has(ipcpi.shim_data, msg->hash.data)) {
+                if (shim_data_reg_has(eth_llc_data.shim_data, msg->hash.data)) {
                         eth_llc_ipcp_sap_req(msg->ssap,
                                              r_addr,
                                              msg->hash.data,
@@ -614,7 +634,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         struct nm_pkthdr       hdr;
 #elif defined(HAVE_BPF)
         uint8_t                buf[BPF_BLEN];
-#elif defined(__linux__)
+#elif defined(HAVE_RAW_SOCKETS)
         uint8_t                buf[ETH_FRAME_SIZE];
 #endif
         int                    frame_len = 0;
@@ -641,7 +661,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 }
 #elif defined(HAVE_BPF)
                 frame_len = read(eth_llc_data.bpf, buf, BPF_BLEN);
-#elif defined(__linux__)
+#elif defined(HAVE_RAW_SOCKETS)
                 frame_len = recv(eth_llc_data.s_fd, buf,
                                  SHIM_ETH_LLC_MAX_SDU_SIZE, 0);
 #endif
@@ -659,7 +679,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 #if !defined(HAVE_BPF)
     #if defined(HAVE_NETMAP)
                 if (memcmp(eth_llc_data.hw_addr,
-    #elif defined(__linux__)
+    #elif defined(HAVE_RAW_SOCKETS)
                 if (memcmp(eth_llc_data.device.sll_addr,
     #endif /* HAVE_NETMAP */
                            llc_frame->dst_hwaddr,
@@ -792,7 +812,7 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         int              disable = 0;
         int              blen;
         struct timeval   tv = {0, EVENT_WAIT_TIMEOUT};
-#elif defined(__linux__)
+#elif defined(HAVE_RAW_SOCKETS)
         struct timeval   tv = {0, EVENT_WAIT_TIMEOUT};
 #endif /* HAVE_NETMAP */
 
@@ -825,8 +845,10 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
                 log_dbg("Interface %s found.", conf->if_name);
 
     #if defined(HAVE_NETMAP) || defined(HAVE_BPF)
-                memcpy(eth_llc_data.hw_addr, LLADDR((struct sockaddr_dl *)(ifa)->ifa_addr), MAC_SIZE);
-    #else
+                memcpy(eth_llc_data.hw_addr,
+                       LLADDR((struct sockaddr_dl *) (ifa)->ifa_addr),
+                       MAC_SIZE);
+    #elif defined (HAVE_RAW_SOCKETS)
                 memcpy(&ifr.ifr_addr, ifa->ifa_addr, sizeof(*ifa->ifa_addr));
     #endif
                 break;
@@ -927,7 +949,7 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         log_info("Using Berkeley Packet Filter.");
-#elif defined(__linux__)
+#elif defined(HAVE_RAW_SOCKETS)
         memset(&(eth_llc_data.device), 0, sizeof(eth_llc_data.device));
         eth_llc_data.device.sll_ifindex  = idx;
         eth_llc_data.device.sll_family   = AF_PACKET;
@@ -991,7 +1013,7 @@ static int eth_llc_ipcp_reg(const uint8_t * hash)
                 return -ENOMEM;
         }
 
-        if (shim_data_reg_add_entry(ipcpi.shim_data, hash_dup)) {
+        if (shim_data_reg_add_entry(eth_llc_data.shim_data, hash_dup)) {
                 log_err("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
                 free(hash_dup);
@@ -1005,7 +1027,7 @@ static int eth_llc_ipcp_reg(const uint8_t * hash)
 
 static int eth_llc_ipcp_unreg(const uint8_t * hash)
 {
-        shim_data_reg_del_entry(ipcpi.shim_data, hash);
+        shim_data_reg_del_entry(eth_llc_data.shim_data, hash);
 
         return 0;
 }
@@ -1019,7 +1041,7 @@ static int eth_llc_ipcp_query(const uint8_t * hash)
         struct dir_query * query;
         int                ret;
 
-        if (shim_data_dir_has(ipcpi.shim_data, hash))
+        if (shim_data_dir_has(eth_llc_data.shim_data, hash))
                 return 0;
 
         msg.code      = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ;
@@ -1033,18 +1055,18 @@ static int eth_llc_ipcp_query(const uint8_t * hash)
         if (query == NULL)
                 return -1;
 
-        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
-        list_add(&query->next, &ipcpi.shim_data->dir_queries);
-        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
+        pthread_mutex_lock(&eth_llc_data.shim_data->dir_queries_lock);
+        list_add(&query->next, &eth_llc_data.shim_data->dir_queries);
+        pthread_mutex_unlock(&eth_llc_data.shim_data->dir_queries_lock);
 
         eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
 
         ret = shim_data_dir_query_wait(query, &timeout);
 
-        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
+        pthread_mutex_lock(&eth_llc_data.shim_data->dir_queries_lock);
         list_del(&query->next);
         shim_data_dir_query_destroy(query);
-        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
+        pthread_mutex_unlock(&eth_llc_data.shim_data->dir_queries_lock);
 
         return ret;
 }
@@ -1066,11 +1088,11 @@ static int eth_llc_ipcp_flow_alloc(int             fd,
                 return -1;
         }
 
-        if (!shim_data_dir_has(ipcpi.shim_data, hash)) {
+        if (!shim_data_dir_has(eth_llc_data.shim_data, hash)) {
                 log_err("Destination unreachable.");
                 return -1;
         }
-        addr = shim_data_dir_get_addr(ipcpi.shim_data, hash);
+        addr = shim_data_dir_get_addr(eth_llc_data.shim_data, hash);
 
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 

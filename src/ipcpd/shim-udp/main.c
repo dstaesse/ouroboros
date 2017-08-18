@@ -20,9 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "ipcpd/shim-udp"
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
@@ -32,9 +35,9 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 
-#include "shim_udp_messages.pb-c.h"
 #include "ipcp.h"
-#include "shim_udp_config.h"
+#include "shim-data.h"
+#include "shim_udp_messages.pb-c.h"
 
 #include <string.h>
 #include <sys/socket.h>
@@ -68,6 +71,8 @@ struct uf {
 };
 
 struct {
+        struct shim_data * shim_data;
+
         uint32_t           ip_addr;
         uint32_t           dns_addr;
         /* listen server */
@@ -79,7 +84,7 @@ struct {
         fd_set             flow_fd_s;
         /* bidir mappings of (n - 1) file descriptor to (n) flow descriptor */
         int                uf_to_fd[FD_SETSIZE];
-        struct uf          fd_to_uf[IRMD_MAX_FLOWS];
+        struct uf          fd_to_uf[SYS_MAX_FLOWS];
         pthread_rwlock_t   flows_lock;
 
         pthread_t          sduloop;
@@ -98,7 +103,7 @@ static int udp_data_init(void)
         for (i = 0; i < FD_SETSIZE; ++i)
                 udp_data.uf_to_fd[i] = -1;
 
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i) {
+        for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 udp_data.fd_to_uf[i].skfd = -1;
                 udp_data.fd_to_uf[i].udp = -1;
         }
@@ -115,6 +120,13 @@ static int udp_data_init(void)
                 return -ENOMEM;
         }
 
+        udp_data.shim_data = shim_data_create();
+        if (udp_data.shim_data == NULL) {
+                fqueue_destroy(udp_data.fq);
+                flow_set_destroy(udp_data.np1_flows);
+                return -ENOMEM;
+        }
+
         pthread_rwlock_init(&udp_data.flows_lock, NULL);
         pthread_cond_init(&udp_data.fd_set_cond, NULL);
         pthread_mutex_init(&udp_data.fd_set_lock, NULL);
@@ -126,6 +138,8 @@ static void udp_data_fini(void)
 {
         flow_set_destroy(udp_data.np1_flows);
         fqueue_destroy(udp_data.fq);
+
+        shim_data_destroy(udp_data.shim_data);
 
         pthread_rwlock_destroy(&udp_data.flows_lock);
         pthread_mutex_destroy(&udp_data.fd_set_lock);
@@ -322,7 +336,7 @@ static int udp_port_to_fd(int udp_port)
 {
         int i;
 
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i)
+        for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 if (udp_data.fd_to_uf[i].udp == udp_port)
                         return i;
 
@@ -765,7 +779,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
                 return -ENOMEM;
         }
 
-        if (shim_data_reg_add_entry(ipcpi.shim_data, hash_dup)) {
+        if (shim_data_reg_add_entry(udp_data.shim_data, hash_dup)) {
                 log_err("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
                 free(hash_dup);
@@ -794,7 +808,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
                         dnsstr, hashstr, DNS_TTL, ipstr);
 
                 if (ddns_send(cmd)) {
-                        shim_data_reg_del_entry(ipcpi.shim_data, hash_dup);
+                        shim_data_reg_del_entry(udp_data.shim_data, hash_dup);
                         return -1;
                 }
         }
@@ -835,7 +849,7 @@ static int ipcp_udp_unreg(const uint8_t * hash)
         }
 #endif
 
-        shim_data_reg_del_entry(ipcpi.shim_data, hash);
+        shim_data_reg_del_entry(udp_data.shim_data, hash);
 
         log_dbg("Unregistered " HASH_FMT ".", HASH_VAL(hash));
 
@@ -855,7 +869,7 @@ static int ipcp_udp_query(const uint8_t * hash)
 
         ipcp_hash_str(hashstr, hash);
 
-        if (shim_data_dir_has(ipcpi.shim_data, hash))
+        if (shim_data_dir_has(udp_data.shim_data, hash))
                 return 0;
 
 #ifdef CONFIG_OUROBOROS_ENABLE_DNS
@@ -880,7 +894,7 @@ static int ipcp_udp_query(const uint8_t * hash)
         }
 #endif
 
-        if (shim_data_dir_add_entry(ipcpi.shim_data, hash, ip_addr)) {
+        if (shim_data_dir_add_entry(udp_data.shim_data, hash, ip_addr)) {
                 log_err("Failed to add directory entry.");
                 return -1;
         }
@@ -926,12 +940,12 @@ static int ipcp_udp_flow_alloc(int             fd,
                 return -1;
         }
 
-        if (!shim_data_dir_has(ipcpi.shim_data, dst)) {
+        if (!shim_data_dir_has(udp_data.shim_data, dst)) {
                 log_dbg("Could not resolve destination.");
                 close(skfd);
                 return -1;
         }
-        ip_addr = (uint32_t) shim_data_dir_get_addr(ipcpi.shim_data, dst);
+        ip_addr = (uint32_t) shim_data_dir_get_addr(udp_data.shim_data, dst);
 
         /* connect to server (store the remote IP address in the fd) */
         memset((char *) &r_saddr, 0, sizeof(r_saddr));

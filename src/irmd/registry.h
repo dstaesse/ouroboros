@@ -23,7 +23,6 @@
 #ifndef OUROBOROS_IRMD_REGISTRY_H
 #define OUROBOROS_IRMD_REGISTRY_H
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/list.h>

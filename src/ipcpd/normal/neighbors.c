@@ -20,9 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 199309L
+
 #define OUROBOROS_PREFIX "neighbors"
 
-#include <ouroboros/config.h>
 #include <ouroboros/qoscube.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/errno.h>

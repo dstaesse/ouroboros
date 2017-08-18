@@ -20,7 +20,6 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/utils.h>

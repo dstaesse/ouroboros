@@ -20,9 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200809L
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "normal-ipcp"
 
-#include <ouroboros/config.h>
 #include <ouroboros/endian.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/ipcp-dev.h>

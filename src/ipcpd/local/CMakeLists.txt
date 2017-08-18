@@ -12,7 +12,7 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-set(IPCP_LOCAL_TARGET ipcpd-local CACHE STRING "IPCP_LOCAL")
+set(IPCP_LOCAL_TARGET ipcpd-local CACHE INTERNAL "")
 
 set(SHIM_LOCAL_SOURCES
   # Add source files here

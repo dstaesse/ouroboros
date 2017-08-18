@@ -15,26 +15,56 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 find_path(NETMAP_C_INCLUDE_DIR
   net/netmap_user.h
   HINTS /usr/include /usr/local/include
-  )
+)
 
-find_path(BPF_C_INCLUDE_DIR
-  net/bpf.h
-  HINTS /usr/include /usr/local/include
-  )
+mark_as_advanced(NETMAP_C_INCLUDE_DIR)
 
-if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
-    NOT BPF_C_INCLUDE_DIR STREQUAL "BPF_C_INCLUDE_DIR-NOTFOUND")
-  message(STATUS "Found Berkeley Packet Filter headers in ${BPF_C_INCLUDE_DIR}")
-  set(HAVE_BPF "1" CACHE STRING "Have Berkeley Packet Filter")
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(DISABLE_RAW_SOCKETS FALSE CACHE BOOL
+    "Disable raw socket support for LLC shim")
+  if (NOT DISABLE_RAW_SOCKETS)
+    message(STATUS "Raw socket support for shim-eth-llc enabled")
+    set(HAVE_RAW_SOCKETS TRUE PARENT_SCOPE)
+  else ()
+    message(STATUS "Raw socket support for shim-eth-llc disabled by user")
+  endif ()
 endif ()
 
-if (NOT NETMAP_C_INCLUDE_DIR STREQUAL "NETMAP_C_INCLUDE_DIR-NOTFOUND")
-  message(STATUS "Found netmap headers in ${NETMAP_C_INCLUDE_DIR}")
-  set(HAVE_NETMAP "1" CACHE STRING "Have netmap")
-  test_and_set_c_compiler_flag_global(-std=c99)
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_path(BPF_C_INCLUDE_DIR
+            net/bpf.h
+            HINTS /usr/include /usr/local/include
+  )
+
+  mark_as_advanced(BPF_C_INCLUDE_DIR)
+
+  if (BPF_C_INCLUDE_DIR)
+    set(DISABLE_BPF FALSE CACHE BOOL
+        "Disable Berkeley Packet Filter support for LLC shim")
+    if (NOT DISABLE_BPF)
+      message(STATUS "Berkeley Packet Filter support "
+                     "for shim-eth-llc enabled")
+      set(HAVE_BPF TRUE PARENT_SCOPE)
+    else ()
+      message(STATUS "Berkeley Packet Filter support "
+                     "for shim-eth-llc disabled by user")
+    endif ()
+  endif ()
 endif ()
 
-if (HAVE_NETMAP OR HAVE_BPF OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if (NETMAP_C_INCLUDE_DIR)
+  set(DISABLE_NETMAP FALSE CACHE BOOL
+      "Disable netmap support for LLC shim")
+  if (NOT DISABLE_NETMAP)
+    message(STATUS "Netmap support for shim-eth-llc enabled")
+    set(HAVE_NETMAP TRUE PARENT_SCOPE)
+    test_and_set_c_compiler_flag_global(-std=c99)
+  else ()
+    message(STATUS "Netmap support for shim-eth-llc disabled by user")
+  endif ()
+endif ()
+
+if (HAVE_NETMAP OR HAVE_BPF OR HAVE_RAW_SOCKETS)
   message(STATUS "Supported raw Ethernet API found, building shim-eth-llc")
   protobuf_generate_c(SHIM_ETH_LLC_PROTO_SRCS SHIM_ETH_LLC_PROTO_HDRS
     shim_eth_llc_messages.proto)
@@ -44,8 +74,7 @@ if (HAVE_NETMAP OR HAVE_BPF OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     ${CMAKE_CURRENT_SOURCE_DIR}/main.c
   )
 
-  set(IPCP_SHIM_ETH_LLC_TARGET ipcpd-shim-eth-llc
-      CACHE STRING "IPCP_SHIM_ETH_LLC_TARGET")
+  set(IPCP_SHIM_ETH_LLC_TARGET ipcpd-shim-eth-llc CACHE INTERNAL "")
 
   add_executable(ipcpd-shim-eth-llc ${SHIM_ETH_LLC_SOURCES} ${IPCP_SOURCES}
     ${SHIM_ETH_LLC_PROTO_SRCS})
@@ -55,7 +84,8 @@ if (HAVE_NETMAP OR HAVE_BPF OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
   endif ()
 
   if (HAVE_NETMAP AND NOT APPLE)
-    target_include_directories(ipcpd-shim-eth-llc PUBLIC ${NETMAP_C_INCLUDE_DIR})
+    target_include_directories(ipcpd-shim-eth-llc PUBLIC
+      ${NETMAP_C_INCLUDE_DIR})
   endif ()
 
   target_link_libraries(ipcpd-shim-eth-llc LINK_PUBLIC ouroboros

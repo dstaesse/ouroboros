@@ -20,7 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
+#define _POSIX_C_SOURCE 200809L
+
+#include "config.h"
+
 #include <ouroboros/lockfile.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/shm_flow_set.h>
@@ -38,11 +41,22 @@
 #include <string.h>
 #include <assert.h>
 
+/*
+ * pthread_cond_timedwait has a WONTFIX bug as of glibc 2.25 where it
+ * doesn't test pthread cancellation when passed an expired timeout
+ * with the clock set to CLOCK_MONOTONIC.
+ */
+#if ((defined(__linux__) || (defined(__MACH__) && !defined(__APPLE__)))        \
+     && (defined(__GLIBC__) && ((__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2025)) \
+     && (PTHREAD_COND_CLOCK == CLOCK_MONOTONIC))
+#define HAVE_CANCEL_BUG
+#endif
+
 #define FN_MAX_CHARS 255
 
 #define FQUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(int))
 
-#define SHM_FLOW_SET_FILE_SIZE (IRMD_MAX_FLOWS * sizeof(ssize_t)          \
+#define SHM_FLOW_SET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)           \
                                 + AP_MAX_FQUEUES * sizeof(size_t)         \
                                 + AP_MAX_FQUEUES * sizeof(pthread_cond_t) \
                                 + AP_MAX_FQUEUES * FQUEUESIZE             \
@@ -109,7 +123,7 @@ struct shm_flow_set * shm_flow_set_create()
         }
 
         set->mtable  = shm_base;
-        set->heads   = (size_t *) (set->mtable + IRMD_MAX_FLOWS);
+        set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
         set->conds   = (pthread_cond_t *)(set->heads + AP_MAX_FQUEUES);
         set->fqueues = (int *) (set->conds + AP_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
@@ -132,7 +146,7 @@ struct shm_flow_set * shm_flow_set_create()
                 pthread_cond_init(&set->conds[i], &cattr);
         }
 
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i)
+        for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 set->mtable[i] = -1;
 
         set->api = getpid();
@@ -175,7 +189,7 @@ struct shm_flow_set * shm_flow_set_open(pid_t api)
         }
 
         set->mtable  = shm_base;
-        set->heads   = (size_t *) (set->mtable + IRMD_MAX_FLOWS);
+        set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
         set->conds   = (pthread_cond_t *)(set->heads + AP_MAX_FQUEUES);
         set->fqueues = (int *) (set->conds + AP_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
@@ -233,7 +247,7 @@ void shm_flow_set_zero(struct shm_flow_set * set,
 
         pthread_mutex_lock(set->lock);
 
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i)
+        for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 if (set->mtable[i] == (ssize_t) idx)
                         set->mtable[i] = -1;
 
@@ -248,7 +262,7 @@ int shm_flow_set_add(struct shm_flow_set * set,
                      int                   port_id)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
+        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
         assert(idx < AP_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
@@ -270,7 +284,7 @@ void shm_flow_set_del(struct shm_flow_set * set,
                       int                   port_id)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
+        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
         assert(idx < AP_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
@@ -288,7 +302,7 @@ int shm_flow_set_has(struct shm_flow_set * set,
         int ret = 0;
 
         assert(set);
-        assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
+        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
         assert(idx < AP_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
@@ -305,7 +319,7 @@ void shm_flow_set_notify(struct shm_flow_set * set,
                          int                   port_id)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < IRMD_MAX_FLOWS);
+        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
 
         pthread_mutex_lock(set->lock);
 
@@ -345,13 +359,18 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                              (void *) set->lock);
 
         while (set->heads[idx] == 0 && ret != -ETIMEDOUT) {
-                if (abstime != NULL)
+                if (abstime != NULL) {
                         ret = -pthread_cond_timedwait(set->conds + idx,
                                                       set->lock,
                                                       abstime);
-                else
+#ifdef HAVE_CANCEL_BUG
+                        if (ret ==  -ETIMEDOUT)
+                                pthread_testcancel();
+#endif
+                } else {
                         ret = -pthread_cond_wait(set->conds + idx,
                                                  set->lock);
+                }
 #ifdef HAVE_ROBUST_MUTEX
                 if (ret == -EOWNERDEAD)
                         pthread_mutex_consistent(set->lock);

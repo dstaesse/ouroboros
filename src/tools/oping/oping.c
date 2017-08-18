@@ -21,6 +21,7 @@
  */
 
 #define _POSIX_C_SOURCE 199506L
+#define __XSI_VISIBLE   500
 
 #include <ouroboros/fqueue.h>
 #include <ouroboros/dev.h>

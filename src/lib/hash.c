@@ -23,7 +23,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
+#include "config.h"
+
 #include <ouroboros/hash.h>
 
 #ifndef HAVE_LIBGCRYPT

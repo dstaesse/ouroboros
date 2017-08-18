@@ -20,9 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "flow-allocator"
 
-#include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/rib.h>
