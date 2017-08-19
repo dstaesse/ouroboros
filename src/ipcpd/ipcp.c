@@ -58,8 +58,6 @@ void ipcp_sig_handler(int         sig,
                         if (ipcp_get_state() == IPCP_OPERATIONAL)
                                 ipcp_set_state(IPCP_SHUTDOWN);
                 }
-
-                tpm_stop();
         default:
                 return;
         }
@@ -689,8 +687,9 @@ int ipcp_boot()
 
 void ipcp_shutdown()
 {
-        tpm_fini();
         pthread_join(ipcpi.acceptor, NULL);
+        tpm_stop();
+        tpm_fini();
 
         log_info("IPCP %d shutting down.", getpid());
 }

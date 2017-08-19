@@ -60,6 +60,12 @@
 #define IPCP_HASH_LEN(e) hash_len(e->dir_hash_algo)
 #define IB_LEN IRM_MSG_BUF_SIZE
 
+enum init_state {
+        IPCP_NULL = 0,
+        IPCP_BOOT,
+        IPCP_LIVE
+};
+
 struct ipcp_entry {
         struct list_head next;
 
@@ -69,9 +75,9 @@ struct ipcp_entry {
         enum hash_algo   dir_hash_algo;
         char *           dif_name;
 
+        enum init_state  init_state;
         pthread_cond_t   init_cond;
         pthread_mutex_t  init_lock;
-        bool             init;
 };
 
 enum irm_state {
@@ -190,8 +196,14 @@ static struct ipcp_entry * ipcp_entry_create(void)
 
 static void ipcp_entry_destroy(struct ipcp_entry * e)
 {
-        if (e == NULL)
-                return;
+        assert(e);
+
+        pthread_mutex_lock(&e->init_lock);
+
+        while (e->init_state == IPCP_BOOT)
+                pthread_cond_wait(&e->init_cond, &e->init_lock);
+
+        pthread_mutex_unlock(&e->init_lock);
 
         if (e->name != NULL)
                 free(e->name);
@@ -309,13 +321,13 @@ static pid_t create_ipcp(char *         name,
 
         list_head_init(&tmp->next);
 
-        tmp->api = api->pid;
         tmp->name = strdup(name);
         if (tmp->name  == NULL) {
                 ipcp_entry_destroy(tmp);
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 return -1;
         }
+
         pthread_condattr_init(&cattr);
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
@@ -327,9 +339,10 @@ static pid_t create_ipcp(char *         name,
 
         pthread_mutex_init(&tmp->init_lock, NULL);
 
+        tmp->api           = api->pid;
         tmp->dif_name      = NULL;
         tmp->type          = ipcp_type;
-        tmp->init          = false;
+        tmp->init_state    = IPCP_BOOT;
         tmp->dir_hash_algo = -1;
 
         list_for_each(p, &irmd.ipcps) {
@@ -349,19 +362,23 @@ static pid_t create_ipcp(char *         name,
         clock_gettime(PTHREAD_COND_CLOCK, &dl);
         ts_add(&dl, &to, &dl);
 
-        while (tmp->init == false && ret != -ETIMEDOUT)
+        while (tmp->init_state == IPCP_BOOT && ret != -ETIMEDOUT)
                 ret = -pthread_cond_timedwait(&tmp->init_cond,
                                               &tmp->init_lock,
                                               &dl);
-        pthread_mutex_unlock(&tmp->init_lock);
 
         if (ret == -ETIMEDOUT) {
-                log_err("Process %d failed to respond.", api->pid);
-                kill(api->pid, SIGKILL);
+                kill(tmp->api, SIGKILL);
+                tmp->init_state = IPCP_NULL;
+                pthread_cond_signal(&tmp->init_cond);
+                pthread_mutex_unlock(&tmp->init_lock);
+                log_err("IPCP %d failed to respond.", tmp->api);
                 return -1;
         }
 
-        log_info("Created IPCP %d.", api->pid);
+        pthread_mutex_unlock(&tmp->init_lock);
+
+        log_info("Created IPCP %d.", tmp->api);
 
         return api->pid;
 }
@@ -382,7 +399,7 @@ static int create_ipcp_r(pid_t api,
 
                 if (e->api == api) {
                         pthread_mutex_lock(&e->init_lock);
-                        e->init = true;
+                        e->init_state = IPCP_LIVE;
                         pthread_cond_broadcast(&e->init_cond);
                         pthread_mutex_unlock(&e->init_lock);
                 }
@@ -1523,7 +1540,6 @@ void irmd_sig_handler(int         sig,
 
                 log_info("IRMd shutting down...");
                 irmd_set_state(IRMD_NULL);
-                tpm_stop();
                 break;
         case SIGPIPE:
                 log_dbg("Ignored SIGPIPE.");
@@ -2228,13 +2244,13 @@ int main(int     argc,
                 goto fail_acceptor;
         }
 
-        /* tpm_stop() called from sighandler */
-
-        tpm_fini();
-
         pthread_join(irmd.acceptor, NULL);
         pthread_join(irmd.irm_sanitize, NULL);
         pthread_join(irmd.shm_sanitize, NULL);
+
+        tpm_stop();
+
+        tpm_fini();
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
