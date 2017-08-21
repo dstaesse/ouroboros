@@ -324,6 +324,7 @@ int enroll_init(void)
 
 void enroll_fini(void)
 {
+        pthread_join(enroll.listener, NULL);
         cdap_destroy(enroll.cdap);
         connmgr_ae_destroy(enroll.ae);
 }
@@ -339,5 +340,4 @@ int enroll_start(void)
 void enroll_stop(void)
 {
         pthread_cancel(enroll.listener);
-        pthread_join(enroll.listener, NULL);
 }
