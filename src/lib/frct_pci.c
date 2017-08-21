@@ -20,7 +20,6 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
 #include <ouroboros/frct_pci.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>

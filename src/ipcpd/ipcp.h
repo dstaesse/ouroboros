@@ -20,15 +20,13 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef IPCPD_IPCP_H
-#define IPCPD_IPCP_H
+#ifndef OUROBOROS_IPCPD_IPCP_H
+#define OUROBOROS_IPCPD_IPCP_H
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
+#include <ouroboros/qoscube.h>
 #include <ouroboros/sockets.h>
-
-#include "shim-data.h"
 
 #include <pthread.h>
 #include <time.h>
@@ -79,8 +77,6 @@ struct ipcp {
 
         struct ipcp_ops *  ops;
         int                irmd_fd;
-
-        struct shim_data * shim_data;
 
         enum ipcp_state    state;
         pthread_rwlock_t   state_lock;
@@ -136,4 +132,4 @@ uint8_t *       ipcp_hash_dup(const uint8_t * hash);
 void            ipcp_hash_str(char            buf[],
                               const uint8_t * hash);
 
-#endif
+#endif /* OUROBOROS_IPCPD_IPCP_H */

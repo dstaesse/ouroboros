@@ -20,9 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
 #define OUROBOROS_PREFIX "graph"
 
-#include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>

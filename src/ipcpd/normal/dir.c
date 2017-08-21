@@ -20,9 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
 #define OUROBOROS_PREFIX "directory"
 
-#include <ouroboros/config.h>
 #include <ouroboros/endian.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>

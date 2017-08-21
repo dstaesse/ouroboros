@@ -20,7 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
+#include "config.h"
+
 #include <ouroboros/shm_rbuff.h>
 #include <ouroboros/lockfile.h>
 #include <ouroboros/time_utils.h>

@@ -9,6 +9,8 @@ if(NOT LIBM_LIBRARIES)
   message(FATAL_ERROR "libm not found")
 endif()
 
+mark_as_advanced(LIBM_LIBRARIES)
+
 set(SOURCE_FILES
   # Add source files here
   oping.c

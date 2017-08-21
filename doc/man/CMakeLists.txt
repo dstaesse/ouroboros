@@ -20,6 +20,8 @@ find_program(GZIP_EXECUTABLE
   NAMES gzip
   DOC "Will gzip the man pages")
 
+mark_as_advanced(GZIP_EXECUTABLE)
+
 if (GZIP_EXECUTABLE)
   foreach (m ${MAN_NAMES})
     set(md ${CMAKE_CURRENT_BINARY_DIR}/${m}.gz)

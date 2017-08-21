@@ -20,9 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 199309L
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "sdu-scheduler"
 
-#include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 

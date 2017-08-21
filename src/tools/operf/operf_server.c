@@ -20,10 +20,6 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifdef __FreeBSD__
-#define __XSI_VISIBLE 500
-#endif
-
 #include <stdlib.h>
 #include <signal.h>
 #include <arpa/inet.h>

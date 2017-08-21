@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef IPCPD_IPCP_DATA_H
-#define IPCPD_IPCP_DATA_H
+#ifndef OUROBOROS_IPCPD_IPCP_DATA_H
+#define OUROBOROS_IPCPD_IPCP_DATA_H
 
 #include <ouroboros/qoscube.h>
 #include <ouroboros/list.h>
@@ -93,4 +93,4 @@ void               shim_data_dir_query_destroy(struct dir_query * query);
 
 int                shim_data_dir_query_wait(struct dir_query *      query,
                                             const struct timespec * timeout);
-#endif /* IPCPD_SHIM_DATA_H */
+#endif /* OUROBOROS_IPCPD_SHIM_DATA_H */

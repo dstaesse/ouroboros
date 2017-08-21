@@ -20,7 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
+#define _POSIX_C_SOURCE 199309L
+
 #include <ouroboros/time_utils.h>
 #include <stddef.h>
 

@@ -1,0 +1,57 @@
+/*
+ * Ouroboros - Copyright (C) 2016 - 2017
+ *
+ * Ouroboros library configuration
+ *
+ *    Dimitri Staessens <dimitri.staessens@ugent.be>
+ *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public License
+ * version 2.1 as published by the Free Software Foundation.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., http://www.fsf.org/about/contact/.
+ */
+
+#cmakedefine HAVE_SYS_RANDOM
+#cmakedefine HAVE_LIBGCRYPT
+#cmakedefine HAVE_OPENSSL
+
+#define SYS_MAX_FLOWS       @SYS_MAX_FLOWS@
+
+#cmakedefine                SHM_RBUFF_LOCKLESS
+
+#define SHM_RBUFF_PREFIX    "@SHM_RBUFF_PREFIX@"
+#define SHM_LOCKFILE_NAME   "@SHM_LOCKFILE_NAME@"
+#define SHM_FLOW_SET_PREFIX "@SHM_FLOW_SET_PREFIX@"
+#define SHM_RDRB_NAME       "@SHM_RDRB_NAME@"
+#define SHM_RDRB_BLOCK_SIZE @SHM_RDRB_BLOCK_SIZE@
+#define SHM_BUFFER_SIZE     @SHM_BUFFER_SIZE@
+
+#if defined(__linux__) || (defined(__MACH__) && !defined(__APPLE__))
+/* Avoid a bug in robust mutex implementation of glibc 2.25 */
+    #include <features.h>
+    #if !defined(__GLIBC__) || !(__GLIBC__ == 2 && __GLIBC_MINOR__ == 25)
+    #cmakedefine HAVE_ROBUST_MUTEX
+    #else
+    #cmakedefine HAVE_ROBUST_MUTEX
+    #endif
+#endif
+
+#define PTHREAD_COND_CLOCK  @PTHREAD_COND_CLOCK@
+
+#define AP_MAX_FLOWS        @AP_MAX_FLOWS@
+#define AP_RES_FDS          @AP_RES_FDS@
+#define AP_MAX_FQUEUES      @AP_MAX_FQUEUES@
+
+#define DU_BUFF_HEADSPACE   @DU_BUFF_HEADSPACE@
+#define DU_BUFF_TAILSPACE   @DU_BUFF_TAILSPACE@
+
+#define CDAP_REPLY_TIMEOUT  @CDAP_REPLY_TIMEOUT@

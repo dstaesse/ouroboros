@@ -19,9 +19,11 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
+
+#define _POSIX_C_SOURCE 199309L
+
 #define OUROBOROS_PREFIX "enrollment"
 
-#include <ouroboros/config.h>
 #include <ouroboros/endian.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/cdap.h>

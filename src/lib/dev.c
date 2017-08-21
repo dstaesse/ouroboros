@@ -20,7 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
+#define _POSIX_C_SOURCE 200809L
+
+#include "config.h"
+
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
@@ -596,7 +599,7 @@ int ouroboros_init(const char * ap_name)
                 frcti_fini(i);
         }
 
-        ai.ports = malloc(sizeof(*ai.ports) * IRMD_MAX_FLOWS);
+        ai.ports = malloc(sizeof(*ai.ports) * SYS_MAX_FLOWS);
         if (ai.ports == NULL)
                 goto fail_ports;
 
@@ -611,7 +614,7 @@ int ouroboros_init(const char * ap_name)
                 }
         }
 
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i) {
+        for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 ai.ports[i].state = PORT_INIT;
                 if (pthread_mutex_init(&ai.ports[i].state_lock, NULL)) {
                         int j;
@@ -640,10 +643,10 @@ int ouroboros_init(const char * ap_name)
  fail_timerwheel:
         pthread_rwlock_destroy(&ai.lock);
  fail_lock:
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i)
+        for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 pthread_cond_destroy(&ai.ports[i].state_cond);
  fail_state_cond:
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i)
+        for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
  fail_announce:
         free(ai.ap_name);
@@ -688,7 +691,7 @@ void ouroboros_fini()
                 }
         }
 
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i) {
+        for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
                 pthread_cond_destroy(&ai.ports[i].state_cond);
         }

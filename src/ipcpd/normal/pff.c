@@ -20,9 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "pff"
 
-#include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/hashtable.h>
 #include <ouroboros/errno.h>

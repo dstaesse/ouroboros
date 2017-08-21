@@ -20,7 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
+#include "config.h"
+
 #include <ouroboros/random.h>
 
 #if defined(__APPLE__) /* Barf */

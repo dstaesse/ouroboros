@@ -22,7 +22,6 @@
 
 #define OUROBOROS_PREFIX "addr_auth"
 
-#include <ouroboros/config.h>
 #include <ouroboros/logs.h>
 
 #include "addr_auth.h"

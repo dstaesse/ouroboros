@@ -20,7 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/config.h>
+#define _POSIX_C_SOURCE 200112L
+
+#include "config.h"
+
 #include <ouroboros/lockfile.h>
 
 #include <stdlib.h>
@@ -47,7 +50,7 @@ struct lockfile * lockfile_create() {
 
         mask = umask(0);
 
-        fd = shm_open(LOCKFILE_NAME, O_CREAT | O_EXCL | O_RDWR, 0666);
+        fd = shm_open(SHM_LOCKFILE_NAME, O_CREAT | O_EXCL | O_RDWR, 0666);
         if (fd == -1) {
                 free(lf);
                 return NULL;
@@ -69,7 +72,7 @@ struct lockfile * lockfile_create() {
         close (fd);
 
         if (lf->api == MAP_FAILED) {
-                shm_unlink(LOCKFILE_NAME);
+                shm_unlink(SHM_LOCKFILE_NAME);
                 free(lf);
                 return NULL;
         }
@@ -85,7 +88,7 @@ struct lockfile * lockfile_open() {
         if (lf == NULL)
                 return NULL;
 
-        fd = shm_open(LOCKFILE_NAME, O_RDWR, 0666);
+        fd = shm_open(SHM_LOCKFILE_NAME, O_RDWR, 0666);
         if (fd < 0) {
                 free(lf);
                 return NULL;
@@ -100,7 +103,7 @@ struct lockfile * lockfile_open() {
         close(fd);
 
         if (lf->api == MAP_FAILED) {
-                shm_unlink(LOCKFILE_NAME);
+                shm_unlink(SHM_LOCKFILE_NAME);
                 free(lf);
                 return NULL;
         }
@@ -126,7 +129,7 @@ void lockfile_destroy(struct lockfile * lf)
 
         munmap(lf->api, LF_SIZE);
 
-        shm_unlink(LOCKFILE_NAME);
+        shm_unlink(SHM_LOCKFILE_NAME);
 
         free(lf);
 }

@@ -20,9 +20,13 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200812L
+#define __XSI_VISIBLE   500
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "irmd"
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/sockets.h>
@@ -2068,7 +2072,7 @@ static int irm_init(void)
         list_head_init(&irmd.registry);
         list_head_init(&irmd.irm_flows);
 
-        irmd.port_ids = bmp_create(IRMD_MAX_FLOWS, 0);
+        irmd.port_ids = bmp_create(SYS_MAX_FLOWS, 0);
         if (irmd.port_ids == NULL) {
                 log_err("Failed to create port_ids bitmap.");
                 goto fail_port_ids;

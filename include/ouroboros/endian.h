@@ -24,42 +24,18 @@
 #define OUROBOROS_ENDIAN_H
 
 #if defined(__linux__) || defined(__CYGWIN__) || \
-  (defined(__MACH__) && !defined(__APPLE__))
-
-#ifndef _BSD_SOURCE
-#define _BSD_SOURCE
-#endif
-#ifndef __USE_BSD
-#define __USE_BSD
-#endif
-#ifndef _DEFAULT_SOURCE
+        (defined(__MACH__) && !defined(__APPLE__))
 #define _DEFAULT_SOURCE
+#include <endian.h>
+#elif defined(__NetBSD__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#include <sys/endian.h>
+#elif defined(__APPLE__)
+#include <libkern/OSByteOrder.h>
+#else
+#error OS currently not supported
 #endif
 
-#include <endian.h>
-#include <features.h>
-
-#define betoh16(x) be16toh(x)
-#define letoh16(x) le16toh(x)
-#define betoh32(x) be32toh(x)
-#define letoh32(x) le32toh(x)
-#define betoh64(x) be64toh(x)
-#define letoh64(x) le64toh(x)
-
-#elif defined(__NetBSD__) || defined(__FreeBSD__)
-
-#include <sys/endian.h>
-
-#define betoh16(x) be16toh(x)
-#define letoh16(x) le16toh(x)
-#define betoh32(x) be32toh(x)
-#define letoh32(x) le32toh(x)
-#define betoh64(x) be64toh(x)
-#define letoh64(x) le64toh(x)
-
-#elif defined(__APPLE__)
-
-#include <libkern/OSByteOrder.h>
+#if defined (__APPLE__)
 
 #define htobe16(x) OSSwapHostToBigInt16(x)
 #define htole16(x) OSSwapHostToLittleInt16(x)
@@ -76,13 +52,14 @@
 #define betoh64(x) OSSwapBigToHostInt64(x)
 #define letoh64(x) OSSwapLittleToHostInt64(x)
 
-#elif defined(__OpenBSD__)
+#elif !defined(__OpenBSD__)
 
-#include <sys/endian.h>
-
-#else
-
-#error OS currently not supported
+#define betoh16(x) be16toh(x)
+#define letoh16(x) le16toh(x)
+#define betoh32(x) be32toh(x)
+#define letoh32(x) le32toh(x)
+#define betoh64(x) be64toh(x)
+#define letoh64(x) le64toh(x)
 
 #endif
 

@@ -20,9 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "ipcpd-local"
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
@@ -33,6 +36,7 @@
 #include <ouroboros/local-dev.h>
 
 #include "ipcp.h"
+#include "shim-data.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -44,18 +48,20 @@
 #define THIS_TYPE IPCP_LOCAL
 
 struct {
-        int                   in_out[IRMD_MAX_FLOWS];
-        flow_set_t *          flows;
-        fqueue_t *            fq;
+        struct shim_data * shim_data;
 
-        pthread_rwlock_t      lock;
-        pthread_t             sduloop;
+        int                in_out[SYS_MAX_FLOWS];
+        flow_set_t *       flows;
+        fqueue_t *         fq;
+
+        pthread_rwlock_t   lock;
+        pthread_t          sduloop;
 } local_data;
 
 static int local_data_init(void)
 {
         int i;
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i)
+        for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 local_data.in_out[i] = -1;
 
         local_data.flows = flow_set_create();
@@ -68,12 +74,20 @@ static int local_data_init(void)
                 return -ENOMEM;
         }
 
+        local_data.shim_data = shim_data_create();
+        if (local_data.shim_data == NULL) {
+                fqueue_destroy(local_data.fq);
+                flow_set_destroy(local_data.flows);
+                return -ENOMEM;
+        }
+
         pthread_rwlock_init(&local_data.lock, NULL);
 
         return 0;
 }
 
 static void local_data_fini(void){
+        shim_data_destroy(local_data.shim_data);
         flow_set_destroy(local_data.flows);
         fqueue_destroy(local_data.fq);
         pthread_rwlock_destroy(&local_data.lock);
@@ -142,7 +156,7 @@ static int ipcp_local_reg(const uint8_t * hash)
                 return -ENOMEM;
         }
 
-        if (shim_data_reg_add_entry(ipcpi.shim_data, hash_dup)) {
+        if (shim_data_reg_add_entry(local_data.shim_data, hash_dup)) {
                 log_dbg("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
                 free(hash_dup);
@@ -156,7 +170,7 @@ static int ipcp_local_reg(const uint8_t * hash)
 
 static int ipcp_local_unreg(const uint8_t * hash)
 {
-        shim_data_reg_del_entry(ipcpi.shim_data, hash);
+        shim_data_reg_del_entry(local_data.shim_data, hash);
 
         log_info("Unregistered " HASH_FMT ".",  HASH_VAL(hash));
 
@@ -167,7 +181,7 @@ static int ipcp_local_query(const uint8_t * hash)
 {
         int ret;
 
-        ret = (shim_data_reg_has(ipcpi.shim_data, hash) ? 0 : -1);
+        ret = (shim_data_reg_has(local_data.shim_data, hash) ? 0 : -1);
 
         return ret;
 }

@@ -20,9 +20,13 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+#define __XSI_VISIBLE   500
+
+#include "config.h"
+
 #define OUROBOROS_PREFIX "ipcpd/ipcp"
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
@@ -533,7 +537,6 @@ int ipcp_init(int               argc,
 
         ipcpi.irmd_fd   = -1;
         ipcpi.state     = IPCP_NULL;
-        ipcpi.shim_data = NULL;
 
         ipcpi.sock_path = ipcp_sock_path(getpid());
         if (ipcpi.sock_path == NULL)
@@ -597,20 +600,10 @@ int ipcp_init(int               argc,
         ipcpi.alloc_id = -1;
         ipcpi.csockfd  = -1;
 
-        if (type != IPCP_NORMAL) {
-                ipcpi.shim_data = shim_data_create();
-                if (ipcpi.shim_data == NULL) {
-                        ret = -ENOMEM;
-                        goto fail_shim_data;
-                }
-        }
-
         pthread_condattr_destroy(&cattr);
 
         return 0;
 
- fail_shim_data:
-        pthread_cond_destroy(&ipcpi.acc_cond);
  fail_acc_cond:
         pthread_cond_destroy(&ipcpi.cmd_cond);
  fail_cmd_cond:
@@ -701,8 +694,6 @@ void ipcp_fini()
                 log_warn("Could not unlink %s.", ipcpi.sock_path);
 
         free(ipcpi.sock_path);
-
-        shim_data_destroy(ipcpi.shim_data);
 
         pthread_cond_destroy(&ipcpi.state_cond);
         pthread_mutex_destroy(&ipcpi.state_mtx);

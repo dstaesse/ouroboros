@@ -1,6 +1,12 @@
 get_filename_component(PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 
+if (NOT (APPLE OR GNU))
+  set(TIMERWHEEL_TEST "timerwheel_test.c")
+else ()
+  set(TIMERWHEEL_TEST "")
+endif ()
+
 create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   # Add new tests here
   bitmap_test.c
@@ -11,7 +17,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   rib_test.c
   sha3_test.c
   time_utils_test.c
-  timerwheel_test.c
+  ${TIMERWHEEL_TEST}
   )
 
 add_executable(${PARENT_DIR}_test EXCLUDE_FROM_ALL ${${PARENT_DIR}_tests})
