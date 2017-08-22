@@ -120,7 +120,12 @@ static int add_ae_conn(const char *       name,
                 return -1;
         }
 
+        pthread_mutex_lock(&ae->conn_lock);
+
         list_add(&ae_conn->next, &ae->conn_list);
+        pthread_cond_signal(&ae->conn_cond);
+
+        pthread_mutex_unlock(&ae->conn_lock);
 
         pthread_rwlock_unlock(&connmgr.aes_lock);
 
