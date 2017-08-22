@@ -52,9 +52,9 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
                                 ipcp_msg_t * msg)
 {
        int            sockfd    = 0;
-       buffer_t       buf;
+       uint8_t        buf[IPCP_MSG_BUF_SIZE];
        char *         sock_path = NULL;
-       ssize_t        count     = 0;
+       ssize_t        len;
        ipcp_msg_t *   recv_msg  = NULL;
        struct timeval tv;
 
@@ -73,14 +73,8 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
 
        free(sock_path);
 
-       buf.len = ipcp_msg__get_packed_size(msg);
-       if (buf.len == 0) {
-               close(sockfd);
-               return NULL;
-       }
-
-       buf.data = malloc(IPCP_MSG_BUF_SIZE);
-       if (buf.data == NULL) {
+       len = ipcp_msg__get_packed_size(msg);
+       if (len == 0) {
                close(sockfd);
                return NULL;
        }
@@ -113,17 +107,15 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
                log_warn("Failed to set timeout on socket.");
 
        pthread_cleanup_push(close_ptr, (void *) &sockfd);
-       pthread_cleanup_push((void (*)(void *)) free, (void *) buf.data);
 
-       ipcp_msg__pack(msg, buf.data);
+       ipcp_msg__pack(msg, buf);
 
-       if (write(sockfd, buf.data, buf.len) != -1)
-               count = read(sockfd, buf.data, IPCP_MSG_BUF_SIZE);
+       if (write(sockfd, buf, len) != -1)
+               len = read(sockfd, buf, IPCP_MSG_BUF_SIZE);
 
-       if (count > 0)
-               recv_msg = ipcp_msg__unpack(NULL, count, buf.data);
+       if (len > 0)
+               recv_msg = ipcp_msg__unpack(NULL, len, buf);
 
-       pthread_cleanup_pop(true);
        pthread_cleanup_pop(true);
 
        return recv_msg;
