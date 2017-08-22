@@ -247,17 +247,34 @@ static int finalize_write(int    fd,
 
 static int frcti_init(int fd)
 {
-        ai.frcti[fd].used = true;
+        struct frcti * frcti;
 
-        ai.frcti[fd].snd_drf = true;
-        ai.frcti[fd].snd_lwe = 0;
-        ai.frcti[fd].snd_rwe = 0;
+        frcti = &(ai.frcti[fd]);
 
-        ai.frcti[fd].rcv_drf = true;
-        ai.frcti[fd].rcv_lwe = 0;
-        ai.frcti[fd].rcv_rwe = 0;
+        frcti->used = true;
+
+        frcti->snd_drf = true;
+        frcti->snd_lwe = 0;
+        frcti->snd_rwe = 0;
+
+        frcti->rcv_drf = true;
+        frcti->rcv_lwe = 0;
+        frcti->rcv_rwe = 0;
+
+        frcti->conf_flags = CONF_ERROR_CHECK;
 
         return 0;
+}
+
+static void frcti_clear(int fd)
+{
+        struct frcti * frcti;
+
+        frcti = &(ai.frcti[fd]);
+
+        frcti->used = false;
+        frcti->snd_inact = NULL;
+        frcti->rcv_inact = NULL;
 }
 
 static void frcti_fini(int fd)
@@ -266,14 +283,14 @@ static void frcti_fini(int fd)
 
         frcti = &(ai.frcti[fd]);
 
-        frcti->used = false;
-
         /* FIXME: We actually need to wait until these timers become NULL. */
         if (frcti->snd_inact != NULL)
                 timerwheel_stop(ai.tw, frcti->snd_inact);
 
         if (frcti->rcv_inact != NULL)
                 timerwheel_stop(ai.tw, frcti->rcv_inact);
+
+        frcti_clear(fd);
 }
 
 static int frcti_configure(int         fd,
@@ -405,14 +422,14 @@ static ssize_t frcti_read(int fd)
         if (frct_pci_des(sdb, &pci, frcti->conf_flags & CONF_ERROR_CHECK)) {
                 pthread_rwlock_unlock(&ai.lock);
                 shm_rdrbuff_remove(ai.rdrb, idx);
-                return -1;
+                return -EAGAIN;
         }
 
         /* We don't accept packets when there is no inactivity timer. */
         if (frcti->rcv_drf && !(pci.flags & FLAG_DATA_RUN)) {
                 pthread_rwlock_unlock(&ai.lock);
                 shm_rdrbuff_remove(ai.rdrb, idx);
-                return -1;
+                return -EAGAIN;
         }
 
         /*
@@ -436,7 +453,7 @@ static ssize_t frcti_read(int fd)
                 if (frcti->rcv_inact == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
                         shm_rdrbuff_remove(ai.rdrb, idx);
-                        return -1;
+                        return -EAGAIN;
                 }
 
                 frcti->rcv_drf = false;
@@ -444,7 +461,7 @@ static ssize_t frcti_read(int fd)
                 if (timerwheel_restart(ai.tw, frcti->rcv_inact, 3 * MPL)) {
                         pthread_rwlock_unlock(&ai.lock);
                         shm_rdrbuff_remove(ai.rdrb, idx);
-                        return -1;
+                        return -EAGAIN;
                 }
         }
 
@@ -507,7 +524,7 @@ static void flow_fini(int fd)
                 shm_flow_set_close(ai.flows[fd].set);
 
         if (ai.frcti[fd].used)
-                frcti_fini(fd);
+                frcti_clear(fd);
 
         flow_clear(fd);
 }

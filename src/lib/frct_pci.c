@@ -24,6 +24,9 @@
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 
+#define OUROBOROS_PREFIX "frct-pci"
+#include <ouroboros/logs.h>
+
 #include <assert.h>
 #include <string.h>
 
@@ -73,6 +76,7 @@ int frct_pci_des(struct shm_du_buff * sdb,
         uint8_t * head;
         uint8_t * tail;
         uint32_t  crc;
+        uint32_t  crc2;
 
         assert(sdb);
         assert(pci);
@@ -89,10 +93,14 @@ int frct_pci_des(struct shm_du_buff * sdb,
                 if (tail == NULL)
                         return -EPERM;
 
-                mem_hash(HASH_CRC32, &crc, head, tail - head);
+                mem_hash(HASH_CRC32, &crc, head,
+                         tail - head - hash_len(HASH_CRC32));
+
+                memcpy(&crc2, tail - hash_len(HASH_CRC32),
+                       hash_len(HASH_CRC32));
 
                 /* Corrupted SDU */
-                if (crc != 0)
+                if (crc != crc2)
                         return -1;
 
                 shm_du_buff_tail_release(sdb, hash_len(HASH_CRC32));
