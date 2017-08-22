@@ -364,7 +364,7 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                                                       set->lock,
                                                       abstime);
 #ifdef HAVE_CANCEL_BUG
-                        if (ret ==  -ETIMEDOUT)
+                        if (ret == -ETIMEDOUT)
                                 pthread_testcancel();
 #endif
                 } else {
