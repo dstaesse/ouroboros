@@ -23,6 +23,8 @@
 #ifndef OUROBOROS_LIB_HASH_H
 #define OUROBOROS_LIB_HASH_H
 
+#include "config.h"
+
 #include <ouroboros/endian.h>
 
 #ifdef HAVE_LIBGCRYPT
