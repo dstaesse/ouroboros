@@ -1289,8 +1289,9 @@ int flow_event_wait(struct flow_set *       set,
                     struct fqueue *         fq,
                     const struct timespec * timeout)
 {
-        ssize_t         ret;
-        struct timespec abstime;
+        ssize_t           ret;
+        struct timespec   abstime;
+        struct timespec * t = NULL;
 
         if (set == NULL || fq == NULL)
                 return -EINVAL;
@@ -1303,13 +1304,14 @@ int flow_event_wait(struct flow_set *       set,
         if (timeout != NULL) {
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
                 ts_add(&abstime, timeout, &abstime);
+                t = &abstime;
         }
 
         if (set->np1_set)
-                ret = frcti_event_wait(set, fq, &abstime);
+                ret = frcti_event_wait(set, fq, t);
         else
                 ret = shm_flow_set_wait(ai.fqset, set->idx,
-                                        fq->fqueue, &abstime);
+                                        fq->fqueue, t);
 
         if (ret == -ETIMEDOUT) {
                 fq->fqsize = 0;
