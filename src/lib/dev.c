@@ -524,7 +524,7 @@ static void flow_fini(int fd)
                 shm_flow_set_close(ai.flows[fd].set);
 
         if (ai.frcti[fd].used)
-                frcti_clear(fd);
+                frcti_fini(fd);
 
         flow_clear(fd);
 }
@@ -618,7 +618,7 @@ int ouroboros_init(const char * ap_name)
 
         for (i = 0; i < AP_MAX_FLOWS; ++i) {
                 flow_clear(i);
-                frcti_fini(i);
+                frcti_clear(i);
         }
 
         ai.ports = malloc(sizeof(*ai.ports) * SYS_MAX_FLOWS);
