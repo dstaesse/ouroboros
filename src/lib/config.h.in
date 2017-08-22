@@ -40,9 +40,9 @@
     #include <features.h>
     #if !defined(__GLIBC__) || !(__GLIBC__ == 2 && __GLIBC_MINOR__ == 25)
     #cmakedefine HAVE_ROBUST_MUTEX
-    #else
-    #cmakedefine HAVE_ROBUST_MUTEX
     #endif
+#else
+#cmakedefine HAVE_ROBUST_MUTEX
 #endif
 
 #define PTHREAD_COND_CLOCK  @PTHREAD_COND_CLOCK@

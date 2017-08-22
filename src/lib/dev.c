@@ -83,11 +83,7 @@ struct frcti {
         uint64_t      rcv_lwe;
         uint64_t      rcv_rwe;
 
-        bool          resource_control;
-        bool          reliable;
-        bool          error_check;
-        bool          ordered;
-        bool          partial;
+        uint8_t       conf_flags;
 };
 
 struct port {
@@ -121,7 +117,6 @@ struct {
         struct shm_flow_set * fqset;
 
         struct timerwheel *   tw;
-        int                   tw_users;
 
         struct bmp *          fds;
         struct bmp *          fqueues;
@@ -317,6 +312,12 @@ static int frcti_write(int                  fd,
 
         frcti = &(ai.frcti[fd]);
 
+        pthread_rwlock_unlock(&ai.lock);
+
+        timerwheel_move(ai.tw);
+
+        pthread_rwlock_rdlock(&ai.lock);
+
         /*
          * Set the DRF in the first packet of a new run of SDUs,
          * otherwise simply recharge the timer.
@@ -337,7 +338,7 @@ static int frcti_write(int                  fd,
         pci.seqno = frcti->snd_lwe++;
         pci.type |= PDU_TYPE_DATA;
 
-        if (frct_pci_ser(sdb, &pci, frcti->error_check))
+        if (frct_pci_ser(sdb, &pci, frcti->conf_flags & CONF_ERROR_CHECK))
                 return -1;
 
         if (finalize_write(fd, shm_du_buff_get_idx(sdb)))
@@ -367,6 +368,8 @@ static ssize_t frcti_read(int fd)
         struct frcti *       frcti;
         struct frct_pci      pci;
         struct shm_du_buff * sdb;
+
+        timerwheel_move(ai.tw);
 
         pthread_rwlock_rdlock(&ai.lock);
 
@@ -399,7 +402,7 @@ static ssize_t frcti_read(int fd)
         sdb = shm_rdrbuff_get(ai.rdrb, idx);
 
         /* SDU may be corrupted. */
-        if (frct_pci_des(sdb, &pci, frcti->error_check)) {
+        if (frct_pci_des(sdb, &pci, frcti->conf_flags & CONF_ERROR_CHECK)) {
                 pthread_rwlock_unlock(&ai.lock);
                 shm_rdrbuff_remove(ai.rdrb, idx);
                 return -1;
@@ -459,6 +462,8 @@ static int frcti_event_wait(struct flow_set *       set,
         assert(set);
         assert(fq);
         assert(timeout);
+
+        timerwheel_move(ai.tw);
 
         /*
          * FIXME: Return the fq only if a data SDU
