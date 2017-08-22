@@ -95,39 +95,31 @@ static void close_ptr(void * o)
 
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 {
-        int sockfd;
-        buffer_t buf;
-        ssize_t count = 0;
-        irm_msg_t * recv_msg = NULL;
+        int         sockfd;
+        uint8_t     buf[IRM_MSG_BUF_SIZE];
+        ssize_t     len;
+        irm_msg_t * recv_msg;
 
         sockfd = client_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0)
                 return NULL;
 
-        buf.len = irm_msg__get_packed_size(msg);
-        if (buf.len == 0) {
-                close(sockfd);
-                return NULL;
-        }
-
-        buf.data = malloc(IRM_MSG_BUF_SIZE);
-        if (buf.data == NULL) {
+        len = irm_msg__get_packed_size(msg);
+        if (len == 0) {
                 close(sockfd);
                 return NULL;
         }
 
         pthread_cleanup_push(close_ptr, &sockfd);
-        pthread_cleanup_push((void (*)(void *)) free, (void *) buf.data);
 
-        irm_msg__pack(msg, buf.data);
+        irm_msg__pack(msg, buf);
 
-        if (write(sockfd, buf.data, buf.len) != -1)
-                count = read(sockfd, buf.data, IRM_MSG_BUF_SIZE);
+        if (write(sockfd, buf, len) != -1)
+                len = read(sockfd, buf, IRM_MSG_BUF_SIZE);
 
-        if (count > 0)
-                recv_msg = irm_msg__unpack(NULL, count, buf.data);
+        if (len > 0)
+                recv_msg = irm_msg__unpack(NULL, len, buf);
 
-        pthread_cleanup_pop(true);
         pthread_cleanup_pop(true);
 
         return recv_msg;

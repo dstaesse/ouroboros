@@ -60,15 +60,39 @@ struct {
         pthread_t        acceptor;
 
         struct list_head aes;
-        pthread_mutex_t  aes_lock;
+        pthread_rwlock_t aes_lock;
 } connmgr;
 
-static int add_ae_conn(struct ae *        ae,
+
+static int get_info_by_name(const char *       name,
+                            struct conn_info * info)
+{
+        struct list_head * p;
+
+        pthread_rwlock_rdlock(&connmgr.aes_lock);
+
+        list_for_each(p, &connmgr.aes) {
+                struct ae * ae = list_entry(p, struct ae, next);
+                if (strcmp(ae->info.ae_name, name) == 0) {
+                        memcpy(info, &ae->info, sizeof(*info));
+                        pthread_rwlock_unlock(&connmgr.aes_lock);
+                        return 0;
+                }
+        }
+
+        pthread_rwlock_unlock(&connmgr.aes_lock);
+
+        return -1;
+}
+
+static int add_ae_conn(const char *       name,
                        int                fd,
                        qosspec_t          qs,
                        struct conn_info * rcv_info)
 {
-        struct ae_conn * ae_conn = NULL;
+        struct ae_conn *   ae_conn;
+        struct list_head * p;
+        struct ae *        ae = NULL;
 
         ae_conn = malloc(sizeof(*ae_conn));
         if (ae_conn == NULL) {
@@ -76,40 +100,40 @@ static int add_ae_conn(struct ae *        ae,
                 return -1;
         }
 
-        ae_conn->conn.conn_info = *rcv_info;
+        ae_conn->conn.conn_info    = *rcv_info;
         ae_conn->conn.flow_info.fd = fd;
         ae_conn->conn.flow_info.qs = qs;
 
         list_head_init(&ae_conn->next);
 
-        pthread_mutex_lock(&ae->conn_lock);
-        list_add(&ae_conn->next, &ae->conn_list);
-        pthread_cond_signal(&ae->conn_cond);
-        pthread_mutex_unlock(&ae->conn_lock);
-
-        return 0;
-}
-
-static struct ae * find_ae_by_name(char * name)
-{
-        struct list_head * p = NULL;
+        pthread_rwlock_wrlock(&connmgr.aes_lock);
 
         list_for_each(p, &connmgr.aes) {
-                struct ae * ae = list_entry(p, struct ae, next);
+                ae = list_entry(p, struct ae, next);
                 if (strcmp(ae->info.ae_name, name) == 0)
-                        return ae;
+                        break;
         }
 
-        return NULL;
+        /* Check if entry was removed during allocation. */
+        if (ae == NULL || strcmp(ae->info.ae_name, name) != 0) {
+                pthread_rwlock_unlock(&connmgr.aes_lock);
+                return -1;
+        }
+
+        list_add(&ae_conn->next, &ae->conn_list);
+
+        pthread_rwlock_unlock(&connmgr.aes_lock);
+
+        return 0;
 }
 
 static void * flow_acceptor(void * o)
 {
         int               fd;
         qosspec_t         qs;
+        struct conn_info  snd_info;
         struct conn_info  rcv_info;
         struct conn_info  fail_info;
-        struct ae *       ae = NULL;
 
         (void) o;
 
@@ -134,25 +158,23 @@ static void * flow_acceptor(void * o)
                         continue;
                 }
 
-                pthread_mutex_lock(&connmgr.aes_lock);
-                ae = find_ae_by_name(rcv_info.ae_name);
-                pthread_mutex_unlock(&connmgr.aes_lock);
-
-                if (ae != NULL) {
-                        if (cacep_snd(fd, &ae->info)) {
-                                log_err("Failed to respond to req.");
-                                flow_dealloc(fd);
-                                continue;
-                        }
-
-                        if (add_ae_conn(ae, fd, qs, &rcv_info)) {
-                                log_err("Failed to add ae conn.");
-                                flow_dealloc(fd);
-                                continue;
-                        }
-                } else {
+                if (get_info_by_name(rcv_info.ae_name, &snd_info)) {
+                        log_err("Failed to get info for %s.", rcv_info.ae_name);
                         cacep_snd(fd, &fail_info);
                         flow_dealloc(fd);
+                        continue;
+                }
+
+                if (cacep_snd(fd, &snd_info)) {
+                        log_err("Failed to respond to request.");
+                        flow_dealloc(fd);
+                        continue;
+                }
+
+                if (add_ae_conn(rcv_info.ae_name, fd, qs, &rcv_info)) {
+                        log_err("Failed to add new connection.");
+                        flow_dealloc(fd);
+                        continue;
                 }
         }
 
@@ -161,10 +183,10 @@ static void * flow_acceptor(void * o)
 
 int connmgr_init(void)
 {
-        list_head_init(&connmgr.aes);
-
-        if (pthread_mutex_init(&connmgr.aes_lock, NULL))
+        if (pthread_rwlock_init(&connmgr.aes_lock, NULL))
                 return -1;
+
+        list_head_init(&connmgr.aes);
 
         return 0;
 }
@@ -180,13 +202,12 @@ int connmgr_start(void)
 void connmgr_stop(void)
 {
         pthread_cancel(connmgr.acceptor);
-        pthread_join(connmgr.acceptor, NULL);
 }
 
 static void destroy_ae(struct ae * ae)
 {
-        struct list_head * p = NULL;
-        struct list_head * h = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
         pthread_mutex_lock(&ae->conn_lock);
 
@@ -206,20 +227,22 @@ static void destroy_ae(struct ae * ae)
 
 void connmgr_fini(void)
 {
-        struct list_head * p = NULL;
-        struct list_head * n = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
-        pthread_mutex_lock(&connmgr.aes_lock);
+        pthread_join(connmgr.acceptor, NULL);
 
-        list_for_each_safe(p, n, &connmgr.aes) {
+        pthread_rwlock_wrlock(&connmgr.aes_lock);
+
+        list_for_each_safe(p, h, &connmgr.aes) {
                 struct ae * e = list_entry(p, struct ae, next);
                 list_del(&e->next);
                 destroy_ae(e);
         }
 
-        pthread_mutex_unlock(&connmgr.aes_lock);
+        pthread_rwlock_unlock(&connmgr.aes_lock);
 
-        pthread_mutex_destroy(&connmgr.aes_lock);
+        pthread_rwlock_destroy(&connmgr.aes_lock);
 }
 
 struct ae * connmgr_ae_create(struct conn_info info)
@@ -228,42 +251,46 @@ struct ae * connmgr_ae_create(struct conn_info info)
 
         ae = malloc(sizeof(*ae));
         if (ae == NULL)
-                return NULL;
+                goto fail_malloc;
 
         list_head_init(&ae->next);
         list_head_init(&ae->conn_list);
 
         ae->info = info;
 
-        if (pthread_mutex_init(&ae->conn_lock, NULL)) {
-                free(ae);
-                return NULL;
-        }
+        if (pthread_mutex_init(&ae->conn_lock, NULL))
+                goto fail_mutex_init;
 
-        if (pthread_cond_init(&ae->conn_cond, NULL)) {
-                pthread_mutex_destroy(&ae->conn_lock);
-                free(ae);
-                return NULL;
-        }
+        if (pthread_cond_init(&ae->conn_cond, NULL))
+                goto fail_cond_init;
 
-        pthread_mutex_lock(&connmgr.aes_lock);
+        pthread_rwlock_wrlock(&connmgr.aes_lock);
+
         list_add(&ae->next, &connmgr.aes);
-        pthread_mutex_unlock(&connmgr.aes_lock);
+
+        pthread_rwlock_unlock(&connmgr.aes_lock);
 
         return ae;
+
+ fail_cond_init:
+        pthread_mutex_destroy(&ae->conn_lock);
+ fail_mutex_init:
+        free(ae);
+ fail_malloc:
+        return NULL;
 }
 
 void connmgr_ae_destroy(struct ae * ae)
 {
         assert(ae);
 
-        pthread_mutex_lock(&connmgr.aes_lock);
+        pthread_rwlock_wrlock(&connmgr.aes_lock);
 
         list_del(&ae->next);
 
-        destroy_ae(ae);
+        pthread_rwlock_unlock(&connmgr.aes_lock);
 
-        pthread_mutex_unlock(&connmgr.aes_lock);
+        destroy_ae(ae);
 }
 
 int connmgr_alloc(struct ae *   ae,
@@ -313,7 +340,7 @@ int connmgr_alloc(struct ae *   ae,
 int connmgr_wait(struct ae *   ae,
                  struct conn * conn)
 {
-        struct ae_conn * ae_conn = NULL;
+        struct ae_conn * ae_conn;
 
         assert(ae);
         assert(conn);

@@ -159,6 +159,7 @@ static int boot_components(void)
         ipcp_set_state(IPCP_OPERATIONAL);
 
         if (connmgr_start()) {
+                ipcp_set_state(IPCP_INIT);
                 log_err("Failed to start AP connection manager.");
                 goto fail_connmgr_start;
         }
@@ -166,7 +167,6 @@ static int boot_components(void)
         return 0;
 
  fail_connmgr_start:
-        ipcp_set_state(IPCP_INIT);
         enroll_stop();
  fail_enroll_start:
         dir_fini();
