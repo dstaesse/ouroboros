@@ -42,4 +42,6 @@ int                 timerwheel_restart(struct timerwheel * tw,
 void                timerwheel_stop(struct timerwheel * tw,
                                     struct tw_f *       f);
 
+void                timerwheel_move(struct timerwheel * tw);
+
 #endif /* OUROBOROS_LIB_TIMERWHEEL_H */

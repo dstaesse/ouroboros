@@ -91,14 +91,12 @@ int timerwheel_test(int argc, char ** argv)
 
         nanosleep(&wait, NULL);
 
-        /* On some systems and VMs, the scheduler may be too slow. */
-        if (total != check_total)
-                nanosleep(&wait, NULL);
+        timerwheel_move(tw);
 
         timerwheel_destroy(tw);
 
         if (total != check_total) {
-                printf("Totals do not match.\n");
+                printf("Totals do not match: %d and %d.\n", total, check_total);
                 return -1;
         }
 
