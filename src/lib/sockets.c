@@ -98,7 +98,7 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
         int         sockfd;
         uint8_t     buf[IRM_MSG_BUF_SIZE];
         ssize_t     len;
-        irm_msg_t * recv_msg;
+        irm_msg_t * recv_msg = NULL;
 
         sockfd = client_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0)

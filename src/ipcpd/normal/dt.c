@@ -252,6 +252,10 @@ void dt_fini(void)
 {
         int i;
 
+        bmp_destroy(dt.res_fds);
+
+        pthread_rwlock_destroy(&dt.lock);
+
         for (i = 0; i < QOS_CUBE_MAX; ++i)
                 routing_i_destroy(dt.routing[i]);
 
