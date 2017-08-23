@@ -478,7 +478,6 @@ static int frcti_event_wait(struct flow_set *       set,
 
         assert(set);
         assert(fq);
-        assert(timeout);
 
         timerwheel_move(ai.tw);
 
