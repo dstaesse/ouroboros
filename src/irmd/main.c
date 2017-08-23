@@ -848,7 +848,7 @@ static int name_reg(const char *  name,
                                 continue;
 
                         hash = malloc(IPCP_HASH_LEN(e));
-                        if  (hash == NULL)
+                        if (hash == NULL)
                                 break;
 
                         str_hash(e->dir_hash_algo, hash, name);
@@ -1827,10 +1827,8 @@ void * mainloop(void * o)
 
                 if (sfd == -1) {
                         pthread_mutex_unlock(&irmd.cmd_lock);
-                        if (tpm_check()) {
-                                close(sfd);
+                        if (tpm_check())
                                 break;
-                        }
                         continue;
                 }
 

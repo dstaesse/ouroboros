@@ -2340,7 +2340,7 @@ void dht_destroy(struct dht * dht)
         list_for_each_safe(p, h, &dht->requests) {
                 struct kad_req * r = list_entry(p, struct kad_req, next);
                 list_del(&r->next);
-                free(r);
+                kad_req_destroy(r);
         }
 
         list_for_each_safe(p, h, &dht->refs) {

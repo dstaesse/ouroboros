@@ -645,6 +645,7 @@ void ouroboros_fini()
 
         free(ai.flows);
         free(ai.ports);
+        free(ai.frcti);
 
         pthread_rwlock_unlock(&ai.lock);
 

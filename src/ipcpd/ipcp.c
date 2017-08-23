@@ -184,10 +184,8 @@ static void * mainloop(void * o)
 
                 if (sfd == -1) {
                         pthread_mutex_unlock(&ipcpi.cmd_lock);
-                        if (tpm_check()) {
-                                close(sfd);
+                        if (tpm_check())
                                 break;
-                        }
                         continue;
                 }
 
