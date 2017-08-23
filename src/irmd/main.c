@@ -296,6 +296,7 @@ static pid_t create_ipcp(char *         name,
         struct timespec     dl;
         struct timespec     to = {SOCKET_TIMEOUT / 1000,
                                   (SOCKET_TIMEOUT % 1000) * MILLION};
+        pid_t               ipcp_pid;
 
         api = malloc(sizeof(*api));
         if (api == NULL)
@@ -348,6 +349,7 @@ static pid_t create_ipcp(char *         name,
         tmp->type          = ipcp_type;
         tmp->init_state    = IPCP_BOOT;
         tmp->dir_hash_algo = -1;
+        ipcp_pid           = tmp->api;
 
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
@@ -376,15 +378,15 @@ static pid_t create_ipcp(char *         name,
                 tmp->init_state = IPCP_NULL;
                 pthread_cond_signal(&tmp->init_cond);
                 pthread_mutex_unlock(&tmp->init_lock);
-                log_err("IPCP %d failed to respond.", tmp->api);
+                log_err("IPCP %d failed to respond.", ipcp_pid);
                 return -1;
         }
 
         pthread_mutex_unlock(&tmp->init_lock);
 
-        log_info("Created IPCP %d.", tmp->api);
+        log_info("Created IPCP %d.", ipcp_pid);
 
-        return api->pid;
+        return ipcp_pid;
 }
 
 static int create_ipcp_r(pid_t api,
