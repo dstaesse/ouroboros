@@ -20,8 +20,6 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-
-
 #ifdef __APPLE__
 #define _BSD_SOURCE
 #define _DARWIN_C_SOURCE
@@ -88,6 +86,8 @@
 #define BPF_BLEN                  sysconf(_SC_PAGESIZE)
 #include <net/bpf.h>
 #endif
+
+#define THIS_TYPE                 IPCP_SHIM_ETH_LLC
 
 #define MGMT_SAP                  0x01
 #define MAC_SIZE                  6
