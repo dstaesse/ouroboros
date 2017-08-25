@@ -2001,7 +2001,8 @@ void * mainloop(void * o)
                         free(apis);
 
                 if (write(sfd, buffer.data, buffer.len) == -1)
-                        log_warn("Failed to send reply message.");
+                        if (ret_msg.result != -EIRMD)
+                                log_warn("Failed to send reply message.");
 
                 free(buffer.data);
                 close(sfd);
