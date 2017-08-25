@@ -375,7 +375,7 @@ static ssize_t frcti_read(int fd)
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
-        pthread_rwlock_rdlock(&ai.lock);
+        pthread_rwlock_wrlock(&ai.lock);
 
         frcti = &(ai.frcti[fd]);
 
