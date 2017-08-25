@@ -121,10 +121,6 @@ int irm_bootstrap_ipcp(pid_t                      api,
                 config.has_ttl            = conf->has_ttl;
                 config.has_addr_auth_type = true;
                 config.addr_auth_type     = conf->addr_auth_type;
-                config.has_dt_gam_type    = true;
-                config.dt_gam_type        = conf->dt_gam_type;
-                config.has_rm_gam_type    = true;
-                config.rm_gam_type        = conf->rm_gam_type;
                 config.has_routing_type   = true;
                 config.routing_type       = conf->routing_type;
                 dif_info.dir_hash_algo    = conf->dif_info.dir_hash_algo;

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Data transfer neighbors
+ * Neighbors
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -29,7 +29,7 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/cacep.h>
 
-#include "connmgr.h"
+#include "ae.h"
 
 enum nb_event {
         NEIGHBOR_ADDED,
@@ -40,14 +40,14 @@ enum nb_event {
 typedef int (* nb_notify_t)(enum nb_event event,
                             struct conn   conn);
 
-struct nb_notifier {
-        struct list_head next;
-        nb_notify_t      notify_call;
-};
-
 struct nb {
         struct list_head next;
         struct conn      conn;
+};
+
+struct nb_notifier {
+        struct list_head next;
+        nb_notify_t      notify_call;
 };
 
 struct nbs {

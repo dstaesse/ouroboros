@@ -35,12 +35,10 @@ message ipcp_config_msg {
         optional uint32 fd_size        =  4;
         optional bool has_ttl          =  5;
         optional uint32 addr_auth_type =  6;
-        optional uint32 dt_gam_type    =  7;
-        optional uint32 rm_gam_type    =  8;
-        optional uint32 routing_type   =  9;
+        optional uint32 routing_type   =  7;
         // Config for shim UDP
-        optional uint32 ip_addr        = 10;
-        optional uint32 dns_addr       = 11;
+        optional uint32 ip_addr        =  8;
+        optional uint32 dns_addr       =  9;
         // Config for the shim Ethernet LLC
-        optional string if_name        = 12;
+        optional string if_name        = 10;
 }

@@ -38,7 +38,6 @@
 #include "dt_pci.h"
 #include "pff.h"
 #include "neighbors.h"
-#include "gam.h"
 #include "routing.h"
 #include "sdu_sched.h"
 #include "ae.h"
@@ -67,11 +66,12 @@ struct {
         struct ae_info     aes[AP_RES_FDS];
         pthread_rwlock_t   lock;
 
-        struct gam *       gam;
         struct nbs *       nbs;
         struct ae *        ae;
 
         struct nb_notifier nb_notifier;
+
+        pthread_t          listener;
 } dt;
 
 static int dt_neighbor_event(enum nb_event event,
@@ -149,36 +149,46 @@ static int sdu_handler(int                  fd,
         return 0;
 }
 
-int dt_init(void)
+static void * dt_conn_handle(void * o)
+{
+        struct conn conn;
+
+        (void) o;
+
+        while (true) {
+                if (connmgr_wait(AEID_DT, &conn)) {
+                        log_err("Failed to get next DT connection.");
+                        continue;
+                }
+
+                log_dbg("Got new connection.");
+
+                nbs_add(dt.nbs, conn);
+        }
+
+        return 0;
+}
+
+int dt_init(enum pol_routing pr,
+            uint8_t          addr_size,
+            uint8_t          fd_size,
+            bool             has_ttl)
 {
         int              i;
         int              j;
         struct conn_info info;
-        enum pol_routing pr;
-
-        if (rib_read(BOOT_PATH "/dt/routing/type", &pr, sizeof(pr))
-            != sizeof(pr)) {
-                log_err("Failed to read policy for routing.");
-                return -1;
-        }
-
-        if (dt_pci_init()) {
-                log_err("Failed to init shm dt_pci.");
-                return -1;
-        }
 
         memset(&info, 0, sizeof(info));
 
         strcpy(info.ae_name, DT_AE);
         strcpy(info.protocol, DT_PROTO);
         info.pref_version = 1;
-        info.pref_syntax = PROTO_FIXED;
-        info.addr = ipcpi.dt_addr;
+        info.pref_syntax  = PROTO_FIXED;
+        info.addr         = ipcpi.dt_addr;
 
-        dt.ae = connmgr_ae_create(info);
-        if (dt.ae == NULL) {
-                log_err("Failed to create AE struct.");
-                goto fail_connmgr;
+        if (dt_pci_init(addr_size, fd_size, has_ttl)) {
+                log_err("Failed to init shm dt_pci.");
+                goto fail_pci_init;
         }
 
         dt.nbs = nbs_create();
@@ -192,6 +202,11 @@ int dt_init(void)
                 log_err("Failed to register notifier.");
                 goto fail_nbs_notifier;
         }
+
+        if (connmgr_ae_init(AEID_DT, &info, dt.nbs)) {
+                log_err("Failed to register with connmgr.");
+                goto fail_connmgr_ae_init;
+        };
 
         if (routing_init(pr, dt.nbs)) {
                 log_err("Failed to init routing.");
@@ -233,6 +248,8 @@ int dt_init(void)
         for (j = 0; j < QOS_CUBE_MAX; ++j)
                 routing_i_destroy(dt.routing[j]);
  fail_routing_i:
+        connmgr_ae_fini(AEID_DT);
+ fail_connmgr_ae_init:
         for (i = 0; i < QOS_CUBE_MAX; ++i)
                 pff_destroy(dt.pff[i]);
  fail_pff:
@@ -242,9 +259,9 @@ int dt_init(void)
  fail_nbs_notifier:
         nbs_destroy(dt.nbs);
  fail_nbs:
-        connmgr_ae_destroy(dt.ae);
- fail_connmgr:
         dt_pci_fini();
+ fail_pci_init:
+        connmgr_ae_fini(AEID_DT);
         return -1;
 }
 
@@ -268,28 +285,19 @@ void dt_fini(void)
 
         nbs_destroy(dt.nbs);
 
-        connmgr_ae_destroy(dt.ae);
+        connmgr_ae_fini(AEID_DT);
 }
 
 int dt_start(void)
 {
-        enum pol_gam pg;
-
-        if (rib_read(BOOT_PATH "/dt/gam/type", &pg, sizeof(pg))
-            != sizeof(pg)) {
-                log_err("Failed to read policy for ribmgr gam.");
-                return -1;
-        }
-
         dt.sdu_sched = sdu_sched_create(sdu_handler);
         if (dt.sdu_sched == NULL) {
                 log_err("Failed to create N-1 SDU scheduler.");
                 return -1;
         }
 
-        dt.gam = gam_create(pg, dt.nbs, dt.ae);
-        if (dt.gam == NULL) {
-                log_err("Failed to init dt graph adjacency manager.");
+        if (pthread_create(&dt.listener, NULL, dt_conn_handle, NULL)) {
+                log_err("Failed to create listener thread.");
                 sdu_sched_destroy(dt.sdu_sched);
                 return -1;
         }
@@ -299,8 +307,8 @@ int dt_start(void)
 
 void dt_stop(void)
 {
-        gam_destroy(dt.gam);
-
+        pthread_cancel(dt.listener);
+        pthread_join(dt.listener, NULL);
         sdu_sched_destroy(dt.sdu_sched);
 }
 

@@ -23,13 +23,20 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_DT_H
 #define OUROBOROS_IPCPD_NORMAL_DT_H
 
+#include <ouroboros/ipcp.h>
 #include <ouroboros/shm_rdrbuff.h>
 
 #include "dt_pci.h"
 
+#define DT_AE        "Data Transfer"
+#define DT_PROTO     "dtp"
 #define INVALID_ADDR 0
 
-int  dt_init(void);
+int  dt_init(enum pol_routing pr,
+             uint8_t          addr_size,
+             uint8_t          fd_size,
+             bool             has_ttl
+);
 
 void dt_fini(void);
 

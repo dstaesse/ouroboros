@@ -48,13 +48,9 @@
 #define DEFAULT_FD_SIZE    2
 #define DEFAULT_DDNS       0
 #define DEFAULT_ADDR_AUTH  FLAT_RANDOM
-#define DEFAULT_DT_GAM     COMPLETE
-#define DEFAULT_RM_GAM     COMPLETE
 #define DEFAULT_ROUTING    LINK_STATE
 #define DEFAULT_HASH_ALGO  DIR_HASH_SHA3_256
 #define ADDR_AUTH_FLAT     "flat"
-#define DT_GAM_COMPLETE    "complete"
-#define RM_GAM_COMPLETE    "complete"
 #define ROUTING_LINK_STATE "link_state"
 
 static void usage(void)
@@ -71,10 +67,6 @@ static void usage(void)
                "                [fd <fd size> (default: %d)]\n"
                "                [ttl (add time to live value in the PCI)]\n"
                "                [addr_auth <address policy> (default: %s)]\n"
-               "                [dt_gam <data transfer graph adjacency manager>"
-               " (default: %s)]\n"
-               "                [rm_gam <rib manager graph adjacency manager>"
-               " (default: %s)]\n"
                "                [routing <routing policy> (default: %s)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
@@ -86,8 +78,7 @@ static void usage(void)
                "if TYPE == " SHIM_ETH_LLC "\n"
                "                if_name <interface name>\n",
                DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE,
-               ADDR_AUTH_FLAT, DT_GAM_COMPLETE, RM_GAM_COMPLETE,
-               ROUTING_LINK_STATE, SHA3_256);
+               ADDR_AUTH_FLAT, ROUTING_LINK_STATE, SHA3_256);
 }
 
 int do_bootstrap_ipcp(int argc, char ** argv)
@@ -99,8 +90,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         uint8_t            fd_size        = DEFAULT_FD_SIZE;
         bool               has_ttl        = false;
         enum pol_addr_auth addr_auth_type = DEFAULT_ADDR_AUTH;
-        enum pol_gam       dt_gam_type    = DEFAULT_DT_GAM;
-        enum pol_gam       rm_gam_type    = DEFAULT_RM_GAM;
         enum pol_routing   routing_type   = DEFAULT_ROUTING;
         enum pol_dir_hash  hash_algo      = DEFAULT_HASH_ALGO;
         uint32_t           ip_addr        = 0;
@@ -151,16 +140,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                                 addr_auth_type = FLAT_RANDOM;
                         else
                                 goto unknown_param;
-                } else if (matches(*argv, "dt_gam") == 0) {
-                        if (strcmp(DT_GAM_COMPLETE, *(argv + 1)) == 0)
-                                dt_gam_type = COMPLETE;
-                        else
-                                goto unknown_param;
-                } else if (matches(*argv, "rm_gam") == 0) {
-                        if (strcmp(RM_GAM_COMPLETE, *(argv + 1)) == 0)
-                                rm_gam_type = COMPLETE;
-                        else
-                                goto unknown_param;
                 } else if (matches(*argv, "routing") == 0) {
                         if (strcmp(ROUTING_LINK_STATE, *(argv + 1)) == 0)
                                 routing_type = LINK_STATE;
@@ -188,8 +167,6 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.fd_size = fd_size;
                 conf.has_ttl = has_ttl;
                 conf.addr_auth_type = addr_auth_type;
-                conf.dt_gam_type = dt_gam_type;
-                conf.rm_gam_type = rm_gam_type;
                 conf.routing_type = routing_type;
                 conf.dif_info.dir_hash_algo = hash_algo;
         } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {

@@ -227,8 +227,6 @@ static void * mainloop(void * o)
                                 conf.fd_size        = conf_msg->fd_size;
                                 conf.has_ttl        = conf_msg->has_ttl;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
-                                conf.dt_gam_type    = conf_msg->dt_gam_type;
-                                conf.rm_gam_type    = conf_msg->rm_gam_type;
                                 conf.routing_type   = conf_msg->routing_type;
 
                                 switch(conf_msg->dif_info->dir_hash_algo) {

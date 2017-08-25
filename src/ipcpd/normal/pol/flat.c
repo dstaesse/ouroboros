@@ -42,47 +42,21 @@
 #define NAME_LEN 8
 #define REC_DIF_SIZE 10000
 
-/* convert 32 bit addr to a hex string */
-static void addr_name(char *   name,
-                      uint32_t addr)
-{
-        sprintf(name, "%8x", (uint32_t) (addr));
-}
-
-static int addr_taken(char *  name,
-                      char ** members,
-                      size_t  len)
-{
-        size_t i;
-        char path[RIB_MAX_PATH_LEN + 1];
-
-        size_t reset;
-        strcpy(path, MEMBERS_PATH);
-
-        reset = strlen(path);
-
-        for (i = 0; i < len; ++i) {
-                ssize_t j;
-                ssize_t c;
-                char ** addrs;
-                rib_path_append(path, members[i]);
-                c = rib_children(path, &addrs);
-                for (j = 0; j < c; ++j)
-                        if (strcmp(addrs[j], name) == 0) {
-                                freepp(char, addrs, c);
-                                return 1;
-                        }
-                freepp(char, addrs, c);
-                path[reset] = '\0';
-        }
-
-        return 0;
-}
+struct {
+        uint8_t addr_size;
+} flat;
 
 #define INVALID_ADDRESS 0
 
-int flat_init(void)
+int flat_init(const void * info)
 {
+        flat.addr_size = *((uint8_t *) info);
+
+        if (flat.addr_size != 4) {
+                log_err("Flat address policy mandates 4 byte addresses.");
+                return -1;
+        }
+
         return 0;
 }
 
@@ -94,66 +68,12 @@ int flat_fini(void)
 uint64_t flat_address(void)
 {
         struct timespec t;
-
-        char path[RIB_MAX_PATH_LEN];
-        char name[NAME_LEN + 1];
-        uint32_t addr;
-        uint8_t addr_size;
-
-        char ** members;
-        ssize_t n_members;
-
-        strcpy(path, MEMBERS_PATH);
-
-        if (!rib_has(path)) {
-                log_err("Could not read members from RIB.");
-                return INVALID_ADDRESS;
-        }
-
-        if (rib_read("/" BOOT_NAME "/dt/const/addr_size",
-                     &addr_size, sizeof(addr_size)) != sizeof(addr_size)) {
-                log_err("Failed to read address size.");
-                return INVALID_ADDRESS;
-        }
-
-        if (addr_size != 4) {
-                log_err("Flat address policy mandates 4 byte addresses.");
-                return INVALID_ADDRESS;
-        }
-
-        n_members = rib_children(path, &members);
-        if (n_members > REC_DIF_SIZE)
-                log_warn("DIF exceeding recommended size for flat addresses.");
-
-        rib_path_append(path, ipcpi.name);
-
-        if (!rib_has(path)) {
-                log_err("This ipcp is not a member.");
-                freepp(char, members, n_members);
-                return INVALID_ADDRESS;
-        }
+        uint32_t        addr;
 
         clock_gettime(CLOCK_REALTIME, &t);
         srand(t.tv_nsec);
 
-        assert(n_members > 0);
-
-        do {
-                addr = (rand() % (RAND_MAX - 1) + 1) & 0xFFFFFFFF;
-                addr_name(name, addr);
-        } while (addr_taken(name, members, n_members));
-
-        freepp(char, members, n_members);
-
-        if (rib_add(path, name)) {
-                log_err("Failed to add address to RIB.");
-                return INVALID_ADDRESS;
-        }
-
-        if (rib_write(path, &addr, sizeof(addr))) {
-                log_err("Failed to write address in RIB.");
-                return INVALID_ADDRESS;
-        }
+        addr = (rand() % (RAND_MAX - 1) + 1) & 0xFFFFFFFF;
 
         return addr;
 }

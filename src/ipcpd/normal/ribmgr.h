@@ -42,6 +42,10 @@ int  ribmgr_init(void);
 
 void ribmgr_fini(void);
 
+int  ribmgr_start(void);
+
+void ribmgr_stop(void);
+
 int  ribmgr_disseminate(char *           path,
                         enum diss_target target,
                         enum diss_freq   freq,

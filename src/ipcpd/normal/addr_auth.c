@@ -35,7 +35,8 @@ struct addr_auth {
         struct pol_addr_auth_ops * ops;
 } addr_auth;
 
-int addr_auth_init(enum pol_addr_auth type)
+int addr_auth_init(enum pol_addr_auth type,
+                   const void *       info)
 {
         switch (type) {
         case FLAT_RANDOM:
@@ -46,7 +47,7 @@ int addr_auth_init(enum pol_addr_auth type)
                 return -1;
         }
 
-        return addr_auth.ops->init();
+        return addr_auth.ops->init(info);
 }
 
 uint64_t addr_auth_address(void)

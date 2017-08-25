@@ -44,19 +44,13 @@ struct {
         size_t          fd_o;
 } dt_pci_info;
 
-int dt_pci_init()
+int dt_pci_init(uint8_t addr_size,
+                uint8_t fd_size,
+                bool    has_ttl)
 {
-        /* read dt constants from the RIB */
-        if (rib_read(BOOT_PATH "/dt/const/addr_size",
-                     &dt_pci_info.addr_size,
-                     sizeof(dt_pci_info.addr_size)) < 0 ||
-            rib_read(BOOT_PATH "/dt/const/fd_size",
-                     &dt_pci_info.fd_size,
-                     sizeof(dt_pci_info.fd_size)) < 0 ||
-            rib_read(BOOT_PATH "/dt/const/has_ttl",
-                     &dt_pci_info.has_ttl,
-                     sizeof(dt_pci_info.has_ttl)) < 0)
-                return -1;
+        dt_pci_info.addr_size = addr_size;
+        dt_pci_info.fd_size   = fd_size;
+        dt_pci_info.has_ttl   = has_ttl;
 
         dt_pci_info.qc_o = dt_pci_info.addr_size;
         dt_pci_info.ttl_o = dt_pci_info.qc_o + QOS_LEN;

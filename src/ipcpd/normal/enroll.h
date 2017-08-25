@@ -23,14 +23,25 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_ENROLL_H
 #define OUROBOROS_IPCPD_NORMAL_ENROLL_H
 
-int  enroll_init(void);
+#include <ouroboros/ipcp.h>
 
-void enroll_fini(void);
+#include "ae.h"
 
-int  enroll_start(void);
+int                  enroll_init(void);
 
-void enroll_stop(void);
+void                 enroll_fini(void);
 
-int  enroll_boot(const char * dst);
+int                  enroll_start(void);
+
+void                 enroll_stop(void);
+
+void                 enroll_bootstrap(const struct ipcp_config * conf);
+
+int                  enroll_boot(struct conn * conn,
+                                 const char *  dst);
+
+int                  enroll_done(struct conn * conn);
+
+struct ipcp_config * enroll_get_conf(void);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_ENROLL_H */

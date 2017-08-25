@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Data transfer graph adjacency manager
+ * Enrollment message
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,18 +20,20 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_GAM_H
-#define OUROBOROS_IPCPD_NORMAL_GAM_H
+syntax = "proto2";
 
-#include <ouroboros/ipcp.h>
-#include <ouroboros/cacep.h>
+import "ipcp_config.proto";
 
-#include "neighbors.h"
+enum enroll_code {
+        ENROLL_REQ  = 1;
+        ENROLL_BOOT = 2;
+        ENROLL_DONE = 4;
+};
 
-struct gam * gam_create(enum pol_gam gam_type,
-                        struct nbs * nbs,
-                        struct ae *  ae);
-
-void         gam_destroy(struct gam * gam);
-
-#endif /* OUROBOROS_IPCPD_NORMAL_GAM_H */
+message enroll_msg {
+        required enroll_code     code   = 1;
+        optional ipcp_config_msg conf   = 2;
+        optional int64           t_sec  = 3;
+        optional uint32          t_nsec = 4;
+        optional int32           result = 5;
+};

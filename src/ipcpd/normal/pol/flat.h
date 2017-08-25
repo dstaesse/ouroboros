@@ -25,8 +25,10 @@
 
 #include "pol-addr-auth-ops.h"
 
-int      flat_init(void);
+int      flat_init(const void * info);
+
 int      flat_fini(void);
+
 uint64_t flat_address(void);
 
 struct pol_addr_auth_ops flat_ops = {

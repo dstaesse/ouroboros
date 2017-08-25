@@ -130,9 +130,10 @@ static int link_state_neighbor_event(enum nb_event event,
         size_t    len;
         uint8_t * data;
 
-        /* Only announce the flow if our address is bigger */
+        /* Only announce the flow if our address is bigger
         if (ipcpi.dt_addr < conn.conn_info.addr)
                 return 0;
+        */
 
         path[0] = '\0';
         sprintf(fso_name, "%" PRIu64 "-%" PRIu64,
@@ -305,42 +306,42 @@ int link_state_init(struct nbs * nbs)
 {
         link_state.graph = graph_create();
         if (link_state.graph == NULL)
-                return -1;
+                goto fail_graph;
 
-        if (rib_add(RIB_ROOT, ROUTING_NAME)) {
-                graph_destroy(link_state.graph);
-                return -1;
-        }
+        if (rib_add(RIB_ROOT, ROUTING_NAME))
+                goto fail_rib_add;
 
         link_state.nbs = nbs;
 
         link_state.nb_notifier.notify_call = link_state_neighbor_event;
-        if (nbs_reg_notifier(link_state.nbs, &link_state.nb_notifier)) {
-                graph_destroy(link_state.graph);
-                rib_del(ROUTING_PATH);
-                return -1;
-        }
+        if (nbs_reg_notifier(link_state.nbs, &link_state.nb_notifier))
+                goto fail_nbs_reg_notifier;
 
         link_state.set = ro_set_create();
-        if (link_state.set == NULL) {
-                nbs_unreg_notifier(link_state.nbs, &link_state.nb_notifier);
-                graph_destroy(link_state.graph);
-                rib_del(ROUTING_PATH);
-                return -1;
-        }
+        if (link_state.set == NULL)
+                goto fail_ro_set_create;
 
         link_state.queue = rqueue_create();
-        if (link_state.queue == NULL) {
-                ro_set_destroy(link_state.set);
-                nbs_unreg_notifier(link_state.nbs, &link_state.nb_notifier);
-                graph_destroy(link_state.graph);
-                rib_del(ROUTING_PATH);
-                return -1;
-        }
+        if (link_state.queue == NULL)
+                goto fail_rqueue_create;
 
-        pthread_create(&link_state.rib_listener, NULL, rib_listener, NULL);
+        if (pthread_create(&link_state.rib_listener, NULL, rib_listener, NULL))
+                goto fail_listener_create;
 
         return 0;
+
+ fail_listener_create:
+        ro_set_destroy(link_state.set);
+ fail_rqueue_create:
+        ro_set_destroy(link_state.set);
+ fail_ro_set_create:
+        nbs_unreg_notifier(link_state.nbs, &link_state.nb_notifier);
+ fail_nbs_reg_notifier:
+        rib_del(ROUTING_PATH);
+ fail_rib_add:
+        graph_destroy(link_state.graph);
+ fail_graph:
+        return -1;
 }
 
 void link_state_fini(void)

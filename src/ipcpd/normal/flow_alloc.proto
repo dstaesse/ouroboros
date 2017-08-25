@@ -23,16 +23,16 @@
 syntax = "proto2";
 
 enum flow_alloc_code {
-        FLOW_REQ     = 1;
-        FLOW_REPLY   = 2;
+        FLOW_REQ   = 1;
+        FLOW_REPLY = 2;
 };
 
 message flow_alloc_msg {
-        required flow_alloc_code code  = 1;
-        optional bytes hash            = 2;
-        optional uint32 qc             = 3;
-        optional sint32 response       = 4;
-        optional uint32 r_fd           = 5;
-        optional uint32 s_fd           = 6;
-        optional uint64 s_addr         = 7;
+        required flow_alloc_code code = 1;
+        optional bytes hash           = 2;
+        optional uint32 qc            = 3;
+        optional sint32 response      = 4;
+        optional uint32 r_fd          = 5;
+        optional uint32 s_fd          = 6;
+        optional uint64 s_addr        = 7;
 };

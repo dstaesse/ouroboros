@@ -117,6 +117,8 @@ struct sdu_sched * sdu_sched_create(next_sdu_t callback)
         if (sdu_sched == NULL)
                 goto fail_malloc;
 
+        assert(callback);
+
         sdu_sched->callback = callback;
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
@@ -170,6 +172,8 @@ void sdu_sched_add(struct sdu_sched * sdu_sched,
 {
         qoscube_t qc;
 
+        /*   assert(sdu_sched); */
+
         ipcp_flow_get_qoscube(fd, &qc);
         flow_set_add(sdu_sched->set[qc], fd);
 }
@@ -178,6 +182,8 @@ void sdu_sched_del(struct sdu_sched * sdu_sched,
                    int                fd)
 {
         qoscube_t qc;
+
+        assert(sdu_sched);
 
         ipcp_flow_get_qoscube(fd, &qc);
         flow_set_del(sdu_sched->set[qc], fd);

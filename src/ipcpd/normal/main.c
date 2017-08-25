@@ -54,50 +54,25 @@
 
 #define THIS_TYPE IPCP_NORMAL
 
-static int boot_components(void)
+static int initialize_components(const struct ipcp_config * conf)
 {
-        char buf[256];
-        ssize_t len;
-        enum pol_addr_auth pa;
-        char path[RIB_MAX_PATH_LEN + 1];
-
-        len = rib_read(BOOT_PATH "/general/dif_name", buf, 256);
-        if (len < 0) {
-                log_err("Failed to read DIF name: %zd.", len);
-                return -1;
+        if (rib_init()) {
+                log_err("Failed to initialize RIB.");
+                goto fail_rib_init;
         }
 
-        ipcpi.dif_name = strdup(buf);
+        ipcpi.dif_name = strdup(conf->dif_info.dif_name);
         if (ipcpi.dif_name == NULL) {
                 log_err("Failed to set DIF name.");
-                return -1;
+                goto fail_dif_name;
         }
 
-        len = rib_read(BOOT_PATH "/general/dir_hash_algo",
-                       &ipcpi.dir_hash_algo, sizeof(ipcpi.dir_hash_algo));
-        if (len < 0) {
-                log_err("Failed to read hash length: %zd.", len);
-                goto fail_addr_auth;
-        }
-
-        ipcpi.dir_hash_algo = ntoh32(ipcpi.dir_hash_algo);
+        ipcpi.dir_hash_algo = conf->dif_info.dir_hash_algo;
 
         assert(ipcp_dir_hash_len() != 0);
 
-        if (rib_add(MEMBERS_PATH, ipcpi.name)) {
-                log_err("Failed to add name to " MEMBERS_PATH);
-                goto fail_addr_auth;
-        }
-
-        log_dbg("Starting components.");
-
-        if (rib_read(BOOT_PATH "/dt/addr_auth/type", &pa, sizeof(pa))
-            != sizeof(pa)) {
-                log_err("Failed to read policy for address authority.");
-                goto fail_addr_auth;
-        }
-
-        if (addr_auth_init(pa)) {
+        if (addr_auth_init(conf->addr_auth_type,
+                           &conf->addr_size)) {
                 log_err("Failed to init address authority.");
                 goto fail_addr_auth;
         }
@@ -105,45 +80,27 @@ static int boot_components(void)
         ipcpi.dt_addr = addr_auth_address();
         if (ipcpi.dt_addr == 0) {
                 log_err("Failed to get a valid address.");
-                goto fail_dir;
-        }
-
-        path[0] = '\0';
-        rib_path_append(rib_path_append(path, MEMBERS_NAME), ipcpi.name);
-        if (rib_write(path, &ipcpi.dt_addr, sizeof(&ipcpi.dt_addr))) {
-                log_err("Failed to write address to member object.");
-                goto fail_dir;
+                goto fail_addr_auth;
         }
 
         log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
-
-        log_dbg("Starting ribmgr.");
 
         if (ribmgr_init()) {
                 log_err("Failed to initialize RIB manager.");
                 goto fail_ribmgr;
         }
 
-        log_dbg("Ribmgr started.");
-
-        if (dt_init()) {
-                log_err("Failed to initialize data transfer ae.");
+        if (dt_init(conf->routing_type,
+                    conf->addr_size,
+                    conf->fd_size,
+                    conf->has_ttl)) {
+                log_err("Failed to initialize data transfer component.");
                 goto fail_dt;
         }
 
         if (fa_init()) {
-                log_err("Failed to initialize flow allocator ae.");
+                log_err("Failed to initialize flow allocator component.");
                 goto fail_fa;
-        }
-
-        if (dt_start()) {
-                log_err("Failed to start data transfer ae.");
-                goto fail_dt_start;
-        }
-
-        if (fa_start()) {
-                log_err("Failed to start flow allocator.");
-                goto fail_fa_start;
         }
 
         if (dir_init()) {
@@ -151,30 +108,11 @@ static int boot_components(void)
                 goto fail_dir;
         }
 
-        if (enroll_start()) {
-                log_err("Failed to start enroll.");
-                goto fail_enroll_start;
-        }
-
-        ipcp_set_state(IPCP_OPERATIONAL);
-
-        if (connmgr_start()) {
-                ipcp_set_state(IPCP_INIT);
-                log_err("Failed to start AP connection manager.");
-                goto fail_connmgr_start;
-        }
+        ipcp_set_state(IPCP_INIT);
 
         return 0;
 
- fail_connmgr_start:
-        enroll_stop();
- fail_enroll_start:
-        dir_fini();
  fail_dir:
-        fa_stop();
- fail_fa_start:
-        dt_stop();
- fail_dt_start:
         fa_fini();
  fail_fa:
         dt_fini();
@@ -184,21 +122,15 @@ static int boot_components(void)
         addr_auth_fini();
  fail_addr_auth:
         free(ipcpi.dif_name);
-
+ fail_dif_name:
+        rib_fini();
+ fail_rib_init:
         return -1;
 }
 
-void shutdown_components(void)
+static void finalize_components(void)
 {
-        connmgr_stop();
-
-        enroll_stop();
-
         dir_fini();
-
-        fa_stop();
-
-        dt_stop();
 
         fa_fini();
 
@@ -209,26 +141,140 @@ void shutdown_components(void)
         addr_auth_fini();
 
         free(ipcpi.dif_name);
+
+        enroll_fini();
+
+        connmgr_fini();
+
+        rib_fini();
+}
+
+static int start_components(void)
+{
+        assert(ipcp_get_state() == IPCP_INIT);
+
+        ipcp_set_state(IPCP_OPERATIONAL);
+
+        if (ribmgr_start()) {
+                log_err("Failed to start RIB manager.");
+                goto fail_ribmgr_start;
+        }
+
+        if (fa_start()) {
+                log_err("Failed to start flow allocator.");
+                goto fail_fa_start;
+        }
+
+        if (enroll_start()) {
+                log_err("Failed to start enrollment.");
+                goto fail_enroll_start;
+        }
+
+        if (connmgr_start()) {
+                log_err("Failed to start AP connection manager.");
+                goto fail_connmgr_start;
+        }
+
+        return 0;
+
+ fail_connmgr_start:
+        enroll_stop();
+ fail_enroll_start:
+        fa_stop();
+ fail_fa_start:
+        ribmgr_stop();
+ fail_ribmgr_start:
+        ipcp_set_state(IPCP_INIT);
+        return -1;
+}
+
+static void stop_components(void)
+{
+        assert(ipcp_get_state() == IPCP_OPERATIONAL ||
+               ipcp_get_state() == IPCP_SHUTDOWN);
+
+        connmgr_stop();
+
+        enroll_stop();
+
+        fa_stop();
+
+        ribmgr_stop();
+
+        ipcp_set_state(IPCP_INIT);
+}
+
+static int bootstrap_components(void)
+{
+        if (dir_bootstrap()) {
+                log_err("Failed to bootstrap directory.");
+                dt_stop();
+                return -1;
+        }
+
+        return 0;
+}
+
+static int enroll_components(uint64_t peer)
+{
+        if (dir_enroll(peer)) {
+                log_err("Failed to enroll directory.");
+                return -1;
+        }
+
+        return 0;
 }
 
 static int normal_ipcp_enroll(const char *      dst,
                               struct dif_info * info)
 {
-        if (rib_add(RIB_ROOT, MEMBERS_NAME)) {
-                log_err("Failed to create members.");
-                return -1;
+        struct conn er_conn;
+        struct conn dt_conn;
+
+        if (connmgr_alloc(AEID_ENROLL, dst, NULL, &er_conn)) {
+                log_err("Failed to get connection.");
+                goto fail_er_flow;
         }
 
-        /* Get boot state from peer */
-        if (enroll_boot(dst)) {
-                log_err("Failed to boot IPCP components.");
-                return -1;
+        /* Get boot state from peer. */
+        if (enroll_boot(&er_conn, dst)) {
+                log_err("Failed to get boot information.");
+                goto fail_enroll_boot;
         }
 
-        if (boot_components()) {
-                log_err("Failed to boot IPCP components.");
-                return -1;
+        if (initialize_components(enroll_get_conf())) {
+                log_err("Failed to initialize IPCP components.");
+                goto fail_enroll_boot;
         }
+
+        if (dt_start()) {
+                log_err("Failed to initialize IPCP components.");
+                goto fail_dt_start;
+        };
+
+        if (connmgr_alloc(AEID_DT, dst, NULL, &dt_conn)) {
+                log_err("Failed to create a data transfer flow.");
+                goto fail_dt_flow;
+        }
+
+        if (start_components()) {
+                log_err("Failed to start components.");
+                goto fail_start_comp;
+        }
+
+        if (enroll_components(dt_conn.conn_info.addr)) {
+                log_err("Failed to enroll components.");
+                goto fail_enroll_comp;
+        }
+
+        if (enroll_done(&er_conn))
+                log_warn("Failed to confirm enrollment with peer.");
+
+        if (connmgr_dealloc(AEID_DT, &dt_conn))
+                log_warn("Failed to deallocate data transfer flow.");
+
+        if (connmgr_dealloc(AEID_ENROLL, &er_conn))
+                log_warn("Failed to deallocate enrollment flow.");
 
         log_dbg("Enrolled with %s.", dst);
 
@@ -236,117 +282,60 @@ static int normal_ipcp_enroll(const char *      dst,
         strcpy(info->dif_name, ipcpi.dif_name);
 
         return 0;
-}
 
-const struct ros {
-        char * parent;
-        char * child;
-} ros[] = {
-        /* BOOT INFO */
-        {RIB_ROOT, BOOT_NAME},
-        /* OTHER RIB STRUCTURES */
-        {RIB_ROOT, MEMBERS_NAME},
-
-        /* GENERAL IPCP INFO */
-        {BOOT_PATH, "general"},
-
-        {BOOT_PATH "/general", "dif_name"},
-        {BOOT_PATH "/general", "dir_hash_algo"},
-
-        /* DT COMPONENT */
-        {BOOT_PATH, "dt"},
-
-        {BOOT_PATH "/dt", "gam"},
-        {BOOT_PATH "/dt/gam", "type"},
-        {BOOT_PATH "/dt/gam", "cacep"},
-        {BOOT_PATH "/dt", "const"},
-        {BOOT_PATH "/dt/const", "addr_size"},
-        {BOOT_PATH "/dt/const", "fd_size"},
-        {BOOT_PATH "/dt/const", "has_ttl"},
-        {BOOT_PATH "/dt", "addr_auth"},
-        {BOOT_PATH "/dt/addr_auth", "type"},
-        {BOOT_PATH "/dt", "routing"},
-        {BOOT_PATH "/dt/routing", "type"},
-
-        /* RIB MGR COMPONENT */
-        {BOOT_PATH, "rm"},
-        {BOOT_PATH "/rm","gam"},
-        {BOOT_PATH "/rm/gam", "type"},
-        {BOOT_PATH "/rm/gam", "cacep"},
-
-        {NULL, NULL}
-};
-
-int normal_rib_init(void)
-{
-        struct ros * r;
-
-        for (r = (struct ros *) ros; r->parent; ++r) {
-                if (rib_add(r->parent, r->child)) {
-                        log_err("Failed to create %s/%s",
-                                r->parent, r->child);
-                        return -1;
-                }
-        }
-
-        return 0;
+ fail_enroll_comp:
+        stop_components();
+ fail_start_comp:
+        connmgr_dealloc(AEID_DT, &dt_conn);
+ fail_dt_flow:
+        dt_stop();
+ fail_dt_start:
+        finalize_components();
+ fail_enroll_boot:
+        connmgr_dealloc(AEID_ENROLL, &er_conn);
+ fail_er_flow:
+        return -1;
 }
 
 static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
 {
-        uint32_t hash_algo;
-
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        hash_algo = hton32((uint32_t) conf->dif_info.dir_hash_algo);
+        enroll_bootstrap(conf);
 
-        assert(ntoh32(hash_algo) != 0);
-
-        if (normal_rib_init()) {
-                log_err("Failed to write initial structure to the RIB.");
-                return -1;
+        if (initialize_components(conf)) {
+                log_err("Failed to init IPCP components.");
+                goto fail_init;
         }
 
-        if (rib_write(BOOT_PATH "/general/dif_name",
-                      conf->dif_info.dif_name,
-                      strlen(conf->dif_info.dif_name) + 1) ||
-            rib_write(BOOT_PATH "/general/dir_hash_algo",
-                      &hash_algo,
-                      sizeof(hash_algo)) ||
-            rib_write(BOOT_PATH "/dt/const/addr_size",
-                      &conf->addr_size,
-                      sizeof(conf->addr_size)) ||
-            rib_write(BOOT_PATH "/dt/const/fd_size",
-                      &conf->fd_size,
-                      sizeof(conf->fd_size)) ||
-            rib_write(BOOT_PATH "/dt/const/has_ttl",
-                      &conf->has_ttl,
-                      sizeof(conf->has_ttl)) ||
-            rib_write(BOOT_PATH "/dt/gam/type",
-                      &conf->dt_gam_type,
-                      sizeof(conf->dt_gam_type)) ||
-            rib_write(BOOT_PATH "/rm/gam/type",
-                      &conf->rm_gam_type,
-                      sizeof(conf->rm_gam_type)) ||
-            rib_write(BOOT_PATH "/dt/addr_auth/type",
-                      &conf->addr_auth_type,
-                      sizeof(conf->addr_auth_type)) ||
-            rib_write(BOOT_PATH "/dt/routing/type",
-                      &conf->routing_type,
-                      sizeof(conf->routing_type))) {
-                log_err("Failed to write boot info to RIB.");
-                return -1;
+        if (dt_start()) {
+                log_err("Failed to initialize IPCP components.");
+                goto fail_dt_start;
+        };
+
+        if (start_components()) {
+                log_err("Failed to init IPCP components.");
+                goto fail_start;
         }
 
-        if (boot_components()) {
-                log_err("Failed to boot IPCP components.");
-                return -1;
+        if (bootstrap_components()) {
+                log_err("Failed to bootstrap IPCP components.");
+                goto fail_bootstrap;
         }
 
         log_dbg("Bootstrapped in DIF %s.", conf->dif_info.dif_name);
 
         return 0;
+
+ fail_bootstrap:
+        stop_components();
+ fail_start:
+        dt_stop();
+ fail_dt_start:
+        finalize_components();
+ fail_init:
+        return -1;
 }
 
 static int normal_ipcp_query(const uint8_t * dst)
@@ -378,18 +367,14 @@ int main(int    argc,
                 goto fail_bind_api;
         }
 
-        if (rib_init()) {
-                log_err("Failed to initialize RIB.");
-                goto fail_rib_init;
-        }
-
+        /* These components must be init at creation. */
         if (connmgr_init()) {
                 log_err("Failed to initialize connection manager.");
                 goto fail_connmgr_init;
         }
 
         if (enroll_init()) {
-                log_err("Failed to initialize enroll component.");
+                log_err("Failed to initialize enrollment component.");
                 goto fail_enroll_init;
         }
 
@@ -406,14 +391,10 @@ int main(int    argc,
 
         ipcp_shutdown();
 
-        if (ipcp_get_state() == IPCP_SHUTDOWN)
-                shutdown_components();
-
-        enroll_fini();
-
-        connmgr_fini();
-
-        rib_fini();
+        if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                dt_stop();
+                stop_components();
+        }
 
         irm_unbind_api(getpid(), ipcpi.name);
 
@@ -428,8 +409,6 @@ int main(int    argc,
  fail_enroll_init:
         connmgr_fini();
  fail_connmgr_init:
-        rib_fini();
- fail_rib_init:
         irm_unbind_api(getpid(), ipcpi.name);
  fail_bind_api:
        ipcp_fini();

@@ -27,7 +27,8 @@
 
 #include <stdint.h>
 
-int      addr_auth_init(enum pol_addr_auth type);
+int      addr_auth_init(enum pol_addr_auth type,
+                        const void *       info);
 
 int      addr_auth_fini(void);
 
