@@ -29,9 +29,15 @@
 #include <stdbool.h>
 
 struct frct_pci {
+        /* Present in every PDU. */
         uint8_t  type;
         uint8_t  flags;
         uint64_t seqno;
+
+        /* Present in config PDU. */
+        uint8_t  conf_flags;
+
+        /* Present in flow control PDU. */
         uint64_t lwe;
         uint64_t rwe;
 };
