@@ -130,11 +130,6 @@ static int link_state_neighbor_event(enum nb_event event,
         size_t    len;
         uint8_t * data;
 
-        /* Only announce the flow if our address is bigger
-        if (ipcpi.dt_addr < conn.conn_info.addr)
-                return 0;
-        */
-
         path[0] = '\0';
         sprintf(fso_name, "%" PRIu64 "-%" PRIu64,
                 ipcpi.dt_addr, conn.conn_info.addr);

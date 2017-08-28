@@ -250,7 +250,7 @@ static int normal_ipcp_enroll(const char *      dst,
         if (dt_start()) {
                 log_err("Failed to initialize IPCP components.");
                 goto fail_dt_start;
-        };
+        }
 
         if (connmgr_alloc(AEID_DT, dst, NULL, &dt_conn)) {
                 log_err("Failed to create a data transfer flow.");

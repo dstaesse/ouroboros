@@ -207,7 +207,7 @@ int dt_init(enum pol_routing pr,
         if (connmgr_ae_init(AEID_DT, &info, dt.nbs)) {
                 log_err("Failed to register with connmgr.");
                 goto fail_connmgr_ae_init;
-        };
+        }
 
         if (routing_init(pr, dt.nbs)) {
                 log_err("Failed to init routing.");

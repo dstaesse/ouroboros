@@ -172,7 +172,7 @@ void sdu_sched_add(struct sdu_sched * sdu_sched,
 {
         qoscube_t qc;
 
-        /*   assert(sdu_sched); */
+        assert(sdu_sched);
 
         ipcp_flow_get_qoscube(fd, &qc);
         flow_set_add(sdu_sched->set[qc], fd);

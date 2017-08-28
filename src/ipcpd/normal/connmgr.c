@@ -207,9 +207,8 @@ int connmgr_ae_init(enum ae_id               id,
 
         ae = connmgr.aes + id;
 
-        if (pthread_mutex_init(&ae->lock, NULL)) {
+        if (pthread_mutex_init(&ae->lock, NULL))
                 return -1;
-        }
 
         if (pthread_cond_init(&ae->cond, NULL)) {
                 pthread_mutex_destroy(&ae->lock);
