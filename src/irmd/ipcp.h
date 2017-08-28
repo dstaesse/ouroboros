@@ -42,6 +42,14 @@ int   ipcp_bootstrap(pid_t               api,
                      ipcp_config_msg_t * conf,
                      struct dif_info *   info);
 
+int   ipcp_connect(pid_t        api,
+                   const char * dst,
+                   const char * component);
+
+int   ipcp_disconnect(pid_t        api,
+                      const char * dst,
+                      const char * component);
+
 int   ipcp_reg(pid_t           api,
                const uint8_t * hash,
                size_t          len);

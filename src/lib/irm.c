@@ -146,7 +146,65 @@ int irm_bootstrap_ipcp(pid_t                      api,
 
         if (recv_msg->has_result == false) {
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -EIRMD;
+        }
+
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int irm_connect_ipcp(pid_t        api,
+                     const char * dst,
+                     const char * component)
+{
+        irm_msg_t   msg      = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int         ret;
+
+        msg.code      = IRM_MSG_CODE__IRM_CONNECT_IPCP;
+        msg.dst_name  = (char *) dst;
+        msg.comp_name = (char *) component;
+        msg.has_api   = true;
+        msg.api       = api;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -EIRMD;
+        }
+
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int irm_disconnect_ipcp(pid_t        api,
+                        const char * dst,
+                        const char * component)
+{
+        irm_msg_t   msg      = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int         ret;
+
+        msg.code      = IRM_MSG_CODE__IRM_DISCONNECT_IPCP;
+        msg.dst_name  = (char *) dst;
+        msg.comp_name = (char *) component;
+        msg.has_api   = true;
+        msg.api       = api;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        if (recv_msg->has_result == false) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -EIRMD;
         }
 
         ret = recv_msg->result;
@@ -158,15 +216,15 @@ int irm_bootstrap_ipcp(pid_t                      api,
 ssize_t irm_list_ipcps(const char * name,
                        pid_t **     apis)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t msg        = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        size_t nr = 0;
+        size_t nr            = 0;
         size_t i;
 
         if (apis == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_LIST_IPCPS;
+        msg.code     = IRM_MSG_CODE__IRM_LIST_IPCPS;
         msg.dst_name = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);

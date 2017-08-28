@@ -29,9 +29,11 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#define CACEP_BUF_STRLEN 64
+
 struct conn_info {
-        char                       ae_name[64];
-        char                       protocol[64];
+        char                       ae_name[CACEP_BUF_STRLEN + 1];
+        char                       protocol[CACEP_BUF_STRLEN + 1];
         uint32_t                   pref_version;
         enum proto_concrete_syntax pref_syntax;
         struct proto_field         fixed_conc_syntax[PROTO_MAX_FIELDS];

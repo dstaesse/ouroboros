@@ -33,7 +33,9 @@ enum ipcp_msg_code {
         IPCP_FLOW_ALLOC      =  6;
         IPCP_FLOW_ALLOC_RESP =  7;
         IPCP_FLOW_DEALLOC    =  8;
-        IPCP_REPLY           =  9;
+        IPCP_CONNECT         =  9;
+        IPCP_DISCONNECT      = 10;
+        IPCP_REPLY           = 11;
 };
 
 message ipcp_msg {
@@ -47,5 +49,6 @@ message ipcp_msg {
         optional int32 api             =  8;
         optional dif_info_msg dif_info =  9;
         optional int32 response        = 10;
-        optional int32 result          = 11;
+        optional string comp_name      = 11;
+        optional int32 result          = 12;
 };

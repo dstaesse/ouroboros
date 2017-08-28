@@ -1092,7 +1092,9 @@ static int ipcp_udp_flow_dealloc(int fd)
 
 static struct ipcp_ops udp_ops = {
         .ipcp_bootstrap       = ipcp_udp_bootstrap,
-        .ipcp_enroll          = NULL,                       /* shim */
+        .ipcp_enroll          = NULL,
+        .ipcp_connect         = NULL,
+        .ipcp_disconnect      = NULL,
         .ipcp_reg             = ipcp_udp_reg,
         .ipcp_unreg           = ipcp_udp_unreg,
         .ipcp_query           = ipcp_udp_query,

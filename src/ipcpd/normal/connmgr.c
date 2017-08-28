@@ -48,7 +48,7 @@ enum connmgr_state {
         CONNMGR_RUNNING
 };
 
-struct ae_conn {
+struct conn_el {
         struct list_head next;
         struct conn      conn;
 };
@@ -58,15 +58,17 @@ struct ae {
         struct conn_info info;
 
         struct list_head conns;
+        struct list_head pending;
+
         pthread_cond_t   cond;
         pthread_mutex_t  lock;
 };
 
 struct {
-        struct ae                aes[AEID_MAX];
-        enum connmgr_state       state;
+        struct ae          aes[AEID_MAX];
+        enum connmgr_state state;
 
-        pthread_t                acceptor;
+        pthread_t          acceptor;
 } connmgr;
 
 static int get_id_by_name(const char * name)
@@ -85,23 +87,21 @@ static int add_ae_conn(enum ae_id         id,
                        qosspec_t          qs,
                        struct conn_info * rcv_info)
 {
-        struct ae_conn *   ae_conn;
+        struct conn_el * el;
 
-        ae_conn = malloc(sizeof(*ae_conn));
-        if (ae_conn == NULL) {
+        el = malloc(sizeof(*el));
+        if (el == NULL) {
                 log_err("Not enough memory.");
                 return -1;
         }
 
-        ae_conn->conn.conn_info    = *rcv_info;
-        ae_conn->conn.flow_info.fd = fd;
-        ae_conn->conn.flow_info.qs = qs;
-
-        list_head_init(&ae_conn->next);
+        el->conn.conn_info    = *rcv_info;
+        el->conn.flow_info.fd = fd;
+        el->conn.flow_info.qs = qs;
 
         pthread_mutex_lock(&connmgr.aes[id].lock);
 
-        list_add(&ae_conn->next, &connmgr.aes[id].conns);
+        list_add(&el->next, &connmgr.aes[id].pending);
         pthread_cond_signal(&connmgr.aes[id].cond);
 
         pthread_mutex_unlock(&connmgr.aes[id].lock);
@@ -217,6 +217,7 @@ int connmgr_ae_init(enum ae_id               id,
         }
 
         list_head_init(&ae->conns);
+        list_head_init(&ae->pending);
 
         memcpy(&connmgr.aes[id].info, info, sizeof(connmgr.aes[id].info));
 
@@ -241,7 +242,13 @@ void connmgr_ae_fini(enum ae_id id)
         pthread_mutex_lock(&ae->lock);
 
         list_for_each_safe(p, h, &ae->conns) {
-                struct ae_conn * e = list_entry(p, struct ae_conn, next);
+                struct conn_el * e = list_entry(p, struct conn_el, next);
+                list_del(&e->next);
+                free(e);
+        }
+
+        list_for_each_safe(p, h, &ae->pending) {
+                struct conn_el * e = list_entry(p, struct conn_el, next);
                 list_del(&e->next);
                 free(e);
         }
@@ -254,6 +261,84 @@ void connmgr_ae_fini(enum ae_id id)
         memset(&connmgr.aes[id].info, 0, sizeof(connmgr.aes[id].info));
 
         connmgr.aes[id].nbs = NULL;
+}
+
+int connmgr_ipcp_connect(const char * dst,
+                         const char * component)
+{
+        struct conn_el * ce;
+        int              id;
+
+        assert(dst);
+        assert(component);
+
+        ce = malloc(sizeof(*ce));
+        if (ce == NULL) {
+                log_dbg("Out of memory.");
+                return -1;
+        }
+
+        id = get_id_by_name(component);
+        if (id < 0) {
+                log_dbg("No such component: %s", component);
+                free(ce);
+                return -1;
+        }
+
+        /* FIXME: get the correct qos for the component. */
+        if (connmgr_alloc(id, dst, NULL, &ce->conn)) {
+                free(ce);
+                return -1;
+        }
+
+        if (strlen(dst) > DST_MAX_STRLEN) {
+                log_warn("Truncating dst length for connection.");
+                memcpy(ce->conn.flow_info.dst, dst, DST_MAX_STRLEN);
+                ce->conn.flow_info.dst[DST_MAX_STRLEN] = '\0';
+        } else {
+                strcpy(ce->conn.flow_info.dst, dst);
+        }
+
+        pthread_mutex_lock(&connmgr.aes[id].lock);
+
+        list_add(&ce->next, &connmgr.aes[id].conns);
+
+        pthread_mutex_unlock(&connmgr.aes[id].lock);
+
+        return 0;
+}
+
+int connmgr_ipcp_disconnect(const char * dst,
+                            const char * component)
+{
+        struct list_head * p;
+        struct list_head * h;
+        int                id;
+
+        assert(dst);
+        assert(component);
+
+        id = get_id_by_name(component);
+        if (id < 0)
+                return -1;
+
+        pthread_mutex_lock(&connmgr.aes[id].lock);
+
+        list_for_each_safe(p,h, &connmgr.aes[id].conns) {
+                struct conn_el * el = list_entry(p, struct conn_el, next);
+                if (strcmp(el->conn.flow_info.dst, dst) == 0) {
+                        int ret;
+                        pthread_mutex_unlock(&connmgr.aes[id].lock);
+                        list_del(&el->next);
+                        ret = connmgr_dealloc(id, &el->conn);
+                        free(el);
+                        return ret;
+                }
+        }
+
+        pthread_mutex_unlock(&connmgr.aes[id].lock);
+
+        return 0;
 }
 
 int connmgr_alloc(enum ae_id    id,
@@ -329,7 +414,7 @@ int connmgr_dealloc(enum ae_id    id,
 int connmgr_wait(enum ae_id    id,
                  struct conn * conn)
 {
-        struct ae_conn * ae_conn;
+        struct conn_el * el;
         struct ae *      ae;
 
         assert(id >= 0 && id < AEID_MAX);
@@ -342,21 +427,21 @@ int connmgr_wait(enum ae_id    id,
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) &ae->lock);
 
-        while (list_is_empty(&ae->conns))
+        while (list_is_empty(&ae->pending))
                 pthread_cond_wait(&ae->cond, &ae->lock);
 
         pthread_cleanup_pop(false);
 
-        ae_conn = list_first_entry((&ae->conns), struct ae_conn, next);
-        if (ae_conn == NULL) {
+        el = list_first_entry((&ae->pending), struct conn_el, next);
+        if (el == NULL) {
                 pthread_mutex_unlock(&ae->lock);
                 return -1;
         }
 
-        *conn = ae_conn->conn;
+        *conn = el->conn;
 
-        list_del(&ae_conn->next);
-        free(ae_conn);
+        list_del(&el->next);
+        free(el);
 
         pthread_mutex_unlock(&ae->lock);
 

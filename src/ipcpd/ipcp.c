@@ -301,6 +301,32 @@ static void * mainloop(void * o)
                                 dif_info.dif_name      = info.dif_name;
                         }
                         break;
+                case IPCP_MSG_CODE__IPCP_CONNECT:
+                        ret_msg.has_result = true;
+
+                        if (ipcpi.ops->ipcp_connect == NULL) {
+                                log_err("Connect unsupported.");
+                                ret_msg.result = -ENOTSUP;
+                                break;
+                        }
+
+                        ret_msg.result =
+                                ipcpi.ops->ipcp_connect(msg->dst_name,
+                                                        msg->comp_name);
+                        break;
+                case IPCP_MSG_CODE__IPCP_DISCONNECT:
+                        ret_msg.has_result = true;
+
+                        if (ipcpi.ops->ipcp_disconnect == NULL) {
+                                log_err("Disconnect unsupported.");
+                                ret_msg.result = -ENOTSUP;
+                                break;
+                        }
+
+                        ret_msg.result =
+                                ipcpi.ops->ipcp_disconnect(msg->dst_name,
+                                                           msg->comp_name);
+                        break;
                 case IPCP_MSG_CODE__IPCP_REG:
                         ret_msg.has_result = true;
 
@@ -435,6 +461,8 @@ static void * mainloop(void * o)
                                 ipcpi.ops->ipcp_flow_dealloc(fd);
                         break;
                 default:
+                        ret_msg.has_result = true;
+                        ret_msg.result     = -1;
                         log_err("Don't know that message code");
                         break;
                 }

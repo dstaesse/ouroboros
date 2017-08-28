@@ -31,19 +31,21 @@ enum irm_msg_code {
         IRM_LIST_IPCPS        =  4;
         IRM_BOOTSTRAP_IPCP    =  5;
         IRM_ENROLL_IPCP       =  6;
-        IRM_BIND_AP           =  7;
-        IRM_UNBIND_AP         =  8;
-        IRM_API_ANNOUNCE      =  9;
-        IRM_BIND_API          = 10;
-        IRM_UNBIND_API        = 11;
-        IRM_REG               = 12;
-        IRM_UNREG             = 13;
-        IRM_FLOW_ALLOC        = 14;
-        IRM_FLOW_ACCEPT       = 15;
-        IRM_FLOW_DEALLOC      = 16;
-        IPCP_FLOW_REQ_ARR     = 17;
-        IPCP_FLOW_ALLOC_REPLY = 18;
-        IRM_REPLY             = 19;
+        IRM_CONNECT_IPCP      =  7;
+        IRM_DISCONNECT_IPCP   =  8;
+        IRM_BIND_AP           =  9;
+        IRM_UNBIND_AP         = 10;
+        IRM_API_ANNOUNCE      = 11;
+        IRM_BIND_API          = 12;
+        IRM_UNBIND_API        = 13;
+        IRM_REG               = 14;
+        IRM_UNREG             = 15;
+        IRM_FLOW_ALLOC        = 16;
+        IRM_FLOW_ACCEPT       = 17;
+        IRM_FLOW_DEALLOC      = 18;
+        IPCP_FLOW_REQ_ARR     = 19;
+        IPCP_FLOW_ALLOC_REPLY = 20;
+        IRM_REPLY             = 21;
 };
 
 message irm_msg {
@@ -63,5 +65,6 @@ message irm_msg {
         repeated sint32 apis          = 14;
         optional uint32 timeo_sec     = 15;
         optional uint32 timeo_nsec    = 16;
-        optional sint32 result        = 17;
+        optional string comp_name     = 17;
+        optional sint32 result        = 18;
 };

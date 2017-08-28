@@ -43,6 +43,12 @@ int         connmgr_ae_init(enum ae_id               id,
 
 void        connmgr_ae_fini(enum ae_id id);
 
+int         connmgr_ipcp_connect(const char * dst,
+                                 const char * component);
+
+int         connmgr_ipcp_disconnect(const char * dst,
+                                    const char * component);
+
 int         connmgr_alloc(enum ae_id    id,
                           const char *  dst,
                           qosspec_t *   qs,

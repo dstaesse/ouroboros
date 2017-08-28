@@ -67,7 +67,6 @@ struct {
         pthread_rwlock_t   lock;
 
         struct nbs *       nbs;
-        struct ae *        ae;
 
         struct nb_notifier nb_notifier;
 
@@ -162,6 +161,8 @@ static void * dt_conn_handle(void * o)
                 }
 
                 log_dbg("Got new connection.");
+
+                /* NOTE: connection acceptance policy could be here. */
 
                 nbs_add(dt.nbs, conn);
         }

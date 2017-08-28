@@ -27,6 +27,8 @@
 
 #include "dt.h"
 
+#define DST_MAX_STRLEN 64
+
 enum ae_id {
         AEID_DT = 0,
         AEID_ENROLL,
@@ -36,9 +38,10 @@ enum ae_id {
 
 struct conn {
         struct conn_info conn_info;
-        struct flow_info {
-                int              fd;
-                qosspec_t        qs;
+        struct {
+                char      dst[DST_MAX_STRLEN + 1];
+                int       fd;
+                qosspec_t qs;
         } flow_info;
 };
 

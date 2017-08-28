@@ -259,14 +259,17 @@ static void * enroll_handle(void * o)
                         continue;
                 }
 
-                if (msg->code != ENROLL_CODE__ENROLL_DONE) {
+                if (msg->code != ENROLL_CODE__ENROLL_DONE || !msg->has_result) {
                         log_err("Wrong message type.");
                         enroll_msg__free_unpacked(msg, NULL);
                         connmgr_dealloc(AEID_ENROLL, &conn);
                         continue;
                 }
 
-                log_dbg("Neighbor enrollment successful.");
+                if (msg->result == 0)
+                        log_dbg("Neighbor enrollment successful.");
+                else
+                        log_dbg("Neigbor reported failed enrollment.");
 
                 connmgr_dealloc(AEID_ENROLL, &conn);
         }
@@ -287,13 +290,16 @@ int enroll_boot(struct conn * conn,
         return 0;
 }
 
-int enroll_done(struct conn * conn)
+int enroll_done(struct conn * conn,
+                int           result)
 {
         enroll_msg_t msg = ENROLL_MSG__INIT;
         uint8_t      buf[ENROLL_BUF_LEN];
         ssize_t       len;
 
-        msg.code = ENROLL_CODE__ENROLL_DONE;
+        msg.code       = ENROLL_CODE__ENROLL_DONE;
+        msg.has_result = true;
+        msg.result     = result;
 
         len = enroll_msg__get_packed_size(&msg);
         if (len < 0) {

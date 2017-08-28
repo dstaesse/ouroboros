@@ -263,11 +263,12 @@ static int normal_ipcp_enroll(const char *      dst,
         }
 
         if (enroll_components(dt_conn.conn_info.addr)) {
+                enroll_done(&er_conn, -1);
                 log_err("Failed to enroll components.");
                 goto fail_enroll_comp;
         }
 
-        if (enroll_done(&er_conn))
+        if (enroll_done(&er_conn, 0))
                 log_warn("Failed to confirm enrollment with peer.");
 
         if (connmgr_dealloc(AEID_DT, &dt_conn))
@@ -346,6 +347,8 @@ static int normal_ipcp_query(const uint8_t * dst)
 static struct ipcp_ops normal_ops = {
         .ipcp_bootstrap       = normal_ipcp_bootstrap,
         .ipcp_enroll          = normal_ipcp_enroll,
+        .ipcp_connect         = connmgr_ipcp_connect,
+        .ipcp_disconnect      = connmgr_ipcp_disconnect,
         .ipcp_reg             = dir_reg,
         .ipcp_unreg           = dir_unreg,
         .ipcp_query           = normal_ipcp_query,
