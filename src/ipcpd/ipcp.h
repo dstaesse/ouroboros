@@ -45,6 +45,12 @@ struct ipcp_ops {
         int   (* ipcp_enroll)(const char *      dst,
                               struct dif_info * info);
 
+        int   (* ipcp_connect)(const char * dst,
+                               const char * component);
+
+        int   (* ipcp_disconnect)(const char * dst,
+                                  const char * component);
+
         int   (* ipcp_reg)(const uint8_t * hash);
 
         int   (* ipcp_unreg)(const uint8_t * hash);

@@ -27,11 +27,7 @@
 #define RIB_MAX_PATH_LEN 256
 
 #define DLR          "/"
-#define BOOT_NAME    "boot"
-#define MEMBERS_NAME "members"
 #define ROUTING_NAME "fsdb"
-#define BOOT_PATH    DLR BOOT_NAME
-#define MEMBERS_PATH DLR MEMBERS_NAME
 #define ROUTING_PATH DLR ROUTING_NAME
 
 #endif /* OUROBOROS_IPCPD_NORMAL_RIB_CONFIG_H */

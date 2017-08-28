@@ -26,13 +26,8 @@
 #include <ouroboros/cacep.h>
 #include <ouroboros/qos.h>
 
-struct conn {
-        struct conn_info conn_info;
-        struct flow_info {
-                int              fd;
-                qosspec_t        qs;
-        } flow_info;
-};
+#include "ae.h"
+#include "neighbors.h"
 
 int         connmgr_init(void);
 
@@ -42,16 +37,27 @@ int         connmgr_start(void);
 
 void        connmgr_stop(void);
 
-struct ae * connmgr_ae_create(struct conn_info info);
+int         connmgr_ae_init(enum ae_id               id,
+                            const struct conn_info * info,
+                            struct nbs *             nbs);
 
-void        connmgr_ae_destroy(struct ae * ae);
+void        connmgr_ae_fini(enum ae_id id);
 
-int         connmgr_alloc(struct ae *   ae,
+int         connmgr_ipcp_connect(const char * dst,
+                                 const char * component);
+
+int         connmgr_ipcp_disconnect(const char * dst,
+                                    const char * component);
+
+int         connmgr_alloc(enum ae_id    id,
                           const char *  dst,
                           qosspec_t *   qs,
                           struct conn * conn);
 
-int         connmgr_wait(struct ae *   ae,
+int         connmgr_dealloc(enum ae_id    id,
+                            struct conn * conn);
+
+int         connmgr_wait(enum ae_id    id,
                          struct conn * conn);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_CONNMGR_H */

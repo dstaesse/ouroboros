@@ -24,7 +24,7 @@
 #define OUROBOROS_IPCPD_NORMAL_POL_ADDR_AUTH_OPS_H
 
 struct pol_addr_auth_ops {
-        int      (* init)(void);
+        int      (* init)(const void * info);
 
         int      (* fini)(void);
 

@@ -1216,6 +1216,8 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 static struct ipcp_ops eth_llc_ops = {
         .ipcp_bootstrap       = eth_llc_ipcp_bootstrap,
         .ipcp_enroll          = NULL,
+        .ipcp_connect         = NULL,
+        .ipcp_disconnect      = NULL,
         .ipcp_reg             = eth_llc_ipcp_reg,
         .ipcp_unreg           = eth_llc_ipcp_unreg,
         .ipcp_query           = eth_llc_ipcp_query,

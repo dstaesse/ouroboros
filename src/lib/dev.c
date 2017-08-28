@@ -857,8 +857,7 @@ int flow_dealloc(int fd)
 
         if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
-                assert(false);
-                return -1;
+                return -EIRMD;
         }
 
         irm_msg__free_unpacked(recv_msg, NULL);

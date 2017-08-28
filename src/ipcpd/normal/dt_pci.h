@@ -30,8 +30,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define DT_PROTO "dt"
-
 /* Abstract syntax */
 enum dtp_fields {
         DTP_DST = 0,   /* DST ADDRESS */
@@ -54,7 +52,9 @@ struct dt_pci {
         uint32_t  fd;
 };
 
-int   dt_pci_init(void);
+int   dt_pci_init(uint8_t addr_size,
+                  uint8_t fd_size,
+                  bool    has_ttl);
 
 void  dt_pci_fini(void);
 

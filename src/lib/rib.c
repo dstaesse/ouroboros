@@ -373,7 +373,8 @@ static void destroy_rnode(struct rnode * node)
                 branch_hash(node->parent);
         }
 
-        rnode_throw_event(node, RO_DELETE);
+        if (node->parent != NULL)
+                rnode_throw_event(node->parent, RO_DELETE);
 
         list_for_each_safe(p, h, &node->subs) {
                 struct rn_sub * s = list_entry(p, struct rn_sub, next);

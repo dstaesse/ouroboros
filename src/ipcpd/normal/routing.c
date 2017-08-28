@@ -29,36 +29,35 @@
 #include "routing.h"
 #include "pol/link_state.h"
 
-struct {
-        struct pol_routing_ops * ops;
-} routing;
+
+struct pol_routing_ops * r_ops;
 
 int routing_init(enum pol_routing pr,
                  struct nbs *     nbs)
 {
         switch (pr) {
         case LINK_STATE:
-                routing.ops = &link_state_ops;
+                r_ops = &link_state_ops;
                 break;
         default:
                 log_err("Unknown routing type.");
                 return -1;
         }
 
-        return routing.ops->init(nbs);
+        return r_ops->init(nbs);
 }
 
 struct routing_i * routing_i_create(struct pff * pff)
 {
-        return routing.ops->routing_i_create(pff);
+        return r_ops->routing_i_create(pff);
 }
 
 void routing_i_destroy(struct routing_i * instance)
 {
-        return routing.ops->routing_i_destroy(instance);
+        return r_ops->routing_i_destroy(instance);
 }
 
 void routing_fini(void)
 {
-        routing.ops->fini();
+        r_ops->fini();
 }

@@ -35,10 +35,11 @@
 #include <ouroboros/rib.h>
 
 #include "ae.h"
-#include "gam.h"
+#include "connmgr.h"
+#include "ipcp.h"
+#include "neighbors.h"
 #include "ribconfig.h"
 #include "ribmgr.h"
-#include "ipcp.h"
 
 #include <stdlib.h>
 #include <pthread.h>
@@ -46,10 +47,12 @@
 #include <errno.h>
 #include <assert.h>
 
+#define MGMT_AE          "Management"
 #define RIB_SYNC_TIMEOUT 1
 
 enum ribmgr_state {
         RIBMGR_NULL = 0,
+        RIBMGR_INIT,
         RIBMGR_OPERATIONAL,
         RIBMGR_SHUTDOWN
 };
@@ -60,7 +63,6 @@ struct {
         pthread_t          reader;
         pthread_t          sync;
 
-        struct gam *       gam;
         struct nbs *       nbs;
         struct ae *        ae;
 
@@ -300,9 +302,8 @@ static void * sync_rib(void *o)
                         rib_path_append(path, children[--ch]);
                         free(children[ch]);
 
-                        /* Only sync fsdb and members */
-                        if (strcmp(path, MEMBERS_PATH) == 0
-                            || strcmp(path, ROUTING_PATH) == 0)
+                        /* Sync fsdb */
+                        if (strcmp(path, ROUTING_PATH) == 0)
                                 ribmgr_sync(path);
                 }
 
@@ -314,7 +315,6 @@ static void * sync_rib(void *o)
 
 int ribmgr_init(void)
 {
-        enum pol_gam     pg;
         struct conn_info info;
 
         memset(&info, 0, sizeof(info));
@@ -323,82 +323,90 @@ int ribmgr_init(void)
         strcpy(info.protocol, CDAP_PROTO);
         info.pref_version = 1;
         info.pref_syntax = PROTO_GPB;
-        /* NOTE: Use the same name as the DT AE of this IPCP */
-        info.addr = ipcpi.dt_addr;
+        info.addr = 0;
 
         ribmgr.nbs = nbs_create();
         if (ribmgr.nbs == NULL) {
                 log_err("Failed to create neighbors.");
-                return -1;
+                goto fail_nbs_create;
         }
 
-        ribmgr.ae = connmgr_ae_create(info);
-        if (ribmgr.ae == NULL) {
-                log_err("Failed to create AE struct.");
-                nbs_destroy(ribmgr.nbs);
-                return -1;
-        }
-
-        if (rib_read(BOOT_PATH "/rm/gam/type", &pg, sizeof(pg))
-            != sizeof(pg)) {
-                log_err("Failed to read policy for ribmgr gam.");
-                connmgr_ae_destroy(ribmgr.ae);
-                nbs_destroy(ribmgr.nbs);
-                return -1;
-        }
+        if (connmgr_ae_init(AEID_MGMT, &info, ribmgr.nbs)) {
+                log_err("Failed to register with connmgr.");
+                goto fail_connmgr_ae_init;
+        };
 
         ribmgr.cdap = cdap_create();
         if (ribmgr.cdap == NULL) {
                 log_err("Failed to create CDAP instance.");
-                connmgr_ae_destroy(ribmgr.ae);
-                nbs_destroy(ribmgr.nbs);
-                return -1;
+                goto fail_cdap_create;
         }
 
         ribmgr.nb_notifier.notify_call = ribmgr_neighbor_event;
         if (nbs_reg_notifier(ribmgr.nbs, &ribmgr.nb_notifier)) {
                 log_err("Failed to register notifier.");
-                cdap_destroy(ribmgr.cdap);
-                connmgr_ae_destroy(ribmgr.ae);
-                nbs_destroy(ribmgr.nbs);
-                return -1;
+                goto fail_nbs_reg_notifier;
         }
 
-        ribmgr.gam = gam_create(pg, ribmgr.nbs, ribmgr.ae);
-        if (ribmgr.gam == NULL) {
-                log_err("Failed to create gam.");
-                nbs_unreg_notifier(ribmgr.nbs, &ribmgr.nb_notifier);
-                cdap_destroy(ribmgr.cdap);
-                connmgr_ae_destroy(ribmgr.ae);
-                nbs_destroy(ribmgr.nbs);
-                return -1;
+        if (pthread_rwlock_init(&ribmgr.state_lock, NULL)) {
+                log_err("Failed to init rwlock.");
+                goto fail_rwlock_init;
         }
 
-        pthread_rwlock_init(&ribmgr.state_lock, NULL);
-
-        ribmgr.state = RIBMGR_OPERATIONAL;
-
-        pthread_create(&ribmgr.sync, NULL, sync_rib, NULL);
-
-        pthread_create(&ribmgr.reader, NULL, reader, NULL);
+        ribmgr.state = RIBMGR_INIT;
 
         return 0;
+
+ fail_rwlock_init:
+        nbs_unreg_notifier(ribmgr.nbs, &ribmgr.nb_notifier);
+ fail_nbs_reg_notifier:
+        cdap_destroy(ribmgr.cdap);
+ fail_cdap_create:
+        connmgr_ae_fini(AEID_MGMT);
+ fail_connmgr_ae_init:
+        nbs_destroy(ribmgr.nbs);
+ fail_nbs_create:
+        return -1;
 }
 
 void ribmgr_fini(void)
 {
-        ribmgr_set_state(RIBMGR_SHUTDOWN);
-
-        pthread_cancel(ribmgr.reader);
-
-        pthread_join(ribmgr.reader, NULL);
-        pthread_join(ribmgr.sync, NULL);
+        if (ribmgr_get_state() == RIBMGR_SHUTDOWN) {
+                pthread_join(ribmgr.reader, NULL);
+                pthread_join(ribmgr.sync, NULL);
+        }
 
         nbs_unreg_notifier(ribmgr.nbs, &ribmgr.nb_notifier);
         cdap_destroy(ribmgr.cdap);
-        gam_destroy(ribmgr.gam);
-        connmgr_ae_destroy(ribmgr.ae);
         nbs_destroy(ribmgr.nbs);
+
+        connmgr_ae_fini(AEID_MGMT);
+}
+
+int ribmgr_start(void)
+{
+        ribmgr_set_state(RIBMGR_OPERATIONAL);
+
+        if (pthread_create(&ribmgr.sync, NULL, sync_rib, NULL)) {
+                ribmgr_set_state(RIBMGR_NULL);
+                return -1;
+        }
+
+        if (pthread_create(&ribmgr.reader, NULL, reader, NULL)) {
+                ribmgr_set_state(RIBMGR_SHUTDOWN);
+                pthread_cancel(ribmgr.reader);
+                return -1;
+        }
+
+        return 0;
+}
+
+void ribmgr_stop(void)
+{
+        if (ribmgr_get_state() == RIBMGR_OPERATIONAL) {
+                ribmgr_set_state(RIBMGR_SHUTDOWN);
+                pthread_cancel(ribmgr.reader);
+        }
 }
 
 int ribmgr_disseminate(char *           path,

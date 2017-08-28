@@ -28,8 +28,11 @@
 
 #include <sys/types.h>
 
-/* Name binding options */
+/* Normal IPCP components. */
+#define DT_AE   "Data Transfer"
+#define MGMT_AE "Management"
 
+/* Name binding options. */
 #define BIND_AP_AUTO   0x01
 #define BIND_AP_UNIQUE 0x02
 
@@ -49,6 +52,14 @@ int     irm_enroll_ipcp(pid_t        api,
 
 int     irm_bootstrap_ipcp(pid_t                      api,
                            const struct ipcp_config * conf);
+
+int     irm_connect_ipcp(pid_t        api,
+                         const char * component,
+                         const char * dst);
+
+int     irm_disconnect_ipcp(pid_t        api,
+                            const char * component,
+                            const char * dst);
 
 int     irm_bind_ap(const char * ap,
                     const char * name,

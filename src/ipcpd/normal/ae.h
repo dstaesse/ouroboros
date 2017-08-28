@@ -23,8 +23,26 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_AE_H
 #define OUROBOROS_IPCPD_NORMAL_AE_H
 
-#define MGMT_AE   "Management"
-#define DT_AE     "Data transfer"
-#define ENROLL_AE "Enrollment"
+#include <ouroboros/cacep.h>
+
+#include "dt.h"
+
+#define DST_MAX_STRLEN 64
+
+enum ae_id {
+        AEID_DT = 0,
+        AEID_ENROLL,
+        AEID_MGMT,
+        AEID_MAX
+};
+
+struct conn {
+        struct conn_info conn_info;
+        struct {
+                char      dst[DST_MAX_STRLEN + 1];
+                int       fd;
+                qosspec_t qs;
+        } flow_info;
+};
 
 #endif /* OUROBOROS_IPCPD_NORMAL_AE_H */

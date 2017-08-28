@@ -35,6 +35,12 @@ int do_bootstrap_ipcp(int     argc,
 int do_enroll_ipcp(int     argc,
                    char ** argv);
 
+int do_connect_ipcp(int     argc,
+                    char ** argv);
+
+int do_disconnect_ipcp(int     argc,
+                       char ** argv);
+
 int bind_cmd(int     argc,
              char ** argv);
 

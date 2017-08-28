@@ -27,24 +27,22 @@
 #include <unistd.h>
 #include <stdbool.h>
 
+#define DIF_NAME_SIZE 256
+
 /*
  * NOTE: the IRMd uses this order to select an IPCP
- * for flow allocation
+ * for flow allocation.
  */
 enum ipcp_type {
         IPCP_LOCAL = 0,
+        IPCP_NORMAL,
         IPCP_SHIM_ETH_LLC,
-        IPCP_SHIM_UDP,
-        IPCP_NORMAL
+        IPCP_SHIM_UDP
 };
 
 /* Normal IPCP policies */
 enum pol_addr_auth {
         FLAT_RANDOM = 0
-};
-
-enum pol_gam {
-        COMPLETE = 0
 };
 
 enum pol_routing {
@@ -57,8 +55,6 @@ enum pol_dir_hash {
         DIR_HASH_SHA3_384,
         DIR_HASH_SHA3_512
 };
-
-#define DIF_NAME_SIZE 256
 
 /* Info reported back to the IRMd about the DIF on enrollment */
 struct dif_info {
@@ -78,8 +74,6 @@ struct ipcp_config {
         bool               has_ttl;
 
         enum pol_addr_auth addr_auth_type;
-        enum pol_gam       dt_gam_type;
-        enum pol_gam       rm_gam_type;
         enum pol_routing   routing_type;
 
         /* Shim UDP */

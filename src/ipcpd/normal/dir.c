@@ -46,80 +46,21 @@
 
 struct dht * dht;
 
-static uint64_t find_peer_addr(void)
+int dir_init(void)
 {
-        ssize_t  i;
-        char ** members;
-        ssize_t n_members;
-        size_t  reset;
-        char    path[RIB_MAX_PATH_LEN + 1];
-
-        strcpy(path, MEMBERS_PATH);
-
-        reset = strlen(path);
-
-        n_members = rib_children(path, &members);
-        if (n_members == 1) {
-                freepp(ssize_t, members, n_members);
-                return 0;
-        }
-
-        for (i = 0; i < n_members; ++i) {
-                uint64_t addr;
-                rib_path_append(path, members[i]);
-                if (rib_read(path, &addr, sizeof(addr)) != sizeof(addr)) {
-                        log_err("Failed to read address from RIB.");
-                        freepp(ssize_t, members, n_members);
-                        return ipcpi.dt_addr;
-                }
-
-                if (addr != ipcpi.dt_addr) {
-                        freepp(ssize_t, members, n_members);
-                        return addr;
-                }
-
-                path[reset] = '\0';
-        }
-
-        freepp(ssize_t, members, n_members);
-
-        return 0;
-}
-
-int dir_init()
-{
-        uint64_t addr;
-
         dht = dht_create(ipcpi.dt_addr);
         if (dht == NULL)
                 return -ENOMEM;
 
-        addr = find_peer_addr();
-        if (addr == ipcpi.dt_addr) {
-                log_err("Failed to get peer address.");
-                dht_destroy(dht);
-                return -EPERM;
-        }
+        return 0;
+}
 
-        if (addr != 0) {
-                size_t retr = 0;
-                log_dbg("Enrolling directory with peer %" PRIu64 ".", addr);
-                /* NOTE: we could try other members if dht_enroll times out. */
-                while (dht_enroll(dht, addr)) {
-                        if (retr++ == ENROL_RETR) {
-                                dht_destroy(dht);
-                                return -EPERM;
-                        }
+void dir_fini(void)
+{
+        dht_destroy(dht);
+}
 
-                        log_dbg("Directory enrollment failed, retrying...");
-                        sleep(ENROL_INTV);
-                }
-
-                log_dbg("Directory enrolled.");
-
-                return 0;
-        }
-
+int dir_bootstrap(void) {
         log_dbg("Bootstrapping directory.");
 
         /* TODO: get parameters for bootstrap from IRM tool. */
@@ -133,9 +74,20 @@ int dir_init()
         return 0;
 }
 
-void dir_fini(void)
-{
-        dht_destroy(dht);
+int dir_enroll(uint64_t addr) {
+        size_t retr = 0;
+        log_dbg("Enrolling directory with peer %" PRIu64 ".", addr);
+        while (dht_enroll(dht, addr)) {
+                if (retr++ == ENROL_RETR)
+                        return -EPERM;
+
+                log_dbg("Directory enrollment failed, retrying...");
+                sleep(ENROL_INTV);
+        }
+
+        log_dbg("Directory enrolled.");
+
+        return 0;
 }
 
 int dir_reg(const uint8_t * hash)

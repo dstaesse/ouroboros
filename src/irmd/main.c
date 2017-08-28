@@ -555,6 +555,76 @@ static int enroll_ipcp(pid_t  api,
         return 0;
 }
 
+static int connect_ipcp(pid_t        api,
+                        const char * dst,
+                        const char * component)
+{
+        struct ipcp_entry * entry = NULL;
+
+        pthread_rwlock_rdlock(&irmd.reg_lock);
+
+        entry = get_ipcp_entry_by_api(api);
+        if (entry == NULL) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("No such IPCP.");
+                return -EIPCP;
+        }
+
+        if (entry->type != IPCP_NORMAL) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("Cannot establish connections for this IPCP type.");
+                return -EIPCP;
+        }
+
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
+        log_dbg("Connecting %s to %s.", component, dst);
+
+        if (ipcp_connect(api, dst, component)) {
+                log_err("Could not connect IPCP.");
+                return -EPERM;
+        }
+
+        log_info("Established %s connection between IPCP %d and %s.",
+                 component, api, dst);
+
+        return 0;
+}
+
+static int disconnect_ipcp(pid_t        api,
+                           const char * dst,
+                           const char * component)
+{
+        struct ipcp_entry * entry = NULL;
+
+        pthread_rwlock_rdlock(&irmd.reg_lock);
+
+        entry = get_ipcp_entry_by_api(api);
+        if (entry == NULL) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("No such IPCP.");
+                return -EIPCP;
+        }
+
+        if (entry->type != IPCP_NORMAL) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("Cannot tear down connections for this IPCP type.");
+                return -EIPCP;
+        }
+
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
+        if (ipcp_disconnect(api, dst, component)) {
+                log_err("Could not disconnect IPCP.");
+                return -EPERM;
+        }
+
+        log_info("%s connection between IPCP %d and %s torn down.",
+                 component, api, dst);
+
+        return 0;
+}
+
 static int bind_ap(char *   ap,
                    char *   name,
                    uint16_t flags,
@@ -1875,6 +1945,18 @@ void * mainloop(void * o)
                         ret_msg.has_result = true;
                         ret_msg.result = enroll_ipcp(msg->api,
                                                      msg->dif_name[0]);
+                        break;
+                case IRM_MSG_CODE__IRM_CONNECT_IPCP:
+                        ret_msg.has_result = true;
+                        ret_msg.result = connect_ipcp(msg->api,
+                                                      msg->dst_name,
+                                                      msg->comp_name);
+                        break;
+                case IRM_MSG_CODE__IRM_DISCONNECT_IPCP:
+                        ret_msg.has_result = true;
+                        ret_msg.result = disconnect_ipcp(msg->api,
+                                                         msg->dst_name,
+                                                         msg->comp_name);
                         break;
                 case IRM_MSG_CODE__IRM_BIND_AP:
                         ret_msg.has_result = true;

@@ -323,7 +323,9 @@ static int ipcp_local_flow_dealloc(int fd)
 
 static struct ipcp_ops local_ops = {
         .ipcp_bootstrap       = ipcp_local_bootstrap,
-        .ipcp_enroll          = NULL,                       /* shim */
+        .ipcp_enroll          = NULL,
+        .ipcp_connect         = NULL,
+        .ipcp_disconnect      = NULL,
         .ipcp_reg             = ipcp_local_reg,
         .ipcp_unreg           = ipcp_local_unreg,
         .ipcp_query           = ipcp_local_query,

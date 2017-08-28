@@ -281,6 +281,67 @@ int ipcp_enroll(pid_t             api,
         return 0;
 }
 
+int ipcp_connect(pid_t        api,
+                 const char * dst,
+                 const char * component)
+{
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int          ret      = -1;
+
+        msg.code      = IPCP_MSG_CODE__IPCP_CONNECT;
+        msg.dst_name  = (char *) dst;
+        msg.comp_name = (char *) component;
+        msg.has_api   = true;
+        msg.api       = api;
+
+        recv_msg = send_recv_ipcp_msg(api, &msg);
+        if (recv_msg == NULL) {
+                log_dbg("bad msg");
+                return -EIPCP;
+        }
+
+        if (recv_msg->has_result == false) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                log_dbg("no result.");
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int ipcp_disconnect(pid_t        api,
+                    const char * dst,
+                    const char * component)
+{
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int          ret      = -1;
+
+        msg.code      = IPCP_MSG_CODE__IPCP_DISCONNECT;
+        msg.dst_name  = (char *) dst;
+        msg.comp_name = (char *) component;
+        msg.has_api   = true;
+        msg.api       = api;
+
+        recv_msg = send_recv_ipcp_msg(api, &msg);
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        if (recv_msg->has_result == false) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
 int ipcp_reg(pid_t           api,
              const uint8_t * hash,
              size_t          len)
