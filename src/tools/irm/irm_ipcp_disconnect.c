@@ -35,10 +35,10 @@
 static void usage(void)
 {
         printf("Usage: irm ipcp disconnect\n"
-               "                name <ipcp name>\n"
-               "                comp <COMPONENT>\n"
-               "                dst  <name of destination IPCP>\n"
-               "where COMPONENT = {" DT " " MGMT "},\n\n");
+               "                name      <ipcp name>\n"
+               "                component [COMPONENT]\n"
+               "                dst       <name of destination IPCP>\n\n"
+               "where COMPONENT = {" DT " " MGMT "}\n");
 }
 
 int do_disconnect_ipcp(int     argc,
@@ -51,11 +51,11 @@ int do_disconnect_ipcp(int     argc,
         ssize_t len       = 0;
 
         while (argc > 0) {
-                if (strcmp(*argv, "name") == 0) {
+                if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                 } else if (matches(*argv, "dst") == 0) {
                         dst_name = *(argv + 1);
-                } else if (matches(*argv, "comp") == 0) {
+                } else if (matches(*argv, "component") == 0) {
                         comp_name = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
