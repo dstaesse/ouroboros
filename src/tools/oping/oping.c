@@ -63,10 +63,10 @@ struct c {
 } client;
 
 struct s {
-        struct timespec   times[OPING_MAX_FLOWS];
-        flow_set_t *      flows;
-        fqueue_t *        fq;
-        pthread_mutex_t   lock;
+        struct timespec times[OPING_MAX_FLOWS];
+        fset_t *        flows;
+        fqueue_t *      fq;
+        pthread_mutex_t lock;
 
         pthread_t cleaner_pt;
         pthread_t accept_pt;

@@ -7,6 +7,18 @@ set(MAN_NAMES
   flow_dealloc.3
   flow_read.3
   flow_write.3
+  fqueue.3
+  fqueue_create.3
+  fqueue_destroy.3
+  fqueue_next.3
+  fevent.3
+  fset.3
+  fset_create.3
+  fset_destroy.3
+  fset_zero.3
+  fset_add.3
+  fset_del.3
+  fset_has.3
   )
 
 macro(INSTALL_MAN __mans)

@@ -50,11 +50,11 @@ void * cleaner_thread(void * o)
                 clock_gettime(CLOCK_REALTIME, &now);
                 pthread_mutex_lock(&server.lock);
                 for (i = 0; i < OPERF_MAX_FLOWS; ++i)
-                        if (flow_set_has(server.flows, i) &&
+                        if (fset_has(server.flows, i) &&
                             ts_diff_ms(&server.times[i], &now)
                             > server.timeout) {
                                 printf("Flow %d timed out.\n", i);
-                                flow_set_del(server.flows, i);
+                                fset_del(server.flows, i);
                                 flow_dealloc(i);
                         }
 
@@ -72,7 +72,7 @@ void * server_thread(void *o)
 
         (void) o;
 
-        while (flow_event_wait(server.flows, server.fq, &timeout))
+        while (fevent(server.flows, server.fq, &timeout))
                 while ((fd = fqueue_next(server.fq)) >= 0) {
                         msg_len = flow_read(fd, server.buffer, OPERF_BUF_SIZE);
                         if (msg_len < 0)
@@ -115,7 +115,7 @@ void * accept_thread(void * o)
                 clock_gettime(CLOCK_REALTIME, &now);
 
                 pthread_mutex_lock(&server.lock);
-                flow_set_add(server.flows, fd);
+                fset_add(server.flows, fd);
                 server.times[fd] = now;
                 pthread_mutex_unlock(&server.lock);
         }
@@ -139,13 +139,13 @@ int server_main(void)
                 return -1;
         }
 
-        server.flows = flow_set_create();
+        server.flows = fset_create();
         if (server.flows == NULL)
                 return 0;
 
         server.fq = fqueue_create();
         if (server.fq == NULL) {
-                flow_set_destroy(server.flows);
+                fset_destroy(server.flows);
                 return -1;
         }
 
@@ -158,7 +158,7 @@ int server_main(void)
         pthread_cancel(server.server_pt);
         pthread_cancel(server.cleaner_pt);
 
-        flow_set_destroy(server.flows);
+        fset_destroy(server.flows);
         fqueue_destroy(server.fq);
 
         pthread_join(server.server_pt, NULL);

@@ -31,7 +31,7 @@ to support Inter-Process Communication (IPC). Such a collection of
 allocated system and network resources is referred to as a flow. A
 flow has a certain Quality of Service (QoS) associated with it.
 
-The \fB flow_accept\fR() function blocks the calling thread waiting
+The \fBflow_accept\fR() function blocks the calling thread waiting
 for an incoming request to allocate a flow. If \fBqosspec_t * \fIqs\fR
 is not NULL, the value of \fIqs\fR will be updated to reflect the
 actual QoS provided by the IPC facility for the accepted flow. Which

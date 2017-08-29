@@ -79,7 +79,7 @@ struct {
         struct sockaddr_in s_saddr;
         int                s_fd;
 
-        flow_set_t *       np1_flows;
+        fset_t *           np1_flows;
         fqueue_t *         fq;
         fd_set             flow_fd_s;
         /* bidir mappings of (n - 1) file descriptor to (n) flow descriptor */
@@ -110,20 +110,20 @@ static int udp_data_init(void)
 
         FD_ZERO(&udp_data.flow_fd_s);
 
-        udp_data.np1_flows = flow_set_create();
+        udp_data.np1_flows = fset_create();
         if (udp_data.np1_flows == NULL)
                 return -ENOMEM;
 
         udp_data.fq = fqueue_create();
         if (udp_data.fq == NULL) {
-                flow_set_destroy(udp_data.np1_flows);
+                fset_destroy(udp_data.np1_flows);
                 return -ENOMEM;
         }
 
         udp_data.shim_data = shim_data_create();
         if (udp_data.shim_data == NULL) {
                 fqueue_destroy(udp_data.fq);
-                flow_set_destroy(udp_data.np1_flows);
+                fset_destroy(udp_data.np1_flows);
                 return -ENOMEM;
         }
 
@@ -136,7 +136,7 @@ static int udp_data_init(void)
 
 static void udp_data_fini(void)
 {
-        flow_set_destroy(udp_data.np1_flows);
+        fset_destroy(udp_data.np1_flows);
         fqueue_destroy(udp_data.fq);
 
         shim_data_destroy(udp_data.shim_data);
@@ -518,7 +518,7 @@ static void * ipcp_udp_sdu_loop(void * o)
         (void) o;
 
         while (ipcp_get_state() == IPCP_OPERATIONAL) {
-                flow_event_wait(udp_data.np1_flows, udp_data.fq, &timeout);
+                fevent(udp_data.np1_flows, udp_data.fq, &timeout);
                 while ((fd = fqueue_next(udp_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_err("Bad read from fd %d.", fd);
@@ -962,7 +962,7 @@ static int ipcp_udp_flow_alloc(int             fd,
         udp_data.fd_to_uf[fd].skfd = skfd;
         udp_data.uf_to_fd[skfd]    = fd;
 
-        flow_set_add(udp_data.np1_flows, fd);
+        fset_add(udp_data.np1_flows, fd);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
@@ -1038,7 +1038,7 @@ static int ipcp_udp_flow_alloc_resp(int fd,
 
         set_fd(skfd);
 
-        flow_set_add(udp_data.np1_flows, fd);
+        fset_add(udp_data.np1_flows, fd);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
@@ -1064,7 +1064,7 @@ static int ipcp_udp_flow_dealloc(int fd)
 
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
-        flow_set_del(udp_data.np1_flows, fd);
+        fset_del(udp_data.np1_flows, fd);
 
         skfd = udp_data.fd_to_uf[fd].skfd;
 

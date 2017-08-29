@@ -52,7 +52,7 @@ struct fd_el {
 };
 
 struct cdap {
-        flow_set_t *     set;
+        fset_t *         set;
         fqueue_t *       fq;
 
         bool             proc;
@@ -304,7 +304,7 @@ static void * sdu_reader(void * o)
         ssize_t len;
         buffer_t data;
 
-        while (flow_event_wait(instance->set, instance->fq, NULL)) {
+        while (fevent(instance->set, instance->fq, NULL)) {
                 int fd;
                 set_proc(instance, true);
                 fd = fqueue_next(instance->fq);
@@ -440,7 +440,7 @@ struct cdap * cdap_create()
         if (instance->ids == NULL)
                 goto fail_bmp_create;
 
-        instance->set = flow_set_create();
+        instance->set = fset_create();
         if (instance->set == NULL)
                 goto fail_set_create;
 
@@ -463,7 +463,7 @@ struct cdap * cdap_create()
  fail_pthread_create:
         fqueue_destroy(instance->fq);
  fail_fqueue_create:
-        flow_set_destroy(instance->set);
+        fset_destroy(instance->set);
  fail_set_create:
         bmp_destroy(instance->ids);
  fail_bmp_create:
@@ -499,7 +499,7 @@ int cdap_destroy(struct cdap * instance)
 
         fqueue_destroy(instance->fq);
 
-        flow_set_destroy(instance->set);
+        fset_destroy(instance->set);
 
         pthread_cond_destroy(&instance->cond);
         pthread_mutex_destroy(&instance->mtx);
@@ -553,7 +553,7 @@ int cdap_add_flow(struct cdap * instance,
 
         pthread_rwlock_wrlock(&instance->flows_lock);
 
-        if (flow_set_add(instance->set, fd)) {
+        if (fset_add(instance->set, fd)) {
                 pthread_rwlock_unlock(&instance->flows_lock);
                 free(e);
                 return -1;
@@ -579,7 +579,7 @@ int cdap_del_flow(struct cdap * instance,
 
         pthread_rwlock_wrlock(&instance->flows_lock);
 
-        flow_set_del(instance->set, fd);
+        fset_del(instance->set, fd);
 
         list_for_each_safe(p, h, &instance->flows) {
                 struct fd_el * e = list_entry(p, struct fd_el, next);

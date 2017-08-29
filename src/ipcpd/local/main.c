@@ -51,7 +51,7 @@ struct {
         struct shim_data * shim_data;
 
         int                in_out[SYS_MAX_FLOWS];
-        flow_set_t *       flows;
+        fset_t *           flows;
         fqueue_t *         fq;
 
         pthread_rwlock_t   lock;
@@ -64,20 +64,20 @@ static int local_data_init(void)
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 local_data.in_out[i] = -1;
 
-        local_data.flows = flow_set_create();
+        local_data.flows = fset_create();
         if (local_data.flows == NULL)
                 return -ENFILE;
 
         local_data.fq = fqueue_create();
         if (local_data.fq == NULL) {
-                flow_set_destroy(local_data.flows);
+                fset_destroy(local_data.flows);
                 return -ENOMEM;
         }
 
         local_data.shim_data = shim_data_create();
         if (local_data.shim_data == NULL) {
                 fqueue_destroy(local_data.fq);
-                flow_set_destroy(local_data.flows);
+                fset_destroy(local_data.flows);
                 return -ENOMEM;
         }
 
@@ -88,7 +88,7 @@ static int local_data_init(void)
 
 static void local_data_fini(void){
         shim_data_destroy(local_data.shim_data);
-        flow_set_destroy(local_data.flows);
+        fset_destroy(local_data.flows);
         fqueue_destroy(local_data.fq);
         pthread_rwlock_destroy(&local_data.lock);
 }
@@ -106,7 +106,7 @@ static void * ipcp_local_sdu_loop(void * o)
                 if (ipcp_get_state() != IPCP_OPERATIONAL)
                         return (void *) 1; /* -ENOTENROLLED */
 
-                flow_event_wait(local_data.flows, local_data.fq, &timeout);
+                fevent(local_data.flows, local_data.fq, &timeout);
 
                 while ((fd = fqueue_next(local_data.fq)) >= 0) {
                         pthread_rwlock_rdlock(&local_data.lock);
@@ -236,7 +236,7 @@ static int ipcp_local_flow_alloc(int             fd,
 
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
-        flow_set_add(local_data.flows, fd);
+        fset_add(local_data.flows, fd);
 
         log_info("Pending local allocation request on fd %d.", fd);
 
@@ -290,7 +290,7 @@ static int ipcp_local_flow_alloc_resp(int fd,
 
         pthread_rwlock_unlock(&local_data.lock);
 
-        flow_set_add(local_data.flows, fd);
+        fset_add(local_data.flows, fd);
 
         if ((ret = ipcp_flow_alloc_reply(out_fd, response)) < 0)
                 return -1;
@@ -308,7 +308,7 @@ static int ipcp_local_flow_dealloc(int fd)
 
         pthread_rwlock_wrlock(&local_data.lock);
 
-        flow_set_del(local_data.flows, fd);
+        fset_del(local_data.flows, fd);
 
         local_data.in_out[fd] = -1;
 
