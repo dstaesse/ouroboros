@@ -399,6 +399,8 @@ int main(int    argc,
                 stop_components();
         }
 
+        finalize_components();
+
         irm_unbind_api(getpid(), ipcpi.name);
 
         ipcp_fini();
