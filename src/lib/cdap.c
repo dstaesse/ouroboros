@@ -555,6 +555,7 @@ int cdap_add_flow(struct cdap * instance,
 
         if (flow_set_add(instance->set, fd)) {
                 pthread_rwlock_unlock(&instance->flows_lock);
+                free(e);
                 return -1;
         }
 

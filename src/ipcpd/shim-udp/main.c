@@ -693,10 +693,8 @@ static uint32_t ddns_resolve(char *   name,
         char * addr_str = "Address:";
         uint32_t ip_addr = 0;
 
-        if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN) == NULL) {
+        if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN) == NULL)
                 return 0;
-        }
-
 
         if (pipe(pipe_fd)) {
                 log_err("Failed to create pipe.");
@@ -743,7 +741,7 @@ static uint32_t ddns_resolve(char *   name,
                 substr = strtok(NULL, "\n");
         }
 
-        if (strstr(substr2, addr_str) == NULL) {
+        if (substr2 == NULL || strstr(substr2, addr_str) == NULL) {
                 log_err("Failed to resolve DNS address.");
                 return 0;
         }

@@ -333,7 +333,6 @@ static int check_ap_path(char ** ap_name)
         strcpy(tstop--, *ap_name);
 
         while (pstop < path_end) {
-                ret = 0;
                 pstart = pstop;
                 if (*pstart != '/') {
                         free(tmp);

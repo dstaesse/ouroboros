@@ -166,11 +166,13 @@ static int eth_llc_data_init(void)
         int                ret = -ENOMEM;
         pthread_condattr_t cattr;
 
-        eth_llc_data.fd_to_ef = malloc(sizeof(struct ef) * SYS_MAX_FLOWS);
+        eth_llc_data.fd_to_ef =
+                malloc(sizeof(*eth_llc_data.fd_to_ef) * SYS_MAX_FLOWS);
         if (eth_llc_data.fd_to_ef == NULL)
                 goto fail_fd_to_ef;
 
-        eth_llc_data.ef_to_fd = malloc(sizeof(struct ef) * MAX_SAPS);
+        eth_llc_data.ef_to_fd =
+                malloc(sizeof(*eth_llc_data.ef_to_fd) * MAX_SAPS);
         if (eth_llc_data.ef_to_fd == NULL)
                 goto fail_ef_to_fd;
 
