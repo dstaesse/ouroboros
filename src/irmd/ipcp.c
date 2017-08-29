@@ -296,14 +296,11 @@ int ipcp_connect(pid_t        api,
         msg.api       = api;
 
         recv_msg = send_recv_ipcp_msg(api, &msg);
-        if (recv_msg == NULL) {
-                log_dbg("bad msg");
+        if (recv_msg == NULL)
                 return -EIPCP;
-        }
 
         if (recv_msg->has_result == false) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
-                log_dbg("no result.");
                 return -EIPCP;
         }
 
