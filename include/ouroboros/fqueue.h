@@ -32,35 +32,35 @@ struct flow_set;
 
 struct fqueue;
 
-typedef struct flow_set flow_set_t;
+typedef struct flow_set fset_t;
 typedef struct fqueue fqueue_t;
 
 __BEGIN_DECLS
 
-flow_set_t * flow_set_create(void);
+fset_t *   fset_create(void);
 
-void         flow_set_destroy(flow_set_t * set);
+void       fset_destroy(fset_t * set);
 
-fqueue_t *   fqueue_create(void);
+fqueue_t * fqueue_create(void);
 
-void         fqueue_destroy(struct fqueue * fq);
+void       fqueue_destroy(struct fqueue * fq);
 
-void         flow_set_zero(flow_set_t * set);
+void       fset_zero(fset_t * set);
 
-int          flow_set_add(flow_set_t * set,
-                          int          fd);
+int        fset_add(fset_t * set,
+                    int      fd);
 
-bool         flow_set_has(const flow_set_t * set,
-                          int                fd);
+bool       fset_has(const fset_t * set,
+                    int            fd);
 
-void         flow_set_del(flow_set_t * set,
-                          int          fd);
+void       fset_del(fset_t * set,
+                    int      fd);
 
-int          fqueue_next(fqueue_t * fq);
+int        fqueue_next(fqueue_t * fq);
 
-int          flow_event_wait(flow_set_t *            set,
-                             fqueue_t *              fq,
-                             const struct timespec * timeout);
+int        fevent(fset_t *                set,
+                  fqueue_t *              fq,
+                  const struct timespec * timeo);
 
 __END_DECLS
 

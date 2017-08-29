@@ -926,7 +926,7 @@ int flow_get_timeout(int               fd,
 {
         int ret = 0;
 
-        if (fd < 0 || fd >= AP_MAX_FLOWS || timeo == NULL)
+        if (fd < 0 || fd > AP_MAX_FLOWS || timeo == NULL)
                 return -EINVAL;
 
         pthread_rwlock_wrlock(&ai.lock);
@@ -949,7 +949,7 @@ int flow_get_timeout(int               fd,
 int flow_set_timeout(int                     fd,
                      const struct timespec * timeo)
 {
-        if (fd < 0 || fd >= AP_MAX_FLOWS)
+        if (fd < 0 || fd > AP_MAX_FLOWS)
                 return -EINVAL;
 
         pthread_rwlock_wrlock(&ai.lock);
@@ -974,7 +974,7 @@ int flow_set_timeout(int                     fd,
 int flow_get_qosspec(int         fd,
                      qosspec_t * qs)
 {
-        if (fd < 0 || fd >= AP_MAX_FLOWS || qs == NULL)
+        if (fd < 0 || fd > AP_MAX_FLOWS || qs == NULL)
                 return -EINVAL;
 
         pthread_rwlock_wrlock(&ai.lock);
@@ -1000,7 +1000,7 @@ ssize_t flow_write(int          fd,
         if (buf == NULL)
                 return 0;
 
-        if (fd < 0 || fd >= AP_MAX_FLOWS)
+        if (fd < 0 || fd > AP_MAX_FLOWS)
                 return -EBADF;
 
         pthread_rwlock_rdlock(&ai.lock);
@@ -1067,7 +1067,7 @@ ssize_t flow_read(int    fd,
         uint8_t * sdu;
         bool      used;
 
-        if (fd < 0 || fd >= AP_MAX_FLOWS)
+        if (fd < 0 || fd > AP_MAX_FLOWS)
                 return -EBADF;
 
         pthread_rwlock_rdlock(&ai.lock);
@@ -1104,7 +1104,7 @@ ssize_t flow_read(int    fd,
 
 /* fqueue functions. */
 
-struct flow_set * flow_set_create()
+struct flow_set * fset_create()
 {
         struct flow_set * set = malloc(sizeof(*set));
         if (set == NULL)
@@ -1126,12 +1126,12 @@ struct flow_set * flow_set_create()
         return set;
 }
 
-void flow_set_destroy(struct flow_set * set)
+void fset_destroy(struct flow_set * set)
 {
         if (set == NULL)
                 return;
 
-        flow_set_zero(set);
+        fset_zero(set);
 
         pthread_rwlock_wrlock(&ai.lock);
 
@@ -1163,7 +1163,7 @@ void fqueue_destroy(struct fqueue * fq)
         free(fq);
 }
 
-void flow_set_zero(struct flow_set * set)
+void fset_zero(struct flow_set * set)
 {
         if (set == NULL)
                 return;
@@ -1171,14 +1171,14 @@ void flow_set_zero(struct flow_set * set)
         shm_flow_set_zero(ai.fqset, set->idx);
 }
 
-int flow_set_add(struct flow_set * set,
-                 int               fd)
+int fset_add(struct flow_set * set,
+             int               fd)
 {
         int ret;
         size_t sdus;
         size_t i;
 
-        if (set == NULL)
+        if (set == NULL || fd < 0 || fd > AP_MAX_FLOWS)
                 return -EINVAL;
 
         pthread_rwlock_wrlock(&ai.lock);
@@ -1194,10 +1194,10 @@ int flow_set_add(struct flow_set * set,
         return ret;
 }
 
-void flow_set_del(struct flow_set * set,
-                  int               fd)
+void fset_del(struct flow_set * set,
+              int               fd)
 {
-        if (set == NULL)
+        if (set == NULL || fd < 0 || fd > AP_MAX_FLOWS)
                 return;
 
         pthread_rwlock_wrlock(&ai.lock);
@@ -1208,8 +1208,8 @@ void flow_set_del(struct flow_set * set,
         pthread_rwlock_unlock(&ai.lock);
 }
 
-bool flow_set_has(const struct flow_set * set,
-                  int                     fd)
+bool fset_has(const struct flow_set * set,
+              int                     fd)
 {
         bool ret = false;
 
@@ -1254,9 +1254,9 @@ int fqueue_next(struct fqueue * fq)
         return fd;
 }
 
-int flow_event_wait(struct flow_set *       set,
-                    struct fqueue *         fq,
-                    const struct timespec * timeout)
+int fevent(struct flow_set *       set,
+           struct fqueue *         fq,
+           const struct timespec * timeo)
 {
         ssize_t           ret;
         struct timespec   abstime;
@@ -1270,9 +1270,9 @@ int flow_event_wait(struct flow_set *       set,
 
         assert(!fq->next);
 
-        if (timeout != NULL) {
+        if (timeo != NULL) {
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-                ts_add(&abstime, timeout, &abstime);
+                ts_add(&abstime, timeo, &abstime);
                 t = &abstime;
         }
 
@@ -1541,7 +1541,7 @@ void ipcp_flow_fini(int fd)
 int ipcp_flow_get_qoscube(int         fd,
                           qoscube_t * cube)
 {
-        if (fd < 0 || fd >= AP_MAX_FLOWS || cube == NULL)
+        if (fd < 0 || fd > AP_MAX_FLOWS || cube == NULL)
                 return -EINVAL;
 
         pthread_rwlock_wrlock(&ai.lock);

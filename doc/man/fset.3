@@ -1,0 +1,107 @@
+.\" Ouroboros man pages (C) 2017
+.\" Dimitri Staessens <dimitri.staessens@ugent.be>
+.\" Sander Vrijders <sander.vrijders@ugent.be>
+
+.TH FSET 3 2017-04-10 GNU "Ouroboros Programmer's Manual"
+
+.SH NAME
+
+fset_create, fset_destroy, fset_zero, fset_add, fset_del, fset_has \-
+manipulation of a set of flow descriptors
+
+.SH SYNOPSIS
+
+.B #include <ouroboros/fqueue.h>
+
+\fBfset_t * fset_create(void);
+
+\fBvoid fset_destroy(fset_t * \fIset\fB);
+
+\fBvoid fset_zero(fset_t * \fIset\fB);
+
+\fBint fset_add(fset_t * \fIset\fB, int \fIfd\fB);
+
+\fBint fset_del(fset_t * \fIset\fB, int \fIfd\fB);
+
+\fBbool fset_has(fset_t * \fIset\fB, int \fIfd\fB);
+
+Compile and link with \fI-louroboros\fR.
+
+.SH DESCRIPTION
+
+These calls are used to manage a set of \fIflow descriptors\fR.
+
+The \fBfset_create\fR() function creates and fset_t struct which holds
+a set of flow descriptors.
+
+The \fBfset_destroy\fR() function frees any resources associated with
+an \fBfset_t \fIset\fR.
+
+The \fBset_zero\fR() function removes all flow descriptors from an
+\fBfset_t \fIset\fR.
+
+The \fBset_add\fR() function adds a flow descriptor \fIfd\fR to the
+\fBfset_t \fIset\fR. A flow descriptor can be in at most one fset at a
+time.
+
+The \fBfset_del\fR() function removes a flow descriptor \fIfd\fR from
+the \fBfset_t \fIset\fR. \fBfset_del\fR() ignores invalid input.
+
+The \fBfset_has\fR() function checks whether a flow descriptor \fIfd\fR is
+an element of the \fBfset_t \fIset\fR.
+
+.SH RETURN VALUE
+
+On success, \fBfset_create\fR() returns a pointer to an \fBfset_t\fB.
+
+\fBfset_destroy\fR(), \fBset_zero\fR() and \fBfset_del\fR() have no return value.
+
+\fBfset_add\fR() returns 0 on success or an error code.
+
+\fBfset_has\fR() returns true when \fIfd\fR is in the set, false if it
+is not or on invalid input.
+
+.SH ERRORS
+
+\fBfset_create\fR() returns NULL when insufficient resources
+were available to create the \fBfset_t\fR.
+
+\fBfset_add\fR() can return the following errors:
+
+.B -EINVAL
+An invalid argument was passed (\fIset\fR was NULL or \fIfd\fR was
+invalid).
+
+.B -EPERM
+The passed flow descriptor \fIfd\fR was already in another \fBfset_t\fR.
+
+.SH ATTRIBUTES
+
+For an explanation of the terms used in this section, see \fBattributes\fR(7).
+
+.TS
+box, tab(&);
+LB|LB|LB
+L|L|L.
+Interface & Attribute & Value
+_
+\fBfset_create\fR() & Thread safety & MT-Safe
+_
+\fBfset_destroy\fR() & Thread safety & MT-Safe
+_
+\fBfset_zero\fR() & Thread safety & MT-Safe
+_
+\fBfset_add\fR() & Thread safety & MT-Safe
+_
+\fBfset_del\fR() & Thread safety & MT-Safe
+_
+\fBfset_has\fR() & Thread safety & MT-Safe
+.TE
+
+.SH SEE ALSO
+
+.BR fqueue "(3), " fevent (3)
+
+.SH COLOPHON
+This page is part of the Ouroboros project, found at
+https://bitbucket.org/ouroboros-rina/ouroboros

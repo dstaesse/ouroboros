@@ -1,0 +1,104 @@
+.\" Ouroboros man pages (C) 2017
+.\" Dimitri Staessens <dimitri.staessens@ugent.be>
+.\" Sander Vrijders <sander.vrijders@ugent.be>
+
+.TH FQUEUE 3 2017-08-29 GNU "Ouroboros Programmer's Manual"
+
+.SH NAME
+
+fqueue_create, fqueue_destroy, fqueue_next, fevent \- I/O multiplexing
+on flows
+
+.SH SYNOPSIS
+
+.B #include <ouroboros/fqueue.h>
+
+\fBfqueue_t * fqueue_create(void);\fR
+
+\fBvoid fqueue_destroy(fqueue_t * \fIfq\fB);
+
+\fBint fqueue_next(fqueue_t * \fIfq\fB);
+
+\fBint fevent(fset_t * \fIset\fB, fqueue_t * \fIfq\fB,
+const struct timespec * \fItimeo\fB);
+
+Compile and link with \fI-louroboros\fR.
+
+.SH DESCRIPTION
+
+These calls are used to
+
+The \fBfqueue_create\fR() function creates an fqueue_t structure which
+is an event queue that stores events that occured within a certain
+\fBfset_t\fR.
+
+The \fBfqueue_destroy\fR() function frees any resources associated with
+an \fBfqueue_t\fR \fIfq\fR.
+
+The \fBfqueue_next\fR() function retrieves the next event (a \fIflow
+descriptor\fR) that is ready within the event queue \fIfq\fR.
+
+The \fBfevent\fR() function retrieves all events that occured on any
+\fIflow descriptor\fR within \fIset\fR and returns them in the event
+queue \fBfq\fR. If a \fBstruct timespec *\fI timeo\fR can be provided,
+it will return either with new events or when \fItimeo\fR has expired.
+If \fItimeo\fR is NULL, the call will block indefinitely until an
+event occurs.
+
+.SH RETURN VALUE
+
+On success, \fBfqueue_create\fR() returns a pointer to an
+\fBfqueue_t\fR.
+
+\fBfqueue_destroy\fR() has no return value.
+
+On success, \fBfevent\fR() returns the number of events that occured in \fIset\fR.
+
+.SH ERRORS
+
+\fBfqueue_create\fR() returns NULL when insufficient resources
+were available to create the \fBfqueue_t\fR.
+
+\fBfqueue_next\fR() and \fBfevent\fR() can return
+
+.B -EINVAL
+An invalid argument was passed (\fIfq\fR or \fIset\fR was \fINULL\fR).
+
+In addition, \fBfqueue_next\fR() can return
+
+.B -EPERM
+No more fds available in \fIfq\fR.
+
+and \fBfevent\fR() can return
+
+.B -ETIMEDOUT
+the interval set int \fItimeo\tR expired before any event in \fIset\fR
+occured.
+
+.SH ATTRIBUTES
+
+For an explanation of the terms used in this section, see \fBattributes\fR(7).
+
+.TS
+box, tab(&);
+LB|LB|LB
+L|L|L.
+Interface & Attribute & Value
+_
+\fBfqueue_create\fR() & Thread safety & MT-Safe
+_
+\fBfqueue_destroy\fR() & Thread safety & MT-Safe
+_
+\fBfqueue_next\fR() & Thread safety & MT-Safe
+_
+\fBfevent\fR() & Thread safety & MT-Safe
+.TE
+
+.SH SEE ALSO
+
+.BR fset_create "(3), " fset_destroy "(3), " \
+fset_add "(3), " fset_del "(3), " fset_has "(3), " fset_zero (3)
+
+.SH COLOPHON
+This page is part of the Ouroboros project, found at
+https://bitbucket.org/ouroboros-rina/ouroboros

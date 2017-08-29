@@ -143,7 +143,7 @@ struct {
 #endif /* HAVE_NETMAP */
 
         struct bmp *       saps;
-        flow_set_t *       np1_flows;
+        fset_t *           np1_flows;
         fqueue_t *         fq;
         int *              ef_to_fd;
         struct ef *        fd_to_ef;
@@ -180,7 +180,7 @@ static int eth_llc_data_init(void)
         if (eth_llc_data.saps == NULL)
                 goto fail_saps;
 
-        eth_llc_data.np1_flows = flow_set_create();
+        eth_llc_data.np1_flows = fset_create();
         if (eth_llc_data.np1_flows == NULL)
                 goto fail_np1_flows;
 
@@ -236,7 +236,7 @@ static int eth_llc_data_init(void)
  fail_shim_data:
         fqueue_destroy(eth_llc_data.fq);
  fail_fq:
-        flow_set_destroy(eth_llc_data.np1_flows);
+        fset_destroy(eth_llc_data.np1_flows);
  fail_np1_flows:
         bmp_destroy(eth_llc_data.saps);
  fail_saps:
@@ -261,7 +261,7 @@ void eth_llc_data_fini(void)
         pthread_rwlock_destroy(&eth_llc_data.flows_lock);
         shim_data_destroy(eth_llc_data.shim_data);
         fqueue_destroy(eth_llc_data.fq);
-        flow_set_destroy(eth_llc_data.np1_flows);
+        fset_destroy(eth_llc_data.np1_flows);
         bmp_destroy(eth_llc_data.saps);
         free(eth_llc_data.fd_to_ef);
         free(eth_llc_data.ef_to_fd);
@@ -751,10 +751,7 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
 
         (void) o;
 
-        while (flow_event_wait(eth_llc_data.np1_flows,
-                               eth_llc_data.fq,
-                               &timeout)) {
-
+        while (fevent(eth_llc_data.np1_flows, eth_llc_data.fq, &timeout)) {
                 if (ipcp_get_state() != IPCP_OPERATIONAL)
                         return (void *) 0;
 
@@ -1120,7 +1117,7 @@ static int eth_llc_ipcp_flow_alloc(int             fd,
                 return -1;
         }
 
-        flow_set_add(eth_llc_data.np1_flows, fd);
+        fset_add(eth_llc_data.np1_flows, fd);
 
         log_dbg("Pending flow with fd %d on SAP %d.", fd, ssap);
 
@@ -1179,7 +1176,7 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd,
                 return -1;
         }
 
-        flow_set_add(eth_llc_data.np1_flows, fd);
+        fset_add(eth_llc_data.np1_flows, fd);
 
         log_dbg("Accepted flow, fd %d, SAP %d.", fd, (uint8_t)ssap);
 
@@ -1195,7 +1192,7 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
 
         pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
 
-        flow_set_del(eth_llc_data.np1_flows, fd);
+        fset_del(eth_llc_data.np1_flows, fd);
 
         sap = eth_llc_data.fd_to_ef[fd].sap;
         memcpy(addr, eth_llc_data.fd_to_ef[fd].r_addr, MAC_SIZE);

@@ -52,13 +52,13 @@ struct c {
 } client;
 
 struct s {
-        struct timespec  times[OPERF_MAX_FLOWS];
-        flow_set_t *     flows;
-        fqueue_t *       fq;
-        pthread_mutex_t  lock;
+        struct timespec times[OPERF_MAX_FLOWS];
+        fset_t *        flows;
+        fqueue_t *      fq;
+        pthread_mutex_t lock;
 
-        uint8_t          buffer[OPERF_BUF_SIZE];
-        ssize_t          timeout;
+        uint8_t buffer[OPERF_BUF_SIZE];
+        ssize_t timeout;
 
         pthread_t cleaner_pt;
         pthread_t accept_pt;

@@ -38,9 +38,9 @@
 #define FD_UPDATE_TIMEOUT 10000 /* nanoseconds */
 
 struct sdu_sched {
-        flow_set_t * set[QOS_CUBE_MAX];
-        next_sdu_t   callback;
-        pthread_t    sdu_readers[IPCP_SCHED_THREADS];
+        fset_t *   set[QOS_CUBE_MAX];
+        next_sdu_t callback;
+        pthread_t  sdu_readers[IPCP_SCHED_THREADS];
 };
 
 static void cleanup_reader(void * o)
@@ -80,7 +80,7 @@ static void * sdu_reader(void * o)
                 /* FIXME: replace with scheduling policy call */
                 i = (i + 1) % QOS_CUBE_MAX;
 
-                ret = flow_event_wait(sched->set[i], fqs[i], &timeout);
+                ret = fevent(sched->set[i], fqs[i], &timeout);
                 if (ret == -ETIMEDOUT)
                         continue;
 
@@ -122,10 +122,10 @@ struct sdu_sched * sdu_sched_create(next_sdu_t callback)
         sdu_sched->callback = callback;
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
-                sdu_sched->set[i] = flow_set_create();
+                sdu_sched->set[i] = fset_create();
                 if (sdu_sched->set[i] == NULL) {
                         for (j = 0; j < i; ++j)
-                                flow_set_destroy(sdu_sched->set[j]);
+                                fset_destroy(sdu_sched->set[j]);
                         goto fail_flow_set;
                 }
         }
@@ -162,7 +162,7 @@ void sdu_sched_destroy(struct sdu_sched * sdu_sched)
         }
 
         for (i = 0; i < QOS_CUBE_MAX; ++i)
-                flow_set_destroy(sdu_sched->set[i]);
+                fset_destroy(sdu_sched->set[i]);
 
         free(sdu_sched);
 }
@@ -175,7 +175,7 @@ void sdu_sched_add(struct sdu_sched * sdu_sched,
         assert(sdu_sched);
 
         ipcp_flow_get_qoscube(fd, &qc);
-        flow_set_add(sdu_sched->set[qc], fd);
+        fset_add(sdu_sched->set[qc], fd);
 }
 
 void sdu_sched_del(struct sdu_sched * sdu_sched,
@@ -186,5 +186,5 @@ void sdu_sched_del(struct sdu_sched * sdu_sched,
         assert(sdu_sched);
 
         ipcp_flow_get_qoscube(fd, &qc);
-        flow_set_del(sdu_sched->set[qc], fd);
+        fset_del(sdu_sched->set[qc], fd);
 }
