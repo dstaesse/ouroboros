@@ -851,7 +851,8 @@ static void lookup_set_state(struct lookup *   lu,
 static void cleanup_wait(void * o)
 {
         struct lookup * lu = (struct lookup *) o;
-        lookup_set_state(lu, LU_NULL);
+        lu->state = LU_NULL;
+        pthread_mutex_unlock(&lu->lock);
         lookup_destroy(lu);
 }
 
