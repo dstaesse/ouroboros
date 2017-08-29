@@ -46,6 +46,40 @@ struct dir_entry {
         uint64_t         addr;
 };
 
+static void destroy_dir_query(struct dir_query * query)
+{
+        assert(query);
+
+        pthread_mutex_lock(&query->lock);
+
+        switch (query->state) {
+        case QUERY_INIT:
+                query->state = QUERY_DONE;
+                break;
+        case QUERY_PENDING:
+                query->state = QUERY_DESTROY;
+                pthread_cond_broadcast(&query->cond);
+                break;
+        case QUERY_RESPONSE:
+        case QUERY_DONE:
+                break;
+        case QUERY_DESTROY:
+                pthread_mutex_unlock(&query->lock);
+                return;
+        }
+
+        while (query->state != QUERY_DONE)
+                pthread_cond_wait(&query->cond, &query->lock);
+
+        pthread_mutex_unlock(&query->lock);
+
+        pthread_cond_destroy(&query->cond);
+        pthread_mutex_destroy(&query->lock);
+
+        free(query->hash);
+        free(query);
+}
+
 static struct reg_entry * reg_entry_create(uint8_t * hash)
 {
         struct reg_entry * entry = malloc(sizeof(*entry));
@@ -151,7 +185,7 @@ static void clear_dir_queries(struct shim_data * data)
         list_for_each_safe(h, t, &data->dir_queries) {
                 struct dir_query * e = list_entry(h, struct dir_query, next);
                 list_del(&e->next);
-                shim_data_dir_query_destroy(e);
+                destroy_dir_query(e);
         }
 }
 
@@ -391,7 +425,8 @@ uint64_t shim_data_dir_get_addr(struct shim_data * data,
         return addr;
 }
 
-struct dir_query * shim_data_dir_query_create(const uint8_t * hash)
+struct dir_query * shim_data_dir_query_create(struct shim_data * data,
+                                              const uint8_t *    hash)
 {
         struct dir_query * query;
         pthread_condattr_t cattr;
@@ -417,58 +452,64 @@ struct dir_query * shim_data_dir_query_create(const uint8_t * hash)
 
         list_head_init(&query->next);
 
+        pthread_mutex_lock(&data->dir_queries_lock);
+        list_add(&query->next, &data->dir_queries);
+        pthread_mutex_unlock(&data->dir_queries_lock);
+
         return query;
 }
 
-void shim_data_dir_query_respond(struct dir_query * query)
+void shim_data_dir_query_respond(struct shim_data * data,
+                                 const uint8_t *    hash)
 {
-        assert(query);
+        struct dir_query * e = NULL;
+        struct list_head * pos;
+        bool               found = false;
 
-        pthread_mutex_lock(&query->lock);
+        pthread_mutex_lock(&data->dir_queries_lock);
 
-        if (query->state != QUERY_PENDING) {
-                pthread_mutex_unlock(&query->lock);
+        list_for_each(pos, &data->dir_queries) {
+                e = list_entry(pos, struct dir_query, next);
+
+                if (memcmp(e->hash, hash, ipcp_dir_hash_len()) == 0) {
+                        found = true;
+                        break;
+                }
+        }
+
+        if (!found) {
+                pthread_mutex_unlock(&data->dir_queries_lock);
                 return;
         }
 
-        query->state = QUERY_RESPONSE;
-        pthread_cond_broadcast(&query->cond);
+        pthread_mutex_lock(&e->lock);
 
-        while (query->state == QUERY_RESPONSE)
-                pthread_cond_wait(&query->cond, &query->lock);
+        if (e->state != QUERY_PENDING) {
+                pthread_mutex_unlock(&e->lock);
+                pthread_mutex_unlock(&data->dir_queries_lock);
+                return;
+        }
 
-        pthread_mutex_unlock(&query->lock);
+        e->state = QUERY_RESPONSE;
+        pthread_cond_broadcast(&e->cond);
+
+        while (e->state == QUERY_RESPONSE)
+                pthread_cond_wait(&e->cond, &e->lock);
+
+        pthread_mutex_unlock(&e->lock);
+
+        pthread_mutex_unlock(&data->dir_queries_lock);
 }
 
-void shim_data_dir_query_destroy(struct dir_query * query)
+void shim_data_dir_query_destroy(struct shim_data * data,
+                                 struct dir_query * query)
 {
-        assert(query);
+        pthread_mutex_lock(&data->dir_queries_lock);
 
-        pthread_mutex_lock(&query->lock);
+        list_del(&query->next);
+        destroy_dir_query(query);
 
-        if (query->state == QUERY_DESTROY) {
-                pthread_mutex_unlock(&query->lock);
-                return;
-        }
-
-        if (query->state == QUERY_INIT)
-                query->state = QUERY_DONE;
-
-        if (query->state == QUERY_PENDING) {
-                query->state = QUERY_DESTROY;
-                pthread_cond_broadcast(&query->cond);
-        }
-
-        while (query->state != QUERY_DONE)
-                pthread_cond_wait(&query->cond, &query->lock);
-
-        pthread_mutex_unlock(&query->lock);
-
-        pthread_cond_destroy(&query->cond);
-        pthread_mutex_destroy(&query->lock);
-
-        free(query->hash);
-        free(query);
+        pthread_mutex_unlock(&data->dir_queries_lock);
 }
 
 int shim_data_dir_query_wait(struct dir_query *      query,

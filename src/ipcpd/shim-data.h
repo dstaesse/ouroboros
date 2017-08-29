@@ -85,11 +85,14 @@ bool               shim_data_dir_has(struct shim_data * data,
 uint64_t           shim_data_dir_get_addr(struct shim_data * data,
                                           const uint8_t *    hash);
 
-struct dir_query * shim_data_dir_query_create(const uint8_t * hash);
+struct dir_query * shim_data_dir_query_create(struct shim_data * data,
+                                              const uint8_t *    hash);
 
-void               shim_data_dir_query_respond(struct dir_query * query);
+void               shim_data_dir_query_destroy(struct shim_data * data,
+                                               struct dir_query * query);
 
-void               shim_data_dir_query_destroy(struct dir_query * query);
+void               shim_data_dir_query_respond(struct shim_data * data,
+                                               const uint8_t *    hash);
 
 int                shim_data_dir_query_wait(struct dir_query *      query,
                                             const struct timespec * timeout);

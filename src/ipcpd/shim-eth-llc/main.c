@@ -512,24 +512,13 @@ static int eth_llc_ipcp_name_query_req(const uint8_t * hash,
 static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
                                          uint8_t *       r_addr)
 {
-        uint64_t           address = 0;
-        struct list_head * pos;
+        uint64_t address = 0;
 
         memcpy(&address, r_addr, MAC_SIZE);
 
         shim_data_dir_add_entry(eth_llc_data.shim_data, hash, address);
 
-        pthread_mutex_lock(&eth_llc_data.shim_data->dir_queries_lock);
-
-        list_for_each(pos, &eth_llc_data.shim_data->dir_queries) {
-                struct dir_query * e =
-                        list_entry(pos, struct dir_query, next);
-                if (memcmp(e->hash, hash, ipcp_dir_hash_len()) == 0) {
-                        shim_data_dir_query_respond(e);
-                }
-        }
-
-        pthread_mutex_unlock(&eth_llc_data.shim_data->dir_queries_lock);
+        shim_data_dir_query_respond(eth_llc_data.shim_data, hash);
 
         return 0;
 }
@@ -1053,22 +1042,15 @@ static int eth_llc_ipcp_query(const uint8_t * hash)
 
         memset(r_addr, 0xff, MAC_SIZE);
 
-        query = shim_data_dir_query_create(hash);
+        query = shim_data_dir_query_create(eth_llc_data.shim_data, hash);
         if (query == NULL)
                 return -1;
-
-        pthread_mutex_lock(&eth_llc_data.shim_data->dir_queries_lock);
-        list_add(&query->next, &eth_llc_data.shim_data->dir_queries);
-        pthread_mutex_unlock(&eth_llc_data.shim_data->dir_queries_lock);
 
         eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
 
         ret = shim_data_dir_query_wait(query, &timeout);
 
-        pthread_mutex_lock(&eth_llc_data.shim_data->dir_queries_lock);
-        list_del(&query->next);
-        shim_data_dir_query_destroy(query);
-        pthread_mutex_unlock(&eth_llc_data.shim_data->dir_queries_lock);
+        shim_data_dir_query_destroy(eth_llc_data.shim_data, query);
 
         return ret;
 }
