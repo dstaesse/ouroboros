@@ -837,6 +837,24 @@ static void lookup_new_addrs(struct lookup * lu,
         pthread_mutex_unlock(&lu->lock);
 }
 
+static void lookup_set_state(struct lookup *   lu,
+                             enum lookup_state state)
+{
+        pthread_mutex_lock(&lu->lock);
+
+        lu->state = state;
+        pthread_cond_signal(&lu->cond);
+
+        pthread_mutex_unlock(&lu->lock);
+}
+
+static void cleanup_wait(void * o)
+{
+        struct lookup * lu = (struct lookup *) o;
+        lookup_set_state(lu, LU_NULL);
+        lookup_destroy(lu);
+}
+
 static enum lookup_state lookup_wait(struct lookup * lu)
 {
         struct timespec   timeo = {KAD_T_RESP, 0};
@@ -853,7 +871,7 @@ static enum lookup_state lookup_wait(struct lookup * lu)
         lu->state = LU_PENDING;
         pthread_cond_signal(&lu->cond);
 
-        pthread_cleanup_push((void (*)(void *)) lookup_destroy, (void *) lu);
+        pthread_cleanup_push(cleanup_wait, lu);
 
         while (lu->state == LU_PENDING && ret != -ETIMEDOUT)
                 ret = -pthread_cond_timedwait(&lu->cond, &lu->lock, &abs);
@@ -861,9 +879,9 @@ static enum lookup_state lookup_wait(struct lookup * lu)
         pthread_cleanup_pop(false);
 
         if (ret == -ETIMEDOUT)
-                state = LU_COMPLETE;
-        else
-                state = lu->state;
+                lu->state = LU_COMPLETE;
+
+        state = lu->state;
 
         pthread_mutex_unlock(&lu->lock);
 
@@ -1501,17 +1519,6 @@ static ssize_t kad_find(struct dht *     dht,
         return sent;
 }
 
-static void lookup_set_state(struct lookup *   lu,
-                             enum lookup_state state)
-{
-        pthread_mutex_lock(&lu->lock);
-
-        lu->state = state;
-        pthread_cond_signal(&lu->cond);
-
-        pthread_mutex_unlock(&lu->lock);
-}
-
 static struct lookup * kad_lookup(struct dht *    dht,
                                   const uint8_t * id,
                                   enum kad_code   code)
@@ -1540,7 +1547,6 @@ static struct lookup * kad_lookup(struct dht *    dht,
                 pthread_rwlock_wrlock(&dht->lock);
                 list_del(&lu->next);
                 pthread_rwlock_unlock(&dht->lock);
-                lu->state = LU_COMPLETE;
                 return lu;
         }
 
@@ -1554,6 +1560,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
                                 pthread_rwlock_wrlock(&dht->lock);
                                 list_del(&lu->next);
                                 pthread_rwlock_unlock(&dht->lock);
+                                lookup_set_state(lu, LU_COMPLETE);
                                 return lu;
                         }
 
