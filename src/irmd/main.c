@@ -922,6 +922,8 @@ static int name_reg(const char *  name,
 
                 for (i = 0; i < len; ++i) {
                         uint8_t * hash;
+                        pid_t     api;
+                        size_t    len;
 
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
@@ -932,22 +934,32 @@ static int name_reg(const char *  name,
 
                         str_hash(e->dir_hash_algo, hash, name);
 
-                        if (ipcp_reg(e->api, hash, IPCP_HASH_LEN(e))) {
+                        api = e->api;
+                        len = IPCP_HASH_LEN(e);
+
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+
+                        if (ipcp_reg(api, hash, len)) {
                                 log_err("Could not register " HASH_FMT
-                                        " in DIF %s (IPCP %d).",
-                                        HASH_VAL(hash), e->dif_name, e->api);
-                        } else {
-                                if (registry_add_name_to_dif(&irmd.registry,
-                                                             name,
-                                                             e->dif_name,
-                                                             e->type) < 0)
-                                        log_warn("Registered unbound name %s. "
-                                                 "Registry may be corrupt.",
-                                                 name);
-                                log_info("Registered %s in %s as " HASH_FMT ".",
-                                         name, e->dif_name, HASH_VAL(hash));
-                                ++ret;
+                                        " with IPCP %d.",
+                                        HASH_VAL(hash), api);
+                                pthread_rwlock_wrlock(&irmd.reg_lock);
+                                free(hash);
+                                break;
                         }
+
+                        pthread_rwlock_wrlock(&irmd.reg_lock);
+
+                        if (registry_add_name_to_dif(&irmd.registry,
+                                                     name,
+                                                     e->dif_name,
+                                                     e->type) < 0)
+                                log_warn("Registered unbound name %s. "
+                                         "Registry may be corrupt.",
+                                         name);
+                        log_info("Registered %s in %s as " HASH_FMT ".",
+                                 name, e->dif_name, HASH_VAL(hash));
+                        ++ret;
 
                         free(hash);
                 }
@@ -982,6 +994,8 @@ static int name_unreg(const char *  name,
 
                 for (i = 0; i < len; ++i) {
                         uint8_t * hash;
+                        pid_t     api;
+                        size_t    len;
 
                         if (wildcard_match(difs[i], e->dif_name))
                                 continue;
@@ -992,17 +1006,27 @@ static int name_unreg(const char *  name,
 
                         str_hash(e->dir_hash_algo, hash, name);
 
-                        if (ipcp_unreg(e->api, hash, IPCP_HASH_LEN(e))) {
-                                log_err("Could not unregister %s in DIF %s.",
-                                        name, e->dif_name);
-                        } else {
-                                registry_del_name_from_dif(&irmd.registry,
-                                                           name,
-                                                           e->dif_name);
-                                log_info("Unregistered %s from %s.",
-                                         name, e->dif_name);
-                                ++ret;
+                        api = e->api;
+                        len = IPCP_HASH_LEN(e);
+
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+
+                        if (ipcp_unreg(api, hash, len)) {
+                                log_err("Could not unregister %s with IPCP %d.",
+                                        name, api);
+                                pthread_rwlock_wrlock(&irmd.reg_lock);
+                                free(hash);
+                                break;
                         }
+
+                        pthread_rwlock_wrlock(&irmd.reg_lock);
+
+                        registry_del_name_from_dif(&irmd.registry,
+                                                   name,
+                                                   e->dif_name);
+                        log_info("Unregistered %s from %s.",
+                                 name, e->dif_name);
+                        ++ret;
 
                         free(hash);
                 }
