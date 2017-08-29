@@ -41,6 +41,8 @@ void                 shm_rdrbuff_close(struct shm_rdrbuff * rdrb);
 
 void                 shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb);
 
+void                 shm_rdrbuff_purge(void);
+
 int                  shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb,
                                            struct timespec *    timeo);
 

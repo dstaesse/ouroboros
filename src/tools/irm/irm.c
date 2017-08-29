@@ -34,7 +34,7 @@ static void usage(void)
 {
         printf("Usage: irm [OPERATION]\n\n"
                "where OPERATION = {ipcp bind unbind\n"
-               "                   register unregister\n");
+               "                   register unregister}\n");
 }
 
 static int do_help(int argc, char **argv)

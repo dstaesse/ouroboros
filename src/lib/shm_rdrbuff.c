@@ -323,6 +323,18 @@ void shm_rdrbuff_close(struct shm_rdrbuff * rdrb)
         free(rdrb);
 }
 
+void shm_rdrbuff_purge(void)
+{
+        char * shm_rdrb_fn;
+
+        shm_rdrb_fn = rdrb_filename();
+        if (shm_rdrb_fn == NULL)
+                return;
+
+        shm_unlink(shm_rdrb_fn);
+        free(shm_rdrb_fn);
+}
+
 void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
 {
         char * shm_rdrb_fn;

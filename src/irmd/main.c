@@ -2204,7 +2204,7 @@ static int irm_init(void)
 
                 if (kill(lockfile_owner(irmd.lf), 0) < 0) {
                         log_info("IRMd didn't properly shut down last time.");
-                        shm_rdrbuff_destroy(shm_rdrbuff_open());
+                        shm_rdrbuff_purge();
                         log_info("Stale resources cleaned.");
                         lockfile_destroy(irmd.lf);
                         irmd.lf = lockfile_create();
