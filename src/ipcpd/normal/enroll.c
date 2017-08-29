@@ -373,6 +373,4 @@ void enroll_stop(void)
 {
         if (enroll.state == ENROLL_RUNNING)
                 pthread_cancel(enroll.listener);
-
-        enroll.state = ENROLL_INIT;
 }
