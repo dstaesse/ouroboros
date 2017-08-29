@@ -85,6 +85,8 @@ static struct btnode * btnode_create(size_t k)
         if (node == NULL)
                 return NULL;
 
+        assert(k > 0);
+
         node->keyvals = malloc(sizeof(*node->keyvals) * k);
         if (node->keyvals == NULL) {
                 free(node);
@@ -368,8 +370,10 @@ struct btree * btree_create(size_t k)
         if (tree == NULL)
                 return NULL;
 
-        if (k > BTREE_MAX_ORDER)
+        if (k < 1 || k > BTREE_MAX_ORDER) {
+                free(tree);
                 return NULL;
+        }
 
         tree->k = k;
         tree->root = NULL;
@@ -413,8 +417,10 @@ int btree_insert(struct btree * tree,
 
         if (rgt != NULL) {
                 struct btnode * lft = btnode_create(tree->root->k);
-                if (lft == NULL)
+                if (lft == NULL) {
+                        free(rgt);
                         return -ENOMEM;
+                }
 
                 lft->used = tree->root->used;
                 lft->leaf = tree->root->leaf;

@@ -60,13 +60,13 @@ static struct reg_entry * reg_entry_create(void)
         return e;
 }
 
-static struct reg_entry * reg_entry_init(struct reg_entry * e,
-                                         char *             name)
+static int reg_entry_init(struct reg_entry * e,
+                          char *             name)
 {
         pthread_condattr_t cattr;
 
         if (e == NULL || name == NULL)
-                return NULL;
+                return -1;
 
         list_head_init(&e->next);
         list_head_init(&e->difs);
@@ -76,20 +76,20 @@ static struct reg_entry * reg_entry_init(struct reg_entry * e,
         e->name = name;
 
         if (pthread_condattr_init(&cattr))
-                return NULL;
+                return -1;
 
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
         if (pthread_cond_init(&e->state_cond, &cattr))
-                return NULL;
+                return -1;
 
         if (pthread_mutex_init(&e->state_lock, NULL))
-                return NULL;
+                return -1;
 
         e->state = REG_NAME_IDLE;
 
-        return e;
+        return 0;
 }
 
 static void reg_entry_destroy(struct reg_entry * e)
@@ -166,17 +166,26 @@ static int reg_entry_add_local_in_dif(struct reg_entry * e,
                                       const char *       dif_name,
                                       enum ipcp_type     type)
 {
-        if (!reg_entry_is_local_in_dif(e, dif_name)) {
-                struct reg_dif * rdn = malloc(sizeof(*rdn));
-                rdn->dif_name = strdup(dif_name);
-                if (rdn->dif_name == NULL)
-                        return -1;
-                rdn->type = type;
-                list_add(&rdn->next, &e->difs);
+        struct reg_dif * rdn;
+
+        /* already registered. Is ok */
+        if (reg_entry_is_local_in_dif(e, dif_name))
                 return 0;
+
+        rdn = malloc(sizeof(*rdn));
+        if (rdn == NULL)
+                return -1;
+
+        rdn->dif_name = strdup(dif_name);
+        if (rdn->dif_name == NULL) {
+                free(rdn);
+                return -1;
         }
 
-        return 0; /* already registered. Is ok */
+        rdn->type = type;
+        list_add(&rdn->next, &e->difs);
+
+        return 0;
 }
 
 static void reg_entry_del_local_from_dif(struct reg_entry * e,
@@ -230,8 +239,10 @@ int reg_entry_add_apn(struct reg_entry * e,
                 return -ENOMEM;
 
         n->str = strdup(a->apn);
-        if (n->str == NULL)
+        if (n->str == NULL) {
+                free(n);
                 return -ENOMEM;
+        }
 
         list_add(&n->next, &e->reg_apns);
 
@@ -546,6 +557,8 @@ struct reg_entry * registry_get_entry_by_hash(struct list_head * registry,
                 }
         }
 
+        free(thash);
+
         return NULL;
 }
 
@@ -568,10 +581,9 @@ struct reg_entry * registry_add_name(struct list_head * registry,
                 return NULL;
         }
 
-        e = reg_entry_init(e, strdup(name));
-        if (e == NULL) {
-                log_dbg("Could not initialize registry entry.");
+        if (reg_entry_init(e, strdup(name))) {
                 reg_entry_destroy(e);
+                log_dbg("Could not initialize registry entry.");
                 return NULL;
         }
 

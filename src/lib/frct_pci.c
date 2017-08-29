@@ -71,7 +71,7 @@ int frct_pci_ser(struct shm_du_buff * sdb,
 
         if (pci->type & PDU_TYPE_CONFIG) {
                 memcpy(head + offset, &pci->conf_flags, CONF_FLAGS_SIZE);
-                offset += CONF_FLAGS_SIZE;
+                /* offset += CONF_FLAGS_SIZE; */
         }
 
         if (error_check) {
@@ -113,7 +113,7 @@ int frct_pci_des(struct shm_du_buff * sdb,
 
         if (pci->type & PDU_TYPE_CONFIG) {
                 memcpy(&pci->conf_flags, head + offset, CONF_FLAGS_SIZE);
-                offset += CONF_FLAGS_SIZE;
+                /* offset += CONF_FLAGS_SIZE; */
         }
 
         if (error_check) {

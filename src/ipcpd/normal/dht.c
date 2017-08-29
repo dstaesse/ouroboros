@@ -745,7 +745,8 @@ static void lookup_update(struct dht *    dht,
                 } else {
                         struct contact * d;
                         list_add_tail(&c->next, p);
-                        d = list_last_entry(&lu->contacts, struct contact, next);
+                        d = list_last_entry(&lu->contacts,
+                                            struct contact, next);
                         list_del(&d->next);
                         contact_destroy(d);
                 }

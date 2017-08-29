@@ -307,6 +307,7 @@ static pid_t create_ipcp(char *         name,
         entry = get_ipcp_entry_by_name(name);
         if (entry != NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
+                free(api);
                 log_err("IPCP by that name already exists.");
                 return -1;
         }
@@ -314,6 +315,7 @@ static pid_t create_ipcp(char *         name,
         api->pid = ipcp_create(name, ipcp_type);
         if (api->pid == -1) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
+                free(api);
                 log_err("Failed to create IPCP.");
                 return -1;
         }
@@ -321,6 +323,7 @@ static pid_t create_ipcp(char *         name,
         tmp = ipcp_entry_create();
         if (tmp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
+                free(api);
                 return -1;
         }
 
@@ -330,6 +333,7 @@ static pid_t create_ipcp(char *         name,
         if (tmp->name  == NULL) {
                 ipcp_entry_destroy(tmp);
                 pthread_rwlock_unlock(&irmd.reg_lock);
+                free(api);
                 return -1;
         }
 
@@ -833,6 +837,11 @@ static ssize_t list_ipcps(char *   name,
                         count++;
         }
 
+        if (count == 0) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                return 0;
+        }
+
         *apis = malloc(count * sizeof(pid_t));
         if (*apis == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
@@ -1039,10 +1048,12 @@ static int api_announce(pid_t  api,
                                 pthread_rwlock_unlock(&irmd.reg_lock);
                                 return -ENOMEM;
                         }
+
                         n->str = strdup(s->str);
                         if (n->str == NULL) {
                                 pthread_rwlock_unlock(&irmd.reg_lock);
                                 free(n);
+                                return -ENOMEM;
                         }
 
                         list_add(&n->next, &e->names);

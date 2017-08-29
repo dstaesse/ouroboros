@@ -788,7 +788,7 @@ static struct rib_sub * rib_get_sub(uint32_t sid)
                         return r;
         }
 
-        return 0;
+        return NULL;
 }
 
 static struct rib_sub * rib_sub_create(uint32_t sid)
@@ -1139,6 +1139,8 @@ int rib_event_wait(ro_set_t *              set,
         pthread_rwlock_rdlock(&rib.lock);
 
         sub = rib_get_sub(set->sid);
+
+        assert(sub);
 
         pthread_rwlock_unlock(&rib.lock);
 

@@ -454,9 +454,10 @@ ssize_t graph_routing_table(struct graph *           graph,
 
         pthread_mutex_lock(&graph->lock);
 
-        if (graph->nr_vertices == 0) {
+        /* We need at least 2 vertices for a table */
+        if (graph->nr_vertices < 2) {
                 pthread_mutex_unlock(&graph->lock);
-                return 0;
+                return -1;
         }
 
         prevs = dijkstra(graph, s_addr);

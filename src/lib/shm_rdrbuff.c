@@ -147,8 +147,10 @@ struct shm_rdrbuff * shm_rdrbuff_create()
                 return NULL;
 
         rdrb = malloc(sizeof *rdrb);
-        if (rdrb == NULL)
+        if (rdrb == NULL) {
+                free(shm_rdrb_fn);
                 return NULL;
+        }
 
         mask = umask(0);
 
@@ -227,8 +229,10 @@ struct shm_rdrbuff * shm_rdrbuff_open()
                 return NULL;
 
         rdrb = malloc(sizeof *rdrb);
-        if (rdrb == NULL)
+        if (rdrb == NULL) {
+                free(shm_rdrb_fn);
                 return NULL;
+        }
 
         shm_fd = shm_open(shm_rdrb_fn, O_RDWR, 0666);
         if (shm_fd < 0) {
