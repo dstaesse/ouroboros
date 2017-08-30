@@ -39,6 +39,7 @@
 #define ENROLL_TIMEOUT         @ENROLL_TIMEOUT@
 #define REG_TIMEOUT            @REG_TIMEOUT@
 #define QUERY_TIMEOUT          @QUERY_TIMEOUT@
+#define CONNECT_TIMEOUT        @CONNECT_TIMEOUT@
 
 #define SYS_MAX_FLOWS          @SYS_MAX_FLOWS@
 

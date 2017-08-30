@@ -96,6 +96,10 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
                tv.tv_sec  = QUERY_TIMEOUT / 1000;
                tv.tv_usec = (QUERY_TIMEOUT % 1000) * 1000;
                break;
+       case IPCP_MSG_CODE__IPCP_CONNECT:
+               tv.tv_sec  = CONNECT_TIMEOUT / 1000;
+               tv.tv_usec = (CONNECT_TIMEOUT % 1000) * 1000;
+               break;
        default:
                tv.tv_sec  = SOCKET_TIMEOUT / 1000;
                tv.tv_usec = (SOCKET_TIMEOUT % 1000) * 1000;

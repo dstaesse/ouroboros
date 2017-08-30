@@ -18,6 +18,8 @@ set(REG_TIMEOUT 10000 CACHE STRING
   "Timeout for registering a name (ms)")
 set(QUERY_TIMEOUT 3000 CACHE STRING
   "Timeout to query a name with an IPCP (ms)")
+set(CONNECT_TIMEOUT 5000 CACHE STRING
+  "Timeout to connect an IPCP to another IPCP (ms)")
 set(IRMD_MIN_THREADS 8 CACHE STRING
   "Minimum number of worker threads in the IRMd.")
 set(IRMD_ADD_THREADS 8 CACHE STRING
