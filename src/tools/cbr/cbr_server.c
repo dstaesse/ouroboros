@@ -22,7 +22,7 @@
 
 #include <ouroboros/dev.h>
 #include <ouroboros/time_utils.h>
-#include <ouroboros/fcntl.h>
+#include <ouroboros/fccntl.h>
 
 #include <stdbool.h>
 
@@ -84,7 +84,7 @@ static void handle_flow(int fd)
         alive = iv_start;
         ts_add(&iv_start, &intv, &iv_end);
 
-        flow_set_flags(fd, FLOW_O_NONBLOCK);
+        fccntl(fd, FLOWSFLAGS, FLOWFNONBLOCK);
 
         while (!stop) {
                 clock_gettime(CLOCK_REALTIME, &now);

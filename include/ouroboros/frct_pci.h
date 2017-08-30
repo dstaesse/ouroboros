@@ -35,7 +35,7 @@ struct frct_pci {
         uint64_t seqno;
 
         /* Present in config PDU. */
-        uint8_t  conf_flags;
+        uint16_t conf_flags;
 
         /* Present in flow control PDU. */
         uint64_t lwe;
@@ -49,14 +49,6 @@ enum pdu_types {
         PDU_TYPE_ACK_AND_FC  = (PDU_TYPE_ACK | PDU_TYPE_FC),
         PDU_TYPE_CONFIG      = 0x08,
         PDU_TYPE_RENDEZ_VOUS = 0x10
-};
-
-enum config_flags {
-        CONF_RESOURCE_CONTROL = 0x01,
-        CONF_RELIABLE         = 0x02,
-        CONF_ERROR_CHECK      = 0x04,
-        CONF_ORDERED          = 0x08,
-        CONF_PARTIAL          = 0x10
 };
 
 enum data_flags {

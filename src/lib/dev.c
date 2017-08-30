@@ -29,7 +29,7 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
 #include <ouroboros/sockets.h>
-#include <ouroboros/fcntl.h>
+#include <ouroboros/fccntl.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/shm_flow_set.h>
 #include <ouroboros/shm_rdrbuff.h>
@@ -43,6 +43,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 #define BUF_SIZE 1500
 
@@ -86,7 +87,7 @@ struct frcti {
         uint64_t        rcv_lwe;
         uint64_t        rcv_rwe;
 
-        uint8_t         conf_flags;
+        uint16_t        conf_flags;
 };
 
 struct port {
@@ -108,7 +109,9 @@ struct flow {
 
         pid_t                 api;
 
-        bool                  timesout;
+        bool                  snd_timesout;
+        bool                  rcv_timesout;
+        struct timespec       snd_timeo;
         struct timespec       rcv_timeo;
 };
 
@@ -309,7 +312,7 @@ static int frcti_send(int                  fd,
 
         pci->seqno = frcti->snd_lwe++;
 
-        if (frct_pci_ser(sdb, pci, frcti->conf_flags & CONF_ERROR_CHECK)) {
+        if (frct_pci_ser(sdb, pci, frcti->conf_flags & FRCTFERRCHCK)) {
                 pthread_rwlock_unlock(&ai.lock);
                 return -1;
         }
@@ -325,8 +328,8 @@ static int frcti_send(int                  fd,
 }
 
 
-static int frcti_configure(int         fd,
-                           qosspec_t * qos)
+static int frcti_configure(int      fd,
+                           uint16_t flags)
 {
         struct frcti *       frcti;
         struct frct_pci      pci;
@@ -336,22 +339,10 @@ static int frcti_configure(int         fd,
 
         memset(&pci, 0, sizeof(pci));
 
-        if (qos == NULL)
-                return 0;
-
         if (ipcp_sdb_reserve(&sdb, 0))
                 return -1;
 
-        if (qos->resource_control)
-                pci.conf_flags |= CONF_RESOURCE_CONTROL;
-        if (qos->reliable)
-                pci.conf_flags |= CONF_RELIABLE;
-        if (qos->error_check)
-                pci.conf_flags |= CONF_ERROR_CHECK;
-        if (qos->ordered)
-                pci.conf_flags |= CONF_ORDERED;
-        if (qos->partial)
-                pci.conf_flags |= CONF_PARTIAL;
+        pci.conf_flags = flags;
 
         /* Always set the DRF on a configure message. */
         pci.flags |= FLAG_DATA_RUN;
@@ -385,49 +376,50 @@ static int frcti_write(int                  fd,
 
 static ssize_t frcti_read(int fd)
 {
-        ssize_t              idx = -1;
-        struct timespec      abstime;
+        ssize_t              idx;
         struct frcti *       frcti;
         struct frct_pci      pci;
         struct shm_du_buff * sdb;
-        struct timespec      now = {0, 0};
 
         do {
+                struct timespec    now;
+                struct timespec    abs;
+                struct timespec *  abstime = NULL;
+                struct shm_rbuff * rb;
+                bool               noblock;
+
+                clock_gettime(PTHREAD_COND_CLOCK, &now);
+
                 pthread_rwlock_rdlock(&ai.lock);
 
-                if (ai.flows[fd].oflags & FLOW_O_NONBLOCK) {
-                        idx = shm_rbuff_read(ai.flows[fd].rx_rb);
-                        pthread_rwlock_unlock(&ai.lock);
-                } else {
-                        struct shm_rbuff * rb   = ai.flows[fd].rx_rb;
-                        bool timeo = ai.flows[fd].timesout;
-                        struct timespec timeout = ai.flows[fd].rcv_timeo;
+                noblock = ai.flows[fd].oflags & FLOWFNONBLOCK;
+                rb      = ai.flows[fd].rx_rb;
 
-                        pthread_rwlock_unlock(&ai.lock);
-
-                        if (timeo) {
-                                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-                                ts_add(&abstime, &timeout, &abstime);
-                                idx = shm_rbuff_read_b(rb, &abstime);
-                        } else {
-                                idx = shm_rbuff_read_b(rb, NULL);
-                        }
+                if (ai.flows[fd].rcv_timesout) {
+                        ts_add(&now, &ai.flows[fd].rcv_timeo, &abs);
+                        abstime = &abs;
                 }
+
+                pthread_rwlock_unlock(&ai.lock);
+
+                if (noblock)
+                        idx = shm_rbuff_read(rb);
+                else
+                        idx = shm_rbuff_read_b(rb, abstime);
 
                 if (idx < 0)
                         return idx;
 
                 clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
-                pthread_rwlock_wrlock(&ai.lock);
-
                 frcti = &(ai.frcti[fd]);
 
                 sdb = shm_rdrbuff_get(ai.rdrb, idx);
 
+                pthread_rwlock_wrlock(&ai.lock);
+
                 /* SDU may be corrupted. */
-                if (frct_pci_des(sdb, &pci,
-                                 frcti->conf_flags & CONF_ERROR_CHECK)) {
+                if (frct_pci_des(sdb, &pci, frcti->conf_flags & FRCTFERRCHCK)) {
                         pthread_rwlock_unlock(&ai.lock);
                         shm_rdrbuff_remove(ai.rdrb, idx);
                         return -EAGAIN;
@@ -538,7 +530,7 @@ static int flow_init(int       port_id,
         }
 
         ai.flows[fd].port_id = port_id;
-        ai.flows[fd].oflags  = FLOW_O_DEFAULT;
+        ai.flows[fd].oflags  = FLOWFDEFAULT;
         ai.flows[fd].api     = api;
         ai.flows[fd].cube    = qc;
         ai.flows[fd].spec    = qos_cube_to_spec(qc);
@@ -821,7 +813,7 @@ int flow_alloc(const char *            dst_name,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        if (frcti_configure(fd, qs)) {
+        if (frcti_configure(fd, FRCTFORDERING | FRCTFERRCHCK)) {
                 flow_fini(fd);
                 bmp_release(ai.fds, fd);
                 return -1;
@@ -872,123 +864,113 @@ int flow_dealloc(int fd)
         return 0;
 }
 
-int flow_set_flags(int fd,
-                   int flags)
+int fccntl(int fd,
+           int cmd,
+           ...)
 {
-        int old;
+        uint32_t *        fflags;
+        uint16_t *        cflags;
+        va_list           l;
+        struct timespec * timeo;
+        qosspec_t *       qs;
 
         if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
 
-        pthread_rwlock_wrlock(&ai.lock);
-
-        if (ai.flows[fd].port_id < 0) {
-                pthread_rwlock_unlock(&ai.lock);
-                return -ENOTALLOC;
-        }
-
-        old = ai.flows[fd].oflags;
-
-        ai.flows[fd].oflags = flags;
-        if (flags & FLOW_O_WRONLY)
-                shm_rbuff_block(ai.flows[fd].rx_rb);
-        if (flags & FLOW_O_RDWR)
-                shm_rbuff_unblock(ai.flows[fd].rx_rb);
-
-        pthread_rwlock_unlock(&ai.lock);
-
-        return old;
-}
-
-int flow_get_flags(int fd)
-{
-        int old;
-
-        if (fd < 0 || fd >= AP_MAX_FLOWS)
-                return -EBADF;
+        va_start(l, cmd);
 
         pthread_rwlock_wrlock(&ai.lock);
 
         if (ai.flows[fd].port_id < 0) {
                 pthread_rwlock_unlock(&ai.lock);
+                va_end(l);
                 return -ENOTALLOC;
         }
 
-        old = ai.flows[fd].oflags;
-
-        pthread_rwlock_unlock(&ai.lock);
-
-        return old;
-}
-
-int flow_get_timeout(int               fd,
-                     struct timespec * timeo)
-{
-        int ret = 0;
-
-        if (fd < 0 || fd > AP_MAX_FLOWS || timeo == NULL)
-                return -EINVAL;
-
-        pthread_rwlock_wrlock(&ai.lock);
-
-        if (ai.flows[fd].port_id < 0) {
+        switch(cmd) {
+        case FLOWSSNDTIMEO:
+                timeo = va_arg(l, struct timespec *);
+                if (timeo == NULL) {
+                        ai.flows[fd].snd_timesout = false;
+                } else {
+                        ai.flows[fd].snd_timesout = true;
+                        ai.flows[fd].snd_timeo    = *timeo;
+                }
+                break;
+        case FLOWGSNDTIMEO:
+                timeo = va_arg(l, struct timespec *);
+                if (timeo == NULL)
+                        goto einval;
+                if (!ai.flows[fd].snd_timesout)
+                        goto eperm;
+                *timeo = ai.flows[fd].snd_timeo;
+                break;
+        case FLOWSRCVTIMEO:
+                timeo = va_arg(l, struct timespec *);
+                if (timeo == NULL) {
+                        ai.flows[fd].rcv_timesout = false;
+                } else {
+                        ai.flows[fd].rcv_timesout = true;
+                        ai.flows[fd].rcv_timeo    = *timeo;
+                }
+                break;
+        case FLOWGRCVTIMEO:
+                timeo = va_arg(l, struct timespec *);
+                if (timeo == NULL)
+                        goto einval;
+                if (!ai.flows[fd].rcv_timesout)
+                        goto eperm;
+                *timeo = ai.flows[fd].snd_timeo;
+                break;
+        case FLOWGQOSSPEC:
+                qs = va_arg(l, qosspec_t *);
+                if (qs == NULL)
+                        goto einval;
+                *qs = ai.flows[fd].spec;
+                break;
+        case FLOWSFLAGS:
+                ai.flows[fd].oflags = va_arg(l, uint32_t);
+                if (ai.flows[fd].oflags & FLOWFWRONLY)
+                        shm_rbuff_block(ai.flows[fd].rx_rb);
+                if (ai.flows[fd].oflags & FLOWFRDWR)
+                        shm_rbuff_unblock(ai.flows[fd].rx_rb);
+                break;
+        case FLOWGFLAGS:
+                fflags = va_arg(l, uint32_t *);
+                if (fflags == NULL)
+                        goto einval;
+                *fflags = ai.flows[fd].oflags;
+                break;
+        case FRCTSFLAGS:
+                ai.frcti[fd].conf_flags = (uint16_t) va_arg(l, int);
+                break;
+        case FRCTGFLAGS:
+                cflags = (uint16_t *) va_arg(l, int *);
+                if (cflags == NULL)
+                        goto einval;
+                *cflags = ai.frcti[fd].conf_flags;
+                break;
+        default:
                 pthread_rwlock_unlock(&ai.lock);
-                return -ENOTALLOC;
-        }
+                va_end(l);
+                return -ENOTSUP;
 
-        if (ai.flows[fd].timesout)
-                *timeo = ai.flows[fd].rcv_timeo;
-        else
-                ret = -EPERM;
+        };
 
         pthread_rwlock_unlock(&ai.lock);
 
-        return ret;
-}
-
-int flow_set_timeout(int                     fd,
-                     const struct timespec * timeo)
-{
-        if (fd < 0 || fd > AP_MAX_FLOWS)
-                return -EINVAL;
-
-        pthread_rwlock_wrlock(&ai.lock);
-
-        if (ai.flows[fd].port_id < 0) {
-                pthread_rwlock_unlock(&ai.lock);
-                return -ENOTALLOC;
-        }
-
-        if (timeo == NULL) {
-                ai.flows[fd].timesout = false;
-        } else {
-                ai.flows[fd].timesout = true;
-                ai.flows[fd].rcv_timeo = *timeo;
-        }
-
-        pthread_rwlock_unlock(&ai.lock);
+        va_end(l);
 
         return 0;
-}
 
-int flow_get_qosspec(int         fd,
-                     qosspec_t * qs)
-{
-        if (fd < 0 || fd > AP_MAX_FLOWS || qs == NULL)
-                return -EINVAL;
-
-        pthread_rwlock_wrlock(&ai.lock);
-
-        if (ai.flows[fd].port_id < 0) {
-                pthread_rwlock_unlock(&ai.lock);
-                return -ENOTALLOC;
-        }
-
-        *qs = ai.flows[fd].spec;
-
+ einval:
         pthread_rwlock_unlock(&ai.lock);
-
-        return 0;
+        va_end(l);
+        return -EINVAL;
+ eperm:
+        pthread_rwlock_unlock(&ai.lock);
+        va_end(l);
+        return -EPERM;
 }
 
 ssize_t flow_write(int          fd,
@@ -1010,12 +992,12 @@ ssize_t flow_write(int          fd,
                 return -ENOTALLOC;
         }
 
-        if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
+        if ((ai.flows[fd].oflags & FLOWFACCMODE) == FLOWFRDONLY) {
                 pthread_rwlock_unlock(&ai.lock);
                 return -EPERM;
         }
 
-        if (ai.flows[fd].oflags & FLOW_O_NONBLOCK) {
+        if (ai.flows[fd].oflags & FLOWFNONBLOCK) {
                 idx = shm_rdrbuff_write(ai.rdrb,
                                        DU_BUFF_HEADSPACE,
                                        DU_BUFF_TAILSPACE,
@@ -1062,10 +1044,11 @@ ssize_t flow_read(int    fd,
                   void * buf,
                   size_t count)
 {
-        ssize_t   idx = -1;
-        ssize_t   n;
-        uint8_t * sdu;
-        bool      used;
+        ssize_t            idx;
+        ssize_t            n;
+        uint8_t *          sdu;
+        bool               used;
+        struct shm_rbuff * rb;
 
         if (fd < 0 || fd > AP_MAX_FLOWS)
                 return -EBADF;
@@ -1078,11 +1061,12 @@ ssize_t flow_read(int    fd,
         }
 
         used = ai.frcti[fd].used;
+        rb   = ai.flows[fd].rx_rb;
 
         pthread_rwlock_unlock(&ai.lock);
 
         if (!used)
-                idx = shm_rbuff_read(ai.flows[fd].rx_rb);
+                idx = shm_rbuff_read(rb);
         else
                 idx = frcti_read(fd);
 
@@ -1477,7 +1461,7 @@ int ipcp_flow_write(int                  fd,
                 return -ENOTALLOC;
         }
 
-        if ((ai.flows[fd].oflags & FLOW_O_ACCMODE) == FLOW_O_RDONLY) {
+        if ((ai.flows[fd].oflags & FLOWFACCMODE) == FLOWFRDONLY) {
                 pthread_rwlock_unlock(&ai.lock);
                 return -EPERM;
         }
@@ -1527,7 +1511,7 @@ void ipcp_flow_fini(int fd)
 {
         struct shm_rbuff * rx_rb;
 
-        flow_set_flags(fd, FLOW_O_WRONLY);
+        fccntl(fd, FLOWSFLAGS, FLOWFWRONLY);
 
         pthread_rwlock_rdlock(&ai.lock);
 
