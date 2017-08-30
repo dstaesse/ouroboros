@@ -765,22 +765,14 @@ static int ipcp_udp_reg(const uint8_t * hash)
         uint32_t ip_addr;
 #endif
         char hashstr[ipcp_dir_hash_strlen() + 1];
-        uint8_t * hash_dup;
 
         assert(hash);
 
         ipcp_hash_str(hashstr, hash);
 
-        hash_dup = ipcp_hash_dup(hash);
-        if (hash_dup == NULL) {
-                log_err("Failed to duplicate hash.");
-                return -ENOMEM;
-        }
-
-        if (shim_data_reg_add_entry(udp_data.shim_data, hash_dup)) {
+        if (shim_data_reg_add_entry(udp_data.shim_data, hash)) {
                 log_err("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
-                free(hash_dup);
                 return -1;
         }
 
@@ -806,7 +798,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
                         dnsstr, hashstr, DNS_TTL, ipstr);
 
                 if (ddns_send(cmd)) {
-                        shim_data_reg_del_entry(udp_data.shim_data, hash_dup);
+                        shim_data_reg_del_entry(udp_data.shim_data, hash);
                         return -1;
                 }
         }

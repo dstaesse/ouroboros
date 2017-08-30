@@ -150,16 +150,9 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
 
 static int ipcp_local_reg(const uint8_t * hash)
 {
-        uint8_t * hash_dup = ipcp_hash_dup(hash);
-        if (hash_dup == NULL) {
-                log_err("Failed to duplicate hash.");
-                return -ENOMEM;
-        }
-
-        if (shim_data_reg_add_entry(local_data.shim_data, hash_dup)) {
+        if (shim_data_reg_add_entry(local_data.shim_data, hash)) {
                 log_dbg("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
-                free(hash_dup);
                 return -1;
         }
 

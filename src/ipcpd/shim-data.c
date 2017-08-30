@@ -24,6 +24,10 @@
 
 #include "config.h"
 
+#define OUROBOROS_PREFIX "shim-data"
+
+#include <ouroboros/endian.h>
+#include <ouroboros/logs.h>
 #include <ouroboros/list.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/errno.h>
@@ -260,9 +264,10 @@ static struct dir_entry * find_dir_entry_any(struct shim_data * data,
 }
 
 int shim_data_reg_add_entry(struct shim_data * data,
-                            uint8_t *          hash)
+                            const uint8_t *    hash)
 {
         struct reg_entry * entry;
+        uint8_t *          hash_dup;
 
         assert(data);
         assert(hash);
@@ -271,10 +276,18 @@ int shim_data_reg_add_entry(struct shim_data * data,
 
         if (find_reg_entry_by_hash(data, hash)) {
                 pthread_rwlock_unlock(&data->reg_lock);
+                log_dbg(HASH_FMT " was already in the directory.",
+                        HASH_VAL(hash));
+                return 0;
+        }
+
+        hash_dup = ipcp_hash_dup(hash);
+        if (hash_dup == NULL) {
+                pthread_rwlock_unlock(&data->reg_lock);
                 return -1;
         }
 
-        entry = reg_entry_create(hash);
+        entry = reg_entry_create(hash_dup);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&data->reg_lock);
                 return -1;

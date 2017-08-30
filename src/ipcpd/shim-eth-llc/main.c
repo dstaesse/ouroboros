@@ -993,18 +993,9 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
 
 static int eth_llc_ipcp_reg(const uint8_t * hash)
 {
-        uint8_t * hash_dup;
-
-        hash_dup = ipcp_hash_dup(hash);
-        if (hash_dup == NULL) {
-                log_err("Failed to duplicate hash.");
-                return -ENOMEM;
-        }
-
-        if (shim_data_reg_add_entry(eth_llc_data.shim_data, hash_dup)) {
+        if (shim_data_reg_add_entry(eth_llc_data.shim_data, hash)) {
                 log_err("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
-                free(hash_dup);
                 return -1;
         }
 

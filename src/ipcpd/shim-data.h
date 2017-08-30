@@ -63,7 +63,7 @@ struct shim_data * shim_data_create(void);
 void               shim_data_destroy(struct shim_data * data);
 
 int                shim_data_reg_add_entry(struct shim_data * data,
-                                           uint8_t *          hash);
+                                           const uint8_t *    hash);
 
 int                shim_data_reg_del_entry(struct shim_data * data,
                                            const uint8_t *    hash);
