@@ -21,7 +21,7 @@
  */
 
 #include <ouroboros/dev.h>
-#include <ouroboros/fcntl.h>
+#include <ouroboros/fccntl.h>
 #include <ouroboros/time_utils.h>
 
 #include <signal.h>
@@ -68,7 +68,7 @@ void * reader(void * o)
         int fd = *((int *) o);
         int msg_len = 0;
 
-        flow_set_timeout(fd, &timeout);
+        fccntl(fd, FLOWSRCVTIMEO, &timeout);
 
         while ((msg_len = flow_read(fd, buf, OPERF_BUF_SIZE)) != -ETIMEDOUT) {
                 if (msg_len != client.size) {

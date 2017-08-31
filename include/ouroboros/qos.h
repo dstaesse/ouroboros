@@ -31,15 +31,14 @@ typedef struct qos_spec {
         uint64_t bandwidth;            /* In bits/s */
         uint8_t  availability;         /* Class of 9s */
         uint32_t maximum_interruption; /* In ms */
-
-        bool     resource_control;     /* Feedback from receiver */
-        bool     reliable;             /* Reliable flow */
-        bool     error_check;          /* Check for errors */
-        bool     ordered;              /* Ordered delivery */
-        bool     partial;              /* Allow partial delivery */
 } qosspec_t;
 
+__BEGIN_DECLS
+
 int qosspec_init(qosspec_t * qs);
+
 int qosspec_fini(qosspec_t * qs);
 
-#endif
+__END_DECLS
+
+#endif /* OUROBOROS_QOS_H */

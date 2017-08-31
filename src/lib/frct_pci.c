@@ -30,7 +30,7 @@
 #define TYPE_SIZE       1
 #define SEQNO_SIZE      8
 #define FLAGS_SIZE      1
-#define CONF_FLAGS_SIZE 1
+#define CONF_FLAGS_SIZE sizeof(((struct frct_pci *) NULL)->conf_flags)
 #define BASE_SIZE       TYPE_SIZE + FLAGS_SIZE + SEQNO_SIZE
 #define CONFIG_SIZE     CONF_FLAGS_SIZE
 

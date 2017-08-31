@@ -1,0 +1,119 @@
+.\" Ouroboros man pages (C) 2017
+.\" Dimitri Staessens <dimitri.staessens@ugent.be>
+.\" Sander Vrijders <sander.vrijders@ugent.be>
+
+.TH FCCNTL 3 2017-08-30 GNU "Ouroboros Programmer's Manual"
+
+.SH NAME
+
+fccntl \- control commands for flows and FRCT connections
+
+.SH SYNOPSIS
+
+.B #include <ouroboros/fccntl.h>
+
+\fBint fccntl(int \fIfd\fB, int \fIcmd\fB, ...);
+
+Compile and link with \fI-louroboros\fR.
+
+.SH DESCRIPTION
+
+\fBfccntl\fR() is used to control the configuration of flows and
+connections.
+
+Supported commands are:
+
+\fBFLOWSSNDTIMEO\fR - set the sender timeout. Takes a \fBstruct
+timespec * \fItimeo\fR as third argument. Passing NULL for \fItimeo\fR
+disables the timeout.
+
+\fBFLOWGSNDTIMEO\fR - retrieve the current sender timeout. Takes a
+\fBstruct timespec * \fItimeo\fR as third argument.
+
+\fBFLOWSRCVTIMEO\fR - set the receiver timeout. Takes a \fBstruct
+timespec * \fItimeo\fR as third argument. Passing NULL for \fItimeo\fR
+disables the timeout.
+
+\fBFLOWGRCVTIMEO\fR - retrieve the current receiver timeout. Takes a
+\fBstruct timespec * \fItimeo\fR as third argument.
+
+\fBFLOWGQOSSPEC\fR  - retrieve the current QoS specification of the
+flow. Takes a \fBqosspec_t * \fIqs\fR as third argument.
+
+\fBFLOWSFLAGS\fR    - set flow flags. Takes flow flags as third
+argument. Supported flags are:
+
+        \fIFLOWFRDONLY\fR   - set flow to read-only.
+
+        \fIFLOWFWRONLY\fR   - set flow_to write-only.
+
+        \fIFLOWFRDWR\fR     - set flow to read-write.
+
+        \fIFLOWFNONBLOCK\fR - set I/O to non-blocking.
+
+        \fIFLOWFDEFAULT\fR  - set flow defaults (blocking, read-write).
+
+\fBFLOWGFLAGS\fR    - get the current flow flags. Takes an \fBuint32_t
+\fIflags\fR as third argument.
+
+\fBFRCTSFLAGS\fR    - set FRCT flags. Takes FRCT flags as third
+argument. Supported flags are:
+
+        \fIFRCTFRESCNTRL\fR - enable resource control.
+
+        \fIFRCTFRTX\fR      - enable retransmission.
+
+        \fIFRCTFERRCHCK\fR  - enable checksum (CRC32).
+
+        \fIFRCTFORDERING\fR - enable packet in-order delivery.
+
+        \fIFRCTFPARTIAL\fR  - enable partial delivery.
+
+\fBFRCTGFLAGS\fR    - get the current flow flags. Takes an \fBuint16_t
+\fIflags\fR as third argument.
+
+.SH RETURN VALUE
+
+On success, \fBfccntl\fR() returns 0.
+
+.SH ERRORS
+
+\fBfccntl\fR() can return
+
+.B -EINVAL
+An invalid argument was passed.
+
+.B -EPERM
+Operation not permitted. This is returned when requesting the value of
+a timeout (FLOWGSNDTIMEO or FLOWGRCVTIMEO) when no such timeout was
+set.
+
+.B -EBADF
+Invalid flow descriptor passed.
+
+.B -ENOTALLOC
+Flow is not allocated.
+
+.B -ENOTSUP
+The specified command is not supported.
+
+.SH ATTRIBUTES
+
+For an explanation of the terms used in this section, see \fBattributes\fR(7).
+
+.TS
+box, tab(&);
+LB|LB|LB
+L|L|L.
+Interface & Attribute & Value
+_
+\fBfccntl\fR() & Thread safety & MT-Safe
+.TE
+
+.SH SEE ALSO
+
+.BR flow_alloc "(3), " flow_accept "(3), " flow_dealloc "(3), " fqueue (3)
+
+.SH COLOPHON
+This page is part of the Ouroboros project, found at
+https://bitbucket.org/ouroboros-rina/ouroboros

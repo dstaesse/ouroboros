@@ -36,12 +36,6 @@ int qosspec_init(qosspec_t * qs)
         qs->availability = 0;
         qs->maximum_interruption = UINT32_MAX;
 
-        qs->resource_control = true;
-        qs->reliable = false;
-        qs->error_check = true;
-        qs->ordered = true;
-        qs->partial = false;
-
         return 0;
 }
 

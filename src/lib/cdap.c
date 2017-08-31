@@ -26,7 +26,6 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/fqueue.h>
-#include <ouroboros/fcntl.h>
 #include <ouroboros/errno.h>
 
 #include "cdap_req.h"

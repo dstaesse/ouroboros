@@ -7,6 +7,7 @@ set(MAN_NAMES
   flow_dealloc.3
   flow_read.3
   flow_write.3
+  fccntl.3
   fqueue.3
   fqueue_create.3
   fqueue_destroy.3

@@ -4,7 +4,7 @@ set(HEADER_FILES
   cdefs.h
   dev.h
   errno.h
-  fcntl.h
+  fccntl.h
   fqueue.h
   ipcp.h
   irm.h
