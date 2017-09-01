@@ -75,19 +75,21 @@ enum port_state {
 };
 
 struct frcti {
-        bool            used;
+        bool             used;
 
-        struct timespec last_snd;
-        bool            snd_drf;
-        uint64_t        snd_lwe;
-        uint64_t        snd_rwe;
+        struct timespec  last_snd;
+        bool             snd_drf;
+        uint64_t         snd_lwe;
+        uint64_t         snd_rwe;
 
-        struct timespec last_rcv;
-        bool            rcv_drf;
-        uint64_t        rcv_lwe;
-        uint64_t        rcv_rwe;
+        struct timespec  last_rcv;
+        bool             rcv_drf;
+        uint64_t         rcv_lwe;
+        uint64_t         rcv_rwe;
 
-        uint16_t        conf_flags;
+        uint16_t         conf_flags;
+
+        pthread_rwlock_t lock;
 };
 
 struct port {
@@ -296,7 +298,7 @@ static int frcti_send(int                  fd,
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
-        pthread_rwlock_wrlock(&ai.lock);
+        pthread_rwlock_wrlock(&frcti->lock);
 
         /* Check if sender inactivity is true. */
         if (!frcti->snd_drf && ts_diff_ms(&now, &frcti->last_snd) > 2 * MPL)
@@ -313,16 +315,16 @@ static int frcti_send(int                  fd,
         pci->seqno = frcti->snd_lwe++;
 
         if (frct_pci_ser(sdb, pci, frcti->conf_flags & FRCTFERRCHCK)) {
-                pthread_rwlock_unlock(&ai.lock);
+                pthread_rwlock_unlock(&frcti->lock);
                 return -1;
         }
 
         if (finalize_write(fd, shm_du_buff_get_idx(sdb))) {
-                pthread_rwlock_unlock(&ai.lock);
+                pthread_rwlock_unlock(&frcti->lock);
                 return -ENOTALLOC;
         }
 
-        pthread_rwlock_unlock(&ai.lock);
+        pthread_rwlock_unlock(&frcti->lock);
 
         return 0;
 }
@@ -348,11 +350,11 @@ static int frcti_configure(int      fd,
         pci.flags |= FLAG_DATA_RUN;
         pci.type |= PDU_TYPE_CONFIG;
 
-        pthread_rwlock_wrlock(&ai.lock);
+        pthread_rwlock_wrlock(&frcti->lock);
 
         frcti->conf_flags = pci.conf_flags;
 
-        pthread_rwlock_unlock(&ai.lock);
+        pthread_rwlock_unlock(&frcti->lock);
 
         if (frcti_send(fd, &pci, sdb)) {
                 shm_rdrbuff_remove(ai.rdrb, shm_du_buff_get_idx(sdb));
@@ -416,11 +418,11 @@ static ssize_t frcti_read(int fd)
 
                 sdb = shm_rdrbuff_get(ai.rdrb, idx);
 
-                pthread_rwlock_wrlock(&ai.lock);
+                pthread_rwlock_wrlock(&frcti->lock);
 
                 /* SDU may be corrupted. */
                 if (frct_pci_des(sdb, &pci, frcti->conf_flags & FRCTFERRCHCK)) {
-                        pthread_rwlock_unlock(&ai.lock);
+                        pthread_rwlock_unlock(&frcti->lock);
                         shm_rdrbuff_remove(ai.rdrb, idx);
                         return -EAGAIN;
                 }
@@ -432,7 +434,7 @@ static ssize_t frcti_read(int fd)
 
                 /* We don't accept packets when there is receiver inactivity. */
                 if (frcti->rcv_drf && !(pci.flags & FLAG_DATA_RUN)) {
-                        pthread_rwlock_unlock(&ai.lock);
+                        pthread_rwlock_unlock(&frcti->lock);
                         shm_rdrbuff_remove(ai.rdrb, idx);
                         return -EAGAIN;
                 }
@@ -449,7 +451,7 @@ static ssize_t frcti_read(int fd)
 
                 frcti->last_rcv = now;
 
-                pthread_rwlock_unlock(&ai.lock);
+                pthread_rwlock_unlock(&frcti->lock);
 
                 if (!(pci.type & PDU_TYPE_DATA))
                         shm_rdrbuff_remove(ai.rdrb, idx);
@@ -546,7 +548,8 @@ static int flow_init(int       port_id,
 
 int ouroboros_init(const char * ap_name)
 {
-        int i   = 0;
+        int i;
+        int j;
         int ret = -ENOMEM;
 
         assert(ai.ap_name == NULL);
@@ -582,6 +585,12 @@ int ouroboros_init(const char * ap_name)
         for (i = 0; i < AP_MAX_FLOWS; ++i) {
                 flow_clear(i);
                 frcti_clear(i);
+
+                if (pthread_rwlock_init(&ai.frcti[i].lock, NULL)) {
+                        for (j = i - 1; j >= 0 ; j--)
+                                pthread_rwlock_destroy(&ai.frcti[j].lock);
+                        goto fail_frct_lock;
+                }
         }
 
         ai.ports = malloc(sizeof(*ai.ports) * SYS_MAX_FLOWS);
@@ -638,6 +647,9 @@ int ouroboros_init(const char * ap_name)
  fail_ap_name:
         free(ai.ports);
  fail_ports:
+        for (i = 0; i < AP_MAX_FLOWS; ++i)
+                pthread_rwlock_destroy(&ai.frcti[i].lock);
+ fail_frct_lock:
         free(ai.frcti);
  fail_frcti:
         free(ai.flows);
@@ -674,6 +686,8 @@ void ouroboros_fini()
                                 shm_rdrbuff_remove(ai.rdrb, idx);
                         flow_fini(i);
                 }
+
+                pthread_rwlock_destroy(&ai.frcti[i].lock);
         }
 
         for (i = 0; i < SYS_MAX_FLOWS; ++i) {
