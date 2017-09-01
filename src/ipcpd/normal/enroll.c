@@ -22,7 +22,7 @@
 
 #define _POSIX_C_SOURCE 199309L
 
-#define OUROBOROS_PREFIX "Enrollment"
+#define OUROBOROS_PREFIX "enrollment"
 
 #include <ouroboros/endian.h>
 #include <ouroboros/errno.h>
@@ -64,7 +64,7 @@ struct {
         pthread_t          listener;
 } enroll;
 
-static int  send_rcv_enroll_msg(int fd)
+static int send_rcv_enroll_msg(int fd)
 {
         enroll_msg_t    req = ENROLL_MSG__INIT;
         enroll_msg_t *  reply;
@@ -277,10 +277,9 @@ static void * enroll_handle(void * o)
         return 0;
 }
 
-int enroll_boot(struct conn * conn,
-                const char *  dst)
+int enroll_boot(struct conn * conn)
 {
-        log_dbg("Getting boot information from %s.", dst);
+        log_dbg("Getting boot information.");
 
         if (send_rcv_enroll_msg(conn->flow_info.fd)) {
                 log_err("Failed to enroll.");

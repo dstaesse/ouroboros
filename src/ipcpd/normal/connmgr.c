@@ -22,7 +22,7 @@
 
 #define _POSIX_C_SOURCE 200112L
 
-#define OUROBOROS_PREFIX "Connection manager"
+#define OUROBOROS_PREFIX "connection-manager"
 
 #include <ouroboros/dev.h>
 #include <ouroboros/cacep.h>
