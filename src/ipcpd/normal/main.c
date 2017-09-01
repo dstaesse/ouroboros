@@ -237,7 +237,7 @@ static int normal_ipcp_enroll(const char *      dst,
         }
 
         /* Get boot state from peer. */
-        if (enroll_boot(&er_conn, dst)) {
+        if (enroll_boot(&er_conn)) {
                 log_err("Failed to get boot information.");
                 goto fail_enroll_boot;
         }
@@ -277,7 +277,7 @@ static int normal_ipcp_enroll(const char *      dst,
         if (connmgr_dealloc(AEID_ENROLL, &er_conn))
                 log_warn("Failed to deallocate enrollment flow.");
 
-        log_dbg("Enrolled with %s.", dst);
+        log_info("Enrolled with %s.", dst);
 
         info->dir_hash_algo = ipcpi.dir_hash_algo;
         strcpy(info->dif_name, ipcpi.dif_name);

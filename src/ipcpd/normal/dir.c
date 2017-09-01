@@ -69,7 +69,7 @@ int dir_bootstrap(void) {
                 return -ENOMEM;
         }
 
-        log_dbg("Directory bootstrapped.");
+        log_info("Directory bootstrapped.");
 
         return 0;
 }
@@ -85,7 +85,7 @@ int dir_enroll(uint64_t addr) {
                 sleep(ENROL_INTV);
         }
 
-        log_dbg("Directory enrolled.");
+        log_info("Directory enrolled.");
 
         return 0;
 }
