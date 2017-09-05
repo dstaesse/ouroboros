@@ -74,6 +74,14 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.pc.in"
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
   DESTINATION "usr/lib/pkgconfig")
 
+if (IS_DIRECTORY "/usr/lib/systemd")
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/irmd.service.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/irmd.service" @ONLY)
+
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/irmd.service"
+    DESTINATION "usr/lib/systemd/system")
+endif ()
+
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 

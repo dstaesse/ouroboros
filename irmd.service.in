@@ -1,0 +1,9 @@
+[Unit]
+Description=Ouroboros IPC Resource Manager Daemon
+
+[Service]
+ExecStart=@CMAKE_INSTALL_PREFIX@/sbin/irmd
+User=root
+
+[Install]
+WantedBy=multi-user.target
