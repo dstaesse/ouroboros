@@ -31,6 +31,7 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/sockets.h>
 
 #include "connmgr.h"
 #include "enroll.h"
@@ -44,8 +45,6 @@
 
 #include "enroll.pb-c.h"
 typedef EnrollMsg enroll_msg_t;
-typedef IpcpConfigMsg ipcp_config_msg_t;
-typedef DifInfoMsg dif_info_msg_t;
 
 #define ENROLL_AE               "Enrollment"
 #define ENROLL_PROTO            "OEP" /* Ouroboros enrollment protocol */
