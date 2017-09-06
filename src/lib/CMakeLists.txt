@@ -52,7 +52,7 @@ if (LIBGCRYPT_LIBRARIES)
       REGEX "^#define GCRYPT_VERSION ")
     string(REGEX REPLACE "^#define GCRYPT_VERSION \"(.*)\".*$" "\\1"
       GCVER "${GCSTR}")
-    message(STATUS "Found libgcrypt: ${LIBGCRYPT_LIBRARIES}"
+    message(STATUS "Found libgcrypt: ${LIBGCRYPT_LIBRARIES} "
                    "(found version \"${GCVER}\")")
     if (NOT GCVER VERSION_LESS "1.7.0")
       set (DISABLE_LIBGCRYPT FALSE CACHE BOOL "Disable libgcrypt support")
