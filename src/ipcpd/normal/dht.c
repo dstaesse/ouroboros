@@ -2335,8 +2335,11 @@ void dht_destroy(struct dht * dht)
         if (dht == NULL)
                 return;
 
-        if (dht_get_state(dht) == DHT_RUNNING)
+        if (dht_get_state(dht) == DHT_RUNNING) {
                 dht_set_state(dht, DHT_SHUTDOWN);
+                pthread_cancel(dht->worker);
+                pthread_join(dht->worker, NULL);
+        }
 
         pthread_rwlock_wrlock(&dht->lock);
 
@@ -2365,11 +2368,6 @@ void dht_destroy(struct dht * dht)
         }
 
         pthread_rwlock_unlock(&dht->lock);
-
-        if (dht_get_state(dht) == DHT_SHUTDOWN) {
-                pthread_cancel(dht->worker);
-                pthread_join(dht->worker, NULL);
-        }
 
         if (dht->buckets != NULL)
                 bucket_destroy(dht->buckets);
