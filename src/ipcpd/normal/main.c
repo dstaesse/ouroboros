@@ -142,10 +142,6 @@ static void finalize_components(void)
 
         free(ipcpi.dif_name);
 
-        enroll_fini();
-
-        connmgr_fini();
-
         rib_fini();
 }
 
@@ -397,9 +393,12 @@ int main(int    argc,
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 dt_stop();
                 stop_components();
+                finalize_components();
         }
 
-        finalize_components();
+        enroll_fini();
+
+        connmgr_fini();
 
         irm_unbind_api(getpid(), ipcpi.name);
 
