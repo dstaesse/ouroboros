@@ -28,7 +28,6 @@
 
 #include <ouroboros/logs.h>
 #include <ouroboros/fqueue.h>
-#include <ouroboros/rib.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
@@ -38,7 +37,6 @@
 #include "fa.h"
 #include "sdu_sched.h"
 #include "ipcp.h"
-#include "ribconfig.h"
 #include "dt.h"
 
 #include <pthread.h>
@@ -59,9 +57,9 @@ struct {
         struct sdu_sched * sdu_sched;
 } fa;
 
-static int sdu_handler(int                  fd,
-                       qoscube_t            qc,
-                       struct shm_du_buff * sdb)
+static void sdu_handler(int                  fd,
+                        qoscube_t            qc,
+                        struct shm_du_buff * sdb)
 {
         pthread_rwlock_rdlock(&fa.flows_lock);
 
@@ -69,12 +67,10 @@ static int sdu_handler(int                  fd,
                 pthread_rwlock_unlock(&fa.flows_lock);
                 ipcp_sdb_release(sdb);
                 log_warn("Failed to forward SDU.");
-                return -1;
+                return;
         }
 
         pthread_rwlock_unlock(&fa.flows_lock);
-
-        return 0;
 }
 
 static void destroy_conn(int fd)

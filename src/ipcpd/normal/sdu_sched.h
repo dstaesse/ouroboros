@@ -26,11 +26,11 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
 
-typedef int (* next_sdu_t)(int                  fd,
-                           qoscube_t            qc,
-                           struct shm_du_buff * sdb);
+typedef void (* next_sdu_fn_t)(int                  fd,
+                               qoscube_t            qc,
+                               struct shm_du_buff * sdb);
 
-struct sdu_sched * sdu_sched_create(next_sdu_t callback);
+struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback);
 
 void               sdu_sched_destroy(struct sdu_sched * sdu_sched);
 

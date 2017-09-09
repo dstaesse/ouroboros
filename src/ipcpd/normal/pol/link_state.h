@@ -23,9 +23,12 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H
 #define OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H
 
+#define LS_AE    "Management"
+#define LS_PROTO "LSP"
+
 #include "pol-routing-ops.h"
 
-int                link_state_init(struct nbs * nbs);
+int                link_state_init(void);
 
 void               link_state_fini(void);
 
@@ -33,11 +36,6 @@ struct routing_i * link_state_routing_i_create(struct pff * pff);
 
 void               link_state_routing_i_destroy(struct routing_i * instance);
 
-struct pol_routing_ops link_state_ops = {
-        .init              = link_state_init,
-        .fini              = link_state_fini,
-        .routing_i_create  = link_state_routing_i_create,
-        .routing_i_destroy = link_state_routing_i_destroy
-};
+struct pol_routing_ops link_state_ops;
 
 #endif /* OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H */

@@ -22,29 +22,24 @@
 
 #define _POSIX_C_SOURCE 200112L
 
-#define OUROBOROS_PREFIX "routing"
-
-#include <ouroboros/logs.h>
+#include <ouroboros/errno.h>
 
 #include "routing.h"
 #include "pol/link_state.h"
 
-
 struct pol_routing_ops * r_ops;
 
-int routing_init(enum pol_routing pr,
-                 struct nbs *     nbs)
+int routing_init(enum pol_routing pr)
 {
         switch (pr) {
         case LINK_STATE:
                 r_ops = &link_state_ops;
                 break;
         default:
-                log_err("Unknown routing type.");
-                return -1;
+                return -ENOTSUP;
         }
 
-        return r_ops->init(nbs);
+        return r_ops->init();
 }
 
 struct routing_i * routing_i_create(struct pff * pff)

@@ -31,9 +31,9 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/irm.h>
-#include <ouroboros/rib.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/notifier.h>
 
 #include "addr_auth.h"
 #include "connmgr.h"
@@ -42,8 +42,6 @@
 #include "fa.h"
 #include "dt.h"
 #include "ipcp.h"
-#include "ribconfig.h"
-#include "ribmgr.h"
 
 #include <stdbool.h>
 #include <signal.h>
@@ -56,11 +54,6 @@
 
 static int initialize_components(const struct ipcp_config * conf)
 {
-        if (rib_init()) {
-                log_err("Failed to initialize RIB.");
-                goto fail_rib_init;
-        }
-
         ipcpi.dif_name = strdup(conf->dif_info.dif_name);
         if (ipcpi.dif_name == NULL) {
                 log_err("Failed to set DIF name.");
@@ -84,11 +77,6 @@ static int initialize_components(const struct ipcp_config * conf)
         }
 
         log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
-
-        if (ribmgr_init()) {
-                log_err("Failed to initialize RIB manager.");
-                goto fail_ribmgr;
-        }
 
         if (dt_init(conf->routing_type,
                     conf->addr_size,
@@ -117,14 +105,10 @@ static int initialize_components(const struct ipcp_config * conf)
  fail_fa:
         dt_fini();
  fail_dt:
-        ribmgr_fini();
- fail_ribmgr:
         addr_auth_fini();
  fail_addr_auth:
         free(ipcpi.dif_name);
  fail_dif_name:
-        rib_fini();
- fail_rib_init:
         return -1;
 }
 
@@ -136,13 +120,9 @@ static void finalize_components(void)
 
         dt_fini();
 
-        ribmgr_fini();
-
         addr_auth_fini();
 
         free(ipcpi.dif_name);
-
-        rib_fini();
 }
 
 static int start_components(void)
@@ -150,11 +130,6 @@ static int start_components(void)
         assert(ipcp_get_state() == IPCP_INIT);
 
         ipcp_set_state(IPCP_OPERATIONAL);
-
-        if (ribmgr_start()) {
-                log_err("Failed to start RIB manager.");
-                goto fail_ribmgr_start;
-        }
 
         if (fa_start()) {
                 log_err("Failed to start flow allocator.");
@@ -178,8 +153,6 @@ static int start_components(void)
  fail_enroll_start:
         fa_stop();
  fail_fa_start:
-        ribmgr_stop();
- fail_ribmgr_start:
         ipcp_set_state(IPCP_INIT);
         return -1;
 }
@@ -194,8 +167,6 @@ static void stop_components(void)
         enroll_stop();
 
         fa_stop();
-
-        ribmgr_stop();
 
         ipcp_set_state(IPCP_INIT);
 }
@@ -377,6 +348,11 @@ int main(int    argc,
                 goto fail_enroll_init;
         }
 
+        if (notifier_init()) {
+                log_err("Failed to initialize notifier component.");
+                goto fail_notifier_init;
+        }
+
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
                 goto fail_boot;
@@ -396,6 +372,8 @@ int main(int    argc,
                 finalize_components();
         }
 
+        notifier_fini();
+
         enroll_fini();
 
         connmgr_fini();
@@ -409,6 +387,8 @@ int main(int    argc,
  fail_create_r:
         ipcp_shutdown();
  fail_boot:
+        notifier_fini();
+ fail_notifier_init:
         enroll_fini();
  fail_enroll_init:
         connmgr_fini();

@@ -27,12 +27,10 @@
 #include <ouroboros/qos.h>
 
 #include "pff.h"
-#include "neighbors.h"
 
 #include <stdint.h>
 
-int                routing_init(enum pol_routing pr,
-                                struct nbs *     nbs);
+int                routing_init(enum pol_routing pr);
 
 void               routing_fini(void);
 

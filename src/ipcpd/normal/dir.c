@@ -27,13 +27,11 @@
 #include <ouroboros/endian.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
 
 #include "dir.h"
 #include "dht.h"
 #include "ipcp.h"
-#include "ribconfig.h"
 
 #include <stdlib.h>
 #include <string.h>

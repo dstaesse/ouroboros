@@ -38,9 +38,9 @@
 #define FD_UPDATE_TIMEOUT 10000 /* nanoseconds */
 
 struct sdu_sched {
-        fset_t *   set[QOS_CUBE_MAX];
-        next_sdu_t callback;
-        pthread_t  sdu_readers[IPCP_SCHED_THREADS];
+        fset_t *      set[QOS_CUBE_MAX];
+        next_sdu_fn_t callback;
+        pthread_t     sdu_readers[IPCP_SCHED_THREADS];
 };
 
 static void cleanup_reader(void * o)
@@ -95,10 +95,7 @@ static void * sdu_reader(void * o)
                                 continue;
                         }
 
-                        if (sched->callback(fd, i, sdb)) {
-                                log_warn("Callback reported an error.");
-                                continue;
-                        }
+                        sched->callback(fd, i, sdb);
                 }
         }
 
@@ -107,7 +104,7 @@ static void * sdu_reader(void * o)
         return (void *) 0;
 }
 
-struct sdu_sched * sdu_sched_create(next_sdu_t callback)
+struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
 {
         struct sdu_sched * sdu_sched;
         int                i;

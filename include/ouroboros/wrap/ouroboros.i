@@ -23,14 +23,12 @@
 %{
 #include "ouroboros/cdefs.h"
 #include "ouroboros/cacep.h"
-#include "ouroboros/cdap.h"
 #include "ouroboros/dev.h"
 #include "ouroboros/errno.h"
 #include "ouroboros/fccntl.h"
 #include "ouroboros/fqueue.h"
 #include "ouroboros/irm.h"
 #include "ouroboros/ipcp.h"
-#include "ouroboros/nsm.h"
 #include "ouroboros/qos.h"
 %}
 
@@ -38,12 +36,10 @@ typedef int pid_t;
 
 %include "ouroboros/cdefs.h"
 %include "ouroboros/cacep.h"
-%include "ouroboros/cdap.h"
 %include "ouroboros/dev.h"
 %include "ouroboros/errno.h"
 %include "ouroboros/fccntl.h"
 %include "ouroboros/fqueue.h"
 %include "ouroboros/irm.h"
 %include "ouroboros/ipcp.h"
-%include "ouroboros/nsm.h"
 %include "ouroboros/qos.h"

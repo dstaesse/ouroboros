@@ -8,8 +8,6 @@ protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS irmd_messages.proto)
 protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS ipcpd_messages.proto)
 protobuf_generate_c(DIF_CONFIG_PROTO_SRCS DIF_CONFIG_PROTO_HDRS
   ipcp_config.proto)
-protobuf_generate_c(CDAP_PROTO_SRCS CDAP_PROTO_HDRS cdap.proto)
-protobuf_generate_c(RO_PROTO_SRCS RO_PROTO_HDRS ro.proto)
 protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
 
 if (NOT APPLE)
@@ -134,8 +132,6 @@ else ()
 endif ()
 set(SOCKET_TIMEOUT 1000 CACHE STRING
   "Default timeout for responses from IPCPs (ms)")
-set(CDAP_REPLY_TIMEOUT 6000 CACHE STRING
-  "Timeout for CDAP to wait for reply")
 set(SHM_PREFIX "ouroboros" CACHE STRING
   "String to prepend to POSIX shared memory filenames")
 set(SHM_RBUFF_PREFIX "/${SHM_PREFIX}.rbuff." CACHE INTERNAL
@@ -154,8 +150,6 @@ set(SOURCE_FILES
   bitmap.c
   btree.c
   cacep.c
-  cdap.c
-  cdap_req.c
   crc32.c
   dev.c
   frct_pci.c
@@ -166,10 +160,10 @@ set(SOURCE_FILES
   lockfile.c
   logs.c
   md5.c
+  notifier.c
   qos.c
   qoscube.c
   random.c
-  rib.c
   sha3.c
   shm_flow_set.c
   shm_rbuff.c
@@ -185,8 +179,7 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)
 
 add_library(ouroboros SHARED ${SOURCE_FILES} ${IRM_PROTO_SRCS}
-  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS} ${CDAP_PROTO_SRCS}
-  ${CACEP_PROTO_SRCS} ${RO_PROTO_SRCS})
+  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS} ${CACEP_PROTO_SRCS})
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)

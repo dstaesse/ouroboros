@@ -27,7 +27,13 @@
 #include <ouroboros/qos.h>
 
 #include "ae.h"
-#include "neighbors.h"
+
+#define NOTIFY_DT_CONN_ADD   0x00D0
+#define NOTIFY_DT_CONN_DEL   0x00D1
+#define NOTIFY_DT_CONN_QOS   0x00D2
+
+#define NOTIFY_MGMT_CONN_ADD 0x00F0
+#define NOTIFY_MGMT_CONN_DEL 0x00F1
 
 int         connmgr_init(void);
 
@@ -38,8 +44,7 @@ int         connmgr_start(void);
 void        connmgr_stop(void);
 
 int         connmgr_ae_init(enum ae_id               id,
-                            const struct conn_info * info,
-                            struct nbs *             nbs);
+                            const struct conn_info * info);
 
 void        connmgr_ae_fini(enum ae_id id);
 
