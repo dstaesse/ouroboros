@@ -20,9 +20,11 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
 #define _BSD_SOURCE
 #define _DARWIN_C_SOURCE
+#elif defined(__FreeBSD__)
+#define __BSD_VISIBLE 1
 #else
 #define _POSIX_C_SOURCE 200112L
 #endif
@@ -97,9 +99,9 @@
 #define ETH_FRAME_SIZE            (ETH_HEADER_SIZE + LLC_HEADER_SIZE \
                                    + SHIM_ETH_LLC_MAX_SDU_SIZE)
 #define SHIM_ETH_LLC_MAX_SDU_SIZE (1500 - LLC_HEADER_SIZE)
-#define EVENT_WAIT_TIMEOUT        10000 /* us */
-#define NAME_QUERY_TIMEOUT        2000  /* ms */
-#define MGMT_TIMEOUT              100   /* ms */
+#define EVENT_WAIT_TIMEO          10000 /* us */
+#define NAME_QUERY_TIMEO          2000  /* ms */
+#define MGMT_TIMEO                100   /* ms */
 
 typedef ShimEthLlcMsg shim_eth_llc_msg_t;
 
@@ -137,7 +139,7 @@ struct {
 #elif defined(HAVE_BPF)
         int                bpf;
         uint8_t            hw_addr[MAC_SIZE];
-#elif defined HAVE_RAW_SOCKETS
+#elif defined(HAVE_RAW_SOCKETS)
         int                s_fd;
         struct sockaddr_ll device;
 #endif /* HAVE_NETMAP */
@@ -412,7 +414,7 @@ static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
                                 const uint8_t * dst,
                                 qoscube_t       cube)
 {
-        struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 100};
+        struct timespec ts = {0, EVENT_WAIT_TIMEO * 100};
         struct timespec abstime;
         int             fd;
 
@@ -569,8 +571,8 @@ static int eth_llc_ipcp_mgmt_frame(const uint8_t * buf,
 static void * eth_llc_ipcp_mgmt_handler(void * o)
 {
         int                 ret;
-        struct timespec     timeout = {(MGMT_TIMEOUT / 1000),
-                                       (MGMT_TIMEOUT % 1000) * MILLION};
+        struct timespec     timeout = {(MGMT_TIMEO / 1000),
+                                       (MGMT_TIMEO % 1000) * MILLION};
         struct timespec     abstime;
         struct mgmt_frame * frame;
 
@@ -640,7 +642,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
                 if (ipcp_get_state() != IPCP_OPERATIONAL)
                         return (void *) 0;
 #if defined(HAVE_NETMAP)
-                if (poll(&eth_llc_data.poll_in, 1, EVENT_WAIT_TIMEOUT / 1000) < 0)
+                if (poll(&eth_llc_data.poll_in, 1, EVENT_WAIT_TIMEO / 1000) < 0)
                         continue;
                 if (eth_llc_data.poll_in.revents == 0) /* TIMED OUT */
                         continue;
@@ -731,7 +733,7 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
 static void * eth_llc_ipcp_sdu_writer(void * o)
 {
-        struct timespec      timeout = {0, EVENT_WAIT_TIMEOUT * 1000};
+        struct timespec      timeout = {0, EVENT_WAIT_TIMEO * 1000};
         int                  fd;
         struct shm_du_buff * sdb;
         uint8_t              ssap;
@@ -799,9 +801,9 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         int              enable  = 1;
         int              disable = 0;
         int              blen;
-        struct timeval   tv = {0, EVENT_WAIT_TIMEOUT};
+        struct timeval   tv = {0, EVENT_WAIT_TIMEO};
 #elif defined(HAVE_RAW_SOCKETS)
-        struct timeval   tv = {0, EVENT_WAIT_TIMEOUT};
+        struct timeval   tv = {0, EVENT_WAIT_TIMEO};
 #endif /* HAVE_NETMAP */
 
 #if defined(__FreeBSD__) || defined(__APPLE__)
@@ -1014,8 +1016,8 @@ static int eth_llc_ipcp_unreg(const uint8_t * hash)
 static int eth_llc_ipcp_query(const uint8_t * hash)
 {
         uint8_t            r_addr[MAC_SIZE];
-        struct timespec    timeout = {(NAME_QUERY_TIMEOUT / 1000),
-                                      (NAME_QUERY_TIMEOUT % 1000) * MILLION};
+        struct timespec    timeout = {(NAME_QUERY_TIMEO / 1000),
+                                      (NAME_QUERY_TIMEO % 1000) * MILLION};
         shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
         struct dir_query * query;
         int                ret;
@@ -1100,7 +1102,7 @@ static int eth_llc_ipcp_flow_alloc(int             fd,
 static int eth_llc_ipcp_flow_alloc_resp(int fd,
                                         int response)
 {
-        struct timespec ts    = {0, EVENT_WAIT_TIMEOUT * 100};
+        struct timespec ts    = {0, EVENT_WAIT_TIMEO * 100};
         struct timespec abstime;
         uint8_t         ssap  = 0;
         uint8_t         r_sap = 0;
