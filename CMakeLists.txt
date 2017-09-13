@@ -85,7 +85,12 @@ endif ()
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
-find_package(ProtobufC REQUIRED QUIET)
+find_package(ProtobufC QUIET)
+if (NOT (PROTOBUF_C_INCLUDE_DIRS AND PROTOBUF_C_LIBRARY
+         AND PROTOBUF_PROTOC_C_EXECUTABLE))
+  message(FATAL_ERROR "Protobuf C compiler required but not found. "
+                      "Please install Google Protocol Buffers.")
+endif ()
 include_directories(${PROTOBUF_C_INCLUDE_DIRS})
 
 add_subdirectory(include)
