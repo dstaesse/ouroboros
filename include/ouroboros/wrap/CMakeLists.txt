@@ -1,18 +1,20 @@
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-find_package(SWIG)
+find_package(SWIG QUIET)
 if (NOT SWIG_FOUND)
-  message(STATUS "SWIG not found: Bindings for other languages disabled")
+  message(STATUS "Install SWIG to enable bindings for other languages")
 else ()
+  message(STATUS "SWIG support enabled")
   include(${SWIG_USE_FILE})
   include_directories(${CMAKE_CURRENT_SOURCE_DIR})
   set(CMAKE_SWIG_FLAGS "")
 
-  find_package(PythonLibs)
+  find_package(PythonLibs QUIET)
   if (NOT PYTHONLIBS_FOUND)
     message(STATUS "Python not found: Python bindings will not be built")
   else ()
+    message(STATUS "Python found: Python bindings will be built")
     include_directories(${PYTHON_INCLUDE_PATH})
 
     # Python assumes C99 since Python 3.6

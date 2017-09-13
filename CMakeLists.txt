@@ -85,7 +85,7 @@ endif ()
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
-find_package(ProtobufC REQUIRED)
+find_package(ProtobufC REQUIRED QUIET)
 include_directories(${PROTOBUF_C_INCLUDE_DIRS})
 
 add_subdirectory(include)
