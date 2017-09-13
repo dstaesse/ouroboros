@@ -21,10 +21,8 @@
  */
 
 #include <ouroboros/errno.h>
-#include <ouroboros/rib.h>
 
 #include "dt_pci.h"
-#include "ribconfig.h"
 
 #include <stdlib.h>
 #include <string.h>

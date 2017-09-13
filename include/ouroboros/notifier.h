@@ -1,7 +1,7 @@
 /*
- * Ouroboros - Copyright (C) 2016- 2017
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
- * CDAP message
+ * Notifier event system using callbacks
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,13 +20,21 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-syntax = "proto2";
+#ifndef OUROBOROS_LIB_NOTIFIER_H
+#define OUROBOROS_LIB_NOTIFIER_H
 
-message cdap {
-        required uint32 opcode    = 1;
-        required uint32 invoke_id = 2;
-        optional uint32 flags     = 3;
-        optional string name      = 4;
-        optional bytes value      = 5;
-        optional int32 result     = 6;
-}
+typedef void (* notifier_fn_t)(int          event,
+                               const void * o);
+
+int  notifier_init(void);
+
+void notifier_fini(void);
+
+void notifier_event(int          event,
+                    const void * o);
+
+int  notifier_reg(notifier_fn_t callback);
+
+void notifier_unreg(notifier_fn_t callback);
+
+#endif /* OUROBOROS_LIB_NOTIFIER_H */

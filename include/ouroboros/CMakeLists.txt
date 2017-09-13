@@ -1,6 +1,5 @@
 set(HEADER_FILES
   cacep.h
-  cdap.h
   cdefs.h
   dev.h
   errno.h
@@ -8,7 +7,6 @@ set(HEADER_FILES
   fqueue.h
   ipcp.h
   irm.h
-  nsm.h
   proto.h
   qos.h)
 

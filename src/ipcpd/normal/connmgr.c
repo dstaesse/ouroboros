@@ -26,16 +26,15 @@
 
 #include <ouroboros/dev.h>
 #include <ouroboros/cacep.h>
-#include <ouroboros/cdap.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/notifier.h>
 
 #include "ae.h"
 #include "connmgr.h"
 #include "enroll.h"
 #include "ipcp.h"
-#include "ribmgr.h"
 
 #include <pthread.h>
 #include <string.h>
@@ -198,8 +197,7 @@ void connmgr_stop(void)
 }
 
 int connmgr_ae_init(enum ae_id               id,
-                    const struct conn_info * info,
-                    struct nbs *             nbs)
+                    const struct conn_info * info)
 {
         struct ae * ae;
 
@@ -219,8 +217,6 @@ int connmgr_ae_init(enum ae_id               id,
         list_head_init(&ae->pending);
 
         memcpy(&connmgr.aes[id].info, info, sizeof(connmgr.aes[id].info));
-
-        connmgr.aes[id].nbs = nbs;
 
         return 0;
 }
@@ -258,8 +254,6 @@ void connmgr_ae_fini(enum ae_id id)
         pthread_mutex_destroy(&ae->lock);
 
         memset(&connmgr.aes[id].info, 0, sizeof(connmgr.aes[id].info));
-
-        connmgr.aes[id].nbs = NULL;
 }
 
 int connmgr_ipcp_connect(const char * dst,
@@ -394,8 +388,16 @@ int connmgr_alloc(enum ae_id    id,
                 return -1;
         }
 
-        if (connmgr.aes[id].nbs != NULL)
-                nbs_add(connmgr.aes[id].nbs, *conn);
+        switch (id) {
+        case AEID_DT:
+                notifier_event(NOTIFY_DT_CONN_ADD, conn);
+                break;
+        case AEID_MGMT:
+                notifier_event(NOTIFY_MGMT_CONN_ADD, conn);
+                break;
+        default:
+                break;
+        }
 
         return 0;
 }
@@ -403,8 +405,16 @@ int connmgr_alloc(enum ae_id    id,
 int connmgr_dealloc(enum ae_id    id,
                     struct conn * conn)
 {
-        if (connmgr.aes[id].nbs != NULL)
-                nbs_del(connmgr.aes[id].nbs, conn->flow_info.fd);
+        switch (id) {
+        case AEID_DT:
+                notifier_event(NOTIFY_DT_CONN_DEL, conn);
+                break;
+        case AEID_MGMT:
+                notifier_event(NOTIFY_MGMT_CONN_DEL, conn);
+                break;
+        default:
+                break;
+        }
 
         return flow_dealloc(conn->flow_info.fd);
 }

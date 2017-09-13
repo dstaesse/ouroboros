@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * RIB manager of the IPC Process
+ * Link State message
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,35 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_RIBMGR_H
-#define OUROBOROS_IPCPD_NORMAL_RIBMGR_H
+syntax = "proto2";
 
-#include <ouroboros/ipcp.h>
-#include <ouroboros/utils.h>
-#include <ouroboros/qos.h>
-
-enum diss_target {
-        NONE = 0,
-        NEIGHBORS,
-        ALL_MEMBERS
+message link_state_msg {
+        required uint64 d_addr = 1;
+        required uint64 s_addr = 2;
+        /* Add QoS parameters of link here */
 };
-
-enum diss_freq {
-        SINGLE = 0,
-        PERIODIC
-};
-
-int  ribmgr_init(void);
-
-void ribmgr_fini(void);
-
-int  ribmgr_start(void);
-
-void ribmgr_stop(void);
-
-int  ribmgr_disseminate(char *           path,
-                        enum diss_target target,
-                        enum diss_freq   freq,
-                        size_t           delay);
-
-#endif /* OUROBOROS_IPCPD_NORMAL_RIBMGR_H */

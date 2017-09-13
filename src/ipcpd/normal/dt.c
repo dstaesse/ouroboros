@@ -29,19 +29,17 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/rib.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/notifier.h>
 
 #include "connmgr.h"
 #include "ipcp.h"
 #include "dt.h"
 #include "dt_pci.h"
 #include "pff.h"
-#include "neighbors.h"
 #include "routing.h"
 #include "sdu_sched.h"
 #include "ae.h"
-#include "ribconfig.h"
 #include "fa.h"
 
 #include <stdlib.h>
@@ -66,36 +64,33 @@ struct {
         struct ae_info     aes[AP_RES_FDS];
         pthread_rwlock_t   lock;
 
-        struct nbs *       nbs;
-
-        struct nb_notifier nb_notifier;
-
         pthread_t          listener;
 } dt;
 
-static int dt_neighbor_event(enum nb_event event,
-                             struct conn   conn)
+static void handle_event(int          event,
+                         const void * o)
 {
-        /* We are only interested in neighbors being added and removed. */
+        struct conn * c;
+
+        c = (struct conn *) o;
+
         switch (event) {
-        case NEIGHBOR_ADDED:
-                sdu_sched_add(dt.sdu_sched, conn.flow_info.fd);
-                log_dbg("Added fd %d to SDU scheduler.", conn.flow_info.fd);
+        case NOTIFY_DT_CONN_ADD:
+                sdu_sched_add(dt.sdu_sched, c->flow_info.fd);
+                log_dbg("Added fd %d to SDU scheduler.", c->flow_info.fd);
                 break;
-        case NEIGHBOR_REMOVED:
-                sdu_sched_del(dt.sdu_sched, conn.flow_info.fd);
-                log_dbg("Removed fd %d from SDU scheduler.", conn.flow_info.fd);
+        case NOTIFY_DT_CONN_DEL:
+                sdu_sched_del(dt.sdu_sched, c->flow_info.fd);
+                log_dbg("Removed fd %d from SDU scheduler.", c->flow_info.fd);
                 break;
         default:
                 break;
         }
-
-        return 0;
 }
 
-static int sdu_handler(int                  fd,
-                       qoscube_t            qc,
-                       struct shm_du_buff * sdb)
+static void sdu_handler(int                  fd,
+                        qoscube_t            qc,
+                        struct shm_du_buff * sdb)
 {
         struct dt_pci dt_pci;
 
@@ -107,45 +102,38 @@ static int sdu_handler(int                  fd,
                 if (dt_pci.ttl == 0) {
                         log_dbg("TTL was zero.");
                         ipcp_sdb_release(sdb);
-                        return 0;
+                        return;
                 }
 
                 fd = pff_nhop(dt.pff[qc], dt_pci.dst_addr);
                 if (fd < 0) {
                         log_err("No next hop for %" PRIu64, dt_pci.dst_addr);
                         ipcp_sdb_release(sdb);
-                        return -1;
+                        return;
                 }
 
                 if (ipcp_flow_write(fd, sdb)) {
                         log_err("Failed to write SDU to fd %d.", fd);
                         ipcp_sdb_release(sdb);
-                        return -1;
+                        return;
                 }
         } else {
                 dt_pci_shrink(sdb);
 
                 if (dt_pci.fd > AP_RES_FDS) {
-                        if (ipcp_flow_write(dt_pci.fd, sdb)) {
+                        if (ipcp_flow_write(dt_pci.fd, sdb))
                                 ipcp_sdb_release(sdb);
-                                return -1;
-                        }
-                        return 0;
+                        return;
                 }
 
                 if (dt.aes[dt_pci.fd].post_sdu == NULL) {
                         log_err("No registered AE on fd %d.", dt_pci.fd);
                         ipcp_sdb_release(sdb);
-                        return -EPERM;
+                        return;
                 }
 
                 dt.aes[dt_pci.fd].post_sdu(dt.aes[dt_pci.fd].ae, sdb);
-
-                return 0;
         }
-
-        /* silence compiler */
-        return 0;
 }
 
 static void * dt_conn_handle(void * o)
@@ -160,11 +148,9 @@ static void * dt_conn_handle(void * o)
                         continue;
                 }
 
-                log_dbg("Got new connection.");
-
                 /* NOTE: connection acceptance policy could be here. */
 
-                nbs_add(dt.nbs, conn);
+                notifier_event(NOTIFY_DT_CONN_ADD, &conn);
         }
 
         return 0;
@@ -192,24 +178,17 @@ int dt_init(enum pol_routing pr,
                 goto fail_pci_init;
         }
 
-        dt.nbs = nbs_create();
-        if (dt.nbs == NULL) {
-                log_err("Failed to create neighbors struct.");
-                goto fail_nbs;
+        if (notifier_reg(handle_event)) {
+                log_err("Failed to register with notifier.");
+                goto fail_notifier_reg;
         }
 
-        dt.nb_notifier.notify_call = dt_neighbor_event;
-        if (nbs_reg_notifier(dt.nbs, &dt.nb_notifier)) {
-                log_err("Failed to register notifier.");
-                goto fail_nbs_notifier;
-        }
-
-        if (connmgr_ae_init(AEID_DT, &info, dt.nbs)) {
+        if (connmgr_ae_init(AEID_DT, &info)) {
                 log_err("Failed to register with connmgr.");
                 goto fail_connmgr_ae_init;
         }
 
-        if (routing_init(pr, dt.nbs)) {
+        if (routing_init(pr)) {
                 log_err("Failed to init routing.");
                 goto fail_routing;
         }
@@ -249,20 +228,17 @@ int dt_init(enum pol_routing pr,
         for (j = 0; j < QOS_CUBE_MAX; ++j)
                 routing_i_destroy(dt.routing[j]);
  fail_routing_i:
-        connmgr_ae_fini(AEID_DT);
- fail_connmgr_ae_init:
         for (i = 0; i < QOS_CUBE_MAX; ++i)
                 pff_destroy(dt.pff[i]);
  fail_pff:
         routing_fini();
  fail_routing:
-        nbs_unreg_notifier(dt.nbs, &dt.nb_notifier);
- fail_nbs_notifier:
-        nbs_destroy(dt.nbs);
- fail_nbs:
+        connmgr_ae_fini(AEID_DT);
+ fail_connmgr_ae_init:
+        notifier_unreg(&handle_event);
+ fail_notifier_reg:
         dt_pci_fini();
  fail_pci_init:
-        connmgr_ae_fini(AEID_DT);
         return -1;
 }
 
@@ -282,11 +258,11 @@ void dt_fini(void)
 
         routing_fini();
 
-        nbs_unreg_notifier(dt.nbs, &dt.nb_notifier);
-
-        nbs_destroy(dt.nbs);
-
         connmgr_ae_fini(AEID_DT);
+
+        notifier_unreg(&handle_event);
+
+        dt_pci_fini();
 }
 
 int dt_start(void)

@@ -29,14 +29,12 @@
 #include <ouroboros/time_utils.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/rib.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/sockets.h>
 
 #include "connmgr.h"
 #include "enroll.h"
 #include "ipcp.h"
-#include "ribconfig.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -270,6 +268,8 @@ static void * enroll_handle(void * o)
                 else
                         log_dbg("Neigbor reported failed enrollment.");
 
+                enroll_msg__free_unpacked(msg, NULL);
+
                 connmgr_dealloc(AEID_ENROLL, &conn);
         }
 
@@ -339,7 +339,7 @@ int enroll_init(void)
         info.pref_syntax  = PROTO_GPB;
         info.addr         = 0;
 
-        if (connmgr_ae_init(AEID_ENROLL, &info, NULL)) {
+        if (connmgr_ae_init(AEID_ENROLL, &info)) {
                 log_err("Failed to register with connmgr.");
                 return -1;
         }

@@ -27,11 +27,9 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/time_utils.h>
-#include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
 
 #include "ipcp.h"
-#include "ribconfig.h"
 
 #include <time.h>
 #include <stdlib.h>

@@ -38,7 +38,8 @@ struct htable {
         uint64_t           buckets_size;
 };
 
-struct htable * htable_create(uint64_t buckets, bool hash_key)
+struct htable * htable_create(uint64_t buckets,
+                              bool     hash_key)
 {
         struct htable * tmp;
         unsigned int i;

@@ -328,9 +328,6 @@ static void kad_req_destroy(struct kad_req * req)
 {
         assert(req);
 
-        if (req->key != NULL)
-                free(req->key);
-
         pthread_mutex_lock(&req->lock);
 
         switch (req->state) {
@@ -351,13 +348,16 @@ static void kad_req_destroy(struct kad_req * req)
                 break;
         }
 
-        while (req->state != REQ_NULL)
+        while (req->state != REQ_NULL && req->state != REQ_DONE)
                 pthread_cond_wait(&req->cond, &req->lock);
 
         pthread_mutex_unlock(&req->lock);
 
         pthread_cond_destroy(&req->cond);
         pthread_mutex_destroy(&req->lock);
+
+        if (req->key != NULL)
+                free(req->key);
 
         free(req);
 }
@@ -391,7 +391,7 @@ static int kad_req_wait(struct kad_req * req,
         case REQ_PENDING: /* ETIMEDOUT */
         case REQ_RESPONSE:
                 req->state = REQ_DONE;
-                pthread_cond_signal(&req->cond);
+                pthread_cond_broadcast(&req->cond);
                 break;
         default:
                 break;
@@ -1859,7 +1859,7 @@ static void * work(void * o)
                                 if (now.tv_sec > v->t_exp) {
                                         list_del(&v->next);
                                         val_destroy(v);
-                                 }
+                                }
 
                                 if (now.tv_sec > v->t_rep) {
                                         kad_publish(dht, e->key, v->addr,
@@ -2018,7 +2018,7 @@ static void kad_handle_response(struct dht * dht,
         case KAD_FIND_VALUE:
         case KAD_FIND_NODE:
                 if (dht_get_state(dht) != DHT_RUNNING)
-                        return;
+                        break;
                 kad_handle_find_resp(dht, req, msg);
                 break;
         default:
