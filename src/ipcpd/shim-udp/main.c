@@ -632,7 +632,7 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
         return 0;
 }
 
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+#ifdef HAVE_DDNS
 /* FIXME: Dependency on nsupdate to be removed in the end */
 /* NOTE: Disgusted with this crap */
 static int ddns_send(char * cmd)
@@ -757,7 +757,7 @@ static uint32_t ddns_resolve(char *   name,
 
 static int ipcp_udp_reg(const uint8_t * hash)
 {
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+#ifdef HAVE_DDNS
         char ipstr[INET_ADDRSTRLEN];
         char dnsstr[INET_ADDRSTRLEN];
         char cmd[1000];
@@ -776,7 +776,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
                 return -1;
         }
 
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+#ifdef HAVE_DDNS
         /* register application with DNS server */
 
         dns_addr = udp_data.dns_addr;
@@ -810,7 +810,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
 
 static int ipcp_udp_unreg(const uint8_t * hash)
 {
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+#ifdef HAVE_DDNS
         char dnsstr[INET_ADDRSTRLEN];
         /* max DNS name length + max IP length + max command length */
         char cmd[100];
@@ -822,7 +822,7 @@ static int ipcp_udp_unreg(const uint8_t * hash)
 
         ipcp_hash_str(hashstr, hash);
 
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+#ifdef HAVE_DDNS
         /* unregister application with DNS server */
 
         dns_addr = udp_data.dns_addr;
@@ -850,7 +850,7 @@ static int ipcp_udp_query(const uint8_t * hash)
 {
         uint32_t           ip_addr = 0;
         struct hostent *   h;
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+#ifdef HAVE_DDNS
         uint32_t           dns_addr = 0;
 #endif
         char hashstr[ipcp_dir_hash_strlen() + 1];
@@ -862,7 +862,7 @@ static int ipcp_udp_query(const uint8_t * hash)
         if (shim_data_dir_has(udp_data.shim_data, hash))
                 return 0;
 
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+#ifdef HAVE_DDNS
         dns_addr = udp_data.dns_addr;
 
         if (dns_addr != 0) {
@@ -880,7 +880,7 @@ static int ipcp_udp_query(const uint8_t * hash)
                 }
 
                 ip_addr = *((uint32_t *) (h->h_addr_list[0]));
-#ifdef CONFIG_OUROBOROS_ENABLE_DNS
+#ifdef HAVE_DDNS
         }
 #endif
 
