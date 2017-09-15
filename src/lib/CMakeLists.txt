@@ -163,6 +163,7 @@ set(SOURCE_FILES
   qos.c
   qoscube.c
   random.c
+  rq.c
   sha3.c
   shm_flow_set.c
   shm_rbuff.c
