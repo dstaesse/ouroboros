@@ -26,21 +26,21 @@
 
 #define OUROBOROS_PREFIX "normal-ipcp"
 
-#include <ouroboros/endian.h>
-#include <ouroboros/logs.h>
-#include <ouroboros/ipcp-dev.h>
-#include <ouroboros/time_utils.h>
-#include <ouroboros/irm.h>
-#include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/hash.h>
+#include <ouroboros/ipcp-dev.h>
+#include <ouroboros/irm.h>
+#include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
+#include <ouroboros/rib.h>
+#include <ouroboros/time_utils.h>
 
 #include "addr_auth.h"
 #include "connmgr.h"
 #include "dir.h"
+#include "dt.h"
 #include "enroll.h"
 #include "fa.h"
-#include "dt.h"
 #include "ipcp.h"
 
 #include <stdbool.h>
@@ -338,6 +338,11 @@ int main(int    argc,
         }
 
         /* These components must be init at creation. */
+        if (rib_init("ipcpd-normal")) {
+                log_err("Failed to initialize RIB.");
+                goto fail_rib_init;
+        }
+
         if (connmgr_init()) {
                 log_err("Failed to initialize connection manager.");
                 goto fail_connmgr_init;
@@ -378,6 +383,8 @@ int main(int    argc,
 
         connmgr_fini();
 
+        rib_fini();
+
         irm_unbind_api(getpid(), ipcpi.name);
 
         ipcp_fini();
@@ -393,6 +400,8 @@ int main(int    argc,
  fail_enroll_init:
         connmgr_fini();
  fail_connmgr_init:
+        rib_fini();
+ fail_rib_init:
         irm_unbind_api(getpid(), ipcpi.name);
  fail_bind_api:
        ipcp_fini();

@@ -37,9 +37,29 @@ if (HAVE_ROBUST_MUTEX)
     set(HAVE_ROBUST_MUTEX TRUE)
   else ()
     message(STATUS "Robust mutex support disabled by user")
-    set(HAVE_ROBUST_MUTEX FALSE)
   endif ()
 endif ()
+
+find_library(FUSE_LIBRARIES fuse QUIET)
+if (FUSE_LIBRARIES)
+  #FIXME: Check for version >= 2.6
+  set(DISABLE_FUSE FALSE CACHE BOOL "Disable FUSE support")
+  if (NOT DISABLE_FUSE)
+    message(STATUS "FUSE support enabled")
+    set(FUSE_PREFIX "/tmp/ouroboros" CACHE STRING
+    "Mountpoint for RIB filesystem")
+    set(HAVE_FUSE TRUE CACHE INTERNAL "")
+  else ()
+    message(STATUS "FUSE support disabled by user")
+  endif ()
+endif ()
+
+if (NOT HAVE_FUSE)
+  set(FUSE_LIBRARIES "")
+  set(FUSE_INCLUDE_DIR "")
+endif ()
+
+mark_as_advanced(FUSE_LIBRARIES)
 
 find_library(LIBGCRYPT_LIBRARIES gcrypt QUIET)
 if (LIBGCRYPT_LIBRARIES)
@@ -163,6 +183,7 @@ set(SOURCE_FILES
   qos.c
   qoscube.c
   random.c
+  rib.c
   rq.c
   sha3.c
   shm_flow_set.c
@@ -188,7 +209,7 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY} ${OPENSSL_LIBRARIES}
-  ${LIBGCRYPT_LIBRARIES})
+  ${LIBGCRYPT_LIBRARIES} ${FUSE_LIBRARIES})
 
 install(TARGETS ouroboros LIBRARY DESTINATION usr/lib)
 

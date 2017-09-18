@@ -1631,6 +1631,11 @@ static void irm_fini(void)
         pthread_cond_destroy(&irmd.cmd_cond);
         pthread_rwlock_destroy(&irmd.reg_lock);
         pthread_rwlock_destroy(&irmd.state_lock);
+
+#ifdef HAVE_FUSE
+        if (rmdir(FUSE_PREFIX))
+                log_dbg("Failed to remove " FUSE_PREFIX);
+#endif
 }
 
 void irmd_sig_handler(int         sig,
@@ -2249,7 +2254,12 @@ static int irm_init(void)
                 log_err("Failed to create rdrbuff.");
                 goto fail_rdrbuff;
         }
-
+#ifdef HAVE_FUSE
+        if (stat(FUSE_PREFIX, &st) != -1)
+                log_warn(FUSE_PREFIX " already exists...");
+        else
+                mkdir(FUSE_PREFIX, 0777);
+#endif
         irmd.csockfd = -1;
         irmd.state   = IRMD_RUNNING;
 
