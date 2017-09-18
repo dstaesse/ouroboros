@@ -416,8 +416,8 @@ static void * calculate_pff(void * o)
         return (void *) 0;
 }
 
-static void send_lsa(uint64_t dst,
-                     uint64_t src)
+static void send_lsa(uint64_t src,
+                     uint64_t dst)
 {
         uint8_t            buf[LSA_MAX_LEN];
         link_state_msg_t   lsa = LINK_STATE_MSG__INIT;
