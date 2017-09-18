@@ -33,6 +33,8 @@
 #define FLOWFRDWR     00000002 /* Read-write flow       */
 #define FLOWFACCMODE  00000003 /* Access mask           */
 
+#define FLOWFDOWN     00000004 /* Flow is down          */
+
 #define FLOWFNONBLOCK 00004000 /* Non-blocking flow     */
 #define FLOWFDEFAULT  00000002 /* Default, blocking, rw */
 

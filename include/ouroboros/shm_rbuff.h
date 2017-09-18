@@ -26,6 +26,12 @@
 #include <sys/types.h>
 #include <sys/time.h>
 
+#include <stdint.h>
+
+#define ACL_RDWR     0000
+#define ACL_RDONLY   0001
+#define ACL_FLOWDOWN 0002
+
 struct shm_rbuff;
 
 struct shm_rbuff * shm_rbuff_create(pid_t api,
@@ -38,9 +44,10 @@ void               shm_rbuff_close(struct shm_rbuff * rb);
 
 void               shm_rbuff_destroy(struct shm_rbuff * rb);
 
-void               shm_rbuff_block(struct shm_rbuff * rb);
+void               shm_rbuff_set_acl(struct shm_rbuff * rb,
+                                     uint32_t           flags);
 
-void               shm_rbuff_unblock(struct shm_rbuff * rb);
+uint32_t           shm_rbuff_get_acl(struct shm_rbuff * rb);
 
 void               shm_rbuff_fini(struct shm_rbuff * rb);
 

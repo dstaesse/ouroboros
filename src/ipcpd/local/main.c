@@ -99,30 +99,28 @@ static void * ipcp_local_sdu_loop(void * o)
 
         (void) o;
 
-        while (true) {
-                int fd;
+        while (ipcp_get_state() == IPCP_OPERATIONAL) {
+                int     fd;
                 ssize_t idx;
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL)
-                        return (void *) 1; /* -ENOTENROLLED */
 
                 fevent(local_data.flows, local_data.fq, &timeout);
 
                 while ((fd = fqueue_next(local_data.fq)) >= 0) {
-                        pthread_rwlock_rdlock(&local_data.lock);
-
                         idx = local_flow_read(fd);
+                        if (idx < 0)
+                                continue;
 
                         assert(idx < (SHM_BUFFER_SIZE));
 
+                        pthread_rwlock_rdlock(&local_data.lock);
+
                         fd = local_data.in_out[fd];
+
+                        pthread_rwlock_unlock(&local_data.lock);
 
                         if (fd != -1)
                                 local_flow_write(fd, idx);
-
-                        pthread_rwlock_unlock(&local_data.lock);
                 }
-
         }
 
         return (void *) 0;

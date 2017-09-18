@@ -93,6 +93,7 @@ static void sdu_handler(int                  fd,
                         struct shm_du_buff * sdb)
 {
         struct dt_pci dt_pci;
+        int           ret;
 
         memset(&dt_pci, 0, sizeof(dt_pci));
 
@@ -112,8 +113,11 @@ static void sdu_handler(int                  fd,
                         return;
                 }
 
-                if (ipcp_flow_write(fd, sdb)) {
+                ret = ipcp_flow_write(fd, sdb);
+                if (ret < 0) {
                         log_err("Failed to write SDU to fd %d.", fd);
+                        if (ret == -EFLOWDOWN)
+                                notifier_event(NOTIFY_DT_CONN_DOWN, &fd);
                         ipcp_sdb_release(sdb);
                         return;
                 }
@@ -323,6 +327,7 @@ int dt_write_sdu(uint64_t             dst_addr,
 {
         int           fd;
         struct dt_pci dt_pci;
+        int           ret;
 
         assert(sdb);
         assert(dst_addr != ipcpi.dt_addr);
@@ -342,8 +347,11 @@ int dt_write_sdu(uint64_t             dst_addr,
                 return -1;
         }
 
-        if (ipcp_flow_write(fd, sdb)) {
+        ret = ipcp_flow_write(fd, sdb);
+        if (ret < 0) {
                 log_err("Failed to write SDU to fd %d.", fd);
+                if (ret == -EFLOWDOWN)
+                        notifier_event(NOTIFY_DT_CONN_DOWN, &fd);
                 return -1;
         }
 

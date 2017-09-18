@@ -46,10 +46,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#define BUF_SIZE 1500
+#define BUF_SIZE       1500
 
-#define TW_ELEMENTS   6000
-#define TW_RESOLUTION 1   /* ms */
+#define TW_ELEMENTS    6000
+#define TW_RESOLUTION  1   /* ms */
 
 #define MPL            2000 /* ms */
 #define RQ_SIZE        20
@@ -249,12 +249,15 @@ static int api_announce(char * ap_name)
 static int finalize_write(int    fd,
                           size_t idx)
 {
-        if (shm_rbuff_write(ai.flows[fd].tx_rb, idx) < 0)
-                return -ENOTALLOC;
+        int ret;
+
+        ret = shm_rbuff_write(ai.flows[fd].tx_rb, idx);
+        if (ret < 0)
+                return ret;
 
         shm_flow_set_notify(ai.flows[fd].set, ai.flows[fd].port_id);
 
-        return 0;
+        return ret;
 }
 
 static int frcti_init(int fd)
@@ -305,6 +308,7 @@ static int frcti_send(int                  fd,
 {
         struct timespec now = {0, 0};
         struct frcti *  frcti;
+        int             ret;
 
         frcti = &(ai.frcti[fd]);
 
@@ -331,9 +335,10 @@ static int frcti_send(int                  fd,
                 return -1;
         }
 
-        if (finalize_write(fd, shm_du_buff_get_idx(sdb))) {
+        ret = finalize_write(fd, shm_du_buff_get_idx(sdb));
+        if (ret < 0) {
                 pthread_rwlock_unlock(&frcti->lock);
-                return -ENOTALLOC;
+                return ret;
         }
 
         pthread_rwlock_unlock(&frcti->lock);
@@ -871,12 +876,6 @@ int flow_alloc(const char *            dst_name,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        if (frcti_configure(fd, FRCTFORDERING | FRCTFERRCHCK)) {
-                flow_fini(fd);
-                bmp_release(ai.fds, fd);
-                return -1;
-        }
-
         return fd;
 }
 
@@ -931,6 +930,8 @@ int fccntl(int fd,
         va_list           l;
         struct timespec * timeo;
         qosspec_t *       qs;
+        uint32_t          rx_acl;
+        uint32_t          tx_acl;
 
         if (fd < 0 || fd >= AP_MAX_FLOWS)
                 return -EBADF;
@@ -988,10 +989,28 @@ int fccntl(int fd,
                 break;
         case FLOWSFLAGS:
                 ai.flows[fd].oflags = va_arg(l, uint32_t);
+                rx_acl = shm_rbuff_get_acl(ai.flows[fd].rx_rb);
+                tx_acl = shm_rbuff_get_acl(ai.flows[fd].rx_rb);
+                /*
+                 * Making our own flow write only means making the
+                 * the other side of the flow read only.
+                 */
                 if (ai.flows[fd].oflags & FLOWFWRONLY)
-                        shm_rbuff_block(ai.flows[fd].rx_rb);
+                        rx_acl |= ACL_RDONLY;
                 if (ai.flows[fd].oflags & FLOWFRDWR)
-                        shm_rbuff_unblock(ai.flows[fd].rx_rb);
+                        rx_acl |= ACL_RDWR;
+
+                if (ai.flows[fd].oflags & FLOWFDOWN) {
+                        rx_acl |= ACL_FLOWDOWN;
+                        tx_acl |= ACL_FLOWDOWN;
+                } else {
+                        rx_acl &= ~ACL_FLOWDOWN;
+                        tx_acl &= ~ACL_FLOWDOWN;
+                }
+
+                shm_rbuff_set_acl(ai.flows[fd].rx_rb, rx_acl);
+                shm_rbuff_set_acl(ai.flows[fd].tx_rb, tx_acl);
+
                 break;
         case FLOWGFLAGS:
                 fflags = va_arg(l, uint32_t *);
@@ -1007,6 +1026,8 @@ int fccntl(int fd,
                 if (cflags == NULL)
                         goto einval;
                 *cflags = ai.frcti[fd].conf_flags;
+                if (frcti_configure(fd, ai.frcti[fd].conf_flags))
+                        goto eperm;
                 break;
         default:
                 pthread_rwlock_unlock(&ai.lock);
@@ -1036,6 +1057,7 @@ ssize_t flow_write(int          fd,
                    size_t       count)
 {
         ssize_t idx;
+        int     ret;
 
         if (buf == NULL)
                 return 0;
@@ -1079,19 +1101,21 @@ ssize_t flow_write(int          fd,
         }
 
         if (!ai.frcti[fd].used) {
-                if (finalize_write(fd, idx)) {
+                ret = finalize_write(fd, idx);
+                if (ret < 0) {
                         pthread_rwlock_unlock(&ai.lock);
                         shm_rdrbuff_remove(ai.rdrb, idx);
-                        return -ENOTALLOC;
+                        return ret;
                 }
 
                 pthread_rwlock_unlock(&ai.lock);
         } else {
                 pthread_rwlock_unlock(&ai.lock);
 
-                if (frcti_write(fd, shm_rdrbuff_get(ai.rdrb, idx))) {
+                ret = frcti_write(fd, shm_rdrbuff_get(ai.rdrb, idx));
+                if (ret < 0) {
                         shm_rdrbuff_remove(ai.rdrb, idx);
-                        return -1;
+                        return ret;
                 }
         }
 
@@ -1129,7 +1153,8 @@ ssize_t flow_read(int    fd,
                 idx = frcti_read(fd);
 
         if (idx < 0) {
-                assert(idx == -EAGAIN || idx == -ETIMEDOUT);
+                assert(idx == -EAGAIN || idx == -ETIMEDOUT ||
+                       idx == -EFLOWDOWN);
                 return idx;
         }
 
@@ -1509,6 +1534,8 @@ int ipcp_flow_read(int                   fd,
 int ipcp_flow_write(int                  fd,
                     struct shm_du_buff * sdb)
 {
+        int ret;
+
         if (sdb == NULL)
                 return -EINVAL;
 
@@ -1527,17 +1554,19 @@ int ipcp_flow_write(int                  fd,
         assert(ai.flows[fd].tx_rb);
 
         if (!ai.frcti[fd].used) {
-                if (finalize_write(fd, shm_du_buff_get_idx(sdb))) {
+                ret = finalize_write(fd, shm_du_buff_get_idx(sdb));
+                if (ret < 0) {
                         pthread_rwlock_unlock(&ai.lock);
-                        return -ENOTALLOC;
+                        return ret;
                 }
 
                 pthread_rwlock_unlock(&ai.lock);
         } else {
                 pthread_rwlock_unlock(&ai.lock);
 
-                if (frcti_write(fd, sdb))
-                        return -1;
+                ret = frcti_write(fd, sdb);
+                if (ret < 0)
+                        return ret;
         }
 
         return 0;
@@ -1618,6 +1647,8 @@ ssize_t local_flow_read(int fd)
 int local_flow_write(int    fd,
                      size_t idx)
 {
+        int ret;
+
         if (fd < 0)
                 return -EINVAL;
 
@@ -1628,9 +1659,10 @@ int local_flow_write(int    fd,
                 return -ENOTALLOC;
         }
 
-        if (finalize_write(fd, idx)) {
+        ret = finalize_write(fd, idx);
+        if (ret < 0) {
                 pthread_rwlock_unlock(&ai.lock);
-                return -ENOTALLOC;
+                return ret;
         }
 
         pthread_rwlock_unlock(&ai.lock);
