@@ -45,6 +45,11 @@
 #cmakedefine HAVE_ROBUST_MUTEX
 #endif
 
+#cmakedefine HAVE_FUSE
+#ifdef HAVE_FUSE
+#define FUSE_PREFIX "@FUSE_PREFIX@"
+#endif
+
 #define PTHREAD_COND_CLOCK  @PTHREAD_COND_CLOCK@
 
 #define AP_MAX_FLOWS        @AP_MAX_FLOWS@
@@ -53,5 +58,3 @@
 
 #define DU_BUFF_HEADSPACE   @DU_BUFF_HEADSPACE@
 #define DU_BUFF_TAILSPACE   @DU_BUFF_TAILSPACE@
-
-#define CDAP_REPLY_TIMEOUT  @CDAP_REPLY_TIMEOUT@

@@ -45,3 +45,8 @@
 
 #define IRMD_MIN_THREADS       @IRMD_MIN_THREADS@
 #define IRMD_ADD_THREADS       @IRMD_ADD_THREADS@
+
+#cmakedefine HAVE_FUSE
+#ifdef HAVE_FUSE
+#define FUSE_PREFIX "@FUSE_PREFIX@"
+#endif

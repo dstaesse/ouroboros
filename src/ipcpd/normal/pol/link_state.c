@@ -22,15 +22,18 @@
 
 #define _POSIX_C_SOURCE 200112L
 
+#include "config.h"
+
 #define OUROBOROS_PREFIX "link-state-routing"
 
+#include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/fqueue.h>
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/utils.h>
 #include <ouroboros/notifier.h>
-#include <ouroboros/dev.h>
-#include <ouroboros/fqueue.h>
+#include <ouroboros/rib.h>
+#include <ouroboros/utils.h>
 
 #include "ae.h"
 #include "connmgr.h"
@@ -52,6 +55,7 @@ typedef LinkStateMsg link_state_msg_t;
 #define LS_UPDATE_TIME 15
 #define LS_TIMEO       60
 #define LSA_MAX_LEN    128
+#define LSDB           "lsdb"
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
@@ -90,6 +94,7 @@ struct {
         fset_t *         mgmt_set;
 
         struct list_head db;
+        size_t           db_len;
 
         pthread_rwlock_t db_lock;
 
@@ -105,6 +110,106 @@ struct pol_routing_ops link_state_ops = {
         .fini              = link_state_fini,
         .routing_i_create  = link_state_routing_i_create,
         .routing_i_destroy = link_state_routing_i_destroy
+};
+
+static int str_adj(struct adjacency * adj,
+                   char *             buf,
+                   size_t             len)
+{
+        char        tmbuf[64];
+        struct tm * tm;
+
+        if (len < 256)
+                return -1;
+
+        tm = localtime(&adj->stamp);
+        strftime(tmbuf, sizeof(tmbuf), "%Y-%m-%d %H:%M:%S", tm);
+
+        sprintf(buf,
+                "src: %" PRIu64 "\n"
+                "dst: %" PRIu64 "\n"
+                "upd: %s\n",
+                adj->src,
+                adj->dst,
+                tmbuf);
+
+        return strlen(buf);
+}
+
+static int lsdb_read(const char * path,
+                     char *       buf,
+                     size_t       len)
+{
+        struct list_head * p;
+        char               entry[RIB_PATH_LEN + 1];
+
+        pthread_rwlock_rdlock(&ls.db_lock);
+
+        if (ls.db_len == 0) {
+                pthread_rwlock_unlock(&ls.db_lock);
+                return -EPERM;
+        }
+
+        list_for_each(p, &ls.db) {
+                struct adjacency * a = list_entry(p, struct adjacency, next);
+                sprintf(entry, "%" PRIu64 ".%" PRIu64, a->src, a->dst);
+                if (strcmp(entry, path) == 0) {
+                        len = str_adj(a, buf, len);
+                        pthread_rwlock_unlock(&ls.db_lock);
+                        return len;
+                }
+        }
+
+        pthread_rwlock_unlock(&ls.db_lock);
+
+        return -1;
+}
+
+static int lsdb_readdir(char *** buf)
+{
+        struct list_head * p;
+        char               entry[RIB_PATH_LEN + 1];
+        ssize_t            idx = 0;
+
+        pthread_rwlock_rdlock(&ls.db_lock);
+
+        if (ls.db_len == 0) {
+                pthread_rwlock_unlock(&ls.db_lock);
+                return 0;
+        }
+
+        *buf = malloc(sizeof(**buf) * ls.db_len);
+        if (*buf == NULL) {
+                pthread_rwlock_unlock(&ls.db_lock);
+                return -ENOMEM;
+        }
+
+        list_for_each(p, &ls.db) {
+                struct adjacency * a = list_entry(p, struct adjacency, next);
+                sprintf(entry, "%" PRIu64 ".%" PRIu64, a->src, a->dst);
+                (*buf)[idx] = malloc(strlen(entry) + 1);
+                if ((*buf)[idx] == NULL) {
+                        ssize_t j;
+                        for (j = 0; j < idx; ++j)
+                                free(*buf[j]);
+                        free(buf);
+                        pthread_rwlock_unlock(&ls.db_lock);
+                        return -ENOMEM;
+                }
+
+                strcpy((*buf)[idx], entry);
+
+                idx++;
+        }
+
+        pthread_rwlock_unlock(&ls.db_lock);
+
+        return idx;
+}
+
+static struct rib_ops r_ops = {
+        .read    = lsdb_read,
+        .readdir = lsdb_readdir
 };
 
 static int lsdb_add_nb(uint64_t     addr,
@@ -214,10 +319,10 @@ static int lsdb_add_link(uint64_t    src,
 
         list_add_tail(&adj->next, p);
 
+        ls.db_len++;
+
         if (graph_update_edge(ls.graph, src, dst, *qs))
                 log_warn("Failed to add edge to graph.");
-
-        log_dbg("Added %" PRIu64 " - %" PRIu64" to lsdb.", adj->src, adj->dst);
 
         pthread_rwlock_unlock(&ls.db_lock);
 
@@ -239,8 +344,7 @@ static int lsdb_del_link(uint64_t src,
                         if (graph_del_edge(ls.graph, src, dst))
                                 log_warn("Failed to delete edge from graph.");
 
-                        log_dbg("Removed %" PRIu64 " - %" PRIu64" from lsdb.",
-                                a->src, a->dst);
+                        ls.db_len--;
 
                         pthread_rwlock_unlock(&ls.db_lock);
                         free(a);
@@ -587,6 +691,10 @@ int link_state_init(void)
         if (pthread_create(&ls.listener, NULL, ls_conn_handle, NULL))
                 goto fail_pthread_create_listener;
 
+        ls.db_len = 0;
+
+        rib_reg(LSDB, &r_ops);
+
         return 0;
 
  fail_pthread_create_listener:
@@ -613,6 +721,8 @@ void link_state_fini(void)
 {
         struct list_head * p;
         struct list_head * h;
+
+        rib_unreg(LSDB);
 
         pthread_cancel(ls.listener);
         pthread_join(ls.listener, NULL);
