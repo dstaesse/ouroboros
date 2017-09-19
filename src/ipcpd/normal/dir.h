@@ -29,8 +29,6 @@ void     dir_fini(void);
 
 int      dir_bootstrap(void);
 
-int      dir_enroll(uint64_t peer);
-
 int      dir_reg(const uint8_t * hash);
 
 int      dir_unreg(const uint8_t * hash);

@@ -30,6 +30,7 @@
 struct listener {
         struct list_head next;
         notifier_fn_t    callback;
+        void *           obj;
 };
 
 struct {
@@ -72,13 +73,16 @@ void notifier_event(int          event,
 
         pthread_mutex_lock(&notifier.lock);
 
-        list_for_each(p, &notifier.listeners)
-                list_entry(p, struct listener, next)->callback(event, o);
+        list_for_each(p, &notifier.listeners) {
+                struct listener * l = list_entry(p, struct listener, next);
+                l->callback(l->obj, event, o);
+        }
 
         pthread_mutex_unlock(&notifier.lock);
 }
 
-int notifier_reg(notifier_fn_t callback)
+int notifier_reg(notifier_fn_t callback,
+                 void *        obj)
 {
         struct listener *  l;
         struct list_head * p;
@@ -100,8 +104,9 @@ int notifier_reg(notifier_fn_t callback)
         }
 
         l->callback = callback;
+        l->obj      = obj;
 
-        list_add(&l->next, &notifier.listeners);
+        list_add_tail(&l->next, &notifier.listeners);
 
         pthread_mutex_unlock(&notifier.lock);
 

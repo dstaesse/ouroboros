@@ -39,8 +39,6 @@
 #include <inttypes.h>
 
 #define KAD_B (hash_len(ipcpi.dir_hash_algo) * CHAR_BIT)
-#define ENROL_RETR 6
-#define ENROL_INTV 1
 
 struct dht * dht;
 
@@ -68,22 +66,6 @@ int dir_bootstrap(void) {
         }
 
         log_info("Directory bootstrapped.");
-
-        return 0;
-}
-
-int dir_enroll(uint64_t addr) {
-        size_t retr = 0;
-        log_dbg("Enrolling directory with peer %" PRIu64 ".", addr);
-        while (dht_enroll(dht, addr)) {
-                if (retr++ == ENROL_RETR)
-                        return -EPERM;
-
-                log_dbg("Directory enrollment failed, retrying...");
-                sleep(ENROL_INTV);
-        }
-
-        log_info("Directory enrolled.");
 
         return 0;
 }

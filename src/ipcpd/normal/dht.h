@@ -36,9 +36,6 @@ int          dht_bootstrap(struct dht * dht,
                            size_t       b,
                            time_t       t_expire);
 
-int          dht_enroll(struct dht * dht,
-                        uint64_t     addr);
-
 void         dht_destroy(struct dht * dht);
 
 int          dht_reg(struct dht *    dht,

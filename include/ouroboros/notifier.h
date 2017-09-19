@@ -23,7 +23,8 @@
 #ifndef OUROBOROS_LIB_NOTIFIER_H
 #define OUROBOROS_LIB_NOTIFIER_H
 
-typedef void (* notifier_fn_t)(int          event,
+typedef void (* notifier_fn_t)(void *       self,
+                               int          event,
                                const void * o);
 
 int  notifier_init(void);
@@ -33,7 +34,8 @@ void notifier_fini(void);
 void notifier_event(int          event,
                     const void * o);
 
-int  notifier_reg(notifier_fn_t callback);
+int  notifier_reg(notifier_fn_t callback,
+                  void *        obj);
 
 void notifier_unreg(notifier_fn_t callback);
 
