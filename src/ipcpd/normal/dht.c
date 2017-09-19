@@ -2165,6 +2165,9 @@ uint64_t dht_query(struct dht *    dht,
 
         addrs[0] = 0;
 
+        if (dht_get_state(dht) != DHT_RUNNING)
+                return 0;
+
         pthread_rwlock_rdlock(&dht->lock);
 
         e = dht_find_entry(dht, key);
