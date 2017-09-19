@@ -182,29 +182,18 @@ static int bootstrap_components(void)
         return 0;
 }
 
-static int enroll_components(uint64_t peer)
-{
-        if (dir_enroll(peer)) {
-                log_err("Failed to enroll directory.");
-                return -1;
-        }
-
-        return 0;
-}
-
 static int normal_ipcp_enroll(const char *      dst,
                               struct dif_info * info)
 {
-        struct conn er_conn;
-        struct conn dt_conn;
+        struct conn conn;
 
-        if (connmgr_alloc(AEID_ENROLL, dst, NULL, &er_conn)) {
+        if (connmgr_alloc(AEID_ENROLL, dst, NULL, &conn)) {
                 log_err("Failed to get connection.");
                 goto fail_er_flow;
         }
 
         /* Get boot state from peer. */
-        if (enroll_boot(&er_conn)) {
+        if (enroll_boot(&conn)) {
                 log_err("Failed to get boot information.");
                 goto fail_enroll_boot;
         }
@@ -219,29 +208,15 @@ static int normal_ipcp_enroll(const char *      dst,
                 goto fail_dt_start;
         }
 
-        if (connmgr_alloc(AEID_DT, dst, NULL, &dt_conn)) {
-                log_err("Failed to create a data transfer flow.");
-                goto fail_dt_flow;
-        }
-
         if (start_components()) {
                 log_err("Failed to start components.");
                 goto fail_start_comp;
         }
 
-        if (enroll_components(dt_conn.conn_info.addr)) {
-                enroll_done(&er_conn, -1);
-                log_err("Failed to enroll components.");
-                goto fail_enroll_comp;
-        }
-
-        if (enroll_done(&er_conn, 0))
+        if (enroll_done(&conn, 0))
                 log_warn("Failed to confirm enrollment with peer.");
 
-        if (connmgr_dealloc(AEID_DT, &dt_conn))
-                log_warn("Failed to deallocate data transfer flow.");
-
-        if (connmgr_dealloc(AEID_ENROLL, &er_conn))
+        if (connmgr_dealloc(AEID_ENROLL, &conn))
                 log_warn("Failed to deallocate enrollment flow.");
 
         log_info("Enrolled with %s.", dst);
@@ -251,16 +226,12 @@ static int normal_ipcp_enroll(const char *      dst,
 
         return 0;
 
- fail_enroll_comp:
-        stop_components();
  fail_start_comp:
-        connmgr_dealloc(AEID_DT, &dt_conn);
- fail_dt_flow:
         dt_stop();
  fail_dt_start:
         finalize_components();
  fail_enroll_boot:
-        connmgr_dealloc(AEID_ENROLL, &er_conn);
+        connmgr_dealloc(AEID_ENROLL, &conn);
  fail_er_flow:
         return -1;
 }

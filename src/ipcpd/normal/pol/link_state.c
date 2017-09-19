@@ -54,7 +54,7 @@ typedef LinkStateMsg link_state_msg_t;
 #define RECALC_TIME    4
 #define LS_UPDATE_TIME 15
 #define LS_TIMEO       60
-#define LSA_MAX_LEN    128
+#define LSM_MAX_LEN    128
 #define LSDB           "lsdb"
 
 #ifndef CLOCK_REALTIME_COARSE
@@ -416,22 +416,22 @@ static void * calculate_pff(void * o)
         return (void *) 0;
 }
 
-static void send_lsa(uint64_t src,
+static void send_lsm(uint64_t src,
                      uint64_t dst)
 {
-        uint8_t            buf[LSA_MAX_LEN];
-        link_state_msg_t   lsa = LINK_STATE_MSG__INIT;
+        uint8_t            buf[LSM_MAX_LEN];
+        link_state_msg_t   lsm = LINK_STATE_MSG__INIT;
         size_t             len;
         struct list_head * p;
 
-        lsa.d_addr = dst;
-        lsa.s_addr = src;
+        lsm.d_addr = dst;
+        lsm.s_addr = src;
 
-        len = link_state_msg__get_packed_size(&lsa);
+        len = link_state_msg__get_packed_size(&lsm);
 
-        assert(len <= LSA_MAX_LEN);
+        assert(len <= LSM_MAX_LEN);
 
-        link_state_msg__pack(&lsa, buf);
+        link_state_msg__pack(&lsm, buf);
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
@@ -471,7 +471,7 @@ static void * lsupdate(void * o)
                         }
 
                         if (adj->src == ipcpi.dt_addr) {
-                                send_lsa(adj->src, adj->dst);
+                                send_lsm(adj->src, adj->dst);
                                 adj->stamp = now.tv_sec;
                         }
                 }
@@ -526,7 +526,7 @@ static void * lsreader(void * o)
 {
         fqueue_t * fq;
         int        ret;
-        uint8_t    buf[LSA_MAX_LEN];
+        uint8_t    buf[LSM_MAX_LEN];
         size_t     len;
         int        fd;
         qosspec_t  qs;
@@ -551,7 +551,7 @@ static void * lsreader(void * o)
 
                 while ((fd = fqueue_next(fq)) >= 0) {
                         link_state_msg_t * msg;
-                        len = flow_read(fd, buf, LSA_MAX_LEN);
+                        len = flow_read(fd, buf, LSM_MAX_LEN);
                         if (len <= 0)
                                 continue;
 
@@ -574,12 +574,15 @@ static void * lsreader(void * o)
         return (void *) 0;
 }
 
-static void handle_event(int          event,
+static void handle_event(void *       self,
+                         int          event,
                          const void * o)
 {
         /* FIXME: Apply correct QoS on graph */
         struct conn * c;
         qosspec_t     qs;
+
+        (void) self;
 
         c = (struct conn *) o;
 
@@ -592,6 +595,7 @@ static void handle_event(int          event,
 
                 if (lsdb_add_link(ipcpi.dt_addr, c->conn_info.addr, &qs))
                         log_dbg("Failed to add adjacency to LSDB.");
+                send_lsm(ipcpi.dt_addr, c->conn_info.addr);
                 break;
         case NOTIFY_DT_CONN_DEL:
                 if (lsdb_del_nb(c->conn_info.addr, c->flow_info.fd))
@@ -666,7 +670,7 @@ int link_state_init(void)
         if (ls.graph == NULL)
                 goto fail_graph;
 
-        if (notifier_reg(handle_event))
+        if (notifier_reg(handle_event, NULL))
                 goto fail_notifier_reg;
 
         if (pthread_rwlock_init(&ls.db_lock, NULL))

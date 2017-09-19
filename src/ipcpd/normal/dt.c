@@ -67,10 +67,13 @@ struct {
         pthread_t          listener;
 } dt;
 
-static void handle_event(int          event,
+static void handle_event(void *       self,
+                         int          event,
                          const void * o)
 {
         struct conn * c;
+
+        (void) self;
 
         c = (struct conn *) o;
 
@@ -182,7 +185,7 @@ int dt_init(enum pol_routing pr,
                 goto fail_pci_init;
         }
 
-        if (notifier_reg(handle_event)) {
+        if (notifier_reg(handle_event, NULL)) {
                 log_err("Failed to register with notifier.");
                 goto fail_notifier_reg;
         }
