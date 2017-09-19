@@ -567,12 +567,12 @@ static size_t dht_contact_list(struct dht *       dht,
                         c = list_entry(p, struct contact, next);
                         c = contact_create(c->id, dht->b, c->addr);
                         if (list_add_sorted(l, c, key) == 1)
-                                if (++len > dht->k)
+                                if (++len == dht->k)
                                         break;
                 }
         } else {
                 struct bucket * d = b->parent;
-                for (i = 0; i < (1L << KAD_BETA); ++i) {
+                for (i = 0; i < (1L << KAD_BETA) && len < dht->k; ++i) {
                         list_for_each(p, &d->children[i]->contacts) {
                                 struct contact * c;
                                 c = list_entry(p, struct contact, next);
@@ -580,7 +580,7 @@ static size_t dht_contact_list(struct dht *       dht,
                                 if (c == NULL)
                                         continue;
                                 if (list_add_sorted(l, c, key) == 1)
-                                        if (++len > dht->k)
+                                        if (++len == dht->k)
                                                 break;
                         }
                 }
