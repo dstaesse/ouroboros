@@ -52,6 +52,8 @@ if (FUSE_LIBRARIES)
   else ()
     message(STATUS "FUSE support disabled by user")
   endif ()
+else ()
+  message(STATUS "Install FUSE version > 2.6 to enable RIB access")
 endif ()
 
 if (NOT HAVE_FUSE)
