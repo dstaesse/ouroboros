@@ -30,5 +30,6 @@
 #define EIRMD        1002 /* Failed to communicate with IRMD */
 #define EIPCP        1003 /* Failed to communicate with IPCP */
 #define EIPCPSTATE   1004 /* Target in wrong state */
+#define EFLOWDOWN    1005 /* Flow is down */
 
 #endif /* OUROBOROS_ERRNO_H */

@@ -43,6 +43,7 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/fccntl.h>
 
 #include "ipcp.h"
 #include "shim-data.h"
@@ -64,6 +65,8 @@
 #ifdef __linux__
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 #endif
 
 #ifdef __FreeBSD__
@@ -153,6 +156,10 @@ struct {
 
         pthread_t          sdu_writer;
         pthread_t          sdu_reader;
+
+#ifdef __linux__
+        pthread_t          if_monitor;
+#endif
 
         /* Handle mgmt frames in a different thread */
         pthread_t          mgmt_handler;
@@ -771,6 +778,114 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
         return (void *) 1;
 }
 
+#ifdef __linux__
+static int open_netlink_socket(void)
+{
+        struct sockaddr_nl sa;
+        int                fd;
+
+        memset(&sa, 0, sizeof(sa));
+        sa.nl_family = AF_NETLINK;
+        sa.nl_pid = getpid();
+        sa.nl_groups = RTMGRP_LINK;
+
+        fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+        if (fd < 0)
+                return -1;
+
+        if (bind(fd, (struct sockaddr *) &sa, sizeof(sa))) {
+                close(fd);
+                return -1;
+        }
+
+        return fd;
+}
+
+static void change_flows_state(bool up)
+{
+        int      i;
+        uint32_t flags;
+
+        pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
+
+        for (i = 0; i < MAX_SAPS; i++) {
+                if (eth_llc_data.ef_to_fd[i] != -1) {
+                        fccntl(i, FLOWGFLAGS, &flags);
+                        if (up)
+                                fccntl(eth_llc_data.ef_to_fd[i],
+                                       FLOWSFLAGS, flags & ~FLOWFDOWN);
+                        else
+                                fccntl(eth_llc_data.ef_to_fd[i],
+                                       FLOWSFLAGS, flags | FLOWFDOWN);
+                }
+        }
+
+        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+}
+
+static void * eth_llc_ipcp_if_monitor(void * o)
+{
+        int                fd;
+        int                status;
+        char               buf[4096];
+        struct iovec       iov = {buf, sizeof(buf)};
+        struct sockaddr_nl snl;
+        struct msghdr      msg = {(void *) &snl, sizeof(snl),
+                                  &iov, 1, NULL, 0, 0};
+        struct nlmsghdr *  h;
+        struct ifinfomsg * ifi;
+
+        (void ) o;
+
+        fd = open_netlink_socket();
+        if (fd < 0) {
+                log_err("Failed to open socket.");
+                return (void *) -1;
+        }
+
+        while (ipcp_get_state() == IPCP_OPERATIONAL) {
+                status = recvmsg(fd, &msg, 0);
+                if (status < 0)
+                        continue;
+
+                for (h = (struct nlmsghdr *) buf;
+                     NLMSG_OK(h, (unsigned int) status);
+                     h = NLMSG_NEXT(h, status)) {
+
+                        /* Finish reading */
+                        if (h->nlmsg_type == NLMSG_DONE)
+                                break;
+
+                        /* Message is some kind of error */
+                        if (h->nlmsg_type == NLMSG_ERROR)
+                                continue;
+
+                        /* Only interested in link up/down */
+                        if (h->nlmsg_type != RTM_NEWLINK)
+                                continue;
+
+                        ifi = NLMSG_DATA(h);
+
+                        /* Not our interface */
+                        if (ifi->ifi_index != eth_llc_data.device.sll_ifindex)
+                                continue;
+
+                        if (ifi->ifi_flags & IFF_UP) {
+                                change_flows_state(true);
+                                log_dbg("Interface up.");
+                        } else {
+                                change_flows_state(false);
+                                log_dbg("Interface down.");
+                        }
+                }
+        }
+
+        close(fd);
+
+        return (void *) 0;
+}
+#endif
+
 #if defined (HAVE_BPF) && !defined(HAVE_NETMAP)
 static int open_bpf_device(void)
 {
@@ -844,13 +959,13 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
                 break;
         }
 
+        freeifaddrs(ifaddr);
+
         if (ifa == NULL) {
                 log_err("Interface not found.");
-                freeifaddrs(ifaddr);
                 return -1;
         }
 
-        freeifaddrs(ifaddr);
 #elif defined(__linux__)
         skfd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (skfd < 0) {
@@ -904,38 +1019,32 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         if (BPF_BLEN < blen) {
                 log_err("BPF buffer too small (is: %ld must be: %d).",
                         BPF_BLEN, blen);
-                close(eth_llc_data.bpf);
-                return -1;
+                goto fail_device;
         }
 
         if (ioctl(eth_llc_data.bpf, BIOCSETIF, &ifr) < 0) {
                 log_err("Failed to set interface.");
-                close(eth_llc_data.bpf);
-                return -1;
+                goto fail_device;
         }
 
         if (ioctl(eth_llc_data.bpf, BIOCSHDRCMPLT, &enable) < 0) {
                 log_err("Failed to set BIOCSHDRCMPLT.");
-                close(eth_llc_data.bpf);
-                return -1;
+                goto fail_device;
         }
 
         if (ioctl(eth_llc_data.bpf, BIOCSSEESENT, &disable) < 0) {
                 log_err("Failed to set BIOCSSEESENT.");
-                close(eth_llc_data.bpf);
-                return -1;
+                goto fail_device;
         }
 
         if (ioctl(eth_llc_data.bpf, BIOCSRTIMEOUT, &tv) < 0) {
                 log_err("Failed to set BIOCSRTIMEOUT.");
-                close(eth_llc_data.bpf);
-                return -1;
+                goto fail_device;
         }
 
         if (ioctl(eth_llc_data.bpf, BIOCIMMEDIATE, &enable) < 0) {
                 log_err("Failed to set BIOCIMMEDIATE.");
-                close(eth_llc_data.bpf);
-                return -1;
+                goto fail_device;
         }
 
         log_info("Using Berkeley Packet Filter.");
@@ -958,39 +1067,74 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         if (bind(eth_llc_data.s_fd, (struct sockaddr *) &eth_llc_data.device,
                 sizeof(eth_llc_data.device))) {
                 log_err("Failed to bind socket to interface");
-                close(eth_llc_data.s_fd);
-                return -1;
+                goto fail_device;
         }
 
         if (setsockopt(eth_llc_data.s_fd, SOL_SOCKET, SO_RCVTIMEO,
                        &tv, sizeof(tv))) {
                 log_err("Failed to set socket timeout: %s.", strerror(errno));
-                close(eth_llc_data.s_fd);
-                return -1;
+                goto fail_device;
         }
 
 #endif /* HAVE_NETMAP */
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        pthread_create(&eth_llc_data.mgmt_handler,
-                       NULL,
-                       eth_llc_ipcp_mgmt_handler,
-                       NULL);
+#ifdef __linux__
+        if (pthread_create(&eth_llc_data.if_monitor,
+                           NULL,
+                           eth_llc_ipcp_if_monitor,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_device;
+        }
+#endif
 
-        pthread_create(&eth_llc_data.sdu_reader,
-                       NULL,
-                       eth_llc_ipcp_sdu_reader,
-                       NULL);
+        if (pthread_create(&eth_llc_data.mgmt_handler,
+                           NULL,
+                           eth_llc_ipcp_mgmt_handler,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_mgmt_handler;
+        }
 
-        pthread_create(&eth_llc_data.sdu_writer,
-                       NULL,
-                       eth_llc_ipcp_sdu_writer,
-                       NULL);
+        if (pthread_create(&eth_llc_data.sdu_reader,
+                           NULL,
+                           eth_llc_ipcp_sdu_reader,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_sdu_reader;
+        }
+
+        if (pthread_create(&eth_llc_data.sdu_writer,
+                           NULL,
+                           eth_llc_ipcp_sdu_writer,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_sdu_writer;
+        }
 
         log_dbg("Bootstrapped shim IPCP over Ethernet with LLC with api %d.",
                 getpid());
 
         return 0;
+
+ fail_sdu_writer:
+        pthread_join(eth_llc_data.sdu_reader, NULL);
+ fail_sdu_reader:
+        pthread_join(eth_llc_data.mgmt_handler, NULL);
+ fail_mgmt_handler:
+#ifdef __linux__
+        pthread_join(eth_llc_data.if_monitor, NULL);
+#endif
+ fail_device:
+#if defined(HAVE_NETMAP)
+        nm_close(eth_llc_data.nmd);
+#elif defined(HAVE_BPF)
+        close(eth_llc_data.bpf);
+#elif defined(HAVE_RAW_SOCKETS)
+        close(eth_llc_data.s_fd);
+#endif
+        return -1;
 }
 
 static int eth_llc_ipcp_reg(const uint8_t * hash)
@@ -1228,6 +1372,9 @@ int main(int    argc,
                 pthread_join(eth_llc_data.sdu_writer, NULL);
                 pthread_join(eth_llc_data.sdu_reader, NULL);
                 pthread_join(eth_llc_data.mgmt_handler, NULL);
+#ifdef __linux__
+                pthread_join(eth_llc_data.if_monitor, NULL);
+#endif
         }
 
         eth_llc_data_fini();
