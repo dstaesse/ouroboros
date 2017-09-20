@@ -50,3 +50,5 @@
 #ifdef HAVE_FUSE
 #define FUSE_PREFIX "@FUSE_PREFIX@"
 #endif
+
+#cmakedefine HAVE_LIBGCRYPT
