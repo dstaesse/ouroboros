@@ -44,6 +44,7 @@ set(SOURCE_FILES
   pol/flat.c
   pol/link_state.c
   pol/graph.c
+  pol/simple_pff.c
   )
 
 add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}

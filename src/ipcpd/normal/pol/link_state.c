@@ -404,7 +404,7 @@ static void * calculate_pff(void * o)
                         if (fd == -1)
                                 continue;
 
-                        pff_add(instance->pff, table[i]->dst, fd);
+                        pff_add(instance->pff, table[i]->dst, &fd, 1);
                 }
 
                 pff_unlock(instance->pff);

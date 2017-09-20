@@ -20,150 +20,98 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define _POSIX_C_SOURCE 200112L
-
-#include "config.h"
-
-#define OUROBOROS_PREFIX "pff"
-
-#include <ouroboros/logs.h>
-#include <ouroboros/hashtable.h>
 #include <ouroboros/errno.h>
 
-#include <assert.h>
-#include <pthread.h>
-
 #include "pff.h"
+#include "pol-pff-ops.h"
+#include "pol/simple_pff.h"
 
 struct pff {
-        struct htable *  table;
-        pthread_rwlock_t lock;
+        struct pol_pff_ops * ops;
+        struct pff_i *       pff_i;
 };
 
-struct pff * pff_create(void)
+struct pff * pff_create(enum pol_pff pol)
 {
-        struct pff * tmp;
+        struct pff * pff;
 
-        tmp = malloc(sizeof(*tmp));
-        if (tmp == NULL)
+        pff = malloc(sizeof(*pff));
+        if (pff == NULL)
                 return NULL;
 
-        if (pthread_rwlock_init(&tmp->lock, NULL)) {
-                free(tmp);
-                return NULL;
+        switch (pol) {
+        case SIMPLE_PFF:
+                pff->ops = &simple_pff_ops;
+                pff->pff_i = pff->ops->create();
+                if (pff->pff_i == NULL)
+                        goto err;
+                break;
+        default:
+                goto err;
         }
 
-        tmp->table = htable_create(PFT_SIZE, false);
-        if (tmp->table == NULL) {
-                pthread_rwlock_destroy(&tmp->lock);
-                free(tmp);
-                return NULL;
-        }
-
-        return tmp;
+        return pff;
+ err:
+        free(pff);
+        return NULL;
 }
 
-void pff_destroy(struct pff * instance)
+void pff_destroy(struct pff * pff)
 {
-        assert(instance);
+        pff->ops->destroy(pff->pff_i);
 
-        htable_destroy(instance->table);
-
-        pthread_rwlock_destroy(&instance->lock);
-        free(instance);
+        free(pff);
 }
 
-void pff_lock(struct pff * instance)
+void pff_lock(struct pff * pff)
 {
-        pthread_rwlock_wrlock(&instance->lock);
+        return pff->ops->lock(pff->pff_i);
 }
 
-void pff_unlock(struct pff * instance)
+void pff_unlock(struct pff * pff)
 {
-        pthread_rwlock_unlock(&instance->lock);
+        return pff->ops->unlock(pff->pff_i);
 }
 
-int pff_add(struct pff * instance,
+int pff_add(struct pff * pff,
             uint64_t     addr,
-            int          fd)
+            int *        fd,
+            size_t       len)
 {
-        int * val;
-
-        assert(instance);
-
-        val = malloc(sizeof(*val));
-        if (val == NULL)
-                return -ENOMEM;
-
-        *val = fd;
-
-        if (htable_insert(instance->table, addr, val)) {
-                free(val);
-                return -1;
-        }
-
-        return 0;
+        return pff->ops->add(pff->pff_i, addr, fd, len);
 }
 
-int pff_update(struct pff * instance,
+int pff_update(struct pff * pff,
                uint64_t     addr,
-               int          fd)
+               int *        fd,
+               size_t       len)
 {
-        int * val;
-
-        assert(instance);
-
-        val = malloc(sizeof(*val));
-        if (val == NULL)
-                return -ENOMEM;
-        *val = fd;
-
-        if (htable_delete(instance->table, addr)) {
-                free(val);
-                return -1;
-        }
-
-        if (htable_insert(instance->table, addr, val)) {
-                free(val);
-                return -1;
-        }
-
-        return 0;
+        return pff->ops->update(pff->pff_i, addr, fd, len);
 }
 
-int pff_remove(struct pff * instance,
-               uint64_t     addr)
+int pff_del(struct pff * pff,
+            uint64_t     addr)
 {
-        assert(instance);
-
-        if (htable_delete(instance->table, addr))
-                return -1;
-
-        return 0;
+        return pff->ops->del(pff->pff_i, addr);
 }
 
-void pff_flush(struct pff * instance)
+void pff_flush(struct pff * pff)
 {
-        assert(instance);
-
-        htable_flush(instance->table);
+        return pff->ops->flush(pff->pff_i);
 }
 
-int pff_nhop(struct pff * instance,
+int pff_nhop(struct pff * pff,
              uint64_t     addr)
 {
-        int * j;
-        int   fd = -1;
+        return pff->ops->nhop(pff->pff_i, addr);
+}
 
-        assert(instance);
+int pff_flow_state_change(struct pff * pff,
+                          int          fd,
+                          bool         up)
+{
+        if (pff->ops->flow_state_change != NULL)
+                return pff->ops->flow_state_change(pff->pff_i, fd, up);
 
-        pthread_rwlock_rdlock(&instance->lock);
-
-        j = (int *) htable_lookup(instance->table, addr);
-        if (j != NULL)
-                fd = *j;
-
-        pthread_rwlock_unlock(&instance->lock);
-
-        return fd;
+        return 0;
 }

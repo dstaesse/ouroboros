@@ -29,33 +29,30 @@
 #include "pol/flat.h"
 
 #include <stdlib.h>
-#include <assert.h>
 
-struct addr_auth {
-        struct pol_addr_auth_ops * ops;
-} addr_auth;
+struct pol_addr_auth_ops * ops;
 
 int addr_auth_init(enum pol_addr_auth type,
                    const void *       info)
 {
         switch (type) {
         case FLAT_RANDOM:
-                addr_auth.ops = &flat_ops;
+                ops = &flat_ops;
                 break;
         default:
                 log_err("Unknown address authority type.");
                 return -1;
         }
 
-        return addr_auth.ops->init(info);
+        return ops->init(info);
 }
 
 uint64_t addr_auth_address(void)
 {
-        return addr_auth.ops->address();
+        return ops->address();
 }
 
 int addr_auth_fini(void)
 {
-        return addr_auth.ops->fini();
+        return ops->fini();
 }

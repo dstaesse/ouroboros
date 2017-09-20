@@ -164,6 +164,7 @@ static void * dt_conn_handle(void * o)
 }
 
 int dt_init(enum pol_routing pr,
+            enum pol_pff     pp,
             uint8_t          addr_size,
             uint8_t          fd_size,
             bool             has_ttl)
@@ -201,8 +202,9 @@ int dt_init(enum pol_routing pr,
         }
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
-                dt.pff[i] = pff_create();
+                dt.pff[i] = pff_create(pp);
                 if (dt.pff[i] == NULL) {
+                        log_err("Failed to create a PFF.");
                         for (j = 0; j < i; ++j)
                                 pff_destroy(dt.pff[j]);
                         goto fail_pff;
