@@ -59,6 +59,10 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+#ifdef HAVE_LIBGCRYPT
+#include <gcrypt.h>
+#endif
+
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 #define SHM_SAN_HOLDOFF 1000 /* ms */
 #define IPCP_HASH_LEN(e) hash_len(e->dir_hash_algo)
@@ -2260,6 +2264,14 @@ static int irm_init(void)
         else
                 mkdir(FUSE_PREFIX, 0777);
 #endif
+
+#ifdef HAVE_LIBGCRYPT
+        if (gcry_control(GCRYCTL_ANY_INITIALIZATION_P))
+                goto fail_gcry_control;
+
+        gcry_control(GCRYCTL_INITIALIZATION_FINISHED);
+#endif
+
         irmd.csockfd = -1;
         irmd.state   = IRMD_RUNNING;
 
@@ -2267,6 +2279,10 @@ static int irm_init(void)
 
         return 0;
 
+#ifdef HAVE_LIBGCRYPT
+ fail_gcry_control:
+        shm_rdrbuff_destroy(irmd.rdrb);
+#endif
  fail_rdrbuff:
         shm_rdrbuff_destroy(irmd.rdrb);
  fail_sock_opt:

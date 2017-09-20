@@ -676,8 +676,7 @@ int ouroboros_init(const char * ap_name)
         if (pthread_rwlock_init(&ai.lock, NULL))
                 goto fail_lock;
 
-        ai.tw = timerwheel_create(TW_RESOLUTION,
-                                  TW_RESOLUTION * TW_ELEMENTS);
+        ai.tw = timerwheel_create(TW_RESOLUTION, TW_RESOLUTION * TW_ELEMENTS);
         if (ai.tw == NULL)
                 goto fail_timerwheel;
 
