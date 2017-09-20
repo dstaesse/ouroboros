@@ -49,6 +49,10 @@ enum pol_routing {
         LINK_STATE = 0
 };
 
+enum pol_pff {
+        SIMPLE_PFF = 0
+};
+
 enum pol_dir_hash {
         DIR_HASH_SHA3_224 = 0,
         DIR_HASH_SHA3_256,
@@ -75,6 +79,7 @@ struct ipcp_config {
 
         enum pol_addr_auth addr_auth_type;
         enum pol_routing   routing_type;
+        enum pol_pff       pff_type;
 
         /* Shim UDP */
         uint32_t           ip_addr;

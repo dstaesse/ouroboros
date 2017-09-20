@@ -123,6 +123,8 @@ int irm_bootstrap_ipcp(pid_t                      api,
                 config.addr_auth_type     = conf->addr_auth_type;
                 config.has_routing_type   = true;
                 config.routing_type       = conf->routing_type;
+                config.has_pff_type       = true;
+                config.pff_type           = conf->pff_type;
                 dif_info.dir_hash_algo    = conf->dif_info.dir_hash_algo;
                 break;
         case IPCP_SHIM_UDP:

@@ -49,9 +49,11 @@
 #define DEFAULT_DDNS       0
 #define DEFAULT_ADDR_AUTH  FLAT_RANDOM
 #define DEFAULT_ROUTING    LINK_STATE
+#define DEFAULT_PFF        SIMPLE_PFF
 #define DEFAULT_HASH_ALGO  DIR_HASH_SHA3_256
 #define ADDR_AUTH_FLAT     "flat"
 #define ROUTING_LINK_STATE "link_state"
+#define PFF_SIMPLE_PFF     "simple_pff"
 
 static void usage(void)
 {
@@ -68,6 +70,7 @@ static void usage(void)
                "                [ttl (add time to live value in the PCI)]\n"
                "                [addr_auth <address policy> (default: %s)]\n"
                "                [routing <routing policy> (default: %s)]\n"
+               "                [pff <pff policy> (default: %s)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n"
@@ -77,8 +80,8 @@ static void usage(void)
                " (default: none)]\n"
                "if TYPE == " SHIM_ETH_LLC "\n"
                "                if_name <interface name>\n",
-               DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE,
-               ADDR_AUTH_FLAT, ROUTING_LINK_STATE, SHA3_256);
+               DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE, ADDR_AUTH_FLAT,
+               ROUTING_LINK_STATE, PFF_SIMPLE_PFF, SHA3_256);
 }
 
 int do_bootstrap_ipcp(int argc, char ** argv)
@@ -91,6 +94,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         bool               has_ttl        = false;
         enum pol_addr_auth addr_auth_type = DEFAULT_ADDR_AUTH;
         enum pol_routing   routing_type   = DEFAULT_ROUTING;
+        enum pol_pff       pff_type       = DEFAULT_PFF;
         enum pol_dir_hash  hash_algo      = DEFAULT_HASH_ALGO;
         uint32_t           ip_addr        = 0;
         uint32_t           dns_addr       = DEFAULT_DDNS;
@@ -145,6 +149,11 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                                 routing_type = LINK_STATE;
                         else
                                 goto unknown_param;
+                } else if (matches(*argv, "pff") == 0) {
+                        if (strcmp(PFF_SIMPLE_PFF, *(argv + 1)) == 0)
+                                pff_type = SIMPLE_PFF;
+                        else
+                                goto unknown_param;
                 } else {
                         printf("Unknown option: \"%s\".\n", *argv);
                         return -1;
@@ -168,6 +177,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 conf.has_ttl = has_ttl;
                 conf.addr_auth_type = addr_auth_type;
                 conf.routing_type = routing_type;
+                conf.pff_type = pff_type;
                 conf.dif_info.dir_hash_algo = hash_algo;
         } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {
                 conf.type = IPCP_SHIM_UDP;

@@ -31,10 +31,6 @@ int      flat_fini(void);
 
 uint64_t flat_address(void);
 
-struct pol_addr_auth_ops flat_ops = {
-        .init    = flat_init,
-        .fini    = flat_fini,
-        .address = flat_address
-};
+struct pol_addr_auth_ops flat_ops;
 
 #endif /* OUROBOROS_IPCPD_NORMAL_FLAT_H */

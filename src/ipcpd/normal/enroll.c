@@ -167,6 +167,8 @@ static ssize_t enroll_pack(uint8_t ** buf)
         config.addr_auth_type     = enroll.conf.addr_auth_type;
         config.has_routing_type   = true;
         config.routing_type       = enroll.conf.routing_type;
+        config.has_pff_type       = true;
+        config.pff_type           = enroll.conf.pff_type;
         config.dif_info           = &dif_info;
 
         dif_info.dif_name      = (char *) enroll.conf.dif_info.dif_name;

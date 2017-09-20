@@ -228,6 +228,7 @@ static void * mainloop(void * o)
                                 conf.has_ttl        = conf_msg->has_ttl;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
                                 conf.routing_type   = conf_msg->routing_type;
+                                conf.pff_type       = conf_msg->pff_type;
 
                                 switch(conf_msg->dif_info->dir_hash_algo) {
                                 case DIR_HASH_SHA3_224:

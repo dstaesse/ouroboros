@@ -33,6 +33,7 @@
 #define INVALID_ADDR 0
 
 int  dt_init(enum pol_routing pr,
+             enum pol_pff     pp,
              uint8_t          addr_size,
              uint8_t          fd_size,
              bool             has_ttl
