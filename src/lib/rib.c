@@ -305,7 +305,10 @@ void rib_fini(void)
         struct list_head * p;
         struct list_head * h;
 
+        fuse_exit(rib.fuse);
+
         fuse_unmount(rib.mnt, rib.ch);
+
         pthread_join(rib.fuse_thr, NULL);
 
         fuse_destroy(rib.fuse);
