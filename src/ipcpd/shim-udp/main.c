@@ -399,16 +399,10 @@ static void * ipcp_udp_listener(void * o)
         ssize_t            n   = 0;
         struct sockaddr_in c_saddr;
         int                sfd = udp_data.s_fd;
-        struct timeval     ltv = {(SOCKET_TIMEOUT / 1000),
-                                  (SOCKET_TIMEOUT % 1000) * 1000};
 
         (void) o;
 
-        if (setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO,
-                       (void *) &ltv, sizeof(ltv)))
-                log_warn("Failed to set timeout on socket.");
-
-        while (ipcp_get_state() == IPCP_OPERATIONAL) {
+        while (true) {
                 shim_udp_msg_t * msg = NULL;
 
                 memset(&buf, 0, SHIM_UDP_MSG_SIZE);
@@ -456,19 +450,19 @@ static void * ipcp_udp_listener(void * o)
 
 static void * ipcp_udp_sdu_reader(void * o)
 {
-        ssize_t n;
-        int skfd;
-        int fd;
+        ssize_t            n;
+        int                skfd;
+        int                fd;
         /* FIXME: avoid this copy */
-        char buf[SHIM_UDP_MAX_SDU_SIZE];
+        char               buf[SHIM_UDP_MAX_SDU_SIZE];
         struct sockaddr_in r_saddr;
-        fd_set read_fds;
-        int flags;
-        struct timeval tv = {0, FD_UPDATE_TIMEOUT};
+        struct timeval     tv = {0, FD_UPDATE_TIMEOUT};
+        fd_set             read_fds;
+        int                flags;
 
         (void) o;
 
-        while (ipcp_get_state() == IPCP_OPERATIONAL) {
+        while (true) {
                 pthread_rwlock_rdlock(&udp_data.flows_lock);
                 pthread_mutex_lock(&udp_data.fd_set_lock);
 
@@ -512,13 +506,12 @@ static void * ipcp_udp_sdu_reader(void * o)
 static void * ipcp_udp_sdu_loop(void * o)
 {
         int fd;
-        struct timespec timeout = {0, FD_UPDATE_TIMEOUT * 1000};
         struct shm_du_buff * sdb;
 
         (void) o;
 
-        while (ipcp_get_state() == IPCP_OPERATIONAL) {
-                fevent(udp_data.np1_flows, udp_data.fq, &timeout);
+        while (true) {
+                fevent(udp_data.np1_flows, udp_data.fq, NULL);
                 while ((fd = fqueue_next(udp_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_err("Bad read from fd %d.", fd);
@@ -531,12 +524,15 @@ static void * ipcp_udp_sdu_loop(void * o)
 
                         pthread_rwlock_unlock(&udp_data.flows_lock);
 
+                        pthread_cleanup_push((void (*)(void *)) ipcp_sdb_release,
+                                             (void *) sdb);
+
                         if (send(fd, shm_du_buff_head(sdb),
                                  shm_du_buff_tail(sdb) - shm_du_buff_head(sdb),
                                  0) < 0)
                                 log_err("Failed to send SDU.");
 
-                        ipcp_sdb_release(sdb);
+                        pthread_cleanup_pop(true);
                 }
         }
 
@@ -570,7 +566,7 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                         log_err("Failed to convert DNS address");
                         return -1;
                 }
-#ifndef CONFIG_OUROBOROS_ENABLE_DNS
+#ifndef HAVE_DDNS
                 log_warn("DNS disabled at compile time, address ignored");
 #endif
         } else {
@@ -580,7 +576,7 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
         /* UDP listen server */
         if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
                 log_err("Can't create socket.");
-                return -1;
+                goto fail_socket;
         }
 
         if (setsockopt(fd,
@@ -599,8 +595,7 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                  (struct sockaddr *) &udp_data.s_saddr,
                  sizeof(udp_data.s_saddr)) < 0) {
                 log_err("Couldn't bind to %s.", ipstr);
-                close(fd);
-                return -1;
+                goto fail_bind;
         }
 
         udp_data.s_fd     = fd;
@@ -611,25 +606,46 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        pthread_create(&udp_data.handler,
-                       NULL,
-                       ipcp_udp_listener,
-                       NULL);
-        pthread_create(&udp_data.sdu_reader,
-                       NULL,
-                       ipcp_udp_sdu_reader,
-                       NULL);
+        if (pthread_create(&udp_data.handler,
+                           NULL,
+                           ipcp_udp_listener,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_bind;
+        }
 
-        pthread_create(&udp_data.sduloop,
-                       NULL,
-                       ipcp_udp_sdu_loop,
-                       NULL);
+        if (pthread_create(&udp_data.sdu_reader,
+                           NULL,
+                           ipcp_udp_sdu_reader,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_sdu_reader;
+        }
+
+        if (pthread_create(&udp_data.sduloop,
+                           NULL,
+                           ipcp_udp_sdu_loop,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_sduloop;
+        }
 
         log_dbg("Bootstrapped shim IPCP over UDP with api %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
         log_dbg("DNS server address is %s.", dnsstr);
 
         return 0;
+
+ fail_sduloop:
+        pthread_cancel(udp_data.sdu_reader);
+        pthread_join(udp_data.sdu_reader, NULL);
+ fail_sdu_reader:
+        pthread_cancel(udp_data.handler);
+        pthread_join(udp_data.handler, NULL);
+ fail_bind:
+        close(fd);
+ fail_socket:
+        return -1;
 }
 
 #ifdef HAVE_DDNS
@@ -1128,6 +1144,10 @@ int main(int    argc,
         ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                pthread_cancel(udp_data.sduloop);
+                pthread_cancel(udp_data.handler);
+                pthread_cancel(udp_data.sdu_reader);
+
                 pthread_join(udp_data.sduloop, NULL);
                 pthread_join(udp_data.handler, NULL);
                 pthread_join(udp_data.sdu_reader, NULL);

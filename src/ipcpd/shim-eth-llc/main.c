@@ -102,7 +102,7 @@
 #define ETH_FRAME_SIZE            (ETH_HEADER_SIZE + LLC_HEADER_SIZE \
                                    + SHIM_ETH_LLC_MAX_SDU_SIZE)
 #define SHIM_ETH_LLC_MAX_SDU_SIZE (1500 - LLC_HEADER_SIZE)
-#define EVENT_WAIT_TIMEO          10000 /* us */
+#define ALLOC_TIMEO               10    /* ms */
 #define NAME_QUERY_TIMEO          2000  /* ms */
 #define MGMT_TIMEO                100   /* ms */
 
@@ -421,7 +421,7 @@ static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
                                 const uint8_t * dst,
                                 qoscube_t       cube)
 {
-        struct timespec ts = {0, EVENT_WAIT_TIMEO * 100};
+        struct timespec ts = {0, ALLOC_TIMEO * MILLION};
         struct timespec abstime;
         int             fd;
 
@@ -585,11 +585,11 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
 
         (void) o;
 
+        pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
+                             (void *) &eth_llc_data.mgmt_lock);
+
         while (true) {
                 ret = 0;
-
-                if (ipcp_get_state() != IPCP_OPERATIONAL)
-                        return (void *) 0;
 
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
                 ts_add(&abstime, &timeout, &abstime);
@@ -620,6 +620,8 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
                 eth_llc_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_addr);
                 free(frame);
         }
+
+        pthread_cleanup_pop(false);
 }
 
 static void * eth_llc_ipcp_sdu_reader(void * o)
@@ -646,10 +648,8 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
         memset(br_addr, 0xff, MAC_SIZE * sizeof(uint8_t));
 
         while (true) {
-                if (ipcp_get_state() != IPCP_OPERATIONAL)
-                        return (void *) 0;
 #if defined(HAVE_NETMAP)
-                if (poll(&eth_llc_data.poll_in, 1, EVENT_WAIT_TIMEO / 1000) < 0)
+                if (poll(&eth_llc_data.poll_in, 1, -1) < 0)
                         continue;
                 if (eth_llc_data.poll_in.revents == 0) /* TIMED OUT */
                         continue;
@@ -740,7 +740,6 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
 static void * eth_llc_ipcp_sdu_writer(void * o)
 {
-        struct timespec      timeout = {0, EVENT_WAIT_TIMEO * 1000};
         int                  fd;
         struct shm_du_buff * sdb;
         uint8_t              ssap;
@@ -749,9 +748,8 @@ static void * eth_llc_ipcp_sdu_writer(void * o)
 
         (void) o;
 
-        while (fevent(eth_llc_data.np1_flows, eth_llc_data.fq, &timeout)) {
-                if (ipcp_get_state() != IPCP_OPERATIONAL)
-                        return (void *) 0;
+        while (true) {
+                fevent(eth_llc_data.np1_flows, eth_llc_data.fq, NULL);
 
                 pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
                 while ((fd = fqueue_next(eth_llc_data.fq)) >= 0) {
@@ -843,7 +841,7 @@ static void * eth_llc_ipcp_if_monitor(void * o)
                 return (void *) -1;
         }
 
-        while (ipcp_get_state() == IPCP_OPERATIONAL) {
+        while (true) {
                 status = recvmsg(fd, &msg, 0);
                 if (status < 0)
                         continue;
@@ -916,9 +914,6 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         int              enable  = 1;
         int              disable = 0;
         int              blen;
-        struct timeval   tv = {0, EVENT_WAIT_TIMEO};
-#elif defined(HAVE_RAW_SOCKETS)
-        struct timeval   tv = {0, EVENT_WAIT_TIMEO};
 #endif /* HAVE_NETMAP */
 
 #if defined(__FreeBSD__) || defined(__APPLE__)
@@ -1037,11 +1032,6 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_device;
         }
 
-        if (ioctl(eth_llc_data.bpf, BIOCSRTIMEOUT, &tv) < 0) {
-                log_err("Failed to set BIOCSRTIMEOUT.");
-                goto fail_device;
-        }
-
         if (ioctl(eth_llc_data.bpf, BIOCIMMEDIATE, &enable) < 0) {
                 log_err("Failed to set BIOCIMMEDIATE.");
                 goto fail_device;
@@ -1067,12 +1057,6 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         if (bind(eth_llc_data.s_fd, (struct sockaddr *) &eth_llc_data.device,
                 sizeof(eth_llc_data.device))) {
                 log_err("Failed to bind socket to interface");
-                goto fail_device;
-        }
-
-        if (setsockopt(eth_llc_data.s_fd, SOL_SOCKET, SO_RCVTIMEO,
-                       &tv, sizeof(tv))) {
-                log_err("Failed to set socket timeout: %s.", strerror(errno));
                 goto fail_device;
         }
 
@@ -1119,11 +1103,14 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         return 0;
 
  fail_sdu_writer:
+        pthread_cancel(eth_llc_data.sdu_reader);
         pthread_join(eth_llc_data.sdu_reader, NULL);
  fail_sdu_reader:
+        pthread_cancel(eth_llc_data.mgmt_handler);
         pthread_join(eth_llc_data.mgmt_handler, NULL);
  fail_mgmt_handler:
 #ifdef __linux__
+        pthread_cancel(eth_llc_data.if_monitor);
         pthread_join(eth_llc_data.if_monitor, NULL);
 #endif
  fail_device:
@@ -1246,7 +1233,7 @@ static int eth_llc_ipcp_flow_alloc(int             fd,
 static int eth_llc_ipcp_flow_alloc_resp(int fd,
                                         int response)
 {
-        struct timespec ts    = {0, EVENT_WAIT_TIMEO * 100};
+        struct timespec ts    = {0, ALLOC_TIMEO * MILLION};
         struct timespec abstime;
         uint8_t         ssap  = 0;
         uint8_t         r_sap = 0;
@@ -1369,6 +1356,12 @@ int main(int    argc,
         ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                pthread_cancel(eth_llc_data.sdu_writer);
+                pthread_cancel(eth_llc_data.sdu_reader);
+                pthread_cancel(eth_llc_data.mgmt_handler);
+#ifdef __linux__
+                pthread_cancel(eth_llc_data.if_monitor);
+#endif
                 pthread_join(eth_llc_data.sdu_writer, NULL);
                 pthread_join(eth_llc_data.sdu_reader, NULL);
                 pthread_join(eth_llc_data.mgmt_handler, NULL);

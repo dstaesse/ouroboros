@@ -44,8 +44,8 @@
 #include <sys/wait.h>
 #include <assert.h>
 
-#define EVENT_WAIT_TIMEOUT 100 /* us */
-#define THIS_TYPE IPCP_LOCAL
+#define THIS_TYPE     IPCP_LOCAL
+#define ALLOC_TIMEOUT 10 /* ms */
 
 struct {
         struct shim_data * shim_data;
@@ -95,15 +95,13 @@ static void local_data_fini(void){
 
 static void * ipcp_local_sdu_loop(void * o)
 {
-        struct timespec timeout = {0, EVENT_WAIT_TIMEOUT * 1000};
-
         (void) o;
 
-        while (ipcp_get_state() == IPCP_OPERATIONAL) {
+        while (true) {
                 int     fd;
                 ssize_t idx;
 
-                fevent(local_data.flows, local_data.fq, &timeout);
+                fevent(local_data.flows, local_data.fq, NULL);
 
                 while ((fd = fqueue_next(local_data.fq)) >= 0) {
                         idx = local_flow_read(fd);
@@ -181,7 +179,7 @@ static int ipcp_local_flow_alloc(int             fd,
                                  const uint8_t * dst,
                                  qoscube_t       cube)
 {
-        struct timespec ts     = {0, EVENT_WAIT_TIMEOUT * 1000};
+        struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
         struct timespec abstime;
         int             out_fd = -1;
 
@@ -237,7 +235,7 @@ static int ipcp_local_flow_alloc(int             fd,
 static int ipcp_local_flow_alloc_resp(int fd,
                                       int response)
 {
-        struct timespec ts     = {0, EVENT_WAIT_TIMEOUT * 1000};
+        struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
         struct timespec abstime;
         int             out_fd = -1;
         int             ret    = -1;
@@ -359,8 +357,10 @@ int main(int    argc,
 
         ipcp_shutdown();
 
-        if (ipcp_get_state() == IPCP_SHUTDOWN)
+        if (ipcp_get_state() == IPCP_SHUTDOWN) {
+                pthread_cancel(local_data.sduloop);
                 pthread_join(local_data.sduloop, NULL);
+        }
 
         local_data_fini();
 
