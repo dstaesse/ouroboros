@@ -227,9 +227,7 @@ static struct fuse_operations r_ops = {
 
 static void * fuse_thr(void * o)
 {
-        (void) o;
-
-        if (fuse_loop(rib.fuse) < 0)
+        if (fuse_loop((struct fuse *) o) < 0)
                 return (void *) -1;
 
         return (void *) 0;
@@ -276,7 +274,7 @@ int rib_init(const char * prefix)
         if (pthread_rwlock_init(&rib.lock, NULL))
                 goto fail_rwlock_init;
 
-        if (pthread_create(&rib.fuse_thr, NULL, fuse_thr, NULL))
+        if (pthread_create(&rib.fuse_thr, NULL, fuse_thr, rib.fuse))
                 goto fail_fuse_thr;
 
         fuse_opt_free_args(&args);

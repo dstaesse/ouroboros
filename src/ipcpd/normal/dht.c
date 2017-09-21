@@ -2240,7 +2240,7 @@ static void * dht_handle_sdu(void * o)
 
         ipcp_sdb_release(sdb);
 
-        free((struct sdu_info *) o);
+        free(o);
 
         if (msg == NULL) {
                 log_err("Failed to unpack message.");
