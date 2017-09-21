@@ -26,6 +26,7 @@
 #include <ouroboros/hash.h>
 
 #include <assert.h>
+#include <string.h>
 
 struct htable_entry {
         struct list_head next;
