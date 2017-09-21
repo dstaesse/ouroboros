@@ -103,6 +103,8 @@ int simple_pff_add(struct pff_i * pff_i,
         assert(pff_i);
         assert(len > 0);
 
+        (void) len;
+
         val = malloc(sizeof(*val));
         if (val == NULL)
                 return -ENOMEM;
@@ -126,6 +128,8 @@ int simple_pff_update(struct pff_i * pff_i,
 
         assert(pff_i);
         assert(len > 0);
+
+        (void) len;
 
         val = malloc(sizeof(*val));
         if (val == NULL)
