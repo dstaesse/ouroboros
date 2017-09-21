@@ -36,7 +36,9 @@
 #define IPCP_ADD_THREADS    @IPCP_ADD_THREADS@
 
 /* normal IPCP */
-#define IPCP_SCHED_THREADS  @IPCP_SCHED_THREADS@
+#define QOS_PRIO_BE         @IPCP_QOS_CUBE_BE_PRIO@
+#define QOS_PRIO_VIDEO      @IPCP_QOS_CUBE_VIDEO_PRIO@
+#define QOS_PRIO_VOICE      @IPCP_QOS_CUBE_VOICE_PRIO@
 #define PFT_SIZE            @PFT_SIZE@
 
 /* shim-udp */
