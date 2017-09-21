@@ -109,7 +109,7 @@ int simple_pff_add(struct pff_i * pff_i,
 
         *val = fd[0];
 
-        if (htable_insert(pff_i->table, addr, val)) {
+        if (htable_insert(pff_i->table, addr, val, 1)) {
                 free(val);
                 return -1;
         }
@@ -137,7 +137,7 @@ int simple_pff_update(struct pff_i * pff_i,
                 return -1;
         }
 
-        if (htable_insert(pff_i->table, addr, val)) {
+        if (htable_insert(pff_i->table, addr, val, 1)) {
                 free(val);
                 return -1;
         }
@@ -166,16 +166,16 @@ void simple_pff_flush(struct pff_i * pff_i)
 int simple_pff_nhop(struct pff_i * pff_i,
                     uint64_t       addr)
 {
-        int * j;
-        int   fd = -1;
+        void * j;
+        size_t len;
+        int    fd = -1;
 
         assert(pff_i);
 
         pthread_rwlock_rdlock(&pff_i->lock);
 
-        j = (int *) htable_lookup(pff_i->table, addr);
-        if (j != NULL)
-                fd = *j;
+        if (!htable_lookup(pff_i->table, addr, &j, &len))
+                fd = *((int *) j);
 
         pthread_rwlock_unlock(&pff_i->lock);
 

@@ -40,11 +40,14 @@ void            htable_flush(struct htable * table);
 /* Passes ownership of the block of memory */
 int             htable_insert(struct htable * table,
                               uint64_t        key,
-                              void *          val);
+                              void *          val,
+                              size_t          len);
 
 /* The block of memory returned is no copy */
-void *          htable_lookup(struct htable * table,
-                              uint64_t        key);
+int             htable_lookup(struct htable * table,
+                              uint64_t        key,
+                              void **         val,
+                              size_t *        len);
 
 int             htable_delete(struct htable * table,
                               uint64_t        key);

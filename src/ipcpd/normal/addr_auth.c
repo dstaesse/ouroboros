@@ -36,7 +36,7 @@ int addr_auth_init(enum pol_addr_auth type,
                    const void *       info)
 {
         switch (type) {
-        case FLAT_RANDOM:
+        case ADDR_AUTH_FLAT_RANDOM:
                 ops = &flat_ops;
                 break;
         default:
