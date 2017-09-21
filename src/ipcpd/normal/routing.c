@@ -32,7 +32,7 @@ struct pol_routing_ops * r_ops;
 int routing_init(enum pol_routing pr)
 {
         switch (pr) {
-        case LINK_STATE:
+        case ROUTING_LINK_STATE:
                 r_ops = &link_state_ops;
                 break;
         default:

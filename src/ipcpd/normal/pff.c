@@ -24,6 +24,7 @@
 
 #include "pff.h"
 #include "pol-pff-ops.h"
+#include "pol/alternate_pff.h"
 #include "pol/simple_pff.h"
 
 struct pff {
@@ -40,15 +41,19 @@ struct pff * pff_create(enum pol_pff pol)
                 return NULL;
 
         switch (pol) {
-        case SIMPLE_PFF:
+        case PFF_ALTERNATE:
+                pff->ops = &alternate_pff_ops;
+                break;
+        case PFF_SIMPLE:
                 pff->ops = &simple_pff_ops;
-                pff->pff_i = pff->ops->create();
-                if (pff->pff_i == NULL)
-                        goto err;
                 break;
         default:
                 goto err;
         }
+
+        pff->pff_i = pff->ops->create();
+        if (pff->pff_i == NULL)
+                goto err;
 
         return pff;
  err:

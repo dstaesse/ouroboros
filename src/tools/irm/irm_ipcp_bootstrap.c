@@ -33,27 +33,28 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define NORMAL            "normal"
-#define SHIM_UDP          "shim-udp"
-#define SHIM_ETH_LLC      "shim-eth-llc"
-#define LOCAL             "local"
+#define NORMAL                "normal"
+#define SHIM_UDP              "shim-udp"
+#define SHIM_ETH_LLC          "shim-eth-llc"
+#define LOCAL                 "local"
 
-#define MD5               "MD5"
-#define SHA3_224          "SHA3_224"
-#define SHA3_256          "SHA3_256"
-#define SHA3_384          "SHA3_384"
-#define SHA3_512          "SHA3_512"
+#define MD5                   "MD5"
+#define SHA3_224              "SHA3_224"
+#define SHA3_256              "SHA3_256"
+#define SHA3_384              "SHA3_384"
+#define SHA3_512              "SHA3_512"
 
-#define DEFAULT_ADDR_SIZE  4
-#define DEFAULT_FD_SIZE    2
-#define DEFAULT_DDNS       0
-#define DEFAULT_ADDR_AUTH  FLAT_RANDOM
-#define DEFAULT_ROUTING    LINK_STATE
-#define DEFAULT_PFF        SIMPLE_PFF
-#define DEFAULT_HASH_ALGO  DIR_HASH_SHA3_256
-#define ADDR_AUTH_FLAT     "flat"
-#define ROUTING_LINK_STATE "link_state"
-#define PFF_SIMPLE_PFF     "simple_pff"
+#define DEFAULT_ADDR_SIZE     4
+#define DEFAULT_FD_SIZE       2
+#define DEFAULT_DDNS          0
+#define DEFAULT_ADDR_AUTH     ADDR_AUTH_FLAT_RANDOM
+#define DEFAULT_ROUTING       ROUTING_LINK_STATE
+#define DEFAULT_PFF           PFF_SIMPLE
+#define DEFAULT_HASH_ALGO     DIR_HASH_SHA3_256
+#define FLAT_RANDOM_ADDR_AUTH "flat"
+#define LINK_STATE_ROUTING    "link_state"
+#define SIMPLE_PFF            "simple"
+#define ALTERNATE_PFF         "alternate"
 
 static void usage(void)
 {
@@ -68,20 +69,23 @@ static void usage(void)
                "                [addr <address size> (default: %d)]\n"
                "                [fd <fd size> (default: %d)]\n"
                "                [ttl (add time to live value in the PCI)]\n"
-               "                [addr_auth <address policy> (default: %s)]\n"
-               "                [routing <routing policy> (default: %s)]\n"
-               "                [pff <pff policy> (default: %s)]\n"
+               "                [addr_auth <ADDRESS_POLICY> (default: %s)]\n"
+               "                [routing <ROUTING_POLICY> (default: %s)]\n"
+               "                [pff [PFF_POLICY] (default: %s)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
-               "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
-               SHA3_384 " " SHA3_512 "}\n"
+               "where ADDRESS_POLICY = {"FLAT_RANDOM_ADDR_AUTH"}\n"
+               "      ROUTING_POLICY = {"LINK_STATE_ROUTING"}\n"
+               "      PFF_POLICY = {" SIMPLE_PFF " " ALTERNATE_PFF "}\n"
+               "      ALGORITHM = {" SHA3_224 " " SHA3_256 " "
+               SHA3_384 " " SHA3_512 "}\n\n"
                "if TYPE == " SHIM_UDP "\n"
                "                ip <IP address in dotted notation>\n"
                "                [dns <DDNS IP address in dotted notation>"
-               " (default: none)]\n"
+               " (default: none)]\n\n"
                "if TYPE == " SHIM_ETH_LLC "\n"
                "                if_name <interface name>\n",
-               DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE, ADDR_AUTH_FLAT,
-               ROUTING_LINK_STATE, PFF_SIMPLE_PFF, SHA3_256);
+               DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE, FLAT_RANDOM_ADDR_AUTH,
+               LINK_STATE_ROUTING, SIMPLE_PFF, SHA3_256);
 }
 
 int do_bootstrap_ipcp(int argc, char ** argv)
@@ -140,18 +144,20 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         argc++;
                         argv--;
                 } else if (matches(*argv, "addr_auth") == 0) {
-                        if (strcmp(ADDR_AUTH_FLAT, *(argv + 1)) == 0)
-                                addr_auth_type = FLAT_RANDOM;
+                        if (strcmp(FLAT_RANDOM_ADDR_AUTH, *(argv + 1)) == 0)
+                                addr_auth_type = ADDR_AUTH_FLAT_RANDOM;
                         else
                                 goto unknown_param;
                 } else if (matches(*argv, "routing") == 0) {
-                        if (strcmp(ROUTING_LINK_STATE, *(argv + 1)) == 0)
-                                routing_type = LINK_STATE;
+                        if (strcmp(LINK_STATE_ROUTING, *(argv + 1)) == 0)
+                                routing_type = ROUTING_LINK_STATE;
                         else
                                 goto unknown_param;
                 } else if (matches(*argv, "pff") == 0) {
-                        if (strcmp(PFF_SIMPLE_PFF, *(argv + 1)) == 0)
-                                pff_type = SIMPLE_PFF;
+                        if (strcmp(SIMPLE_PFF, *(argv + 1)) == 0)
+                                pff_type = PFF_SIMPLE;
+                        else if (strcmp(ALTERNATE_PFF, *(argv + 1)) == 0)
+                                pff_type = PFF_ALTERNATE;
                         else
                                 goto unknown_param;
                 } else {

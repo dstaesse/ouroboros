@@ -42,15 +42,16 @@ enum ipcp_type {
 
 /* Normal IPCP policies */
 enum pol_addr_auth {
-        FLAT_RANDOM = 0
+        ADDR_AUTH_FLAT_RANDOM = 0
 };
 
 enum pol_routing {
-        LINK_STATE = 0
+        ROUTING_LINK_STATE = 0
 };
 
 enum pol_pff {
-        SIMPLE_PFF = 0
+        PFF_SIMPLE = 0,
+        PFF_ALTERNATE
 };
 
 enum pol_dir_hash {

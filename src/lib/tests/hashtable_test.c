@@ -30,8 +30,10 @@
 int hashtable_test(int argc, char ** argv)
 {
         struct htable * table;
-        int i;
-        int * j;
+        int             i;
+        int *           j;
+        void *          el;
+        size_t          len;
 
         (void) argc;
         (void) argv;
@@ -59,20 +61,20 @@ int hashtable_test(int argc, char ** argv)
                 }
                 *j = i;
 
-                if (htable_insert(table, i, (void *) j)) {
+                if (htable_insert(table, i, (void *) j, 1)) {
                         printf("Failed to insert.\n");
                         htable_destroy(table);
                         return -1;
                 }
         }
 
-        j = (int *) htable_lookup(table, INT_TEST);
-        if (j == NULL) {
+        if (htable_lookup(table, INT_TEST, &el, &len)) {
                 printf("Failed to lookup.\n");
                 htable_destroy(table);
                 return -1;
         }
 
+        j = (int *) el;
         if (*j != INT_TEST) {
                 printf("Lookup returned wrong value (%d != %d).\n",
                        INT_TEST, *j);
@@ -80,13 +82,13 @@ int hashtable_test(int argc, char ** argv)
                 return -1;
         }
 
-        j = (int *) htable_lookup(table, HASHTABLE_SIZE + INT_TEST);
-        if (j == NULL) {
+        if (htable_lookup(table, HASHTABLE_SIZE + INT_TEST, &el, &len)) {
                 printf("Failed to lookup.\n");
                 htable_destroy(table);
                 return -1;
         }
 
+        j = (int *) el;
         if (*j != HASHTABLE_SIZE + INT_TEST) {
                 printf("Lookup returned wrong value (%d != %d).\n",
                        INT_TEST, *j);
@@ -100,20 +102,19 @@ int hashtable_test(int argc, char ** argv)
                 return -1;
         }
 
-        j = (int *) htable_lookup(table, INT_TEST);
-        if (j != NULL) {
+        if (htable_lookup(table, INT_TEST, &el, &len) == 0) {
                 printf("Failed to delete properly.\n");
                 htable_destroy(table);
                 return -1;
         }
 
-        j = (int *) htable_lookup(table, HASHTABLE_SIZE + INT_TEST);
-        if (j == NULL) {
+        if (htable_lookup(table, HASHTABLE_SIZE + INT_TEST, &el, &len)) {
                 printf("Failed to lookup after deletion.\n");
                 htable_destroy(table);
                 return -1;
         }
 
+        j = (int *) el;
         if (*j != HASHTABLE_SIZE + INT_TEST) {
                 printf("Lookup returned wrong value (%d != %d).\n",
                        INT_TEST, *j);

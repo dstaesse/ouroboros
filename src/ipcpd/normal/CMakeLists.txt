@@ -41,6 +41,7 @@ set(SOURCE_FILES
   routing.c
   sdu_sched.c
   # Add policies last
+  pol/alternate_pff.c
   pol/flat.c
   pol/link_state.c
   pol/graph.c

@@ -23,6 +23,7 @@
 #include <ouroboros/hashtable.h>
 #include <ouroboros/list.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/hash.h>
 
 #include <assert.h>
 
@@ -30,6 +31,7 @@ struct htable_entry {
         struct list_head next;
         uint64_t         key;
         void *           val;
+        size_t           len;
 };
 
 struct htable {
@@ -104,16 +106,25 @@ void htable_flush(struct htable * table)
         }
 }
 
-static uint64_t hash(uint64_t x)
+static uint64_t hash(uint64_t key)
 {
-        x = (x ^ (x >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
-        x = (x ^ (x >> 27)) * UINT64_C(0x94d049bb133111eb);
-        x = x ^ (x >> 31);
+        void *   res;
+        uint64_t ret;
+        uint8_t  keys[4];
 
-        return x;
+        memcpy(keys, &key, 4);
+
+        mem_hash(HASH_MD5, &res, keys, 4);
+
+        ret = (* (uint64_t *) res);
+
+        free(res);
+
+        return ret;
 }
 
-static uint64_t calc_key(struct htable * table, uint64_t key)
+static uint64_t calc_key(struct htable * table,
+                         uint64_t        key)
 {
         if (table->hash_key == true)
                 key = hash(key);
@@ -121,7 +132,10 @@ static uint64_t calc_key(struct htable * table, uint64_t key)
         return (key & (table->buckets_size - 1));
 }
 
-int htable_insert(struct htable * table, uint64_t key, void * val)
+int htable_insert(struct htable * table,
+                  uint64_t        key,
+                  void *          val,
+                  size_t          len)
 {
         struct htable_entry * entry;
         uint64_t              lookup_key;
@@ -143,6 +157,7 @@ int htable_insert(struct htable * table, uint64_t key, void * val)
 
         entry->key = key;
         entry->val = val;
+        entry->len = len;
         list_head_init(&entry->next);
 
         list_add(&entry->next, &(table->buckets[lookup_key]));
@@ -150,7 +165,10 @@ int htable_insert(struct htable * table, uint64_t key, void * val)
         return 0;
 }
 
-void * htable_lookup(struct htable * table, uint64_t key)
+int htable_lookup(struct htable * table,
+                  uint64_t        key,
+                  void **         val,
+                  size_t *        len)
 {
         struct htable_entry * entry;
         struct list_head *    pos = NULL;
@@ -162,14 +180,18 @@ void * htable_lookup(struct htable * table, uint64_t key)
 
         list_for_each(pos, &(table->buckets[lookup_key])) {
                 entry = list_entry(pos, struct htable_entry, next);
-                if (entry->key == key)
-                        return entry->val;
+                if (entry->key == key) {
+                        *val = entry->val;
+                        *len = entry->len;
+                        return 0;
+                }
         }
 
-        return NULL;
+        return -1;
 }
 
-int htable_delete(struct htable * table, uint64_t key)
+int htable_delete(struct htable * table,
+                  uint64_t        key)
 {
         struct htable_entry * entry;
         uint64_t              lookup_key;
