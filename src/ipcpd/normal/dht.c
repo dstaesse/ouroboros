@@ -721,6 +721,7 @@ static void lookup_update(struct dht *    dht,
         struct contact *   c = NULL;
         size_t             n;
         size_t             pos = 0;
+        bool               mod = false;
 
         assert(lu);
         assert(msg);
@@ -774,6 +775,7 @@ static void lookup_update(struct dht *    dht,
                 if (lu->n_contacts < dht->k) {
                         list_add_tail(&c->next, p);
                         ++lu->n_contacts;
+                        mod = true;
                 } else if (pos == dht->k) {
                         contact_destroy(c);
                         continue;
@@ -784,10 +786,11 @@ static void lookup_update(struct dht *    dht,
                                             struct contact, next);
                         list_del(&d->next);
                         contact_destroy(d);
+                        mod = true;
                 }
         }
 
-        if (lu->out == 0)
+        if (lu->out == 0 && !mod)
                 lu->state = LU_COMPLETE;
         else
                 lu->state = LU_UPDATE;
