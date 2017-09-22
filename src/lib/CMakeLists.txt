@@ -165,8 +165,8 @@ set(SHM_RDRB_NAME "/${SHM_PREFIX}.rdrb" CACHE INTERNAL
   "Name for the main POSIX shared memory buffer")
 set(SHM_RDRB_BLOCK_SIZE "sysconf(_SC_PAGESIZE)" CACHE STRING
   "SDU buffer block size, multiple of pagesize for performance")
-set(SHM_RBUFF_LOCKLESS 1 CACHE BOOL
-  "Enable shared memory rbuff lockless support")
+set(SHM_RBUFF_LOCKLESS 0 CACHE BOOL
+  "Enable shared memory lockless rbuff support")
 
 set(SOURCE_FILES
   # Add source files here
