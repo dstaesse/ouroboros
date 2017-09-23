@@ -100,69 +100,65 @@ struct bmp {
 struct bmp * bmp_create(size_t  bits,
                         ssize_t offset)
 {
-        struct bmp * tmp;
+        struct bmp * bmp;
 
-        if (bits == 0)
+        assert(bits);
+
+        bmp = malloc(sizeof(*bmp));
+        if (bmp == NULL)
                 return NULL;
 
-        tmp = malloc(sizeof(*tmp));
-        if (tmp == NULL)
-                return NULL;
-
-        tmp->bitmap = malloc(BITS_TO_LONGS(bits) * sizeof(size_t));
-        if (tmp->bitmap == NULL) {
-                free(tmp);
+        bmp->bitmap = malloc(BITS_TO_LONGS(bits) * sizeof(size_t));
+        if (bmp->bitmap == NULL) {
+                free(bmp);
                 return NULL;
         }
 
-        tmp->size   = bits;
-        tmp->offset = offset;
-        bitmap_zero(tmp->bitmap, bits);
+        bmp->size   = bits;
+        bmp->offset = offset;
+        bitmap_zero(bmp->bitmap, bits);
 
-        return tmp;
+        return bmp;
 }
 
-void bmp_destroy(struct bmp * b)
+void bmp_destroy(struct bmp * bmp)
 {
-        if (b == NULL)
-                return;
+        assert(bmp);
 
-        if (b->bitmap != NULL)
-                free(b->bitmap);
+        if (bmp->bitmap != NULL)
+                free(bmp->bitmap);
 
-        free(b);
+        free(bmp);
 }
 
-static ssize_t bad_id(struct bmp * b)
+static ssize_t bad_id(struct bmp * bmp)
 {
-        if (b == NULL)
-                return -1;
+        assert(bmp);
 
-        return b->offset - 1;
+        return bmp->offset - 1;
 }
 
-ssize_t bmp_allocate(struct bmp * b)
+ssize_t bmp_allocate(struct bmp * bmp)
 {
         size_t id;
 
-        if (b == NULL)
-                return -1;
+        assert(bmp);
 
-        id = find_next_zero_bit(b->bitmap, b->size);
-        if (id >= b->size)
-                return bad_id(b);
+        id = find_next_zero_bit(bmp->bitmap, bmp->size);
+        if (id >= bmp->size)
+                return bad_id(bmp);
 
-        bitmap_set(b->bitmap, id);
+        bitmap_set(bmp->bitmap, id);
 
-        return id + b->offset;
+        return id + bmp->offset;
 }
 
-static bool is_id_valid(struct bmp * b,
+static bool is_id_valid(struct bmp * bmp,
                         ssize_t      id)
 {
-        assert(b);
+        assert(bmp);
 
-        if ((id < b->offset) || (id > (ssize_t) (b->offset + b->size)))
+        if ((id < bmp->offset) || (id > (ssize_t) (bmp->offset + bmp->size)))
                 return false;
 
         return true;
@@ -177,34 +173,31 @@ static bool is_id_used(size_t * map,
         return (*p & mask) != 0;
 }
 
-bool bmp_is_id_valid(struct bmp * b,
+bool bmp_is_id_valid(struct bmp * bmp,
                      ssize_t      id)
 {
-        if (b == NULL)
-                return false;
+        assert(bmp);
 
-        return is_id_valid(b, id);
+        return is_id_valid(bmp, id);
 }
 
-int bmp_release(struct bmp * b,
+int bmp_release(struct bmp * bmp,
                 ssize_t      id)
 {
-        if (b == NULL)
+        assert(bmp);
+
+        if (!is_id_valid(bmp, id))
                 return -1;
 
-        if (!is_id_valid(b, id))
-                return -1;
-
-        bitmap_clear(b->bitmap, id - b->offset);
+        bitmap_clear(bmp->bitmap, id - bmp->offset);
 
         return 0;
 }
 
-bool bmp_is_id_used(struct bmp * b,
+bool bmp_is_id_used(struct bmp * bmp,
                     ssize_t      id)
 {
-        if (b == NULL)
-                return false;
+        assert(bmp);
 
-        return is_id_used(b->bitmap, id - b->offset);
+        return is_id_used(bmp->bitmap, id - bmp->offset);
 }

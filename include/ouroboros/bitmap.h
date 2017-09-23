@@ -32,17 +32,17 @@ struct bmp;
 struct bmp * bmp_create(size_t  bits,
                         ssize_t offset);
 
-void         bmp_destroy(struct bmp * b);
+void         bmp_destroy(struct bmp * bmp);
 
-ssize_t      bmp_allocate(struct bmp * instance);
+ssize_t      bmp_allocate(struct bmp * bmp);
 
-int          bmp_release(struct bmp * instance,
+int          bmp_release(struct bmp * bmp,
                          ssize_t      id);
 
-bool         bmp_is_id_valid(struct bmp * b,
+bool         bmp_is_id_valid(struct bmp * bmp,
                              ssize_t      id);
 
-bool         bmp_is_id_used(struct bmp * b,
+bool         bmp_is_id_used(struct bmp * bmp,
                             ssize_t      id);
 
 #endif /* OUROBOROS_BITMAP_H */
