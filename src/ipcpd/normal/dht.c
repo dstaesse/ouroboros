@@ -1964,7 +1964,7 @@ static int kad_handle_join_resp(struct dht *     dht,
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&dht->lock);
+        pthread_rwlock_rdlock(&dht->lock);
 
         dht->buckets = bucket_create();
         if (dht->buckets == NULL) {
@@ -1994,8 +1994,6 @@ static int kad_handle_join_resp(struct dht *     dht,
         }
 
         kad_req_respond(req);
-
-        dht_update_bucket(dht, msg->s_id.data, msg->s_addr);
 
         pthread_rwlock_unlock(&dht->lock);
 
@@ -2226,6 +2224,8 @@ static void * dht_handle_sdu(void * o)
         uint64_t             addr;
         buffer_t             buf;
         size_t               i;
+        size_t               b;
+        size_t               t_expire;
 
         assert(o);
 
@@ -2250,13 +2250,20 @@ static void * dht_handle_sdu(void * o)
                 return (void *) -1;
         }
 
-        if (msg->has_key && msg->key.len != dht->b) {
+        pthread_rwlock_rdlock(&dht->lock);
+
+        b        = dht->b;
+        t_expire = dht->t_expire;
+
+        pthread_rwlock_unlock(&dht->lock);
+
+        if (msg->has_key && msg->key.len != b) {
                 kad_msg__free_unpacked(msg, NULL);
                 log_warn("Bad key in message.");
                 return (void *) -1;
         }
 
-        if (msg->has_s_id && !msg->has_b && msg->s_id.len != dht->b) {
+        if (msg->has_s_id && !msg->has_b && msg->s_id.len != b) {
                 kad_msg__free_unpacked(msg, NULL);
                 log_warn("Bad source ID in message of type %d.", msg->code);
                 return (void *) -1;
@@ -2302,9 +2309,9 @@ static void * dht_handle_sdu(void * o)
                 resp_msg.has_t_refresh   = true;
                 resp_msg.has_t_replicate = true;
                 resp_msg.alpha           = KAD_ALPHA;
-                resp_msg.b               = dht->b;
+                resp_msg.b               = b;
                 resp_msg.k               = KAD_K;
-                resp_msg.t_expire        = dht->t_expire;
+                resp_msg.t_expire        = t_expire;
                 resp_msg.t_refresh       = KAD_T_REFR;
                 resp_msg.t_replicate     = KAD_T_REPL;
                 break;
