@@ -320,10 +320,11 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         udp_data.fd_to_uf[fd].udp  = f_saddr.sin_port;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         ipcpi.alloc_id = fd;
         pthread_cond_broadcast(&ipcpi.alloc_cond);
+
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         log_dbg("Pending allocation request, fd %d, UDP port (%d, %d).",
                 fd, ntohs(f_saddr.sin_port), ntohs(c_saddr->sin_port));
@@ -345,7 +346,7 @@ static int udp_port_to_fd(int udp_port)
 
 static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
                                      uint16_t dst_udp_port,
-                                     int response)
+                                     int      response)
 {
         int fd   = -1;
         int ret  =  0;
