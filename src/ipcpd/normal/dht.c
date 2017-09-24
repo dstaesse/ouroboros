@@ -698,7 +698,7 @@ static void lookup_destroy(struct lookup * lu)
                 return;
         case LU_PENDING:
                 lu->state = LU_DESTROY;
-                pthread_cond_signal(&lu->cond);
+                pthread_cond_broadcast(&lu->cond);
                 break;
         case LU_INIT:
         case LU_DONE:
@@ -727,7 +727,6 @@ static void lookup_destroy(struct lookup * lu)
 
         pthread_mutex_unlock(&lu->lock);
 
-        pthread_cond_destroy(&lu->cond);
         pthread_mutex_destroy(&lu->lock);
 
         free(lu);
@@ -761,19 +760,30 @@ static void lookup_update(struct dht *    dht,
                         lu->n_addrs = msg->n_addrs;
                 }
                 lu->state = LU_COMPLETE;
-                pthread_cond_signal(&lu->cond);
+                pthread_cond_broadcast(&lu->cond);
                 pthread_mutex_unlock(&lu->lock);
                 return;
         }
 
-        while (lu->state == LU_INIT)
+        while (lu->state == LU_INIT) {
+                pthread_rwlock_unlock(&dht->lock);
                 pthread_cond_wait(&lu->cond, &lu->lock);
+                pthread_rwlock_rdlock(&dht->lock);
+        }
+
+        /* BUG: this should not be allowed since it's use-after-free. */
+        if (lu->state == LU_DESTROY || lu->state == LU_NULL) {
+                log_warn("Use-after-free. Update aborted to avoid worse.");
+                return;
+        }
 
         for (n = 0; n < msg->n_contacts; ++n) {
                 c = contact_create(msg->contacts[n]->id.data,
                                    dht->b, msg->contacts[n]->addr);
                 if (c == NULL)
                         continue;
+
+                pos = 0;
 
                 list_for_each(p, &lu->contacts) {
                         struct contact * e;
@@ -786,6 +796,7 @@ static void lookup_update(struct dht *    dht,
 
                         if (dist(c->id, lu->key) > dist(e->id, lu->key))
                                 break;
+
                         pos++;
                 }
 
@@ -798,7 +809,6 @@ static void lookup_update(struct dht *    dht,
                         mod = true;
                 } else if (pos == dht->k) {
                         contact_destroy(c);
-                        continue;
                 } else {
                         struct contact * d;
                         list_add_tail(&c->next, p);
@@ -815,7 +825,7 @@ static void lookup_update(struct dht *    dht,
         else
                 lu->state = LU_UPDATE;
 
-        pthread_cond_signal(&lu->cond);
+        pthread_cond_broadcast(&lu->cond);
         pthread_mutex_unlock(&lu->lock);
         return;
 }
@@ -862,7 +872,7 @@ static ssize_t lookup_contact_addrs(struct lookup * lu,
 }
 
 static void lookup_new_addrs(struct lookup * lu,
-                                uint64_t *      addrs)
+                             uint64_t *      addrs)
 {
         struct list_head * p;
         size_t             n = 0;
@@ -889,8 +899,10 @@ static void lookup_new_addrs(struct lookup * lu,
 
         addrs[n] = 0;
 
-        if (n == 0)
+        if (n == 0) {
                 lu->state = LU_DONE;
+                pthread_cond_signal(&lu->cond);
+        }
 
         pthread_mutex_unlock(&lu->lock);
 }
@@ -901,7 +913,7 @@ static void lookup_set_state(struct lookup *   lu,
         pthread_mutex_lock(&lu->lock);
 
         lu->state = state;
-        pthread_cond_signal(&lu->cond);
+        pthread_cond_broadcast(&lu->cond);
 
         pthread_mutex_unlock(&lu->lock);
 }
@@ -927,8 +939,10 @@ static enum lookup_state lookup_wait(struct lookup * lu)
 
         pthread_mutex_lock(&lu->lock);
 
-        lu->state = LU_PENDING;
-        pthread_cond_signal(&lu->cond);
+        if (lu->state == LU_INIT) {
+                lu->state = LU_PENDING;
+                pthread_cond_signal(&lu->cond);
+        }
 
         pthread_cleanup_push(cleanup_wait, lu);
 
@@ -1582,6 +1596,16 @@ static ssize_t kad_find(struct dht *     dht,
         return sent;
 }
 
+static void lookup_detach(struct dht *    dht,
+                          struct lookup * lu)
+{
+        pthread_rwlock_wrlock(&dht->lock);
+
+        list_del(&lu->next);
+
+        pthread_rwlock_unlock(&dht->lock);
+}
+
 static struct lookup * kad_lookup(struct dht *    dht,
                                   const uint8_t * id,
                                   enum kad_code   code)
@@ -1598,18 +1622,14 @@ static struct lookup * kad_lookup(struct dht *    dht,
         lookup_new_addrs(lu, addrs);
 
         if (addrs[0] == 0) {
-                pthread_rwlock_wrlock(&dht->lock);
-                list_del(&lu->next);
-                pthread_rwlock_unlock(&dht->lock);
+                lookup_detach(dht, lu);
                 lookup_destroy(lu);
                 return NULL;
         }
 
         out = kad_find(dht, id, addrs, code);
         if (out == 0) {
-                pthread_rwlock_wrlock(&dht->lock);
-                list_del(&lu->next);
-                pthread_rwlock_unlock(&dht->lock);
+                lookup_detach(dht, lu);
                 return lu;
         }
 
@@ -1620,9 +1640,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
                 case LU_UPDATE:
                         lookup_new_addrs(lu, addrs);
                         if (addrs[0] == 0) {
-                                pthread_rwlock_wrlock(&dht->lock);
-                                list_del(&lu->next);
-                                pthread_rwlock_unlock(&dht->lock);
+                                lookup_detach(dht, lu);
                                 lookup_set_state(lu, LU_COMPLETE);
                                 return lu;
                         }
@@ -1631,21 +1649,17 @@ static struct lookup * kad_lookup(struct dht *    dht,
                         lookup_add_out(lu, out);
                         break;
                 case LU_DESTROY:
-                        pthread_rwlock_wrlock(&dht->lock);
-                        list_del(&lu->next);
-                        pthread_rwlock_unlock(&dht->lock);
+                        lookup_detach(dht, lu);
                         lookup_set_state(lu, LU_NULL);
                         return NULL;
                 default:
                         break;
-                };
+                }
         }
 
         assert(state = LU_COMPLETE);
 
-        pthread_rwlock_wrlock(&dht->lock);
-        list_del(&lu->next);
-        pthread_rwlock_unlock(&dht->lock);
+        lookup_detach(dht, lu);
 
         return lu;
 }
