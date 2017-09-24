@@ -25,22 +25,25 @@
 
 #include <stdbool.h>
 
-int  tpm_init(size_t    min,
-              size_t    inc,
-              void * (* func)(void *));
+struct tpm;
 
-int  tpm_start(void);
+struct tpm * tpm_create(size_t    min,
+                        size_t    inc,
+                        void * (* func)(void *),
+                        void *    o);
 
-void tpm_stop(void);
+void         tpm_destroy(struct tpm * tpm);
 
-void tpm_fini(void);
+int          tpm_start(struct tpm * tpm);
 
-bool tpm_check(void);
+void         tpm_stop(struct tpm * tpm);
 
-void tpm_exit(void);
+bool         tpm_check(struct tpm * tpm);
 
-void tpm_dec(void);
+void         tpm_exit(struct tpm * tpm);
 
-void tpm_inc(void);
+void         tpm_dec(struct tpm * tpm);
+
+void         tpm_inc(struct tpm * tpm);
 
 #endif /* OUROBOROS_LIB_TPM_H */
