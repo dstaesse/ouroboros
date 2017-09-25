@@ -379,12 +379,11 @@ static int nbr_to_fd(uint64_t addr)
 static void * calculate_pff(void * o)
 {
         struct routing_i * instance;
-        int                i = 0;
         int                fd;
         struct list_head   table;
         struct list_head * p;
         struct list_head * q;
-        int                fds[1024];
+        int                fds[AP_MAX_FLOWS];
 
         instance = (struct routing_i *) o;
 
@@ -399,6 +398,7 @@ static void * calculate_pff(void * o)
                 pff_flush(instance->pff);
 
                 list_for_each(p, &table) {
+                        int                    i = 0;
                         struct routing_table * t =
                                 list_entry(p, struct routing_table, next);
 
@@ -475,7 +475,7 @@ static void * lsupdate(void * o)
                                         adj->src, adj->dst);
                                 if (graph_del_edge(ls.graph, adj->src,
                                                    adj->dst))
-                                        log_dbg("Failed to delete edge.");
+                                        log_err("Failed to del edge.");
                                 free(adj);
                                 continue;
                         }

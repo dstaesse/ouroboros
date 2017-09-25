@@ -44,9 +44,8 @@ int graph_test_entries(int entries)
                 return -1;
         }
 
-        list_for_each(p, &table) {
+        list_for_each(p, &table)
                 i++;
-        }
 
         if (i != entries) {
                 printf("Wrong number of entries.\n");
@@ -69,9 +68,8 @@ int graph_test_double_link(void)
                 return -1;
         }
 
-        list_for_each(p, &table) {
+        list_for_each(p, &table)
                 i++;
-        }
 
         if (i != 2) {
                 printf("Wrong number of entries.\n");
@@ -108,9 +106,8 @@ int graph_test_single_link(void)
                 return -1;
         }
 
-        list_for_each(p, &table) {
+        list_for_each(p, &table)
                 i++;
-        }
 
         if (i != 1) {
                 printf("Wrong number of entries.\n");
@@ -168,6 +165,12 @@ int graph_test(int     argc,
                 return -1;
         }
 
+        if (graph_update_edge(graph, 2, 1, qs)) {
+                printf("Failed to add edge.\n");
+                graph_destroy(graph);
+                return -1;
+        }
+
         if (graph_test_single_link()) {
                 graph_destroy(graph);
                 return -1;
@@ -178,6 +181,13 @@ int graph_test(int     argc,
                 graph_destroy(graph);
                 return -1;
         }
+
+        if (graph_update_edge(graph, 3, 2, qs)) {
+                printf("Failed to add edge.\n");
+                graph_destroy(graph);
+                return -1;
+        }
+
 
         if (graph_test_double_link()) {
                 graph_destroy(graph);
@@ -190,13 +200,21 @@ int graph_test(int     argc,
                 return -1;
         }
 
+        if (graph_del_edge(graph, 3, 2)) {
+                printf("Failed to delete edge.\n");
+                graph_destroy(graph);
+                return -1;
+        }
+
         if (graph_test_single_link()) {
                 graph_destroy(graph);
                 return -1;
         }
 
         graph_update_edge(graph, 2, 3, qs);
+        graph_update_edge(graph, 3, 2, qs);
         graph_update_edge(graph, 1, 3, qs);
+        graph_update_edge(graph, 3, 1, qs);
 
         if (graph_test_entries(2)) {
                 graph_destroy(graph);
@@ -204,7 +222,9 @@ int graph_test(int     argc,
         }
 
         graph_update_edge(graph, 3, 4, qs);
+        graph_update_edge(graph, 4, 3, qs);
         graph_update_edge(graph, 4, 5, qs);
+        graph_update_edge(graph, 5, 4, qs);
 
         if (graph_test_entries(4)) {
                 graph_destroy(graph);
@@ -212,8 +232,11 @@ int graph_test(int     argc,
         }
 
         graph_update_edge(graph, 2, 6, qs);
+        graph_update_edge(graph, 6, 2, qs);
         graph_update_edge(graph, 6, 7, qs);
+        graph_update_edge(graph, 7, 6, qs);
         graph_update_edge(graph, 3, 7, qs);
+        graph_update_edge(graph, 7, 3, qs);
 
         if (graph_test_entries(6)) {
                 graph_destroy(graph);

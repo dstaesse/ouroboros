@@ -40,6 +40,7 @@ struct edge {
         struct list_head next;
         struct vertex *  nb;
         qosspec_t        qs;
+        int              announced;
 };
 
 struct vertex {
@@ -94,6 +95,7 @@ static struct edge * add_edge(struct vertex * vertex,
 
         list_head_init(&edge->next);
         edge->nb = nb;
+        edge->announced = 0;
 
         list_add(&edge->next, &vertex->edges);
 
@@ -251,7 +253,7 @@ int graph_update_edge(struct graph * graph,
                 e = add_edge(v, nb);
                 if (e == NULL) {
                         if (list_is_empty(&v->edges))
-                            del_vertex(graph, v);
+                                del_vertex(graph, v);
                         if (list_is_empty(&nb->edges))
                                 del_vertex(graph, nb);
                         pthread_mutex_unlock(&graph->lock);
@@ -260,13 +262,15 @@ int graph_update_edge(struct graph * graph,
                 }
         }
 
+        e->announced++;
         e->qs = qs;
 
         nb_e = find_edge_by_addr(nb, s_addr);
         if (nb_e == NULL) {
                 nb_e = add_edge(nb, v);
                 if (nb_e == NULL) {
-                        del_edge(e);
+                        if (--e->announced == 0)
+                                del_edge(e);
                         if (list_is_empty(&v->edges))
                                 del_vertex(graph, v);
                         if (list_is_empty(&nb->edges))
@@ -277,6 +281,7 @@ int graph_update_edge(struct graph * graph,
                 }
         }
 
+        nb_e->announced++;
         nb_e->qs = qs;
 
         pthread_mutex_unlock(&graph->lock);
@@ -300,33 +305,35 @@ int graph_del_edge(struct graph * graph,
         v = find_vertex_by_addr(graph, s_addr);
         if (v == NULL) {
                 pthread_mutex_unlock(&graph->lock);
-                log_err("No such vertex.");
+                log_err("No such source vertex.");
                 return -1;
         }
 
         nb = find_vertex_by_addr(graph, d_addr);
         if (nb == NULL) {
                 pthread_mutex_unlock(&graph->lock);
-                log_err("No such vertex.");
+                log_err("No such destination vertex.");
                 return -1;
         }
 
         e = find_edge_by_addr(v, d_addr);
         if (e == NULL) {
                 pthread_mutex_unlock(&graph->lock);
-                log_err("No such edge.");
+                log_err("No such source edge.");
                 return -1;
         }
 
         nb_e = find_edge_by_addr(nb, s_addr);
         if (nb_e == NULL) {
                 pthread_mutex_unlock(&graph->lock);
-                log_err("No such edge.");
+                log_err("No such destination edge.");
                 return -1;
         }
 
-        del_edge(e);
-        del_edge(nb_e);
+        if (--e->announced == 0)
+                del_edge(e);
+        if (--nb_e->announced == 0)
+                del_edge(nb_e);
 
         /* Removing vertex if it was the last edge */
         if (list_is_empty(&v->edges))
@@ -407,6 +414,10 @@ static struct vertex ** dijkstra(struct graph * graph,
                 list_for_each(p, &v->edges) {
                         e = list_entry(p, struct edge, next);
 
+                        /* Only include it if both sides announced it. */
+                        if (e->announced != 2)
+                                continue;
+
                         /*
                          * NOTE: Current weight is just hop count.
                          * Method could be extended to use a different
@@ -483,10 +494,7 @@ int graph_routing_table(struct graph *     graph,
 
         list_head_init(table);
 
-        /*
-         * Now loop through the list of predecessors
-         * to construct the routing table
-         */
+        /* Now construct the routing table from the nhops. */
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
 
@@ -507,7 +515,7 @@ int graph_routing_table(struct graph *     graph,
                         goto fail_n;
 
                 t->dst = v->addr;
-                n->nhop =  nhops[i]->addr;
+                n->nhop = nhops[i]->addr;
 
                 list_add(&n->next, &t->nhops);
                 list_add(&t->next, table);
