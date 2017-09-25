@@ -119,6 +119,7 @@ static struct vertex * add_vertex(struct graph * graph,
         list_head_init(&vertex->edges);
         vertex->addr = addr;
 
+        /* Keep them ordered on address. */
         list_for_each(p, &graph->vertices) {
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > addr)
@@ -319,59 +320,48 @@ int graph_del_edge(struct graph * graph,
         return 0;
 }
 
-static int get_min_vertex(struct vertex ** vertices,
-                          int              nr_vertices,
+static int get_min_vertex(struct graph *   graph,
                           int *            dist,
+                          bool *           used,
                           struct vertex ** v)
 {
-        int min = INT_MAX;
-        int index = -1;
-        int i;
+        int                min = INT_MAX;
+        int                index = -1;
+        int                i = 0;
+        struct list_head * p = NULL;
 
         *v = NULL;
 
-        for (i = 0; i < nr_vertices; i++) {
-                if (vertices[i] == NULL)
+        list_for_each(p, &graph->vertices) {
+                if (used[i] == true) {
+                        i++;
                         continue;
+                }
 
                 if (dist[i] < min) {
-                        *v = vertices[i];
                         min = dist[i];
                         index = i;
+                        *v = list_entry(p, struct vertex, next);
                 }
+
+                i++;
         }
 
         if (index != -1)
-                vertices[index] = NULL;
+                used[index] = true;
 
         return index;
 }
 
-static int get_vertex_number(struct vertex ** vertices,
-                             int              nr_vertices,
-                             struct vertex *  v)
+static int get_vertex_number(struct graph *  graph,
+                             struct vertex * v)
 
 {
-        int i;
-
-        for (i = 0; i < nr_vertices; i++) {
-                if (vertices[i] == v)
-                        return i;
-        }
-
-        return -1;
-}
-
-static int get_vertex_index(struct graph *  graph,
-                            struct vertex * v)
-
-{
-        struct list_head * p = NULL;
-        struct vertex *    vertex;
         int                i = 0;
+        struct list_head * p = NULL;
 
         list_for_each(p, &graph->vertices) {
-                vertex = list_entry(p, struct vertex, next);
+                struct vertex * vertex = list_entry(p, struct vertex, next);
                 if (vertex == v)
                         return i;
                 i++;
@@ -384,7 +374,7 @@ static struct vertex ** dijkstra(struct graph * graph,
                                  uint64_t       src)
 {
         int                dist[graph->nr_vertices];
-        struct vertex *    vertices[graph->nr_vertices];
+        bool               used[graph->nr_vertices];
         struct list_head * p = NULL;
         int                i = 0;
         int                j = 0;
@@ -400,24 +390,22 @@ static struct vertex ** dijkstra(struct graph * graph,
         /* Init the data structures */
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
-                vertices[i] = v;
                 if (v->addr == src)
                         dist[i] = 0;
                 else
                         dist[i] = INT_MAX;
                 prev[i] = NULL;
+                used[i] = false;
                 i++;
         }
 
         /* Perform actual Dijkstra */
-        i = get_min_vertex(vertices, graph->nr_vertices, dist, &v);
+        i = get_min_vertex(graph, dist, used, &v);
         while (v != NULL) {
                 list_for_each(p, &v->edges) {
                         e = list_entry(p, struct edge, next);
 
-                        j = get_vertex_number(vertices,
-                                              graph->nr_vertices,
-                                              e->nb);
+                        j = get_vertex_number(graph, e->nb);
                         if (j == -1)
                                 continue;
 
@@ -432,7 +420,7 @@ static struct vertex ** dijkstra(struct graph * graph,
                                 prev[j] = v;
                         }
                 }
-                i = get_min_vertex(vertices, graph->nr_vertices, dist, &v);
+                i = get_min_vertex(graph, dist, used, &v);
         }
 
         return prev;
@@ -512,11 +500,11 @@ int graph_routing_table(struct graph *     graph,
                         continue;
                 }
 
-                index = get_vertex_index(graph, prev);
+                index = get_vertex_number(graph, prev);
                 while (prevs[index] != NULL) {
                         nhop = prev;
                         prev = prevs[index];
-                        index = get_vertex_index(graph, prev);
+                        index = get_vertex_number(graph, prev);
                 }
 
                 t = malloc(sizeof(*t));
