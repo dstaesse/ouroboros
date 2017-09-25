@@ -438,40 +438,64 @@ static struct vertex ** dijkstra(struct graph * graph,
         return prev;
 }
 
-ssize_t graph_routing_table(struct graph *           graph,
-                            uint64_t                 s_addr,
-                            struct routing_table *** table)
+static void free_routing_table(struct list_head * table)
 {
-        struct vertex **   prevs;
-        struct list_head * p = NULL;
-        int                i = 0;
-        int                index = 0;
-        int                j = 0;
-        int                k = 0;
-        struct vertex *    prev;
-        struct vertex *    nhop;
-        struct vertex *    v;
+        struct list_head * h;
+        struct list_head * p;
+        struct list_head * q;
+        struct list_head * i;
+
+        list_for_each_safe(p, h, table) {
+                struct routing_table * t =
+                        list_entry(p, struct routing_table, next);
+                list_for_each_safe(q, i, &t->nhops) {
+                        struct nhop * n =
+                                list_entry(q, struct nhop, next);
+                        list_del(&n->next);
+                        free(n);
+                }
+                list_del(&t->next);
+                free(t);
+        }
+}
+
+void graph_free_routing_table(struct graph *     graph,
+                              struct list_head * table)
+{
+        assert(table);
+
+        pthread_mutex_lock(&graph->lock);
+
+        free_routing_table(table);
+
+        pthread_mutex_unlock(&graph->lock);
+}
+
+int graph_routing_table(struct graph *     graph,
+                        uint64_t           s_addr,
+                        struct list_head * table)
+{
+        struct vertex **       prevs;
+        struct list_head *     p;
+        int                    i = 0;
+        int                    index = 0;
+        struct vertex *        prev;
+        struct vertex *        nhop;
+        struct vertex *        v;
+        struct routing_table * t;
+        struct nhop *          n;
 
         pthread_mutex_lock(&graph->lock);
 
         /* We need at least 2 vertices for a table */
-        if (graph->nr_vertices < 2) {
-                pthread_mutex_unlock(&graph->lock);
-                return -1;
-        }
+        if (graph->nr_vertices < 2)
+                goto fail_vertices;
 
         prevs = dijkstra(graph, s_addr);
-        if (prevs == NULL) {
-                pthread_mutex_unlock(&graph->lock);
-                return -1;
-        }
+        if (prevs == NULL)
+                goto fail_vertices;
 
-        *table = malloc(sizeof(**table) * (graph->nr_vertices - 1));
-        if (*table == NULL) {
-                pthread_mutex_unlock(&graph->lock);
-                free(prevs);
-                return -1;
-        }
+        list_head_init(table);
 
         /*
          * Now loop through the list of predecessors
@@ -495,19 +519,22 @@ ssize_t graph_routing_table(struct graph *           graph,
                         index = get_vertex_index(graph, prev);
                 }
 
-                (*table)[j] = malloc(sizeof(***table));
-                if ((*table)[j] == NULL) {
-                        pthread_mutex_unlock(&graph->lock);
-                        for (k = 0; k < j; ++k)
-                                free((*table)[k]);
-                        free(*table);
-                        free(prevs);
-                        return -1;
-                }
+                t = malloc(sizeof(*t));
+                if (t == NULL)
+                        goto fail_t;
 
-                (*table)[j]->dst = v->addr;
-                (*table)[j]->nhop = nhop->addr;
-                j++;
+                list_head_init(&t->nhops);
+
+                n = malloc(sizeof(*n));
+                if (n == NULL)
+                        goto fail_n;
+
+                t->dst = v->addr;
+                n->nhop = nhop->addr;
+
+                list_add(&n->next, &t->nhops);
+                list_add(&t->next, table);
+
                 i++;
         }
 
@@ -515,5 +542,14 @@ ssize_t graph_routing_table(struct graph *           graph,
 
         free(prevs);
 
-        return j;
+        return 0;
+
+ fail_n:
+        free(t);
+ fail_t:
+        free_routing_table(table);
+        free(prevs);
+ fail_vertices:
+        pthread_mutex_unlock(&graph->lock);
+        return -1;
 }

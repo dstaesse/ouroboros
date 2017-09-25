@@ -378,19 +378,18 @@ static int nbr_to_fd(uint64_t addr)
 
 static void * calculate_pff(void * o)
 {
-        struct routing_i *      instance;
-        struct routing_table ** table;
-        ssize_t                 n_table;
-        int                     i;
-        int                     fd;
+        struct routing_i * instance;
+        int                i;
+        int                fd;
+        struct list_head   table;
+        struct list_head * p;
+        struct list_head * q;
+        int                fds[1024];
 
         instance = (struct routing_i *) o;
 
         while (true) {
-                table = NULL;
-                n_table = graph_routing_table(ls.graph,
-                                              ipcpi.dt_addr, &table);
-                if (n_table < 0) {
+                if (graph_routing_table(ls.graph, ipcpi.dt_addr, &table)) {
                         sleep(RECALC_TIME);
                         continue;
                 }
@@ -399,17 +398,28 @@ static void * calculate_pff(void * o)
 
                 pff_flush(instance->pff);
 
-                for (i = 0; i < n_table; i++) {
-                        fd = nbr_to_fd(table[i]->nhop);
-                        if (fd == -1)
-                                continue;
+                list_for_each(p, &table) {
+                        struct routing_table * t =
+                                list_entry(p, struct routing_table, next);
 
-                        pff_add(instance->pff, table[i]->dst, &fd, 1);
+                        list_for_each(q, &t->nhops) {
+                                struct nhop * n =
+                                        list_entry(q, struct nhop, next);
+
+                                fd = nbr_to_fd(n->nhop);
+                                if (fd == -1)
+                                        continue;
+
+                                fds[i++] = fd;
+                        }
+
+                        pff_add(instance->pff, t->dst, fds, i);
                 }
 
                 pff_unlock(instance->pff);
 
-                freepp(struct routing_table, table, n_table);
+                graph_free_routing_table(ls.graph, &table);
+
                 sleep(RECALC_TIME);
         }
 
