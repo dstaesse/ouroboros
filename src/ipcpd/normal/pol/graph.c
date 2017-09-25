@@ -381,10 +381,10 @@ static struct vertex ** dijkstra(struct graph * graph,
         struct vertex *    v = NULL;
         struct edge *      e = NULL;
         int                alt;
-        struct vertex **   prev;
+        struct vertex **   nhop;
 
-        prev = malloc(sizeof(*prev) * graph->nr_vertices);
-        if (prev == NULL)
+        nhop = malloc(sizeof(*nhop) * graph->nr_vertices);
+        if (nhop == NULL)
                 return NULL;
 
         /* Init the data structures */
@@ -394,7 +394,8 @@ static struct vertex ** dijkstra(struct graph * graph,
                         dist[i] = 0;
                 else
                         dist[i] = INT_MAX;
-                prev[i] = NULL;
+
+                nhop[i] = NULL;
                 used[i] = false;
                 i++;
         }
@@ -417,13 +418,16 @@ static struct vertex ** dijkstra(struct graph * graph,
                         alt = dist[i] + 1;
                         if (alt < dist[j]) {
                                 dist[j] = alt;
-                                prev[j] = v;
+                                if (v->addr == src)
+                                        nhop[j] = e->nb;
+                                else
+                                        nhop[j] = nhop[i];
                         }
                 }
                 i = get_min_vertex(graph, dist, used, &v);
         }
 
-        return prev;
+        return nhop;
 }
 
 static void free_routing_table(struct list_head * table)
@@ -463,12 +467,9 @@ int graph_routing_table(struct graph *     graph,
                         uint64_t           s_addr,
                         struct list_head * table)
 {
-        struct vertex **       prevs;
+        struct vertex **       nhops;
         struct list_head *     p;
         int                    i = 0;
-        int                    index = 0;
-        struct vertex *        prev;
-        struct vertex *        nhop;
         struct vertex *        v;
         struct routing_table * t;
         struct nhop *          n;
@@ -479,8 +480,8 @@ int graph_routing_table(struct graph *     graph,
         if (graph->nr_vertices < 2)
                 goto fail_vertices;
 
-        prevs = dijkstra(graph, s_addr);
-        if (prevs == NULL)
+        nhops = dijkstra(graph, s_addr);
+        if (nhops == NULL)
                 goto fail_vertices;
 
         list_head_init(table);
@@ -491,20 +492,11 @@ int graph_routing_table(struct graph *     graph,
          */
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
-                prev = prevs[i];
-                nhop = v;
 
                 /* This is the src */
-                if (prev == NULL) {
+                if (nhops[i] == NULL) {
                         i++;
                         continue;
-                }
-
-                index = get_vertex_number(graph, prev);
-                while (prevs[index] != NULL) {
-                        nhop = prev;
-                        prev = prevs[index];
-                        index = get_vertex_number(graph, prev);
                 }
 
                 t = malloc(sizeof(*t));
@@ -518,7 +510,7 @@ int graph_routing_table(struct graph *     graph,
                         goto fail_n;
 
                 t->dst = v->addr;
-                n->nhop = nhop->addr;
+                n->nhop =  nhops[i]->addr;
 
                 list_add(&n->next, &t->nhops);
                 list_add(&t->next, table);
@@ -528,7 +520,7 @@ int graph_routing_table(struct graph *     graph,
 
         pthread_mutex_unlock(&graph->lock);
 
-        free(prevs);
+        free(nhops);
 
         return 0;
 
@@ -536,7 +528,7 @@ int graph_routing_table(struct graph *     graph,
         free(t);
  fail_t:
         free_routing_table(table);
-        free(prevs);
+        free(nhops);
  fail_vertices:
         pthread_mutex_unlock(&graph->lock);
         return -1;
