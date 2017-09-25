@@ -379,7 +379,7 @@ static int nbr_to_fd(uint64_t addr)
 static void * calculate_pff(void * o)
 {
         struct routing_i * instance;
-        int                i;
+        int                i = 0;
         int                fd;
         struct list_head   table;
         struct list_head * p;

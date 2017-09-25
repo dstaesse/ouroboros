@@ -46,6 +46,7 @@ struct vertex {
         struct list_head next;
         uint64_t         addr;
         struct list_head edges;
+        int              index;
 };
 
 struct graph {
@@ -110,6 +111,7 @@ static struct vertex * add_vertex(struct graph * graph,
 {
         struct vertex *    vertex;
         struct list_head * p;
+        int                i = 0;
 
         vertex = malloc(sizeof(*vertex));
         if (vertex == NULL)
@@ -124,9 +126,19 @@ static struct vertex * add_vertex(struct graph * graph,
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > addr)
                         break;
+                i++;
         }
 
+        vertex->index = i;
+
         list_add_tail(&vertex->next, p);
+
+        /* Increase the index of the vertices to the right. */
+        list_for_each(p, &graph->vertices) {
+                struct vertex * v = list_entry(p, struct vertex, next);
+                if (v->addr > addr)
+                        v->index++;
+        }
 
         graph->nr_vertices++;
 
@@ -140,6 +152,13 @@ static void del_vertex(struct graph * graph,
         struct list_head * n = NULL;
 
         list_del(&vertex->next);
+
+        /* Decrease the index of the vertices to the right. */
+        list_for_each(p, &graph->vertices) {
+                struct vertex * v = list_entry(p, struct vertex, next);
+                if (v->addr > vertex->addr)
+                        v->index--;
+        }
 
         list_for_each_safe(p, n, &vertex->edges) {
                 struct edge * e = list_entry(p, struct edge, next);
@@ -353,23 +372,6 @@ static int get_min_vertex(struct graph *   graph,
         return index;
 }
 
-static int get_vertex_number(struct graph *  graph,
-                             struct vertex * v)
-
-{
-        int                i = 0;
-        struct list_head * p = NULL;
-
-        list_for_each(p, &graph->vertices) {
-                struct vertex * vertex = list_entry(p, struct vertex, next);
-                if (vertex == v)
-                        return i;
-                i++;
-        }
-
-        return -1;
-}
-
 static struct vertex ** dijkstra(struct graph * graph,
                                  uint64_t       src)
 {
@@ -377,7 +379,6 @@ static struct vertex ** dijkstra(struct graph * graph,
         bool               used[graph->nr_vertices];
         struct list_head * p = NULL;
         int                i = 0;
-        int                j = 0;
         struct vertex *    v = NULL;
         struct edge *      e = NULL;
         int                alt;
@@ -406,22 +407,18 @@ static struct vertex ** dijkstra(struct graph * graph,
                 list_for_each(p, &v->edges) {
                         e = list_entry(p, struct edge, next);
 
-                        j = get_vertex_number(graph, e->nb);
-                        if (j == -1)
-                                continue;
-
                         /*
                          * NOTE: Current weight is just hop count.
                          * Method could be extended to use a different
                          * weight for a different QoS cube.
                          */
                         alt = dist[i] + 1;
-                        if (alt < dist[j]) {
-                                dist[j] = alt;
+                        if (alt < dist[e->nb->index]) {
+                                dist[e->nb->index] = alt;
                                 if (v->addr == src)
-                                        nhop[j] = e->nb;
+                                        nhop[e->nb->index] = e->nb;
                                 else
-                                        nhop[j] = nhop[i];
+                                        nhop[e->nb->index] = nhop[i];
                         }
                 }
                 i = get_min_vertex(graph, dist, used, &v);
