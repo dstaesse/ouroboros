@@ -40,12 +40,14 @@ struct edge {
         struct list_head next;
         struct vertex *  nb;
         qosspec_t        qs;
+        int              announced;
 };
 
 struct vertex {
         struct list_head next;
         uint64_t         addr;
         struct list_head edges;
+        int              index;
 };
 
 struct graph {
@@ -93,6 +95,7 @@ static struct edge * add_edge(struct vertex * vertex,
 
         list_head_init(&edge->next);
         edge->nb = nb;
+        edge->announced = 0;
 
         list_add(&edge->next, &vertex->edges);
 
@@ -110,6 +113,7 @@ static struct vertex * add_vertex(struct graph * graph,
 {
         struct vertex *    vertex;
         struct list_head * p;
+        int                i = 0;
 
         vertex = malloc(sizeof(*vertex));
         if (vertex == NULL)
@@ -119,13 +123,24 @@ static struct vertex * add_vertex(struct graph * graph,
         list_head_init(&vertex->edges);
         vertex->addr = addr;
 
+        /* Keep them ordered on address. */
         list_for_each(p, &graph->vertices) {
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > addr)
                         break;
+                i++;
         }
 
+        vertex->index = i;
+
         list_add_tail(&vertex->next, p);
+
+        /* Increase the index of the vertices to the right. */
+        list_for_each(p, &graph->vertices) {
+                struct vertex * v = list_entry(p, struct vertex, next);
+                if (v->addr > addr)
+                        v->index++;
+        }
 
         graph->nr_vertices++;
 
@@ -139,6 +154,13 @@ static void del_vertex(struct graph * graph,
         struct list_head * n = NULL;
 
         list_del(&vertex->next);
+
+        /* Decrease the index of the vertices to the right. */
+        list_for_each(p, &graph->vertices) {
+                struct vertex * v = list_entry(p, struct vertex, next);
+                if (v->addr > vertex->addr)
+                        v->index--;
+        }
 
         list_for_each_safe(p, n, &vertex->edges) {
                 struct edge * e = list_entry(p, struct edge, next);
@@ -231,7 +253,7 @@ int graph_update_edge(struct graph * graph,
                 e = add_edge(v, nb);
                 if (e == NULL) {
                         if (list_is_empty(&v->edges))
-                            del_vertex(graph, v);
+                                del_vertex(graph, v);
                         if (list_is_empty(&nb->edges))
                                 del_vertex(graph, nb);
                         pthread_mutex_unlock(&graph->lock);
@@ -240,13 +262,15 @@ int graph_update_edge(struct graph * graph,
                 }
         }
 
+        e->announced++;
         e->qs = qs;
 
         nb_e = find_edge_by_addr(nb, s_addr);
         if (nb_e == NULL) {
                 nb_e = add_edge(nb, v);
                 if (nb_e == NULL) {
-                        del_edge(e);
+                        if (--e->announced == 0)
+                                del_edge(e);
                         if (list_is_empty(&v->edges))
                                 del_vertex(graph, v);
                         if (list_is_empty(&nb->edges))
@@ -257,6 +281,7 @@ int graph_update_edge(struct graph * graph,
                 }
         }
 
+        nb_e->announced++;
         nb_e->qs = qs;
 
         pthread_mutex_unlock(&graph->lock);
@@ -280,33 +305,35 @@ int graph_del_edge(struct graph * graph,
         v = find_vertex_by_addr(graph, s_addr);
         if (v == NULL) {
                 pthread_mutex_unlock(&graph->lock);
-                log_err("No such vertex.");
+                log_err("No such source vertex.");
                 return -1;
         }
 
         nb = find_vertex_by_addr(graph, d_addr);
         if (nb == NULL) {
                 pthread_mutex_unlock(&graph->lock);
-                log_err("No such vertex.");
+                log_err("No such destination vertex.");
                 return -1;
         }
 
         e = find_edge_by_addr(v, d_addr);
         if (e == NULL) {
                 pthread_mutex_unlock(&graph->lock);
-                log_err("No such edge.");
+                log_err("No such source edge.");
                 return -1;
         }
 
         nb_e = find_edge_by_addr(nb, s_addr);
         if (nb_e == NULL) {
                 pthread_mutex_unlock(&graph->lock);
-                log_err("No such edge.");
+                log_err("No such destination edge.");
                 return -1;
         }
 
-        del_edge(e);
-        del_edge(nb_e);
+        if (--e->announced == 0)
+                del_edge(e);
+        if (--nb_e->announced == 0)
+                del_edge(nb_e);
 
         /* Removing vertex if it was the last edge */
         if (list_is_empty(&v->edges))
@@ -319,106 +346,76 @@ int graph_del_edge(struct graph * graph,
         return 0;
 }
 
-static int get_min_vertex(struct vertex ** vertices,
-                          int              nr_vertices,
+static int get_min_vertex(struct graph *   graph,
                           int *            dist,
+                          bool *           used,
                           struct vertex ** v)
 {
-        int min = INT_MAX;
-        int index = -1;
-        int i;
+        int                min = INT_MAX;
+        int                index = -1;
+        int                i = 0;
+        struct list_head * p = NULL;
 
         *v = NULL;
 
-        for (i = 0; i < nr_vertices; i++) {
-                if (vertices[i] == NULL)
+        list_for_each(p, &graph->vertices) {
+                if (used[i] == true) {
+                        i++;
                         continue;
+                }
 
                 if (dist[i] < min) {
-                        *v = vertices[i];
                         min = dist[i];
                         index = i;
+                        *v = list_entry(p, struct vertex, next);
                 }
-        }
 
-        if (index != -1)
-                vertices[index] = NULL;
-
-        return index;
-}
-
-static int get_vertex_number(struct vertex ** vertices,
-                             int              nr_vertices,
-                             struct vertex *  v)
-
-{
-        int i;
-
-        for (i = 0; i < nr_vertices; i++) {
-                if (vertices[i] == v)
-                        return i;
-        }
-
-        return -1;
-}
-
-static int get_vertex_index(struct graph *  graph,
-                            struct vertex * v)
-
-{
-        struct list_head * p = NULL;
-        struct vertex *    vertex;
-        int                i = 0;
-
-        list_for_each(p, &graph->vertices) {
-                vertex = list_entry(p, struct vertex, next);
-                if (vertex == v)
-                        return i;
                 i++;
         }
 
-        return -1;
+        if (index != -1)
+                used[index] = true;
+
+        return index;
 }
 
 static struct vertex ** dijkstra(struct graph * graph,
                                  uint64_t       src)
 {
         int                dist[graph->nr_vertices];
-        struct vertex *    vertices[graph->nr_vertices];
+        bool               used[graph->nr_vertices];
         struct list_head * p = NULL;
         int                i = 0;
-        int                j = 0;
         struct vertex *    v = NULL;
         struct edge *      e = NULL;
         int                alt;
-        struct vertex **   prev;
+        struct vertex **   nhop;
 
-        prev = malloc(sizeof(*prev) * graph->nr_vertices);
-        if (prev == NULL)
+        nhop = malloc(sizeof(*nhop) * graph->nr_vertices);
+        if (nhop == NULL)
                 return NULL;
 
         /* Init the data structures */
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
-                vertices[i] = v;
                 if (v->addr == src)
                         dist[i] = 0;
                 else
                         dist[i] = INT_MAX;
-                prev[i] = NULL;
+
+                nhop[i] = NULL;
+                used[i] = false;
                 i++;
         }
 
         /* Perform actual Dijkstra */
-        i = get_min_vertex(vertices, graph->nr_vertices, dist, &v);
+        i = get_min_vertex(graph, dist, used, &v);
         while (v != NULL) {
                 list_for_each(p, &v->edges) {
                         e = list_entry(p, struct edge, next);
 
-                        j = get_vertex_number(vertices,
-                                              graph->nr_vertices,
-                                              e->nb);
-                        if (j == -1)
+                        /* Only include it if both sides announced it. */
+                        if (e->announced != 2)
                                 continue;
 
                         /*
@@ -427,93 +424,117 @@ static struct vertex ** dijkstra(struct graph * graph,
                          * weight for a different QoS cube.
                          */
                         alt = dist[i] + 1;
-                        if (alt < dist[j]) {
-                                dist[j] = alt;
-                                prev[j] = v;
+                        if (alt < dist[e->nb->index]) {
+                                dist[e->nb->index] = alt;
+                                if (v->addr == src)
+                                        nhop[e->nb->index] = e->nb;
+                                else
+                                        nhop[e->nb->index] = nhop[i];
                         }
                 }
-                i = get_min_vertex(vertices, graph->nr_vertices, dist, &v);
+                i = get_min_vertex(graph, dist, used, &v);
         }
 
-        return prev;
+        return nhop;
 }
 
-ssize_t graph_routing_table(struct graph *           graph,
-                            uint64_t                 s_addr,
-                            struct routing_table *** table)
+static void free_routing_table(struct list_head * table)
 {
-        struct vertex **   prevs;
-        struct list_head * p = NULL;
-        int                i = 0;
-        int                index = 0;
-        int                j = 0;
-        int                k = 0;
-        struct vertex *    prev;
-        struct vertex *    nhop;
-        struct vertex *    v;
+        struct list_head * h;
+        struct list_head * p;
+        struct list_head * q;
+        struct list_head * i;
+
+        list_for_each_safe(p, h, table) {
+                struct routing_table * t =
+                        list_entry(p, struct routing_table, next);
+                list_for_each_safe(q, i, &t->nhops) {
+                        struct nhop * n =
+                                list_entry(q, struct nhop, next);
+                        list_del(&n->next);
+                        free(n);
+                }
+                list_del(&t->next);
+                free(t);
+        }
+}
+
+void graph_free_routing_table(struct graph *     graph,
+                              struct list_head * table)
+{
+        assert(table);
+
+        pthread_mutex_lock(&graph->lock);
+
+        free_routing_table(table);
+
+        pthread_mutex_unlock(&graph->lock);
+}
+
+int graph_routing_table(struct graph *     graph,
+                        uint64_t           s_addr,
+                        struct list_head * table)
+{
+        struct vertex **       nhops;
+        struct list_head *     p;
+        int                    i = 0;
+        struct vertex *        v;
+        struct routing_table * t;
+        struct nhop *          n;
 
         pthread_mutex_lock(&graph->lock);
 
         /* We need at least 2 vertices for a table */
-        if (graph->nr_vertices < 2) {
-                pthread_mutex_unlock(&graph->lock);
-                return -1;
-        }
+        if (graph->nr_vertices < 2)
+                goto fail_vertices;
 
-        prevs = dijkstra(graph, s_addr);
-        if (prevs == NULL) {
-                pthread_mutex_unlock(&graph->lock);
-                return -1;
-        }
+        nhops = dijkstra(graph, s_addr);
+        if (nhops == NULL)
+                goto fail_vertices;
 
-        *table = malloc(sizeof(**table) * (graph->nr_vertices - 1));
-        if (*table == NULL) {
-                pthread_mutex_unlock(&graph->lock);
-                free(prevs);
-                return -1;
-        }
+        list_head_init(table);
 
-        /*
-         * Now loop through the list of predecessors
-         * to construct the routing table
-         */
+        /* Now construct the routing table from the nhops. */
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
-                prev = prevs[i];
-                nhop = v;
 
                 /* This is the src */
-                if (prev == NULL) {
+                if (nhops[i] == NULL) {
                         i++;
                         continue;
                 }
 
-                index = get_vertex_index(graph, prev);
-                while (prevs[index] != NULL) {
-                        nhop = prev;
-                        prev = prevs[index];
-                        index = get_vertex_index(graph, prev);
-                }
+                t = malloc(sizeof(*t));
+                if (t == NULL)
+                        goto fail_t;
 
-                (*table)[j] = malloc(sizeof(***table));
-                if ((*table)[j] == NULL) {
-                        pthread_mutex_unlock(&graph->lock);
-                        for (k = 0; k < j; ++k)
-                                free((*table)[k]);
-                        free(*table);
-                        free(prevs);
-                        return -1;
-                }
+                list_head_init(&t->nhops);
 
-                (*table)[j]->dst = v->addr;
-                (*table)[j]->nhop = nhop->addr;
-                j++;
+                n = malloc(sizeof(*n));
+                if (n == NULL)
+                        goto fail_n;
+
+                t->dst = v->addr;
+                n->nhop = nhops[i]->addr;
+
+                list_add(&n->next, &t->nhops);
+                list_add(&t->next, table);
+
                 i++;
         }
 
         pthread_mutex_unlock(&graph->lock);
 
-        free(prevs);
+        free(nhops);
 
-        return j;
+        return 0;
+
+ fail_n:
+        free(t);
+ fail_t:
+        free_routing_table(table);
+        free(nhops);
+ fail_vertices:
+        pthread_mutex_unlock(&graph->lock);
+        return -1;
 }

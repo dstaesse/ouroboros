@@ -28,9 +28,15 @@
 
 #include <inttypes.h>
 
+struct nhop {
+        struct list_head next;
+        uint64_t         nhop;
+};
+
 struct routing_table {
-        uint64_t dst;
-        uint64_t nhop;
+        struct list_head next;
+        uint64_t         dst;
+        struct list_head nhops;
 };
 
 struct graph * graph_create(void);
@@ -46,8 +52,11 @@ int            graph_del_edge(struct graph * graph,
                               uint64_t       s_addr,
                               uint64_t       d_addr);
 
-ssize_t        graph_routing_table(struct graph *           graph,
-                                   uint64_t                 s_addr,
-                                   struct routing_table *** table);
+int            graph_routing_table(struct graph *     graph,
+                                   uint64_t           s_addr,
+                                   struct list_head * table);
+
+void           graph_free_routing_table(struct graph *     graph,
+                                        struct list_head * table);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_GRAPH_H */
