@@ -2320,12 +2320,12 @@ static void * dht_handle_sdu(void * o)
                 struct cmd *         cmd;
                 int                  ret = 0;
 
-                clock_gettime(PTHREAD_COND_CLOCK, &dl);
+                clock_gettime(CLOCK_REALTIME_COARSE, &dl);
                 ts_add(&dl, &to, &dl);
 
                 pthread_mutex_lock(&dht->mtx);
 
-                while(list_is_empty(&dht->cmds) && ret != -ETIMEDOUT)
+                while (list_is_empty(&dht->cmds) && ret != -ETIMEDOUT)
                         ret = -pthread_cond_timedwait(&dht->cond,
                                                       &dht->mtx, &dl);
 
@@ -2400,7 +2400,7 @@ static void * dht_handle_sdu(void * o)
                                          "DHT enrolment refused.");
 
                                 break;
-                }
+                        }
 
                         if (msg->t_refresh != KAD_T_REFR) {
                                 log_warn("Refresh time mismatch. "
