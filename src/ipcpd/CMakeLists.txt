@@ -10,6 +10,8 @@ set(IPCP_MIN_THREADS 4 CACHE STRING
   "Minimum number of worker threads in the IPCP")
 set(IPCP_ADD_THREADS 4 CACHE STRING
   "Number of extra threads to start when an IPCP faces thread starvation")
+set(IPCP_SCHED_THR_MUL 2 CACHE STRING
+  "Number of scheduler threads per QoS cube")
 
 if ((IPCP_QOS_CUBE_BE_PRIO LESS 0) OR (IPCP_QOS_CUBE_BE_PRIO GREATER 99))
   message(FATAL_ERROR "Invalid priority for best effort QoS cube")

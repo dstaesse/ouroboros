@@ -43,7 +43,7 @@ static int qos_prio [] = {
 struct sdu_sched {
         fset_t *      set[QOS_CUBE_MAX];
         next_sdu_fn_t callback;
-        pthread_t     readers[QOS_CUBE_MAX];
+        pthread_t     readers[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
 };
 
 struct sched_info {
@@ -96,7 +96,7 @@ static void * sdu_reader(void * o)
 struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
 {
         struct sdu_sched *  sdu_sched;
-        struct sched_info * infos[QOS_CUBE_MAX];
+        struct sched_info * infos[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
         int                 i;
         int                 j;
 
@@ -117,7 +117,7 @@ struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
                 }
         }
 
-        for (i = 0; i < QOS_CUBE_MAX; ++i) {
+        for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
                 infos[i] = malloc(sizeof(*infos[i]));
                 if (infos[i] == NULL) {
                         for (j = 0; j < i; ++j)
@@ -125,10 +125,10 @@ struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
                         goto fail_infos;
                 }
                 infos[i]->sch = sdu_sched;
-                infos[i]->qc  = i;
+                infos[i]->qc  = i % QOS_CUBE_MAX;
         }
 
-        for (i = 0; i < QOS_CUBE_MAX; ++i) {
+        for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
                 if (pthread_create(&sdu_sched->readers[i], NULL,
                                    sdu_reader, infos[i])) {
                         for (j = 0; j < i; ++j)
@@ -139,7 +139,7 @@ struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
                 }
         }
 
-        for (i = 0; i < QOS_CUBE_MAX; ++i) {
+        for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
                 struct sched_param  par;
                 int                 pol = SCHED_RR;
                 int                 min;
@@ -150,7 +150,8 @@ struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
 
                 min = (max - min) / 2;
 
-                par.sched_priority = min + (qos_prio[i] * (max - min) / 99);
+                par.sched_priority = min +
+                        (qos_prio[i % QOS_CUBE_MAX] * (max - min) / 99);
                 if (pthread_setschedparam(sdu_sched->readers[i], pol, &par))
                         goto fail_sched;
         }
@@ -158,12 +159,12 @@ struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
         return sdu_sched;
 
  fail_sched:
-        for (j = 0; j < QOS_CUBE_MAX; ++j)
+        for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                 pthread_cancel(sdu_sched->readers[j]);
-        for (j = 0; j < QOS_CUBE_MAX; ++j)
+        for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                 pthread_join(sdu_sched->readers[j], NULL);
  fail_pthr:
-        for (j = 0; j < QOS_CUBE_MAX; ++j)
+        for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                 free(infos[j]);
  fail_infos:
         for (j = 0; j < QOS_CUBE_MAX; ++j)
