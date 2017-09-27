@@ -62,8 +62,10 @@ typedef LinkStateMsg link_state_msg_t;
 #endif
 
 struct routing_i {
-        struct pff * pff;
-        pthread_t    calculator;
+        struct list_head next;
+
+        struct pff *     pff;
+        pthread_t        calculator;
 };
 
 /* TODO: link weight support. */
@@ -107,6 +109,9 @@ struct {
         pthread_t        lsupdate;
         pthread_t        lsreader;
         pthread_t        listener;
+
+        struct list_head routing_instances;
+        pthread_mutex_t  routing_i_lock;
 
         rtable_fn_t      rtable;
 } ls;
@@ -590,6 +595,24 @@ static void * lsreader(void * o)
         return (void *) 0;
 }
 
+static void flow_event(int  fd,
+                       bool up)
+{
+
+        struct list_head * p;
+
+        log_dbg("Notifying routing instances of flow event.");
+
+        pthread_mutex_lock(&ls.routing_i_lock);
+
+        list_for_each(p, &ls.routing_instances) {
+                struct routing_i * ri = list_entry(p, struct routing_i, next);
+                pff_flow_state_change(ri->pff, fd, up);
+        }
+
+        pthread_mutex_unlock(&ls.routing_i_lock);
+}
+
 static void handle_event(void *       self,
                          int          event,
                          const void * o)
@@ -614,6 +637,8 @@ static void handle_event(void *       self,
                 send_lsm(ipcpi.dt_addr, c->conn_info.addr);
                 break;
         case NOTIFY_DT_CONN_DEL:
+                flow_event(c->flow_info.fd, false);
+
                 if (lsdb_del_nb(c->conn_info.addr, c->flow_info.fd))
                         log_dbg("Failed to delete neighbor from LSDB.");
 
@@ -622,6 +647,12 @@ static void handle_event(void *       self,
                 break;
         case NOTIFY_DT_CONN_QOS:
                 log_dbg("QoS changes currently unsupported.");
+                break;
+        case NOTIFY_DT_CONN_UP:
+                flow_event(c->flow_info.fd, true);
+                break;
+        case NOTIFY_DT_CONN_DOWN:
+                flow_event(c->flow_info.fd, false);
                 break;
         case NOTIFY_MGMT_CONN_ADD:
                 fset_add(ls.mgmt_set, c->flow_info.fd);
@@ -656,12 +687,24 @@ struct routing_i * link_state_routing_i_create(struct pff * pff)
                 return NULL;
         }
 
+        pthread_mutex_lock(&ls.routing_i_lock);
+
+        list_add(&tmp->next, &ls.routing_instances);
+
+        pthread_mutex_unlock(&ls.routing_i_lock);
+
         return tmp;
 }
 
 void link_state_routing_i_destroy(struct routing_i * instance)
 {
         assert(instance);
+
+        pthread_mutex_lock(&ls.routing_i_lock);
+
+        list_del(&instance->next);
+
+        pthread_mutex_unlock(&ls.routing_i_lock);
 
         pthread_cancel(instance->calculator);
 
@@ -703,6 +746,9 @@ int link_state_init(enum pol_routing pr)
         if (pthread_rwlock_init(&ls.db_lock, NULL))
                 goto fail_db_lock_init;
 
+        if (pthread_mutex_init(&ls.routing_i_lock, NULL))
+                goto fail_routing_i_lock_init;
+
         if (connmgr_ae_init(AEID_MGMT, &info))
                 goto fail_connmgr_ae_init;
 
@@ -712,6 +758,7 @@ int link_state_init(enum pol_routing pr)
 
         list_head_init(&ls.db);
         list_head_init(&ls.nbs);
+        list_head_init(&ls.routing_instances);
 
         if (pthread_create(&ls.lsupdate, NULL, lsupdate, NULL))
                 goto fail_pthread_create_lsupdate;
@@ -739,6 +786,8 @@ int link_state_init(enum pol_routing pr)
  fail_fset_create:
         connmgr_ae_fini(AEID_MGMT);
  fail_connmgr_ae_init:
+        pthread_mutex_destroy(&ls.routing_i_lock);
+ fail_routing_i_lock_init:
         pthread_rwlock_destroy(&ls.db_lock);
  fail_db_lock_init:
         notifier_unreg(handle_event);
@@ -781,6 +830,8 @@ void link_state_fini(void)
         pthread_rwlock_unlock(&ls.db_lock);
 
         pthread_rwlock_destroy(&ls.db_lock);
+
+        pthread_mutex_destroy(&ls.routing_i_lock);
 
         notifier_unreg(handle_event);
 }
