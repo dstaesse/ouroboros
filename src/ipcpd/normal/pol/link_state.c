@@ -89,6 +89,10 @@ struct nb {
         enum nb_type     type;
 };
 
+typedef int (* rtable_fn_t)(struct graph *     graph,
+                            uint64_t           s_addr,
+                            struct list_head * table);
+
 struct {
         struct list_head nbs;
         fset_t *         mgmt_set;
@@ -103,6 +107,8 @@ struct {
         pthread_t        lsupdate;
         pthread_t        lsreader;
         pthread_t        listener;
+
+        rtable_fn_t      rtable;
 } ls;
 
 struct pol_routing_ops link_state_ops = {
@@ -388,7 +394,7 @@ static void * calculate_pff(void * o)
         instance = (struct routing_i *) o;
 
         while (true) {
-                if (graph_routing_table(ls.graph, ipcpi.dt_addr, &table)) {
+                if (ls.rtable(ls.graph, ipcpi.dt_addr, &table)) {
                         sleep(RECALC_TIME);
                         continue;
                 }
@@ -664,7 +670,7 @@ void link_state_routing_i_destroy(struct routing_i * instance)
         free(instance);
 }
 
-int link_state_init(void)
+int link_state_init(enum pol_routing pr)
 {
         struct conn_info info;
 
@@ -675,6 +681,17 @@ int link_state_init(void)
         info.pref_version = 1;
         info.pref_syntax  = PROTO_GPB;
         info.addr         = ipcpi.dt_addr;
+
+        switch (pr) {
+        case ROUTING_LINK_STATE:
+                ls.rtable = graph_routing_table;
+                break;
+        case ROUTING_LINK_STATE_LFA:
+                ls.rtable = graph_routing_table_lfa;
+                break;
+        default:
+                goto fail_graph;
+        }
 
         ls.graph = graph_create();
         if (ls.graph == NULL)
