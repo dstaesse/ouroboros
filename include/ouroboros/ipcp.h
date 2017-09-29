@@ -46,7 +46,8 @@ enum pol_addr_auth {
 };
 
 enum pol_routing {
-        ROUTING_LINK_STATE = 0
+        ROUTING_LINK_STATE = 0,
+        ROUTING_LINK_STATE_LFA
 };
 
 enum pol_pff {

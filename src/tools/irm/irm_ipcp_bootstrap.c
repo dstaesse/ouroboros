@@ -33,28 +33,29 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define NORMAL                "normal"
-#define SHIM_UDP              "shim-udp"
-#define SHIM_ETH_LLC          "shim-eth-llc"
-#define LOCAL                 "local"
+#define NORMAL                 "normal"
+#define SHIM_UDP               "shim-udp"
+#define SHIM_ETH_LLC           "shim-eth-llc"
+#define LOCAL                  "local"
 
-#define MD5                   "MD5"
-#define SHA3_224              "SHA3_224"
-#define SHA3_256              "SHA3_256"
-#define SHA3_384              "SHA3_384"
-#define SHA3_512              "SHA3_512"
+#define MD5                    "MD5"
+#define SHA3_224               "SHA3_224"
+#define SHA3_256               "SHA3_256"
+#define SHA3_384               "SHA3_384"
+#define SHA3_512               "SHA3_512"
 
-#define DEFAULT_ADDR_SIZE     4
-#define DEFAULT_FD_SIZE       2
-#define DEFAULT_DDNS          0
-#define DEFAULT_ADDR_AUTH     ADDR_AUTH_FLAT_RANDOM
-#define DEFAULT_ROUTING       ROUTING_LINK_STATE
-#define DEFAULT_PFF           PFF_SIMPLE
-#define DEFAULT_HASH_ALGO     DIR_HASH_SHA3_256
-#define FLAT_RANDOM_ADDR_AUTH "flat"
-#define LINK_STATE_ROUTING    "link_state"
-#define SIMPLE_PFF            "simple"
-#define ALTERNATE_PFF         "alternate"
+#define DEFAULT_ADDR_SIZE      4
+#define DEFAULT_FD_SIZE        2
+#define DEFAULT_DDNS           0
+#define DEFAULT_ADDR_AUTH      ADDR_AUTH_FLAT_RANDOM
+#define DEFAULT_ROUTING        ROUTING_LINK_STATE
+#define DEFAULT_PFF            PFF_SIMPLE
+#define DEFAULT_HASH_ALGO      DIR_HASH_SHA3_256
+#define FLAT_RANDOM_ADDR_AUTH  "flat"
+#define LINK_STATE_ROUTING     "link_state"
+#define LINK_STATE_LFA_ROUTING "lfa"
+#define SIMPLE_PFF             "simple"
+#define ALTERNATE_PFF          "alternate"
 
 static void usage(void)
 {
@@ -74,7 +75,8 @@ static void usage(void)
                "                [pff [PFF_POLICY] (default: %s)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ADDRESS_POLICY = {"FLAT_RANDOM_ADDR_AUTH"}\n"
-               "      ROUTING_POLICY = {"LINK_STATE_ROUTING"}\n"
+               "      ROUTING_POLICY = {"LINK_STATE_ROUTING " "
+               LINK_STATE_LFA_ROUTING "}\n"
                "      PFF_POLICY = {" SIMPLE_PFF " " ALTERNATE_PFF "}\n"
                "      ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n"
@@ -151,6 +153,9 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 } else if (matches(*argv, "routing") == 0) {
                         if (strcmp(LINK_STATE_ROUTING, *(argv + 1)) == 0)
                                 routing_type = ROUTING_LINK_STATE;
+                        else if (strcmp(LINK_STATE_LFA_ROUTING,
+                                        *(argv + 1)) == 0)
+                                routing_type = ROUTING_LINK_STATE_LFA;
                         else
                                 goto unknown_param;
                 } else if (matches(*argv, "pff") == 0) {

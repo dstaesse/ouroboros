@@ -26,7 +26,7 @@
 #include "pff.h"
 
 struct pol_routing_ops {
-        int                (* init)(void);
+        int                (* init)(enum pol_routing pr);
 
         void               (* fini)(void);
 

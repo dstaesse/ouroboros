@@ -28,7 +28,7 @@
 
 #include "pol-routing-ops.h"
 
-int                link_state_init(void);
+int                link_state_init(enum pol_routing pr);
 
 void               link_state_fini(void);
 

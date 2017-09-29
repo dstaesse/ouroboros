@@ -33,13 +33,14 @@ int routing_init(enum pol_routing pr)
 {
         switch (pr) {
         case ROUTING_LINK_STATE:
+        case ROUTING_LINK_STATE_LFA:
                 r_ops = &link_state_ops;
                 break;
         default:
                 return -ENOTSUP;
         }
 
-        return r_ops->init();
+        return r_ops->init(pr);
 }
 
 struct routing_i * routing_i_create(struct pff * pff)

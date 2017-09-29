@@ -56,6 +56,10 @@ int            graph_routing_table(struct graph *     graph,
                                    uint64_t           s_addr,
                                    struct list_head * table);
 
+int            graph_routing_table_lfa(struct graph *     graph,
+                                       uint64_t           s_addr,
+                                       struct list_head * table);
+
 void           graph_free_routing_table(struct graph *     graph,
                                         struct list_head * table);
 

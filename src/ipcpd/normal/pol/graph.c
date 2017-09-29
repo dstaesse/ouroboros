@@ -379,37 +379,43 @@ static int get_min_vertex(struct graph *   graph,
         return index;
 }
 
-static struct vertex ** dijkstra(struct graph * graph,
-                                 uint64_t       src)
+static int dijkstra(struct graph *    graph,
+                    uint64_t          src,
+                    struct vertex *** nhops,
+                    int **            dist)
 {
-        int                dist[graph->nr_vertices];
         bool               used[graph->nr_vertices];
         struct list_head * p = NULL;
         int                i = 0;
         struct vertex *    v = NULL;
         struct edge *      e = NULL;
         int                alt;
-        struct vertex **   nhop;
 
-        nhop = malloc(sizeof(*nhop) * graph->nr_vertices);
-        if (nhop == NULL)
-                return NULL;
+        *nhops = malloc(sizeof(**nhops) * graph->nr_vertices);
+        if (*nhops == NULL)
+                return -1;
+
+        *dist = malloc(sizeof(**dist) * graph->nr_vertices);
+        if (*dist == NULL) {
+                free(*nhops);
+                return -1;
+        }
 
         /* Init the data structures */
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
                 if (v->addr == src)
-                        dist[i] = 0;
+                        (*dist)[i] = 0;
                 else
-                        dist[i] = INT_MAX;
+                        (*dist)[i] = INT_MAX;
 
-                nhop[i] = NULL;
+                (*nhops)[i] = NULL;
                 used[i] = false;
                 i++;
         }
 
         /* Perform actual Dijkstra */
-        i = get_min_vertex(graph, dist, used, &v);
+        i = get_min_vertex(graph, *dist, used, &v);
         while (v != NULL) {
                 list_for_each(p, &v->edges) {
                         e = list_entry(p, struct edge, next);
@@ -423,19 +429,19 @@ static struct vertex ** dijkstra(struct graph * graph,
                          * Method could be extended to use a different
                          * weight for a different QoS cube.
                          */
-                        alt = dist[i] + 1;
-                        if (alt < dist[e->nb->index]) {
-                                dist[e->nb->index] = alt;
+                        alt = (*dist)[i] + 1;
+                        if (alt < (*dist)[e->nb->index]) {
+                                (*dist)[e->nb->index] = alt;
                                 if (v->addr == src)
-                                        nhop[e->nb->index] = e->nb;
+                                        (*nhops)[e->nb->index] = e->nb;
                                 else
-                                        nhop[e->nb->index] = nhop[i];
+                                        (*nhops)[e->nb->index] = (*nhops)[i];
                         }
                 }
-                i = get_min_vertex(graph, dist, used, &v);
+                i = get_min_vertex(graph, *dist, used, &v);
         }
 
-        return nhop;
+        return 0;
 }
 
 static void free_routing_table(struct list_head * table)
@@ -471,9 +477,10 @@ void graph_free_routing_table(struct graph *     graph,
         pthread_mutex_unlock(&graph->lock);
 }
 
-int graph_routing_table(struct graph *     graph,
-                        uint64_t           s_addr,
-                        struct list_head * table)
+static int graph_routing_table_simple(struct graph *     graph,
+                                      uint64_t           s_addr,
+                                      struct list_head * table,
+                                      int **             dist)
 {
         struct vertex **       nhops;
         struct list_head *     p;
@@ -482,14 +489,11 @@ int graph_routing_table(struct graph *     graph,
         struct routing_table * t;
         struct nhop *          n;
 
-        pthread_mutex_lock(&graph->lock);
-
         /* We need at least 2 vertices for a table */
         if (graph->nr_vertices < 2)
                 goto fail_vertices;
 
-        nhops = dijkstra(graph, s_addr);
-        if (nhops == NULL)
+        if (dijkstra(graph, s_addr, &nhops, dist))
                 goto fail_vertices;
 
         list_head_init(table);
@@ -523,8 +527,6 @@ int graph_routing_table(struct graph *     graph,
                 i++;
         }
 
-        pthread_mutex_unlock(&graph->lock);
-
         free(nhops);
 
         return 0;
@@ -535,6 +537,149 @@ int graph_routing_table(struct graph *     graph,
         free_routing_table(table);
         free(nhops);
  fail_vertices:
+        return -1;
+}
+
+int graph_routing_table(struct graph *     graph,
+                        uint64_t           s_addr,
+                        struct list_head * table)
+{
+        int   ret = 0;
+        int * dist;
+
+        assert(graph);
+        assert(table);
+
+        pthread_mutex_lock(&graph->lock);
+
+        ret = graph_routing_table_simple(graph, s_addr, table, &dist);
+
+        free(dist);
+
         pthread_mutex_unlock(&graph->lock);
+
+        return ret;
+}
+
+static int add_lfa_to_table(struct list_head * table,
+                            uint64_t           addr,
+                            uint64_t           lfa)
+{
+        struct list_head * p = NULL;
+        struct nhop *      n;
+
+        n = malloc(sizeof(*n));
+        if (n == NULL)
+                return -1;
+
+        n->nhop = lfa;
+
+        list_for_each(p, table) {
+                struct routing_table * t =
+                        list_entry(p, struct routing_table, next);
+                if (t->dst == addr) {
+                        list_add_tail(&n->next, &t->nhops);
+                        return 0;
+                }
+        }
+
+        return -1;
+}
+
+int graph_routing_table_lfa(struct graph *     graph,
+                            uint64_t           s_addr,
+                            struct list_head * table)
+{
+        int *              s_dist;
+        int *              n_dist[AP_MAX_FLOWS];
+        uint64_t           addrs[AP_MAX_FLOWS];
+        int                n_index[AP_MAX_FLOWS];
+        struct list_head * p;
+        struct list_head * q;
+        struct vertex *    v;
+        struct edge *      e;
+        struct vertex **   nhops;
+        int                i = 0;
+        int                j = 0;
+        int                k;
+
+        assert(graph);
+        assert(table);
+
+        pthread_mutex_lock(&graph->lock);
+
+        for (j = 0; j < AP_MAX_FLOWS; j++) {
+                n_dist[i] = NULL;
+                n_index[i] = -1;
+                addrs[i] = -1;
+        }
+
+        /* Get the normal next hops routing table. */
+        if (graph_routing_table_simple(graph, s_addr, table, &s_dist))
+                goto fail_table_simple;
+
+        list_for_each(p, &graph->vertices) {
+                v = list_entry(p, struct vertex, next);
+
+                if (v->addr != s_addr)
+                        continue;
+
+                /* Get the distances for every neighbor of the source. */
+                list_for_each(q, &v->edges) {
+                        e = list_entry(q, struct edge, next);
+
+                        addrs[i] = e->nb->addr;
+                        n_index[i] = e->nb->index;
+                        if (dijkstra(graph, e->nb->addr,
+                                     &nhops, &(n_dist[i++])))
+                                goto fail_dijkstra;
+
+                        free(nhops);
+                }
+
+                break;
+        }
+
+        /* Loop though all nodes to see if we have a LFA for them. */
+        list_for_each(p, &graph->vertices) {
+                v = list_entry(p, struct vertex, next);
+
+                if (v->addr == s_addr)
+                        continue;
+
+                /*
+                 * Check for every neighbor if dist(neighbor, destination) <
+                 * dist(neighbor, source) + dist(source, destination).
+                 */
+                for (j = 0; j < i; j++) {
+                        /* Exclude ourselves. */
+                        if (addrs[j] == v->addr)
+                                continue;
+
+                        if (n_dist[j][v->index] <
+                            s_dist[n_index[j]] + s_dist[v->index]) {
+                                if (add_lfa_to_table(table, v->addr, addrs[j]))
+                                        goto fail_add_lfa;
+                        }
+
+                        free(n_dist[j]);
+                }
+        }
+
+        pthread_mutex_unlock(&graph->lock);
+
+        free(s_dist);
+
+        return 0;
+
+ fail_add_lfa:
+        for (k = j; k < i; k++)
+                free(n_dist[k]);
+ fail_dijkstra:
+        free_routing_table(table);
+        free(s_dist);
+ fail_table_simple:
+        pthread_mutex_unlock(&graph->lock);
+
         return -1;
 }
