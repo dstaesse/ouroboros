@@ -36,8 +36,6 @@
 #include <limits.h>
 #include <assert.h>
 
-#define ENTRY_SLEEP_TIMEOUT 10 /* ms */
-
 struct api_entry * api_entry_create(pid_t  api,
                                     char * apn)
 {
@@ -70,19 +68,28 @@ struct api_entry * api_entry_create(pid_t  api,
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
 
-        if (pthread_mutex_init(&e->state_lock, NULL)) {
+        if (pthread_mutex_init(&e->lock, NULL)) {
                 free(e);
                 return NULL;
         }
 
 
-        if (pthread_cond_init(&e->state_cond, &cattr)) {
-                pthread_mutex_destroy(&e->state_lock);
+        if (pthread_cond_init(&e->cond, &cattr)) {
+                pthread_mutex_destroy(&e->lock);
                 free(e);
                 return NULL;
         }
 
         return e;
+}
+
+void cancel_api_entry(void * o)
+{
+        struct api_entry * e = (struct api_entry *) o;
+
+        e->state = API_NULL;
+
+        pthread_mutex_unlock(&e->lock);
 }
 
 void api_entry_destroy(struct api_entry * e)
@@ -92,25 +99,29 @@ void api_entry_destroy(struct api_entry * e)
 
         assert(e);
 
-        pthread_mutex_lock(&e->state_lock);
+        pthread_mutex_lock(&e->lock);
 
         if (e->state == API_DESTROY) {
-                pthread_mutex_unlock(&e->state_lock);
+                pthread_mutex_unlock(&e->lock);
                 return;
         }
 
         if (e->state == API_SLEEP)
                 e->state = API_DESTROY;
 
-        pthread_cond_signal(&e->state_cond);
+        pthread_cond_signal(&e->cond);
+
+        pthread_cleanup_push(cancel_api_entry, e);
 
         while (e->state != API_INIT)
-                pthread_cond_wait(&e->state_cond, &e->state_lock);
+                pthread_cond_wait(&e->cond, &e->lock);
 
-        pthread_mutex_unlock(&e->state_lock);
+        pthread_cleanup_pop(false);
 
-        pthread_cond_destroy(&e->state_cond);
-        pthread_mutex_destroy(&e->state_lock);
+        pthread_mutex_unlock(&e->lock);
+
+        pthread_cond_destroy(&e->cond);
+        pthread_mutex_destroy(&e->lock);
 
         if (e->apn != NULL)
                 free(e->apn);
@@ -164,39 +175,34 @@ void api_entry_del_name(struct api_entry * e,
         }
 }
 
-void api_entry_cancel(struct api_entry * e)
+int api_entry_sleep(struct api_entry * e,
+                    struct timespec *  timeo)
 {
-        pthread_mutex_lock(&e->state_lock);
-
-        e->state = API_INIT;
-        pthread_cond_broadcast(&e->state_cond);
-
-        pthread_mutex_unlock(&e->state_lock);
-}
-
-int api_entry_sleep(struct api_entry * e)
-{
-        struct timespec timeout = {(ENTRY_SLEEP_TIMEOUT / 1000),
-                                   (ENTRY_SLEEP_TIMEOUT % 1000) * MILLION};
-        struct timespec now;
         struct timespec dl;
 
         int ret = 0;
 
         assert(e);
 
-        clock_gettime(PTHREAD_COND_CLOCK, &now);
-        ts_add(&now, &timeout, &dl);
+        if (timeo != NULL) {
+                clock_gettime(PTHREAD_COND_CLOCK, &dl);
+                ts_add(&dl, timeo, &dl);
+        }
 
-        pthread_mutex_lock(&e->state_lock);
+        pthread_mutex_lock(&e->lock);
 
         if (e->state != API_WAKE && e->state != API_DESTROY)
                 e->state = API_SLEEP;
 
+        pthread_cleanup_push(cancel_api_entry, e);
+
         while (e->state == API_SLEEP && ret != -ETIMEDOUT)
-                ret = -pthread_cond_timedwait(&e->state_cond,
-                                              &e->state_lock,
-                                              &dl);
+                if (timeo)
+                        ret = -pthread_cond_timedwait(&e->cond, &e->lock, &dl);
+                else
+                        ret = -pthread_cond_wait(&e->cond, &e->lock);
+
+        pthread_cleanup_pop(false);
 
         if (e->state == API_DESTROY) {
                 if (e->re != NULL)
@@ -204,11 +210,10 @@ int api_entry_sleep(struct api_entry * e)
                 ret = -1;
         }
 
-        if (ret != -ETIMEDOUT)
-                e->state = API_INIT;
+        e->state = API_INIT;
 
-        pthread_cond_broadcast(&e->state_cond);
-        pthread_mutex_unlock(&e->state_lock);
+        pthread_cond_broadcast(&e->cond);
+        pthread_mutex_unlock(&e->lock);
 
         return ret;
 }
@@ -219,25 +224,29 @@ void api_entry_wake(struct api_entry * e,
         assert(e);
         assert(re);
 
-        pthread_mutex_lock(&e->state_lock);
+        pthread_mutex_lock(&e->lock);
 
         if (e->state != API_SLEEP) {
-                pthread_mutex_unlock(&e->state_lock);
+                pthread_mutex_unlock(&e->lock);
                 return;
         }
 
         e->state = API_WAKE;
         e->re    = re;
 
-        pthread_cond_broadcast(&e->state_cond);
+        pthread_cond_broadcast(&e->cond);
+
+        pthread_cleanup_push(cancel_api_entry, e);
 
         while (e->state == API_WAKE)
-                pthread_cond_wait(&e->state_cond, &e->state_lock);
+                pthread_cond_wait(&e->cond, &e->lock);
+
+        pthread_cleanup_pop(false);
 
         if (e->state == API_DESTROY)
                 e->state = API_INIT;
 
-        pthread_mutex_unlock(&e->state_lock);
+        pthread_mutex_unlock(&e->lock);
 }
 
 int api_table_add(struct list_head * api_table,

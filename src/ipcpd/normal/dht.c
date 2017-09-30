@@ -288,13 +288,16 @@ static int dht_wait_running(struct dht * dht)
 
         pthread_mutex_lock(&dht->mtx);
 
+        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                             &dht->mtx);
+
         while (dht->state == DHT_JOINING)
                 pthread_cond_wait(&dht->cond, &dht->mtx);
 
         if (dht->state != DHT_RUNNING)
                 ret = -1;
 
-        pthread_mutex_unlock(&dht->mtx);
+        pthread_cleanup_pop(true);
 
         return ret;
 }
@@ -379,6 +382,21 @@ static void kad_req_create(struct dht * dht,
         pthread_rwlock_unlock(&dht->lock);
 }
 
+static void cancel_req_destroy(void * o)
+{
+        struct kad_req * req = (struct kad_req *) o;
+
+        pthread_mutex_unlock(&req->lock);
+
+        pthread_cond_destroy(&req->cond);
+        pthread_mutex_destroy(&req->lock);
+
+        if (req->key != NULL)
+                free(req->key);
+
+        free(req);
+}
+
 static void kad_req_destroy(struct kad_req * req)
 {
         assert(req);
@@ -403,18 +421,12 @@ static void kad_req_destroy(struct kad_req * req)
                 break;
         }
 
+        pthread_cleanup_push(cancel_req_destroy, req);
+
         while (req->state != REQ_NULL && req->state != REQ_DONE)
                 pthread_cond_wait(&req->cond, &req->lock);
 
-        pthread_mutex_unlock(&req->lock);
-
-        pthread_cond_destroy(&req->cond);
-        pthread_mutex_destroy(&req->lock);
-
-        if (req->key != NULL)
-                free(req->key);
-
-        free(req);
+        pthread_cleanup_pop(true);
 }
 
 static int kad_req_wait(struct kad_req * req,
@@ -434,6 +446,9 @@ static int kad_req_wait(struct kad_req * req,
 
         req->state = REQ_PENDING;
 
+        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                             &req->lock);
+
         while (req->state == REQ_PENDING && ret != -ETIMEDOUT)
                 ret = -pthread_cond_timedwait(&req->cond, &req->lock, &abs);
 
@@ -452,7 +467,7 @@ static int kad_req_wait(struct kad_req * req,
                 break;
         }
 
-        pthread_mutex_unlock(&req->lock);
+        pthread_cleanup_pop(true);
 
         return ret;
 }
@@ -683,11 +698,34 @@ static void lookup_add_out(struct lookup * lu,
         pthread_mutex_unlock(&lu->lock);
 }
 
-static void lookup_destroy(struct lookup * lu)
+static void cancel_lookup_destroy(void * o)
 {
+        struct lookup *    lu;
         struct list_head * p;
         struct list_head * h;
 
+        lu = (struct lookup *) o;
+
+        if (lu->key != NULL)
+                free(lu->key);
+        if (lu->addrs != NULL)
+                free(lu->addrs);
+
+        list_for_each_safe(p, h, &lu->contacts) {
+                struct contact * c = list_entry(p, struct contact, next);
+                list_del(&c->next);
+                contact_destroy(c);
+        }
+
+        pthread_mutex_unlock(&lu->lock);
+
+        pthread_mutex_destroy(&lu->lock);
+
+        free(lu);
+}
+
+static void lookup_destroy(struct lookup * lu)
+{
         assert(lu);
 
         pthread_mutex_lock(&lu->lock);
@@ -711,25 +749,12 @@ static void lookup_destroy(struct lookup * lu)
                 break;
         }
 
+        pthread_cleanup_push(cancel_lookup_destroy, lu);
+
         while (lu->state != LU_NULL)
                 pthread_cond_wait(&lu->cond, &lu->lock);
 
-        if (lu->key != NULL)
-                free(lu->key);
-        if (lu->addrs != NULL)
-                free(lu->addrs);
-
-        list_for_each_safe(p, h, &lu->contacts) {
-                struct contact * c = list_entry(p, struct contact, next);
-                list_del(&c->next);
-                contact_destroy(c);
-        }
-
-        pthread_mutex_unlock(&lu->lock);
-
-        pthread_mutex_destroy(&lu->lock);
-
-        free(lu);
+        pthread_cleanup_pop(true);
 }
 
 static void lookup_update(struct dht *    dht,
@@ -765,11 +790,16 @@ static void lookup_update(struct dht *    dht,
                 return;
         }
 
+        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                             &lu->lock);
+
         while (lu->state == LU_INIT) {
                 pthread_rwlock_unlock(&dht->lock);
                 pthread_cond_wait(&lu->cond, &lu->lock);
                 pthread_rwlock_rdlock(&dht->lock);
         }
+
+        pthread_cleanup_pop(false);
 
         /* BUG: this should not be allowed since it's use-after-free. */
         if (lu->state == LU_DESTROY || lu->state == LU_NULL) {
@@ -2302,10 +2332,8 @@ uint64_t dht_query(struct dht *    dht,
 
 static void * dht_handle_sdu(void * o)
 {
-        struct dht *    dht = (struct dht *) o;
-        struct timespec dl;
-        struct timespec to = {(HANDLE_TIMEO / 1000),
-                              (HANDLE_TIMEO % 1000) * MILLION};
+        struct dht * dht = (struct dht *) o;
+
         assert(dht);
 
         while (true) {
@@ -2318,28 +2346,19 @@ static void * dht_handle_sdu(void * o)
                 size_t               b;
                 size_t               t_expire;
                 struct cmd *         cmd;
-                int                  ret = 0;
-
-                clock_gettime(CLOCK_REALTIME_COARSE, &dl);
-                ts_add(&dl, &to, &dl);
 
                 pthread_mutex_lock(&dht->mtx);
 
-                while (list_is_empty(&dht->cmds) && ret != -ETIMEDOUT)
-                        ret = -pthread_cond_timedwait(&dht->cond,
-                                                      &dht->mtx, &dl);
+                pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                                     &dht->mtx);
 
-                if (ret == -ETIMEDOUT) {
-                        pthread_mutex_unlock(&dht->mtx);
-                        if (tpm_check(dht->tpm))
-                                break;
-                        continue;
-                }
+                while (list_is_empty(&dht->cmds))
+                        pthread_cond_wait(&dht->cond, &dht->mtx);
 
                 cmd = list_last_entry(&dht->cmds, struct cmd, next);
                 list_del(&cmd->next);
 
-                pthread_mutex_unlock(&dht->mtx);
+                pthread_cleanup_pop(true);
 
                 i = shm_du_buff_tail(cmd->sdb) - shm_du_buff_head(cmd->sdb);
 
@@ -2486,8 +2505,6 @@ static void * dht_handle_sdu(void * o)
 
                 tpm_inc(dht->tpm);
         }
-
-        tpm_exit(dht->tpm);
 
         return (void *) 0;
 }

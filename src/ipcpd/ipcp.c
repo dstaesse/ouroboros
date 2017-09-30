@@ -159,6 +159,16 @@ static void * acceptloop(void * o)
         return (void *) 0;
 }
 
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
+
+static void free_msg(void * o)
+{
+        ipcp_msg__free_unpacked((ipcp_msg_t *) o, NULL);
+}
+
 static void * mainloop(void * o)
 {
         int                 sfd;
@@ -167,14 +177,10 @@ static void * mainloop(void * o)
         struct dif_info     info;
         ipcp_config_msg_t * conf_msg;
         ipcp_msg_t *        msg;
-        struct timespec     dl;
-        struct timespec     to  = {(IPCP_ACCEPT_TIMEOUT / 1000),
-                                   (IPCP_ACCEPT_TIMEOUT % 1000) * MILLION};
 
         (void) o;
 
         while (true) {
-                int                 ret = 0;
                 ipcp_msg_t          ret_msg  = IPCP_MSG__INIT;
                 dif_info_msg_t      dif_info = DIF_INFO_MSG__INIT;
                 int                 fd       = -1;
@@ -182,27 +188,18 @@ static void * mainloop(void * o)
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
 
-                clock_gettime(PTHREAD_COND_CLOCK, &dl);
-                ts_add(&dl, &to, &dl);
-
                 pthread_mutex_lock(&ipcpi.cmd_lock);
 
-                while (list_is_empty(&ipcpi.cmds) && ret != -ETIMEDOUT)
-                        ret = -pthread_cond_timedwait(&ipcpi.cmd_cond,
-                                                      &ipcpi.cmd_lock,
-                                                      &dl);
+                pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                                     &ipcpi.cmd_lock);
 
-                if (ret == -ETIMEDOUT) {
-                        pthread_mutex_unlock(&ipcpi.cmd_lock);
-                        if (tpm_check(ipcpi.tpm))
-                                break;
-                        continue;
-                }
+                while (list_is_empty(&ipcpi.cmds))
+                        pthread_cond_wait(&ipcpi.cmd_cond, &ipcpi.cmd_lock);
 
                 cmd = list_last_entry(&ipcpi.cmds, struct cmd, next);
                 list_del(&cmd->next);
 
-                pthread_mutex_unlock(&ipcpi.cmd_lock);
+                pthread_cleanup_pop(true);
 
                 msg = ipcp_msg__unpack(NULL, cmd->len, cmd->cbuf);
                 sfd = cmd->fd;
@@ -215,6 +212,9 @@ static void * mainloop(void * o)
                 }
 
                 tpm_dec(ipcpi.tpm);
+
+                pthread_cleanup_push(close_ptr, &sfd);
+                pthread_cleanup_push(free_msg, msg);
 
                 switch (msg->code) {
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
@@ -482,7 +482,8 @@ static void * mainloop(void * o)
                         break;
                 }
 
-                ipcp_msg__free_unpacked(msg, NULL);
+                pthread_cleanup_pop(true);
+                pthread_cleanup_pop(false);
 
                 buffer.len = ipcp_msg__get_packed_size(&ret_msg);
                 if (buffer.len == 0) {
@@ -502,21 +503,16 @@ static void * mainloop(void * o)
 
                 ipcp_msg__pack(&ret_msg, buffer.data);
 
-                if (write(sfd, buffer.data, buffer.len) == -1) {
-                        log_err("Failed to send reply message");
-                        free(buffer.data);
-                        close(sfd);
-                        tpm_inc(ipcpi.tpm);
-                        continue;
-                }
+                pthread_cleanup_push(close_ptr, &sfd);
+
+                if (write(sfd, buffer.data, buffer.len) == -1)
+                        log_warn("Failed to send reply message");
 
                 free(buffer.data);
-                close(sfd);
+                pthread_cleanup_pop(true);
 
                 tpm_inc(ipcpi.tpm);
         }
-
-        tpm_exit(ipcpi.tpm);
 
         return (void *) 0;
 }
@@ -778,6 +774,9 @@ int ipcp_wait_state(enum ipcp_state         state,
 
         pthread_mutex_lock(&ipcpi.state_mtx);
 
+        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                             &ipcpi.state_mtx);
+
         while (ipcpi.state != state
                && ipcpi.state != IPCP_SHUTDOWN
                && ipcpi.state != IPCP_NULL
@@ -791,7 +790,7 @@ int ipcp_wait_state(enum ipcp_state         state,
                                                       &abstime);
         }
 
-        pthread_mutex_unlock(&ipcpi.state_mtx);
+        pthread_cleanup_pop(true);
 
         return ret;
 }

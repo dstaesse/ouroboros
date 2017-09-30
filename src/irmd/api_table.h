@@ -23,6 +23,7 @@
 #ifndef OUROBOROS_IRMD_API_TABLE_H
 #define OUROBOROS_IRMD_API_TABLE_H
 
+#include "time.h"
 #include "utils.h"
 
 #include <unistd.h>
@@ -45,10 +46,10 @@ struct api_entry {
 
         struct reg_entry * re;       /* reg_entry for which a flow arrived */
 
-        /* the api will block on this */
+        /* The process will block on this */
         enum api_state     state;
-        pthread_cond_t     state_cond;
-        pthread_mutex_t    state_lock;
+        pthread_cond_t     cond;
+        pthread_mutex_t    lock;
 };
 
 struct api_entry * api_entry_create(pid_t  api,
@@ -56,7 +57,8 @@ struct api_entry * api_entry_create(pid_t  api,
 
 void               api_entry_destroy(struct api_entry * e);
 
-int                api_entry_sleep(struct api_entry * e);
+int                api_entry_sleep(struct api_entry * e,
+                                   struct timespec *  timeo);
 
 void               api_entry_wake(struct api_entry * e,
                                   struct reg_entry * re);

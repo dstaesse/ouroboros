@@ -38,10 +38,6 @@ int          tpm_start(struct tpm * tpm);
 
 void         tpm_stop(struct tpm * tpm);
 
-bool         tpm_check(struct tpm * tpm);
-
-void         tpm_exit(struct tpm * tpm);
-
 void         tpm_dec(struct tpm * tpm);
 
 void         tpm_inc(struct tpm * tpm);
