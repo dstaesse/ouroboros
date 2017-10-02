@@ -92,30 +92,13 @@ static int reg_entry_init(struct reg_entry * e,
         return 0;
 }
 
-static void reg_entry_destroy(struct reg_entry * e)
+static void cancel_reg_entry_destroy(void * o)
 {
-        struct list_head * p = NULL;
-        struct list_head * h = NULL;
+        struct reg_entry * e;
+        struct list_head * p;
+        struct list_head * h;
 
-        if (e == NULL)
-                return;
-
-        pthread_mutex_lock(&e->state_lock);
-
-        if (e->state == REG_NAME_DESTROY) {
-                pthread_mutex_unlock(&e->state_lock);
-                return;
-        }
-
-        if (e->state != REG_NAME_FLOW_ACCEPT)
-                e->state = REG_NAME_NULL;
-        else
-                e->state = REG_NAME_DESTROY;
-
-        pthread_cond_broadcast(&e->state_cond);
-
-        while (e->state != REG_NAME_NULL)
-                pthread_cond_wait(&e->state_cond, &e->state_lock);
+        e = (struct reg_entry *) o;
 
         pthread_mutex_unlock(&e->state_lock);
 
@@ -146,6 +129,33 @@ static void reg_entry_destroy(struct reg_entry * e)
         }
 
         free(e);
+}
+
+static void reg_entry_destroy(struct reg_entry * e)
+{
+        if (e == NULL)
+                return;
+
+        pthread_mutex_lock(&e->state_lock);
+
+        if (e->state == REG_NAME_DESTROY) {
+                pthread_mutex_unlock(&e->state_lock);
+                return;
+        }
+
+        if (e->state != REG_NAME_FLOW_ACCEPT)
+                e->state = REG_NAME_NULL;
+        else
+                e->state = REG_NAME_DESTROY;
+
+        pthread_cond_broadcast(&e->state_cond);
+
+        pthread_cleanup_push(cancel_reg_entry_destroy, e);
+
+        while (e->state != REG_NAME_NULL)
+                pthread_cond_wait(&e->state_cond, &e->state_lock);
+
+        pthread_cleanup_pop(true);
 }
 
 static bool reg_entry_is_local_in_dif(struct reg_entry * e,
@@ -459,6 +469,9 @@ int reg_entry_leave_state(struct reg_entry *  e,
 
         pthread_mutex_lock(&e->state_lock);
 
+        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                             &e->state_lock);
+
         while (e->state == state && ret != -ETIMEDOUT)
                 if (timeout)
                         ret = -pthread_cond_timedwait(&e->state_cond,
@@ -474,7 +487,7 @@ int reg_entry_leave_state(struct reg_entry *  e,
                 pthread_cond_broadcast(&e->state_cond);
         }
 
-        pthread_mutex_unlock(&e->state_lock);
+        pthread_cleanup_pop(true);
 
         return ret;
 }

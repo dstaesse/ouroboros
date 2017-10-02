@@ -38,8 +38,8 @@
 struct pthr_el {
         struct list_head next;
 
-        bool             join;
         bool             kill;
+        bool             busy;
 
         pthread_t        thr;
 };
@@ -78,36 +78,17 @@ static void tpm_join(struct tpm * tpm)
                 if (tpm->state != TPM_RUNNING) {
                         if (!e->kill) {
                                 e->kill = true;
+                                pthread_cancel(e->thr);
                                 --tpm->cur;
                         }
-                        while (!e->join)
-                                pthread_cond_wait(&tpm->cond, &tpm->lock);
                 }
 
-                if (e->join) {
+                if (e->kill) {
                         pthread_join(e->thr, NULL);
                         list_del(&e->next);
                         free(e);
                 }
         }
-}
-
-static struct pthr_el * tpm_pthr_el(struct tpm * tpm,
-                                    pthread_t    thr)
-{
-        struct list_head * p;
-        struct pthr_el *   e;
-
-        list_for_each(p, &tpm->pool) {
-                e = list_entry(p, struct pthr_el, next);
-                if (e->thr == thr)
-                        return e;
-
-        }
-
-        assert(false);
-
-        return NULL;
 }
 
 static void tpm_kill(struct tpm * tpm)
@@ -116,8 +97,9 @@ static void tpm_kill(struct tpm * tpm)
 
         list_for_each(p, &tpm->pool) {
                 struct pthr_el * e = list_entry(p, struct pthr_el, next);
-                if (!e->kill) {
+                if (!e->busy && !e->kill) {
                         e->kill = true;
+                        pthread_cancel(e->thr);
                         --tpm->cur;
                         return;
                 }
@@ -152,8 +134,8 @@ static void * tpmgr(void * o)
                                 if (e == NULL)
                                         break;
 
-                                e->join = false;
                                 e->kill = false;
+                                e->busy = false;
 
                                 if (pthread_create(&e->thr, NULL,
                                                    tpm->func, tpm->o)) {
@@ -261,22 +243,29 @@ void tpm_destroy(struct tpm * tpm)
         free(tpm);
 }
 
-bool tpm_check(struct tpm * tpm)
+static struct pthr_el * tpm_pthr_el(struct tpm * tpm,
+                                    pthread_t    thr)
 {
-        bool ret;
+        struct list_head * p;
+        struct pthr_el *   e;
 
-        pthread_mutex_lock(&tpm->lock);
+        list_for_each(p, &tpm->pool) {
+                e = list_entry(p, struct pthr_el, next);
+                if (e->thr == thr)
+                        return e;
 
-        ret = tpm_pthr_el(tpm, pthread_self())->kill;
+        }
 
-        pthread_mutex_unlock(&tpm->lock);
+        assert(false);
 
-        return ret;
+        return NULL;
 }
 
 void tpm_inc(struct tpm * tpm)
 {
         pthread_mutex_lock(&tpm->lock);
+
+        tpm_pthr_el(tpm, pthread_self())->busy = false;
 
         --tpm->wrk;
 
@@ -287,18 +276,9 @@ void tpm_dec(struct tpm * tpm)
 {
         pthread_mutex_lock(&tpm->lock);
 
+        tpm_pthr_el(tpm, pthread_self())->busy = true;
+
         ++tpm->wrk;
-
-        pthread_cond_signal(&tpm->cond);
-
-        pthread_mutex_unlock(&tpm->lock);
-}
-
-void tpm_exit(struct tpm * tpm)
-{
-        pthread_mutex_lock(&tpm->lock);
-
-        tpm_pthr_el(tpm, pthread_self())->join = true;
 
         pthread_cond_signal(&tpm->cond);
 

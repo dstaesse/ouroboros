@@ -88,6 +88,21 @@ struct irm_flow * irm_flow_create(pid_t     n_api,
         return f;
 }
 
+static void cancel_irm_destroy(void * o)
+{
+        struct irm_flow * f = (struct irm_flow *) o;
+
+        pthread_mutex_unlock(&f->state_lock);
+
+        pthread_cond_destroy(&f->state_cond);
+        pthread_mutex_destroy(&f->state_lock);
+
+        shm_rbuff_destroy(f->n_rb);
+        shm_rbuff_destroy(f->n_1_rb);
+
+        free(f);
+}
+
 void irm_flow_destroy(struct irm_flow * f)
 {
         assert(f);
@@ -106,18 +121,12 @@ void irm_flow_destroy(struct irm_flow * f)
 
         pthread_cond_signal(&f->state_cond);
 
+        pthread_cleanup_push(cancel_irm_destroy, f);
+
         while (f->state != FLOW_NULL)
                 pthread_cond_wait(&f->state_cond, &f->state_lock);
 
-        pthread_mutex_unlock(&f->state_lock);
-
-        pthread_cond_destroy(&f->state_cond);
-        pthread_mutex_destroy(&f->state_lock);
-
-        shm_rbuff_destroy(f->n_rb);
-        shm_rbuff_destroy(f->n_1_rb);
-
-        free(f);
+        pthread_cleanup_pop(true);
 }
 
 enum flow_state irm_flow_get_state(struct irm_flow * f)
@@ -172,6 +181,9 @@ int irm_flow_wait_state(struct irm_flow * f,
 
         assert(f->state != FLOW_NULL);
 
+        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                             &f->state_lock);
+
         while (!(f->state == state ||
                  f->state == FLOW_DESTROY ||
                  f->state == FLOW_DEALLOC_PENDING) &&
@@ -194,7 +206,7 @@ int irm_flow_wait_state(struct irm_flow * f,
 
         s = f->state;
 
-        pthread_mutex_unlock(&f->state_lock);
+        pthread_cleanup_pop(true);
 
         return ret ? ret : s;
 }

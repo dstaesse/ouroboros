@@ -1111,18 +1111,10 @@ static int flow_accept(pid_t              api,
         struct reg_entry * re = NULL;
         struct list_head * p  = NULL;
 
-        struct timespec dl;
-        struct timespec now;
-
         pid_t api_n1;
         pid_t api_n;
         int   port_id;
         int   ret;
-
-        if (timeo != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &now);
-                ts_add(&now, timeo, &dl);
-        }
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -1147,28 +1139,12 @@ static int flow_accept(pid_t              api,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        while (true) {
-                if (timeo != NULL && ts_diff_ns(&now, &dl) < 0) {
-                        log_dbg("Accept timed out.");
-                        return -ETIMEDOUT;
-                }
+        ret = api_entry_sleep(e, timeo);
+        if (ret == -ETIMEDOUT)
+                return -ETIMEDOUT;
 
-                if (irmd_get_state() != IRMD_RUNNING)
-                        return -EIRMD;
-
-                ret = api_entry_sleep(e);
-                if (ret == -ETIMEDOUT) {
-                        clock_gettime(PTHREAD_COND_CLOCK, &now);
-                        api_entry_cancel(e);
-                        continue;
-                }
-
-                if (ret == -1)
-                        return -EPIPE;
-
-                if (ret == 0)
-                        break;
-        }
+        if (ret == -1)
+                return -EPIPE;
 
         if (irmd_get_state() != IRMD_RUNNING) {
                 reg_entry_set_state(re, REG_NAME_NULL);
@@ -1206,11 +1182,11 @@ static int flow_accept(pid_t              api,
                 return -EPERM;
         }
 
-        pthread_mutex_lock(&e->state_lock);
+        pthread_mutex_lock(&e->lock);
 
         re = e->re;
 
-        pthread_mutex_unlock(&e->state_lock);
+        pthread_mutex_unlock(&e->lock);
 
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
@@ -1915,19 +1891,25 @@ static void * acceptloop(void * o)
         return (void *) 0;
 }
 
-void * mainloop(void * o)
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
+
+static void free_msg(void * o)
+{
+        irm_msg__free_unpacked((irm_msg_t *) o, NULL);
+}
+
+static void * mainloop(void * o)
 {
         int             sfd;
         irm_msg_t *     msg;
         buffer_t        buffer;
-        struct timespec dl;
-        struct timespec to = {(IRMD_ACCEPT_TIMEOUT / 1000),
-                              (IRMD_ACCEPT_TIMEOUT % 1000) * MILLION};
 
         (void) o;
 
         while (true) {
-                int               ret     = 0;
                 irm_msg_t         ret_msg = IRM_MSG__INIT;
                 struct irm_flow * e       = NULL;
                 pid_t *           apis    = NULL;
@@ -1937,27 +1919,18 @@ void * mainloop(void * o)
 
                 ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
 
-                clock_gettime(PTHREAD_COND_CLOCK, &dl);
-                ts_add(&dl, &to, &dl);
-
                 pthread_mutex_lock(&irmd.cmd_lock);
 
-                while (list_is_empty(&irmd.cmds) && ret != -ETIMEDOUT)
-                        ret = -pthread_cond_timedwait(&irmd.cmd_cond,
-                                                      &irmd.cmd_lock,
-                                                      &dl);
+                pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
+                                     &irmd.cmd_lock);
 
-                if (ret == -ETIMEDOUT) {
-                        pthread_mutex_unlock(&irmd.cmd_lock);
-                        if (tpm_check(irmd.tpm))
-                                break;
-                        continue;
-                }
+                while (list_is_empty(&irmd.cmds))
+                        pthread_cond_wait(&irmd.cmd_cond, &irmd.cmd_lock);
 
                 cmd = list_last_entry(&irmd.cmds, struct cmd, next);
                 list_del(&cmd->next);
 
-                pthread_mutex_unlock(&irmd.cmd_lock);
+                pthread_cleanup_pop(true);
 
                 msg = irm_msg__unpack(NULL, cmd->len, cmd->cbuf);
                 sfd = cmd->fd;
@@ -1978,6 +1951,9 @@ void * mainloop(void * o)
                         ts.tv_nsec = msg->timeo_nsec;
                         timeo = &ts;
                 }
+
+                pthread_cleanup_push(close_ptr, &sfd);
+                pthread_cleanup_push(free_msg, msg);
 
                 switch (msg->code) {
                 case IRM_MSG_CODE__IRM_CREATE_IPCP:
@@ -2106,7 +2082,8 @@ void * mainloop(void * o)
                         break;
                 }
 
-                irm_msg__free_unpacked(msg, NULL);
+                pthread_cleanup_pop(true);
+                pthread_cleanup_pop(false);
 
                 if (ret_msg.result == -EPIPE || !ret_msg.has_result) {
                         close(sfd);
@@ -2138,17 +2115,18 @@ void * mainloop(void * o)
                 if (apis != NULL)
                         free(apis);
 
+                pthread_cleanup_push(close_ptr, &sfd);
+
                 if (write(sfd, buffer.data, buffer.len) == -1)
                         if (ret_msg.result != -EIRMD)
                                 log_warn("Failed to send reply message.");
 
                 free(buffer.data);
-                close(sfd);
+
+                pthread_cleanup_pop(true);
 
                 tpm_inc(irmd.tpm);
         }
-
-        tpm_exit(irmd.tpm);
 
         return (void *) 0;
 }
