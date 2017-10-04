@@ -1703,29 +1703,8 @@ void * irm_sanitize(void * o)
                 if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
                         log_warn("Failed to get time.");
 
-                if (irmd_get_state() != IRMD_RUNNING) {
-                        /* Clean up all flows first to kill mainloops */
-                        pthread_rwlock_wrlock(&irmd.flows_lock);
-                        list_for_each_safe(p, h, &irmd.irm_flows) {
-                                struct irm_flow * f =
-                                        list_entry(p, struct irm_flow, next);
-                                list_del(&f->next);
-                                irm_flow_set_state(f, FLOW_NULL);
-                                clear_irm_flow(f);
-                                irm_flow_destroy(f);
-                        }
-                        pthread_rwlock_unlock(&irmd.flows_lock);
-                        pthread_rwlock_wrlock(&irmd.reg_lock);
-                        /* Clean up api entries as well */
-                        list_for_each_safe(p, h, &irmd.api_table) {
-                                struct api_entry * e =
-                                        list_entry(p, struct api_entry, next);
-                                list_del(&e->next);
-                                api_entry_destroy(e);
-                        }
-                        pthread_rwlock_unlock(&irmd.reg_lock);
+                if (irmd_get_state() != IRMD_RUNNING)
                         return (void *) 0;
-                }
 
                 pthread_rwlock_wrlock(&irmd.reg_lock);
 
