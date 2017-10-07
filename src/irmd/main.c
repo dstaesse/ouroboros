@@ -2272,8 +2272,10 @@ static int irm_init(void)
 
 static void usage(void)
 {
-        log_err("Usage: irmd \n\n"
-                 "         [--stdout (Print to stdout instead of logs)]\n");
+        printf("Usage: irmd \n"
+               "         [--stdout  (Log to stdout instead of system log)]\n"
+               "         [--version (Print version number and exit)]\n"
+               "\n");
 }
 
 int main(int     argc,
@@ -2289,11 +2291,6 @@ int main(int     argc,
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
 
-        if (geteuid() != 0) {
-                log_err("IPC Resource Manager must be run as root.");
-                exit(EXIT_FAILURE);
-        }
-
         argc--;
         argv++;
         while (argc > 0) {
@@ -2301,10 +2298,20 @@ int main(int     argc,
                         use_stdout = true;
                         argc--;
                         argv++;
+                } else if (strcmp(*argv, "--version") == 0) {
+                        printf("Ouroboros version %d.%d\n",
+                               OUROBOROS_VERSION_MAJOR,
+                               OUROBOROS_VERSION_MINOR);
+                        exit(EXIT_SUCCESS);
                 } else {
                         usage();
                         exit(EXIT_FAILURE);
                 }
+        }
+
+        if (geteuid() != 0) {
+                printf("IPC Resource Manager must be run as root.\n");
+                exit(EXIT_FAILURE);
         }
 
         /* Init sig_act. */
@@ -2369,9 +2376,9 @@ int main(int     argc,
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        log_fini();
-
         log_info("Bye.");
+
+        log_fini();
 
         exit(EXIT_SUCCESS);
 
