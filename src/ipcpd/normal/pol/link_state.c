@@ -534,13 +534,16 @@ static void forward_lsm(uint8_t * buf,
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
+        pthread_cleanup_push((void (*))(void *) pthread_rwlock_unlock,
+                             &ls.db_lock);
+
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->type == NB_MGMT && nb->fd != in_fd)
                         flow_write(nb->fd, buf, len);
         }
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_cleanup_pop(true);
 }
 
 static void * lsreader(void * o)
