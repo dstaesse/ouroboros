@@ -821,6 +821,12 @@ static void change_flows_state(bool up)
         pthread_rwlock_unlock(&eth_llc_data.flows_lock);
 }
 
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
+
+
 static void * eth_llc_ipcp_if_monitor(void * o)
 {
         int                fd;
@@ -840,6 +846,8 @@ static void * eth_llc_ipcp_if_monitor(void * o)
                 log_err("Failed to open socket.");
                 return (void *) -1;
         }
+
+        pthread_cleanup_push(close_ptr, &fd);
 
         while (true) {
                 status = recvmsg(fd, &msg, 0);
@@ -878,7 +886,7 @@ static void * eth_llc_ipcp_if_monitor(void * o)
                 }
         }
 
-        close(fd);
+        pthread_cleanup_pop(true);
 
         return (void *) 0;
 }
