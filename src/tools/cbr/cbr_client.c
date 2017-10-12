@@ -102,7 +102,7 @@ int client_main(char * server,
                         ts_add(&end, &intv, &end);
                         memcpy(buf, &seqnr, sizeof(seqnr));
 
-                        if (flow_write(fd, buf, size) == -1) {
+                        if (flow_write(fd, buf, size) < 0) {
                                 stop = true;
                                 continue;
                         }
@@ -120,7 +120,7 @@ int client_main(char * server,
         } else { /* flood */
                 while (!stop) {
                         clock_gettime(CLOCK_REALTIME, &end);
-                        if (flow_write(fd, buf, (size_t) size) == -1) {
+                        if (flow_write(fd, buf, (size_t) size) < 0) {
                                 stop = true;
                                 continue;
                         }
