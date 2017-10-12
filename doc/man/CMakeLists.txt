@@ -1,7 +1,5 @@
 set(MAN_NAMES
   # Add man page sources here
-  ouroboros_init.3
-  ouroboros_fini.3
   flow_accept.3
   flow_alloc.3
   flow_dealloc.3

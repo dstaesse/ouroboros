@@ -91,8 +91,8 @@ if (HAVE_LLC)
       ${NETMAP_C_INCLUDE_DIR})
   endif ()
 
-  target_link_libraries(ipcpd-shim-eth-llc LINK_PUBLIC ouroboros
-    ${PROTOBUF_C_LIBRARY})
+  target_link_libraries(ipcpd-shim-eth-llc LINK_PUBLIC ouroboros-common
+    ouroboros-dev ${PROTOBUF_C_LIBRARY})
 
   include(AddCompileFlags)
   if (CMAKE_BUILD_TYPE MATCHES Debug)

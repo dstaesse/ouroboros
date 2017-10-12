@@ -326,7 +326,7 @@ static struct ipcp_ops local_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, THIS_TYPE, &local_ops) < 0) {
+        if (ipcp_init(argc, argv, &local_ops) < 0) {
                 ipcp_create_r(getpid(), -1);
                 exit(EXIT_FAILURE);
         }

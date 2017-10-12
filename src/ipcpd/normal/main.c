@@ -299,7 +299,7 @@ static struct ipcp_ops normal_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, THIS_TYPE, &normal_ops) < 0) {
+        if (ipcp_init(argc, argv, &normal_ops) < 0) {
                 log_err("Failed to init IPCP.");
                 goto fail_init;
         }

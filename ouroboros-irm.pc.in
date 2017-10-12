@@ -3,10 +3,10 @@ exec_prefix=${prefix}
 libdir=${exec_prefix}/usr/lib
 includedir=${prefix}/usr/include
 
-Name: @PROJECT_NAME@
-Description: @PACKAGE_DESCRIPTION@
+Name: ouroboros-irm
+Description: Management library for Ouroboros
 URL: @PACKAGE_URL@
 Version: @PACKAGE_VERSION@
 
-Libs: -L${libdir} -louroboros
+Libs: -L${libdir} -louroboros-irm
 Cflags: -I${includedir}

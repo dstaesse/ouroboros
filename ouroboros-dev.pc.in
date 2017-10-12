@@ -1,0 +1,12 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/usr/lib
+includedir=${prefix}/usr/include
+
+Name: ouroboros-dev
+Description: Development library for Ouroboros
+URL: @PACKAGE_URL@
+Version: @PACKAGE_VERSION@
+
+Libs: -L${libdir} -louroboros-dev
+Cflags: -I${includedir}

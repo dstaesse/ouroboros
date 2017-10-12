@@ -595,11 +595,16 @@ static int flow_init(int       port_id,
         return fd;
 }
 
-int ouroboros_init(const char * ap_name)
+__attribute__((constructor)) static void init(int     argc,
+                                              char ** argv,
+                                              char ** envp)
 {
-        int i;
-        int j;
-        int ret = -ENOMEM;
+        const char * ap_name = argv[0];
+        int          i;
+        int          j;
+
+        (void) argc;
+        (void) envp;
 
         assert(ai.ap_name == NULL);
 
@@ -618,10 +623,8 @@ int ouroboros_init(const char * ap_name)
                 goto fail_fqset;
 
         ai.rdrb = shm_rdrbuff_open();
-        if (ai.rdrb == NULL) {
-                ret = -EIRMD;
+        if (ai.rdrb == NULL)
                 goto fail_rdrb;
-        }
 
         ai.flows = malloc(sizeof(*ai.flows) * AP_MAX_FLOWS);
         if (ai.flows == NULL)
@@ -651,10 +654,8 @@ int ouroboros_init(const char * ap_name)
                 if (ai.ap_name == NULL)
                         goto fail_ap_name;
 
-                if (api_announce((char *) ai.ap_name)) {
-                        ret = -EIRMD;
+                if (api_announce((char *) ai.ap_name))
                         goto fail_announce;
-                }
         }
 
         for (i = 0; i < SYS_MAX_FLOWS; ++i) {
@@ -680,7 +681,7 @@ int ouroboros_init(const char * ap_name)
         if (ai.tw == NULL)
                 goto fail_timerwheel;
 
-        return 0;
+        return;
 
  fail_timerwheel:
         pthread_rwlock_destroy(&ai.lock);
@@ -710,10 +711,12 @@ int ouroboros_init(const char * ap_name)
  fail_fqueues:
         bmp_destroy(ai.fds);
  fail_fds:
-        return ret;
+        fprintf(stderr, "FATAL: ouroboros-dev init failed. "
+                        "Make sure an IRMd is running.\n\n");
+        exit(EXIT_FAILURE);
 }
 
-void ouroboros_fini()
+__attribute__((destructor)) static void fini(void)
 {
         int i = 0;
 

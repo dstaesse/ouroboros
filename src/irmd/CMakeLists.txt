@@ -41,7 +41,7 @@ set(SOURCE_FILES
 
 add_executable (irmd ${SOURCE_FILES})
 
-target_link_libraries (irmd LINK_PUBLIC ouroboros)
+target_link_libraries (irmd LINK_PUBLIC ouroboros-common)
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)

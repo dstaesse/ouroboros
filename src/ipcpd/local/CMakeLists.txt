@@ -19,7 +19,7 @@ set(SHIM_LOCAL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
 
 add_executable(ipcpd-local ${SHIM_LOCAL_SOURCES} ${IPCP_SOURCES})
-target_link_libraries(ipcpd-local LINK_PUBLIC ouroboros)
+target_link_libraries(ipcpd-local LINK_PUBLIC ouroboros-common ouroboros-dev)
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)

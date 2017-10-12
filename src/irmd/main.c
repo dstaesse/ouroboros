@@ -1120,7 +1120,6 @@ static int flow_accept(pid_t              api,
 
         e = api_table_get(&irmd.api_table, api);
         if (e == NULL) {
-                /* Can only happen if server called ouroboros_init(NULL); */
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Unknown instance %d calling accept.", api);
                 return -EINVAL;

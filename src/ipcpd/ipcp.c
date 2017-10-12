@@ -544,7 +544,6 @@ static int parse_args(int    argc,
 
 int ipcp_init(int               argc,
               char **           argv,
-              enum ipcp_type    type,
               struct ipcp_ops * ops)
 {
         bool               log;
@@ -557,18 +556,6 @@ int ipcp_init(int               argc,
                 return -1;
 
         log_init(log);
-
-        if (type == IPCP_NORMAL) {
-                if (ouroboros_init(argv[0])) {
-                        log_err("Failed to init normal IPCPI.");
-                        return -1;
-                }
-        } else {
-                if (ouroboros_init(NULL)) {
-                        log_err("Failed to init shim IPCPI.");
-                        return -1;
-                }
-        }
 
         ipcpi.irmd_fd   = -1;
         ipcpi.state     = IPCP_NULL;
@@ -652,8 +639,6 @@ int ipcp_init(int               argc,
  fail_serv_sock:
         free(ipcpi.sock_path);
  fail_sock_path:
-        ouroboros_fini();
-
         return ret;
 }
 
@@ -736,8 +721,6 @@ void ipcp_fini()
         log_info("IPCP %d out.", getpid());
 
         log_fini();
-
-        ouroboros_fini();
 }
 
 void ipcp_set_state(enum ipcp_state state)
