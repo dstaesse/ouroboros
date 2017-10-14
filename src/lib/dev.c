@@ -1095,6 +1095,8 @@ ssize_t flow_write(int          fd,
                                           DU_BUFF_TAILSPACE,
                                           buf,
                                           count);
+                if (idx < 0)
+                        return idx;
 
                 pthread_rwlock_rdlock(&ai.lock);
         }
