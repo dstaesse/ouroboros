@@ -29,6 +29,6 @@ set(SOURCE_FILES
 
 add_executable(irm ${SOURCE_FILES})
 
-target_link_libraries(irm LINK_PUBLIC ouroboros)
+target_link_libraries(irm LINK_PUBLIC ouroboros-irm)
 
 install(TARGETS irm RUNTIME DESTINATION sbin)

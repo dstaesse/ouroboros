@@ -32,7 +32,8 @@ else ()
         TYPE MODULE)
     endif()
 
-    swig_link_libraries(ouroboros ${PYTHON_LIBRARIES} ouroboros)
+    swig_link_libraries(ouroboros ${PYTHON_LIBRARIES} ouroboros-common
+      ouroboros-dev ouroboros-irm)
 
     # Installation directives
     if (CMAKE_INSTALL_PREFIX STREQUAL "")

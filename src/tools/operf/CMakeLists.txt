@@ -16,6 +16,6 @@ set(SOURCE_FILES
 
 add_executable(operf ${SOURCE_FILES})
 
-target_link_libraries(operf LINK_PUBLIC ${LIBM_LIBRARIES} ouroboros)
+target_link_libraries(operf LINK_PUBLIC ${LIBM_LIBRARIES} ouroboros-dev)
 
 install(TARGETS operf RUNTIME DESTINATION usr/bin)

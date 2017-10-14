@@ -11,7 +11,7 @@ include(GNUInstallDirs)
 
 set(PACKAGE_NAME        "${CMAKE_PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "The Ouroboros prototype")
-set(PACKAGE_URL         "None")
+set(PACKAGE_URL         "http://ouroboros.ilabt.imec.be")
 set(PACKAGE_BUGREPORT   "None")
 set(PACKAGE_VERSION     "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}")
 
@@ -68,10 +68,16 @@ test_and_set_c_compiler_flag_global(-Wunreachable-code)
 test_and_set_c_compiler_flag_global(-Wdeclaration-after-statement)
 test_and_set_c_compiler_flag_global(-fmax-errors=5)
 
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.pc.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc" @ONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros-dev.pc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc" @ONLY)
 
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.pc"
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros-irm.pc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-irm.pc" @ONLY)
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc"
+  DESTINATION "usr/lib/pkgconfig")
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-irm.pc"
   DESTINATION "usr/lib/pkgconfig")
 
 if (IS_DIRECTORY "/usr/lib/systemd")

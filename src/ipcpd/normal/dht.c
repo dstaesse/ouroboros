@@ -1420,7 +1420,9 @@ static int send_msg(struct dht * dht,
                     kad_msg_t *  msg,
                     uint64_t     addr)
 {
+#ifndef __DHT_TEST__
         struct shm_du_buff * sdb;
+#endif
         size_t               len;
         int                  retr = 0;
 
@@ -1451,12 +1453,11 @@ static int send_msg(struct dht * dht,
         if (len == 0)
                 goto fail_msg;
 
+#ifndef __DHT_TEST__
         if (ipcp_sdb_reserve(&sdb, len))
                 goto fail_msg;
-
         kad_msg__pack(msg, shm_du_buff_head(sdb));
 
-#ifndef __DHT_TEST__
         while (retr >= 0) {
                 if (dt_write_sdu(addr, QOS_CUBE_BE, dht->fd, sdb))
                         retr--;
@@ -1470,7 +1471,6 @@ static int send_msg(struct dht * dht,
 #else
         (void) addr;
         (void) retr;
-        ipcp_sdb_release(sdb);
 #endif /* __DHT_TEST__ */
 
         if (msg->code < KAD_STORE && dht_get_state(dht) != DHT_SHUTDOWN)
@@ -2363,8 +2363,9 @@ static void * dht_handle_sdu(void * o)
                 i = shm_du_buff_tail(cmd->sdb) - shm_du_buff_head(cmd->sdb);
 
                 msg = kad_msg__unpack(NULL, i, shm_du_buff_head(cmd->sdb));
-
+#ifndef __DHT_TEST__
                 ipcp_sdb_release(cmd->sdb);
+#endif
                 free(cmd);
 
                 if (msg == NULL) {

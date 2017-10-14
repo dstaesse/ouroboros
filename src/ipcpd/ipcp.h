@@ -109,7 +109,6 @@ struct ipcp {
 
 int             ipcp_init(int               argc,
                           char **           argv,
-                          enum ipcp_type    type,
                           struct ipcp_ops * ops);
 
 int             ipcp_boot(void);

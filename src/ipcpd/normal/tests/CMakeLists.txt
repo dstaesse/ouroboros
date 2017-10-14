@@ -24,7 +24,7 @@ set_source_files_properties(${KAD_PROTO_SRCS} PROPERTIES GENERATED TRUE)
 
 add_executable(${PARENT_DIR}_test EXCLUDE_FROM_ALL ${${PARENT_DIR}_tests}
   ${KAD_PROTO_SRCS})
-target_link_libraries(${PARENT_DIR}_test ouroboros)
+target_link_libraries(${PARENT_DIR}_test ouroboros-common)
 
 add_dependencies(check ${PARENT_DIR}_test)
 

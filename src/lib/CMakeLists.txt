@@ -73,7 +73,7 @@ if (LIBGCRYPT_LIBRARIES)
     string(REGEX REPLACE "^#define GCRYPT_VERSION \"(.*)\".*$" "\\1"
       GCVER "${GCSTR}")
     if (NOT GCVER VERSION_LESS "1.7.0")
-      set (DISABLE_LIBGCRYPT FALSE CACHE BOOL "Disable libgcrypt support")
+      set(DISABLE_LIBGCRYPT FALSE CACHE BOOL "Disable libgcrypt support")
       if (NOT DISABLE_LIBGCRYPT)
         message(STATUS "libgcrypt support enabled")
         set(HAVE_LIBGCRYPT TRUE CACHE INTERNAL "")
@@ -94,7 +94,7 @@ endif ()
 
 find_package(OpenSSL QUIET)
 if (OPENSSL_FOUND)
-  set (DISABLE_OPENSSL FALSE CACHE BOOL "Disable OpenSSL support")
+  set(DISABLE_OPENSSL FALSE CACHE BOOL "Disable OpenSSL support")
   if (NOT DISABLE_OPENSSL)
     message(STATUS "OpenSSL support enabled")
     set(HAVE_OPENSSL TRUE)
@@ -104,7 +104,7 @@ if (OPENSSL_FOUND)
 endif ()
 
 if (NOT HAVE_OPENSSL)
-  set (OPENSSL_INCLUDE_DIR "")
+  set(OPENSSL_INCLUDE_DIR "")
 endif ()
 
 if (APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
@@ -129,12 +129,12 @@ mark_as_advanced(LIBRT_LIBRARIES LIBPTHREAD_LIBRARIES
   LIBGCRYPT_LIBRARIES OPENSSL_LIBRARIES SYS_RND_INCLUDE_DIR
   LIBGCRYPT_INCLUDE_DIR SYS_RND_HDR)
 
-math(EXPR SHM_BUFFER_EXPR "1 << 20")
+math(EXPR SHM_BUFFER_EXPR "1 << 17")
 set(SHM_BUFFER_SIZE ${SHM_BUFFER_EXPR} CACHE STRING
     "Number of blocks in SDU buffer, must be a power of 2")
-set(SYS_MAX_FLOWS 4096 CACHE STRING
+set(SYS_MAX_FLOWS 10240 CACHE STRING
   "Maximum number of total flows for this system")
-set(AP_MAX_FLOWS 1024 CACHE STRING
+set(AP_MAX_FLOWS 4096 CACHE STRING
   "Maximum number of flows in an application")
 set(AP_RES_FDS 64 CACHE STRING
   "Number of reserved flow descriptors per application")
@@ -148,7 +148,7 @@ if (NOT APPLE)
   set(PTHREAD_COND_CLOCK "CLOCK_MONOTONIC" CACHE STRING
     "Clock to use for condition variable timing")
 else ()
-  set (PTHREAD_COND_CLOCK "CLOCK_REALTIME" CACHE INTERNAL
+  set(PTHREAD_COND_CLOCK "CLOCK_REALTIME" CACHE INTERNAL
     "Clock to use for condition variable timing")
 endif ()
 set(SOCKET_TIMEOUT 1000 CACHE STRING
@@ -170,17 +170,24 @@ set(SHM_RDRB_MULTI_BLOCK true CACHE BOOL
 set(SHM_RBUFF_LOCKLESS 0 CACHE BOOL
   "Enable shared memory lockless rbuff support")
 
-set(SOURCE_FILES
+set(SOURCE_FILES_DEV
   # Add source files here
-  bitmap.c
-  btree.c
   cacep.c
-  crc32.c
   dev.c
   frct_pci.c
+  timerwheel.c
+  )
+
+set(SOURCE_FILES_IRM
+  irm.c
+)
+
+set(SOURCE_FILES_COMMON
+  bitmap.c
+  btree.c
+  crc32.c
   hash.c
   hashtable.c
-  irm.c
   list.c
   lockfile.c
   logs.c
@@ -197,29 +204,48 @@ set(SOURCE_FILES
   shm_rdrbuff.c
   sockets.c
   time_utils.c
-  timerwheel.c
   tpm.c
   utils.c
-  )
+)
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)
 
-add_library(ouroboros SHARED ${SOURCE_FILES} ${IRM_PROTO_SRCS}
+add_library(ouroboros-common SHARED ${SOURCE_FILES_COMMON} ${IRM_PROTO_SRCS}
+  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS})
+
+add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${IRM_PROTO_SRCS}
   ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS} ${CACEP_PROTO_SRCS})
+
+add_library(ouroboros-irm SHARED ${SOURCE_FILES_IRM} ${IRM_PROTO_SRCS}
+  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS})
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-  add_compile_flags(ouroboros -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ouroboros-common -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ouroboros-dev -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ouroboros-irm -DCONFIG_OUROBOROS_DEBUG)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-target_link_libraries(ouroboros ${LIBRT_LIBRARIES}
+target_link_libraries(ouroboros-common ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY} ${OPENSSL_LIBRARIES}
   ${LIBGCRYPT_LIBRARIES} ${FUSE_LIBRARIES})
 
-install(TARGETS ouroboros LIBRARY DESTINATION usr/lib)
+target_link_libraries(ouroboros-dev ouroboros-common)
 
-target_include_directories(ouroboros PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
+target_link_libraries(ouroboros-irm ouroboros-common)
+
+install(TARGETS ouroboros-common LIBRARY DESTINATION usr/lib)
+install(TARGETS ouroboros-dev LIBRARY DESTINATION usr/lib)
+install(TARGETS ouroboros-irm LIBRARY DESTINATION usr/lib)
+
+target_include_directories(ouroboros-common PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
+  ${SYS_RND_HDR} ${LIBGCRYPT_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
+
+target_include_directories(ouroboros-dev PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
+  ${SYS_RND_HDR} ${LIBGCRYPT_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
+
+target_include_directories(ouroboros-irm PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
   ${SYS_RND_HDR} ${LIBGCRYPT_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
 
 add_subdirectory(tests)

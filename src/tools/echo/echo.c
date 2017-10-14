@@ -41,7 +41,6 @@ static void usage(void)
 int main(int argc, char ** argv)
 {
         int ret = -1;
-        char ** argv_dup = argv;
         bool server = false;
 
         argc--;
@@ -58,21 +57,10 @@ int main(int argc, char ** argv)
                 argv++;
         }
 
-        if (server) {
-                if (ouroboros_init(argv_dup[0])) {
-                        printf("Failed to init AP.\n");
-                        return -1;
-                }
+        if (server)
                 ret = server_main();
-        } else {
-                if (ouroboros_init(NULL)) {
-                        printf("Failed to init AP.\n");
-                        return -1;
-                }
+        else
                 ret = client_main();
-        }
-
-        ouroboros_fini();
 
         return ret;
 }

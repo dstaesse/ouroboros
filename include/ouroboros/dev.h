@@ -31,11 +31,6 @@
 
 __BEGIN_DECLS
 
-/* These calls should be removed once we write the ouroboros OS. */
-int     ouroboros_init(const char * ap_name);
-
-void    ouroboros_fini(void);
-
 /* Returns flow descriptor, qs updates to supplied QoS. */
 int     flow_alloc(const char *            dst_name,
                    qosspec_t *             qs,

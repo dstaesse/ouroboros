@@ -27,14 +27,6 @@
 
 #include <ouroboros/dev.h>
 
-void shutdown_server(int signo)
-{
-        (void) signo;
-
-        ouroboros_fini();
-        exit(EXIT_SUCCESS);
-}
-
 int server_main(void)
 {
         int    fd = 0;
@@ -43,12 +35,6 @@ int server_main(void)
         qosspec_t qs;
 
         printf("Starting the server.\n");
-
-        /* Manual cleanup is required for now */
-        if (signal(SIGINT, shutdown_server) == SIG_ERR) {
-                printf("Can't install signal handler.\n");
-                return -1;
-        }
 
         while (true) {
                 fd = flow_accept(&qs, NULL);

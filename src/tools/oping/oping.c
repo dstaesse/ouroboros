@@ -101,7 +101,6 @@ int main(int argc, char ** argv)
         int ret = -1;
         char * rem = NULL;
         bool serv = false;
-        char ** argv_dup = argv;
 
         argc--;
         argv++;
@@ -140,18 +139,8 @@ int main(int argc, char ** argv)
         }
 
         if (serv) {
-                if (ouroboros_init(argv_dup[0])) {
-                        printf("Failed to init AP.\n");
-                        exit(EXIT_FAILURE);
-                }
-
                 ret = server_main();
         } else {
-                if (ouroboros_init(NULL)) {
-                        printf("Failed to init AP.\n");
-                        exit(EXIT_FAILURE);
-                }
-
                 if (client.s_apn == NULL) {
                         printf("No server specified.\n");
                         usage();
@@ -179,8 +168,6 @@ int main(int argc, char ** argv)
 
                 ret = client_main();
         }
-
-        ouroboros_fini();
 
         if (ret < 0)
                 exit(EXIT_FAILURE);

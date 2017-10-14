@@ -1342,7 +1342,7 @@ static struct ipcp_ops eth_llc_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, THIS_TYPE, &eth_llc_ops) < 0)
+        if (ipcp_init(argc, argv, &eth_llc_ops) < 0)
                 goto fail_init;
 
         if (eth_llc_data_init() < 0) {
