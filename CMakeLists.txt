@@ -12,7 +12,7 @@ include(GNUInstallDirs)
 set(PACKAGE_NAME        "${CMAKE_PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "The Ouroboros prototype")
 set(PACKAGE_URL         "http://ouroboros.ilabt.imec.be")
-set(PACKAGE_BUGREPORT   "None")
+set(PACKAGE_BUGREPORT   "http://ouroboros.ilabt.imec.be/bugzilla/")
 set(PACKAGE_VERSION     "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}")
 
 if (APPLE)
