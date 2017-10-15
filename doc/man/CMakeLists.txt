@@ -18,6 +18,11 @@ set(MAN_NAMES
   fset_add.3
   fset_del.3
   fset_has.3
+  ouroboros-glossary.7
+  ouroboros-tutorial.7
+  ouroboros.8
+  irmd.8
+  irm.8
   )
 
 macro(INSTALL_MAN __mans)

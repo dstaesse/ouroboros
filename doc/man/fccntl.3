@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH FCCNTL 3 2017-08-30 GNU "Ouroboros Programmer's Manual"
+.TH FCCNTL 3 2017-08-30 Ouroboros "Ouroboros Programmer's Manual"
 
 .SH NAME
 
@@ -43,17 +43,20 @@ flow. Takes a \fBqosspec_t * \fIqs\fR as third argument.
 \fBFLOWSFLAGS\fR    - set flow flags. Takes flow flags as third
 argument. Supported flags are:
 
-        \fIFLOWFRDONLY\fR   - set flow to read-only.
+.RS 8
+\fIFLOWFRDONLY\fR   - set flow to read-only.
 
-        \fIFLOWFWRONLY\fR   - set flow_to write-only.
+\fIFLOWFWRONLY\fR   - set flow_to write-only.
 
-        \fIFLOWFRDWR\fR     - set flow to read-write.
+\fIFLOWFRDWR\fR     - set flow to read-write.
 
-        \fIFLOWFDOWN\fR     - mark flow as down.
+\fIFLOWFDOWN\fR     - mark flow as down.
 
-        \fIFLOWFNONBLOCK\fR - set I/O to non-blocking.
+\fIFLOWFNONBLOCK\fR - set I/O to non-blocking.
 
-        \fIFLOWFDEFAULT\fR  - set flow defaults (blocking, read-write).
+\fIFLOWFDEFAULT\fR  - set flow defaults (blocking, read-write).
+
+.RE
 
 \fBFLOWGFLAGS\fR    - get the current flow flags. Takes an \fBuint32_t
 \fIflags\fR as third argument.
@@ -61,15 +64,18 @@ argument. Supported flags are:
 \fBFRCTSFLAGS\fR    - set FRCT flags. Takes FRCT flags as third
 argument. Supported flags are:
 
-        \fIFRCTFRESCNTRL\fR - enable resource control.
+.RS 8
+\fIFRCTFRESCNTRL\fR - enable resource control.
 
-        \fIFRCTFRTX\fR      - enable retransmission.
+\fIFRCTFRTX\fR      - enable retransmission.
 
-        \fIFRCTFERRCHCK\fR  - enable checksum (CRC32).
+\fIFRCTFERRCHCK\fR  - enable checksum (CRC32).
 
-        \fIFRCTFORDERING\fR - enable packet in-order delivery.
+\fIFRCTFORDERING\fR - enable packet in-order delivery.
 
-        \fIFRCTFPARTIAL\fR  - enable partial delivery.
+\fIFRCTFPARTIAL\fR  - enable partial delivery.
+
+.RE
 
 \fBFRCTGFLAGS\fR    - get the current flow flags. Takes an \fBuint16_t
 \fIflags\fR as third argument.
@@ -112,10 +118,14 @@ _
 \fBfccntl\fR() & Thread safety & MT-Safe
 .TE
 
+.SH TERMINOLOGY
+Please see \fBouroboros-glossary\fR(7).
+
 .SH SEE ALSO
 
-.BR flow_alloc "(3), " flow_accept "(3), " flow_dealloc "(3), " fqueue (3)
+.BR flow_alloc "(3), " flow_read "(3), " fqueue "(3), " fset "(3), " \
+ouroboros (8)
 
 .SH COLOPHON
 This page is part of the Ouroboros project, found at
-https://bitbucket.org/ouroboros-rina/ouroboros
+http://ouroboros.ilabt.imec.be

@@ -1,0 +1,146 @@
+.\" Ouroboros man pages (C) 2017
+.\" Dimitri Staessens <dimitri.staessens@ugent.be>
+.\" Sander Vrijders <sander.vrijders@ugent.be>
+
+.TH OUROBOROS-TUTORIAL 7 2017-10-15 Ouroboros "Ouroboros User Manual"
+
+.SH NAME
+
+ouroboros-tutorial - A tutorial introduction to managing Ouroboros
+
+.SH SYNOPSIS
+
+irm *
+
+.SH DESCRIPTION
+This tutorial explains how to start and configure the Ouroboros
+Inter-Process Communication subsystem.
+
+.SH STARTING AND STOPPING THE IPC RESOURCE MANAGER DAEMON
+
+For the tutorials, it is recommended to start the IRMd (you will need
+root privileges) as a user process, writing output to stdout (If your
+system has an IRMd running as a systemd service, you will need to stop
+it).
+
+.RS 4
+$ irmd --stdout
+.RE
+
+Terminating the irmd can be done by pressing Ctrl+C if it is running
+in the foreground or by sending it a kill command for its process ID:
+
+.RS 4
+$ kill 25959
+.RE
+
+The output should be
+
+.RS 4
+==25959== irmd(II): Ouroboros IPC Resource Manager daemon started...
+.br
+==25959== irmd(II): IRMd shutting down...
+.br
+==25959== irmd(II): Bye.
+.RE
+
+.SH PINGING A SERVER APPLICATION OVER THE LOOPBACK ADAPTER
+
+With a running irmd, let's create an IPC process. For this
+tutorial, we will create and bootstrap a shim-eth-llc shim IPCP over
+the loopback interface. To observe what's going on, open another
+terminal window. Note that "ipcp bootstrap" will create an IPCP if an
+IPCP by that name does not yet exist (See \fBouroboros\fR(8)).
+
+.RS 4
+$ irm ipcp bootstrap type shim-eth-llc name shim dif llc if lo
+.RE
+
+.RS 4
+==23918== irmd(II): Created IPCP 23932.
+.br
+==23932== ipcpd/shim-eth-llc(II): Using raw socket device.
+.br
+==23918== irmd(II): Bootstrapped IPCP 23932 in DIF llc.
+.RE
+
+Now that we have a shim IPCP bootstrapped, it can act as a local
+network that can provide full connectivity between all processes in
+the system. Let's test it using the oping application. First, let's
+choose a name for the server ("my.oping.server") and register in the
+shim DIF.
+
+.RS 4
+$ irm reg name my.oping.server dif llc
+.RE
+
+The IRMd should respond with
+
+.RS 4
+==23918== irmd(II): Registered my.oping.server in llc as 716016b1.
+.RE
+
+Now start a server of oping in the background (or in a different
+terminal) and bind the process to the name "my.oping.server" (replace
+the correct process id for your system).
+
+.RS 4
+$ oping -l &
+.br
+[1] 24063
+.br
+$ irm bind api 24063 name my.oping.server
+.RE
+
+With the server up and running, let's connect a client and send 3
+pings:
+
+.RS 4
+$ oping -n my.oping.server -c 3
+.br
+Pinging my.oping.server with 64 bytes of data:
+
+64 bytes from my.oping.server: seq=0 time=0.475 ms
+.br
+64 bytes from my.oping.server: seq=1 time=0.304 ms
+.br
+64 bytes from my.oping.server: seq=2 time=0.398 ms
+
+--- my.oping.server ping statistics ---
+.br
+3 SDUs transmitted, 3 received, 0% packet loss, time: 3001.011 ms
+.br
+rtt min/avg/max/mdev = 0.304/0.392/0.475/0.086 ms
+.RE
+
+That's all there is to it! The IRMd should log the flow
+allocation. There are two endpoints of the flow (port_id's 0 and 1),
+one for the server (1) and one for the client (0). After the flow
+request, a new port_id is created at the server side (port_id 1) and
+then a previously pending flow (on port_id 0) is allocated following
+the response from the server.
+
+When the communication is done, the flow is deallocated and the
+resources (port_id's 0 and 1) are released.
+
+.RS 4
+==23918== irmd(II): Flow request arrived for my.oping.server.
+.br
+==23918== irmd(II): Flow on port_id 1 allocated.
+.br
+==23918== irmd(II): Flow on port_id 0 allocated.
+.br
+==23918== irmd(II): Completed deallocation of port_id 0 by AP-I 23932.
+.br
+==23918== irmd(II): Completed deallocation of port_id 1 by AP-I 23932.
+.RE
+
+.SH TERMINOLOGY
+Please see \fBouroboros-glossary\fR(7).
+
+.SH SEE ALSO
+\fBouroboros\fR(8)\fB, ouroboros-tutorial\fR(7)\fB.\fR
+
+.SH COLOPHON
+This page is part of the Ouroboros project, found at
+http://ouroboros.ilabt.imec.be
