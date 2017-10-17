@@ -101,7 +101,6 @@ connection. Ouroboros currently supports shim IPCPs over shared memory
 (shim-udp). The normal DIF requires connections to be established
 between IPCP components for its operation.
 
-.RS 4
 \fBConnecting the management components\fR using \fImanagement
 flows\fR allows management information to be sent between IPCPs so
 that resources for flows can be allocated. Currently the only
@@ -112,8 +111,6 @@ flows\fR allows the routing system to forward packets between
 IPCPs. This establishes adjacencies in a network of IPCPs. Components
 that rely on data transfer flows are the \fIdirectory\fR and the
 \fIflow allocator\fR.
-
-.RE
 
 .SH IRM IPCP COMMANDS
 .PP
@@ -248,7 +245,7 @@ application when it is started.
 .RE
 
 .PP
-\fBirm bind\fR api \fIpid\fR name \fInamefR
+\fBirm bind\fR api \fIpid\fR name \fIname\fR
 .RS 4
 bind a process \fIpid\fR to a certain name. If \fIname\fR is registered
 in a DIF, the process \fIpid\fR will accept flows for that name.
@@ -305,10 +302,10 @@ Ouroboros was started and is currently maintained by Dimitri Staessens
 and Sander Vrijders.
 
 .SH REPORTING BUGS
-Report bugs on the bugzilla tracker at https://ouroboros.ilabt.imec.be/bugzilla.
+Report bugs on the bugzilla tracker at https://ouroboros.ilabt.imec.be/bugzilla
 
 .SH SEE ALSO
-\fBouroboros-tutorial\fR(7)\fB, ouroboros-glossary\fR(7)\fB.\fR
+.BR flow_alloc "(3), " ouroboros-tutorial "(7), " ouroboros-glossary (7)
 
 .SH COLOPHON
 This page is part of the Ouroboros project, found at
