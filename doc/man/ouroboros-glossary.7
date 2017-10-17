@@ -1,0 +1,122 @@
+.\" Ouroboros man pages (C) 2017
+.\" Dimitri Staessens <dimitri.staessens@ugent.be>
+.\" Sander Vrijders <sander.vrijders@ugent.be>
+
+.TH OUROBOROS-GLOSSARY 7 2017-10-15 Ouroboros "Ouroboros User Manual"
+
+.SH NAME
+
+ouroboros-glossary - The Ouroboros Glossary
+
+.SH SYNOPSIS
+ *
+
+.SH USER MANUAL GLOSSARY
+.PP
+address
+.RS 4
+an element of a partially ordered set (POSET) consisting of data
+transfer component namespaces within an IPC process
+.RE
+
+.PP
+bind a name
+.RS 4
+to associate a name with a program or process. This mapping is stored
+in the IRMd.
+.RE
+
+.PP
+bootstrap
+.RS 4
+to configure an IPCP and start it as the first member of a DIF.
+.RE
+
+.PP
+congestion control
+.RS 4
+the mechanism by which a server DIF controls its resources and
+prevents its client processes from sending more information than it
+can currently handle. This is orthogonal to flow control.
+.RE
+
+.PP
+directory
+.RS 4
+the database that keeps a mapping between an address and a registered
+hash. In Ouroboros, the default implementation is a Distributed Hash
+Table.
+.RE
+
+.PP
+distributed IPC facility (DIF)
+.RS 4
+deprecate?
+.RE
+
+.PP
+enrolment
+.RS 4
+the action of connecting to a member of an existing DIF, retrieving
+the bootstrap information and starting the IPCP as a new member of
+that DIF.
+.RE
+
+.PP
+flow
+.RS 4
+the system and network resources over which two application processes
+can send information. A flow is an abstraction of the actual
+underlying IPC mechanism and has a quality of service (QoS) associated
+with it, which reflects externally measurable quantities such as
+delay, jitter, bandwidth, loss and bit error rate.
+.RE
+
+.PP
+flow allocator
+.RS 4
+the component of an IPCP that reserves the resources for a flow
+towards a given registered hash.
+.RE
+
+.PP
+flow control
+.RS 4
+the mechanism with which the destination endpoint of a connection
+controls the source to prevent the source from sending more
+information than the destination can currently handle. This is
+orthogonal to congestion control.
+.RE
+
+.PP
+flow descriptor
+.RS 4
+an integer used as a handle to a flow (a port ID) within an
+application.
+.RE
+
+.PP
+inter process communication (IPC)
+.RS 4
+the mechanisms that allow processes to share information.
+.RE
+
+.PP
+IPC process
+.RS 4
+a process that allocates and manages the necessary resources within a
+layer to allow IPC between processes that are clients of that layer.
+.RE
+
+.PP
+IPC resource manager (IRM)
+.RS 4
+the process that manages local IPC and IPCPs (providing remote IPC).
+.RE
+
+.SH SEE ALSO
+\fBouroboros-tutorial\fR(7)\fB, ouroboros\fR(8)
+
+.SH COLOPHON
+This page is part of the Ouroboros project, found at
+http://ouroboros.ilabt.imec.be

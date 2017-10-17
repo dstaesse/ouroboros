@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH FQUEUE 3 2017-08-29 GNU "Ouroboros Programmer's Manual"
+.TH FQUEUE 3 2017-08-29 Ouroboros "Ouroboros Programmer's Manual"
 
 .SH NAME
 
@@ -92,11 +92,14 @@ _
 \fBfevent\fR() & Thread safety & MT-Safe
 .TE
 
+.SH TERMINOLOGY
+Please see \fBouroboros-glossary\fR(7).
+
 .SH SEE ALSO
 
-.BR fset_create "(3), " fset_destroy "(3), " \
-fset_add "(3), " fset_del "(3), " fset_has "(3), " fset_zero (3)
+.BR fccntl "(3), " flow_alloc "(3), " flow_read "(3), " fqueue "(3), " \
+fset "(3), " ouroboros (8)
 
 .SH COLOPHON
 This page is part of the Ouroboros project, found at
-https://bitbucket.org/ouroboros-rina/ouroboros
+http://ouroboros.ilabt.imec.be

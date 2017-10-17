@@ -1,0 +1,315 @@
+.\" Ouroboros man pages (C) 2017
+.\" Dimitri Staessens <dimitri.staessens@ugent.be>
+.\" Sander Vrijders <sander.vrijders@ugent.be>
+
+.TH OUROBOROS 8 2017-10-15 Ouroboros "Ouroboros User Manual"
+
+.SH NAME
+
+Ouroboros - the free IPC subsystem
+
+.SH SYNOPSIS
+
+\fIirmd\fR [--stdout] [--version]
+
+\fIirm\fR [ipcp] <command> <args>
+
+.SH DESCRIPTION
+Ouroboros is an Inter-Process Communication (IPC) subsystem consisting
+of an IPC Resource Manager (IRM), a number of IPC Processes (IPCPs)
+and a library. It provides an API to establish communication between
+processes, regardless of whether they are running locally or remote.
+
+See \fBouroboros-tutorial\fR(7) to get started.
+
+This page provides an overview of the command options for the
+\fBirmd\fR and associated \fBirm\fR toolset. You can learn more about
+individual commands with "irm [command] help".
+
+.SH IRM DAEMON
+The \fBIPC Resource Manager (IRM)\fR is the core component of the
+Ouroboros subsystem. It manages \fIIPC processes\fR and the
+datastructures used for communication over Ouroboros. Before using
+Ouroboros, an IRM daemon must be running on your system. The IRM
+daemon can be started as a process at the command line (as a
+superuser):
+
+$ irmd
+
+or, if your system uses systemd, the IRM can be started as a service:
+
+$ systemctl start irmd
+
+When started from the command line, the IRM has the following options:
+.PP
+\-\-stdout
+.RS 4
+The \fIIRM\fR daemon and \fIIPCPs\fR will print output to stdout
+instead of the system logs.
+.RE
+
+.PP
+\-\-version
+.RS 4
+The \fIIRM\fR daemon will print the Ouroboros version to stdout and exit.
+.RE
+
+.SH IRM TOOL
+The \fBirm\fR tool is used to command the Ouroboros subsystem or
+individual IPCPs.
+
+.SH WORKFLOW
+To setup a \fIflow\fR between processes, Ouroboros has a number of
+steps that must be taken. These steps can be taken in (almost) any
+order.
+
+.RS 4
+
+\fBBinding a name to a program or process\fR tells the IRMd that a
+certain \fIprogram\fR or \fIprocess\fR will respond to \fIflow
+allocation\fR requests for the bound name. Multiple programs and
+processes can be bound to the same name, and a program or process can
+be bound to multiple names.
+
+\fBCreating an IPC Process\fR will instantiate a new IPCP in the
+system. This IPCP will be empty, with only a name and type specified,
+and ready for either \fIbootstrapping\fR into a new DIF (or a new or
+existing shim DIF) or \fIenrolling\fR in an existing DIF.
+
+\fBBootstrapping an IPC Process\fR gives it the necessary information
+from the command line to start operating as a \fIDIF\fR. Each IPCP
+type has its own set of configuration options.
+
+\fBEnrolling an IPC Process\fR in a DIF configures it by contacting
+another IPCP that is already a member of that DIF (bootstrapped or
+enrolled). After \fIenrollment\fR, the IPCP is configured, and may or
+may not have connections to the DIF.
+
+\fBRegistering a name in a DIF\fR inserts the name in that \fIDIF\fR's
+\fIdirectory\fR.  Once a name is \fIregistered\fR in a DIF, the name
+can be used as a destination handle for \fIflow allocation\fR.
+
+Ouroboros normal IPCPs are just like any other process, and will need
+to be bound and registered in a lower-rank DIF before they can be
+accessed by other processes.
+
+In order to enroll an IPC process in a DIF, some other member will
+have to be reachable over a lower DIF. Shim IPCPs are all bootstrapped
+and thus need not enroll as they work directly over a physical
+connection. Ouroboros currently supports shim IPCPs over shared memory
+(local), L2 (shim-eth-llc), L1 (raptor, experimental) and L3
+(shim-udp). The normal DIF requires connections to be established
+between IPCP components for its operation.
+
+.RS 4
+\fBConnecting the management components\fR using \fImanagement
+flows\fR allows management information to be sent between IPCPs so
+that resources for flows can be allocated. Currently the only
+component that requires management flows is the routing component.
+
+\fBConnecting the data transfer components\fR using \fIdata transfer
+flows\fR allows the routing system to forward packets between
+IPCPs. This establishes adjacencies in a network of IPCPs. Components
+that rely on data transfer flows are the \fIdirectory\fR and the
+\fIflow allocator\fR.
+
+.RE
+
+.SH IRM IPCP COMMANDS
+.PP
+\fBirm ipcp create\fR type \fItype\fR name \fIname\fR
+.RS 4
+creates an IPCP process of type \fItype\fR in the system with name
+\fIname\fR. Allowable values for \fItype\fR are:
+.PP
+\fBlocal\fR        - create a loopback IPCP.
+.PP
+\fBshim-eth-llc\fR - create an IPCP that attaches to an Ethernet adapter.
+.PP
+\fBshim-udp\fR     - create an IPCP that attaches to a UDP socket.
+.PP
+\fBnormal\fR       - create a normal IPCP that uses lower level DIFs.
+.RE
+
+.PP
+\fBirm ipcp destroy\fR name \fIname\fR
+.RS 4
+destroys the IPCP process with name \fIname\fR.
+.RE
+.PP
+\fBirm ipcp bootstrap\fR type \fItype\fR name \fIname\fR dif \fIdif\fR \
+[\fIparams\fR]
+.RS 4
+bootstraps an IPCP process of type \fItype\fR and name \fIname\fR in a
+DIF \fIdif\fR. If an IPCP with that name does not exist yet, the IPCP
+will be created.
+.PP
+Values for [\fIparam\fR] are dependent on \fItype\fR:
+.PP
+\fBlocal\fR
+.RS 4
+does not take additional parameters.
+.RE
+
+.PP
+\fBshim-eth-llc\fR
+.RS 4
+if_name \fIinterface\fR specifies the interface to bind the shim to.
+.RE
+
+.PP
+\fBshim-udp\fR
+.RS 4
+ip \fIip\fR specifies the local IP address to bind to
+
+[dns \fdns\fR] specifies an optional DDNS server that will be used for
+the directory.
+.RE
+
+.PP
+\fBnormal\fR
+.RS 4
+[addr \fIaddress_size\fR] specifies the size of an address in bytes.
+.br
+default: 4 bytes.
+.PP
+[fd \fIfd_size\fR] specifies the size of the flow descriptor field
+(for identifying internal components using the DT component) in bytes.
+.br
+default: 2 bytes.
+.PP
+[ttl] specifies the presence of a time-to-live field.
+TODO: set a default TTL here?
+.PP
+[addr_auth \fIpolicy\fR] specifies the address authority policy.
+.br
+\fIpolicy\fR: flat.
+.br
+default: flat.
+.PP
+[routing \fIpolicy\fR] specifies the routing policy.
+.br
+\fIpolicy\fR: link_state, lfa.
+.br
+default: link_state.
+.PP
+[pff \fIpolicy\fR] specifies the pdu forwarding function policy.
+.br
+\fIpolicy\fR: simple, alternate.
+.br
+default: simple.
+.PP
+[hash \fIpolicy\fR] specifies the hash function used for the directory,
+.br
+\fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
+.br
+default: SHA3_256.
+.RE
+.RE
+
+.PP
+\fBirm ipcp enroll\fR name \fIname\fR dif \fIdif\fR
+.RS 4
+enrolls a normal IPCP \fIname\fR to a dif for which the IPCPs accept flows for
+\fIname\fR.
+.RE
+
+\fBirm ipcp connect\fR name \fIname\fR component \fIcomponent\fR dst
+\fIdestination\fR
+.RS 4
+connects a \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a normal IPCP
+with name \fIname\FR to that component of the destination IPCP within the
+same DIF.
+.RE
+
+\fBirm ipcp disconnect\fR name \fIname\fR component \fIcomponent\fR dst
+\fIdestination\fR
+.RS 4
+disconnects \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a normal IPCP
+with name \fIname\FR from that component of the destination IPCP within the
+same DIF.
+.RE
+.RE
+
+.SH IRM COMMANDS
+.PP
+\fBirm bind\fR ap \fiprogram\fR name \fIname\fR [[\fIauto\fR] -- \
+[\fIparam\fR] [\fIparam\fR] ... [\fIparam\fR]]
+.RS 4
+bind a program \fIprogram\fR, referenced by its binary, to a certain
+name. The binary can be specified by an absolute or relative path, and
+will be searched for in all directories specified in the \fBPATH\fR
+variable. If \fIname\fR is registered in a DIF, all instances of
+\fIprogram\fR will accept flows for \fIname\fR. If the \fIauto\fR
+keyword is specified, the IRMd will start instances if there are no
+readily available instances when a new flow is requested and any
+arguments \fIparam\fR that are passed after -- are passed to the
+application when it is started.
+.RE
+
+.PP
+\fBirm bind\fR api \fIpid\fR name \fInamefR
+.RS 4
+bind a process \fIpid\fR to a certain name. If \fIname\fR is registered
+in a DIF, the process \fIpid\fR will accept flows for that name.
+.RE
+
+.PP
+\fBirm bind\fR ipcp \fIipcp\fR name \fIname\fR
+.RS 4
+bind an IPCP \fIipcp\fR to a \fIname\fR. If \fIname\fR is registered
+in a DIF, \fIipcp\fR will accept flows for \fIname\fR. This is a
+shorthand for binding the pid of \fipcp\fR.
+.RE
+
+.PP
+\fBirm unbind\fR ap \fIprogram\fR name \fIname\fR
+.RS 4
+remove the binding between \fIprogram\fR and \fIname\fR. Instances of
+\fIprogram\fR will not accept future flow allocation requests for
+\fIname\fR.
+.RE
+
+.PP
+\fBirm unbind\fR api \fIpid\fR name \fIname\fR
+.RS 4
+remove the binding between \fIpid\fR and \fIname\fR. The process
+\fIpid\fR will not accept future flow allocation requests for
+\fIname\fR.
+.RE
+
+.PP
+\fBirm unbind\fR ipcp \fIipcp\fR name \fIname\fR
+.RS 4
+remove the binding between \fIipcp\fR and \fIname\fR. This IPCP will
+not accept future flow allocation requests for \fIname\fR.
+.RE
+
+.PP
+\fBirm reg\fR name \fIname\fR dif \fIdif\fR [dif \fIdif\fR ...]
+.RS 4
+Register name \fIname\fR in difs \fIdif\fR.
+.RE
+
+.PP
+\fBirm unreg\fR name \fIname\fR dif \fIdif\fR [dif \fIdif\fR ...]
+.RS 4
+Unregister name \fIname\fR in difs \fIdif\fR.
+.RE
+
+.SH TERMINOLOGY
+Please see \fBouroboros-glossary\fR(7).
+
+.SH AUTHORS
+Ouroboros was started and is currently maintained by Dimitri Staessens
+and Sander Vrijders.
+
+.SH REPORTING BUGS
+Report bugs on the bugzilla tracker at https://ouroboros.ilabt.imec.be/bugzilla.
+
+.SH SEE ALSO
+\fBouroboros-tutorial\fR(7)\fB, ouroboros-glossary\fR(7)\fB.\fR
+
+.SH COLOPHON
+This page is part of the Ouroboros project, found at
+http://ouroboros.ilabt.imec.be
