@@ -713,12 +713,16 @@ __attribute__((constructor)) static void init(int     argc,
  fail_fds:
         fprintf(stderr, "FATAL: ouroboros-dev init failed. "
                         "Make sure an IRMd is running.\n\n");
+        memset(&ai, 0, sizeof(ai));
         exit(EXIT_FAILURE);
 }
 
 __attribute__((destructor)) static void fini(void)
 {
         int i = 0;
+
+        if (ai.fds == NULL)
+                return;
 
         bmp_destroy(ai.fds);
         bmp_destroy(ai.fqueues);
