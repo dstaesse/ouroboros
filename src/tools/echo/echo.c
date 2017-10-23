@@ -22,13 +22,12 @@
 
 #define _POSIX_C_SOURCE 199309L
 
+#include <ouroboros/dev.h>
+
 #include <stdio.h>
 #include <string.h>
 
 #define BUF_SIZE 256
-
-#include "echo_client.c"
-#include "echo_server.c"
 
 static void usage(void)
 {
@@ -36,6 +35,77 @@ static void usage(void)
                "Sends an echo between a server and a client\n\n"
                "  -l, --listen              Run in server mode\n"
                "      --help                Display this help text and exit\n");
+}
+
+int server_main(void)
+{
+        int     fd = 0;
+        char    buf[BUF_SIZE];
+        ssize_t count = 0;
+
+        printf("Starting the server.\n");
+
+        while (true) {
+                fd = flow_accept(NULL, NULL);
+                if (fd < 0) {
+                        printf("Failed to accept flow.\n");
+                        break;
+                }
+
+                printf("New flow.\n");
+
+                count = flow_read(fd, &buf, BUF_SIZE);
+                if (count < 0) {
+                        printf("Failed to read SDU.\n");
+                        flow_dealloc(fd);
+                        continue;
+                }
+
+                printf("Message from client is %.*s.\n", (int) count, buf);
+
+                if (flow_write(fd, buf, count) == -1) {
+                        printf("Failed to write SDU.\n");
+                        flow_dealloc(fd);
+                        continue;
+                }
+
+                flow_dealloc(fd);
+        }
+
+        return 0;
+}
+
+int client_main(void)
+{
+        int     fd      = 0;
+        char    buf[BUF_SIZE];
+        char *  message = "Client says hi!";
+        ssize_t count   = 0;
+
+        fd = flow_alloc("echo", NULL, NULL);
+        if (fd < 0) {
+                printf("Failed to allocate flow.\n");
+                return -1;
+        }
+
+        if (flow_write(fd, message, strlen(message) + 1) < 0) {
+                printf("Failed to write SDU.\n");
+                flow_dealloc(fd);
+                return -1;
+        }
+
+        count = flow_read(fd, buf, BUF_SIZE);
+        if (count < 0) {
+                printf("Failed to read SDU.\n");
+                flow_dealloc(fd);
+                return -1;
+        }
+
+        printf("Server replied with %.*s\n", (int) count, buf);
+
+        flow_dealloc(fd);
+
+        return 0;
 }
 
 int main(int argc, char ** argv)
