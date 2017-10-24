@@ -595,6 +595,16 @@ static int flow_init(int       port_id,
         return fd;
 }
 
+static bool check_python(char * str)
+{
+        if (!strcmp(path_strip(str), "python") ||
+            !strcmp(path_strip(str), "python2") ||
+            !strcmp(path_strip(str), "python3"))
+                return true;
+
+        return false;
+}
+
 __attribute__((constructor)) static void init(int     argc,
                                               char ** argv,
                                               char ** envp)
@@ -607,6 +617,9 @@ __attribute__((constructor)) static void init(int     argc,
         (void) envp;
 
         assert(ai.ap_name == NULL);
+
+        if (check_python(argv[0]))
+                ap_name = argv[1];
 
         ai.api = getpid();
 
