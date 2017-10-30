@@ -430,7 +430,7 @@ static ssize_t frcti_read(int fd)
 
                 pthread_rwlock_rdlock(&ai.lock);
 
-                noblock = ai.flows[fd].oflags & FLOWFNONBLOCK;
+                noblock = ai.flows[fd].oflags & FLOWFRNOBLOCK;
                 rb      = ai.flows[fd].rx_rb;
 
                 if (ai.flows[fd].rcv_timesout) {
@@ -1096,7 +1096,7 @@ ssize_t flow_write(int          fd,
                 return -EPERM;
         }
 
-        if (ai.flows[fd].oflags & FLOWFNONBLOCK) {
+        if (ai.flows[fd].oflags & FLOWFWNOBLOCK) {
                 idx = shm_rdrbuff_write(ai.rdrb,
                                        DU_BUFF_HEADSPACE,
                                        DU_BUFF_TAILSPACE,

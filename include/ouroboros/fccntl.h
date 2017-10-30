@@ -35,7 +35,10 @@
 
 #define FLOWFDOWN     00000004 /* Flow is down          */
 
-#define FLOWFNONBLOCK 00004000 /* Non-blocking flow     */
+#define FLOWFRNOBLOCK 00001000 /* Non-blocking read     */
+#define FLOWFWNOBLOCK 00002000 /* Non-blocking write    */
+#define FLOWFNONBLOCK 00003000 /* Non-blocking rw       */
+
 #define FLOWFDEFAULT  00000002 /* Default, blocking, rw */
 
 #define FLOWFINVALID  (FLOWFWRONLY | FLOWFRDWR)
