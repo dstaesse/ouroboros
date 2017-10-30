@@ -4,7 +4,7 @@ ME=compile_debug
 
 if (($# == 1 ))
 then
-    PREFIX=`echo "$1"|sed -e "s,\/$,,"`
+    PREFIX=${1/%\//}
 else
     PREFIX="/usr/local/ouroboros"
 fi
@@ -20,7 +20,7 @@ if test -n "$BUILDDIR" ; then
         echo "$ME: Cannot create directory '$BUILDDIR'"
     }
 fi
-cd $BUILDDIR
+cd $BUILDDIR || exit 1
 
 echo "$ME: Debug directory will be '$DEBUGDIR'"
 if test -n "$DEBUGDIR" ; then
@@ -28,7 +28,7 @@ if test -n "$DEBUGDIR" ; then
         echo "$ME: Cannot create directory '$DEBUGDIR'"
     }
 fi
-cd $DEBUGDIR
+cd $DEBUGDIR || exit 1
 
 cmake -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Debug ../..
 

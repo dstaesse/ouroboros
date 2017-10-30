@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
-ME=install_release
-
 if (($# == 1 ))
 then
-    PREFIX=`echo "$1"|sed -e "s,\/$,,"`
+    PREFIX=${1/%\//}
 else
     PREFIX=""
 fi
@@ -12,7 +10,7 @@ fi
 BUILDDIR=build
 RELEASEDIR=release
 
-bash compile_release.sh $PREFIX
+bash compile_release.sh "$PREFIX"
 
-cd $BUILDDIR/$RELEASEDIR
+cd $BUILDDIR/$RELEASEDIR || exit 1
 make install
