@@ -20,7 +20,7 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/rq.h>
+#include "rq.h"
 
 #include <stdio.h>
 

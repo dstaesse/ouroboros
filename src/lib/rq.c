@@ -20,7 +20,7 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/rq.h>
+#include "rq.h"
 
 #include <assert.h>
 
@@ -77,11 +77,11 @@ int rq_push(struct rq * rq,
                 return -1;
 
         i = ++rq->n_items;
-        j = i / 2;
+        j = i >> 1;
         while (i > 1 && rq->items[j].seqno > seqno) {
                 rq->items[i] = rq->items[j];
                 i = j;
-                j = j / 2;
+                j >>= 1;
         }
 
         rq->items[i].seqno = seqno;
@@ -121,7 +121,7 @@ size_t rq_pop(struct rq * rq)
         i = 1;
         while (true) {
                 k = i;
-                j = 2 * i;
+                j = i << 1;
 
                 if (j <= rq->n_items && rq->items[j].seqno < rq->items[k].seqno)
                         k = j;

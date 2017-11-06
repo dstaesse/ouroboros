@@ -20,29 +20,23 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/frct_pci.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
+
+#include "frct_pci.h"
 
 #include <assert.h>
 #include <string.h>
 
-#define TYPE_SIZE       1
-#define SEQNO_SIZE      8
-#define FLAGS_SIZE      1
-#define CONF_FLAGS_SIZE sizeof(((struct frct_pci *) NULL)->conf_flags)
-#define BASE_SIZE       TYPE_SIZE + FLAGS_SIZE + SEQNO_SIZE
-#define CONFIG_SIZE     CONF_FLAGS_SIZE
+#define TYPE_SIZE        1
+#define FLAGS_SIZE       1
+#define SEQNO_SIZE       8
+#define CONF_FLAGS_SIZE  2
 
-static size_t get_head_len(struct frct_pci * pci)
-{
-        size_t len = BASE_SIZE;
+#define BASE_SIZE        TYPE_SIZE + FLAGS_SIZE + SEQNO_SIZE
 
-        if (pci->type & PDU_TYPE_CONFIG)
-                len += CONFIG_SIZE;
-
-        return len;
-}
+#define head_len(pci)    (pci->type & PDU_TYPE_CONFIG ?                 \
+                          BASE_SIZE + CONF_FLAGS_SIZE : BASE_SIZE)
 
 int frct_pci_ser(struct shm_du_buff * sdb,
                  struct frct_pci *    pci,
@@ -50,15 +44,12 @@ int frct_pci_ser(struct shm_du_buff * sdb,
 {
         uint8_t * head;
         uint8_t * tail;
-        size_t    len;
         size_t    offset = 0;
 
         assert(sdb);
         assert(pci);
 
-        len = get_head_len(pci);
-
-        head = shm_du_buff_head_alloc(sdb, len);
+        head = shm_du_buff_head_alloc(sdb, head_len(pci));
         if (head == NULL)
                 return -EPERM;
 
@@ -70,14 +61,14 @@ int frct_pci_ser(struct shm_du_buff * sdb,
         offset += SEQNO_SIZE;
 
         if (pci->type & PDU_TYPE_CONFIG) {
-                memcpy(head + offset, &pci->conf_flags, CONF_FLAGS_SIZE);
+                memcpy(head + offset, &pci->cflags, CONF_FLAGS_SIZE);
                 /* offset += CONF_FLAGS_SIZE; */
         }
 
         if (error_check) {
                 tail = shm_du_buff_tail_alloc(sdb, hash_len(HASH_CRC32));
                 if (tail == NULL) {
-                        shm_du_buff_head_release(sdb, len);
+                        shm_du_buff_head_release(sdb, head_len(pci));
                         return -EPERM;
                 }
 
@@ -103,23 +94,8 @@ int frct_pci_des(struct shm_du_buff * sdb,
 
         head = shm_du_buff_head(sdb);
 
-         /* Depending on the type a different deserialization. */
-        memcpy(&pci->type, head, TYPE_SIZE);
-        offset += TYPE_SIZE;
-        memcpy(&pci->flags, head + offset, FLAGS_SIZE);
-        offset += FLAGS_SIZE;
-        memcpy(&pci->seqno, head + offset, SEQNO_SIZE);
-        offset += SEQNO_SIZE;
-
-        if (pci->type & PDU_TYPE_CONFIG) {
-                memcpy(&pci->conf_flags, head + offset, CONF_FLAGS_SIZE);
-                /* offset += CONF_FLAGS_SIZE; */
-        }
-
         if (error_check) {
                 tail = shm_du_buff_tail(sdb);
-                if (tail == NULL)
-                        return -EPERM;
 
                 mem_hash(HASH_CRC32, &crc, head,
                          tail - head - hash_len(HASH_CRC32));
@@ -134,7 +110,20 @@ int frct_pci_des(struct shm_du_buff * sdb,
                 shm_du_buff_tail_release(sdb, hash_len(HASH_CRC32));
         }
 
-        shm_du_buff_head_release(sdb, get_head_len(pci));
+        /* Depending on the type a different deserialization. */
+        memcpy(&pci->type, head, TYPE_SIZE);
+        offset += TYPE_SIZE;
+        memcpy(&pci->flags, head + offset, FLAGS_SIZE);
+        offset += FLAGS_SIZE;
+        memcpy(&pci->seqno, head + offset, SEQNO_SIZE);
+        offset += SEQNO_SIZE;
+
+        if (pci->type & PDU_TYPE_CONFIG) {
+                memcpy(&pci->cflags, head + offset, CONF_FLAGS_SIZE);
+                /* offset += CONF_FLAGS_SIZE; */
+        }
+
+        shm_du_buff_head_release(sdb, head_len(pci));
 
         return 0;
 }
