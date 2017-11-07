@@ -1422,8 +1422,8 @@ static int send_msg(struct dht * dht,
 {
 #ifndef __DHT_TEST__
         struct shm_du_buff * sdb;
-#endif
         size_t               len;
+#endif
         int                  retr = 0;
 
         if (msg->code == KAD_RESPONSE)
@@ -1449,25 +1449,28 @@ static int send_msg(struct dht * dht,
 
         pthread_rwlock_unlock(&dht->lock);
 
+#ifndef __DHT_TEST__
         len = kad_msg__get_packed_size(msg);
         if (len == 0)
                 goto fail_msg;
 
-#ifndef __DHT_TEST__
-        if (ipcp_sdb_reserve(&sdb, len))
-                goto fail_msg;
-        kad_msg__pack(msg, shm_du_buff_head(sdb));
+        while (true) {
+                if (ipcp_sdb_reserve(&sdb, len))
+                        goto fail_msg;
 
-        while (retr >= 0) {
-                if (dt_write_sdu(addr, QOS_CUBE_BE, dht->fd, sdb))
-                        retr--;
-                else
+                kad_msg__pack(msg, shm_du_buff_head(sdb));
+
+                if (dt_write_sdu(addr, QOS_CUBE_BE, dht->fd, sdb) == 0)
                         break;
+
+                ipcp_sdb_release(sdb);
+
                 sleep(1);
+
+                if (--retr < 0)
+                        goto fail_msg;
         }
 
-        if (retr < 0)
-                goto fail_write;
 #else
         (void) addr;
         (void) retr;
@@ -1477,15 +1480,12 @@ static int send_msg(struct dht * dht,
                 kad_req_create(dht, msg, addr);
 
         return 0;
-
 #ifndef __DHT_TEST__
- fail_write:
-        ipcp_sdb_release(sdb);
-#endif
  fail_msg:
         pthread_rwlock_wrlock(&dht->lock);
         bmp_release(dht->cookies, msg->cookie);
         pthread_rwlock_unlock(&dht->lock);
+#endif /* !__DHT_TEST__ */
  fail_bmp_alloc:
         return -1;
 }
