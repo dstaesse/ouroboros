@@ -97,6 +97,7 @@ typedef int (* rtable_fn_t)(struct graph *     graph,
 
 struct {
         struct list_head nbs;
+        size_t           nbs_len;
         fset_t *         mgmt_set;
 
         struct list_head db;
@@ -156,7 +157,7 @@ static int lsdb_read(const char * path,
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
-        if (ls.db_len == 0) {
+        if (ls.db_len + ls.nbs_len == 0) {
                 pthread_rwlock_unlock(&ls.db_lock);
                 return -EPERM;
         }
@@ -184,15 +185,33 @@ static int lsdb_readdir(char *** buf)
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
-        if (ls.db_len == 0) {
+        if (ls.db_len + ls.nbs_len == 0) {
                 pthread_rwlock_unlock(&ls.db_lock);
                 return 0;
         }
 
-        *buf = malloc(sizeof(**buf) * ls.db_len);
+        *buf = malloc(sizeof(**buf) * (ls.db_len + ls.nbs_len));
         if (*buf == NULL) {
                 pthread_rwlock_unlock(&ls.db_lock);
                 return -ENOMEM;
+        }
+
+        list_for_each(p, &ls.nbs) {
+                struct nb * nb = list_entry(p, struct nb, next);
+                char * str = (nb->type == NB_DT ? "dt." : "mgmt.");
+                sprintf(entry, "%s%" PRIu64, str, nb->addr);
+                (*buf)[idx] = malloc(strlen(entry) + 1);
+                if ((*buf)[idx] == NULL) {
+                        while (--idx >= 0)
+                                free(*buf[idx]);
+                        free(buf);
+                        pthread_rwlock_unlock(&ls.db_lock);
+                        return -ENOMEM;
+                }
+
+                strcpy((*buf)[idx], entry);
+
+                idx++;
         }
 
         list_for_each(p, &ls.db) {
@@ -261,6 +280,8 @@ static int lsdb_add_nb(uint64_t     addr,
 
         list_add_tail(&nb->next, p);
 
+        ++ls.nbs_len;
+
         log_dbg("Type %s neighbor %" PRIu64 " added.",
                 nb->type == NB_DT ? "dt" : "mgmt", addr);
 
@@ -281,6 +302,7 @@ static int lsdb_del_nb(uint64_t     addr,
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->addr == addr && nb->fd == fd) {
                         list_del(&nb->next);
+                        --ls.nbs_len;
                         pthread_rwlock_unlock(&ls.db_lock);
                         log_dbg("Type %s neighbor %" PRIu64 " deleted.",
                                 nb->type == NB_DT ? "dt" : "mgmt", addr);
@@ -772,7 +794,8 @@ int link_state_init(enum pol_routing pr)
         if (pthread_create(&ls.listener, NULL, ls_conn_handle, NULL))
                 goto fail_pthread_create_listener;
 
-        ls.db_len = 0;
+        ls.db_len  = 0;
+        ls.nbs_len = 0;
 
         rib_reg(LSDB, &r_ops);
 
