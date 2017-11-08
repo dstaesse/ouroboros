@@ -602,8 +602,6 @@ uint8_t * shm_du_buff_tail(struct shm_du_buff * sdb)
 uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
                                  size_t               size)
 {
-        uint8_t * buf = NULL;
-
         assert(sdb);
 
         if (sdb->du_head < size)
@@ -611,15 +609,13 @@ uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
 
         sdb->du_head -= size;
 
-        buf = (uint8_t *) (sdb + 1) + sdb->du_head;
-
-        return buf;
+        return (uint8_t *) (sdb + 1) + sdb->du_head;
 }
 
 uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
                                  size_t               size)
 {
-        uint8_t * buf = NULL;
+        uint8_t * buf;
 
         assert(sdb);
 
@@ -633,22 +629,30 @@ uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
         return buf;
 }
 
-void shm_du_buff_head_release(struct shm_du_buff * sdb,
-                              size_t               size)
+uint8_t * shm_du_buff_head_release(struct shm_du_buff * sdb,
+                                   size_t               size)
 {
+        uint8_t * buf;
+
         assert(sdb);
         assert(!(size > sdb->du_tail - sdb->du_head));
 
+        buf = (uint8_t *) (sdb + 1) + sdb->du_head;
+
         sdb->du_head += size;
+
+        return buf;
 }
 
-void shm_du_buff_tail_release(struct shm_du_buff * sdb,
+uint8_t * shm_du_buff_tail_release(struct shm_du_buff * sdb,
                               size_t               size)
 {
         assert(sdb);
         assert(!(size > sdb->du_tail - sdb->du_head));
 
         sdb->du_tail -= size;
+
+        return (uint8_t *) (sdb + 1) + sdb->du_tail;
 }
 
 void shm_du_buff_truncate(struct shm_du_buff * sdb,

@@ -30,16 +30,20 @@
 #define TW_ELEMENTS    6000
 #define TW_RESOLUTION  1     /* ms */
 
+#define FRCT_PCILEN    (sizeof(struct frct_pci))
+#define FRCT_CRCLEN    (sizeof(uint32_t))
+
 struct frct_cr {
-        bool            drf;
-        uint64_t        lwe;
-        uint64_t        rwe;
+        bool     drf;
+        uint32_t lwe;
+        uint32_t rwe;
 
-        bool            conf;
-        uint16_t        cflags;
+        uint32_t seqno;
+        bool     conf;
+        uint8_t  cflags;
 
-        time_t          act;
-        time_t          inact;
+        time_t   act;
+        time_t   inact;
 };
 
 struct frcti {
@@ -62,6 +66,28 @@ struct frcti {
 struct {
         struct timerwheel * tw;
 } frct;
+
+enum frct_flags {
+        FRCT_DATA = 0x01, /* PDU carries data */
+        FRCT_DRF  = 0x02, /* Data run flag    */
+        FRCT_ACK  = 0x03, /* ACK field valid  */
+        FRCT_FC   = 0x08, /* FC window valid  */
+        FRCT_RDVZ = 0x10, /* Rendez-vous      */
+        FRCT_CFG  = 0x20, /* Configuration    */
+        FRCT_MFGM = 0x40, /* More fragments   */
+        FRCT_CRC  = 0x80, /* CRC present      */
+};
+
+struct frct_pci {
+        uint8_t  flags;
+
+        uint8_t  cflags;
+
+        uint16_t window;
+
+        uint32_t seqno;
+        uint32_t ackno;
+} __attribute__((packed));
 
 static int frct_init(void)
 {
@@ -104,6 +130,11 @@ static struct frcti * frcti_create(int fd)
 
         frcti->snd_cr.drf    = true;
         frcti->snd_cr.conf   = true;
+#ifdef OUROBOROS_CONFIG_DEBUG
+        frcti->snd_cr.seqno  = 0;
+#else
+        random_buffer(&frcti->snd_cr.seqno, sizeof(frcti->snd_cr.seqno));
+#endif
         frcti->snd_cr.lwe    = 0;
         frcti->snd_cr.rwe    = 0;
         frcti->snd_cr.cflags = 0;
@@ -201,23 +232,49 @@ static ssize_t __frcti_queued_pdu(struct frcti * frcti)
         return idx;
 }
 
+static int frct_chk_crc(uint8_t * head,
+                        uint8_t * tail)
+{
+        uint32_t crc;
+
+        mem_hash(HASH_CRC32, &crc, head, tail - head);
+
+        return crc == *((uint32_t *) tail);
+}
+
+static void frct_add_crc(uint8_t * head,
+                         uint8_t * tail)
+{
+        mem_hash(HASH_CRC32, tail, head, tail - head);
+}
+
+static struct frct_pci * frcti_alloc_head(struct shm_du_buff * sdb)
+{
+        struct frct_pci * pci = NULL;
+
+        pci = (struct frct_pci *) shm_du_buff_head_alloc(sdb, FRCT_PCILEN);
+        if (pci != NULL)
+                memset(pci, 0, sizeof(*pci));
+
+        return pci;
+}
+
 static int __frcti_snd(struct frcti *       frcti,
                        struct shm_du_buff * sdb)
 {
-        struct frct_pci  pci;
-        struct timespec  now;
-        struct frct_cr * snd_cr;
+        struct frct_pci * pci;
+        struct timespec   now;
+        struct frct_cr *  snd_cr;
 
-        if (frcti == NULL)
-                return 0;
+        assert(frcti);
 
         snd_cr = &frcti->snd_cr;
 
-        memset(&pci, 0, sizeof(pci));
+        pci = frcti_alloc_head(sdb);
+        if (pci == NULL)
+                return -1;
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
-
-        pci.type |= PDU_TYPE_DATA;
 
         pthread_rwlock_wrlock(&frcti->lock);
 
@@ -225,20 +282,29 @@ static int __frcti_snd(struct frcti *       frcti,
         if (!snd_cr->drf && now.tv_sec - snd_cr->act > snd_cr->inact)
                 snd_cr->drf = true;
 
+        pci->flags |= FRCT_DATA;
+
         /* Set the DRF in the first packet of a new run of SDUs. */
         if (snd_cr->drf) {
-                pci.flags |= FLAG_DATA_RUN;
+                pci->flags |= FRCT_DRF;
                 if (snd_cr->conf) {
-                        pci.type |= PDU_TYPE_CONFIG;
-                        pci.cflags = snd_cr->cflags;
+                        pci->flags |= FRCT_CFG;
+                        pci->cflags = snd_cr->cflags;
                 }
         }
 
-        pci.seqno = snd_cr->lwe++;
+        pci->seqno = snd_cr->seqno++;
 
-        if (frct_pci_ser(sdb, &pci, snd_cr->cflags & FRCTFERRCHCK)) {
-                pthread_rwlock_unlock(&frcti->lock);
-                return -1;
+        if (snd_cr->cflags & FRCTFERRCHCK) {
+                uint8_t * tail = shm_du_buff_tail_alloc(sdb, FRCT_CRCLEN);
+                if (tail == NULL) {
+                        pthread_rwlock_unlock(&frcti->lock);
+                        return -1;
+                }
+
+                frct_add_crc((uint8_t *) pci, tail);
+
+                pci->flags |= FRCT_CRC;
         }
 
         snd_cr->act = now.tv_sec;
@@ -255,14 +321,16 @@ static int __frcti_snd(struct frcti *       frcti,
 static int __frcti_rcv(struct frcti *       frcti,
                        struct shm_du_buff * sdb)
 {
-        ssize_t          idx;
-        struct frct_pci  pci;
-        struct timespec  now;
-        struct frct_cr * rcv_cr;
+        ssize_t           idx;
+        struct frct_pci * pci;
+        struct timespec   now;
+        struct frct_cr *  rcv_cr;
 
         assert(frcti);
 
         rcv_cr = &frcti->rcv_cr;
+
+        pci = (struct frct_pci *) shm_du_buff_head_release(sdb, FRCT_PCILEN);
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
@@ -270,29 +338,38 @@ static int __frcti_rcv(struct frcti *       frcti,
 
         idx = shm_du_buff_get_idx(sdb);
 
-        /* SDU may be corrupted. */
-        if (frct_pci_des(sdb, &pci, rcv_cr->cflags & FRCTFERRCHCK)) {
-                pthread_rwlock_unlock(&frcti->lock);
-                shm_rdrbuff_remove(ai.rdrb, idx);
-                return -EAGAIN;
+        /* PDU may be corrupted. */
+        if (pci->flags & FRCT_CRC) {
+                uint8_t * tail = shm_du_buff_tail_release(sdb, FRCT_CRCLEN);
+                if (frct_chk_crc((uint8_t *) pci, tail))
+                        goto fail_clean;
         }
 
         /* Check if receiver inactivity is true. */
         if (!rcv_cr->drf && now.tv_sec - rcv_cr->act > rcv_cr->inact)
                 rcv_cr->drf = true;
 
-        /* When there is receiver inactivity and no DRF, drop the SDU. */
-        if (rcv_cr->drf && !(pci.flags & FLAG_DATA_RUN)) {
-                pthread_rwlock_unlock(&frcti->lock);
-                shm_rdrbuff_remove(ai.rdrb, idx);
-                return -EAGAIN;
+        /* When there is receiver inactivity and no DRF, drop the PDU. */
+        if (rcv_cr->drf && !(pci->flags & FRCT_DRF))
+                goto fail_clean;
+
+        /* Queue the PDU if needed. */
+        if (rcv_cr->cflags & FRCTFORDERING) {
+                if (pci->seqno != frcti->rcv_cr.lwe) {
+                        /* NOTE: queued PDUs head/tail without PCI. */
+                        if (rq_push(frcti->rq, pci->seqno, idx))
+                                shm_rdrbuff_remove(ai.rdrb, idx);
+                        goto fail;
+                } else {
+                      ++rcv_cr->lwe;
+                }
         }
 
         /* If the DRF is set, reset the state of the connection. */
-        if (pci.flags & FLAG_DATA_RUN) {
-                rcv_cr->lwe = pci.seqno;
-                if (pci.type & PDU_TYPE_CONFIG)
-                        rcv_cr->cflags = pci.cflags;
+        if (pci->flags & FRCT_DRF) {
+                rcv_cr->lwe = pci->seqno;
+                if (pci->flags & FRCT_CFG)
+                        rcv_cr->cflags = pci->cflags;
         }
 
         if (rcv_cr->drf)
@@ -300,21 +377,17 @@ static int __frcti_rcv(struct frcti *       frcti,
 
         rcv_cr->act = now.tv_sec;
 
-        if (!(pci.type & PDU_TYPE_DATA))
+        if (!(pci->flags & FRCT_DATA))
                 shm_rdrbuff_remove(ai.rdrb, idx);
-
-        if (rcv_cr->cflags & FRCTFORDERING) {
-                if (pci.seqno != frcti->rcv_cr.lwe) {
-                        if (rq_push(frcti->rq, pci.seqno, idx))
-                                shm_rdrbuff_remove(ai.rdrb, idx);
-                        pthread_rwlock_unlock(&frcti->lock);
-                        return -EAGAIN;
-                } else {
-                      ++rcv_cr->lwe;
-                }
-        }
 
         pthread_rwlock_unlock(&frcti->lock);
 
         return 0;
+
+ fail_clean:
+        if (!(pci->flags & FRCT_DATA))
+                shm_rdrbuff_remove(ai.rdrb, idx);
+ fail:
+        pthread_rwlock_unlock(&frcti->lock);
+        return -EAGAIN;
 }

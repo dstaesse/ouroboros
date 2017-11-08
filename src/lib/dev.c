@@ -24,6 +24,7 @@
 
 #include "config.h"
 
+#include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
@@ -31,6 +32,7 @@
 #include <ouroboros/sockets.h>
 #include <ouroboros/fccntl.h>
 #include <ouroboros/bitmap.h>
+#include <ouroboros/random.h>
 #include <ouroboros/shm_flow_set.h>
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_rbuff.h>
@@ -39,7 +41,6 @@
 #include <ouroboros/qoscube.h>
 #include <ouroboros/timerwheel.h>
 
-#include "frct_pci.h"
 #include "rq.h"
 
 #include <stdlib.h>

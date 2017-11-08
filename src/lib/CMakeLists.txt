@@ -174,7 +174,6 @@ set(SOURCE_FILES_DEV
   # Add source files here
   cacep.c
   dev.c
-  frct_pci.c
   timerwheel.c
   )
 
