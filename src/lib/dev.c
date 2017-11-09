@@ -20,6 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#include <ouroboros/endian.h>
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "config.h"

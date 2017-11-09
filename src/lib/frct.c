@@ -293,7 +293,7 @@ static int __frcti_snd(struct frcti *       frcti,
                 }
         }
 
-        pci->seqno = snd_cr->seqno++;
+        pci->seqno = hton32(snd_cr->seqno++);
 
         if (snd_cr->cflags & FRCTFERRCHCK) {
                 uint8_t * tail = shm_du_buff_tail_alloc(sdb, FRCT_CRCLEN);
@@ -325,6 +325,7 @@ static int __frcti_rcv(struct frcti *       frcti,
         struct frct_pci * pci;
         struct timespec   now;
         struct frct_cr *  rcv_cr;
+        uint32_t          seqno;
 
         assert(frcti);
 
@@ -353,11 +354,13 @@ static int __frcti_rcv(struct frcti *       frcti,
         if (rcv_cr->drf && !(pci->flags & FRCT_DRF))
                 goto fail_clean;
 
+        seqno = ntoh32(pci->seqno);
+
         /* Queue the PDU if needed. */
         if (rcv_cr->cflags & FRCTFORDERING) {
-                if (pci->seqno != frcti->rcv_cr.lwe) {
+                if (seqno != frcti->rcv_cr.lwe) {
                         /* NOTE: queued PDUs head/tail without PCI. */
-                        if (rq_push(frcti->rq, pci->seqno, idx))
+                        if (rq_push(frcti->rq, seqno, idx))
                                 shm_rdrbuff_remove(ai.rdrb, idx);
                         goto fail;
                 } else {
@@ -367,7 +370,7 @@ static int __frcti_rcv(struct frcti *       frcti,
 
         /* If the DRF is set, reset the state of the connection. */
         if (pci->flags & FRCT_DRF) {
-                rcv_cr->lwe = pci->seqno;
+                rcv_cr->lwe = seqno;
                 if (pci->flags & FRCT_CFG)
                         rcv_cr->cflags = pci->cflags;
         }
