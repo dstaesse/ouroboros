@@ -10,8 +10,9 @@ else ()
   include_directories(${CMAKE_CURRENT_SOURCE_DIR})
   set(CMAKE_SWIG_FLAGS "")
 
+  find_package(PythonInterp QUIET)
   find_package(PythonLibs QUIET)
-  if (NOT PYTHONLIBS_FOUND)
+  if (NOT PYTHONLIBS_FOUND OR NOT PYTHONINTERP_FOUND)
     message(STATUS "Python not found: Python bindings will not be built")
   else ()
     message(STATUS "Python found: Python bindings will be built")
@@ -38,12 +39,14 @@ else ()
     # Installation directives
     if (CMAKE_INSTALL_PREFIX STREQUAL "")
       execute_process(
-        COMMAND python -c "from distutils import sysconfig; print(sysconfig.get_python_lib())"
+        COMMAND ${PYTHON_EXECUTABLE} -c
+          "from distutils import sysconfig; print(sysconfig.get_python_lib())"
         OUTPUT_VARIABLE PYTHON_MODULE_PATH
         OUTPUT_STRIP_TRAILING_WHITESPACE)
     else ()
       execute_process(
-        COMMAND python -c "from distutils import sysconfig; print(sysconfig.get_python_lib(plat_specific=True, prefix='${CMAKE_INSTALL_PREFIX}'))"
+        COMMAND ${PYTHON_EXECUTABLE} -c
+          "from distutils import sysconfig; print(sysconfig.get_python_lib(plat_specific=True, prefix='${CMAKE_INSTALL_PREFIX}'))"
         OUTPUT_VARIABLE _ABS_PYTHON_MODULE_PATH
         OUTPUT_STRIP_TRAILING_WHITESPACE)
       get_filename_component(_ABS_PYTHON_MODULE_PATH
