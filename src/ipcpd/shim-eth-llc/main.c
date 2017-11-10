@@ -1117,11 +1117,13 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         pthread_cancel(eth_llc_data.mgmt_handler);
         pthread_join(eth_llc_data.mgmt_handler, NULL);
  fail_mgmt_handler:
-#ifdef __linux__
+#if defined(__linux__)
         pthread_cancel(eth_llc_data.if_monitor);
         pthread_join(eth_llc_data.if_monitor, NULL);
 #endif
+#if !defined(HAVE_NETMAP)
  fail_device:
+#endif
 #if defined(HAVE_NETMAP)
         nm_close(eth_llc_data.nmd);
 #elif defined(HAVE_BPF)
