@@ -38,10 +38,12 @@
 #ifdef HAVE_FUSE
 #define _FILE_OFFSET_BITS 64
 #define FUSE_USE_VERSION  26
-#include <fuse.h>
+#if defined (__linux__)
+#define __USE_XOPEN
+#elif defined (__FreeBSD__)
+#define __XSI_VISIBLE 500
 #endif
-
-#ifdef HAVE_FUSE
+#include <fuse.h>
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
@@ -182,7 +184,7 @@ static int rib_getattr(const char *  path,
         memset(st, 0, sizeof(*st));
 
         if (strcmp(path, RT) == 0) {
-                st->st_mode  = __S_IFDIR | 0755;
+                st->st_mode  = S_IFDIR | 0755;
                 st->st_nlink = 2;
                 st->st_uid   = getuid();
                 st->st_gid   = getgid();
@@ -195,7 +197,7 @@ static int rib_getattr(const char *  path,
         list_for_each(p, &rib.reg_comps) {
                 struct reg_comp * rc = list_entry(p, struct reg_comp, next);
                 if (strcmp(path + 1, rc->path) == 0) {
-                        st->st_mode  = __S_IFDIR | 0755;
+                        st->st_mode  = S_IFDIR | 0755;
                         st->st_nlink = 2;
                         break;
                 }
@@ -206,7 +208,7 @@ static int rib_getattr(const char *  path,
         if (st->st_mode == 0) {
                 char buf[4096];
                 st->st_nlink = 2;
-                st->st_mode = __S_IFREG | 0755;
+                st->st_mode = S_IFREG | 0755;
                 st->st_size = rib_read(path, buf, 4096, 0, NULL);
         }
 
