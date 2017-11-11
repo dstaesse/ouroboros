@@ -67,6 +67,9 @@ test_and_set_c_compiler_flag_global(-Wstrict-prototypes)
 test_and_set_c_compiler_flag_global(-Wunreachable-code)
 test_and_set_c_compiler_flag_global(-Wdeclaration-after-statement)
 test_and_set_c_compiler_flag_global(-fmax-errors=5)
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+  test_and_set_c_compiler_flag_global(-O3)
+endif ()
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros-dev.pc.in"
   "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc" @ONLY)
