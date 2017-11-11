@@ -213,11 +213,9 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
 add_library(ouroboros-common SHARED ${SOURCE_FILES_COMMON} ${IRM_PROTO_SRCS}
   ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS})
 
-add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${IRM_PROTO_SRCS}
-  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS} ${CACEP_PROTO_SRCS})
+add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CACEP_PROTO_SRCS})
 
-add_library(ouroboros-irm SHARED ${SOURCE_FILES_IRM} ${IRM_PROTO_SRCS}
-  ${IPCP_PROTO_SRCS} ${DIF_CONFIG_PROTO_SRCS})
+add_library(ouroboros-irm SHARED ${SOURCE_FILES_IRM})
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES Debug)
