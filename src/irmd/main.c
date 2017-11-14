@@ -511,7 +511,7 @@ static int bootstrap_ipcp(pid_t               api,
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Bootstrapped IPCP %d in DIF %s.",
-                 entry->api, conf->dif_info->dif_name);
+                 api, conf->dif_info->dif_name);
 
         return 0;
 }
