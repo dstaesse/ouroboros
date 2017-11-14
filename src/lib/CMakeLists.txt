@@ -105,6 +105,7 @@ endif ()
 
 if (NOT HAVE_OPENSSL)
   set(OPENSSL_INCLUDE_DIR "")
+  set(OPENSSL_LIBRARIES "")
 endif ()
 
 if (APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
