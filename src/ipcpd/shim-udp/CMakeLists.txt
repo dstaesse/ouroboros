@@ -57,8 +57,8 @@ else ()
 endif ()
 
 include(AddCompileFlags)
-if (CMAKE_BUILD_TYPE MATCHES Debug)
+if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(ipcpd-shim-udp -DCONFIG_OUROBOROS_DEBUG)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
+endif ()
 
 install(TARGETS ipcpd-shim-udp RUNTIME DESTINATION sbin)

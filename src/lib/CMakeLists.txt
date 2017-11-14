@@ -219,11 +219,11 @@ add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CACEP_PROTO_SRCS})
 add_library(ouroboros-irm SHARED ${SOURCE_FILES_IRM})
 
 include(AddCompileFlags)
-if (CMAKE_BUILD_TYPE MATCHES Debug)
+if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(ouroboros-common -DCONFIG_OUROBOROS_DEBUG)
   add_compile_flags(ouroboros-dev -DCONFIG_OUROBOROS_DEBUG)
   add_compile_flags(ouroboros-irm -DCONFIG_OUROBOROS_DEBUG)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
+endif ()
 
 target_link_libraries(ouroboros-common ${LIBRT_LIBRARIES}
   ${LIBPTHREAD_LIBRARIES} ${PROTOBUF_C_LIBRARY} ${OPENSSL_LIBRARIES}

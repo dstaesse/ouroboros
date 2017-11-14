@@ -44,9 +44,9 @@ add_executable (irmd ${SOURCE_FILES})
 target_link_libraries (irmd LINK_PUBLIC ouroboros-common)
 
 include(AddCompileFlags)
-if (CMAKE_BUILD_TYPE MATCHES Debug)
+if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(irmd -DCONFIG_OUROBOROS_DEBUG)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
+endif ()
 
 install(TARGETS irmd RUNTIME DESTINATION sbin)
 

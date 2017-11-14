@@ -95,9 +95,9 @@ if (HAVE_LLC)
     ouroboros-dev ${PROTOBUF_C_LIBRARY})
 
   include(AddCompileFlags)
-  if (CMAKE_BUILD_TYPE MATCHES Debug)
+  if (CMAKE_BUILD_TYPE MATCHES "Debug*")
     add_compile_flags(ipcpd-shim-eth-llc -DCONFIG_OUROBOROS_DEBUG)
-  endif (CMAKE_BUILD_TYPE MATCHES Debug)
+  endif ()
 
   install(TARGETS ipcpd-shim-eth-llc RUNTIME DESTINATION sbin)
 endif ()

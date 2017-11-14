@@ -53,9 +53,9 @@ add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
 target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros-dev ouroboros-irm)
 
 include(AddCompileFlags)
-if (CMAKE_BUILD_TYPE MATCHES Debug)
+if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
+endif ()
 
 install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
 

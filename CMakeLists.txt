@@ -70,6 +70,13 @@ test_and_set_c_compiler_flag_global(-fmax-errors=5)
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   test_and_set_c_compiler_flag_global(-O3)
 endif ()
+if (CMAKE_BUILD_TYPE STREQUAL "DebugASan")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
+elseif (CMAKE_BUILD_TYPE STREQUAL "DebugTSan")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread")
+elseif (CMAKE_BUILD_TYPE STREQUAL "DebugLSan")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=leak")
+endif ()
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros-dev.pc.in"
   "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc" @ONLY)
