@@ -15,13 +15,14 @@ set(PACKAGE_URL         "http://ouroboros.ilabt.imec.be")
 set(PACKAGE_BUGREPORT   "http://ouroboros.ilabt.imec.be/bugzilla/")
 set(PACKAGE_VERSION     "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}")
 
-set(CMAKE_BUILD_TYPE "Release" CACHE STRING
-  "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan)")
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING
+    "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan)" FORCE)
+endif()
 
 if (NOT APPLE AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "/" CACHE STRING "Installation Prefix" FORCE)
 endif ()
-
 
 if (APPLE)
   set(CMAKE_MACOSX_RPATH 1)
