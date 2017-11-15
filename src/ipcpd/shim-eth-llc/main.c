@@ -622,6 +622,8 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
         }
 
         pthread_cleanup_pop(false);
+
+        return (void *) 0;
 }
 
 static void * eth_llc_ipcp_sdu_reader(void * o)
