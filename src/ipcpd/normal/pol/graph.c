@@ -537,6 +537,7 @@ static int graph_routing_table_simple(struct graph *     graph,
         free_routing_table(table);
         free(nhops);
  fail_vertices:
+        *dist = NULL;
         return -1;
 }
 
