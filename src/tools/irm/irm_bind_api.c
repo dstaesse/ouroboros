@@ -36,8 +36,12 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <signal.h>
 
 #include <ouroboros/irm.h>
 #include <ouroboros/errno.h>
@@ -54,6 +58,7 @@ int do_bind_api(int argc, char ** argv)
 {
         pid_t api = -1;
         char * name = NULL;
+        char * t;
 
         while (argc > 1) {
                 if (matches(*argv, "name") == 0) {
@@ -61,7 +66,12 @@ int do_bind_api(int argc, char ** argv)
                         ++argv;
                         --argc;
                 } else if (matches(*argv, "api") == 0) {
-                        api = strtol(*(argv + 1), NULL, 10);
+                        api = strtol(*(argv + 1), &t, 10);
+                        if (*(argv + 1) == t || *t != '\0' || kill(api, 0)) {
+                                printf("\"%s\" is not a valid process id.\n",
+                                       *(argv + 1));
+                                return -1;
+                        }
                         ++argv;
                         --argc;
                 } else {
