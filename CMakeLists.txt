@@ -17,7 +17,7 @@ set(PACKAGE_VERSION     "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}")
 
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING
-    "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan)" FORCE)
+      "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan)" FORCE)
 endif()
 
 if (NOT APPLE AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -28,14 +28,20 @@ if (APPLE)
   set(CMAKE_MACOSX_RPATH 1)
 endif()
 
+if (CMAKE_INSTALL_PREFIX STREQUAL "/")
+  set(RPATH_PREFIX "")
+else ()
+  set(RPATH_PREFIX ${CMAKE_INSTALL_PREFIX})
+endif ()
+
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
-  "${CMAKE_INSTALL_PREFIX}/usr/lib" isSystemDir)
+  "${RPATH_PREFIX}/usr/lib" isSystemDir)
 IF ("${isSystemDir}" STREQUAL "-1")
-  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/usr/lib")
+  set(CMAKE_INSTALL_RPATH "${RPATH_PREFIX}/usr/lib")
 ENDIF ("${isSystemDir}" STREQUAL "-1")
 
 message(STATUS "Package name is:            ${PACKAGE_NAME}")
