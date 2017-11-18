@@ -68,13 +68,14 @@ void * reader(void * o)
 {
         struct timespec timeout = {2, 0};
         struct timespec now = {0, 0};
+        struct timespec sent;
 
-        char buf[OPING_BUF_SIZE];
+        char               buf[OPING_BUF_SIZE];
         struct oping_msg * msg = (struct oping_msg *) buf;
-        int fd = *((int *) o);
-        int msg_len = 0;
-        double ms = 0;
-        double d = 0;
+        int                fd      = *((int *) o);
+        int                msg_len = 0;
+        double             ms      = 0;
+        double             d       = 0;
 
         fccntl(fd, FLOWSRCVTIMEO, &timeout);
 
@@ -86,12 +87,12 @@ void * reader(void * o)
                 if (msg_len < 0)
                         continue;
 
-                if (ntohl(msg->type) != ECHO_REPLY) {
+                if (ntoh32(msg->type) != ECHO_REPLY) {
                         printf("Invalid message on fd %d.\n", fd);
                         continue;
                 }
 
-                if (ntohl(msg->id) >= client.count) {
+                if (ntoh32(msg->id) >= client.count) {
                         printf("Invalid id.\n");
                         continue;
                 }
@@ -100,10 +101,10 @@ void * reader(void * o)
 
                 clock_gettime(CLOCK_MONOTONIC, &now);
 
-                pthread_mutex_lock(&client.lock);
-                ms = ts_diff_us(&client.times[ntohl(msg->id)], &now)
-                        / 1000.0;
-                pthread_mutex_unlock(&client.lock);
+                sent.tv_sec = ntoh64(msg->tv_sec);
+                sent.tv_nsec = ntoh64(msg->tv_nsec);
+
+                ms = ts_diff_us(&sent, &now) / 1000.0;
 
                 printf("%d bytes from %s: seq=%d time=%.3f ms\n",
                        msg_len,
@@ -150,14 +151,13 @@ void * writer(void * o)
 
         while (client.sent < client.count) {
                 nanosleep(&wait, NULL);
-                msg->type = htonl(ECHO_REQUEST);
-                msg->id = htonl(client.sent);
 
                 clock_gettime(CLOCK_MONOTONIC, &now);
 
-                pthread_mutex_lock(&client.lock);
-                client.times[client.sent++] = now;
-                pthread_mutex_unlock(&client.lock);
+                msg->type = hton32(ECHO_REQUEST);
+                msg->id = hton32(client.sent++);
+                msg->tv_sec = hton64(now.tv_sec);
+                msg->tv_nsec = hton64(now.tv_nsec);
 
                 if (flow_write(*fdp, buf, client.size) == -1) {
                         printf("Failed to send SDU.\n");
@@ -174,12 +174,6 @@ void * writer(void * o)
 
 static int client_init(void)
 {
-        client.times = malloc(sizeof(struct timespec) * client.count);
-        if (client.times == NULL) {
-                pthread_mutex_unlock(&client.lock);
-                return -ENOMEM;
-        }
-
         client.sent = 0;
         client.rcvd = 0;
         client.rtt_min = FLT_MAX;
@@ -187,18 +181,15 @@ static int client_init(void)
         client.rtt_avg = 0;
         client.rtt_m2 = 0;
 
-        pthread_mutex_init(&client.lock, NULL);
-
         return 0;
 }
 
-void client_fini(void)
+static void client_fini(void)
 {
-        if (client.times != NULL)
-                free(client.times);
+        return;
 }
 
-int client_main(void)
+static int client_main(void)
 {
         struct sigaction sig_act;
 

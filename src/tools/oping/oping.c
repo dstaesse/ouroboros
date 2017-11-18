@@ -39,6 +39,7 @@
 #define _POSIX_C_SOURCE 199506L
 #define __XSI_VISIBLE   500
 
+#include <ouroboros/endian.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/dev.h>
 
@@ -70,10 +71,6 @@ struct c {
         double rtt_avg;
         double rtt_m2;
 
-        /* needs locking */
-        struct timespec * times;
-        pthread_mutex_t lock;
-
         pthread_t reader_pt;
         pthread_t writer_pt;
 } client;
@@ -92,7 +89,9 @@ struct s {
 struct oping_msg {
         uint32_t type;
         uint32_t id;
-};
+        uint64_t tv_sec;
+        uint64_t tv_nsec;
+} __attribute__((packed));
 
 
 #include "oping_client.c"
@@ -175,11 +174,6 @@ int main(int argc, char ** argv)
                 if (client.size < 64) {
                         printf("Packet size set to 64 bytes.\n");
                         client.size = 64;
-                }
-
-                if (client.count > 1000000) {
-                        printf("Count truncated to 1 million SDUs.\n");
-                        client.count = 1000000;
                 }
 
                 ret = client_main();
