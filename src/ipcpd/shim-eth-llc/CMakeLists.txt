@@ -70,6 +70,7 @@ if (NETMAP_C_INCLUDE_DIR)
     message(STATUS "Netmap support for shim-eth-llc disabled by user")
     unset(HAVE_NETMAP)
     unset(HAVE_LLC)
+    unset(IPCP_SHIM_ETH_LLC_TARGET CACHE)
   endif ()
 endif ()
 
