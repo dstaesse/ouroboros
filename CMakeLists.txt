@@ -20,7 +20,7 @@ if (NOT CMAKE_BUILD_TYPE)
       "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan)" FORCE)
 endif()
 
-if (NOT APPLE AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "/" CACHE STRING "Installation Prefix" FORCE)
 endif ()
 
