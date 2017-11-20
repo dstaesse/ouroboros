@@ -316,9 +316,9 @@ static bool check_python(char * str)
         return false;
 }
 
-__attribute__((constructor)) static void init(int     argc,
-                                              char ** argv,
-                                              char ** envp)
+static void init(int     argc,
+                 char ** argv,
+                 char ** envp)
 {
         const char * ap_name = argv[0];
         int          i;
@@ -422,7 +422,7 @@ __attribute__((constructor)) static void init(int     argc,
         exit(EXIT_FAILURE);
 }
 
-__attribute__((destructor)) static void fini(void)
+static void fini(void)
 {
         int i = 0;
 
@@ -467,6 +467,9 @@ __attribute__((destructor)) static void fini(void)
 
         pthread_rwlock_destroy(&ai.lock);
 }
+
+__attribute__((section(".init_array"))) __typeof__(init) * __init = init;
+__attribute__((section(".fini_array"))) __typeof__(fini) * __fini = fini;
 
 int flow_accept(qosspec_t *             qs,
                 const struct timespec * timeo)
