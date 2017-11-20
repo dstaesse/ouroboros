@@ -468,8 +468,16 @@ static void fini(void)
         pthread_rwlock_destroy(&ai.lock);
 }
 
-__attribute__((section(".init_array"))) __typeof__(init) * __init = init;
-__attribute__((section(".fini_array"))) __typeof__(fini) * __fini = fini;
+#if defined(__MACH__) && defined(__APPLE__)
+#define INIT_SECTION "__DATA, __mod_init_func"
+#define FINI_SECTION "__DATA, __mod_term_func"
+#else
+#define INIT_SECTION ".init_array"
+#define FINI_SECTION ".fini_array"
+#endif
+
+__attribute__((section(INIT_SECTION))) __typeof__(init) * __init = init;
+__attribute__((section(FINI_SECTION))) __typeof__(fini) * __fini = fini;
 
 int flow_accept(qosspec_t *             qs,
                 const struct timespec * timeo)
