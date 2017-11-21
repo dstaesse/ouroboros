@@ -48,6 +48,8 @@
 #include <errno.h>
 #include <float.h>
 
+volatile bool stop;
+
 void shutdown_client(int signo, siginfo_t * info, void * c)
 {
         (void) info;
@@ -57,8 +59,7 @@ void shutdown_client(int signo, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-                pthread_cancel(client.reader_pt);
-                pthread_cancel(client.writer_pt);
+                stop = true;
         default:
                 return;
         }
@@ -79,7 +80,7 @@ void * reader(void * o)
 
         fccntl(fd, FLOWSRCVTIMEO, &timeout);
 
-        while (client.rcvd != client.count) {
+        while (!stop && client.rcvd != client.count) {
                 msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
                 if (msg_len == -ETIMEDOUT)
                         break;
@@ -149,7 +150,7 @@ void * writer(void * o)
 
         pthread_cleanup_push((void (*) (void *)) free, buf);
 
-        while (client.sent < client.count) {
+        while (!stop && client.sent < client.count) {
                 nanosleep(&wait, NULL);
 
                 clock_gettime(CLOCK_MONOTONIC, &now);
@@ -174,6 +175,7 @@ void * writer(void * o)
 
 static int client_init(void)
 {
+        stop = false;
         client.sent = 0;
         client.rcvd = 0;
         client.rtt_min = FLT_MAX;
@@ -228,6 +230,8 @@ static int client_main(void)
         pthread_create(&client.writer_pt, NULL, writer, &fd);
 
         pthread_join(client.writer_pt, NULL);
+
+        pthread_cancel(client.reader_pt);
         pthread_join(client.reader_pt, NULL);
 
         clock_gettime(CLOCK_REALTIME, &toc);
