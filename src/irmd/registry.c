@@ -241,7 +241,7 @@ int reg_entry_add_apn(struct reg_entry * e,
 
         if (!(a->flags & BIND_AP_AUTO)) {
                 log_dbg("AP %s cannot be auto-instantiated.", a->apn);
-                return -EINVAL;
+                return 0;
         }
 
         n = malloc(sizeof(*n));
