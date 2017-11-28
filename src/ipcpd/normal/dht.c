@@ -2477,7 +2477,8 @@ static void * dht_handle_sdu(void * o)
                         break;
                 }
 
-                if (msg->code != KAD_JOIN) {
+                if (msg->code != KAD_JOIN &&
+                    dht_get_state(dht) == DHT_RUNNING) {
                         pthread_rwlock_wrlock(&dht->lock);
                         if (dht_update_bucket(dht, msg->s_id.data, addr))
                                 log_warn("Failed to update bucket.");
