@@ -1770,9 +1770,6 @@ void * irm_sanitize(void * o)
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 ipcpi   = f->n_1_api;
                                 port_id = f->port_id;
-                                pthread_rwlock_unlock(&irmd.flows_lock);
-                                ipcp_flow_dealloc(ipcpi, port_id);
-                                pthread_rwlock_wrlock(&irmd.flows_lock);
                                 continue;
                         }
 

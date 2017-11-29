@@ -1369,7 +1369,8 @@ void ipcp_flow_fini(int fd)
 
         pthread_rwlock_unlock(&ai.lock);
 
-        shm_rbuff_fini(rx_rb);
+        if (rx_rb != NULL)
+                shm_rbuff_fini(rx_rb);
 }
 
 int ipcp_flow_get_qoscube(int         fd,
