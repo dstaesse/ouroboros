@@ -134,57 +134,62 @@ static char * rdrb_filename(void)
         return str;
 }
 
-struct shm_rdrbuff * shm_rdrbuff_create()
+void shm_rdrbuff_close(struct shm_rdrbuff * rdrb)
+{
+        assert(rdrb);
+
+        munmap(rdrb->shm_base, SHM_FILE_SIZE);
+        free(rdrb);
+}
+
+void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
+{
+        char * shm_rdrb_fn;
+
+        assert(rdrb);
+
+        if (getpid() != *rdrb->api && kill(*rdrb->api, 0) == 0)
+                return;
+
+        shm_rdrbuff_close(rdrb);
+
+        shm_rdrb_fn = rdrb_filename();
+        if (shm_rdrb_fn == NULL)
+                return;
+
+        shm_unlink(shm_rdrb_fn);
+        free(shm_rdrb_fn);
+}
+
+#define MM_FLAGS (PROT_READ | PROT_WRITE)
+
+static struct shm_rdrbuff * rdrb_create(int flags)
 {
         struct shm_rdrbuff * rdrb;
-        mode_t               mask;
-        int                  shm_fd;
+        int                  fd;
         uint8_t *            shm_base;
-        pthread_mutexattr_t  mattr;
-        pthread_condattr_t   cattr;
-        char *               shm_rdrb_fn = rdrb_filename();
+        char *               shm_rdrb_fn;
+
+        shm_rdrb_fn = rdrb_filename();
         if (shm_rdrb_fn == NULL)
-                return NULL;
+                goto fail_fn;
 
         rdrb = malloc(sizeof *rdrb);
-        if (rdrb == NULL) {
-                free(shm_rdrb_fn);
-                return NULL;
-        }
+        if (rdrb == NULL)
+                goto fail_rdrb;
 
-        mask = umask(0);
+        fd = shm_open(shm_rdrb_fn, flags, 0666);
+        if (fd == -1)
+                goto fail_open;
 
-        shm_fd = shm_open(shm_rdrb_fn, O_CREAT | O_EXCL | O_RDWR, 0666);
-        if (shm_fd == -1) {
-                free(shm_rdrb_fn);
-                free(rdrb);
-                return NULL;
-        }
+        if ((flags & O_CREAT) && ftruncate(fd, SHM_FILE_SIZE - 1) < 0)
+                goto fail_truncate;
 
-        umask(mask);
+        shm_base = mmap(NULL, SHM_FILE_SIZE, MM_FLAGS, MAP_SHARED, fd, 0);
+        if (shm_base == MAP_FAILED)
+                goto fail_truncate;
 
-        if (ftruncate(shm_fd, SHM_FILE_SIZE - 1) < 0) {
-                free(shm_rdrb_fn);
-                close(shm_fd);
-                free(rdrb);
-                return NULL;
-        }
-
-        shm_base = mmap(NULL,
-                        SHM_FILE_SIZE,
-                        PROT_READ | PROT_WRITE,
-                        MAP_SHARED,
-                        shm_fd,
-                        0);
-
-        close(shm_fd);
-
-        if (shm_base == MAP_FAILED) {
-                shm_unlink(shm_rdrb_fn);
-                free(shm_rdrb_fn);
-                free(rdrb);
-                return NULL;
-        }
+        close(fd);
 
         rdrb->shm_base = shm_base;
         rdrb->head = (size_t *) ((uint8_t *) rdrb->shm_base + SHM_BLOCKS_SIZE);
@@ -194,80 +199,88 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         rdrb->healthy = rdrb->full + 1;
         rdrb->api = (pid_t *) (rdrb->healthy + 1);
 
-        pthread_mutexattr_init(&mattr);
+        free(shm_rdrb_fn);
+
+        return rdrb;
+
+ fail_truncate:
+        close(fd);
+        if (flags & O_CREAT)
+                shm_unlink(shm_rdrb_fn);
+ fail_open:
+        free(rdrb);
+ fail_rdrb:
+        free(shm_rdrb_fn);
+ fail_fn:
+        return NULL;
+}
+
+struct shm_rdrbuff * shm_rdrbuff_create()
+{
+        struct shm_rdrbuff * rdrb;
+        mode_t               mask;
+        pthread_mutexattr_t  mattr;
+        pthread_condattr_t   cattr;
+
+        mask = umask(0);
+
+        rdrb = rdrb_create(O_CREAT | O_EXCL | O_RDWR);
+
+        umask(mask);
+
+        if (rdrb == NULL)
+                goto fail_rdrb;
+
+        if (pthread_mutexattr_init(&mattr))
+                goto fail_mattr;
+
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
 #ifdef HAVE_ROBUST_MUTEX
         pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
 #endif
-        pthread_mutex_init(rdrb->lock, &mattr);
+        if (pthread_mutex_init(rdrb->lock, &mattr))
+                goto fail_mutex;
 
-        pthread_condattr_init(&cattr);
+        if (pthread_condattr_init(&cattr))
+                goto fail_cattr;
+
         pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        pthread_cond_init(rdrb->full, &cattr);
-        pthread_cond_init(rdrb->healthy, &cattr);
+        if (pthread_cond_init(rdrb->full, &cattr))
+                goto fail_full;
+
+        if (pthread_cond_init(rdrb->healthy, &cattr))
+                goto fail_healthy;
 
         *rdrb->head = 0;
         *rdrb->tail = 0;
 
         *rdrb->api = getpid();
 
-        free(shm_rdrb_fn);
+        pthread_mutexattr_destroy(&mattr);
+        pthread_condattr_destroy(&cattr);
 
         return rdrb;
+
+ fail_healthy:
+        pthread_cond_destroy(rdrb->full);
+ fail_full:
+        pthread_condattr_destroy(&cattr);
+ fail_cattr:
+        pthread_mutex_destroy(rdrb->lock);
+ fail_mutex:
+        pthread_mutexattr_destroy(&mattr);
+ fail_mattr:
+        shm_rdrbuff_destroy(rdrb);
+ fail_rdrb:
+         return NULL;
 }
 
 struct shm_rdrbuff * shm_rdrbuff_open()
 {
-        struct shm_rdrbuff * rdrb;
-        int                  shm_fd;
-        uint8_t *            shm_base;
-        char *               shm_rdrb_fn = rdrb_filename();
-        if (shm_rdrb_fn == NULL)
-                return NULL;
-
-        rdrb = malloc(sizeof *rdrb);
-        if (rdrb == NULL) {
-                free(shm_rdrb_fn);
-                return NULL;
-        }
-
-        shm_fd = shm_open(shm_rdrb_fn, O_RDWR, 0666);
-        if (shm_fd < 0) {
-                free(shm_rdrb_fn);
-                free(rdrb);
-                return NULL;
-        }
-
-        shm_base = mmap(NULL,
-                        SHM_FILE_SIZE,
-                        PROT_READ | PROT_WRITE,
-                        MAP_SHARED,
-                        shm_fd,
-                        0);
-
-        close(shm_fd);
-
-        if (shm_base == MAP_FAILED) {
-                shm_unlink(shm_rdrb_fn);
-                free(shm_rdrb_fn);
-                free(rdrb);
-                return NULL;
-        }
-
-        rdrb->shm_base = shm_base;
-        rdrb->head = (size_t *) ((uint8_t *) rdrb->shm_base + SHM_BLOCKS_SIZE);
-        rdrb->tail = rdrb->head + 1;
-        rdrb->lock = (pthread_mutex_t *) (rdrb->tail + 1);
-        rdrb->full = (pthread_cond_t *) (rdrb->lock + 1);
-        rdrb->healthy = rdrb->full + 1;
-        rdrb->api = (pid_t *) (rdrb->healthy + 1);
-
-        free(shm_rdrb_fn);
-
-        return rdrb;
+        return rdrb_create(O_RDWR);
 }
 
 int shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb,
@@ -315,14 +328,6 @@ int shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb,
         return 0;
 }
 
-void shm_rdrbuff_close(struct shm_rdrbuff * rdrb)
-{
-        assert(rdrb);
-
-        munmap(rdrb->shm_base, SHM_FILE_SIZE);
-        free(rdrb);
-}
-
 void shm_rdrbuff_purge(void)
 {
         char * shm_rdrb_fn;
@@ -332,27 +337,6 @@ void shm_rdrbuff_purge(void)
                 return;
 
         shm_unlink(shm_rdrb_fn);
-        free(shm_rdrb_fn);
-}
-
-void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
-{
-        char * shm_rdrb_fn;
-
-        assert(rdrb);
-
-        if (getpid() != *rdrb->api && kill(*rdrb->api, 0) == 0)
-                return;
-
-        munmap(rdrb->shm_base, SHM_FILE_SIZE);
-
-        shm_rdrb_fn = rdrb_filename();
-        if (shm_rdrb_fn == NULL)
-                return;
-
-        shm_unlink(shm_rdrb_fn);
-
-        free(rdrb);
         free(shm_rdrb_fn);
 }
 
