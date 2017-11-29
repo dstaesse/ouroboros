@@ -23,7 +23,7 @@ set(SHIM_UDP_SOURCES
 
 add_executable(ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES}
   ${SHIM_UDP_PROTO_SRCS})
-target_link_libraries(ipcpd-shim-udp LINK_PUBLIC ouroboros-common ouroboros-dev
+target_link_libraries(ipcpd-shim-udp LINK_PUBLIC ouroboros-dev
   ${PROTOBUF_C_LIBRARY})
 
 # Find the nsupdate executable
