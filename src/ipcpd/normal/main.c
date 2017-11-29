@@ -29,7 +29,6 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp-dev.h>
-#include <ouroboros/irm.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/rib.h>
@@ -304,11 +303,6 @@ int main(int    argc,
                 goto fail_init;
         }
 
-        if (irm_bind_api(getpid(), ipcpi.name)) {
-                log_err("Failed to bind AP name.");
-                goto fail_bind_api;
-        }
-
         /* These components must be init at creation. */
         if (rib_init("ipcpd-normal")) {
                 log_err("Failed to initialize RIB.");
@@ -357,8 +351,6 @@ int main(int    argc,
 
         rib_fini();
 
-        irm_unbind_api(getpid(), ipcpi.name);
-
         ipcp_fini();
 
         exit(EXIT_SUCCESS);
@@ -374,8 +366,6 @@ int main(int    argc,
  fail_connmgr_init:
         rib_fini();
  fail_rib_init:
-        irm_unbind_api(getpid(), ipcpi.name);
- fail_bind_api:
        ipcp_fini();
  fail_init:
         ipcp_create_r(getpid(), -1);

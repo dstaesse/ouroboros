@@ -135,7 +135,7 @@ destroys the IPCP process with name \fIname\fR.
 .RE
 .PP
 \fBirm ipcp bootstrap\fR type \fItype\fR name \fIname\fR dif \fIdif\fR \
-[\fIparams\fR]
+[\fIparams\fR] [\fIautobind\fR]
 .RS 4
 bootstraps an IPCP process of type \fItype\fR and name \fIname\fR in a
 DIF \fIdif\fR. If an IPCP with that name does not exist yet, the IPCP
@@ -176,7 +176,6 @@ default: 4 bytes.
 default: 2 bytes.
 .PP
 [ttl] specifies the presence of a time-to-live field.
-TODO: set a default TTL here?
 .PP
 [addr_auth \fIpolicy\fR] specifies the address authority policy.
 .br
@@ -201,14 +200,18 @@ default: simple.
 \fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
 .br
 default: SHA3_256.
+.PP
+[autobind] will automatically bind a normal IPCP to its name and the DIF name.
 .RE
 .RE
 
 .PP
-\fBirm ipcp enroll\fR name \fIname\fR dif \fIdif\fR
+\fBirm ipcp enroll\fR name \fIname\fR dif \fIdif\fR [\fIautobind\fR]
 .RS 4
 enrolls a normal IPCP \fIname\fR to a dif for which the IPCPs accept flows for
 \fIname\fR.
+.PP
+[autobind] will automatically bind this IPCP to its name and the DIF name.
 .RE
 
 \fBirm ipcp connect\fR name \fIname\fR component \fIcomponent\fR dst

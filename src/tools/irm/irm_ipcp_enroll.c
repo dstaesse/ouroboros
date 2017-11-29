@@ -48,31 +48,38 @@ static void usage(void)
 {
         printf("Usage: irm ipcp enroll\n"
                "                name <ipcp name>\n"
-               "                dif <dif to enroll in>\n");
+               "                dif <dif to enroll in>\n"
+               "                [autobind]\n");
 }
 
 int do_enroll_ipcp(int argc, char ** argv)
 {
-        char * name = NULL;
-        char * dif_name = NULL;
-        pid_t * apis = NULL;
-        pid_t api;
-        ssize_t len = 0;
-        int i = 0;
+        char *  name     = NULL;
+        char *  dif_name = NULL;
+        pid_t * apis     = NULL;
+        pid_t   api;
+        ssize_t len      = 0;
+        int     i        = 0;
+        bool    autobind = false;
+        int     cargs;
 
         while (argc > 0) {
+                cargs = 2;
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                 } else if (matches(*argv, "dif") == 0) {
                         dif_name = *(argv + 1);
+                } else if (matches(*argv, "autobind") == 0) {
+                        autobind = true;
+                        cargs = 1;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "enroll_ipcp\".\n", *argv);
                         return -1;
                 }
 
-                argc -= 2;
-                argv += 2;
+                argc -= cargs;
+                argv += cargs;
         }
 
         if (dif_name == NULL || name == NULL) {
@@ -89,7 +96,20 @@ int do_enroll_ipcp(int argc, char ** argv)
         }
 
         for (i = 0; i < len; i++) {
+                if (autobind && irm_bind_api(apis[i], name)) {
+                        free(apis);
+                        return -1;
+                }
+
                 if (irm_enroll_ipcp(apis[i], dif_name)) {
+                        if (autobind)
+                                irm_unbind_api(apis[i], name);
+                        free(apis);
+                        return -1;
+                }
+
+                if (autobind && irm_bind_api(apis[i], dif_name)) {
+                        printf("Failed to bind %d to %s.\n", apis[i], dif_name);
                         free(apis);
                         return -1;
                 }

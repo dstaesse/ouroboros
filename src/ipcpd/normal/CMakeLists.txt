@@ -50,7 +50,7 @@ set(SOURCE_FILES
 
 add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
   ${FLOW_ALLOC_SRCS} ${LS_PROTO_SRCS} ${KAD_PROTO_SRCS} ${ENROLL_PROTO_SRCS})
-target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros-dev ouroboros-irm)
+target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros-dev)
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")

@@ -90,6 +90,7 @@ static void usage(void)
                "                [routing <ROUTING_POLICY> (default: %s)]\n"
                "                [pff [PFF_POLICY] (default: %s)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
+               "                [autobind]\n"
                "where ADDRESS_POLICY = {"FLAT_RANDOM_ADDR_AUTH"}\n"
                "      ROUTING_POLICY = {"LINK_STATE_ROUTING " "
                LINK_STATE_LFA_ROUTING "}\n"
@@ -126,8 +127,11 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         pid_t *            apis           = NULL;
         ssize_t            len            = 0;
         int                i              = 0;
+        bool               autobind       = false;
+        int                cargs;
 
         while (argc > 0) {
+                cargs = 2;
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "dif") == 0) {
@@ -159,8 +163,10 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         fd_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "ttl") == 0) {
                         has_ttl = true;
-                        argc++;
-                        argv--;
+                        cargs = 1;
+                } else if (matches(*argv, "autobind") == 0) {
+                        autobind = true;
+                        cargs = 1;
                 } else if (matches(*argv, "addr_auth") == 0) {
                         if (strcmp(FLAT_RANDOM_ADDR_AUTH, *(argv + 1)) == 0)
                                 addr_auth_type = ADDR_AUTH_FLAT_RANDOM;
@@ -186,8 +192,8 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                         return -1;
                 }
 
-                argc -= 2;
-                argv += 2;
+                argc -= cargs;
+                argv += cargs;
         }
 
         if (name == NULL || dif_name == NULL || ipcp_type == NULL) {
@@ -228,6 +234,11 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 return -1;
         }
 
+        if (autobind && conf.type != IPCP_NORMAL) {
+                printf("Can only bind normal IPCPs, autobind disabled.\n");
+                autobind = false;
+        }
+
         len = irm_list_ipcps(name, &apis);
         if (len <= 0) {
                 api = irm_create_ipcp(name, conf.type);
@@ -236,14 +247,31 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 len = irm_list_ipcps(name, &apis);
         }
 
-        for (i = 0; i < len; i++)
-                if (irm_bootstrap_ipcp(apis[i], &conf)) {
+        for (i = 0; i < len; i++) {
+                if (autobind && irm_bind_api(apis[i], name)) {
+                        printf("Failed to bind %d to %s.\n", apis[i], name);
                         free(apis);
                         return -1;
                 }
 
-        if (apis != NULL)
-                free(apis);
+                if (autobind && irm_bind_api(apis[i], dif_name)) {
+                        printf("Failed to bind %d to %s.\n", apis[i], dif_name);
+                        irm_unbind_api(apis[i], name);
+                        free(apis);
+                        return -1;
+                }
+
+                if (irm_bootstrap_ipcp(apis[i], &conf)) {
+                        if (autobind) {
+                                irm_unbind_api(apis[i], name);
+                                irm_unbind_api(apis[i], dif_name);
+                        }
+                        free(apis);
+                        return -1;
+                }
+        }
+
+        free(apis);
 
         return 0;
 
