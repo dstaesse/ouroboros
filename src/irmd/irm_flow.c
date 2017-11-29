@@ -20,7 +20,7 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define _POSIX_C_SOURCE 199309L
+#define _POSIX_C_SOURCE 200112L
 
 #include "config.h"
 
@@ -41,20 +41,22 @@ struct irm_flow * irm_flow_create(pid_t     n_api,
                                   int       port_id,
                                   qoscube_t qc)
 {
-        struct irm_flow * f = malloc(sizeof(*f));
+        pthread_condattr_t cattr;
+        struct irm_flow *  f = malloc(sizeof(*f));
         if (f == NULL)
-                return NULL;
+                goto fail_malloc;
 
-        if (pthread_cond_init(&f->state_cond, NULL)) {
-                free(f);
-                return NULL;
-        }
+        if (pthread_condattr_init(&cattr))
+                goto fail_cattr;
 
-        if (pthread_mutex_init(&f->state_lock, NULL)) {
-                pthread_cond_destroy(&f->state_cond);
-                free(f);
-                return NULL;
-        }
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+        if (pthread_cond_init(&f->state_cond, &cattr))
+                goto fail_state_cond;
+
+        if (pthread_mutex_init(&f->state_lock, NULL))
+                goto fail_mutex;
 
         f->n_api   = n_api;
         f->n_1_api = n_1_api;
@@ -64,20 +66,13 @@ struct irm_flow * irm_flow_create(pid_t     n_api,
         f->n_rb = shm_rbuff_create(n_api, port_id);
         if (f->n_rb == NULL) {
                 log_err("Could not create ringbuffer for AP-I %d.", n_api);
-                pthread_mutex_destroy(&f->state_lock);
-                pthread_cond_destroy(&f->state_cond);
-                free(f);
-                return NULL;
+                goto fail_n_rbuff;
         }
 
         f->n_1_rb = shm_rbuff_create(n_1_api, port_id);
         if (f->n_1_rb == NULL) {
                 log_err("Could not create ringbuffer for AP-I %d.", n_1_api);
-                shm_rbuff_destroy(f->n_rb);
-                pthread_mutex_destroy(&f->state_lock);
-                pthread_cond_destroy(&f->state_cond);
-                free(f);
-                return NULL;
+                goto fail_n_1_rbuff;
         }
 
         f->state = FLOW_ALLOC_PENDING;
@@ -85,7 +80,22 @@ struct irm_flow * irm_flow_create(pid_t     n_api,
         if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
                 log_warn("Failed to set timestamp.");
 
+        pthread_condattr_destroy(&cattr);
+
         return f;
+
+ fail_n_1_rbuff:
+        shm_rbuff_destroy(f->n_rb);
+ fail_n_rbuff:
+        pthread_mutex_destroy(&f->state_lock);
+ fail_mutex:
+        pthread_cond_destroy(&f->state_cond);
+ fail_state_cond:
+        pthread_condattr_destroy(&cattr);
+ fail_cattr:
+        free(f);
+ fail_malloc:
+        return NULL;
 }
 
 static void cancel_irm_destroy(void * o)
