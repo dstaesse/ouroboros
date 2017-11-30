@@ -133,14 +133,12 @@ static void * acceptloop(void * o)
                 cmd = malloc(sizeof(*cmd));
                 if (cmd == NULL) {
                         log_err("Out of memory");
+                        close(csockfd);
                         break;
                 }
 
-                pthread_mutex_lock(&ipcpi.cmd_lock);
-
                 cmd->len = read(csockfd, cmd->cbuf, IPCP_MSG_BUF_SIZE);
                 if (cmd->len <= 0) {
-                        pthread_mutex_unlock(&ipcpi.cmd_lock);
                         log_err("Failed to read from socket.");
                         close(csockfd);
                         free(cmd);
@@ -148,6 +146,8 @@ static void * acceptloop(void * o)
                 }
 
                 cmd->fd = csockfd;
+
+                pthread_mutex_lock(&ipcpi.cmd_lock);
 
                 list_add(&cmd->next, &ipcpi.cmds);
 
