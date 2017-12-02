@@ -33,11 +33,11 @@ enum irm_msg_code {
         IRM_ENROLL_IPCP       =  6;
         IRM_CONNECT_IPCP      =  7;
         IRM_DISCONNECT_IPCP   =  8;
-        IRM_BIND_AP           =  9;
-        IRM_UNBIND_AP         = 10;
-        IRM_API_ANNOUNCE      = 11;
-        IRM_BIND_API          = 12;
-        IRM_UNBIND_API        = 13;
+        IRM_BIND_PROGRAM      =  9;
+        IRM_UNBIND_PROGRAM    = 10;
+        IRM_PROC_ANNOUNCE     = 11;
+        IRM_BIND_PROCESS      = 12;
+        IRM_UNBIND_PROCESS    = 13;
         IRM_REG               = 14;
         IRM_UNREG             = 15;
         IRM_FLOW_ALLOC        = 16;
@@ -50,8 +50,8 @@ enum irm_msg_code {
 
 message irm_msg {
         required irm_msg_code code    =  1;
-        optional string ap_name       =  2;
-        optional sint32 api           =  3;
+        optional string prog_name     =  2;
+        optional sint32 pid           =  3;
         optional uint32 ipcp_type     =  4;
         repeated string dif_name      =  5;
         repeated string args          =  6;
@@ -62,7 +62,7 @@ message irm_msg {
         optional sint32 qoscube       = 11;
         optional ipcp_config_msg conf = 12;
         optional uint32 opts          = 13;
-        repeated sint32 apis          = 14;
+        repeated sint32 pids          = 14;
         optional uint32 timeo_sec     = 15;
         optional uint32 timeo_nsec    = 16;
         optional string comp_name     = 17;

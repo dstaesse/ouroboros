@@ -27,7 +27,7 @@
 
 #include <unistd.h>
 
-int  np1_flow_alloc(pid_t     n_api,
+int  np1_flow_alloc(pid_t     n_pid,
                     int       port_id,
                     qoscube_t qc);
 

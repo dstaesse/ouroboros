@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Unbind AP names
+ * Bind programs to a name
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -36,38 +36,58 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 500
+
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 
 #include <ouroboros/irm.h>
+#include <ouroboros/errno.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
 static void usage(void)
 {
-        printf("Usage: irm unbind ap <ap>\n"
-               "                  [name <name> (default: remove all AP info)]"
-               "\n");
+        printf("Usage: irm bind program <program>\n"
+               "           name <name>\n"
+               "           [auto] (instantiate program if not running)\n"
+               "           [-- <application arguments>]\n");
 }
 
-int do_unbind_ap(int argc, char ** argv)
+
+int do_bind_program(int     argc,
+                    char ** argv)
 {
-        char * name = NULL;
-        char * ap_name = NULL;
+        char *   name  = NULL;
+        char *   prog  = NULL;
+        uint16_t flags = 0;
+        int      ret   = 0;
+        char *   temp  = NULL;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                         ++argv;
                         --argc;
-                } else if (matches(*argv, "ap") == 0) {
-                        ap_name = *(argv + 1);
+                } else if (matches(*argv, "program") == 0) {
+                        ++argv;
+                        temp = realpath(*argv, NULL);
+                        if (temp != NULL)
+                                *argv = temp;
+                        prog = *argv;
+                        --argc;
+                } else if (strcmp(*argv, "auto") == 0) {
+                        flags |= BIND_AUTO;
+                } else if (strcmp(*argv, "--") == 0) {
                         ++argv;
                         --argc;
+                        break;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "unbind ap\".\n", *argv);
+                               "bind program\".\n", *argv);
                         return -1;
                 }
 
@@ -75,10 +95,24 @@ int do_unbind_ap(int argc, char ** argv)
                 --argc;
         }
 
-        if (ap_name == NULL) {
+        if (name == NULL || prog == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_unbind_ap(ap_name, name);
+        ret = irm_bind_program(prog, name, flags, argc, argv);
+        if (ret == -ENOENT) {
+                printf("%s does not exist.\n", prog);
+                return ret;
+        }
+
+        if (ret == -EPERM) {
+                printf("Cannot execute %s, please check permissions.\n", prog);
+                return ret;
+        }
+
+        if (temp != NULL)
+                free(temp);
+
+        return ret;
 }

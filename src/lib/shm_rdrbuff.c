@@ -103,7 +103,7 @@ struct shm_rdrbuff {
         pthread_mutex_t * lock;     /* lock all free space in shm */
         pthread_cond_t *  full;     /* flag when full */
         pthread_cond_t *  healthy;  /* flag when SDU is read */
-        pid_t *           api;      /* api of the irmd owner */
+        pid_t *           pid;      /* pid of the irmd owner */
 };
 
 static void garbage_collect(struct shm_rdrbuff * rdrb)
@@ -148,7 +148,7 @@ void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
 
         assert(rdrb);
 
-        if (getpid() != *rdrb->api && kill(*rdrb->api, 0) == 0)
+        if (getpid() != *rdrb->pid && kill(*rdrb->pid, 0) == 0)
                 return;
 
         shm_rdrbuff_close(rdrb);
@@ -197,7 +197,7 @@ static struct shm_rdrbuff * rdrb_create(int flags)
         rdrb->lock = (pthread_mutex_t *) (rdrb->tail + 1);
         rdrb->full = (pthread_cond_t *) (rdrb->lock + 1);
         rdrb->healthy = rdrb->full + 1;
-        rdrb->api = (pid_t *) (rdrb->healthy + 1);
+        rdrb->pid = (pid_t *) (rdrb->healthy + 1);
 
         free(shm_rdrb_fn);
 
@@ -257,7 +257,7 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         *rdrb->head = 0;
         *rdrb->tail = 0;
 
-        *rdrb->api = getpid();
+        *rdrb->pid = getpid();
 
         pthread_mutexattr_destroy(&mattr);
         pthread_condattr_destroy(&cattr);

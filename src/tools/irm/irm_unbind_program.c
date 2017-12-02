@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Unbind AP-I names
+ * Unbind programs
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -38,7 +38,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
 
 #include <ouroboros/irm.h>
 
@@ -47,28 +46,29 @@
 
 static void usage(void)
 {
-        printf("Usage: irm unbind api <pid>\n"
-               "                  [name <name> (default: remove all AP-I info)]"
+        printf("Usage: irm unbind program <program>\n"
+               "                  [name <name> (default: unbind all names)]"
                "\n");
 }
 
-int do_unbind_api(int argc, char ** argv)
+int do_unbind_program(int     argc,
+                      char ** argv)
 {
-        pid_t api = -1;
         char * name = NULL;
+        char * prog = NULL;
 
-        while (argc > 1) {
+        while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                         ++argv;
                         --argc;
-                } else if (matches(*argv, "api") == 0) {
-                        api = strtol(*(argv + 1), NULL, 10);
+                } else if (matches(*argv, "program") == 0) {
+                        prog = *(argv + 1);
                         ++argv;
                         --argc;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "unbind api\".\n", *argv);
+                               "unbind program\".\n", *argv);
                         return -1;
                 }
 
@@ -76,10 +76,10 @@ int do_unbind_api(int argc, char ** argv)
                 --argc;
         }
 
-        if (api < 0) {
+        if (prog == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_unbind_api(api, name);
+        return irm_unbind_program(prog, name);
 }

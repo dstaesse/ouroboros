@@ -93,7 +93,7 @@ struct flow {
         qoscube_t             cube;
         qosspec_t             spec;
 
-        pid_t                 api;
+        pid_t                 pid;
 
         bool                  snd_timesout;
         bool                  rcv_timesout;
@@ -104,8 +104,8 @@ struct flow {
 };
 
 struct {
-        char *                ap_name;
-        pid_t                 api;
+        char *                prog;
+        pid_t                 pid;
 
         struct shm_rdrbuff *  rdrb;
         struct shm_flow_set * fqset;
@@ -198,17 +198,17 @@ static enum port_state port_wait_assign(int port_id)
         return state;
 }
 
-static int api_announce(char * ap_name)
+static int proc_announce(char * prog)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int         ret      = -1;
 
-        msg.code    = IRM_MSG_CODE__IRM_API_ANNOUNCE;
-        msg.has_api = true;
+        msg.code    = IRM_MSG_CODE__IRM_PROC_ANNOUNCE;
+        msg.has_pid = true;
 
-        msg.api = ai.api;
-        msg.ap_name = ap_name;
+        msg.pid       = ai.pid;
+        msg.prog_name = prog;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
@@ -230,7 +230,7 @@ static void flow_clear(int fd)
         memset(&ai.flows[fd], 0, sizeof(ai.flows[fd]));
 
         ai.flows[fd].port_id  = -1;
-        ai.flows[fd].api      = -1;
+        ai.flows[fd].pid      = -1;
         ai.flows[fd].cube     = QOS_CUBE_BE;
 }
 
@@ -259,7 +259,7 @@ static void flow_fini(int fd)
 }
 
 static int flow_init(int       port_id,
-                     pid_t     api,
+                     pid_t     pid,
                      qoscube_t qc)
 {
         int fd;
@@ -273,21 +273,21 @@ static int flow_init(int       port_id,
                 goto fail_fds;
         }
 
-        ai.flows[fd].rx_rb = shm_rbuff_open(ai.api, port_id);
+        ai.flows[fd].rx_rb = shm_rbuff_open(ai.pid, port_id);
         if (ai.flows[fd].rx_rb == NULL)
                 goto fail;
 
-        ai.flows[fd].tx_rb = shm_rbuff_open(api, port_id);
+        ai.flows[fd].tx_rb = shm_rbuff_open(pid, port_id);
         if (ai.flows[fd].tx_rb == NULL)
                 goto fail;
 
-        ai.flows[fd].set = shm_flow_set_open(api);
+        ai.flows[fd].set = shm_flow_set_open(pid);
         if (ai.flows[fd].set == NULL)
                 goto fail;
 
         ai.flows[fd].port_id = port_id;
         ai.flows[fd].oflags  = FLOWFDEFAULT;
-        ai.flows[fd].api     = api;
+        ai.flows[fd].pid     = pid;
         ai.flows[fd].cube    = qc;
         ai.flows[fd].spec    = qos_cube_to_spec(qc);
 
@@ -320,24 +320,24 @@ static void init(int     argc,
                  char ** argv,
                  char ** envp)
 {
-        const char * ap_name = argv[0];
+        const char * prog = argv[0];
         int          i;
 
         (void) argc;
         (void) envp;
 
-        assert(ai.ap_name == NULL);
+        assert(ai.prog == NULL);
 
         if (check_python(argv[0]))
-                ap_name = argv[1];
+                prog = argv[1];
 
-        ai.api = getpid();
+        ai.pid = getpid();
 
-        ai.fds = bmp_create(AP_MAX_FLOWS - AP_RES_FDS, AP_RES_FDS);
+        ai.fds = bmp_create(PROG_MAX_FLOWS - PROG_RES_FDS, PROG_RES_FDS);
         if (ai.fds == NULL)
                 goto fail_fds;
 
-        ai.fqueues = bmp_create(AP_MAX_FQUEUES, 0);
+        ai.fqueues = bmp_create(PROG_MAX_FQUEUES, 0);
         if (ai.fqueues == NULL)
                 goto fail_fqueues;
 
@@ -349,23 +349,23 @@ static void init(int     argc,
         if (ai.rdrb == NULL)
                 goto fail_rdrb;
 
-        ai.flows = malloc(sizeof(*ai.flows) * AP_MAX_FLOWS);
+        ai.flows = malloc(sizeof(*ai.flows) * PROG_MAX_FLOWS);
         if (ai.flows == NULL)
                 goto fail_flows;
 
-        for (i = 0; i < AP_MAX_FLOWS; ++i)
+        for (i = 0; i < PROG_MAX_FLOWS; ++i)
                 flow_clear(i);
 
         ai.ports = malloc(sizeof(*ai.ports) * SYS_MAX_FLOWS);
         if (ai.ports == NULL)
                 goto fail_ports;
 
-        if (ap_name != NULL) {
-                ai.ap_name = strdup(path_strip((char *) ap_name));
-                if (ai.ap_name == NULL)
-                        goto fail_ap_name;
+        if (prog != NULL) {
+                ai.prog = strdup(path_strip((char *) prog));
+                if (ai.prog == NULL)
+                        goto fail_prog;
 
-                if (api_announce((char *) ai.ap_name))
+                if (proc_announce((char *) ai.prog))
                         goto fail_announce;
         }
 
@@ -402,8 +402,8 @@ static void init(int     argc,
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
  fail_announce:
-        free(ai.ap_name);
- fail_ap_name:
+        free(ai.prog);
+ fail_prog:
         free(ai.ports);
  fail_ports:
         free(ai.flows);
@@ -433,12 +433,12 @@ static void fini(void)
 
         shm_flow_set_destroy(ai.fqset);
 
-        if (ai.ap_name != NULL)
-                free(ai.ap_name);
+        if (ai.prog != NULL)
+                free(ai.prog);
 
         pthread_rwlock_wrlock(&ai.lock);
 
-        for (i = 0; i < AP_MAX_FLOWS; ++i) {
+        for (i = 0; i < PROG_MAX_FLOWS; ++i) {
                 if (ai.flows[i].port_id != -1) {
                         ssize_t idx;
                         while ((idx = shm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
@@ -487,8 +487,8 @@ int flow_accept(qosspec_t *             qs,
         int         fd       = -1;
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
-        msg.has_api = true;
-        msg.api     = ai.api;
+        msg.has_pid = true;
+        msg.pid     = ai.pid;
 
         if (timeo != NULL) {
                 msg.has_timeo_sec = true;
@@ -512,13 +512,13 @@ int flow_accept(qosspec_t *             qs,
                 return res;
         }
 
-        if (!recv_msg->has_api || !recv_msg->has_port_id ||
+        if (!recv_msg->has_pid || !recv_msg->has_port_id ||
             !recv_msg->has_qoscube) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
         }
 
-        fd = flow_init(recv_msg->port_id, recv_msg->api, recv_msg->qoscube);
+        fd = flow_init(recv_msg->port_id, recv_msg->pid, recv_msg->qoscube);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -557,9 +557,9 @@ int flow_alloc(const char *            dst_name,
 
         msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst_name    = (char *) dst_name;
-        msg.has_api     = true;
+        msg.has_pid     = true;
         msg.has_qoscube = true;
-        msg.api         = ai.api;
+        msg.pid         = ai.pid;
 
         if (qs != NULL)
                 qc = qos_spec_to_cube(*qs);
@@ -588,12 +588,12 @@ int flow_alloc(const char *            dst_name,
                 return res;
         }
 
-        if (!recv_msg->has_api || !recv_msg->has_port_id) {
+        if (!recv_msg->has_pid || !recv_msg->has_port_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
         }
 
-        fd = flow_init(recv_msg->port_id, recv_msg->api, qc);
+        fd = flow_init(recv_msg->port_id, recv_msg->pid, qc);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -627,8 +627,8 @@ int flow_dealloc(int fd)
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_port_id  = true;
-        msg.has_api      = true;
-        msg.api          = ai.api;
+        msg.has_pid      = true;
+        msg.pid          = ai.pid;
 
         pthread_rwlock_rdlock(&ai.lock);
 
@@ -672,7 +672,7 @@ int fccntl(int fd,
         uint32_t          tx_acl;
         struct flow *     flow;
 
-        if (fd < 0 || fd >= AP_MAX_FLOWS)
+        if (fd < 0 || fd >= PROG_MAX_FLOWS)
                 return -EBADF;
 
         flow = &ai.flows[fd];
@@ -807,7 +807,7 @@ ssize_t flow_write(int          fd,
         if (buf == NULL)
                 return 0;
 
-        if (fd < 0 || fd > AP_MAX_FLOWS)
+        if (fd < 0 || fd > PROG_MAX_FLOWS)
                 return -EBADF;
 
         flow = &ai.flows[fd];
@@ -876,7 +876,7 @@ ssize_t flow_read(int    fd,
         struct flow *        flow;
         bool                 noblock;
 
-        if (fd < 0 || fd > AP_MAX_FLOWS)
+        if (fd < 0 || fd > PROG_MAX_FLOWS)
                 return -EBADF;
 
         flow = &ai.flows[fd];
@@ -998,7 +998,7 @@ int fset_add(struct flow_set * set,
         size_t sdus;
         size_t i;
 
-        if (set == NULL || fd < 0 || fd > AP_MAX_FLOWS)
+        if (set == NULL || fd < 0 || fd > PROG_MAX_FLOWS)
                 return -EINVAL;
 
         pthread_rwlock_wrlock(&ai.lock);
@@ -1017,7 +1017,7 @@ int fset_add(struct flow_set * set,
 void fset_del(struct flow_set * set,
               int               fd)
 {
-        if (set == NULL || fd < 0 || fd > AP_MAX_FLOWS)
+        if (set == NULL || fd < 0 || fd > PROG_MAX_FLOWS)
                 return;
 
         pthread_rwlock_wrlock(&ai.lock);
@@ -1111,11 +1111,11 @@ int fevent(struct flow_set *       set,
 
 /* ipcp-dev functions. */
 
-int np1_flow_alloc(pid_t     n_api,
+int np1_flow_alloc(pid_t     n_pid,
                    int       port_id,
                    qoscube_t qc)
 {
-        return flow_init(port_id, n_api, qc);
+        return flow_init(port_id, n_pid, qc);
 }
 
 int np1_flow_dealloc(int port_id)
@@ -1147,7 +1147,7 @@ int np1_flow_resp(int port_id)
         return fd;
 }
 
-int ipcp_create_r(pid_t api,
+int ipcp_create_r(pid_t pid,
                   int   result)
 {
         irm_msg_t msg = IRM_MSG__INIT;
@@ -1155,8 +1155,8 @@ int ipcp_create_r(pid_t api,
         int ret = -1;
 
         msg.code       = IRM_MSG_CODE__IPCP_CREATE_R;
-        msg.has_api    = true;
-        msg.api        = api;
+        msg.has_pid    = true;
+        msg.pid        = pid;
         msg.has_result = true;
         msg.result     = result;
 
@@ -1175,7 +1175,7 @@ int ipcp_create_r(pid_t api,
         return ret;
 }
 
-int ipcp_flow_req_arr(pid_t           api,
+int ipcp_flow_req_arr(pid_t           pid,
                       const uint8_t * dst,
                       size_t          len,
                       qoscube_t       qc)
@@ -1188,8 +1188,8 @@ int ipcp_flow_req_arr(pid_t           api,
                 return -EINVAL;
 
         msg.code        = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
-        msg.has_api     = true;
-        msg.api         = api;
+        msg.has_pid     = true;
+        msg.pid         = pid;
         msg.has_hash    = true;
         msg.hash.len    = len;
         msg.hash.data   = (uint8_t *) dst;
@@ -1201,7 +1201,7 @@ int ipcp_flow_req_arr(pid_t           api,
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (!recv_msg->has_port_id || !recv_msg->has_api) {
+        if (!recv_msg->has_port_id || !recv_msg->has_pid) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -1211,7 +1211,7 @@ int ipcp_flow_req_arr(pid_t           api,
                 return -1;
         }
 
-        fd = flow_init(recv_msg->port_id, recv_msg->api, qc);
+        fd = flow_init(recv_msg->port_id, recv_msg->pid, qc);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 

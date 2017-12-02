@@ -56,10 +56,10 @@
 
 #define FQUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(int))
 
-#define SHM_FLOW_SET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)           \
-                                + AP_MAX_FQUEUES * sizeof(size_t)         \
-                                + AP_MAX_FQUEUES * sizeof(pthread_cond_t) \
-                                + AP_MAX_FQUEUES * FQUEUESIZE             \
+#define SHM_FLOW_SET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)             \
+                                + PROG_MAX_FQUEUES * sizeof(size_t)         \
+                                + PROG_MAX_FQUEUES * sizeof(pthread_cond_t) \
+                                + PROG_MAX_FQUEUES * FQUEUESIZE             \
                                 + sizeof(pthread_mutex_t))
 
 #define fqueue_ptr(fs, idx) (fs->fqueues + (SHM_BUFFER_SIZE) * idx)
@@ -71,7 +71,7 @@ struct shm_flow_set {
         int *             fqueues;
         pthread_mutex_t * lock;
 
-        pid_t             api;
+        pid_t             pid;
 };
 
 struct shm_flow_set * shm_flow_set_create()
@@ -124,10 +124,10 @@ struct shm_flow_set * shm_flow_set_create()
 
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
-        set->conds   = (pthread_cond_t *)(set->heads + AP_MAX_FQUEUES);
-        set->fqueues = (int *) (set->conds + AP_MAX_FQUEUES);
+        set->conds   = (pthread_cond_t *)(set->heads + PROG_MAX_FQUEUES);
+        set->fqueues = (int *) (set->conds + PROG_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
-                (set->fqueues + AP_MAX_FQUEUES * (SHM_BUFFER_SIZE));
+                (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
         pthread_mutexattr_init(&mattr);
 #ifdef HAVE_ROBUST_MUTEX
@@ -141,7 +141,7 @@ struct shm_flow_set * shm_flow_set_create()
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        for (i = 0; i < AP_MAX_FQUEUES; ++i) {
+        for (i = 0; i < PROG_MAX_FQUEUES; ++i) {
                 set->heads[i] = 0;
                 pthread_cond_init(&set->conds[i], &cattr);
         }
@@ -149,19 +149,19 @@ struct shm_flow_set * shm_flow_set_create()
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 set->mtable[i] = -1;
 
-        set->api = getpid();
+        set->pid = getpid();
 
         return set;
 }
 
-struct shm_flow_set * shm_flow_set_open(pid_t api)
+struct shm_flow_set * shm_flow_set_open(pid_t pid)
 {
         struct shm_flow_set * set;
         ssize_t *             shm_base;
         char                  fn[FN_MAX_CHARS];
         int                   shm_fd;
 
-        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", api);
+        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", pid);
 
         set = malloc(sizeof(*set));
         if (set == NULL)
@@ -190,12 +190,12 @@ struct shm_flow_set * shm_flow_set_open(pid_t api)
 
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
-        set->conds   = (pthread_cond_t *)(set->heads + AP_MAX_FQUEUES);
-        set->fqueues = (int *) (set->conds + AP_MAX_FQUEUES);
+        set->conds   = (pthread_cond_t *)(set->heads + PROG_MAX_FQUEUES);
+        set->fqueues = (int *) (set->conds + PROG_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
-                (set->fqueues + AP_MAX_FQUEUES * (SHM_BUFFER_SIZE));
+                (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
-        set->api = api;
+        set->pid = pid;
 
         return set;
 }
@@ -207,7 +207,7 @@ void shm_flow_set_destroy(struct shm_flow_set * set)
 
         assert(set);
 
-        if (set->api != getpid()) {
+        if (set->pid != getpid()) {
                 lf = lockfile_open();
                 if (lf == NULL)
                         return;
@@ -220,7 +220,7 @@ void shm_flow_set_destroy(struct shm_flow_set * set)
                 }
         }
 
-        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", set->api);
+        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", set->pid);
 
         munmap(set->mtable, SHM_FLOW_SET_FILE_SIZE);
         shm_unlink(fn);
@@ -243,7 +243,7 @@ void shm_flow_set_zero(struct shm_flow_set * set,
         ssize_t i = 0;
 
         assert(set);
-        assert(idx < AP_MAX_FQUEUES);
+        assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
@@ -263,7 +263,7 @@ int shm_flow_set_add(struct shm_flow_set * set,
 {
         assert(set);
         assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
-        assert(idx < AP_MAX_FQUEUES);
+        assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
@@ -285,7 +285,7 @@ void shm_flow_set_del(struct shm_flow_set * set,
 {
         assert(set);
         assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
-        assert(idx < AP_MAX_FQUEUES);
+        assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
@@ -303,7 +303,7 @@ int shm_flow_set_has(struct shm_flow_set * set,
 
         assert(set);
         assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
-        assert(idx < AP_MAX_FQUEUES);
+        assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
@@ -345,7 +345,7 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
         ssize_t ret = 0;
 
         assert(set);
-        assert(idx < AP_MAX_FQUEUES);
+        assert(idx < PROG_MAX_FQUEUES);
         assert(fqueue);
 
 #ifndef HAVE_ROBUST_MUTEX

@@ -38,7 +38,7 @@
 #define LF_SIZE (sizeof(pid_t))
 
 struct lockfile {
-        pid_t * api;
+        pid_t * pid;
 };
 
 struct lockfile * lockfile_create() {
@@ -63,7 +63,7 @@ struct lockfile * lockfile_create() {
                 return NULL;
         }
 
-        lf->api = mmap(NULL,
+        lf->pid = mmap(NULL,
                        LF_SIZE, PROT_READ | PROT_WRITE,
                        MAP_SHARED,
                        fd,
@@ -71,13 +71,13 @@ struct lockfile * lockfile_create() {
 
         close (fd);
 
-        if (lf->api == MAP_FAILED) {
+        if (lf->pid == MAP_FAILED) {
                 shm_unlink(SHM_LOCKFILE_NAME);
                 free(lf);
                 return NULL;
         }
 
-        *lf->api = getpid();
+        *lf->pid = getpid();
 
         return lf;
 }
@@ -94,7 +94,7 @@ struct lockfile * lockfile_open() {
                 return NULL;
         }
 
-        lf->api = mmap(NULL,
+        lf->pid = mmap(NULL,
                        LF_SIZE, PROT_READ | PROT_WRITE,
                        MAP_SHARED,
                        fd,
@@ -102,7 +102,7 @@ struct lockfile * lockfile_open() {
 
         close(fd);
 
-        if (lf->api == MAP_FAILED) {
+        if (lf->pid == MAP_FAILED) {
                 shm_unlink(SHM_LOCKFILE_NAME);
                 free(lf);
                 return NULL;
@@ -115,7 +115,7 @@ void lockfile_close(struct lockfile * lf)
 {
         assert(lf);
 
-        munmap(lf->api, LF_SIZE);
+        munmap(lf->pid, LF_SIZE);
 
         free(lf);
 }
@@ -124,10 +124,10 @@ void lockfile_destroy(struct lockfile * lf)
 {
         assert(lf);
 
-        if (getpid() != *lf->api && kill(*lf->api, 0) == 0)
+        if (getpid() != *lf->pid && kill(*lf->pid, 0) == 0)
                 return;
 
-        munmap(lf->api, LF_SIZE);
+        munmap(lf->pid, LF_SIZE);
 
         shm_unlink(SHM_LOCKFILE_NAME);
 
@@ -138,5 +138,5 @@ pid_t lockfile_owner(struct lockfile * lf)
 {
         assert(lf);
 
-        return *lf->api;
+        return *lf->pid;
 }

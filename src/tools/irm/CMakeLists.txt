@@ -7,8 +7,8 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 set(SOURCE_FILES
   # Add source files here
   irm.c
-  irm_bind_ap.c
-  irm_bind_api.c
+  irm_bind_program.c
+  irm_bind_process.c
   irm_bind_ipcp.c
   irm_ipcp_create.c
   irm_ipcp_destroy.c
@@ -16,8 +16,8 @@ set(SOURCE_FILES
   irm_ipcp_enroll.c
   irm_ipcp_connect.c
   irm_ipcp_disconnect.c
-  irm_unbind_ap.c
-  irm_unbind_api.c
+  irm_unbind_program.c
+  irm_unbind_process.c
   irm_unbind_ipcp.c
   irm_unbind.c
   irm_bind.c

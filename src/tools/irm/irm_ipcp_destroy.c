@@ -53,7 +53,7 @@ static void usage(void)
 int do_destroy_ipcp(int argc, char ** argv)
 {
         char *  name = NULL;
-        pid_t * apis;
+        pid_t * pids;
         ssize_t len = 0;
         int     i = 0;
 
@@ -75,15 +75,15 @@ int do_destroy_ipcp(int argc, char ** argv)
                 return -1;
         }
 
-        len = irm_list_ipcps(name, &apis);
+        len = irm_list_ipcps(name, &pids);
         if (len <= 0)
                 return -1;
 
         for (i = 0; i < len; i++)
-                if (irm_destroy_ipcp(apis[i]))
+                if (irm_destroy_ipcp(pids[i]))
                         return -1;
 
-        free(apis);
+        free(pids);
 
         return 0;
 }

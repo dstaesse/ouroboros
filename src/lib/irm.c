@@ -36,20 +36,23 @@
 pid_t irm_create_ipcp(const char *   name,
                       enum ipcp_type ipcp_type)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int         ret      = -1;
 
-        msg.code = IRM_MSG_CODE__IRM_CREATE_IPCP;
-        msg.dst_name = (char *) name;
+        if (name == NULL)
+                return -EINVAL;
+
+        msg.code          = IRM_MSG_CODE__IRM_CREATE_IPCP;
+        msg.dst_name      = (char *) name;
         msg.has_ipcp_type = true;
-        msg.ipcp_type = ipcp_type;
+        msg.ipcp_type     = ipcp_type;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -60,24 +63,24 @@ pid_t irm_create_ipcp(const char *   name,
         return ret;
 }
 
-int irm_destroy_ipcp(pid_t api)
+int irm_destroy_ipcp(pid_t pid)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int         ret      = -1;
 
-        if (api == -1)
+        if (pid < 0)
                 return -EINVAL;
 
         msg.code    = IRM_MSG_CODE__IRM_DESTROY_IPCP;
-        msg.has_api = true;
-        msg.api     = api;
+        msg.has_pid = true;
+        msg.pid     = pid;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -88,7 +91,7 @@ int irm_destroy_ipcp(pid_t api)
         return ret;
 }
 
-int irm_bootstrap_ipcp(pid_t                      api,
+int irm_bootstrap_ipcp(pid_t                      pid,
                        const struct ipcp_config * conf)
 {
         irm_msg_t         msg      = IRM_MSG__INIT;
@@ -97,12 +100,12 @@ int irm_bootstrap_ipcp(pid_t                      api,
         irm_msg_t *       recv_msg = NULL;
         int               ret      = -1;
 
-        if (api == -1 || conf == NULL)
+        if (pid == -1 || conf == NULL)
                 return -EINVAL;
 
         msg.code    = IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP;
-        msg.has_api = true;
-        msg.api     = api;
+        msg.has_pid = true;
+        msg.pid     = pid;
 
         config.dif_info = &dif_info;
         msg.conf = &config;
@@ -146,7 +149,7 @@ int irm_bootstrap_ipcp(pid_t                      api,
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
         }
@@ -157,7 +160,7 @@ int irm_bootstrap_ipcp(pid_t                      api,
         return ret;
 }
 
-int irm_connect_ipcp(pid_t        api,
+int irm_connect_ipcp(pid_t        pid,
                      const char * dst,
                      const char * component)
 {
@@ -168,14 +171,14 @@ int irm_connect_ipcp(pid_t        api,
         msg.code      = IRM_MSG_CODE__IRM_CONNECT_IPCP;
         msg.dst_name  = (char *) dst;
         msg.comp_name = (char *) component;
-        msg.has_api   = true;
-        msg.api       = api;
+        msg.has_pid   = true;
+        msg.pid       = pid;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
         }
@@ -186,7 +189,7 @@ int irm_connect_ipcp(pid_t        api,
         return ret;
 }
 
-int irm_disconnect_ipcp(pid_t        api,
+int irm_disconnect_ipcp(pid_t        pid,
                         const char * dst,
                         const char * component)
 {
@@ -197,14 +200,14 @@ int irm_disconnect_ipcp(pid_t        api,
         msg.code      = IRM_MSG_CODE__IRM_DISCONNECT_IPCP;
         msg.dst_name  = (char *) dst;
         msg.comp_name = (char *) component;
-        msg.has_api   = true;
-        msg.api       = api;
+        msg.has_pid   = true;
+        msg.pid       = pid;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
         }
@@ -216,14 +219,14 @@ int irm_disconnect_ipcp(pid_t        api,
 }
 
 ssize_t irm_list_ipcps(const char * name,
-                       pid_t **     apis)
+                       pid_t **     pids)
 {
         irm_msg_t msg        = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         size_t nr            = 0;
         size_t i;
 
-        if (apis == NULL)
+        if (pids == NULL)
                 return -EINVAL;
 
         msg.code     = IRM_MSG_CODE__IRM_LIST_IPCPS;
@@ -233,41 +236,41 @@ ssize_t irm_list_ipcps(const char * name,
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->apis == NULL) {
+        if (recv_msg->pids == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
 
-        nr = recv_msg->n_apis;
-        *apis = malloc(nr * sizeof(pid_t));
-        if (*apis == NULL) {
+        nr = recv_msg->n_pids;
+        *pids = malloc(nr * sizeof(pid_t));
+        if (*pids == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
         }
 
         for (i = 0; i < nr; i++)
-                (*apis)[i] = recv_msg->apis[i];
+                (*pids)[i] = recv_msg->pids[i];
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
         return nr;
 }
 
-int irm_enroll_ipcp(pid_t        api,
+int irm_enroll_ipcp(pid_t        pid,
                     const char * dif_name)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int         ret      = -1;
 
-        if (api == -1 || dif_name == NULL)
+        if (pid == -1 || dif_name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_ENROLL_IPCP;
-        msg.has_api = true;
-        msg.api = api;
+        msg.code       = IRM_MSG_CODE__IRM_ENROLL_IPCP;
+        msg.has_pid    = true;
+        msg.pid        = pid;
         msg.n_dif_name = 1;
-        msg.dif_name = malloc(sizeof(*(msg.dif_name)));
+        msg.dif_name   = malloc(sizeof(*(msg.dif_name)));
         if (msg.dif_name == NULL)
                 return -ENOMEM;
 
@@ -279,7 +282,7 @@ int irm_enroll_ipcp(pid_t        api,
                 return -EIRMD;
         }
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -291,11 +294,11 @@ int irm_enroll_ipcp(pid_t        api,
         return ret;
 }
 
-static int check_ap(const char * ap_name)
+static int check_prog(const char * prog)
 {
         struct stat s;
 
-        if (stat(ap_name, &s) != 0)
+        if (stat(prog, &s) != 0)
                 return -ENOENT;
 
         if (!(s.st_mode & S_IXUSR))
@@ -304,7 +307,7 @@ static int check_ap(const char * ap_name)
         return 0;
 }
 
-static int check_ap_path(char ** ap_name)
+static int check_prog_path(char ** prog)
 {
         char * path = getenv("PATH");
         char * path_end = path + strlen(path) + 1;
@@ -316,23 +319,23 @@ static int check_ap_path(char ** ap_name)
         bool   perm = true;
         int    ret = 0;
 
-        assert(ap_name);
+        assert(prog);
 
-        if (*ap_name == NULL || path == NULL)
+        if (*prog == NULL || path == NULL)
                 return -EINVAL;
 
-        if (!strlen(path) || strchr(*ap_name, '/') != NULL) {
-                if ((ret = check_ap(*ap_name)) < 0)
+        if (!strlen(path) || strchr(*prog, '/') != NULL) {
+                if ((ret = check_prog(*prog)) < 0)
                         return ret;
                 return 0;
         }
 
-        tmp = malloc(strlen(path) + strlen(*ap_name) + 2);
+        tmp = malloc(strlen(path) + strlen(*prog) + 2);
         if (tmp == NULL)
                 return -ENOMEM;
 
         tstop = tmp + strlen(path) + 1;
-        strcpy(tstop--, *ap_name);
+        strcpy(tstop--, *prog);
 
         while (pstop < path_end) {
                 pstart = pstop;
@@ -349,17 +352,17 @@ static int check_ap_path(char ** ap_name)
                 strcpy(tstart, pstart);
                 *tstop = '/';
 
-                if ((ret = check_ap(tstart)) < 0) {
+                if ((ret = check_prog(tstart)) < 0) {
                         if (ret == -EPERM)
                                 perm = false;
                         continue;
                 }
 
-                free(*ap_name);
-                *ap_name = strdup(tstart);
+                free(*prog);
+                *prog = strdup(tstart);
                 free(tmp);
 
-                if (*ap_name == NULL)
+                if (*prog == NULL)
                         return -ENOMEM;
 
                 return 0;
@@ -372,32 +375,32 @@ static int check_ap_path(char ** ap_name)
         return -ENOENT;
 }
 
-int irm_bind_ap(const char * ap,
-                const char * name,
-                uint16_t     opts,
-                int          argc,
-                char **      argv)
+int irm_bind_program(const char * prog,
+                     const char * name,
+                     uint16_t     opts,
+                     int          argc,
+                     char **      argv)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        int ret = -1;
-        char * full_ap_name;
+        int         ret      = -1;
+        char *      full_name;
 
-        if (ap == NULL || name == NULL)
+        if (prog == NULL || name == NULL)
                 return -EINVAL;
 
-        full_ap_name = strdup(ap);
-        if (full_ap_name == NULL)
+        full_name = strdup(prog);
+        if (full_name == NULL)
                 return -ENOMEM;
 
-        if ((ret = check_ap_path(&full_ap_name)) < 0) {
-                free(full_ap_name);
+        if ((ret = check_prog_path(&full_name)) < 0) {
+                free(full_name);
                 return ret;
         }
 
-        msg.code = IRM_MSG_CODE__IRM_BIND_AP;
-        msg.dst_name = (char *) name;
-        msg.ap_name = full_ap_name;
+        msg.code      = IRM_MSG_CODE__IRM_BIND_PROGRAM;
+        msg.dst_name  = (char *) name;
+        msg.prog_name = full_name;
 
         if (argv != NULL) {
                 msg.n_args = argc;
@@ -409,12 +412,12 @@ int irm_bind_ap(const char * ap,
 
         recv_msg = send_recv_irm_msg(&msg);
 
-        free(full_ap_name);
+        free(full_name);
 
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -425,26 +428,26 @@ int irm_bind_ap(const char * ap,
         return ret;
 }
 
-int irm_bind_api(pid_t        api,
-                 const char * name)
+int irm_bind_process(pid_t        pid,
+                     const char * name)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int         ret      = -1;
 
         if (name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_BIND_API;
-        msg.has_api  = true;
-        msg.api      = api;
+        msg.code     = IRM_MSG_CODE__IRM_BIND_PROCESS;
+        msg.has_pid  = true;
+        msg.pid      = pid;
         msg.dst_name = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -455,25 +458,25 @@ int irm_bind_api(pid_t        api,
         return ret;
 }
 
-int irm_unbind_ap(const char * ap,
-                  const char * name)
+int irm_unbind_program(const char * prog,
+                       const char * name)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int         ret      = -1;
 
         if (name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_UNBIND_AP;
-        msg.ap_name  = (char *) ap;
-        msg.dst_name = (char *) name;
+        msg.code      = IRM_MSG_CODE__IRM_UNBIND_PROGRAM;
+        msg.prog_name = (char *) prog;
+        msg.dst_name  = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -484,26 +487,26 @@ int irm_unbind_ap(const char * ap,
         return ret;
 }
 
-int irm_unbind_api(pid_t        api,
-                   const char * name)
+int irm_unbind_process(pid_t        pid,
+                       const char * name)
 {
-        irm_msg_t msg = IRM_MSG__INIT;
+        irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
-        int ret = -1;
+        int         ret      = -1;
 
         if (name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_UNBIND_API;
-        msg.has_api  = true;
-        msg.api      = api;
+        msg.code = IRM_MSG_CODE__IRM_UNBIND_PROCESS;
+        msg.has_pid  = true;
+        msg.pid      = pid;
         msg.dst_name = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -536,7 +539,7 @@ int irm_reg(const char * name,
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -570,7 +573,7 @@ int irm_unreg(const char * name,
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }

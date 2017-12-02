@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH OUROBOROS-TUTORIAL 7 2017-10-15 Ouroboros "Ouroboros User Manual"
+.TH OUROBOROS-TUTORIAL 7 2017-12-02 Ouroboros "Ouroboros User Manual"
 
 .SH NAME
 
@@ -89,7 +89,7 @@ $ oping -l &
 .br
 [1] 24063
 .br
-$ irm bind api 24063 name my.oping.server
+$ irm bind process 24063 name my.oping.server
 .RE
 
 With the server up and running, let's connect a client and send 3
@@ -130,9 +130,9 @@ resources (port_id's 0 and 1) are released.
 .br
 ==23918== irmd(II): Flow on port_id 0 allocated.
 .br
-==23918== irmd(II): Completed deallocation of port_id 0 by AP-I 23932.
+==23918== irmd(II): Completed deallocation of port_id 0 by process 23932.
 .br
-==23918== irmd(II): Completed deallocation of port_id 1 by AP-I 23932.
+==23918== irmd(II): Completed deallocation of port_id 1 by process 23932.
 .RE
 
 .SH TERMINOLOGY

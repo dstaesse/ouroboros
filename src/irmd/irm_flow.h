@@ -45,8 +45,8 @@ struct irm_flow {
         int                port_id;
         qoscube_t          qc;
 
-        pid_t              n_api;
-        pid_t              n_1_api;
+        pid_t              n_pid;
+        pid_t              n_1_pid;
 
         struct shm_rbuff * n_rb;
         struct shm_rbuff * n_1_rb;
@@ -58,8 +58,8 @@ struct irm_flow {
         pthread_mutex_t    state_lock;
 };
 
-struct irm_flow * irm_flow_create(pid_t     n_api,
-                                  pid_t     n_1_api,
+struct irm_flow * irm_flow_create(pid_t     n_pid,
+                                  pid_t     n_1_pid,
                                   int       port_id,
                                   qoscube_t qc);
 

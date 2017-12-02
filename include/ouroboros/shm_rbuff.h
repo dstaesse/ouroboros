@@ -34,10 +34,10 @@
 
 struct shm_rbuff;
 
-struct shm_rbuff * shm_rbuff_create(pid_t api,
+struct shm_rbuff * shm_rbuff_create(pid_t pid,
                                     int   port_id);
 
-struct shm_rbuff * shm_rbuff_open(pid_t api,
+struct shm_rbuff * shm_rbuff_open(pid_t pid,
                                   int   port_id);
 
 void               shm_rbuff_close(struct shm_rbuff * rb);

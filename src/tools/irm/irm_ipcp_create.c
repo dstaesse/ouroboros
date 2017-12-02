@@ -63,7 +63,7 @@ int do_create_ipcp(int argc, char ** argv)
         char * ipcp_type = NULL;
         char * ipcp_name = NULL;
         enum ipcp_type type = 0;
-        pid_t api;
+        pid_t pid;
 
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {
@@ -98,8 +98,8 @@ int do_create_ipcp(int argc, char ** argv)
                 return -1;
         }
 
-        api = irm_create_ipcp(ipcp_name, type);
-        if (api == 0)
+        pid = irm_create_ipcp(ipcp_name, type);
+        if (pid == 0)
                 return -1;
 
         return 0;

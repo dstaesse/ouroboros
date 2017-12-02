@@ -53,7 +53,8 @@ static void usage(void)
                "                   register unregister}\n");
 }
 
-static int do_help(int argc, char **argv)
+static int do_help(int    argc,
+                   char **argv)
 {
         (void) argc;
         (void) argv;
@@ -76,8 +77,8 @@ static const struct cmd {
 };
 
 static int do_cmd(const char * argv0,
-                  int argc,
-                  char ** argv)
+                  int          argc,
+                  char **      argv)
 {
         const struct cmd * c;
 
@@ -91,7 +92,8 @@ static int do_cmd(const char * argv0,
         return -1;
 }
 
-int main(int argc, char ** argv)
+int main(int     argc,
+         char ** argv)
 {
         int ret = 0;
 

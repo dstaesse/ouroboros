@@ -359,7 +359,7 @@ static int get_min_vertex(struct graph *   graph,
         *v = NULL;
 
         list_for_each(p, &graph->vertices) {
-                if (used[i] == true) {
+                if (used[i]) {
                         i++;
                         continue;
                 }
@@ -592,9 +592,9 @@ int graph_routing_table_lfa(struct graph *     graph,
                             struct list_head * table)
 {
         int *              s_dist;
-        int *              n_dist[AP_MAX_FLOWS];
-        uint64_t           addrs[AP_MAX_FLOWS];
-        int                n_index[AP_MAX_FLOWS];
+        int *              n_dist[PROG_MAX_FLOWS];
+        uint64_t           addrs[PROG_MAX_FLOWS];
+        int                n_index[PROG_MAX_FLOWS];
         struct list_head * p;
         struct list_head * q;
         struct vertex *    v;
@@ -609,7 +609,7 @@ int graph_routing_table_lfa(struct graph *     graph,
 
         pthread_mutex_lock(&graph->lock);
 
-        for (j = 0; j < AP_MAX_FLOWS; j++) {
+        for (j = 0; j < PROG_MAX_FLOWS; j++) {
                 n_dist[i] = NULL;
                 n_index[i] = -1;
                 addrs[i] = -1;

@@ -60,11 +60,11 @@ int do_disconnect_ipcp(int     argc,
 int bind_cmd(int     argc,
              char ** argv);
 
-int do_bind_ap(int     argc,
-               char ** argv);
+int do_bind_program(int     argc,
+                    char ** argv);
 
-int do_bind_api(int     argc,
-                char ** argv);
+int do_bind_process(int     argc,
+                    char ** argv);
 
 int do_bind_ipcp(int     argc,
                  char ** argv);
@@ -72,11 +72,11 @@ int do_bind_ipcp(int     argc,
 int unbind_cmd(int     argc,
                char ** argv);
 
-int do_unbind_ap(int     argc,
-                 char ** argv);
+int do_unbind_program(int     argc,
+                      char ** argv);
 
-int do_unbind_api(int     argc,
-                  char ** argv);
+int do_unbind_process(int     argc,
+                      char ** argv);
 
 int do_unbind_ipcp(int     argc,
                    char ** argv);

@@ -33,7 +33,7 @@ struct shm_flow_set * shm_flow_set_create(void);
 
 void                  shm_flow_set_destroy(struct shm_flow_set * set);
 
-struct shm_flow_set * shm_flow_set_open(pid_t api);
+struct shm_flow_set * shm_flow_set_open(pid_t pid);
 
 void                  shm_flow_set_close(struct shm_flow_set * set);
 

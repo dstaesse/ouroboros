@@ -70,8 +70,8 @@ static int reg_entry_init(struct reg_entry * e,
 
         list_head_init(&e->next);
         list_head_init(&e->difs);
-        list_head_init(&e->reg_apns);
-        list_head_init(&e->reg_apis);
+        list_head_init(&e->reg_progs);
+        list_head_init(&e->reg_pids);
 
         e->name = name;
 
@@ -108,13 +108,13 @@ static void cancel_reg_entry_destroy(void * o)
         if (e->name != NULL)
                 free(e->name);
 
-        list_for_each_safe(p, h, &e->reg_apis) {
+        list_for_each_safe(p, h, &e->reg_pids) {
                 struct pid_el * pe = list_entry(p, struct pid_el, next);
                 list_del(&pe->next);
                 free(pe);
         }
 
-        list_for_each_safe(p, h, &e->reg_apns) {
+        list_for_each_safe(p, h, &e->reg_progs) {
                 struct str_el * a = list_entry(p, struct str_el, next);
                 list_del(&a->next);
                 free(a->str);
@@ -214,33 +214,33 @@ static void reg_entry_del_local_from_dif(struct reg_entry * e,
         }
 }
 
-static bool reg_entry_has_apn(struct reg_entry * e,
-                              const char *       apn)
+static bool reg_entry_has_prog(struct reg_entry * e,
+                               const char *       prog)
 {
         struct list_head * p;
 
-        list_for_each(p, &e->reg_apns) {
+        list_for_each(p, &e->reg_progs) {
                 struct str_el * e = list_entry(p, struct str_el, next);
-                if (!strcmp(e->str, apn))
+                if (!strcmp(e->str, prog))
                         return true;
         }
 
         return false;
 }
 
-int reg_entry_add_apn(struct reg_entry * e,
-                      struct apn_entry * a)
+int reg_entry_add_prog(struct reg_entry *  e,
+                       struct prog_entry * a)
 {
         struct str_el * n;
 
-        if (reg_entry_has_apn(e, a->apn)) {
-                log_warn("AP %s already accepting flows for %s.",
-                         a->apn, e->name);
+        if (reg_entry_has_prog(e, a->prog)) {
+                log_warn("Program %s already accepting flows for %s.",
+                         a->prog, e->name);
                 return 0;
         }
 
-        if (!(a->flags & BIND_AP_AUTO)) {
-                log_dbg("AP %s cannot be auto-instantiated.", a->apn);
+        if (!(a->flags & BIND_AUTO)) {
+                log_dbg("Program %s cannot be auto-instantiated.", a->prog);
                 return 0;
         }
 
@@ -248,13 +248,13 @@ int reg_entry_add_apn(struct reg_entry * e,
         if (n == NULL)
                 return -ENOMEM;
 
-        n->str = strdup(a->apn);
+        n->str = strdup(a->prog);
         if (n->str == NULL) {
                 free(n);
                 return -ENOMEM;
         }
 
-        list_add(&n->next, &e->reg_apns);
+        list_add(&n->next, &e->reg_progs);
 
         pthread_mutex_lock(&e->state_lock);
 
@@ -266,15 +266,15 @@ int reg_entry_add_apn(struct reg_entry * e,
         return 0;
 }
 
-void reg_entry_del_apn(struct reg_entry * e,
-                       const char *       apn)
+void reg_entry_del_prog(struct reg_entry * e,
+                        const char *       prog)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;
 
-        list_for_each_safe(p, h, &e->reg_apns) {
+        list_for_each_safe(p, h, &e->reg_progs) {
                 struct str_el * e = list_entry(p, struct str_el, next);
-                if (!wildcard_match(apn, e->str)) {
+                if (!wildcard_match(prog, e->str)) {
                         list_del(&e->next);
                         free(e->str);
                         free(e);
@@ -283,7 +283,7 @@ void reg_entry_del_apn(struct reg_entry * e,
 
         pthread_mutex_lock(&e->state_lock);
 
-        if (e->state == REG_NAME_AUTO_ACCEPT && list_is_empty(&e->reg_apns)) {
+        if (e->state == REG_NAME_AUTO_ACCEPT && list_is_empty(&e->reg_progs)) {
                 e->state = REG_NAME_IDLE;
                 pthread_cond_broadcast(&e->state_cond);
         }
@@ -291,37 +291,37 @@ void reg_entry_del_apn(struct reg_entry * e,
         pthread_mutex_unlock(&e->state_lock);
 }
 
-char * reg_entry_get_apn(struct reg_entry * e)
+char * reg_entry_get_prog(struct reg_entry * e)
 {
-        if (!list_is_empty(&e->reg_apis) || list_is_empty(&e->reg_apns))
+        if (!list_is_empty(&e->reg_pids) || list_is_empty(&e->reg_progs))
                 return NULL;
 
-        return list_first_entry(&e->reg_apns, struct str_el, next)->str;
+        return list_first_entry(&e->reg_progs, struct str_el, next)->str;
 }
 
-static bool reg_entry_has_api(struct reg_entry * e,
-                              pid_t              api)
+static bool reg_entry_has_pid(struct reg_entry * e,
+                              pid_t              pid)
 {
         struct list_head * p;
 
-        list_for_each(p, &e->reg_apns) {
+        list_for_each(p, &e->reg_progs) {
                 struct pid_el * e = list_entry(p, struct pid_el, next);
-                if (e->pid == api)
+                if (e->pid == pid)
                         return true;
         }
 
         return false;
 }
 
-int reg_entry_add_api(struct reg_entry * e,
-                      pid_t              api)
+int reg_entry_add_pid(struct reg_entry * e,
+                      pid_t              pid)
 {
         struct pid_el * i;
 
         assert(e);
 
-        if (reg_entry_has_api(e, api)) {
-                log_dbg("Instance already registered with this name.");
+        if (reg_entry_has_pid(e, pid)) {
+                log_dbg("Process already registered with this name.");
                 return -EPERM;
         }
 
@@ -339,9 +339,9 @@ int reg_entry_add_api(struct reg_entry * e,
                 return -ENOMEM;
         }
 
-        i->pid = api;
+        i->pid = pid;
 
-        list_add(&i->next, &e->reg_apis);
+        list_add(&i->next, &e->reg_pids);
 
         if (e->state == REG_NAME_IDLE ||
             e->state == REG_NAME_AUTO_ACCEPT ||
@@ -365,8 +365,8 @@ static void reg_entry_check_state(struct reg_entry * e)
                 return;
         }
 
-        if (list_is_empty(&e->reg_apis)) {
-                if (!list_is_empty(&e->reg_apns))
+        if (list_is_empty(&e->reg_pids)) {
+                if (!list_is_empty(&e->reg_progs))
                         e->state = REG_NAME_AUTO_ACCEPT;
                 else
                         e->state = REG_NAME_IDLE;
@@ -389,8 +389,8 @@ void reg_entry_del_pid_el(struct reg_entry * e,
         reg_entry_check_state(e);
 }
 
-void reg_entry_del_api(struct reg_entry * e,
-                       pid_t              api)
+void reg_entry_del_pid(struct reg_entry * e,
+                       pid_t              pid)
 {
         struct list_head * p;
         struct list_head * h;
@@ -400,9 +400,9 @@ void reg_entry_del_api(struct reg_entry * e,
         if (e == NULL)
                 return;
 
-        list_for_each_safe(p, h, &e->reg_apis) {
+        list_for_each_safe(p, h, &e->reg_pids) {
                 struct pid_el * a = list_entry(p, struct pid_el, next);
-                if (a->pid == api) {
+                if (a->pid == pid) {
                         list_del(&a->next);
                         free(a);
                 }
@@ -411,15 +411,15 @@ void reg_entry_del_api(struct reg_entry * e,
         reg_entry_check_state(e);
 }
 
-pid_t reg_entry_get_api(struct reg_entry * e)
+pid_t reg_entry_get_pid(struct reg_entry * e)
 {
         if (e == NULL)
                 return -1;
 
-        if (list_is_empty(&e->reg_apis))
+        if (list_is_empty(&e->reg_pids))
                 return -1;
 
-        return list_first_entry(&e->reg_apis, struct pid_el, next)->pid;
+        return list_first_entry(&e->reg_pids, struct pid_el, next)->pid;
 }
 
 enum reg_name_state reg_entry_get_state(struct reg_entry * e)
@@ -618,19 +618,19 @@ void registry_del_name(struct list_head * registry,
         return;
 }
 
-void registry_del_api(struct list_head * registry,
-                      pid_t              api)
+void registry_del_process(struct list_head * registry,
+                          pid_t              pid)
 {
         struct list_head * p;
 
         assert(registry);
-        assert(api > 0);
+        assert(pid > 0);
 
         list_for_each(p, registry) {
                 struct reg_entry * e = list_entry(p, struct reg_entry, next);
                 pthread_mutex_lock(&e->state_lock);
                 assert(e);
-                reg_entry_del_api(e, api);
+                reg_entry_del_pid(e, pid);
                 pthread_mutex_unlock(&e->state_lock);
         }
 

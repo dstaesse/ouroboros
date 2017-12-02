@@ -46,7 +46,7 @@ message ipcp_msg {
         optional string dst_name       =  5;
         optional uint32 qoscube        =  6;
         optional ipcp_config_msg conf  =  7;
-        optional int32 api             =  8;
+        optional int32 pid             =  8;
         optional dif_info_msg dif_info =  9;
         optional int32 response        = 10;
         optional string comp_name      = 11;

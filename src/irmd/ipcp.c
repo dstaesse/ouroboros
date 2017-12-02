@@ -48,7 +48,7 @@ static void close_ptr(void * o)
         close(*(int *) o);
 }
 
-ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
+ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                                 ipcp_msg_t * msg)
 {
        int            sockfd    = 0;
@@ -58,10 +58,10 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
        ipcp_msg_t *   recv_msg  = NULL;
        struct timeval tv;
 
-       if (kill(api, 0) < 0)
+       if (kill(pid, 0) < 0)
                return NULL;
 
-       sock_path = ipcp_sock_path(api);
+       sock_path = ipcp_sock_path(pid);
        if (sock_path == NULL)
                return NULL;
 
@@ -128,10 +128,10 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        api,
 pid_t ipcp_create(const char *   name,
                   enum ipcp_type ipcp_type)
 {
-        pid_t  api       = -1;
+        pid_t  pid       = -1;
         char * ipcp_dir  = "/sbin/";
         char * exec_name = NULL;
-        char   irmd_api[10];
+        char   irmd_pid[10];
         char   full_name[256];
         char * argv[5];
 
@@ -157,16 +157,16 @@ pid_t ipcp_create(const char *   name,
                 return -1;
         }
 
-        sprintf(irmd_api, "%u", getpid());
+        sprintf(irmd_pid, "%u", getpid());
 
-        api = fork();
-        if (api == -1) {
+        pid = fork();
+        if (pid == -1) {
                 log_err("Failed to fork");
-                return api;
+                return pid;
         }
 
-        if (api != 0)
-                return api;
+        if (pid != 0)
+                return pid;
 
         strcpy(full_name, INSTALL_PREFIX);
         strcat(full_name, ipcp_dir);
@@ -174,7 +174,7 @@ pid_t ipcp_create(const char *   name,
 
         /* log_file to be placed at the end */
         argv[0] = full_name;
-        argv[1] = irmd_api;
+        argv[1] = irmd_pid;
         argv[2] = (char *) name;
         if (log_syslog)
                 argv[3] = "1";
@@ -190,9 +190,9 @@ pid_t ipcp_create(const char *   name,
         exit(EXIT_FAILURE);
 }
 
-int ipcp_destroy(pid_t api)
+int ipcp_destroy(pid_t pid)
 {
-        if (kill(api, SIGTERM)) {
+        if (kill(pid, SIGTERM)) {
                 log_err("Failed to destroy IPCP");
                 return -1;
         }
@@ -200,7 +200,7 @@ int ipcp_destroy(pid_t api)
         return 0;
 }
 
-int ipcp_bootstrap(pid_t               api,
+int ipcp_bootstrap(pid_t               pid,
                    ipcp_config_msg_t * conf,
                    struct dif_info   * info)
 {
@@ -214,11 +214,11 @@ int ipcp_bootstrap(pid_t               api,
         msg.code = IPCP_MSG_CODE__IPCP_BOOTSTRAP;
         msg.conf = conf;
 
-        recv_msg = send_recv_ipcp_msg(api, &msg);
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
                 return -EIPCP;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
                 return -EIPCP;
         }
@@ -243,7 +243,7 @@ int ipcp_bootstrap(pid_t               api,
         return ret;
 }
 
-int ipcp_enroll(pid_t             api,
+int ipcp_enroll(pid_t             pid,
                 const char *      dst,
                 struct dif_info * info)
 {
@@ -257,11 +257,11 @@ int ipcp_enroll(pid_t             api,
         msg.code     = IPCP_MSG_CODE__IPCP_ENROLL;
         msg.dst_name = (char *) dst;
 
-        recv_msg = send_recv_ipcp_msg(api, &msg);
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
                 return -EIPCP;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
                 return -EIPCP;
         }
@@ -285,7 +285,7 @@ int ipcp_enroll(pid_t             api,
         return 0;
 }
 
-int ipcp_connect(pid_t        api,
+int ipcp_connect(pid_t        pid,
                  const char * dst,
                  const char * component)
 {
@@ -296,164 +296,10 @@ int ipcp_connect(pid_t        api,
         msg.code      = IPCP_MSG_CODE__IPCP_CONNECT;
         msg.dst_name  = (char *) dst;
         msg.comp_name = (char *) component;
-        msg.has_api   = true;
-        msg.api       = api;
+        msg.has_pid   = true;
+        msg.pid       = pid;
 
-        recv_msg = send_recv_ipcp_msg(api, &msg);
-        if (recv_msg == NULL)
-                return -EIPCP;
-
-        if (recv_msg->has_result == false) {
-                ipcp_msg__free_unpacked(recv_msg, NULL);
-                return -EIPCP;
-        }
-
-        ret = recv_msg->result;
-        ipcp_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
-}
-
-int ipcp_disconnect(pid_t        api,
-                    const char * dst,
-                    const char * component)
-{
-        ipcp_msg_t   msg      = IPCP_MSG__INIT;
-        ipcp_msg_t * recv_msg = NULL;
-        int          ret      = -1;
-
-        msg.code      = IPCP_MSG_CODE__IPCP_DISCONNECT;
-        msg.dst_name  = (char *) dst;
-        msg.comp_name = (char *) component;
-        msg.has_api   = true;
-        msg.api       = api;
-
-        recv_msg = send_recv_ipcp_msg(api, &msg);
-        if (recv_msg == NULL)
-                return -EIPCP;
-
-        if (recv_msg->has_result == false) {
-                ipcp_msg__free_unpacked(recv_msg, NULL);
-                return -EIPCP;
-        }
-
-        ret = recv_msg->result;
-        ipcp_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
-}
-
-int ipcp_reg(pid_t           api,
-             const uint8_t * hash,
-             size_t          len)
-{
-        ipcp_msg_t   msg      = IPCP_MSG__INIT;
-        ipcp_msg_t * recv_msg = NULL;
-        int          ret      = -1;
-
-        assert(hash);
-
-        msg.code      = IPCP_MSG_CODE__IPCP_REG;
-        msg.has_hash  = true;
-        msg.hash.len  = len;
-        msg.hash.data = (uint8_t *)hash;
-
-        recv_msg = send_recv_ipcp_msg(api, &msg);
-        if (recv_msg == NULL)
-                return -EIPCP;
-
-        if (recv_msg->has_result == false) {
-                ipcp_msg__free_unpacked(recv_msg, NULL);
-                return -EIPCP;
-        }
-
-        ret = recv_msg->result;
-        ipcp_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
-}
-
-int ipcp_unreg(pid_t           api,
-               const uint8_t * hash,
-               size_t          len)
-{
-        ipcp_msg_t   msg      = IPCP_MSG__INIT;
-        ipcp_msg_t * recv_msg = NULL;
-        int          ret      = -1;
-
-        msg.code      = IPCP_MSG_CODE__IPCP_UNREG;
-        msg.has_hash  = true;
-        msg.hash.len  = len;
-        msg.hash.data = (uint8_t *) hash;
-
-        recv_msg = send_recv_ipcp_msg(api, &msg);
-        if (recv_msg == NULL)
-                return -EIPCP;
-
-        if (recv_msg->has_result == false) {
-                ipcp_msg__free_unpacked(recv_msg, NULL);
-                return -EIPCP;
-        }
-
-        ret = recv_msg->result;
-        ipcp_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
-}
-
-int ipcp_query(pid_t           api,
-               const uint8_t * hash,
-               size_t          len)
-{
-        ipcp_msg_t   msg      = IPCP_MSG__INIT;
-        ipcp_msg_t * recv_msg = NULL;
-        int          ret      = -1;
-
-        msg.code      = IPCP_MSG_CODE__IPCP_QUERY;
-        msg.has_hash  = true;
-        msg.hash.len  = len;
-        msg.hash.data = (uint8_t *) hash;
-
-        recv_msg = send_recv_ipcp_msg(api, &msg);
-        if (recv_msg == NULL)
-                return -EIPCP;
-
-        if (recv_msg->has_result == false) {
-                ipcp_msg__free_unpacked(recv_msg, NULL);
-                return -EIPCP;
-        }
-
-        ret = recv_msg->result;
-        ipcp_msg__free_unpacked(recv_msg, NULL);
-
-        return ret;
-}
-
-int ipcp_flow_alloc(pid_t           api,
-                    int             port_id,
-                    pid_t           n_api,
-                    const uint8_t * dst,
-                    size_t          len,
-                    qoscube_t       cube)
-{
-        ipcp_msg_t   msg      = IPCP_MSG__INIT;
-        ipcp_msg_t * recv_msg = NULL;
-        int          ret      = -1;
-
-        assert(dst);
-
-        msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
-        msg.has_port_id  = true;
-        msg.port_id      = port_id;
-        msg.has_api      = true;
-        msg.api          = n_api;
-        msg.has_hash     = true;
-        msg.hash.len     = len;
-        msg.hash.data    = (uint8_t *) dst;
-        msg.has_qoscube  = true;
-        msg.qoscube      = cube;
-
-        recv_msg = send_recv_ipcp_msg(api, &msg);
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
                 return -EIPCP;
 
@@ -468,28 +314,25 @@ int ipcp_flow_alloc(pid_t           api,
         return ret;
 }
 
-int ipcp_flow_alloc_resp(pid_t api,
-                         int   port_id,
-                         pid_t n_api,
-                         int   response)
+int ipcp_disconnect(pid_t        pid,
+                    const char * dst,
+                    const char * component)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int          ret      = -1;
 
-        msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP;
-        msg.has_port_id  = true;
-        msg.port_id      = port_id;
-        msg.has_api      = true;
-        msg.api          = n_api;
-        msg.has_response = true;
-        msg.response     = response;
+        msg.code      = IPCP_MSG_CODE__IPCP_DISCONNECT;
+        msg.dst_name  = (char *) dst;
+        msg.comp_name = (char *) component;
+        msg.has_pid   = true;
+        msg.pid       = pid;
 
-        recv_msg = send_recv_ipcp_msg(api, &msg);
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
                 return -EIPCP;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
                 return -EIPCP;
         }
@@ -500,7 +343,164 @@ int ipcp_flow_alloc_resp(pid_t api,
         return ret;
 }
 
-int ipcp_flow_dealloc(pid_t api,
+int ipcp_reg(pid_t           pid,
+             const uint8_t * hash,
+             size_t          len)
+{
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int          ret      = -1;
+
+        assert(hash);
+
+        msg.code      = IPCP_MSG_CODE__IPCP_REG;
+        msg.has_hash  = true;
+        msg.hash.len  = len;
+        msg.hash.data = (uint8_t *)hash;
+
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        if (!recv_msg->has_result) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int ipcp_unreg(pid_t           pid,
+               const uint8_t * hash,
+               size_t          len)
+{
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int          ret      = -1;
+
+        msg.code      = IPCP_MSG_CODE__IPCP_UNREG;
+        msg.has_hash  = true;
+        msg.hash.len  = len;
+        msg.hash.data = (uint8_t *) hash;
+
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        if (!recv_msg->has_result) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int ipcp_query(pid_t           pid,
+               const uint8_t * hash,
+               size_t          len)
+{
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int          ret      = -1;
+
+        msg.code      = IPCP_MSG_CODE__IPCP_QUERY;
+        msg.has_hash  = true;
+        msg.hash.len  = len;
+        msg.hash.data = (uint8_t *) hash;
+
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        if (!recv_msg->has_result) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int ipcp_flow_alloc(pid_t           pid,
+                    int             port_id,
+                    pid_t           n_pid,
+                    const uint8_t * dst,
+                    size_t          len,
+                    qoscube_t       cube)
+{
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int          ret      = -1;
+
+        assert(dst);
+
+        msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
+        msg.has_port_id  = true;
+        msg.port_id      = port_id;
+        msg.has_pid      = true;
+        msg.pid          = n_pid;
+        msg.has_hash     = true;
+        msg.hash.len     = len;
+        msg.hash.data    = (uint8_t *) dst;
+        msg.has_qoscube  = true;
+        msg.qoscube      = cube;
+
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        if (!recv_msg->has_result) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int ipcp_flow_alloc_resp(pid_t pid,
+                         int   port_id,
+                         pid_t n_pid,
+                         int   response)
+{
+        ipcp_msg_t   msg      = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg = NULL;
+        int          ret      = -1;
+
+        msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP;
+        msg.has_port_id  = true;
+        msg.port_id      = port_id;
+        msg.has_pid      = true;
+        msg.pid          = n_pid;
+        msg.has_response = true;
+        msg.response     = response;
+
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        if (!recv_msg->has_result) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int ipcp_flow_dealloc(pid_t pid,
                       int   port_id)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
@@ -511,11 +511,11 @@ int ipcp_flow_dealloc(pid_t api,
         msg.has_port_id = true;
         msg.port_id     = port_id;
 
-        recv_msg = send_recv_ipcp_msg(api, &msg);
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
                 return 0;
 
-        if (recv_msg->has_result == false) {
+        if (!recv_msg->has_result) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
                 return 0;
         }

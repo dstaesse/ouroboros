@@ -107,10 +107,11 @@ static void usage(void)
                LINK_STATE_ROUTING, SIMPLE_PFF, SHA3_256);
 }
 
-int do_bootstrap_ipcp(int argc, char ** argv)
+int do_bootstrap_ipcp(int     argc,
+                      char ** argv)
 {
         char *             name           = NULL;
-        pid_t              api;
+        pid_t              pid;
         struct ipcp_config conf;
         uint8_t            addr_size      = DEFAULT_ADDR_SIZE;
         uint8_t            fd_size        = DEFAULT_FD_SIZE;
@@ -124,7 +125,7 @@ int do_bootstrap_ipcp(int argc, char ** argv)
         char *             ipcp_type      = NULL;
         char *             dif_name       = NULL;
         char *             if_name        = NULL;
-        pid_t *            apis           = NULL;
+        pid_t *            pids           = NULL;
         ssize_t            len            = 0;
         int                i              = 0;
         bool               autobind       = false;
@@ -239,39 +240,39 @@ int do_bootstrap_ipcp(int argc, char ** argv)
                 autobind = false;
         }
 
-        len = irm_list_ipcps(name, &apis);
+        len = irm_list_ipcps(name, &pids);
         if (len <= 0) {
-                api = irm_create_ipcp(name, conf.type);
-                if (api == 0)
+                pid = irm_create_ipcp(name, conf.type);
+                if (pid== 0)
                         return -1;
-                len = irm_list_ipcps(name, &apis);
+                len = irm_list_ipcps(name, &pids);
         }
 
         for (i = 0; i < len; i++) {
-                if (autobind && irm_bind_api(apis[i], name)) {
-                        printf("Failed to bind %d to %s.\n", apis[i], name);
-                        free(apis);
+                if (autobind && irm_bind_process(pids[i], name)) {
+                        printf("Failed to bind %d to %s.\n", pids[i], name);
+                        free(pids);
                         return -1;
                 }
 
-                if (autobind && irm_bind_api(apis[i], dif_name)) {
-                        printf("Failed to bind %d to %s.\n", apis[i], dif_name);
-                        irm_unbind_api(apis[i], name);
-                        free(apis);
+                if (autobind && irm_bind_process(pids[i], dif_name)) {
+                        printf("Failed to bind %d to %s.\n", pids[i], dif_name);
+                        irm_unbind_process(pids[i], name);
+                        free(pids);
                         return -1;
                 }
 
-                if (irm_bootstrap_ipcp(apis[i], &conf)) {
+                if (irm_bootstrap_ipcp(pids[i], &conf)) {
                         if (autobind) {
-                                irm_unbind_api(apis[i], name);
-                                irm_unbind_api(apis[i], dif_name);
+                                irm_unbind_process(pids[i], name);
+                                irm_unbind_process(pids[i], dif_name);
                         }
-                        free(apis);
+                        free(pids);
                         return -1;
                 }
         }
 
-        free(apis);
+        free(pids);
 
         return 0;
 

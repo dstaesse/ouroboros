@@ -140,11 +140,11 @@ set(SHM_BUFFER_SIZE ${SHM_BUFFER_EXPR} CACHE STRING
     "Number of blocks in SDU buffer, must be a power of 2")
 set(SYS_MAX_FLOWS 10240 CACHE STRING
   "Maximum number of total flows for this system")
-set(AP_MAX_FLOWS 4096 CACHE STRING
+set(PROG_MAX_FLOWS 4096 CACHE STRING
   "Maximum number of flows in an application")
-set(AP_RES_FDS 64 CACHE STRING
+set(PROG_RES_FDS 64 CACHE STRING
   "Number of reserved flow descriptors per application")
-set(AP_MAX_FQUEUES 32 CACHE STRING
+set(PROG_MAX_FQUEUES 32 CACHE STRING
   "Maximum number of flow sets per application")
 set(DU_BUFF_HEADSPACE 128 CACHE STRING
   "Bytes of headspace to reserve for future headers")

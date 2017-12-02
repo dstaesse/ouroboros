@@ -63,7 +63,7 @@ int do_disconnect_ipcp(int     argc,
         char *  name      = NULL;
         char *  dst_name  = NULL;
         char *  comp_name = NULL;
-        pid_t * apis      = NULL;
+        pid_t * pids      = NULL;
         ssize_t len       = 0;
 
         while (argc > 0) {
@@ -88,7 +88,7 @@ int do_disconnect_ipcp(int     argc,
                 return -1;
         }
 
-        len = irm_list_ipcps(name, &apis);
+        len = irm_list_ipcps(name, &pids);
         if (len != 1)
                 return -1;
 
@@ -98,13 +98,13 @@ int do_disconnect_ipcp(int     argc,
         if (!strcmp(comp_name , MGMT))
                 comp_name = MGMT_AE;
 
-        if (irm_disconnect_ipcp(apis[0], dst_name, comp_name)) {
-                free(apis);
+        if (irm_disconnect_ipcp(pids[0], dst_name, comp_name)) {
+                free(pids);
                 return -1;
         }
 
-        if (apis != NULL)
-                free(apis);
+        if (pids != NULL)
+                free(pids);
 
         return 0;
 }

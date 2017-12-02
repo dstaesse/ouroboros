@@ -631,7 +631,7 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                 goto fail_sduloop;
         }
 
-        log_dbg("Bootstrapped shim IPCP over UDP with api %d.", getpid());
+        log_dbg("Bootstrapped shim IPCP over UDP with pid %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
         log_dbg("DNS server address is %s.", dnsstr);
 
@@ -654,7 +654,7 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
 /* NOTE: Disgusted with this crap */
 static int ddns_send(char * cmd)
 {
-        pid_t api = -1;
+        pid_t pid = -1;
         int wstatus;
         int pipe_fd[2];
         char * argv[] = {NSUPDATE_EXEC, 0};
@@ -665,13 +665,13 @@ static int ddns_send(char * cmd)
                 return -1;
         }
 
-        api = fork();
-        if (api == -1) {
+        pid = fork();
+        if (pid == -1) {
                 log_err("Failed to fork.");
                 return -1;
         }
 
-        if (api == 0) {
+        if (pid == 0) {
                 close(pipe_fd[1]);
                 dup2(pipe_fd[0], 0);
                 execve(argv[0], &argv[0], envp);
@@ -685,9 +685,8 @@ static int ddns_send(char * cmd)
                 return -1;
         }
 
-        waitpid(api, &wstatus, 0);
-        if (WIFEXITED(wstatus) == true &&
-            WEXITSTATUS(wstatus) == 0)
+        waitpid(pid, &wstatus, 0);
+        if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0)
                 log_dbg("Succesfully communicated with DNS server.");
         else
                 log_err("Failed to register with DNS server.");
@@ -699,7 +698,7 @@ static int ddns_send(char * cmd)
 static uint32_t ddns_resolve(char *   name,
                              uint32_t dns_addr)
 {
-        pid_t api = -1;
+        pid_t pid = -1;
         int wstatus;
         int pipe_fd[2];
         char dnsstr[INET_ADDRSTRLEN];
@@ -718,13 +717,13 @@ static uint32_t ddns_resolve(char *   name,
                 return 0;
         }
 
-        api = fork();
-        if (api == -1) {
+        pid = fork();
+        if (pid == -1) {
                 log_err("Failed to fork.");
                 return 0;
         }
 
-        if (api == 0) {
+        if (pid == 0) {
                 char * argv[] = {NSLOOKUP_EXEC, name, dnsstr, 0};
                 char * envp[] = {0};
 
@@ -744,9 +743,8 @@ static uint32_t ddns_resolve(char *   name,
 
         close(pipe_fd[0]);
 
-        waitpid(api, &wstatus, 0);
-        if (WIFEXITED(wstatus) == true &&
-            WEXITSTATUS(wstatus) == 0)
+        waitpid(pid, &wstatus, 0);
+        if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0)
                 log_dbg("Succesfully communicated with nslookup.");
         else
                 log_err("Failed to resolve DNS address.");

@@ -56,8 +56,8 @@ int do_enroll_ipcp(int argc, char ** argv)
 {
         char *  name     = NULL;
         char *  dif_name = NULL;
-        pid_t * apis     = NULL;
-        pid_t   api;
+        pid_t * pids     = NULL;
+        pid_t   pid;
         ssize_t len      = 0;
         int     i        = 0;
         bool    autobind = false;
@@ -87,36 +87,36 @@ int do_enroll_ipcp(int argc, char ** argv)
                 return -1;
         }
 
-        len = irm_list_ipcps(name, &apis);
+        len = irm_list_ipcps(name, &pids);
         if (len <= 0) {
-                api = irm_create_ipcp(name, IPCP_NORMAL);
-                if (api == 0)
+                pid = irm_create_ipcp(name, IPCP_NORMAL);
+                if (pid == 0)
                         return -1;
-                len = irm_list_ipcps(name, &apis);
+                len = irm_list_ipcps(name, &pids);
         }
 
         for (i = 0; i < len; i++) {
-                if (autobind && irm_bind_api(apis[i], name)) {
-                        free(apis);
+                if (autobind && irm_bind_process(pids[i], name)) {
+                        free(pids);
                         return -1;
                 }
 
-                if (irm_enroll_ipcp(apis[i], dif_name)) {
+                if (irm_enroll_ipcp(pids[i], dif_name)) {
                         if (autobind)
-                                irm_unbind_api(apis[i], name);
-                        free(apis);
+                                irm_unbind_process(pids[i], name);
+                        free(pids);
                         return -1;
                 }
 
-                if (autobind && irm_bind_api(apis[i], dif_name)) {
-                        printf("Failed to bind %d to %s.\n", apis[i], dif_name);
-                        free(apis);
+                if (autobind && irm_bind_process(pids[i], dif_name)) {
+                        printf("Failed to bind %d to %s.\n", pids[i], dif_name);
+                        free(pids);
                         return -1;
                 }
         }
 
-        if (apis != NULL)
-                free(apis);
+        if (pids != NULL)
+                free(pids);
 
         return 0;
 }

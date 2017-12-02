@@ -36,8 +36,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
-struct irm_flow * irm_flow_create(pid_t     n_api,
-                                  pid_t     n_1_api,
+struct irm_flow * irm_flow_create(pid_t     n_pid,
+                                  pid_t     n_1_pid,
                                   int       port_id,
                                   qoscube_t qc)
 {
@@ -58,20 +58,20 @@ struct irm_flow * irm_flow_create(pid_t     n_api,
         if (pthread_mutex_init(&f->state_lock, NULL))
                 goto fail_mutex;
 
-        f->n_api   = n_api;
-        f->n_1_api = n_1_api;
+        f->n_pid   = n_pid;
+        f->n_1_pid = n_1_pid;
         f->port_id = port_id;
         f->qc      = qc;
 
-        f->n_rb = shm_rbuff_create(n_api, port_id);
+        f->n_rb = shm_rbuff_create(n_pid, port_id);
         if (f->n_rb == NULL) {
-                log_err("Could not create ringbuffer for AP-I %d.", n_api);
+                log_err("Could not create ringbuffer for process %d.", n_pid);
                 goto fail_n_rbuff;
         }
 
-        f->n_1_rb = shm_rbuff_create(n_1_api, port_id);
+        f->n_1_rb = shm_rbuff_create(n_1_pid, port_id);
         if (f->n_1_rb == NULL) {
-                log_err("Could not create ringbuffer for AP-I %d.", n_1_api);
+                log_err("Could not create ringbuffer for process %d.", n_1_pid);
                 goto fail_n_1_rbuff;
         }
 

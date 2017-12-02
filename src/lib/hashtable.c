@@ -127,7 +127,7 @@ static uint64_t hash(uint64_t key)
 static uint64_t calc_key(struct htable * table,
                          uint64_t        key)
 {
-        if (table->hash_key == true)
+        if (table->hash_key)
                 key = hash(key);
 
         return (key & (table->buckets_size - 1));

@@ -28,8 +28,8 @@
 #include <ouroboros/list.h>
 #include <ouroboros/qoscube.h>
 
-#include "api_table.h"
-#include "apn_table.h"
+#include "proc_table.h"
+#include "prog_table.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -57,35 +57,35 @@ struct reg_entry {
 
         /* DIFs in which this name is registered */
         struct list_head    difs;
-        /* APs that can be instantiated by the irmd */
-        struct list_head    reg_apns;
-        /* Instances that are listening for this name */
-        struct list_head    reg_apis;
+        /* Programs that can be instantiated by the irmd */
+        struct list_head    reg_progs;
+        /* Processes that are listening for this name */
+        struct list_head    reg_pids;
 
         enum reg_name_state state;
         pthread_cond_t      state_cond;
         pthread_mutex_t     state_lock;
 };
 
-int                 reg_entry_add_apn(struct reg_entry * e,
-                                      struct apn_entry * a);
+int                 reg_entry_add_prog(struct reg_entry *  e,
+                                       struct prog_entry * a);
 
-void                reg_entry_del_apn(struct reg_entry * e,
-                                      const char *       apn);
+void                reg_entry_del_prog(struct reg_entry * e,
+                                       const char *       prog);
 
-char *              reg_entry_get_apn(struct reg_entry * e);
+char *              reg_entry_get_prog(struct reg_entry * e);
 
 
-int                 reg_entry_add_api(struct reg_entry * e,
-                                      pid_t              api);
+int                 reg_entry_add_pid(struct reg_entry * e,
+                                      pid_t              pid);
 
-void                reg_entry_del_api(struct reg_entry * e,
-                                      pid_t              api);
+void                reg_entry_del_pid(struct reg_entry * e,
+                                      pid_t              pid);
 
 void                reg_entry_del_pid_el(struct reg_entry * e,
                                          struct pid_el *    a);
 
-pid_t               reg_entry_get_api(struct reg_entry * e);
+pid_t               reg_entry_get_pid(struct reg_entry * e);
 
 enum reg_name_state reg_entry_get_state(struct reg_entry * e);
 
@@ -106,10 +106,10 @@ struct reg_entry *  registry_add_name(struct list_head * registry,
 void                registry_del_name(struct list_head * registry,
                                       const char *       name);
 
-void                registry_del_api(struct list_head * registry,
-                                     pid_t              api);
+void                registry_del_process(struct list_head * registry,
+                                         pid_t              pid);
 
-void                registry_sanitize_apis(struct list_head * registry);
+void                registry_sanitize_pids(struct list_head * registry);
 
 struct reg_entry *  registry_get_entry(struct list_head * registry,
                                        const char *       name);

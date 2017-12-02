@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Bind AP-I to a name
+ * Bind a process to a name
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -51,12 +51,13 @@
 
 static void usage(void)
 {
-        printf("Usage: irm bind api <pid> name <name>\n");
+        printf("Usage: irm bind process <pid> name <name>\n");
 }
 
-int do_bind_api(int argc, char ** argv)
+int do_bind_process(int     argc,
+                    char ** argv)
 {
-        pid_t api = -1;
+        pid_t  pid  = -1;
         char * name = NULL;
         char * t;
 
@@ -65,9 +66,9 @@ int do_bind_api(int argc, char ** argv)
                         name = *(argv + 1);
                         ++argv;
                         --argc;
-                } else if (matches(*argv, "api") == 0) {
-                        api = strtol(*(argv + 1), &t, 10);
-                        if (*(argv + 1) == t || *t != '\0' || kill(api, 0)) {
+                } else if (matches(*argv, "process") == 0) {
+                        pid = strtol(*(argv + 1), &t, 10);
+                        if (*(argv + 1) == t || *t != '\0' || kill(pid, 0)) {
                                 printf("\"%s\" is not a valid process id.\n",
                                        *(argv + 1));
                                 return -1;
@@ -76,7 +77,7 @@ int do_bind_api(int argc, char ** argv)
                         --argc;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "bind api\".\n", *argv);
+                               "bind process\".\n", *argv);
                         return -1;
                 }
 
@@ -84,10 +85,10 @@ int do_bind_api(int argc, char ** argv)
                 --argc;
         }
 
-        if (argc == 1 || api < 0 || name == NULL) {
+        if (argc == 1 || pid < 0 || name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_bind_api(api, name);
+        return irm_bind_process(pid, name);
 }

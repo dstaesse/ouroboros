@@ -73,7 +73,7 @@ struct ipcp_ops {
 #define ipcp_dir_hash_len() (hash_len(ipcpi.dir_hash_algo))
 
 struct ipcp {
-        int                irmd_api;
+        pid_t              irmd_pid;
         char *             name;
 
         enum ipcp_type     type;

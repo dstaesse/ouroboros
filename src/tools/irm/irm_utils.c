@@ -42,7 +42,8 @@
 
 #include "irm_utils.h"
 
-int matches(const char * cmd, const char * pattern)
+int matches(const char * cmd,
+            const char * pattern)
 {
         size_t len = strlen(cmd);
 

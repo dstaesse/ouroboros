@@ -1107,7 +1107,7 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_sdu_writer;
         }
 
-        log_dbg("Bootstrapped shim IPCP over Ethernet with LLC with api %d.",
+        log_dbg("Bootstrapped shim IPCP over Ethernet with LLC with pid %d.",
                 getpid());
 
         return 0;

@@ -47,10 +47,11 @@ static void usage(void)
 {
         printf("Usage: irm bind [OPERATION]\n"
                "\n"
-               "where OPERATION = {ap api ipcp help}\n");
+               "where OPERATION = {program process ipcp help}\n");
 }
 
-static int do_help(int argc, char **argv)
+static int do_help(int    argc,
+                   char **argv)
 {
         (void) argc;
         (void) argv;
@@ -63,16 +64,16 @@ static const struct cmd {
         const char * cmd;
         int (* func)(int argc, char ** argv);
 } cmds[] = {
-        { "ap",   do_bind_ap },
-        { "api",  do_bind_api },
-        { "ipcp", do_bind_ipcp },
-        { "help", do_help },
-        { NULL,   NULL }
+        { "program", do_bind_program },
+        { "process", do_bind_process },
+        { "ipcp",    do_bind_ipcp },
+        { "help",    do_help },
+        { NULL,      NULL }
 };
 
 static int do_cmd(const char * argv0,
-                  int argc,
-                  char ** argv)
+                  int          argc,
+                  char **      argv)
 {
         const struct cmd * c;
 
@@ -86,7 +87,8 @@ static int do_cmd(const char * argv0,
         return -1;
 }
 
-int bind_cmd(int argc, char ** argv)
+int bind_cmd(int     argc,
+             char ** argv)
 {
         if (argc < 1) {
                 usage();

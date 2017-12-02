@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * The IPC Resource Manager - Application Process Table
+ * The IPC Resource Manager - Program Table
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -23,20 +23,22 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/irm.h>
 
-#include "apn_table.h"
+#include "prog_table.h"
 #include "utils.h"
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
-struct apn_entry * apn_entry_create(char * apn,
-                                    char * ap,
-                                    uint32_t flags,
-                                    char ** argv)
+struct prog_entry * prog_entry_create(char *   progn,
+                                      char *   prog,
+                                      uint32_t flags,
+                                      char **  argv)
 {
-        struct apn_entry * e;
-        if (apn == NULL)
-                return NULL;
+        struct prog_entry * e;
+
+        assert(progn);
+        assert(prog);
 
         e = malloc(sizeof(*e));
         if (e == NULL)
@@ -45,11 +47,11 @@ struct apn_entry * apn_entry_create(char * apn,
         list_head_init(&e->next);
         list_head_init(&e->names);
 
-        e->apn   = apn;
-        e->ap    = ap;
+        e->progn = progn;
+        e->prog  = prog;
         e->flags = flags;
 
-        if (flags & BIND_AP_AUTO) {
+        if (flags & BIND_AUTO) {
                 e->argv = argv;
         } else {
                 e->argv  = NULL;
@@ -59,7 +61,7 @@ struct apn_entry * apn_entry_create(char * apn,
 
         return e;
 }
-void apn_entry_destroy(struct apn_entry * e)
+void prog_entry_destroy(struct prog_entry * e)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;
@@ -67,11 +69,11 @@ void apn_entry_destroy(struct apn_entry * e)
         if (e == NULL)
                 return;
 
-        if (e->apn != NULL)
-                free(e->apn);
+        if (e->progn != NULL)
+                free(e->progn);
 
-        if (e->ap != NULL)
-                free(e->ap);
+        if (e->prog != NULL)
+                free(e->prog);
 
         if (e->argv != NULL)
                 argvfree(e->argv);
@@ -87,7 +89,8 @@ void apn_entry_destroy(struct apn_entry * e)
         free(e);
 }
 
-int apn_entry_add_name(struct apn_entry * e, char * name)
+int prog_entry_add_name(struct prog_entry * e,
+                        char *              name)
 {
         struct str_el * s;
 
@@ -104,7 +107,8 @@ int apn_entry_add_name(struct apn_entry * e, char * name)
         return 0;
 }
 
-void apn_entry_del_name(struct apn_entry * e, char * name)
+void prog_entry_del_name(struct prog_entry * e,
+                         char *              name)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;
@@ -120,60 +124,63 @@ void apn_entry_del_name(struct apn_entry * e, char * name)
         }
 }
 
-int apn_table_add(struct list_head * apn_table, struct apn_entry * e)
+int prog_table_add(struct list_head *  prog_table,
+                   struct prog_entry * e)
 {
-        if (apn_table == NULL || e == NULL)
-                return -EINVAL;
+        assert(prog_table);
+        assert(e);
 
-        list_add(&e->next, apn_table);
+        list_add(&e->next, prog_table);
 
         return 0;
 }
 
-void apn_table_del(struct list_head * apn_table, char * ap)
+void prog_table_del(struct list_head * prog_table,
+                    char *             prog)
 {
         struct list_head * p;
         struct list_head * h;
 
-        if (apn_table == NULL || ap == NULL)
-                return;
+        assert(prog_table);
+        assert(prog);
 
-        list_for_each_safe(p, h, apn_table) {
-                struct apn_entry * e = list_entry(p, struct apn_entry, next);
-                if (!wildcard_match(ap, e->ap)) {
+        list_for_each_safe(p, h, prog_table) {
+                struct prog_entry * e = list_entry(p, struct prog_entry, next);
+                if (!wildcard_match(prog, e->prog)) {
                         list_del(&e->next);
-                        apn_entry_destroy(e);
+                        prog_entry_destroy(e);
                 }
         }
 }
 
-struct apn_entry * apn_table_get(struct list_head * apn_table, char * ap)
+struct prog_entry * prog_table_get(struct list_head * prog_table,
+                                   char *             prog)
 {
         struct list_head * p;
 
-        if (apn_table == NULL || ap == NULL)
-                return NULL;
+        assert(prog_table);
+        assert(prog);
 
-        list_for_each(p, apn_table) {
-                struct apn_entry * e = list_entry(p, struct apn_entry, next);
-                if (!strcmp(e->ap, ap))
+        list_for_each(p, prog_table) {
+                struct prog_entry * e = list_entry(p, struct prog_entry, next);
+                if (!strcmp(e->prog, prog))
                         return e;
         }
 
         return NULL;
 }
 
-struct apn_entry * apn_table_get_by_apn(struct list_head * apn_table,
-                                        char *             apn)
+struct prog_entry * prog_table_get_by_progn(struct list_head * prog_table,
+                                            char *             progn)
 {
         struct list_head * p;
 
-        if (apn_table == NULL || apn == NULL)
-                return NULL;
+        assert(prog_table);
+        assert(progn);
 
-        list_for_each(p, apn_table) {
-                struct apn_entry * e = list_entry(p, struct apn_entry, next);
-                if (!strcmp(e->apn, apn))
+        list_for_each(p, prog_table) {
+                struct prog_entry * e = list_entry(p, struct prog_entry, next);
+                if (!strcmp(e->progn, progn))
                         return e;
         }
 

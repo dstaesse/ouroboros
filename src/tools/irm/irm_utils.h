@@ -36,5 +36,10 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef OUROBOROS_TOOLS_IRM_UTILS_H
+#define OUROBOROS_TOOLS_IRM_UTILS_H
+
 int matches(const char * cmd,
             const char * pattern);
+
+#endif /* OUROBOROS_TOOLS_IRM_UTILS_H */

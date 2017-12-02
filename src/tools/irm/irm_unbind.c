@@ -47,10 +47,11 @@ static void usage(void)
 {
         printf("Usage: irm unbind [OPERATION]\n"
                "\n"
-               "where OPERATION = {ap api ipcp help}\n");
+               "where OPERATION = {program process ipcp help}\n");
 }
 
-static int do_help(int argc, char **argv)
+static int do_help(int     argc,
+                   char ** argv)
 {
         (void) argc;
         (void) argv;
@@ -63,14 +64,16 @@ static const struct cmd {
         const char * cmd;
         int (* func)(int argc, char ** argv);
 } cmds[] = {
-        { "ap",   do_unbind_ap },
-        { "api",  do_unbind_api },
-        { "ipcp", do_unbind_ipcp },
-        { "help", do_help },
-        { NULL,   NULL }
+        { "program",  do_unbind_program },
+        { "process",  do_unbind_process },
+        { "ipcp",     do_unbind_ipcp },
+        { "help",     do_help },
+        { NULL,       NULL }
 };
 
-static int do_cmd(const char * argv0, int argc, char ** argv)
+static int do_cmd(const char * argv0,
+                  int          argc,
+                  char **      argv)
 {
         const struct cmd * c;
 
@@ -83,7 +86,8 @@ static int do_cmd(const char * argv0, int argc, char ** argv)
         return -1;
 }
 
-int unbind_cmd(int argc, char ** argv)
+int unbind_cmd(int     argc,
+               char ** argv)
 {
         if (argc < 1) {
                 usage();

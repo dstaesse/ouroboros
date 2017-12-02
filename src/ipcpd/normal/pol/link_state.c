@@ -416,7 +416,7 @@ static void * calculate_pff(void * o)
         struct list_head   table;
         struct list_head * p;
         struct list_head * q;
-        int                fds[AP_MAX_FLOWS];
+        int                fds[PROG_MAX_FLOWS];
 
         instance = (struct routing_i *) o;
 

@@ -61,7 +61,7 @@ struct {
         struct routing_i * routing[QOS_CUBE_MAX];
 
         struct bmp *       res_fds;
-        struct ae_info     aes[AP_RES_FDS];
+        struct ae_info     aes[PROG_RES_FDS];
         pthread_rwlock_t   lock;
 
         pthread_t          listener;
@@ -127,7 +127,7 @@ static void sdu_handler(int                  fd,
         } else {
                 dt_pci_shrink(sdb);
 
-                if (dt_pci.fd > AP_RES_FDS) {
+                if (dt_pci.fd > PROG_RES_FDS) {
                         if (ipcp_flow_write(dt_pci.fd, sdb))
                                 ipcp_sdb_release(sdb);
                         return;
@@ -225,7 +225,7 @@ int dt_init(enum pol_routing pr,
                 goto fail_rwlock_init;
         }
 
-        dt.res_fds = bmp_create(AP_RES_FDS, 0);
+        dt.res_fds = bmp_create(PROG_RES_FDS, 0);
         if (dt.res_fds == NULL)
                 goto fail_res_fds;
 

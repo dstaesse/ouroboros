@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH OUROBOROS 8 2017-10-15 Ouroboros "Ouroboros User Manual"
+.TH OUROBOROS 8 2017-12-02 Ouroboros "Ouroboros User Manual"
 
 .SH NAME
 
@@ -233,7 +233,7 @@ same DIF.
 
 .SH IRM COMMANDS
 .PP
-\fBirm bind\fR ap \fiprogram\fR name \fIname\fR [[\fIauto\fR] -- \
+\fBirm bind\fR program \fiprogram\fR name \fIname\fR [[\fIauto\fR] -- \
 [\fIparam\fR] [\fIparam\fR] ... [\fIparam\fR]]
 .RS 4
 bind a program \fIprogram\fR, referenced by its binary, to a certain
@@ -248,7 +248,7 @@ application when it is started.
 .RE
 
 .PP
-\fBirm bind\fR api \fIpid\fR name \fIname\fR
+\fBirm bind\fR process \fIpid\fR name \fIname\fR
 .RS 4
 bind a process \fIpid\fR to a certain name. If \fIname\fR is registered
 in a DIF, the process \fIpid\fR will accept flows for that name.
@@ -263,7 +263,7 @@ shorthand for binding the pid of \fipcp\fR.
 .RE
 
 .PP
-\fBirm unbind\fR ap \fIprogram\fR name \fIname\fR
+\fBirm unbind\fR program \fIprogram\fR name \fIname\fR
 .RS 4
 remove the binding between \fIprogram\fR and \fIname\fR. Instances of
 \fIprogram\fR will not accept future flow allocation requests for
@@ -271,7 +271,7 @@ remove the binding between \fIprogram\fR and \fIname\fR. Instances of
 .RE
 
 .PP
-\fBirm unbind\fR api \fIpid\fR name \fIname\fR
+\fBirm unbind\fR process \fIpid\fR name \fIname\fR
 .RS 4
 remove the binding between \fIpid\fR and \fIname\fR. The process
 \fIpid\fR will not accept future flow allocation requests for

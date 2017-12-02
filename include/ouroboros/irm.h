@@ -33,48 +33,47 @@
 #define MGMT_AE "Management"
 
 /* Name binding options. */
-#define BIND_AP_AUTO   0x01
-#define BIND_AP_UNIQUE 0x02
+#define BIND_AUTO   0x01
 
 __BEGIN_DECLS
 
 pid_t   irm_create_ipcp(const char *   name,
                         enum ipcp_type ipcp_type);
 
-int     irm_destroy_ipcp(pid_t api);
+int     irm_destroy_ipcp(pid_t pid);
 
-/* apis is an out-parameter */
+/* pids is an out-parameter */
 ssize_t irm_list_ipcps(const char * name,
-                       pid_t **     apis);
+                       pid_t **     pids);
 
-int     irm_enroll_ipcp(pid_t        api,
+int     irm_enroll_ipcp(pid_t        pid,
                         const char * dif_name);
 
-int     irm_bootstrap_ipcp(pid_t                      api,
+int     irm_bootstrap_ipcp(pid_t                      pid,
                            const struct ipcp_config * conf);
 
-int     irm_connect_ipcp(pid_t        api,
+int     irm_connect_ipcp(pid_t        pid,
                          const char * component,
                          const char * dst);
 
-int     irm_disconnect_ipcp(pid_t        api,
+int     irm_disconnect_ipcp(pid_t        pid,
                             const char * component,
                             const char * dst);
 
-int     irm_bind_ap(const char * ap,
-                    const char * name,
-                    uint16_t     opts,
-                    int          argc,
-                    char **      argv);
+int     irm_bind_program(const char * prog,
+                         const char * name,
+                         uint16_t     opts,
+                         int          argc,
+                         char **      argv);
 
-int     irm_unbind_ap(const char * ap,
-                      const char * name);
+int     irm_unbind_program(const char * progr,
+                           const char * name);
 
-int     irm_bind_api(pid_t        api,
-                     const char * name);
+int     irm_bind_process(pid_t        pid,
+                         const char * name);
 
-int     irm_unbind_api(pid_t        api,
-                       const char * name);
+int     irm_unbind_process(pid_t        pid,
+                           const char * name);
 
 int     irm_reg(const char *  name,
                 char **       difs,

@@ -45,7 +45,7 @@
 
 #define FN_MAX_CHARS 255
 
-#define SHM_RB_FILE_SIZE ((SHM_BUFFER_SIZE) * sizeof(ssize_t)          \
+#define SHM_RB_FILE_SIZE ((SHM_BUFFER_SIZE) * sizeof(ssize_t)           \
                           + 3 * sizeof(size_t)                          \
                           + sizeof(pthread_mutex_t)                     \
                           + 2 * sizeof (pthread_cond_t))
@@ -65,7 +65,7 @@ struct shm_rbuff {
         pthread_mutex_t * lock;     /* lock all free space in shm    */
         pthread_cond_t *  add;      /* SDU arrived                   */
         pthread_cond_t *  del;      /* SDU removed                   */
-        pid_t             api;      /* api of the owner              */
+        pid_t             pid;      /* pid of the owner              */
         int               port_id;  /* port_id of the flow           */
 };
 
@@ -80,14 +80,16 @@ void shm_rbuff_close(struct shm_rbuff * rb)
 
 #define MM_FLAGS (PROT_READ | PROT_WRITE)
 
-struct shm_rbuff * rbuff_create(pid_t api, int port_id, int flags)
+struct shm_rbuff * rbuff_create(pid_t pid,
+                                int   port_id,
+                                int   flags)
 {
         struct shm_rbuff * rb;
         int                fd;
         ssize_t *          shm_base;
         char               fn[FN_MAX_CHARS];
 
-        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", api, port_id);
+        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", pid, port_id);
 
         rb = malloc(sizeof(*rb));
         if (rb == NULL)
@@ -113,9 +115,8 @@ struct shm_rbuff * rbuff_create(pid_t api, int port_id, int flags)
         rb->lock     = (pthread_mutex_t *) (rb->acl + 1);
         rb->add      = (pthread_cond_t *) (rb->lock + 1);
         rb->del      = rb->add + 1;
-
-        rb->api = api;
-        rb->port_id = port_id;
+        rb->pid      = pid;
+        rb->port_id  = port_id;
 
         return rb;
 
@@ -129,7 +130,8 @@ struct shm_rbuff * rbuff_create(pid_t api, int port_id, int flags)
         return NULL;
 }
 
-struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
+struct shm_rbuff * shm_rbuff_create(pid_t pid,
+                                    int   port_id)
 {
         struct shm_rbuff *  rb;
         pthread_mutexattr_t mattr;
@@ -138,7 +140,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
 
         mask = umask(0);
 
-        rb = rbuff_create(api, port_id, O_CREAT | O_EXCL | O_RDWR);
+        rb = rbuff_create(pid, port_id, O_CREAT | O_EXCL | O_RDWR);
 
         umask(mask);
 
@@ -172,7 +174,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         *rb->head = 0;
         *rb->tail = 0;
 
-        rb->api = api;
+        rb->pid = pid;
         rb->port_id = port_id;
 
         pthread_mutexattr_destroy(&mattr);
@@ -194,9 +196,10 @@ struct shm_rbuff * shm_rbuff_create(pid_t api, int port_id)
         return NULL;
 }
 
-struct shm_rbuff * shm_rbuff_open(pid_t api, int port_id)
+struct shm_rbuff * shm_rbuff_open(pid_t pid,
+                                  int   port_id)
 {
-        return rbuff_create(api, port_id, O_RDWR);
+        return rbuff_create(pid, port_id, O_RDWR);
 }
 
 #if (defined(SHM_RBUFF_LOCKLESS) &&                            \

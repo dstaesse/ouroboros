@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Bind AP to a name
+ * Unbind process names
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -36,61 +36,40 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define _POSIX_C_SOURCE 200809L
-#define _XOPEN_SOURCE 500
-
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 #include <ouroboros/irm.h>
-#include <ouroboros/errno.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
 static void usage(void)
 {
-        printf("Usage: irm bind ap <ap>\n"
-               "           name <name>\n"
-               "           [auto] (instantiate apn if not running)\n"
-               "           [loc] (location-dependent application)\n"
-               "           [unique] (there can only be one instantiation)\n"
-               "           [-- <application arguments>]\n");
+        printf("Usage: irm unbind process <pid>\n"
+               "                  [name <name> (default: unbind all names)]"
+               "\n");
 }
 
-
-int do_bind_ap(int argc, char ** argv)
+int do_unbind_process(int     argc,
+                      char ** argv)
 {
+        pid_t  pid  = -1;
         char * name = NULL;
-        char * ap_name = NULL;
-        uint16_t flags = 0;
-        int ret = 0;
-        char * temp = NULL;
 
-        while (argc > 0) {
+        while (argc > 1) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                         ++argv;
                         --argc;
-                } else if (matches(*argv, "ap") == 0) {
-                        ++argv;
-                        temp = realpath(*argv, NULL);
-                        if (temp != NULL)
-                                *argv = temp;
-                        ap_name = *argv;
-                        --argc;
-                } else if (strcmp(*argv, "auto") == 0) {
-                        flags |= BIND_AP_AUTO;
-                } else if (strcmp(*argv, "unique") == 0) {
-                        flags |= BIND_AP_UNIQUE;
-                } else if (strcmp(*argv, "--") == 0) {
+                } else if (matches(*argv, "process") == 0) {
+                        pid = strtol(*(argv + 1), NULL, 10);
                         ++argv;
                         --argc;
-                        break;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "bind\".\n", *argv);
+                               "unbind process\".\n", *argv);
                         return -1;
                 }
 
@@ -98,25 +77,10 @@ int do_bind_ap(int argc, char ** argv)
                 --argc;
         }
 
-        if (name == NULL || ap_name == NULL) {
+        if (pid < 0) {
                 usage();
                 return -1;
         }
 
-        ret = irm_bind_ap(ap_name, name, flags, argc, argv);
-        if (ret == -ENOENT) {
-                printf("%s does not exist.\n", ap_name);
-                return ret;
-        }
-
-        if (ret == -EPERM) {
-                printf("Cannot execute %s, please check permissions.\n",
-                        ap_name);
-                return ret;
-        }
-
-        if (temp != NULL)
-                free(temp);
-
-        return ret;
+        return irm_unbind_process(pid, name);
 }

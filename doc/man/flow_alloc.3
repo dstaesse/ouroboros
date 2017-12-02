@@ -2,13 +2,12 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH FLOW_ALLOC 3 2017-04-10 Ouroboros "Ouroboros Programmer's Manual"
+.TH FLOW_ALLOC 3 2017-12-02 Ouroboros "Ouroboros Programmer's Manual"
 
 .SH NAME
 
 flow_accept, flow_alloc, flow_dealloc \- allocate and free resources
-to support Inter-Process Communication between application process
-instances
+to support Inter-Process Communication
 
 .SH SYNOPSIS
 
@@ -31,24 +30,23 @@ to support Inter-Process Communication (IPC). Such a collection of
 allocated system and network resources is referred to as a flow. A
 flow has a certain Quality of Service (QoS) associated with it.
 
-The \fBflow_accept\fR() function blocks the calling thread waiting
-for an incoming request to allocate a flow. If \fBqosspec_t * \fIqs\fR
-is not NULL, the value of \fIqs\fR will be updated to reflect the
-actual QoS provided by the IPC facility for the accepted flow. Which
-flows this application will accept is configured outside of the
-program. For an explanation on configuring which flows an application
-should accept, see \fBirm\fR(8).
+The \fBflow_accept\fR() function blocks the calling thread waiting for
+an incoming request to allocate a flow. If \fBqosspec_t * \fIqs\fR is
+not NULL, the value of \fIqs\fR will be updated to reflect the actual
+QoS provided by the IPC facility for the accepted flow. Which flows
+this process will accept is configured through the IRMd. For an
+explanation on configuring which flows an application should accept,
+see \fBirm\fR(8).
 
 The \fBflow_alloc\fR() function requests to allocate system and/or
 network resources to support Inter-Process Communication between the
-calling application and one or more application process instances
-accepting flows for \fBchar * \fIdst_name\fR, which cannot be NULL.
-The \fBflow_alloc\fR() call can specify a certain minimum \fBqosspec_t
-* \fIqs\fR that has to be guaranteed by the IPC facility allocating
-the resources. This can be NULL if there is no QoS to be guaranteed
-(best effort service). If \fIqs\fR is not NULL, the value of \fIqs\fR
-will be updated to reflect the actual QoS provided by the IPC
-facility.
+calling application and one or more processes accepting flows for
+\fBchar * \fIdst_name\fR, which cannot be NULL.  The
+\fBflow_alloc\fR() call can specify a certain minimum \fBqosspec_t *
+\fIqs\fR that has to be guaranteed by the IPC facility allocating the
+resources. This can be NULL if there is no QoS to be guaranteed (best
+effort service). If \fIqs\fR is not NULL, the value of \fIqs\fR will
+be updated to reflect the actual QoS provided by the IPC facility.
 
 The \fBflow_accept\fR() and \fBflow_alloc\fR() take a \fBconst struct
 timespec * \fItimeo\fR to specify a timeout. If \fItimeo\fR is NULL,

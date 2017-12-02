@@ -30,8 +30,8 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
 
 set(SOURCE_FILES
   # Add source files here
-  api_table.c
-  apn_table.c
+  proc_table.c
+  prog_table.c
   ipcp.c
   irm_flow.c
   main.c

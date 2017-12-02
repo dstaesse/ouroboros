@@ -50,8 +50,8 @@ typedef FlowAllocMsg flow_alloc_msg_t;
 
 struct {
         pthread_rwlock_t   flows_lock;
-        int                r_fd[AP_MAX_FLOWS];
-        uint64_t           r_addr[AP_MAX_FLOWS];
+        int                r_fd[PROG_MAX_FLOWS];
+        uint64_t           r_addr[PROG_MAX_FLOWS];
         int                fd;
 
         struct sdu_sched * sdu_sched;
@@ -188,7 +188,7 @@ int fa_init(void)
 {
         int i;
 
-        for (i = 0; i < AP_MAX_FLOWS; ++i)
+        for (i = 0; i < PROG_MAX_FLOWS; ++i)
                 destroy_conn(i);
 
         if (pthread_rwlock_init(&fa.flows_lock, NULL))

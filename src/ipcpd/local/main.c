@@ -139,7 +139,7 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
                 return -1;
         }
 
-        log_info("Bootstrapped local IPCP with api %d.", getpid());
+        log_info("Bootstrapped local IPCP with pid %d.", getpid());
 
         return 0;
 }

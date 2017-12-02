@@ -62,7 +62,7 @@ void ipcp_sig_handler(int         sig,
         case SIGTERM:
         case SIGHUP:
         case SIGQUIT:
-                if (info->si_pid == ipcpi.irmd_api) {
+                if (info->si_pid == ipcpi.irmd_pid) {
                         if (ipcp_get_state() == IPCP_INIT)
                                 ipcp_set_state(IPCP_NULL);
 
@@ -407,7 +407,7 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        fd = np1_flow_alloc(msg->api,
+                        fd = np1_flow_alloc(msg->pid,
                                             msg->port_id,
                                             msg->qoscube);
                         if (fd < 0) {
@@ -526,11 +526,11 @@ static int parse_args(int    argc,
         if (!(argc == 4 || argc == 3))
                 return -1;
 
-        /* argument 1: api of irmd */
+        /* argument 1: pid of irmd */
         if (atoi(argv[1]) == 0)
                 return -1;
 
-        ipcpi.irmd_api = atoi(argv[1]);
+        ipcpi.irmd_pid = atoi(argv[1]);
 
         /* argument 2: IPCP name */
         ipcpi.name = argv[2];

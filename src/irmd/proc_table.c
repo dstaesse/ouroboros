@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * The IPC Resource Manager - Application Instance Table
+ * The IPC Resource Manager - Process Table
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -28,7 +28,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/time_utils.h>
 
-#include "api_table.h"
+#include "proc_table.h"
 #include "registry.h"
 
 #include <stdlib.h>
@@ -36,13 +36,13 @@
 #include <limits.h>
 #include <assert.h>
 
-struct api_entry * api_entry_create(pid_t  api,
-                                    char * apn)
+struct proc_entry * proc_entry_create(pid_t  pid,
+                                      char * prog)
 {
-        struct api_entry * e;
-        pthread_condattr_t cattr;
+        struct proc_entry * e;
+        pthread_condattr_t  cattr;
 
-        assert(apn);
+        assert(prog);
 
         e = malloc(sizeof(*e));
         if (e == NULL)
@@ -51,13 +51,13 @@ struct api_entry * api_entry_create(pid_t  api,
         list_head_init(&e->next);
         list_head_init(&e->names);
 
-        e->api      = api;
-        e->apn      = apn;
+        e->pid      = pid;
+        e->prog     = prog;
         e->daf_name = NULL;
 
         e->re       = NULL;
 
-        e->state    = API_INIT;
+        e->state    = PROC_INIT;
 
         if (pthread_condattr_init(&cattr)) {
                 free(e);
@@ -83,16 +83,16 @@ struct api_entry * api_entry_create(pid_t  api,
         return e;
 }
 
-void cancel_api_entry(void * o)
+static void cancel_proc_entry(void * o)
 {
-        struct api_entry * e = (struct api_entry *) o;
+        struct proc_entry * e = (struct proc_entry *) o;
 
-        e->state = API_NULL;
+        e->state = PROC_NULL;
 
         pthread_mutex_unlock(&e->lock);
 }
 
-void api_entry_destroy(struct api_entry * e)
+void proc_entry_destroy(struct proc_entry * e)
 {
         struct list_head * p;
         struct list_head * h;
@@ -101,19 +101,19 @@ void api_entry_destroy(struct api_entry * e)
 
         pthread_mutex_lock(&e->lock);
 
-        if (e->state == API_DESTROY) {
+        if (e->state == PROC_DESTROY) {
                 pthread_mutex_unlock(&e->lock);
                 return;
         }
 
-        if (e->state == API_SLEEP)
-                e->state = API_DESTROY;
+        if (e->state == PROC_SLEEP)
+                e->state = PROC_DESTROY;
 
         pthread_cond_signal(&e->cond);
 
-        pthread_cleanup_push(cancel_api_entry, e);
+        pthread_cleanup_push(cancel_proc_entry, e);
 
-        while (e->state != API_INIT)
+        while (e->state != PROC_INIT)
                 pthread_cond_wait(&e->cond, &e->lock);
 
         pthread_cleanup_pop(false);
@@ -123,8 +123,8 @@ void api_entry_destroy(struct api_entry * e)
         pthread_cond_destroy(&e->cond);
         pthread_mutex_destroy(&e->lock);
 
-        if (e->apn != NULL)
-                free(e->apn);
+        if (e->prog != NULL)
+                free(e->prog);
 
         list_for_each_safe(p, h, &e->names) {
                 struct str_el * n = list_entry(p, struct str_el, next);
@@ -137,8 +137,8 @@ void api_entry_destroy(struct api_entry * e)
         free(e);
 }
 
-int api_entry_add_name(struct api_entry * e,
-                       char *             name)
+int proc_entry_add_name(struct proc_entry * e,
+                        char *              name)
 {
         struct str_el * s;
 
@@ -155,8 +155,8 @@ int api_entry_add_name(struct api_entry * e,
         return 0;
 }
 
-void api_entry_del_name(struct api_entry * e,
-                        const char *       name)
+void proc_entry_del_name(struct proc_entry * e,
+                         const char *        name)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;
@@ -175,8 +175,8 @@ void api_entry_del_name(struct api_entry * e,
         }
 }
 
-int api_entry_sleep(struct api_entry * e,
-                    struct timespec *  timeo)
+int proc_entry_sleep(struct proc_entry * e,
+                     struct timespec *   timeo)
 {
         struct timespec dl;
 
@@ -191,12 +191,12 @@ int api_entry_sleep(struct api_entry * e,
 
         pthread_mutex_lock(&e->lock);
 
-        if (e->state != API_WAKE && e->state != API_DESTROY)
-                e->state = API_SLEEP;
+        if (e->state != PROC_WAKE && e->state != PROC_DESTROY)
+                e->state = PROC_SLEEP;
 
-        pthread_cleanup_push(cancel_api_entry, e);
+        pthread_cleanup_push(cancel_proc_entry, e);
 
-        while (e->state == API_SLEEP && ret != -ETIMEDOUT)
+        while (e->state == PROC_SLEEP && ret != -ETIMEDOUT)
                 if (timeo)
                         ret = -pthread_cond_timedwait(&e->cond, &e->lock, &dl);
                 else
@@ -204,13 +204,13 @@ int api_entry_sleep(struct api_entry * e,
 
         pthread_cleanup_pop(false);
 
-        if (e->state == API_DESTROY) {
+        if (e->state == PROC_DESTROY) {
                 if (e->re != NULL)
-                        reg_entry_del_api(e->re, e->api);
+                        reg_entry_del_pid(e->re, e->pid);
                 ret = -1;
         }
 
-        e->state = API_INIT;
+        e->state = PROC_INIT;
 
         pthread_cond_broadcast(&e->cond);
         pthread_mutex_unlock(&e->lock);
@@ -218,76 +218,76 @@ int api_entry_sleep(struct api_entry * e,
         return ret;
 }
 
-void api_entry_wake(struct api_entry * e,
-                    struct reg_entry * re)
+void proc_entry_wake(struct proc_entry * e,
+                     struct reg_entry *  re)
 {
         assert(e);
         assert(re);
 
         pthread_mutex_lock(&e->lock);
 
-        if (e->state != API_SLEEP) {
+        if (e->state != PROC_SLEEP) {
                 pthread_mutex_unlock(&e->lock);
                 return;
         }
 
-        e->state = API_WAKE;
+        e->state = PROC_WAKE;
         e->re    = re;
 
         pthread_cond_broadcast(&e->cond);
 
-        pthread_cleanup_push(cancel_api_entry, e);
+        pthread_cleanup_push(cancel_proc_entry, e);
 
-        while (e->state == API_WAKE)
+        while (e->state == PROC_WAKE)
                 pthread_cond_wait(&e->cond, &e->lock);
 
         pthread_cleanup_pop(false);
 
-        if (e->state == API_DESTROY)
-                e->state = API_INIT;
+        if (e->state == PROC_DESTROY)
+                e->state = PROC_INIT;
 
         pthread_mutex_unlock(&e->lock);
 }
 
-int api_table_add(struct list_head * api_table,
-                  struct api_entry * e)
+int proc_table_add(struct list_head *  proc_table,
+                   struct proc_entry * e)
 {
 
-        assert(api_table);
+        assert(proc_table);
         assert(e);
 
-        list_add(&e->next, api_table);
+        list_add(&e->next, proc_table);
 
         return 0;
 }
 
-void api_table_del(struct list_head * api_table,
-                   pid_t              api)
+void proc_table_del(struct list_head * proc_table,
+                    pid_t              pid)
 {
         struct list_head * p;
         struct list_head * h;
 
-        assert(api_table);
+        assert(proc_table);
 
-        list_for_each_safe(p, h, api_table) {
-                struct api_entry * e = list_entry(p, struct api_entry, next);
-                if (api == e->api) {
+        list_for_each_safe(p, h, proc_table) {
+                struct proc_entry * e = list_entry(p, struct proc_entry, next);
+                if (pid == e->pid) {
                         list_del(&e->next);
-                        api_entry_destroy(e);
+                        proc_entry_destroy(e);
                 }
         }
 }
 
-struct api_entry * api_table_get(struct list_head * api_table,
-                                 pid_t              api)
+struct proc_entry * proc_table_get(struct list_head * proc_table,
+                                   pid_t              pid)
 {
         struct list_head * h;
 
-        assert(api_table);
+        assert(proc_table);
 
-        list_for_each(h, api_table) {
-                struct api_entry * e = list_entry(h, struct api_entry, next);
-                if (api == e->api)
+        list_for_each(h, proc_table) {
+                struct proc_entry * e = list_entry(h, struct proc_entry, next);
+                if (pid == e->pid)
                         return e;
         }
 

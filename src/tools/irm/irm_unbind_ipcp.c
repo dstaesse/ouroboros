@@ -57,7 +57,7 @@ int do_unbind_ipcp(int argc, char ** argv)
         char * ipcp = NULL;
         char * name = NULL;
 
-        pid_t * apis = NULL;
+        pid_t * pids = NULL;
         ssize_t len  = 0;
 
         int i;
@@ -86,12 +86,12 @@ int do_unbind_ipcp(int argc, char ** argv)
                 return -1;
         }
 
-        len = irm_list_ipcps(ipcp, &apis);
+        len = irm_list_ipcps(ipcp, &pids);
 
         for (i = 0; i < len; ++i)
-                irm_unbind_api(apis[i], name);
+                irm_unbind_process(pids[i], name);
 
-        free(apis);
+        free(pids);
 
         return 0;
 }
