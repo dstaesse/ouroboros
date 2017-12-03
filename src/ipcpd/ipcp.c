@@ -243,23 +243,37 @@ static void * mainloop(void * o)
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
                                 conf.routing_type   = conf_msg->routing_type;
                                 conf.pff_type       = conf_msg->pff_type;
+                        }
 
+                        if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC)
+                                conf.if_name        = conf_msg->if_name;
+
+                        if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
+                                conf.ip_addr  = conf_msg->ip_addr;
+                                conf.dns_addr = conf_msg->dns_addr;
+
+                                conf.dif_info.dir_hash_algo = HASH_MD5;
+                                dif_info.dir_hash_algo      = HASH_MD5;
+                        }
+
+                        /* Only shim-udp needs a fixed hash algorithm */
+                        if (conf_msg->ipcp_type != IPCP_SHIM_UDP) {
                                 switch(conf_msg->dif_info->dir_hash_algo) {
                                 case DIR_HASH_SHA3_224:
-                                        conf.dif_info.dir_hash_algo
-                                                = HASH_SHA3_224;
+                                        conf.dif_info.dir_hash_algo =
+                                                HASH_SHA3_224;
                                         break;
                                 case DIR_HASH_SHA3_256:
-                                        conf.dif_info.dir_hash_algo
-                                                = HASH_SHA3_256;
+                                        conf.dif_info.dir_hash_algo =
+                                                HASH_SHA3_256;
                                         break;
                                 case DIR_HASH_SHA3_384:
-                                        conf.dif_info.dir_hash_algo
-                                                = HASH_SHA3_384;
+                                        conf.dif_info.dir_hash_algo =
+                                                HASH_SHA3_384;
                                         break;
                                 case DIR_HASH_SHA3_512:
-                                        conf.dif_info.dir_hash_algo
-                                                = HASH_SHA3_512;
+                                        conf.dif_info.dir_hash_algo =
+                                                HASH_SHA3_512;
                                         break;
                                 default:
                                         assert(false);
@@ -269,23 +283,7 @@ static void * mainloop(void * o)
                                         conf.dif_info.dir_hash_algo;
                         }
 
-                        if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
-                                conf.ip_addr           = conf_msg->ip_addr;
-                                conf.dns_addr          = conf_msg->dns_addr;
-                                dif_info.dir_hash_algo = HASH_MD5;
-                                ipcpi.dir_hash_algo    = HASH_MD5;
-                        }
-
-                        if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC) {
-                                conf.if_name           = conf_msg->if_name;
-                                dif_info.dir_hash_algo = HASH_SHA3_256;
-                                ipcpi.dir_hash_algo    = HASH_SHA3_256;
-                        }
-
-                        if (conf_msg->ipcp_type == IPCP_LOCAL) {
-                                dif_info.dir_hash_algo = HASH_SHA3_256;
-                                ipcpi.dir_hash_algo    = HASH_SHA3_256;
-                        }
+                        ipcpi.dir_hash_algo = conf.dif_info.dir_hash_algo;
 
                         ret_msg.result = ipcpi.ops->ipcp_bootstrap(&conf);
                         if (ret_msg.result == 0) {

@@ -102,9 +102,16 @@ static void usage(void)
                "                [dns <DDNS IP address in dotted notation>"
                " (default: none)]\n\n"
                "if TYPE == " SHIM_ETH_LLC "\n"
-               "                if_name <interface name>\n",
+               "                if_name <interface name>\n"
+               "                [hash [ALGORITHM] (default: %s)]\n"
+               "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
+               SHA3_384 " " SHA3_512 "}\n\n"
+               "if TYPE == " LOCAL "\n"
+               "                [hash [ALGORITHM] (default: %s)]\n"
+               "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
+               SHA3_384 " " SHA3_512 "}\n\n",
                DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE, FLAT_RANDOM_ADDR_AUTH,
-               LINK_STATE_ROUTING, SIMPLE_PFF, SHA3_256);
+               LINK_STATE_ROUTING, SIMPLE_PFF, SHA3_256, SHA3_256, SHA3_256);
 }
 
 int do_bootstrap_ipcp(int     argc,
@@ -203,6 +210,8 @@ int do_bootstrap_ipcp(int     argc,
         }
 
         strcpy(conf.dif_info.dif_name, dif_name);
+        if (strcmp(ipcp_type, SHIM_UDP) != 0)
+                conf.dif_info.dir_hash_algo = hash_algo;
 
         if (strcmp(ipcp_type, NORMAL) == 0) {
                 conf.type = IPCP_NORMAL;
@@ -212,7 +221,6 @@ int do_bootstrap_ipcp(int     argc,
                 conf.addr_auth_type = addr_auth_type;
                 conf.routing_type = routing_type;
                 conf.pff_type = pff_type;
-                conf.dif_info.dir_hash_algo = hash_algo;
         } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {
                 conf.type = IPCP_SHIM_UDP;
                 if (ip_addr == 0) {
