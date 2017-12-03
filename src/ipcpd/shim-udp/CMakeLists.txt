@@ -12,19 +12,14 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-protobuf_generate_c(SHIM_UDP_PROTO_SRCS SHIM_UDP_PROTO_HDRS
-  shim_udp_messages.proto)
-
 set(IPCP_SHIM_UDP_TARGET ipcpd-shim-udp CACHE INTERNAL "")
 
 set(SHIM_UDP_SOURCES
   # Add source files here
   ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
 
-add_executable(ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES}
-  ${SHIM_UDP_PROTO_SRCS})
-target_link_libraries(ipcpd-shim-udp LINK_PUBLIC ouroboros-dev
-  ${PROTOBUF_C_LIBRARY})
+add_executable(ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES})
+target_link_libraries(ipcpd-shim-udp LINK_PUBLIC ouroboros-dev)
 
 # Find the nsupdate executable
 find_program(NSUPDATE_EXECUTABLE

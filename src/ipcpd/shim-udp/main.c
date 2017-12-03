@@ -37,7 +37,6 @@
 
 #include "ipcp.h"
 #include "shim-data.h"
-#include "shim_udp_messages.pb-c.h"
 
 #include <string.h>
 #include <sys/socket.h>
@@ -51,23 +50,32 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-typedef ShimUdpMsg shim_udp_msg_t;
+#define FLOW_REQ              1
+#define FLOW_REPLY            2
 
-#define THIS_TYPE IPCP_SHIM_UDP
-#define LISTEN_PORT htons(0x0D1F)
-#define SHIM_UDP_BUF_SIZE 256
-#define SHIM_UDP_MSG_SIZE 256
+#define THIS_TYPE             IPCP_SHIM_UDP
+#define LISTEN_PORT           htons(0x0D1F)
+#define SHIM_UDP_BUF_SIZE     256
+#define SHIM_UDP_MSG_SIZE     256
 #define SHIM_UDP_MAX_SDU_SIZE 8980
-#define DNS_TTL 86400
-#define FD_UPDATE_TIMEOUT 100 /* microseconds */
+#define DNS_TTL               86400
+#define FD_UPDATE_TIMEOUT     100 /* microseconds */
 
-#define local_ip (udp_data.s_saddr.sin_addr.s_addr)
+#define local_ip              (udp_data.s_saddr.sin_addr.s_addr)
 
-#define UDP_MAX_PORTS 0xFFFF
+#define UDP_MAX_PORTS         0xFFFF
+
+struct mgmt_msg {
+        uint16_t src_udp_port;
+        uint16_t dst_udp_port;
+        uint8_t  code;
+        uint8_t  qoscube;
+        uint8_t  response;
+} __attribute__((packed));
 
 struct uf {
-        int                udp;
-        int                skfd;
+        int udp;
+        int skfd;
 };
 
 struct {
@@ -172,10 +180,10 @@ static void clr_fd(int fd)
         pthread_mutex_unlock(&udp_data.fd_set_lock);
 }
 
-static int send_shim_udp_msg(shim_udp_msg_t * msg,
-                             uint32_t         dst_ip_addr)
+static int send_shim_udp_msg(uint8_t * buf,
+                             size_t    len,
+                             uint32_t  dst_ip_addr)
 {
-       buffer_t           buf;
        struct sockaddr_in r_saddr;
 
        memset((char *)&r_saddr, 0, sizeof(r_saddr));
@@ -183,29 +191,12 @@ static int send_shim_udp_msg(shim_udp_msg_t * msg,
        r_saddr.sin_addr.s_addr = dst_ip_addr;
        r_saddr.sin_port        = LISTEN_PORT;
 
-       buf.len = shim_udp_msg__get_packed_size(msg);
-       if (buf.len == 0) {
-               return -1;
-       }
-
-       buf.data = malloc(SHIM_UDP_MSG_SIZE);
-       if (buf.data == NULL)
-               return -1;
-
-       shim_udp_msg__pack(msg, buf.data);
-
-       if (sendto(udp_data.s_fd,
-                  buf.data,
-                  buf.len,
-                  0,
+       if (sendto(udp_data.s_fd, buf, len, 0,
                   (struct sockaddr *) &r_saddr,
                   sizeof(r_saddr)) == -1) {
                log_err("Failed to send message.");
-               free(buf.data);
                return -1;
        }
-
-       free(buf.data);
 
        return 0;
 }
@@ -215,17 +206,29 @@ static int ipcp_udp_port_alloc(uint32_t        dst_ip_addr,
                                const uint8_t * dst,
                                qoscube_t       cube)
 {
-        shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
+        uint8_t *         buf;
+        struct mgmt_msg * msg;
+        size_t            len;
+        int               ret;
 
-        msg.code         = SHIM_UDP_MSG_CODE__FLOW_REQ;
-        msg.src_udp_port = src_udp_port;
-        msg.has_hash     = true;
-        msg.hash.len     = ipcp_dir_hash_len();
-        msg.hash.data    = (uint8_t *) dst;
-        msg.has_qoscube  = true;
-        msg.qoscube      = cube;
+        len = sizeof(*msg) + ipcp_dir_hash_len();
 
-        return send_shim_udp_msg(&msg, dst_ip_addr);
+        buf = malloc(len);
+        if (buf == NULL)
+                return -1;
+
+        msg               = (struct mgmt_msg *) buf;
+        msg->code         = FLOW_REQ;
+        msg->src_udp_port = src_udp_port;
+        msg->qoscube      = cube;
+
+        memcpy(msg + 1, dst, ipcp_dir_hash_len());
+
+        ret = send_shim_udp_msg(buf, len, dst_ip_addr);
+
+        free(buf);
+
+        return ret;
 }
 
 static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
@@ -233,16 +236,25 @@ static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
                                     uint16_t dst_udp_port,
                                     int      response)
 {
-        shim_udp_msg_t msg = SHIM_UDP_MSG__INIT;
+        uint8_t *         buf;
+        struct mgmt_msg * msg;
+        int               ret;
 
-        msg.code             = SHIM_UDP_MSG_CODE__FLOW_REPLY;
-        msg.src_udp_port     = src_udp_port;
-        msg.has_dst_udp_port = true;
-        msg.dst_udp_port     = dst_udp_port;
-        msg.has_response     = true;
-        msg.response         = response;
+        buf = malloc(sizeof(*msg));
+        if (buf == NULL)
+                return -1;
 
-        return send_shim_udp_msg(&msg, dst_ip_addr);
+        msg               = (struct mgmt_msg *) buf;
+        msg->code         = FLOW_REPLY;
+        msg->src_udp_port = src_udp_port;
+        msg->dst_udp_port = dst_udp_port;
+        msg->response     = response;
+
+        ret = send_shim_udp_msg(buf, sizeof(*msg), dst_ip_addr);
+
+        free(buf);
+
+        return ret;
 }
 
 static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
@@ -404,7 +416,7 @@ static void * ipcp_udp_listener(void * o)
         (void) o;
 
         while (true) {
-                shim_udp_msg_t * msg = NULL;
+                struct mgmt_msg * msg = NULL;
 
                 memset(&buf, 0, SHIM_UDP_MSG_SIZE);
                 n = sizeof(c_saddr);
@@ -419,31 +431,26 @@ static void * ipcp_udp_listener(void * o)
                     == NULL)
                         continue;
 
-                msg = shim_udp_msg__unpack(NULL, n, buf);
-                if (msg == NULL)
-                        continue;
+                msg = (struct mgmt_msg *) buf;
 
                 switch (msg->code) {
-                case SHIM_UDP_MSG_CODE__FLOW_REQ:
+                case FLOW_REQ:
                         c_saddr.sin_port = msg->src_udp_port;
                         ipcp_udp_port_req(&c_saddr,
-                                          msg->hash.data,
+                                          (uint8_t *) (msg + 1),
                                           msg->qoscube);
                         break;
-                case SHIM_UDP_MSG_CODE__FLOW_REPLY:
+                case FLOW_REPLY:
                         ipcp_udp_port_alloc_reply(msg->src_udp_port,
                                                   msg->dst_udp_port,
                                                   msg->response);
                         break;
                 default:
                         log_err("Unknown message received %d.", msg->code);
-                        shim_udp_msg__free_unpacked(msg, NULL);
                         continue;
                 }
 
                 c_saddr.sin_port = LISTEN_PORT;
-
-                shim_udp_msg__free_unpacked(msg, NULL);
         }
 
         return 0;
