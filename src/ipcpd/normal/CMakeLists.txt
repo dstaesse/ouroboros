@@ -19,9 +19,6 @@ protobuf_generate_c(ENROLL_PROTO_SRCS ENROLL_PROTO_HDRS enroll.proto
   ${CMAKE_SOURCE_DIR}/src/lib/ipcp_config.proto)
 protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS kademlia.proto)
 
-# Add GPB sources of policies last
-protobuf_generate_c(LS_PROTO_SRCS LS_PROTO_HDRS pol/link_state.proto)
-
 math(EXPR PFT_EXPR "1 << 12")
 set(PFT_SIZE ${PFT_EXPR} CACHE STRING
   "Size of the PDU forwarding table")
@@ -49,7 +46,7 @@ set(SOURCE_FILES
   )
 
 add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
-  ${FLOW_ALLOC_SRCS} ${LS_PROTO_SRCS} ${KAD_PROTO_SRCS} ${ENROLL_PROTO_SRCS})
+  ${FLOW_ALLOC_SRCS} ${KAD_PROTO_SRCS} ${ENROLL_PROTO_SRCS})
 target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros-dev)
 
 include(AddCompileFlags)

@@ -26,6 +26,7 @@
 
 #define OUROBOROS_PREFIX "link-state-routing"
 
+#include <ouroboros/endian.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/fqueue.h>
@@ -48,18 +49,19 @@
 #include <string.h>
 #include <pthread.h>
 
-#include "link_state.pb-c.h"
-typedef LinkStateMsg link_state_msg_t;
-
 #define RECALC_TIME    4
 #define LS_UPDATE_TIME 15
 #define LS_TIMEO       60
-#define LSM_MAX_LEN    128
 #define LSDB           "lsdb"
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
+
+struct lsa {
+        uint64_t d_addr;
+        uint64_t s_addr;
+} __attribute__((packed));
 
 struct routing_i {
         struct list_head next;
@@ -462,24 +464,16 @@ static void * calculate_pff(void * o)
 static void send_lsm(uint64_t src,
                      uint64_t dst)
 {
-        uint8_t            buf[LSM_MAX_LEN];
-        link_state_msg_t   lsm = LINK_STATE_MSG__INIT;
-        size_t             len;
+        struct lsa         lsm;
         struct list_head * p;
 
-        lsm.d_addr = dst;
-        lsm.s_addr = src;
-
-        len = link_state_msg__get_packed_size(&lsm);
-
-        assert(len <= LSM_MAX_LEN);
-
-        link_state_msg__pack(&lsm, buf);
+        lsm.d_addr = hton64(dst);
+        lsm.s_addr = hton64(src);
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->type == NB_MGMT)
-                        flow_write(nb->fd, buf, len);
+                        flow_write(nb->fd, &lsm, sizeof(lsm));
         }
 }
 
@@ -570,12 +564,13 @@ static void forward_lsm(uint8_t * buf,
 
 static void * lsreader(void * o)
 {
-        fqueue_t * fq;
-        int        ret;
-        uint8_t    buf[LSM_MAX_LEN];
-        size_t     len;
-        int        fd;
-        qosspec_t  qs;
+        fqueue_t *   fq;
+        int          ret;
+        uint8_t      buf[sizeof(struct lsa)];
+        int          fd;
+        qosspec_t    qs;
+        struct lsa * msg;
+        size_t       len;
 
         (void) o;
 
@@ -596,20 +591,15 @@ static void * lsreader(void * o)
                 }
 
                 while ((fd = fqueue_next(fq)) >= 0) {
-                        link_state_msg_t * msg;
-                        len = flow_read(fd, buf, LSM_MAX_LEN);
-                        if (len <= 0)
+                        len = flow_read(fd, buf, sizeof(*msg));
+                        if (len <= 0 || len != sizeof(*msg))
                                 continue;
 
-                        msg = link_state_msg__unpack(NULL, len, buf);
-                        if (msg == NULL) {
-                                log_dbg("Failed to unpack link state message.");
-                                continue;
-                        }
+                        msg = (struct lsa *) buf;
 
-                        lsdb_add_link(msg->s_addr, msg->d_addr, &qs);
-
-                        link_state_msg__free_unpacked(msg, NULL);
+                        lsdb_add_link(ntoh64(msg->s_addr),
+                                      ntoh64(msg->d_addr),
+                                      &qs);
 
                         forward_lsm(buf, len, fd);
                 }
