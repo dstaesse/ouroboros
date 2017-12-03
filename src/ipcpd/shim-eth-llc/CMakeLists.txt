@@ -76,8 +76,6 @@ endif ()
 
 if (HAVE_LLC)
   message(STATUS "Supported raw Ethernet API found, building shim-eth-llc")
-  protobuf_generate_c(SHIM_ETH_LLC_PROTO_SRCS SHIM_ETH_LLC_PROTO_HDRS
-    shim_eth_llc_messages.proto)
 
   set(SHIM_ETH_LLC_SOURCES
     # Add source files here
@@ -86,8 +84,7 @@ if (HAVE_LLC)
 
   set(IPCP_SHIM_ETH_LLC_TARGET ipcpd-shim-eth-llc CACHE INTERNAL "")
 
-  add_executable(ipcpd-shim-eth-llc ${SHIM_ETH_LLC_SOURCES} ${IPCP_SOURCES}
-    ${SHIM_ETH_LLC_PROTO_SRCS})
+  add_executable(ipcpd-shim-eth-llc ${SHIM_ETH_LLC_SOURCES} ${IPCP_SOURCES})
 
   if (HAVE_BPF AND NOT APPLE)
     target_include_directories(ipcpd-shim-eth-llc PUBLIC ${BPF_C_INCLUDE_DIR})
@@ -98,8 +95,7 @@ if (HAVE_LLC)
       ${NETMAP_C_INCLUDE_DIR})
   endif ()
 
-  target_link_libraries(ipcpd-shim-eth-llc LINK_PUBLIC ouroboros-dev
-    ${PROTOBUF_C_LIBRARY})
+  target_link_libraries(ipcpd-shim-eth-llc LINK_PUBLIC ouroboros-dev)
 
   include(AddCompileFlags)
   if (CMAKE_BUILD_TYPE MATCHES "Debug*")

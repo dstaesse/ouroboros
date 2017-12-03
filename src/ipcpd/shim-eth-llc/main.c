@@ -47,7 +47,6 @@
 
 #include "ipcp.h"
 #include "shim-data.h"
-#include "shim_eth_llc_messages.pb-c.h"
 
 #include <signal.h>
 #include <stdlib.h>
@@ -106,7 +105,18 @@
 #define NAME_QUERY_TIMEO          2000  /* ms */
 #define MGMT_TIMEO                100   /* ms */
 
-typedef ShimEthLlcMsg shim_eth_llc_msg_t;
+#define FLOW_REQ                  0
+#define FLOW_REPLY                1
+#define NAME_QUERY_REQ            2
+#define NAME_QUERY_REPLY          3
+
+struct mgmt_msg {
+        uint8_t code;
+        uint8_t ssap;
+        uint8_t dsap;
+        uint8_t qoscube;
+        int8_t  response;
+} __attribute__((packed));
 
 struct eth_llc_frame {
         uint8_t dst_hwaddr[MAC_SIZE];
@@ -116,7 +126,7 @@ struct eth_llc_frame {
         uint8_t ssap;
         uint8_t cf;
         uint8_t payload;
-};
+} __attribute__((packed));
 
 struct ef {
         int8_t  sap;
@@ -351,51 +361,35 @@ static int eth_llc_ipcp_send_frame(const uint8_t * dst_addr,
         return 0;
 }
 
-static int eth_llc_ipcp_send_mgmt_frame(shim_eth_llc_msg_t * msg,
-                                        const uint8_t *      dst_addr)
-{
-        size_t    len;
-        uint8_t * buf;
-
-        len = shim_eth_llc_msg__get_packed_size(msg);
-        if (len == 0)
-                return -1;
-
-        buf = malloc(len);
-        if (buf == NULL)
-                return -1;
-
-        shim_eth_llc_msg__pack(msg, buf);
-
-        if (eth_llc_ipcp_send_frame(dst_addr, reverse_bits(MGMT_SAP),
-                                    reverse_bits(MGMT_SAP), buf, len)) {
-                log_err("Failed to send management frame.");
-                free(buf);
-                return -1;
-        }
-
-        free(buf);
-
-        return 0;
-}
-
 static int eth_llc_ipcp_sap_alloc(const uint8_t * dst_addr,
                                   uint8_t         ssap,
                                   const uint8_t * hash,
                                   qoscube_t       cube)
 {
-        shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
+        uint8_t *         buf;
+        struct mgmt_msg * msg;
+        size_t            len;
+        int               ret;
 
-        msg.code        = SHIM_ETH_LLC_MSG_CODE__FLOW_REQ;
-        msg.has_ssap    = true;
-        msg.ssap        = ssap;
-        msg.has_hash    = true;
-        msg.hash.len    = ipcp_dir_hash_len();
-        msg.hash.data   = (uint8_t *) hash;
-        msg.has_qoscube = true;
-        msg.qoscube     = cube;
+        len = sizeof(*msg) + ipcp_dir_hash_len();
 
-        return eth_llc_ipcp_send_mgmt_frame(&msg, dst_addr);
+        buf = malloc(len);
+        if (buf == NULL)
+                return -1;
+
+        msg          = (struct mgmt_msg *) buf;
+        msg->code    = FLOW_REQ;
+        msg->ssap    = ssap;
+        msg->qoscube = cube;
+
+        memcpy(msg + 1, hash, ipcp_dir_hash_len());
+
+        ret = eth_llc_ipcp_send_frame(dst_addr, reverse_bits(MGMT_SAP),
+                                      reverse_bits(MGMT_SAP), buf, len);
+
+        free(buf);
+
+        return ret;
 }
 
 static int eth_llc_ipcp_sap_alloc_resp(uint8_t * dst_addr,
@@ -403,17 +397,16 @@ static int eth_llc_ipcp_sap_alloc_resp(uint8_t * dst_addr,
                                        uint8_t   dsap,
                                        int       response)
 {
-        shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
+        struct mgmt_msg msg;
 
-        msg.code         = SHIM_ETH_LLC_MSG_CODE__FLOW_REPLY;
-        msg.has_ssap     = true;
-        msg.ssap         = ssap;
-        msg.has_dsap     = true;
-        msg.dsap         = dsap;
-        msg.has_response = true;
-        msg.response     = response;
+        msg.code     = FLOW_REPLY;
+        msg.ssap     = ssap;
+        msg.dsap     = dsap;
+        msg.response = response;
 
-        return eth_llc_ipcp_send_mgmt_frame(&msg, dst_addr);
+        return eth_llc_ipcp_send_frame(dst_addr, reverse_bits(MGMT_SAP),
+                                       reverse_bits(MGMT_SAP),
+                                       (uint8_t *) &msg, sizeof(msg));
 }
 
 static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
@@ -504,15 +497,30 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
 static int eth_llc_ipcp_name_query_req(const uint8_t * hash,
                                        uint8_t *       r_addr)
 {
-        shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
+        uint8_t *         buf;
+        struct mgmt_msg * msg;
+        size_t            len;
 
         if (shim_data_reg_has(eth_llc_data.shim_data, hash)) {
-                msg.code      = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY;
-                msg.has_hash  = true;
-                msg.hash.len  = ipcp_dir_hash_len();
-                msg.hash.data = (uint8_t *) hash;
+                len = sizeof(*msg) + ipcp_dir_hash_len();
 
-                eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
+                buf = malloc(len);
+                if (buf == NULL)
+                        return -1;
+
+                msg       = (struct mgmt_msg *) buf;
+                msg->code = NAME_QUERY_REPLY;
+
+                memcpy(msg + 1, hash, ipcp_dir_hash_len());
+
+                if (eth_llc_ipcp_send_frame(r_addr, reverse_bits(MGMT_SAP),
+                                            reverse_bits(MGMT_SAP), buf, len)) {
+                        log_err("Failed to send management frame.");
+                        free(buf);
+                        return -1;
+                }
+
+                free(buf);
         }
 
         return 0;
@@ -533,45 +541,39 @@ static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
 }
 
 static int eth_llc_ipcp_mgmt_frame(const uint8_t * buf,
-                                   size_t          len,
                                    uint8_t *       r_addr)
 {
-        shim_eth_llc_msg_t * msg;
+        struct mgmt_msg * msg;
 
-        msg = shim_eth_llc_msg__unpack(NULL, len, buf);
-        if (msg == NULL) {
-                log_err("Failed to unpack.");
-                return -1;
-        }
+        msg = (struct mgmt_msg *) buf;
 
         switch (msg->code) {
-        case SHIM_ETH_LLC_MSG_CODE__FLOW_REQ:
-                if (shim_data_reg_has(eth_llc_data.shim_data, msg->hash.data)) {
+        case FLOW_REQ:
+                if (shim_data_reg_has(eth_llc_data.shim_data,
+                                      buf + sizeof(*msg))) {
                         eth_llc_ipcp_sap_req(msg->ssap,
                                              r_addr,
-                                             msg->hash.data,
+                                             buf + sizeof(*msg),
                                              msg->qoscube);
                 }
                 break;
-        case SHIM_ETH_LLC_MSG_CODE__FLOW_REPLY:
+        case FLOW_REPLY:
                 eth_llc_ipcp_sap_alloc_reply(msg->ssap,
                                              r_addr,
                                              msg->dsap,
                                              msg->response);
                 break;
-        case SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ:
-                eth_llc_ipcp_name_query_req(msg->hash.data, r_addr);
+        case NAME_QUERY_REQ:
+                eth_llc_ipcp_name_query_req(buf + sizeof(*msg), r_addr);
                 break;
-        case SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REPLY:
-                eth_llc_ipcp_name_query_reply(msg->hash.data, r_addr);
+        case NAME_QUERY_REPLY:
+                eth_llc_ipcp_name_query_reply(buf + sizeof(*msg), r_addr);
                 break;
         default:
                 log_err("Unknown message received %d.", msg->code);
-                shim_eth_llc_msg__free_unpacked(msg, NULL);
                 return -1;
         }
 
-        shim_eth_llc_msg__free_unpacked(msg, NULL);
         return 0;
 }
 
@@ -617,7 +619,7 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
                 list_del(&frame->next);
                 pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
 
-                eth_llc_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_addr);
+                eth_llc_ipcp_mgmt_frame(frame->buf, frame->r_addr);
                 free(frame);
         }
 
@@ -1161,25 +1163,43 @@ static int eth_llc_ipcp_query(const uint8_t * hash)
         uint8_t            r_addr[MAC_SIZE];
         struct timespec    timeout = {(NAME_QUERY_TIMEO / 1000),
                                       (NAME_QUERY_TIMEO % 1000) * MILLION};
-        shim_eth_llc_msg_t msg = SHIM_ETH_LLC_MSG__INIT;
         struct dir_query * query;
         int                ret;
+        uint8_t *          buf;
+        struct mgmt_msg *  msg;
+        size_t             len;
 
         if (shim_data_dir_has(eth_llc_data.shim_data, hash))
                 return 0;
 
-        msg.code      = SHIM_ETH_LLC_MSG_CODE__NAME_QUERY_REQ;
-        msg.has_hash  = true;
-        msg.hash.len  = ipcp_dir_hash_len();
-        msg.hash.data = (uint8_t *) hash;
+        len = sizeof(*msg) + ipcp_dir_hash_len();
+
+        buf = malloc(len);
+        if (buf == NULL)
+                return -1;
+
+        msg       = (struct mgmt_msg *) buf;
+        msg->code = NAME_QUERY_REQ;
+
+        memcpy(buf + sizeof(*msg), hash, ipcp_dir_hash_len());
 
         memset(r_addr, 0xff, MAC_SIZE);
 
         query = shim_data_dir_query_create(eth_llc_data.shim_data, hash);
-        if (query == NULL)
+        if (query == NULL) {
+                free(buf);
                 return -1;
+        }
 
-        eth_llc_ipcp_send_mgmt_frame(&msg, r_addr);
+        if (eth_llc_ipcp_send_frame(r_addr, reverse_bits(MGMT_SAP),
+                                    reverse_bits(MGMT_SAP), buf, len)) {
+                log_err("Failed to send management frame.");
+                shim_data_dir_query_destroy(eth_llc_data.shim_data, query);
+                free(buf);
+                return -1;
+        }
+
+        free(buf);
 
         ret = shim_data_dir_query_wait(query, &timeout);
 
