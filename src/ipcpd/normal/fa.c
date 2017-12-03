@@ -43,10 +43,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "flow_alloc.pb-c.h"
-typedef FlowAllocMsg flow_alloc_msg_t;
-
 #define TIMEOUT 10000 /* nanoseconds */
+
+#define FLOW_REQ   0
+#define FLOW_REPLY 1
+
+struct fa_msg {
+        uint64_t s_addr;
+        uint32_t r_fd;
+        uint32_t s_fd;
+        uint8_t  code;
+        uint8_t  qc;
+        int8_t   response;
+} __attribute__((packed));
 
 struct {
         pthread_rwlock_t   flows_lock;
@@ -82,42 +91,35 @@ static void destroy_conn(int fd)
 static void fa_post_sdu(void *               ae,
                         struct shm_du_buff * sdb)
 {
-        struct timespec    ts  = {0, TIMEOUT * 1000};
-        struct timespec    abstime;
-        int                fd;
-        flow_alloc_msg_t * msg;
+        struct timespec ts  = {0, TIMEOUT * 1000};
+        struct timespec abstime;
+        int             fd;
+        uint8_t *       buf;
+        struct fa_msg * msg;
 
         (void) ae;
 
         assert(ae == &fa);
         assert(sdb);
 
+        buf = malloc(sizeof(*msg) + ipcp_dir_hash_len());
+        if (buf == NULL)
+                return;
+
+        msg = (struct fa_msg *) buf;
+
         /* Depending on the message call the function in ipcp-dev.h */
 
-        msg = flow_alloc_msg__unpack(NULL,
-                                     shm_du_buff_tail(sdb) -
-                                     shm_du_buff_head(sdb),
-                                     shm_du_buff_head(sdb));
+        memcpy(msg, shm_du_buff_head(sdb),
+               shm_du_buff_tail(sdb) - shm_du_buff_head(sdb));
 
         ipcp_sdb_release(sdb);
 
-        if (msg == NULL) {
-                log_err("Failed to unpack flow alloc message.");
-                return;
-        }
-
         switch (msg->code) {
-        case FLOW_ALLOC_CODE__FLOW_REQ:
+        case FLOW_REQ:
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
                 pthread_mutex_lock(&ipcpi.alloc_lock);
-
-                if (!msg->has_hash || !msg->has_s_fd || !msg->has_s_addr) {
-                        log_err("Bad flow request.");
-                        pthread_mutex_unlock(&ipcpi.alloc_lock);
-                        flow_alloc_msg__free_unpacked(msg, NULL);
-                        return;
-                }
 
                 while (ipcpi.alloc_id != -1 &&
                        ipcp_get_state() == IPCP_OPERATIONAL) {
@@ -130,20 +132,20 @@ static void fa_post_sdu(void *               ae,
                 if (ipcp_get_state() != IPCP_OPERATIONAL) {
                         log_dbg("Won't allocate over non-operational IPCP.");
                         pthread_mutex_unlock(&ipcpi.alloc_lock);
-                        flow_alloc_msg__free_unpacked(msg, NULL);
+                        free(msg);
                         return;
                 }
 
                 assert(ipcpi.alloc_id == -1);
 
                 fd = ipcp_flow_req_arr(getpid(),
-                                       msg->hash.data,
+                                       (uint8_t *) (msg + 1),
                                        ipcp_dir_hash_len(),
                                        msg->qc);
                 if (fd < 0) {
                         pthread_mutex_unlock(&ipcpi.alloc_lock);
-                        flow_alloc_msg__free_unpacked(msg, NULL);
                         log_err("Failed to get fd for flow.");
+                        free(msg);
                         return;
                 }
 
@@ -160,7 +162,7 @@ static void fa_post_sdu(void *               ae,
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
 
                 break;
-        case FLOW_ALLOC_CODE__FLOW_REPLY:
+        case FLOW_REPLY:
                 pthread_rwlock_wrlock(&fa.flows_lock);
 
                 fa.r_fd[msg->r_fd] = msg->s_fd;
@@ -177,11 +179,10 @@ static void fa_post_sdu(void *               ae,
                 break;
         default:
                 log_err("Got an unknown flow allocation message.");
-                flow_alloc_msg__free_unpacked(msg, NULL);
-                return;
+                break;
         }
 
-        flow_alloc_msg__free_unpacked(msg, NULL);
+        free(msg);
 }
 
 int fa_init(void)
@@ -220,47 +221,26 @@ void fa_stop(void)
         sdu_sched_destroy(fa.sdu_sched);
 }
 
-static struct shm_du_buff * create_fa_sdb(flow_alloc_msg_t * msg)
-{
-        struct shm_du_buff * sdb;
-        size_t len;
-
-        len = flow_alloc_msg__get_packed_size(msg);
-        if (len == 0)
-                return NULL;
-
-        if (ipcp_sdb_reserve(&sdb, len))
-                return NULL;
-
-        flow_alloc_msg__pack(msg, shm_du_buff_head(sdb));
-
-        return sdb;
-}
-
 int fa_alloc(int             fd,
              const uint8_t * dst,
              qoscube_t       qc)
 {
-        flow_alloc_msg_t     msg = FLOW_ALLOC_MSG__INIT;
+        struct fa_msg *      msg;
         uint64_t             addr;
         struct shm_du_buff * sdb;
 
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()))
+                return -1;
+
         addr = dir_query(dst);
 
-        msg.code         = FLOW_ALLOC_CODE__FLOW_REQ;
-        msg.has_hash     = true;
-        msg.hash.len     = ipcp_dir_hash_len();
-        msg.hash.data    = (uint8_t *) dst;
-        msg.has_qc       = true;
-        msg.qc           = qc;
-        msg.has_s_fd     = true;
-        msg.s_fd         = fd;
-        msg.has_s_addr   = true;
-        msg.s_addr       = ipcpi.dt_addr;
+        msg         = (struct fa_msg *) shm_du_buff_head(sdb);
+        msg->code   = FLOW_REQ;
+        msg->qc     = qc;
+        msg->s_fd   = fd;
+        msg->s_addr = ipcpi.dt_addr;
 
-        sdb = create_fa_sdb(&msg);
-        if (sdb == NULL)
-                return -1;
+        memcpy(msg + 1, dst, ipcp_dir_hash_len());
 
         if (dt_write_sdu(addr, qc, fa.fd, sdb)) {
                 ipcp_sdb_release(sdb);
@@ -282,7 +262,7 @@ int fa_alloc_resp(int fd,
 {
         struct timespec      ts = {0, TIMEOUT * 1000};
         struct timespec      abstime;
-        flow_alloc_msg_t     msg = FLOW_ALLOC_MSG__INIT;
+        struct fa_msg *      msg;
         struct shm_du_buff * sdb;
         qoscube_t            qc;
 
@@ -307,22 +287,18 @@ int fa_alloc_resp(int fd,
 
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
-        pthread_rwlock_wrlock(&fa.flows_lock);
-
-        msg.code         = FLOW_ALLOC_CODE__FLOW_REPLY;
-        msg.has_r_fd     = true;
-        msg.r_fd         = fa.r_fd[fd];
-        msg.has_s_fd     = true;
-        msg.s_fd         = fd;
-        msg.response     = response;
-        msg.has_response = true;
-
-        sdb = create_fa_sdb(&msg);
-        if (sdb == NULL) {
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len())) {
                 destroy_conn(fd);
-                pthread_rwlock_unlock(&fa.flows_lock);
                 return -1;
         }
+
+        pthread_rwlock_wrlock(&fa.flows_lock);
+
+        msg           = (struct fa_msg *) shm_du_buff_head(sdb);
+        msg->code     = FLOW_REPLY;
+        msg->r_fd     = fa.r_fd[fd];
+        msg->s_fd     = fd;
+        msg->response = response;
 
         if (response < 0) {
                 destroy_conn(fd);
