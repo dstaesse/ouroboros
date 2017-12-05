@@ -2503,7 +2503,7 @@ static void * dht_handle_sdu(void * o)
                         pthread_rwlock_wrlock(&dht->lock);
                         if ((dht->state == DHT_JOINING ||
                              dht->state == DHT_RUNNING) &&
-                            dht_update_bucket(dht, msg->s_id.data, addr)
+                            dht_update_bucket(dht, msg->s_id.data, addr))
                                 log_warn("Failed to update bucket.");
                         pthread_rwlock_unlock(&dht->lock);
                 }
