@@ -2223,6 +2223,20 @@ int dht_bootstrap(struct dht * dht,
         return -1;
 }
 
+static struct ref_entry * ref_entry_get(struct dht *    dht,
+                                        const uint8_t * key)
+{
+        struct list_head * p;
+
+        list_for_each(p, &dht->refs) {
+                struct ref_entry * r = list_entry(p, struct ref_entry, next);
+                if (!memcmp(key, r->key, dht-> b) )
+                        return r;
+        }
+
+        return NULL;
+}
+
 int dht_reg(struct dht *    dht,
             const uint8_t * key)
 {
@@ -2237,11 +2251,19 @@ int dht_reg(struct dht *    dht,
         if (dht_get_state(dht) != DHT_RUNNING)
                 return -1;
 
-        e = ref_entry_create(dht, key);
-        if (e == NULL)
-                return -ENOMEM;
-
         pthread_rwlock_wrlock(&dht->lock);
+
+        if (ref_entry_get(dht, key) != NULL) {
+                log_dbg("Name already registered.");
+                pthread_rwlock_unlock(&dht->lock);
+                return 0;
+        }
+
+        e = ref_entry_create(dht, key);
+        if (e == NULL) {
+                pthread_rwlock_unlock(&dht->lock);
+                return -ENOMEM;
+        }
 
         list_add(&e->next, &dht->refs);
 
@@ -2305,7 +2327,7 @@ uint64_t dht_query(struct dht *    dht,
 
         pthread_rwlock_unlock(&dht->lock);
 
-        if (addrs[0] != 0 && addrs[0] != dht->addr)
+        if (addrs[0] != 0)
                 return addrs[0];
 
         lu = kad_lookup(dht, key, KAD_FIND_VALUE);
@@ -2477,10 +2499,11 @@ static void * dht_handle_sdu(void * o)
                         break;
                 }
 
-                if (msg->code != KAD_JOIN &&
-                    dht_get_state(dht) == DHT_RUNNING) {
+                if (msg->code != KAD_JOIN) {
                         pthread_rwlock_wrlock(&dht->lock);
-                        if (dht_update_bucket(dht, msg->s_id.data, addr))
+                        if ((dht->state == DHT_JOINING ||
+                             dht->state == DHT_RUNNING) &&
+                            dht_update_bucket(dht, msg->s_id.data, addr)
                                 log_warn("Failed to update bucket.");
                         pthread_rwlock_unlock(&dht->lock);
                 }
@@ -2606,6 +2629,7 @@ static void * join_thr(void * o)
         while (kad_join(info->dht, info->addr)) {
                 if (retr++ == KAD_JOIN_RETR) {
                         dht_set_state(info->dht, DHT_INIT);
+                        log_warn("DHT enrollment attempt failed.");
                         goto finish;
                 }
 
