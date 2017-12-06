@@ -2395,6 +2395,12 @@ static void * dht_handle_sdu(void * o)
                         continue;
                 }
 
+                if (msg->code != KAD_RESPONSE && dht_wait_running(dht)) {
+                        kad_msg__free_unpacked(msg, NULL);
+                        log_dbg("Got a request message when not running.");
+                        continue;
+                }
+
                 pthread_rwlock_rdlock(&dht->lock);
 
                 b        = dht->b;
@@ -2412,12 +2418,6 @@ static void * dht_handle_sdu(void * o)
                         kad_msg__free_unpacked(msg, NULL);
                         log_warn("Bad source ID in message of type %d.",
                                  msg->code);
-                        continue;
-                }
-
-                if (msg->code != KAD_RESPONSE && dht_wait_running(dht)) {
-                        kad_msg__free_unpacked(msg, NULL);
-                        log_dbg("Got a request message when not running.");
                         continue;
                 }
 
@@ -2501,17 +2501,18 @@ static void * dht_handle_sdu(void * o)
 
                 if (msg->code != KAD_JOIN) {
                         pthread_rwlock_wrlock(&dht->lock);
-                        if ((dht->state == DHT_JOINING ||
-                             dht->state == DHT_RUNNING) &&
-                            dht_update_bucket(dht, msg->s_id.data, addr))
+                        if (dht->state == DHT_JOINING && dht->buckets == NULL) {
+                                pthread_rwlock_unlock(&dht->lock);
+                                break;
+                        }
+
+                        if (dht_update_bucket(dht, msg->s_id.data, addr))
                                 log_warn("Failed to update bucket.");
                         pthread_rwlock_unlock(&dht->lock);
                 }
 
-                if (msg->code < KAD_STORE) {
-                        if (send_msg(dht, &resp_msg, addr))
+                if (msg->code < KAD_STORE && send_msg(dht, &resp_msg, addr))
                                 log_warn("Failed to send response.");
-                }
 
                 kad_msg__free_unpacked(msg, NULL);
 
