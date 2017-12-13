@@ -53,6 +53,7 @@
 #define SHIM_UDP               "shim-udp"
 #define SHIM_ETH_LLC           "shim-eth-llc"
 #define LOCAL                  "local"
+#define RAPTOR                 "raptor"
 
 #define MD5                    "MD5"
 #define SHA3_224               "SHA3_224"
@@ -81,7 +82,7 @@ static void usage(void)
                "                dif <DIF name>\n"
                "                type [TYPE]\n"
                "where TYPE = {" NORMAL " " LOCAL " "
-               SHIM_UDP " " SHIM_ETH_LLC"},\n\n"
+               SHIM_UDP " " SHIM_ETH_LLC " " RAPTOR "},\n\n"
                "if TYPE == " NORMAL "\n"
                "                [addr <address size> (default: %d)]\n"
                "                [fd <fd size> (default: %d)]\n"
@@ -109,9 +110,14 @@ static void usage(void)
                "if TYPE == " LOCAL "\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
+               SHA3_384 " " SHA3_512 "}\n\n"
+               "if TYPE == " RAPTOR "\n"
+               "                [hash [ALGORITHM] (default: %s)]\n"
+               "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n",
                DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE, FLAT_RANDOM_ADDR_AUTH,
-               LINK_STATE_ROUTING, SIMPLE_PFF, SHA3_256, SHA3_256, SHA3_256);
+               LINK_STATE_ROUTING, SIMPLE_PFF, SHA3_256, SHA3_256, SHA3_256,
+               SHA3_256);
 }
 
 int do_bootstrap_ipcp(int     argc,
@@ -231,6 +237,8 @@ int do_bootstrap_ipcp(int     argc,
                 conf.dns_addr = dns_addr;
         } else if (strcmp(ipcp_type, LOCAL) == 0) {
                 conf.type = IPCP_LOCAL;
+        } else if (strcmp(ipcp_type, RAPTOR) == 0) {
+                conf.type = IPCP_RAPTOR;
         } else if (strcmp(ipcp_type, SHIM_ETH_LLC) == 0) {
                 conf.type = IPCP_SHIM_ETH_LLC;
                 if (if_name == NULL) {

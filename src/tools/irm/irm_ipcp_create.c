@@ -44,10 +44,11 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define NORMAL "normal"
-#define SHIM_UDP "shim-udp"
+#define NORMAL       "normal"
+#define SHIM_UDP     "shim-udp"
 #define SHIM_ETH_LLC "shim-eth-llc"
-#define LOCAL "local"
+#define LOCAL        "local"
+#define RAPTOR       "raptor"
 
 static void usage(void)
 {
@@ -55,7 +56,7 @@ static void usage(void)
                "                name <ipcp name>\n"
                "                type [TYPE]\n\n"
                "where TYPE = {" NORMAL " " LOCAL " "
-               SHIM_UDP " " SHIM_ETH_LLC "}\n");
+               SHIM_UDP " " SHIM_ETH_LLC " " RAPTOR "}\n");
 }
 
 int do_create_ipcp(int argc, char ** argv)
@@ -93,6 +94,8 @@ int do_create_ipcp(int argc, char ** argv)
                 type = IPCP_LOCAL;
         else if (strcmp(ipcp_type, SHIM_ETH_LLC) == 0)
                 type = IPCP_SHIM_ETH_LLC;
+        else if (strcmp(ipcp_type, RAPTOR) == 0)
+                type = IPCP_RAPTOR;
         else {
                 usage();
                 return -1;

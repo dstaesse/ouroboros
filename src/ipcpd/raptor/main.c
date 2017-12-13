@@ -23,9 +23,10 @@
 
 #define _DEFAULT_SOURCE
 
+#include "config.h"
+
 #define OUROBOROS_PREFIX "ipcpd/raptor"
 
-#include <ouroboros/config.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
@@ -39,7 +40,7 @@
 #include <ouroboros/time_utils.h>
 
 #include "ipcp.h"
-#include "raptor_messages.pb-c.h"
+#include "shim-data.h"
 
 #include <net/if.h>
 #include <signal.h>
@@ -62,49 +63,58 @@
 #include <poll.h>
 #include <sys/mman.h>
 
-typedef RaptorMsg raptor_msg_t;
+#define THIS_TYPE          IPCP_RAPTOR
+#define MGMT_SAP           0x01
+#define MAC_SIZE           6
+#define MAX_SAPS           64
 
-#define THIS_TYPE IPCP_RAPTOR
-#define MGMT_SAP 0x01
-#define MAC_SIZE 6
-#define MAX_SAPS 64
-
-#define EVENT_WAIT_TIMEOUT 100 /* us */
+#define EVENT_WAIT_TIMEOUT 100  /* us */
 #define NAME_QUERY_TIMEOUT 2000 /* ms */
-#define MGMT_TIMEOUT 100 /* ms */
+#define MGMT_TIMEOUT       100  /* ms */
 
-#define IOCTL_SEND 0xAD420000
-#define IOCTL_RECV 0xAD430000
-#define IOCTL_SEND_DONE 0xAD440000
-#define IOCTL_RECV_DONE 0xAD450000
-#define IOCTL_RECV_NEED 0xAD460000
+#define IOCTL_SEND         0xAD420000
+#define IOCTL_RECV         0xAD430000
+#define IOCTL_SEND_DONE    0xAD440000
+#define IOCTL_RECV_DONE    0xAD450000
+#define IOCTL_RECV_NEED    0xAD460000
 
-#define RAPTOR_PAGE ((1 << 12) - 200) /* 4kB - 200 */
+#define RAPTOR_PAGE        ((1 << 12) - 200) /* 4kB - 200 */
+#define RAPTOR_PAGE_MASK   (~0xFFF)
 
-#define RAPTOR_PAGE_MASK (~0xFFF)
+#define RAPTOR_BATCH       100
+#define RAPTOR_HEADER      3
 
-#define RAPTOR_BATCH 100
+#define FLOW_REQ           0
+#define FLOW_REPLY         1
+#define NAME_QUERY_REQ     2
+#define NAME_QUERY_REPLY   3
 
-#define RAPTOR_HEADER 3
+struct mgmt_msg {
+        uint8_t code;
+        uint8_t ssap;
+        uint8_t dsap;
+        uint8_t qoscube;
+        int8_t  response;
+} __attribute__((packed));
 
 struct ef {
         int8_t  sap;
         int8_t  r_sap;
-        uint8_t r_addr[MAC_SIZE];
 };
 
 struct mgmt_frame {
         struct list_head next;
-        uint8_t          r_addr[MAC_SIZE];
         uint8_t          buf[RAPTOR_PAGE];
         size_t           len;
 };
 
 struct {
+        struct shim_data * shim_data;
+
         int                ioctl_fd;
 
         struct bmp *       saps;
-        flow_set_t *       np1_flows;
+        fset_t *           np1_flows;
         fqueue_t *         fq;
         int *              ef_to_fd;
         struct ef *        fd_to_ef;
@@ -126,118 +136,112 @@ struct {
 static int raptor_data_init(void)
 {
         int                i;
-        int                ret = -1;
+        int                ret = -ENOMEM;
         pthread_condattr_t cattr;
 
-        log_info("%s", __FUNCTION__);
-
-        raptor_data.fd_to_ef = malloc(sizeof(struct ef) * IRMD_MAX_FLOWS);
+        raptor_data.fd_to_ef =
+                malloc(sizeof(*raptor_data.fd_to_ef) * SYS_MAX_FLOWS);
         if (raptor_data.fd_to_ef == NULL)
-                return -ENOMEM;
+                goto fail_fd_to_ef;
 
-        raptor_data.ef_to_fd = malloc(sizeof(struct ef) * MAX_SAPS);
-        if (raptor_data.ef_to_fd == NULL) {
-                ret = -ENOMEM;
-                goto free_fd_to_ef;
-        }
+        raptor_data.ef_to_fd =
+                malloc(sizeof(*raptor_data.ef_to_fd) * MAX_SAPS);
+        if (raptor_data.ef_to_fd == NULL)
+                goto fail_ef_to_fd;
 
         raptor_data.saps = bmp_create(MAX_SAPS, 2);
-        if (raptor_data.saps == NULL) {
-                ret = -ENOMEM;
-                goto free_ef_to_fd;
-        }
+        if (raptor_data.saps == NULL)
+                goto fail_saps;
 
-        raptor_data.np1_flows = flow_set_create();
-        if (raptor_data.np1_flows == NULL) {
-                ret = -ENOMEM;
-                goto bmp_destroy;
-        }
+        raptor_data.np1_flows = fset_create();
+        if (raptor_data.np1_flows == NULL)
+                goto fail_np1_flows;
 
         raptor_data.fq = fqueue_create();
-        if (raptor_data.fq == NULL) {
-                ret = -ENOMEM;
-                goto flow_set_destroy;
-        }
+        if (raptor_data.fq == NULL)
+                goto fail_fq;
 
         for (i = 0; i < MAX_SAPS; ++i)
                 raptor_data.ef_to_fd[i] = -1;
 
-        for (i = 0; i < IRMD_MAX_FLOWS; ++i) {
+        for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 raptor_data.fd_to_ef[i].sap   = -1;
                 raptor_data.fd_to_ef[i].r_sap = -1;
-                memset(&raptor_data.fd_to_ef[i].r_addr, 0, MAC_SIZE);
         }
 
+        raptor_data.shim_data = shim_data_create();
+        if (raptor_data.shim_data == NULL)
+                goto fail_shim_data;
+
+        ret = -1;
+
         if (pthread_rwlock_init(&raptor_data.flows_lock, NULL))
-                goto fqueue_destroy;
+                goto fail_flows_lock;
 
         if (pthread_mutex_init(&raptor_data.mgmt_lock, NULL))
-                goto flow_lock_destroy;
+                goto fail_mgmt_lock;
 
         if (pthread_condattr_init(&cattr))
-                goto mgmt_lock_destroy;;
+                goto fail_condattr;
 
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
 
         if (pthread_cond_init(&raptor_data.mgmt_cond, &cattr))
-                goto mgmt_lock_destroy;
+                goto fail_mgmt_cond;
+
+        pthread_condattr_destroy(&cattr);
 
         list_head_init(&raptor_data.mgmt_frames);
 
         return 0;
 
- mgmt_lock_destroy:
+ fail_mgmt_cond:
+        pthread_condattr_destroy(&cattr);
+ fail_condattr:
         pthread_mutex_destroy(&raptor_data.mgmt_lock);
- flow_lock_destroy:
+ fail_mgmt_lock:
         pthread_rwlock_destroy(&raptor_data.flows_lock);
- fqueue_destroy:
+ fail_flows_lock:
+        shim_data_destroy(raptor_data.shim_data);
+ fail_shim_data:
         fqueue_destroy(raptor_data.fq);
- flow_set_destroy:
-        flow_set_destroy(raptor_data.np1_flows);
- bmp_destroy:
+ fail_fq:
+        fset_destroy(raptor_data.np1_flows);
+ fail_np1_flows:
         bmp_destroy(raptor_data.saps);
- free_ef_to_fd:
+ fail_saps:
         free(raptor_data.ef_to_fd);
- free_fd_to_ef:
+ fail_ef_to_fd:
         free(raptor_data.fd_to_ef);
-
+ fail_fd_to_ef:
         return ret;
 }
 
-void raptor_data_fini(void)
+static void raptor_data_fini(void)
 {
-        log_info("%s", __FUNCTION__);
-
         close(raptor_data.ioctl_fd);
         pthread_cond_destroy(&raptor_data.mgmt_cond);
         pthread_mutex_destroy(&raptor_data.mgmt_lock);
         pthread_rwlock_destroy(&raptor_data.flows_lock);
         fqueue_destroy(raptor_data.fq);
-        flow_set_destroy(raptor_data.np1_flows);
+        fset_destroy(raptor_data.np1_flows);
         bmp_destroy(raptor_data.saps);
         free(raptor_data.fd_to_ef);
         free(raptor_data.ef_to_fd);
 }
 
-static int raptor_ipcp_send_frame(struct shm_du_buff * sdb,
-                                  uint8_t              dsap)
+static int raptor_send_frame(struct shm_du_buff * sdb,
+                             uint8_t              dsap)
 {
-        /* length (16b) + dsap (8b) */
-
         uint8_t * frame;
-        size_t frame_len;
+        size_t    frame_len;
         uint8_t * payload;
-        size_t len;
+        size_t    len;
 
         payload = shm_du_buff_head(sdb);
         len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
-
-        if (payload == NULL) {
-                log_err("Payload was NULL.");
-                return -1;
-        }
 
         frame_len = RAPTOR_HEADER + len;
 
@@ -247,7 +251,6 @@ static int raptor_ipcp_send_frame(struct shm_du_buff * sdb,
         }
 
         frame = memalign(1 << 12, 1 << 12);
-
         if (frame == NULL) {
                 log_err("frame == NULL");
                 return -1;
@@ -264,98 +267,81 @@ static int raptor_ipcp_send_frame(struct shm_du_buff * sdb,
 
         memcpy(&frame[RAPTOR_HEADER], payload, len);
 
-        ipcp_sdb_release(sdb);
-
         if (ioctl(raptor_data.ioctl_fd, IOCTL_SEND | 1, &frame) != 1) {
                 log_err("Ioctl send failed.");
                 free(frame);
                 return -1;
         }
+
         return 0;
 }
 
-static int raptor_ipcp_send_mgmt_frame(raptor_msg_t * msg,
-                                        const uint8_t *      dst_addr)
+static int raptor_sap_alloc(uint8_t         ssap,
+                            const uint8_t * hash,
+                            qoscube_t       cube)
 {
-        size_t    len;
-        uint8_t * buf;
+        struct mgmt_msg *    msg;
         struct shm_du_buff * sdb;
 
-        (void)dst_addr;
-
-        log_info("%s", __FUNCTION__);
-
-        len = raptor_msg__get_packed_size(msg);
-        if (len == 0)
-                return -1;
-
-        if (ipcp_sdb_reserve(&sdb, len) < 0) {
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()) < 0) {
                 log_err("failed to reserve sdb for management frame.");
                 return -1;
         }
 
-        buf = shm_du_buff_head(sdb);
+        msg          = (struct mgmt_msg *) shm_du_buff_head(sdb);
+        msg->code    = FLOW_REQ;
+        msg->ssap    = ssap;
+        msg->qoscube = cube;
 
-        raptor_msg__pack(msg, buf);
+        memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
-        if (raptor_ipcp_send_frame(sdb, MGMT_SAP)) {
+        if (raptor_send_frame(sdb, MGMT_SAP)) {
                 log_err("Failed to send management frame.");
+                ipcp_sdb_release(sdb);
                 return -1;
         }
+
+        ipcp_sdb_release(sdb);
+
         return 0;
 }
 
-static int raptor_ipcp_sap_alloc(const uint8_t * dst_addr,
-                                  uint8_t         ssap,
-                                  const uint8_t * hash,
-                                  qoscube_t       cube)
+static int raptor_sap_alloc_resp(uint8_t   ssap,
+                                 uint8_t   dsap,
+                                 int       response)
 {
-        raptor_msg_t msg = RAPTOR_MSG__INIT;
+        struct mgmt_msg * msg;
+        struct shm_du_buff * sdb;
 
-        log_info("%s", __FUNCTION__);
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg)) < 0) {
+                log_err("failed to reserve sdb for management frame.");
+                return -1;
+        }
 
-        msg.code        = RAPTOR_MSG_CODE__FLOW_REQ;
-        msg.has_ssap    = true;
-        msg.ssap        = ssap;
-        msg.has_hash    = true;
-        msg.hash.len    = ipcp_dir_hash_len();
-        msg.hash.data   = (uint8_t *) hash;
-        msg.has_qoscube = true;
-        msg.qoscube     = cube;
+        msg           = (struct mgmt_msg *) shm_du_buff_head(sdb);
+        msg->code     = FLOW_REPLY;
+        msg->ssap     = ssap;
+        msg->dsap     = dsap;
+        msg->response = response;
 
-        return raptor_ipcp_send_mgmt_frame(&msg, dst_addr);
+        if (raptor_send_frame(sdb, MGMT_SAP)) {
+                log_err("Failed to send management frame.");
+                ipcp_sdb_release(sdb);
+                return -1;
+        }
+
+        ipcp_sdb_release(sdb);
+
+        return 0;
 }
 
-static int raptor_ipcp_sap_alloc_resp(uint8_t * dst_addr,
-                                       uint8_t   ssap,
-                                       uint8_t   dsap,
-                                       int       response)
-{
-        raptor_msg_t msg = RAPTOR_MSG__INIT;
-
-        log_info("%s", __FUNCTION__);
-
-        msg.code         = RAPTOR_MSG_CODE__FLOW_REPLY;
-        msg.has_ssap     = true;
-        msg.ssap         = ssap;
-        msg.has_dsap     = true;
-        msg.dsap         = dsap;
-        msg.has_response = true;
-        msg.response     = response;
-
-        return raptor_ipcp_send_mgmt_frame(&msg, dst_addr);
-}
-
-static int raptor_ipcp_sap_req(uint8_t         r_sap,
-                                uint8_t *       r_addr,
-                                const uint8_t * dst,
-                                qoscube_t       cube)
+static int raptor_sap_req(uint8_t         r_sap,
+                          const uint8_t * dst,
+                          qoscube_t       cube)
 {
         struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 1000};
         struct timespec abstime;
         int             fd;
-
-        log_info("%s", __FUNCTION__);
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -385,7 +371,6 @@ static int raptor_ipcp_sap_req(uint8_t         r_sap,
         pthread_rwlock_wrlock(&raptor_data.flows_lock);
 
         raptor_data.fd_to_ef[fd].r_sap = r_sap;
-        memcpy(raptor_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
 
         ipcpi.alloc_id = fd;
         pthread_cond_broadcast(&ipcpi.alloc_cond);
@@ -398,15 +383,12 @@ static int raptor_ipcp_sap_req(uint8_t         r_sap,
         return 0;
 }
 
-static int raptor_ipcp_sap_alloc_reply(uint8_t   ssap,
-                                        uint8_t * r_addr,
-                                        int       dsap,
-                                        int       response)
+static int raptor_sap_alloc_reply(uint8_t ssap,
+                                  int     dsap,
+                                  int     response)
 {
         int ret = 0;
         int fd = -1;
-
-        log_info("%s", __FUNCTION__);
 
         pthread_rwlock_wrlock(&raptor_data.flows_lock);
 
@@ -417,12 +399,10 @@ static int raptor_ipcp_sap_alloc_reply(uint8_t   ssap,
                 return -1; /* -EFLOWNOTFOUND */
         }
 
-        if (response) {
+        if (response)
                 bmp_release(raptor_data.saps, raptor_data.fd_to_ef[fd].sap);
-        } else {
+        else
                 raptor_data.fd_to_ef[fd].r_sap = ssap;
-                memcpy(raptor_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
-        }
 
         pthread_rwlock_unlock(&raptor_data.flows_lock);
 
@@ -435,96 +415,93 @@ static int raptor_ipcp_sap_alloc_reply(uint8_t   ssap,
 
 }
 
-static int raptor_ipcp_name_query_req(const uint8_t * hash,
-                                       uint8_t *       r_addr)
+static int raptor_name_query_req(const uint8_t * hash)
 {
-        raptor_msg_t msg = RAPTOR_MSG__INIT;
+        struct mgmt_msg *    msg;
+        struct shm_du_buff * sdb;
 
-        log_info("%s", __FUNCTION__);
+        if (!shim_data_reg_has(raptor_data.shim_data, hash))
+                return 0;
 
-        if (shim_data_reg_has(ipcpi.shim_data, hash)) {
-                msg.code      = RAPTOR_MSG_CODE__NAME_QUERY_REPLY;
-                msg.has_hash  = true;
-                msg.hash.len  = ipcp_dir_hash_len();
-                msg.hash.data = (uint8_t *) hash;
-
-                raptor_ipcp_send_mgmt_frame(&msg, r_addr);
-        }
-
-        return 0;
-}
-
-static int raptor_ipcp_name_query_reply(const uint8_t * hash,
-                                         uint8_t *       r_addr)
-{
-        uint64_t           address = 0;
-        struct list_head * pos;
-
-        log_info("%s", __FUNCTION__);
-
-        memcpy(&address, r_addr, MAC_SIZE);
-
-        shim_data_dir_add_entry(ipcpi.shim_data, hash, address);
-
-        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
-        list_for_each(pos, &ipcpi.shim_data->dir_queries) {
-                struct dir_query * e =
-                        list_entry(pos, struct dir_query, next);
-                if (memcmp(e->hash, hash, ipcp_dir_hash_len()) == 0) {
-                        shim_data_dir_query_respond(e);
-                }
-        }
-        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
-
-        return 0;
-}
-
-static int raptor_ipcp_mgmt_frame(const uint8_t * buf,
-                                   size_t          len,
-                                   uint8_t *       r_addr)
-{
-        raptor_msg_t * msg;
-
-        log_info("%s", __FUNCTION__);
-
-        msg = raptor_msg__unpack(NULL, len, buf);
-        if (msg == NULL) {
-                log_err("Failed to unpack.");
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()) < 0) {
+                log_err("failed to reserve sdb for management frame.");
                 return -1;
         }
 
+        msg          = (struct mgmt_msg *) shm_du_buff_head(sdb);
+        msg->code    = NAME_QUERY_REPLY;
+
+        memcpy(msg + 1, hash, ipcp_dir_hash_len());
+
+        if (raptor_send_frame(sdb, MGMT_SAP)) {
+                log_err("Failed to send management frame.");
+                ipcp_sdb_release(sdb);
+                return -1;
+        }
+
+        ipcp_sdb_release(sdb);
+
+        return 0;
+}
+
+static int raptor_name_query_reply(const uint8_t * hash)
+{
+        shim_data_dir_add_entry(raptor_data.shim_data, hash, 0);
+
+        shim_data_dir_query_respond(raptor_data.shim_data, hash);
+
+        return 0;
+}
+
+static int raptor_mgmt_frame(const uint8_t * buf,
+                             size_t          len)
+{
+        struct mgmt_msg * msg = (struct mgmt_msg *) buf;
+        uint8_t * hash = (uint8_t *) (msg + 1);
+
         switch (msg->code) {
-        case RAPTOR_MSG_CODE__FLOW_REQ:
-                if (shim_data_reg_has(ipcpi.shim_data, msg->hash.data)) {
-                        raptor_ipcp_sap_req(msg->ssap,
-                                             r_addr,
-                                             msg->hash.data,
-                                             msg->qoscube);
+        case FLOW_REQ:
+                if (len != sizeof(*msg) + ipcp_dir_hash_len()) {
+                        log_err("Corrupt message received.");
+                        return -1;
                 }
+
+                if (shim_data_reg_has(raptor_data.shim_data, hash))
+                        raptor_sap_req(msg->ssap, hash, msg->qoscube);
                 break;
-        case RAPTOR_MSG_CODE__FLOW_REPLY:
-                raptor_ipcp_sap_alloc_reply(msg->ssap,
-                                             r_addr,
-                                             msg->dsap,
-                                             msg->response);
+        case FLOW_REPLY:
+                if (len != sizeof(*msg)) {
+                        log_err("Corrupt message received.");
+                        return -1;
+                }
+
+                raptor_sap_alloc_reply(msg->ssap, msg->dsap, msg->response);
                 break;
-        case RAPTOR_MSG_CODE__NAME_QUERY_REQ:
-                raptor_ipcp_name_query_req(msg->hash.data, r_addr);
+        case NAME_QUERY_REQ:
+                if (len != sizeof(*msg) + ipcp_dir_hash_len()) {
+                        log_err("Corrupt message received.");
+                        return -1;
+                }
+
+                raptor_name_query_req(hash);
                 break;
-        case RAPTOR_MSG_CODE__NAME_QUERY_REPLY:
-                raptor_ipcp_name_query_reply(msg->hash.data, r_addr);
+        case NAME_QUERY_REPLY:
+                if (len != sizeof(*msg) + ipcp_dir_hash_len()) {
+                        log_err("Corrupt message received.");
+                        return -1;
+                }
+
+                raptor_name_query_reply(hash);
                 break;
         default:
                 log_err("Unknown message received %d.", msg->code);
-                raptor_msg__free_unpacked(msg, NULL);
                 return -1;
         }
 
-        raptor_msg__free_unpacked(msg, NULL);
         return 0;
 }
 
-static void * raptor_ipcp_mgmt_handler(void * o)
+static void * raptor_mgmt_handler(void * o)
 {
         int                 ret;
         struct timespec     timeout = {(MGMT_TIMEOUT / 1000),
@@ -533,10 +510,6 @@ static void * raptor_ipcp_mgmt_handler(void * o)
         struct mgmt_frame * frame;
 
         (void) o;
-
-        log_info("%s", __FUNCTION__);
-
-        log_info("Mgmt handler started.");
 
         while (true) {
                 ret = 0;
@@ -570,44 +543,43 @@ static void * raptor_ipcp_mgmt_handler(void * o)
                 list_del(&frame->next);
                 pthread_mutex_unlock(&raptor_data.mgmt_lock);
 
-                raptor_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_addr);
+                raptor_mgmt_frame(frame->buf, frame->len);
                 free(frame);
         }
 
-        log_info("Mgmt handler stopped.");
         return NULL;
 }
 
-static void raptor_ipcp_recv_frame(uint8_t* frame)
+static void raptor_recv_frame(uint8_t * frame)
 {
-        uint8_t dsap;
-        uint8_t* payload;
-        size_t frame_len;
-        size_t length;
-        int fd;
-        struct mgmt_frame * mgmt_frame;
+        uint8_t              dsap;
+        uint8_t *            payload;
+        size_t               frame_len;
+        size_t               length;
+        int                  fd;
+        struct mgmt_frame *  mgmt_frame;
         struct shm_du_buff * sdb;
-        size_t idx;
+        size_t               idx;
 
-        sdb = (struct shm_du_buff*)((uint64_t)frame & RAPTOR_PAGE_MASK);
+        sdb = (struct shm_du_buff *)((uint64_t) frame & RAPTOR_PAGE_MASK);
         idx = shm_du_buff_get_idx(sdb);
 
         frame_len = frame[0] | (frame[1] << 8);
-
         if (frame_len < RAPTOR_HEADER) {
                 log_err("Received packet smaller than header alone.");
                 ipcp_sdb_release(sdb);
                 return;
         }
+
         if (frame_len >= RAPTOR_PAGE) {
                 log_err("Received packet too large.");
                 ipcp_sdb_release(sdb);
                 return;
         }
 
-        dsap = frame[2];
+        dsap    = frame[2];
         payload = &frame[RAPTOR_HEADER];
-        length = frame_len - RAPTOR_HEADER;
+        length  = frame_len - RAPTOR_HEADER;
 
         shm_du_buff_head_release(sdb, RAPTOR_HEADER);
         shm_du_buff_tail_release(sdb, RAPTOR_PAGE - frame_len);
@@ -623,7 +595,6 @@ static void raptor_ipcp_recv_frame(uint8_t* frame)
                 }
 
                 memcpy(mgmt_frame->buf, payload, length);
-                memset(mgmt_frame->r_addr, 0, MAC_SIZE);
                 mgmt_frame->len = length;
                 list_add(&mgmt_frame->next, &raptor_data.mgmt_frames);
                 pthread_cond_signal(&raptor_data.mgmt_cond);
@@ -646,34 +617,32 @@ static void raptor_ipcp_recv_frame(uint8_t* frame)
         }
 }
 
-static void * raptor_ipcp_recv_done_thread(void * o)
+static void * raptor_recv_done_thread(void * o)
 {
         uint8_t * frames[RAPTOR_BATCH];
-        int count;
-        int i;
+        int       count;
+        int       i;
 
-        (void)o;
-
-        log_info("Recv_done thread started.");
+        (void) o;
 
         while (true) {
                 if (ipcp_get_state() != IPCP_OPERATIONAL)
                         break;
 
-                count = ioctl(raptor_data.ioctl_fd, IOCTL_RECV_DONE | RAPTOR_BATCH, frames);
+                count = ioctl(raptor_data.ioctl_fd,
+                              IOCTL_RECV_DONE | RAPTOR_BATCH, frames);
 
                 if (count <= 0)
                         continue;
 
                 for (i = 0; i < count; i++)
-                        raptor_ipcp_recv_frame(frames[i]);
+                        raptor_recv_frame(frames[i]);
         }
 
-        log_info("Recv_done thread stopped.");
         return NULL;
 }
 
-static void * raptor_ipcp_send_thread(void * o)
+static void * raptor_send_thread(void * o)
 {
         struct timespec      timeout = {0, EVENT_WAIT_TIMEOUT * 1000};
         int                  fd;
@@ -682,12 +651,7 @@ static void * raptor_ipcp_send_thread(void * o)
 
         (void) o;
 
-        log_info("Send thread started.");
-
-        while (flow_event_wait(raptor_data.np1_flows,
-                               raptor_data.fq,
-                               &timeout)) {
-
+        while (fevent(raptor_data.np1_flows, raptor_data.fq, &timeout)) {
                 if (ipcp_get_state() != IPCP_OPERATIONAL)
                         break;
 
@@ -700,80 +664,75 @@ static void * raptor_ipcp_send_thread(void * o)
 
                         dsap = raptor_data.fd_to_ef[fd].r_sap;
 
-                        raptor_ipcp_send_frame(sdb, dsap);
+                        raptor_send_frame(sdb, dsap);
                 }
                 pthread_rwlock_unlock(&raptor_data.flows_lock);
         }
 
-        log_info("Send thread stopped.");
         return NULL;
 }
 
-static void * raptor_ipcp_send_done_thread(void * o)
+static void * raptor_send_done_thread(void * o)
 {
         uint8_t * frames[RAPTOR_BATCH];
-        int count;
-        int i;
+        int       count;
+        int       i;
 
-        (void)o;
-
-        log_info("Send_done thread started.");
+        (void) o;
 
         while (true) {
                 if (ipcp_get_state() != IPCP_OPERATIONAL)
                         break;
 
-                count = ioctl(raptor_data.ioctl_fd, IOCTL_SEND_DONE | RAPTOR_BATCH, frames);
+                count = ioctl(raptor_data.ioctl_fd,
+                              IOCTL_SEND_DONE | RAPTOR_BATCH, frames);
 
                 if (count <= 0)
                         continue;
 
-                for (i = 0; i < count; i++) {
+                for (i = 0; i < count; i++)
                         free(frames[i]);
-                }
         }
 
-        log_info("Send_done thread stopped.");
         return NULL;
 }
 
-static void * raptor_ipcp_recv_thread(void * o)
+static void * raptor_recv_thread(void * o)
 {
         struct shm_du_buff * sdb;
-        uint8_t * frames[RAPTOR_BATCH];
-        uint8_t ** head;
-        int needed = 0;
-        int count;
-        int i;
+        uint8_t *            frames[RAPTOR_BATCH];
+        uint8_t **           head;
+        int                  needed = 0;
+        int                  count;
+        int                  i;
 
-        (void)o;
-
-        log_info("Recv thread started.");
+        (void) o;
 
         while (true) {
                 if (ipcp_get_state() != IPCP_OPERATIONAL)
                         break;
 
-                needed = ioctl(raptor_data.ioctl_fd, IOCTL_RECV_NEED | RAPTOR_BATCH, NULL);
+                needed = ioctl(raptor_data.ioctl_fd,
+                               IOCTL_RECV_NEED | RAPTOR_BATCH, NULL);
 
                 if (needed <= 0)
                         continue;
 
                 for (i = 0; i < needed; i++) {
                         if (ipcp_sdb_reserve(&sdb, RAPTOR_PAGE) < 0) {
-                                log_err("Recv thread: reserve sdb failed. Stopping thread.");
+                                log_err("Recv thread: reserve sdb failed.");
                                 return NULL;
                         }
 
                         if ((uint64_t)sdb & (~RAPTOR_PAGE_MASK)) {
-                                log_err("Recv thread: sdb not at offset 0 in page. Stopping thread.");
+                                log_err("Recv thread: sdb not at offset 0.");
                                 return NULL;
                         }
 
                         frames[i] = shm_du_buff_head(sdb);
 
                         if ((uint64_t)frames[i] & 0x7) {
-                                log_err("Recv thread: frame not 64bit aligned. Stopping thread.");
+                                log_err("Recv thread: frame not aligned.");
                                 return NULL;
                         }
                 }
@@ -781,8 +740,8 @@ static void * raptor_ipcp_recv_thread(void * o)
                 head = frames;
 
                 do {
-                        count = ioctl(raptor_data.ioctl_fd, IOCTL_RECV | needed, head);
-
+                        count = ioctl(raptor_data.ioctl_fd,
+                                      IOCTL_RECV | needed, head);
                         if (count <= 0)
                                 continue;
 
@@ -794,61 +753,85 @@ static void * raptor_ipcp_recv_thread(void * o)
                 } while (needed > 0 && ipcp_get_state() == IPCP_OPERATIONAL);
         }
 
-        log_info("Recv thread stopped.");
         return NULL;
 }
 
-static int raptor_ipcp_bootstrap(const struct ipcp_config * conf)
+static int raptor_bootstrap(const struct ipcp_config * conf)
 {
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        log_info("%s", __FUNCTION__);
+        (void) conf;
 
         raptor_data.ioctl_fd = open("/dev/raptor", 0);
-
         if (raptor_data.ioctl_fd < 0) {
                 log_err("Failed to open /dev/raptor.");
-                return -1;
+                goto fail_ioctl;
         }
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        pthread_create(&raptor_data.mgmt_handler,
-                       NULL,
-                       raptor_ipcp_mgmt_handler,
-                       NULL);
+        if (pthread_create(&raptor_data.mgmt_handler,
+                           NULL,
+                           raptor_mgmt_handler,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_mgmt_handler;
+        }
 
-        pthread_create(&raptor_data.send_thread,
-                       NULL,
-                       raptor_ipcp_send_thread,
-                       NULL);
+        if (pthread_create(&raptor_data.send_thread,
+                           NULL,
+                           raptor_send_thread,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_send_thread;
+        }
 
-        pthread_create(&raptor_data.recv_thread,
-                       NULL,
-                       raptor_ipcp_recv_thread,
-                       NULL);
+        if (pthread_create(&raptor_data.recv_thread,
+                           NULL,
+                           raptor_recv_thread,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_recv_thread;
+        }
 
-        pthread_create(&raptor_data.send_done_thread,
-                       NULL,
-                       raptor_ipcp_send_done_thread,
-                       NULL);
+        if (pthread_create(&raptor_data.send_done_thread,
+                           NULL,
+                           raptor_send_done_thread,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_send_done_thread;
+        }
 
-        pthread_create(&raptor_data.recv_done_thread,
-                       NULL,
-                       raptor_ipcp_recv_done_thread,
-                       NULL);
+        if (pthread_create(&raptor_data.recv_done_thread,
+                           NULL,
+                           raptor_recv_done_thread,
+                           NULL)) {
+                ipcp_set_state(IPCP_INIT);
+                goto fail_recv_done_thread;
+        }
 
         log_dbg("Bootstrapped raptor IPCP with api %d.", getpid());
 
         return 0;
+
+ fail_recv_done_thread:
+        pthread_join(raptor_data.send_done_thread, NULL);
+ fail_send_done_thread:
+        pthread_join(raptor_data.recv_thread, NULL);
+ fail_recv_thread:
+        pthread_join(raptor_data.send_thread, NULL);
+ fail_send_thread:
+        pthread_join(raptor_data.mgmt_handler, NULL);
+ fail_mgmt_handler:
+        close(raptor_data.ioctl_fd);
+ fail_ioctl:
+        return -1;
 }
 
-static int raptor_ipcp_reg(const uint8_t * hash)
+static int raptor_reg(const uint8_t * hash)
 {
         uint8_t * hash_dup;
-
-        log_info("%s", __FUNCTION__);
 
         hash_dup = ipcp_hash_dup(hash);
         if (hash_dup == NULL) {
@@ -856,7 +839,7 @@ static int raptor_ipcp_reg(const uint8_t * hash)
                 return -ENOMEM;
         }
 
-        if (shim_data_reg_add_entry(ipcpi.shim_data, hash_dup)) {
+        if (shim_data_reg_add_entry(raptor_data.shim_data, hash_dup)) {
                 log_err("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
                 free(hash_dup);
@@ -868,65 +851,59 @@ static int raptor_ipcp_reg(const uint8_t * hash)
         return 0;
 }
 
-static int raptor_ipcp_unreg(const uint8_t * hash)
+static int raptor_unreg(const uint8_t * hash)
 {
-        log_info("%s", __FUNCTION__);
-
-        shim_data_reg_del_entry(ipcpi.shim_data, hash);
+        shim_data_reg_del_entry(raptor_data.shim_data, hash);
 
         return 0;
 }
 
-static int raptor_ipcp_query(const uint8_t * hash)
+static int raptor_query(const uint8_t * hash)
 {
-        uint8_t            r_addr[MAC_SIZE];
-        struct timespec    timeout = {(NAME_QUERY_TIMEOUT / 1000),
-                                      (NAME_QUERY_TIMEOUT % 1000) * MILLION};
-        raptor_msg_t msg = RAPTOR_MSG__INIT;
-        struct dir_query * query;
-        int                ret;
+        struct timespec      timeout = {(NAME_QUERY_TIMEOUT / 1000),
+                                        (NAME_QUERY_TIMEOUT % 1000) * MILLION};
+        struct mgmt_msg *    msg;
+        struct dir_query *   query;
+        int                  ret;
+        struct shm_du_buff * sdb;
 
-        log_info("%s", __FUNCTION__);
-
-        if (shim_data_dir_has(ipcpi.shim_data, hash))
+        if (shim_data_dir_has(raptor_data.shim_data, hash))
                 return 0;
 
-        msg.code      = RAPTOR_MSG_CODE__NAME_QUERY_REQ;
-        msg.has_hash  = true;
-        msg.hash.len  = ipcp_dir_hash_len();
-        msg.hash.data = (uint8_t *) hash;
-
-        memset(r_addr, 0xff, MAC_SIZE);
-
-        query = shim_data_dir_query_create(hash);
-        if (query == NULL)
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()) < 0) {
+                log_err("failed to reserve sdb for management frame.");
                 return -1;
+        }
 
-        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
-        list_add(&query->next, &ipcpi.shim_data->dir_queries);
-        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
+        msg       = (struct mgmt_msg *) shm_du_buff_head(sdb);
+        msg->code = NAME_QUERY_REQ;
 
-        raptor_ipcp_send_mgmt_frame(&msg, r_addr);
+        memcpy(msg + 1, hash, ipcp_dir_hash_len());
+
+        query = shim_data_dir_query_create(raptor_data.shim_data, hash);
+        if (query == NULL) {
+                ipcp_sdb_release(sdb);
+                return -1;
+        }
+
+        if (raptor_send_frame(sdb, MGMT_SAP)) {
+                log_err("Failed to send management frame.");
+                ipcp_sdb_release(sdb);
+                return -1;
+        }
 
         ret = shim_data_dir_query_wait(query, &timeout);
 
-        pthread_mutex_lock(&ipcpi.shim_data->dir_queries_lock);
-        list_del(&query->next);
-        shim_data_dir_query_destroy(query);
-        pthread_mutex_unlock(&ipcpi.shim_data->dir_queries_lock);
+        shim_data_dir_query_destroy(raptor_data.shim_data, query);
 
         return ret;
 }
 
-static int raptor_ipcp_flow_alloc(int             fd,
-                                   const uint8_t * hash,
-                                   qoscube_t       cube)
+static int raptor_flow_alloc(int             fd,
+                             const uint8_t * hash,
+                             qoscube_t       cube)
 {
         uint8_t  ssap = 0;
-        uint8_t  r_addr[MAC_SIZE];
-        uint64_t addr = 0;
-
-        log_info("%s", __FUNCTION__);
 
         log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(hash));
 
@@ -937,11 +914,10 @@ static int raptor_ipcp_flow_alloc(int             fd,
                 return -1;
         }
 
-        if (!shim_data_dir_has(ipcpi.shim_data, hash)) {
+        if (!shim_data_dir_has(raptor_data.shim_data, hash)) {
                 log_err("Destination unreachable.");
                 return -1;
         }
-        addr = shim_data_dir_get_addr(ipcpi.shim_data, hash);
 
         pthread_rwlock_wrlock(&raptor_data.flows_lock);
 
@@ -956,9 +932,7 @@ static int raptor_ipcp_flow_alloc(int             fd,
 
         pthread_rwlock_unlock(&raptor_data.flows_lock);
 
-        memcpy(r_addr, &addr, MAC_SIZE);
-
-        if (raptor_ipcp_sap_alloc(r_addr, ssap, hash, cube) < 0) {
+        if (raptor_sap_alloc(ssap, hash, cube) < 0) {
                 pthread_rwlock_wrlock(&raptor_data.flows_lock);
                 bmp_release(raptor_data.saps, raptor_data.fd_to_ef[fd].sap);
                 raptor_data.fd_to_ef[fd].sap = -1;
@@ -967,23 +941,20 @@ static int raptor_ipcp_flow_alloc(int             fd,
                 return -1;
         }
 
-        flow_set_add(raptor_data.np1_flows, fd);
+        fset_add(raptor_data.np1_flows, fd);
 
         log_dbg("Pending flow with fd %d on SAP %d.", fd, ssap);
 
         return 0;
 }
 
-static int raptor_ipcp_flow_alloc_resp(int fd,
-                                        int response)
+static int raptor_flow_alloc_resp(int fd,
+                                  int response)
 {
         struct timespec ts    = {0, EVENT_WAIT_TIMEOUT * 1000};
         struct timespec abstime;
         uint8_t         ssap  = 0;
         uint8_t         r_sap = 0;
-        uint8_t         r_addr[MAC_SIZE];
-
-        log_info("%s", __FUNCTION__);
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -1015,45 +986,39 @@ static int raptor_ipcp_flow_alloc_resp(int fd,
         }
 
         raptor_data.fd_to_ef[fd].sap = ssap;
-        memcpy(r_addr, raptor_data.fd_to_ef[fd].r_addr, MAC_SIZE);
         r_sap = raptor_data.fd_to_ef[fd].r_sap;
         raptor_data.ef_to_fd[ssap] = fd;
 
         pthread_rwlock_unlock(&raptor_data.flows_lock);
 
-        if (raptor_ipcp_sap_alloc_resp(r_addr, ssap, r_sap, response) < 0) {
+        if (raptor_sap_alloc_resp(ssap, r_sap, response) < 0) {
                 pthread_rwlock_wrlock(&raptor_data.flows_lock);
                 bmp_release(raptor_data.saps, raptor_data.fd_to_ef[fd].sap);
                 pthread_rwlock_unlock(&raptor_data.flows_lock);
                 return -1;
         }
 
-        flow_set_add(raptor_data.np1_flows, fd);
+        fset_add(raptor_data.np1_flows, fd);
 
         log_dbg("Accepted flow, fd %d, SAP %d.", fd, (uint8_t)ssap);
 
         return 0;
 }
 
-static int raptor_ipcp_flow_dealloc(int fd)
+static int raptor_flow_dealloc(int fd)
 {
         uint8_t sap;
-        uint8_t addr[MAC_SIZE];
-
-        log_info("%s", __FUNCTION__);
 
         ipcp_flow_fini(fd);
 
         pthread_rwlock_wrlock(&raptor_data.flows_lock);
 
-        flow_set_del(raptor_data.np1_flows, fd);
+        fset_del(raptor_data.np1_flows, fd);
 
         sap = raptor_data.fd_to_ef[fd].sap;
-        memcpy(addr, raptor_data.fd_to_ef[fd].r_addr, MAC_SIZE);
         bmp_release(raptor_data.saps, sap);
         raptor_data.fd_to_ef[fd].sap = -1;
         raptor_data.fd_to_ef[fd].r_sap = -1;
-        memset(&raptor_data.fd_to_ef[fd].r_addr, 0, MAC_SIZE);
 
         raptor_data.ef_to_fd[sap] = -1;
 
@@ -1067,46 +1032,38 @@ static int raptor_ipcp_flow_dealloc(int fd)
 }
 
 static struct ipcp_ops raptor_ops = {
-        .ipcp_bootstrap       = raptor_ipcp_bootstrap,
+        .ipcp_bootstrap       = raptor_bootstrap,
         .ipcp_enroll          = NULL,
-        .ipcp_reg             = raptor_ipcp_reg,
-        .ipcp_unreg           = raptor_ipcp_unreg,
-        .ipcp_query           = raptor_ipcp_query,
-        .ipcp_flow_alloc      = raptor_ipcp_flow_alloc,
-        .ipcp_flow_alloc_resp = raptor_ipcp_flow_alloc_resp,
-        .ipcp_flow_dealloc    = raptor_ipcp_flow_dealloc
+        .ipcp_reg             = raptor_reg,
+        .ipcp_unreg           = raptor_unreg,
+        .ipcp_query           = raptor_query,
+        .ipcp_flow_alloc      = raptor_flow_alloc,
+        .ipcp_flow_alloc_resp = raptor_flow_alloc_resp,
+        .ipcp_flow_dealloc    = raptor_flow_dealloc
 };
 
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, THIS_TYPE, &raptor_ops) < 0) {
-                ipcp_create_r(getpid(), -1);
-                exit(EXIT_FAILURE);
+        if (ipcp_init(argc, argv, &raptor_ops) < 0) {
+                log_err("Failed to init IPCP.");
+                goto fail_init;
         }
 
         if (raptor_data_init() < 0) {
                 log_err("Failed to init shim-eth-llc data.");
-                ipcp_create_r(getpid(), -1);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_data_init;
         }
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
-                ipcp_create_r(getpid(), -1);
-                raptor_data_fini();
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_boot;
         }
 
         if (ipcp_create_r(getpid(), 0)) {
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
-                ipcp_shutdown();
-                raptor_data_fini();
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_create_r;
         }
 
         log_info("Raptor created.");
@@ -1126,4 +1083,14 @@ int main(int    argc,
         ipcp_fini();
 
         exit(EXIT_SUCCESS);
+
+ fail_create_r:
+        ipcp_shutdown();
+ fail_boot:
+        raptor_data_fini();
+ fail_data_init:
+        ipcp_fini();
+ fail_init:
+        ipcp_create_r(getpid(), -1);
+        exit(EXIT_FAILURE);
 }

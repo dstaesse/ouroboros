@@ -97,7 +97,7 @@ In order to enroll an IPC process in a DIF, some other member will
 have to be reachable over a lower DIF. Shim IPCPs are all bootstrapped
 and thus need not enroll as they work directly over a physical
 connection. Ouroboros currently supports shim IPCPs over shared memory
-(local), L2 (shim-eth-llc), L1 (raptor, experimental) and L3
+(local), L1 (raptor, experimental), L2 (shim-eth-llc) and L3
 (shim-udp). The normal DIF requires connections to be established
 between IPCP components for its operation.
 
@@ -120,6 +120,8 @@ creates an IPCP process of type \fItype\fR in the system with name
 \fIname\fR. Allowable values for \fItype\fR are:
 .PP
 \fBlocal\fR        - create a loopback IPCP.
+.PP
+\fBraptor\fR       - create an IPCP that attaches to a raptor NetFPGA device.
 .PP
 \fBshim-eth-llc\fR - create an IPCP that attaches to an Ethernet adapter.
 .PP
@@ -145,13 +147,28 @@ Values for [\fIparam\fR] are dependent on \fItype\fR:
 .PP
 \fBlocal\fR
 .RS 4
-does not take additional parameters.
+.PP
+[hash \fIpolicy\fR] specifies the hash function used for the directory,
+.br
+\fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
+.RE
+
+\fBraptor\fR
+.RS 4
+.PP
+[hash \fIpolicy\fR] specifies the hash function used for the directory,
+.br
+\fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
 .RE
 
 .PP
 \fBshim-eth-llc\fR
 .RS 4
 if_name \fIinterface\fR specifies the interface to bind the shim to.
+.PP
+[hash \fIpolicy\fR] specifies the hash function used for the directory,
+.br
+\fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
 .RE
 
 .PP

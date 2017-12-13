@@ -36,6 +36,7 @@
 enum ipcp_type {
         IPCP_LOCAL = 0,
         IPCP_NORMAL,
+        IPCP_RAPTOR,
         IPCP_SHIM_ETH_LLC,
         IPCP_SHIM_UDP
 };

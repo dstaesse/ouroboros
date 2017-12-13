@@ -12,26 +12,40 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-protobuf_generate_c(RAPTOR_PROTO_SRCS RAPTOR_PROTO_HDRS
-  raptor_messages.proto)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_path(RAPTOR_KERNEL_MODULE
+    NAMES
+    raptor.ko
+    raptor.ko.gz
+    HINTS
+    /lib/modules/${CMAKE_SYSTEM_VERSION}/
+    /lib/modules/${CMAKE_SYSTEM_VERSION}/extramodules/
+  )
 
-set(IPCP_RAPTOR_TARGET ipcpd-raptor
-  CACHE STRING "IPCP_RAPTOR_TARGET")
+  mark_as_advanced(RAPTOR_KERNEL_MODULE)
 
-set(RAPTOR_SOURCES
-  # Add source files here
-  ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
+  if (RAPTOR_KERNEL_MODULE)
+    set(DISABLE_RAPTOR FALSE CACHE BOOL
+      "Disable support for raptor devices")
+    if (NOT DISABLE_RAPTOR)
+      message(STATUS "Kernel module for raptor found. Building raptor.")
+      set(IPCP_RAPTOR_TARGET ipcpd-raptor CACHE INTERNAL "")
 
-add_executable(ipcpd-raptor ${RAPTOR_SOURCES} ${IPCP_SOURCES}
-  ${RAPTOR_PROTO_SRCS})
-target_link_libraries(ipcpd-raptor LINK_PUBLIC ouroboros
-  ${PROTOBUF_C_LIBRARY})
+      set(RAPTOR_SOURCES
+      # Add source files here
+      ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
 
-test_and_set_c_compiler_flag_global(-std=c99)
+      add_executable(ipcpd-raptor ${RAPTOR_SOURCES} ${IPCP_SOURCES})
+      target_link_libraries(ipcpd-raptor LINK_PUBLIC ouroboros-dev)
 
-include(AddCompileFlags)
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-  add_compile_flags(ipcpd-raptor -DCONFIG_OUROBOROS_DEBUG)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
+      include(AddCompileFlags)
+      if (CMAKE_BUILD_TYPE MATCHES "Debug*")
+        add_compile_flags(ipcpd-raptor -DCONFIG_OUROBOROS_DEBUG)
+      endif ()
 
-install(TARGETS ipcpd-raptor RUNTIME DESTINATION sbin)
+      install(TARGETS ipcpd-raptor RUNTIME DESTINATION sbin)
+    else ()
+      message(STATUS "Raptor support disabled by user")
+    endif ()
+  endif ()
+endif ()
