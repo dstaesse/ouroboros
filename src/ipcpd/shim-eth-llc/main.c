@@ -266,7 +266,7 @@ static int eth_llc_data_init(void)
         return ret;
 }
 
-void eth_llc_data_fini(void)
+static void eth_llc_data_fini(void)
 {
 #if defined(HAVE_NETMAP)
         nm_close(eth_llc_data.nmd);
@@ -1417,5 +1417,4 @@ int main(int    argc,
  fail_init:
         ipcp_create_r(getpid(), -1);
         exit(EXIT_FAILURE);
-
 }

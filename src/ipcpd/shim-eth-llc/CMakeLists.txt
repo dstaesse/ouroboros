@@ -43,7 +43,7 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
 
   if (BPF_C_INCLUDE_DIR)
     set(DISABLE_BPF FALSE CACHE BOOL
-        "Disable Berkeley Packet Filter support for LLC shim")
+      "Disable Berkeley Packet Filter support for LLC shim")
     if (NOT DISABLE_BPF)
       message(STATUS "Berkeley Packet Filter support "
                      "for shim-eth-llc enabled")
