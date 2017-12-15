@@ -15,11 +15,9 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
   find_path(RAPTOR_KERNEL_MODULE
     NAMES
-    raptor.ko
     raptor.ko.gz
     HINTS
-    /lib/modules/${CMAKE_SYSTEM_VERSION}/
-    /lib/modules/${CMAKE_SYSTEM_VERSION}/extramodules/
+    /lib/modules/${CMAKE_SYSTEM_VERSION}/extra
   )
 
   mark_as_advanced(RAPTOR_KERNEL_MODULE)
