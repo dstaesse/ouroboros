@@ -55,7 +55,7 @@ struct reg_entry {
         struct list_head    next;
         char *              name;
 
-        /* DIFs in which this name is registered */
+        /* layers in which this name is registered */
         struct list_head    difs;
         /* Programs that can be instantiated by the irmd */
         struct list_head    reg_progs;

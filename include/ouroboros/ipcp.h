@@ -27,7 +27,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-#define DIF_NAME_SIZE 256
+#define LAYER_NAME_SIZE 256
 
 /*
  * NOTE: the IRMd uses this order to select an IPCP
@@ -37,8 +37,8 @@ enum ipcp_type {
         IPCP_LOCAL = 0,
         IPCP_NORMAL,
         IPCP_RAPTOR,
-        IPCP_SHIM_ETH_LLC,
-        IPCP_SHIM_UDP
+        IPCP_ETH_LLC,
+        IPCP_UDP
 };
 
 /* Normal IPCP policies */
@@ -63,9 +63,9 @@ enum pol_dir_hash {
         DIR_HASH_SHA3_512
 };
 
-/* Info reported back to the IRMd about the DIF on enrollment */
+/* Info reported back to the IRMd about the layer on enrollment */
 struct dif_info {
-        char dif_name[DIF_NAME_SIZE];
+        char dif_name[LAYER_NAME_SIZE];
         int  dir_hash_algo;
 };
 
@@ -84,11 +84,11 @@ struct ipcp_config {
         enum pol_routing   routing_type;
         enum pol_pff       pff_type;
 
-        /* Shim UDP */
+        /* UDP */
         uint32_t           ip_addr;
         uint32_t           dns_addr;
 
-        /* Shim Ethernet LLC */
+        /* Ethernet LLC */
         char *             if_name;
 };
 

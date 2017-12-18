@@ -44,30 +44,30 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define MAX_DIFS 128
+#define MAX_LAYERS 128
 
 static void usage(void)
 {
         printf("Usage: irm unregister\n"
                "           name <name>\n"
-               "           dif <dif name to unregister from>\n"
-               "           [dif <dif name to unregister from>]\n"
-               "           [... (maximum %d difs)]\n"
-               , MAX_DIFS);
+               "           layer <layer to unregister from>\n"
+               "           [layer <layer to unregister from>]\n"
+               "           [... (maximum %d layers)]\n"
+               , MAX_LAYERS);
 }
 
 int do_unregister(int argc, char ** argv)
 {
-        char * difs[MAX_DIFS];
+        char * difs[MAX_LAYERS];
         size_t difs_len = 0;
         char * name = NULL;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                } else if (matches(*argv, "dif") == 0) {
+                } else if (matches(*argv, "layer") == 0) {
                         difs[difs_len++] = *(argv + 1);
-                        if (difs_len > MAX_DIFS) {
+                        if (difs_len > MAX_LAYERS) {
                                 printf("Too many difs specified\n");
                                 return -1;
                         }

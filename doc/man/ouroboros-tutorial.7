@@ -46,32 +46,32 @@ The output should be
 
 .SH PINGING A SERVER APPLICATION OVER THE LOOPBACK ADAPTER
 
-With a running irmd, let's create an IPC process. For this
-tutorial, we will create and bootstrap a shim-eth-llc shim IPCP over
-the loopback interface. To observe what's going on, open another
-terminal window. Note that "ipcp bootstrap" will create an IPCP if an
-IPCP by that name does not yet exist (See \fBouroboros\fR(8)).
+With a running irmd, let's create an IPC process. For this tutorial,
+we will create and bootstrap an eth-llc IPCP over the loopback
+interface. To observe what's going on, open another terminal
+window. Note that "ipcp bootstrap" will create an IPCP if an IPCP by
+that name does not yet exist (See \fBouroboros\fR(8)).
 
 .RS 4
-$ irm ipcp bootstrap type shim-eth-llc name shim dif llc if lo
+$ irm ipcp bootstrap type eth-llc name llc layer llc if lo
 .RE
 
 .RS 4
 ==23918== irmd(II): Created IPCP 23932.
 .br
-==23932== ipcpd/shim-eth-llc(II): Using raw socket device.
+==23932== ipcpd/eth-llc(II): Using raw socket device.
 .br
-==23918== irmd(II): Bootstrapped IPCP 23932 in DIF llc.
+==23918== irmd(II): Bootstrapped IPCP 23932 in layer llc.
 .RE
 
-Now that we have a shim IPCP bootstrapped, it can act as a local
-network that can provide full connectivity between all processes in
-the system. Let's test it using the oping application. First, let's
-choose a name for the server ("my.oping.server") and register in the
-shim DIF.
+Now that we have the IPCP bootstrapped, it can act as a local network
+layer that can provide full connectivity between all processes in the
+system. Let's test it using the oping application. First, let's choose
+a name for the server ("my.oping.server") and register in the llc
+layer.
 
 .RS 4
-$ irm reg name my.oping.server dif llc
+$ irm reg name my.oping.server layer llc
 .RE
 
 The IRMd should respond with

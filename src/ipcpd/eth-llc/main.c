@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Shim IPC process over Ethernet with LLC
+ * IPC process over Ethernet with LLC
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -31,7 +31,7 @@
 
 #include "config.h"
 
-#define OUROBOROS_PREFIX "ipcpd/shim-eth-llc"
+#define OUROBOROS_PREFIX "ipcpd/eth-llc"
 
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
@@ -91,7 +91,7 @@
 #include <net/bpf.h>
 #endif
 
-#define THIS_TYPE                 IPCP_SHIM_ETH_LLC
+#define THIS_TYPE                 IPCP_ETH_LLC
 
 #define MGMT_SAP                  0x01
 #define MAC_SIZE                  6
@@ -1109,7 +1109,7 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_sdu_writer;
         }
 
-        log_dbg("Bootstrapped shim IPCP over Ethernet with LLC with pid %d.",
+        log_dbg("Bootstrapped IPCP over Ethernet with LLC with pid %d.",
                 getpid());
 
         return 0;
@@ -1370,7 +1370,7 @@ int main(int    argc,
                 goto fail_init;
 
         if (eth_llc_data_init() < 0) {
-                log_err("Failed to init shim-eth-llc data.");
+                log_err("Failed to init eth-llc data.");
                 goto fail_data_init;
         }
 

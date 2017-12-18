@@ -502,7 +502,7 @@ static int bootstrap_ipcp(pid_t               pid,
         entry->dif_name = strdup(info.dif_name);
         if (entry->dif_name == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_warn("Failed to set name of DIF.");
+                log_warn("Failed to set name of layer.");
                 return -ENOMEM;
         }
 
@@ -510,7 +510,7 @@ static int bootstrap_ipcp(pid_t               pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        log_info("Bootstrapped IPCP %d in DIF %s.",
+        log_info("Bootstrapped IPCP %d in layer %s.",
                  pid, conf->dif_info->dif_name);
 
         return 0;
@@ -564,7 +564,7 @@ static int enroll_ipcp(pid_t  pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        log_info("Enrolled IPCP %d in DIF %s.",
+        log_info("Enrolled IPCP %d in layer %s.",
                  pid, info.dif_name);
 
         return 0;

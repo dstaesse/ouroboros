@@ -45,12 +45,12 @@
 #define IPCP_SCHED_THR_MUL  @IPCP_SCHED_THR_MUL@
 #define PFT_SIZE            @PFT_SIZE@
 
-/* shim-udp */
+/* udp */
 #cmakedefine HAVE_DDNS
 #define NSUPDATE_EXEC       "@NSUPDATE_EXECUTABLE@"
 #define NSLOOKUP_EXEC       "@NSLOOKUP_EXECUTABLE@"
 
-/* shim-eth-llc */
+/* eth-llc */
 #cmakedefine HAVE_NETMAP
 #cmakedefine HAVE_BPF
 #cmakedefine HAVE_RAW_SOCKETS

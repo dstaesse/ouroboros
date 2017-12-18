@@ -44,11 +44,11 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define NORMAL       "normal"
-#define SHIM_UDP     "shim-udp"
-#define SHIM_ETH_LLC "shim-eth-llc"
-#define LOCAL        "local"
-#define RAPTOR       "raptor"
+#define NORMAL  "normal"
+#define UDP     "udp"
+#define ETH_LLC "eth-llc"
+#define LOCAL   "local"
+#define RAPTOR  "raptor"
 
 static void usage(void)
 {
@@ -56,7 +56,7 @@ static void usage(void)
                "                name <ipcp name>\n"
                "                type [TYPE]\n\n"
                "where TYPE = {" NORMAL " " LOCAL " "
-               SHIM_UDP " " SHIM_ETH_LLC " " RAPTOR "}\n");
+               UDP " " ETH_LLC " " RAPTOR "}\n");
 }
 
 int do_create_ipcp(int argc, char ** argv)
@@ -88,12 +88,12 @@ int do_create_ipcp(int argc, char ** argv)
 
         if (strcmp(ipcp_type, NORMAL) == 0)
                 type = IPCP_NORMAL;
-        else if (strcmp(ipcp_type, SHIM_UDP) == 0)
-                type = IPCP_SHIM_UDP;
+        else if (strcmp(ipcp_type, UDP) == 0)
+                type = IPCP_UDP;
         else if (strcmp(ipcp_type, LOCAL) == 0)
                 type = IPCP_LOCAL;
-        else if (strcmp(ipcp_type, SHIM_ETH_LLC) == 0)
-                type = IPCP_SHIM_ETH_LLC;
+        else if (strcmp(ipcp_type, ETH_LLC) == 0)
+                type = IPCP_ETH_LLC;
         else if (strcmp(ipcp_type, RAPTOR) == 0)
                 type = IPCP_RAPTOR;
         else {

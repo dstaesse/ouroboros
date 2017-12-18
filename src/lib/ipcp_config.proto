@@ -37,9 +37,9 @@ message ipcp_config_msg {
         optional uint32 addr_auth_type =  6;
         optional uint32 routing_type   =  7;
         optional uint32 pff_type       =  8;
-        // Config for shim UDP
+        // Config for UDP
         optional uint32 ip_addr        =  9;
         optional uint32 dns_addr       = 10;
-        // Config for the shim Ethernet LLC
+        // Config for the Ethernet LLC
         optional string if_name        = 11;
 }

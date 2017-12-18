@@ -245,10 +245,10 @@ static void * mainloop(void * o)
                                 conf.pff_type       = conf_msg->pff_type;
                         }
 
-                        if (conf_msg->ipcp_type == IPCP_SHIM_ETH_LLC)
+                        if (conf_msg->ipcp_type == IPCP_ETH_LLC)
                                 conf.if_name        = conf_msg->if_name;
 
-                        if (conf_msg->ipcp_type == IPCP_SHIM_UDP) {
+                        if (conf_msg->ipcp_type == IPCP_UDP) {
                                 conf.ip_addr  = conf_msg->ip_addr;
                                 conf.dns_addr = conf_msg->dns_addr;
 
@@ -256,8 +256,8 @@ static void * mainloop(void * o)
                                 dif_info.dir_hash_algo      = HASH_MD5;
                         }
 
-                        /* Only shim-udp needs a fixed hash algorithm */
-                        if (conf_msg->ipcp_type != IPCP_SHIM_UDP) {
+                        /* Only udp needs a fixed hash algorithm */
+                        if (conf_msg->ipcp_type != IPCP_UDP) {
                                 switch(conf_msg->dif_info->dir_hash_algo) {
                                 case DIR_HASH_SHA3_224:
                                         conf.dif_info.dir_hash_algo =

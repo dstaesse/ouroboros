@@ -39,7 +39,6 @@
 #include <assert.h>
 
 #define NAME_LEN 8
-#define REC_DIF_SIZE 10000
 
 struct {
         uint8_t addr_size;

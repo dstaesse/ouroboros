@@ -73,33 +73,34 @@ be bound to multiple names.
 
 \fBCreating an IPC Process\fR will instantiate a new IPCP in the
 system. This IPCP will be empty, with only a name and type specified,
-and ready for either \fIbootstrapping\fR into a new DIF (or a new or
-existing shim DIF) or \fIenrolling\fR in an existing DIF.
+and ready for either \fIbootstrapping\fR into a new layer or
+\fIenrolling\fR in an existing layer.
 
 \fBBootstrapping an IPC Process\fR gives it the necessary information
-from the command line to start operating as a \fIDIF\fR. Each IPCP
+from the command line to start operating as a \fIlayer\fR. Each IPCP
 type has its own set of configuration options.
 
-\fBEnrolling an IPC Process\fR in a DIF configures it by contacting
-another IPCP that is already a member of that DIF (bootstrapped or
+\fBEnrolling an IPC Process\fR in a layer configures it by contacting
+another IPCP that is already a member of that layer (bootstrapped or
 enrolled). After \fIenrollment\fR, the IPCP is configured, and may or
-may not have connections to the DIF.
+may not have connections to the layer.
 
-\fBRegistering a name in a DIF\fR inserts the name in that \fIDIF\fR's
-\fIdirectory\fR.  Once a name is \fIregistered\fR in a DIF, the name
-can be used as a destination handle for \fIflow allocation\fR.
+\fBRegistering a name in a layer\fR inserts the name in that
+\fIlayer\fR's \fIdirectory\fR.  Once a name is \fIregistered\fR in a
+layer, the name can be used as a destination handle for \fIflow
+allocation\fR.
 
 Ouroboros normal IPCPs are just like any other process, and will need
-to be bound and registered in a lower-rank DIF before they can be
+to be bound and registered in a lower-rank layer before they can be
 accessed by other processes.
 
-In order to enroll an IPC process in a DIF, some other member will
-have to be reachable over a lower DIF. Shim IPCPs are all bootstrapped
-and thus need not enroll as they work directly over a physical
-connection. Ouroboros currently supports shim IPCPs over shared memory
-(local), L1 (raptor, experimental), L2 (shim-eth-llc) and L3
-(shim-udp). The normal DIF requires connections to be established
-between IPCP components for its operation.
+In order to enroll an IPC process in a layer, some other member will
+have to be reachable over a lower layer. IPCPs that wrap a legacy
+transmission technology are all bootstrapped and thus need not enroll
+as they work directly over a physical connection. Ouroboros currently
+supports IPCPs over shared memory (local), L1 (raptor, experimental),
+L2 (eth-llc) and L3 (udp). The normal layer requires connections to be
+established between IPCP components for its operation.
 
 \fBConnecting the management components\fR using \fImanagement
 flows\fR allows management information to be sent between IPCPs so
@@ -119,15 +120,15 @@ that rely on data transfer flows are the \fIdirectory\fR and the
 creates an IPCP process of type \fItype\fR in the system with name
 \fIname\fR. Allowable values for \fItype\fR are:
 .PP
-\fBlocal\fR        - create a loopback IPCP.
+\fBlocal\fR    - create a loopback IPCP.
 .PP
-\fBraptor\fR       - create an IPCP that attaches to a raptor NetFPGA device.
+\fBraptor\fR   - create an IPCP that attaches to a raptor NetFPGA device.
 .PP
-\fBshim-eth-llc\fR - create an IPCP that attaches to an Ethernet adapter.
+\fBeth-llc\fR  - create an IPCP that attaches to an Ethernet adapter.
 .PP
-\fBshim-udp\fR     - create an IPCP that attaches to a UDP socket.
+\fBsudp\fR     - create an IPCP that attaches to a UDP socket.
 .PP
-\fBnormal\fR       - create a normal IPCP that uses lower level DIFs.
+\fBnormal\fR   - create a normal IPCP that uses lower level layers.
 .RE
 
 .PP
@@ -136,12 +137,12 @@ creates an IPCP process of type \fItype\fR in the system with name
 destroys the IPCP process with name \fIname\fR.
 .RE
 .PP
-\fBirm ipcp bootstrap\fR type \fItype\fR name \fIname\fR dif \fIdif\fR \
+\fBirm ipcp bootstrap\fR type \fItype\fR name \fIname\fR layer \fIlayer\fR \
 [\fIparams\fR] [\fIautobind\fR]
 .RS 4
 bootstraps an IPCP process of type \fItype\fR and name \fIname\fR in a
-DIF \fIdif\fR. If an IPCP with that name does not exist yet, the IPCP
-will be created.
+layer \fIlayer\fR. If an IPCP with that name does not exist yet, the
+IPCP will be created.
 .PP
 Values for [\fIparam\fR] are dependent on \fItype\fR:
 .PP
@@ -162,9 +163,9 @@ Values for [\fIparam\fR] are dependent on \fItype\fR:
 .RE
 
 .PP
-\fBshim-eth-llc\fR
+\fBeth-llc\fR
 .RS 4
-if_name \fIinterface\fR specifies the interface to bind the shim to.
+if_name \fIinterface\fR specifies the interface to bind the IPCP to.
 .PP
 [hash \fIpolicy\fR] specifies the hash function used for the directory,
 .br
@@ -172,7 +173,7 @@ if_name \fIinterface\fR specifies the interface to bind the shim to.
 .RE
 
 .PP
-\fBshim-udp\fR
+\fBudp\fR
 .RS 4
 ip \fIip\fR specifies the local IP address to bind to
 
@@ -218,17 +219,17 @@ default: simple.
 .br
 default: SHA3_256.
 .PP
-[autobind] will automatically bind a normal IPCP to its name and the DIF name.
+[autobind] will automatically bind a normal IPCP to its name and the layer name.
 .RE
 .RE
 
 .PP
-\fBirm ipcp enroll\fR name \fIname\fR dif \fIdif\fR [\fIautobind\fR]
+\fBirm ipcp enroll\fR name \fIname\fR layer \fIlayer\fR [\fIautobind\fR]
 .RS 4
-enrolls a normal IPCP \fIname\fR to a dif for which the IPCPs accept flows for
+enrolls a normal IPCP \fIname\fR to a layer for which the IPCPs accept flows for
 \fIname\fR.
 .PP
-[autobind] will automatically bind this IPCP to its name and the DIF name.
+[autobind] will automatically bind this IPCP to its name and the layer name.
 .RE
 
 \fBirm ipcp connect\fR name \fIname\fR component \fIcomponent\fR dst
@@ -236,7 +237,7 @@ enrolls a normal IPCP \fIname\fR to a dif for which the IPCPs accept flows for
 .RS 4
 connects a \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a normal IPCP
 with name \fIname\fR to that component of the destination IPCP within the
-same DIF.
+same layer.
 .RE
 
 \fBirm ipcp disconnect\fR name \fIname\fR component \fIcomponent\fR dst
@@ -244,7 +245,7 @@ same DIF.
 .RS 4
 disconnects \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a normal IPCP
 with name \fIname\fR from that component of the destination IPCP within the
-same DIF.
+same layer.
 .RE
 .RE
 
@@ -256,7 +257,7 @@ same DIF.
 bind a program \fIprogram\fR, referenced by its binary, to a certain
 name. The binary can be specified by an absolute or relative path, and
 will be searched for in all directories specified in the \fBPATH\fR
-variable. If \fIname\fR is registered in a DIF, all instances of
+variable. If \fIname\fR is registered in a layer, all instances of
 \fIprogram\fR will accept flows for \fIname\fR. If the \fIauto\fR
 keyword is specified, the IRMd will start instances if there are no
 readily available instances when a new flow is requested and any
@@ -268,14 +269,14 @@ application when it is started.
 \fBirm bind\fR process \fIpid\fR name \fIname\fR
 .RS 4
 bind a process \fIpid\fR to a certain name. If \fIname\fR is registered
-in a DIF, the process \fIpid\fR will accept flows for that name.
+in a layer, the process \fIpid\fR will accept flows for that name.
 .RE
 
 .PP
 \fBirm bind\fR ipcp \fIipcp\fR name \fIname\fR
 .RS 4
 bind an IPCP \fIipcp\fR to a \fIname\fR. If \fIname\fR is registered
-in a DIF, \fIipcp\fR will accept flows for \fIname\fR. This is a
+in a layer, \fIipcp\fR will accept flows for \fIname\fR. This is a
 shorthand for binding the pid of \fipcp\fR.
 .RE
 
@@ -303,15 +304,15 @@ not accept future flow allocation requests for \fIname\fR.
 .RE
 
 .PP
-\fBirm reg\fR name \fIname\fR dif \fIdif\fR [dif \fIdif\fR ...]
+\fBirm reg\fR name \fIname\fR layer \fIlayer\fR [layer \fIlayer\fR ...]
 .RS 4
-Register name \fIname\fR in difs \fIdif\fR.
+Register name \fIname\fR in layers \fIlayer\fR.
 .RE
 
 .PP
-\fBirm unreg\fR name \fIname\fR dif \fIdif\fR [dif \fIdif\fR ...]
+\fBirm unreg\fR name \fIname\fR layer \fIlayer\fR [layer \fIlayer\fR ...]
 .RS 4
-Unregister name \fIname\fR in difs \fIdif\fR.
+Unregister name \fIname\fR in layers \fIlayer\fR.
 .RE
 
 .SH TERMINOLOGY

@@ -14,11 +14,11 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(IPCP_LOCAL_TARGET ipcpd-local CACHE INTERNAL "")
 
-set(SHIM_LOCAL_SOURCES
+set(LOCAL_SOURCES
   # Add source files here
   ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
 
-add_executable(ipcpd-local ${SHIM_LOCAL_SOURCES} ${IPCP_SOURCES})
+add_executable(ipcpd-local ${LOCAL_SOURCES} ${IPCP_SOURCES})
 target_link_libraries(ipcpd-local LINK_PUBLIC ouroboros-common ouroboros-dev)
 
 include(AddCompileFlags)

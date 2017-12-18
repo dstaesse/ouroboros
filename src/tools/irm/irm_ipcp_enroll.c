@@ -48,7 +48,7 @@ static void usage(void)
 {
         printf("Usage: irm ipcp enroll\n"
                "                name <ipcp name>\n"
-               "                dif <dif to enroll in>\n"
+               "                layer <layer to enroll in>\n"
                "                [autobind]\n");
 }
 
@@ -67,7 +67,7 @@ int do_enroll_ipcp(int argc, char ** argv)
                 cargs = 2;
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                } else if (matches(*argv, "dif") == 0) {
+                } else if (matches(*argv, "layer") == 0) {
                         dif_name = *(argv + 1);
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;

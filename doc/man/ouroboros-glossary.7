@@ -29,13 +29,13 @@ in the IRMd.
 .PP
 bootstrap
 .RS 4
-to configure an IPCP and start it as the first member of a DIF.
+to configure an IPCP and start it as the first member of a layer.
 .RE
 
 .PP
 congestion control
 .RS 4
-the mechanism by which a server DIF controls its resources and
+the mechanism by which a server layer controls its resources and
 prevents its client processes from sending more information than it
 can currently handle. This is orthogonal to flow control.
 .RE
@@ -49,17 +49,11 @@ Table.
 .RE
 
 .PP
-distributed IPC facility (DIF)
-.RS 4
-deprecate?
-.RE
-
-.PP
 enrolment
 .RS 4
-the action of connecting to a member of an existing DIF, retrieving
+the action of connecting to a member of an existing layer, retrieving
 the bootstrap information and starting the IPCP as a new member of
-that DIF.
+that layer.
 .RE
 
 .PP

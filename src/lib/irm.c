@@ -130,7 +130,7 @@ int irm_bootstrap_ipcp(pid_t                      pid,
                 config.pff_type           = conf->pff_type;
                 dif_info.dir_hash_algo    = conf->dif_info.dir_hash_algo;
                 break;
-        case IPCP_SHIM_UDP:
+        case IPCP_UDP:
                 config.has_ip_addr  = true;
                 config.ip_addr      = conf->ip_addr;
                 config.has_dns_addr = true;
@@ -139,7 +139,7 @@ int irm_bootstrap_ipcp(pid_t                      pid,
         case IPCP_LOCAL:
         case IPCP_RAPTOR:
                 break;
-        case IPCP_SHIM_ETH_LLC:
+        case IPCP_ETH_LLC:
                 config.if_name = conf->if_name;
                 break;
         default:

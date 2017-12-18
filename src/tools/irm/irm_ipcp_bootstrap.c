@@ -50,8 +50,8 @@
 #include "irm_utils.h"
 
 #define NORMAL                 "normal"
-#define SHIM_UDP               "shim-udp"
-#define SHIM_ETH_LLC           "shim-eth-llc"
+#define UDP                    "udp"
+#define ETH_LLC                "eth-llc"
 #define LOCAL                  "local"
 #define RAPTOR                 "raptor"
 
@@ -79,10 +79,10 @@ static void usage(void)
         /* FIXME: Add ipcp_config stuff */
         printf("Usage: irm ipcp bootstrap\n"
                "                name <ipcp name>\n"
-               "                dif <DIF name>\n"
+               "                layer <layer name>\n"
                "                type [TYPE]\n"
                "where TYPE = {" NORMAL " " LOCAL " "
-               SHIM_UDP " " SHIM_ETH_LLC " " RAPTOR "},\n\n"
+               UDP " " ETH_LLC " " RAPTOR "},\n\n"
                "if TYPE == " NORMAL "\n"
                "                [addr <address size> (default: %d)]\n"
                "                [fd <fd size> (default: %d)]\n"
@@ -98,11 +98,11 @@ static void usage(void)
                "      PFF_POLICY = {" SIMPLE_PFF " " ALTERNATE_PFF "}\n"
                "      ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n"
-               "if TYPE == " SHIM_UDP "\n"
+               "if TYPE == " UDP "\n"
                "                ip <IP address in dotted notation>\n"
                "                [dns <DDNS IP address in dotted notation>"
                " (default: none)]\n\n"
-               "if TYPE == " SHIM_ETH_LLC "\n"
+               "if TYPE == " ETH_LLC "\n"
                "                if_name <interface name>\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
@@ -148,7 +148,7 @@ int do_bootstrap_ipcp(int     argc,
                 cargs = 2;
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
-                } else if (matches(*argv, "dif") == 0) {
+                } else if (matches(*argv, "layer") == 0) {
                         dif_name = *(argv + 1);
                 } else if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
@@ -216,7 +216,7 @@ int do_bootstrap_ipcp(int     argc,
         }
 
         strcpy(conf.dif_info.dif_name, dif_name);
-        if (strcmp(ipcp_type, SHIM_UDP) != 0)
+        if (strcmp(ipcp_type, UDP) != 0)
                 conf.dif_info.dir_hash_algo = hash_algo;
 
         if (strcmp(ipcp_type, NORMAL) == 0) {
@@ -227,8 +227,8 @@ int do_bootstrap_ipcp(int     argc,
                 conf.addr_auth_type = addr_auth_type;
                 conf.routing_type = routing_type;
                 conf.pff_type = pff_type;
-        } else if (strcmp(ipcp_type, SHIM_UDP) == 0) {
-                conf.type = IPCP_SHIM_UDP;
+        } else if (strcmp(ipcp_type, UDP) == 0) {
+                conf.type = IPCP_UDP;
                 if (ip_addr == 0) {
                         usage();
                         return -1;
@@ -239,8 +239,8 @@ int do_bootstrap_ipcp(int     argc,
                 conf.type = IPCP_LOCAL;
         } else if (strcmp(ipcp_type, RAPTOR) == 0) {
                 conf.type = IPCP_RAPTOR;
-        } else if (strcmp(ipcp_type, SHIM_ETH_LLC) == 0) {
-                conf.type = IPCP_SHIM_ETH_LLC;
+        } else if (strcmp(ipcp_type, ETH_LLC) == 0) {
+                conf.type = IPCP_ETH_LLC;
                 if (if_name == NULL) {
                         usage();
                         return -1;

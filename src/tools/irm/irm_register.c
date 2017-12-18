@@ -43,32 +43,32 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define MAX_DIFS 128
+#define MAX_LAYERS 128
 
 static void usage(void)
 {
         printf("Usage: irm register\n"
                "           name <name>\n"
-               "           dif <dif name to register with>\n"
-               "           [dif <dif name to register with>]\n"
-               "           [... (maximum %d difs)]\n"
-               , MAX_DIFS);
+               "           layer <layer to register with>\n"
+               "           [layer <layer to register with>]\n"
+               "           [... (maximum %d layers)]\n"
+               , MAX_LAYERS);
 }
 
 
 int do_register(int argc, char ** argv)
 {
         char * name = NULL;
-        char * difs[MAX_DIFS];
+        char * difs[MAX_LAYERS];
         size_t difs_len = 0;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                } else if (matches(*argv, "dif") == 0) {
+                } else if (matches(*argv, "layer") == 0) {
                         difs[difs_len++] = *(argv + 1);
-                        if (difs_len > MAX_DIFS) {
-                                printf("Too many difs specified\n");
+                        if (difs_len > MAX_LAYERS) {
+                                printf("Too many layers specified\n");
                                 return -1;
                         }
                 } else {

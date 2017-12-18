@@ -34,8 +34,8 @@ set(IPCP_SOURCES
 add_subdirectory(local)
 add_subdirectory(normal)
 add_subdirectory(raptor)
-add_subdirectory(shim-udp)
-add_subdirectory(shim-eth-llc)
+add_subdirectory(udp)
+add_subdirectory(eth-llc)
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)

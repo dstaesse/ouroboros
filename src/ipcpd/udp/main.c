@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2017
  *
- * Shim IPC process over UDP
+ * IPC process over UDP
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -24,7 +24,7 @@
 
 #include "config.h"
 
-#define OUROBOROS_PREFIX "ipcpd/shim-udp"
+#define OUROBOROS_PREFIX "ipcpd/udp"
 
 #include <ouroboros/hash.h>
 #include <ouroboros/list.h>
@@ -53,7 +53,7 @@
 #define FLOW_REQ              1
 #define FLOW_REPLY            2
 
-#define THIS_TYPE             IPCP_SHIM_UDP
+#define THIS_TYPE             IPCP_UDP
 #define LISTEN_PORT           htons(0x0D1F)
 #define SHIM_UDP_BUF_SIZE     256
 #define SHIM_UDP_MSG_SIZE     256
@@ -638,7 +638,7 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                 goto fail_sduloop;
         }
 
-        log_dbg("Bootstrapped shim IPCP over UDP with pid %d.", getpid());
+        log_dbg("Bootstrapped IPCP over UDP with pid %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
         log_dbg("DNS server address is %s.", dnsstr);
 
@@ -1124,7 +1124,7 @@ int main(int    argc,
         }
 
         if (udp_data_init() < 0) {
-                log_err("Failed to init shim-udp data.");
+                log_err("Failed to init udp data.");
                 ipcp_create_r(getpid(), -1);
                 ipcp_fini();
                 exit(EXIT_FAILURE);

@@ -12,14 +12,14 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-set(IPCP_SHIM_UDP_TARGET ipcpd-shim-udp CACHE INTERNAL "")
+set(IPCP_UDP_TARGET ipcpd-udp CACHE INTERNAL "")
 
-set(SHIM_UDP_SOURCES
+set(UDP_SOURCES
   # Add source files here
   ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
 
-add_executable(ipcpd-shim-udp ${SHIM_UDP_SOURCES} ${IPCP_SOURCES})
-target_link_libraries(ipcpd-shim-udp LINK_PUBLIC ouroboros-dev)
+add_executable(ipcpd-udp ${UDP_SOURCES} ${IPCP_SOURCES})
+target_link_libraries(ipcpd-udp LINK_PUBLIC ouroboros-dev)
 
 # Find the nsupdate executable
 find_program(NSUPDATE_EXECUTABLE
@@ -54,7 +54,7 @@ endif ()
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")
-  add_compile_flags(ipcpd-shim-udp -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ipcpd-udp -DCONFIG_OUROBOROS_DEBUG)
 endif ()
 
-install(TARGETS ipcpd-shim-udp RUNTIME DESTINATION sbin)
+install(TARGETS ipcpd-udp RUNTIME DESTINATION sbin)

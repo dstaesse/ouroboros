@@ -55,7 +55,7 @@ static int initialize_components(const struct ipcp_config * conf)
 {
         ipcpi.dif_name = strdup(conf->dif_info.dif_name);
         if (ipcpi.dif_name == NULL) {
-                log_err("Failed to set DIF name.");
+                log_err("Failed to set layer name.");
                 goto fail_dif_name;
         }
 
@@ -263,7 +263,7 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_bootstrap;
         }
 
-        log_dbg("Bootstrapped in DIF %s.", conf->dif_info.dif_name);
+        log_dbg("Bootstrapped in layer %s.", conf->dif_info.dif_name);
 
         return 0;
 

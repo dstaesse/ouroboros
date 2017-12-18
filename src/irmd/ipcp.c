@@ -139,11 +139,11 @@ pid_t ipcp_create(const char *   name,
         case IPCP_NORMAL:
                 exec_name = IPCP_NORMAL_EXEC;
                 break;
-        case IPCP_SHIM_UDP:
-                exec_name = IPCP_SHIM_UDP_EXEC;
+        case IPCP_UDP:
+                exec_name = IPCP_UDP_EXEC;
                 break;
-        case IPCP_SHIM_ETH_LLC:
-                exec_name = IPCP_SHIM_ETH_LLC_EXEC;
+        case IPCP_ETH_LLC:
+                exec_name = IPCP_ETH_LLC_EXEC;
                 break;
         case IPCP_LOCAL:
                 exec_name = IPCP_LOCAL_EXEC;
