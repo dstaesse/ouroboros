@@ -2,20 +2,20 @@
 
 There are 2 ways that will be used to communicate: The mailing list
 (ouroboros@freelists.org) will be used for almost everything except
-for day-to-day chat. For that we will use the channel #ouroboros-rina
-on Freenode (IRC chat). Use whatever name you desire.
+for day-to-day chat. For that we will use the channel #ouroboros on
+Freenode (IRC chat). Use whatever name you desire.
 
 2. Coding guidelines
 
-The Ouroboros stack is written in C and has the GPL license. It uses
-autotools as the build system. The coding guidelines of the Ouroboros
-stack are the same as those of the Linux kernel
+The coding guidelines of the Ouroboros stack are the same as those of
+the Linux kernel
 (https://www.kernel.org/doc/Documentation/CodingStyle) with the
 following exceptions:
 
 - Soft tabs are to be used instead of hard tabs
 
-- A space is to be inserted between a pointer and its object name. Example:
+- A space is to be inserted between a pointer and its object name upon
+  declaration or in function signatures. Example:
 
 int * a;
 instead of
@@ -23,9 +23,7 @@ int *a;
 
 - Don't explicitly cast malloc, but do
 
-ptr = malloc (sizeof(*ptr) * len);
-or
-ptr = malloc (sizeof *ptr * len);
+ptr = malloc(sizeof(*ptr) * len);
 
 - When checking for invalid pointers use
 
@@ -36,40 +34,38 @@ if (!ptr)
 3. Development workflow
 
 Git is used as a version tooling for the code. Releases are identified
-through a git tag by a number MAJOR.MICRO. Incrementing MAJOR is used
-to indicate a big step ahead in terms of features; it is discussed
-when new features are planned. Incrementing MICRO is done when
-APIs/ABIs are not necessarily compatible.
+through a git tag by a number MAJOR.MICRO.PATCHLEVEL. Incrementing
+MAJOR is done to indicate a big step ahead in terms of features; it is
+discussed when new features are planned. Incrementing MICRO is done
+when APIs/ABIs are not necessarily compatible. The PATCHLEVEL is
+incremented when an urgent bugfix is incorporated.
 
 3.1. Repository structure
 
 The main git repository can be found at:
-https://bitbucket.org/ouroboros-rina/stack
+https://ouroboros.ilabt.imec.be/git/ouroboros
 
 It contains the following branches:
 
-- master: Contains the most stable versions of the stack.
+- master: Contains the most stable versions of Ouroboros.
 
-- testing: Contains tested version but may still contain bugs.
+- testing: Contains tested code but may still contain bugs.
 
 - be: Contains untested but compiling code.
 
-All new contributions are integrated into ‘be’ from forks of the main
-git repository. Once a version of ‘be’ is tested enough, it is merged
-into ‘testing’. When a ‘testing’ version is considered stable enough,
-it is merged into ‘master’. Users should ALWAYS use master.
+All new contributions are integrated into 'be' through patches sent to
+the mailing list. Once a version of 'be' is tested enough, it is
+merged into 'testing'. When a 'testing' version is considered stable
+enough, it is merged into 'master'. Users should ALWAYS use master
+unless told otherwise.
 
 3.2. Contributions
 
-There are 3 ways to provide contributions:
-
-- bitbucket pull-requests: via bitbucket UI
-
-- git email pull-requests: via mailing list (ouroboros@freelists.org)
+There is 1 ways to provide contributions:
 
 - git email patch: via mailing list (ouroboros@freelists.org)
 
-New development is ALWAYS done against the ‘be’ branch of the main git
+New development is ALWAYS done against the 'be' branch of the main git
 repository. Contributions are always made using your real name and
 real e-mail address.
 
@@ -97,33 +93,35 @@ were made
 
 - If the commit addresses a bug, reference it in the body
 
+- Sign off your commits using the signoff feature in git
+
 3.4 Bugs
 
-Bugs are reported through the bitbucket issue tracker
-(https://bitbucket.org/ouroboros-rina/stack/issues?status=new&status=open). The
-process of reporting a bug is the following:
+Bugs are reported through the Bugzilla issue tracker
+(https://ouroboros.ilabt.imec.be/bugzilla/). The process of reporting
+a bug is the following:
 
-a. Report the bug on the issue tracker
+a. Provide a description of the bug
 
-b. Sync with the HEAD of the most stable branch where the bug is
+b. Provide system logs
+
+c. Provide a minimal code example to reproduce the bug
+
+d. Sync with the HEAD of the most stable branch where the bug is
 present
 
-c. Provide a bug fix
+e. Provide a bug fix if you can
 
-d. Request a pull request to that branch
+f. Send a patch to the mailing list
 
-e. The bugfix will be merged upwards into the less stable branches
+g. The bugfix will be merged upwards into the less stable branches
 
-Note that step a is always required. Steps b-e may be performed by
-someone else.
+Note that step a and b are always required. Steps c-g may be performed
+by someone else.
 
 4. New features
 
 New features can be always be requested through the mailing list. They
 will be taken into account when a next version of the prototype is
-discussed. A next version is discussed through a conference call,
-after which the agreed upon features are added to the issue
-tracker. Version 1.0 of Ouroboros will contain minimal functionality
-to have a RINA implementation. Pull requests containing non discussed
-features will be automatically rejected and will revoke you the rights
-to perform new pull requests.
+discussed. Patches containing non discussed features will be
+automatically rejected.
