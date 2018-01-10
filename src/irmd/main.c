@@ -42,6 +42,7 @@
 #include <ouroboros/time_utils.h>
 #include <ouroboros/tpm.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/version.h>
 
 #include "utils.h"
 #include "registry.h"

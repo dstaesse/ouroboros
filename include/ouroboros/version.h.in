@@ -1,7 +1,7 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2018
+ * Ouroboros - Copyright (C) 2016 - 2017
  *
- * SWIG wrapper file
+ * Ouroboros version
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,29 +20,11 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-%module ouroboros
-%{
-#include "ouroboros/cdefs.h"
-#include "ouroboros/cacep.h"
-#include "ouroboros/dev.h"
-#include "ouroboros/errno.h"
-#include "ouroboros/fccntl.h"
-#include "ouroboros/fqueue.h"
-#include "ouroboros/irm.h"
-#include "ouroboros/ipcp.h"
-#include "ouroboros/qos.h"
-#include "ouroboros/version.h"
-%}
+#ifndef OUROBOROS_VERSION_H
+#define OUROBOROS_VERSION_H
 
-typedef int pid_t;
+#define OUROBOROS_VERSION_MAJOR @PACKAGE_VERSION_MAJOR@
+#define OUROBOROS_VERSION_MINOR @PACKAGE_VERSION_MINOR@
+#define OUROBOROS_VERSION_PATCH @PACKAGE_VERSION_PATCH@
 
-%include "ouroboros/cdefs.h"
-%include "ouroboros/cacep.h"
-%include "ouroboros/dev.h"
-%include "ouroboros/errno.h"
-%include "ouroboros/fccntl.h"
-%include "ouroboros/fqueue.h"
-%include "ouroboros/irm.h"
-%include "ouroboros/ipcp.h"
-%include "ouroboros/qos.h"
-%include "ouroboros/version.h"
+#endif /* OUROBOROS_VERSION_H */
