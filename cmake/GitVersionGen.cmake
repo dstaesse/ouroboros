@@ -24,13 +24,17 @@ macro(git_version_gen)
   message(STATUS "Repository tag is: ${_git_tag}")
 
   string(REGEX REPLACE
-    "[^0-9]*([0-9]+)\\.[0-9]+.*" "\\1"
+    "^([0-9]+)\\..*" "\\1"
     _version_major "${_git_tag}")
   string(REGEX REPLACE
-    "[^0-9]*[0-9]+\\.([0-9]+).*" "\\1"
+    "^[0-9]+\\.([0-9]+)\\..*" "\\1"
     _version_minor "${_git_tag}")
+  string(REGEX REPLACE
+    "^[0-9]+\\.[0-9]+\\.([0-9]+)" "\\1"
+    _version_patch "${_git_tag}")
 
   set(PACKAGE_VERSION_MAJOR "${_version_major}")
   set(PACKAGE_VERSION_MINOR "${_version_minor}")
+  set(PACKAGE_VERSION_PATCH "${_version_patch}")
 
 endmacro(git_version_gen)

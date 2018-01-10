@@ -2298,9 +2298,10 @@ int main(int     argc,
                         argc--;
                         argv++;
                 } else if (strcmp(*argv, "--version") == 0) {
-                        printf("Ouroboros version %d.%d\n",
+                        printf("Ouroboros version %d.%d.%d\n",
                                OUROBOROS_VERSION_MAJOR,
-                               OUROBOROS_VERSION_MINOR);
+                               OUROBOROS_VERSION_MINOR,
+                               OUROBOROS_VERSION_PATCH);
                         exit(EXIT_SUCCESS);
                 } else {
                         usage();
