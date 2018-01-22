@@ -1415,7 +1415,7 @@ int local_flow_write(int    fd,
         pthread_rwlock_rdlock(&ai.lock);
 
         if (ai.flows[fd].port_id < 0) {
-                pthread_rwlock_rdlock(&ai.lock);
+                pthread_rwlock_unlock(&ai.lock);
                 return -ENOTALLOC;
         }
 
