@@ -72,9 +72,9 @@ typedef KadContactMsg kad_contact_msg_t;
 
 enum dht_state {
         DHT_INIT = 0,
+        DHT_SHUTDOWN,
         DHT_JOINING,
         DHT_RUNNING,
-        DHT_SHUTDOWN,
 };
 
 enum kad_code {
@@ -277,7 +277,7 @@ static void dht_set_state(struct dht *   dht,
 
         dht->state = state;
 
-        pthread_cond_signal(&dht->cond);
+        pthread_cond_broadcast(&dht->cond);
 
         pthread_mutex_unlock(&dht->mtx);
 }
@@ -2245,7 +2245,10 @@ int dht_reg(struct dht *    dht,
         assert(key);
         assert(dht->addr != 0);
 
-        if (dht_get_state(dht) != DHT_RUNNING)
+        if (dht_get_state(dht) < DHT_JOINING)
+                return -1;
+
+        if (dht_wait_running(dht))
                 return -1;
 
         pthread_rwlock_wrlock(&dht->lock);
@@ -2313,7 +2316,10 @@ uint64_t dht_query(struct dht *    dht,
 
         addrs[0] = 0;
 
-        if (dht_get_state(dht) != DHT_RUNNING)
+        if (dht_get_state(dht) < DHT_JOINING)
+                return 0;
+
+        if (dht_wait_running(dht))
                 return 0;
 
         pthread_rwlock_rdlock(&dht->lock);
