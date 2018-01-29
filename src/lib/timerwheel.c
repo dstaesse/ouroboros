@@ -186,7 +186,7 @@ struct tw_f * timerwheel_start(struct timerwheel * tw,
         f->func = func;
         f->arg = arg;
 
-        assert(delay < tw->elements * tw->resolution);
+        assert(delay < (time_t) tw->elements * tw->resolution);
 
         pthread_mutex_lock(&tw->lock);
 
@@ -205,7 +205,7 @@ int timerwheel_restart(struct timerwheel * tw,
         int pos;
 
         assert(tw);
-        assert(delay < tw->elements * tw->resolution);
+        assert(delay < (time_t) tw->elements * tw->resolution);
 
         pthread_mutex_lock(&tw->lock);
 
