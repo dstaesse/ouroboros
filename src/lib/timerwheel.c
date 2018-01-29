@@ -60,7 +60,7 @@ struct timerwheel {
         pthread_mutex_t  lock;
 
         time_t           resolution;
-        unsigned int     elements;
+        size_t           elements;
 };
 
 static void tw_el_fini(struct tw_el * e)
@@ -111,7 +111,7 @@ struct timerwheel * timerwheel_create(time_t resolution,
         struct timespec now = {0, 0};
         struct timespec res_ts = {resolution / 1000,
                                   (resolution % 1000) * MILLION};
-        unsigned long i;
+        size_t i;
 
         struct timerwheel * tw;
 
@@ -126,7 +126,7 @@ struct timerwheel * timerwheel_create(time_t resolution,
 
         tw->elements = 1;
 
-        while (tw->elements < max_delay / resolution)
+        while (tw->elements < (size_t) max_delay / resolution)
                 tw->elements <<= 1;
 
         tw->wheel = malloc(sizeof(*tw->wheel) * tw->elements);
