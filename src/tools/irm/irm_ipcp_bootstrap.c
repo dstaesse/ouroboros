@@ -259,7 +259,7 @@ int do_bootstrap_ipcp(int     argc,
         len = irm_list_ipcps(name, &pids);
         if (len <= 0) {
                 pid = irm_create_ipcp(name, conf.type);
-                if (pid== 0)
+                if (pid <= 0)
                         return -1;
                 len = irm_list_ipcps(name, &pids);
         }
