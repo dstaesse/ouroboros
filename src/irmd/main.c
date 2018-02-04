@@ -1449,8 +1449,8 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                 }
 
                 reg_entry_set_state(re, REG_NAME_AUTO_EXEC);
-                a = prog_table_get_by_progn(&irmd.prog_table,
-                                            reg_entry_get_prog(re));
+                a = prog_table_get(&irmd.prog_table,
+                                   reg_entry_get_prog(re));
 
                 if (a == NULL || (c_pid->pid = auto_execute(a->argv)) < 0) {
                         reg_entry_set_state(re, REG_NAME_AUTO_ACCEPT);
