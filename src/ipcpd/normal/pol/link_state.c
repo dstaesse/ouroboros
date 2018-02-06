@@ -477,6 +477,21 @@ static void send_lsm(uint64_t src,
         }
 }
 
+/* replicate the lsdb to a mgmt neighbor */
+static void lsdb_replicate(int fd)
+{
+        struct list_head * p;
+
+        list_for_each(p, &ls.db) {
+                struct lsa         lsm;
+                struct adjacency * adj;
+                adj = list_entry(p, struct adjacency, next);
+                lsm.d_addr = hton64(adj->dst);
+                lsm.s_addr = hton64(adj->src);
+                flow_write(fd, &lsm, sizeof(lsm));
+        }
+}
+
 static void * lsupdate(void * o)
 {
         struct list_head * p;
@@ -673,6 +688,8 @@ static void handle_event(void *       self,
                 fset_add(ls.mgmt_set, c->flow_info.fd);
                 if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_MGMT))
                         log_warn("Failed to add mgmt neighbor to LSDB.");
+                /* replicate the entire lsdb */
+                lsdb_replicate(c->flow_info.fd);
                 break;
         case NOTIFY_MGMT_CONN_DEL:
                 fset_del(ls.mgmt_set, c->flow_info.fd);
