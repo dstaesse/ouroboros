@@ -1675,6 +1675,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
                         out = kad_find(dht, id, addrs, code);
                         lookup_add_out(lu, out);
                         break;
+                case LU_DONE:
                 case LU_DESTROY:
                         lookup_detach(dht, lu);
                         lookup_set_state(lu, LU_NULL);
