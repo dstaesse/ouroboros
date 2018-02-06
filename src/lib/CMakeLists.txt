@@ -238,9 +238,9 @@ target_link_libraries(ouroboros-dev ouroboros-common)
 
 target_link_libraries(ouroboros-irm ouroboros-common)
 
-install(TARGETS ouroboros-common LIBRARY DESTINATION usr/lib)
-install(TARGETS ouroboros-dev LIBRARY DESTINATION usr/lib)
-install(TARGETS ouroboros-irm LIBRARY DESTINATION usr/lib)
+install(TARGETS ouroboros-common LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS ouroboros-dev LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS ouroboros-irm LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 target_include_directories(ouroboros-common PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
   ${SYS_RND_HDR} ${LIBGCRYPT_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})

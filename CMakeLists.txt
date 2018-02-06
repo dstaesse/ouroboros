@@ -22,14 +22,14 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "/" CACHE STRING "Installation Prefix" FORCE)
+  set(CMAKE_INSTALL_PREFIX "/usr" CACHE STRING "Installation Prefix" FORCE)
 endif ()
 
 if (APPLE)
   set(CMAKE_MACOSX_RPATH 1)
 endif()
 
-if (CMAKE_INSTALL_PREFIX STREQUAL "/")
+if (CMAKE_INSTALL_PREFIX STREQUAL "/usr")
   set(RPATH_PREFIX "")
 else ()
   set(RPATH_PREFIX ${CMAKE_INSTALL_PREFIX})
@@ -40,9 +40,9 @@ set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
-  "${RPATH_PREFIX}/usr/lib" isSystemDir)
+  "${RPATH_PREFIX}/lib" isSystemDir)
 IF ("${isSystemDir}" STREQUAL "-1")
-  set(CMAKE_INSTALL_RPATH "${RPATH_PREFIX}/usr/lib")
+  set(CMAKE_INSTALL_RPATH "${RPATH_PREFIX}/lib")
 ENDIF ("${isSystemDir}" STREQUAL "-1")
 
 message(STATUS "Package name is:            ${PACKAGE_NAME}")
@@ -101,17 +101,17 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros-irm.pc.in"
   "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-irm.pc" @ONLY)
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc"
-  DESTINATION "usr/lib/pkgconfig")
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-irm.pc"
-  DESTINATION "usr/lib/pkgconfig")
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
 if (IS_DIRECTORY "/usr/lib/systemd")
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/irmd.service.in"
     "${CMAKE_CURRENT_BINARY_DIR}/irmd.service" @ONLY)
 
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/irmd.service"
-    DESTINATION "usr/lib/systemd/system")
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/systemd/system")
 endif ()
 
 enable_testing()

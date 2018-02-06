@@ -28,7 +28,7 @@ set(MAN_NAMES
 macro(INSTALL_MAN __mans)
   foreach (_man ${ARGV})
     string(REGEX REPLACE "^.+[.]([1-9]).gz" "\\1" _mansect ${_man})
-    install(FILES ${_man} DESTINATION "usr/share/man/man${_mansect}")
+    install(FILES ${_man} DESTINATION "${CMAKE_INSTALL_MANDIR}/man${_mansect}")
   endforeach (_man)
 endmacro(INSTALL_MAN __mans)
 

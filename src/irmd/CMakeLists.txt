@@ -48,7 +48,7 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(irmd -DCONFIG_OUROBOROS_DEBUG)
 endif ()
 
-install(TARGETS irmd RUNTIME DESTINATION sbin)
+install(TARGETS irmd RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 # Enable once irmd has tests
 # add_subdirectory(tests)

@@ -41,7 +41,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_compile_flags(ipcpd-raptor -DCONFIG_OUROBOROS_DEBUG)
       endif ()
 
-      install(TARGETS ipcpd-raptor RUNTIME DESTINATION sbin)
+      install(TARGETS ipcpd-raptor RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
     else ()
       message(STATUS "Raptor support disabled by user")
     endif ()

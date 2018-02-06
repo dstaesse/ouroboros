@@ -57,4 +57,4 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(ipcpd-udp -DCONFIG_OUROBOROS_DEBUG)
 endif ()
 
-install(TARGETS ipcpd-udp RUNTIME DESTINATION sbin)
+install(TARGETS ipcpd-udp RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})

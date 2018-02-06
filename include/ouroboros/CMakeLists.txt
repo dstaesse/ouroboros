@@ -15,6 +15,6 @@ set(HEADER_FILES
   ${CMAKE_CURRENT_BINARY_DIR}/version.h
   )
 
-install(FILES ${HEADER_FILES} DESTINATION usr/include/ouroboros)
+install(FILES ${HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ouroboros)
 
 add_subdirectory(wrap)

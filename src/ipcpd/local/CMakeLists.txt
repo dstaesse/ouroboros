@@ -26,7 +26,7 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(ipcpd-local -DCONFIG_OUROBOROS_DEBUG)
 endif ()
 
-install(TARGETS ipcpd-local RUNTIME DESTINATION sbin)
+install(TARGETS ipcpd-local RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 # Enable once ipcp-local has tests
 # add_subdirectory(tests)

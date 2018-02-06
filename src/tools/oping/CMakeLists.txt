@@ -20,4 +20,4 @@ add_executable(oping ${SOURCE_FILES})
 
 target_link_libraries(oping LINK_PUBLIC ${LIBM_LIBRARIES} ouroboros-dev)
 
-install(TARGETS oping RUNTIME DESTINATION usr/bin)
+install(TARGETS oping RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

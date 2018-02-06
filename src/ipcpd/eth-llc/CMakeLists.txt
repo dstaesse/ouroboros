@@ -102,5 +102,5 @@ if (HAVE_LLC)
     add_compile_flags(ipcpd-eth-llc -DCONFIG_OUROBOROS_DEBUG)
   endif ()
 
-  install(TARGETS ipcpd-eth-llc RUNTIME DESTINATION sbin)
+  install(TARGETS ipcpd-eth-llc RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 endif ()

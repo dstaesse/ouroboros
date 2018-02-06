@@ -53,7 +53,7 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
 endif ()
 
-install(TARGETS ipcpd-normal RUNTIME DESTINATION sbin)
+install(TARGETS ipcpd-normal RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 add_subdirectory(pol/tests)
 
