@@ -229,10 +229,12 @@ int fa_alloc(int             fd,
         uint64_t             addr;
         struct shm_du_buff * sdb;
 
-        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()))
+        addr = dir_query(dst);
+        if (addr == 0)
                 return -1;
 
-        addr = dir_query(dst);
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()))
+                return -1;
 
         msg         = (struct fa_msg *) shm_du_buff_head(sdb);
         msg->code   = FLOW_REQ;
