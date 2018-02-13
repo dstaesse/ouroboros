@@ -5,6 +5,12 @@ macro(git_version_gen)
     message(FATAL_ERROR "This is not a git repository")
   endif ()
 
+  find_program(SORT "sort")
+  mark_as_advanced(SORT)
+  if (${SORT} STREQUAL "")
+    message(FATAL_ERROR "Cannot find the sort executable")
+  endif ()
+
   find_program(TAIL "tail")
   mark_as_advanced(TAIL)
   if (${TAIL} STREQUAL "")
@@ -13,6 +19,7 @@ macro(git_version_gen)
 
   execute_process(
     COMMAND ${GIT_EXECUTABLE} tag -l -n0
+    COMMAND ${SORT} -V
     COMMAND ${TAIL} -n 1
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     OUTPUT_VARIABLE _git_tag
