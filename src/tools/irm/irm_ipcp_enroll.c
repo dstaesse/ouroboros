@@ -54,13 +54,13 @@ static void usage(void)
 
 int do_enroll_ipcp(int argc, char ** argv)
 {
-        char *  name     = NULL;
-        char *  dif_name = NULL;
-        pid_t * pids     = NULL;
+        char *  name       = NULL;
+        char *  layer_name = NULL;
+        pid_t * pids       = NULL;
         pid_t   pid;
-        ssize_t len      = 0;
-        int     i        = 0;
-        bool    autobind = false;
+        ssize_t len        = 0;
+        int     i          = 0;
+        bool    autobind   = false;
         int     cargs;
 
         while (argc > 0) {
@@ -68,7 +68,7 @@ int do_enroll_ipcp(int argc, char ** argv)
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
-                        dif_name = *(argv + 1);
+                        layer_name = *(argv + 1);
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
@@ -82,7 +82,7 @@ int do_enroll_ipcp(int argc, char ** argv)
                 argv += cargs;
         }
 
-        if (dif_name == NULL || name == NULL) {
+        if (layer_name == NULL || name == NULL) {
                 usage();
                 return -1;
         }
@@ -101,15 +101,16 @@ int do_enroll_ipcp(int argc, char ** argv)
                         return -1;
                 }
 
-                if (irm_enroll_ipcp(pids[i], dif_name)) {
+                if (irm_enroll_ipcp(pids[i], layer_name)) {
                         if (autobind)
                                 irm_unbind_process(pids[i], name);
                         free(pids);
                         return -1;
                 }
 
-                if (autobind && irm_bind_process(pids[i], dif_name)) {
-                        printf("Failed to bind %d to %s.\n", pids[i], dif_name);
+                if (autobind && irm_bind_process(pids[i], layer_name)) {
+                        printf("Failed to bind %d to %s.\n",
+                               pids[i], layer_name);
                         free(pids);
                         return -1;
                 }

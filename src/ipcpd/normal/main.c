@@ -53,13 +53,13 @@
 
 static int initialize_components(const struct ipcp_config * conf)
 {
-        ipcpi.dif_name = strdup(conf->dif_info.dif_name);
-        if (ipcpi.dif_name == NULL) {
+        ipcpi.layer_name = strdup(conf->layer_info.layer_name);
+        if (ipcpi.layer_name == NULL) {
                 log_err("Failed to set layer name.");
-                goto fail_dif_name;
+                goto fail_layer_name;
         }
 
-        ipcpi.dir_hash_algo = conf->dif_info.dir_hash_algo;
+        ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
 
         assert(ipcp_dir_hash_len() != 0);
 
@@ -80,8 +80,8 @@ static int initialize_components(const struct ipcp_config * conf)
         if (dt_init(conf->routing_type,
                     conf->pff_type,
                     conf->addr_size,
-                    conf->fd_size,
-                    conf->has_ttl)) {
+                    conf->eid_size,
+                    conf->max_ttl)) {
                 log_err("Failed to initialize data transfer component.");
                 goto fail_dt;
         }
@@ -107,8 +107,8 @@ static int initialize_components(const struct ipcp_config * conf)
  fail_dt:
         addr_auth_fini();
  fail_addr_auth:
-        free(ipcpi.dif_name);
- fail_dif_name:
+        free(ipcpi.layer_name);
+ fail_layer_name:
         return -1;
 }
 
@@ -122,7 +122,7 @@ static void finalize_components(void)
 
         addr_auth_fini();
 
-        free(ipcpi.dif_name);
+        free(ipcpi.layer_name);
 }
 
 static int start_components(void)
@@ -182,12 +182,12 @@ static int bootstrap_components(void)
         return 0;
 }
 
-static int normal_ipcp_enroll(const char *      dst,
-                              struct dif_info * info)
+static int normal_ipcp_enroll(const char *        dst,
+                              struct layer_info * info)
 {
         struct conn conn;
 
-        if (connmgr_alloc(AEID_ENROLL, dst, NULL, &conn)) {
+        if (connmgr_alloc(COMPID_ENROLL, dst, NULL, &conn)) {
                 log_err("Failed to get connection.");
                 goto fail_er_flow;
         }
@@ -216,13 +216,13 @@ static int normal_ipcp_enroll(const char *      dst,
         if (enroll_done(&conn, 0))
                 log_warn("Failed to confirm enrollment with peer.");
 
-        if (connmgr_dealloc(AEID_ENROLL, &conn))
+        if (connmgr_dealloc(COMPID_ENROLL, &conn))
                 log_warn("Failed to deallocate enrollment flow.");
 
         log_info("Enrolled with %s.", dst);
 
         info->dir_hash_algo = ipcpi.dir_hash_algo;
-        strcpy(info->dif_name, ipcpi.dif_name);
+        strcpy(info->layer_name, ipcpi.layer_name);
 
         return 0;
 
@@ -231,7 +231,7 @@ static int normal_ipcp_enroll(const char *      dst,
  fail_dt_start:
         finalize_components();
  fail_enroll_boot:
-        connmgr_dealloc(AEID_ENROLL, &conn);
+        connmgr_dealloc(COMPID_ENROLL, &conn);
  fail_er_flow:
         return -1;
 }
@@ -263,7 +263,7 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_bootstrap;
         }
 
-        log_dbg("Bootstrapped in layer %s.", conf->dif_info.dif_name);
+        log_dbg("Bootstrapped in layer %s.", conf->layer_info.layer_name);
 
         return 0;
 

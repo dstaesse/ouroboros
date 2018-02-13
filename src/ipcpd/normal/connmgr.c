@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Handles AE connections
+ * Handles connections between components
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -31,7 +31,7 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
 
-#include "ae.h"
+#include "comp.h"
 #include "connmgr.h"
 #include "enroll.h"
 #include "ipcp.h"
@@ -52,7 +52,7 @@ struct conn_el {
         struct conn      conn;
 };
 
-struct ae {
+struct comp {
         struct nbs *     nbs;
         struct conn_info info;
 
@@ -64,7 +64,7 @@ struct ae {
 };
 
 struct {
-        struct ae          aes[AEID_MAX];
+        struct comp        comps[COMPID_MAX];
         enum connmgr_state state;
 
         pthread_t          acceptor;
@@ -72,19 +72,19 @@ struct {
 
 static int get_id_by_name(const char * name)
 {
-        enum ae_id i;
+        enum comp_id i;
 
-        for (i = 0; i < AEID_MAX; ++i)
-                if (strcmp(name, connmgr.aes[i].info.ae_name) == 0)
+        for (i = 0; i < COMPID_MAX; ++i)
+                if (strcmp(name, connmgr.comps[i].info.comp_name) == 0)
                         return i;
 
         return -1;
 }
 
-static int add_ae_conn(enum ae_id         id,
-                       int                fd,
-                       qosspec_t          qs,
-                       struct conn_info * rcv_info)
+static int add_comp_conn(enum comp_id       id,
+                         int                fd,
+                         qosspec_t          qs,
+                         struct conn_info * rcv_info)
 {
         struct conn_el * el;
 
@@ -98,12 +98,12 @@ static int add_ae_conn(enum ae_id         id,
         el->conn.flow_info.fd = fd;
         el->conn.flow_info.qs = qs;
 
-        pthread_mutex_lock(&connmgr.aes[id].lock);
+        pthread_mutex_lock(&connmgr.comps[id].lock);
 
-        list_add(&el->next, &connmgr.aes[id].pending);
-        pthread_cond_signal(&connmgr.aes[id].cond);
+        list_add(&el->next, &connmgr.comps[id].pending);
+        pthread_cond_signal(&connmgr.comps[id].cond);
 
-        pthread_mutex_unlock(&connmgr.aes[id].lock);
+        pthread_mutex_unlock(&connmgr.comps[id].lock);
 
         return 0;
 }
@@ -135,24 +135,24 @@ static void * flow_acceptor(void * o)
                         continue;
                 }
 
-                id = get_id_by_name(rcv_info.ae_name);
+                id = get_id_by_name(rcv_info.comp_name);
                 if (id < 0) {
-                        log_dbg("Connection request for unknown AE %s.",
-                                rcv_info.ae_name);
+                        log_dbg("Connection request for unknown component %s.",
+                                rcv_info.comp_name);
                         cacep_snd(fd, &fail_info);
                         flow_dealloc(fd);
                         continue;
                 }
 
-                assert(id < AEID_MAX);
+                assert(id < COMPID_MAX);
 
-                if (cacep_snd(fd, &connmgr.aes[id].info)) {
+                if (cacep_snd(fd, &connmgr.comps[id].info)) {
                         log_dbg("Failed to respond to request.");
                         flow_dealloc(fd);
                         continue;
                 }
 
-                if (add_ae_conn(id, fd, qs, &rcv_info)) {
+                if (add_comp_conn(id, fd, qs, &rcv_info)) {
                         log_dbg("Failed to add new connection.");
                         flow_dealloc(fd);
                         continue;
@@ -176,8 +176,8 @@ void connmgr_fini(void)
         if (connmgr.state == CONNMGR_RUNNING)
                 pthread_join(connmgr.acceptor, NULL);
 
-        for (i = 0; i < AEID_MAX; ++i)
-                connmgr_ae_fini(i);
+        for (i = 0; i < COMPID_MAX; ++i)
+                connmgr_comp_fini(i);
 }
 
 int connmgr_start(void)
@@ -196,64 +196,64 @@ void connmgr_stop(void)
                 pthread_cancel(connmgr.acceptor);
 }
 
-int connmgr_ae_init(enum ae_id               id,
-                    const struct conn_info * info)
+int connmgr_comp_init(enum comp_id             id,
+                      const struct conn_info * info)
 {
-        struct ae * ae;
+        struct comp * comp;
 
-        assert(id >= 0 && id < AEID_MAX);
+        assert(id >= 0 && id < COMPID_MAX);
 
-        ae = connmgr.aes + id;
+        comp = connmgr.comps + id;
 
-        if (pthread_mutex_init(&ae->lock, NULL))
+        if (pthread_mutex_init(&comp->lock, NULL))
                 return -1;
 
-        if (pthread_cond_init(&ae->cond, NULL)) {
-                pthread_mutex_destroy(&ae->lock);
+        if (pthread_cond_init(&comp->cond, NULL)) {
+                pthread_mutex_destroy(&comp->lock);
                 return -1;
         }
 
-        list_head_init(&ae->conns);
-        list_head_init(&ae->pending);
+        list_head_init(&comp->conns);
+        list_head_init(&comp->pending);
 
-        memcpy(&connmgr.aes[id].info, info, sizeof(connmgr.aes[id].info));
+        memcpy(&connmgr.comps[id].info, info, sizeof(connmgr.comps[id].info));
 
         return 0;
 }
 
-void connmgr_ae_fini(enum ae_id id)
+void connmgr_comp_fini(enum comp_id id)
 {
         struct list_head * p;
         struct list_head * h;
-        struct ae *        ae;
+        struct comp *      comp;
 
-        assert(id >= 0 && id < AEID_MAX);
+        assert(id >= 0 && id < COMPID_MAX);
 
-        if (strlen(connmgr.aes[id].info.ae_name) == 0)
+        if (strlen(connmgr.comps[id].info.comp_name) == 0)
                 return;
 
-        ae = connmgr.aes + id;
+        comp = connmgr.comps + id;
 
-        pthread_mutex_lock(&ae->lock);
+        pthread_mutex_lock(&comp->lock);
 
-        list_for_each_safe(p, h, &ae->conns) {
+        list_for_each_safe(p, h, &comp->conns) {
                 struct conn_el * e = list_entry(p, struct conn_el, next);
                 list_del(&e->next);
                 free(e);
         }
 
-        list_for_each_safe(p, h, &ae->pending) {
+        list_for_each_safe(p, h, &comp->pending) {
                 struct conn_el * e = list_entry(p, struct conn_el, next);
                 list_del(&e->next);
                 free(e);
         }
 
-        pthread_mutex_unlock(&ae->lock);
+        pthread_mutex_unlock(&comp->lock);
 
-        pthread_cond_destroy(&ae->cond);
-        pthread_mutex_destroy(&ae->lock);
+        pthread_cond_destroy(&comp->cond);
+        pthread_mutex_destroy(&comp->lock);
 
-        memset(&connmgr.aes[id].info, 0, sizeof(connmgr.aes[id].info));
+        memset(&connmgr.comps[id].info, 0, sizeof(connmgr.comps[id].info));
 }
 
 int connmgr_ipcp_connect(const char * dst,
@@ -292,11 +292,11 @@ int connmgr_ipcp_connect(const char * dst,
                 strcpy(ce->conn.flow_info.dst, dst);
         }
 
-        pthread_mutex_lock(&connmgr.aes[id].lock);
+        pthread_mutex_lock(&connmgr.comps[id].lock);
 
-        list_add(&ce->next, &connmgr.aes[id].conns);
+        list_add(&ce->next, &connmgr.comps[id].conns);
 
-        pthread_mutex_unlock(&connmgr.aes[id].lock);
+        pthread_mutex_unlock(&connmgr.comps[id].lock);
 
         return 0;
 }
@@ -315,13 +315,13 @@ int connmgr_ipcp_disconnect(const char * dst,
         if (id < 0)
                 return -1;
 
-        pthread_mutex_lock(&connmgr.aes[id].lock);
+        pthread_mutex_lock(&connmgr.comps[id].lock);
 
-        list_for_each_safe(p,h, &connmgr.aes[id].conns) {
+        list_for_each_safe(p,h, &connmgr.comps[id].conns) {
                 struct conn_el * el = list_entry(p, struct conn_el, next);
                 if (strcmp(el->conn.flow_info.dst, dst) == 0) {
                         int ret;
-                        pthread_mutex_unlock(&connmgr.aes[id].lock);
+                        pthread_mutex_unlock(&connmgr.comps[id].lock);
                         list_del(&el->next);
                         ret = connmgr_dealloc(id, &el->conn);
                         free(el);
@@ -329,17 +329,17 @@ int connmgr_ipcp_disconnect(const char * dst,
                 }
         }
 
-        pthread_mutex_unlock(&connmgr.aes[id].lock);
+        pthread_mutex_unlock(&connmgr.comps[id].lock);
 
         return 0;
 }
 
-int connmgr_alloc(enum ae_id    id,
+int connmgr_alloc(enum comp_id  id,
                   const char *  dst,
                   qosspec_t *   qs,
                   struct conn * conn)
 {
-        assert(id >= 0 && id < AEID_MAX);
+        assert(id >= 0 && id < COMPID_MAX);
         assert(dst);
 
         conn->flow_info.fd = flow_alloc(dst, qs, NULL);
@@ -354,9 +354,9 @@ int connmgr_alloc(enum ae_id    id,
                 memset(&conn->flow_info.qs, 0, sizeof(conn->flow_info.qs));
 
         log_dbg("Sending cacep info for protocol %s to fd %d.",
-                connmgr.aes[id].info.protocol, conn->flow_info.fd);
+                connmgr.comps[id].info.protocol, conn->flow_info.fd);
 
-        if (cacep_snd(conn->flow_info.fd, &connmgr.aes[id].info)) {
+        if (cacep_snd(conn->flow_info.fd, &connmgr.comps[id].info)) {
                 log_dbg("Failed to create application connection.");
                 flow_dealloc(conn->flow_info.fd);
                 return -1;
@@ -368,31 +368,31 @@ int connmgr_alloc(enum ae_id    id,
                 return -1;
         }
 
-        if (strcmp(connmgr.aes[id].info.protocol, conn->conn_info.protocol)) {
+        if (strcmp(connmgr.comps[id].info.protocol, conn->conn_info.protocol)) {
                 log_dbg("Unknown protocol (requested %s, got %s).",
-                        connmgr.aes[id].info.protocol,
+                        connmgr.comps[id].info.protocol,
                         conn->conn_info.protocol);
                 flow_dealloc(conn->flow_info.fd);
                 return -1;
         }
 
-        if (connmgr.aes[id].info.pref_version != conn->conn_info.pref_version) {
+        if (connmgr.comps[id].info.pref_version != conn->conn_info.pref_version) {
                 log_dbg("Unknown protocol version.");
                 flow_dealloc(conn->flow_info.fd);
                 return -1;
         }
 
-        if (connmgr.aes[id].info.pref_syntax != conn->conn_info.pref_syntax) {
+        if (connmgr.comps[id].info.pref_syntax != conn->conn_info.pref_syntax) {
                 log_dbg("Unknown protocol syntax.");
                 flow_dealloc(conn->flow_info.fd);
                 return -1;
         }
 
         switch (id) {
-        case AEID_DT:
+        case COMPID_DT:
                 notifier_event(NOTIFY_DT_CONN_ADD, conn);
                 break;
-        case AEID_MGMT:
+        case COMPID_MGMT:
                 notifier_event(NOTIFY_MGMT_CONN_ADD, conn);
                 break;
         default:
@@ -402,14 +402,14 @@ int connmgr_alloc(enum ae_id    id,
         return 0;
 }
 
-int connmgr_dealloc(enum ae_id    id,
+int connmgr_dealloc(enum comp_id  id,
                     struct conn * conn)
 {
         switch (id) {
-        case AEID_DT:
+        case COMPID_DT:
                 notifier_event(NOTIFY_DT_CONN_DEL, conn);
                 break;
-        case AEID_MGMT:
+        case COMPID_MGMT:
                 notifier_event(NOTIFY_MGMT_CONN_DEL, conn);
                 break;
         default:
@@ -420,30 +420,30 @@ int connmgr_dealloc(enum ae_id    id,
 }
 
 
-int connmgr_wait(enum ae_id    id,
+int connmgr_wait(enum comp_id  id,
                  struct conn * conn)
 {
         struct conn_el * el;
-        struct ae *      ae;
+        struct comp *    comp;
 
-        assert(id >= 0 && id < AEID_MAX);
+        assert(id >= 0 && id < COMPID_MAX);
         assert(conn);
 
-        ae = connmgr.aes + id;
+        comp = connmgr.comps + id;
 
-        pthread_mutex_lock(&ae->lock);
+        pthread_mutex_lock(&comp->lock);
 
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void *) &ae->lock);
+                             (void *) &comp->lock);
 
-        while (list_is_empty(&ae->pending))
-                pthread_cond_wait(&ae->cond, &ae->lock);
+        while (list_is_empty(&comp->pending))
+                pthread_cond_wait(&comp->cond, &comp->lock);
 
         pthread_cleanup_pop(false);
 
-        el = list_first_entry((&ae->pending), struct conn_el, next);
+        el = list_first_entry((&comp->pending), struct conn_el, next);
         if (el == NULL) {
-                pthread_mutex_unlock(&ae->lock);
+                pthread_mutex_unlock(&comp->lock);
                 return -1;
         }
 
@@ -452,7 +452,7 @@ int connmgr_wait(enum ae_id    id,
         list_del(&el->next);
         free(el);
 
-        pthread_mutex_unlock(&ae->lock);
+        pthread_mutex_unlock(&comp->lock);
 
         return 0;
 }

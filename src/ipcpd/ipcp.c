@@ -174,16 +174,16 @@ static void * mainloop(void * o)
         int                 sfd;
         buffer_t            buffer;
         struct ipcp_config  conf;
-        struct dif_info     info;
+        struct layer_info   info;
         ipcp_config_msg_t * conf_msg;
         ipcp_msg_t *        msg;
 
         (void) o;
 
         while (true) {
-                ipcp_msg_t          ret_msg  = IPCP_MSG__INIT;
-                dif_info_msg_t      dif_info = DIF_INFO_MSG__INIT;
-                int                 fd       = -1;
+                ipcp_msg_t          ret_msg    = IPCP_MSG__INIT;
+                layer_info_msg_t    layer_info = LAYER_INFO_MSG__INIT;
+                int                 fd         = -1;
                 struct cmd *        cmd;
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
@@ -234,12 +234,12 @@ static void * mainloop(void * o)
 
                         conf_msg = msg->conf;
                         conf.type = conf_msg->ipcp_type;
-                        strcpy(conf.dif_info.dif_name,
-                               conf_msg->dif_info->dif_name);
+                        strcpy(conf.layer_info.layer_name,
+                               conf_msg->layer_info->layer_name);
                         if (conf_msg->ipcp_type == IPCP_NORMAL) {
                                 conf.addr_size      = conf_msg->addr_size;
-                                conf.fd_size        = conf_msg->fd_size;
-                                conf.has_ttl        = conf_msg->has_ttl;
+                                conf.eid_size       = conf_msg->eid_size;
+                                conf.max_ttl        = conf_msg->max_ttl;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
                                 conf.routing_type   = conf_msg->routing_type;
                                 conf.pff_type       = conf_msg->pff_type;
@@ -252,43 +252,44 @@ static void * mainloop(void * o)
                                 conf.ip_addr  = conf_msg->ip_addr;
                                 conf.dns_addr = conf_msg->dns_addr;
 
-                                conf.dif_info.dir_hash_algo = HASH_MD5;
-                                dif_info.dir_hash_algo      = HASH_MD5;
+                                conf.layer_info.dir_hash_algo = HASH_MD5;
+                                layer_info.dir_hash_algo      = HASH_MD5;
                         }
 
                         /* Only udp needs a fixed hash algorithm */
                         if (conf_msg->ipcp_type != IPCP_UDP) {
-                                switch(conf_msg->dif_info->dir_hash_algo) {
+                                switch(conf_msg->layer_info->dir_hash_algo) {
                                 case DIR_HASH_SHA3_224:
-                                        conf.dif_info.dir_hash_algo =
+                                        conf.layer_info.dir_hash_algo =
                                                 HASH_SHA3_224;
                                         break;
                                 case DIR_HASH_SHA3_256:
-                                        conf.dif_info.dir_hash_algo =
+                                        conf.layer_info.dir_hash_algo =
                                                 HASH_SHA3_256;
                                         break;
                                 case DIR_HASH_SHA3_384:
-                                        conf.dif_info.dir_hash_algo =
+                                        conf.layer_info.dir_hash_algo =
                                                 HASH_SHA3_384;
                                         break;
                                 case DIR_HASH_SHA3_512:
-                                        conf.dif_info.dir_hash_algo =
+                                        conf.layer_info.dir_hash_algo =
                                                 HASH_SHA3_512;
                                         break;
                                 default:
                                         assert(false);
                                 }
 
-                                dif_info.dir_hash_algo =
-                                        conf.dif_info.dir_hash_algo;
+                                layer_info.dir_hash_algo =
+                                        conf.layer_info.dir_hash_algo;
                         }
 
-                        ipcpi.dir_hash_algo = conf.dif_info.dir_hash_algo;
+                        ipcpi.dir_hash_algo = conf.layer_info.dir_hash_algo;
 
                         ret_msg.result = ipcpi.ops->ipcp_bootstrap(&conf);
                         if (ret_msg.result == 0) {
-                                ret_msg.dif_info       = &dif_info;
-                                dif_info.dif_name      = conf.dif_info.dif_name;
+                                ret_msg.layer_info = &layer_info;
+                                layer_info.layer_name =
+                                        conf.layer_info.layer_name;
                         }
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
@@ -309,9 +310,9 @@ static void * mainloop(void * o)
                         ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dst_name,
                                                                 &info);
                         if (ret_msg.result == 0) {
-                                ret_msg.dif_info       = &dif_info;
-                                dif_info.dir_hash_algo = info.dir_hash_algo;
-                                dif_info.dif_name      = info.dif_name;
+                                ret_msg.layer_info       = &layer_info;
+                                layer_info.dir_hash_algo = info.dir_hash_algo;
+                                layer_info.layer_name    = info.layer_name;
                         }
                         break;
                 case IPCP_MSG_CODE__IPCP_CONNECT:

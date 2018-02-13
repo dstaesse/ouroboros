@@ -93,10 +93,10 @@ int do_disconnect_ipcp(int     argc,
                 return -1;
 
         if (!strcmp(comp_name, DT))
-                comp_name = DT_AE;
+                comp_name = DT_COMP;
 
         if (!strcmp(comp_name , MGMT))
-                comp_name = MGMT_AE;
+                comp_name = MGMT_COMP;
 
         if (irm_disconnect_ipcp(pids[0], dst_name, comp_name)) {
                 free(pids);

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * DIF config message
+ * Layer configuration message
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -22,24 +22,24 @@
 
 syntax = "proto2";
 
-message dif_info_msg {
-        required string dif_name      =  1;
+message layer_info_msg {
+        required string layer_name    =  1;
         required uint32 dir_hash_algo =  2;
 }
 
 message ipcp_config_msg {
-        required dif_info_msg dif_info =  1;
-        required int32 ipcp_type       =  2;
+        required layer_info_msg layer_info =  1;
+        required int32 ipcp_type           =  2;
         // Config for normal IPCP
-        optional uint32 addr_size      =  3;
-        optional uint32 fd_size        =  4;
-        optional bool has_ttl          =  5;
-        optional uint32 addr_auth_type =  6;
-        optional uint32 routing_type   =  7;
-        optional uint32 pff_type       =  8;
+        optional uint32 addr_size          =  3;
+        optional uint32 eid_size           =  4;
+        optional uint32 max_ttl            =  5;
+        optional uint32 addr_auth_type     =  6;
+        optional uint32 routing_type       =  7;
+        optional uint32 pff_type           =  8;
         // Config for UDP
-        optional uint32 ip_addr        =  9;
-        optional uint32 dns_addr       = 10;
+        optional uint32 ip_addr            =  9;
+        optional uint32 dns_addr           = 10;
         // Config for the Ethernet LLC
-        optional string if_name        = 11;
+        optional string if_name            = 11;
 }

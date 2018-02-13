@@ -2767,7 +2767,7 @@ struct dht * dht_create(uint64_t addr)
         if (tpm_start(dht->tpm))
                 goto fail_tpm_start;
 
-        dht->fd   = dt_reg_ae(dht, &dht_post_sdu);
+        dht->fd   = dt_reg_comp(dht, &dht_post_sdu);
         notifier_reg(handle_event, dht);
 #else
         (void) handle_event;

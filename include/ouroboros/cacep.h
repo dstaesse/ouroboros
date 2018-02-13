@@ -32,13 +32,13 @@
 #define CACEP_BUF_STRLEN 64
 
 struct conn_info {
-        char                       ae_name[CACEP_BUF_STRLEN + 1];
+        char                       comp_name[CACEP_BUF_STRLEN + 1];
         char                       protocol[CACEP_BUF_STRLEN + 1];
         uint32_t                   pref_version;
         enum proto_concrete_syntax pref_syntax;
         struct proto_field         fixed_conc_syntax[PROTO_MAX_FIELDS];
         size_t                     num_fields;
-        uint64_t                   addr; /* AE-I name */
+        uint64_t                   addr;
 };
 
 __BEGIN_DECLS

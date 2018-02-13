@@ -49,7 +49,7 @@ static int read_msg(int                fd,
         if (msg == NULL)
                 return -1;
 
-        strcpy(info->ae_name, msg->ae_name);
+        strcpy(info->comp_name, msg->comp_name);
         strcpy(info->protocol, msg->protocol);
 
         info->pref_version = msg->pref_version;
@@ -68,7 +68,7 @@ static int send_msg(int                      fd,
         uint8_t *   data = NULL;
         size_t      len  = 0;
 
-        msg.ae_name      = (char *) info->ae_name;
+        msg.comp_name    = (char *) info->comp_name;
         msg.protocol     = (char *) info->protocol;
         msg.address      = info->addr;
         msg.pref_version = info->pref_version;

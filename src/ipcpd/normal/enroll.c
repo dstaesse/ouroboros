@@ -44,7 +44,7 @@
 #include "enroll.pb-c.h"
 typedef EnrollMsg enroll_msg_t;
 
-#define ENROLL_AE               "Enrollment"
+#define ENROLL_COMP             "Enrollment"
 #define ENROLL_PROTO            "OEP" /* Ouroboros enrollment protocol */
 #define ENROLL_WARN_TIME_OFFSET 20
 #define ENROLL_BUF_LEN          1024
@@ -124,16 +124,17 @@ static int send_rcv_enroll_msg(int fd)
         if (labs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
                 log_warn("Clock offset above threshold.");
 
-        strcpy(enroll.conf.dif_info.dif_name, reply->conf->dif_info->dif_name);
+        strcpy(enroll.conf.layer_info.layer_name,
+               reply->conf->layer_info->layer_name);
         enroll.conf.type           = reply->conf->ipcp_type;
         enroll.conf.addr_size      = reply->conf->addr_size;
-        enroll.conf.fd_size        = reply->conf->fd_size;
-        enroll.conf.has_ttl        = reply->conf->has_ttl;
+        enroll.conf.eid_size       = reply->conf->eid_size;
+        enroll.conf.max_ttl        = reply->conf->max_ttl;
         enroll.conf.addr_auth_type = reply->conf->addr_auth_type;
         enroll.conf.routing_type   = reply->conf->routing_type;
         enroll.conf.pff_type       = reply->conf->pff_type;
-        enroll.conf.dif_info.dir_hash_algo
-                = reply->conf->dif_info->dir_hash_algo;
+        enroll.conf.layer_info.dir_hash_algo
+                = reply->conf->layer_info->dir_hash_algo;
 
         enroll_msg__free_unpacked(reply, NULL);
 
@@ -142,9 +143,9 @@ static int send_rcv_enroll_msg(int fd)
 
 static ssize_t enroll_pack(uint8_t ** buf)
 {
-        enroll_msg_t      msg      = ENROLL_MSG__INIT;
-        ipcp_config_msg_t config   = IPCP_CONFIG_MSG__INIT;
-        dif_info_msg_t    dif_info = DIF_INFO_MSG__INIT;
+        enroll_msg_t      msg        = ENROLL_MSG__INIT;
+        ipcp_config_msg_t config     = IPCP_CONFIG_MSG__INIT;
+        layer_info_msg_t  layer_info = LAYER_INFO_MSG__INIT;
         struct timespec   now;
         ssize_t           len;
 
@@ -160,20 +161,20 @@ static ssize_t enroll_pack(uint8_t ** buf)
         config.ipcp_type          = enroll.conf.type;
         config.has_addr_size      = true;
         config.addr_size          = enroll.conf.addr_size;
-        config.has_fd_size        = true;
-        config.fd_size            = enroll.conf.fd_size;
-        config.has_has_ttl        = true;
-        config.has_ttl            = enroll.conf.has_ttl;
+        config.has_eid_size       = true;
+        config.eid_size           = enroll.conf.eid_size;
+        config.has_max_ttl        = true;
+        config.max_ttl            = enroll.conf.max_ttl;
         config.has_addr_auth_type = true;
         config.addr_auth_type     = enroll.conf.addr_auth_type;
         config.has_routing_type   = true;
         config.routing_type       = enroll.conf.routing_type;
         config.has_pff_type       = true;
         config.pff_type           = enroll.conf.pff_type;
-        config.dif_info           = &dif_info;
+        config.layer_info         = &layer_info;
 
-        dif_info.dif_name      = (char *) enroll.conf.dif_info.dif_name;
-        dif_info.dir_hash_algo = enroll.conf.dif_info.dir_hash_algo;
+        layer_info.layer_name     = (char *) enroll.conf.layer_info.layer_name;
+        layer_info.dir_hash_algo  = enroll.conf.layer_info.dir_hash_algo;
 
         len = enroll_msg__get_packed_size(&msg);
 
@@ -197,7 +198,7 @@ static void * enroll_handle(void * o)
         (void) o;
 
         while (true) {
-                if (connmgr_wait(AEID_ENROLL, &conn)) {
+                if (connmgr_wait(COMPID_ENROLL, &conn)) {
                         log_err("Failed to get next connection.");
                         continue;
                 }
@@ -205,20 +206,20 @@ static void * enroll_handle(void * o)
                 len = flow_read(conn.flow_info.fd, buf, ENROLL_BUF_LEN);
                 if (len < 0) {
                         log_err("Failed to read from flow.");
-                        connmgr_dealloc(AEID_ENROLL, &conn);
+                        connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
                 msg = enroll_msg__unpack(NULL, len, buf);
                 if (msg == NULL) {
                         log_err("Failed to unpack message.");
-                        connmgr_dealloc(AEID_ENROLL, &conn);
+                        connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
                 if (msg->code != ENROLL_CODE__ENROLL_REQ) {
                         log_err("Wrong message type.");
-                        connmgr_dealloc(AEID_ENROLL, &conn);
+                        connmgr_dealloc(COMPID_ENROLL, &conn);
                         enroll_msg__free_unpacked(msg, NULL);
                         continue;
                 }
@@ -230,7 +231,7 @@ static void * enroll_handle(void * o)
                 len = enroll_pack(&reply);
                 if (reply == NULL) {
                         log_err("Failed to pack enrollment message.");
-                        connmgr_dealloc(AEID_ENROLL, &conn);
+                        connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
@@ -238,7 +239,7 @@ static void * enroll_handle(void * o)
 
                 if (flow_write(conn.flow_info.fd, reply, len)) {
                         log_err("Failed respond to enrollment request.");
-                        connmgr_dealloc(AEID_ENROLL, &conn);
+                        connmgr_dealloc(COMPID_ENROLL, &conn);
                         free(reply);
                         continue;
                 }
@@ -248,21 +249,21 @@ static void * enroll_handle(void * o)
                 len = flow_read(conn.flow_info.fd, buf, ENROLL_BUF_LEN);
                 if (len < 0) {
                         log_err("Failed to read from flow.");
-                        connmgr_dealloc(AEID_ENROLL, &conn);
+                        connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
                 msg = enroll_msg__unpack(NULL, len, buf);
                 if (msg == NULL) {
                         log_err("Failed to unpack message.");
-                        connmgr_dealloc(AEID_ENROLL, &conn);
+                        connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
                 if (msg->code != ENROLL_CODE__ENROLL_DONE || !msg->has_result) {
                         log_err("Wrong message type.");
                         enroll_msg__free_unpacked(msg, NULL);
-                        connmgr_dealloc(AEID_ENROLL, &conn);
+                        connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
@@ -273,7 +274,7 @@ static void * enroll_handle(void * o)
 
                 enroll_msg__free_unpacked(msg, NULL);
 
-                connmgr_dealloc(AEID_ENROLL, &conn);
+                connmgr_dealloc(COMPID_ENROLL, &conn);
         }
 
         return 0;
@@ -336,13 +337,13 @@ int enroll_init(void)
 
         memset(&info, 0, sizeof(info));
 
-        strcpy(info.ae_name, ENROLL_AE);
+        strcpy(info.comp_name, ENROLL_COMP);
         strcpy(info.protocol, ENROLL_PROTO);
         info.pref_version = 1;
         info.pref_syntax  = PROTO_GPB;
         info.addr         = 0;
 
-        if (connmgr_ae_init(AEID_ENROLL, &info)) {
+        if (connmgr_comp_init(COMPID_ENROLL, &info)) {
                 log_err("Failed to register with connmgr.");
                 return -1;
         }
@@ -357,7 +358,7 @@ void enroll_fini(void)
         if (enroll.state == ENROLL_RUNNING)
                 pthread_join(enroll.listener, NULL);
 
-        connmgr_ae_fini(AEID_ENROLL);
+        connmgr_comp_fini(COMPID_ENROLL);
 }
 
 int enroll_start(void)

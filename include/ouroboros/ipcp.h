@@ -64,21 +64,21 @@ enum pol_dir_hash {
 };
 
 /* Info reported back to the IRMd about the layer on enrollment */
-struct dif_info {
-        char dif_name[LAYER_NAME_SIZE];
+struct layer_info {
+        char layer_name[LAYER_NAME_SIZE];
         int  dir_hash_algo;
 };
 
 /* Structure to configure the first IPCP */
 struct ipcp_config {
-        struct dif_info    dif_info;
+        struct layer_info  layer_info;
 
         enum ipcp_type     type;
 
         /* Normal */
         uint8_t            addr_size;
-        uint8_t            fd_size;
-        bool               has_ttl;
+        uint8_t            eid_size;
+        uint8_t            max_ttl;
 
         enum pol_addr_auth addr_auth_type;
         enum pol_routing   routing_type;

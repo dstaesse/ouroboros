@@ -205,7 +205,7 @@ int ipcp_destroy(pid_t pid)
 
 int ipcp_bootstrap(pid_t               pid,
                    ipcp_config_msg_t * conf,
-                   struct dif_info   * info)
+                   struct layer_info * info)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
@@ -232,13 +232,13 @@ int ipcp_bootstrap(pid_t               pid,
                 return ret;
         }
 
-        if (recv_msg->dif_info == NULL) {
+        if (recv_msg->layer_info == NULL) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
                 return -EIPCP;
         }
 
-        info->dir_hash_algo = recv_msg->dif_info->dir_hash_algo;
-        strcpy(info->dif_name, recv_msg->dif_info->dif_name);
+        info->dir_hash_algo = recv_msg->layer_info->dir_hash_algo;
+        strcpy(info->layer_name, recv_msg->layer_info->layer_name);
 
         ret = recv_msg->result;
         ipcp_msg__free_unpacked(recv_msg, NULL);
@@ -246,9 +246,9 @@ int ipcp_bootstrap(pid_t               pid,
         return ret;
 }
 
-int ipcp_enroll(pid_t             pid,
-                const char *      dst,
-                struct dif_info * info)
+int ipcp_enroll(pid_t               pid,
+                const char *        dst,
+                struct layer_info * info)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
@@ -275,13 +275,13 @@ int ipcp_enroll(pid_t             pid,
                 return ret;
         }
 
-        if (recv_msg->dif_info == NULL) {
+        if (recv_msg->layer_info == NULL) {
                 ipcp_msg__free_unpacked(recv_msg, NULL);
                 return -EIPCP;
         }
 
-        info->dir_hash_algo = recv_msg->dif_info->dir_hash_algo;
-        strcpy(info->dif_name, recv_msg->dif_info->dif_name);
+        info->dir_hash_algo = recv_msg->layer_info->dir_hash_algo;
+        strcpy(info->layer_name, recv_msg->layer_info->layer_name);
 
         ipcp_msg__free_unpacked(recv_msg, NULL);
 

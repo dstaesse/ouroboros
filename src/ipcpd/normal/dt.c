@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Data Transfer AE
+ * Data Transfer Component
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -24,7 +24,7 @@
 
 #include "config.h"
 
-#define OUROBOROS_PREFIX "dt-ae"
+#define OUROBOROS_PREFIX "dt"
 
 #include <ouroboros/bitmap.h>
 #include <ouroboros/errno.h>
@@ -39,7 +39,7 @@
 #include "pff.h"
 #include "routing.h"
 #include "sdu_sched.h"
-#include "ae.h"
+#include "comp.h"
 #include "fa.h"
 
 #include <stdlib.h>
@@ -49,9 +49,9 @@
 #include <inttypes.h>
 #include <assert.h>
 
-struct ae_info {
-        void   (* post_sdu)(void * ae, struct shm_du_buff * sdb);
-        void * ae;
+struct comp_info {
+        void   (* post_sdu)(void * comp, struct shm_du_buff * sdb);
+        void * comp;
 };
 
 struct {
@@ -61,7 +61,7 @@ struct {
         struct routing_i * routing[QOS_CUBE_MAX];
 
         struct bmp *       res_fds;
-        struct ae_info     aes[PROG_RES_FDS];
+        struct comp_info   comps[PROG_RES_FDS];
         pthread_rwlock_t   lock;
 
         pthread_t          listener;
@@ -127,19 +127,20 @@ static void sdu_handler(int                  fd,
         } else {
                 dt_pci_shrink(sdb);
 
-                if (dt_pci.fd > PROG_RES_FDS) {
-                        if (ipcp_flow_write(dt_pci.fd, sdb))
+                if (dt_pci.eid > PROG_RES_FDS) {
+                        if (ipcp_flow_write(dt_pci.eid, sdb))
                                 ipcp_sdb_release(sdb);
                         return;
                 }
 
-                if (dt.aes[dt_pci.fd].post_sdu == NULL) {
-                        log_err("No registered AE on fd %d.", dt_pci.fd);
+                if (dt.comps[dt_pci.eid].post_sdu == NULL) {
+                        log_err("No registered component on eid %d.",
+                                dt_pci.eid);
                         ipcp_sdb_release(sdb);
                         return;
                 }
 
-                dt.aes[dt_pci.fd].post_sdu(dt.aes[dt_pci.fd].ae, sdb);
+                dt.comps[dt_pci.eid].post_sdu(dt.comps[dt_pci.eid].comp, sdb);
         }
 }
 
@@ -150,7 +151,7 @@ static void * dt_conn_handle(void * o)
         (void) o;
 
         while (true) {
-                if (connmgr_wait(AEID_DT, &conn)) {
+                if (connmgr_wait(COMPID_DT, &conn)) {
                         log_err("Failed to get next DT connection.");
                         continue;
                 }
@@ -166,8 +167,8 @@ static void * dt_conn_handle(void * o)
 int dt_init(enum pol_routing pr,
             enum pol_pff     pp,
             uint8_t          addr_size,
-            uint8_t          fd_size,
-            bool             has_ttl)
+            uint8_t          eid_size,
+            uint8_t          max_ttl)
 {
         int              i;
         int              j;
@@ -175,13 +176,13 @@ int dt_init(enum pol_routing pr,
 
         memset(&info, 0, sizeof(info));
 
-        strcpy(info.ae_name, DT_AE);
+        strcpy(info.comp_name, DT_COMP);
         strcpy(info.protocol, DT_PROTO);
         info.pref_version = 1;
         info.pref_syntax  = PROTO_FIXED;
         info.addr         = ipcpi.dt_addr;
 
-        if (dt_pci_init(addr_size, fd_size, has_ttl)) {
+        if (dt_pci_init(addr_size, eid_size, max_ttl)) {
                 log_err("Failed to init shm dt_pci.");
                 goto fail_pci_init;
         }
@@ -191,9 +192,9 @@ int dt_init(enum pol_routing pr,
                 goto fail_notifier_reg;
         }
 
-        if (connmgr_ae_init(AEID_DT, &info)) {
+        if (connmgr_comp_init(COMPID_DT, &info)) {
                 log_err("Failed to register with connmgr.");
-                goto fail_connmgr_ae_init;
+                goto fail_connmgr_comp_init;
         }
 
         if (routing_init(pr)) {
@@ -242,8 +243,8 @@ int dt_init(enum pol_routing pr,
  fail_pff:
         routing_fini();
  fail_routing:
-        connmgr_ae_fini(AEID_DT);
- fail_connmgr_ae_init:
+        connmgr_comp_fini(COMPID_DT);
+ fail_connmgr_comp_init:
         notifier_unreg(&handle_event);
  fail_notifier_reg:
         dt_pci_fini();
@@ -267,7 +268,7 @@ void dt_fini(void)
 
         routing_fini();
 
-        connmgr_ae_fini(AEID_DT);
+        connmgr_comp_fini(COMPID_DT);
 
         notifier_unreg(&handle_event);
 
@@ -298,8 +299,8 @@ void dt_stop(void)
         sdu_sched_destroy(dt.sdu_sched);
 }
 
-int dt_reg_ae(void * ae,
-              void (* func)(void * func, struct shm_du_buff *))
+int dt_reg_comp(void * comp,
+                void (* func)(void * func, struct shm_du_buff *))
 {
         int res_fd;
 
@@ -314,11 +315,11 @@ int dt_reg_ae(void * ae,
                 return -EBADF;
         }
 
-        assert(dt.aes[res_fd].post_sdu == NULL);
-        assert(dt.aes[res_fd].ae == NULL);
+        assert(dt.comps[res_fd].post_sdu == NULL);
+        assert(dt.comps[res_fd].comp == NULL);
 
-        dt.aes[res_fd].post_sdu = func;
-        dt.aes[res_fd].ae = ae;
+        dt.comps[res_fd].post_sdu = func;
+        dt.comps[res_fd].comp     = comp;
 
         pthread_rwlock_unlock(&dt.lock);
 
@@ -345,7 +346,7 @@ int dt_write_sdu(uint64_t             dst_addr,
 
         dt_pci.dst_addr = dst_addr;
         dt_pci.qc       = qc;
-        dt_pci.fd       = np1_fd;
+        dt_pci.eid      = np1_fd;
 
         if (dt_pci_ser(sdb, &dt_pci)) {
                 log_err("Failed to serialize PDU.");

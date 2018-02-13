@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Protocol Control Information of Data Transfer AE
+ * Protocol Control Information of Data Transfer Component
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -32,29 +32,27 @@
 
 /* Abstract syntax */
 enum dtp_fields {
-        DTP_DST = 0,   /* DST ADDRESS */
-        DTP_QOS,       /* QOS ID      */
-        DTP_DFD,       /* DEST FD     */
-        DTP_TTL,       /* TTL FIELD   */
-        DTP_NUM_FIELDS /* number of fields */
+        DTP_DST = 0,   /* DST ADDRESS      */
+        DTP_QOS,       /* QOS ID           */
+        DTP_DEID,      /* DST Endpoint ID  */
+        DTP_TTL,       /* TTL FIELD        */
+        DTP_NUM_FIELDS /* Number of fields */
 };
 
-/* Default field lengths */
+/* Fixed field lengths */
 #define TTL_LEN 1
 #define QOS_LEN 1
-#define DFD_LEN 1
-#define DST_LEN 2
 
 struct dt_pci {
         uint64_t  dst_addr;
         qoscube_t qc;
         uint8_t   ttl;
-        uint32_t  fd;
+        uint32_t  eid;
 };
 
 int   dt_pci_init(uint8_t addr_size,
-                  uint8_t fd_size,
-                  bool    has_ttl);
+                  uint8_t eid_size,
+                  uint8_t max_ttl);
 
 void  dt_pci_fini(void);
 

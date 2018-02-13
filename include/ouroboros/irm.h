@@ -29,8 +29,8 @@
 #include <sys/types.h>
 
 /* Normal IPCP components. */
-#define DT_AE   "Data Transfer"
-#define MGMT_AE "Management"
+#define DT_COMP   "Data Transfer"
+#define MGMT_COMP "Management"
 
 /* Name binding options. */
 #define BIND_AUTO   0x01
@@ -47,7 +47,7 @@ ssize_t irm_list_ipcps(const char * name,
                        pid_t **     pids);
 
 int     irm_enroll_ipcp(pid_t        pid,
-                        const char * dif_name);
+                        const char * layer_name);
 
 int     irm_bootstrap_ipcp(pid_t                      pid,
                            const struct ipcp_config * conf);
@@ -76,11 +76,11 @@ int     irm_unbind_process(pid_t        pid,
                            const char * name);
 
 int     irm_reg(const char *  name,
-                char **       difs,
+                char **       layers,
                 size_t        len);
 
 int     irm_unreg(const char * name,
-                  char **      difs,
+                  char **      layers,
                   size_t       len);
 
 __END_DECLS

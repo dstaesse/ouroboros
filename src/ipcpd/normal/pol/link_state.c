@@ -36,7 +36,7 @@
 #include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
 
-#include "ae.h"
+#include "comp.h"
 #include "connmgr.h"
 #include "graph.h"
 #include "ipcp.h"
@@ -543,7 +543,7 @@ static void * ls_conn_handle(void * o)
         (void) o;
 
         while (true) {
-                if (connmgr_wait(AEID_MGMT, &conn)) {
+                if (connmgr_wait(COMPID_MGMT, &conn)) {
                         log_err("Failed to get next MGMT connection.");
                         continue;
                 }
@@ -751,7 +751,7 @@ int link_state_init(enum pol_routing pr)
 
         memset(&info, 0, sizeof(info));
 
-        strcpy(info.ae_name, LS_AE);
+        strcpy(info.comp_name, LS_COMP);
         strcpy(info.protocol, LS_PROTO);
         info.pref_version = 1;
         info.pref_syntax  = PROTO_GPB;
@@ -781,8 +781,8 @@ int link_state_init(enum pol_routing pr)
         if (pthread_mutex_init(&ls.routing_i_lock, NULL))
                 goto fail_routing_i_lock_init;
 
-        if (connmgr_ae_init(AEID_MGMT, &info))
-                goto fail_connmgr_ae_init;
+        if (connmgr_comp_init(COMPID_MGMT, &info))
+                goto fail_connmgr_comp_init;
 
         ls.mgmt_set = fset_create();
         if (ls.mgmt_set == NULL)
@@ -817,8 +817,8 @@ int link_state_init(enum pol_routing pr)
  fail_pthread_create_lsupdate:
         fset_destroy(ls.mgmt_set);
  fail_fset_create:
-        connmgr_ae_fini(AEID_MGMT);
- fail_connmgr_ae_init:
+        connmgr_comp_fini(COMPID_MGMT);
+ fail_connmgr_comp_init:
         pthread_mutex_destroy(&ls.routing_i_lock);
  fail_routing_i_lock_init:
         pthread_rwlock_destroy(&ls.db_lock);
@@ -848,7 +848,7 @@ void link_state_fini(void)
 
         fset_destroy(ls.mgmt_set);
 
-        connmgr_ae_fini(AEID_MGMT);
+        connmgr_comp_fini(COMPID_MGMT);
 
         graph_destroy(ls.graph);
 

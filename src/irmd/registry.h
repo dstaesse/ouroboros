@@ -56,7 +56,7 @@ struct reg_entry {
         char *              name;
 
         /* layers in which this name is registered */
-        struct list_head    difs;
+        struct list_head    layers;
         /* Programs that can be instantiated by the irmd */
         struct list_head    reg_progs;
         /* Processes that are listening for this name */
@@ -119,14 +119,14 @@ struct reg_entry *  registry_get_entry_by_hash(struct list_head * registry,
                                                const uint8_t *    hash,
                                                size_t             len);
 
-int                 registry_add_name_to_dif(struct list_head * registry,
-                                             const char *       name,
-                                             const char *       dif_name,
-                                             enum ipcp_type     type);
-
-void                registry_del_name_from_dif(struct list_head * registry,
+int                 registry_add_name_to_layer(struct list_head * registry,
                                                const char *       name,
-                                               const char *       dif_name);
+                                               const char *       layer_name,
+                                               enum ipcp_type     type);
+
+void                registry_del_name_from_layer(struct list_head * registry,
+                                                 const char *       name,
+                                                 const char *       layer_name);
 
 void                registry_destroy(struct list_head * registry);
 

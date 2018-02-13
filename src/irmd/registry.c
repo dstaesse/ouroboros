@@ -42,9 +42,9 @@
 #include <limits.h>
 #include <assert.h>
 
-struct reg_dif {
+struct reg_layer {
         struct list_head next;
-        char *           dif_name;
+        char *           layer_name;
         enum ipcp_type   type;
 };
 
@@ -69,7 +69,7 @@ static int reg_entry_init(struct reg_entry * e,
                 return -1;
 
         list_head_init(&e->next);
-        list_head_init(&e->difs);
+        list_head_init(&e->layers);
         list_head_init(&e->reg_progs);
         list_head_init(&e->reg_pids);
 
@@ -121,10 +121,10 @@ static void cancel_reg_entry_destroy(void * o)
                 free(a);
         }
 
-        list_for_each_safe(p, h, &e->difs) {
-                struct reg_dif * d = list_entry(p, struct reg_dif, next);
+        list_for_each_safe(p, h, &e->layers) {
+                struct reg_layer * d = list_entry(p, struct reg_layer, next);
                 list_del(&d->next);
-                free(d->dif_name);
+                free(d->layer_name);
                 free(d);
         }
 
@@ -158,57 +158,57 @@ static void reg_entry_destroy(struct reg_entry * e)
         pthread_cleanup_pop(true);
 }
 
-static bool reg_entry_is_local_in_dif(struct reg_entry * e,
-                                      const char *       dif_name)
+static bool reg_entry_is_local_in_layer(struct reg_entry * e,
+                                        const char *       layer_name)
 {
         struct list_head * p = NULL;
 
-        list_for_each(p, &e->difs) {
-                struct reg_dif * d = list_entry(p, struct reg_dif, next);
-                if (!strcmp(dif_name, d->dif_name))
+        list_for_each(p, &e->layers) {
+                struct reg_layer * d = list_entry(p, struct reg_layer, next);
+                if (!strcmp(layer_name, d->layer_name))
                         return true;
         }
 
         return false;
 }
 
-static int reg_entry_add_local_in_dif(struct reg_entry * e,
-                                      const char *       dif_name,
-                                      enum ipcp_type     type)
+static int reg_entry_add_local_in_layer(struct reg_entry * e,
+                                        const char *       layer_name,
+                                        enum ipcp_type     type)
 {
-        struct reg_dif * rdn;
+        struct reg_layer * rdn;
 
         /* already registered. Is ok */
-        if (reg_entry_is_local_in_dif(e, dif_name))
+        if (reg_entry_is_local_in_layer(e, layer_name))
                 return 0;
 
         rdn = malloc(sizeof(*rdn));
         if (rdn == NULL)
                 return -1;
 
-        rdn->dif_name = strdup(dif_name);
-        if (rdn->dif_name == NULL) {
+        rdn->layer_name = strdup(layer_name);
+        if (rdn->layer_name == NULL) {
                 free(rdn);
                 return -1;
         }
 
         rdn->type = type;
-        list_add(&rdn->next, &e->difs);
+        list_add(&rdn->next, &e->layers);
 
         return 0;
 }
 
-static void reg_entry_del_local_from_dif(struct reg_entry * e,
-                                         const char *       dif_name)
+static void reg_entry_del_local_from_layer(struct reg_entry * e,
+                                           const char *       layer_name)
 {
         struct list_head * p = NULL;
         struct list_head * h = NULL;
 
-        list_for_each_safe(p, h, &e->difs) {
-                struct reg_dif * d = list_entry(p, struct reg_dif, next);
-                if (!strcmp(dif_name, d->dif_name)) {
+        list_for_each_safe(p, h, &e->layers) {
+                struct reg_layer * d = list_entry(p, struct reg_layer, next);
+                if (!strcmp(layer_name, d->layer_name)) {
                         list_del(&d->next);
-                        free(d->dif_name);
+                        free(d->layer_name);
                         free(d);
                 }
         }
@@ -637,27 +637,27 @@ void registry_del_process(struct list_head * registry,
         return;
 }
 
-int registry_add_name_to_dif(struct list_head * registry,
-                             const char *       name,
-                             const char *       dif_name,
-                             enum ipcp_type     type)
+int registry_add_name_to_layer(struct list_head * registry,
+                               const char *       name,
+                               const char *       layer_name,
+                               enum ipcp_type     type)
 {
         struct reg_entry * re = registry_get_entry(registry, name);
         if (re == NULL)
                 return -1;
 
-        return reg_entry_add_local_in_dif(re, dif_name, type);
+        return reg_entry_add_local_in_layer(re, layer_name, type);
 }
 
-void registry_del_name_from_dif(struct list_head * registry,
-                                const char *       name,
-                                const char *       dif_name)
+void registry_del_name_from_layer(struct list_head * registry,
+                                  const char *       name,
+                                  const char *       layer_name)
 {
         struct reg_entry * re = registry_get_entry(registry, name);
         if (re == NULL)
                 return;
 
-        reg_entry_del_local_from_dif(re, dif_name);
+        reg_entry_del_local_from_layer(re, layer_name);
 }
 
 void registry_destroy(struct list_head * registry)

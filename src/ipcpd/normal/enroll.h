@@ -25,7 +25,7 @@
 
 #include <ouroboros/ipcp.h>
 
-#include "ae.h"
+#include "comp.h"
 
 int                  enroll_init(void);
 

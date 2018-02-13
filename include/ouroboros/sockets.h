@@ -27,7 +27,7 @@
 
 #include "ipcp_config.pb-c.h"
 typedef IpcpConfigMsg ipcp_config_msg_t;
-typedef DifInfoMsg dif_info_msg_t;
+typedef LayerInfoMsg layer_info_msg_t;
 
 #include "irmd_messages.pb-c.h"
 typedef IrmMsg irm_msg_t;

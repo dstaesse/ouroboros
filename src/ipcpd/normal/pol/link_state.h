@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H
 #define OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H
 
-#define LS_AE    "Management"
+#define LS_COMP  "Management"
 #define LS_PROTO "LSP"
 
 #include "pol-routing-ops.h"

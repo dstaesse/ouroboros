@@ -34,13 +34,13 @@ pid_t ipcp_create(const char *   name,
 
 int   ipcp_destroy(pid_t pid);
 
-int   ipcp_enroll(pid_t             pid,
-                  const char *      dst,
-                  struct dif_info * info);
+int   ipcp_enroll(pid_t               pid,
+                  const char *        dst,
+                  struct layer_info * info);
 
 int   ipcp_bootstrap(pid_t               pid,
                      ipcp_config_msg_t * conf,
-                     struct dif_info *   info);
+                     struct layer_info * info);
 
 int   ipcp_connect(pid_t        pid,
                    const char * dst,

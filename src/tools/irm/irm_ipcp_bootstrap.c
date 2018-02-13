@@ -62,8 +62,9 @@
 #define SHA3_512               "SHA3_512"
 
 #define DEFAULT_ADDR_SIZE      4
-#define DEFAULT_FD_SIZE        2
+#define DEFAULT_EID_SIZE       2
 #define DEFAULT_DDNS           0
+#define DEFAULT_TTL            60
 #define DEFAULT_ADDR_AUTH      ADDR_AUTH_FLAT_RANDOM
 #define DEFAULT_ROUTING        ROUTING_LINK_STATE
 #define DEFAULT_PFF            PFF_SIMPLE
@@ -76,7 +77,7 @@
 
 static void usage(void)
 {
-        /* FIXME: Add ipcp_config stuff */
+        /* FIXME: Add ipcp_config stuff. */
         printf("Usage: irm ipcp bootstrap\n"
                "                name <ipcp name>\n"
                "                layer <layer name>\n"
@@ -85,8 +86,8 @@ static void usage(void)
                UDP " " ETH_LLC " " RAPTOR "},\n\n"
                "if TYPE == " NORMAL "\n"
                "                [addr <address size> (default: %d)]\n"
-               "                [fd <fd size> (default: %d)]\n"
-               "                [ttl (add time to live value in the PCI)]\n"
+               "                [eid <eid size> (default: %d)]\n"
+               "                [ttl (max time-to-live value, default: %d)]\n"
                "                [addr_auth <ADDRESS_POLICY> (default: %s)]\n"
                "                [routing <ROUTING_POLICY> (default: %s)]\n"
                "                [pff [PFF_POLICY] (default: %s)]\n"
@@ -115,9 +116,9 @@ static void usage(void)
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n",
-               DEFAULT_ADDR_SIZE, DEFAULT_FD_SIZE, FLAT_RANDOM_ADDR_AUTH,
-               LINK_STATE_ROUTING, SIMPLE_PFF, SHA3_256, SHA3_256, SHA3_256,
-               SHA3_256);
+               DEFAULT_ADDR_SIZE, DEFAULT_EID_SIZE, DEFAULT_TTL,
+               FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING, SIMPLE_PFF,
+               SHA3_256, SHA3_256, SHA3_256, SHA3_256);
 }
 
 int do_bootstrap_ipcp(int     argc,
@@ -127,8 +128,8 @@ int do_bootstrap_ipcp(int     argc,
         pid_t              pid;
         struct ipcp_config conf;
         uint8_t            addr_size      = DEFAULT_ADDR_SIZE;
-        uint8_t            fd_size        = DEFAULT_FD_SIZE;
-        bool               has_ttl        = false;
+        uint8_t            eid_size       = DEFAULT_EID_SIZE;
+        uint8_t            max_ttl        = DEFAULT_TTL;
         enum pol_addr_auth addr_auth_type = DEFAULT_ADDR_AUTH;
         enum pol_routing   routing_type   = DEFAULT_ROUTING;
         enum pol_pff       pff_type       = DEFAULT_PFF;
@@ -136,7 +137,7 @@ int do_bootstrap_ipcp(int     argc,
         uint32_t           ip_addr        = 0;
         uint32_t           dns_addr       = DEFAULT_DDNS;
         char *             ipcp_type      = NULL;
-        char *             dif_name       = NULL;
+        char *             layer_name     = NULL;
         char *             if_name        = NULL;
         pid_t *            pids           = NULL;
         ssize_t            len            = 0;
@@ -149,7 +150,7 @@ int do_bootstrap_ipcp(int     argc,
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
-                        dif_name = *(argv + 1);
+                        layer_name = *(argv + 1);
                 } else if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                 } else if (matches(*argv, "hash") == 0) {
@@ -173,11 +174,10 @@ int do_bootstrap_ipcp(int     argc,
                         if_name = *(argv + 1);
                 } else if (matches(*argv, "addr") == 0) {
                         addr_size = atoi(*(argv + 1));
-                } else if (matches(*argv, "fd") == 0) {
-                        fd_size = atoi(*(argv + 1));
+                } else if (matches(*argv, "eid") == 0) {
+                        eid_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "ttl") == 0) {
-                        has_ttl = true;
-                        cargs = 1;
+                        max_ttl = atoi(*(argv + 1));
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
@@ -210,23 +210,23 @@ int do_bootstrap_ipcp(int     argc,
                 argv += cargs;
         }
 
-        if (name == NULL || dif_name == NULL || ipcp_type == NULL) {
+        if (name == NULL || layer_name == NULL || ipcp_type == NULL) {
                 usage();
                 return -1;
         }
 
-        strcpy(conf.dif_info.dif_name, dif_name);
+        strcpy(conf.layer_info.layer_name, layer_name);
         if (strcmp(ipcp_type, UDP) != 0)
-                conf.dif_info.dir_hash_algo = hash_algo;
+                conf.layer_info.dir_hash_algo = hash_algo;
 
         if (strcmp(ipcp_type, NORMAL) == 0) {
-                conf.type = IPCP_NORMAL;
-                conf.addr_size = addr_size;
-                conf.fd_size = fd_size;
-                conf.has_ttl = has_ttl;
+                conf.type           = IPCP_NORMAL;
+                conf.addr_size      = addr_size;
+                conf.eid_size       = eid_size;
+                conf.max_ttl        = max_ttl;
                 conf.addr_auth_type = addr_auth_type;
-                conf.routing_type = routing_type;
-                conf.pff_type = pff_type;
+                conf.routing_type   = routing_type;
+                conf.pff_type       = pff_type;
         } else if (strcmp(ipcp_type, UDP) == 0) {
                 conf.type = IPCP_UDP;
                 if (ip_addr == 0) {
@@ -271,8 +271,9 @@ int do_bootstrap_ipcp(int     argc,
                         return -1;
                 }
 
-                if (autobind && irm_bind_process(pids[i], dif_name)) {
-                        printf("Failed to bind %d to %s.\n", pids[i], dif_name);
+                if (autobind && irm_bind_process(pids[i], layer_name)) {
+                        printf("Failed to bind %d to %s.\n",
+                               pids[i], layer_name);
                         irm_unbind_process(pids[i], name);
                         free(pids);
                         return -1;
@@ -281,7 +282,7 @@ int do_bootstrap_ipcp(int     argc,
                 if (irm_bootstrap_ipcp(pids[i], &conf)) {
                         if (autobind) {
                                 irm_unbind_process(pids[i], name);
-                                irm_unbind_process(pids[i], dif_name);
+                                irm_unbind_process(pids[i], layer_name);
                         }
                         free(pids);
                         return -1;

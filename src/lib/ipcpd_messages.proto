@@ -39,16 +39,16 @@ enum ipcp_msg_code {
 };
 
 message ipcp_msg {
-        required ipcp_msg_code code    =  1;
-        optional string name           =  2;
-        optional bytes hash            =  3;
-        optional int32 port_id         =  4;
-        optional string dst_name       =  5;
-        optional uint32 qoscube        =  6;
-        optional ipcp_config_msg conf  =  7;
-        optional int32 pid             =  8;
-        optional dif_info_msg dif_info =  9;
-        optional int32 response        = 10;
-        optional string comp_name      = 11;
-        optional int32 result          = 12;
+        required ipcp_msg_code code        =  1;
+        optional string name               =  2;
+        optional bytes hash                =  3;
+        optional int32 port_id             =  4;
+        optional string dst_name           =  5;
+        optional uint32 qoscube            =  6;
+        optional ipcp_config_msg conf      =  7;
+        optional int32 pid                 =  8;
+        optional layer_info_msg layer_info =  9;
+        optional int32 response            = 10;
+        optional string comp_name          = 11;
+        optional int32 result              = 12;
 };

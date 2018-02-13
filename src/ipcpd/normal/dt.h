@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Data Transfer AE
+ * Data Transfer component
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -28,15 +28,15 @@
 
 #include "dt_pci.h"
 
-#define DT_AE        "Data Transfer"
+#define DT_COMP      "Data Transfer"
 #define DT_PROTO     "dtp"
 #define INVALID_ADDR 0
 
 int  dt_init(enum pol_routing pr,
              enum pol_pff     pp,
              uint8_t          addr_size,
-             uint8_t          fd_size,
-             bool             has_ttl
+             uint8_t          eid_size,
+             uint8_t          max_ttl
 );
 
 void dt_fini(void);
@@ -45,8 +45,8 @@ int  dt_start(void);
 
 void dt_stop(void);
 
-int  dt_reg_ae(void * ae,
-               void (* func)(void * ae, struct shm_du_buff * sdb));
+int  dt_reg_comp(void * comp,
+                 void (* func)(void * comp, struct shm_du_buff * sdb));
 
 int  dt_write_sdu(uint64_t             dst_addr,
                   qoscube_t            qc,

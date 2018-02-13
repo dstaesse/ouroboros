@@ -58,17 +58,17 @@ static void usage(void)
 
 int do_unregister(int argc, char ** argv)
 {
-        char * difs[MAX_LAYERS];
-        size_t difs_len = 0;
+        char * layers[MAX_LAYERS];
+        size_t layers_len = 0;
         char * name = NULL;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
-                        difs[difs_len++] = *(argv + 1);
-                        if (difs_len > MAX_LAYERS) {
-                                printf("Too many difs specified\n");
+                        layers[layers_len++] = *(argv + 1);
+                        if (layers_len > MAX_LAYERS) {
+                                printf("Too many layers specified\n");
                                 return -1;
                         }
                 } else {
@@ -81,10 +81,10 @@ int do_unregister(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (difs_len == 0 || name == NULL) {
+        if (layers_len == 0 || name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_unreg(name, difs, difs_len);
+        return irm_unreg(name, layers, layers_len);
 }

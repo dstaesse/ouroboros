@@ -44,8 +44,8 @@ enum ipcp_state {
 struct ipcp_ops {
         int   (* ipcp_bootstrap)(const struct ipcp_config * conf);
 
-        int   (* ipcp_enroll)(const char *      dst,
-                              struct dif_info * info);
+        int   (* ipcp_enroll)(const char *        dst,
+                              struct layer_info * info);
 
         int   (* ipcp_connect)(const char * dst,
                                const char * component);
@@ -77,7 +77,7 @@ struct ipcp {
         char *             name;
 
         enum ipcp_type     type;
-        char *             dif_name;
+        char *             layer_name;
 
         uint64_t           dt_addr;
 

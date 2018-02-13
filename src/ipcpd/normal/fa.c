@@ -88,7 +88,7 @@ static void destroy_conn(int fd)
         fa.r_addr[fd] = INVALID_ADDR;
 }
 
-static void fa_post_sdu(void *               ae,
+static void fa_post_sdu(void *               comp,
                         struct shm_du_buff * sdb)
 {
         struct timespec ts  = {0, TIMEOUT * 1000};
@@ -97,9 +97,9 @@ static void fa_post_sdu(void *               ae,
         uint8_t *       buf;
         struct fa_msg * msg;
 
-        (void) ae;
+        (void) comp;
 
-        assert(ae == &fa);
+        assert(comp == &fa);
         assert(sdb);
 
         buf = malloc(sizeof(*msg) + ipcp_dir_hash_len());
@@ -195,7 +195,7 @@ int fa_init(void)
         if (pthread_rwlock_init(&fa.flows_lock, NULL))
                 return -1;
 
-        fa.fd = dt_reg_ae(&fa, &fa_post_sdu);
+        fa.fd = dt_reg_comp(&fa, &fa_post_sdu);
 
         return 0;
 }

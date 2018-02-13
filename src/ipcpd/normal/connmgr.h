@@ -26,7 +26,7 @@
 #include <ouroboros/cacep.h>
 #include <ouroboros/qos.h>
 
-#include "ae.h"
+#include "comp.h"
 
 #define NOTIFY_DT_CONN_ADD    0x00D0
 #define NOTIFY_DT_CONN_DEL    0x00D1
@@ -45,10 +45,10 @@ int         connmgr_start(void);
 
 void        connmgr_stop(void);
 
-int         connmgr_ae_init(enum ae_id               id,
-                            const struct conn_info * info);
+int         connmgr_comp_init(enum comp_id             id,
+                              const struct conn_info * info);
 
-void        connmgr_ae_fini(enum ae_id id);
+void        connmgr_comp_fini(enum comp_id id);
 
 int         connmgr_ipcp_connect(const char * dst,
                                  const char * component);
@@ -56,15 +56,15 @@ int         connmgr_ipcp_connect(const char * dst,
 int         connmgr_ipcp_disconnect(const char * dst,
                                     const char * component);
 
-int         connmgr_alloc(enum ae_id    id,
+int         connmgr_alloc(enum comp_id  id,
                           const char *  dst,
                           qosspec_t *   qs,
                           struct conn * conn);
 
-int         connmgr_dealloc(enum ae_id    id,
+int         connmgr_dealloc(enum comp_id  id,
                             struct conn * conn);
 
-int         connmgr_wait(enum ae_id    id,
+int         connmgr_wait(enum comp_id  id,
                          struct conn * conn);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_CONNMGR_H */

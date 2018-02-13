@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Application Entities for the normal IPC process
+ * Components for the normal IPC process
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_AE_H
-#define OUROBOROS_IPCPD_NORMAL_AE_H
+#ifndef OUROBOROS_IPCPD_NORMAL_COMP_H
+#define OUROBOROS_IPCPD_NORMAL_COMP_H
 
 #include <ouroboros/cacep.h>
 
@@ -29,11 +29,11 @@
 
 #define DST_MAX_STRLEN 64
 
-enum ae_id {
-        AEID_DT = 0,
-        AEID_ENROLL,
-        AEID_MGMT,
-        AEID_MAX
+enum comp_id {
+        COMPID_DT = 0,
+        COMPID_ENROLL,
+        COMPID_MGMT,
+        COMPID_MAX
 };
 
 struct conn {
@@ -45,4 +45,4 @@ struct conn {
         } flow_info;
 };
 
-#endif /* OUROBOROS_IPCPD_NORMAL_AE_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_COMP_H */

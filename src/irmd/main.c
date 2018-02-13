@@ -82,7 +82,7 @@ struct ipcp_entry {
         pid_t            pid;
         enum ipcp_type   type;
         enum hash_algo   dir_hash_algo;
-        char *           dif_name;
+        char *           layer_name;
 
         enum init_state  init_state;
         pthread_cond_t   init_cond;
@@ -202,8 +202,8 @@ static struct ipcp_entry * ipcp_entry_create(void)
         if (e == NULL)
                 return NULL;
 
-        e->name = NULL;
-        e->dif_name = NULL;
+        e->name       = NULL;
+        e->layer_name = NULL;
 
         list_head_init(&e->next);
 
@@ -224,8 +224,8 @@ static void ipcp_entry_destroy(struct ipcp_entry * e)
         if (e->name != NULL)
                 free(e->name);
 
-        if (e->dif_name != NULL)
-                free(e->dif_name);
+        if (e->layer_name != NULL)
+                free(e->layer_name);
 
         free(e);
 }
@@ -268,7 +268,7 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
 
         list_for_each_safe(p, h, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->dif_name == NULL || e->pid == src)
+                if (e->layer_name == NULL || e->pid == src)
                         continue;
 
                 hash = malloc(IPCP_HASH_LEN(e));
@@ -361,7 +361,7 @@ static pid_t create_ipcp(char *         name,
         pthread_mutex_init(&tmp->init_lock, NULL);
 
         tmp->pid           = ppid->pid;
-        tmp->dif_name      = NULL;
+        tmp->layer_name    = NULL;
         tmp->type          = ipcp_type;
         tmp->init_state    = IPCP_BOOT;
         tmp->dir_hash_algo = -1;
@@ -477,7 +477,7 @@ static int bootstrap_ipcp(pid_t               pid,
                           ipcp_config_msg_t * conf)
 {
         struct ipcp_entry * entry = NULL;
-        struct dif_info     info;
+        struct layer_info   info;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -500,8 +500,8 @@ static int bootstrap_ipcp(pid_t               pid,
                 return -1;
         }
 
-        entry->dif_name = strdup(info.dif_name);
-        if (entry->dif_name == NULL) {
+        entry->layer_name = strdup(info.layer_name);
+        if (entry->layer_name == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Failed to set name of layer.");
                 return -ENOMEM;
@@ -512,7 +512,7 @@ static int bootstrap_ipcp(pid_t               pid,
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Bootstrapped IPCP %d in layer %s.",
-                 pid, conf->dif_info->dif_name);
+                 pid, conf->layer_info->layer_name);
 
         return 0;
 }
@@ -521,7 +521,7 @@ static int enroll_ipcp(pid_t  pid,
                        char * dst_name)
 {
         struct ipcp_entry * entry = NULL;
-        struct dif_info     info;
+        struct layer_info   info;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -532,7 +532,7 @@ static int enroll_ipcp(pid_t  pid,
                 return -1;
         }
 
-        if (entry->dif_name != NULL) {
+        if (entry->layer_name != NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("IPCP in wrong state");
                 return -1;
@@ -554,10 +554,10 @@ static int enroll_ipcp(pid_t  pid,
                 return -1;
         }
 
-        entry->dif_name = strdup(info.dif_name);
-        if (entry->dif_name == NULL) {
+        entry->layer_name = strdup(info.layer_name);
+        if (entry->layer_name == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Failed to strdup dif_name.");
+                log_err("Failed to strdup layer_name.");
                 return -ENOMEM;
         }
 
@@ -566,7 +566,7 @@ static int enroll_ipcp(pid_t  pid,
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Enrolled IPCP %d in layer %s.",
-                 pid, info.dif_name);
+                 pid, info.layer_name);
 
         return 0;
 }
@@ -873,7 +873,7 @@ static ssize_t list_ipcps(char *   name,
 }
 
 static int name_reg(const char *  name,
-                    char **       difs,
+                    char **       layers,
                     size_t        len)
 {
         size_t i;
@@ -882,8 +882,8 @@ static int name_reg(const char *  name,
 
         assert(name);
         assert(len);
-        assert(difs);
-        assert(difs[0]);
+        assert(layers);
+        assert(layers[0]);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -929,7 +929,7 @@ static int name_reg(const char *  name,
 
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->dif_name == NULL)
+                if (e->layer_name == NULL)
                         continue;
 
                 for (i = 0; i < len; ++i) {
@@ -937,7 +937,7 @@ static int name_reg(const char *  name,
                         pid_t     pid;
                         size_t    len;
 
-                        if (wildcard_match(difs[i], e->dif_name))
+                        if (wildcard_match(layers[i], e->layer_name))
                                 continue;
 
                         hash = malloc(IPCP_HASH_LEN(e));
@@ -962,15 +962,15 @@ static int name_reg(const char *  name,
 
                         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-                        if (registry_add_name_to_dif(&irmd.registry,
-                                                     name,
-                                                     e->dif_name,
-                                                     e->type) < 0)
+                        if (registry_add_name_to_layer(&irmd.registry,
+                                                       name,
+                                                       e->layer_name,
+                                                       e->type) < 0)
                                 log_warn("Registered unbound name %s. "
                                          "Registry may be corrupt.",
                                          name);
                         log_info("Registered %s in %s as " HASH_FMT ".",
-                                 name, e->dif_name, HASH_VAL(hash));
+                                 name, e->layer_name, HASH_VAL(hash));
                         ++ret;
 
                         free(hash);
@@ -983,7 +983,7 @@ static int name_reg(const char *  name,
 }
 
 static int name_unreg(const char *  name,
-                      char **       difs,
+                      char **       layers,
                       size_t        len)
 {
         size_t i;
@@ -992,8 +992,8 @@ static int name_unreg(const char *  name,
 
         assert(name);
         assert(len);
-        assert(difs);
-        assert(difs[0]);
+        assert(layers);
+        assert(layers[0]);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -1001,7 +1001,7 @@ static int name_unreg(const char *  name,
                 struct ipcp_entry * e =
                         list_entry(pos, struct ipcp_entry, next);
 
-                if (e->dif_name == NULL)
+                if (e->layer_name == NULL)
                         continue;
 
                 for (i = 0; i < len; ++i) {
@@ -1009,7 +1009,7 @@ static int name_unreg(const char *  name,
                         pid_t     pid;
                         size_t    len;
 
-                        if (wildcard_match(difs[i], e->dif_name))
+                        if (wildcard_match(layers[i], e->layer_name))
                                 continue;
 
                         hash = malloc(IPCP_HASH_LEN(e));
@@ -1033,11 +1033,11 @@ static int name_unreg(const char *  name,
 
                         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-                        registry_del_name_from_dif(&irmd.registry,
-                                                   name,
-                                                   e->dif_name);
+                        registry_del_name_from_layer(&irmd.registry,
+                                                     name,
+                                                     e->layer_name);
                         log_info("Unregistered %s from %s.",
-                                 name, e->dif_name);
+                                 name, e->layer_name);
                         ++ret;
 
                         free(hash);
@@ -1952,7 +1952,7 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IRM_ENROLL_IPCP:
                         ret_msg.has_result = true;
                         ret_msg.result = enroll_ipcp(msg->pid,
-                                                     msg->dif_name[0]);
+                                                     msg->layer_name[0]);
                         break;
                 case IRM_MSG_CODE__IRM_CONNECT_IPCP:
                         ret_msg.has_result = true;
@@ -2001,14 +2001,14 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IRM_REG:
                         ret_msg.has_result = true;
                         ret_msg.result = name_reg(msg->dst_name,
-                                                  msg->dif_name,
-                                                  msg->n_dif_name);
+                                                  msg->layer_name,
+                                                  msg->n_layer_name);
                         break;
                 case IRM_MSG_CODE__IRM_UNREG:
                         ret_msg.has_result = true;
                         ret_msg.result = name_unreg(msg->dst_name,
-                                                    msg->dif_name,
-                                                    msg->n_dif_name);
+                                                    msg->layer_name,
+                                                    msg->n_layer_name);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                         ret_msg.has_result = true;
