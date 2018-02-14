@@ -36,18 +36,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ouroboros/dev.h>
-#include <ouroboros/fccntl.h>
-#include <ouroboros/time_utils.h>
-
-#include <signal.h>
-#include <stdlib.h>
-#include <sys/time.h>
-#include <arpa/inet.h>
-#include <math.h>
-#include <errno.h>
-#include <float.h>
-
 volatile bool stop;
 
 void shutdown_client(int signo, siginfo_t * info, void * c)
@@ -88,12 +76,12 @@ void * reader(void * o)
                 if (msg_len < 0)
                         continue;
 
-                if (ntoh32(msg->type) != ECHO_REPLY) {
+                if (ntohl(msg->type) != ECHO_REPLY) {
                         printf("Invalid message on fd %d.\n", fd);
                         continue;
                 }
 
-                if (ntoh32(msg->id) >= client.count) {
+                if ((uint32_t) ntohl(msg->id) >= client.count) {
                         printf("Invalid id.\n");
                         continue;
                 }
@@ -102,8 +90,8 @@ void * reader(void * o)
 
                 clock_gettime(CLOCK_MONOTONIC, &now);
 
-                sent.tv_sec = ntoh64(msg->tv_sec);
-                sent.tv_nsec = ntoh64(msg->tv_nsec);
+                sent.tv_sec = msg->tv_sec;
+                sent.tv_nsec = msg->tv_nsec;
 
                 ms = ts_diff_us(&sent, &now) / 1000.0;
 
@@ -155,10 +143,10 @@ void * writer(void * o)
 
                 clock_gettime(CLOCK_MONOTONIC, &now);
 
-                msg->type = hton32(ECHO_REQUEST);
-                msg->id = hton32(client.sent++);
-                msg->tv_sec = hton64(now.tv_sec);
-                msg->tv_nsec = hton64(now.tv_nsec);
+                msg->type = htonl(ECHO_REQUEST);
+                msg->id = htonl(client.sent++);
+                msg->tv_sec = now.tv_sec;
+                msg->tv_nsec = now.tv_nsec;
 
                 if (flow_write(*fdp, buf, client.size) == -1) {
                         printf("Failed to send SDU.\n");

@@ -36,10 +36,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdlib.h>
-#include <signal.h>
-#include <arpa/inet.h>
-
 void shutdown_server(int signo, siginfo_t * info, void * c)
 {
         (void) info;

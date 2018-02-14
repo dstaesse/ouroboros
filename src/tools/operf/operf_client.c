@@ -36,18 +36,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ouroboros/dev.h>
-#include <ouroboros/fccntl.h>
-#include <ouroboros/time_utils.h>
-
-#include <signal.h>
-#include <stdlib.h>
-#include <sys/time.h>
-#include <arpa/inet.h>
-#include <math.h>
-#include <errno.h>
-#include <float.h>
-
 static void busy_wait_until(const struct timespec * deadline)
 {
         struct timespec now;

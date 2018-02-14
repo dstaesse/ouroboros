@@ -48,14 +48,14 @@
 
 #define BUF_SIZE 1500
 
-#include "cbr_client.c"
+#include "ocbr_client.c"
 
 struct s {
         long interval;
         long timeout;
 } server_settings;
 
-#include "cbr_server.c"
+#include "ocbr_server.c"
 
 static void usage(void)
 {

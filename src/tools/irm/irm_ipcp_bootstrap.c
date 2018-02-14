@@ -44,7 +44,6 @@
 #include <sys/socket.h>
 #endif
 #include <ouroboros/irm.h>
-#include <ouroboros/ipcp.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"

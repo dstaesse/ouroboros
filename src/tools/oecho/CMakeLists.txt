@@ -6,11 +6,11 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(SOURCE_FILES
   # Add source files here
-  cbr.c
+  oecho.c
   )
 
-add_executable(cbr ${SOURCE_FILES})
+add_executable(oecho ${SOURCE_FILES})
 
-target_link_libraries(cbr LINK_PUBLIC ouroboros-dev)
+target_link_libraries(oecho LINK_PUBLIC ouroboros-dev)
 
-install(TARGETS cbr RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS oecho RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

@@ -1,5 +1,5 @@
 add_subdirectory(irm)
-add_subdirectory(echo)
-add_subdirectory(cbr)
+add_subdirectory(ocbr)
+add_subdirectory(oecho)
 add_subdirectory(oping)
 add_subdirectory(operf)
