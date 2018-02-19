@@ -29,6 +29,7 @@
 #include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
 
+#include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -155,9 +156,11 @@ static int rib_readdir(const char *            path,
                         ssize_t           i;
                         struct reg_comp * c;
                         c = list_entry(p, struct reg_comp, next);
-                        if (strcmp(path + 1, c->path) == 0)
-                                if (c->ops->readdir == NULL)
-                                        break;
+
+                        if (strcmp(path + 1, c->path) != 0)
+                                continue;
+
+                        assert(c->ops->readdir != NULL);
 
                         len = c->ops->readdir(&dir_entries);
                         if (len < 0)
@@ -173,49 +176,70 @@ static int rib_readdir(const char *            path,
         return 0;
 }
 
+static size_t __getattr(const char *  path,
+                        struct stat * st)
+{
+        struct list_head * p;
+        char               comp[RIB_PATH_LEN + 1];
+        char *             c;
+
+        strcpy(comp, path + 1);
+
+        c = strstr(comp, "/");
+
+        if (c != NULL)
+                *c = '\0';
+
+        pthread_rwlock_rdlock(&rib.lock);
+
+        list_for_each(p, &rib.reg_comps) {
+                struct reg_comp * r = list_entry(p, struct reg_comp, next);
+                if (strcmp(comp, r->path) == 0) {
+                        size_t ret = r->ops->getattr(c + 1, st);
+                        pthread_rwlock_unlock(&rib.lock);
+                        return ret;
+                }
+        }
+
+        pthread_rwlock_unlock(&rib.lock);
+
+        return -1;
+}
+
 static int rib_getattr(const char *  path,
                        struct stat * st)
 {
         struct list_head * p;
         struct timespec    now;
 
-        clock_gettime(CLOCK_REALTIME_COARSE, &now);
-
         memset(st, 0, sizeof(*st));
 
-        if (strcmp(path, RT) == 0) {
-                st->st_mode  = S_IFDIR | 0755;
-                st->st_nlink = 2;
-                st->st_uid   = getuid();
-                st->st_gid   = getgid();
-                st->st_mtime = now.tv_sec;
-                return 0;
-        }
+        if (strcmp(path, RT) == 0)
+                goto finish_dir;
 
         pthread_rwlock_rdlock(&rib.lock);
 
         list_for_each(p, &rib.reg_comps) {
                 struct reg_comp * rc = list_entry(p, struct reg_comp, next);
                 if (strcmp(path + 1, rc->path) == 0) {
-                        st->st_mode  = S_IFDIR | 0755;
-                        st->st_nlink = 2;
-                        break;
+                        pthread_rwlock_unlock(&rib.lock);
+                        goto finish_dir;
                 }
         }
 
         pthread_rwlock_unlock(&rib.lock);
 
-        if (st->st_mode == 0) {
-                char buf[4096];
-                st->st_nlink = 2;
-                st->st_mode = S_IFREG | 0755;
-                st->st_size = rib_read(path, buf, 4096, 0, NULL);
-        }
+        assert(st->st_mode == 0);
 
+        return __getattr(path, st);
+
+ finish_dir:
+        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+        st->st_mode  = S_IFDIR | 0755;
+        st->st_nlink = 2;
         st->st_uid   = getuid();
         st->st_gid   = getgid();
         st->st_mtime = now.tv_sec;
-
         return 0;
 }
 

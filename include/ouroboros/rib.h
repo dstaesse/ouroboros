@@ -25,6 +25,9 @@
 
 #define RIB_PATH_LEN 128
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
 struct rib;
 
 struct rib_ops {
@@ -32,6 +35,8 @@ struct rib_ops {
                      char *       buf,
                      size_t       len);
         int (* readdir)(char *** entries);
+        int (* getattr)(const char *  path,
+                        struct stat * st);
 };
 
 int  rib_init(const char * prefix);

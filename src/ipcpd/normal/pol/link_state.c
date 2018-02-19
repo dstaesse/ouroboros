@@ -52,6 +52,7 @@
 #define RECALC_TIME    4
 #define LS_UPDATE_TIME 15
 #define LS_TIMEO       60
+#define LS_ENTRY_SIZE  78
 #define LSDB           "lsdb"
 
 #ifndef CLOCK_REALTIME_COARSE
@@ -131,51 +132,96 @@ static int str_adj(struct adjacency * adj,
                    size_t             len)
 {
         char        tmbuf[64];
+        char        srcbuf[64];
+        char        dstbuf[64];
         struct tm * tm;
 
-        if (len < 256)
+        if (len < LS_ENTRY_SIZE)
                 return -1;
 
         tm = localtime(&adj->stamp);
-        strftime(tmbuf, sizeof(tmbuf), "%Y-%m-%d %H:%M:%S", tm);
+        strftime(tmbuf, sizeof(tmbuf), "%F %T", tm); /* 19 chars */
 
-        sprintf(buf,
-                "src: %" PRIu64 "\n"
-                "dst: %" PRIu64 "\n"
-                "upd: %s\n",
-                adj->src,
-                adj->dst,
-                tmbuf);
+        sprintf(srcbuf, "%" PRIu64, adj->src);
+        sprintf(dstbuf, "%" PRIu64, adj->dst);
 
-        return strlen(buf);
+        sprintf(buf, "src: %20s\ndst: %20s\nupd: %20s\n",
+                srcbuf, dstbuf, tmbuf);
+
+        return LS_ENTRY_SIZE;
+}
+
+static struct adjacency * get_adj(const char * path)
+{
+        struct list_head * p;
+        char               entry[RIB_PATH_LEN + 1];
+
+        assert(path);
+
+        list_for_each(p, &ls.db) {
+                struct adjacency * a = list_entry(p, struct adjacency, next);
+                sprintf(entry, "%" PRIu64 ".%" PRIu64, a->src, a->dst);
+                if (strcmp(entry, path) == 0)
+                        return a;
+        }
+
+        return NULL;
+}
+
+static int lsdb_getattr(const char *  path,
+                        struct stat * st)
+{
+        struct adjacency * adj;
+        struct timespec    now;
+
+        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+
+        pthread_rwlock_rdlock(&ls.db_lock);
+
+        adj = get_adj(path);
+        if (adj != NULL) {
+                st->st_mtime = adj->stamp;
+                st->st_size  = LS_ENTRY_SIZE;
+        } else {
+                st->st_mtime = now.tv_sec;
+                st->st_size  = 0;
+        }
+
+        st->st_mode  = S_IFREG | 0755;
+        st->st_nlink = 1;
+        st->st_uid   = getuid();
+        st->st_gid   = getgid();
+
+        pthread_rwlock_unlock(&ls.db_lock);
+
+        return 0;
 }
 
 static int lsdb_read(const char * path,
                      char *       buf,
                      size_t       len)
 {
-        struct list_head * p;
-        char               entry[RIB_PATH_LEN + 1];
+        struct adjacency * a;
+        int                size;
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
-        if (ls.db_len + ls.nbs_len == 0) {
-                pthread_rwlock_unlock(&ls.db_lock);
-                return -EPERM;
-        }
+        if (ls.db_len + ls.nbs_len == 0)
+                goto fail;
 
-        list_for_each(p, &ls.db) {
-                struct adjacency * a = list_entry(p, struct adjacency, next);
-                sprintf(entry, "%" PRIu64 ".%" PRIu64, a->src, a->dst);
-                if (strcmp(entry, path) == 0) {
-                        len = str_adj(a, buf, len);
-                        pthread_rwlock_unlock(&ls.db_lock);
-                        return len;
-                }
-        }
+        a = get_adj(path);
+        if (a == NULL)
+                goto fail;
+
+        size = str_adj(a, buf, len);
+        if (size < 0)
+                goto fail;
 
         pthread_rwlock_unlock(&ls.db_lock);
+        return size;
 
+ fail:
+        pthread_rwlock_unlock(&ls.db_lock);
         return -1;
 }
 
@@ -204,8 +250,8 @@ static int lsdb_readdir(char *** buf)
                 sprintf(entry, "%s%" PRIu64, str, nb->addr);
                 (*buf)[idx] = malloc(strlen(entry) + 1);
                 if ((*buf)[idx] == NULL) {
-                        while (--idx >= 0)
-                                free(*buf[idx]);
+                        while (idx-- > 0)
+                                free((*buf)[idx]);
                         free(buf);
                         pthread_rwlock_unlock(&ls.db_lock);
                         return -ENOMEM;
@@ -241,7 +287,8 @@ static int lsdb_readdir(char *** buf)
 
 static struct rib_ops r_ops = {
         .read    = lsdb_read,
-        .readdir = lsdb_readdir
+        .readdir = lsdb_readdir,
+        .getattr = lsdb_getattr
 };
 
 static int lsdb_add_nb(uint64_t     addr,
@@ -801,13 +848,17 @@ int link_state_init(enum pol_routing pr)
         if (pthread_create(&ls.listener, NULL, ls_conn_handle, NULL))
                 goto fail_pthread_create_listener;
 
+        if (rib_reg(LSDB, &r_ops))
+                goto fail_rib_reg;
+
         ls.db_len  = 0;
         ls.nbs_len = 0;
 
-        rib_reg(LSDB, &r_ops);
-
         return 0;
 
+ fail_rib_reg:
+        pthread_cancel(ls.listener);
+        pthread_join(ls.listener, NULL);
  fail_pthread_create_listener:
         pthread_cancel(ls.lsreader);
         pthread_join(ls.lsreader, NULL);
