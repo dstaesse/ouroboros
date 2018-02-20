@@ -45,6 +45,8 @@
 #define IPCP_SCHED_THR_MUL  @IPCP_SCHED_THR_MUL@
 #define PFT_SIZE            @PFT_SIZE@
 
+#cmakedefine IPCP_FLOW_STATS
+
 /* udp */
 #cmakedefine HAVE_DDNS
 #define NSUPDATE_EXEC       "@NSUPDATE_EXECUTABLE@"

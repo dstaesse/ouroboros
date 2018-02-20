@@ -21,6 +21,16 @@ protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS kademlia.proto)
 math(EXPR PFT_EXPR "1 << 12")
 set(PFT_SIZE ${PFT_EXPR} CACHE STRING
   "Size of the PDU forwarding table")
+if (HAVE_FUSE)
+  set(IPCP_FLOW_STATS FALSE CACHE BOOL
+    "Enable flow statistics tracking in IPCP")
+    if (IPCP_FLOW_STATS)
+       message(STATUS "IPCP flow statistics enabled")
+    else ()
+       message(STATUS "IPCP flow statistics disabled")
+    endif ()
+endif ()
+
 
 set(SOURCE_FILES
   # Add source files here
