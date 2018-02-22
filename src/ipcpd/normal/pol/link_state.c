@@ -528,13 +528,40 @@ static void send_lsm(uint64_t src,
 static void lsdb_replicate(int fd)
 {
         struct list_head * p;
+        struct list_head * h;
+        struct list_head   copy;
+
+        list_head_init(&copy);
+
+        /* Lock the lsdb, copy the lsms and send outside of lock. */
+        pthread_rwlock_rdlock(&ls.db_lock);
 
         list_for_each(p, &ls.db) {
+                struct adjacency * adj;
+                struct adjacency * cpy;
+                adj = list_entry(p, struct adjacency, next);
+                cpy = malloc(sizeof(*cpy));
+                if (cpy == NULL) {
+                        log_warn("Failed to replicate full lsdb.");
+                        break;
+                }
+
+                cpy->dst = adj->dst;
+                cpy->src = adj->src;
+
+                list_add_tail(&cpy->next, &copy);
+        }
+
+        pthread_rwlock_unlock(&ls.db_lock);
+
+        list_for_each_safe(p, h, &copy) {
                 struct lsa         lsm;
                 struct adjacency * adj;
                 adj = list_entry(p, struct adjacency, next);
                 lsm.d_addr = hton64(adj->dst);
                 lsm.s_addr = hton64(adj->src);
+                list_del(&adj->next);
+                free(adj);
                 flow_write(fd, &lsm, sizeof(lsm));
         }
 }
