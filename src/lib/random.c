@@ -56,7 +56,8 @@ int random_buffer(void * buf,
 #elif defined(HAVE_SYS_RANDOM)
         return getrandom(buf, len, GRND_NONBLOCK); /* glibc 2.25 */
 #elif defined(HAVE_LIBGCRYPT)
-        return gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
+        gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
+        return 0;
 #elif defined(HAVE_OPENSSL)
         if (len > 0 && len < INT_MAX)
                 return RAND_bytes((unsigned char *) buf, (int) len);
