@@ -43,3 +43,17 @@ message ipcp_config_msg {
         // Config for the Ethernet LLC
         optional string if_name            = 11;
 }
+
+enum enroll_code {
+        ENROLL_REQ  = 1;
+        ENROLL_BOOT = 2;
+        ENROLL_DONE = 4;
+};
+
+message enroll_msg {
+        required enroll_code     code   = 1;
+        optional ipcp_config_msg conf   = 2;
+        optional int64           t_sec  = 3;
+        optional uint32          t_nsec = 4;
+        optional int32           result = 5;
+};

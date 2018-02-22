@@ -41,7 +41,7 @@
 #include <string.h>
 #include <pthread.h>
 
-#include "enroll.pb-c.h"
+#include "ipcp_config.pb-c.h"
 typedef EnrollMsg enroll_msg_t;
 
 #define ENROLL_COMP             "Enrollment"
