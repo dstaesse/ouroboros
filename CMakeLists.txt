@@ -4,10 +4,11 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 project(ouroboros C)
 
-include(GitVersionGen)
-git_version_gen()
-
 include(GNUInstallDirs)
+
+set(PACKAGE_VERSION_MAJOR  0)
+set(PACKAGE_VERSION_MINOR 10)
+set(PACKAGE_VERSION_PATCH  1)
 
 set(PACKAGE_NAME        "${CMAKE_PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "The Ouroboros prototype")
