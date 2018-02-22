@@ -272,6 +272,8 @@ static void set_used(int  fd,
 
         pthread_mutex_lock(&dt.stat[fd].lock);
 
+        memset(&dt.stat[fd], 0, sizeof(dt.stat[fd]));
+
         dt.stat[fd].stamp = b ? now.tv_sec : 0;
 
         pthread_mutex_unlock(&dt.stat[fd].lock);
