@@ -46,7 +46,8 @@ int  dt_start(void);
 void dt_stop(void);
 
 int  dt_reg_comp(void * comp,
-                 void (* func)(void * comp, struct shm_du_buff * sdb));
+                 void (* func)(void * comp, struct shm_du_buff * sdb),
+                 char * name);
 
 int  dt_write_sdu(uint64_t             dst_addr,
                   qoscube_t            qc,

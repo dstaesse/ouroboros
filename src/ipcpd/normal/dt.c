@@ -53,11 +53,12 @@
 #include <inttypes.h>
 #include <assert.h>
 
-#define STAT_FILE_LEN 1590
+#define STAT_FILE_LEN 1627
 
 struct comp_info {
         void   (* post_sdu)(void * comp, struct shm_du_buff * sdb);
         void * comp;
+        char * name;
 };
 
 struct {
@@ -68,6 +69,7 @@ struct {
 #ifdef IPCP_FLOW_STATS
         struct {
                 time_t          stamp;
+                uint64_t        addr;
                 size_t          snd_pkt[QOS_CUBE_MAX];
                 size_t          rcv_pkt[QOS_CUBE_MAX];
                 size_t          snd_bytes[QOS_CUBE_MAX];
@@ -102,6 +104,7 @@ static int dt_stat_read(const char * path,
         int  fd;
         int  i;
         char str[587];
+        char addrstr[20];
 
         /* NOTE: we may need stronger checks. */
         fd = atoi(path);
@@ -117,6 +120,12 @@ static int dt_stat_read(const char * path,
                 pthread_mutex_unlock(&dt.stat[fd].lock);
                 return 0;
         }
+
+        if (dt.stat[fd].addr == ipcpi.dt_addr)
+                sprintf(addrstr, dt.comps[fd].name);
+        else
+                sprintf(addrstr, "%" PRIu64, dt.stat[fd].addr);
+        sprintf(buf, "Endpt address:  %20s\n", addrstr);
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 sprintf(str,
@@ -263,8 +272,8 @@ static struct rib_ops r_ops = {
 
 #ifdef IPCP_FLOW_STATS
 
-static void set_used(int  fd,
-                     bool b)
+static void stat_used(int      fd,
+                      uint64_t addr)
 {
         struct timespec now;
 
@@ -274,13 +283,14 @@ static void set_used(int  fd,
 
         memset(&dt.stat[fd], 0, sizeof(dt.stat[fd]));
 
-        dt.stat[fd].stamp = b ? now.tv_sec : 0;
+        dt.stat[fd].stamp = (addr != INVALID_ADDR) ? now.tv_sec : 0;
+        dt.stat[fd].addr = addr;
 
         pthread_mutex_unlock(&dt.stat[fd].lock);
 
         pthread_rwlock_wrlock(&dt.lock);
 
-        b ? ++dt.n_flows : --dt.n_flows;
+        (addr != INVALID_ADDR) ? ++dt.n_flows : --dt.n_flows;
 
         pthread_rwlock_unlock(&dt.lock);
 }
@@ -299,14 +309,14 @@ static void handle_event(void *       self,
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
 #ifdef IPCP_FLOW_STATS
-                set_used(c->flow_info.fd, true);
+                stat_used(c->flow_info.fd, c->conn_info.addr);
 #endif
                 sdu_sched_add(dt.sdu_sched, c->flow_info.fd);
                 log_dbg("Added fd %d to SDU scheduler.", c->flow_info.fd);
                 break;
         case NOTIFY_DT_CONN_DEL:
 #ifdef IPCP_FLOW_STATS
-                set_used(c->flow_info.fd, false);
+                stat_used(c->flow_info.fd, INVALID_ADDR);
 #endif
                 sdu_sched_del(dt.sdu_sched, c->flow_info.fd);
                 log_dbg("Removed fd %d from SDU scheduler.", c->flow_info.fd);
@@ -662,7 +672,8 @@ void dt_stop(void)
 }
 
 int dt_reg_comp(void * comp,
-                void (* func)(void * func, struct shm_du_buff *))
+                void (* func)(void * func, struct shm_du_buff *),
+                char * name)
 {
         int res_fd;
 
@@ -679,13 +690,15 @@ int dt_reg_comp(void * comp,
 
         assert(dt.comps[res_fd].post_sdu == NULL);
         assert(dt.comps[res_fd].comp == NULL);
+        assert(dt.comps[res_fd].name == NULL);
 
         dt.comps[res_fd].post_sdu = func;
         dt.comps[res_fd].comp     = comp;
+        dt.comps[res_fd].name     = name;
 
         pthread_rwlock_unlock(&dt.lock);
 #ifdef IPCP_FLOW_STATS
-        set_used(res_fd, true);
+        stat_used(res_fd, ipcpi.dt_addr);
 #endif
         return res_fd;
 }

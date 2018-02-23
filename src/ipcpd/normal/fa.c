@@ -24,7 +24,8 @@
 
 #include "config.h"
 
-#define OUROBOROS_PREFIX "flow-allocator"
+#define FA               "flow-allocator"
+#define OUROBOROS_PREFIX FA
 
 #include <ouroboros/logs.h>
 #include <ouroboros/fqueue.h>
@@ -195,7 +196,7 @@ int fa_init(void)
         if (pthread_rwlock_init(&fa.flows_lock, NULL))
                 return -1;
 
-        fa.fd = dt_reg_comp(&fa, &fa_post_sdu);
+        fa.fd = dt_reg_comp(&fa, &fa_post_sdu, FA);
 
         return 0;
 }
