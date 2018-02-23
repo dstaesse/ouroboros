@@ -53,7 +53,11 @@
 #include <inttypes.h>
 #include <assert.h>
 
-#define STAT_FILE_LEN 1627
+#define STAT_FILE_LEN 2088
+
+#ifndef CLOCK_REALTIME_COARSE
+#define CLOCK_REALTIME_COARSE CLOCK_REALTIME
+#endif
 
 struct comp_info {
         void   (* post_sdu)(void * comp, struct shm_du_buff * sdb);
@@ -101,10 +105,12 @@ static int dt_stat_read(const char * path,
                         size_t       len)
 {
 #ifdef IPCP_FLOW_STATS
-        int  fd;
-        int  i;
-        char str[587];
-        char addrstr[20];
+        int         fd;
+        int         i;
+        char        str[681];
+        char        addrstr[20];
+        char        tmstr[20];
+        struct tm * tm;
 
         /* NOTE: we may need stronger checks. */
         fd = atoi(path);
@@ -125,29 +131,36 @@ static int dt_stat_read(const char * path,
                 sprintf(addrstr, dt.comps[fd].name);
         else
                 sprintf(addrstr, "%" PRIu64, dt.stat[fd].addr);
-        sprintf(buf, "Endpt address:  %20s\n", addrstr);
+
+        tm = localtime(&dt.stat[fd].stamp);
+        strftime(tmstr, sizeof(tmstr), "%F %T", tm);
+
+        sprintf(buf,
+                "Established  : %20s\n"
+                "Endpt address: %20s\n",
+                tmstr, addrstr);
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 sprintf(str,
-                        "Qos cube %d:\n"
-                        " sent (packets):          %10zu\n"
-                        " rcvd (packets):          %10zu\n"
-                        " sent (bytes):            %10zu\n"
-                        " rcvd (bytes):            %10zu\n"
-                        " local sent (packets):    %10zu\n"
-                        " local sent (bytes):      %10zu\n"
-                        " local rcvd (packets):    %10zu\n"
-                        " local rcvd (bytes):      %10zu\n"
-                        " dropped ttl (packets):   %10zu\n"
-                        " dropped ttl (bytes):     %10zu\n"
-                        " failed writes (packets): %10zu\n"
-                        " failed writes (bytes):   %10zu\n"
-                        " failed nhop (packets):   %10zu\n"
-                        " failed nhop (bytes):     %10zu\n",
+                        "Qos cube %3d:\n"
+                        " sent (packets):          %20zu\n"
+                        " sent (bytes):            %20zu\n"
+                        " rcvd (packets):          %20zu\n"
+                        " rcvd (bytes):            %20zu\n"
+                        " local sent (packets):    %20zu\n"
+                        " local sent (bytes):      %20zu\n"
+                        " local rcvd (packets):    %20zu\n"
+                        " local rcvd (bytes):      %20zu\n"
+                        " dropped ttl (packets):   %20zu\n"
+                        " dropped ttl (bytes):     %20zu\n"
+                        " failed writes (packets): %20zu\n"
+                        " failed writes (bytes):   %20zu\n"
+                        " failed nhop (packets):   %20zu\n"
+                        " failed nhop (bytes):     %20zu\n",
                         i,
                         dt.stat[fd].snd_pkt[i],
-                        dt.stat[fd].rcv_pkt[i],
                         dt.stat[fd].snd_bytes[i],
+                        dt.stat[fd].rcv_pkt[i],
                         dt.stat[fd].rcv_bytes[i],
                         dt.stat[fd].lcl_w_pkt[i],
                         dt.stat[fd].lcl_w_bytes[i],
