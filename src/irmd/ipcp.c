@@ -42,6 +42,7 @@
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <spawn.h>
 
 static void close_ptr(void * o)
 {
@@ -162,15 +163,6 @@ pid_t ipcp_create(const char *   name,
 
         sprintf(irmd_pid, "%u", getpid());
 
-        pid = fork();
-        if (pid == -1) {
-                log_err("Failed to fork");
-                return pid;
-        }
-
-        if (pid != 0)
-                return pid;
-
         strcpy(full_name, INSTALL_PREFIX);
         strcat(full_name, ipcp_dir);
         strcat(full_name, exec_name);
@@ -186,11 +178,12 @@ pid_t ipcp_create(const char *   name,
 
         argv[4] = NULL;
 
-        execv(argv[0], &argv[0]);
+        if (posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL)) {
+                log_err("Failed to spawn new process");
+                return -1;
+        }
 
-        log_dbg("%s", strerror(errno));
-        log_err("Failed to load IPCP daemon.");
-        exit(EXIT_FAILURE);
+        return pid;
 }
 
 int ipcp_destroy(pid_t pid)

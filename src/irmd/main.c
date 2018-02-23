@@ -59,6 +59,7 @@
 #include <pthread.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <spawn.h>
 
 #ifdef HAVE_LIBGCRYPT
 #include <gcrypt.h>
@@ -685,7 +686,8 @@ static int bind_program(char *   prog,
                                 if (argv_dup[i] == NULL) {
                                         pthread_rwlock_unlock(&irmd.reg_lock);
                                         argvfree(argv_dup);
-                                        log_err("Failed to bind program %s to %s.",
+                                        log_err("Failed to bind program "
+                                                "%s to %s.",
                                                 prog, name);
                                         free(progs);
                                         free(progn);
@@ -1370,22 +1372,14 @@ static pid_t auto_execute(char ** argv)
                 return -1;
         }
 
-        pid = fork();
-        if (pid == -1) {
-                log_err("Failed to fork");
-                return pid;
+        if (posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL)) {
+                log_err("Failed to spawn new process");
+                return -1;
         }
 
-        if (pid != 0) {
-                log_info("Instantiated %s as process %d.", argv[0], pid);
-                return pid;
-        }
+        log_info("Instantiated %s as process %d.", argv[0], pid);
 
-        execv(argv[0], argv);
-
-        log_err("Failed to execute %s.", argv[0]);
-
-        exit(EXIT_FAILURE);
+        return pid;
 }
 
 static struct irm_flow * flow_req_arr(pid_t           pid,
@@ -1776,7 +1770,8 @@ void * irm_sanitize(void * o)
 
                         if (kill(f->n_pid, 0) < 0) {
                                 struct shm_flow_set * set;
-                                log_dbg("Process %d gone, deallocating flow %d.",
+                                log_dbg("Process %d gone, deallocating "
+                                        "flow %d.",
                                          f->n_pid, f->port_id);
                                 set = shm_flow_set_open(f->n_pid);
                                 if (set != NULL)
