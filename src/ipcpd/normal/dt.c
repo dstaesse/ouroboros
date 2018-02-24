@@ -128,7 +128,7 @@ static int dt_stat_read(const char * path,
         }
 
         if (dt.stat[fd].addr == ipcpi.dt_addr)
-                sprintf(addrstr, dt.comps[fd].name);
+                sprintf(addrstr, "%s", dt.comps[fd].name);
         else
                 sprintf(addrstr, "%" PRIu64, dt.stat[fd].addr);
 
