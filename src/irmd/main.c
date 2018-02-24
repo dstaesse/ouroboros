@@ -1763,8 +1763,6 @@ void * irm_sanitize(void * o)
                                          f->port_id);
                                 f->n_pid = -1;
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                                ipcpi   = f->n_1_pid;
-                                port_id = f->port_id;
                                 continue;
                         }
 
