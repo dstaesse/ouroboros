@@ -1555,17 +1555,23 @@ static void irm_fini(void)
         if (irmd_get_state() != IRMD_NULL)
                 log_warn("Unsafe destroy.");
 
+        close(irmd.sockfd);
+
+        if (unlink(IRM_SOCK_PATH))
+                log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
+
         pthread_rwlock_wrlock(&irmd.flows_lock);
 
         if (irmd.port_ids != NULL)
                 bmp_destroy(irmd.port_ids);
 
+        list_for_each_safe(p, h, &irmd.irm_flows) {
+                struct irm_flow * f = list_entry(p, struct irm_flow, next);
+                list_del(&f->next);
+                irm_flow_destroy(f);
+        }
+
         pthread_rwlock_unlock(&irmd.flows_lock);
-
-        close(irmd.sockfd);
-
-        if (unlink(IRM_SOCK_PATH))
-                log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
         /* Clear the lists. */
@@ -1609,6 +1615,7 @@ static void irm_fini(void)
 
         pthread_mutex_destroy(&irmd.cmd_lock);
         pthread_cond_destroy(&irmd.cmd_cond);
+        pthread_rwlock_destroy(&irmd.flows_lock);
         pthread_rwlock_destroy(&irmd.reg_lock);
         pthread_rwlock_destroy(&irmd.state_lock);
 
