@@ -584,6 +584,8 @@ static int add_lfa_to_table(struct list_head * table,
                 }
         }
 
+        free(n);
+
         return -1;
 }
 
