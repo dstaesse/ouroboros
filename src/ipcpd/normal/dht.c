@@ -2538,7 +2538,8 @@ static void * dht_handle_sdu(void * o)
 
                 if (msg->code != KAD_JOIN) {
                         pthread_rwlock_wrlock(&dht->lock);
-                        if (dht->state == DHT_JOINING && dht->buckets == NULL) {
+                        if (dht_get_state(dht) == DHT_JOINING &&
+                            dht->buckets == NULL) {
                                 pthread_rwlock_unlock(&dht->lock);
                                 break;
                         }
