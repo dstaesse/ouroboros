@@ -736,14 +736,14 @@ int dt_write_sdu(uint64_t             dst_addr,
         if (fd < 0) {
                 log_dbg("Could not get nhop for addr %" PRIu64 ".", dst_addr);
 #ifdef IPCP_FLOW_STATS
-                pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
+                pthread_mutex_lock(&dt.stat[np1_fd].lock);
 
-                ++dt.stat[dt_pci.eid].lcl_r_pkt[qc];
-                dt.stat[dt_pci.eid].lcl_r_bytes[qc] += len;
-                ++dt.stat[dt_pci.eid].f_nhp_pkt[qc];
-                dt.stat[dt_pci.eid].f_nhp_bytes[qc] += len;
+                ++dt.stat[np1_fd].lcl_r_pkt[qc];
+                dt.stat[np1_fd].lcl_r_bytes[qc] += len;
+                ++dt.stat[np1_fd].f_nhp_pkt[qc];
+                dt.stat[np1_fd].f_nhp_bytes[qc] += len;
 
-                pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
+                pthread_mutex_unlock(&dt.stat[np1_fd].lock);
 #endif
                 return -1;
         }
@@ -765,12 +765,12 @@ int dt_write_sdu(uint64_t             dst_addr,
                 goto fail_write;
         }
 #ifdef IPCP_FLOW_STATS
-        pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
+        pthread_mutex_lock(&dt.stat[np1_fd].lock);
 
-        ++dt.stat[dt_pci.eid].lcl_r_pkt[qc];
-        dt.stat[dt_pci.eid].lcl_r_bytes[qc] += len;
+        ++dt.stat[np1_fd].lcl_r_pkt[qc];
+        dt.stat[np1_fd].lcl_r_bytes[qc] += len;
 
-        pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
+        pthread_mutex_unlock(&dt.stat[np1_fd].lock);
         pthread_mutex_lock(&dt.stat[fd].lock);
 
         if (dt_pci.eid < PROG_RES_FDS) {
@@ -786,12 +786,12 @@ int dt_write_sdu(uint64_t             dst_addr,
 
  fail_write:
 #ifdef IPCP_FLOW_STATS
-        pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
+        pthread_mutex_lock(&dt.stat[np1_fd].lock);
 
-        ++dt.stat[dt_pci.eid].lcl_w_pkt[qc];
-        dt.stat[dt_pci.eid].lcl_w_bytes[qc] += len;
+        ++dt.stat[np1_fd].lcl_w_pkt[qc];
+        dt.stat[np1_fd].lcl_w_bytes[qc] += len;
 
-        pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
+        pthread_mutex_unlock(&dt.stat[np1_fd].lock);
         pthread_mutex_lock(&dt.stat[fd].lock);
 
         if (dt_pci.eid < PROG_RES_FDS) {
