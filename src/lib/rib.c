@@ -260,20 +260,19 @@ static void * fuse_thr(void * o)
 }
 #endif /* HAVE_FUSE */
 
+
 int rib_init(const char * prefix)
 {
 #ifdef HAVE_FUSE
         struct stat      st;
-        char *           argv[] = {"ignored",
-                                   NULL,
-                                   "-f",
+        char *           argv[] = {"-f",
                                    "-o",
-                                   "ro,",
-                                   "allow_other,",
-                                   "default_permissions,",
+                                   "ro,"
+                                   "default_permissions,"
+                                   "allow_other,"
                                    "fsname=rib",
                                    NULL};
-        struct fuse_args args   = FUSE_ARGS_INIT(0, NULL);
+        struct fuse_args args = FUSE_ARGS_INIT(3, argv);
 
         if (stat(FUSE_PREFIX, &st) == -1)
                 return -1;
@@ -283,9 +282,7 @@ int rib_init(const char * prefix)
         if (stat(rib.mnt, &st) == -1)
                 mkdir(rib.mnt, 0777);
 
-        argv[1] = rib.mnt;
-
-        fuse_opt_parse(&args, argv, NULL, NULL);
+        fuse_opt_parse(&args, NULL, NULL, NULL);
 
         list_head_init(&rib.reg_comps);
 
