@@ -495,7 +495,7 @@ static void sdu_handler(int                  fd,
                 pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
 
                 ++dt.stat[dt_pci.eid].snd_pkt[qc];
-                dt.stat[dt_pci.eid].rcv_bytes[qc] += len;
+                dt.stat[dt_pci.eid].snd_bytes[qc] += len;
 
                 pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
 #endif
