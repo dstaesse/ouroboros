@@ -50,7 +50,7 @@
 #define FRCTFORDERING 00000010 /* Ordered delivery       */
 #define FRCTFPARTIAL  00000020 /* Allow partial delivery */
 
-/* Operations */
+/* Flow operations */
 #define FLOWSRCVTIMEO 00000001 /* Set read timeout       */
 #define FLOWGRCVTIMEO 00000002 /* Get read timeout       */
 #define FLOWSSNDTIMEO 00000003 /* Set send timeout       */
@@ -58,8 +58,12 @@
 #define FLOWGQOSSPEC  00000005 /* Get qosspec_t          */
 #define FLOWSFLAGS    00000006 /* Set flags for flow     */
 #define FLOWGFLAGS    00000007 /* Get flags for flow     */
-#define FRCTSFLAGS    00000010 /* Set flags for FRCT     */
-#define FRCTGFLAGS    00000011 /* Get flags for FRCT     */
+#define FLOWGRXQLEN   00000010 /* Get queue length on rx */
+#define FLOWGTXQLEN   00000011 /* Get queue length on tx */
+
+/* FRCT operations */
+#define FRCTSFLAGS    00001000 /* Set flags for FRCT     */
+#define FRCTGFLAGS    00001001 /* Get flags for FRCT     */
 
 __BEGIN_DECLS
 

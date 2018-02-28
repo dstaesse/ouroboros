@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH FCCNTL 3 2017-08-30 Ouroboros "Ouroboros Programmer's Manual"
+.TH FCCNTL 3 2018-02-28 Ouroboros "Ouroboros Programmer's Manual"
 
 .SH NAME
 
@@ -64,6 +64,12 @@ argument. Supported flags are:
 
 \fBFLOWGFLAGS\fR    - get the current flow flags. Takes an \fBuint32_t
 \fIflags\fR as third argument.
+
+\fBFLOWGRXQLEN\fR   - get the current number of packets in the receive
+buffer. Takes a \fBsize_t \fIqlen\fR as third argument.
+
+\fBFLOWGTXQLEN\fR   - get the current number of packets in the transmit
+buffer. Takes a \fBsize_t \fIqlen\fR as third argument.
 
 \fBFRCTSFLAGS\fR    - set FRCT flags. Takes FRCT flags as third
 argument. Supported flags are:

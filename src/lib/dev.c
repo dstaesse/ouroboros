@@ -670,6 +670,7 @@ int fccntl(int fd,
         qosspec_t *       qs;
         uint32_t          rx_acl;
         uint32_t          tx_acl;
+        size_t *          qlen;
         struct flow *     flow;
 
         if (fd < 0 || fd >= PROG_MAX_FLOWS)
@@ -727,6 +728,14 @@ int fccntl(int fd,
                 if (qs == NULL)
                         goto einval;
                 *qs = flow->spec;
+                break;
+        case FLOWGRXQLEN:
+                qlen  = va_arg(l, size_t *);
+                *qlen = shm_rbuff_queued(flow->rx_rb);
+                break;
+        case FLOWGTXQLEN:
+                qlen  = va_arg(l, size_t *);
+                *qlen = shm_rbuff_queued(flow->rx_rb);
                 break;
         case FLOWSFLAGS:
                 flow->oflags = va_arg(l, uint32_t);

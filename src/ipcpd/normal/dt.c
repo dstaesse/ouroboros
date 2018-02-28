@@ -35,6 +35,9 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/rib.h>
+#ifdef IPCP_FLOW_STATS
+#include <ouroboros/fccntl.h>
+#endif
 
 #include "connmgr.h"
 #include "ipcp.h"
@@ -53,7 +56,7 @@
 #include <inttypes.h>
 #include <assert.h>
 
-#define STAT_FILE_LEN 2088
+#define STAT_FILE_LEN 2205
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
@@ -110,6 +113,8 @@ static int dt_stat_read(const char * path,
         char        str[681];
         char        addrstr[20];
         char        tmstr[20];
+        size_t      rxqlen = 0;
+        size_t      txqlen = 0;
         struct tm * tm;
 
         /* NOTE: we may need stronger checks. */
@@ -135,10 +140,17 @@ static int dt_stat_read(const char * path,
         tm = localtime(&dt.stat[fd].stamp);
         strftime(tmstr, sizeof(tmstr), "%F %T", tm);
 
+        if (fd >= PROG_RES_FDS) {
+                fccntl(fd, FLOWGRXQLEN, &rxqlen);
+                fccntl(fd, FLOWGTXQLEN, &txqlen);
+        }
+
         sprintf(buf,
-                "Established  : %20s\n"
-                "Endpt address: %20s\n",
-                tmstr, addrstr);
+                "Flow established at:      %20s\n"
+                "Endpoint address:         %20s\n"
+                "Queued packets (rx):      %20zu\n"
+                "Queued packets (tx):      %20zu\n\n",
+                tmstr, addrstr, rxqlen, txqlen);
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 sprintf(str,
@@ -430,7 +442,7 @@ static void sdu_handler(int                  fd,
 #endif
         } else {
                 dt_pci_shrink(sdb);
-                if (dt_pci.eid > PROG_RES_FDS) {
+                if (dt_pci.eid >= PROG_RES_FDS) {
                         if (ipcp_flow_write(dt_pci.eid, sdb)) {
                                 ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
