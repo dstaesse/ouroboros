@@ -218,8 +218,6 @@ static int client_main(void)
         pthread_create(&client.writer_pt, NULL, writer, &fd);
 
         pthread_join(client.writer_pt, NULL);
-
-        pthread_cancel(client.reader_pt);
         pthread_join(client.reader_pt, NULL);
 
         clock_gettime(CLOCK_REALTIME, &toc);
