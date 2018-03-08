@@ -363,12 +363,12 @@ static void sdu_handler(int                  fd,
 #else
         (void)        fd;
 #endif
-        memset(&dt_pci, 0, sizeof(dt_pci));
 
-        dt_pci_des(sdb, &dt_pci);
 #ifdef IPCP_FLOW_STATS
         len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
 #endif
+        memset(&dt_pci, 0, sizeof(dt_pci));
+        dt_pci_des(sdb, &dt_pci);
         if (dt_pci.dst_addr != ipcpi.dt_addr) {
                 if (dt_pci.ttl == 0) {
                         log_dbg("TTL was zero.");
@@ -741,13 +741,13 @@ int dt_write_sdu(uint64_t             dst_addr,
 #endif
         assert(sdb);
         assert(dst_addr != ipcpi.dt_addr);
-#ifdef IPCP_FLOW_STATS
-        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
-#endif
+
         fd = pff_nhop(dt.pff[qc], dst_addr);
         if (fd < 0) {
                 log_dbg("Could not get nhop for addr %" PRIu64 ".", dst_addr);
 #ifdef IPCP_FLOW_STATS
+                len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+
                 pthread_mutex_lock(&dt.stat[np1_fd].lock);
 
                 ++dt.stat[np1_fd].lcl_r_pkt[qc];
@@ -766,9 +766,14 @@ int dt_write_sdu(uint64_t             dst_addr,
 
         if (dt_pci_ser(sdb, &dt_pci)) {
                 log_dbg("Failed to serialize PDU.");
+#ifdef IPCP_FLOW_STATS
+                len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+#endif
                 goto fail_write;
         }
-
+#ifdef IPCP_FLOW_STATS
+        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+#endif
         ret = ipcp_flow_write(fd, sdb);
         if (ret < 0) {
                 log_dbg("Failed to write SDU to fd %d.", fd);
