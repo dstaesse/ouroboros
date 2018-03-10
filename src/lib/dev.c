@@ -890,7 +890,7 @@ ssize_t flow_read(int    fd,
 
         flow = &ai.flows[fd];
 
-        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
 
         pthread_rwlock_rdlock(&ai.lock);
 

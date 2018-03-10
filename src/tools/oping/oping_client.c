@@ -55,7 +55,7 @@ void shutdown_client(int signo, siginfo_t * info, void * c)
 
 void * reader(void * o)
 {
-        struct timespec timeout = {2, 0};
+        struct timespec timeout = {client.interval / 1000 + 2, 0};
         struct timespec now = {0, 0};
         struct timespec sent;
 
@@ -70,8 +70,11 @@ void * reader(void * o)
 
         while (!stop && client.rcvd != client.count) {
                 msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
-                if (msg_len == -ETIMEDOUT)
+                if (msg_len == -ETIMEDOUT) {
+                        printf("Server timed out.\n");
+                        stop = true;
                         break;
+                }
 
                 if (msg_len < 0)
                         continue;
