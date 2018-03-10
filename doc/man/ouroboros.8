@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH OUROBOROS 8 2018-02-13 Ouroboros "Ouroboros User Manual"
+.TH OUROBOROS 8 2018-03-10 Ouroboros "Ouroboros User Manual"
 
 .SH NAME
 
@@ -99,8 +99,9 @@ have to be reachable over a lower layer. IPCPs that wrap a legacy
 transmission technology are all bootstrapped and thus need not enroll
 as they work directly over a physical connection. Ouroboros currently
 supports IPCPs over shared memory (local), L1 (raptor, experimental),
-L2 (eth-llc) and L3 (udp). The normal layer requires connections to be
-established between IPCP components for its operation.
+L2 (eth-llc and eth-dix) and L3 (udp). The normal layer requires
+connections to be established between IPCP components for its
+operation.
 
 \fBConnecting the management components\fR using \fImanagement
 flows\fR allows management information to be sent between IPCPs so
@@ -124,7 +125,9 @@ creates an IPCP process of type \fItype\fR in the system with name
 .PP
 \fBraptor\fR   - create an IPCP that attaches to a raptor NetFPGA device.
 .PP
-\fBeth-llc\fR  - create an IPCP that attaches to an Ethernet adapter.
+\fBeth-llc\fR  - create an IPCP that attaches to Ethernet using LLC frames.
+.PP
+\fBeth-dix\fR  - create an IPCP that attaches to Ethernet using DIX frames.
 .PP
 \fBudp\fR      - create an IPCP that attaches to a UDP socket.
 .PP
@@ -152,6 +155,8 @@ Values for [\fIparam\fR] are dependent on \fItype\fR:
 [hash \fIpolicy\fR] specifies the hash function used for the directory,
 .br
 \fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
+.br
+default: SHA3_256.
 .RE
 
 \fBraptor\fR
@@ -160,16 +165,36 @@ Values for [\fIparam\fR] are dependent on \fItype\fR:
 [hash \fIpolicy\fR] specifies the hash function used for the directory,
 .br
 \fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
+.br
+default: SHA3_256.
 .RE
 
 .PP
 \fBeth-llc\fR
 .RS 4
-if_name \fIinterface\fR specifies the interface to bind the IPCP to.
+dev \fIinterface\fR specifies the interface to bind the IPCP to.
 .PP
 [hash \fIpolicy\fR] specifies the hash function used for the directory,
 .br
 \fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
+.br
+default: SHA3_256.
+.RE
+
+.PP
+\fBeth-dix\fR
+.RS 4
+dev \fIinterface\fR specifies the interface to bind the IPCP to.
+.PP
+[ethertype \fIethertype\fR] specifies the ethertype used for the layer.
+.br
+default: 0xA000.
+.PP
+[hash \fIpolicy\fR] specifies the hash function used for the directory,
+.br
+\fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
+.br
+default: SHA3_256.
 .RE
 
 .PP

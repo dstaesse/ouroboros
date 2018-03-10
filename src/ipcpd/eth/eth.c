@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * IPC process over Ethernet with LLC
+ * IPC processes over Ethernet
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,6 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if !defined(BUILD_ETH_DIX) && !defined(BUILD_ETH_LLC)
+#error Define BUILD_ETH_DIX or BUILD_ETH_LLC to build an Ethernet IPCP
+#endif
+
 #if defined(__APPLE__)
 #define _BSD_SOURCE
 #define _DARWIN_C_SOURCE
@@ -30,8 +34,6 @@
 #endif
 
 #include "config.h"
-
-#define OUROBOROS_PREFIX "ipcpd/eth-llc"
 
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
@@ -91,16 +93,27 @@
 #include <net/bpf.h>
 #endif
 
-#define THIS_TYPE                 IPCP_ETH_LLC
-
-#define MGMT_SAP                  0x01
 #define MAC_SIZE                  6
+#define ETH_TYPE_LENGTH_SIZE      2
+#define ETH_HEADER_SIZE           (2 * MAC_SIZE + ETH_TYPE_LENGTH_SIZE)
+
+#if defined(BUILD_ETH_DIX)
+#define THIS_TYPE                 IPCP_ETH_DIX
+#define MGMT_EID                  0
+#define DIX_HEADER_SIZE           2
+#define MAX_EIDS                  (1 << (8 * DIX_HEADER_SIZE))
+#define ETH_MAX_SDU_SIZE          (1500 - DIX_HEADER_SIZE)
+#define ETH_FRAME_SIZE            (ETH_HEADER_SIZE + DIX_HEADER_SIZE    \
+                                   + ETH_MAX_SDU_SIZE)
+#elif defined(BUILD_ETH_LLC)
+#define THIS_TYPE                 IPCP_ETH_LLC
+#define MGMT_SAP                  0x01
 #define LLC_HEADER_SIZE           3
 #define MAX_SAPS                  64
-#define ETH_HEADER_SIZE           (2 * MAC_SIZE + 2)
-#define ETH_FRAME_SIZE            (ETH_HEADER_SIZE + LLC_HEADER_SIZE \
-                                   + SHIM_ETH_LLC_MAX_SDU_SIZE)
-#define SHIM_ETH_LLC_MAX_SDU_SIZE (1500 - LLC_HEADER_SIZE)
+#define ETH_MAX_SDU_SIZE          (1500 - LLC_HEADER_SIZE)
+#define ETH_FRAME_SIZE            (ETH_HEADER_SIZE + LLC_HEADER_SIZE    \
+                                   + ETH_MAX_SDU_SIZE)
+#endif
 #define ALLOC_TIMEO               10    /* ms */
 #define NAME_QUERY_TIMEO          2000  /* ms */
 #define MGMT_TIMEO                100   /* ms */
@@ -112,25 +125,39 @@
 
 struct mgmt_msg {
         uint8_t code;
+#if defined(BUILD_ETH_DIX)
+        uint16_t seid;
+        uint16_t deid;
+#elif defined(BUILD_ETH_LLC)
         uint8_t ssap;
         uint8_t dsap;
+#endif
         uint8_t qoscube;
         int8_t  response;
 } __attribute__((packed));
 
-struct eth_llc_frame {
+struct eth_frame {
         uint8_t dst_hwaddr[MAC_SIZE];
         uint8_t src_hwaddr[MAC_SIZE];
-        uint8_t length[2];
+#if defined(BUILD_ETH_DIX)
+        uint8_t ethertype[ETH_TYPE_LENGTH_SIZE];
+        uint8_t eid[DIX_HEADER_SIZE];
+#elif defined(BUILD_ETH_LLC)
+        uint8_t length[ETH_TYPE_LENGTH_SIZE];
         uint8_t dsap;
         uint8_t ssap;
         uint8_t cf;
+#endif
         uint8_t payload;
 } __attribute__((packed));
 
 struct ef {
+#if defined(BUILD_ETH_DIX)
+        int32_t r_eid;
+#elif defined(BUILD_ETH_LLC)
         int8_t  sap;
         int8_t  r_sap;
+#endif
         uint8_t r_addr[MAC_SIZE];
 };
 
@@ -138,7 +165,6 @@ struct mgmt_frame {
         struct list_head next;
         uint8_t          r_addr[MAC_SIZE];
         uint8_t          buf[ETH_FRAME_SIZE];
-        size_t           len;
 };
 
 struct {
@@ -156,12 +182,15 @@ struct {
         int                s_fd;
         struct sockaddr_ll device;
 #endif /* HAVE_NETMAP */
-
+#if defined (BUILD_ETH_DIX)
+        uint16_t           ethertype;
+#elif defined(BUILD_ETH_LLC)
         struct bmp *       saps;
+        int *              ef_to_fd;
+#endif
+        struct ef *        fd_to_ef;
         fset_t *           np1_flows;
         fqueue_t *         fq;
-        int *              ef_to_fd;
-        struct ef *        fd_to_ef;
         pthread_rwlock_t   flows_lock;
 
         pthread_t          sdu_writer;
@@ -176,56 +205,60 @@ struct {
         pthread_mutex_t    mgmt_lock;
         pthread_cond_t     mgmt_cond;
         struct list_head   mgmt_frames;
+} eth_data;
 
-} eth_llc_data;
-
-static int eth_llc_data_init(void)
+static int eth_data_init(void)
 {
         int                i;
         int                ret = -ENOMEM;
         pthread_condattr_t cattr;
 
-        eth_llc_data.fd_to_ef =
-                malloc(sizeof(*eth_llc_data.fd_to_ef) * SYS_MAX_FLOWS);
-        if (eth_llc_data.fd_to_ef == NULL)
+        eth_data.fd_to_ef =
+                malloc(sizeof(*eth_data.fd_to_ef) * SYS_MAX_FLOWS);
+        if (eth_data.fd_to_ef == NULL)
                 goto fail_fd_to_ef;
 
-        eth_llc_data.ef_to_fd =
-                malloc(sizeof(*eth_llc_data.ef_to_fd) * MAX_SAPS);
-        if (eth_llc_data.ef_to_fd == NULL)
+#ifdef BUILD_ETH_LLC
+        eth_data.ef_to_fd =
+                malloc(sizeof(*eth_data.ef_to_fd) * MAX_SAPS);
+        if (eth_data.ef_to_fd == NULL)
                 goto fail_ef_to_fd;
 
-        eth_llc_data.saps = bmp_create(MAX_SAPS, 2);
-        if (eth_llc_data.saps == NULL)
-                goto fail_saps;
+        for (i = 0; i < MAX_SAPS; ++i)
+                eth_data.ef_to_fd[i] = -1;
 
-        eth_llc_data.np1_flows = fset_create();
-        if (eth_llc_data.np1_flows == NULL)
+        eth_data.saps = bmp_create(MAX_SAPS, 2);
+        if (eth_data.saps == NULL)
+                goto fail_saps;
+#endif
+        eth_data.np1_flows = fset_create();
+        if (eth_data.np1_flows == NULL)
                 goto fail_np1_flows;
 
-        eth_llc_data.fq = fqueue_create();
-        if (eth_llc_data.fq == NULL)
+        eth_data.fq = fqueue_create();
+        if (eth_data.fq == NULL)
                 goto fail_fq;
 
-        for (i = 0; i < MAX_SAPS; ++i)
-                eth_llc_data.ef_to_fd[i] = -1;
-
         for (i = 0; i < SYS_MAX_FLOWS; ++i) {
-                eth_llc_data.fd_to_ef[i].sap   = -1;
-                eth_llc_data.fd_to_ef[i].r_sap = -1;
-                memset(&eth_llc_data.fd_to_ef[i].r_addr, 0, MAC_SIZE);
+#if defined(BUILD_ETH_DIX)
+                eth_data.fd_to_ef[i].r_eid = -1;
+#elif defined(BUILD_ETH_LLC)
+                eth_data.fd_to_ef[i].sap   = -1;
+                eth_data.fd_to_ef[i].r_sap = -1;
+#endif
+                memset(&eth_data.fd_to_ef[i].r_addr, 0, MAC_SIZE);
         }
 
-        eth_llc_data.shim_data = shim_data_create();
-        if (eth_llc_data.shim_data == NULL)
+        eth_data.shim_data = shim_data_create();
+        if (eth_data.shim_data == NULL)
                 goto fail_shim_data;
 
         ret = -1;
 
-        if (pthread_rwlock_init(&eth_llc_data.flows_lock, NULL))
+        if (pthread_rwlock_init(&eth_data.flows_lock, NULL))
                 goto fail_flows_lock;
 
-        if (pthread_mutex_init(&eth_llc_data.mgmt_lock, NULL))
+        if (pthread_mutex_init(&eth_data.mgmt_lock, NULL))
                 goto fail_mgmt_lock;
 
         if (pthread_condattr_init(&cattr))
@@ -235,57 +268,62 @@ static int eth_llc_data_init(void)
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
 
-        if (pthread_cond_init(&eth_llc_data.mgmt_cond, &cattr))
+        if (pthread_cond_init(&eth_data.mgmt_cond, &cattr))
                 goto fail_mgmt_cond;
 
         pthread_condattr_destroy(&cattr);
 
-        list_head_init(&eth_llc_data.mgmt_frames);
+        list_head_init(&eth_data.mgmt_frames);
 
         return 0;
 
  fail_mgmt_cond:
         pthread_condattr_destroy(&cattr);
  fail_condattr:
-        pthread_mutex_destroy(&eth_llc_data.mgmt_lock);
+        pthread_mutex_destroy(&eth_data.mgmt_lock);
  fail_mgmt_lock:
-        pthread_rwlock_destroy(&eth_llc_data.flows_lock);
+        pthread_rwlock_destroy(&eth_data.flows_lock);
  fail_flows_lock:
-        shim_data_destroy(eth_llc_data.shim_data);
+        shim_data_destroy(eth_data.shim_data);
  fail_shim_data:
-        fqueue_destroy(eth_llc_data.fq);
+        fqueue_destroy(eth_data.fq);
  fail_fq:
-        fset_destroy(eth_llc_data.np1_flows);
+        fset_destroy(eth_data.np1_flows);
  fail_np1_flows:
-        bmp_destroy(eth_llc_data.saps);
+#ifdef BUILD_ETH_LLC
+        bmp_destroy(eth_data.saps);
  fail_saps:
-        free(eth_llc_data.ef_to_fd);
+        free(eth_data.ef_to_fd);
  fail_ef_to_fd:
-        free(eth_llc_data.fd_to_ef);
+#endif
+        free(eth_data.fd_to_ef);
  fail_fd_to_ef:
         return ret;
 }
 
-static void eth_llc_data_fini(void)
+static void eth_data_fini(void)
 {
 #if defined(HAVE_NETMAP)
-        nm_close(eth_llc_data.nmd);
+        nm_close(eth_data.nmd);
 #elif defined(HAVE_BPF)
-        close(eth_llc_data.bpf);
+        close(eth_data.bpf);
 #elif defined(HAVE_RAW_SOCKETS)
-        close(eth_llc_data.s_fd);
+        close(eth_data.s_fd);
 #endif
-        pthread_cond_destroy(&eth_llc_data.mgmt_cond);
-        pthread_mutex_destroy(&eth_llc_data.mgmt_lock);
-        pthread_rwlock_destroy(&eth_llc_data.flows_lock);
-        shim_data_destroy(eth_llc_data.shim_data);
-        fqueue_destroy(eth_llc_data.fq);
-        fset_destroy(eth_llc_data.np1_flows);
-        bmp_destroy(eth_llc_data.saps);
-        free(eth_llc_data.fd_to_ef);
-        free(eth_llc_data.ef_to_fd);
+        pthread_cond_destroy(&eth_data.mgmt_cond);
+        pthread_mutex_destroy(&eth_data.mgmt_lock);
+        pthread_rwlock_destroy(&eth_data.flows_lock);
+        shim_data_destroy(eth_data.shim_data);
+        fqueue_destroy(eth_data.fq);
+        fset_destroy(eth_data.np1_flows);
+#ifdef BUILD_ETH_LLC
+        bmp_destroy(eth_data.saps);
+        free(eth_data.ef_to_fd);
+#endif
+        free(eth_data.fd_to_ef);
 }
 
+#ifdef BUILD_ETH_LLC
 static uint8_t reverse_bits(uint8_t b)
 {
         b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
@@ -294,66 +332,80 @@ static uint8_t reverse_bits(uint8_t b)
 
         return b;
 }
+#endif
 
-static int eth_llc_ipcp_send_frame(const uint8_t * dst_addr,
-                                   uint8_t         dsap,
-                                   uint8_t         ssap,
-                                   const uint8_t * payload,
-                                   size_t          len)
+static int eth_ipcp_send_frame(const uint8_t * dst_addr,
+#if defined(BUILD_ETH_DIX)
+                               uint16_t        deid,
+#elif defined(BUILD_ETH_LLC)
+                               uint8_t         dsap,
+                               uint8_t         ssap,
+#endif
+                               const uint8_t * payload,
+                               size_t          len)
 {
         uint32_t               frame_len = 0;
+#ifdef BUILD_ETH_LLC
         uint8_t                cf = 0x03;
         uint16_t               length;
-        uint8_t                frame[SHIM_ETH_LLC_MAX_SDU_SIZE];
-        struct eth_llc_frame * llc_frame;
+#endif
+        uint8_t                frame[ETH_MAX_SDU_SIZE];
+        struct eth_frame *     e_frame;
 
         if (payload == NULL) {
                 log_err("Payload was NULL.");
                 return -1;
         }
 
-        if (len > SHIM_ETH_LLC_MAX_SDU_SIZE)
+        if (len > ETH_MAX_SDU_SIZE)
                 return -1;
 
-        llc_frame = (struct eth_llc_frame *) frame;
+        e_frame = (struct eth_frame *) frame;
 
-        memcpy(llc_frame->dst_hwaddr, dst_addr, MAC_SIZE);
-        memcpy(llc_frame->src_hwaddr,
+        memcpy(e_frame->dst_hwaddr, dst_addr, MAC_SIZE);
+        memcpy(e_frame->src_hwaddr,
 #if defined(HAVE_NETMAP) || defined(HAVE_BPF)
-               eth_llc_data.hw_addr,
+               eth_data.hw_addr,
 #elif defined(HAVE_RAW_SOCKETS)
-               eth_llc_data.device.sll_addr,
+               eth_data.device.sll_addr,
 #endif /* HAVE_NETMAP */
                MAC_SIZE);
+#if defined(BUILD_ETH_DIX)
+        memcpy(&e_frame->ethertype, &eth_data.ethertype, ETH_TYPE_LENGTH_SIZE);
+        deid = htons(deid);
+        memcpy(&e_frame->eid, &deid, DIX_HEADER_SIZE);
+        frame_len = ETH_HEADER_SIZE + DIX_HEADER_SIZE + len;
+#elif defined(BUILD_ETH_LLC)
         length = htons(LLC_HEADER_SIZE + len);
-        memcpy(&llc_frame->length, &length, sizeof(length));
-        llc_frame->dsap = dsap;
-        llc_frame->ssap = ssap;
-        llc_frame->cf   = cf;
-        memcpy(&llc_frame->payload, payload, len);
-
+        memcpy(&e_frame->length, &length, sizeof(length));
+        e_frame->dsap = dsap;
+        e_frame->ssap = ssap;
+        e_frame->cf   = cf;
         frame_len = ETH_HEADER_SIZE + LLC_HEADER_SIZE + len;
+#endif
+        memcpy(&e_frame->payload, payload, len);
+
 #if defined(HAVE_NETMAP)
-        if (poll(&eth_llc_data.poll_out, 1, -1) < 0)
+        if (poll(&eth_data.poll_out, 1, -1) < 0)
                 return -1;
 
-        if (nm_inject(eth_llc_data.nmd, frame, frame_len) != (int) frame_len) {
+        if (nm_inject(eth_data.nmd, frame, frame_len) != (int) frame_len) {
                 log_dbg("Failed to send message.");
                 return -1;
         }
 #elif defined(HAVE_BPF)
-        if (write(eth_llc_data.bpf, frame, frame_len) < 0) {
+        if (write(eth_data.bpf, frame, frame_len) < 0) {
                 log_dbg("Failed to send message.");
                 return -1;
         }
 
 #elif defined(HAVE_RAW_SOCKETS)
-        if (sendto(eth_llc_data.s_fd,
+        if (sendto(eth_data.s_fd,
                    frame,
                    frame_len,
                    0,
-                   (struct sockaddr *) &eth_llc_data.device,
-                   sizeof(eth_llc_data.device)) <= 0) {
+                   (struct sockaddr *) &eth_data.device,
+                   sizeof(eth_data.device)) <= 0) {
                 log_dbg("Failed to send message.");
                 return -1;
         }
@@ -361,10 +413,14 @@ static int eth_llc_ipcp_send_frame(const uint8_t * dst_addr,
         return 0;
 }
 
-static int eth_llc_ipcp_sap_alloc(const uint8_t * dst_addr,
-                                  uint8_t         ssap,
-                                  const uint8_t * hash,
-                                  qoscube_t       cube)
+static int eth_ipcp_alloc(const uint8_t * dst_addr,
+#if defined(BUILD_ETH_DIX)
+                          uint16_t        eid,
+#elif defined(BUILD_ETH_LLC)
+                          uint8_t         ssap,
+#endif
+                          const uint8_t * hash,
+                          qoscube_t       cube)
 {
         uint8_t *         buf;
         struct mgmt_msg * msg;
@@ -379,40 +435,68 @@ static int eth_llc_ipcp_sap_alloc(const uint8_t * dst_addr,
 
         msg          = (struct mgmt_msg *) buf;
         msg->code    = FLOW_REQ;
+#if defined(BUILD_ETH_DIX)
+        msg->seid    = htons(eid);
+#elif defined(BUILD_ETH_LLC)
         msg->ssap    = ssap;
+#endif
         msg->qoscube = cube;
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
-        ret = eth_llc_ipcp_send_frame(dst_addr, reverse_bits(MGMT_SAP),
-                                      reverse_bits(MGMT_SAP), buf, len);
-
+        ret = eth_ipcp_send_frame(dst_addr,
+#if defined(BUILD_ETH_DIX)
+                                  MGMT_EID,
+#elif defined(BUILD_ETH_LLC)
+                                  reverse_bits(MGMT_SAP),
+                                  reverse_bits(MGMT_SAP),
+#endif
+                                  buf, len);
         free(buf);
 
         return ret;
 }
 
-static int eth_llc_ipcp_sap_alloc_resp(uint8_t * dst_addr,
-                                       uint8_t   ssap,
-                                       uint8_t   dsap,
-                                       int       response)
+static int eth_ipcp_alloc_resp(uint8_t * dst_addr,
+#if defined(BUILD_ETH_DIX)
+                               uint16_t  seid,
+                               uint16_t  deid,
+#elif defined(BUILD_ETH_LLC)
+                               uint8_t   ssap,
+                               uint8_t   dsap,
+#endif
+                               int       response)
 {
         struct mgmt_msg msg;
 
         msg.code     = FLOW_REPLY;
+#if defined(BUILD_ETH_DIX)
+        msg.seid     = htons(seid);
+        msg.deid     = htons(deid);
+#elif defined(BUILD_ETH_LLC)
         msg.ssap     = ssap;
         msg.dsap     = dsap;
+#endif
         msg.response = response;
 
-        return eth_llc_ipcp_send_frame(dst_addr, reverse_bits(MGMT_SAP),
-                                       reverse_bits(MGMT_SAP),
-                                       (uint8_t *) &msg, sizeof(msg));
+        return eth_ipcp_send_frame(dst_addr,
+#if defined(BUILD_ETH_DIX)
+                                   MGMT_EID,
+#elif defined(BUILD_ETH_LLC)
+                                   reverse_bits(MGMT_SAP),
+                                   reverse_bits(MGMT_SAP),
+#endif
+                                   (uint8_t *) &msg, sizeof(msg));
 }
 
-static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
-                                uint8_t *       r_addr,
-                                const uint8_t * dst,
-                                qoscube_t       cube)
+static int eth_ipcp_req(uint8_t *       r_addr,
+#if defined(BUILD_ETH_DIX)
+                        uint16_t        r_eid,
+#elif defined(BUILD_ETH_LLC)
+                        uint8_t         r_sap,
+#endif
+                        const uint8_t * dst,
+                        qoscube_t       cube)
 {
         struct timespec ts = {0, ALLOC_TIMEO * MILLION};
         struct timespec abstime;
@@ -443,50 +527,76 @@ static int eth_llc_ipcp_sap_req(uint8_t         r_sap,
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_wrlock(&eth_data.flows_lock);
+#if defined(BUILD_ETH_DIX)
+        eth_data.fd_to_ef[fd].r_eid = r_eid;
+#elif defined(BUILD_ETH_LLC)
+        eth_data.fd_to_ef[fd].r_sap = r_sap;
+#endif
+        memcpy(eth_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
 
-        eth_llc_data.fd_to_ef[fd].r_sap = r_sap;
-        memcpy(eth_llc_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
+        pthread_rwlock_unlock(&eth_data.flows_lock);
 
         ipcpi.alloc_id = fd;
         pthread_cond_broadcast(&ipcpi.alloc_cond);
 
-        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
+#if defined(BUILD_ETH_DIX)
+        log_dbg("New flow request, fd %d, remote endpoint %d.", fd, r_eid);
+#elif defined(BUILD_ETH_LLC)
         log_dbg("New flow request, fd %d, remote SAP %d.", fd, r_sap);
+#endif
 
         return 0;
 }
 
-static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
-                                        uint8_t * r_addr,
-                                        int       dsap,
-                                        int       response)
+static int eth_ipcp_alloc_reply(uint8_t * r_addr,
+#if defined(BUILD_ETH_DIX)
+                                uint16_t  seid,
+                                uint16_t  deid,
+#elif defined(BUILD_ETH_LLC)
+                                uint8_t   ssap,
+                                int       dsap,
+#endif
+                                int       response)
 {
         int ret = 0;
         int fd = -1;
 
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_wrlock(&eth_data.flows_lock);
 
-        fd = eth_llc_data.ef_to_fd[dsap];
+#if defined(BUILD_ETH_DIX)
+        fd = deid;
+#elif defined(BUILD_ETH_LLC)
+        fd = eth_data.ef_to_fd[dsap];
+#endif
         if (fd < 0) {
-                pthread_rwlock_unlock(& eth_llc_data.flows_lock);
+                pthread_rwlock_unlock(& eth_data.flows_lock);
                 log_err("No flow found with that SAP.");
                 return -1; /* -EFLOWNOTFOUND */
         }
 
         if (response) {
-                bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
+#ifdef BUILD_ETH_LLC
+                bmp_release(eth_data.saps, eth_data.fd_to_ef[fd].sap);
+#endif
         } else {
-                eth_llc_data.fd_to_ef[fd].r_sap = ssap;
-                memcpy(eth_llc_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
+#if defined(BUILD_ETH_DIX)
+                eth_data.fd_to_ef[fd].r_eid = seid;
+#elif defined(BUILD_ETH_LLC)
+                eth_data.fd_to_ef[fd].r_sap = ssap;
+#endif
+                memcpy(eth_data.fd_to_ef[fd].r_addr, r_addr, MAC_SIZE);
         }
 
-        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_unlock(&eth_data.flows_lock);
 
+#if defined(BUILD_ETH_DIX)
+        log_dbg("Flow reply, fd %d, src eid %d, dst eid %d.", fd, seid, deid);
+#elif defined(BUILD_ETH_LLC)
         log_dbg("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
-
+#endif
         if ((ret = ipcp_flow_alloc_reply(fd, response)) < 0)
                 return -1;
 
@@ -494,14 +604,14 @@ static int eth_llc_ipcp_sap_alloc_reply(uint8_t   ssap,
 
 }
 
-static int eth_llc_ipcp_name_query_req(const uint8_t * hash,
-                                       uint8_t *       r_addr)
+static int eth_ipcp_name_query_req(const uint8_t * hash,
+                                   uint8_t *       r_addr)
 {
         uint8_t *         buf;
         struct mgmt_msg * msg;
         size_t            len;
 
-        if (shim_data_reg_has(eth_llc_data.shim_data, hash)) {
+        if (shim_data_reg_has(eth_data.shim_data, hash)) {
                 len = sizeof(*msg) + ipcp_dir_hash_len();
 
                 buf = malloc(len);
@@ -513,8 +623,14 @@ static int eth_llc_ipcp_name_query_req(const uint8_t * hash,
 
                 memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
-                if (eth_llc_ipcp_send_frame(r_addr, reverse_bits(MGMT_SAP),
-                                            reverse_bits(MGMT_SAP), buf, len)) {
+                if (eth_ipcp_send_frame(r_addr,
+#if defined(BUILD_ETH_DIX)
+                                        MGMT_EID,
+#elif defined(BUILD_ETH_LLC)
+                                        reverse_bits(MGMT_SAP),
+                                        reverse_bits(MGMT_SAP),
+#endif
+                                        buf, len)) {
                         log_err("Failed to send management frame.");
                         free(buf);
                         return -1;
@@ -526,22 +642,22 @@ static int eth_llc_ipcp_name_query_req(const uint8_t * hash,
         return 0;
 }
 
-static int eth_llc_ipcp_name_query_reply(const uint8_t * hash,
-                                         uint8_t *       r_addr)
+static int eth_ipcp_name_query_reply(const uint8_t * hash,
+                                     uint8_t *       r_addr)
 {
         uint64_t address = 0;
 
         memcpy(&address, r_addr, MAC_SIZE);
 
-        shim_data_dir_add_entry(eth_llc_data.shim_data, hash, address);
+        shim_data_dir_add_entry(eth_data.shim_data, hash, address);
 
-        shim_data_dir_query_respond(eth_llc_data.shim_data, hash);
+        shim_data_dir_query_respond(eth_data.shim_data, hash);
 
         return 0;
 }
 
-static int eth_llc_ipcp_mgmt_frame(const uint8_t * buf,
-                                   uint8_t *       r_addr)
+static int eth_ipcp_mgmt_frame(const uint8_t * buf,
+                               uint8_t *       r_addr)
 {
         struct mgmt_msg * msg;
 
@@ -549,25 +665,34 @@ static int eth_llc_ipcp_mgmt_frame(const uint8_t * buf,
 
         switch (msg->code) {
         case FLOW_REQ:
-                if (shim_data_reg_has(eth_llc_data.shim_data,
+                if (shim_data_reg_has(eth_data.shim_data,
                                       buf + sizeof(*msg))) {
-                        eth_llc_ipcp_sap_req(msg->ssap,
-                                             r_addr,
-                                             buf + sizeof(*msg),
-                                             msg->qoscube);
+                        eth_ipcp_req(r_addr,
+#if defined(BUILD_ETH_DIX)
+                                     ntohs(msg->seid),
+#elif defined(BUILD_ETH_LLC)
+                                     msg->ssap,
+#endif
+                                     buf + sizeof(*msg),
+                                     msg->qoscube);
                 }
                 break;
         case FLOW_REPLY:
-                eth_llc_ipcp_sap_alloc_reply(msg->ssap,
-                                             r_addr,
-                                             msg->dsap,
-                                             msg->response);
+                eth_ipcp_alloc_reply(r_addr,
+#if defined(BUILD_ETH_DIX)
+                                     ntohs(msg->seid),
+                                     ntohs(msg->deid),
+#elif defined(BUILD_ETH_LLC)
+                                     msg->ssap,
+                                     msg->dsap,
+#endif
+                                     msg->response);
                 break;
         case NAME_QUERY_REQ:
-                eth_llc_ipcp_name_query_req(buf + sizeof(*msg), r_addr);
+                eth_ipcp_name_query_req(buf + sizeof(*msg), r_addr);
                 break;
         case NAME_QUERY_REPLY:
-                eth_llc_ipcp_name_query_reply(buf + sizeof(*msg), r_addr);
+                eth_ipcp_name_query_reply(buf + sizeof(*msg), r_addr);
                 break;
         default:
                 log_err("Unknown message received %d.", msg->code);
@@ -577,7 +702,7 @@ static int eth_llc_ipcp_mgmt_frame(const uint8_t * buf,
         return 0;
 }
 
-static void * eth_llc_ipcp_mgmt_handler(void * o)
+static void * eth_ipcp_mgmt_handler(void * o)
 {
         int                 ret;
         struct timespec     timeout = {(MGMT_TIMEO / 1000),
@@ -588,7 +713,7 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
         (void) o;
 
         pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
-                             (void *) &eth_llc_data.mgmt_lock);
+                             (void *) &eth_data.mgmt_lock);
 
         while (true) {
                 ret = 0;
@@ -596,30 +721,30 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
                 ts_add(&abstime, &timeout, &abstime);
 
-                pthread_mutex_lock(&eth_llc_data.mgmt_lock);
+                pthread_mutex_lock(&eth_data.mgmt_lock);
 
-                while (list_is_empty(&eth_llc_data.mgmt_frames) &&
+                while (list_is_empty(&eth_data.mgmt_frames) &&
                        ret != -ETIMEDOUT)
-                        ret = -pthread_cond_timedwait(&eth_llc_data.mgmt_cond,
-                                                      &eth_llc_data.mgmt_lock,
+                        ret = -pthread_cond_timedwait(&eth_data.mgmt_cond,
+                                                      &eth_data.mgmt_lock,
                                                       &abstime);
 
                 if (ret == -ETIMEDOUT) {
-                        pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
+                        pthread_mutex_unlock(&eth_data.mgmt_lock);
                         continue;
                 }
 
-                frame = list_first_entry((&eth_llc_data.mgmt_frames),
+                frame = list_first_entry((&eth_data.mgmt_frames),
                                          struct mgmt_frame, next);
                 if (frame == NULL) {
-                        pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
+                        pthread_mutex_unlock(&eth_data.mgmt_lock);
                         continue;
                 }
 
                 list_del(&frame->next);
-                pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
+                pthread_mutex_unlock(&eth_data.mgmt_lock);
 
-                eth_llc_ipcp_mgmt_frame(frame->buf, frame->r_addr);
+                eth_ipcp_mgmt_frame(frame->buf, frame->r_addr);
                 free(frame);
         }
 
@@ -628,24 +753,28 @@ static void * eth_llc_ipcp_mgmt_handler(void * o)
         return (void *) 0;
 }
 
-static void * eth_llc_ipcp_sdu_reader(void * o)
+static void * eth_ipcp_sdu_reader(void * o)
 {
-        uint8_t                br_addr[MAC_SIZE];
-        uint16_t               length;
-        uint8_t                dsap;
-        uint8_t                ssap;
-        int                    fd;
-#if defined(HAVE_NETMAP)
-        uint8_t *              buf;
-        struct nm_pkthdr       hdr;
-#elif defined(HAVE_BPF)
-        uint8_t                buf[BPF_BLEN];
-#elif defined(HAVE_RAW_SOCKETS)
-        uint8_t                buf[ETH_FRAME_SIZE];
+        uint8_t             br_addr[MAC_SIZE];
+#if defined(BUILD_ETH_DIX)
+        uint16_t            deid;
+#elif defined(BUILD_ETH_LLC)
+        uint8_t             dsap;
+        uint8_t             ssap;
 #endif
-        int                    frame_len = 0;
-        struct eth_llc_frame * llc_frame;
-        struct mgmt_frame *    frame;
+        uint16_t            length;
+        int                 fd;
+#if defined(HAVE_NETMAP)
+        uint8_t *           buf;
+        struct nm_pkthdr    hdr;
+#elif defined(HAVE_BPF)
+        uint8_t             buf[BPF_BLEN];
+#elif defined(HAVE_RAW_SOCKETS)
+        uint8_t             buf[ETH_FRAME_SIZE];
+#endif
+        int                 frame_len = 0;
+        struct eth_frame *  e_frame;
+        struct mgmt_frame * frame;
 
         (void) o;
 
@@ -653,45 +782,53 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
         while (true) {
 #if defined(HAVE_NETMAP)
-                if (poll(&eth_llc_data.poll_in, 1, -1) < 0)
+                if (poll(&eth_data.poll_in, 1, -1) < 0)
                         continue;
-                if (eth_llc_data.poll_in.revents == 0) /* TIMED OUT */
+                if (eth_data.poll_in.revents == 0) /* TIMED OUT */
                         continue;
 
-                buf = nm_nextpkt(eth_llc_data.nmd, &hdr);
+                buf = nm_nextpkt(eth_data.nmd, &hdr);
                 if (buf == NULL) {
                         log_err("Bad read from netmap device.");
                         continue;
                 }
 #elif defined(HAVE_BPF)
-                frame_len = read(eth_llc_data.bpf, buf, BPF_BLEN);
+                frame_len = read(eth_data.bpf, buf, BPF_BLEN);
 #elif defined(HAVE_RAW_SOCKETS)
-                frame_len = recv(eth_llc_data.s_fd, buf,
-                                 SHIM_ETH_LLC_MAX_SDU_SIZE, 0);
+                frame_len = recv(eth_data.s_fd, buf,
+                                 ETH_MAX_SDU_SIZE, 0);
 #endif
                 if (frame_len <= 0)
                         continue;
 
 #if defined(HAVE_BPF) && !defined(HAVE_NETMAP)
-                llc_frame = (struct eth_llc_frame *)
+                e_frame = (struct eth_frame *)
                         (buf + ((struct bpf_hdr *) buf)->bh_hdrlen);
 #else
-                llc_frame = (struct eth_llc_frame *) buf;
+                e_frame = (struct eth_frame *) buf;
 #endif
-                assert(llc_frame->dst_hwaddr);
+                assert(e_frame->dst_hwaddr);
 
 #if !defined(HAVE_BPF)
     #if defined(HAVE_NETMAP)
-                if (memcmp(eth_llc_data.hw_addr,
+                if (memcmp(eth_data.hw_addr,
     #elif defined(HAVE_RAW_SOCKETS)
-                if (memcmp(eth_llc_data.device.sll_addr,
+                if (memcmp(eth_data.device.sll_addr,
     #endif /* HAVE_NETMAP */
-                           llc_frame->dst_hwaddr,
+                           e_frame->dst_hwaddr,
                            MAC_SIZE) &&
-                    memcmp(br_addr, llc_frame->dst_hwaddr, MAC_SIZE)) {
+                    memcmp(br_addr, e_frame->dst_hwaddr, MAC_SIZE)) {
                 }
 #endif
-                memcpy(&length, &llc_frame->length, sizeof(length));
+
+#if defined(BUILD_ETH_DIX)
+                length = frame_len - ETH_HEADER_SIZE - DIX_HEADER_SIZE;
+                memcpy(&deid, &e_frame->eid, sizeof(deid));
+                deid = ntohs(deid);
+
+                if (deid == MGMT_EID) {
+#elif defined (BUILD_ETH_LLC)
+                memcpy(&length, &e_frame->length, sizeof(length));
                 length = ntohs(length);
 
                 if (length > 0x05FF) /* DIX */
@@ -699,82 +836,100 @@ static void * eth_llc_ipcp_sdu_reader(void * o)
 
                 length -= LLC_HEADER_SIZE;
 
-                dsap = reverse_bits(llc_frame->dsap);
-                ssap = reverse_bits(llc_frame->ssap);
+                dsap = reverse_bits(e_frame->dsap);
+                ssap = reverse_bits(e_frame->ssap);
 
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
-                        pthread_mutex_lock(&eth_llc_data.mgmt_lock);
+#endif
+                        pthread_mutex_lock(&eth_data.mgmt_lock);
 
                         frame = malloc(sizeof(*frame));
                         if (frame == NULL) {
-                                pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
+                                pthread_mutex_unlock(&eth_data.mgmt_lock);
                                 continue;
                         }
 
-                        memcpy(frame->buf, &llc_frame->payload, length);
-                        memcpy(frame->r_addr, llc_frame->src_hwaddr, MAC_SIZE);
-                        frame->len = length;
-                        list_add(&frame->next, &eth_llc_data.mgmt_frames);
-                        pthread_cond_signal(&eth_llc_data.mgmt_cond);
-                        pthread_mutex_unlock(&eth_llc_data.mgmt_lock);
+                        memcpy(frame->buf, &e_frame->payload, length);
+                        memcpy(frame->r_addr, e_frame->src_hwaddr, MAC_SIZE);
+                        list_add(&frame->next, &eth_data.mgmt_frames);
+                        pthread_cond_signal(&eth_data.mgmt_cond);
+                        pthread_mutex_unlock(&eth_data.mgmt_lock);
                 } else {
-                        pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
+                        pthread_rwlock_rdlock(&eth_data.flows_lock);
 
-                        fd = eth_llc_data.ef_to_fd[dsap];
+#if defined(BUILD_ETH_DIX)
+                        fd = deid;
+#elif defined(BUILD_ETH_LLC)
+                        fd = eth_data.ef_to_fd[dsap];
+#endif
                         if (fd < 0) {
-                                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+                                pthread_rwlock_unlock(&eth_data.flows_lock);
                                 continue;
                         }
 
-                        if (eth_llc_data.fd_to_ef[fd].r_sap != ssap
-                            || memcmp(eth_llc_data.fd_to_ef[fd].r_addr,
-                                      llc_frame->src_hwaddr, MAC_SIZE)) {
-                                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+#ifdef BUILD_ETH_LLC
+                        if (eth_data.fd_to_ef[fd].r_sap != ssap
+                            || memcmp(eth_data.fd_to_ef[fd].r_addr,
+                                      e_frame->src_hwaddr, MAC_SIZE)) {
+                                pthread_rwlock_unlock(&eth_data.flows_lock);
                                 continue;
                         }
+#endif
+                        pthread_rwlock_unlock(&eth_data.flows_lock);
 
-                        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
-
-                        flow_write(fd, &llc_frame->payload, length);
+                        flow_write(fd, &e_frame->payload, length);
                 }
         }
 
         return (void *) 0;
 }
 
-static void * eth_llc_ipcp_sdu_writer(void * o)
+static void * eth_ipcp_sdu_writer(void * o)
 {
         int                  fd;
         struct shm_du_buff * sdb;
-        uint8_t              ssap;
+#if defined(BUILD_ETH_DIX)
+        uint16_t             deid;
+#elif defined(BUILD_ETH_LLC)
         uint8_t              dsap;
+        uint8_t              ssap;
+#endif
         uint8_t              r_addr[MAC_SIZE];
 
         (void) o;
 
         while (true) {
-                fevent(eth_llc_data.np1_flows, eth_llc_data.fq, NULL);
+                fevent(eth_data.np1_flows, eth_data.fq, NULL);
 
-                pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
-                while ((fd = fqueue_next(eth_llc_data.fq)) >= 0) {
+                pthread_rwlock_rdlock(&eth_data.flows_lock);
+                while ((fd = fqueue_next(eth_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_err("Bad read from fd %d.", fd);
                                 continue;
                         }
 
-                        ssap = reverse_bits(eth_llc_data.fd_to_ef[fd].sap);
-                        dsap = reverse_bits(eth_llc_data.fd_to_ef[fd].r_sap);
+#if defined(BUILD_ETH_DIX)
+                        deid = eth_data.fd_to_ef[fd].r_eid;
+#elif defined(BUILD_ETH_LLC)
+                        dsap = reverse_bits(eth_data.fd_to_ef[fd].r_sap);
+                        ssap = reverse_bits(eth_data.fd_to_ef[fd].sap);
+#endif
                         memcpy(r_addr,
-                               eth_llc_data.fd_to_ef[fd].r_addr,
+                               eth_data.fd_to_ef[fd].r_addr,
                                MAC_SIZE);
 
-                        eth_llc_ipcp_send_frame(r_addr, dsap, ssap,
-                                                shm_du_buff_head(sdb),
-                                                shm_du_buff_tail(sdb)
-                                                - shm_du_buff_head(sdb));
+                        eth_ipcp_send_frame(r_addr,
+#if defined(BUILD_ETH_DIX)
+                                            deid,
+#elif defined(BUILD_ETH_LLC)
+                                            dsap, ssap,
+#endif
+                                            shm_du_buff_head(sdb),
+                                            shm_du_buff_tail(sdb)
+                                            - shm_du_buff_head(sdb));
                         ipcp_sdb_release(sdb);
                 }
-                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+                pthread_rwlock_unlock(&eth_data.flows_lock);
         }
 
         return (void *) 1;
@@ -808,21 +963,31 @@ static void change_flows_state(bool up)
         int      i;
         uint32_t flags;
 
-        pthread_rwlock_rdlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_rdlock(&eth_data.flows_lock);
 
-        for (i = 0; i < MAX_SAPS; i++) {
-                if (eth_llc_data.ef_to_fd[i] != -1) {
+#if defined(BUILD_ETH_DIX)
+        for (i = 0; i < SYS_MAX_FLOWS; ++i)
+                if (eth_data.fd_to_ef[i].r_eid != -1) {
                         fccntl(i, FLOWGFLAGS, &flags);
                         if (up)
-                                fccntl(eth_llc_data.ef_to_fd[i],
+                                fccntl(i, FLOWSFLAGS, flags & ~FLOWFDOWN);
+                        else
+                                fccntl(i, FLOWSFLAGS, flags | FLOWFDOWN);
+                }
+#elif defined(BUILD_ETH_LLC)
+        for (i = 0; i < MAX_SAPS; i++)
+                if (eth_data.ef_to_fd[i] != -1) {
+                        fccntl(eth_data.ef_to_fd[i], FLOWGFLAGS, &flags);
+                        if (up)
+                                fccntl(eth_data.ef_to_fd[i],
                                        FLOWSFLAGS, flags & ~FLOWFDOWN);
                         else
-                                fccntl(eth_llc_data.ef_to_fd[i],
+                                fccntl(eth_data.ef_to_fd[i],
                                        FLOWSFLAGS, flags | FLOWFDOWN);
                 }
-        }
+#endif
 
-        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_unlock(&eth_data.flows_lock);
 }
 
 static void close_ptr(void * o)
@@ -831,7 +996,7 @@ static void close_ptr(void * o)
 }
 
 
-static void * eth_llc_ipcp_if_monitor(void * o)
+static void * eth_ipcp_if_monitor(void * o)
 {
         int                fd;
         int                status;
@@ -877,7 +1042,7 @@ static void * eth_llc_ipcp_if_monitor(void * o)
                         ifi = NLMSG_DATA(h);
 
                         /* Not our interface */
-                        if (ifi->ifi_index != eth_llc_data.device.sll_ifindex)
+                        if (ifi->ifi_index != eth_data.device.sll_ifindex)
                                 continue;
 
                         if (ifi->ifi_flags & IFF_UP) {
@@ -916,7 +1081,7 @@ static int open_bpf_device(void)
 }
 #endif
 
-static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
+static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 {
         int              idx;
         struct ifreq     ifr;
@@ -937,13 +1102,17 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        if (conf->if_name == NULL) {
-                log_err("Interface name is NULL.");
+        if (conf->dev == NULL) {
+                log_err("Device name is NULL.");
                 return -1;
         }
 
         memset(&ifr, 0, sizeof(ifr));
-        memcpy(ifr.ifr_name, conf->if_name, strlen(conf->if_name));
+        memcpy(ifr.ifr_name, conf->dev, strlen(conf->dev));
+
+#ifdef BUILD_ETH_DIX
+        eth_data.ethertype = htons(conf->ethertype);
+#endif
 
 #if defined(__FreeBSD__) || defined(__APPLE__)
         if (getifaddrs(&ifaddr) < 0)  {
@@ -952,12 +1121,12 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         for (ifa = ifaddr, idx = 0; ifa != NULL; ifa = ifa->ifa_next, ++idx) {
-                if (strcmp(ifa->ifa_name, conf->if_name))
+                if (strcmp(ifa->ifa_name, conf->dev))
                         continue;
-                log_dbg("Interface %s found.", conf->if_name);
+                log_dbg("Interface %s found.", conf->dev);
 
     #if defined(HAVE_NETMAP) || defined(HAVE_BPF)
-                memcpy(eth_llc_data.hw_addr,
+                memcpy(eth_data.hw_addr,
                        LLADDR((struct sockaddr_dl *) (ifa)->ifa_addr),
                        MAC_SIZE);
     #elif defined (HAVE_RAW_SOCKETS)
@@ -988,7 +1157,7 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
 
         close(skfd);
 
-        idx = if_nametoindex(conf->if_name);
+        idx = if_nametoindex(conf->dev);
         if (idx == 0) {
                 log_err("Failed to retrieve interface index.");
                 close(skfd);
@@ -998,76 +1167,81 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
 
 #if defined(HAVE_NETMAP)
         strcpy(ifn, "netmap:");
-        strcat(ifn, conf->if_name);
+        strcat(ifn, conf->dev);
 
-        eth_llc_data.nmd = nm_open(ifn, NULL, 0, NULL);
-        if (eth_llc_data.nmd == NULL) {
+        eth_data.nmd = nm_open(ifn, NULL, 0, NULL);
+        if (eth_data.nmd == NULL) {
                 log_err("Failed to open netmap device.");
                 return -1;
         }
 
-        memset(&eth_llc_data.poll_in, 0, sizeof(eth_llc_data.poll_in));
-        memset(&eth_llc_data.poll_out, 0, sizeof(eth_llc_data.poll_out));
+        memset(&eth_data.poll_in, 0, sizeof(eth_data.poll_in));
+        memset(&eth_data.poll_out, 0, sizeof(eth_data.poll_out));
 
-        eth_llc_data.poll_in.fd      = NETMAP_FD(eth_llc_data.nmd);
-        eth_llc_data.poll_in.events  = POLLIN;
-        eth_llc_data.poll_out.fd     = NETMAP_FD(eth_llc_data.nmd);
-        eth_llc_data.poll_out.events = POLLOUT;
+        eth_data.poll_in.fd      = NETMAP_FD(eth_data.nmd);
+        eth_data.poll_in.events  = POLLIN;
+        eth_data.poll_out.fd     = NETMAP_FD(eth_data.nmd);
+        eth_data.poll_out.events = POLLOUT;
 
         log_info("Using netmap device.");
 #elif defined(HAVE_BPF) /* !HAVE_NETMAP */
-        eth_llc_data.bpf = open_bpf_device();
-        if (eth_llc_data.bpf < 0) {
+        eth_data.bpf = open_bpf_device();
+        if (eth_data.bpf < 0) {
                 log_err("Failed to open bpf device.");
                 return -1;
         }
 
-        ioctl(eth_llc_data.bpf, BIOCGBLEN, &blen);
+        ioctl(eth_data.bpf, BIOCGBLEN, &blen);
         if (BPF_BLEN < blen) {
                 log_err("BPF buffer too small (is: %ld must be: %d).",
                         BPF_BLEN, blen);
                 goto fail_device;
         }
 
-        if (ioctl(eth_llc_data.bpf, BIOCSETIF, &ifr) < 0) {
+        if (ioctl(eth_data.bpf, BIOCSETIF, &ifr) < 0) {
                 log_err("Failed to set interface.");
                 goto fail_device;
         }
 
-        if (ioctl(eth_llc_data.bpf, BIOCSHDRCMPLT, &enable) < 0) {
+        if (ioctl(eth_data.bpf, BIOCSHDRCMPLT, &enable) < 0) {
                 log_err("Failed to set BIOCSHDRCMPLT.");
                 goto fail_device;
         }
 
-        if (ioctl(eth_llc_data.bpf, BIOCSSEESENT, &disable) < 0) {
+        if (ioctl(eth_data.bpf, BIOCSSEESENT, &disable) < 0) {
                 log_err("Failed to set BIOCSSEESENT.");
                 goto fail_device;
         }
 
-        if (ioctl(eth_llc_data.bpf, BIOCIMMEDIATE, &enable) < 0) {
+        if (ioctl(eth_data.bpf, BIOCIMMEDIATE, &enable) < 0) {
                 log_err("Failed to set BIOCIMMEDIATE.");
                 goto fail_device;
         }
 
         log_info("Using Berkeley Packet Filter.");
 #elif defined(HAVE_RAW_SOCKETS)
-        memset(&(eth_llc_data.device), 0, sizeof(eth_llc_data.device));
-        eth_llc_data.device.sll_ifindex  = idx;
-        eth_llc_data.device.sll_family   = AF_PACKET;
-        memcpy(eth_llc_data.device.sll_addr, ifr.ifr_hwaddr.sa_data, MAC_SIZE);
-        eth_llc_data.device.sll_halen    = MAC_SIZE;
-        eth_llc_data.device.sll_protocol = htons(ETH_P_ALL);
-        eth_llc_data.s_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
+        memset(&(eth_data.device), 0, sizeof(eth_data.device));
+        eth_data.device.sll_ifindex  = idx;
+        eth_data.device.sll_family   = AF_PACKET;
+        memcpy(eth_data.device.sll_addr, ifr.ifr_hwaddr.sa_data, MAC_SIZE);
+        eth_data.device.sll_halen    = MAC_SIZE;
+        eth_data.device.sll_protocol = htons(ETH_P_ALL);
+
+    #if defined (BUILD_ETH_DIX)
+        eth_data.s_fd = socket(AF_PACKET, SOCK_RAW, eth_data.ethertype);
+    #elif defined (BUILD_ETH_LLC)
+        eth_data.s_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
+    #endif
 
         log_info("Using raw socket device.");
 
-        if (eth_llc_data.s_fd < 0) {
+        if (eth_data.s_fd < 0) {
                 log_err("Failed to create socket.");
                 return -1;
         }
 
-        if (bind(eth_llc_data.s_fd, (struct sockaddr *) &eth_llc_data.device,
-                sizeof(eth_llc_data.device))) {
+        if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
+                sizeof(eth_data.device))) {
                 log_err("Failed to bind socket to interface");
                 goto fail_device;
         }
@@ -1076,71 +1250,76 @@ static int eth_llc_ipcp_bootstrap(const struct ipcp_config * conf)
         ipcp_set_state(IPCP_OPERATIONAL);
 
 #ifdef __linux__
-        if (pthread_create(&eth_llc_data.if_monitor,
+        if (pthread_create(&eth_data.if_monitor,
                            NULL,
-                           eth_llc_ipcp_if_monitor,
+                           eth_ipcp_if_monitor,
                            NULL)) {
                 ipcp_set_state(IPCP_INIT);
                 goto fail_device;
         }
 #endif
 
-        if (pthread_create(&eth_llc_data.mgmt_handler,
+        if (pthread_create(&eth_data.mgmt_handler,
                            NULL,
-                           eth_llc_ipcp_mgmt_handler,
+                           eth_ipcp_mgmt_handler,
                            NULL)) {
                 ipcp_set_state(IPCP_INIT);
                 goto fail_mgmt_handler;
         }
 
-        if (pthread_create(&eth_llc_data.sdu_reader,
+        if (pthread_create(&eth_data.sdu_reader,
                            NULL,
-                           eth_llc_ipcp_sdu_reader,
+                           eth_ipcp_sdu_reader,
                            NULL)) {
                 ipcp_set_state(IPCP_INIT);
                 goto fail_sdu_reader;
         }
 
-        if (pthread_create(&eth_llc_data.sdu_writer,
+        if (pthread_create(&eth_data.sdu_writer,
                            NULL,
-                           eth_llc_ipcp_sdu_writer,
+                           eth_ipcp_sdu_writer,
                            NULL)) {
                 ipcp_set_state(IPCP_INIT);
                 goto fail_sdu_writer;
         }
 
+#if defined(BUILD_ETH_DIX)
+        log_dbg("Bootstrapped IPCP over DIX Ethernet with pid %d "
+                "and Ethertype 0x%X.", getpid(), conf->ethertype);
+#elif defined(BUILD_ETH_LLC)
         log_dbg("Bootstrapped IPCP over Ethernet with LLC with pid %d.",
                 getpid());
+#endif
 
         return 0;
 
  fail_sdu_writer:
-        pthread_cancel(eth_llc_data.sdu_reader);
-        pthread_join(eth_llc_data.sdu_reader, NULL);
+        pthread_cancel(eth_data.sdu_reader);
+        pthread_join(eth_data.sdu_reader, NULL);
  fail_sdu_reader:
-        pthread_cancel(eth_llc_data.mgmt_handler);
-        pthread_join(eth_llc_data.mgmt_handler, NULL);
+        pthread_cancel(eth_data.mgmt_handler);
+        pthread_join(eth_data.mgmt_handler, NULL);
  fail_mgmt_handler:
 #if defined(__linux__)
-        pthread_cancel(eth_llc_data.if_monitor);
-        pthread_join(eth_llc_data.if_monitor, NULL);
+        pthread_cancel(eth_data.if_monitor);
+        pthread_join(eth_data.if_monitor, NULL);
 #endif
 #if !defined(HAVE_NETMAP)
  fail_device:
 #endif
 #if defined(HAVE_NETMAP)
-        nm_close(eth_llc_data.nmd);
+        nm_close(eth_data.nmd);
 #elif defined(HAVE_BPF)
-        close(eth_llc_data.bpf);
+        close(eth_data.bpf);
 #elif defined(HAVE_RAW_SOCKETS)
-        close(eth_llc_data.s_fd);
+        close(eth_data.s_fd);
 #endif
         return -1;
 }
 
-static int eth_llc_ipcp_reg(const uint8_t * hash)
+static int eth_ipcp_reg(const uint8_t * hash)
 {
-        if (shim_data_reg_add_entry(eth_llc_data.shim_data, hash)) {
+        if (shim_data_reg_add_entry(eth_data.shim_data, hash)) {
                 log_err("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
                 return -1;
@@ -1151,14 +1330,14 @@ static int eth_llc_ipcp_reg(const uint8_t * hash)
         return 0;
 }
 
-static int eth_llc_ipcp_unreg(const uint8_t * hash)
+static int eth_ipcp_unreg(const uint8_t * hash)
 {
-        shim_data_reg_del_entry(eth_llc_data.shim_data, hash);
+        shim_data_reg_del_entry(eth_data.shim_data, hash);
 
         return 0;
 }
 
-static int eth_llc_ipcp_query(const uint8_t * hash)
+static int eth_ipcp_query(const uint8_t * hash)
 {
         uint8_t            r_addr[MAC_SIZE];
         struct timespec    timeout = {(NAME_QUERY_TIMEO / 1000),
@@ -1169,7 +1348,7 @@ static int eth_llc_ipcp_query(const uint8_t * hash)
         struct mgmt_msg *  msg;
         size_t             len;
 
-        if (shim_data_dir_has(eth_llc_data.shim_data, hash))
+        if (shim_data_dir_has(eth_data.shim_data, hash))
                 return 0;
 
         len = sizeof(*msg) + ipcp_dir_hash_len();
@@ -1185,16 +1364,22 @@ static int eth_llc_ipcp_query(const uint8_t * hash)
 
         memset(r_addr, 0xff, MAC_SIZE);
 
-        query = shim_data_dir_query_create(eth_llc_data.shim_data, hash);
+        query = shim_data_dir_query_create(eth_data.shim_data, hash);
         if (query == NULL) {
                 free(buf);
                 return -1;
         }
 
-        if (eth_llc_ipcp_send_frame(r_addr, reverse_bits(MGMT_SAP),
-                                    reverse_bits(MGMT_SAP), buf, len)) {
+        if (eth_ipcp_send_frame(r_addr,
+#if defined(BUILD_ETH_DIX)
+                                MGMT_EID,
+#elif defined(BUILD_ETH_LLC)
+                                reverse_bits(MGMT_SAP),
+                                reverse_bits(MGMT_SAP),
+#endif
+                                buf, len)) {
                 log_err("Failed to send management frame.");
-                shim_data_dir_query_destroy(eth_llc_data.shim_data, query);
+                shim_data_dir_query_destroy(eth_data.shim_data, query);
                 free(buf);
                 return -1;
         }
@@ -1203,16 +1388,18 @@ static int eth_llc_ipcp_query(const uint8_t * hash)
 
         ret = shim_data_dir_query_wait(query, &timeout);
 
-        shim_data_dir_query_destroy(eth_llc_data.shim_data, query);
+        shim_data_dir_query_destroy(eth_data.shim_data, query);
 
         return ret;
 }
 
-static int eth_llc_ipcp_flow_alloc(int             fd,
-                                   const uint8_t * hash,
-                                   qoscube_t       cube)
+static int eth_ipcp_flow_alloc(int             fd,
+                               const uint8_t * hash,
+                               qoscube_t       cube)
 {
+#ifdef BUILD_ETH_LLC
         uint8_t  ssap = 0;
+#endif
         uint8_t  r_addr[MAC_SIZE];
         uint64_t addr = 0;
 
@@ -1225,50 +1412,64 @@ static int eth_llc_ipcp_flow_alloc(int             fd,
                 return -1;
         }
 
-        if (!shim_data_dir_has(eth_llc_data.shim_data, hash)) {
+        if (!shim_data_dir_has(eth_data.shim_data, hash)) {
                 log_err("Destination unreachable.");
                 return -1;
         }
-        addr = shim_data_dir_get_addr(eth_llc_data.shim_data, hash);
+        addr = shim_data_dir_get_addr(eth_data.shim_data, hash);
 
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
-
-        ssap =  bmp_allocate(eth_llc_data.saps);
-        if (!bmp_is_id_valid(eth_llc_data.saps, ssap)) {
-                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_wrlock(&eth_data.flows_lock);
+#ifdef BUILD_ETH_LLC
+        ssap = bmp_allocate(eth_data.saps);
+        if (!bmp_is_id_valid(eth_data.saps, ssap)) {
+                pthread_rwlock_unlock(&eth_data.flows_lock);
                 return -1;
         }
 
-        eth_llc_data.fd_to_ef[fd].sap = ssap;
-        eth_llc_data.ef_to_fd[ssap]   = fd;
-
-        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        eth_data.fd_to_ef[fd].sap = ssap;
+        eth_data.ef_to_fd[ssap]   = fd;
+#endif
+        pthread_rwlock_unlock(&eth_data.flows_lock);
 
         memcpy(r_addr, &addr, MAC_SIZE);
 
-        if (eth_llc_ipcp_sap_alloc(r_addr, ssap, hash, cube) < 0) {
-                pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
-                bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
-                eth_llc_data.fd_to_ef[fd].sap = -1;
-                eth_llc_data.ef_to_fd[ssap]   = -1;
-                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        if (eth_ipcp_alloc(r_addr,
+#if defined(BUILD_ETH_DIX)
+                           fd,
+#elif defined(BUILD_ETH_LLC)
+                           ssap,
+#endif
+                           hash, cube) < 0) {
+#ifdef BUILD_ETH_LLC
+                pthread_rwlock_wrlock(&eth_data.flows_lock);
+                bmp_release(eth_data.saps, eth_data.fd_to_ef[fd].sap);
+                eth_data.fd_to_ef[fd].sap = -1;
+                eth_data.ef_to_fd[ssap]   = -1;
+                pthread_rwlock_unlock(&eth_data.flows_lock);
+#endif
                 return -1;
         }
 
-        fset_add(eth_llc_data.np1_flows, fd);
-
+        fset_add(eth_data.np1_flows, fd);
+#if defined(BUILD_ETH_DIX)
+        log_dbg("Pending flow with fd %d.", fd);
+#elif defined(BUILD_ETH_LLC)
         log_dbg("Pending flow with fd %d on SAP %d.", fd, ssap);
-
+#endif
         return 0;
 }
 
-static int eth_llc_ipcp_flow_alloc_resp(int fd,
-                                        int response)
+static int eth_ipcp_flow_alloc_resp(int fd,
+                                    int response)
 {
         struct timespec ts    = {0, ALLOC_TIMEO * MILLION};
         struct timespec abstime;
-        uint8_t         ssap  = 0;
-        uint8_t         r_sap = 0;
+#if defined(BUILD_ETH_DIX)
+        uint16_t        r_eid;
+#elif defined(BUILD_ETH_LLC)
+        uint8_t         ssap;
+        uint8_t         r_sap;
+#endif
         uint8_t         r_addr[MAC_SIZE];
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
@@ -1292,56 +1493,71 @@ static int eth_llc_ipcp_flow_alloc_resp(int fd,
 
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
-
-        ssap = bmp_allocate(eth_llc_data.saps);
-        if (!bmp_is_id_valid(eth_llc_data.saps, ssap)) {
-                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_wrlock(&eth_data.flows_lock);
+#if defined(BUILD_ETH_DIX)
+        r_eid = eth_data.fd_to_ef[fd].r_eid;
+#elif defined(BUILD_ETH_LLC)
+        ssap = bmp_allocate(eth_data.saps);
+        if (!bmp_is_id_valid(eth_data.saps, ssap)) {
+                pthread_rwlock_unlock(&eth_data.flows_lock);
                 return -1;
         }
 
-        eth_llc_data.fd_to_ef[fd].sap = ssap;
-        memcpy(r_addr, eth_llc_data.fd_to_ef[fd].r_addr, MAC_SIZE);
-        r_sap = eth_llc_data.fd_to_ef[fd].r_sap;
-        eth_llc_data.ef_to_fd[ssap] = fd;
+        eth_data.fd_to_ef[fd].sap = ssap;
+        r_sap = eth_data.fd_to_ef[fd].r_sap;
+        eth_data.ef_to_fd[ssap] = fd;
+#endif
+        memcpy(r_addr, eth_data.fd_to_ef[fd].r_addr, MAC_SIZE);
 
-        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_unlock(&eth_data.flows_lock);
 
-        if (eth_llc_ipcp_sap_alloc_resp(r_addr, ssap, r_sap, response) < 0) {
-                pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
-                bmp_release(eth_llc_data.saps, eth_llc_data.fd_to_ef[fd].sap);
-                pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        if (eth_ipcp_alloc_resp(r_addr,
+#if defined(BUILD_ETH_DIX)
+                                fd, r_eid,
+#elif defined(BUILD_ETH_LLC)
+                                ssap, r_sap,
+#endif
+                                response) < 0) {
+#ifdef BUILD_ETH_LLC
+                pthread_rwlock_wrlock(&eth_data.flows_lock);
+                bmp_release(eth_data.saps, eth_data.fd_to_ef[fd].sap);
+                pthread_rwlock_unlock(&eth_data.flows_lock);
+#endif
                 return -1;
         }
 
-        fset_add(eth_llc_data.np1_flows, fd);
-
+        fset_add(eth_data.np1_flows, fd);
+#if defined(BUILD_ETH_DIX)
+        log_dbg("Accepted flow, fd %d.", fd);
+#elif defined(BUILD_ETH_LLC)
         log_dbg("Accepted flow, fd %d, SAP %d.", fd, (uint8_t)ssap);
-
+#endif
         return 0;
 }
 
-static int eth_llc_ipcp_flow_dealloc(int fd)
+static int eth_ipcp_flow_dealloc(int fd)
 {
+#ifdef BUILD_ETH_LLC
         uint8_t sap;
-        uint8_t addr[MAC_SIZE];
-
+#endif
         ipcp_flow_fini(fd);
 
-        pthread_rwlock_wrlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_wrlock(&eth_data.flows_lock);
 
-        fset_del(eth_llc_data.np1_flows, fd);
+        fset_del(eth_data.np1_flows, fd);
 
-        sap = eth_llc_data.fd_to_ef[fd].sap;
-        memcpy(addr, eth_llc_data.fd_to_ef[fd].r_addr, MAC_SIZE);
-        bmp_release(eth_llc_data.saps, sap);
-        eth_llc_data.fd_to_ef[fd].sap = -1;
-        eth_llc_data.fd_to_ef[fd].r_sap = -1;
-        memset(&eth_llc_data.fd_to_ef[fd].r_addr, 0, MAC_SIZE);
+#if defined(BUILD_ETH_DIX)
+        eth_data.fd_to_ef[fd].r_eid = -1;
+#elif defined BUILD_ETH_LLC
+        sap = eth_data.fd_to_ef[fd].sap;
+        bmp_release(eth_data.saps, sap);
+        eth_data.fd_to_ef[fd].sap = -1;
+        eth_data.fd_to_ef[fd].r_sap = -1;
+        eth_data.ef_to_fd[sap] = -1;
+#endif
+        memset(&eth_data.fd_to_ef[fd].r_addr, 0, MAC_SIZE);
 
-        eth_llc_data.ef_to_fd[sap] = -1;
-
-        pthread_rwlock_unlock(&eth_llc_data.flows_lock);
+        pthread_rwlock_unlock(&eth_data.flows_lock);
 
         flow_dealloc(fd);
 
@@ -1350,27 +1566,31 @@ static int eth_llc_ipcp_flow_dealloc(int fd)
         return 0;
 }
 
-static struct ipcp_ops eth_llc_ops = {
-        .ipcp_bootstrap       = eth_llc_ipcp_bootstrap,
+static struct ipcp_ops eth_ops = {
+        .ipcp_bootstrap       = eth_ipcp_bootstrap,
         .ipcp_enroll          = NULL,
         .ipcp_connect         = NULL,
         .ipcp_disconnect      = NULL,
-        .ipcp_reg             = eth_llc_ipcp_reg,
-        .ipcp_unreg           = eth_llc_ipcp_unreg,
-        .ipcp_query           = eth_llc_ipcp_query,
-        .ipcp_flow_alloc      = eth_llc_ipcp_flow_alloc,
-        .ipcp_flow_alloc_resp = eth_llc_ipcp_flow_alloc_resp,
-        .ipcp_flow_dealloc    = eth_llc_ipcp_flow_dealloc
+        .ipcp_reg             = eth_ipcp_reg,
+        .ipcp_unreg           = eth_ipcp_unreg,
+        .ipcp_query           = eth_ipcp_query,
+        .ipcp_flow_alloc      = eth_ipcp_flow_alloc,
+        .ipcp_flow_alloc_resp = eth_ipcp_flow_alloc_resp,
+        .ipcp_flow_dealloc    = eth_ipcp_flow_dealloc
 };
 
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, &eth_llc_ops) < 0)
+        if (ipcp_init(argc, argv, &eth_ops) < 0)
                 goto fail_init;
 
-        if (eth_llc_data_init() < 0) {
+        if (eth_data_init() < 0) {
+#if defined(BUILD_ETH_DIX)
                 log_err("Failed to init eth-llc data.");
+#elif defined(BUILD_ETH_LLC)
+                log_err("Failed to init eth-dix data.");
+#endif
                 goto fail_data_init;
         }
 
@@ -1388,21 +1608,21 @@ int main(int    argc,
         ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                pthread_cancel(eth_llc_data.sdu_writer);
-                pthread_cancel(eth_llc_data.sdu_reader);
-                pthread_cancel(eth_llc_data.mgmt_handler);
+                pthread_cancel(eth_data.sdu_writer);
+                pthread_cancel(eth_data.sdu_reader);
+                pthread_cancel(eth_data.mgmt_handler);
 #ifdef __linux__
-                pthread_cancel(eth_llc_data.if_monitor);
+                pthread_cancel(eth_data.if_monitor);
 #endif
-                pthread_join(eth_llc_data.sdu_writer, NULL);
-                pthread_join(eth_llc_data.sdu_reader, NULL);
-                pthread_join(eth_llc_data.mgmt_handler, NULL);
+                pthread_join(eth_data.sdu_writer, NULL);
+                pthread_join(eth_data.sdu_reader, NULL);
+                pthread_join(eth_data.mgmt_handler, NULL);
 #ifdef __linux__
-                pthread_join(eth_llc_data.if_monitor, NULL);
+                pthread_join(eth_data.if_monitor, NULL);
 #endif
         }
 
-        eth_llc_data_fini();
+        eth_data_fini();
 
         ipcp_fini();
 
@@ -1411,7 +1631,7 @@ int main(int    argc,
  fail_create_r:
         ipcp_shutdown();
  fail_boot:
-        eth_llc_data_fini();
+        eth_data_fini();
  fail_data_init:
         ipcp_fini();
  fail_init:

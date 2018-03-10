@@ -40,8 +40,10 @@ message ipcp_config_msg {
         // Config for UDP
         optional uint32 ip_addr            =  9;
         optional uint32 dns_addr           = 10;
-        // Config for the Ethernet LLC
-        optional string if_name            = 11;
+        // Config for the Ethernet
+        optional string dev                = 11;
+        // Config for DIX Ethernet
+        optional uint32 ethertype          = 12;
 }
 
 enum enroll_code {

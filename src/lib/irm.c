@@ -139,7 +139,12 @@ int irm_bootstrap_ipcp(pid_t                      pid,
         case IPCP_RAPTOR:
                 break;
         case IPCP_ETH_LLC:
-                config.if_name = conf->if_name;
+                config.dev = conf->dev;
+                break;
+        case IPCP_ETH_DIX:
+                config.dev = conf->dev;
+                config.has_ethertype = true;
+                config.ethertype = conf->ethertype;
                 break;
         default:
                 return -EIPCPTYPE;

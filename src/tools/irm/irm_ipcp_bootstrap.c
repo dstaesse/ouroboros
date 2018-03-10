@@ -51,6 +51,7 @@
 #define NORMAL                 "normal"
 #define UDP                    "udp"
 #define ETH_LLC                "eth-llc"
+#define ETH_DIX                "eth-dix"
 #define LOCAL                  "local"
 #define RAPTOR                 "raptor"
 
@@ -68,6 +69,8 @@
 #define DEFAULT_ROUTING        ROUTING_LINK_STATE
 #define DEFAULT_PFF            PFF_SIMPLE
 #define DEFAULT_HASH_ALGO      DIR_HASH_SHA3_256
+#define DEFAULT_ETHERTYPE      0xA000
+
 #define FLAT_RANDOM_ADDR_AUTH  "flat"
 #define LINK_STATE_ROUTING     "link_state"
 #define LINK_STATE_LFA_ROUTING "lfa"
@@ -82,7 +85,7 @@ static void usage(void)
                "                layer <layer name>\n"
                "                type [TYPE]\n"
                "where TYPE = {" NORMAL " " LOCAL " "
-               UDP " " ETH_LLC " " RAPTOR "},\n\n"
+               UDP " " ETH_LLC " " ETH_DIX " " RAPTOR "},\n\n"
                "if TYPE == " NORMAL "\n"
                "                [addr <address size> (default: %d)]\n"
                "                [eid <eid size> (default: %d)]\n"
@@ -103,7 +106,13 @@ static void usage(void)
                "                [dns <DDNS IP address in dotted notation>"
                " (default: none)]\n\n"
                "if TYPE == " ETH_LLC "\n"
-               "                if_name <interface name>\n"
+               "                dev <interface name>\n"
+               "                [hash [ALGORITHM] (default: %s)]\n"
+               "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
+               SHA3_384 " " SHA3_512 "}\n\n"
+               "if TYPE == " ETH_DIX "\n"
+               "                dev <interface name>\n"
+               "                [ethertype <ethertype> (default: 0x%4X)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n"
@@ -117,7 +126,7 @@ static void usage(void)
                SHA3_384 " " SHA3_512 "}\n\n",
                DEFAULT_ADDR_SIZE, DEFAULT_EID_SIZE, DEFAULT_TTL,
                FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING, SIMPLE_PFF,
-               SHA3_256, SHA3_256, SHA3_256, SHA3_256);
+               SHA3_256, SHA3_256, 0xA000, SHA3_256, SHA3_256, SHA3_256);
 }
 
 int do_bootstrap_ipcp(int     argc,
@@ -137,7 +146,8 @@ int do_bootstrap_ipcp(int     argc,
         uint32_t           dns_addr       = DEFAULT_DDNS;
         char *             ipcp_type      = NULL;
         char *             layer_name     = NULL;
-        char *             if_name        = NULL;
+        char *             dev            = NULL;
+        uint16_t           ethertype      = DEFAULT_ETHERTYPE;
         pid_t *            pids           = NULL;
         ssize_t            len            = 0;
         int                i              = 0;
@@ -169,8 +179,14 @@ int do_bootstrap_ipcp(int     argc,
                 } else if (matches(*argv, "dns") == 0) {
                         if (inet_pton(AF_INET, *(argv + 1), &dns_addr) != 1)
                                 goto unknown_param;
-                } else if (matches(*argv, "if_name") == 0) {
-                        if_name = *(argv + 1);
+                } else if (matches(*argv, "device") == 0) {
+                        dev = *(argv + 1);
+                } else if (matches(*argv, "ethertype") == 0) {
+                        /* NOTE: We might do some checks on this. */
+                        if (matches(*(argv + 1), "0x") == 0)
+                                ethertype = strtol(*(argv + 1), NULL, 0);
+                        else
+                                ethertype = strtol(*(argv + 1), NULL, 16);
                 } else if (matches(*argv, "addr") == 0) {
                         addr_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "eid") == 0) {
@@ -240,11 +256,19 @@ int do_bootstrap_ipcp(int     argc,
                 conf.type = IPCP_RAPTOR;
         } else if (strcmp(ipcp_type, ETH_LLC) == 0) {
                 conf.type = IPCP_ETH_LLC;
-                if (if_name == NULL) {
+                if (dev == NULL) {
                         usage();
                         return -1;
                 }
-                conf.if_name = if_name;
+                conf.dev = dev;
+        } else if (strcmp(ipcp_type, ETH_DIX) == 0) {
+                conf.type = IPCP_ETH_DIX;
+                if (dev == NULL) {
+                        usage();
+                        return -1;
+                }
+                conf.dev = dev;
+                conf.ethertype = ethertype;
         } else {
                 usage();
                 return -1;

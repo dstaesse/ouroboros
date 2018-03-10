@@ -246,7 +246,12 @@ static void * mainloop(void * o)
                         }
 
                         if (conf_msg->ipcp_type == IPCP_ETH_LLC)
-                                conf.if_name        = conf_msg->if_name;
+                                conf.dev = conf_msg->dev;
+
+                        if (conf_msg->ipcp_type == IPCP_ETH_DIX) {
+                                conf.dev = conf_msg->dev;
+                                conf.ethertype = conf_msg->ethertype;
+                        }
 
                         if (conf_msg->ipcp_type == IPCP_UDP) {
                                 conf.ip_addr  = conf_msg->ip_addr;

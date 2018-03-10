@@ -35,7 +35,7 @@ add_subdirectory(local)
 add_subdirectory(normal)
 add_subdirectory(raptor)
 add_subdirectory(udp)
-add_subdirectory(eth-llc)
+add_subdirectory(eth)
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)

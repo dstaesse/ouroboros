@@ -146,6 +146,9 @@ pid_t ipcp_create(const char *   name,
         case IPCP_ETH_LLC:
                 exec_name = IPCP_ETH_LLC_EXEC;
                 break;
+        case IPCP_ETH_DIX:
+                exec_name = IPCP_ETH_DIX_EXEC;
+                break;
         case IPCP_LOCAL:
                 exec_name = IPCP_LOCAL_EXEC;
                 break;

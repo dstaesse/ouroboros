@@ -38,6 +38,7 @@ enum ipcp_type {
         IPCP_NORMAL,
         IPCP_RAPTOR,
         IPCP_ETH_LLC,
+        IPCP_ETH_DIX,
         IPCP_UDP
 };
 
@@ -88,8 +89,11 @@ struct ipcp_config {
         uint32_t           ip_addr;
         uint32_t           dns_addr;
 
-        /* Ethernet LLC */
-        char *             if_name;
+        /* Ethernet */
+        char *             dev;
+
+        /* Ethernet DIX */
+        uint16_t           ethertype;
 };
 
 #endif /* OUROBOROS_IPCP_H */
