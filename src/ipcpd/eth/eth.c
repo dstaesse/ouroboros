@@ -88,67 +88,70 @@
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
 #elif defined(HAVE_BPF)
-#define BPF_DEV_MAX               256
-#define BPF_BLEN                  sysconf(_SC_PAGESIZE)
+#define BPF_DEV_MAX          256
+#define BPF_BLEN             sysconf(_SC_PAGESIZE)
 #include <net/bpf.h>
 #endif
 
-#define MAC_SIZE                  6
-#define ETH_TYPE_LENGTH_SIZE      2
-#define ETH_HEADER_SIZE           (2 * MAC_SIZE + ETH_TYPE_LENGTH_SIZE)
+#define MAC_SIZE             6
+#define ETH_TYPE_LENGTH_SIZE sizeof(uint16_t)
+#define ETH_HEADER_SIZE      (2 * MAC_SIZE + ETH_TYPE_LENGTH_SIZE)
 
 #if defined(BUILD_ETH_DIX)
-#define THIS_TYPE                 IPCP_ETH_DIX
-#define MGMT_EID                  0
-#define DIX_HEADER_SIZE           2
-#define MAX_EIDS                  (1 << (8 * DIX_HEADER_SIZE))
-#define ETH_MAX_SDU_SIZE          (1500 - DIX_HEADER_SIZE)
-#define ETH_FRAME_SIZE            (ETH_HEADER_SIZE + DIX_HEADER_SIZE    \
-                                   + ETH_MAX_SDU_SIZE)
+#define THIS_TYPE            IPCP_ETH_DIX
+#define MGMT_EID             0
+#define DIX_EID_SIZE         sizeof(uint16_t)
+#define DIX_LENGTH_SIZE      sizeof(uint16_t)
+#define DIX_HEADER_SIZE      (DIX_EID_SIZE + DIX_LENGTH_SIZE)
+#define MAX_EIDS             (1 << (8 * DIX_EID_SIZE))
+#define ETH_MAX_SDU_SIZE     (1500 - DIX_HEADER_SIZE)
+#define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + DIX_HEADER_SIZE \
+                              + ETH_MAX_SDU_SIZE)
 #elif defined(BUILD_ETH_LLC)
-#define THIS_TYPE                 IPCP_ETH_LLC
-#define MGMT_SAP                  0x01
-#define LLC_HEADER_SIZE           3
-#define MAX_SAPS                  64
-#define ETH_MAX_SDU_SIZE          (1500 - LLC_HEADER_SIZE)
-#define ETH_FRAME_SIZE            (ETH_HEADER_SIZE + LLC_HEADER_SIZE    \
-                                   + ETH_MAX_SDU_SIZE)
+#define THIS_TYPE            IPCP_ETH_LLC
+#define MGMT_SAP             0x01
+#define LLC_HEADER_SIZE      3
+#define MAX_SAPS             64
+#define ETH_MAX_SDU_SIZE     (1500 - LLC_HEADER_SIZE)
+#define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + LLC_HEADER_SIZE \
+                              + ETH_MAX_SDU_SIZE)
 #endif
-#define ALLOC_TIMEO               10    /* ms */
-#define NAME_QUERY_TIMEO          2000  /* ms */
-#define MGMT_TIMEO                100   /* ms */
+#define ALLOC_TIMEO          10    /* ms */
+#define NAME_QUERY_TIMEO     2000  /* ms */
+#define MGMT_TIMEO           100   /* ms */
 
-#define FLOW_REQ                  0
-#define FLOW_REPLY                1
-#define NAME_QUERY_REQ            2
-#define NAME_QUERY_REPLY          3
+#define FLOW_REQ             0
+#define FLOW_REPLY           1
+#define NAME_QUERY_REQ       2
+#define NAME_QUERY_REPLY     3
 
 struct mgmt_msg {
-        uint8_t code;
+        uint8_t  code;
 #if defined(BUILD_ETH_DIX)
         uint16_t seid;
         uint16_t deid;
 #elif defined(BUILD_ETH_LLC)
-        uint8_t ssap;
-        uint8_t dsap;
+        uint8_t  ssap;
+        uint8_t  dsap;
 #endif
-        uint8_t qoscube;
-        int8_t  response;
+        uint8_t  qoscube;
+        int8_t   response;
 } __attribute__((packed));
 
 struct eth_frame {
-        uint8_t dst_hwaddr[MAC_SIZE];
-        uint8_t src_hwaddr[MAC_SIZE];
+        uint8_t  dst_hwaddr[MAC_SIZE];
+        uint8_t  src_hwaddr[MAC_SIZE];
 #if defined(BUILD_ETH_DIX)
-        uint8_t ethertype[ETH_TYPE_LENGTH_SIZE];
-        uint8_t eid[DIX_HEADER_SIZE];
+        uint16_t ethertype;
+        uint16_t eid;
+        uint16_t length;
 #elif defined(BUILD_ETH_LLC)
-        uint8_t length[ETH_TYPE_LENGTH_SIZE];
-        uint8_t dsap;
-        uint8_t ssap;
-        uint8_t cf;
+        uint16_t length;
+        uint8_t  dsap;
+        uint8_t  ssap;
+        uint8_t  cf;
 #endif
-        uint8_t payload;
+        uint8_t  payload;
 } __attribute__((packed));
 
 struct ef {
@@ -344,18 +347,14 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
                                const uint8_t * payload,
                                size_t          len)
 {
-        uint32_t               frame_len = 0;
+        uint32_t           frame_len = 0;
 #ifdef BUILD_ETH_LLC
-        uint8_t                cf = 0x03;
-        uint16_t               length;
+        uint8_t            cf = 0x03;
 #endif
-        uint8_t                frame[ETH_MAX_SDU_SIZE];
-        struct eth_frame *     e_frame;
+        uint8_t            frame[ETH_MAX_SDU_SIZE];
+        struct eth_frame * e_frame;
 
-        if (payload == NULL) {
-                log_err("Payload was NULL.");
-                return -1;
-        }
+        assert(payload);
 
         if (len > ETH_MAX_SDU_SIZE)
                 return -1;
@@ -371,13 +370,12 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
 #endif /* HAVE_NETMAP */
                MAC_SIZE);
 #if defined(BUILD_ETH_DIX)
-        memcpy(&e_frame->ethertype, &eth_data.ethertype, ETH_TYPE_LENGTH_SIZE);
-        deid = htons(deid);
-        memcpy(&e_frame->eid, &deid, DIX_HEADER_SIZE);
+        e_frame->ethertype = eth_data.ethertype;
+        e_frame->eid = htons(deid);
+        e_frame->length = htons(len);
         frame_len = ETH_HEADER_SIZE + DIX_HEADER_SIZE + len;
 #elif defined(BUILD_ETH_LLC)
-        length = htons(LLC_HEADER_SIZE + len);
-        memcpy(&e_frame->length, &length, sizeof(length));
+        e_frame->length = htons(LLC_HEADER_SIZE + len);
         e_frame->dsap = dsap;
         e_frame->ssap = ssap;
         e_frame->cf   = cf;
@@ -410,6 +408,7 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
                 return -1;
         }
 #endif /* HAVE_NETMAP */
+
         return 0;
 }
 
@@ -821,16 +820,12 @@ static void * eth_ipcp_sdu_reader(void * o)
                 }
 #endif
 
+                length = ntohs(e_frame->length);
 #if defined(BUILD_ETH_DIX)
-                length = frame_len - ETH_HEADER_SIZE - DIX_HEADER_SIZE;
-                memcpy(&deid, &e_frame->eid, sizeof(deid));
-                deid = ntohs(deid);
+                deid = ntohs(e_frame->eid);
 
                 if (deid == MGMT_EID) {
 #elif defined (BUILD_ETH_LLC)
-                memcpy(&length, &e_frame->length, sizeof(length));
-                length = ntohs(length);
-
                 if (length > 0x05FF) /* DIX */
                         continue;
 
