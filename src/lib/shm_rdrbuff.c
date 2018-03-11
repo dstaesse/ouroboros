@@ -419,11 +419,12 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         return sdb->idx;
 }
 
-ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
-                            size_t               headspace,
-                            size_t               tailspace,
-                            const uint8_t *      data,
-                            size_t               len)
+ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
+                            size_t                  headspace,
+                            size_t                  tailspace,
+                            const uint8_t *         data,
+                            size_t                  len,
+                            const struct timespec * abstime)
 {
         struct shm_du_buff * sdb;
         size_t               size = headspace + len + tailspace;
@@ -432,6 +433,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         size_t               padblocks = 0;
 #endif
         ssize_t              sz = size + sizeof(*sdb);
+        int                  ret = 0;
 
         assert(rdrb);
 
@@ -457,38 +459,49 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
         if (blocks + *rdrb->head > (SHM_BUFFER_SIZE))
                 padblocks = (SHM_BUFFER_SIZE) - *rdrb->head;
 
-        while (!shm_rdrb_free(rdrb, (blocks + padblocks))) {
+        while (!shm_rdrb_free(rdrb, (blocks + padblocks)) && ret != ETIMEDOUT) {
 #else
-        while (!shm_rdrb_free(rdrb, 1)) {
+        while (!shm_rdrb_free(rdrb, 1) && ret != ETIMEDOUT) {
 #endif
                 pthread_cond_broadcast(rdrb->full);
-                pthread_cond_wait(rdrb->healthy, rdrb->lock);
+                if (abstime != NULL)
+                        ret = pthread_cond_timedwait(rdrb->healthy,
+                                                     rdrb->lock,
+                                                     abstime);
+                else
+                        ret = pthread_cond_wait(rdrb->healthy, rdrb->lock);
         }
 
+        if (ret != ETIMEDOUT) {
 #ifdef SHM_RDRB_MULTI_BLOCK
-        if (padblocks) {
-                sdb = get_head_ptr(rdrb);
-                sdb->size    = 0;
-                sdb->blocks  = padblocks;
-                sdb->flags   = SDB_NULL;
-                sdb->du_head = 0;
-                sdb->du_tail = 0;
-                sdb->idx     = *rdrb->head;
+                if (padblocks) {
+                        sdb = get_head_ptr(rdrb);
+                        sdb->size    = 0;
+                        sdb->blocks  = padblocks;
+                        sdb->flags   = SDB_NULL;
+                        sdb->du_head = 0;
+                        sdb->du_tail = 0;
+                        sdb->idx     = *rdrb->head;
 
-                *rdrb->head = 0;
-        }
+                        *rdrb->head = 0;
+                }
 #endif
-        sdb        = get_head_ptr(rdrb);
-        sdb->flags = SDB_VALID;
-        sdb->idx   = *rdrb->head;
+                sdb        = get_head_ptr(rdrb);
+                sdb->flags = SDB_VALID;
+                sdb->idx   = *rdrb->head;
 #ifdef SHM_RDRB_MULTI_BLOCK
-        sdb->blocks  = blocks;
+                sdb->blocks  = blocks;
 
-        *rdrb->head = (*rdrb->head + blocks) & ((SHM_BUFFER_SIZE) - 1);
+                *rdrb->head = (*rdrb->head + blocks) & ((SHM_BUFFER_SIZE) - 1);
 #else
-        *rdrb->head = (*rdrb->head + 1) & ((SHM_BUFFER_SIZE) - 1);
+                *rdrb->head = (*rdrb->head + 1) & ((SHM_BUFFER_SIZE) - 1);
 #endif
+        }
+
         pthread_cleanup_pop(true);
+
+        if (ret == ETIMEDOUT)
+                return -ETIMEDOUT;
 
         sdb->size    = size;
         sdb->du_head = headspace;

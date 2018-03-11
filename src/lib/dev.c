@@ -808,10 +808,12 @@ ssize_t flow_write(int          fd,
                    const void * buf,
                    size_t       count)
 {
-        struct flow * flow;
-        ssize_t       idx;
-        int           ret;
-        int           flags;
+        struct flow *     flow;
+        ssize_t           idx;
+        int               ret;
+        int               flags;
+        struct timespec   abs;
+        struct timespec * abstime = NULL;
 
         if (buf == NULL)
                 return 0;
@@ -821,11 +823,18 @@ ssize_t flow_write(int          fd,
 
         flow = &ai.flows[fd];
 
+        clock_gettime(PTHREAD_COND_CLOCK, &abs);
+
         pthread_rwlock_rdlock(&ai.lock);
 
         if (flow->port_id < 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 return -ENOTALLOC;
+        }
+
+        if (ai.flows[fd].snd_timesout) {
+                ts_add(&abs, &flow->snd_timeo, &abs);
+                abstime = &abs;
         }
 
         flags = flow->oflags;
@@ -846,7 +855,8 @@ ssize_t flow_write(int          fd,
                                           DU_BUFF_HEADSPACE,
                                           DU_BUFF_TAILSPACE,
                                           buf,
-                                          count);
+                                          count,
+                                          abstime);
         if (idx < 0)
                 return idx;
 
@@ -879,7 +889,6 @@ ssize_t flow_read(int    fd,
         uint8_t *            sdu;
         struct shm_rbuff *   rb;
         struct shm_du_buff * sdb;
-        struct timespec      now;
         struct timespec      abs;
         struct timespec *    abstime = NULL;
         struct flow *        flow;
@@ -890,7 +899,7 @@ ssize_t flow_read(int    fd,
 
         flow = &ai.flows[fd];
 
-        clock_gettime(PTHREAD_COND_CLOCK, &now);
+        clock_gettime(PTHREAD_COND_CLOCK, &abs);
 
         pthread_rwlock_rdlock(&ai.lock);
 
@@ -903,7 +912,7 @@ ssize_t flow_read(int    fd,
         noblock = flow->oflags & FLOWFRNOBLOCK;
 
         if (ai.flows[fd].rcv_timesout) {
-                ts_add(&now, &flow->rcv_timeo, &abs);
+                ts_add(&abs, &flow->rcv_timeo, &abs);
                 abstime = &abs;
         }
 
@@ -1349,7 +1358,8 @@ int ipcp_sdb_reserve(struct shm_du_buff ** sdb,
                                   DU_BUFF_HEADSPACE,
                                   DU_BUFF_TAILSPACE,
                                   NULL,
-                                  len);
+                                  len,
+                                  NULL);
 
         if (idx < 0)
                 return -1;

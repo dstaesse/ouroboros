@@ -53,11 +53,12 @@ ssize_t              shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                                        const uint8_t *      data,
                                        size_t               data_len);
 
-ssize_t              shm_rdrbuff_write_b(struct shm_rdrbuff * rdrb,
-                                         size_t               headspace,
-                                         size_t               tailspace,
-                                         const uint8_t *      data,
-                                         size_t               data_len);
+ssize_t              shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
+                                         size_t                  headspace,
+                                         size_t                  tailspace,
+                                         const uint8_t *         data,
+                                         size_t                  data_len,
+                                         const struct timespec * abstime);
 
 ssize_t              shm_rdrbuff_read(uint8_t **           dst,
                                       struct shm_rdrbuff * rdrb,
