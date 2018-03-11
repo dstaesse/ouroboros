@@ -182,11 +182,17 @@ int do_bootstrap_ipcp(int     argc,
                 } else if (matches(*argv, "device") == 0) {
                         dev = *(argv + 1);
                 } else if (matches(*argv, "ethertype") == 0) {
-                        /* NOTE: We might do some checks on this. */
+                        /* NOTE: We might do some more checks on strtol. */
                         if (matches(*(argv + 1), "0x") == 0)
                                 ethertype = strtol(*(argv + 1), NULL, 0);
                         else
                                 ethertype = strtol(*(argv + 1), NULL, 16);
+                        if (ethertype < 0x0600 || ethertype == 0xFFFF) {
+                                printf("Invalid Ethertype: \"%s\".\n"
+                                       "Recommended range: 0xA000-0xEFFF.\n",
+                                       *(argv + 1));
+                                return -1;
+                        }
                 } else if (matches(*argv, "addr") == 0) {
                         addr_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "eid") == 0) {

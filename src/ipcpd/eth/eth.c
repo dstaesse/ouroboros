@@ -1106,6 +1106,10 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         memcpy(ifr.ifr_name, conf->dev, strlen(conf->dev));
 
 #ifdef BUILD_ETH_DIX
+        if (conf->ethertype < 0x0600 || conf->ethertype == 0xFFFF) {
+                log_err("Invalid Ethertype.");
+                return -1;
+        }
         eth_data.ethertype = htons(conf->ethertype);
 #endif
 
