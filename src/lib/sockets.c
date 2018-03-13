@@ -38,7 +38,7 @@ int client_socket_open(char * file_name)
         int sockfd;
         struct sockaddr_un serv_addr;
 
-        sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+        sockfd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
         if (sockfd < 0)
                 return -1;
 
@@ -66,7 +66,7 @@ int server_socket_open(char * file_name)
                         return -1;
         }
 
-        sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+        sockfd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
         if (sockfd < 0)
                 return -1;
 
