@@ -142,7 +142,7 @@ void * accept_thread(void * o)
                 server.times[fd] = now;
                 pthread_mutex_unlock(&server.lock);
 
-                fccntl(fd, FLOWSFLAGS, FLOWFNONBLOCK | FLOWFRDWR);
+                fccntl(fd, FLOWSFLAGS, FLOWFRNOBLOCK | FLOWFRDWR);
         }
 
         return (void *) 0;
