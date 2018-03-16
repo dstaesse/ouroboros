@@ -655,7 +655,7 @@ static void * lsreader(void * o)
 {
         fqueue_t *   fq;
         int          ret;
-        uint8_t      buf[sizeof(struct lsa)];
+        uint8_t      buf[sizeof(struct lsa) + 1];
         int          fd;
         qosspec_t    qs;
         struct lsa * msg;
@@ -680,7 +680,7 @@ static void * lsreader(void * o)
                 }
 
                 while ((fd = fqueue_next(fq)) >= 0) {
-                        len = flow_read(fd, buf, sizeof(*msg));
+                        len = flow_read(fd, buf, sizeof(*msg) + 1);
                         if (len <= 0 || len != sizeof(*msg))
                                 continue;
 
