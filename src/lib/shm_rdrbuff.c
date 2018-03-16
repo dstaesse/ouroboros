@@ -517,7 +517,6 @@ ssize_t shm_rdrbuff_read(uint8_t **           dst,
                          struct shm_rdrbuff * rdrb,
                          size_t               idx)
 {
-        ssize_t len = 0;
         struct shm_du_buff * sdb;
 
         assert(dst);
@@ -525,23 +524,18 @@ ssize_t shm_rdrbuff_read(uint8_t **           dst,
         assert(idx < (SHM_BUFFER_SIZE));
 
         sdb = idx_to_du_buff_ptr(rdrb, idx);
-        len = (ssize_t) (sdb->du_tail - sdb->du_head);
         *dst = ((uint8_t *) (sdb + 1)) + sdb->du_head;
 
-        return len;
+        return (ssize_t) (sdb->du_tail - sdb->du_head);
 }
 
 struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb,
                                      size_t               idx)
 {
-        struct shm_du_buff * sdb;
-
         assert(rdrb);
         assert(idx < (SHM_BUFFER_SIZE));
 
-        sdb = idx_to_du_buff_ptr(rdrb, idx);
-
-        return sdb;
+        return idx_to_du_buff_ptr(rdrb, idx);
 }
 
 int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb,
