@@ -47,13 +47,13 @@
 
 static void usage(void)
 {
-        printf("Usage: echo-app [OPTION]...\n"
+        printf("Usage: oecho [OPTION]...\n"
                "Sends an echo between a server and a client\n\n"
                "  -l, --listen              Run in server mode\n"
                "      --help                Display this help text and exit\n");
 }
 
-int server_main(void)
+static int server_main(void)
 {
         int     fd = 0;
         char    buf[BUF_SIZE];
@@ -91,14 +91,14 @@ int server_main(void)
         return 0;
 }
 
-int client_main(void)
+static int client_main(void)
 {
         int     fd      = 0;
         char    buf[BUF_SIZE];
         char *  message = "Client says hi!";
         ssize_t count   = 0;
 
-        fd = flow_alloc("echo", NULL, NULL);
+        fd = flow_alloc("oecho", NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 return -1;
