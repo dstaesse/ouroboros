@@ -29,6 +29,7 @@
 #include <ouroboros/endian.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/fccntl.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
@@ -655,7 +656,7 @@ static void * lsreader(void * o)
 {
         fqueue_t *   fq;
         int          ret;
-        uint8_t      buf[sizeof(struct lsa) + 1];
+        uint8_t      buf[sizeof(struct lsa)];
         int          fd;
         qosspec_t    qs;
         struct lsa * msg;
@@ -680,7 +681,7 @@ static void * lsreader(void * o)
                 }
 
                 while ((fd = fqueue_next(fq)) >= 0) {
-                        len = flow_read(fd, buf, sizeof(*msg) + 1);
+                        len = flow_read(fd, buf, sizeof(*msg));
                         if (len <= 0 || len != sizeof(*msg))
                                 continue;
 
@@ -724,6 +725,7 @@ static void handle_event(void *       self,
         /* FIXME: Apply correct QoS on graph */
         struct conn * c;
         qosspec_t     qs;
+        int           flags;
 
         (void) self;
 
@@ -759,6 +761,8 @@ static void handle_event(void *       self,
                 flow_event(c->flow_info.fd, false);
                 break;
         case NOTIFY_MGMT_CONN_ADD:
+                fccntl(c->flow_info.fd, FLOWGFLAGS, &flags);
+                fccntl(c->flow_info.fd, FLOWSFLAGS, flags | FLOWFRNOPART);
                 fset_add(ls.mgmt_set, c->flow_info.fd);
                 if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_MGMT))
                         log_warn("Failed to add mgmt neighbor to LSDB.");

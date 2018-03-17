@@ -897,6 +897,7 @@ ssize_t flow_read(int    fd,
         struct timespec *    abstime = NULL;
         struct flow *        flow;
         bool                 noblock;
+        bool                 partrd;
 
         if (fd < 0 || fd > PROG_MAX_FLOWS)
                 return -EBADF;
@@ -919,6 +920,7 @@ ssize_t flow_read(int    fd,
 
         rb   = flow->rx_rb;
         noblock = flow->oflags & FLOWFRNOBLOCK;
+        partrd = !(flow->oflags & FLOWFRNOPART);
 
         if (ai.flows[fd].rcv_timesout) {
                 ts_add(&abs, &flow->rcv_timeo, &abs);
@@ -948,14 +950,20 @@ ssize_t flow_read(int    fd,
         if (n <= (ssize_t) count) {
                 memcpy(buf, sdu, n);
                 shm_rdrbuff_remove(ai.rdrb, idx);
-                flow->part_idx = (n == (ssize_t) count) ? DONE_PART : NO_PART;
+                flow->part_idx = (partrd && n == (ssize_t) count) ?
+                        DONE_PART : NO_PART;
                 return n;
         } else {
-                memcpy(buf, sdu, count);
-                sdb = shm_rdrbuff_get(ai.rdrb, idx);
-                shm_du_buff_head_release(sdb, n);
-                flow->part_idx = idx;
-                return count;
+                if (partrd) {
+                        memcpy(buf, sdu, count);
+                        sdb = shm_rdrbuff_get(ai.rdrb, idx);
+                        shm_du_buff_head_release(sdb, n);
+                        flow->part_idx = idx;
+                        return count;
+                } else {
+                        shm_rdrbuff_remove(ai.rdrb, idx);
+                        return -EMSGSIZE;
+                }
         }
 }
 

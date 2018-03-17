@@ -33,15 +33,14 @@ On success, \fBflow_read\fR() returns the number of bytes read. On
 failure, a negative value indicating the error will be returned. If
 the number of bytes read equals count, a subsequent call to
 \fBflow_read\fR() should be performed to check if there were more
-bytes to read. This call to \fBflow_read\fR will return 0 if there
-was no more data and mark the end of the datagram.
+bytes to read. This call to \fBflow_read\fR will return 0 if there was
+no more data and mark the end of the datagram.
 
 On success, \fBflow_write\fR() returns 0. On failure, a negative value
 indicating the error will be returned. Passing a NULL pointer for
 \fIbuf\fR returns 0 with no other effects.
 
 .SH ERRORS
-
 .B -EINVAL
 An invalid argument was passed.
 

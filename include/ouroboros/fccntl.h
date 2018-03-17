@@ -38,6 +38,7 @@
 #define FLOWFRNOBLOCK 00001000 /* Non-blocking read     */
 #define FLOWFWNOBLOCK 00002000 /* Non-blocking write    */
 #define FLOWFNONBLOCK (FLOWFRNOBLOCK | FLOWFWNOBLOCK)
+#define FLOWFRNOPART  00004000 /* Disable partial reads */
 
 #define FLOWFDEFAULT  FLOWFRDWR
 
