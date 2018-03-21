@@ -119,15 +119,6 @@ struct reg_entry *  registry_get_entry_by_hash(struct list_head * registry,
                                                const uint8_t *    hash,
                                                size_t             len);
 
-int                 registry_add_name_to_layer(struct list_head * registry,
-                                               const char *       name,
-                                               const char *       layer_name,
-                                               enum ipcp_type     type);
-
-void                registry_del_name_from_layer(struct list_head * registry,
-                                                 const char *       name,
-                                                 const char *       layer_name);
-
 void                registry_destroy(struct list_head * registry);
 
 #endif /* OUROBOROS_IRMD_REGISTRY_H */

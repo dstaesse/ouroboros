@@ -964,13 +964,6 @@ static int name_reg(const char *  name,
 
                         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-                        if (registry_add_name_to_layer(&irmd.registry,
-                                                       name,
-                                                       e->layer_name,
-                                                       e->type) < 0)
-                                log_warn("Registered unbound name %s. "
-                                         "Registry may be corrupt.",
-                                         name);
                         log_info("Registered %s in %s as " HASH_FMT ".",
                                  name, e->layer_name, HASH_VAL(hash));
                         ++ret;
@@ -1035,9 +1028,6 @@ static int name_unreg(const char *  name,
 
                         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-                        registry_del_name_from_layer(&irmd.registry,
-                                                     name,
-                                                     e->layer_name);
                         log_info("Unregistered %s from %s.",
                                  name, e->layer_name);
                         ++ret;
