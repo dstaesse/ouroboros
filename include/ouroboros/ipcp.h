@@ -39,7 +39,8 @@ enum ipcp_type {
         IPCP_RAPTOR,
         IPCP_ETH_LLC,
         IPCP_ETH_DIX,
-        IPCP_UDP
+        IPCP_UDP,
+        IPCP_INVALID
 };
 
 /* Normal IPCP policies */

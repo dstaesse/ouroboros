@@ -867,7 +867,6 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
         *n_ipcps = irmd.n_ipcps;
-
         if (*n_ipcps == 0) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 return 0;
@@ -883,18 +882,20 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 (*ipcps)[i] = malloc(sizeof(***ipcps));
-                if ((*ipcps)[i] == NULL)
-                        goto fail_malloc;
+                if ((*ipcps)[i] == NULL) {
+                        --i;
+                        goto fail;
+                }
 
                 ipcp_info_msg__init((*ipcps)[i]);
                 (*ipcps)[i]->name = strdup(e->name);
                 if ((*ipcps)[i]->name == NULL)
-                        goto fail_mem;
+                        goto fail;
 
                 (*ipcps)[i]->layer = strdup(
                         e->layer != NULL ? e->layer : "Not enrolled");
                 if ((*ipcps)[i]->layer == NULL)
-                        goto fail_mem;
+                        goto fail;
 
                 (*ipcps)[i]->pid    = e->pid;
                 (*ipcps)[i++]->type = e->type;
@@ -904,19 +905,12 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
 
         return 0;
 
- fail_mem:
-        while (i > 0) {
+ fail:
+        while (i >= 0) {
                 free((*ipcps)[i]->layer);
                 free((*ipcps)[i]->name);
-                free(*ipcps[--i]);
+                free(*ipcps[i--]);
         }
-        free(*ipcps);
-        *n_ipcps = 0;
-        return -ENOMEM;
-
- fail_malloc:
-        while (i > 0)
-                free(*ipcps[--i]);
         free(*ipcps);
         *n_ipcps = 0;
         return -ENOMEM;

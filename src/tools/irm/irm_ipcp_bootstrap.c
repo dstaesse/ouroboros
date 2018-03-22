@@ -147,7 +147,7 @@ int do_bootstrap_ipcp(int     argc,
         uint32_t           ip_addr        = 0;
         uint32_t           dns_addr       = DEFAULT_DDNS;
         char *             ipcp_type      = NULL;
-        enum ipcp_type     type;
+        enum ipcp_type     type           = IPCP_INVALID;
         char *             layer          = NULL;
         char *             dev            = NULL;
         uint16_t           ethertype      = DEFAULT_ETHERTYPE;
