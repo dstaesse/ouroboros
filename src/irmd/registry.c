@@ -44,7 +44,9 @@
 
 static struct reg_entry * reg_entry_create(void)
 {
-        struct reg_entry * e = malloc(sizeof(*e));
+        struct reg_entry * e;
+
+        e = malloc(sizeof(*e));
         if (e == NULL)
                 return NULL;
 
@@ -59,8 +61,8 @@ static int reg_entry_init(struct reg_entry * e,
 {
         pthread_condattr_t cattr;
 
-        if (e == NULL || name == NULL)
-                return -1;
+        assert(e);
+        assert(name);
 
         list_head_init(&e->next);
         list_head_init(&e->reg_progs);
@@ -69,20 +71,29 @@ static int reg_entry_init(struct reg_entry * e,
         e->name = name;
 
         if (pthread_condattr_init(&cattr))
-                return -1;
+                goto fail_cattr;
 
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
         if (pthread_cond_init(&e->state_cond, &cattr))
-                return -1;
+                goto fail_cond;
 
         if (pthread_mutex_init(&e->state_lock, NULL))
-                return -1;
+                goto fail_mutex;
+
+        pthread_condattr_destroy(&cattr);
 
         e->state = REG_NAME_IDLE;
 
         return 0;
+
+ fail_mutex:
+        pthread_cond_destroy(&e->state_cond);
+ fail_cond:
+        pthread_condattr_destroy(&cattr);
+ fail_cattr:
+        return -1;
 }
 
 static void cancel_reg_entry_destroy(void * o)
@@ -199,12 +210,12 @@ int reg_entry_add_prog(struct reg_entry *  e,
 void reg_entry_del_prog(struct reg_entry * e,
                         const char *       prog)
 {
-        struct list_head * p = NULL;
-        struct list_head * h = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
         list_for_each_safe(p, h, &e->reg_progs) {
                 struct str_el * e = list_entry(p, struct str_el, next);
-                if (!wildcard_match(prog, e->str)) {
+                if (!strcmp(prog, e->str)) {
                         list_del(&e->next);
                         free(e->str);
                         free(e);
@@ -470,7 +481,7 @@ struct reg_entry * registry_get_entry(struct list_head * registry,
 
         list_for_each(p, registry) {
                 struct reg_entry * e = list_entry(p, struct reg_entry, next);
-                if (!wildcard_match(name, e->name))
+                if (!strcmp(name, e->name))
                         return e;
         }
 

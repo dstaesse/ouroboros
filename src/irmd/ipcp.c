@@ -253,8 +253,8 @@ int ipcp_enroll(pid_t               pid,
         if (dst == NULL)
                 return -EINVAL;
 
-        msg.code     = IPCP_MSG_CODE__IPCP_ENROLL;
-        msg.dst_name = (char *) dst;
+        msg.code = IPCP_MSG_CODE__IPCP_ENROLL;
+        msg.dst  = (char *) dst;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -292,11 +292,11 @@ int ipcp_connect(pid_t        pid,
         ipcp_msg_t * recv_msg = NULL;
         int          ret      = -1;
 
-        msg.code      = IPCP_MSG_CODE__IPCP_CONNECT;
-        msg.dst_name  = (char *) dst;
-        msg.comp_name = (char *) component;
-        msg.has_pid   = true;
-        msg.pid       = pid;
+        msg.code    = IPCP_MSG_CODE__IPCP_CONNECT;
+        msg.dst     = (char *) dst;
+        msg.comp    = (char *) component;
+        msg.has_pid = true;
+        msg.pid     = pid;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -321,11 +321,11 @@ int ipcp_disconnect(pid_t        pid,
         ipcp_msg_t * recv_msg = NULL;
         int          ret      = -1;
 
-        msg.code      = IPCP_MSG_CODE__IPCP_DISCONNECT;
-        msg.dst_name  = (char *) dst;
-        msg.comp_name = (char *) component;
-        msg.has_pid   = true;
-        msg.pid       = pid;
+        msg.code    = IPCP_MSG_CODE__IPCP_DISCONNECT;
+        msg.dst     = (char *) dst;
+        msg.comp    = (char *) component;
+        msg.has_pid = true;
+        msg.pid     = pid;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)

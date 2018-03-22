@@ -34,7 +34,7 @@
 #include <sys/stat.h>
 
 pid_t irm_create_ipcp(const char *   name,
-                      enum ipcp_type ipcp_type)
+                      enum ipcp_type type)
 {
         irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -44,9 +44,9 @@ pid_t irm_create_ipcp(const char *   name,
                 return -EINVAL;
 
         msg.code          = IRM_MSG_CODE__IRM_CREATE_IPCP;
-        msg.dst_name      = (char *) name;
+        msg.name          = (char *) name;
         msg.has_ipcp_type = true;
-        msg.ipcp_type     = ipcp_type;
+        msg.ipcp_type     = type;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -54,7 +54,7 @@ pid_t irm_create_ipcp(const char *   name,
 
         if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return -EIRMD;
         }
 
         ret = recv_msg->result;
@@ -174,8 +174,8 @@ int irm_connect_ipcp(pid_t        pid,
         int         ret;
 
         msg.code      = IRM_MSG_CODE__IRM_CONNECT_IPCP;
-        msg.dst_name  = (char *) dst;
-        msg.comp_name = (char *) component;
+        msg.dst       = (char *) dst;
+        msg.comp      = (char *) component;
         msg.has_pid   = true;
         msg.pid       = pid;
 
@@ -202,11 +202,11 @@ int irm_disconnect_ipcp(pid_t        pid,
         irm_msg_t * recv_msg = NULL;
         int         ret;
 
-        msg.code      = IRM_MSG_CODE__IRM_DISCONNECT_IPCP;
-        msg.dst_name  = (char *) dst;
-        msg.comp_name = (char *) component;
-        msg.has_pid   = true;
-        msg.pid       = pid;
+        msg.code    = IRM_MSG_CODE__IRM_DISCONNECT_IPCP;
+        msg.dst     = (char *) dst;
+        msg.comp    = (char *) component;
+        msg.has_pid = true;
+        msg.pid     = pid;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -223,38 +223,47 @@ int irm_disconnect_ipcp(pid_t        pid,
         return ret;
 }
 
-ssize_t irm_list_ipcps(const char * name,
-                       pid_t **     pids)
+ssize_t irm_list_ipcps(struct ipcp_info ** ipcps)
 {
         irm_msg_t msg        = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        size_t nr            = 0;
+        irm_msg_t * recv_msg;
+        size_t nr;
         size_t i;
 
-        if (pids == NULL)
+        if (ipcps == NULL)
                 return -EINVAL;
 
+        *ipcps = NULL;
+
         msg.code     = IRM_MSG_CODE__IRM_LIST_IPCPS;
-        msg.dst_name = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (recv_msg->pids == NULL) {
+        if (recv_msg->ipcps == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                return 0;
         }
 
-        nr = recv_msg->n_pids;
-        *pids = malloc(nr * sizeof(pid_t));
-        if (*pids == NULL) {
+        nr = recv_msg->n_ipcps;
+        if (nr == 0) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return 0;
+        }
+
+        *ipcps = malloc(nr * sizeof(**ipcps));
+        if (*ipcps == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
         }
 
-        for (i = 0; i < nr; i++)
-                (*pids)[i] = recv_msg->pids[i];
+        for (i = 0; i < nr; i++) {
+                (*ipcps)[i].pid   = recv_msg->ipcps[i]->pid;
+                (*ipcps)[i].type  = recv_msg->ipcps[i]->type;
+                strcpy((*ipcps)[i].name, recv_msg->ipcps[i]->name);
+                strcpy((*ipcps)[i].layer, recv_msg->ipcps[i]->layer);
+        }
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -262,30 +271,23 @@ ssize_t irm_list_ipcps(const char * name,
 }
 
 int irm_enroll_ipcp(pid_t        pid,
-                    const char * layer_name)
+                    const char * dst)
 {
         irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int         ret      = -1;
 
-        if (pid == -1 || layer_name == NULL)
+        if (pid == -1 || dst == NULL)
                 return -EINVAL;
 
         msg.code         = IRM_MSG_CODE__IRM_ENROLL_IPCP;
         msg.has_pid      = true;
         msg.pid          = pid;
-        msg.n_layer_name = 1;
-        msg.layer_name   = malloc(sizeof(*(msg.layer_name)));
-        if (msg.layer_name == NULL)
-                return -ENOMEM;
-
-        msg.layer_name[0] = (char *) layer_name;
+        msg.dst          = (char *) dst;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
-                free(msg.layer_name);
+        if (recv_msg == NULL)
                 return -EIRMD;
-        }
 
         if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -295,7 +297,6 @@ int irm_enroll_ipcp(pid_t        pid,
         ret = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
 
-        free(msg.layer_name);
         return ret;
 }
 
@@ -403,9 +404,9 @@ int irm_bind_program(const char * prog,
                 return ret;
         }
 
-        msg.code      = IRM_MSG_CODE__IRM_BIND_PROGRAM;
-        msg.dst_name  = (char *) name;
-        msg.prog_name = full_name;
+        msg.code = IRM_MSG_CODE__IRM_BIND_PROGRAM;
+        msg.name = (char *) name;
+        msg.prog = full_name;
 
         if (argv != NULL) {
                 msg.n_args = argc;
@@ -443,10 +444,10 @@ int irm_bind_process(pid_t        pid,
         if (name == NULL)
                 return -EINVAL;
 
-        msg.code     = IRM_MSG_CODE__IRM_BIND_PROCESS;
-        msg.has_pid  = true;
-        msg.pid      = pid;
-        msg.dst_name = (char *) name;
+        msg.code    = IRM_MSG_CODE__IRM_BIND_PROCESS;
+        msg.has_pid = true;
+        msg.pid     = pid;
+        msg.name    = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -473,9 +474,9 @@ int irm_unbind_program(const char * prog,
         if (name == NULL)
                 return -EINVAL;
 
-        msg.code      = IRM_MSG_CODE__IRM_UNBIND_PROGRAM;
-        msg.prog_name = (char *) prog;
-        msg.dst_name  = (char *) name;
+        msg.code = IRM_MSG_CODE__IRM_UNBIND_PROGRAM;
+        msg.prog = (char *) prog;
+        msg.name = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -502,10 +503,10 @@ int irm_unbind_process(pid_t        pid,
         if (name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_UNBIND_PROCESS;
-        msg.has_pid  = true;
-        msg.pid      = pid;
-        msg.dst_name = (char *) name;
+        msg.code    = IRM_MSG_CODE__IRM_UNBIND_PROCESS;
+        msg.has_pid = true;
+        msg.pid     = pid;
+        msg.name    = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -522,23 +523,20 @@ int irm_unbind_process(pid_t        pid,
         return ret;
 }
 
-int irm_reg(const char * name,
-            char **      layers,
-            size_t       len)
+int irm_reg(pid_t        pid,
+            const char * name)
 {
         irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int         ret      = -1;
 
-        if (name == NULL || layers == NULL || len == 0)
+        if (name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_REG;
-
-        msg.dst_name = (char *) name;
-
-        msg.layer_name   = layers;
-        msg.n_layer_name = len;
+        msg.code    = IRM_MSG_CODE__IRM_REG;
+        msg.has_pid = true;
+        msg.pid     = pid;
+        msg.name    = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -556,23 +554,20 @@ int irm_reg(const char * name,
 }
 
 
-int irm_unreg(const char * name,
-              char **      layers,
-              size_t       len)
+int irm_unreg(pid_t        pid,
+              const char * name)
 {
         irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
         int         ret      = -1;
 
-        if (name == NULL || layers == NULL || len == 0)
+        if (name == NULL)
                 return -EINVAL;
 
-        msg.code = IRM_MSG_CODE__IRM_UNREG;
-
-        msg.dst_name = (char *) name;
-
-        msg.layer_name   = (char **) layers;
-        msg.n_layer_name = len;
+        msg.code    = IRM_MSG_CODE__IRM_UNREG;
+        msg.has_pid = true;
+        msg.pid     = pid;
+        msg.name    = (char *) name;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)

@@ -36,31 +36,41 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
-#include <string.h>
-
 #include <ouroboros/irm.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#define MAX_IPCPS  128
 #define MAX_LAYERS 128
 
 static void usage(void)
 {
         printf("Usage: irm unregister\n"
                "           name <name>\n"
+               "           ipcp <ipcp to register with>\n"
+               "           [ipcp <ipcp to register with>]\n"
+               "           [... (maximum %d ipcps)]\n"
                "           layer <layer to unregister from>\n"
                "           [layer <layer to unregister from>]\n"
                "           [... (maximum %d layers)]\n"
-               , MAX_LAYERS);
+               , MAX_IPCPS, MAX_LAYERS);
 }
 
 int do_unregister(int argc, char ** argv)
 {
-        char * layers[MAX_LAYERS];
-        size_t layers_len = 0;
-        char * name = NULL;
+        char *             name       = NULL;
+        char *             layers[MAX_LAYERS];
+        size_t             layers_len = 0;
+        char *             ipcp[MAX_IPCPS];
+        size_t             ipcp_len   = 0;
+        struct ipcp_info * ipcps;
+        size_t             len;
+        size_t             i;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
@@ -68,7 +78,13 @@ int do_unregister(int argc, char ** argv)
                 } else if (matches(*argv, "layer") == 0) {
                         layers[layers_len++] = *(argv + 1);
                         if (layers_len > MAX_LAYERS) {
-                                printf("Too many layers specified\n");
+                                printf("Too many layers specified.\n");
+                                return -1;
+                        }
+                } else if (matches(*argv, "ipcp") == 0) {
+                        ipcp[ipcp_len++] = *(argv + 1);
+                        if (ipcp_len > MAX_IPCPS) {
+                                printf("Too many IPCPs specified.\n");
                                 return -1;
                         }
                 } else {
@@ -81,10 +97,35 @@ int do_unregister(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (layers_len == 0 || name == NULL) {
+        if ((layers_len < 1 && ipcp_len < 1) || name == NULL) {
                 usage();
                 return -1;
         }
 
-        return irm_unreg(name, layers, layers_len);
+        len = irm_list_ipcps(&ipcps);
+        for (i = 0; i < len; ++i) {
+                size_t j;
+                for (j = 0; j < layers_len; j++) {
+                        if (wildcard_match(ipcps[i].layer, layers[j]) == 0) {
+                                if (irm_unreg(ipcps[i].pid, name)) {
+                                        free(ipcps);
+                                        return -1;
+                                }
+                                break;
+                        }
+                }
+                for (j = 0; j < ipcp_len; j++) {
+                        if (wildcard_match(ipcps[i].name, ipcp[j]) == 0) {
+                                if (irm_unreg(ipcps[i].pid, name)) {
+                                        free(ipcps);
+                                        return -1;
+                                }
+                                break;
+                        }
+                }
+        }
+
+        free(ipcps);
+
+        return 0;
 }

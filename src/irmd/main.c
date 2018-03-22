@@ -83,11 +83,11 @@ struct ipcp_entry {
         pid_t            pid;
         enum ipcp_type   type;
         enum hash_algo   dir_hash_algo;
-        char *           layer_name;
+        char *           layer;
 
-        enum init_state  init_state;
-        pthread_cond_t   init_cond;
-        pthread_mutex_t  init_lock;
+        enum init_state  state;
+        pthread_cond_t   cond;
+        pthread_mutex_t  lock;
 };
 
 enum irm_state {
@@ -107,6 +107,7 @@ struct {
         struct list_head     registry;     /* registered names known     */
 
         struct list_head     ipcps;        /* list of ipcps in system    */
+        size_t               n_ipcps;      /* number of ipcps            */
 
         struct list_head     proc_table;   /* processes                  */
         struct list_head     prog_table;   /* programs known             */
@@ -197,47 +198,116 @@ static struct irm_flow * get_irm_flow_n(pid_t n_pid)
         return NULL;
 }
 
-static struct ipcp_entry * ipcp_entry_create(void)
+static struct ipcp_entry * ipcp_entry_create(const char *   name,
+                                             enum ipcp_type type)
 {
-        struct ipcp_entry * e = malloc(sizeof(*e));
-        if (e == NULL)
-                return NULL;
+        struct ipcp_entry * e;
+        pthread_condattr_t  cattr;
 
-        e->name       = NULL;
-        e->layer_name = NULL;
+        e = malloc(sizeof(*e));
+        if (e == NULL)
+                goto fail_malloc;
+
+        e->layer = NULL;
+        e->type  = type;
+        e->state = IPCP_BOOT;
+        e->name  = strdup(name);
+        if (e->name == NULL)
+                goto fail_name;
+
+        if (pthread_condattr_init(&cattr))
+                goto fail_cattr;
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+        if (pthread_cond_init(&e->cond, &cattr))
+                goto fail_cond;
+
+        if (pthread_mutex_init(&e->lock, NULL))
+                goto fail_mutex;
+
 
         list_head_init(&e->next);
 
+        pthread_condattr_destroy(&cattr);
+
         return e;
+
+ fail_mutex:
+        pthread_cond_destroy(&e->cond);
+ fail_cond:
+        pthread_condattr_destroy(&cattr);
+ fail_cattr:
+        free(e->name);
+ fail_name:
+        free(e);
+ fail_malloc:
+        return NULL;
 }
 
 static void ipcp_entry_destroy(struct ipcp_entry * e)
 {
         assert(e);
 
-        pthread_mutex_lock(&e->init_lock);
+        pthread_mutex_lock(&e->lock);
 
-        while (e->init_state == IPCP_BOOT)
-                pthread_cond_wait(&e->init_cond, &e->init_lock);
+        while (e->state == IPCP_BOOT)
+                pthread_cond_wait(&e->cond, &e->lock);
 
-        pthread_mutex_unlock(&e->init_lock);
+        pthread_mutex_unlock(&e->lock);
 
-        if (e->name != NULL)
-                free(e->name);
-
-        if (e->layer_name != NULL)
-                free(e->layer_name);
-
+        free(e->name);
+        free(e->layer);
         free(e);
+}
+
+static void ipcp_entry_set_state(struct ipcp_entry * e,
+                                 enum init_state     state)
+{
+        pthread_mutex_lock(&e->lock);
+        e->state = state;
+        pthread_cond_broadcast(&e->cond);
+        pthread_mutex_unlock(&e->lock);
+}
+
+static int ipcp_entry_wait_boot(struct ipcp_entry * e)
+{
+        int             ret = 0;
+        struct timespec dl;
+        struct timespec to = {SOCKET_TIMEOUT / 1000,
+                              (SOCKET_TIMEOUT % 1000) * MILLION};
+
+        clock_gettime(PTHREAD_COND_CLOCK, &dl);
+        ts_add(&dl, &to, &dl);
+
+        pthread_mutex_lock(&e->lock);
+
+        while (e->state == IPCP_BOOT && ret != ETIMEDOUT)
+                ret = pthread_cond_timedwait(&e->cond, &e->lock, &dl);
+
+        if (ret == ETIMEDOUT) {
+                kill(e->pid, SIGTERM);
+                e->state = IPCP_NULL;
+                pthread_cond_signal(&e->cond);
+        }
+
+        if (e->state != IPCP_LIVE) {
+                pthread_mutex_unlock(&e->lock);
+                return -1;
+        }
+
+        pthread_mutex_unlock(&e->lock);
+
+        return 0;
 }
 
 static struct ipcp_entry * get_ipcp_entry_by_pid(pid_t pid)
 {
-        struct list_head * p = NULL;
+        struct list_head * p;
 
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (pid == e->pid)
+                if (e->pid == pid)
                         return e;
         }
 
@@ -246,7 +316,7 @@ static struct ipcp_entry * get_ipcp_entry_by_pid(pid_t pid)
 
 static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
 {
-        struct list_head * p = NULL;
+        struct list_head * p;
 
         list_for_each(p, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
@@ -264,15 +334,18 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
         struct list_head * h;
         uint8_t *          hash;
         pid_t              pid;
+        size_t             len;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
         list_for_each_safe(p, h, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->layer_name == NULL || e->pid == src)
+                if (e->layer == NULL || e->pid == src)
                         continue;
 
-                hash = malloc(IPCP_HASH_LEN(e));
+                len = IPCP_HASH_LEN(e);
+
+                hash = malloc(len);
                 if  (hash == NULL)
                         return NULL;
 
@@ -282,7 +355,7 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
 
                 pthread_rwlock_unlock(&irmd.reg_lock);
 
-                if (ipcp_query(pid, hash, IPCP_HASH_LEN(e)) == 0) {
+                if (ipcp_query(pid, hash, len) == 0) {
                         free(hash);
                         return e;
                 }
@@ -297,134 +370,89 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
         return NULL;
 }
 
-static pid_t create_ipcp(char *         name,
-                         enum ipcp_type ipcp_type)
+static pid_t create_ipcp(const char *   name,
+                         enum ipcp_type type)
 {
-        struct pid_el *     ppid  = NULL;
-        struct ipcp_entry * tmp   = NULL;
-        struct list_head *  p     = NULL;
-        struct ipcp_entry * entry = NULL;
-        int                 ret   = 0;
-        pthread_condattr_t  cattr;
-        struct timespec     dl;
-        struct timespec     to = {SOCKET_TIMEOUT / 1000,
-                                  (SOCKET_TIMEOUT % 1000) * MILLION};
-        pid_t               ipcp_pid;
+        struct pid_el *     ppid;
+        struct ipcp_entry * entry;
+        struct list_head *  p;
+        pid_t               pid;
 
-        ppid = malloc(sizeof(*ppid));
-        if (ppid == NULL)
-                return -ENOMEM;
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        pthread_rwlock_rdlock(&irmd.reg_lock);
 
         entry = get_ipcp_entry_by_name(name);
         if (entry != NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                free(ppid);
                 log_err("IPCP by that name already exists.");
-                return -1;
+                return -EPERM;
         }
 
-        ppid->pid = ipcp_create(name, ipcp_type);
-        if (ppid->pid == -1) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                free(ppid);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
+        ppid = malloc(sizeof(*ppid));
+        if (ppid == NULL)
+                goto fail_ppid;
+
+        entry = ipcp_entry_create(name, type);
+        if (entry == NULL) {
+                log_err("Failed to create IPCP entry.");
+                goto fail_ipcp_entry;
+        }
+
+        pid = ipcp_create(name, type);
+        if (pid == -1) {
                 log_err("Failed to create IPCP.");
-                return -1;
+                goto fail_ipcp;
         }
 
-        tmp = ipcp_entry_create();
-        if (tmp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                free(ppid);
-                return -1;
-        }
+        entry->pid = pid;
 
-        list_head_init(&tmp->next);
-
-        tmp->name = strdup(name);
-        if (tmp->name == NULL) {
-                ipcp_entry_destroy(tmp);
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                free(ppid);
-                return -1;
-        }
-
-        pthread_condattr_init(&cattr);
-#ifndef __APPLE__
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
-#endif
-
-        pthread_cond_init(&tmp->init_cond, &cattr);
-
-        pthread_condattr_destroy(&cattr);
-
-        pthread_mutex_init(&tmp->init_lock, NULL);
-
-        tmp->pid           = ppid->pid;
-        tmp->layer_name    = NULL;
-        tmp->type          = ipcp_type;
-        tmp->init_state    = IPCP_BOOT;
-        tmp->dir_hash_algo = -1;
-        ipcp_pid           = tmp->pid;
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->type > ipcp_type)
+                if (list_entry(p, struct ipcp_entry, next)->type > type)
                         break;
         }
 
-        list_add_tail(&tmp->next, p);
+        list_add_tail(&entry->next, p);
+        ++irmd.n_ipcps;
 
+        ppid->pid = entry->pid;
         list_add(&ppid->next, &irmd.spawned_pids);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        pthread_mutex_lock(&tmp->init_lock);
-
-        clock_gettime(PTHREAD_COND_CLOCK, &dl);
-        ts_add(&dl, &to, &dl);
-
-        while (tmp->init_state == IPCP_BOOT && ret != -ETIMEDOUT)
-                ret = -pthread_cond_timedwait(&tmp->init_cond,
-                                              &tmp->init_lock,
-                                              &dl);
-
-        if (ret == -ETIMEDOUT) {
-                kill(tmp->pid, SIGKILL);
-                tmp->init_state = IPCP_NULL;
-                pthread_cond_signal(&tmp->init_cond);
-                pthread_mutex_unlock(&tmp->init_lock);
-                log_err("IPCP %d failed to respond.", ipcp_pid);
+        /* IRMd maintenance will clean up if booting fails. */
+        if (ipcp_entry_wait_boot(entry)) {
+                log_err("IPCP %d failed to boot.", pid);
                 return -1;
         }
 
-        pthread_mutex_unlock(&tmp->init_lock);
+        log_info("Created IPCP %d.", pid);
 
-        log_info("Created IPCP %d.", ipcp_pid);
+        return pid;
 
-        return ipcp_pid;
+        ipcp_destroy(pid);
+ fail_ipcp:
+        ipcp_entry_destroy(entry);
+ fail_ipcp_entry:
+        free(ppid);
+ fail_ppid:
+        return -1;
 }
 
 static int create_ipcp_r(pid_t pid,
                          int   result)
 {
-        struct list_head * pos = NULL;
-
-        if (result != 0)
-                return result;
+        struct list_head * p;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        list_for_each(pos, &irmd.ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(pos, struct ipcp_entry, next);
-
+        list_for_each(p, &irmd.ipcps) {
+                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
                 if (e->pid == pid) {
-                        pthread_mutex_lock(&e->init_lock);
-                        e->init_state = IPCP_LIVE;
-                        pthread_cond_broadcast(&e->init_cond);
-                        pthread_mutex_unlock(&e->init_lock);
+                        ipcp_entry_set_state(e, result ? IPCP_NULL : IPCP_LIVE);
+                        break;
                 }
         }
 
@@ -435,12 +463,12 @@ static int create_ipcp_r(pid_t pid,
 
 static void clear_spawned_process(pid_t pid)
 {
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
-        list_for_each_safe(pos, n, &(irmd.spawned_pids)) {
-                struct pid_el * a = list_entry(pos, struct pid_el, next);
-                if (pid == a->pid) {
+        list_for_each_safe(p, h, &(irmd.spawned_pids)) {
+                struct pid_el * a = list_entry(p, struct pid_el, next);
+                if (a->pid == pid) {
                         list_del(&a->next);
                         free(a);
                 }
@@ -449,22 +477,20 @@ static void clear_spawned_process(pid_t pid)
 
 static int destroy_ipcp(pid_t pid)
 {
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        list_for_each_safe(pos, n, &(irmd.ipcps)) {
-                struct ipcp_entry * tmp =
-                        list_entry(pos, struct ipcp_entry, next);
-
-                if (pid == tmp->pid) {
+        list_for_each_safe(p, h, &irmd.ipcps) {
+                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                if (e->pid == pid) {
                         clear_spawned_process(pid);
                         if (ipcp_destroy(pid))
                                 log_err("Could not destroy IPCP.");
-                        list_del(&tmp->next);
-                        ipcp_entry_destroy(tmp);
-
+                        list_del(&e->next);
+                        ipcp_entry_destroy(e);
+                        --irmd.n_ipcps;
                         log_info("Destroyed IPCP %d.", pid);
                 }
         }
@@ -477,7 +503,7 @@ static int destroy_ipcp(pid_t pid)
 static int bootstrap_ipcp(pid_t               pid,
                           ipcp_config_msg_t * conf)
 {
-        struct ipcp_entry * entry = NULL;
+        struct ipcp_entry * entry;
         struct layer_info   info;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
@@ -501,8 +527,8 @@ static int bootstrap_ipcp(pid_t               pid,
                 return -1;
         }
 
-        entry->layer_name = strdup(info.layer_name);
-        if (entry->layer_name == NULL) {
+        entry->layer = strdup(info.layer_name);
+        if (entry->layer == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Failed to set name of layer.");
                 return -ENOMEM;
@@ -519,7 +545,7 @@ static int bootstrap_ipcp(pid_t               pid,
 }
 
 static int enroll_ipcp(pid_t  pid,
-                       char * dst_name)
+                       char * dst)
 {
         struct ipcp_entry * entry = NULL;
         struct layer_info   info;
@@ -533,7 +559,7 @@ static int enroll_ipcp(pid_t  pid,
                 return -1;
         }
 
-        if (entry->layer_name != NULL) {
+        if (entry->layer != NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("IPCP in wrong state");
                 return -1;
@@ -541,7 +567,7 @@ static int enroll_ipcp(pid_t  pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        if (ipcp_enroll(pid, dst_name, &info) < 0) {
+        if (ipcp_enroll(pid, dst, &info) < 0) {
                 log_err("Could not enroll IPCP %d.", pid);
                 return -1;
         }
@@ -555,8 +581,8 @@ static int enroll_ipcp(pid_t  pid,
                 return -1;
         }
 
-        entry->layer_name = strdup(info.layer_name);
-        if (entry->layer_name == NULL) {
+        entry->layer = strdup(info.layer_name);
+        if (entry->layer == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Failed to strdup layer_name.");
                 return -ENOMEM;
@@ -648,13 +674,13 @@ static int bind_program(char *   prog,
                         int      argc,
                         char **  argv)
 {
-        char * progs;
-        char * progn;
-        char ** argv_dup = NULL;
-        int i;
-        char * name_dup = NULL;
-        struct prog_entry * e = NULL;
-        struct reg_entry * re = NULL;
+        char *              progs;
+        char *              progn;
+        char **             argv_dup = NULL;
+        int                 i;
+        char *              name_dup = NULL;
+        struct prog_entry * e        = NULL;
+        struct reg_entry *  re       = NULL;
 
         if (prog == NULL || name == NULL)
                 return -EINVAL;
@@ -662,7 +688,6 @@ static int bind_program(char *   prog,
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
         e = prog_table_get(&irmd.prog_table, path_strip(prog));
-
         if (e == NULL) {
                 progs = strdup(path_strip(prog));
                 if (progs == NULL) {
@@ -704,9 +729,7 @@ static int bind_program(char *   prog,
                         argvfree(argv_dup);
                         return -ENOMEM;
                 }
-
                 prog_table_add(&irmd.prog_table, e);
-
         }
 
         name_dup = strdup(name);
@@ -835,68 +858,78 @@ static int unbind_process(pid_t        pid,
         return 0;
 }
 
-static ssize_t list_ipcps(char *   name,
-                          pid_t ** pids)
+static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
+                          size_t *            n_ipcps)
 {
-        struct list_head * pos = NULL;
-        size_t count = 0;
-        int i = 0;
+        struct list_head * p;
+        int                i = 0;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        list_for_each(pos, &irmd.ipcps) {
-                struct ipcp_entry * tmp =
-                        list_entry(pos, struct ipcp_entry, next);
-                if (wildcard_match(name, tmp->name) == 0)
-                        count++;
-        }
+        *n_ipcps = irmd.n_ipcps;
 
-        if (count == 0) {
+        if (*n_ipcps == 0) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 return 0;
         }
 
-        *pids = malloc(count * sizeof(**pids));
-        if (*pids == NULL) {
+        *ipcps = malloc(irmd.n_ipcps * sizeof(**ipcps));
+        if (*ipcps == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
+                *n_ipcps = 0;
                 return -1;
         }
 
-        list_for_each(pos, &irmd.ipcps) {
-                struct ipcp_entry * tmp =
-                        list_entry(pos, struct ipcp_entry, next);
-                if (wildcard_match(name, tmp->name) == 0)
-                        (*pids)[i++] = tmp->pid;
-        }
+        list_for_each(p, &irmd.ipcps) {
+                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                (*ipcps)[i] = malloc(sizeof(***ipcps));
+                if ((*ipcps)[i] == NULL)
+                        goto fail_malloc;
+
+                ipcp_info_msg__init((*ipcps)[i]);
+                (*ipcps)[i]->name = strdup(e->name);
+                if ((*ipcps)[i]->name == NULL)
+                        goto fail_mem;
+
+                (*ipcps)[i]->layer = strdup(
+                        e->layer != NULL ? e->layer : "Not enrolled");
+                if ((*ipcps)[i]->layer == NULL)
+                        goto fail_mem;
+
+                (*ipcps)[i]->pid    = e->pid;
+                (*ipcps)[i++]->type = e->type;
+       }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        return count;
+        return 0;
+
+ fail_mem:
+        while (i > 0) {
+                free((*ipcps)[i]->layer);
+                free((*ipcps)[i]->name);
+                free(*ipcps[--i]);
+        }
+        free(*ipcps);
+        *n_ipcps = 0;
+        return -ENOMEM;
+
+ fail_malloc:
+        while (i > 0)
+                free(*ipcps[--i]);
+        free(*ipcps);
+        *n_ipcps = 0;
+        return -ENOMEM;
 }
 
-static int name_reg(const char *  name,
-                    char **       layers,
-                    size_t        len)
+static int irm_update_name(const char * name)
 {
-        size_t i;
-        int ret = 0;
-        struct list_head * p = NULL;
-
-        assert(name);
-        assert(len);
-        assert(layers);
-        assert(layers[0]);
+        struct list_head * p;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        if (list_is_empty(&irmd.ipcps)) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return -1;
-        }
-
         if (!registry_has_name(&irmd.registry, name)) {
-                struct reg_entry * re =
-                        registry_add_name(&irmd.registry, name);
+                struct reg_entry * re = registry_add_name(&irmd.registry, name);
                 if (re == NULL) {
                         log_err("Failed creating registry entry for %s.", name);
                         pthread_rwlock_unlock(&irmd.reg_lock);
@@ -906,11 +939,11 @@ static int name_reg(const char *  name,
                 /* check the tables for client programs */
                 list_for_each(p, &irmd.proc_table) {
                         struct list_head * q;
-                        struct proc_entry * e =
-                                list_entry(p, struct proc_entry, next);
+                        struct proc_entry * e;
+                        e = list_entry(p, struct proc_entry, next);
                         list_for_each(q, &e->names) {
-                                struct str_el * s =
-                                        list_entry(q, struct str_el, next);
+                                struct str_el * s;
+                                s = list_entry(q, struct str_el, next);
                                 if (!strcmp(s->str, name))
                                         reg_entry_add_pid(re, e->pid);
                         }
@@ -918,145 +951,145 @@ static int name_reg(const char *  name,
 
                 list_for_each(p, &irmd.prog_table) {
                         struct list_head * q;
-                        struct prog_entry * e =
-                                list_entry(p, struct prog_entry, next);
+                        struct prog_entry * e;
+                        e = list_entry(p, struct prog_entry, next);
                         list_for_each(q, &e->names) {
-                                struct str_el * s =
-                                        list_entry(q, struct str_el, next);
+                                struct str_el * s;
+                                s = list_entry(q, struct str_el, next);
                                 if (!strcmp(s->str, name))
                                         reg_entry_add_prog(re, e);
                         }
                 }
         }
 
-        list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->layer_name == NULL)
-                        continue;
-
-                for (i = 0; i < len; ++i) {
-                        uint8_t * hash;
-                        pid_t     pid;
-                        size_t    len;
-
-                        if (wildcard_match(layers[i], e->layer_name))
-                                continue;
-
-                        hash = malloc(IPCP_HASH_LEN(e));
-                        if (hash == NULL)
-                                break;
-
-                        str_hash(e->dir_hash_algo, hash, name);
-
-                        pid = e->pid;
-                        len = IPCP_HASH_LEN(e);
-
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-
-                        if (ipcp_reg(pid, hash, len)) {
-                                log_err("Could not register " HASH_FMT
-                                        " with IPCP %d.",
-                                        HASH_VAL(hash), pid);
-                                pthread_rwlock_wrlock(&irmd.reg_lock);
-                                free(hash);
-                                break;
-                        }
-
-                        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-                        log_info("Registered %s in %s as " HASH_FMT ".",
-                                 name, e->layer_name, HASH_VAL(hash));
-                        ++ret;
-
-                        free(hash);
-                }
-        }
-
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        return (ret > 0 ? 0 : -1);
+        return 0;
 }
 
-static int name_unreg(const char *  name,
-                      char **       layers,
-                      size_t        len)
+static int name_reg(pid_t         pid,
+                    const char *  name)
 {
-        size_t i;
-        int ret = 0;
-        struct list_head * pos = NULL;
+        size_t              len;
+        struct ipcp_entry * ipcp;
+        uint8_t *           hash;
+        int                 err;
 
         assert(name);
-        assert(len);
-        assert(layers);
-        assert(layers[0]);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        list_for_each(pos, &irmd.ipcps) {
-                struct ipcp_entry * e =
-                        list_entry(pos, struct ipcp_entry, next);
-
-                if (e->layer_name == NULL)
-                        continue;
-
-                for (i = 0; i < len; ++i) {
-                        uint8_t * hash;
-                        pid_t     pid;
-                        size_t    len;
-
-                        if (wildcard_match(layers[i], e->layer_name))
-                                continue;
-
-                        hash = malloc(IPCP_HASH_LEN(e));
-                        if  (hash == NULL)
-                                break;
-
-                        str_hash(e->dir_hash_algo, hash, name);
-
-                        pid = e->pid;
-                        len = IPCP_HASH_LEN(e);
-
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-
-                        if (ipcp_unreg(pid, hash, len)) {
-                                log_err("Could not unregister %s with IPCP %d.",
-                                        name, pid);
-                                pthread_rwlock_wrlock(&irmd.reg_lock);
-                                free(hash);
-                                break;
-                        }
-
-                        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-                        log_info("Unregistered %s from %s.",
-                                 name, e->layer_name);
-                        ++ret;
-
-                        free(hash);
-                }
+        ipcp = get_ipcp_entry_by_pid(pid);
+        if (ipcp == NULL) {
+                err = -EIPCP;
+                goto fail;
         }
+
+        if (ipcp->layer == NULL) {
+                err = -EPERM;
+                goto fail;
+        }
+
+        len = IPCP_HASH_LEN(ipcp);
+
+        hash = malloc(len);
+        if (hash == NULL) {
+                err = -ENOMEM;
+                goto fail;
+        }
+
+        str_hash(ipcp->dir_hash_algo, hash, name);
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
+        if (ipcp_reg(pid, hash, len)) {
+                log_err("Could not register " HASH_FMT " with IPCP %d.",
+                        HASH_VAL(hash), pid);
+                free(hash);
+                return -1;
+        }
+
+        irm_update_name(name);
+
+        log_info("Registered %s with IPCP %d as " HASH_FMT ".",
+                 name, pid, HASH_VAL(hash));
+
+        free(hash);
+
+        return 0;
+
+fail:
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        return err;
+}
+
+static int name_unreg(pid_t         pid,
+                      const char *  name)
+{
+        struct ipcp_entry * ipcp;
+        int                 err;
+        uint8_t *           hash;
+        size_t              len;
+
+        assert(name);
+
+        pthread_rwlock_wrlock(&irmd.reg_lock);
+
+        ipcp = get_ipcp_entry_by_pid(pid);
+        if (ipcp == NULL) {
+                err = -EIPCP;
+                goto fail;
+        }
+
+        if (ipcp->layer == NULL) {
+                err = -EPERM;
+                goto fail;
+        }
+
+        len = IPCP_HASH_LEN(ipcp);
+
+        hash = malloc(len);
+        if  (hash == NULL) {
+                err = -ENOMEM;
+                goto fail;
+        }
+
+        str_hash(ipcp->dir_hash_algo, hash, name);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        return (ret > 0 ? 0 : -1);
+        if (ipcp_unreg(pid, hash, len)) {
+                log_err("Could not unregister %s with IPCP %d.", name, pid);
+                free(hash);
+                return -1;
+        }
+
+        log_info("Unregistered %s from %d.", name, pid);
+
+        free(hash);
+
+        return 0;
+
+ fail:
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        return err;
 }
 
 static int proc_announce(pid_t  pid,
                          char * prog)
 {
-        struct proc_entry * e = NULL;
-        struct prog_entry * a = NULL;
-        char * prog_dup;
-        if (prog == NULL)
-                return -EINVAL;
+        struct proc_entry * e;
+        struct prog_entry * a;
+        char *              prog_dup;
+
+        assert(prog);
 
         prog_dup = strdup(prog);
-        if (prog_dup == NULL) {
+        if (prog_dup == NULL)
                 return -ENOMEM;
-        }
 
         e = proc_entry_create(pid, prog_dup);
         if (e == NULL) {
+                free(prog_dup);
                 return -ENOMEM;
         }
 
@@ -1065,7 +1098,6 @@ static int proc_announce(pid_t  pid,
         proc_table_add(&irmd.proc_table, e);
 
         /* Copy listen names from program if it exists. */
-
         a = prog_table_get(&irmd.prog_table, e->prog);
         if (a != NULL) {
                 struct list_head * p;
@@ -1876,17 +1908,24 @@ static void * mainloop(void * o)
         (void) o;
 
         while (true) {
-                irm_msg_t         ret_msg = IRM_MSG__INIT;
+                irm_msg_t       * ret_msg;
                 struct irm_flow * e       = NULL;
-                pid_t *           pids    = NULL;
                 struct timespec * timeo   = NULL;
                 struct timespec   ts      = {0, 0};
                 struct cmd *      cmd;
 
-                ret_msg.code = IRM_MSG_CODE__IRM_REPLY;
+                ret_msg = malloc(sizeof(*ret_msg));
+                if (ret_msg == NULL)
+                        return (void *) -1;
+
+                irm_msg__init(ret_msg);
+
+                ret_msg->code = IRM_MSG_CODE__IRM_REPLY;
+
 
                 pthread_mutex_lock(&irmd.cmd_lock);
 
+                pthread_cleanup_push(free_msg, ret_msg);
                 pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
                                      &irmd.cmd_lock);
 
@@ -1897,6 +1936,7 @@ static void * mainloop(void * o)
                 list_del(&cmd->next);
 
                 pthread_cleanup_pop(true);
+                pthread_cleanup_pop(false);
 
                 msg = irm_msg__unpack(NULL, cmd->len, cmd->cbuf);
                 sfd = cmd->fd;
@@ -1905,6 +1945,7 @@ static void * mainloop(void * o)
 
                 if (msg == NULL) {
                         close(sfd);
+                        irm_msg__free_unpacked(ret_msg, NULL);
                         continue;
                 }
 
@@ -1920,151 +1961,145 @@ static void * mainloop(void * o)
 
                 pthread_cleanup_push(close_ptr, &sfd);
                 pthread_cleanup_push(free_msg, msg);
+                pthread_cleanup_push(free_msg, ret_msg);
 
                 switch (msg->code) {
                 case IRM_MSG_CODE__IRM_CREATE_IPCP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = create_ipcp(msg->dst_name,
-                                                     msg->ipcp_type);
+                        ret_msg->has_result = true;
+                        ret_msg->result = create_ipcp(msg->name,
+                                                      msg->ipcp_type);
                         break;
                 case IRM_MSG_CODE__IPCP_CREATE_R:
-                        ret_msg.has_result = true;
-                        ret_msg.result = create_ipcp_r(msg->pid, msg->result);
+                        ret_msg->has_result = true;
+                        ret_msg->result = create_ipcp_r(msg->pid, msg->result);
                         break;
                 case IRM_MSG_CODE__IRM_DESTROY_IPCP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = destroy_ipcp(msg->pid);
+                        ret_msg->has_result = true;
+                        ret_msg->result = destroy_ipcp(msg->pid);
                         break;
                 case IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = bootstrap_ipcp(msg->pid, msg->conf);
+                        ret_msg->has_result = true;
+                        ret_msg->result = bootstrap_ipcp(msg->pid, msg->conf);
                         break;
                 case IRM_MSG_CODE__IRM_ENROLL_IPCP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = enroll_ipcp(msg->pid,
-                                                     msg->layer_name[0]);
+                        ret_msg->has_result = true;
+                        ret_msg->result = enroll_ipcp(msg->pid, msg->dst);
                         break;
                 case IRM_MSG_CODE__IRM_CONNECT_IPCP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = connect_ipcp(msg->pid,
-                                                      msg->dst_name,
-                                                      msg->comp_name);
+                        ret_msg->has_result = true;
+                        ret_msg->result = connect_ipcp(msg->pid,
+                                                       msg->dst,
+                                                       msg->comp);
                         break;
                 case IRM_MSG_CODE__IRM_DISCONNECT_IPCP:
-                        ret_msg.has_result = true;
-                        ret_msg.result = disconnect_ipcp(msg->pid,
-                                                         msg->dst_name,
-                                                         msg->comp_name);
+                        ret_msg->has_result = true;
+                        ret_msg->result = disconnect_ipcp(msg->pid,
+                                                          msg->dst,
+                                                          msg->comp);
                         break;
                 case IRM_MSG_CODE__IRM_BIND_PROGRAM:
-                        ret_msg.has_result = true;
-                        ret_msg.result = bind_program(msg->prog_name,
-                                                      msg->dst_name,
-                                                      msg->opts,
-                                                      msg->n_args,
-                                                      msg->args);
+                        ret_msg->has_result = true;
+                        ret_msg->result = bind_program(msg->prog,
+                                                       msg->name,
+                                                       msg->opts,
+                                                       msg->n_args,
+                                                       msg->args);
                         break;
                 case IRM_MSG_CODE__IRM_UNBIND_PROGRAM:
-                        ret_msg.has_result = true;
-                        ret_msg.result = unbind_program(msg->prog_name,
-                                                        msg->dst_name);
+                        ret_msg->has_result = true;
+                        ret_msg->result = unbind_program(msg->prog, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_PROC_ANNOUNCE:
-                        ret_msg.has_result = true;
-                        ret_msg.result = proc_announce(msg->pid,
-                                                       msg->prog_name);
+                        ret_msg->has_result = true;
+                        ret_msg->result = proc_announce(msg->pid, msg->prog);
                         break;
                 case IRM_MSG_CODE__IRM_BIND_PROCESS:
-                        ret_msg.has_result = true;
-                        ret_msg.result = bind_process(msg->pid, msg->dst_name);
+                        ret_msg->has_result = true;
+                        ret_msg->result = bind_process(msg->pid, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_UNBIND_PROCESS:
-                        ret_msg.has_result = true;
-                        ret_msg.result = unbind_process(msg->pid,
-                                                        msg->dst_name);
+                        ret_msg->has_result = true;
+                        ret_msg->result = unbind_process(msg->pid, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_LIST_IPCPS:
-                        ret_msg.has_result = true;
-                        ret_msg.n_pids = list_ipcps(msg->dst_name, &pids);
-                        ret_msg.pids = pids;
+                        ret_msg->has_result = true;
+                        ret_msg->result = list_ipcps(&ret_msg->ipcps,
+                                                     &ret_msg->n_ipcps);
                         break;
                 case IRM_MSG_CODE__IRM_REG:
-                        ret_msg.has_result = true;
-                        ret_msg.result = name_reg(msg->dst_name,
-                                                  msg->layer_name,
-                                                  msg->n_layer_name);
+                        ret_msg->has_result = true;
+                        ret_msg->result = name_reg(msg->pid, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_UNREG:
-                        ret_msg.has_result = true;
-                        ret_msg.result = name_unreg(msg->dst_name,
-                                                    msg->layer_name,
-                                                    msg->n_layer_name);
+                        ret_msg->has_result = true;
+                        ret_msg->result = name_unreg(msg->pid, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
-                        ret_msg.has_result = true;
-                        ret_msg.result = flow_accept(msg->pid, timeo, &e);
-                        if (ret_msg.result == 0) {
-                                ret_msg.has_port_id = true;
-                                ret_msg.port_id     = e->port_id;
-                                ret_msg.has_pid     = true;
-                                ret_msg.pid         = e->n_1_pid;
-                                ret_msg.has_qoscube = true;
-                                ret_msg.qoscube     = e->qc;
+                        ret_msg->has_result = true;
+                        ret_msg->result = flow_accept(msg->pid, timeo, &e);
+                        if (ret_msg->result == 0) {
+                                ret_msg->has_port_id = true;
+                                ret_msg->port_id     = e->port_id;
+                                ret_msg->has_pid     = true;
+                                ret_msg->pid         = e->n_1_pid;
+                                ret_msg->has_qoscube = true;
+                                ret_msg->qoscube     = e->qc;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
-                        ret_msg.has_result = true;
-                        ret_msg.result = flow_alloc(msg->pid, msg->dst_name,
-                                                    msg->qoscube, timeo, &e);
-                        if (ret_msg.result == 0) {
-                                ret_msg.has_port_id = true;
-                                ret_msg.port_id     = e->port_id;
-                                ret_msg.has_pid     = true;
-                                ret_msg.pid         = e->n_1_pid;
+                        ret_msg->has_result = true;
+                        ret_msg->result = flow_alloc(msg->pid, msg->dst,
+                                                     msg->qoscube, timeo, &e);
+                        if (ret_msg->result == 0) {
+                                ret_msg->has_port_id = true;
+                                ret_msg->port_id     = e->port_id;
+                                ret_msg->has_pid     = true;
+                                ret_msg->pid         = e->n_1_pid;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
-                        ret_msg.has_result = true;
-                        ret_msg.result = flow_dealloc(msg->pid, msg->port_id);
+                        ret_msg->has_result = true;
+                        ret_msg->result = flow_dealloc(msg->pid, msg->port_id);
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->pid,
                                          msg->hash.data,
                                          msg->qoscube);
-                        ret_msg.has_result = true;
+                        ret_msg->has_result = true;
                         if (e == NULL) {
-                                ret_msg.result = -1;
+                                ret_msg->result = -1;
                                 break;
                         }
-                        ret_msg.has_port_id = true;
-                        ret_msg.port_id     = e->port_id;
-                        ret_msg.has_pid     = true;
-                        ret_msg.pid         = e->n_pid;
+                        ret_msg->has_port_id = true;
+                        ret_msg->port_id     = e->port_id;
+                        ret_msg->has_pid     = true;
+                        ret_msg->pid         = e->n_pid;
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
-                        ret_msg.has_result = true;
-                        ret_msg.result = flow_alloc_reply(msg->port_id,
-                                                          msg->response);
+                        ret_msg->has_result = true;
+                        ret_msg->result = flow_alloc_reply(msg->port_id,
+                                                           msg->response);
                         break;
                 default:
                         log_err("Don't know that message code.");
                         break;
                 }
 
+                pthread_cleanup_pop(false);
                 pthread_cleanup_pop(true);
                 pthread_cleanup_pop(false);
 
-                if (ret_msg.result == -EPIPE || !ret_msg.has_result) {
+                if (ret_msg->result == -EPIPE || !ret_msg->has_result) {
+                        irm_msg__free_unpacked(ret_msg, NULL);
                         close(sfd);
                         tpm_inc(irmd.tpm);
                         continue;
                 }
 
-                buffer.len = irm_msg__get_packed_size(&ret_msg);
+                buffer.len = irm_msg__get_packed_size(ret_msg);
                 if (buffer.len == 0) {
                         log_err("Failed to calculate length of reply message.");
-                        if (pids != NULL)
-                                free(pids);
+                        irm_msg__free_unpacked(ret_msg, NULL);
                         close(sfd);
                         tpm_inc(irmd.tpm);
                         continue;
@@ -2072,22 +2107,20 @@ static void * mainloop(void * o)
 
                 buffer.data = malloc(buffer.len);
                 if (buffer.data == NULL) {
-                        if (pids != NULL)
-                                free(pids);
+                        irm_msg__free_unpacked(ret_msg, NULL);
                         close(sfd);
                         tpm_inc(irmd.tpm);
                         continue;
                 }
 
-                irm_msg__pack(&ret_msg, buffer.data);
+                irm_msg__pack(ret_msg, buffer.data);
 
-                if (pids != NULL)
-                        free(pids);
+                irm_msg__free_unpacked(ret_msg, NULL);
 
                 pthread_cleanup_push(close_ptr, &sfd);
 
                 if (write(sfd, buffer.data, buffer.len) == -1)
-                        if (ret_msg.result != -EIRMD)
+                        if (ret_msg->result != -EIRMD)
                                 log_warn("Failed to send reply message.");
 
                 free(buffer.data);

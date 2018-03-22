@@ -166,7 +166,7 @@ void proc_entry_del_name(struct proc_entry * e,
 
         list_for_each_safe(p, h, &e->names) {
                 struct str_el * s = list_entry(p, struct str_el, next);
-                if (!wildcard_match(name, s->str)) {
+                if (!strcmp(name, s->str)) {
                         list_del(&s->next);
                         if (s->str != NULL)
                                 free(s->str);

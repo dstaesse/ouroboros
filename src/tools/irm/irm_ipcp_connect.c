@@ -60,19 +60,21 @@ static void usage(void)
 int do_connect_ipcp(int     argc,
                     char ** argv)
 {
-        char *  name      = NULL;
-        char *  dst_name  = NULL;
-        char *  comp_name = NULL;
-        pid_t * pids      = NULL;
-        ssize_t len       = 0;
+        char *             ipcp = NULL;
+        char *             dst  = NULL;
+        char *             comp = NULL;
+        struct ipcp_info * ipcps;
+        ssize_t            len  = 0;
+        pid_t              pid  = -1;
+        ssize_t            i;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
-                        name = *(argv + 1);
+                        ipcp = *(argv + 1);
                 } else if (matches(*argv, "dst") == 0) {
-                        dst_name = *(argv + 1);
+                        dst = *(argv + 1);
                 } else if (matches(*argv, "component") == 0) {
-                        comp_name = *(argv + 1);
+                        comp = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "ipcpi connect\".\n", *argv);
@@ -83,28 +85,29 @@ int do_connect_ipcp(int     argc,
                 argv += 2;
         }
 
-        if (name == NULL || dst_name == NULL || comp_name == NULL) {
+        if (ipcp == NULL || dst == NULL || comp == NULL) {
                 usage();
                 return -1;
         }
 
-        len = irm_list_ipcps(name, &pids);
-        if (len != 1)
+        len = irm_list_ipcps(&ipcps);
+        for (i = 0; i < len; i++)
+                if (strcmp(ipcps[i].name, ipcp) == 0)
+                        pid = ipcps[i].pid;
+
+        free(ipcps);
+
+        if (pid == -1)
                 return -1;
 
-        if (!strcmp(comp_name, DT))
-                comp_name = DT_COMP;
+        if (!strcmp(comp, DT))
+                comp = DT_COMP;
 
-        if (!strcmp(comp_name , MGMT))
-                comp_name = MGMT_COMP;
+        if (!strcmp(comp , MGMT))
+                comp = MGMT_COMP;
 
-        if (irm_connect_ipcp(pids[0], dst_name, comp_name)) {
-                free(pids);
+        if (irm_connect_ipcp(pid, dst, comp))
                 return -1;
-        }
-
-        if (pids != NULL)
-                free(pids);
 
         return 0;
 }

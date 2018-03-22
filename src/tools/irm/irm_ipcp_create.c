@@ -47,6 +47,7 @@
 #define NORMAL  "normal"
 #define UDP     "udp"
 #define ETH_LLC "eth-llc"
+#define ETH_DIX "eth-dix"
 #define LOCAL   "local"
 #define RAPTOR  "raptor"
 
@@ -59,7 +60,8 @@ static void usage(void)
                UDP " " ETH_LLC " " RAPTOR "}\n");
 }
 
-int do_create_ipcp(int argc, char ** argv)
+int do_create_ipcp(int     argc,
+                   char ** argv)
 {
         char * ipcp_type = NULL;
         char * ipcp_name = NULL;
@@ -94,6 +96,8 @@ int do_create_ipcp(int argc, char ** argv)
                 type = IPCP_LOCAL;
         else if (strcmp(ipcp_type, ETH_LLC) == 0)
                 type = IPCP_ETH_LLC;
+        else if (strcmp(ipcp_type, ETH_DIX) == 0)
+                type = IPCP_ETH_DIX;
         else if (strcmp(ipcp_type, RAPTOR) == 0)
                 type = IPCP_RAPTOR;
         else {
@@ -102,7 +106,7 @@ int do_create_ipcp(int argc, char ** argv)
         }
 
         pid = irm_create_ipcp(ipcp_name, type);
-        if (pid == 0)
+        if (pid <= 0)
                 return -1;
 
         return 0;

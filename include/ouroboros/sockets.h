@@ -31,6 +31,7 @@ typedef LayerInfoMsg layer_info_msg_t;
 
 #include "irmd_messages.pb-c.h"
 typedef IrmMsg irm_msg_t;
+typedef IpcpInfoMsg ipcp_info_msg_t;
 
 #include "ipcpd_messages.pb-c.h"
 typedef IpcpMsg ipcp_msg_t;
@@ -39,7 +40,7 @@ typedef IpcpMsg ipcp_msg_t;
 #define SOCK_PATH_SUFFIX ".sock"
 
 #define IRM_SOCK_PATH SOCK_PATH "irm" SOCK_PATH_SUFFIX
-#define IRM_MSG_BUF_SIZE 256
+#define IRM_MSG_BUF_SIZE 2048
 
 #define IPCP_SOCK_PATH_PREFIX SOCK_PATH "ipcp"
 #define IPCP_MSG_BUF_SIZE IRM_MSG_BUF_SIZE

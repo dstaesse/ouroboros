@@ -44,22 +44,25 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
+#include <string.h>
+
 static void usage(void)
 {
         printf("Usage: irm ipcp destroy\n"
                "                name <ipcp name>\n");
 }
 
-int do_destroy_ipcp(int argc, char ** argv)
+int do_destroy_ipcp(int     argc,
+                    char ** argv)
 {
-        char *  name = NULL;
-        pid_t * pids;
-        ssize_t len = 0;
-        int     i = 0;
+        char *             ipcp = NULL;
+        struct ipcp_info * ipcps;
+        ssize_t            len;
+        int                i;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
-                        name = *(argv + 1);
+                        ipcp = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "ipcp destroy\".\n", *argv);
@@ -70,20 +73,26 @@ int do_destroy_ipcp(int argc, char ** argv)
                 argv += 2;
         }
 
-        if (name == NULL) {
+        if (ipcp == NULL) {
                 usage();
                 return -1;
         }
 
-        len = irm_list_ipcps(name, &pids);
+        len = irm_list_ipcps(&ipcps);
         if (len <= 0)
-                return -1;
+                goto fail;
 
         for (i = 0; i < len; i++)
-                if (irm_destroy_ipcp(pids[i]))
-                        return -1;
+                if (strcmp(ipcps[i].name, ipcp) == 0) {
+                        if (irm_destroy_ipcp(ipcps[i].pid))
+                                goto fail_destroy;
+                        break;
+                }
 
-        free(pids);
 
         return 0;
+ fail_destroy:
+        free(ipcps);
+ fail:
+        return -1;
 }

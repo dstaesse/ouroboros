@@ -44,6 +44,8 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
+#include <string.h>
+
 static void usage(void)
 {
         printf("Usage: irm ipcp enroll\n"
@@ -52,23 +54,24 @@ static void usage(void)
                "                [autobind]\n");
 }
 
-int do_enroll_ipcp(int argc, char ** argv)
+int do_enroll_ipcp(int     argc,
+                   char ** argv)
 {
-        char *  name       = NULL;
-        char *  layer_name = NULL;
-        pid_t * pids       = NULL;
-        pid_t   pid;
-        ssize_t len        = 0;
-        int     i          = 0;
-        bool    autobind   = false;
-        int     cargs;
+        char *             ipcp     = NULL;
+        char *             layer    = NULL;
+        struct ipcp_info * ipcps;
+        pid_t              pid      = -1;
+        ssize_t            len      = 0;
+        int                i        = 0;
+        bool               autobind = false;
+        int                cargs;
 
         while (argc > 0) {
                 cargs = 2;
                 if (matches(*argv, "name") == 0) {
-                        name = *(argv + 1);
+                        ipcp = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
-                        layer_name = *(argv + 1);
+                        layer = *(argv + 1);
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
@@ -82,42 +85,53 @@ int do_enroll_ipcp(int argc, char ** argv)
                 argv += cargs;
         }
 
-        if (layer_name == NULL || name == NULL) {
+        if (layer == NULL || ipcp == NULL) {
                 usage();
                 return -1;
         }
 
-        len = irm_list_ipcps(name, &pids);
-        if (len <= 0) {
-                pid = irm_create_ipcp(name, IPCP_NORMAL);
-                if (pid == 0)
-                        return -1;
-                len = irm_list_ipcps(name, &pids);
+        len = irm_list_ipcps(&ipcps);
+        for (i = 0; i < len; i++)
+                if (wildcard_match(ipcps[i].name, ipcp) == 0 &&
+                    ipcps[i].type == IPCP_NORMAL)
+                        pid = ipcps[i].pid;
+
+        if (pid < 0) {
+                pid = irm_create_ipcp(ipcp, IPCP_NORMAL);
+                if (pid < 0)
+                        goto fail;
+                free(ipcps);
+                len = irm_list_ipcps(&ipcps);
         }
 
         for (i = 0; i < len; i++) {
-                if (autobind && irm_bind_process(pids[i], name)) {
-                        free(pids);
-                        return -1;
-                }
+                if (ipcps[i].type != IPCP_NORMAL)
+                        continue;
+                if (wildcard_match(ipcps[i].name, ipcp) == 0) {
+                        pid = ipcps[i].pid;
+                        if (autobind && irm_bind_process(pid, ipcp)) {
+                                printf("Failed to bind %d to %s.\n", pid, ipcp);
+                                goto fail;
+                        }
 
-                if (irm_enroll_ipcp(pids[i], layer_name)) {
-                        if (autobind)
-                                irm_unbind_process(pids[i], name);
-                        free(pids);
-                        return -1;
-                }
+                        if (irm_enroll_ipcp(pid, layer)) {
+                                if (autobind)
+                                        irm_unbind_process(pid, ipcp);
+                                goto fail;
+                        }
 
-                if (autobind && irm_bind_process(pids[i], layer_name)) {
-                        printf("Failed to bind %d to %s.\n",
-                               pids[i], layer_name);
-                        free(pids);
-                        return -1;
+                        if (autobind && irm_bind_process(pid, layer)) {
+                                printf("Failed to bind %d to %s.\n", pid, layer);
+                                goto fail;
+                        }
                 }
         }
 
-        if (pids != NULL)
-                free(pids);
+        free(ipcps);
 
         return 0;
+
+ fail:
+        free(ipcps);
+        return -1;
 }

@@ -48,23 +48,31 @@ enum irm_msg_code {
         IRM_REPLY             = 21;
 };
 
+message ipcp_info_msg {
+        required uint32 pid   = 1;
+        required uint32 type  = 2;
+        required string name  = 3;
+        required string layer = 4;
+};
+
 message irm_msg {
         required irm_msg_code code    =  1;
-        optional string prog_name     =  2;
+        optional string prog          =  2;
         optional sint32 pid           =  3;
-        optional uint32 ipcp_type     =  4;
-        repeated string layer_name    =  5;
-        repeated string args          =  6;
-        optional sint32 response      =  7;
-        optional string dst_name      =  8;
-        optional bytes  hash          =  9;
-        optional sint32 port_id       = 10;
-        optional sint32 qoscube       = 11;
-        optional ipcp_config_msg conf = 12;
-        optional uint32 opts          = 13;
-        repeated sint32 pids          = 14;
-        optional uint32 timeo_sec     = 15;
-        optional uint32 timeo_nsec    = 16;
-        optional string comp_name     = 17;
-        optional sint32 result        = 18;
+        optional string name          =  4;
+        optional uint32 ipcp_type     =  5;
+        optional string layer         =  6;
+        repeated string args          =  7;
+        optional sint32 response      =  8;
+        optional string dst           =  9;
+        optional bytes  hash          = 10;
+        optional sint32 port_id       = 11;
+        optional sint32 qoscube       = 12;
+        optional ipcp_config_msg conf = 13;
+        optional uint32 opts          = 14;
+        repeated ipcp_info_msg ipcps  = 15;
+        optional uint32 timeo_sec     = 16;
+        optional uint32 timeo_nsec    = 17;
+        optional string comp          = 18;
+        optional sint32 result        = 19;
 };

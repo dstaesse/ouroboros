@@ -14,6 +14,7 @@ set(SOURCE_FILES
   irm_ipcp_destroy.c
   irm_ipcp_bootstrap.c
   irm_ipcp_enroll.c
+  irm_ipcp_list.c
   irm_ipcp_connect.c
   irm_ipcp_disconnect.c
   irm_unbind_program.c

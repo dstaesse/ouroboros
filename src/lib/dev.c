@@ -209,9 +209,8 @@ static int proc_announce(char * prog)
 
         msg.code    = IRM_MSG_CODE__IRM_PROC_ANNOUNCE;
         msg.has_pid = true;
-
-        msg.pid       = ai.pid;
-        msg.prog_name = prog;
+        msg.pid     = ai.pid;
+        msg.prog    = prog;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL) {
@@ -550,7 +549,7 @@ int flow_accept(qosspec_t *             qs,
         return fd;
 }
 
-int flow_alloc(const char *            dst_name,
+int flow_alloc(const char *            dst,
                qosspec_t *             qs,
                const struct timespec * timeo)
 {
@@ -560,7 +559,7 @@ int flow_alloc(const char *            dst_name,
         int         fd;
 
         msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
-        msg.dst_name    = (char *) dst_name;
+        msg.dst         = (char *) dst;
         msg.has_pid     = true;
         msg.has_qoscube = true;
         msg.pid         = ai.pid;

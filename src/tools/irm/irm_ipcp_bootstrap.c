@@ -36,6 +36,12 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <ouroboros/irm.h>
+
+#include "irm_ops.h"
+#include "irm_utils.h"
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,10 +49,6 @@
 #ifdef __FreeBSD__
 #include <sys/socket.h>
 #endif
-#include <ouroboros/irm.h>
-
-#include "irm_ops.h"
-#include "irm_utils.h"
 
 #define NORMAL                 "normal"
 #define UDP                    "udp"
@@ -83,7 +85,7 @@ static void usage(void)
         printf("Usage: irm ipcp bootstrap\n"
                "                name <ipcp name>\n"
                "                layer <layer name>\n"
-               "                type [TYPE]\n"
+               "                [type [TYPE]]\n"
                "where TYPE = {" NORMAL " " LOCAL " "
                UDP " " ETH_LLC " " ETH_DIX " " RAPTOR "},\n\n"
                "if TYPE == " NORMAL "\n"
@@ -132,8 +134,8 @@ static void usage(void)
 int do_bootstrap_ipcp(int     argc,
                       char ** argv)
 {
-        char *             name           = NULL;
-        pid_t              pid;
+        char *             ipcp           = NULL;
+        pid_t              pid            = -1;
         struct ipcp_config conf;
         uint8_t            addr_size      = DEFAULT_ADDR_SIZE;
         uint8_t            eid_size       = DEFAULT_EID_SIZE;
@@ -145,10 +147,11 @@ int do_bootstrap_ipcp(int     argc,
         uint32_t           ip_addr        = 0;
         uint32_t           dns_addr       = DEFAULT_DDNS;
         char *             ipcp_type      = NULL;
-        char *             layer_name     = NULL;
+        enum ipcp_type     type;
+        char *             layer          = NULL;
         char *             dev            = NULL;
         uint16_t           ethertype      = DEFAULT_ETHERTYPE;
-        pid_t *            pids           = NULL;
+        struct ipcp_info * ipcps;
         ssize_t            len            = 0;
         int                i              = 0;
         bool               autobind       = false;
@@ -159,9 +162,9 @@ int do_bootstrap_ipcp(int     argc,
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
-                        layer_name = *(argv + 1);
+                        layer = *(argv + 1);
                 } else if (matches(*argv, "name") == 0) {
-                        name = *(argv + 1);
+                        ipcp = *(argv + 1);
                 } else if (matches(*argv, "hash") == 0) {
                         if (strcmp(*(argv + 1), SHA3_224) == 0)
                                 hash_algo = DIR_HASH_SHA3_224;
@@ -231,98 +234,133 @@ int do_bootstrap_ipcp(int     argc,
                 argv += cargs;
         }
 
-        if (name == NULL || layer_name == NULL || ipcp_type == NULL) {
+        if (ipcp == NULL || layer == NULL) {
                 usage();
                 return -1;
         }
 
-        strcpy(conf.layer_info.layer_name, layer_name);
-        if (strcmp(ipcp_type, UDP) != 0)
-                conf.layer_info.dir_hash_algo = hash_algo;
-
-        if (strcmp(ipcp_type, NORMAL) == 0) {
-                conf.type           = IPCP_NORMAL;
-                conf.addr_size      = addr_size;
-                conf.eid_size       = eid_size;
-                conf.max_ttl        = max_ttl;
-                conf.addr_auth_type = addr_auth_type;
-                conf.routing_type   = routing_type;
-                conf.pff_type       = pff_type;
-        } else if (strcmp(ipcp_type, UDP) == 0) {
-                conf.type = IPCP_UDP;
-                if (ip_addr == 0) {
-                        usage();
-                        return -1;
+        len = irm_list_ipcps(&ipcps);
+        for (i = 0; i < len; i++) {
+                if (wildcard_match(ipcps[i].name, ipcp) == 0) {
+                        pid = ipcps[i].pid;
+                        break;
                 }
-                conf.ip_addr = ip_addr;
-                conf.dns_addr = dns_addr;
-        } else if (strcmp(ipcp_type, LOCAL) == 0) {
-                conf.type = IPCP_LOCAL;
-        } else if (strcmp(ipcp_type, RAPTOR) == 0) {
-                conf.type = IPCP_RAPTOR;
-        } else if (strcmp(ipcp_type, ETH_LLC) == 0) {
-                conf.type = IPCP_ETH_LLC;
-                if (dev == NULL) {
-                        usage();
-                        return -1;
-                }
-                conf.dev = dev;
-        } else if (strcmp(ipcp_type, ETH_DIX) == 0) {
-                conf.type = IPCP_ETH_DIX;
-                if (dev == NULL) {
-                        usage();
-                        return -1;
-                }
-                conf.dev = dev;
-                conf.ethertype = ethertype;
-        } else {
-                usage();
-                return -1;
         }
 
-        if (autobind && conf.type != IPCP_NORMAL) {
-                printf("Can only bind normal IPCPs, autobind disabled.\n");
-                autobind = false;
-        }
+        if (pid == -1) {
+                if (ipcp_type == NULL) {
+                        printf("No IPCPs matching %s found.\n\n", ipcp);
+                        goto fail;
+                } else {
+                        if (strcmp(ipcp_type, NORMAL) == 0)
+                                type = IPCP_NORMAL;
+                        else if (strcmp(ipcp_type, UDP) == 0)
+                                type = IPCP_UDP;
+                        else if (strcmp(ipcp_type, ETH_LLC) == 0)
+                                type = IPCP_ETH_LLC;
+                        else if (strcmp(ipcp_type, ETH_DIX) == 0)
+                                type = IPCP_ETH_DIX;
+                        else if (strcmp(ipcp_type, LOCAL) == 0)
+                                type = IPCP_LOCAL;
+                        else if (strcmp(ipcp_type, RAPTOR) == 0)
+                                type = IPCP_RAPTOR;
+                        else goto fail_usage;
+                }
 
-        len = irm_list_ipcps(name, &pids);
-        if (len <= 0) {
-                pid = irm_create_ipcp(name, conf.type);
-                if (pid <= 0)
-                        return -1;
-                len = irm_list_ipcps(name, &pids);
+                pid = irm_create_ipcp(ipcp, type);
+                if (pid < 0)
+                        goto fail;
+                free(ipcps);
+                len = irm_list_ipcps(&ipcps);
         }
 
         for (i = 0; i < len; i++) {
-                if (autobind && irm_bind_process(pids[i], name)) {
-                        printf("Failed to bind %d to %s.\n", pids[i], name);
-                        free(pids);
-                        return -1;
-                }
-
-                if (autobind && irm_bind_process(pids[i], layer_name)) {
-                        printf("Failed to bind %d to %s.\n",
-                               pids[i], layer_name);
-                        irm_unbind_process(pids[i], name);
-                        free(pids);
-                        return -1;
-                }
-
-                if (irm_bootstrap_ipcp(pids[i], &conf)) {
-                        if (autobind) {
-                                irm_unbind_process(pids[i], name);
-                                irm_unbind_process(pids[i], layer_name);
+                if (wildcard_match(ipcps[i].name, ipcp) == 0) {
+                        pid = ipcps[i].pid;
+                        if (ipcp_type != NULL && type != ipcps[i].type) {
+                                printf("Types do not match.\n\n");
+                                goto fail;
                         }
-                        free(pids);
-                        return -1;
+                        conf.type = ipcps[i].type;
+
+                        if (autobind && conf.type != IPCP_NORMAL) {
+                                printf("Can only bind normal IPCPs, "
+                                       "autobind disabled.\n");
+                                autobind = false;
+                        }
+
+                        strcpy(conf.layer_info.layer_name, layer);
+                        if (conf.type == IPCP_UDP)
+                                conf.layer_info.dir_hash_algo = hash_algo;
+
+                        switch (conf.type) {
+                        case IPCP_NORMAL:
+                                conf.addr_size      = addr_size;
+                                conf.eid_size       = eid_size;
+                                conf.max_ttl        = max_ttl;
+                                conf.addr_auth_type = addr_auth_type;
+                                conf.routing_type   = routing_type;
+                                conf.pff_type       = pff_type;
+                                break;
+                        case IPCP_UDP:
+                                if (ip_addr == 0)
+                                        goto fail_usage;
+                                conf.ip_addr = ip_addr;
+                                conf.dns_addr = dns_addr;
+                                break;
+                        case IPCP_ETH_LLC:
+                                if (dev == NULL)
+                                        goto fail_usage;
+                                conf.dev = dev;
+                                break;
+                        case IPCP_ETH_DIX:
+                                if (dev == NULL)
+                                        goto fail_usage;
+                                conf.dev = dev;
+                                conf.ethertype = ethertype;
+                                break;
+                        case IPCP_LOCAL:
+                                /* FALLTHRU */
+                        case IPCP_RAPTOR:
+                                break;
+                        default:
+                                assert(false);
+                                break;
+                        }
+
+                        if (autobind && irm_bind_process(pid, ipcp)) {
+                                printf("Failed to bind %d to %s.\n", pid, ipcp);
+                                goto fail;
+                        }
+
+                        if (autobind && irm_bind_process(pid, layer)) {
+                                printf("Failed to bind %d to %s.\n",
+                                       pid, layer);
+                                irm_unbind_process(pid, ipcp);
+                                goto fail;
+                        }
+
+                        if (irm_bootstrap_ipcp(pid, &conf)) {
+                                if (autobind) {
+                                        irm_unbind_process(pid, ipcp);
+                                        irm_unbind_process(pid, layer);
+                                }
+                                goto fail;
+                        }
                 }
         }
 
-        free(pids);
+        free(ipcps);
 
         return 0;
 
  unknown_param:
         printf("Unknown parameter for %s: \"%s\".\n", *argv, *(argv + 1));
+        return -1;
+
+ fail_usage:
+        usage();
+ fail:
+        free(ipcps);
         return -1;
 }

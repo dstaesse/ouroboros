@@ -35,19 +35,27 @@
 /* Name binding options. */
 #define BIND_AUTO   0x01
 
+#define NAME_SIZE 256
+#define LAYER_SIZE LAYER_NAME_SIZE
+
+struct ipcp_info {
+        pid_t          pid;
+        enum ipcp_type type;
+        char           name[NAME_SIZE];
+        char           layer[LAYER_SIZE];;
+};
+
 __BEGIN_DECLS
 
 pid_t   irm_create_ipcp(const char *   name,
-                        enum ipcp_type ipcp_type);
+                        enum ipcp_type type);
 
 int     irm_destroy_ipcp(pid_t pid);
 
-/* pids is an out-parameter */
-ssize_t irm_list_ipcps(const char * name,
-                       pid_t **     pids);
+ssize_t irm_list_ipcps(struct ipcp_info ** ipcps);
 
 int     irm_enroll_ipcp(pid_t        pid,
-                        const char * layer_name);
+                        const char * dst);
 
 int     irm_bootstrap_ipcp(pid_t                      pid,
                            const struct ipcp_config * conf);
@@ -75,13 +83,11 @@ int     irm_bind_process(pid_t        pid,
 int     irm_unbind_process(pid_t        pid,
                            const char * name);
 
-int     irm_reg(const char *  name,
-                char **       layers,
-                size_t        len);
+int     irm_reg(pid_t        pid,
+                const char * name);
 
-int     irm_unreg(const char * name,
-                  char **      layers,
-                  size_t       len);
+int     irm_unreg(pid_t        pid,
+                  const char * name);
 
 __END_DECLS
 

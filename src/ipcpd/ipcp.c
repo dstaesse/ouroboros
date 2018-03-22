@@ -312,7 +312,7 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dst_name,
+                        ret_msg.result = ipcpi.ops->ipcp_enroll(msg->dst,
                                                                 &info);
                         if (ret_msg.result == 0) {
                                 ret_msg.layer_info       = &layer_info;
@@ -329,9 +329,8 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        ret_msg.result =
-                                ipcpi.ops->ipcp_connect(msg->dst_name,
-                                                        msg->comp_name);
+                        ret_msg.result = ipcpi.ops->ipcp_connect(msg->dst,
+                                                                 msg->comp);
                         break;
                 case IPCP_MSG_CODE__IPCP_DISCONNECT:
                         ret_msg.has_result = true;
@@ -342,9 +341,8 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        ret_msg.result =
-                                ipcpi.ops->ipcp_disconnect(msg->dst_name,
-                                                           msg->comp_name);
+                        ret_msg.result = ipcpi.ops->ipcp_disconnect(msg->dst,
+                                                                    msg->comp);
                         break;
                 case IPCP_MSG_CODE__IPCP_REG:
                         ret_msg.has_result = true;

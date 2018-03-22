@@ -272,6 +272,11 @@ disconnects \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a normal IPCP
 with name \fIname\fR from that component of the destination IPCP within the
 same layer.
 .RE
+
+\fBirm ipcp list\fR type \fItype\fR name \fIname\fR layer \fIlayer\fR
+.RS 4
+lists IPCPs in the system. You can filter by type, by name or by layer.
+.RE
 .RE
 
 .SH IRM COMMANDS
@@ -329,15 +334,17 @@ not accept future flow allocation requests for \fIname\fR.
 .RE
 
 .PP
-\fBirm reg\fR name \fIname\fR layer \fIlayer\fR [layer \fIlayer\fR ...]
+\fBirm reg\fR name \fIname\fR \fIipcp\fR ipcp [\fIipcp\fR ...]
+layer [layer \fIlayer\fR ...]
 .RS 4
-Register name \fIname\fR in layers \fIlayer\fR.
+Register name \fIname\fR in ipcps \fIipcp\fR ipcp and layers \fIlayer\fR.
 .RE
 
 .PP
-\fBirm unreg\fR name \fIname\fR layer \fIlayer\fR [layer \fIlayer\fR ...]
+\fBirm unreg\fR name \fIname\fR \fIipcp\fR ipcp [\fIipcp\fR ...]
+layer [layer \fIlayer\fR ...]
 .RS 4
-Unregister name \fIname\fR in layers \fIlayer\fR.
+Unregister name \fIname\fR in ipcps \fIipcp\fR ipcp and layers \fIlayer\fR.
 .RE
 
 .SH TERMINOLOGY

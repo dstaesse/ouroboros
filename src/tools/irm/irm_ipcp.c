@@ -68,6 +68,7 @@ static const struct cmd {
         { "enroll",     do_enroll_ipcp },
         { "connect",    do_connect_ipcp },
         { "disconnect", do_disconnect_ipcp },
+        { "list",       do_list_ipcp},
         { "help",       do_help },
         { NULL,         NULL }
 };

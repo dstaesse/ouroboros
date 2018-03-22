@@ -45,6 +45,8 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
+#include <string.h>
+
 static void usage(void)
 {
         printf("Usage: irm bind ipcp <name> name <name>\n");
@@ -53,13 +55,11 @@ static void usage(void)
 int do_bind_ipcp(int     argc,
                  char ** argv)
 {
-        char * ipcp = NULL;
-        char * name = NULL;
-
-        pid_t * pids = NULL;
-        ssize_t len  = 0;
-
-        int i;
+        char *             ipcp = NULL;
+        char *             name = NULL;
+        struct ipcp_info * ipcps;
+        ssize_t            len;
+        ssize_t            i;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
@@ -85,12 +85,17 @@ int do_bind_ipcp(int     argc,
                 return -1;
         }
 
-        len = irm_list_ipcps(ipcp, &pids);
-
+        len = irm_list_ipcps(&ipcps);
         for (i = 0; i < len; ++i)
-                irm_bind_process(pids[i], name);
+                if (strcmp(ipcps[i].name, ipcp) == 0) {
+                        if (irm_bind_process(ipcps[i].pid, name)) {
+                                free(ipcps);
+                                return -1;
+                        }
+                        break;
+                }
 
-        free(pids);
+        free(ipcps);
 
         return 0;
 }
