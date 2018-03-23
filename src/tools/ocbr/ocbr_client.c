@@ -79,7 +79,7 @@ int client_main(char * server,
         struct sigaction sig_act;
 
         int fd = 0;
-        char buf[size];
+        char buf[BUF_SIZE];
         long seqnr = 0;
         long gap = size * 8.0 * (BILLION / (double) rate);
 

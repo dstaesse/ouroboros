@@ -100,7 +100,7 @@ static void handle_flow(int fd)
         alive = iv_start;
         ts_add(&iv_start, &intv, &iv_end);
 
-        fccntl(fd, FLOWSFLAGS, FLOWFRNOBLOCK | FLOWFRDWR);
+        fccntl(fd, FLOWSFLAGS, FLOWFRNOBLOCK | FLOWFRDWR | FLOWFRNOPART);
 
         while (!stop) {
                 clock_gettime(CLOCK_REALTIME, &now);

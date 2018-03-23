@@ -46,7 +46,7 @@
 #include <time.h>
 #include <stdbool.h>
 
-#define BUF_SIZE 1500
+#define BUF_SIZE 524288L
 
 #include "ocbr_client.c"
 
@@ -71,11 +71,12 @@ static void usage(void)
                "  -n, --server_apn          Specify the name of the server.\n"
                "  -d, --duration            Duration for sending (s)\n"
                "  -f, --flood               Send SDUs as fast as possible\n"
-               "  -s, --size                SDU size (B)\n"
+               "  -s, --size                SDU size (B, max %ld B)\n"
                "  -r, --rate                Rate (b/s)\n"
                "      --sleep               Sleep in between sending SDUs\n"
                "\n\n"
-               "      --help                Display this help text and exit\n");
+               "      --help                Display this help text and exit\n",
+               BUF_SIZE);
 }
 
 int main(int argc, char ** argv)
@@ -149,6 +150,16 @@ int main(int argc, char ** argv)
                 if (s_apn == NULL) {
                         printf("No server specified.\n");
                         usage();
+                        return 0;
+                }
+
+                if (size > BUF_SIZE) {
+                        printf("Maximum size: %ld.\n", BUF_SIZE);
+                        return 0;
+                }
+
+                if (size < 0) {
+                        printf("Size overflow.\n");
                         return 0;
                 }
 
