@@ -432,7 +432,6 @@ static pid_t create_ipcp(const char *   name,
 
         return pid;
 
-        ipcp_destroy(pid);
  fail_ipcp:
         ipcp_entry_destroy(entry);
  fail_ipcp_entry:
