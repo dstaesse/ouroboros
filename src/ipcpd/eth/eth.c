@@ -351,7 +351,7 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
 #ifdef BUILD_ETH_LLC
         uint8_t            cf = 0x03;
 #endif
-        uint8_t            frame[ETH_MAX_SDU_SIZE];
+        uint8_t            frame[ETH_FRAME_SIZE];
         struct eth_frame * e_frame;
 
         assert(payload);
@@ -795,7 +795,7 @@ static void * eth_ipcp_sdu_reader(void * o)
                 frame_len = read(eth_data.bpf, buf, BPF_BLEN);
 #elif defined(HAVE_RAW_SOCKETS)
                 frame_len = recv(eth_data.s_fd, buf,
-                                 ETH_MAX_SDU_SIZE, 0);
+                                 ETH_FRAME_SIZE, 0);
 #endif
                 if (frame_len <= 0)
                         continue;
