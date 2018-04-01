@@ -290,7 +290,7 @@ int do_bootstrap_ipcp(int     argc,
                         }
 
                         strcpy(conf.layer_info.layer_name, layer);
-                        if (conf.type == IPCP_UDP)
+                        if (conf.type != IPCP_UDP)
                                 conf.layer_info.dir_hash_algo = hash_algo;
 
                         switch (conf.type) {
