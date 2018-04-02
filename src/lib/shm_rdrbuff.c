@@ -652,5 +652,5 @@ void shm_du_buff_truncate(struct shm_du_buff * sdb,
         assert(sdb);
         assert(len <= sdb->size);
 
-        sdb->du_tail -= sdb->size - len;
+        sdb->du_tail = sdb->du_head + len;
 }

@@ -94,6 +94,7 @@
 #endif
 
 #define MAC_SIZE             6
+#define ETH_MTU              1500
 #define ETH_TYPE_LENGTH_SIZE sizeof(uint16_t)
 #define ETH_HEADER_SIZE      (2 * MAC_SIZE + ETH_TYPE_LENGTH_SIZE)
 
@@ -103,19 +104,20 @@
 #define DIX_EID_SIZE         sizeof(uint16_t)
 #define DIX_LENGTH_SIZE      sizeof(uint16_t)
 #define DIX_HEADER_SIZE      (DIX_EID_SIZE + DIX_LENGTH_SIZE)
+#define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + DIX_HEADER_SIZE)
 #define MAX_EIDS             (1 << (8 * DIX_EID_SIZE))
-#define ETH_MAX_SDU_SIZE     (1500 - DIX_HEADER_SIZE)
-#define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + DIX_HEADER_SIZE \
-                              + ETH_MAX_SDU_SIZE)
+#define ETH_MAX_SDU_SIZE     (ETH_MTU - DIX_HEADER_SIZE)
+#define ETH_FRAME_SIZE       (ETH_HEADER_TOT_SIZE + ETH_MAX_SDU_SIZE)
 #elif defined(BUILD_ETH_LLC)
 #define THIS_TYPE            IPCP_ETH_LLC
 #define MGMT_SAP             0x01
 #define LLC_HEADER_SIZE      3
+#define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + LLC_HEADER_SIZE)
 #define MAX_SAPS             64
-#define ETH_MAX_SDU_SIZE     (1500 - LLC_HEADER_SIZE)
-#define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + LLC_HEADER_SIZE \
-                              + ETH_MAX_SDU_SIZE)
+#define ETH_MAX_SDU_SIZE     (ETH_MTU - LLC_HEADER_SIZE)
+#define ETH_FRAME_SIZE       (ETH_HEADER_TOT_SIZE + ETH_MAX_SDU_SIZE)
 #endif
+
 #define ALLOC_TIMEO          10    /* ms */
 #define NAME_QUERY_TIMEO     2000  /* ms */
 #define MGMT_TIMEO           100   /* ms */
@@ -373,13 +375,13 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
         e_frame->ethertype = eth_data.ethertype;
         e_frame->eid = htons(deid);
         e_frame->length = htons(len);
-        frame_len = ETH_HEADER_SIZE + DIX_HEADER_SIZE + len;
+        frame_len = ETH_HEADER_TOT_SIZE + len;
 #elif defined(BUILD_ETH_LLC)
         e_frame->length = htons(LLC_HEADER_SIZE + len);
         e_frame->dsap = dsap;
         e_frame->ssap = ssap;
         e_frame->cf   = cf;
-        frame_len = ETH_HEADER_SIZE + LLC_HEADER_SIZE + len;
+        frame_len = ETH_HEADER_TOT_SIZE + len;
 #endif
         memcpy(&e_frame->payload, payload, len);
 
@@ -754,26 +756,25 @@ static void * eth_ipcp_mgmt_handler(void * o)
 
 static void * eth_ipcp_sdu_reader(void * o)
 {
-        uint8_t             br_addr[MAC_SIZE];
+        uint8_t              br_addr[MAC_SIZE];
 #if defined(BUILD_ETH_DIX)
-        uint16_t            deid;
+        uint16_t             deid;
 #elif defined(BUILD_ETH_LLC)
-        uint8_t             dsap;
-        uint8_t             ssap;
+        uint8_t              dsap;
+        uint8_t              ssap;
 #endif
-        uint16_t            length;
-        int                 fd;
+        uint16_t             length;
+        int                  fd;
+        uint8_t *            buf;
 #if defined(HAVE_NETMAP)
-        uint8_t *           buf;
-        struct nm_pkthdr    hdr;
-#elif defined(HAVE_BPF)
-        uint8_t             buf[BPF_BLEN];
-#elif defined(HAVE_RAW_SOCKETS)
-        uint8_t             buf[ETH_FRAME_SIZE];
+        struct nm_pkthdr     hdr;
+#else
+        struct shm_du_buff * sdb;
+        fd_set               fds;
+        int                  frame_len;
 #endif
-        int                 frame_len = 0;
-        struct eth_frame *  e_frame;
-        struct mgmt_frame * frame;
+        struct eth_frame *   e_frame;
+        struct mgmt_frame *  frame;
 
         (void) o;
 
@@ -793,14 +794,33 @@ static void * eth_ipcp_sdu_reader(void * o)
                         log_err("Bad read from netmap device.");
                         continue;
                 }
-#elif defined(HAVE_BPF)
-                frame_len = read(eth_data.bpf, buf, BPF_BLEN);
-#elif defined(HAVE_RAW_SOCKETS)
-                frame_len = recv(eth_data.s_fd, buf,
-                                 ETH_FRAME_SIZE, 0);
-#endif
-                if (frame_len <= 0)
+#else
+                FD_ZERO(&fds);
+    #if defined(HAVE_BPF)
+                FD_SET(eth_data.bpf, &fds);
+                if (select(eth_data.bpf + 1, &fds, NULL, NULL, NULL))
                         continue;
+                assert(FD_ISSET(eth_data.bpf, &fds));
+                if (ipcp_sdb_reserve(&sdb, BPF_LEN))
+                        continue;
+                buf = shm_du_buff_head(sdb);
+                frame_len = read(eth_data.bpf, buf, BPF_BLEN);
+    #elif defined(HAVE_RAW_SOCKETS)
+                FD_SET(eth_data.s_fd, &fds);
+                if (select(eth_data.s_fd + 1, &fds, NULL, NULL, NULL) < 0)
+                        continue;
+                assert(FD_ISSET(eth_data.s_fd, &fds));
+                if (ipcp_sdb_reserve(&sdb, ETH_FRAME_SIZE))
+                        continue;
+                buf = shm_du_buff_head(sdb);
+                frame_len = recv(eth_data.s_fd, buf, ETH_FRAME_SIZE, 0);
+    #endif
+                if (frame_len <= 0) {
+                        ipcp_sdb_release(sdb);
+                        continue;
+                }
+                shm_du_buff_truncate(sdb, frame_len);
+#endif
 
 #if defined(HAVE_BPF) && !defined(HAVE_NETMAP)
                 e_frame = (struct eth_frame *)
@@ -821,15 +841,16 @@ static void * eth_ipcp_sdu_reader(void * o)
                     memcmp(br_addr, e_frame->dst_hwaddr, MAC_SIZE)) {
                 }
 #endif
-
                 length = ntohs(e_frame->length);
 #if defined(BUILD_ETH_DIX)
                 deid = ntohs(e_frame->eid);
 
                 if (deid == MGMT_EID) {
 #elif defined (BUILD_ETH_LLC)
-                if (length > 0x05FF) /* DIX */
+                if (length > 0x05FF) {/* DIX */
+                        ipcp_sdb_release(sdb);
                         continue;
+                }
 
                 length -= LLC_HEADER_SIZE;
 
@@ -843,6 +864,9 @@ static void * eth_ipcp_sdu_reader(void * o)
                         frame = malloc(sizeof(*frame));
                         if (frame == NULL) {
                                 pthread_mutex_unlock(&eth_data.mgmt_lock);
+#ifndef HAVE_NETMAP
+                                ipcp_sdb_release(sdb);
+#endif
                                 continue;
                         }
 
@@ -851,6 +875,10 @@ static void * eth_ipcp_sdu_reader(void * o)
                         list_add(&frame->next, &eth_data.mgmt_frames);
                         pthread_cond_signal(&eth_data.mgmt_cond);
                         pthread_mutex_unlock(&eth_data.mgmt_lock);
+
+#ifndef HAVE_NETMAP
+                        ipcp_sdb_release(sdb);
+#endif
                 } else {
                         pthread_rwlock_rdlock(&eth_data.flows_lock);
 
@@ -861,6 +889,9 @@ static void * eth_ipcp_sdu_reader(void * o)
 #endif
                         if (fd < 0) {
                                 pthread_rwlock_unlock(&eth_data.flows_lock);
+#ifndef HAVE_NETMAP
+                                ipcp_sdb_release(sdb);
+#endif
                                 continue;
                         }
 
@@ -869,12 +900,20 @@ static void * eth_ipcp_sdu_reader(void * o)
                             || memcmp(eth_data.fd_to_ef[fd].r_addr,
                                       e_frame->src_hwaddr, MAC_SIZE)) {
                                 pthread_rwlock_unlock(&eth_data.flows_lock);
+#ifndef HAVE_NETMAP
+                                ipcp_sdb_release(sdb);
+#endif
                                 continue;
                         }
 #endif
                         pthread_rwlock_unlock(&eth_data.flows_lock);
 
+#ifndef HAVE_NETMAP
+                        shm_du_buff_head_release(sdb, ETH_HEADER_TOT_SIZE);
+                        ipcp_flow_write(fd, sdb);
+#else
                         flow_write(fd, &e_frame->payload, length);
+#endif
                 }
         }
 
