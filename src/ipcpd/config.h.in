@@ -35,7 +35,6 @@
 
 #define IPCP_MIN_THREADS    @IPCP_MIN_THREADS@
 #define IPCP_ADD_THREADS    @IPCP_ADD_THREADS@
-
 #cmakedefine HAVE_LIBGCRYPT
 
 /* normal IPCP */
@@ -45,6 +44,7 @@
 #define IPCP_SCHED_THR_MUL  @IPCP_SCHED_THR_MUL@
 #define PFT_SIZE            @PFT_SIZE@
 
+#cmakedefine DISABLE_CORE_LOCK
 #cmakedefine IPCP_FLOW_STATS
 
 /* udp */

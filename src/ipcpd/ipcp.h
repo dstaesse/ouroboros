@@ -138,4 +138,7 @@ uint8_t *       ipcp_hash_dup(const uint8_t * hash);
 void            ipcp_hash_str(char            buf[],
                               const uint8_t * hash);
 
+/* Helper function to lock a thread to a core. */
+void            ipcp_lock_to_core(void);
+
 #endif /* OUROBOROS_IPCPD_IPCP_H */

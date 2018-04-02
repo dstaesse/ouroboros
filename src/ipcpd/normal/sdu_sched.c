@@ -20,12 +20,13 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define _POSIX_C_SOURCE 199309L
+#define _POSIX_C_SOURCE 200112L
 
 #include "config.h"
 
 #include <ouroboros/errno.h>
 
+#include "ipcp.h"
 #include "sdu_sched.h"
 
 #include <assert.h>
@@ -66,6 +67,8 @@ static void * sdu_reader(void * o)
 
         sched = ((struct sched_info *) o)->sch;
         qc    = ((struct sched_info *) o)->qc;
+
+        ipcp_lock_to_core();
 
         free(o);
 

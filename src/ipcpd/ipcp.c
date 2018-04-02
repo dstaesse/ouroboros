@@ -20,6 +20,11 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
+#define _GNU_SOURCE
+#define NPROC (sysconf(_SC_NPROCESSORS_ONLN))
+#endif
+
 #define _POSIX_C_SOURCE 200112L
 #define __XSI_VISIBLE   500
 
@@ -42,6 +47,9 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <stdlib.h>
+#if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
+#include <unistd.h>
+#endif
 
 struct cmd {
         struct list_head next;
@@ -778,4 +786,25 @@ int ipcp_wait_state(enum ipcp_state         state,
         pthread_cleanup_pop(true);
 
         return ret;
+}
+
+void ipcp_lock_to_core(void)
+{
+#if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
+        cpu_set_t           cpus;
+        size_t              cpu;
+
+        /* Choose a random core. */
+        cpu = rand() % NPROC;
+
+        CPU_ZERO(&cpus);
+        CPU_SET(cpu, &cpus);
+
+        if (pthread_setaffinity_np(pthread_self(), sizeof(cpus), &cpus))
+                log_warn("Failed to lock thread %lu to CPU %lu/%lu.",
+                         pthread_self(), cpu, NPROC);
+        else
+                log_dbg("Locked thread %lu to CPU %lu/%lu.",
+                        pthread_self(), cpu, NPROC);
+#endif
 }

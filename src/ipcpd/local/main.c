@@ -97,6 +97,8 @@ static void * ipcp_local_sdu_loop(void * o)
 {
         (void) o;
 
+        ipcp_lock_to_core();
+
         while (true) {
                 int     fd;
                 ssize_t idx;

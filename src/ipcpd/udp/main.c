@@ -470,6 +470,8 @@ static void * ipcp_udp_sdu_reader(void * o)
 
         (void) o;
 
+        ipcp_lock_to_core();
+
         while (true) {
                 pthread_rwlock_rdlock(&udp_data.flows_lock);
                 pthread_mutex_lock(&udp_data.fd_set_lock);
@@ -517,6 +519,8 @@ static void * ipcp_udp_sdu_loop(void * o)
         struct shm_du_buff * sdb;
 
         (void) o;
+
+        ipcp_lock_to_core();
 
         while (true) {
                 fevent(udp_data.np1_flows, udp_data.fq, NULL);

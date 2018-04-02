@@ -777,6 +777,8 @@ static void * eth_ipcp_sdu_reader(void * o)
 
         (void) o;
 
+        ipcp_lock_to_core();
+
         memset(br_addr, 0xff, MAC_SIZE * sizeof(uint8_t));
 
         while (true) {
@@ -892,6 +894,8 @@ static void * eth_ipcp_sdu_writer(void * o)
         uint8_t              r_addr[MAC_SIZE];
 
         (void) o;
+
+        ipcp_lock_to_core();
 
         while (true) {
                 fevent(eth_data.np1_flows, eth_data.fq, NULL);
