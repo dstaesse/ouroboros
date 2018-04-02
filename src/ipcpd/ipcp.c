@@ -44,6 +44,7 @@
 
 #include "ipcp.h"
 
+#include <signal.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <stdlib.h>
@@ -59,9 +60,9 @@ struct cmd {
         int              fd;
 };
 
-void ipcp_sig_handler(int         sig,
-                      siginfo_t * info,
-                      void *      c)
+static void ipcp_sig_handler(int         sig,
+                             siginfo_t * info,
+                             void *      c)
 {
         (void) c;
 

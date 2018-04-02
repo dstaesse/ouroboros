@@ -32,7 +32,6 @@
 
 #include <pthread.h>
 #include <time.h>
-#include <signal.h>
 
 enum ipcp_state {
         IPCP_NULL = 0,
@@ -126,11 +125,6 @@ int             ipcp_wait_state(enum ipcp_state         state,
 
 int             ipcp_parse_arg(int    argc,
                                char * argv[]);
-
-/* Handle shutdown of IPCP */
-void            ipcp_sig_handler(int         sig,
-                                 siginfo_t * info,
-                                 void *      c);
 
 /* Helper functions for directory entries, could be moved */
 uint8_t *       ipcp_hash_dup(const uint8_t * hash);
