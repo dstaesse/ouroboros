@@ -339,6 +339,7 @@ static uint8_t reverse_bits(uint8_t b)
 }
 #endif
 
+/* Pass a buffer that contains space for the header. */
 static int eth_ipcp_send_frame(const uint8_t * dst_addr,
 #if defined(BUILD_ETH_DIX)
                                uint16_t        deid,
@@ -346,17 +347,16 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
                                uint8_t         dsap,
                                uint8_t         ssap,
 #endif
-                               const uint8_t * payload,
+                               const uint8_t * frame,
                                size_t          len)
 {
         uint32_t           frame_len = 0;
 #ifdef BUILD_ETH_LLC
         uint8_t            cf = 0x03;
 #endif
-        uint8_t            frame[ETH_FRAME_SIZE];
         struct eth_frame * e_frame;
 
-        assert(payload);
+        assert(frame);
 
         if (len > ETH_MAX_SDU_SIZE)
                 return -1;
@@ -383,7 +383,6 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
         e_frame->cf   = cf;
         frame_len = ETH_HEADER_TOT_SIZE + len;
 #endif
-        memcpy(&e_frame->payload, payload, len);
 
 #if defined(HAVE_NETMAP)
         if (poll(&eth_data.poll_out, 1, -1) < 0)
@@ -430,11 +429,11 @@ static int eth_ipcp_alloc(const uint8_t * dst_addr,
 
         len = sizeof(*msg) + ipcp_dir_hash_len();
 
-        buf = malloc(len);
+        buf = malloc(len + ETH_HEADER_TOT_SIZE);
         if (buf == NULL)
                 return -1;
 
-        msg          = (struct mgmt_msg *) buf;
+        msg          = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
         msg->code    = FLOW_REQ;
 #if defined(BUILD_ETH_DIX)
         msg->seid    = htons(eid);
@@ -468,26 +467,40 @@ static int eth_ipcp_alloc_resp(uint8_t * dst_addr,
 #endif
                                int       response)
 {
-        struct mgmt_msg msg;
+        struct mgmt_msg * msg;
+        uint8_t *         buf;
 
-        msg.code     = FLOW_REPLY;
-#if defined(BUILD_ETH_DIX)
-        msg.seid     = htons(seid);
-        msg.deid     = htons(deid);
-#elif defined(BUILD_ETH_LLC)
-        msg.ssap     = ssap;
-        msg.dsap     = dsap;
-#endif
-        msg.response = response;
+        buf = malloc(sizeof(*msg) + ETH_HEADER_TOT_SIZE);
+        if (buf == NULL)
+                return -1;
 
-        return eth_ipcp_send_frame(dst_addr,
+        msg = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
+
+        msg->code     = FLOW_REPLY;
 #if defined(BUILD_ETH_DIX)
-                                   MGMT_EID,
+        msg->seid     = htons(seid);
+        msg->deid     = htons(deid);
 #elif defined(BUILD_ETH_LLC)
-                                   reverse_bits(MGMT_SAP),
-                                   reverse_bits(MGMT_SAP),
+        msg->ssap     = ssap;
+        msg->dsap     = dsap;
 #endif
-                                   (uint8_t *) &msg, sizeof(msg));
+        msg->response = response;
+
+        if (eth_ipcp_send_frame(dst_addr,
+#if defined(BUILD_ETH_DIX)
+                                MGMT_EID,
+#elif defined(BUILD_ETH_LLC)
+                                reverse_bits(MGMT_SAP),
+                                reverse_bits(MGMT_SAP),
+#endif
+                                buf, sizeof(*msg))) {
+                free(buf);
+                return -1;
+        }
+
+        free(buf);
+
+        return 0;
 }
 
 static int eth_ipcp_req(uint8_t *       r_addr,
@@ -615,11 +628,11 @@ static int eth_ipcp_name_query_req(const uint8_t * hash,
         if (shim_data_reg_has(eth_data.shim_data, hash)) {
                 len = sizeof(*msg) + ipcp_dir_hash_len();
 
-                buf = malloc(len);
+                buf = malloc(len + ETH_HEADER_TOT_SIZE);
                 if (buf == NULL)
                         return -1;
 
-                msg       = (struct mgmt_msg *) buf;
+                msg       = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
                 msg->code = NAME_QUERY_REPLY;
 
                 memcpy(msg + 1, hash, ipcp_dir_hash_len());
@@ -924,6 +937,7 @@ static void * eth_ipcp_sdu_writer(void * o)
 {
         int                  fd;
         struct shm_du_buff * sdb;
+        size_t               len;
 #if defined(BUILD_ETH_DIX)
         uint16_t             deid;
 #elif defined(BUILD_ETH_LLC)
@@ -946,6 +960,13 @@ static void * eth_ipcp_sdu_writer(void * o)
                                 continue;
                         }
 
+                        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+
+                        if (shm_du_buff_head_alloc(sdb, ETH_HEADER_TOT_SIZE)
+                            == NULL) {
+                                log_err("Failed to allocate header.");
+                                ipcp_sdb_release(sdb);
+                        }
 #if defined(BUILD_ETH_DIX)
                         deid = eth_data.fd_to_ef[fd].r_eid;
 #elif defined(BUILD_ETH_LLC)
@@ -963,8 +984,7 @@ static void * eth_ipcp_sdu_writer(void * o)
                                             dsap, ssap,
 #endif
                                             shm_du_buff_head(sdb),
-                                            shm_du_buff_tail(sdb)
-                                            - shm_du_buff_head(sdb));
+                                            len);
                         ipcp_sdb_release(sdb);
                 }
                 pthread_rwlock_unlock(&eth_data.flows_lock);
@@ -1395,14 +1415,14 @@ static int eth_ipcp_query(const uint8_t * hash)
 
         len = sizeof(*msg) + ipcp_dir_hash_len();
 
-        buf = malloc(len);
+        buf = malloc(len + ETH_HEADER_TOT_SIZE);
         if (buf == NULL)
                 return -1;
 
-        msg       = (struct mgmt_msg *) buf;
+        msg       = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
         msg->code = NAME_QUERY_REQ;
 
-        memcpy(buf + sizeof(*msg), hash, ipcp_dir_hash_len());
+        memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
         memset(r_addr, 0xff, MAC_SIZE);
 
