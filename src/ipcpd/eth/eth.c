@@ -856,8 +856,14 @@ static void * eth_ipcp_sdu_reader(void * o)
 #endif
                 length = ntohs(e_frame->length);
 #if defined(BUILD_ETH_DIX)
-                deid = ntohs(e_frame->eid);
+                if (e_frame->ethertype != eth_data.ethertype) {
+#ifndef HAVE_NETMAP
+                        ipcp_sdb_release(sdb);
+#endif
+                        continue;
+                }
 
+                deid = ntohs(e_frame->eid);
                 if (deid == MGMT_EID) {
 #elif defined (BUILD_ETH_LLC)
                 if (length > 0x05FF) {/* DIX */
