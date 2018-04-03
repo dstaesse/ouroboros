@@ -832,7 +832,6 @@ static void * eth_ipcp_sdu_reader(void * o)
                         ipcp_sdb_release(sdb);
                         continue;
                 }
-                shm_du_buff_truncate(sdb, frame_len);
 #endif
 
 #if defined(HAVE_BPF) && !defined(HAVE_NETMAP)
@@ -929,6 +928,7 @@ static void * eth_ipcp_sdu_reader(void * o)
 
 #ifndef HAVE_NETMAP
                         shm_du_buff_head_release(sdb, ETH_HEADER_TOT_SIZE);
+                        shm_du_buff_truncate(sdb, length);
                         ipcp_flow_write(fd, sdb);
 #else
                         flow_write(fd, &e_frame->payload, length);
