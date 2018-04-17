@@ -46,7 +46,8 @@ static void usage(void)
         printf("Usage: irm ipcp [OPERATION]\n\n"
                "where OPERATION = {create destroy\n"
                "                   bootstrap enroll\n"
-               "                   connect disconnect help}\n");
+               "                   connect disconnect\n"
+               "                   list help}\n");
 }
 
 static int do_help(int argc, char **argv)

@@ -72,8 +72,9 @@ int do_register(int     argc,
         char *             ipcp[MAX_IPCPS];
         size_t             ipcp_len   = 0;
         struct ipcp_info * ipcps;
-        size_t             len;
-        size_t             i;
+        ssize_t            len;
+        ssize_t            i;
+
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
@@ -106,6 +107,9 @@ int do_register(int     argc,
         }
 
         len = irm_list_ipcps(&ipcps);
+        if (len < 0)
+                return len;
+
         for (i = 0; i < len; ++i) {
                 size_t j;
                 for (j = 0; j < layers_len; j++) {
