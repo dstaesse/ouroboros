@@ -247,24 +247,26 @@ int do_bootstrap_ipcp(int     argc,
                 }
         }
 
+        if (ipcp_type != NULL) {
+                if (strcmp(ipcp_type, NORMAL) == 0)
+                        type = IPCP_NORMAL;
+                else if (strcmp(ipcp_type, UDP) == 0)
+                        type = IPCP_UDP;
+                else if (strcmp(ipcp_type, ETH_LLC) == 0)
+                        type = IPCP_ETH_LLC;
+                else if (strcmp(ipcp_type, ETH_DIX) == 0)
+                        type = IPCP_ETH_DIX;
+                else if (strcmp(ipcp_type, LOCAL) == 0)
+                        type = IPCP_LOCAL;
+                else if (strcmp(ipcp_type, RAPTOR) == 0)
+                        type = IPCP_RAPTOR;
+                else goto fail_usage;
+        }
+
         if (pid == -1) {
                 if (ipcp_type == NULL) {
                         printf("No IPCPs matching %s found.\n\n", ipcp);
                         goto fail;
-                } else {
-                        if (strcmp(ipcp_type, NORMAL) == 0)
-                                type = IPCP_NORMAL;
-                        else if (strcmp(ipcp_type, UDP) == 0)
-                                type = IPCP_UDP;
-                        else if (strcmp(ipcp_type, ETH_LLC) == 0)
-                                type = IPCP_ETH_LLC;
-                        else if (strcmp(ipcp_type, ETH_DIX) == 0)
-                                type = IPCP_ETH_DIX;
-                        else if (strcmp(ipcp_type, LOCAL) == 0)
-                                type = IPCP_LOCAL;
-                        else if (strcmp(ipcp_type, RAPTOR) == 0)
-                                type = IPCP_RAPTOR;
-                        else goto fail_usage;
                 }
 
                 pid = irm_create_ipcp(ipcp, type);
