@@ -84,12 +84,8 @@ struct shm_flow_set * shm_flow_set_create()
         mode_t                mask;
         int                   shm_fd;
         int                   i;
-        struct stat           st;
 
         sprintf(fn, SHM_FLOW_SET_PREFIX "%d", getpid());
-
-        if (stat(fn, &st) != -1 && unlink(fn))
-                return NULL;
 
         set = malloc(sizeof(*set));
         if (set == NULL)
@@ -97,7 +93,7 @@ struct shm_flow_set * shm_flow_set_create()
 
         mask = umask(0);
 
-        shm_fd = shm_open(fn, O_CREAT | O_EXCL | O_RDWR, 0666);
+        shm_fd = shm_open(fn, O_CREAT | O_RDWR, 0666);
         if (shm_fd == -1) {
                 free(set);
                 return NULL;
