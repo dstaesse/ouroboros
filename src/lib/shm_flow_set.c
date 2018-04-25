@@ -84,8 +84,12 @@ struct shm_flow_set * shm_flow_set_create()
         mode_t                mask;
         int                   shm_fd;
         int                   i;
+        struct stat           st;
 
         sprintf(fn, SHM_FLOW_SET_PREFIX "%d", getpid());
+
+        if (stat(fn, &st) != -1 && unlink(fn))
+                return NULL;
 
         set = malloc(sizeof(*set));
         if (set == NULL)
