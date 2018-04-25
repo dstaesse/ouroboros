@@ -280,7 +280,16 @@ int rib_init(const char * prefix)
         sprintf(rib.mnt, FUSE_PREFIX "/%s.%d", prefix, getpid());
 
         if (stat(rib.mnt, &st) == -1)
-                mkdir(rib.mnt, 0777);
+                switch(errno) {
+                case ENOENT:
+                        mkdir(rib.mnt, 0777);
+                        break;
+                case ENOTCONN:
+                        fuse_unmount(rib.mnt, rib.ch);
+                        break;
+                default:
+                        return -1;
+                }
 
         fuse_opt_parse(&args, NULL, NULL, NULL);
 
