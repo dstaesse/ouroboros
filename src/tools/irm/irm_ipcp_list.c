@@ -37,6 +37,7 @@
  */
 
 #include <ouroboros/irm.h>
+#include <ouroboros/errno.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
@@ -130,7 +131,12 @@ int do_list_ipcp(int     argc,
         if (len == 0) {
                 printf("No IPCPs in system.\n\n");
                 return 0;
-        }
+        } else if (len == -EIRMD) {
+                printf("Failed to communicate with the "
+                       "Ouroboros IPC Resource Manager daemon.\n");
+                return -1;
+        } else if (len < 0)
+                return len;
 
         /* FIXME: Implement filtering based on type and name. */
         (void) type;
@@ -138,7 +144,8 @@ int do_list_ipcp(int     argc,
 
         printf("+---------+----------------------+------------+"
                "----------------------+\n");
-        printf("| %7s | %20s | %10s | %20s |\n", "pid", "name", "type", "layer");
+        printf("| %7s | %20s | %10s | %20s |\n", "pid", "name",
+               "type", "layer");
         printf("+---------+----------------------+------------+"
                "----------------------+\n");
 
