@@ -309,6 +309,11 @@ int main(int    argc,
                 goto fail_rib_init;
         }
 
+        if (notifier_init()) {
+                log_err("Failed to initialize notifier component.");
+                goto fail_notifier_init;
+        }
+
         if (connmgr_init()) {
                 log_err("Failed to initialize connection manager.");
                 goto fail_connmgr_init;
@@ -317,11 +322,6 @@ int main(int    argc,
         if (enroll_init()) {
                 log_err("Failed to initialize enrollment component.");
                 goto fail_enroll_init;
-        }
-
-        if (notifier_init()) {
-                log_err("Failed to initialize notifier component.");
-                goto fail_notifier_init;
         }
 
         if (ipcp_boot() < 0) {
@@ -343,11 +343,11 @@ int main(int    argc,
                 finalize_components();
         }
 
-        notifier_fini();
-
         enroll_fini();
 
         connmgr_fini();
+
+        notifier_fini();
 
         rib_fini();
 
@@ -358,12 +358,12 @@ int main(int    argc,
  fail_create_r:
         ipcp_shutdown();
  fail_boot:
-        notifier_fini();
- fail_notifier_init:
         enroll_fini();
  fail_enroll_init:
         connmgr_fini();
  fail_connmgr_init:
+        notifier_fini();
+ fail_notifier_init:
         rib_fini();
  fail_rib_init:
        ipcp_fini();
