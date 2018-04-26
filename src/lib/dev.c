@@ -444,6 +444,7 @@ static void fini(void)
         for (i = 0; i < PROG_MAX_FLOWS; ++i) {
                 if (ai.flows[i].port_id != -1) {
                         ssize_t idx;
+                        shm_rbuff_set_acl(ai.flows[i].rx_rb, ACL_FLOWDOWN);
                         while ((idx = shm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
                                 shm_rdrbuff_remove(ai.rdrb, idx);
                         flow_fini(i);
