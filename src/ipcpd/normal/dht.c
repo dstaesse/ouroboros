@@ -2625,6 +2625,13 @@ void dht_destroy(struct dht * dht)
 
         pthread_rwlock_wrlock(&dht->lock);
 
+        list_for_each_safe(p, h, &dht->cmds) {
+                struct cmd * c = list_entry(p, struct cmd, next);
+                list_del(&c->next);
+                ipcp_sdb_release(c->sdb);
+                free(c);
+        }
+
         list_for_each_safe(p, h, &dht->entries) {
                 struct dht_entry * e = list_entry(p, struct dht_entry, next);
                 list_del(&e->next);
