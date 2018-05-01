@@ -2579,6 +2579,11 @@ static void dht_post_sdu(void *               comp,
         struct cmd * cmd;
         struct dht * dht = (struct dht *) comp;
 
+        if (dht_get_state(dht) == DHT_SHUTDOWN) {
+                ipcp_sdb_release(sdb);
+                return;
+        }
+
         cmd = malloc(sizeof(*cmd));
         if (cmd == NULL) {
                 log_err("Command failed. Out of memory.");
@@ -2666,6 +2671,11 @@ static void * join_thr(void * o)
         assert(info);
 
         while (kad_join(info->dht, info->addr)) {
+                if (dht_get_state(info->dht) == DHT_SHUTDOWN) {
+                        log_dbg("DHT enrollment aborted.");
+                        goto finish;
+                }
+
                 if (retr++ == KAD_JOIN_RETR) {
                         dht_set_state(info->dht, DHT_INIT);
                         log_warn("DHT enrollment attempt failed.");
