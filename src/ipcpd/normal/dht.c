@@ -1021,6 +1021,7 @@ static struct lookup * dht_find_lookup(struct dht *    dht,
 {
         struct list_head * p;
         struct list_head * p2;
+        struct list_head * h2;
 
         assert(dht);
         assert(cookie > 0);
@@ -1028,10 +1029,12 @@ static struct lookup * dht_find_lookup(struct dht *    dht,
         list_for_each(p, &dht->lookups) {
                 struct lookup * l = list_entry(p, struct lookup, next);
                 pthread_mutex_lock(&l->lock);
-                list_for_each(p2, &l->cookies) {
+                list_for_each_safe(p2, h2, &l->cookies) {
                         struct cookie_el * e;
                         e = list_entry(p2, struct cookie_el, next);
                         if (e->cookie == cookie) {
+                                list_del(&e->next);
+                                free(e);
                                 pthread_mutex_unlock(&l->lock);
                                 return l;
                         }
