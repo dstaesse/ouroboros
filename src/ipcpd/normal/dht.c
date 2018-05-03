@@ -276,16 +276,23 @@ static enum dht_state dht_get_state(struct dht * dht)
         return state;
 }
 
-static void dht_set_state(struct dht *   dht,
-                          enum dht_state state)
+static int dht_set_state(struct dht *   dht,
+                         enum dht_state state)
 {
         pthread_mutex_lock(&dht->mtx);
+
+        if (state == DHT_JOINING && dht->state != DHT_INIT) {
+                 pthread_mutex_unlock(&dht->mtx);
+                 return -1;
+        }
 
         dht->state = state;
 
         pthread_cond_broadcast(&dht->cond);
 
         pthread_mutex_unlock(&dht->mtx);
+
+        return 0;
 }
 
 static int dht_wait_running(struct dht * dht)
@@ -2282,9 +2289,6 @@ int dht_reg(struct dht *    dht,
         assert(key);
         assert(dht->addr != 0);
 
-        if (dht_get_state(dht) < DHT_JOINING)
-                return -1;
-
         if (dht_wait_running(dht))
                 return -1;
 
@@ -2352,9 +2356,6 @@ uint64_t dht_query(struct dht *    dht,
         size_t             n;
 
         addrs[0] = 0;
-
-        if (dht_get_state(dht) < DHT_JOINING)
-                return 0;
 
         if (dht_wait_running(dht))
                 return 0;
@@ -2715,27 +2716,28 @@ static void handle_event(void *       self,
 
         if (event == NOTIFY_DT_CONN_ADD) {
                 pthread_t          thr;
-                struct join_info * info;
+                struct join_info * inf;
                 struct conn *      c     = (struct conn *) o;
-                enum dht_state     state = dht_get_state(dht);
 
-                switch(state) {
+                switch(dht_get_state(dht)) {
                 case DHT_INIT:
-                        info = malloc(sizeof(*info));
-                        if (info == NULL)
+                        inf = malloc(sizeof(*inf));
+                        if (inf == NULL)
                                 break;
 
-                        info->dht  = dht;
-                        info->addr = c->conn_info.addr;
+                        inf->dht  = dht;
+                        inf->addr = c->conn_info.addr;
 
-                        dht_set_state(dht, DHT_JOINING);
-
-                        if (pthread_create(&thr, NULL, join_thr, info)) {
-                                dht_set_state(dht, DHT_INIT);
-                                free(info);
-                                return;
+                        if (dht_set_state(dht, DHT_JOINING) == 0 ||
+                            dht_wait_running(dht)) {
+                                log_dbg("creating join thread.");
+                                if (pthread_create(&thr, NULL, join_thr, inf)) {
+                                        dht_set_state(dht, DHT_INIT);
+                                        free(inf);
+                                        return;
+                                }
+                                pthread_detach(thr);
                         }
-                        pthread_detach(thr);
                         break;
                 case DHT_RUNNING:
                         /*
