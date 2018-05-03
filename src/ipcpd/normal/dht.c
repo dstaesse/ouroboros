@@ -70,6 +70,7 @@ typedef KadContactMsg kad_contact_msg_t;
 #define KAD_JOIN_RETR 8    /* Number of retries sending a join.          */
 #define KAD_JOIN_INTV 1    /* Time (seconds) between join retries.       */
 #define HANDLE_TIMEO  1000 /* Timeout for dht_handle_sdu tpm check (ms)  */
+#define DHT_RETR_ADDR 1    /* Number of addresses to return on retrieve  */
 
 enum dht_state {
         DHT_INIT = 0,
@@ -1891,33 +1892,38 @@ static buffer_t dht_retrieve(struct dht *    dht,
         struct list_head * p;
         buffer_t           buf;
         uint64_t *         pos;
-
-        buf.len = 0;
+        size_t             addrs = 0;
 
         pthread_rwlock_rdlock(&dht->lock);
 
         e = dht_find_entry(dht, key);
-        if (e == NULL) {
-                pthread_rwlock_unlock(&dht->lock);
-                return buf;
-        }
+        if (e == NULL)
+                goto fail;
 
-        buf.data = malloc(sizeof(dht->addr) * e->n_vals);
-        if (buf.data == NULL) {
-                pthread_rwlock_unlock(&dht->lock);
-                return buf;
-        }
+        buf.len = MIN(DHT_RETR_ADDR, e->n_vals);
+        if (buf.len == 0)
+                goto fail;
 
-        buf.len = e->n_vals;
+        buf.data = malloc(sizeof(dht->addr) * buf.len);
+        if (buf.data == NULL)
+                goto fail;
 
         pos = (uint64_t *) buf.data;;
 
         list_for_each(p, &e->vals) {
                 struct val * v = list_entry(p, struct val, next);
                 *pos++ = v->addr;
+                if (++addrs >= buf.len)
+                        break;
         }
 
         pthread_rwlock_unlock(&dht->lock);
+
+        return buf;
+
+ fail:
+        pthread_rwlock_unlock(&dht->lock);
+        buf.len = 0;
 
         return buf;
 }
