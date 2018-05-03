@@ -2714,7 +2714,6 @@ static void handle_event(void *       self,
         struct dht * dht = (struct dht *) self;
 
         if (event == NOTIFY_DT_CONN_ADD) {
-                struct lookup *    lu;
                 pthread_t          thr;
                 struct join_info * info;
                 struct conn *      c     = (struct conn *) o;
@@ -2739,9 +2738,14 @@ static void handle_event(void *       self,
                         pthread_detach(thr);
                         break;
                 case DHT_RUNNING:
-                        lu = kad_lookup(dht, dht->id, KAD_FIND_NODE);
-                        if (lu != NULL)
-                                lookup_destroy(lu);
+                        /*
+                         * FIXME: this lookup for effiency reasons
+                         * causes a SEGV when stressed with rapid
+                         * enrollments.
+                         * lu = kad_lookup(dht, dht->id, KAD_FIND_NODE);
+                         * if (lu != NULL)
+                         *         lookup_destroy(lu);
+                         */
                         break;
                 default:
                         break;
