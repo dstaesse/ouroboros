@@ -84,3 +84,13 @@ uint64_t dir_query(const uint8_t * hash)
 {
         return dht_query(dht, hash);
 }
+
+int dir_wait_running(void)
+{
+        if (dht_wait_running(dht)) {
+                log_warn("Directory did not bootstrap.");
+                return -1;
+        }
+
+        return 0;
+}

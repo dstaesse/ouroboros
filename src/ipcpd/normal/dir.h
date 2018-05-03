@@ -35,4 +35,6 @@ int      dir_unreg(const uint8_t * hash);
 
 uint64_t dir_query(const uint8_t * hash);
 
+int      dir_wait_running(void);
+
 #endif /* OUROBOROS_IPCPD_NORMAL_DIR_H */

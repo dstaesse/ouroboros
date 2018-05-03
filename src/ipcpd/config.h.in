@@ -44,6 +44,7 @@
 #define IPCP_SCHED_THR_MUL  @IPCP_SCHED_THR_MUL@
 #define PFT_SIZE            @PFT_SIZE@
 
+#cmakedefine IPCP_CONN_WAIT_DIR
 #cmakedefine DISABLE_CORE_LOCK
 #cmakedefine IPCP_FLOW_STATS
 

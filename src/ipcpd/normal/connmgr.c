@@ -33,6 +33,7 @@
 
 #include "comp.h"
 #include "connmgr.h"
+#include "dir.h"
 #include "enroll.h"
 #include "ipcp.h"
 
@@ -376,7 +377,8 @@ int connmgr_alloc(enum comp_id  id,
                 return -1;
         }
 
-        if (connmgr.comps[id].info.pref_version != conn->conn_info.pref_version) {
+        if (connmgr.comps[id].info.pref_version !=
+            conn->conn_info.pref_version) {
                 log_dbg("Unknown protocol version.");
                 flow_dealloc(conn->flow_info.fd);
                 return -1;
@@ -391,6 +393,9 @@ int connmgr_alloc(enum comp_id  id,
         switch (id) {
         case COMPID_DT:
                 notifier_event(NOTIFY_DT_CONN_ADD, conn);
+#ifdef IPCP_CONN_WAIT_DIR
+                dir_wait_running();
+#endif
                 break;
         case COMPID_MGMT:
                 notifier_event(NOTIFY_MGMT_CONN_ADD, conn);

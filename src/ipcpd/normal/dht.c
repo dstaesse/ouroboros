@@ -295,7 +295,7 @@ static int dht_set_state(struct dht *   dht,
         return 0;
 }
 
-static int dht_wait_running(struct dht * dht)
+int dht_wait_running(struct dht * dht)
 {
         int ret = 0;
 

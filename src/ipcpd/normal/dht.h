@@ -47,4 +47,6 @@ int          dht_unreg(struct dht *    dht,
 uint64_t     dht_query(struct dht *    dht,
                        const uint8_t * key);
 
+int          dht_wait_running(struct dht * dht);
+
 #endif /* OUROBOROS_IPCPD_NORMAL_DHT_H */

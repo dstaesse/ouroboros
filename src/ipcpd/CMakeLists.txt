@@ -14,6 +14,8 @@ set(IPCP_SCHED_THR_MUL 2 CACHE STRING
   "Number of scheduler threads per QoS cube")
 set(DISABLE_CORE_LOCK FALSE CACHE BOOL
   "Disable locking performance threads to a core")
+set(IPCP_CONN_WAIT_DIR FALSE CACHE BOOL
+  "Check the running state of the directory when adding a dt connection")
 
 if ((IPCP_QOS_CUBE_BE_PRIO LESS 0) OR (IPCP_QOS_CUBE_BE_PRIO GREATER 99))
   message(FATAL_ERROR "Invalid priority for best effort QoS cube")
