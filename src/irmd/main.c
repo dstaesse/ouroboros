@@ -68,7 +68,7 @@
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 #define SHM_SAN_HOLDOFF 1000 /* ms */
 #define IPCP_HASH_LEN(e) hash_len(e->dir_hash_algo)
-#define IB_LEN IRM_MSG_BUF_SIZE
+#define IB_LEN SOCK_BUF_SIZE
 
 enum init_state {
         IPCP_NULL = 0,
@@ -1862,7 +1862,7 @@ static void * acceptloop(void * o)
                         break;
                 }
 
-                cmd->len = read(csockfd, cmd->cbuf, IRM_MSG_BUF_SIZE);
+                cmd->len = read(csockfd, cmd->cbuf, SOCK_BUF_SIZE);
                 if (cmd->len <= 0) {
                         log_err("Failed to read from socket.");
                         close(csockfd);

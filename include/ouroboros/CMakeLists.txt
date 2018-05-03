@@ -1,6 +1,12 @@
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/version.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/version.h" @ONLY)
 
+set(SOCK_BUF_SIZE 10240 CACHE STRING
+    "Size of the buffer used by the UNIX sockets for local IPC")
+
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/sockets.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/sockets.h" @ONLY)
+
 set(HEADER_FILES
   cacep.h
   cdefs.h

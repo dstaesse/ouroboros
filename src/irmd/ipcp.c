@@ -53,7 +53,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                                 ipcp_msg_t * msg)
 {
        int            sockfd    = 0;
-       uint8_t        buf[IPCP_MSG_BUF_SIZE];
+       uint8_t        buf[SOCK_BUF_SIZE];
        char *         sock_path = NULL;
        ssize_t        len;
        ipcp_msg_t *   recv_msg  = NULL;
@@ -116,7 +116,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
        ipcp_msg__pack(msg, buf);
 
        if (write(sockfd, buf, len) != -1)
-               len = read(sockfd, buf, IPCP_MSG_BUF_SIZE);
+               len = read(sockfd, buf, SOCK_BUF_SIZE);
 
        if (len > 0)
                recv_msg = ipcp_msg__unpack(NULL, len, buf);

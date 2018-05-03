@@ -33,12 +33,19 @@
 #include <stdbool.h>
 #include <sys/time.h>
 
+/* Apple doesn't support SEQPACKET. */
+#ifdef __APPLE__
+#define SOCK_TYPE SOCK_STREAM
+#else
+#define SOCK_TYPE SOCK_SEQPACKET
+#endif
+
 int client_socket_open(char * file_name)
 {
         int sockfd;
         struct sockaddr_un serv_addr;
 
-        sockfd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+        sockfd = socket(AF_UNIX, SOCK_TYPE, 0);
         if (sockfd < 0)
                 return -1;
 
@@ -66,7 +73,7 @@ int server_socket_open(char * file_name)
                         return -1;
         }
 
-        sockfd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+        sockfd = socket(AF_UNIX, SOCK_TYPE, 0);
         if (sockfd < 0)
                 return -1;
 
@@ -96,7 +103,7 @@ static void close_ptr(void * o)
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 {
         int         sockfd;
-        uint8_t     buf[IRM_MSG_BUF_SIZE];
+        uint8_t     buf[SOCK_BUF_SIZE];
         ssize_t     len;
         irm_msg_t * recv_msg = NULL;
 
@@ -115,7 +122,7 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
         irm_msg__pack(msg, buf);
 
         if (write(sockfd, buf, len) != -1)
-                len = read(sockfd, buf, IRM_MSG_BUF_SIZE);
+                len = read(sockfd, buf, SOCK_BUF_SIZE);
 
         if (len > 0)
                 recv_msg = irm_msg__unpack(NULL, len, buf);

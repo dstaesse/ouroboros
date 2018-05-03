@@ -55,7 +55,7 @@
 struct cmd {
         struct list_head next;
 
-        uint8_t          cbuf[IPCP_MSG_BUF_SIZE];
+        uint8_t          cbuf[SOCK_BUF_SIZE];
         size_t           len;
         int              fd;
 };
@@ -146,7 +146,7 @@ static void * acceptloop(void * o)
                         break;
                 }
 
-                cmd->len = read(csockfd, cmd->cbuf, IPCP_MSG_BUF_SIZE);
+                cmd->len = read(csockfd, cmd->cbuf, SOCK_BUF_SIZE);
                 if (cmd->len <= 0) {
                         log_err("Failed to read from socket.");
                         close(csockfd);
