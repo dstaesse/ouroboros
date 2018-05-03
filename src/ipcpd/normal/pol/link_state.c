@@ -459,50 +459,49 @@ static int nbr_to_fd(uint64_t addr)
         return -1;
 }
 
-static void * calculate_pff(void * o)
+static void calculate_pff(struct routing_i * instance)
 {
-        struct routing_i * instance;
         int                fd;
         struct list_head   table;
         struct list_head * p;
         struct list_head * q;
         int                fds[PROG_MAX_FLOWS];
 
-        instance = (struct routing_i *) o;
+        if (ls.rtable(ls.graph, ipcpi.dt_addr, &table))
+                return;
 
+        pff_lock(instance->pff);
+
+        pff_flush(instance->pff);
+
+        /* Calulcate forwarding table from routing table. */
+        list_for_each(p, &table) {
+                int                    i = 0;
+                struct routing_table * t =
+                        list_entry(p, struct routing_table, next);
+
+                list_for_each(q, &t->nhops) {
+                        struct nhop * n = list_entry(q, struct nhop, next);
+
+                        fd = nbr_to_fd(n->nhop);
+                        if (fd == -1)
+                                continue;
+
+                        fds[i++] = fd;
+                }
+
+                pff_add(instance->pff, t->dst, fds, i);
+        }
+
+        pff_unlock(instance->pff);
+
+        graph_free_routing_table(ls.graph, &table);
+}
+
+static void * periodic_recalc_pff(void * o)
+{
         while (true) {
-                if (ls.rtable(ls.graph, ipcpi.dt_addr, &table)) {
-                        sleep(RECALC_TIME);
-                        continue;
-                }
-
-                pff_lock(instance->pff);
-
-                pff_flush(instance->pff);
-
-                list_for_each(p, &table) {
-                        int                    i = 0;
-                        struct routing_table * t =
-                                list_entry(p, struct routing_table, next);
-
-                        list_for_each(q, &t->nhops) {
-                                struct nhop * n =
-                                        list_entry(q, struct nhop, next);
-
-                                fd = nbr_to_fd(n->nhop);
-                                if (fd == -1)
-                                        continue;
-
-                                fds[i++] = fd;
-                        }
-
-                        pff_add(instance->pff, t->dst, fds, i);
-                }
-
-                pff_unlock(instance->pff);
-
-                graph_free_routing_table(ls.graph, &table);
-
+                calculate_pff((struct routing_i *) o);
                 sleep(RECALC_TIME);
         }
 
@@ -723,9 +722,10 @@ static void handle_event(void *       self,
                          const void * o)
 {
         /* FIXME: Apply correct QoS on graph */
-        struct conn * c;
-        qosspec_t     qs;
-        int           flags;
+        struct conn *      c;
+        qosspec_t          qs;
+        int                flags;
+        struct list_head * p;
 
         (void) self;
 
@@ -740,7 +740,17 @@ static void handle_event(void *       self,
 
                 if (lsdb_add_link(ipcpi.dt_addr, c->conn_info.addr, &qs))
                         log_dbg("Failed to add adjacency to LSDB.");
+
                 send_lsm(ipcpi.dt_addr, c->conn_info.addr);
+
+                pthread_mutex_lock(&ls.routing_i_lock);
+                list_for_each(p, &ls.routing_instances) {
+                        struct routing_i * instance =
+                                list_entry(p, struct routing_i, next);
+                        calculate_pff(instance);
+                }
+                pthread_mutex_unlock(&ls.routing_i_lock);
+
                 break;
         case NOTIFY_DT_CONN_DEL:
                 flow_event(c->flow_info.fd, false);
@@ -792,7 +802,8 @@ struct routing_i * link_state_routing_i_create(struct pff * pff)
 
         tmp->pff = pff;
 
-        if (pthread_create(&tmp->calculator, NULL, calculate_pff, tmp)) {
+        if (pthread_create(&tmp->calculator, NULL,
+                           periodic_recalc_pff, tmp)) {
                 free(tmp);
                 return NULL;
         }
