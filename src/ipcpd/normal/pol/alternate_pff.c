@@ -234,6 +234,7 @@ void alternate_pff_destroy(struct pff_i * pff_i)
 
         htable_destroy(pff_i->table);
         del_nhops_down(pff_i);
+        del_addrs(pff_i);
         pthread_rwlock_destroy(&pff_i->lock);
         free(pff_i);
 }

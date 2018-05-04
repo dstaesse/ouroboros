@@ -612,9 +612,9 @@ int graph_routing_table_lfa(struct graph *     graph,
         pthread_mutex_lock(&graph->lock);
 
         for (j = 0; j < PROG_MAX_FLOWS; j++) {
-                n_dist[i] = NULL;
-                n_index[i] = -1;
-                addrs[i] = -1;
+                n_dist[j] = NULL;
+                n_index[j] = -1;
+                addrs[j] = -1;
         }
 
         /* Get the normal next hops routing table. */
@@ -660,16 +660,16 @@ int graph_routing_table_lfa(struct graph *     graph,
                                 continue;
 
                         if (n_dist[j][v->index] <
-                            s_dist[n_index[j]] + s_dist[v->index]) {
+                            s_dist[n_index[j]] + s_dist[v->index])
                                 if (add_lfa_to_table(table, v->addr, addrs[j]))
                                         goto fail_add_lfa;
-                        }
-
-                        free(n_dist[j]);
                 }
         }
 
         pthread_mutex_unlock(&graph->lock);
+
+        for (j = 0; j < i; j++)
+                free(n_dist[j]);
 
         free(s_dist);
 
