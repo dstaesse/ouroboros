@@ -1908,6 +1908,7 @@ static void * mainloop(void * o)
                 struct timespec * timeo   = NULL;
                 struct timespec   ts      = {0, 0};
                 struct cmd *      cmd;
+                int               result;
 
                 ret_msg = malloc(sizeof(*ret_msg));
                 if (ret_msg == NULL)
@@ -1916,7 +1917,6 @@ static void * mainloop(void * o)
                 irm_msg__init(ret_msg);
 
                 ret_msg->code = IRM_MSG_CODE__IRM_REPLY;
-
 
                 pthread_mutex_lock(&irmd.cmd_lock);
 
@@ -1960,79 +1960,57 @@ static void * mainloop(void * o)
 
                 switch (msg->code) {
                 case IRM_MSG_CODE__IRM_CREATE_IPCP:
-                        ret_msg->has_result = true;
-                        ret_msg->result = create_ipcp(msg->name,
-                                                      msg->ipcp_type);
+                        result = create_ipcp(msg->name, msg->ipcp_type);
                         break;
                 case IRM_MSG_CODE__IPCP_CREATE_R:
-                        ret_msg->has_result = true;
-                        ret_msg->result = create_ipcp_r(msg->pid, msg->result);
+                        result = create_ipcp_r(msg->pid, msg->result);
                         break;
                 case IRM_MSG_CODE__IRM_DESTROY_IPCP:
-                        ret_msg->has_result = true;
-                        ret_msg->result = destroy_ipcp(msg->pid);
+                        result = destroy_ipcp(msg->pid);
                         break;
                 case IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP:
-                        ret_msg->has_result = true;
-                        ret_msg->result = bootstrap_ipcp(msg->pid, msg->conf);
+                        result = bootstrap_ipcp(msg->pid, msg->conf);
                         break;
                 case IRM_MSG_CODE__IRM_ENROLL_IPCP:
-                        ret_msg->has_result = true;
-                        ret_msg->result = enroll_ipcp(msg->pid, msg->dst);
+                        result = enroll_ipcp(msg->pid, msg->dst);
                         break;
                 case IRM_MSG_CODE__IRM_CONNECT_IPCP:
-                        ret_msg->has_result = true;
-                        ret_msg->result = connect_ipcp(msg->pid,
-                                                       msg->dst,
-                                                       msg->comp);
+                        result = connect_ipcp(msg->pid, msg->dst, msg->comp);
                         break;
                 case IRM_MSG_CODE__IRM_DISCONNECT_IPCP:
-                        ret_msg->has_result = true;
-                        ret_msg->result = disconnect_ipcp(msg->pid,
-                                                          msg->dst,
-                                                          msg->comp);
+                        result = disconnect_ipcp(msg->pid, msg->dst, msg->comp);
                         break;
                 case IRM_MSG_CODE__IRM_BIND_PROGRAM:
-                        ret_msg->has_result = true;
-                        ret_msg->result = bind_program(msg->prog,
-                                                       msg->name,
-                                                       msg->opts,
-                                                       msg->n_args,
-                                                       msg->args);
+                        result = bind_program(msg->prog,
+                                              msg->name,
+                                              msg->opts,
+                                              msg->n_args,
+                                              msg->args);
                         break;
                 case IRM_MSG_CODE__IRM_UNBIND_PROGRAM:
-                        ret_msg->has_result = true;
-                        ret_msg->result = unbind_program(msg->prog, msg->name);
+                        result = unbind_program(msg->prog, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_PROC_ANNOUNCE:
-                        ret_msg->has_result = true;
-                        ret_msg->result = proc_announce(msg->pid, msg->prog);
+                        result = proc_announce(msg->pid, msg->prog);
                         break;
                 case IRM_MSG_CODE__IRM_BIND_PROCESS:
-                        ret_msg->has_result = true;
-                        ret_msg->result = bind_process(msg->pid, msg->name);
+                        result = bind_process(msg->pid, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_UNBIND_PROCESS:
-                        ret_msg->has_result = true;
-                        ret_msg->result = unbind_process(msg->pid, msg->name);
+                        result = unbind_process(msg->pid, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_LIST_IPCPS:
-                        ret_msg->has_result = true;
-                        ret_msg->result = list_ipcps(&ret_msg->ipcps,
-                                                     &ret_msg->n_ipcps);
+                        result = list_ipcps(&ret_msg->ipcps, &ret_msg->n_ipcps);
                         break;
                 case IRM_MSG_CODE__IRM_REG:
-                        ret_msg->has_result = true;
-                        ret_msg->result = name_reg(msg->pid, msg->name);
+                        result = name_reg(msg->pid, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_UNREG:
-                        ret_msg->has_result = true;
-                        ret_msg->result = name_unreg(msg->pid, msg->name);
+                        result = name_unreg(msg->pid, msg->name);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
-                        ret_msg->has_result = true;
-                        ret_msg->result = flow_accept(msg->pid, timeo, &e);
-                        if (ret_msg->result == 0) {
+                        result = flow_accept(msg->pid, timeo, &e);
+                        if (result == 0) {
                                 ret_msg->has_port_id = true;
                                 ret_msg->port_id     = e->port_id;
                                 ret_msg->has_pid     = true;
@@ -2042,10 +2020,9 @@ static void * mainloop(void * o)
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
-                        ret_msg->has_result = true;
-                        ret_msg->result = flow_alloc(msg->pid, msg->dst,
-                                                     msg->qoscube, timeo, &e);
-                        if (ret_msg->result == 0) {
+                        result = flow_alloc(msg->pid, msg->dst,
+                                            msg->qoscube, timeo, &e);
+                        if (result == 0) {
                                 ret_msg->has_port_id = true;
                                 ret_msg->port_id     = e->port_id;
                                 ret_msg->has_pid     = true;
@@ -2053,27 +2030,22 @@ static void * mainloop(void * o)
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
-                        ret_msg->has_result = true;
-                        ret_msg->result = flow_dealloc(msg->pid, msg->port_id);
+                        result = flow_dealloc(msg->pid, msg->port_id);
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->pid,
                                          msg->hash.data,
                                          msg->qoscube);
-                        ret_msg->has_result = true;
-                        if (e == NULL) {
-                                ret_msg->result = -1;
-                                break;
+                        result = (e == NULL ? -1 : 0);
+                        if (result == 0) {
+                                ret_msg->has_port_id = true;
+                                ret_msg->port_id     = e->port_id;
+                                ret_msg->has_pid     = true;
+                                ret_msg->pid         = e->n_pid;
                         }
-                        ret_msg->has_port_id = true;
-                        ret_msg->port_id     = e->port_id;
-                        ret_msg->has_pid     = true;
-                        ret_msg->pid         = e->n_pid;
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
-                        ret_msg->has_result = true;
-                        ret_msg->result = flow_alloc_reply(msg->port_id,
-                                                           msg->response);
+                        result = flow_alloc_reply(msg->port_id, msg->response);
                         break;
                 default:
                         log_err("Don't know that message code.");
@@ -2084,28 +2056,24 @@ static void * mainloop(void * o)
                 pthread_cleanup_pop(true);
                 pthread_cleanup_pop(false);
 
-                if (ret_msg->result == -EPIPE || !ret_msg->has_result) {
-                        irm_msg__free_unpacked(ret_msg, NULL);
-                        close(sfd);
-                        tpm_inc(irmd.tpm);
-                        continue;
+                if (result == -EPIPE) {
+                        log_warn("Peer closed socket.");
+                        goto fail;
                 }
+
+                ret_msg->has_result = true;
+                ret_msg->result     = result;
 
                 buffer.len = irm_msg__get_packed_size(ret_msg);
                 if (buffer.len == 0) {
                         log_err("Failed to calculate length of reply message.");
-                        irm_msg__free_unpacked(ret_msg, NULL);
-                        close(sfd);
-                        tpm_inc(irmd.tpm);
-                        continue;
+                        goto fail;
                 }
 
                 buffer.data = malloc(buffer.len);
                 if (buffer.data == NULL) {
-                        irm_msg__free_unpacked(ret_msg, NULL);
-                        close(sfd);
-                        tpm_inc(irmd.tpm);
-                        continue;
+                        log_err("Failed to malloc buffer.");
+                        goto fail;
                 }
 
                 irm_msg__pack(ret_msg, buffer.data);
@@ -2115,7 +2083,7 @@ static void * mainloop(void * o)
                 pthread_cleanup_push(close_ptr, &sfd);
 
                 if (write(sfd, buffer.data, buffer.len) == -1)
-                        if (ret_msg->result != -EIRMD)
+                        if (result != -EIRMD)
                                 log_warn("Failed to send reply message.");
 
                 free(buffer.data);
@@ -2123,6 +2091,13 @@ static void * mainloop(void * o)
                 pthread_cleanup_pop(true);
 
                 tpm_inc(irmd.tpm);
+
+                continue;
+ fail:
+                irm_msg__free_unpacked(ret_msg, NULL);
+                close(sfd);
+                tpm_inc(irmd.tpm);
+                continue;
         }
 
         return (void *) 0;
