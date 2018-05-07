@@ -94,7 +94,13 @@
 #endif
 
 #define MAC_SIZE             6
+#if defined(__linux__) && defined(BUILD_ETH_DIX)
+#define ETH_MTU              eth_data.mtu
+#define ETH_MTU_MAX          ETH_MAX_MTU /* if_ether.h */
+#else
 #define ETH_MTU              1500
+#define ETH_MTU_MAX          ETH_MTU
+#endif
 #define ETH_TYPE_LENGTH_SIZE sizeof(uint16_t)
 #define ETH_HEADER_SIZE      (2 * MAC_SIZE + ETH_TYPE_LENGTH_SIZE)
 
@@ -106,7 +112,7 @@
 #define DIX_HEADER_SIZE      (DIX_EID_SIZE + DIX_LENGTH_SIZE)
 #define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + DIX_HEADER_SIZE)
 #define MAX_EIDS             (1 << (8 * DIX_EID_SIZE))
-#define ETH_MAX_SDU_SIZE     (ETH_MTU - DIX_HEADER_SIZE)
+#define ETH_MAX_SDU_SIZE     (ETH_MTU_MAX - DIX_HEADER_SIZE)
 #define ETH_FRAME_SIZE       (ETH_HEADER_TOT_SIZE + ETH_MAX_SDU_SIZE)
 #elif defined(BUILD_ETH_LLC)
 #define THIS_TYPE            IPCP_ETH_LLC
@@ -114,7 +120,7 @@
 #define LLC_HEADER_SIZE      3
 #define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + LLC_HEADER_SIZE)
 #define MAX_SAPS             64
-#define ETH_MAX_SDU_SIZE     (ETH_MTU - LLC_HEADER_SIZE)
+#define ETH_MAX_SDU_SIZE     (ETH_MTU_MAX - LLC_HEADER_SIZE)
 #define ETH_FRAME_SIZE       (ETH_HEADER_TOT_SIZE + ETH_MAX_SDU_SIZE)
 #endif
 
@@ -174,7 +180,9 @@ struct mgmt_frame {
 
 struct {
         struct shim_data * shim_data;
-
+#ifdef __linux__
+        int                mtu;
+#endif
 #if defined(HAVE_NETMAP)
         struct nm_desc *   nmd;
         uint8_t            hw_addr[MAC_SIZE];
@@ -1218,10 +1226,22 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         if (ioctl(skfd, SIOCGIFHWADDR, &ifr)) {
-                log_err("Failed to ioctl.");
+                log_err("Failed to get hwaddr.");
                 close(skfd);
                 return -1;
         }
+
+        if (ioctl(skfd, SIOCGIFMTU, &ifr)) {
+                log_err("Failed to get MTU.");
+                close(skfd);
+                return -1;
+        }
+
+        log_dbg("Device MTU is %d.", ifr.ifr_mtu);
+
+        eth_data.mtu = MIN((int) ETH_MTU_MAX, ifr.ifr_mtu);
+
+        log_dbg("Layer MTU is %d.", eth_data.mtu);
 
         close(skfd);
 
