@@ -118,9 +118,9 @@ void * server_thread(void *o)
 
 void * accept_thread(void * o)
 {
-        int fd;
+        int             fd;
         struct timespec now;
-        qosspec_t qs;
+        qosspec_t       qs;
 
         (void) o;
 
@@ -142,7 +142,8 @@ void * accept_thread(void * o)
                 server.times[fd] = now;
                 pthread_mutex_unlock(&server.lock);
 
-                fccntl(fd, FLOWSFLAGS, FLOWFRNOBLOCK | FLOWFRDWR);
+                fccntl(fd, FLOWSFLAGS,
+                       FLOWFRNOBLOCK | FLOWFRDWR | FLOWFRNOPART);
         }
 
         return (void *) 0;

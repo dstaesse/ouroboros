@@ -215,6 +215,8 @@ static int client_main(void)
                 return -1;
         }
 
+        fccntl(fd, FLOWSFLAGS, FLOWFRDWR | FLOWFRNOPART);
+
         clock_gettime(CLOCK_REALTIME, &tic);
 
         pthread_create(&client.reader_pt, NULL, reader, &fd);
