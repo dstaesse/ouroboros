@@ -802,10 +802,10 @@ void ipcp_lock_to_core(void)
         CPU_SET(cpu, &cpus);
 
         if (pthread_setaffinity_np(pthread_self(), sizeof(cpus), &cpus))
-                log_warn("Failed to lock thread %lu to CPU %lu/%lu.",
+                log_warn("Failed to lock thread %lu to CPU %zu/%lu.",
                          pthread_self(), cpu, NPROC);
         else
-                log_dbg("Locked thread %lu to CPU %lu/%lu.",
+                log_dbg("Locked thread %lu to CPU %zu/%lu.",
                         pthread_self(), cpu, NPROC);
 #endif
 }
