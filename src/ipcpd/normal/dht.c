@@ -28,6 +28,7 @@
 #define OUROBOROS_PREFIX DHT
 
 #include <ouroboros/hash.h>
+#include <ouroboros/ipcp-dev.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
@@ -2736,7 +2737,6 @@ static void handle_event(void *       self,
 
                         if (dht_set_state(dht, DHT_JOINING) == 0 ||
                             dht_wait_running(dht)) {
-                                log_dbg("creating join thread.");
                                 if (pthread_create(&thr, NULL, join_thr, inf)) {
                                         dht_set_state(dht, DHT_INIT);
                                         free(inf);
