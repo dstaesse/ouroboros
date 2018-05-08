@@ -94,13 +94,22 @@
 #endif
 
 #define MAC_SIZE             6
-#if defined(__linux__) && defined(BUILD_ETH_DIX)
+#ifdef __linux__
+#ifndef ETH_MAX_MTU          /* In if_ether.h as of Linux 4.10. */
+#define ETH_MAX_MTU          65535
+#endif /* ETH_MAX_MTU */
+#ifdef BUILD_ETH_DIX
 #define ETH_MTU              eth_data.mtu
-#define ETH_MTU_MAX          ETH_MAX_MTU /* if_ether.h */
+#define ETH_MTU_MAX          ETH_MAX_MTU
 #else
+#define ETH_MTU              eth_data.mtu
+#define ETH_MTU_MAX          1500
+#endif /* BUILD_ETH_DIX */
+#else /* __linux__ */
 #define ETH_MTU              1500
 #define ETH_MTU_MAX          ETH_MTU
-#endif
+#endif /* __linux__ */
+
 #define ETH_TYPE_LENGTH_SIZE sizeof(uint16_t)
 #define ETH_HEADER_SIZE      (2 * MAC_SIZE + ETH_TYPE_LENGTH_SIZE)
 
