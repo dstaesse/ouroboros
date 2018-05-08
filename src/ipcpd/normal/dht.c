@@ -2591,7 +2591,9 @@ static void dht_post_sdu(void *               comp,
         struct dht * dht = (struct dht *) comp;
 
         if (dht_get_state(dht) == DHT_SHUTDOWN) {
+#ifndef __DHT_TEST__
                 ipcp_sdb_release(sdb);
+#endif
                 return;
         }
 
@@ -2636,7 +2638,9 @@ void dht_destroy(struct dht * dht)
         list_for_each_safe(p, h, &dht->cmds) {
                 struct cmd * c = list_entry(p, struct cmd, next);
                 list_del(&c->next);
+#ifndef __DHT_TEST__
                 ipcp_sdb_release(c->sdb);
+#endif
                 free(c);
         }
 
