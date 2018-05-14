@@ -27,7 +27,6 @@
 #include <ouroboros/lockfile.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/shm_flow_set.h>
-#include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>
 
 #include <pthread.h>
@@ -54,24 +53,29 @@
 
 #define FN_MAX_CHARS 255
 
-#define FQUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(int))
+#define QUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(struct portevent))
 
 #define SHM_FLOW_SET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)             \
                                 + PROG_MAX_FQUEUES * sizeof(size_t)         \
                                 + PROG_MAX_FQUEUES * sizeof(pthread_cond_t) \
-                                + PROG_MAX_FQUEUES * FQUEUESIZE             \
+                                + PROG_MAX_FQUEUES * QUEUESIZE              \
                                 + sizeof(pthread_mutex_t))
 
 #define fqueue_ptr(fs, idx) (fs->fqueues + (SHM_BUFFER_SIZE) * idx)
 
-struct shm_flow_set {
-        ssize_t *         mtable;
-        size_t *          heads;
-        pthread_cond_t *  conds;
-        int *             fqueues;
-        pthread_mutex_t * lock;
+struct portevent {
+        int port_id;
+        int event;
+};
 
-        pid_t             pid;
+struct shm_flow_set {
+        ssize_t *          mtable;
+        size_t *           heads;
+        pthread_cond_t *   conds;
+        struct portevent * fqueues;
+        pthread_mutex_t *  lock;
+
+        pid_t pid;
 };
 
 struct shm_flow_set * shm_flow_set_create()
@@ -125,7 +129,7 @@ struct shm_flow_set * shm_flow_set_create()
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
         set->conds   = (pthread_cond_t *)(set->heads + PROG_MAX_FQUEUES);
-        set->fqueues = (int *) (set->conds + PROG_MAX_FQUEUES);
+        set->fqueues = (struct portevent *) (set->conds + PROG_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
                 (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
@@ -191,10 +195,9 @@ struct shm_flow_set * shm_flow_set_open(pid_t pid)
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
         set->conds   = (pthread_cond_t *)(set->heads + PROG_MAX_FQUEUES);
-        set->fqueues = (int *) (set->conds + PROG_MAX_FQUEUES);
+        set->fqueues = (struct portevent *) (set->conds + PROG_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
                 (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
-
         set->pid = pid;
 
         return set;
@@ -316,7 +319,8 @@ int shm_flow_set_has(struct shm_flow_set * set,
 }
 
 void shm_flow_set_notify(struct shm_flow_set * set,
-                         int                   port_id)
+                         int                   port_id,
+                         int                   event)
 {
         assert(set);
         assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
@@ -328,8 +332,10 @@ void shm_flow_set_notify(struct shm_flow_set * set,
                 return;
         }
 
-        *(fqueue_ptr(set, set->mtable[port_id]) +
-                     (set->heads[set->mtable[port_id]])++) = port_id;
+        (fqueue_ptr(set, set->mtable[port_id]) +
+         (set->heads[set->mtable[port_id]]))->port_id = port_id;
+        (fqueue_ptr(set, set->mtable[port_id]) +
+         (set->heads[set->mtable[port_id]])++)->event = event;
 
         pthread_cond_signal(&set->conds[set->mtable[port_id]]);
 
@@ -380,7 +386,7 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
         if (ret != -ETIMEDOUT) {
                 memcpy(fqueue,
                        fqueue_ptr(set, idx),
-                       set->heads[idx] * sizeof(int));
+                       set->heads[idx] * sizeof(struct portevent));
                 ret = set->heads[idx];
                 set->heads[idx] = 0;
         }

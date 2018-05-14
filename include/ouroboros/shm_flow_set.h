@@ -53,7 +53,8 @@ void                  shm_flow_set_del(struct shm_flow_set * shm_set,
                                        int                   port_id);
 
 void                  shm_flow_set_notify(struct shm_flow_set * set,
-                                          int                   port_id);
+                                          int                   port_id,
+                                          int                   event);
 
 ssize_t               shm_flow_set_wait(const struct shm_flow_set * shm_set,
                                         size_t                      idx,

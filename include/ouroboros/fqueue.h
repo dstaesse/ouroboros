@@ -28,6 +28,14 @@
 #include <stdbool.h>
 #include <time.h>
 
+enum fqtype {
+        FLOW_PKT = 0,
+        FLOW_DOWN,
+        FLOW_UP,
+        FLOW_ALLOC,
+        FLOW_DEALLOC
+};
+
 struct flow_set;
 
 struct fqueue;
@@ -37,30 +45,32 @@ typedef struct fqueue fqueue_t;
 
 __BEGIN_DECLS
 
-fset_t *   fset_create(void);
+fset_t *    fset_create(void);
 
-void       fset_destroy(fset_t * set);
+void        fset_destroy(fset_t * set);
 
-fqueue_t * fqueue_create(void);
+fqueue_t *  fqueue_create(void);
 
-void       fqueue_destroy(struct fqueue * fq);
+void        fqueue_destroy(struct fqueue * fq);
 
-void       fset_zero(fset_t * set);
+void        fset_zero(fset_t * set);
 
-int        fset_add(fset_t * set,
-                    int      fd);
+int         fset_add(fset_t * set,
+                     int      fd);
 
-bool       fset_has(const fset_t * set,
-                    int            fd);
+bool        fset_has(const fset_t * set,
+                     int            fd);
 
-void       fset_del(fset_t * set,
-                    int      fd);
+void        fset_del(fset_t * set,
+                     int      fd);
 
-int        fqueue_next(fqueue_t * fq);
+int         fqueue_next(fqueue_t * fq);
 
-int        fevent(fset_t *                set,
-                  fqueue_t *              fq,
-                  const struct timespec * timeo);
+enum fqtype fqueue_type(fqueue_t * fq);
+
+int         fevent(fset_t *                set,
+                   fqueue_t *              fq,
+                   const struct timespec * timeo);
 
 __END_DECLS
 

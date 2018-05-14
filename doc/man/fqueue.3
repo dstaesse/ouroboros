@@ -19,6 +19,8 @@ on flows
 
 \fBint fqueue_next(fqueue_t * \fIfq\fB);
 
+\fBint fqueue_type(fqueue_t * \fIfq\fB);
+
 \fBint fevent(fset_t * \fIset\fB, fqueue_t * \fIfq\fB,
 const struct timespec * \fItimeo\fB);
 
@@ -36,6 +38,22 @@ an \fBfqueue_t\fR \fIfq\fR.
 The \fBfqueue_next\fR() function retrieves the next event (a \fIflow
 descriptor\fR) that is ready within the event queue \fIfq\fR.
 
+The \fBfqueue_type\fR() function retrieves the type for the current
+event on the fd that was returned by \fBfqueue_next\fR(). Event types
+are:
+.RS 4
+FLOW_PKT: A new packet arrived on this flow and is ready for reading.
+
+FLOW_UP: The flow is now marked UP and ready for read/write.
+
+FLOW_DOWN: The flow is now marked DOWN and cannot be written to.
+
+FLOW_ALLOC: A pending flow is now allocated.
+
+FLOW_DEALLOC: The flow is deallocated by the other (N+1 or N-1)
+process.
+.RE
+
 The \fBfevent\fR() function retrieves all events that occured on any
 \fIflow descriptor\fR within \fIset\fR and returns them in the event
 queue \fBfq\fR. If a \fBstruct timespec *\fI timeo\fR can be provided,
@@ -50,7 +68,14 @@ On success, \fBfqueue_create\fR() returns a pointer to an
 
 \fBfqueue_destroy\fR() has no return value.
 
-On success, \fBfevent\fR() returns the number of events that occured in \fIset\fR.
+On success, \fBfevent\fR() returns the number of events that occured
+in \fIset\fR.
+
+On success, \fBfqueue_next\fR() returns the next file descriptor for
+which an event occurred.
+
+On success, \fBfqueue_type\fR() returns the event type for the last
+event returned by \fBfqueue_next\fR().
 
 .SH ERRORS
 
@@ -62,10 +87,10 @@ were available to create the \fBfqueue_t\fR.
 .B -EINVAL
 An invalid argument was passed (\fIfq\fR or \fIset\fR was \fINULL\fR).
 
-In addition, \fBfqueue_next\fR() can return
+In addition, \fBfqueue_next\fR() or \fBqueue_type\fR() can return
 
 .B -EPERM
-No more fds available in \fIfq\fR.
+No more fds available or no current event in \fIfq\fR.
 
 and \fBfevent\fR() can return
 
