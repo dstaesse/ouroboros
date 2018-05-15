@@ -304,7 +304,7 @@ int main(int    argc,
         }
 
         /* These components must be init at creation. */
-        if (rib_init("ipcpd-normal")) {
+        if (rib_init(ipcpi.name)) {
                 log_err("Failed to initialize RIB.");
                 goto fail_rib_init;
         }

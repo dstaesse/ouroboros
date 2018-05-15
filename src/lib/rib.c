@@ -261,7 +261,7 @@ static void * fuse_thr(void * o)
 #endif /* HAVE_FUSE */
 
 
-int rib_init(const char * prefix)
+int rib_init(const char * mountpt)
 {
 #ifdef HAVE_FUSE
         struct stat      st;
@@ -277,7 +277,7 @@ int rib_init(const char * prefix)
         if (stat(FUSE_PREFIX, &st) == -1)
                 return -1;
 
-        sprintf(rib.mnt, FUSE_PREFIX "/%s.%d", prefix, getpid());
+        sprintf(rib.mnt, FUSE_PREFIX "/%s", mountpt);
 
         if (stat(rib.mnt, &st) == -1)
                 switch(errno) {
