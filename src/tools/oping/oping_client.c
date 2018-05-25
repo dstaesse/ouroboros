@@ -129,8 +129,10 @@ void * writer(void * o)
         if (buf == NULL)
                 return (void *) -ENOMEM;
 
-        if (fdp == NULL)
+        if (fdp == NULL) {
+                free(buf);
                 return (void *) -EINVAL;
+        }
 
         memset(buf, 0, client.size);
 
