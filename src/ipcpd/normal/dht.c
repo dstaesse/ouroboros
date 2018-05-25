@@ -825,12 +825,6 @@ static void lookup_update(struct dht *    dht,
 
         pthread_cleanup_pop(false);
 
-        /* BUG: this should not be allowed since it's use-after-free. */
-        if (lu->state == LU_DESTROY || lu->state == LU_NULL) {
-                log_warn("Use-after-free. Update aborted to avoid worse.");
-                return;
-        }
-
         for (n = 0; n < msg->n_contacts; ++n) {
                 c = contact_create(msg->contacts[n]->id.data,
                                    dht->b, msg->contacts[n]->addr);
@@ -1905,11 +1899,11 @@ static buffer_t dht_retrieve(struct dht *    dht,
         if (buf.len == 0)
                 goto fail;
 
-        buf.data = malloc(sizeof(dht->addr) * buf.len);
-        if (buf.data == NULL)
+        pos = malloc(sizeof(dht->addr) * buf.len);
+        if (pos == NULL)
                 goto fail;
 
-        pos = (uint64_t *) buf.data;;
+        buf.data = (uint8_t *) pos;
 
         list_for_each(p, &e->vals) {
                 struct val * v = list_entry(p, struct val, next);
@@ -2747,6 +2741,8 @@ static void handle_event(void *       self,
                                         return;
                                 }
                                 pthread_detach(thr);
+                        } else {
+                                free(inf);
                         }
                         break;
                 case DHT_RUNNING:
