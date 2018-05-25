@@ -2049,6 +2049,7 @@ static void * mainloop(void * o)
                         break;
                 default:
                         log_err("Don't know that message code.");
+                        result = -1;
                         break;
                 }
 
