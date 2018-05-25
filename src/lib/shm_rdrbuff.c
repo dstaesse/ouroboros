@@ -148,8 +148,10 @@ void shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb)
 
         assert(rdrb);
 
-        if (getpid() != *rdrb->pid && kill(*rdrb->pid, 0) == 0)
+        if (getpid() != *rdrb->pid && kill(*rdrb->pid, 0) == 0) {
+                free(rdrb);
                 return;
+        }
 
         shm_rdrbuff_close(rdrb);
 
@@ -275,7 +277,7 @@ struct shm_rdrbuff * shm_rdrbuff_create()
  fail_mattr:
         shm_rdrbuff_destroy(rdrb);
  fail_rdrb:
-         return NULL;
+        return NULL;
 }
 
 struct shm_rdrbuff * shm_rdrbuff_open()
