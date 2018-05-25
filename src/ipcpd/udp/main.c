@@ -236,23 +236,21 @@ static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
                                     uint16_t dst_udp_port,
                                     int      response)
 {
-        uint8_t *         buf;
         struct mgmt_msg * msg;
         int               ret;
 
-        buf = malloc(sizeof(*msg));
-        if (buf == NULL)
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
                 return -1;
 
-        msg               = (struct mgmt_msg *) buf;
         msg->code         = FLOW_REPLY;
         msg->src_udp_port = src_udp_port;
         msg->dst_udp_port = dst_udp_port;
         msg->response     = response;
 
-        ret = send_shim_udp_msg(buf, sizeof(*msg), dst_ip_addr);
+        ret = send_shim_udp_msg((uint8_t *) msg, sizeof(*msg), dst_ip_addr);
 
-        free(buf);
+        free(msg);
 
         return ret;
 }
