@@ -51,8 +51,8 @@
 
 struct fa_msg {
         uint64_t s_addr;
-        uint32_t r_fd;
-        uint32_t s_fd;
+        uint32_t r_eid;
+        uint32_t s_eid;
         uint8_t  code;
         uint8_t  qc;
         int8_t   response;
@@ -60,7 +60,7 @@ struct fa_msg {
 
 struct {
         pthread_rwlock_t   flows_lock;
-        int                r_fd[PROG_MAX_FLOWS];
+        int                r_eid[PROG_MAX_FLOWS];
         uint64_t           r_addr[PROG_MAX_FLOWS];
         int                fd;
 
@@ -73,7 +73,7 @@ static void sdu_handler(int                  fd,
 {
         pthread_rwlock_rdlock(&fa.flows_lock);
 
-        if (dt_write_sdu(fa.r_addr[fd], qc, fa.r_fd[fd], sdb)) {
+        if (dt_write_sdu(fa.r_addr[fd], qc, fa.r_eid[fd], sdb)) {
                 pthread_rwlock_unlock(&fa.flows_lock);
                 ipcp_sdb_release(sdb);
                 log_warn("Failed to forward SDU.");
@@ -85,7 +85,7 @@ static void sdu_handler(int                  fd,
 
 static void destroy_conn(int fd)
 {
-        fa.r_fd[fd]   = -1;
+        fa.r_eid[fd]   = -1;
         fa.r_addr[fd] = INVALID_ADDR;
 }
 
@@ -152,7 +152,7 @@ static void fa_post_sdu(void *               comp,
 
                 pthread_rwlock_wrlock(&fa.flows_lock);
 
-                fa.r_fd[fd]   = msg->s_fd;
+                fa.r_eid[fd]  = msg->s_eid;
                 fa.r_addr[fd] = msg->s_addr;
 
                 pthread_rwlock_unlock(&fa.flows_lock);
@@ -166,14 +166,14 @@ static void fa_post_sdu(void *               comp,
         case FLOW_REPLY:
                 pthread_rwlock_wrlock(&fa.flows_lock);
 
-                fa.r_fd[msg->r_fd] = msg->s_fd;
+                fa.r_eid[msg->r_eid] = msg->s_eid;
 
-                ipcp_flow_alloc_reply(msg->r_fd, msg->response);
+                ipcp_flow_alloc_reply(msg->r_eid, msg->response);
 
                 if (msg->response < 0)
-                        destroy_conn(msg->r_fd);
+                        destroy_conn(msg->r_eid);
                 else
-                        sdu_sched_add(fa.sdu_sched, msg->r_fd);
+                        sdu_sched_add(fa.sdu_sched, msg->r_eid);
 
                 pthread_rwlock_unlock(&fa.flows_lock);
 
@@ -240,7 +240,7 @@ int fa_alloc(int             fd,
         msg         = (struct fa_msg *) shm_du_buff_head(sdb);
         msg->code   = FLOW_REQ;
         msg->qc     = qc;
-        msg->s_fd   = fd;
+        msg->s_eid  = fd;
         msg->s_addr = ipcpi.dt_addr;
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
@@ -252,7 +252,7 @@ int fa_alloc(int             fd,
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
-        assert(fa.r_fd[fd] == -1);
+        assert(fa.r_eid[fd] == -1);
         fa.r_addr[fd] = addr;
 
         pthread_rwlock_unlock(&fa.flows_lock);
@@ -299,8 +299,8 @@ int fa_alloc_resp(int fd,
 
         msg           = (struct fa_msg *) shm_du_buff_head(sdb);
         msg->code     = FLOW_REPLY;
-        msg->r_fd     = fa.r_fd[fd];
-        msg->s_fd     = fd;
+        msg->r_eid    = fa.r_eid[fd];
+        msg->s_eid    = fd;
         msg->response = response;
 
         if (response < 0) {
