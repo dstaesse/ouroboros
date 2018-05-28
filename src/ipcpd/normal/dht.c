@@ -863,6 +863,7 @@ static void lookup_update(struct dht *    dht,
                         d = list_last_entry(&lu->contacts,
                                             struct contact, next);
                         list_del(&d->next);
+                        assert(lu->contacts.prv != &d->next);
                         contact_destroy(d);
                         mod = true;
                 }
