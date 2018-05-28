@@ -79,6 +79,7 @@ test_and_set_c_compiler_flag_global(-Werror)
 test_and_set_c_compiler_flag_global(-Wundef)
 test_and_set_c_compiler_flag_global(-Wpointer-arith)
 test_and_set_c_compiler_flag_global(-Wstrict-prototypes)
+test_and_set_c_compiler_flag_global(-Wvla)
 #Wswitch-default check fails on the swig-generated code
 #test_and_set_c_compiler_flag_global(-Wswitch-default)
 test_and_set_c_compiler_flag_global(-Wunreachable-code)

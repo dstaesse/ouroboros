@@ -359,12 +359,7 @@ static int get_min_vertex(struct graph *   graph,
         *v = NULL;
 
         list_for_each(p, &graph->vertices) {
-                if (used[i]) {
-                        i++;
-                        continue;
-                }
-
-                if (dist[i] < min) {
+                if (!used[i] && dist[i] < min) {
                         min = dist[i];
                         index = i;
                         *v = list_entry(p, struct vertex, next);
@@ -384,7 +379,7 @@ static int dijkstra(struct graph *    graph,
                     struct vertex *** nhops,
                     int **            dist)
 {
-        bool               used[graph->nr_vertices];
+        bool *             used;
         struct list_head * p = NULL;
         int                i = 0;
         struct vertex *    v = NULL;
@@ -393,25 +388,24 @@ static int dijkstra(struct graph *    graph,
 
         *nhops = malloc(sizeof(**nhops) * graph->nr_vertices);
         if (*nhops == NULL)
-                return -1;
+                goto fail_pnhops;
 
         *dist = malloc(sizeof(**dist) * graph->nr_vertices);
-        if (*dist == NULL) {
-                free(*nhops);
-                return -1;
-        }
+        if (*dist == NULL)
+                goto fail_pdist;
+
+        used = malloc(sizeof(*used) * graph->nr_vertices);
+        if (used == NULL)
+                goto fail_used;
 
         /* Init the data structures */
+        memset(used, 0, sizeof(*used) * graph->nr_vertices);
+        memset(*nhops, 0, sizeof(**nhops) * graph->nr_vertices);
+        memset(*dist, 0, sizeof(**dist) * graph->nr_vertices);
+
         list_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
-                if (v->addr == src)
-                        (*dist)[i] = 0;
-                else
-                        (*dist)[i] = INT_MAX;
-
-                (*nhops)[i] = NULL;
-                used[i] = false;
-                i++;
+                (*dist)[i++]  = (v->addr == src) ? 0 : INT_MAX;
         }
 
         /* Perform actual Dijkstra */
@@ -441,7 +435,17 @@ static int dijkstra(struct graph *    graph,
                 i = get_min_vertex(graph, *dist, used, &v);
         }
 
+        free(used);
+
         return 0;
+
+ fail_used:
+        free(*dist);
+ fail_pdist:
+        free(*nhops);
+ fail_pnhops:
+        return -1;
+
 }
 
 static void free_routing_table(struct list_head * table)
@@ -536,6 +540,7 @@ static int graph_routing_table_simple(struct graph *     graph,
  fail_t:
         free_routing_table(table);
         free(nhops);
+        free(*dist);
  fail_vertices:
         *dist = NULL;
         return -1;

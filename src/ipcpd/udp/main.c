@@ -788,7 +788,11 @@ static int ipcp_udp_reg(const uint8_t * hash)
         uint32_t dns_addr;
         uint32_t ip_addr;
 #endif
-        char hashstr[ipcp_dir_hash_strlen() + 1];
+        char * hashstr;
+
+        hashstr = malloc(ipcp_dir_hash_strlen() + 1);
+        if (hashstr == NULL)
+                return -1;
 
         assert(hash);
 
@@ -797,6 +801,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
         if (shim_data_reg_add_entry(udp_data.shim_data, hash)) {
                 log_err("Failed to add " HASH_FMT " to local registry.",
                         HASH_VAL(hash));
+                free(hashstr);
                 return -1;
         }
 
@@ -810,11 +815,13 @@ static int ipcp_udp_reg(const uint8_t * hash)
 
                 if (inet_ntop(AF_INET, &ip_addr,
                               ipstr, INET_ADDRSTRLEN) == NULL) {
+                        free(hashstr);
                         return -1;
                 }
 
                 if (inet_ntop(AF_INET, &dns_addr,
                               dnsstr, INET_ADDRSTRLEN) == NULL) {
+                        free(hashstr);
                         return -1;
                 }
 
@@ -823,11 +830,14 @@ static int ipcp_udp_reg(const uint8_t * hash)
 
                 if (ddns_send(cmd)) {
                         shim_data_reg_del_entry(udp_data.shim_data, hash);
+                        free(hashstr);
                         return -1;
                 }
         }
 #endif
         log_dbg("Registered " HASH_FMT ".", HASH_VAL(hash));
+
+        free(hashstr);
 
         return 0;
 }
@@ -840,9 +850,13 @@ static int ipcp_udp_unreg(const uint8_t * hash)
         char cmd[100];
         uint32_t dns_addr;
 #endif
-        char hashstr[ipcp_dir_hash_strlen() + 1];
+        char * hashstr;
 
         assert(hash);
+
+        hashstr = malloc(ipcp_dir_hash_strlen() + 1);
+        if (hashstr == NULL)
+                return -1;
 
         ipcp_hash_str(hashstr, hash);
 
@@ -854,6 +868,7 @@ static int ipcp_udp_unreg(const uint8_t * hash)
         if (dns_addr != 0) {
                 if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN)
                     == NULL) {
+                        free(hashstr);
                         return -1;
                 }
                 sprintf(cmd, "server %s\nupdate delete %s A\nsend\nquit\n",
@@ -867,24 +882,32 @@ static int ipcp_udp_unreg(const uint8_t * hash)
 
         log_dbg("Unregistered " HASH_FMT ".", HASH_VAL(hash));
 
+        free(hashstr);
+
         return 0;
 }
 
 static int ipcp_udp_query(const uint8_t * hash)
 {
         uint32_t           ip_addr = 0;
+        char *             hashstr;
         struct hostent *   h;
 #ifdef HAVE_DDNS
         uint32_t           dns_addr = 0;
 #endif
-        char hashstr[ipcp_dir_hash_strlen() + 1];
 
         assert(hash);
 
+        hashstr = malloc(ipcp_dir_hash_strlen() + 1);
+        if (hashstr == NULL)
+                return -ENOMEM;
+
         ipcp_hash_str(hashstr, hash);
 
-        if (shim_data_dir_has(udp_data.shim_data, hash))
+        if (shim_data_dir_has(udp_data.shim_data, hash)) {
+                free(hashstr);
                 return 0;
+        }
 
 #ifdef HAVE_DDNS
         dns_addr = udp_data.dns_addr;
@@ -893,6 +916,7 @@ static int ipcp_udp_query(const uint8_t * hash)
                 ip_addr = ddns_resolve(hashstr, dns_addr);
                 if (ip_addr == 0) {
                         log_dbg("Could not resolve %s.", hashstr);
+                        free(hashstr);
                         return -1;
                 }
         } else {
@@ -900,6 +924,7 @@ static int ipcp_udp_query(const uint8_t * hash)
                 h = gethostbyname(hashstr);
                 if (h == NULL) {
                         log_dbg("Could not resolve %s.", hashstr);
+                        free(hashstr);
                         return -1;
                 }
 
@@ -910,8 +935,11 @@ static int ipcp_udp_query(const uint8_t * hash)
 
         if (shim_data_dir_add_entry(udp_data.shim_data, hash, ip_addr)) {
                 log_err("Failed to add directory entry.");
+                free(hashstr);
                 return -1;
         }
+
+        free(hashstr);
 
         return 0;
 }
