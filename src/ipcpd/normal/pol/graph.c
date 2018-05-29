@@ -35,6 +35,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <string.h>
 
 struct edge {
         struct list_head next;
