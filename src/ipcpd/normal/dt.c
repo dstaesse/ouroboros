@@ -543,6 +543,7 @@ int dt_init(enum pol_routing pr,
 {
         int              i;
         int              j;
+        char             dtstr[256];
         struct conn_info info;
 
         memset(&info, 0, sizeof(info));
@@ -612,7 +613,8 @@ int dt_init(enum pol_routing pr,
 
         dt.n_flows = 0;
 #endif
-        if (rib_reg(DT, &r_ops))
+        sprintf(dtstr, "%s.%" PRIu64, DT, ipcpi.dt_addr);
+        if (rib_reg(dtstr, &r_ops))
                 goto fail_rib_reg;
 
         return 0;
