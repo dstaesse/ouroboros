@@ -18,9 +18,9 @@ get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   # Add new tests here
   dht_test.c
-)
+  )
 
-set_source_files_properties(${KAD_PROTO_SRCS} PROPERTIES GENERATED TRUE)
+protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS ../kademlia.proto)
 
 add_executable(${PARENT_DIR}_test EXCLUDE_FROM_ALL ${${PARENT_DIR}_tests}
   ${KAD_PROTO_SRCS})
