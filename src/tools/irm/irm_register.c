@@ -113,21 +113,19 @@ int do_register(int     argc,
         for (i = 0; i < len; ++i) {
                 size_t j;
                 for (j = 0; j < layers_len; j++) {
-                        if (wildcard_match(ipcps[i].layer, layers[j]) == 0) {
+                        if (wildcard_match(layers[j], ipcps[i].layer) == 0) {
                                 if (irm_reg(ipcps[i].pid, name)) {
                                         free(ipcps);
                                         return -1;
                                 }
-                                break;
                         }
                 }
                 for (j = 0; j < ipcp_len; j++) {
-                        if (wildcard_match(ipcps[i].name, ipcp[j]) == 0) {
+                        if (wildcard_match(ipcp[j], ipcps[i].name) == 0) {
                                 if (irm_reg(ipcps[i].pid, name)) {
                                         free(ipcps);
                                         return -1;
                                 }
-                                break;
                         }
                 }
         }
