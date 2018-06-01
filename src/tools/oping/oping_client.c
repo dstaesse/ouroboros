@@ -98,6 +98,14 @@ void * reader(void * o)
 
                 ms = ts_diff_us(&sent, &now) / 1000.0;
 
+                if (client.timestamp) {
+                        struct timespec rtc;
+                        clock_gettime(CLOCK_REALTIME, &rtc);
+                        printf("[%zd.%06zu] ",
+                               (ssize_t) rtc.tv_sec,
+                               (size_t) rtc.tv_nsec / 1000);
+                }
+
                 printf("%d bytes from %s: seq=%d time=%.3f ms\n",
                        msg_len,
                        client.s_apn,

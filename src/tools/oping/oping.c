@@ -70,6 +70,7 @@ struct c {
         int      interval;
         uint32_t count;
         int      size;
+        bool     timestamp;
 
         /* stats */
         uint32_t sent;
@@ -115,16 +116,19 @@ static void usage(void)
                "\n"
                "  -c, --count               Number of packets (default 1000)\n"
                "  -i, --interval            Interval (ms, default 1000)\n"
-               "  -n, --server-apn          Name of the oping server\n"
+               "  -n, --server-name         Name of the oping server\n"
                "  -s, --size                Payload size (B, default 64)\n"
+               "  -D, --timeofday           Print time of day before each line"
+               "\n"
                "      --help                Display this help text and exit\n");
 }
 
-int main(int argc, char ** argv)
+int main(int     argc,
+         char ** argv)
 {
-        int ret = -1;
-        char * rem = NULL;
-        bool serv = false;
+        int    ret  = -1;
+        char * rem  = NULL;
+        bool   serv = false;
 
         argc--;
         argv++;
@@ -133,6 +137,7 @@ int main(int argc, char ** argv)
         client.interval = 1000;
         client.size = 64;
         client.count = 1000;
+        client.timestamp = false;
 
         while (argc > 0) {
                 if (strcmp(*argv, "-i") == 0 ||
@@ -140,7 +145,7 @@ int main(int argc, char ** argv)
                         client.interval = strtol(*(++argv), &rem, 10);
                         --argc;
                 } else if (strcmp(*argv, "-n") == 0 ||
-                           strcmp(*argv, "--server_apn") == 0) {
+                           strcmp(*argv, "--server_name") == 0) {
                         client.s_apn = *(++argv);
                         --argc;
                 } else if (strcmp(*argv, "-c") == 0 ||
@@ -154,6 +159,9 @@ int main(int argc, char ** argv)
                 } else if (strcmp(*argv, "-l") == 0 ||
                            strcmp(*argv, "--listen") == 0) {
                         serv = true;
+                } else if (strcmp(*argv, "-D") == 0 ||
+                           strcmp(*argv, "--timeofday") == 0) {
+                        client.timestamp = true;
                 } else {
                         usage();
                         exit(EXIT_SUCCESS);
