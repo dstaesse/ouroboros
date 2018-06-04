@@ -23,7 +23,6 @@
 #include <ouroboros/endian.h>
 
 #define _POSIX_C_SOURCE 200809L
-
 #include "config.h"
 
 #include <ouroboros/hash.h>
@@ -42,8 +41,6 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/qoscube.h>
 #include <ouroboros/timerwheel.h>
-
-#include "rq.h"
 
 #include <stdlib.h>
 #include <string.h>

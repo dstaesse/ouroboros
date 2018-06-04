@@ -201,7 +201,6 @@ set(SOURCE_FILES_COMMON
   qoscube.c
   random.c
   rib.c
-  rq.c
   sha3.c
   shm_flow_set.c
   shm_rbuff.c
