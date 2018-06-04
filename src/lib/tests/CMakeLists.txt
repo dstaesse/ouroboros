@@ -14,7 +14,6 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   crc32_test.c
   hashtable_test.c
   md5_test.c
-  rq_test.c
   sha3_test.c
   time_utils_test.c
   ${TIMERWHEEL_TEST}
