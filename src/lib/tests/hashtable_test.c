@@ -64,6 +64,7 @@ int hashtable_test(int argc, char ** argv)
                 if (htable_insert(table, i, (void *) j, 1)) {
                         printf("Failed to insert.\n");
                         htable_destroy(table);
+                        free(j);
                         return -1;
                 }
         }
