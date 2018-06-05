@@ -20,41 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#include <ouroboros/qos.h>
 #include <ouroboros/qoscube.h>
 
 #include <string.h>
-
-static struct qos_spec qos_raw = {
-        .delay                = UINT32_MAX,
-        .bandwidth            = UINT64_MAX,
-        .availability         = 0,
-        .in_order             = 0,
-        .maximum_interruption = UINT32_MAX
-};
-
-static struct qos_spec qos_best_effort = {
-        .delay                = UINT32_MAX,
-        .bandwidth            = UINT64_MAX,
-        .availability         = 0,
-        .in_order             = 1,
-        .maximum_interruption = UINT32_MAX
-};
-
-static struct qos_spec qos_video = {
-        .delay                = 100,
-        .bandwidth            = UINT64_MAX,
-        .availability         = 3,
-        .in_order             = 1,
-        .maximum_interruption = 100
-};
-
-static struct qos_spec qos_voice = {
-        .delay                = 10,
-        .bandwidth            = 100000,
-        .availability         = 5,
-        .in_order             = 1,
-        .maximum_interruption = 50
-};
 
 qoscube_t qos_spec_to_cube(qosspec_t qs)
 {

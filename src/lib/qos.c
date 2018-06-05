@@ -26,6 +26,38 @@
 #include <stdint.h>
 #include <stddef.h>
 
+qosspec_t qos_raw = {
+        .delay                = UINT32_MAX,
+        .bandwidth            = UINT64_MAX,
+        .availability         = 0,
+        .in_order             = 0,
+        .maximum_interruption = UINT32_MAX
+};
+
+qosspec_t qos_best_effort = {
+        .delay                = UINT32_MAX,
+        .bandwidth            = UINT64_MAX,
+        .availability         = 0,
+        .in_order             = 1,
+        .maximum_interruption = UINT32_MAX
+};
+
+qosspec_t qos_video = {
+        .delay                = 100,
+        .bandwidth            = UINT64_MAX,
+        .availability         = 3,
+        .in_order             = 1,
+        .maximum_interruption = 100
+};
+
+qosspec_t qos_voice = {
+        .delay                = 10,
+        .bandwidth            = 100000,
+        .availability         = 5,
+        .in_order             = 1,
+        .maximum_interruption = 50
+};
+
 int qosspec_init(qosspec_t * qs)
 {
         if (qs == NULL)

@@ -34,6 +34,11 @@ typedef struct qos_spec {
         uint32_t maximum_interruption; /* In ms */
 } qosspec_t;
 
+qosspec_t qos_raw;
+qosspec_t qos_best_effort;
+qosspec_t qos_video;
+qosspec_t qos_voice;
+
 __BEGIN_DECLS
 
 int qosspec_init(qosspec_t * qs);
