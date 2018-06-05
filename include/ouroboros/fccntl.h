@@ -48,8 +48,7 @@
 #define FRCTFRESCNTRL 00000001 /* Feedback from receiver */
 #define FRCTFRTX      00000002 /* Reliable flow          */
 #define FRCTFERRCHCK  00000004 /* Check for errors       */
-#define FRCTFORDERING 00000010 /* Ordered delivery       */
-#define FRCTFPARTIAL  00000020 /* Allow partial delivery */
+#define FRCTFPARTIAL  00000010 /* Allow partial delivery */
 
 /* Flow operations */
 #define FLOWSRCVTIMEO 00000001 /* Set read timeout       */
