@@ -486,6 +486,7 @@ int flow_accept(qosspec_t *             qs,
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
         int         fd;
+        qoscube_t   qc;
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
@@ -519,6 +520,8 @@ int flow_accept(qosspec_t *             qs,
                 return -EIRMD;
         }
 
+        qc = recv_msg->qoscube;
+
         fd = flow_init(recv_msg->port_id, recv_msg->pid, recv_msg->qoscube);
 
         irm_msg__free_unpacked(recv_msg, NULL);
@@ -532,11 +535,13 @@ int flow_accept(qosspec_t *             qs,
 
         assert(ai.flows[fd].frcti == NULL);
 
-        ai.flows[fd].frcti = frcti_create(fd);
-        if (ai.flows[fd].frcti == NULL) {
-                flow_fini(fd);
-                pthread_rwlock_unlock(&ai.lock);
-                return -ENOMEM;
+        if (qc != QOS_CUBE_RAW) {
+                ai.flows[fd].frcti = frcti_create(fd);
+                if (ai.flows[fd].frcti == NULL) {
+                        flow_fini(fd);
+                        pthread_rwlock_unlock(&ai.lock);
+                        return -ENOMEM;
+                }
         }
 
         if (qs != NULL)
@@ -553,7 +558,7 @@ int flow_alloc(const char *            dst,
 {
         irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
-        qoscube_t   qc       = QOS_CUBE_BE;
+        qoscube_t   qc       = QOS_CUBE_RAW;
         int         fd;
 
         msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
@@ -603,14 +608,15 @@ int flow_alloc(const char *            dst,
 
         pthread_rwlock_wrlock(&ai.lock);
 
-        /* FIXME: check if FRCT is needed based on qc? */
         assert(ai.flows[fd].frcti == NULL);
 
-        ai.flows[fd].frcti = frcti_create(fd);
-        if (ai.flows[fd].frcti == NULL) {
-                flow_fini(fd);
-                pthread_rwlock_unlock(&ai.lock);
-                return -ENOMEM;
+        if (qc != QOS_CUBE_RAW) {
+                ai.flows[fd].frcti = frcti_create(fd);
+                if (ai.flows[fd].frcti == NULL) {
+                        flow_fini(fd);
+                        pthread_rwlock_unlock(&ai.lock);
+                        return -ENOMEM;
+                }
         }
 
         pthread_rwlock_unlock(&ai.lock);

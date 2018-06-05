@@ -30,6 +30,7 @@ typedef struct qos_spec {
         uint32_t delay;                /* In ms */
         uint64_t bandwidth;            /* In bits/s */
         uint8_t  availability;         /* Class of 9s */
+        uint8_t  in_order;             /* In-order delivery, enables FRCT */
         uint32_t maximum_interruption; /* In ms */
 } qosspec_t;
 
