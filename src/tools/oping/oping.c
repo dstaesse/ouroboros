@@ -116,6 +116,7 @@ static void usage(void)
                "  -l, --listen              Run in server mode\n"
                "\n"
                "  -c, --count               Number of packets (default 1000)\n"
+               "  -d, --duration            Duration of the test\n"
                "  -i, --interval            Interval (ms, default 1000)\n"
                "  -n, --server-name         Name of the oping server\n"
                "  -s, --size                Payload size (B, default 64)\n"
@@ -124,12 +125,33 @@ static void usage(void)
                "      --help                Display this help text and exit\n");
 }
 
+/* Times are in ms. */
+static int time_mul(const char * rem)
+{
+        if (strcmp (rem, "ms") == 0 || strcmp(rem, "") == 0)
+                return 1;
+        else if(strcmp(rem, "s") == 0)
+                return 1000;
+        else if (strcmp(rem, "m") == 0)
+                return 60 * 1000;
+        else if (strcmp(rem, "h") == 0)
+                return 60 * 60 * 1000;
+        else if (strcmp(rem, "d") == 0)
+                return 60 * 60 * 24 * 1000;
+
+        printf("Unknown time unit: %s.", rem);
+
+        usage();
+        exit(EXIT_SUCCESS);
+}
+
 int main(int     argc,
          char ** argv)
 {
-        int    ret  = -1;
-        char * rem  = NULL;
-        bool   serv = false;
+        int     ret  = -1;
+        char *  rem  = NULL;
+        bool    serv = false;
+        long    duration = 0;
 
         argc--;
         argv++;
@@ -144,6 +166,7 @@ int main(int     argc,
                 if (strcmp(*argv, "-i") == 0 ||
                     strcmp(*argv, "--interval") == 0) {
                         client.interval = strtol(*(++argv), &rem, 10);
+                        client.interval *= time_mul(rem);
                         --argc;
                 } else if (strcmp(*argv, "-n") == 0 ||
                            strcmp(*argv, "--server_name") == 0) {
@@ -152,6 +175,11 @@ int main(int     argc,
                 } else if (strcmp(*argv, "-c") == 0 ||
                            strcmp(*argv, "--count") == 0) {
                         client.count = strtol(*(++argv), &rem, 10);
+                        --argc;
+                } else if (strcmp(*argv, "-d") == 0 ||
+                           strcmp(*argv, "--duration") == 0) {
+                        duration = strtol(*(++argv), &rem, 10);
+                        duration *= time_mul(rem);
                         --argc;
                 } else if (strcmp(*argv, "-s") == 0 ||
                            strcmp(*argv, "--size") == 0) {
@@ -164,12 +192,14 @@ int main(int     argc,
                            strcmp(*argv, "--timeofday") == 0) {
                         client.timestamp = true;
                 } else {
-                        usage();
-                        exit(EXIT_SUCCESS);
+                        goto fail;
                 }
                 argc--;
                 argv++;
         }
+
+        if (duration > 0)
+                client.count = duration / client.interval;
 
         if (serv) {
                 ret = server_main();
@@ -188,7 +218,6 @@ int main(int     argc,
                                OPING_BUF_SIZE);
                         client.size = OPING_BUF_SIZE;
                 }
-
                 if (client.size < 64) {
                         printf("Packet size set to 64 bytes.\n");
                         client.size = 64;
@@ -200,5 +229,9 @@ int main(int     argc,
         if (ret < 0)
                 exit(EXIT_FAILURE);
 
+        exit(EXIT_SUCCESS);
+
+ fail:
+        usage();
         exit(EXIT_SUCCESS);
 }
