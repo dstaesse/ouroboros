@@ -42,6 +42,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/fccntl.h>
 #include <ouroboros/fqueue.h>
+#include <ouroboros/qos.h>
 
 #include "time_utils.h"
 
@@ -66,11 +67,12 @@
 #define OPING_MAX_FLOWS 256
 
 struct c {
-        char *   s_apn;
-        int      interval;
-        uint32_t count;
-        int      size;
-        bool     timestamp;
+        char *    s_apn;
+        int       interval;
+        uint32_t  count;
+        int       size;
+        bool      timestamp;
+        qosspec_t qs;
 
         /* stats */
         uint32_t sent;
@@ -115,10 +117,11 @@ static void usage(void)
                "and reports the Round Trip Time (RTT)\n\n"
                "  -l, --listen              Run in server mode\n"
                "\n"
-               "  -c, --count               Number of packets (default 1000)\n"
-               "  -d, --duration            Duration of the test\n"
-               "  -i, --interval            Interval (ms, default 1000)\n"
+               "  -c, --count               Number of packets\n"
+               "  -d, --duration            Duration of the test (default 1s)\n"
+               "  -i, --interval            Interval (default 1000ms)\n"
                "  -n, --server-name         Name of the oping server\n"
+               "  -q, --qos                 QoS (raw, best, video or voice)\n"
                "  -s, --size                Payload size (B, default 64)\n"
                "  -D, --timeofday           Print time of day before each line"
                "\n"
@@ -148,19 +151,21 @@ static int time_mul(const char * rem)
 int main(int     argc,
          char ** argv)
 {
-        int     ret  = -1;
-        char *  rem  = NULL;
-        bool    serv = false;
-        long    duration = 0;
+        int    ret      = -1;
+        char * rem      = NULL;
+        bool   serv     = false;
+        long   duration = 0;
+        char * qos      = NULL;
 
         argc--;
         argv++;
 
-        client.s_apn = NULL;
-        client.interval = 1000;
-        client.size = 64;
-        client.count = 1000;
+        client.s_apn     = NULL;
+        client.interval  = 1000;
+        client.size      = 64;
+        client.count     = INT_MAX;
         client.timestamp = false;
+        client.qs        = qos_raw;
 
         while (argc > 0) {
                 if (strcmp(*argv, "-i") == 0 ||
@@ -185,6 +190,10 @@ int main(int     argc,
                            strcmp(*argv, "--size") == 0) {
                         client.size = strtol(*(++argv), &rem, 10);
                         --argc;
+                } else if (strcmp(*argv, "-q") == 0 ||
+                           strcmp(*argv, "--qos") == 0) {
+                        qos = *(++argv);
+                        --argc;
                 } else if (strcmp(*argv, "-l") == 0 ||
                            strcmp(*argv, "--listen") == 0) {
                         serv = true;
@@ -200,6 +209,19 @@ int main(int     argc,
 
         if (duration > 0)
                 client.count = duration / client.interval;
+
+        if (qos != NULL) {
+                if (strcmp(qos, "best") == 0)
+                        client.qs = qos_best_effort;
+                else if (strcmp(qos, "raw") == 0)
+                        client.qs = qos_raw;
+                else if (strcmp(qos, "video") == 0)
+                        client.qs = qos_video;
+                else if (strcmp(qos, "voice") == 0)
+                        client.qs = qos_voice;
+                else
+                        printf("Unknown QoS cube, defaulting to raw.\n");
+        }
 
         if (serv) {
                 ret = server_main();

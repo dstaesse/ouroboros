@@ -229,7 +229,7 @@ static int client_main(void)
                 return -1;
         }
 
-        fd = flow_alloc(client.s_apn, NULL, NULL);
+        fd = flow_alloc(client.s_apn, &client.qs, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 client_fini();
