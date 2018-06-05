@@ -65,10 +65,13 @@ void * reader(void * o)
         int                msg_len = 0;
         double             ms      = 0;
         double             d       = 0;
+        uint32_t           exp_id  = 0;
 
         fccntl(fd, FLOWSRCVTIMEO, &timeout);
 
         while (!stop && client.rcvd != client.count) {
+                uint32_t id;
+
                 msg_len = flow_read(fd, buf, OPING_BUF_SIZE);
                 if (msg_len == -ETIMEDOUT) {
                         printf("Server timed out.\n");
@@ -84,7 +87,8 @@ void * reader(void * o)
                         continue;
                 }
 
-                if ((uint32_t) ntohl(msg->id) >= client.count) {
+                id = (uint32_t) ntohl(msg->id);
+                if (id >= client.count) {
                         printf("Invalid id.\n");
                         continue;
                 }
@@ -106,11 +110,15 @@ void * reader(void * o)
                                (size_t) rtc.tv_nsec / 1000);
                 }
 
-                printf("%d bytes from %s: seq=%d time=%.3f ms\n",
+                if (id < exp_id)
+                        ++client.ooo;
+
+                printf("%d bytes from %s: seq=%d time=%.3f ms%s\n",
                        msg_len,
                        client.s_apn,
                        ntohl(msg->id),
-                       ms);
+                       ms,
+                       id < exp_id ? " [out-of-order]" : "");
 
                 if (ms < client.rtt_min)
                         client.rtt_min = ms;
@@ -120,6 +128,9 @@ void * reader(void * o)
                 d = (ms - client.rtt_avg);
                 client.rtt_avg += d / client.rcvd;
                 client.rtt_m2 += d * (ms - client.rtt_avg);
+
+                if (id >= exp_id)
+                        exp_id = id + 1;
         }
 
         return (void *) 0;
@@ -241,6 +252,7 @@ static int client_main(void)
         printf("--- %s ping statistics ---\n", client.s_apn);
         printf("%d SDUs transmitted, ", client.sent);
         printf("%d received, ", client.rcvd);
+        printf("%zd out-of-order, ", client.ooo);
         printf("%.0lf%% packet loss, ", client.sent == 0 ? 0 :
                ceil(100 - (100 * (client.rcvd / (float) client.sent))));
         printf("time: %.3f ms\n", ts_diff_us(&tic, &toc) / 1000.0);

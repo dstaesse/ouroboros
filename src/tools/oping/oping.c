@@ -75,6 +75,7 @@ struct c {
         /* stats */
         uint32_t sent;
         uint32_t rcvd;
+        size_t   ooo;
 
         double rtt_min;
         double rtt_max;
