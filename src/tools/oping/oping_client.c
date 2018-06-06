@@ -102,23 +102,25 @@ void * reader(void * o)
 
                 ms = ts_diff_us(&sent, &now) / 1000.0;
 
-                if (client.timestamp) {
-                        struct timespec rtc;
-                        clock_gettime(CLOCK_REALTIME, &rtc);
-                        printf("[%zd.%06zu] ",
-                               (ssize_t) rtc.tv_sec,
-                               (size_t) rtc.tv_nsec / 1000);
-                }
-
                 if (id < exp_id)
                         ++client.ooo;
 
-                printf("%d bytes from %s: seq=%d time=%.3f ms%s\n",
-                       msg_len,
-                       client.s_apn,
-                       ntohl(msg->id),
-                       ms,
-                       id < exp_id ? " [out-of-order]" : "");
+                if (!client.quiet) {
+                        if (client.timestamp) {
+                                struct timespec rtc;
+                                clock_gettime(CLOCK_REALTIME, &rtc);
+                                printf("[%zd.%06zu] ",
+                                       (ssize_t) rtc.tv_sec,
+                                       (size_t) rtc.tv_nsec / 1000);
+                        }
+
+                        printf("%d bytes from %s: seq=%d time=%.3f ms%s\n",
+                               msg_len,
+                               client.s_apn,
+                               ntohl(msg->id),
+                               ms,
+                               id < exp_id ? " [out-of-order]" : "");
+                }
 
                 if (ms < client.rtt_min)
                         client.rtt_min = ms;
@@ -157,8 +159,9 @@ void * writer(void * o)
 
         msg = (struct oping_msg *) buf;
 
-        printf("Pinging %s with %d bytes of data:\n\n",
-               client.s_apn, client.size);
+        if (!client.quiet)
+                printf("Pinging %s with %d bytes of data (%u packets):\n\n",
+                       client.s_apn, client.size, client.count);
 
         pthread_cleanup_push((void (*) (void *)) free, buf);
 

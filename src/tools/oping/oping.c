@@ -78,6 +78,7 @@ struct c {
         uint32_t sent;
         uint32_t rcvd;
         size_t   ooo;
+        bool     quiet;
 
         double rtt_min;
         double rtt_max;
@@ -123,6 +124,7 @@ static void usage(void)
                "  -n, --server-name         Name of the oping server\n"
                "  -q, --qos                 QoS (raw, best, video or voice)\n"
                "  -s, --size                Payload size (B, default 64)\n"
+               "  -Q, --quiet               Only print final statistics\n"
                "  -D, --timeofday           Print time of day before each line"
                "\n"
                "      --help                Display this help text and exit\n");
@@ -166,6 +168,7 @@ int main(int     argc,
         client.count     = INT_MAX;
         client.timestamp = false;
         client.qs        = qos_raw;
+        client.quiet     = false;
 
         while (argc > 0) {
                 if (strcmp(*argv, "-i") == 0 ||
@@ -200,6 +203,10 @@ int main(int     argc,
                 } else if (strcmp(*argv, "-D") == 0 ||
                            strcmp(*argv, "--timeofday") == 0) {
                         client.timestamp = true;
+                } else if (strcmp(*argv, "-Q") == 0 ||
+                           strcmp(*argv, "--quiet") == 0) {
+                        client.quiet = true;
+
                 } else {
                         goto fail;
                 }
@@ -207,8 +214,12 @@ int main(int     argc,
                 argv++;
         }
 
-        if (duration > 0)
-                client.count = duration / client.interval;
+        if (duration > 0) {
+                if (client.interval == 0)
+                        client.count = duration * 10;
+                else
+                        client.count = duration / client.interval;
+        }
 
         if (qos != NULL) {
                 if (strcmp(qos, "best") == 0)
