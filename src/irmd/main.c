@@ -69,6 +69,7 @@
 #define SHM_SAN_HOLDOFF 1000 /* ms */
 #define IPCP_HASH_LEN(e) hash_len(e->dir_hash_algo)
 #define IB_LEN SOCK_BUF_SIZE
+#define BIND_TIMEOUT  10 /* ms */
 
 enum init_state {
         IPCP_NULL = 0,
@@ -758,18 +759,32 @@ static int bind_program(char *   prog,
 static int bind_process(pid_t  pid,
                         char * name)
 {
-        char * name_dup = NULL;
-        struct proc_entry * e = NULL;
-        struct reg_entry * re = NULL;
+        char * name_dup        = NULL;
+        struct proc_entry * e  = NULL;
+        struct reg_entry *  re = NULL;
+        struct timespec     now;
+        struct timespec     dl = {0, 10 * MILLION};
 
         if (name == NULL)
                 return -EINVAL;
 
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+
+        ts_add(&dl, &now, &dl);
+
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        e = proc_table_get(&irmd.proc_table, pid);
+        while (!kill(pid, 0)) {
+                e = proc_table_get(&irmd.proc_table, pid);
+                if (e != NULL || ts_diff_ms(&now, &dl) > 0)
+                        break;
+                clock_gettime(PTHREAD_COND_CLOCK, &now);
+                sched_yield();
+        }
+
         if (e == NULL) {
-                log_err("Process %d does not exist.", pid);
+                log_err("Process %d does not %s.", pid,
+                        kill(pid, 0) ? "exist" : "respond");
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 return -1;
         }
