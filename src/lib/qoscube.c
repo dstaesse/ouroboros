@@ -27,7 +27,9 @@
 
 qoscube_t qos_spec_to_cube(qosspec_t qs)
 {
-        if (qs.delay <= qos_voice.delay &&
+        if (qs.loss == 0)
+                return QOS_CUBE_DATA;
+        else if (qs.delay <= qos_voice.delay &&
             qs.bandwidth <= qos_voice.bandwidth &&
             qs.availability >= qos_voice.availability &&
             qs.maximum_interruption <= qos_voice.maximum_interruption)
@@ -52,6 +54,8 @@ qosspec_t qos_cube_to_spec(qoscube_t qc)
                 return qos_video;
         case QOS_CUBE_BE:
                 return qos_best_effort;
+        case QOS_CUBE_DATA:
+                return qos_data;
         default:
                 return qos_raw;
         }

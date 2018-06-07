@@ -105,7 +105,8 @@ static void frct_fini(void)
         timerwheel_destroy(frct.tw);
 }
 
-static struct frcti * frcti_create(int fd)
+static struct frcti * frcti_create(int       fd,
+                                   qoscube_t qc)
 {
         struct frcti *  frcti;
         time_t          delta_t;
@@ -132,6 +133,9 @@ static struct frcti * frcti_create(int fd)
         frcti->fd  = fd;
 
         delta_t = (frcti->mpl + frcti->a + frcti->r) / 1000;
+
+        if (qc == QOS_CUBE_DATA)
+                frcti->snd_cr.cflags |= FRCTFRTX;
 
         frcti->snd_cr.conf   = true;
         frcti->snd_cr.inact  = 3 * delta_t + 1;
@@ -316,6 +320,9 @@ static int __frcti_snd(struct frcti *       frcti,
 
         pci->seqno = hton32(snd_cr->seqno++);
         if (!(snd_cr->cflags & FRCTFRTX))
+                snd_cr->lwe++;
+        else
+                /* TODO: update on ACK */
                 snd_cr->lwe++;
 
         snd_cr->act  = now.tv_sec;

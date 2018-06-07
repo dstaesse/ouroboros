@@ -536,7 +536,7 @@ int flow_accept(qosspec_t *             qs,
         assert(ai.flows[fd].frcti == NULL);
 
         if (qc != QOS_CUBE_RAW) {
-                ai.flows[fd].frcti = frcti_create(fd);
+                ai.flows[fd].frcti = frcti_create(fd, qc);
                 if (ai.flows[fd].frcti == NULL) {
                         flow_fini(fd);
                         pthread_rwlock_unlock(&ai.lock);
@@ -611,7 +611,7 @@ int flow_alloc(const char *            dst,
         assert(ai.flows[fd].frcti == NULL);
 
         if (qc != QOS_CUBE_RAW) {
-                ai.flows[fd].frcti = frcti_create(fd);
+                ai.flows[fd].frcti = frcti_create(fd, qc);
                 if (ai.flows[fd].frcti == NULL) {
                         flow_fini(fd);
                         pthread_rwlock_unlock(&ai.lock);

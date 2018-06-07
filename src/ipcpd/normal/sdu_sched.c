@@ -39,7 +39,8 @@ static int qos_prio [] = {
         QOS_PRIO_RAW,
         QOS_PRIO_BE,
         QOS_PRIO_VIDEO,
-        QOS_PRIO_VOICE
+        QOS_PRIO_VOICE,
+        QOS_PRIO_DATA
 };
 
 struct sdu_sched {

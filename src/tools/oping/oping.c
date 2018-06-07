@@ -122,7 +122,8 @@ static void usage(void)
                "  -d, --duration            Duration of the test (default 1s)\n"
                "  -i, --interval            Interval (default 1000ms)\n"
                "  -n, --server-name         Name of the oping server\n"
-               "  -q, --qos                 QoS (raw, best, video or voice)\n"
+               "  -q, --qos                 QoS (raw, best, video, voice, data)"
+               "\n"
                "  -s, --size                Payload size (B, default 64)\n"
                "  -Q, --quiet               Only print final statistics\n"
                "  -D, --timeofday           Print time of day before each line"
@@ -230,6 +231,8 @@ int main(int     argc,
                         client.qs = qos_video;
                 else if (strcmp(qos, "voice") == 0)
                         client.qs = qos_voice;
+                else if (strcmp(qos, "data") == 0)
+                        client.qs = qos_data;
                 else
                         printf("Unknown QoS cube, defaulting to raw.\n");
         }
