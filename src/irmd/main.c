@@ -134,7 +134,6 @@ struct {
         struct tpm *         tpm;          /* thread pool manager        */
 
         pthread_t            irm_sanitize; /* clean up irmd resources    */
-        pthread_t            shm_sanitize; /* keep track of rdrbuff use  */
         pthread_t            acceptor;     /* accept new commands        */
 } irmd;
 
@@ -1683,43 +1682,6 @@ void irmd_sig_handler(int         sig,
         }
 }
 
-void * shm_sanitize(void * o)
-{
-        struct list_head * p = NULL;
-        struct timespec ts = {SHM_SAN_HOLDOFF / 1000,
-                              (SHM_SAN_HOLDOFF % 1000) * MILLION};
-        ssize_t idx;
-
-        (void) o;
-
-        while (irmd_get_state() == IRMD_RUNNING) {
-                if (shm_rdrbuff_wait_full(irmd.rdrb, &ts) == -ETIMEDOUT)
-                        continue;
-
-                pthread_rwlock_wrlock(&irmd.flows_lock);
-
-                list_for_each(p, &irmd.irm_flows) {
-                        struct irm_flow * f =
-                                list_entry(p, struct irm_flow, next);
-                        if (kill(f->n_pid, 0) < 0) {
-                                while ((idx = shm_rbuff_read(f->n_rb)) >= 0)
-                                        shm_rdrbuff_remove(irmd.rdrb, idx);
-                                continue;
-                        }
-
-                        if (kill(f->n_1_pid, 0) < 0) {
-                                while ((idx = shm_rbuff_read(f->n_1_rb)) >= 0)
-                                        shm_rdrbuff_remove(irmd.rdrb, idx);
-                                continue;
-                        }
-                }
-
-                pthread_rwlock_unlock(&irmd.flows_lock);
-        }
-
-        return (void *) 0;
-}
-
 void * irm_sanitize(void * o)
 {
         struct timespec now;
@@ -2362,11 +2324,6 @@ int main(int     argc,
                 goto fail_irm_sanitize;
         }
 
-        if (pthread_create(&irmd.shm_sanitize, NULL, shm_sanitize, irmd.rdrb)) {
-                irmd_set_state(IRMD_NULL);
-                goto fail_shm_sanitize;
-        }
-
         if (pthread_create(&irmd.acceptor, NULL, acceptloop, NULL)) {
                 irmd_set_state(IRMD_NULL);
                 goto fail_acceptor;
@@ -2374,7 +2331,6 @@ int main(int     argc,
 
         pthread_join(irmd.acceptor, NULL);
         pthread_join(irmd.irm_sanitize, NULL);
-        pthread_join(irmd.shm_sanitize, NULL);
 
         tpm_stop(irmd.tpm);
 
@@ -2393,8 +2349,6 @@ int main(int     argc,
         exit(EXIT_SUCCESS);
 
  fail_acceptor:
-        pthread_join(irmd.shm_sanitize, NULL);
- fail_shm_sanitize:
         pthread_join(irmd.irm_sanitize, NULL);
  fail_irm_sanitize:
         tpm_stop(irmd.tpm);
