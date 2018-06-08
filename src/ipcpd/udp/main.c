@@ -958,7 +958,7 @@ static int ipcp_udp_flow_alloc(int             fd,
 
         assert(dst);
 
-        if (cube > QOS_CUBE_BE) {
+        if (cube > QOS_CUBE_DATA) {
                 log_dbg("Unsupported QoS requested.");
                 return -1;
         }
