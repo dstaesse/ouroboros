@@ -385,7 +385,7 @@ static int __frcti_rcv(struct frcti *       frcti,
 
                 if (rcv_cr->cflags & FRCTFRTX) {
                         size_t pos = seqno & (RQ_SIZE - 1);
-                        if ((seqno - RQ_SIZE - rcv_cr->lwe) > 0 /* Out of rq. */
+                        if ((seqno - rcv_cr->lwe) > RQ_SIZE /* Out of rq. */
                             || frcti->rq[pos] != -1) /* Duplicate in rq. */
                                 goto drop_packet;
                         /* Queue. */
