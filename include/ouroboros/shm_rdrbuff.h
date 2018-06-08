@@ -43,9 +43,6 @@ void                 shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb);
 
 void                 shm_rdrbuff_purge(void);
 
-int                  shm_rdrbuff_wait_full(struct shm_rdrbuff * rdrb,
-                                           struct timespec *    timeo);
-
 /* returns the index of the buffer in the DU map */
 ssize_t              shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                                        size_t               headspace,
