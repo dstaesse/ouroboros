@@ -840,7 +840,7 @@ static void * eth_ipcp_sdu_reader(void * o)
                 if (select(eth_data.s_fd + 1, &fds, NULL, NULL, NULL) < 0)
                         continue;
                 assert(FD_ISSET(eth_data.s_fd, &fds));
-                if (ipcp_sdb_reserve(&sdb, ETH_FRAME_SIZE))
+                if (ipcp_sdb_reserve(&sdb, eth_data.mtu))
                         continue;
                 buf = shm_du_buff_head(sdb);
                 frame_len = recv(eth_data.s_fd, buf, ETH_FRAME_SIZE, 0);
@@ -1180,6 +1180,9 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 #elif defined(__linux__)
         int              skfd;
 #endif
+#ifndef SHM_RDRB_MULTI_BLOCK
+        size_t           maxsz;
+#endif
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
@@ -1250,6 +1253,14 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 
         eth_data.mtu = MIN((int) ETH_MTU_MAX, ifr.ifr_mtu);
 
+#ifndef SHM_RDRB_MULTI_BLOCK
+        maxsz = SHM_RDRB_BLOCK_SIZE - 5 * sizeof(size_t) -
+                (DU_BUFF_HEADSPACE + DU_BUFF_TAILSPACE);
+        if ((size_t) eth_data.mtu > maxsz ) {
+                log_dbg("Layer MTU truncated to shm block size.");
+                eth_data.mtu = maxsz;
+        }
+#endif
         log_dbg("Layer MTU is %d.", eth_data.mtu);
 
         close(skfd);
