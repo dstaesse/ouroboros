@@ -67,9 +67,6 @@
 #define idx_to_du_buff_ptr(rdrb, idx)                                          \
         ((struct shm_du_buff *) (rdrb->shm_base + idx * SHM_RDRB_BLOCK_SIZE))
 
-#define block_ptr_to_idx(rdrb, sdb)                                            \
-        (((uint8_t *)sdb - rdrb->shm_base) / SHM_RDRB_BLOCK_SIZE)
-
 #define shm_rdrb_used(rdrb)                                                    \
         ((*rdrb->head + (SHM_BUFFER_SIZE) - *rdrb->tail)                       \
          & ((SHM_BUFFER_SIZE) - 1))
