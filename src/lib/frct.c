@@ -335,6 +335,7 @@ static int __frcti_rcv(struct frcti *       frcti,
         struct timespec   now;
         struct frct_cr *  rcv_cr;
         uint32_t          seqno;
+        int               ret = 0;
 
         assert(frcti);
 
@@ -372,16 +373,17 @@ static int __frcti_rcv(struct frcti *       frcti,
                 if (pci->flags & FRCT_CFG)
                         rcv_cr->cflags = pci->cflags;
         } else { /* Out of order. */
-                if (seqno < rcv_cr->lwe) /* Duplicate. */
+                if ((int32_t)(seqno - rcv_cr->lwe) < 0) /* Duplicate. */
                         goto drop_packet;
 
                 if (rcv_cr->cflags & FRCTFRTX) {
                         size_t pos = seqno & (RQ_SIZE - 1);
-                        if (seqno > rcv_cr->lwe + RQ_SIZE || /* Out of range. */
-                            frcti->rq[pos] != -1) /* Duplicate in rq. */
+                        if ((seqno - RQ_SIZE - rcv_cr->lwe) > 0 /* Out of rq. */
+                            || frcti->rq[pos] != -1) /* Duplicate in rq. */
                                 goto drop_packet;
                         /* Queue. */
                         frcti->rq[pos] = idx;
+                        ret = -EAGAIN;
                 } else {
                         rcv_cr->lwe = seqno;
                 }
@@ -394,7 +396,7 @@ static int __frcti_rcv(struct frcti *       frcti,
 
         pthread_rwlock_unlock(&frcti->lock);
 
-        return 0;
+        return ret;
 
  drop_packet:
         shm_rdrbuff_remove(ai.rdrb, idx);
