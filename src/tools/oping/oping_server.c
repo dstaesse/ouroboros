@@ -96,7 +96,7 @@ void * server_thread(void *o)
                                 continue;
 
                         if (ntohl(msg->type) != ECHO_REQUEST) {
-                                printf("Invalid message on fd %d.", fd);
+                                printf("Invalid message on fd %d.\n", fd);
                                 continue;
                         }
 

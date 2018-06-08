@@ -145,10 +145,10 @@ static int time_mul(const char * rem)
         else if (strcmp(rem, "d") == 0)
                 return 60 * 60 * 24 * 1000;
 
-        printf("Unknown time unit: %s.", rem);
+        printf("Unknown time unit: %s.\n", rem);
 
         usage();
-        exit(EXIT_SUCCESS);
+        exit(EXIT_FAILURE);
 }
 
 int main(int     argc,
