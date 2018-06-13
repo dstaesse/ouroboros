@@ -206,7 +206,6 @@ set(SOURCE_FILES_COMMON
   shm_rbuff.c
   shm_rdrbuff.c
   sockets.c
-  time_utils.c
   tpm.c
   utils.c
 )

@@ -48,6 +48,7 @@
 #include <string.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <limits.h>
 
 #include "kademlia.pb-c.h"
 typedef KadMsg kad_msg_t;

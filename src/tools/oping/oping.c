@@ -46,6 +46,7 @@
 
 #include "time_utils.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>

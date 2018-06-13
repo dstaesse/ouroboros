@@ -35,7 +35,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #ifndef OUROBOROS_TOOLS_TIME_UTILS_H
 #define OUROBOROS_TOOLS_TIME_UTILS_H
 
@@ -52,7 +51,6 @@
 
 #include <time.h>
 #include <sys/time.h>
-#include <limits.h> /* LONG_MAX */
 
 /* functions for timespecs */
 #define ts_diff_ns(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * BILLION     \
@@ -69,29 +67,70 @@
                             + ((tx)->tv_usec - (t0)->tv_usec) / MILLION)
 
 /* functions for timespecs */
-int ts_add(const struct timespec * t,
-           const struct timespec * intv,
-           struct timespec *       res);
 
-int ts_diff(const struct timespec * t,
-            const struct timespec * intv,
-            struct timespec *       res);
+#define ts_add(t, intv, res)                                    \
+        do {                                                    \
+                time_t nanos = 0;                               \
+                nanos = (t)->tv_nsec + (intv)->tv_nsec;         \
+                (res)->tv_sec = (t)->tv_sec + (intv)->tv_sec;   \
+                while (nanos >= BILLION) {                      \
+                        nanos -= BILLION;                       \
+                        ++((res)->tv_sec);                      \
+                }                                               \
+                (res)->tv_nsec = nanos;                         \
+        } while (0);
+
+#define ts_diff(t, intv, res)                                   \
+        do {                                                    \
+                time_t nanos = 0;                               \
+                nanos = (t)->tv_nsec - (intv)->tv_nsec;         \
+                (res)->tv_sec = (t)->tv_sec - (intv)->tv_sec;   \
+                while (nanos < 0) {                             \
+                        nanos += BILLION;                       \
+                        --((res)->tv_sec);                      \
+                }                                               \
+                (res)->tv_nsec = nanos;                         \
+        } while (0);
 
 /* functions for timevals */
-int tv_add(const struct timeval * t,
-           const struct timeval * intv,
-           struct timeval *       res);
 
-int tv_diff(const struct timeval * t,
-            const struct timeval * intv,
-            struct timeval *       res);
+#define tv_add(t, intv, res)                                    \
+        do {                                                    \
+                time_t micros = 0;                              \
+                nanos = (t)->tv_usec + (intv)->tv_usec;         \
+                (res)->tv_sec = (t)->tv_sec + (intv)->tv_sec;   \
+                while (micros >= MILLION) {                     \
+                        micros -= MILLION;                      \
+                        ++((res)->tv_sec);                      \
+                }                                               \
+                (res)->tv_nsec = nanos;                         \
+        } while (0);
+
+#define tv_diff(t, intv, res)                                   \
+        do {                                                    \
+                time_t micros = 0;                              \
+                micros = (t)->tv_usec - (intv)->tv_usec;        \
+                (res)->tv_sec = (t)->tv_sec - (intv)->tv_sec;   \
+                while (micros < 0) {                            \
+                        micros += MILLION;                      \
+                        --((res)->tv_sec);                      \
+                }                                               \
+                (res)->tv_usec = micros;                        \
+        } while (0);
+
 
 /* copying a timeval into a timespec */
-int tv_to_ts(const struct timeval * src,
-             struct timespec *      dst);
+#define tv_to_ts(tv, ts)                                \
+        do {                                            \
+                (ts)->tv_sec  = (tv)->tv_sec;           \
+                (ts)->tv_nsec = (tv)->tv_usec * 1000L;  \
+        } while (0);
 
 /* copying a timespec into a timeval (loss of resolution) */
-int ts_to_tv(const struct timespec * src,
-             struct timeval *        dst);
+#define ts_to_tv(ts, tv)                                \
+        do {                                            \
+                (tv)->tv_sec  = (ts)->tv_sec;           \
+                (tv)->tv_usec = (ts)->tv_nsec / 1000L;  \
+        } while (0);
 
 #endif /* OUROBOROS_TOOLS_TIME_UTILS_H */
