@@ -93,10 +93,9 @@
 #include <net/bpf.h>
 #endif
 
-#define MAC_SIZE             6
 #ifdef __linux__
 #ifndef ETH_MAX_MTU          /* In if_ether.h as of Linux 4.10. */
-#define ETH_MAX_MTU          65535
+#define ETH_MAX_MTU          0xFFFFU
 #endif /* ETH_MAX_MTU */
 #ifdef BUILD_ETH_DIX
 #define ETH_MTU              eth_data.mtu
@@ -110,6 +109,7 @@
 #define ETH_MTU_MAX          ETH_MTU
 #endif /* __linux__ */
 
+#define MAC_SIZE             6
 #define ETH_TYPE_LENGTH_SIZE sizeof(uint16_t)
 #define ETH_HEADER_SIZE      (2 * MAC_SIZE + ETH_TYPE_LENGTH_SIZE)
 
@@ -121,21 +121,22 @@
 #define DIX_HEADER_SIZE      (DIX_EID_SIZE + DIX_LENGTH_SIZE)
 #define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + DIX_HEADER_SIZE)
 #define MAX_EIDS             (1 << (8 * DIX_EID_SIZE))
-#define ETH_MAX_SDU_SIZE     (ETH_MTU_MAX - DIX_HEADER_SIZE)
-#define ETH_FRAME_SIZE       (ETH_HEADER_TOT_SIZE + ETH_MAX_SDU_SIZE)
+#define ETH_MAX_SDU_SIZE     (ETH_MTU - DIX_HEADER_SIZE)
+#define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + ETH_MTU_MAX)
 #elif defined(BUILD_ETH_LLC)
 #define THIS_TYPE            IPCP_ETH_LLC
 #define MGMT_SAP             0x01
 #define LLC_HEADER_SIZE      3
 #define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + LLC_HEADER_SIZE)
 #define MAX_SAPS             64
-#define ETH_MAX_SDU_SIZE     (ETH_MTU_MAX - LLC_HEADER_SIZE)
-#define ETH_FRAME_SIZE       (ETH_HEADER_TOT_SIZE + ETH_MAX_SDU_SIZE)
+#define ETH_MAX_SDU_SIZE     (ETH_MTU - LLC_HEADER_SIZE)
+#define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + ETH_MTU_MAX)
 #endif
 
 #define ALLOC_TIMEO          10    /* ms */
 #define NAME_QUERY_TIMEO     2000  /* ms */
 #define MGMT_TIMEO           100   /* ms */
+#define MGMT_FRAME_SIZE      512
 
 #define FLOW_REQ             0
 #define FLOW_REPLY           1
@@ -184,7 +185,7 @@ struct ef {
 struct mgmt_frame {
         struct list_head next;
         uint8_t          r_addr[MAC_SIZE];
-        uint8_t          buf[ETH_FRAME_SIZE];
+        uint8_t          buf[MGMT_FRAME_SIZE];
 };
 
 struct {
@@ -375,7 +376,7 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
 
         assert(frame);
 
-        if (len > ETH_MAX_SDU_SIZE)
+        if (len > (size_t) ETH_MAX_SDU_SIZE)
                 return -1;
 
         e_frame = (struct eth_frame *) frame;
@@ -840,10 +841,16 @@ static void * eth_ipcp_sdu_reader(void * o)
                 if (select(eth_data.s_fd + 1, &fds, NULL, NULL, NULL) < 0)
                         continue;
                 assert(FD_ISSET(eth_data.s_fd, &fds));
-                if (ipcp_sdb_reserve(&sdb, eth_data.mtu))
+                if (ipcp_sdb_reserve(&sdb, ETH_MTU))
                         continue;
-                buf = shm_du_buff_head(sdb);
-                frame_len = recv(eth_data.s_fd, buf, ETH_FRAME_SIZE, 0);
+                buf = shm_du_buff_head_alloc(sdb, ETH_HEADER_TOT_SIZE);
+                if (buf == NULL) {
+                        log_dbg("Failed to allocate header.");
+                        ipcp_sdb_release(sdb);
+                        continue;
+                }
+                frame_len = recv(eth_data.s_fd, buf,
+                                 ETH_MTU + ETH_HEADER_TOT_SIZE, 0);
     #endif
                 if (frame_len <= 0) {
                         ipcp_sdb_release(sdb);
@@ -894,11 +901,8 @@ static void * eth_ipcp_sdu_reader(void * o)
 
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
 #endif
-                        pthread_mutex_lock(&eth_data.mgmt_lock);
-
                         frame = malloc(sizeof(*frame));
                         if (frame == NULL) {
-                                pthread_mutex_unlock(&eth_data.mgmt_lock);
 #ifndef HAVE_NETMAP
                                 ipcp_sdb_release(sdb);
 #endif
@@ -907,6 +911,8 @@ static void * eth_ipcp_sdu_reader(void * o)
 
                         memcpy(frame->buf, &e_frame->payload, length);
                         memcpy(frame->r_addr, e_frame->src_hwaddr, MAC_SIZE);
+                        pthread_mutex_unlock(&eth_data.mgmt_lock);
+
                         list_add(&frame->next, &eth_data.mgmt_frames);
                         pthread_cond_signal(&eth_data.mgmt_cond);
                         pthread_mutex_unlock(&eth_data.mgmt_lock);
@@ -979,7 +985,7 @@ static void * eth_ipcp_sdu_writer(void * o)
                 pthread_rwlock_rdlock(&eth_data.flows_lock);
                 while ((fd = fqueue_next(eth_data.fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
-                                log_err("Bad read from fd %d.", fd);
+                                log_dbg("Bad read from fd %d.", fd);
                                 continue;
                         }
 
@@ -987,7 +993,7 @@ static void * eth_ipcp_sdu_writer(void * o)
 
                         if (shm_du_buff_head_alloc(sdb, ETH_HEADER_TOT_SIZE)
                             == NULL) {
-                                log_err("Failed to allocate header.");
+                                log_dbg("Failed to allocate header.");
                                 ipcp_sdb_release(sdb);
                         }
 #if defined(BUILD_ETH_DIX)
@@ -1237,12 +1243,6 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 return -1;
         }
 
-        if (ioctl(skfd, SIOCGIFHWADDR, &ifr)) {
-                log_err("Failed to get hwaddr.");
-                close(skfd);
-                return -1;
-        }
-
         if (ioctl(skfd, SIOCGIFMTU, &ifr)) {
                 log_err("Failed to get MTU.");
                 close(skfd);
@@ -1262,6 +1262,12 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 #endif
         log_dbg("Layer MTU is %d.", eth_data.mtu);
+
+        if (ioctl(skfd, SIOCGIFHWADDR, &ifr)) {
+                log_err("Failed to get hwaddr.");
+                close(skfd);
+                return -1;
+        }
 
         close(skfd);
 

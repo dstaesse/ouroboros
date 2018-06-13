@@ -37,6 +37,7 @@
 #include <string.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <limits.h>
 
 #define KAD_B (hash_len(ipcpi.dir_hash_algo) * CHAR_BIT)
 

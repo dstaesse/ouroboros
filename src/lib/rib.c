@@ -324,7 +324,7 @@ int rib_init(const char * mountpt)
         rmdir(rib.mnt);
         return -1;
 #else
-        (void) prefix;
+        (void) mountpt;
         return 0;
 #endif
 }
