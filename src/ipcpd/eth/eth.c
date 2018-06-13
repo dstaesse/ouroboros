@@ -1243,12 +1243,6 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 return -1;
         }
 
-        if (ioctl(skfd, SIOCGIFHWADDR, &ifr)) {
-                log_err("Failed to get hwaddr.");
-                close(skfd);
-                return -1;
-        }
-
         if (ioctl(skfd, SIOCGIFMTU, &ifr)) {
                 log_err("Failed to get MTU.");
                 close(skfd);
@@ -1268,6 +1262,12 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 #endif
         log_dbg("Layer MTU is %d.", eth_data.mtu);
+
+        if (ioctl(skfd, SIOCGIFHWADDR, &ifr)) {
+                log_err("Failed to get hwaddr.");
+                close(skfd);
+                return -1;
+        }
 
         close(skfd);
 
