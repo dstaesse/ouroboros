@@ -56,7 +56,8 @@
 #include <inttypes.h>
 #include <assert.h>
 
-#define STAT_FILE_LEN 2205
+#define QOS_BLOCK_LEN 672
+#define STAT_FILE_LEN (189 + QOS_BLOCK_LEN * QOS_CUBE_MAX)
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
@@ -110,7 +111,7 @@ static int dt_stat_read(const char * path,
 #ifdef IPCP_FLOW_STATS
         int         fd;
         int         i;
-        char        str[681];
+        char        str[QOS_BLOCK_LEN + 1];
         char        addrstr[20];
         char        tmstr[20];
         size_t      rxqlen = 0;
