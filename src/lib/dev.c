@@ -242,11 +242,15 @@ static void flow_fini(int fd)
                 bmp_release(ai.fds, fd);
         }
 
-        if (ai.flows[fd].rx_rb != NULL)
+        if (ai.flows[fd].rx_rb != NULL) {
+                shm_rbuff_set_acl(ai.flows[fd].rx_rb, ACL_FLOWDOWN);
                 shm_rbuff_close(ai.flows[fd].rx_rb);
+        }
 
-        if (ai.flows[fd].tx_rb != NULL)
+        if (ai.flows[fd].tx_rb != NULL) {
+                shm_rbuff_set_acl(ai.flows[fd].tx_rb, ACL_FLOWDOWN);
                 shm_rbuff_close(ai.flows[fd].tx_rb);
+        }
 
         if (ai.flows[fd].set != NULL)
                 shm_flow_set_close(ai.flows[fd].set);
