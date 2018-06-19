@@ -70,6 +70,9 @@ struct routing_i {
 
         struct pff *     pff;
         pthread_t        calculator;
+
+        bool             modified;
+        pthread_mutex_t  lock;
 };
 
 /* TODO: link weight support. */
@@ -366,6 +369,21 @@ static int lsdb_del_nb(uint64_t     addr,
         return -EPERM;
 }
 
+static void set_pff_modified(void)
+{
+        struct list_head * p;
+
+        pthread_mutex_lock(&ls.routing_i_lock);
+        list_for_each(p, &ls.routing_instances) {
+                struct routing_i * inst =
+                        list_entry(p, struct routing_i, next);
+                pthread_mutex_lock(&inst->lock);
+                inst->modified = true;
+                pthread_mutex_unlock(&inst->lock);
+        }
+        pthread_mutex_unlock(&ls.routing_i_lock);
+}
+
 static int lsdb_add_link(uint64_t    src,
                          uint64_t    dst,
                          qosspec_t * qs)
@@ -409,6 +427,8 @@ static int lsdb_add_link(uint64_t    src,
 
         pthread_rwlock_unlock(&ls.db_lock);
 
+        set_pff_modified();
+
         return 0;
 }
 
@@ -430,6 +450,7 @@ static int lsdb_del_link(uint64_t src,
                         ls.db_len--;
 
                         pthread_rwlock_unlock(&ls.db_lock);
+                        set_pff_modified();
                         free(a);
                         return 0;
                 }
@@ -500,8 +521,17 @@ static void calculate_pff(struct routing_i * instance)
 
 static void * periodic_recalc_pff(void * o)
 {
+        bool               modified;
+        struct routing_i * inst = (struct routing_i *) o;
+
         while (true) {
-                calculate_pff((struct routing_i *) o);
+                pthread_mutex_lock(&inst->lock);
+                modified = inst->modified;
+                inst->modified = false;
+                pthread_mutex_unlock(&inst->lock);
+
+                if (modified)
+                        calculate_pff(inst);
                 sleep(RECALC_TIME);
         }
 
@@ -725,7 +755,6 @@ static void handle_event(void *       self,
         struct conn *      c;
         qosspec_t          qs;
         int                flags;
-        struct list_head * p;
 
         (void) self;
 
@@ -742,14 +771,6 @@ static void handle_event(void *       self,
                         log_dbg("Failed to add adjacency to LSDB.");
 
                 send_lsm(ipcpi.dt_addr, c->conn_info.addr);
-
-                pthread_mutex_lock(&ls.routing_i_lock);
-                list_for_each(p, &ls.routing_instances) {
-                        struct routing_i * instance =
-                                list_entry(p, struct routing_i, next);
-                        calculate_pff(instance);
-                }
-                pthread_mutex_unlock(&ls.routing_i_lock);
 
                 break;
         case NOTIFY_DT_CONN_DEL:
@@ -797,15 +818,17 @@ struct routing_i * link_state_routing_i_create(struct pff * pff)
 
         tmp = malloc(sizeof(*tmp));
         if (tmp == NULL)
-                return NULL;
+                goto fail_tmp;
 
-        tmp->pff = pff;
+        tmp->pff      = pff;
+        tmp->modified = false;
+
+        if (pthread_mutex_init(&tmp->lock, NULL))
+                goto fail_instance_lock_init;
 
         if (pthread_create(&tmp->calculator, NULL,
-                           periodic_recalc_pff, tmp)) {
-                free(tmp);
-                return NULL;
-        }
+                           periodic_recalc_pff, tmp))
+                goto fail_pthread_create_lsupdate;
 
         pthread_mutex_lock(&ls.routing_i_lock);
 
@@ -814,6 +837,13 @@ struct routing_i * link_state_routing_i_create(struct pff * pff)
         pthread_mutex_unlock(&ls.routing_i_lock);
 
         return tmp;
+
+ fail_pthread_create_lsupdate:
+        pthread_mutex_destroy(&tmp->lock);
+ fail_instance_lock_init:
+        free(tmp);
+ fail_tmp:
+        return NULL;
 }
 
 void link_state_routing_i_destroy(struct routing_i * instance)
@@ -829,6 +859,8 @@ void link_state_routing_i_destroy(struct routing_i * instance)
         pthread_cancel(instance->calculator);
 
         pthread_join(instance->calculator, NULL);
+
+        pthread_mutex_destroy(&instance->lock);
 
         free(instance);
 }
@@ -894,8 +926,8 @@ int link_state_init(enum pol_routing pr)
         if (rib_reg(LSDB, &r_ops))
                 goto fail_rib_reg;
 
-        ls.db_len  = 0;
-        ls.nbs_len = 0;
+        ls.db_len      = 0;
+        ls.nbs_len     = 0;
 
         return 0;
 
