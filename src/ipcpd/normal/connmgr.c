@@ -54,7 +54,6 @@ struct conn_el {
 };
 
 struct comp {
-        struct nbs *     nbs;
         struct conn_info info;
 
         struct list_head conns;
@@ -78,6 +77,29 @@ static int get_id_by_name(const char * name)
         for (i = 0; i < COMPID_MAX; ++i)
                 if (strcmp(name, connmgr.comps[i].info.comp_name) == 0)
                         return i;
+
+        return -1;
+}
+
+static int get_conn_by_fd(int           fd,
+                          enum comp_id  id,
+                          struct conn * conn)
+{
+        struct list_head * p;
+
+        pthread_mutex_lock(&connmgr.comps[id].lock);
+
+        list_for_each(p, &connmgr.comps[id].conns) {
+                struct conn_el * c =
+                        list_entry(p, struct conn_el, next);
+                if (c->conn.flow_info.fd == fd) {
+                        *conn = c->conn;
+                        pthread_mutex_unlock(&connmgr.comps[id].lock);
+                        return 0;
+                }
+        }
+
+        pthread_mutex_unlock(&connmgr.comps[id].lock);
 
         return -1;
 }
@@ -163,9 +185,38 @@ static void * flow_acceptor(void * o)
         return (void *) 0;
 }
 
+static void handle_event(void *       self,
+                         int          event,
+                         const void * o)
+{
+        struct conn conn;
+
+        (void) self;
+
+        if (!(event == NOTIFY_DT_FLOW_UP || event == NOTIFY_DT_FLOW_DOWN))
+                return;
+
+        if (get_conn_by_fd(*((int *) o), COMPID_DT, &conn))
+                return;
+
+        switch (event) {
+        case NOTIFY_DT_FLOW_UP:
+                notifier_event(NOTIFY_DT_CONN_UP, &conn);
+                break;
+        case NOTIFY_DT_FLOW_DOWN:
+                notifier_event(NOTIFY_DT_CONN_DOWN, &conn);
+                break;
+        default:
+                break;
+        }
+}
+
 int connmgr_init(void)
 {
         connmgr.state = CONNMGR_INIT;
+
+        if (notifier_reg(handle_event, NULL))
+                return -1;
 
         return 0;
 }
@@ -173,6 +224,8 @@ int connmgr_init(void)
 void connmgr_fini(void)
 {
         int i;
+
+        notifier_unreg(handle_event);
 
         if (connmgr.state == CONNMGR_RUNNING)
                 pthread_join(connmgr.acceptor, NULL);
@@ -455,7 +508,7 @@ int connmgr_wait(enum comp_id  id,
         *conn = el->conn;
 
         list_del(&el->next);
-        free(el);
+        list_add(&el->next, &connmgr.comps[id].conns);
 
         pthread_mutex_unlock(&comp->lock);
 

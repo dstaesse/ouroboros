@@ -20,6 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define _POSIX_C_SOURCE 200112L
+
 #include <ouroboros/errno.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/list.h>
@@ -35,12 +37,12 @@ struct listener {
 
 struct {
         struct list_head listeners;
-        pthread_mutex_t  lock;
+        pthread_rwlock_t lock;
 } notifier;
 
 int notifier_init(void)
 {
-        if (pthread_mutex_init(&notifier.lock, NULL))
+        if (pthread_rwlock_init(&notifier.lock, NULL))
                 return -1;
 
         list_head_init(&notifier.listeners);
@@ -53,7 +55,7 @@ void notifier_fini(void)
         struct list_head * p;
         struct list_head * h;
 
-        pthread_mutex_lock(&notifier.lock);
+        pthread_rwlock_wrlock(&notifier.lock);
 
         list_for_each_safe(p, h, &notifier.listeners) {
                 struct listener * l = list_entry(p, struct listener, next);
@@ -61,9 +63,9 @@ void notifier_fini(void)
                 free(l);
         }
 
-        pthread_mutex_unlock(&notifier.lock);
+        pthread_rwlock_unlock(&notifier.lock);
 
-        pthread_mutex_destroy(&notifier.lock);
+        pthread_rwlock_destroy(&notifier.lock);
 }
 
 void notifier_event(int          event,
@@ -71,14 +73,14 @@ void notifier_event(int          event,
 {
         struct list_head * p;
 
-        pthread_mutex_lock(&notifier.lock);
+        pthread_rwlock_rdlock(&notifier.lock);
 
         list_for_each(p, &notifier.listeners) {
                 struct listener * l = list_entry(p, struct listener, next);
                 l->callback(l->obj, event, o);
         }
 
-        pthread_mutex_unlock(&notifier.lock);
+        pthread_rwlock_unlock(&notifier.lock);
 }
 
 int notifier_reg(notifier_fn_t callback,
@@ -87,19 +89,19 @@ int notifier_reg(notifier_fn_t callback,
         struct listener *  l;
         struct list_head * p;
 
-        pthread_mutex_lock(&notifier.lock);
+        pthread_rwlock_wrlock(&notifier.lock);
 
         list_for_each(p, &notifier.listeners) {
                 struct listener * l = list_entry(p, struct listener, next);
                 if (l->callback == callback) {
-                        pthread_mutex_unlock(&notifier.lock);
+                        pthread_rwlock_unlock(&notifier.lock);
                         return -EPERM;
                 }
         }
 
         l = malloc(sizeof(*l));
         if (l == NULL) {
-                pthread_mutex_unlock(&notifier.lock);
+                pthread_rwlock_unlock(&notifier.lock);
                 return -ENOMEM;
         }
 
@@ -108,7 +110,7 @@ int notifier_reg(notifier_fn_t callback,
 
         list_add_tail(&l->next, &notifier.listeners);
 
-        pthread_mutex_unlock(&notifier.lock);
+        pthread_rwlock_unlock(&notifier.lock);
 
         return 0;
 }
@@ -118,7 +120,7 @@ void notifier_unreg(notifier_fn_t callback)
         struct list_head * p;
         struct list_head * h;
 
-        pthread_mutex_lock(&notifier.lock);
+        pthread_rwlock_wrlock(&notifier.lock);
 
         list_for_each_safe(p, h, &notifier.listeners) {
                 struct listener * l = list_entry(p, struct listener, next);
@@ -129,5 +131,5 @@ void notifier_unreg(notifier_fn_t callback)
                 }
         }
 
-        pthread_mutex_unlock(&notifier.lock);
+        pthread_rwlock_unlock(&notifier.lock);
 }

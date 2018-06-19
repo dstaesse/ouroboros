@@ -785,7 +785,6 @@ static void handle_event(void *       self,
                         log_warn("Failed to add mgmt neighbor to LSDB.");
                 break;
         default:
-                log_info("Unknown routing event.");
                 break;
         }
 }
@@ -848,9 +847,11 @@ int link_state_init(enum pol_routing pr)
 
         switch (pr) {
         case ROUTING_LINK_STATE:
+                log_dbg("Using link state routing policy.");
                 ls.rtable = graph_routing_table;
                 break;
         case ROUTING_LINK_STATE_LFA:
+                log_dbg("Using Loop-Free Alternates policy.");
                 ls.rtable = graph_routing_table_lfa;
                 break;
         default:

@@ -384,7 +384,7 @@ int alternate_flow_state_change(struct pff_i * pff_i,
                 } else {
                         /* Need to switch to a (different) alternate */
                         if (fds[0] == fd) {
-                                for (i = 0 ; i < len; i++) {
+                                for (i = 1; i < len; i++) {
                                         /* Usable alternate */
                                         if (!nhops_down_has(pff_i, fds[i])) {
                                                 tmp = fds[0];

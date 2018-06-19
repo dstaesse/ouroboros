@@ -409,7 +409,7 @@ static void sdu_handler(int                  fd,
                 if (ret < 0) {
                         log_dbg("Failed to write SDU to fd %d.", ofd);
                         if (ret == -EFLOWDOWN)
-                                notifier_event(NOTIFY_DT_CONN_DOWN, &ofd);
+                                notifier_event(NOTIFY_DT_FLOW_DOWN, &ofd);
                         ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
                         pthread_mutex_lock(&dt.stat[fd].lock);
@@ -781,7 +781,7 @@ int dt_write_sdu(uint64_t             dst_addr,
         if (ret < 0) {
                 log_dbg("Failed to write SDU to fd %d.", fd);
                 if (ret == -EFLOWDOWN)
-                        notifier_event(NOTIFY_DT_CONN_DOWN, &fd);
+                        notifier_event(NOTIFY_DT_FLOW_DOWN, &fd);
                 goto fail_write;
         }
 #ifdef IPCP_FLOW_STATS

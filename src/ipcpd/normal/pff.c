@@ -20,7 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#define OUROBOROS_PREFIX "pff"
+
 #include <ouroboros/errno.h>
+#include <ouroboros/logs.h>
 
 #include "pff.h"
 #include "pol-pff-ops.h"
@@ -42,9 +45,11 @@ struct pff * pff_create(enum pol_pff pol)
 
         switch (pol) {
         case PFF_ALTERNATE:
+                log_dbg("Using alternate PFF policy.");
                 pff->ops = &alternate_pff_ops;
                 break;
         case PFF_SIMPLE:
+                log_dbg("Using simple PFF policy.");
                 pff->ops = &simple_pff_ops;
                 break;
         default:
