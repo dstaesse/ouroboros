@@ -62,19 +62,32 @@
 
 #define OPERF_MAX_FLOWS 256
 
+#define TEST_TYPE_UNI 0
+#define TEST_TYPE_BI  1
+
+struct conf {
+        uint32_t test_type;
+} __attribute__((packed));
+
+struct msg {
+        uint32_t id;
+} __attribute__((packed));
+
 struct c {
-        char * s_apn;
-        int    size;
+        char * server_name;
         long   rate;
         bool   flood;
         bool   sleep;
         int    duration;
+        int    size;
 
         unsigned long sent;
         unsigned long rcvd;
 
         pthread_t reader_pt;
         pthread_t writer_pt;
+
+        struct conf conf;
 } client;
 
 struct s {
@@ -82,6 +95,7 @@ struct s {
         fset_t *        flows;
         fqueue_t *      fq;
         pthread_mutex_t lock;
+        struct conf     conf[OPERF_MAX_FLOWS];
 
         uint8_t buffer[OPERF_BUF_SIZE];
         ssize_t timeout;
@@ -99,26 +113,62 @@ static void usage(void)
         printf("Usage: operf [OPTION]...\n"
                "Measures bandwidth between a client and a server\n"
                "  -l, --listen              Run in server mode\n"
-               "\n"
-               "  -n, --server-apn          Name of the operf server\n"
-               "  -d, --duration            Test duration (s, default 60)\n"
+               "  -t, --test                The type of test [uni, bi]"
+               " (default uni)\n"
+               "  -n, --server-name         Name of the operf server\n"
+               "  -d, --duration            Test duration (default 60s)\n"
                "  -r, --rate                Rate (b/s)\n"
                "  -s, --size                Payload size (B, default 1500)\n"
                "  -f, --flood               Send SDUs as fast as possible\n"
                "      --sleep               Sleep in between sending SDUs\n"
+               "\n"
                "      --help                Display this help text and exit\n");
+}
+
+/* Times are in ms. */
+static int time_mul(const char * rem)
+{
+        if (strcmp(rem, "ms") == 0 || strcmp(rem, "") == 0)
+                return 1;
+        else if(strcmp(rem, "s") == 0)
+                return 1000;
+        else if (strcmp(rem, "m") == 0)
+                return 60 * 1000;
+        else if (strcmp(rem, "h") == 0)
+                return 60 * 60 * 1000;
+        else if (strcmp(rem, "d") == 0)
+                return 60 * 60 * 24 * 1000;
+
+        printf("Unknown time unit: %s.\n", rem);
+
+        exit(EXIT_FAILURE);
+}
+
+static int rate_mul(const char * rem)
+{
+        if (strcmp(rem, "k") == 0 || strcmp(rem, "") == 0)
+                return 1000;
+        else if(strcmp(rem, "M") == 0)
+                return MILLION;
+        else if (strcmp(rem, "G") == 0)
+                return BILLION;
+
+        printf("Unknown rate unit: %s.\n", rem);
+
+        exit(EXIT_FAILURE);
 }
 
 int main(int argc, char ** argv)
 {
-        int ret = -1;
-        char * rem = NULL;
-        bool serv = false;
+        int    ret       = -1;
+        char * rem       = NULL;
+        bool   serv      = false;
+        char * type      = "uni";
 
         argc--;
         argv++;
 
-        client.s_apn = NULL;
+        client.server_name = NULL;
         client.size = 1500;
         client.duration = 60000;
         server.timeout = 1000; /* ms */
@@ -128,8 +178,8 @@ int main(int argc, char ** argv)
 
         while (argc > 0) {
                 if (strcmp(*argv, "-n") == 0 ||
-                           strcmp(*argv, "--server_apn") == 0) {
-                        client.s_apn = *(++argv);
+                           strcmp(*argv, "--server-name") == 0) {
+                        client.server_name = *(++argv);
                         --argc;
                 } else if (strcmp(*argv, "-s") == 0 ||
                            strcmp(*argv, "--size") == 0) {
@@ -137,17 +187,13 @@ int main(int argc, char ** argv)
                         --argc;
                 } else if (strcmp(*argv, "-d") == 0 ||
                            strcmp(*argv, "--duration") == 0) {
-                        client.duration = strtol(*(++argv), &rem, 10) * 1000;
+                        client.duration = strtol(*(++argv), &rem, 10);
+                        client.duration *= time_mul(rem);
                         --argc;
                 } else if (strcmp(*argv, "-r") == 0 ||
                            strcmp(*argv, "--rate") == 0) {
                         client.rate = strtol(*(++argv), &rem, 10);
-                        if (*rem == 'k')
-                                client.rate *= 1000;
-                        if (*rem == 'M')
-                                client.rate *= MILLION;
-                        if (*rem == 'G')
-                                client.rate *= BILLION;
+                        client.rate *= rate_mul(rem);
                         --argc;
                 } else if (strcmp(*argv, "-f") == 0 ||
                            strcmp(*argv, "--flood") == 0) {
@@ -157,6 +203,10 @@ int main(int argc, char ** argv)
                 } else if (strcmp(*argv, "-l") == 0 ||
                            strcmp(*argv, "--listen") == 0) {
                         serv = true;
+                } else if (strcmp(*argv, "-t") == 0 ||
+                           strcmp(*argv, "--test") == 0) {
+                        type = *(++argv);
+                        --argc;
                 } else {
                         usage();
                         exit(EXIT_SUCCESS);
@@ -168,11 +218,20 @@ int main(int argc, char ** argv)
         if (serv) {
                 ret = server_main();
         } else {
-                if (client.s_apn == NULL) {
+                if (client.server_name == NULL) {
                         printf("No server specified.\n");
-                        usage();
-                        exit(EXIT_SUCCESS);
+                        exit(EXIT_FAILURE);
                 }
+
+                if (strcmp(type, "uni") == 0)
+                        client.conf.test_type = TEST_TYPE_UNI;
+                else if (strcmp(type, "bi") == 0)
+                        client.conf.test_type = TEST_TYPE_BI;
+                else {
+                        printf("Invalid test type.\n");
+                        exit(EXIT_FAILURE);
+                }
+
                 if (client.size > OPERF_BUF_SIZE) {
                         printf("Packet size truncated to %d bytes.\n",
                                OPERF_BUF_SIZE);

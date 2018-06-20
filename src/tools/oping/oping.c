@@ -135,7 +135,7 @@ static void usage(void)
 /* Times are in ms. */
 static int time_mul(const char * rem)
 {
-        if (strcmp (rem, "ms") == 0 || strcmp(rem, "") == 0)
+        if (strcmp(rem, "ms") == 0 || strcmp(rem, "") == 0)
                 return 1;
         else if(strcmp(rem, "s") == 0)
                 return 1000;
@@ -148,7 +148,6 @@ static int time_mul(const char * rem)
 
         printf("Unknown time unit: %s.\n", rem);
 
-        usage();
         exit(EXIT_FAILURE);
 }
 
@@ -244,7 +243,7 @@ int main(int     argc,
                 if (client.s_apn == NULL) {
                         printf("No server specified.\n");
                         usage();
-                        exit(EXIT_SUCCESS);
+                        exit(EXIT_FAILURE);
                 }
                 if (client.interval > 10000) {
                         printf("Ping interval truncated to 10s.\n");
@@ -270,5 +269,5 @@ int main(int     argc,
 
  fail:
         usage();
-        exit(EXIT_SUCCESS);
+        exit(EXIT_FAILURE);
 }
