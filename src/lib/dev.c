@@ -252,8 +252,12 @@ static void flow_fini(int fd)
                 shm_rbuff_close(ai.flows[fd].tx_rb);
         }
 
-        if (ai.flows[fd].set != NULL)
+        if (ai.flows[fd].set != NULL) {
+                shm_flow_set_notify(ai.flows[fd].set,
+                                    ai.flows[fd].port_id,
+                                    FLOW_DEALLOC);
                 shm_flow_set_close(ai.flows[fd].set);
+        }
 
         if (ai.flows[fd].frcti != NULL)
                 frcti_destroy(ai.flows[fd].frcti);
@@ -435,8 +439,6 @@ static void fini(void)
 
         frct_fini();
 
-        shm_flow_set_destroy(ai.fqset);
-
         if (ai.prog != NULL)
                 free(ai.prog);
 
@@ -451,6 +453,8 @@ static void fini(void)
                         flow_fini(i);
                 }
         }
+
+        shm_flow_set_destroy(ai.fqset);
 
         for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
@@ -764,9 +768,15 @@ int fccntl(int fd,
                 if (flow->oflags & FLOWFDOWN) {
                         rx_acl |= ACL_FLOWDOWN;
                         tx_acl |= ACL_FLOWDOWN;
+                        shm_flow_set_notify(flow->set,
+                                            flow->port_id,
+                                            FLOW_DOWN);
                 } else {
                         rx_acl &= ~ACL_FLOWDOWN;
                         tx_acl &= ~ACL_FLOWDOWN;
+                        shm_flow_set_notify(flow->set,
+                                            flow->port_id,
+                                            FLOW_UP);
                 }
 
                 shm_rbuff_set_acl(flow->rx_rb, rx_acl);
@@ -1424,6 +1434,10 @@ void ipcp_flow_fini(int fd)
 
         shm_rbuff_set_acl(ai.flows[fd].rx_rb, ACL_FLOWDOWN);
         shm_rbuff_set_acl(ai.flows[fd].tx_rb, ACL_FLOWDOWN);
+
+        shm_flow_set_notify(ai.flows[fd].set,
+                            ai.flows[fd].port_id,
+                            FLOW_DEALLOC);
 
         rx_rb = ai.flows[fd].rx_rb;
 

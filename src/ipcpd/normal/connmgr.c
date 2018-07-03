@@ -193,7 +193,9 @@ static void handle_event(void *       self,
 
         (void) self;
 
-        if (!(event == NOTIFY_DT_FLOW_UP || event == NOTIFY_DT_FLOW_DOWN))
+        if (!(event == NOTIFY_DT_FLOW_UP ||
+              event == NOTIFY_DT_FLOW_DOWN ||
+              event == NOTIFY_DT_FLOW_DEALLOC))
                 return;
 
         if (get_conn_by_fd(*((int *) o), COMPID_DT, &conn))
@@ -205,6 +207,9 @@ static void handle_event(void *       self,
                 break;
         case NOTIFY_DT_FLOW_DOWN:
                 notifier_event(NOTIFY_DT_CONN_DOWN, &conn);
+                break;
+        case NOTIFY_DT_FLOW_DEALLOC:
+                notifier_event(NOTIFY_DT_CONN_DEL, &conn);
                 break;
         default:
                 break;

@@ -25,9 +25,11 @@
 #include "config.h"
 
 #include <ouroboros/errno.h>
+#include <ouroboros/notifier.h>
 
 #include "ipcp.h"
 #include "sdu_sched.h"
+#include "connmgr.h"
 
 #include <assert.h>
 #include <sched.h>
@@ -86,10 +88,25 @@ static void * sdu_reader(void * o)
                         continue;
 
                 while ((fd = fqueue_next(fq)) >= 0) {
-                        if (ipcp_flow_read(fd, &sdb))
-                                continue;
+                        switch (fqueue_type(fq)) {
+                        case FLOW_DEALLOC:
+                                notifier_event(NOTIFY_DT_FLOW_DEALLOC, &fd);
+                                break;
+                        case FLOW_DOWN:
+                                notifier_event(NOTIFY_DT_FLOW_DOWN, &fd);
+                                break;
+                        case FLOW_UP:
+                                notifier_event(NOTIFY_DT_FLOW_UP, &fd);
+                                break;
+                        case FLOW_PKT:
+                                if (ipcp_flow_read(fd, &sdb))
+                                        continue;
 
-                        sched->callback(fd, qc, sdb);
+                                sched->callback(fd, qc, sdb);
+                                break;
+                        default:
+                                break;
+                        }
                 }
         }
 

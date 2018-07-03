@@ -28,16 +28,17 @@
 
 #include "comp.h"
 
-#define NOTIFY_DT_CONN_ADD    0x00D0
-#define NOTIFY_DT_CONN_DEL    0x00D1
-#define NOTIFY_DT_CONN_QOS    0x00D2
-#define NOTIFY_DT_CONN_UP     0x00D3
-#define NOTIFY_DT_CONN_DOWN   0x00D4
-#define NOTIFY_DT_FLOW_UP     0x00D5
-#define NOTIFY_DT_FLOW_DOWN   0x00D6
+#define NOTIFY_DT_CONN_ADD     0x00D0
+#define NOTIFY_DT_CONN_DEL     0x00D1
+#define NOTIFY_DT_CONN_QOS     0x00D2
+#define NOTIFY_DT_CONN_UP      0x00D3
+#define NOTIFY_DT_CONN_DOWN    0x00D4
+#define NOTIFY_DT_FLOW_UP      0x00D5
+#define NOTIFY_DT_FLOW_DOWN    0x00D6
+#define NOTIFY_DT_FLOW_DEALLOC 0x00D7
 
-#define NOTIFY_MGMT_CONN_ADD  0x00F0
-#define NOTIFY_MGMT_CONN_DEL  0x00F1
+#define NOTIFY_MGMT_CONN_ADD   0x00F0
+#define NOTIFY_MGMT_CONN_DEL   0x00F1
 
 int         connmgr_init(void);
 
