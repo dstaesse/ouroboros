@@ -53,16 +53,21 @@
 #define RECALC_TIME    4
 #define LS_UPDATE_TIME 15
 #define LS_TIMEO       60
-#define LS_ENTRY_SIZE  78
+#define LS_ENTRY_SIZE  104
 #define LSDB           "lsdb"
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
+#define LSA_NEW     0
+#define LSA_UPDATED 1
+#define LSA_OLD     2
+
 struct lsa {
         uint64_t d_addr;
         uint64_t s_addr;
+        uint64_t seqno;
 } __attribute__((packed));
 
 struct routing_i {
@@ -81,6 +86,8 @@ struct adjacency {
 
         uint64_t         dst;
         uint64_t         src;
+
+        uint64_t         seqno;
 
         time_t           stamp;
 };
@@ -138,6 +145,7 @@ static int str_adj(struct adjacency * adj,
         char        tmbuf[64];
         char        srcbuf[64];
         char        dstbuf[64];
+        char        seqnobuf[64];
         struct tm * tm;
 
         if (len < LS_ENTRY_SIZE)
@@ -148,9 +156,10 @@ static int str_adj(struct adjacency * adj,
 
         sprintf(srcbuf, "%" PRIu64, adj->src);
         sprintf(dstbuf, "%" PRIu64, adj->dst);
+        sprintf(seqnobuf, "%" PRIu64, adj->seqno);
 
-        sprintf(buf, "src: %20s\ndst: %20s\nupd: %20s\n",
-                srcbuf, dstbuf, tmbuf);
+        sprintf(buf, "src: %20s\ndst: %20s\nseqno: %18s\nupd: %20s\n",
+                srcbuf, dstbuf, seqnobuf, tmbuf);
 
         return LS_ENTRY_SIZE;
 }
@@ -386,11 +395,13 @@ static void set_pff_modified(void)
 
 static int lsdb_add_link(uint64_t    src,
                          uint64_t    dst,
+                         uint64_t    seqno,
                          qosspec_t * qs)
 {
         struct list_head * p;
         struct adjacency * adj;
         struct timespec    now;
+        int                ret;
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
@@ -399,9 +410,11 @@ static int lsdb_add_link(uint64_t    src,
         list_for_each(p, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 if (a->dst == dst && a->src == src) {
+                        ret = (a->seqno <= seqno ? LSA_OLD : LSA_UPDATED);
                         a->stamp = now.tv_sec;
+                        a->seqno = seqno;
                         pthread_rwlock_unlock(&ls.db_lock);
-                        return 0;
+                        return ret;
                 }
 
                 if (a->dst > dst || (a->dst == dst && a->src > src))
@@ -416,6 +429,7 @@ static int lsdb_add_link(uint64_t    src,
 
         adj->dst   = dst;
         adj->src   = src;
+        adj->seqno = seqno;
         adj->stamp = now.tv_sec;
 
         list_add_tail(&adj->next, p);
@@ -429,7 +443,7 @@ static int lsdb_add_link(uint64_t    src,
 
         set_pff_modified();
 
-        return 0;
+        return LSA_NEW;
 }
 
 static int lsdb_del_link(uint64_t src,
@@ -539,13 +553,15 @@ static void * periodic_recalc_pff(void * o)
 }
 
 static void send_lsm(uint64_t src,
-                     uint64_t dst)
+                     uint64_t dst,
+                     uint64_t seqno)
 {
         struct lsa         lsm;
         struct list_head * p;
 
         lsm.d_addr = hton64(dst);
         lsm.s_addr = hton64(src);
+        lsm.seqno  = hton64(seqno);
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
@@ -576,8 +592,9 @@ static void lsdb_replicate(int fd)
                         break;
                 }
 
-                cpy->dst = adj->dst;
-                cpy->src = adj->src;
+                cpy->dst   = adj->dst;
+                cpy->src   = adj->src;
+                cpy->seqno = adj->seqno;
 
                 list_add_tail(&cpy->next, &copy);
         }
@@ -590,6 +607,7 @@ static void lsdb_replicate(int fd)
                 adj = list_entry(p, struct adjacency, next);
                 lsm.d_addr = hton64(adj->dst);
                 lsm.s_addr = hton64(adj->src);
+                lsm.seqno  = hton64(adj->seqno);
                 list_del(&adj->next);
                 free(adj);
                 flow_write(fd, &lsm, sizeof(lsm));
@@ -627,7 +645,8 @@ static void * lsupdate(void * o)
                         }
 
                         if (adj->src == ipcpi.dt_addr) {
-                                send_lsm(adj->src, adj->dst);
+                                adj->seqno++;
+                                send_lsm(adj->src, adj->dst, adj->seqno);
                                 adj->stamp = now.tv_sec;
                         }
                 }
@@ -716,11 +735,11 @@ static void * lsreader(void * o)
 
                         msg = (struct lsa *) buf;
 
-                        lsdb_add_link(ntoh64(msg->s_addr),
-                                      ntoh64(msg->d_addr),
-                                      &qs);
-
-                        forward_lsm(buf, len, fd);
+                        if (lsdb_add_link(ntoh64(msg->s_addr),
+                                          ntoh64(msg->d_addr),
+                                          ntoh64(msg->seqno),
+                                          &qs) != LSA_OLD)
+                                forward_lsm(buf, len, fd);
                 }
         }
 
@@ -767,10 +786,10 @@ static void handle_event(void *       self,
                 if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_DT))
                         log_dbg("Failed to add neighbor to LSDB.");
 
-                if (lsdb_add_link(ipcpi.dt_addr, c->conn_info.addr, &qs))
-                        log_dbg("Failed to add adjacency to LSDB.");
+                if (lsdb_add_link(ipcpi.dt_addr, c->conn_info.addr, 0, &qs))
+                        log_dbg("Failed to add new adjacency to LSDB.");
 
-                send_lsm(ipcpi.dt_addr, c->conn_info.addr);
+                send_lsm(ipcpi.dt_addr, c->conn_info.addr, 0);
 
                 break;
         case NOTIFY_DT_CONN_DEL:
