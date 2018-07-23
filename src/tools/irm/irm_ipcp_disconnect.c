@@ -45,15 +45,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DT      "dt"
-#define MGMT    "mgmt"
+#define DT   "dt"
+#define MGMT "mgmt"
 
 static void usage(void)
 {
         printf("Usage: irm ipcp disconnect\n"
                "                name      <ipcp name>\n"
-               "                component [COMPONENT]\n"
-               "                dst       <name of destination IPCP>\n\n"
+               "                dst       <name of destination IPCP>\n"
+               "                [component [COMPONENT]]\n\n"
                "where COMPONENT = {" DT " " MGMT "}\n");
 }
 
@@ -62,7 +62,8 @@ int do_disconnect_ipcp(int     argc,
 {
         char *             ipcp = NULL;
         char *             dst  = NULL;
-        char *             comp = NULL;
+        char *             comp = "*";
+        char *             component = NULL;
         struct ipcp_info * ipcps;
         ssize_t            len  = 0;
         pid_t              pid  = -1;
@@ -77,7 +78,7 @@ int do_disconnect_ipcp(int     argc,
                         comp = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
-                               "ipcpi connect\".\n", *argv);
+                               "ipcp connect\".\n", *argv);
                         return -1;
                 }
 
@@ -100,14 +101,17 @@ int do_disconnect_ipcp(int     argc,
         if (pid == -1)
                 return -1;
 
-        if (!strcmp(comp, DT))
-                comp = DT_COMP;
+        if (wildcard_match(comp, DT) == 0) {
+                component = DT_COMP;
+                if (irm_disconnect_ipcp(pid, dst, component))
+                        return -1;
+        }
 
-        if (!strcmp(comp , MGMT))
-                comp = MGMT_COMP;
-
-        if (irm_disconnect_ipcp(pid, dst, comp))
-                return -1;
+        if (wildcard_match(comp, MGMT) == 0) {
+                component = MGMT_COMP;
+                if (irm_disconnect_ipcp(pid, dst, component))
+                        return -1;
+        }
 
         return 0;
 }
