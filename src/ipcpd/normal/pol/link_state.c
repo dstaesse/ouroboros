@@ -60,10 +60,6 @@
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
-#define LSA_NEW     0
-#define LSA_UPDATED 1
-#define LSA_OLD     2
-
 struct lsa {
         uint64_t d_addr;
         uint64_t s_addr;
@@ -401,7 +397,7 @@ static int lsdb_add_link(uint64_t    src,
         struct list_head * p;
         struct adjacency * adj;
         struct timespec    now;
-        int                ret;
+        int                ret = -1;
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
@@ -410,9 +406,11 @@ static int lsdb_add_link(uint64_t    src,
         list_for_each(p, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 if (a->dst == dst && a->src == src) {
-                        ret = (a->seqno <= seqno ? LSA_OLD : LSA_UPDATED);
-                        a->stamp = now.tv_sec;
-                        a->seqno = seqno;
+                        if (a->seqno < seqno) {
+                                a->stamp = now.tv_sec;
+                                a->seqno = seqno;
+                                ret = 0;
+                        }
                         pthread_rwlock_unlock(&ls.db_lock);
                         return ret;
                 }
@@ -443,7 +441,7 @@ static int lsdb_add_link(uint64_t    src,
 
         set_pff_modified();
 
-        return LSA_NEW;
+        return 0;
 }
 
 static int lsdb_del_link(uint64_t src,
@@ -738,8 +736,10 @@ static void * lsreader(void * o)
                         if (lsdb_add_link(ntoh64(msg->s_addr),
                                           ntoh64(msg->d_addr),
                                           ntoh64(msg->seqno),
-                                          &qs) != LSA_OLD)
-                                forward_lsm(buf, len, fd);
+                                          &qs))
+                                continue;
+
+                        forward_lsm(buf, len, fd);
                 }
         }
 
