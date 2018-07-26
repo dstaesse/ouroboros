@@ -49,4 +49,8 @@ uint8_t * shm_du_buff_tail_release(struct shm_du_buff * sdb,
 void      shm_du_buff_truncate(struct shm_du_buff * sdb,
                                size_t               len);
 
+int       shm_du_buff_wait_ack(struct shm_du_buff * sdb);
+
+int       shm_du_buff_ack(struct shm_du_buff * sdb);
+
 #endif /* OUROBOROS_SHM_DU_BUFF_H */

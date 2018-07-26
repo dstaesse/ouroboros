@@ -65,11 +65,6 @@
 #define shm_rdrb_empty(rdrb)                                                   \
         (*rdrb->tail == *rdrb->head)
 
-enum shm_du_buff_flags {
-        SDB_VALID = 0,
-        SDB_NULL
-};
-
 struct shm_du_buff {
         size_t size;
 #ifdef SHM_RDRB_MULTI_BLOCK
@@ -77,7 +72,7 @@ struct shm_du_buff {
 #endif
         size_t du_head;
         size_t du_tail;
-        size_t flags;
+        size_t refs;
         size_t idx;
 };
 
@@ -96,11 +91,11 @@ static void garbage_collect(struct shm_rdrbuff * rdrb)
 #ifdef SHM_RDRB_MULTI_BLOCK
         struct shm_du_buff * sdb;
         while (!shm_rdrb_empty(rdrb) &&
-               (sdb = get_tail_ptr(rdrb))->flags == SDB_NULL)
+               (sdb = get_tail_ptr(rdrb))->refs == 0)
                 *rdrb->tail = (*rdrb->tail + sdb->blocks)
                         & ((SHM_BUFFER_SIZE) - 1);
 #else
-        while (!shm_rdrb_empty(rdrb) && get_tail_ptr(rdrb)->flags == SDB_NULL)
+        while (!shm_rdrb_empty(rdrb) && get_tail_ptr(rdrb)->refs == 0)
                 *rdrb->tail = (*rdrb->tail + 1) & ((SHM_BUFFER_SIZE) - 1);
 #endif
         pthread_cond_broadcast(rdrb->healthy);
@@ -108,7 +103,7 @@ static void garbage_collect(struct shm_rdrbuff * rdrb)
 
 static void sanitize(struct shm_rdrbuff * rdrb)
 {
-        get_head_ptr(rdrb)->flags = SDB_NULL;
+        --get_head_ptr(rdrb)->refs;
         garbage_collect(rdrb);
         pthread_mutex_consistent(rdrb->lock);
 }
@@ -338,7 +333,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
                 sdb = get_head_ptr(rdrb);
                 sdb->size    = 0;
                 sdb->blocks  = padblocks;
-                sdb->flags   = SDB_NULL;
+                sdb->refs    = 0;
                 sdb->du_head = 0;
                 sdb->du_tail = 0;
                 sdb->idx     = *rdrb->head;
@@ -347,7 +342,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         }
 #endif
         sdb        = get_head_ptr(rdrb);
-        sdb->flags = SDB_VALID;
+        sdb->refs  = 1;
         sdb->idx   = *rdrb->head;
 #ifdef SHM_RDRB_MULTI_BLOCK
         sdb->blocks  = blocks;
@@ -434,7 +429,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
                         sdb = get_head_ptr(rdrb);
                         sdb->size    = 0;
                         sdb->blocks  = padblocks;
-                        sdb->flags   = SDB_NULL;
+                        sdb->refs    = 0;
                         sdb->du_head = 0;
                         sdb->du_tail = 0;
                         sdb->idx     = *rdrb->head;
@@ -443,7 +438,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
                 }
 #endif
                 sdb        = get_head_ptr(rdrb);
-                sdb->flags = SDB_VALID;
+                sdb->refs  = 1;
                 sdb->idx   = *rdrb->head;
 #ifdef SHM_RDRB_MULTI_BLOCK
                 sdb->blocks  = blocks;
@@ -497,6 +492,8 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb,
 int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb,
                        size_t               idx)
 {
+        struct shm_du_buff * sdb;
+
         assert(rdrb);
         assert(idx < (SHM_BUFFER_SIZE));
 
@@ -508,10 +505,13 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb,
 #endif
         assert(!shm_rdrb_empty(rdrb));
 
-        idx_to_du_buff_ptr(rdrb, idx)->flags = SDB_NULL;
+        sdb = idx_to_du_buff_ptr(rdrb, idx);
 
-        if (idx == *rdrb->tail)
-                garbage_collect(rdrb);
+        if (sdb->refs == 1) { /* only stack needs it, can be removed */
+                sdb->refs = 0;
+                if (idx == *rdrb->tail)
+                        garbage_collect(rdrb);
+        }
 
         pthread_mutex_unlock(rdrb->lock);
 
@@ -602,4 +602,17 @@ void shm_du_buff_truncate(struct shm_du_buff * sdb,
         assert(len <= sdb->size);
 
         sdb->du_tail = sdb->du_head + len;
+}
+
+int shm_du_buff_wait_ack(struct shm_du_buff * sdb)
+{
+        __sync_add_and_fetch(&sdb->refs, 1);
+
+        return 0;
+}
+
+int shm_du_buff_ack(struct shm_du_buff * sdb)
+{
+        __sync_sub_and_fetch(&sdb->refs, 1);
+        return 0;
 }

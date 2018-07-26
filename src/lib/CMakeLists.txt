@@ -179,7 +179,6 @@ set(SOURCE_FILES_DEV
   # Add source files here
   cacep.c
   dev.c
-  timerwheel.c
   )
 
 set(SOURCE_FILES_IRM

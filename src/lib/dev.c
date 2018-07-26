@@ -40,7 +40,6 @@
 #include <ouroboros/utils.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/qoscube.h>
-#include <ouroboros/timerwheel.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -82,6 +81,9 @@ struct port {
         pthread_mutex_t state_lock;
         pthread_cond_t  state_cond;
 };
+
+#define frcti_to_flow(frcti) \
+        ((struct flow *)((uint8_t *) frcti - offsetof(struct flow, frcti)))
 
 struct flow {
         struct shm_rbuff *    rx_rb;
@@ -396,12 +398,12 @@ static void init(int     argc,
         if (pthread_rwlock_init(&ai.lock, NULL))
                 goto fail_lock;
 
-        if (frct_init())
-                goto fail_frct;
+        if (rxmwheel_init())
+                goto fail_rxmwheel;
 
         return;
 
- fail_frct:
+ fail_rxmwheel:
         pthread_rwlock_destroy(&ai.lock);
  fail_lock:
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
@@ -437,7 +439,7 @@ static void fini(void)
         if (ai.fds == NULL)
                 return;
 
-        frct_fini();
+        rxmwheel_fini();
 
         if (ai.prog != NULL)
                 free(ai.prog);
@@ -462,9 +464,6 @@ static void fini(void)
         }
 
         shm_rdrbuff_close(ai.rdrb);
-
-        if (ai.tw != NULL)
-                timerwheel_destroy(ai.tw);
 
         free(ai.flows);
         free(ai.ports);
