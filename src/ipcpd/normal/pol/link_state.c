@@ -727,6 +727,9 @@ static void * lsreader(void * o)
                 }
 
                 while ((fd = fqueue_next(fq)) >= 0) {
+                        if (fqueue_type(fq) != FLOW_PKT)
+                                continue;
+
                         len = flow_read(fd, buf, sizeof(*msg));
                         if (len <= 0 || len != sizeof(*msg))
                                 continue;
@@ -822,7 +825,7 @@ static void handle_event(void *       self,
         case NOTIFY_MGMT_CONN_DEL:
                 fset_del(ls.mgmt_set, c->flow_info.fd);
                 if (lsdb_del_nb(c->conn_info.addr, c->flow_info.fd))
-                        log_warn("Failed to add mgmt neighbor to LSDB.");
+                        log_warn("Failed to delete mgmt neighbor from LSDB.");
                 break;
         default:
                 break;
