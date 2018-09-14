@@ -101,30 +101,26 @@ struct nb {
         enum nb_type     type;
 };
 
-typedef int (* rtable_fn_t)(struct graph *     graph,
-                            uint64_t           s_addr,
-                            struct list_head * table);
-
 struct {
-        struct list_head nbs;
-        size_t           nbs_len;
-        fset_t *         mgmt_set;
+        struct list_head  nbs;
+        size_t            nbs_len;
+        fset_t *          mgmt_set;
 
-        struct list_head db;
-        size_t           db_len;
+        struct list_head  db;
+        size_t            db_len;
 
-        pthread_rwlock_t db_lock;
+        pthread_rwlock_t  db_lock;
 
-        struct graph *   graph;
+        struct graph *    graph;
 
-        pthread_t        lsupdate;
-        pthread_t        lsreader;
-        pthread_t        listener;
+        pthread_t         lsupdate;
+        pthread_t         lsreader;
+        pthread_t         listener;
 
-        struct list_head routing_instances;
-        pthread_mutex_t  routing_i_lock;
+        struct list_head  routing_instances;
+        pthread_mutex_t   routing_i_lock;
 
-        rtable_fn_t      rtable;
+        enum routing_algo routing_algo;
 } ls;
 
 struct pol_routing_ops link_state_ops = {
@@ -500,7 +496,8 @@ static void calculate_pff(struct routing_i * instance)
         struct list_head * q;
         int                fds[PROG_MAX_FLOWS];
 
-        if (ls.rtable(ls.graph, ipcpi.dt_addr, &table))
+        if (graph_routing_table(ls.graph, ls.routing_algo,
+                                ipcpi.dt_addr, &table))
                 return;
 
         pff_lock(instance->pff);
@@ -902,11 +899,11 @@ int link_state_init(enum pol_routing pr)
         switch (pr) {
         case ROUTING_LINK_STATE:
                 log_dbg("Using link state routing policy.");
-                ls.rtable = graph_routing_table;
+                ls.routing_algo = ROUTING_SIMPLE;
                 break;
         case ROUTING_LINK_STATE_LFA:
                 log_dbg("Using Loop-Free Alternates policy.");
-                ls.rtable = graph_routing_table_lfa;
+                ls.routing_algo = ROUTING_LFA;
                 break;
         default:
                 goto fail_graph;

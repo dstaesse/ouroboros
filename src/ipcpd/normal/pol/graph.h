@@ -28,6 +28,11 @@
 
 #include <inttypes.h>
 
+enum routing_algo {
+         ROUTING_SIMPLE = 0,
+         ROUTING_LFA
+};
+
 struct nhop {
         struct list_head next;
         uint64_t         nhop;
@@ -53,12 +58,9 @@ int            graph_del_edge(struct graph * graph,
                               uint64_t       d_addr);
 
 int            graph_routing_table(struct graph *     graph,
+                                   enum routing_algo  algo,
                                    uint64_t           s_addr,
                                    struct list_head * table);
-
-int            graph_routing_table_lfa(struct graph *     graph,
-                                       uint64_t           s_addr,
-                                       struct list_head * table);
 
 void           graph_free_routing_table(struct graph *     graph,
                                         struct list_head * table);
