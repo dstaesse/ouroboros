@@ -23,9 +23,12 @@
 #ifndef OUROBOROS_ENDIAN_H
 #define OUROBOROS_ENDIAN_H
 
+
 #if defined(__linux__) || defined(__CYGWIN__) || \
         (defined(__MACH__) && !defined(__APPLE__))
-#define _DEFAULT_SOURCE
+#ifndef _DEFAULT_SOURCE
+#error You must define _DEFAULT_SOURCE before including this file
+#endif
 #include <endian.h>
 #elif defined(__NetBSD__) || defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <sys/endian.h>

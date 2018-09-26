@@ -25,8 +25,12 @@
 #define NPROC (sysconf(_SC_NPROCESSORS_ONLN))
 #endif
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#else
 #define _POSIX_C_SOURCE 200112L
 #define __XSI_VISIBLE   500
+#endif
 
 #include "config.h"
 

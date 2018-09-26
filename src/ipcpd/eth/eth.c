@@ -29,6 +29,8 @@
 #define _DARWIN_C_SOURCE
 #elif defined(__FreeBSD__)
 #define __BSD_VISIBLE 1
+#elif defined (__linux__) || defined (__CYGWIN__)
+#define _DEFAULT_SOURCE
 #else
 #define _POSIX_C_SOURCE 200112L
 #endif

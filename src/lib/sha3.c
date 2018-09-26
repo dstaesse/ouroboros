@@ -42,6 +42,10 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  Use this program  at  your own risk!
  */
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#endif
+
 #include <ouroboros/endian.h>
 #include <ouroboros/sha3.h>
 
