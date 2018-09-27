@@ -69,7 +69,7 @@ int do_unregister(int argc, char ** argv)
         char *             ipcp[MAX_IPCPS];
         size_t             ipcp_len   = 0;
         struct ipcp_info * ipcps;
-        size_t             len;
+        ssize_t            len;
         size_t             i;
 
         while (argc > 0) {
@@ -103,7 +103,10 @@ int do_unregister(int argc, char ** argv)
         }
 
         len = irm_list_ipcps(&ipcps);
-        for (i = 0; i < len; ++i) {
+        if (len < 0)
+                return -1;
+
+        for (i = 0; i < (size_t) len; ++i) {
                 size_t j;
                 for (j = 0; j < layers_len; j++) {
                         if (wildcard_match(ipcps[i].layer, layers[j]) == 0) {
