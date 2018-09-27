@@ -112,6 +112,15 @@ static int udp_data_init(void)
 {
         int i;
 
+        if (pthread_rwlock_init(&udp_data.flows_lock, NULL))
+                return -1;
+
+        if (pthread_cond_init(&udp_data.fd_set_cond, NULL))
+                goto fail_set_cond;
+
+        if (pthread_mutex_init(&udp_data.fd_set_lock, NULL))
+                goto fail_set_lock;
+
         for (i = 0; i < FD_SETSIZE; ++i)
                 udp_data.uf_to_fd[i] = -1;
 
@@ -124,26 +133,28 @@ static int udp_data_init(void)
 
         udp_data.np1_flows = fset_create();
         if (udp_data.np1_flows == NULL)
-                return -ENOMEM;
+                goto fail_fset;
 
         udp_data.fq = fqueue_create();
-        if (udp_data.fq == NULL) {
-                fset_destroy(udp_data.np1_flows);
-                return -ENOMEM;
-        }
+        if (udp_data.fq == NULL)
+                goto fail_fqueue;
 
         udp_data.shim_data = shim_data_create();
-        if (udp_data.shim_data == NULL) {
-                fqueue_destroy(udp_data.fq);
-                fset_destroy(udp_data.np1_flows);
-                return -ENOMEM;
-        }
-
-        pthread_rwlock_init(&udp_data.flows_lock, NULL);
-        pthread_cond_init(&udp_data.fd_set_cond, NULL);
-        pthread_mutex_init(&udp_data.fd_set_lock, NULL);
+        if (udp_data.shim_data == NULL)
+                goto fail_data;
 
         return 0;
+ fail_data:
+        fqueue_destroy(udp_data.fq);
+ fail_fqueue:
+        fset_destroy(udp_data.np1_flows);
+ fail_fset:
+        pthread_mutex_destroy(&udp_data.fd_set_lock);
+ fail_set_lock:
+        pthread_cond_destroy(&udp_data.fd_set_cond);
+ fail_set_cond:
+        pthread_rwlock_destroy(&udp_data.flows_lock);
+        return -1;
 }
 
 static void udp_data_fini(void)
@@ -315,6 +326,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_dbg("Won't allocate over non-operational IPCP.");
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
+                close(skfd);
                 return -1;
         }
 
@@ -375,6 +387,11 @@ static int ipcp_udp_port_alloc_reply(uint16_t src_udp_port,
         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
         fd = udp_port_to_fd(dst_udp_port);
+        if (fd < 0) {
+                pthread_rwlock_unlock(&udp_data.flows_lock);
+                return -1;
+        }
+
         skfd = udp_data.fd_to_uf[fd].skfd;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
@@ -421,9 +438,9 @@ static void * ipcp_udp_listener(void * o)
                 struct mgmt_msg * msg = NULL;
 
                 memset(&buf, 0, SHIM_UDP_MSG_SIZE);
-                n = sizeof(c_saddr);
                 n = recvfrom(sfd, buf, SHIM_UDP_MSG_SIZE, 0,
-                             (struct sockaddr *) &c_saddr, (unsigned *) &n);
+                             (struct sockaddr *) &c_saddr,
+                             (socklen_t *) sizeof(c_saddr));
                 if (n < 0)
                         continue;
 
@@ -757,7 +774,8 @@ static uint32_t ddns_resolve(char *   name,
         close(pipe_fd[0]);
 
         waitpid(pid, &wstatus, 0);
-        if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0)
+        if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0 &&
+            count != SHIM_UDP_BUF_SIZE)
                 log_dbg("Succesfully communicated with nslookup.");
         else
                 log_err("Failed to resolve DNS address.");
@@ -968,6 +986,8 @@ static int ipcp_udp_flow_alloc(int             fd,
         }
 
         skfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (skfd < 0)
+                return -1;
 
         /* this socket is for the flow */
         memset((char *) &f_saddr, 0, sizeof(f_saddr));
