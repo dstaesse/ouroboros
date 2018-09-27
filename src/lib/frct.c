@@ -34,12 +34,9 @@
 #define FRCT_CRCLEN    (sizeof(uint32_t))
 
 struct frct_cr {
-        bool     drf;
         uint32_t lwe;
         uint32_t rwe;
 
-        uint32_t seqno;
-        bool     conf;
         uint8_t  cflags;
 
         time_t   act;
@@ -52,6 +49,8 @@ struct frcti {
         time_t           mpl;
         time_t           a;
         time_t           r;
+
+        uint32_t         seqno;
 
         struct frct_cr   snd_cr;
         struct frct_cr   rcv_cr;
@@ -73,15 +72,12 @@ enum frct_flags {
         FRCT_ACK  = 0x03, /* ACK field valid  */
         FRCT_FC   = 0x08, /* FC window valid  */
         FRCT_RDVZ = 0x10, /* Rendez-vous      */
-        FRCT_CFG  = 0x20, /* Configuration    */
-        FRCT_MFGM = 0x40, /* More fragments   */
-        FRCT_CRC  = 0x80, /* CRC present      */
+        FRCT_MFGM = 0x20, /* More fragments   */
+        FRCT_CRC  = 0x40, /* CRC present      */
 };
 
 struct frct_pci {
-        uint8_t  flags;
-
-        uint8_t  cflags;
+        uint16_t flags;
 
         uint16_t window;
 
@@ -134,14 +130,13 @@ static struct frcti * frcti_create(int       fd,
 
         delta_t = (frcti->mpl + frcti->a + frcti->r) / 1000;
 
+        frcti->snd_cr.inact  = 3 * delta_t;
+        frcti->snd_cr.act    = now.tv_sec - (frcti->snd_cr.inact + 1);
+
         if (qc == QOS_CUBE_DATA)
                 frcti->snd_cr.cflags |= FRCTFRTX;
 
-        frcti->snd_cr.conf   = true;
-        frcti->snd_cr.inact  = 3 * delta_t + 1;
-        frcti->snd_cr.act    = now.tv_sec - (frcti->snd_cr.inact + 1);
-
-        frcti->rcv_cr.inact  = 2 * delta_t + 1;
+        frcti->rcv_cr.inact  = 2 * delta_t;
         frcti->rcv_cr.act    = now.tv_sec - (frcti->rcv_cr.inact + 1);
 
         return frcti;
@@ -156,30 +151,12 @@ static void frcti_destroy(struct frcti * frcti)
 {
         /*
          * FIXME: In case of reliable transmission we should
-         * make sure everything is acked.
+         * make sure everything we sent is acked.
          */
 
         pthread_rwlock_destroy(&frcti->lock);
 
         free(frcti);
-}
-
-static int frcti_setconf(struct frcti * frcti,
-                         uint16_t       flags)
-{
-        assert(frcti);
-
-        pthread_rwlock_wrlock(&frcti->lock);
-
-        if (frcti->snd_cr.cflags != flags) {
-                frcti->snd_cr.cflags = flags;
-                frcti->snd_cr.conf   = true;
-                frcti->snd_cr.drf    = true;
-        }
-
-        pthread_rwlock_unlock(&frcti->lock);
-
-        return 0;
 }
 
 static uint16_t frcti_getconf(struct frcti * frcti)
@@ -219,14 +196,6 @@ static ssize_t __frcti_queued_pdu(struct frcti * frcti)
         pos = frcti->rcv_cr.lwe & (RQ_SIZE - 1);
         idx = frcti->rq[pos];
         if (idx != -1) {
-                struct shm_du_buff * sdb;
-                struct frct_pci *    pci;
-
-                sdb = shm_rdrbuff_get(ai.rdrb, idx);
-                pci = (struct frct_pci *) shm_du_buff_head(sdb) - 1;
-                if (pci->flags & FRCT_CFG)
-                        frcti->rcv_cr.cflags = pci->cflags;
-
                 ++frcti->rcv_cr.lwe;
                 frcti->rq[pos] = -1;
         }
@@ -297,28 +266,22 @@ static int __frcti_snd(struct frcti *       frcti,
         }
 
         /* Set DRF if there are no unacknowledged packets. */
-        if (snd_cr->seqno == snd_cr->lwe)
+        if (frcti->seqno == snd_cr->lwe)
                 pci->flags |= FRCT_DRF;
-
-        if (snd_cr->conf) {
-                /* FIXME: This packet must be acked! */
-                pci->flags |= FRCT_CFG;
-                pci->cflags = snd_cr->cflags;
-        }
 
         /* Choose a new sequence number if sender inactivity expired. */
         if (now.tv_sec - snd_cr->act > snd_cr->inact) {
                 /* There are no unacknowledged packets. */
-                assert(snd_cr->seqno == snd_cr->lwe);
-#ifdef OUROBOROS_CONFIG_DEBUG
-                frcti->snd_cr.seqno = 0;
+                assert(frcti->seqno == snd_cr->lwe);
+#ifdef CONFIG_OUROBOROS_DEBUG
+                frcti->seqno = 0;
 #else
-                random_buffer(&snd_cr->seqno, sizeof(snd_cr->seqno));
+                random_buffer(&frcti->seqno, sizeof(frcti->seqno));
 #endif
-                frcti->snd_cr.lwe = frcti->snd_cr.seqno;
+                frcti->snd_cr.lwe = frcti->seqno;
         }
 
-        pci->seqno = hton32(snd_cr->seqno++);
+        pci->seqno = hton32(frcti->seqno++);
         if (!(snd_cr->cflags & FRCTFRTX))
                 snd_cr->lwe++;
         else
@@ -326,7 +289,6 @@ static int __frcti_snd(struct frcti *       frcti,
                 snd_cr->lwe++;
 
         snd_cr->act  = now.tv_sec;
-        snd_cr->conf = false;
 
         pthread_rwlock_unlock(&frcti->lock);
 
@@ -376,9 +338,6 @@ static int __frcti_rcv(struct frcti *       frcti,
 
         if (seqno == rcv_cr->lwe) {
                 ++rcv_cr->lwe;
-                /* Check for online reconfiguration. */
-                if (pci->flags & FRCT_CFG)
-                        rcv_cr->cflags = pci->cflags;
         } else { /* Out of order. */
                 if ((int32_t)(seqno - rcv_cr->lwe) < 0) /* Duplicate. */
                         goto drop_packet;

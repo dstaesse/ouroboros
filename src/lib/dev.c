@@ -682,7 +682,6 @@ int fccntl(int fd,
            int cmd,
            ...)
 {
-        uint16_t          sflags;
         uint32_t *        fflags;
         uint16_t *        cflags;
         va_list           l;
@@ -793,11 +792,6 @@ int fccntl(int fd,
                 if (fflags == NULL)
                         goto einval;
                 *fflags = flow->oflags;
-                break;
-        case FRCTSFLAGS:
-                sflags = (uint16_t) va_arg(l, int);
-                if (flow->frcti == NULL || frcti_setconf(flow->frcti, sflags))
-                        goto eperm;
                 break;
         case FRCTGFLAGS:
                 cflags = (uint16_t *) va_arg(l, int *);
