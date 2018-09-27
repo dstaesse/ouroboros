@@ -81,8 +81,7 @@ void prog_entry_destroy(struct prog_entry * e)
         list_for_each_safe(p, h, &e->names) {
                 struct str_el * s = list_entry(p, struct str_el, next);
                 list_del(&s->next);
-                if (s->str != NULL)
-                        free(s->str);
+                free(s->str);
                 free(s);
         }
 

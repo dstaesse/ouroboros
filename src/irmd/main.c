@@ -349,8 +349,10 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
                 len = IPCP_HASH_LEN(e);
 
                 hash = malloc(len);
-                if  (hash == NULL)
+                if (hash == NULL) {
+                        pthread_rwlock_unlock(&irmd.reg_lock);
                         return NULL;
+                }
 
                 str_hash(e->dir_hash_algo, hash, name);
 
@@ -828,13 +830,13 @@ static int unbind_program(char * prog,
         if (name == NULL)
                 prog_table_del(&irmd.prog_table, prog);
         else {
-                struct prog_entry * e = prog_table_get(&irmd.prog_table, prog);
-                prog_entry_del_name(e, name);
-        }
+                struct prog_entry * en = prog_table_get(&irmd.prog_table, prog);
+                prog_entry_del_name(en, name);
 
-        e = registry_get_entry(&irmd.registry, name);
-        if (e != NULL)
-                reg_entry_del_prog(e, prog);
+                e = registry_get_entry(&irmd.registry, name);
+                if (e != NULL)
+                        reg_entry_del_prog(e, prog);
+        }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -856,13 +858,14 @@ static int unbind_process(pid_t        pid,
         if (name == NULL)
                 proc_table_del(&irmd.proc_table, pid);
         else {
-                struct proc_entry * e = proc_table_get(&irmd.proc_table, pid);
-                proc_entry_del_name(e, name);
-        }
+                struct proc_entry * en = proc_table_get(&irmd.proc_table, pid);
+                if (en != NULL)
+                        proc_entry_del_name(en, name);
 
-        e = registry_get_entry(&irmd.registry, name);
-        if (e != NULL)
-                reg_entry_del_pid(e, pid);
+                e = registry_get_entry(&irmd.registry, name);
+                if (e != NULL)
+                        reg_entry_del_pid(e, pid);
+        }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -922,6 +925,7 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
         return 0;
 
  fail:
+        pthread_rwlock_unlock(&irmd.reg_lock);
         while (i >= 0) {
                 free((*ipcps)[i]->layer);
                 free((*ipcps)[i]->name);
@@ -1180,10 +1184,8 @@ static int flow_accept(pid_t              pid,
         if (ret == -1)
                 return -EPIPE;
 
-        if (irmd_get_state() != IRMD_RUNNING) {
-                reg_entry_set_state(re, REG_NAME_NULL);
+        if (irmd_get_state() != IRMD_RUNNING)
                 return -EIRMD;
-        }
 
         pthread_rwlock_rdlock(&irmd.flows_lock);
 
@@ -2163,6 +2165,11 @@ static int irm_init(void)
                 }
         }
 
+        if (irmd.lf == NULL) {
+                log_err("Failed to create lockfile.");
+                goto fail_lockfile;
+        }
+
         if (stat(SOCK_PATH, &st) == -1) {
                 if (mkdir(SOCK_PATH, 0777)) {
                         log_err("Failed to create sockets directory.");
@@ -2187,11 +2194,6 @@ static int irm_init(void)
                 goto fail_sock_opt;
         }
 
-        if (irmd.lf == NULL) {
-                log_err("Failed to create lockfile.");
-                goto fail_sock_opt;
-        }
-
         if ((irmd.rdrb = shm_rdrbuff_create()) == NULL) {
                 log_err("Failed to create rdrbuff.");
                 goto fail_rdrbuff;
@@ -2210,7 +2212,7 @@ static int irm_init(void)
         gcry_control(GCRYCTL_INITIALIZATION_FINISHED);
 #endif
 
-        irmd.state   = IRMD_RUNNING;
+        irmd_set_state(IRMD_RUNNING);
 
         log_info("Ouroboros IPC Resource Manager daemon started...");
 

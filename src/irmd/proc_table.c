@@ -172,8 +172,7 @@ void proc_entry_del_name(struct proc_entry * e,
                 struct str_el * s = list_entry(p, struct str_el, next);
                 if (!strcmp(name, s->str)) {
                         list_del(&s->next);
-                        if (s->str != NULL)
-                                free(s->str);
+                        free(s->str);
                         free(s);
                 }
         }
