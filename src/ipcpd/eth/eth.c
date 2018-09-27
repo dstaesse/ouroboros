@@ -1200,7 +1200,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         memset(&ifr, 0, sizeof(ifr));
-        memcpy(ifr.ifr_name, conf->dev, strlen(conf->dev));
+        memcpy(ifr.ifr_name, conf->dev, IFNAMSIZ);
 
 #ifdef BUILD_ETH_DIX
         if (conf->ethertype < 0x0600 || conf->ethertype == 0xFFFF) {
@@ -1276,7 +1276,6 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         idx = if_nametoindex(conf->dev);
         if (idx == 0) {
                 log_err("Failed to retrieve interface index.");
-                close(skfd);
                 return -1;
         }
 #endif /* __FreeBSD__ */
