@@ -357,15 +357,15 @@ static int __frcti_rcv(struct frcti *       frcti,
 
         rcv_cr->act = now.tv_sec;
 
+        pthread_rwlock_unlock(&frcti->lock);
+
         if (!(pci->flags & FRCT_DATA))
                 shm_rdrbuff_remove(ai.rdrb, idx);
-
-        pthread_rwlock_unlock(&frcti->lock);
 
         return ret;
 
  drop_packet:
-        shm_rdrbuff_remove(ai.rdrb, idx);
         pthread_rwlock_unlock(&frcti->lock);
+        shm_rdrbuff_remove(ai.rdrb, idx);
         return -EAGAIN;
 }

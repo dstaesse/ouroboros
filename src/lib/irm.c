@@ -319,10 +319,10 @@ static int check_prog(const char * prog)
 
 static int check_prog_path(char ** prog)
 {
-        char * path = getenv("PATH");
-        char * path_end = path + strlen(path) + 1;
+        char * path;
+        char * path_end;
         char * pstart;
-        char * pstop = path;
+        char * pstop;
         char * tmp;
         char * tstop;
         char * tstart;
@@ -331,9 +331,15 @@ static int check_prog_path(char ** prog)
 
         assert(prog);
 
-        if (*prog == NULL || path == NULL)
+        if (*prog == NULL)
                 return -EINVAL;
 
+        path = getenv("PATH");
+        if (path == NULL)
+                return -ENOENT;
+
+        pstop = path;
+        path_end = path + strlen(path) + 1;
         if (!strlen(path) || strchr(*prog, '/') != NULL) {
                 if ((ret = check_prog(*prog)) < 0)
                         return ret;

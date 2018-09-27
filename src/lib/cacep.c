@@ -32,7 +32,7 @@
 #include "cacep.pb-c.h"
 typedef CacepMsg cacep_msg_t;
 
-#define BUF_SIZE 64
+#define BUF_SIZE 128
 
 static int read_msg(int                fd,
                     struct conn_info * info)
@@ -48,6 +48,11 @@ static int read_msg(int                fd,
         msg = cacep_msg__unpack(NULL, len, buf);
         if (msg == NULL)
                 return -1;
+
+        if (strlen(msg->comp_name) > CACEP_BUF_STRLEN) {
+                cacep_msg__free_unpacked(msg, NULL);
+                return -1;
+        }
 
         strcpy(info->comp_name, msg->comp_name);
         strcpy(info->protocol, msg->protocol);

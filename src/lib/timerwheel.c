@@ -121,9 +121,6 @@ struct timerwheel * timerwheel_create(time_t resolution,
         if (tw == NULL)
                 return NULL;
 
-        if (pthread_mutex_init(&tw->lock, NULL))
-                return NULL;
-
         tw->elements = 1;
 
         while (tw->elements < (size_t) max_delay / resolution)

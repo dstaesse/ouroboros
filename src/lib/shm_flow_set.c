@@ -98,17 +98,14 @@ struct shm_flow_set * shm_flow_set_create()
         mask = umask(0);
 
         shm_fd = shm_open(fn, O_CREAT | O_RDWR, 0666);
-        if (shm_fd == -1) {
-                free(set);
-                return NULL;
-        }
+        if (shm_fd == -1)
+                goto fail_shm_open;
 
         umask(mask);
 
         if (ftruncate(shm_fd, SHM_FLOW_SET_FILE_SIZE - 1) < 0) {
-                free(set);
                 close(shm_fd);
-                return NULL;
+                goto fail_shm_open;
         }
 
         shm_base = mmap(NULL,
@@ -120,11 +117,8 @@ struct shm_flow_set * shm_flow_set_create()
 
         close(shm_fd);
 
-        if (shm_base == MAP_FAILED) {
-                shm_unlink(fn);
-                free(set);
-                return NULL;
-        }
+        if (shm_base == MAP_FAILED)
+                goto fail_mmap;
 
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
@@ -133,21 +127,27 @@ struct shm_flow_set * shm_flow_set_create()
         set->lock    = (pthread_mutex_t *)
                 (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
-        pthread_mutexattr_init(&mattr);
-#ifdef HAVE_ROBUST_MUTEX
-        pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
-#endif
-        pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
-        pthread_mutex_init(set->lock, &mattr);
+        if (pthread_mutexattr_init(&mattr))
+                goto fail_mmap;
 
-        pthread_condattr_init(&cattr);
-        pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+#ifdef HAVE_ROBUST_MUTEX
+        if (pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST))
+                goto fail_mmap;
+#endif
+        if (pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED) ||
+            pthread_mutex_init(set->lock, &mattr) ||
+            pthread_condattr_init(&cattr) ||
+            pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED))
+                goto fail_mmap;
+
 #ifndef __APPLE__
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+        if (pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK))
+                goto fail_mmap;
 #endif
         for (i = 0; i < PROG_MAX_FQUEUES; ++i) {
                 set->heads[i] = 0;
-                pthread_cond_init(&set->conds[i], &cattr);
+                if (pthread_cond_init(&set->conds[i], &cattr))
+                        goto fail_mmap;
         }
 
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
@@ -156,6 +156,12 @@ struct shm_flow_set * shm_flow_set_create()
         set->pid = getpid();
 
         return set;
+
+ fail_mmap:
+        shm_unlink(fn);
+ fail_shm_open:
+        free(set);
+        return NULL;
 }
 
 struct shm_flow_set * shm_flow_set_open(pid_t pid)
