@@ -39,7 +39,7 @@ int graph_test_entries(int entries)
         struct list_head * p;
         int                i = 0;
 
-        if (graph_routing_table(graph, 1, &table)) {
+        if (graph_routing_table(graph, ROUTING_SIMPLE, 1, &table)) {
                 printf("Failed to get routing table.\n");
                 return -1;
         }
@@ -63,7 +63,7 @@ int graph_test_double_link(void)
         struct list_head * p;
         int                i = 0;
 
-        if (graph_routing_table(graph, 1, &table)) {
+        if (graph_routing_table(graph, ROUTING_SIMPLE, 1, &table)) {
                 printf("Failed to get routing table.\n");
                 return -1;
         }
@@ -101,7 +101,7 @@ int graph_test_single_link(void)
         struct list_head * p;
         int                i = 0;
 
-        if (graph_routing_table(graph, 1, &table)) {
+        if (graph_routing_table(graph, ROUTING_SIMPLE, 1, &table)) {
                 printf("Failed to get routing table.\n");
                 return -1;
         }
@@ -243,7 +243,7 @@ int graph_test(int     argc,
                 return -1;
         }
 
-        if (graph_routing_table(graph, 1, &table)) {
+        if (graph_routing_table(graph, ROUTING_SIMPLE, 1, &table)) {
                 printf("Failed to get routing table.\n");
                 return -1;
         }
