@@ -46,7 +46,6 @@
 #include "connmgr.h"
 #include "ipcp.h"
 #include "dt.h"
-#include "dt_pci.h"
 #include "pff.h"
 #include "routing.h"
 #include "sdu_sched.h"
@@ -72,6 +71,89 @@ struct comp_info {
         void * comp;
         char * name;
 };
+
+/* Abstract syntax */
+enum dtp_fields {
+        DTP_DST = 0,   /* DST ADDRESS      */
+        DTP_QOS,       /* QOS ID           */
+        DTP_DEID,      /* DST Endpoint ID  */
+        DTP_TTL,       /* TTL FIELD        */
+        DTP_NUM_FIELDS /* Number of fields */
+};
+
+/* Fixed field lengths */
+#define TTL_LEN 1
+#define QOS_LEN 1
+
+struct dt_pci {
+        uint64_t  dst_addr;
+        qoscube_t qc;
+        uint8_t   ttl;
+        uint32_t  eid;
+};
+
+struct {
+        uint8_t         addr_size;
+        uint8_t         eid_size;
+        size_t          head_size;
+
+        /* Offsets */
+        size_t          qc_o;
+        size_t          ttl_o;
+        size_t          eid_o;
+
+        /* Initial TTL value */
+        uint8_t         max_ttl;
+} dt_pci_info;
+
+static int dt_pci_ser(struct shm_du_buff * sdb,
+                      struct dt_pci *      dt_pci)
+{
+        uint8_t * head;
+        uint8_t   ttl = dt_pci_info.max_ttl;
+
+        assert(sdb);
+        assert(dt_pci);
+
+        head = shm_du_buff_head_alloc(sdb, dt_pci_info.head_size);
+        if (head == NULL)
+                return -EPERM;
+
+        /* FIXME: Add check and operations for Big Endian machines. */
+        memcpy(head, &dt_pci->dst_addr, dt_pci_info.addr_size);
+        memcpy(head + dt_pci_info.qc_o, &dt_pci->qc, QOS_LEN);
+        memcpy(head + dt_pci_info.ttl_o, &ttl, TTL_LEN);
+        memcpy(head + dt_pci_info.eid_o, &dt_pci->eid, dt_pci_info.eid_size);
+
+        return 0;
+}
+
+static void dt_pci_des(struct shm_du_buff * sdb,
+                       struct dt_pci *      dt_pci)
+{
+        uint8_t * head;
+
+        assert(sdb);
+        assert(dt_pci);
+
+        head = shm_du_buff_head(sdb);
+
+        /* Decrease TTL */
+        --*(head + dt_pci_info.ttl_o);
+
+        /* FIXME: Add check and operations for Big Endian machines. */
+        memcpy(&dt_pci->dst_addr, head, dt_pci_info.addr_size);
+        memcpy(&dt_pci->qc, head + dt_pci_info.qc_o, QOS_LEN);
+        memcpy(&dt_pci->ttl, head + dt_pci_info.ttl_o, TTL_LEN);
+        memcpy(&dt_pci->eid, head + dt_pci_info.eid_o, dt_pci_info.eid_size);
+}
+
+static void dt_pci_shrink(struct shm_du_buff * sdb)
+{
+        assert(sdb);
+
+        shm_du_buff_head_release(sdb, dt_pci_info.head_size);
+}
 
 struct {
         struct sdu_sched * sdu_sched;
@@ -559,10 +641,14 @@ int dt_init(enum pol_routing pr,
         info.pref_syntax  = PROTO_FIXED;
         info.addr         = ipcpi.dt_addr;
 
-        if (dt_pci_init(addr_size, eid_size, max_ttl)) {
-                log_err("Failed to init shm dt_pci.");
-                goto fail_pci_init;
-        }
+        dt_pci_info.addr_size = addr_size;
+        dt_pci_info.eid_size  = eid_size;
+        dt_pci_info.max_ttl   = max_ttl;
+
+        dt_pci_info.qc_o      = dt_pci_info.addr_size;
+        dt_pci_info.ttl_o     = dt_pci_info.qc_o + QOS_LEN;
+        dt_pci_info.eid_o     = dt_pci_info.ttl_o + TTL_LEN;
+        dt_pci_info.head_size = dt_pci_info.eid_o + dt_pci_info.eid_size;
 
         if (notifier_reg(handle_event, NULL)) {
                 log_err("Failed to register with notifier.");
@@ -646,8 +732,6 @@ int dt_init(enum pol_routing pr,
  fail_connmgr_comp_init:
         notifier_unreg(&handle_event);
  fail_notifier_reg:
-        dt_pci_fini();
- fail_pci_init:
         return -1;
 }
 
@@ -675,8 +759,6 @@ void dt_fini(void)
         connmgr_comp_fini(COMPID_DT);
 
         notifier_unreg(&handle_event);
-
-        dt_pci_fini();
 }
 
 int dt_start(void)

@@ -38,7 +38,6 @@
 #include <ouroboros/ipcp-dev.h>
 
 #include "dir.h"
-#include "dt_pci.h"
 #include "fa.h"
 #include "sdu_sched.h"
 #include "ipcp.h"

@@ -37,7 +37,6 @@ set(SOURCE_FILES
   dht.c
   dir.c
   dt.c
-  dt_pci.c
   enroll.c
   fa.c
   main.c

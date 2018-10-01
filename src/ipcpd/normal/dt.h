@@ -26,8 +26,6 @@
 #include <ouroboros/ipcp.h>
 #include <ouroboros/shm_rdrbuff.h>
 
-#include "dt_pci.h"
-
 #define DT_COMP      "Data Transfer"
 #define DT_PROTO     "dtp"
 #define INVALID_ADDR 0
