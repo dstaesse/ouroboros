@@ -77,6 +77,11 @@ endif ()
 if (HAVE_ETH)
   message(STATUS "Supported raw packet API found, building eth-llc and eth-dix")
 
+  set(IPCP_ETH_RD_THR 3 CACHE STRING
+    "Number of reader threads in Ethernet IPCP")
+  set(IPCP_ETH_WR_THR 3 CACHE STRING
+    "Number of writer threads in Ethernet IPCP")
+
   set(ETH_LLC_SOURCES
     # Add source files here
     ${CMAKE_CURRENT_SOURCE_DIR}/llc.c
