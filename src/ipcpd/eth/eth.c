@@ -991,7 +991,6 @@ static void * eth_ipcp_sdu_writer(void * o)
 
         while (true) {
                 fevent(eth_data.np1_flows, fq, NULL);
-                pthread_rwlock_rdlock(&eth_data.flows_lock);
                 while ((fd = fqueue_next(fq)) >= 0) {
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_dbg("Bad read from fd %d.", fd);
@@ -1005,6 +1004,8 @@ static void * eth_ipcp_sdu_writer(void * o)
                                 log_dbg("Failed to allocate header.");
                                 ipcp_sdb_release(sdb);
                         }
+
+                        pthread_rwlock_rdlock(&eth_data.flows_lock);
 #if defined(BUILD_ETH_DIX)
                         deid = eth_data.fd_to_ef[fd].r_eid;
 #elif defined(BUILD_ETH_LLC)
@@ -1014,6 +1015,8 @@ static void * eth_ipcp_sdu_writer(void * o)
                         memcpy(r_addr,
                                eth_data.fd_to_ef[fd].r_addr,
                                MAC_SIZE);
+
+                        pthread_rwlock_unlock(&eth_data.flows_lock);
 
                         eth_ipcp_send_frame(r_addr,
 #if defined(BUILD_ETH_DIX)
@@ -1025,7 +1028,6 @@ static void * eth_ipcp_sdu_writer(void * o)
                                             len);
                         ipcp_sdb_release(sdb);
                 }
-                pthread_rwlock_unlock(&eth_data.flows_lock);
         }
 
         pthread_cleanup_pop(true);
@@ -1202,6 +1204,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 #endif
 #if defined(HAVE_RAW_SOCKETS)
         int              qdisc_bypass = 1;
+        int              flags;
 #endif
         assert(conf);
         assert(conf->type == THIS_TYPE);
@@ -1368,6 +1371,17 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 return -1;
         }
 
+        flags = fcntl(eth_data.s_fd, F_GETFL, 0);
+        if (flags < 0) {
+                log_err("Failed to get flags.");
+                goto fail_device;
+        }
+
+        if (fcntl(eth_data.s_fd, F_SETFL, flags | O_NONBLOCK)) {
+                log_err("Failed to set socket non-blocking.");
+                goto fail_device;
+        }
+
         if (setsockopt(eth_data.s_fd, SOL_PACKET, PACKET_QDISC_BYPASS,
                        &qdisc_bypass, sizeof(qdisc_bypass))) {
                 log_info("Qdisc bypass not supported.");
@@ -1375,7 +1389,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 
         if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
                 sizeof(eth_data.device))) {
-                log_err("Failed to bind socket to interface");
+                log_err("Failed to bind socket to interface.");
                 goto fail_device;
         }
 
