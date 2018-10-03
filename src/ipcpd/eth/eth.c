@@ -1200,6 +1200,9 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 #ifndef SHM_RDRB_MULTI_BLOCK
         size_t           maxsz;
 #endif
+#if defined(HAVE_RAW_SOCKETS)
+        int              qdisc_bypass = 1;
+#endif
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
@@ -1363,6 +1366,11 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         if (eth_data.s_fd < 0) {
                 log_err("Failed to create socket.");
                 return -1;
+        }
+
+        if (setsockopt(eth_data.s_fd, SOL_PACKET, PACKET_QDISC_BYPASS,
+                       &qdisc_bypass, sizeof(qdisc_bypass))) {
+                log_info("Qdisc bypass not supported.");
         }
 
         if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
