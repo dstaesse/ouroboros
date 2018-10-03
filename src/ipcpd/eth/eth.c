@@ -194,6 +194,7 @@ struct {
         struct shim_data * shim_data;
 #ifdef __linux__
         int                mtu;
+        int                if_idx;
 #endif
 #if defined(HAVE_NETMAP)
         struct nm_desc *   nmd;
@@ -884,7 +885,9 @@ static void * eth_ipcp_sdu_reader(void * o)
                 if (deid == MGMT_EID) {
 #elif defined (BUILD_ETH_LLC)
                 if (length > 0x05FF) {/* DIX */
+#ifndef HAVE_NETMAP
                         ipcp_sdb_release(sdb);
+#endif
                         continue;
                 }
 
@@ -1137,7 +1140,7 @@ static void * eth_ipcp_if_monitor(void * o)
                         ifi = NLMSG_DATA(h);
 
                         /* Not our interface */
-                        if (ifi->ifi_index != eth_data.device.sll_ifindex)
+                        if (ifi->ifi_index != eth_data.if_idx)
                                 continue;
 
                         if (ifi->ifi_flags & IFF_UP) {
@@ -1284,6 +1287,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 log_err("Failed to retrieve interface index.");
                 return -1;
         }
+        eth_data.if_idx = idx;
 #endif /* __FreeBSD__ */
 
 #if defined(HAVE_NETMAP)
@@ -1370,7 +1374,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 #endif /* HAVE_NETMAP */
         ipcp_set_state(IPCP_OPERATIONAL);
 
-#ifdef __linux__
+#if defined(__linux__)
         if (pthread_create(&eth_data.if_monitor,
                            NULL,
                            eth_ipcp_if_monitor,
@@ -1436,7 +1440,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         pthread_cancel(eth_data.if_monitor);
         pthread_join(eth_data.if_monitor, NULL);
 #endif
-#if !defined(HAVE_NETMAP)
+#if defined(__linux__) || !defined(HAVE_NETMAP)
  fail_device:
 #endif
 #if defined(HAVE_NETMAP)

@@ -19,6 +19,8 @@ find_path(NETMAP_C_INCLUDE_DIR
 
 mark_as_advanced(NETMAP_C_INCLUDE_DIR)
 
+unset(HAVE_ETH)
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(DISABLE_RAW_SOCKETS FALSE CACHE BOOL
     "Disable raw socket support for Ethernet IPCPs")
@@ -29,7 +31,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
   else ()
     message(STATUS "Raw socket support for Ethernet IPCPs disabled by user")
     unset(HAVE_RAW_SOCKETS)
-    unset(HAVE_ETH)
   endif ()
 endif ()
 
@@ -53,7 +54,6 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
       message(STATUS "Berkeley Packet Filter support "
                      "for Ethernet IPCPs disabled by user")
       unset(HAVE_BPF)
-      unset(HAVE_ETH)
     endif ()
   endif ()
 endif ()
@@ -69,8 +69,6 @@ if (NETMAP_C_INCLUDE_DIR)
   else ()
     message(STATUS "Netmap support for Ethernet IPCPs disabled by user")
     unset(HAVE_NETMAP)
-    unset(HAVE_ETH)
-    unset(IPCP_ETH_TARGET CACHE)
   endif ()
 endif ()
 
