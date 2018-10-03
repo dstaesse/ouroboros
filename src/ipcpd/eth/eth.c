@@ -905,8 +905,8 @@ static void * eth_ipcp_sdu_reader(void * o)
 
                         memcpy(frame->buf, &e_frame->payload, length);
                         memcpy(frame->r_addr, e_frame->src_hwaddr, MAC_SIZE);
-                        pthread_mutex_unlock(&eth_data.mgmt_lock);
 
+                        pthread_mutex_lock(&eth_data.mgmt_lock);
                         list_add(&frame->next, &eth_data.mgmt_frames);
                         pthread_cond_signal(&eth_data.mgmt_cond);
                         pthread_mutex_unlock(&eth_data.mgmt_lock);
