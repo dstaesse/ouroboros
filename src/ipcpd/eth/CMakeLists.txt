@@ -14,31 +14,31 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 find_path(NETMAP_C_INCLUDE_DIR
   net/netmap_user.h
-  HINTS /usr/include /usr/local/include
-)
+  HINTS /usr/include /usr/local/include)
 
 mark_as_advanced(NETMAP_C_INCLUDE_DIR)
 
-unset(HAVE_ETH)
-
+# Check for raw sockets
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(DISABLE_RAW_SOCKETS FALSE CACHE BOOL
     "Disable raw socket support for Ethernet IPCPs")
   if (NOT DISABLE_RAW_SOCKETS)
     message(STATUS "Raw socket support for Ethernet IPCPs enabled")
     set(HAVE_RAW_SOCKETS TRUE PARENT_SCOPE)
+    set(HAVE_RAW_SOCKETS TRUE)
     set(HAVE_ETH TRUE)
   else ()
     message(STATUS "Raw socket support for Ethernet IPCPs disabled by user")
+    unset(HAVE_RAW_SOCKETS PARENT_SCOPE)
     unset(HAVE_RAW_SOCKETS)
   endif ()
 endif ()
 
+# Check for BPF
 if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
   find_path(BPF_C_INCLUDE_DIR
-            net/bpf.h
-            HINTS /usr/include /usr/local/include
-  )
+    net/bpf.h
+    HINTS /usr/include /usr/local/include)
 
   mark_as_advanced(BPF_C_INCLUDE_DIR)
 
@@ -47,28 +47,31 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
       "Disable Berkeley Packet Filter support for Ethernet IPCPs")
     if (NOT DISABLE_BPF)
       message(STATUS "Berkeley Packet Filter support "
-                     "for Ethernet IPCPs enabled")
+        "for Ethernet IPCPs enabled")
       set(HAVE_BPF TRUE PARENT_SCOPE)
+      set(HAVE_BPF TRUE)
       set(HAVE_ETH TRUE)
     else ()
       message(STATUS "Berkeley Packet Filter support "
-                     "for Ethernet IPCPs disabled by user")
+        "for Ethernet IPCPs disabled by user")
+      unset(HAVE_BPF PARENT_SCOPE)
       unset(HAVE_BPF)
     endif ()
   endif ()
 endif ()
 
-if (NETMAP_C_INCLUDE_DIR)
+# Check for netmap exclusively
+if (NOT HAVE_RAW_SOCKETS AND NOT HAVE_BPF AND NETMAP_C_INCLUDE_DIR)
   set(DISABLE_NETMAP FALSE CACHE BOOL
-      "Disable netmap support for ETH IPCPs")
+    "Disable netmap support for ETH IPCPs")
   if (NOT DISABLE_NETMAP)
     message(STATUS "Netmap support for Ethernet IPCPs enabled")
-    set(HAVE_NETMAP TRUE PARENT_SCOPE)
     test_and_set_c_compiler_flag_global(-std=c99)
+    set(HAVE_NETMAP TRUE PARENT_SCOPE)
     set(HAVE_ETH TRUE)
   else ()
     message(STATUS "Netmap support for Ethernet IPCPs disabled by user")
-    unset(HAVE_NETMAP)
+    unset(HAVE_NETMAP PARENT_SCOPE)
   endif ()
 endif ()
 
@@ -83,12 +86,12 @@ if (HAVE_ETH)
   set(ETH_LLC_SOURCES
     # Add source files here
     ${CMAKE_CURRENT_SOURCE_DIR}/llc.c
-  )
+    )
 
   set(ETH_DIX_SOURCES
     # Add source files here
     ${CMAKE_CURRENT_SOURCE_DIR}/dix.c
-  )
+    )
 
   set(IPCP_ETH_LLC_TARGET ipcpd-eth-llc CACHE INTERNAL "")
   set(IPCP_ETH_DIX_TARGET ipcpd-eth-dix CACHE INTERNAL "")
