@@ -31,8 +31,6 @@
 #define DT               "dt"
 #define OUROBOROS_PREFIX DT
 
-/* FIXME: fix #defines and remove endian.h include. */
-#include <ouroboros/endian.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>

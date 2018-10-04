@@ -28,66 +28,61 @@
 #include <string.h>
 
 qosspec_t qos_raw = {
-        .delay                = UINT32_MAX,
-        .bandwidth            = 0,
-        .availability         = 0,
-        .loss                 = 1,
-        .in_order             = 0,
-        .maximum_interruption = UINT32_MAX
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 1,
+        .ber          = 1,
+        .in_order     = 0,
+        .max_gap      = UINT32_MAX
+};
+
+qosspec_t qos_raw_no_errors = {
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 0,
+        .max_gap      = UINT32_MAX
 };
 
 qosspec_t qos_best_effort = {
-        .delay                = UINT32_MAX,
-        .bandwidth            = 0,
-        .availability         = 0,
-        .loss                 = 1,
-        .in_order             = 1,
-        .maximum_interruption = UINT32_MAX
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = UINT32_MAX
 };
 
-qosspec_t qos_video = {
-        .delay                = 100,
-        .bandwidth            = UINT64_MAX,
-        .availability         = 3,
-        .loss                 = 1,
-        .in_order             = 1,
-        .maximum_interruption = 100
+qosspec_t qos_video   = {
+        .delay        = 100,
+        .bandwidth    = UINT64_MAX,
+        .availability = 3,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 100
 };
 
 qosspec_t qos_voice = {
-        .delay                = 50,
-        .bandwidth            = 100000,
-        .availability         = 5,
-        .loss                 = 1,
-        .in_order             = 1,
-        .maximum_interruption = 50
+        .delay        = 50,
+        .bandwidth    = 100000,
+        .availability = 5,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 50
 };
 
 qosspec_t qos_data = {
-        .delay                = 1000,
-        .bandwidth            = 0,
-        .availability         = 0,
-        .in_order             = 1,
-        .loss                 = 0,
-        .maximum_interruption = 2000
+        .delay        = 1000,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 0,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 2000
 };
-
-int qosspec_init(qosspec_t * qs)
-{
-        if (qs == NULL)
-                return -EINVAL;
-
-        *qs = qos_best_effort;
-
-        return 0;
-}
-
-int qosspec_fini(qosspec_t * qs)
-{
-        if (qs == NULL)
-                return -EINVAL;
-
-        memset(qs, 0, sizeof(*qs));
-
-        return 0;
-}

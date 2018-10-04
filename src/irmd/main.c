@@ -1264,7 +1264,7 @@ static int flow_accept(pid_t              pid,
 
 static int flow_alloc(pid_t              pid,
                       const char *       dst,
-                      qoscube_t          cube,
+                      qosspec_t          qs,
                       struct timespec *  timeo,
                       struct irm_flow ** e)
 {
@@ -1288,7 +1288,7 @@ static int flow_alloc(pid_t              pid,
                 return -EBADF;
         }
 
-        f = irm_flow_create(pid, ipcp->pid, port_id, cube);
+        f = irm_flow_create(pid, ipcp->pid, port_id, qs);
         if (f == NULL) {
                 bmp_release(irmd.port_ids, port_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1310,7 +1310,7 @@ static int flow_alloc(pid_t              pid,
         str_hash(ipcp->dir_hash_algo, hash, dst);
 
         if (ipcp_flow_alloc(ipcp->pid, port_id, pid, hash,
-                            IPCP_HASH_LEN(ipcp), cube)) {
+                            IPCP_HASH_LEN(ipcp), qs)) {
                 /* sanitizer cleans this */
                 log_info("Flow_allocation failed.");
                 free(hash);
@@ -1418,7 +1418,7 @@ static pid_t auto_execute(char ** argv)
 
 static struct irm_flow * flow_req_arr(pid_t           pid,
                                       const uint8_t * hash,
-                                      qoscube_t       cube)
+                                      qosspec_t       qs)
 {
         struct reg_entry *  re = NULL;
         struct prog_entry * a  = NULL;
@@ -1521,7 +1521,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                 return NULL;
         }
 
-        f = irm_flow_create(h_pid, pid, port_id, cube);
+        f = irm_flow_create(h_pid, pid, port_id, qs);
         if (f == NULL) {
                 bmp_release(irmd.port_ids, port_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1993,17 +1993,19 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                         result = flow_accept(msg->pid, timeo, &e);
                         if (result == 0) {
+                                qosspec_msg_t qs_msg;
                                 ret_msg->has_port_id = true;
                                 ret_msg->port_id     = e->port_id;
                                 ret_msg->has_pid     = true;
                                 ret_msg->pid         = e->n_1_pid;
-                                ret_msg->has_qoscube = true;
-                                ret_msg->qoscube     = e->qc;
+                                qs_msg = spec_to_msg(&e->qs);
+                                ret_msg->qosspec     = &qs_msg;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
                         result = flow_alloc(msg->pid, msg->dst,
-                                            msg->qoscube, timeo, &e);
+                                            msg_to_spec(msg->qosspec),
+                                            timeo, &e);
                         if (result == 0) {
                                 ret_msg->has_port_id = true;
                                 ret_msg->port_id     = e->port_id;
@@ -2017,7 +2019,7 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->pid,
                                          msg->hash.data,
-                                         msg->qoscube);
+                                         msg_to_spec(msg->qosspec));
                         result = (e == NULL ? -1 : 0);
                         if (result == 0) {
                                 ret_msg->has_port_id = true;
@@ -2061,6 +2063,8 @@ static void * mainloop(void * o)
 
                 irm_msg__pack(ret_msg, buffer.data);
 
+                /* Can't free the qosspec. */
+                ret_msg->qosspec = NULL;
                 irm_msg__free_unpacked(ret_msg, NULL);
 
                 pthread_cleanup_push(close_ptr, &sfd);

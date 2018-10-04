@@ -73,8 +73,15 @@ struct mgmt_msg {
         uint16_t src_udp_port;
         uint16_t dst_udp_port;
         uint8_t  code;
-        uint8_t  qoscube;
         uint8_t  response;
+        /* QoS parameters from spec, aligned */
+        uint8_t  availability;
+        uint8_t  in_order;
+        uint32_t delay;
+        uint64_t bandwidth;
+        uint32_t loss;
+        uint32_t ber;
+        uint32_t max_gap;
 } __attribute__((packed));
 
 struct uf {
@@ -219,7 +226,7 @@ static int send_shim_udp_msg(uint8_t * buf,
 static int ipcp_udp_port_alloc(uint32_t        dst_ip_addr,
                                uint16_t        src_udp_port,
                                const uint8_t * dst,
-                               qoscube_t       cube)
+                               qosspec_t       qs)
 {
         uint8_t *         buf;
         struct mgmt_msg * msg;
@@ -235,7 +242,13 @@ static int ipcp_udp_port_alloc(uint32_t        dst_ip_addr,
         msg               = (struct mgmt_msg *) buf;
         msg->code         = FLOW_REQ;
         msg->src_udp_port = src_udp_port;
-        msg->qoscube      = cube;
+        msg->delay        = hton32(qs.delay);
+        msg->bandwidth    = hton64(qs.bandwidth);
+        msg->availability = qs.availability;
+        msg->loss         = hton32(qs.loss);
+        msg->ber          = hton32(qs.ber);
+        msg->in_order     = qs.in_order;
+        msg->max_gap      = hton32(qs.max_gap);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
 
@@ -272,7 +285,7 @@ static int ipcp_udp_port_alloc_resp(uint32_t dst_ip_addr,
 
 static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                              const uint8_t *      dst,
-                             qoscube_t            cube)
+                             qosspec_t            qs)
 {
         struct timespec    ts          = {0, FD_UPDATE_TIMEOUT * 1000};
         struct timespec    abstime;
@@ -331,7 +344,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         }
 
         /* reply to IRM */
-        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), cube);
+        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), qs);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -436,7 +449,7 @@ static void * ipcp_udp_listener(void * o)
 
         while (true) {
                 struct mgmt_msg * msg = NULL;
-
+                qosspec_t         qs;
                 memset(&buf, 0, SHIM_UDP_MSG_SIZE);
                 n = recvfrom(sfd, buf, SHIM_UDP_MSG_SIZE, 0,
                              (struct sockaddr *) &c_saddr,
@@ -455,9 +468,16 @@ static void * ipcp_udp_listener(void * o)
                 switch (msg->code) {
                 case FLOW_REQ:
                         c_saddr.sin_port = msg->src_udp_port;
+                        qs.delay = ntoh32(msg->delay);
+                        qs.bandwidth = ntoh64(msg->bandwidth);
+                        qs.availability = msg->availability;
+                        qs.loss = ntoh32(msg->loss);
+                        qs.ber = ntoh32(msg->ber);
+                        qs.in_order = msg->in_order;
+                        qs.max_gap = ntoh32(msg->max_gap);
                         ipcp_udp_port_req(&c_saddr,
                                           (uint8_t *) (msg + 1),
-                                          msg->qoscube);
+                                          qs);
                         break;
                 case FLOW_REPLY:
                         ipcp_udp_port_alloc_reply(msg->src_udp_port,
@@ -555,7 +575,8 @@ static void * ipcp_udp_sdu_loop(void * o)
 
                         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-                        pthread_cleanup_push((void (*)(void *)) ipcp_sdb_release,
+                        pthread_cleanup_push((void (*)(void *))
+                                             ipcp_sdb_release,
                                              (void *) sdb);
 
                         if (send(fd, shm_du_buff_head(sdb),
@@ -968,7 +989,7 @@ static int ipcp_udp_query(const uint8_t * hash)
 
 static int ipcp_udp_flow_alloc(int             fd,
                                const uint8_t * dst,
-                               qoscube_t       cube)
+                               qosspec_t       qs)
 {
         struct sockaddr_in r_saddr; /* server address */
         struct sockaddr_in f_saddr; /* flow */
@@ -978,12 +999,9 @@ static int ipcp_udp_flow_alloc(int             fd,
 
         log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(dst));
 
-        assert(dst);
+        (void) qs;
 
-        if (cube > QOS_CUBE_DATA) {
-                log_dbg("Unsupported QoS requested.");
-                return -1;
-        }
+        assert(dst);
 
         skfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (skfd < 0)
@@ -1034,7 +1052,7 @@ static int ipcp_udp_flow_alloc(int             fd,
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        if (ipcp_udp_port_alloc(ip_addr, f_saddr.sin_port, dst, cube) < 0) {
+        if (ipcp_udp_port_alloc(ip_addr, f_saddr.sin_port, dst, qs) < 0) {
                 pthread_rwlock_wrlock(&udp_data.flows_lock);
 
                 udp_data.fd_to_uf[fd].udp  = -1;

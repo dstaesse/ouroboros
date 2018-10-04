@@ -20,6 +20,13 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#else
+#define _POSIX_C_SOURCE 200112L
+#define __XSI_VISIBLE   500
+#endif
+
 #if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
 #define _GNU_SOURCE
 #define NPROC (sysconf(_SC_NPROCESSORS_ONLN))
@@ -198,6 +205,7 @@ static void * mainloop(void * o)
                 layer_info_msg_t    layer_info = LAYER_INFO_MSG__INIT;
                 int                 fd         = -1;
                 struct cmd *        cmd;
+                qosspec_t           qs;
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
 
@@ -422,9 +430,10 @@ static void * mainloop(void * o)
                                 break;
                         }
 
+                        qs = msg_to_spec(msg->qosspec);
                         fd = np1_flow_alloc(msg->pid,
                                             msg->port_id,
-                                            msg->qoscube);
+                                            qs);
                         if (fd < 0) {
                                 log_err("Failed allocating fd on port_id %d.",
                                         msg->port_id);
@@ -435,7 +444,7 @@ static void * mainloop(void * o)
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc(fd,
                                                            msg->hash.data,
-                                                           msg->qoscube);
+                                                           qs);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         ret_msg.has_result = true;

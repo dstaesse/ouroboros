@@ -60,7 +60,7 @@ struct ipcp_ops {
 
         int   (* ipcp_flow_alloc)(int             fd,
                                   const uint8_t * dst,
-                                  qoscube_t       qos);
+                                  qosspec_t       qs);
 
         int   (* ipcp_flow_alloc_resp)(int fd,
                                        int response);

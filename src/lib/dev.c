@@ -44,7 +44,6 @@
 #include <ouroboros/shm_rbuff.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/fqueue.h>
-#include <ouroboros/qoscube.h>
 #include <ouroboros/timerwheel.h>
 
 #include <stdlib.h>
@@ -94,7 +93,6 @@ struct flow {
         struct shm_flow_set * set;
         int                   port_id;
         int                   oflags;
-        qoscube_t             cube;
         qosspec_t             spec;
         ssize_t               part_idx;
 
@@ -235,7 +233,6 @@ static void flow_clear(int fd)
 
         ai.flows[fd].port_id  = -1;
         ai.flows[fd].pid      = -1;
-        ai.flows[fd].cube     = QOS_CUBE_BE;
 }
 
 static void flow_fini(int fd)
@@ -272,7 +269,7 @@ static void flow_fini(int fd)
 
 static int flow_init(int       port_id,
                      pid_t     pid,
-                     qoscube_t qc)
+                     qosspec_t qs)
 {
         int fd;
         int err = -ENOMEM;
@@ -300,9 +297,8 @@ static int flow_init(int       port_id,
         ai.flows[fd].port_id  = port_id;
         ai.flows[fd].oflags   = FLOWFDEFAULT;
         ai.flows[fd].pid      = pid;
-        ai.flows[fd].cube     = qc;
-        ai.flows[fd].spec     = qos_cube_to_spec(qc);
         ai.flows[fd].part_idx = NO_PART;
+        ai.flows[fd].spec     = qs;
 
         ai.ports[port_id].fd = fd;
 
@@ -499,7 +495,6 @@ int flow_accept(qosspec_t *             qs,
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
         int         fd;
-        qoscube_t   qc;
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
@@ -528,14 +523,13 @@ int flow_accept(qosspec_t *             qs,
         }
 
         if (!recv_msg->has_pid || !recv_msg->has_port_id ||
-            !recv_msg->has_qoscube) {
+            recv_msg->qosspec == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
         }
 
-        qc = recv_msg->qoscube;
-
-        fd = flow_init(recv_msg->port_id, recv_msg->pid, recv_msg->qoscube);
+        fd = flow_init(recv_msg->port_id, recv_msg->pid,
+                       msg_to_spec(recv_msg->qosspec));
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -544,12 +538,10 @@ int flow_accept(qosspec_t *             qs,
 
         pthread_rwlock_wrlock(&ai.lock);
 
-        /* FIXME: check if FRCT is needed based on qc? */
-
         assert(ai.flows[fd].frcti == NULL);
 
-        if (qc != QOS_CUBE_RAW) {
-                ai.flows[fd].frcti = frcti_create(fd, qc);
+        if (ai.flows[fd].spec.in_order != 0) {
+                ai.flows[fd].frcti = frcti_create(fd);
                 if (ai.flows[fd].frcti == NULL) {
                         flow_fini(fd);
                         pthread_rwlock_unlock(&ai.lock);
@@ -569,21 +561,17 @@ int flow_alloc(const char *            dst,
                qosspec_t *             qs,
                const struct timespec * timeo)
 {
-        irm_msg_t   msg      = IRM_MSG__INIT;
-        irm_msg_t * recv_msg;
-        qoscube_t   qc       = QOS_CUBE_RAW;
-        int         fd;
+        irm_msg_t     msg    = IRM_MSG__INIT;
+        qosspec_msg_t qs_msg = QOSSPEC_MSG__INIT;
+        irm_msg_t *   recv_msg;
+        int           fd;
 
-        msg.code        = IRM_MSG_CODE__IRM_FLOW_ALLOC;
-        msg.dst         = (char *) dst;
-        msg.has_pid     = true;
-        msg.has_qoscube = true;
-        msg.pid         = ai.pid;
-
-        if (qs != NULL)
-                qc = qos_spec_to_cube(*qs);
-
-        msg.qoscube = qc;
+        msg.code    = IRM_MSG_CODE__IRM_FLOW_ALLOC;
+        msg.dst     = (char *) dst;
+        msg.has_pid = true;
+        msg.pid     = ai.pid;
+        qs_msg      = spec_to_msg(qs);
+        msg.qosspec = &qs_msg;
 
         if (timeo != NULL) {
                 msg.has_timeo_sec = true;
@@ -612,7 +600,8 @@ int flow_alloc(const char *            dst,
                 return -EIRMD;
         }
 
-        fd = flow_init(recv_msg->port_id, recv_msg->pid, qc);
+        fd = flow_init(recv_msg->port_id, recv_msg->pid,
+                       qs == NULL ? qos_raw : *qs);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -623,8 +612,8 @@ int flow_alloc(const char *            dst,
 
         assert(ai.flows[fd].frcti == NULL);
 
-        if (qc != QOS_CUBE_RAW) {
-                ai.flows[fd].frcti = frcti_create(fd, qc);
+        if (ai.flows[fd].spec.in_order != 0) {
+                ai.flows[fd].frcti = frcti_create(fd);
                 if (ai.flows[fd].frcti == NULL) {
                         flow_fini(fd);
                         pthread_rwlock_unlock(&ai.lock);
@@ -1178,9 +1167,9 @@ int fevent(struct flow_set *       set,
 
 int np1_flow_alloc(pid_t     n_pid,
                    int       port_id,
-                   qoscube_t qc)
+                   qosspec_t qs)
 {
-        return flow_init(port_id, n_pid, qc);
+        return flow_init(port_id, n_pid, qs);
 }
 
 int np1_flow_dealloc(int port_id)
@@ -1243,25 +1232,25 @@ int ipcp_create_r(pid_t pid,
 int ipcp_flow_req_arr(pid_t           pid,
                       const uint8_t * dst,
                       size_t          len,
-                      qoscube_t       qc)
+                      qosspec_t       qs)
 {
-        irm_msg_t   msg = IRM_MSG__INIT;
-        irm_msg_t * recv_msg;
-        int         fd;
+        irm_msg_t     msg = IRM_MSG__INIT;
+        irm_msg_t *   recv_msg;
+        qosspec_msg_t qs_msg;
+        int           fd;
 
         assert(dst != NULL);
 
-        msg.code        = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
-        msg.has_pid     = true;
-        msg.pid         = pid;
-        msg.has_hash    = true;
-        msg.hash.len    = len;
-        msg.hash.data   = (uint8_t *) dst;
-        msg.has_qoscube = true;
-        msg.qoscube     = qc;
+        msg.code      = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
+        msg.has_pid   = true;
+        msg.pid       = pid;
+        msg.has_hash  = true;
+        msg.hash.len  = len;
+        msg.hash.data = (uint8_t *) dst;
+        qs_msg        = spec_to_msg(&qs);
+        msg.qosspec   = &qs_msg;
 
         recv_msg = send_recv_irm_msg(&msg);
-
         if (recv_msg == NULL)
                 return -EIRMD;
 
@@ -1275,7 +1264,7 @@ int ipcp_flow_req_arr(pid_t           pid,
                 return -1;
         }
 
-        fd = flow_init(recv_msg->port_id, recv_msg->pid, qc);
+        fd = flow_init(recv_msg->port_id, recv_msg->pid, qs);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -1457,7 +1446,7 @@ int ipcp_flow_get_qoscube(int         fd,
 
         assert(ai.flows[fd].port_id >= 0);
 
-        *cube = ai.flows[fd].cube;
+        *cube = qos_spec_to_cube(ai.flows[fd].spec);
 
         pthread_rwlock_unlock(&ai.lock);
 

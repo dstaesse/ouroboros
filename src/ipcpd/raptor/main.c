@@ -90,11 +90,18 @@
 #define NAME_QUERY_REPLY   3
 
 struct mgmt_msg {
-        uint8_t code;
-        uint8_t ssap;
-        uint8_t dsap;
-        uint8_t qoscube;
-        int8_t  response;
+        uint8_t  code;
+        uint8_t  ssap;
+        uint8_t  dsap;
+        int8_t   response;
+        /* QoS parameters from spec, aligned */
+        uint32_t loss;
+        uint64_t bandwidth;
+        uint32_t ber;
+        uint32_t max_gap;
+        uint32_t delay;
+        uint8_t  in_order;
+        uint8_t  availability;
 } __attribute__((packed));
 
 struct ef {
@@ -278,7 +285,7 @@ static int raptor_send_frame(struct shm_du_buff * sdb,
 
 static int raptor_sap_alloc(uint8_t         ssap,
                             const uint8_t * hash,
-                            qoscube_t       cube)
+                            qosspec_t       qs)
 {
         struct mgmt_msg *    msg;
         struct shm_du_buff * sdb;
@@ -288,10 +295,16 @@ static int raptor_sap_alloc(uint8_t         ssap,
                 return -1;
         }
 
-        msg          = (struct mgmt_msg *) shm_du_buff_head(sdb);
-        msg->code    = FLOW_REQ;
-        msg->ssap    = ssap;
-        msg->qoscube = cube;
+        msg               = (struct mgmt_msg *) shm_du_buff_head(sdb);
+        msg->code         = FLOW_REQ;
+        msg->ssap         = ssap;
+        msg->delay        = hton32(qs.delay);
+        msg->bandwidth    = hton64(qs.bandwidth);
+        msg->availability = qs.availability;
+        msg->loss         = hton32(qs.loss);
+        msg->ber          = hton32(qs.ber);
+        msg->in_order     = qs.in_order;
+        msg->max_gap      = hton32(qs.max_gap);
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
@@ -306,15 +319,15 @@ static int raptor_sap_alloc(uint8_t         ssap,
         return 0;
 }
 
-static int raptor_sap_alloc_resp(uint8_t   ssap,
-                                 uint8_t   dsap,
-                                 int       response)
+static int raptor_sap_alloc_resp(uint8_t ssap,
+                                 uint8_t dsap,
+                                 int     response)
 {
-        struct mgmt_msg * msg;
+        struct mgmt_msg *    msg;
         struct shm_du_buff * sdb;
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg)) < 0) {
-                log_err("failed to reserve sdb for management frame.");
+                log_err("Failed to reserve sdb for management frame.");
                 return -1;
         }
 
@@ -337,7 +350,7 @@ static int raptor_sap_alloc_resp(uint8_t   ssap,
 
 static int raptor_sap_req(uint8_t         r_sap,
                           const uint8_t * dst,
-                          qoscube_t       cube)
+                          qosspec_t       qs)
 {
         struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 1000};
         struct timespec abstime;
@@ -361,7 +374,7 @@ static int raptor_sap_req(uint8_t         r_sap,
         }
 
         /* reply to IRM, called under lock to prevent race */
-        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), cube);
+        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), qs);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -424,12 +437,12 @@ static int raptor_name_query_req(const uint8_t * hash)
                 return 0;
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()) < 0) {
-                log_err("failed to reserve sdb for management frame.");
+                log_err("Failed to reserve sdb for management frame.");
                 return -1;
         }
 
-        msg          = (struct mgmt_msg *) shm_du_buff_head(sdb);
-        msg->code    = NAME_QUERY_REPLY;
+        msg       = (struct mgmt_msg *) shm_du_buff_head(sdb);
+        msg->code = NAME_QUERY_REPLY;
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
@@ -456,8 +469,9 @@ static int raptor_name_query_reply(const uint8_t * hash)
 static int raptor_mgmt_frame(const uint8_t * buf,
                              size_t          len)
 {
-        struct mgmt_msg * msg = (struct mgmt_msg *) buf;
-        uint8_t * hash = (uint8_t *) (msg + 1);
+        struct mgmt_msg * msg  = (struct mgmt_msg *) buf;
+        uint8_t *         hash = (uint8_t *) (msg + 1);
+        qosspec_t         qs;
 
         switch (msg->code) {
         case FLOW_REQ:
@@ -466,8 +480,16 @@ static int raptor_mgmt_frame(const uint8_t * buf,
                         return -1;
                 }
 
+                qs.delay        = ntoh32(msg->delay);
+                qs.bandwidth    = ntoh64(msg->bandwidth);
+                qs.availability = msg->availability;
+                qs.loss         = ntoh32(msg->loss);
+                qs.ber          = ntoh32(msg->ber);
+                qs.in_order     = msg->in_order;
+                qs.max_gap      = ntoh32(msg->max_gap);
+
                 if (shim_data_reg_has(raptor_data.shim_data, hash))
-                        raptor_sap_req(msg->ssap, hash, msg->qoscube);
+                        raptor_sap_req(msg->ssap, hash, qs);
                 break;
         case FLOW_REPLY:
                 if (len != sizeof(*msg)) {
@@ -901,18 +923,13 @@ static int raptor_query(const uint8_t * hash)
 
 static int raptor_flow_alloc(int             fd,
                              const uint8_t * hash,
-                             qoscube_t       cube)
+                             qosspec_t       qs)
 {
         uint8_t  ssap = 0;
 
         log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(hash));
 
         assert(hash);
-
-        if (cube != QOS_CUBE_BE) {
-                log_dbg("Unsupported QoS requested.");
-                return -1;
-        }
 
         if (!shim_data_dir_has(raptor_data.shim_data, hash)) {
                 log_err("Destination unreachable.");
@@ -932,7 +949,7 @@ static int raptor_flow_alloc(int             fd,
 
         pthread_rwlock_unlock(&raptor_data.flows_lock);
 
-        if (raptor_sap_alloc(ssap, hash, cube) < 0) {
+        if (raptor_sap_alloc(ssap, hash, qs) < 0) {
                 pthread_rwlock_wrlock(&raptor_data.flows_lock);
                 bmp_release(raptor_data.saps, raptor_data.fd_to_ef[fd].sap);
                 raptor_data.fd_to_ef[fd].sap = -1;

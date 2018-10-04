@@ -183,7 +183,7 @@ static int ipcp_local_query(const uint8_t * hash)
 
 static int ipcp_local_flow_alloc(int             fd,
                                  const uint8_t * dst,
-                                 qoscube_t       cube)
+                                 qosspec_t       qs)
 {
         struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
         struct timespec abstime;
@@ -212,7 +212,7 @@ static int ipcp_local_flow_alloc(int             fd,
 
         assert(ipcpi.alloc_id == -1);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), cube);
+        out_fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), qs);
         if (out_fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Flow allocation failed: %d", out_fd);

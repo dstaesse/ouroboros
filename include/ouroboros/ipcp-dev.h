@@ -31,7 +31,7 @@ int  ipcp_create_r(pid_t pid,
 int  ipcp_flow_req_arr(pid_t           pid,
                        const uint8_t * dst,
                        size_t          len,
-                       qoscube_t       cube);
+                       qosspec_t       qs);
 
 int  ipcp_flow_alloc_reply(int fd,
                            int response);

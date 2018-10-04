@@ -433,11 +433,12 @@ int ipcp_flow_alloc(pid_t           pid,
                     pid_t           n_pid,
                     const uint8_t * dst,
                     size_t          len,
-                    qoscube_t       cube)
+                    qosspec_t       qs)
 {
-        ipcp_msg_t   msg      = IPCP_MSG__INIT;
-        ipcp_msg_t * recv_msg = NULL;
-        int          ret      = -1;
+        ipcp_msg_t    msg      = IPCP_MSG__INIT;
+        qosspec_msg_t qs_msg;
+        ipcp_msg_t *  recv_msg = NULL;
+        int           ret      = -1;
 
         assert(dst);
 
@@ -449,8 +450,8 @@ int ipcp_flow_alloc(pid_t           pid,
         msg.has_hash     = true;
         msg.hash.len     = len;
         msg.hash.data    = (uint8_t *) dst;
-        msg.has_qoscube  = true;
-        msg.qoscube      = cube;
+        qs_msg           = spec_to_msg(&qs);
+        msg.qosspec      = &qs_msg;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)

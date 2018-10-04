@@ -101,8 +101,7 @@ static void frct_fini(void)
         timerwheel_destroy(frct.tw);
 }
 
-static struct frcti * frcti_create(int       fd,
-                                   qoscube_t qc)
+static struct frcti * frcti_create(int fd)
 {
         struct frcti *  frcti;
         time_t          delta_t;
@@ -133,7 +132,7 @@ static struct frcti * frcti_create(int       fd,
         frcti->snd_cr.inact  = 3 * delta_t;
         frcti->snd_cr.act    = now.tv_sec - (frcti->snd_cr.inact + 1);
 
-        if (qc == QOS_CUBE_DATA)
+        if (ai.flows[fd].spec.loss == 0)
                 frcti->snd_cr.cflags |= FRCTFRTX;
 
         frcti->rcv_cr.inact  = 2 * delta_t;

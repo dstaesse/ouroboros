@@ -36,7 +36,7 @@ void fa_stop(void);
 
 int  fa_alloc(int             fd,
               const uint8_t * dst,
-              qoscube_t       qos);
+              qosspec_t       qs);
 
 int  fa_alloc_resp(int fd,
                    int response);

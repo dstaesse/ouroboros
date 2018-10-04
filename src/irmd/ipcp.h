@@ -67,7 +67,7 @@ int   ipcp_flow_alloc(pid_t           pid,
                       pid_t           n_pid,
                       const uint8_t * dst,
                       size_t          len,
-                      qoscube_t       qos);
+                      qosspec_t       qs);
 
 int   ipcp_flow_alloc_resp(pid_t pid,
                            int   port_id,

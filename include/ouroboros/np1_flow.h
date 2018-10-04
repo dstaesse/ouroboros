@@ -29,7 +29,7 @@
 
 int  np1_flow_alloc(pid_t     n_pid,
                     int       port_id,
-                    qoscube_t qc);
+                    qosspec_t qs);
 
 int  np1_flow_resp(int port_id);
 
