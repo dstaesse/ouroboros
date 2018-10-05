@@ -26,7 +26,6 @@
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/list.h>
-#include <ouroboros/qoscube.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/tpm.h>
 

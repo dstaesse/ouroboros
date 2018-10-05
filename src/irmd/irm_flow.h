@@ -24,8 +24,8 @@
 #define OUROBOROS_IRMD_IRM_FLOW_H
 
 #include <ouroboros/list.h>
+#include <ouroboros/qos.h>
 #include <ouroboros/shm_rbuff.h>
-#include <ouroboros/qoscube.h>
 
 #include <sys/types.h>
 #include <pthread.h>

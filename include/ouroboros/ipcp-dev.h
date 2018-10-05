@@ -21,6 +21,7 @@
  */
 
 #include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/qoscube.h>
 
 #ifndef OUROBOROS_IPCP_DEV_H
 #define OUROBOROS_IPCP_DEV_H

@@ -22,7 +22,6 @@
 
 #include <ouroboros/ipcp.h>
 #include <ouroboros/sockets.h>
-#include <ouroboros/qoscube.h>
 
 #include <sys/types.h>
 

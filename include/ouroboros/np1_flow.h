@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_NP1_FLOW_H
 #define OUROBOROS_NP1_FLOW_H
 
-#include <ouroboros/qoscube.h>
+#include <ouroboros/qos.h>
 
 #include <unistd.h>
 

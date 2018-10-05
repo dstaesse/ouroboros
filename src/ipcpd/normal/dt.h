@@ -24,6 +24,7 @@
 #define OUROBOROS_IPCPD_NORMAL_DT_H
 
 #include <ouroboros/ipcp.h>
+#include <ouroboros/qoscube.h>
 #include <ouroboros/shm_rdrbuff.h>
 
 #define DT_COMP      "Data Transfer"
