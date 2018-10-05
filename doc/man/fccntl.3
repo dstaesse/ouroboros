@@ -73,18 +73,16 @@ buffer. Takes a \fBsize_t \fIqlen\fR as third argument.
 \fBFLOWGTXQLEN\fR   - get the current number of packets in the transmit
 buffer. Takes a \fBsize_t \fIqlen\fR as third argument.
 
-\fBFRCTSFLAGS\fR    - set FRCT flags. Takes FRCT flags as third
-argument.
-
-.RE
-
 \fBFRCTGFLAGS\fR    - get the current flow flags. Takes an \fBuint16_t
 \fIflags\fR as third argument. Supported flags are:
 
 .RS 8
-\fIFRCTFRESCNTRL\fR - enable resource control.
+\fIFRCTFRESCNTRL\fR - resource control enabled.
 
-\fIFRCTFRTX\fR      - enable retransmission.
+\fIFRCTFRTX\fR      - retransmission enabled.
+
+.RE
+
 
 .SH RETURN VALUE
 

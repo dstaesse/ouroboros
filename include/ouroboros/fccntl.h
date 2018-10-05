@@ -61,8 +61,7 @@
 #define FLOWGTXQLEN   00000011 /* Get queue length on tx */
 
 /* FRCT operations */
-#define FRCTSFLAGS    00001000 /* Set flags for FRCT     */
-#define FRCTGFLAGS    00001001 /* Get flags for FRCT     */
+#define FRCTGFLAGS    00001000 /* Get flags for FRCT     */
 
 __BEGIN_DECLS
 
