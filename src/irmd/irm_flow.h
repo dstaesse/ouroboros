@@ -42,7 +42,7 @@ enum flow_state {
 struct irm_flow {
         struct list_head   next;
 
-        int                port_id;
+        int                flow_id;
 
         pid_t              n_pid;
         pid_t              n_1_pid;
@@ -61,7 +61,7 @@ struct irm_flow {
 
 struct irm_flow * irm_flow_create(pid_t     n_pid,
                                   pid_t     n_1_pid,
-                                  int       port_id,
+                                  int       flow_id,
                                   qosspec_t qs);
 
 void              irm_flow_destroy(struct irm_flow * f);

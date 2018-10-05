@@ -91,7 +91,7 @@ struct flow {
         struct shm_rbuff *    rx_rb;
         struct shm_rbuff *    tx_rb;
         struct shm_flow_set * set;
-        int                   port_id;
+        int                   flow_id;
         int                   oflags;
         qosspec_t             spec;
         ssize_t               part_idx;
@@ -167,12 +167,12 @@ static void port_set_state(struct port *   p,
         pthread_mutex_unlock(&p->state_lock);
 }
 
-static enum port_state port_wait_assign(int port_id)
+static enum port_state port_wait_assign(int flow_id)
 {
         enum port_state state;
         struct port *   p;
 
-        p = &ai.ports[port_id];
+        p = &ai.ports[flow_id];
 
         pthread_mutex_lock(&p->state_lock);
 
@@ -231,7 +231,7 @@ static void flow_clear(int fd)
 {
         memset(&ai.flows[fd], 0, sizeof(ai.flows[fd]));
 
-        ai.flows[fd].port_id  = -1;
+        ai.flows[fd].flow_id  = -1;
         ai.flows[fd].pid      = -1;
 }
 
@@ -239,8 +239,8 @@ static void flow_fini(int fd)
 {
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
 
-        if (ai.flows[fd].port_id != -1) {
-                port_destroy(&ai.ports[ai.flows[fd].port_id]);
+        if (ai.flows[fd].flow_id != -1) {
+                port_destroy(&ai.ports[ai.flows[fd].flow_id]);
                 bmp_release(ai.fds, fd);
         }
 
@@ -256,7 +256,7 @@ static void flow_fini(int fd)
 
         if (ai.flows[fd].set != NULL) {
                 shm_flow_set_notify(ai.flows[fd].set,
-                                    ai.flows[fd].port_id,
+                                    ai.flows[fd].flow_id,
                                     FLOW_DEALLOC);
                 shm_flow_set_close(ai.flows[fd].set);
         }
@@ -267,7 +267,7 @@ static void flow_fini(int fd)
         flow_clear(fd);
 }
 
-static int flow_init(int       port_id,
+static int flow_init(int       flow_id,
                      pid_t     pid,
                      qosspec_t qs)
 {
@@ -282,11 +282,11 @@ static int flow_init(int       port_id,
                 goto fail_fds;
         }
 
-        ai.flows[fd].rx_rb = shm_rbuff_open(ai.pid, port_id);
+        ai.flows[fd].rx_rb = shm_rbuff_open(ai.pid, flow_id);
         if (ai.flows[fd].rx_rb == NULL)
                 goto fail;
 
-        ai.flows[fd].tx_rb = shm_rbuff_open(pid, port_id);
+        ai.flows[fd].tx_rb = shm_rbuff_open(pid, flow_id);
         if (ai.flows[fd].tx_rb == NULL)
                 goto fail;
 
@@ -294,15 +294,15 @@ static int flow_init(int       port_id,
         if (ai.flows[fd].set == NULL)
                 goto fail;
 
-        ai.flows[fd].port_id  = port_id;
+        ai.flows[fd].flow_id  = flow_id;
         ai.flows[fd].oflags   = FLOWFDEFAULT;
         ai.flows[fd].pid      = pid;
         ai.flows[fd].part_idx = NO_PART;
         ai.flows[fd].spec     = qs;
 
-        ai.ports[port_id].fd = fd;
+        ai.ports[flow_id].fd = fd;
 
-        port_set_state(&ai.ports[port_id], PORT_ID_ASSIGNED);
+        port_set_state(&ai.ports[flow_id], PORT_ID_ASSIGNED);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -446,7 +446,7 @@ static void fini(void)
         pthread_rwlock_wrlock(&ai.lock);
 
         for (i = 0; i < PROG_MAX_FLOWS; ++i) {
-                if (ai.flows[i].port_id != -1) {
+                if (ai.flows[i].flow_id != -1) {
                         ssize_t idx;
                         shm_rbuff_set_acl(ai.flows[i].rx_rb, ACL_FLOWDOWN);
                         while ((idx = shm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
@@ -522,13 +522,13 @@ int flow_accept(qosspec_t *             qs,
                 return res;
         }
 
-        if (!recv_msg->has_pid || !recv_msg->has_port_id ||
+        if (!recv_msg->has_pid || !recv_msg->has_flow_id ||
             recv_msg->qosspec == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
         }
 
-        fd = flow_init(recv_msg->port_id, recv_msg->pid,
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
                        msg_to_spec(recv_msg->qosspec));
 
         irm_msg__free_unpacked(recv_msg, NULL);
@@ -595,12 +595,12 @@ int flow_alloc(const char *            dst,
                 return res;
         }
 
-        if (!recv_msg->has_pid || !recv_msg->has_port_id) {
+        if (!recv_msg->has_pid || !recv_msg->has_flow_id) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -EIRMD;
         }
 
-        fd = flow_init(recv_msg->port_id, recv_msg->pid,
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
                        qs == NULL ? qos_raw : *qs);
 
         irm_msg__free_unpacked(recv_msg, NULL);
@@ -635,15 +635,15 @@ int flow_dealloc(int fd)
                 return -EINVAL;
 
         msg.code         = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
-        msg.has_port_id  = true;
+        msg.has_flow_id  = true;
         msg.has_pid      = true;
         msg.pid          = ai.pid;
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        assert(ai.flows[fd].port_id >= 0);
+        assert(ai.flows[fd].flow_id >= 0);
 
-        msg.port_id = ai.flows[fd].port_id;
+        msg.flow_id = ai.flows[fd].flow_id;
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -690,7 +690,7 @@ int fccntl(int fd,
 
         pthread_rwlock_wrlock(&ai.lock);
 
-        if (flow->port_id < 0) {
+        if (flow->flow_id < 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 va_end(l);
                 return -ENOTALLOC;
@@ -762,13 +762,13 @@ int fccntl(int fd,
                         rx_acl |= ACL_FLOWDOWN;
                         tx_acl |= ACL_FLOWDOWN;
                         shm_flow_set_notify(flow->set,
-                                            flow->port_id,
+                                            flow->flow_id,
                                             FLOW_DOWN);
                 } else {
                         rx_acl &= ~ACL_FLOWDOWN;
                         tx_acl &= ~ACL_FLOWDOWN;
                         shm_flow_set_notify(flow->set,
-                                            flow->port_id,
+                                            flow->flow_id,
                                             FLOW_UP);
                 }
 
@@ -836,7 +836,7 @@ ssize_t flow_write(int          fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        if (flow->port_id < 0) {
+        if (flow->flow_id < 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 return -ENOTALLOC;
         }
@@ -880,7 +880,7 @@ ssize_t flow_write(int          fd,
         if (ret < 0)
                 shm_rdrbuff_remove(ai.rdrb, idx);
         else
-                shm_flow_set_notify(flow->set, flow->port_id, FLOW_PKT);
+                shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -918,7 +918,7 @@ ssize_t flow_read(int    fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        if (flow->port_id < 0) {
+        if (flow->flow_id < 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 return -ENOTALLOC;
         }
@@ -1050,11 +1050,11 @@ int fset_add(struct flow_set * set,
 
         pthread_rwlock_wrlock(&ai.lock);
 
-        ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].port_id);
+        ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].flow_id);
 
         packets = shm_rbuff_queued(ai.flows[fd].rx_rb);
         for (i = 0; i < packets; i++)
-                shm_flow_set_notify(ai.fqset, ai.flows[fd].port_id, FLOW_PKT);
+                shm_flow_set_notify(ai.fqset, ai.flows[fd].flow_id, FLOW_PKT);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1069,8 +1069,8 @@ void fset_del(struct flow_set * set,
 
         pthread_rwlock_wrlock(&ai.lock);
 
-        if (ai.flows[fd].port_id >= 0)
-                shm_flow_set_del(ai.fqset, set->idx, ai.flows[fd].port_id);
+        if (ai.flows[fd].flow_id >= 0)
+                shm_flow_set_del(ai.fqset, set->idx, ai.flows[fd].flow_id);
 
         pthread_rwlock_unlock(&ai.lock);
 }
@@ -1085,12 +1085,12 @@ bool fset_has(const struct flow_set * set,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        if (ai.flows[fd].port_id < 0) {
+        if (ai.flows[fd].flow_id < 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 return false;
         }
 
-        ret = (shm_flow_set_has(ai.fqset, set->idx, ai.flows[fd].port_id) == 1);
+        ret = (shm_flow_set_has(ai.fqset, set->idx, ai.flows[fd].flow_id) == 1);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1166,35 +1166,35 @@ int fevent(struct flow_set *       set,
 /* ipcp-dev functions. */
 
 int np1_flow_alloc(pid_t     n_pid,
-                   int       port_id,
+                   int       flow_id,
                    qosspec_t qs)
 {
-        return flow_init(port_id, n_pid, qs);
+        return flow_init(flow_id, n_pid, qs);
 }
 
-int np1_flow_dealloc(int port_id)
+int np1_flow_dealloc(int flow_id)
 {
         int fd;
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        fd = ai.ports[port_id].fd;
+        fd = ai.ports[flow_id].fd;
 
         pthread_rwlock_unlock(&ai.lock);
 
         return fd;
 }
 
-int np1_flow_resp(int port_id)
+int np1_flow_resp(int flow_id)
 {
         int fd;
 
-        if (port_wait_assign(port_id) != PORT_ID_ASSIGNED)
+        if (port_wait_assign(flow_id) != PORT_ID_ASSIGNED)
                 return -1;
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        fd = ai.ports[port_id].fd;
+        fd = ai.ports[flow_id].fd;
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1254,7 +1254,7 @@ int ipcp_flow_req_arr(pid_t           pid,
         if (recv_msg == NULL)
                 return -EIRMD;
 
-        if (!recv_msg->has_port_id || !recv_msg->has_pid) {
+        if (!recv_msg->has_flow_id || !recv_msg->has_pid) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -1;
         }
@@ -1264,7 +1264,7 @@ int ipcp_flow_req_arr(pid_t           pid,
                 return -1;
         }
 
-        fd = flow_init(recv_msg->port_id, recv_msg->pid, qs);
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid, qs);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -1281,11 +1281,11 @@ int ipcp_flow_alloc_reply(int fd,
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
 
         msg.code         = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
-        msg.has_port_id  = true;
+        msg.has_flow_id  = true;
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        msg.port_id = ai.flows[fd].port_id;
+        msg.flow_id = ai.flows[fd].flow_id;
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1322,7 +1322,7 @@ int ipcp_flow_read(int                   fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        assert(flow->port_id >= 0);
+        assert(flow->flow_id >= 0);
 
         rb = flow->rx_rb;
 
@@ -1360,7 +1360,7 @@ int ipcp_flow_write(int                  fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        assert(flow->port_id >= 0);
+        assert(flow->flow_id >= 0);
 
         if ((flow->oflags & FLOWFACCMODE) == FLOWFRDONLY) {
                 pthread_rwlock_unlock(&ai.lock);
@@ -1378,7 +1378,7 @@ int ipcp_flow_write(int                  fd,
 
         ret = shm_rbuff_write(flow->tx_rb, idx);
         if (ret == 0)
-                shm_flow_set_notify(flow->set, flow->port_id, FLOW_PKT);
+                shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1424,7 +1424,7 @@ void ipcp_flow_fini(int fd)
         shm_rbuff_set_acl(ai.flows[fd].tx_rb, ACL_FLOWDOWN);
 
         shm_flow_set_notify(ai.flows[fd].set,
-                            ai.flows[fd].port_id,
+                            ai.flows[fd].flow_id,
                             FLOW_DEALLOC);
 
         rx_rb = ai.flows[fd].rx_rb;
@@ -1444,7 +1444,7 @@ int ipcp_flow_get_qoscube(int         fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        assert(ai.flows[fd].port_id >= 0);
+        assert(ai.flows[fd].flow_id >= 0);
 
         *cube = qos_spec_to_cube(ai.flows[fd].spec);
 
@@ -1480,14 +1480,14 @@ int local_flow_write(int    fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        if (flow->port_id < 0) {
+        if (flow->flow_id < 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 return -ENOTALLOC;
         }
 
         ret = shm_rbuff_write(flow->tx_rb, idx);
         if (ret == 0)
-                shm_flow_set_notify(flow->set, flow->port_id, FLOW_PKT);
+                shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
 
         pthread_rwlock_unlock(&ai.lock);
 

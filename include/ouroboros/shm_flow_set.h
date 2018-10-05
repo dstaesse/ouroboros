@@ -42,18 +42,18 @@ void                  shm_flow_set_zero(struct shm_flow_set * shm_set,
 
 int                   shm_flow_set_add(struct shm_flow_set * shm_set,
                                        size_t                idx,
-                                       int                   port_id);
+                                       int                   flow_id);
 
 int                   shm_flow_set_has(struct shm_flow_set * shm_set,
                                        size_t                idx,
-                                       int                   port_id);
+                                       int                   flow_id);
 
 void                  shm_flow_set_del(struct shm_flow_set * shm_set,
                                        size_t                idx,
-                                       int                   port_id);
+                                       int                   flow_id);
 
 void                  shm_flow_set_notify(struct shm_flow_set * set,
-                                          int                   port_id,
+                                          int                   flow_id,
                                           int                   event);
 
 ssize_t               shm_flow_set_wait(const struct shm_flow_set * shm_set,

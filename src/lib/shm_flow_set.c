@@ -64,7 +64,7 @@
 #define fqueue_ptr(fs, idx) (fs->fqueues + (SHM_BUFFER_SIZE) * idx)
 
 struct portevent {
-        int port_id;
+        int flow_id;
         int event;
 };
 
@@ -268,20 +268,20 @@ void shm_flow_set_zero(struct shm_flow_set * set,
 
 int shm_flow_set_add(struct shm_flow_set * set,
                      size_t                idx,
-                     int                   port_id)
+                     int                   flow_id)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
         assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[port_id] != -1) {
+        if (set->mtable[flow_id] != -1) {
                 pthread_mutex_unlock(set->lock);
                 return -EPERM;
         }
 
-        set->mtable[port_id] = idx;
+        set->mtable[flow_id] = idx;
 
         pthread_mutex_unlock(set->lock);
 
@@ -290,33 +290,33 @@ int shm_flow_set_add(struct shm_flow_set * set,
 
 void shm_flow_set_del(struct shm_flow_set * set,
                       size_t                idx,
-                      int                   port_id)
+                      int                   flow_id)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
         assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[port_id] == (ssize_t) idx)
-                set->mtable[port_id] = -1;
+        if (set->mtable[flow_id] == (ssize_t) idx)
+                set->mtable[flow_id] = -1;
 
         pthread_mutex_unlock(set->lock);
 }
 
 int shm_flow_set_has(struct shm_flow_set * set,
                      size_t                idx,
-                     int                   port_id)
+                     int                   flow_id)
 {
         int ret = 0;
 
         assert(set);
-        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
         assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[port_id] == (ssize_t) idx)
+        if (set->mtable[flow_id] == (ssize_t) idx)
                 ret = 1;
 
         pthread_mutex_unlock(set->lock);
@@ -325,25 +325,25 @@ int shm_flow_set_has(struct shm_flow_set * set,
 }
 
 void shm_flow_set_notify(struct shm_flow_set * set,
-                         int                   port_id,
+                         int                   flow_id,
                          int                   event)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[port_id] == -1) {
+        if (set->mtable[flow_id] == -1) {
                 pthread_mutex_unlock(set->lock);
                 return;
         }
 
-        (fqueue_ptr(set, set->mtable[port_id]) +
-         (set->heads[set->mtable[port_id]]))->port_id = port_id;
-        (fqueue_ptr(set, set->mtable[port_id]) +
-         (set->heads[set->mtable[port_id]])++)->event = event;
+        (fqueue_ptr(set, set->mtable[flow_id]) +
+         (set->heads[set->mtable[flow_id]]))->flow_id = flow_id;
+        (fqueue_ptr(set, set->mtable[flow_id]) +
+         (set->heads[set->mtable[flow_id]])++)->event = event;
 
-        pthread_cond_signal(&set->conds[set->mtable[port_id]]);
+        pthread_cond_signal(&set->conds[set->mtable[flow_id]]);
 
         pthread_mutex_unlock(set->lock);
 }

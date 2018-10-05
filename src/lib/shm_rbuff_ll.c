@@ -29,7 +29,7 @@ void shm_rbuff_destroy(struct shm_rbuff * rb)
 
         assert(rb);
 
-        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->pid, rb->port_id);
+        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->pid, rb->flow_id);
 
         shm_rbuff_close(rb);
 

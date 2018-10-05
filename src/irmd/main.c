@@ -118,7 +118,7 @@ struct {
         struct list_head     spawned_pids; /* child processes            */
         pthread_rwlock_t     reg_lock;     /* lock for registration info */
 
-        struct bmp *         port_ids;     /* port_ids for flows         */
+        struct bmp *         flow_ids;     /* flow_ids for flows         */
         struct list_head     irm_flows;    /* flow information           */
         pthread_rwlock_t     flows_lock;   /* lock for flows             */
 
@@ -174,13 +174,13 @@ static void clear_irm_flow(struct irm_flow * f) {
                 shm_rdrbuff_remove(irmd.rdrb, idx);
 }
 
-static struct irm_flow * get_irm_flow(int port_id)
+static struct irm_flow * get_irm_flow(int flow_id)
 {
         struct list_head * pos = NULL;
 
         list_for_each(pos, &irmd.irm_flows) {
                 struct irm_flow * e = list_entry(pos, struct irm_flow, next);
-                if (e->port_id == port_id)
+                if (e->flow_id == flow_id)
                         return e;
         }
 
@@ -1152,7 +1152,7 @@ static int flow_accept(pid_t              pid,
 
         pid_t pid_n1;
         pid_t pid_n;
-        int   port_id;
+        int   flow_id;
         int   ret;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
@@ -1198,7 +1198,7 @@ static int flow_accept(pid_t              pid,
 
         pid_n   = f->n_pid;
         pid_n1  = f->n_1_pid;
-        port_id = f->port_id;
+        flow_id = f->flow_id;
 
         pthread_rwlock_unlock(&irmd.flows_lock);
         pthread_rwlock_rdlock(&irmd.reg_lock);
@@ -1208,9 +1208,9 @@ static int flow_accept(pid_t              pid,
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
-                bmp_release(irmd.port_ids, f->port_id);
+                bmp_release(irmd.flow_ids, f->flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                ipcp_flow_alloc_resp(pid_n1, port_id, pid_n, -1);
+                ipcp_flow_alloc_resp(pid_n1, flow_id, pid_n, -1);
                 clear_irm_flow(f);
                 irm_flow_set_state(f, FLOW_NULL);
                 irm_flow_destroy(f);
@@ -1228,9 +1228,9 @@ static int flow_accept(pid_t              pid,
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
-                bmp_release(irmd.port_ids, f->port_id);
+                bmp_release(irmd.flow_ids, f->flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                ipcp_flow_alloc_resp(pid_n1, port_id, pid_n, -1);
+                ipcp_flow_alloc_resp(pid_n1, flow_id, pid_n, -1);
                 clear_irm_flow(f);
                 irm_flow_set_state(f, FLOW_NULL);
                 irm_flow_destroy(f);
@@ -1242,7 +1242,7 @@ static int flow_accept(pid_t              pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        if (ipcp_flow_alloc_resp(pid_n1, port_id, pid_n, 0)) {
+        if (ipcp_flow_alloc_resp(pid_n1, flow_id, pid_n, 0)) {
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1255,7 +1255,7 @@ static int flow_accept(pid_t              pid,
 
         irm_flow_set_state(f, FLOW_ALLOCATED);
 
-        log_info("Flow on port_id %d allocated.", f->port_id);
+        log_info("Flow on flow_id %d allocated.", f->flow_id);
 
         *fl = f;
 
@@ -1270,7 +1270,7 @@ static int flow_alloc(pid_t              pid,
 {
         struct irm_flow *   f;
         struct ipcp_entry * ipcp;
-        int                 port_id;
+        int                 flow_id;
         int                 state;
         uint8_t *           hash;
 
@@ -1281,18 +1281,18 @@ static int flow_alloc(pid_t              pid,
         }
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
-        port_id = bmp_allocate(irmd.port_ids);
-        if (!bmp_is_id_valid(irmd.port_ids, port_id)) {
+        flow_id = bmp_allocate(irmd.flow_ids);
+        if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                log_err("Could not allocate port_id.");
+                log_err("Could not allocate flow_id.");
                 return -EBADF;
         }
 
-        f = irm_flow_create(pid, ipcp->pid, port_id, qs);
+        f = irm_flow_create(pid, ipcp->pid, flow_id, qs);
         if (f == NULL) {
-                bmp_release(irmd.port_ids, port_id);
+                bmp_release(irmd.flow_ids, flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                log_err("Could not allocate port_id.");
+                log_err("Could not allocate flow_id.");
                 return -ENOMEM;
         }
 
@@ -1309,7 +1309,7 @@ static int flow_alloc(pid_t              pid,
 
         str_hash(ipcp->dir_hash_algo, hash, dst);
 
-        if (ipcp_flow_alloc(ipcp->pid, port_id, pid, hash,
+        if (ipcp_flow_alloc(ipcp->pid, flow_id, pid, hash,
                             IPCP_HASH_LEN(ipcp), qs)) {
                 /* sanitizer cleans this */
                 log_info("Flow_allocation failed.");
@@ -1334,13 +1334,13 @@ static int flow_alloc(pid_t              pid,
 
         *e = f;
 
-        log_info("Flow on port_id %d allocated.", port_id);
+        log_info("Flow on flow_id %d allocated.", flow_id);
 
         return 0;
 }
 
 static int flow_dealloc(pid_t pid,
-                        int   port_id)
+                        int   flow_id)
 {
         pid_t n_1_pid = -1;
         int   ret = 0;
@@ -1349,10 +1349,10 @@ static int flow_dealloc(pid_t pid,
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
 
-        f = get_irm_flow(port_id);
+        f = get_irm_flow(flow_id);
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                log_dbg("Deallocate unknown port %d by %d.", port_id, pid);
+                log_dbg("Deallocate unknown port %d by %d.", flow_id, pid);
                 return 0;
         }
 
@@ -1374,19 +1374,19 @@ static int flow_dealloc(pid_t pid,
                         irm_flow_set_state(f, FLOW_NULL);
                 clear_irm_flow(f);
                 irm_flow_destroy(f);
-                bmp_release(irmd.port_ids, port_id);
-                log_info("Completed deallocation of port_id %d by process %d.",
-                         port_id, pid);
+                bmp_release(irmd.flow_ids, flow_id);
+                log_info("Completed deallocation of flow_id %d by process %d.",
+                         flow_id, pid);
         } else {
                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                log_dbg("Partial deallocation of port_id %d by process %d.",
-                        port_id, pid);
+                log_dbg("Partial deallocation of flow_id %d by process %d.",
+                        flow_id, pid);
         }
 
         pthread_rwlock_unlock(&irmd.flows_lock);
 
         if (n_1_pid != -1)
-                ret = ipcp_flow_dealloc(n_1_pid, port_id);
+                ret = ipcp_flow_dealloc(n_1_pid, flow_id);
 
         return ret;
 }
@@ -1428,7 +1428,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
         struct pid_el *     c_pid;
         struct ipcp_entry * ipcp;
         pid_t               h_pid   = -1;
-        int                 port_id = -1;
+        int                 flow_id = -1;
 
         struct timespec wt = {IRMD_REQ_ARR_TIMEOUT / 1000,
                               (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
@@ -1515,17 +1515,17 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
         pthread_rwlock_wrlock(&irmd.flows_lock);
-        port_id = bmp_allocate(irmd.port_ids);
-        if (!bmp_is_id_valid(irmd.port_ids, port_id)) {
+        flow_id = bmp_allocate(irmd.flow_ids);
+        if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 return NULL;
         }
 
-        f = irm_flow_create(h_pid, pid, port_id, qs);
+        f = irm_flow_create(h_pid, pid, flow_id, qs);
         if (f == NULL) {
-                bmp_release(irmd.port_ids, port_id);
+                bmp_release(irmd.flow_ids, flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                log_err("Could not allocate port_id.");
+                log_err("Could not allocate flow_id.");
                 return NULL;
         }
 
@@ -1541,7 +1541,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 clear_irm_flow(f);
-                bmp_release(irmd.port_ids, f->port_id);
+                bmp_release(irmd.flow_ids, f->flow_id);
                 list_del(&f->next);
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 log_err("Could not get process table entry for %d.", h_pid);
@@ -1558,14 +1558,14 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
         return f;
 }
 
-static int flow_alloc_reply(int port_id,
+static int flow_alloc_reply(int flow_id,
                             int response)
 {
         struct irm_flow * f;
 
         pthread_rwlock_rdlock(&irmd.flows_lock);
 
-        f = get_irm_flow(port_id);
+        f = get_irm_flow(flow_id);
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 return -1;
@@ -1631,8 +1631,8 @@ static void irm_fini(void)
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
 
-        if (irmd.port_ids != NULL)
-                bmp_destroy(irmd.port_ids);
+        if (irmd.flow_ids != NULL)
+                bmp_destroy(irmd.flow_ids);
 
         list_for_each_safe(p, h, &irmd.irm_flows) {
                 struct irm_flow * f = list_entry(p, struct irm_flow, next);
@@ -1759,14 +1759,14 @@ void * irm_sanitize(void * o)
 
                 list_for_each_safe(p, h, &irmd.irm_flows) {
                         int ipcpi;
-                        int port_id;
+                        int flow_id;
                         struct irm_flow * f =
                                 list_entry(p, struct irm_flow, next);
 
                         if (irm_flow_get_state(f) == FLOW_ALLOC_PENDING
                             && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
-                                log_dbg("Pending port_id %d timed out.",
-                                         f->port_id);
+                                log_dbg("Pending flow_id %d timed out.",
+                                         f->flow_id);
                                 f->n_pid = -1;
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 continue;
@@ -1776,16 +1776,16 @@ void * irm_sanitize(void * o)
                                 struct shm_flow_set * set;
                                 log_dbg("Process %d gone, deallocating "
                                         "flow %d.",
-                                         f->n_pid, f->port_id);
+                                         f->n_pid, f->flow_id);
                                 set = shm_flow_set_open(f->n_pid);
                                 if (set != NULL)
                                         shm_flow_set_destroy(set);
                                 f->n_pid = -1;
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 ipcpi   = f->n_1_pid;
-                                port_id = f->port_id;
+                                flow_id = f->flow_id;
                                 pthread_rwlock_unlock(&irmd.flows_lock);
-                                ipcp_flow_dealloc(ipcpi, port_id);
+                                ipcp_flow_dealloc(ipcpi, flow_id);
                                 pthread_rwlock_wrlock(&irmd.flows_lock);
                                 continue;
                         }
@@ -1793,7 +1793,7 @@ void * irm_sanitize(void * o)
                         if (kill(f->n_1_pid, 0) < 0) {
                                 struct shm_flow_set * set;
                                 log_err("IPCP %d gone, flow %d removed.",
-                                        f->n_1_pid, f->port_id);
+                                        f->n_1_pid, f->flow_id);
                                 set = shm_flow_set_open(f->n_pid);
                                 if (set != NULL)
                                         shm_flow_set_destroy(set);
@@ -1994,8 +1994,8 @@ static void * mainloop(void * o)
                         result = flow_accept(msg->pid, timeo, &e);
                         if (result == 0) {
                                 qosspec_msg_t qs_msg;
-                                ret_msg->has_port_id = true;
-                                ret_msg->port_id     = e->port_id;
+                                ret_msg->has_flow_id = true;
+                                ret_msg->flow_id     = e->flow_id;
                                 ret_msg->has_pid     = true;
                                 ret_msg->pid         = e->n_1_pid;
                                 qs_msg = spec_to_msg(&e->qs);
@@ -2007,14 +2007,14 @@ static void * mainloop(void * o)
                                             msg_to_spec(msg->qosspec),
                                             timeo, &e);
                         if (result == 0) {
-                                ret_msg->has_port_id = true;
-                                ret_msg->port_id     = e->port_id;
+                                ret_msg->has_flow_id = true;
+                                ret_msg->flow_id     = e->flow_id;
                                 ret_msg->has_pid     = true;
                                 ret_msg->pid         = e->n_1_pid;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
-                        result = flow_dealloc(msg->pid, msg->port_id);
+                        result = flow_dealloc(msg->pid, msg->flow_id);
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         e = flow_req_arr(msg->pid,
@@ -2022,14 +2022,14 @@ static void * mainloop(void * o)
                                          msg_to_spec(msg->qosspec));
                         result = (e == NULL ? -1 : 0);
                         if (result == 0) {
-                                ret_msg->has_port_id = true;
-                                ret_msg->port_id     = e->port_id;
+                                ret_msg->has_flow_id = true;
+                                ret_msg->flow_id     = e->flow_id;
                                 ret_msg->has_pid     = true;
                                 ret_msg->pid         = e->n_pid;
                         }
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
-                        result = flow_alloc_reply(msg->port_id, msg->response);
+                        result = flow_alloc_reply(msg->flow_id, msg->response);
                         break;
                 default:
                         log_err("Don't know that message code.");
@@ -2143,10 +2143,10 @@ static int irm_init(void)
         list_head_init(&irmd.irm_flows);
         list_head_init(&irmd.cmds);
 
-        irmd.port_ids = bmp_create(SYS_MAX_FLOWS, 0);
-        if (irmd.port_ids == NULL) {
-                log_err("Failed to create port_ids bitmap.");
-                goto fail_port_ids;
+        irmd.flow_ids = bmp_create(SYS_MAX_FLOWS, 0);
+        if (irmd.flow_ids == NULL) {
+                log_err("Failed to create flow_ids bitmap.");
+                goto fail_flow_ids;
         }
 
         if ((irmd.lf = lockfile_create()) == NULL) {
@@ -2235,8 +2235,8 @@ static int irm_init(void)
  fail_stat:
         lockfile_destroy(irmd.lf);
  fail_lockfile:
-        bmp_destroy(irmd.port_ids);
- fail_port_ids:
+        bmp_destroy(irmd.flow_ids);
+ fail_flow_ids:
         pthread_cond_destroy(&irmd.cmd_cond);
  fail_cmd_cond:
         pthread_mutex_destroy(&irmd.cmd_lock);

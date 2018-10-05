@@ -42,7 +42,7 @@ enum ipcp_msg_code {
 message ipcp_msg {
         required ipcp_msg_code code        =  1;
         optional bytes hash                =  2;
-        optional int32 port_id             =  3;
+        optional int32 flow_id             =  3;
         optional string dst                =  4;
         optional qosspec_msg qosspec       =  5;
         optional ipcp_config_msg conf      =  6;

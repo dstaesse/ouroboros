@@ -38,7 +38,7 @@
 
 struct irm_flow * irm_flow_create(pid_t     n_pid,
                                   pid_t     n_1_pid,
-                                  int       port_id,
+                                  int       flow_id,
                                   qosspec_t qs)
 {
         pthread_condattr_t cattr;
@@ -60,16 +60,16 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
 
         f->n_pid   = n_pid;
         f->n_1_pid = n_1_pid;
-        f->port_id = port_id;
+        f->flow_id = flow_id;
         f->qs      = qs;
 
-        f->n_rb = shm_rbuff_create(n_pid, port_id);
+        f->n_rb = shm_rbuff_create(n_pid, flow_id);
         if (f->n_rb == NULL) {
                 log_err("Could not create ringbuffer for process %d.", n_pid);
                 goto fail_n_rbuff;
         }
 
-        f->n_1_rb = shm_rbuff_create(n_1_pid, port_id);
+        f->n_1_rb = shm_rbuff_create(n_1_pid, flow_id);
         if (f->n_1_rb == NULL) {
                 log_err("Could not create ringbuffer for process %d.", n_1_pid);
                 goto fail_n_1_rbuff;

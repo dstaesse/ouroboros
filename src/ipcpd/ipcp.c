@@ -432,11 +432,11 @@ static void * mainloop(void * o)
 
                         qs = msg_to_spec(msg->qosspec);
                         fd = np1_flow_alloc(msg->pid,
-                                            msg->port_id,
+                                            msg->flow_id,
                                             qs);
                         if (fd < 0) {
-                                log_err("Failed allocating fd on port_id %d.",
-                                        msg->port_id);
+                                log_err("Failed allocating fd on flow_id %d.",
+                                        msg->flow_id);
                                 ret_msg.result = -1;
                                 break;
                         }
@@ -461,10 +461,10 @@ static void * mainloop(void * o)
                         }
 
                         if (!msg->response) {
-                                fd = np1_flow_resp(msg->port_id);
+                                fd = np1_flow_resp(msg->flow_id);
                                 if (fd < 0) {
                                         log_warn("Port_id %d is not known.",
-                                                 msg->port_id);
+                                                 msg->flow_id);
                                         ret_msg.result = -1;
                                         break;
                                 }
@@ -488,10 +488,10 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        fd = np1_flow_dealloc(msg->port_id);
+                        fd = np1_flow_dealloc(msg->flow_id);
                         if (fd < 0) {
-                                log_warn("Could not deallocate port_id %d.",
-                                        msg->port_id);
+                                log_warn("Could not deallocate flow_id %d.",
+                                        msg->flow_id);
                                 ret_msg.result = -1;
                                 break;
                         }
