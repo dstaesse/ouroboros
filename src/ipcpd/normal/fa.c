@@ -39,7 +39,7 @@
 
 #include "dir.h"
 #include "fa.h"
-#include "sdu_sched.h"
+#include "packet_sched.h"
 #include "ipcp.h"
 #include "dt.h"
 
@@ -74,19 +74,19 @@ struct {
         uint64_t           r_addr[PROG_MAX_FLOWS];
         int                fd;
 
-        struct sdu_sched * sdu_sched;
+        struct packet_sched * packet_sched;
 } fa;
 
-static void sdu_handler(int                  fd,
-                        qoscube_t            qc,
-                        struct shm_du_buff * sdb)
+static void packet_handler(int                  fd,
+                           qoscube_t            qc,
+                           struct shm_du_buff * sdb)
 {
         pthread_rwlock_rdlock(&fa.flows_lock);
 
-        if (dt_write_sdu(fa.r_addr[fd], qc, fa.r_eid[fd], sdb)) {
+        if (dt_write_packet(fa.r_addr[fd], qc, fa.r_eid[fd], sdb)) {
                 pthread_rwlock_unlock(&fa.flows_lock);
                 ipcp_sdb_release(sdb);
-                log_warn("Failed to forward SDU.");
+                log_warn("Failed to forward packet.");
                 return;
         }
 
@@ -99,7 +99,7 @@ static void destroy_conn(int fd)
         fa.r_addr[fd] = INVALID_ADDR;
 }
 
-static void fa_post_sdu(void *               comp,
+static void fa_post_packet(void *               comp,
                         struct shm_du_buff * sdb)
 {
         struct timespec ts  = {0, TIMEOUT * 1000};
@@ -192,7 +192,7 @@ static void fa_post_sdu(void *               comp,
                 if (msg->response < 0)
                         destroy_conn(ntoh32(msg->r_eid));
                 else
-                        sdu_sched_add(fa.sdu_sched, ntoh32(msg->r_eid));
+                        packet_sched_add(fa.packet_sched, ntoh32(msg->r_eid));
 
                 pthread_rwlock_unlock(&fa.flows_lock);
 
@@ -215,7 +215,7 @@ int fa_init(void)
         if (pthread_rwlock_init(&fa.flows_lock, NULL))
                 return -1;
 
-        fa.fd = dt_reg_comp(&fa, &fa_post_sdu, FA);
+        fa.fd = dt_reg_comp(&fa, &fa_post_packet, FA);
 
         return 0;
 }
@@ -227,9 +227,9 @@ void fa_fini(void)
 
 int fa_start(void)
 {
-        fa.sdu_sched = sdu_sched_create(sdu_handler);
-        if (fa.sdu_sched == NULL) {
-                log_err("Failed to create SDU scheduler.");
+        fa.packet_sched = packet_sched_create(packet_handler);
+        if (fa.packet_sched == NULL) {
+                log_err("Failed to create packet scheduler.");
                 return -1;
         }
 
@@ -238,7 +238,7 @@ int fa_start(void)
 
 void fa_stop(void)
 {
-        sdu_sched_destroy(fa.sdu_sched);
+        packet_sched_destroy(fa.packet_sched);
 }
 
 int fa_alloc(int             fd,
@@ -273,7 +273,7 @@ int fa_alloc(int             fd,
 
         qc = qos_spec_to_cube(qs);
 
-        if (dt_write_sdu(addr, qc, fa.fd, sdb)) {
+        if (dt_write_packet(addr, qc, fa.fd, sdb)) {
                 ipcp_sdb_release(sdb);
                 return -1;
         }
@@ -335,14 +335,14 @@ int fa_alloc_resp(int fd,
                 destroy_conn(fd);
                 ipcp_sdb_release(sdb);
         } else {
-                sdu_sched_add(fa.sdu_sched, fd);
+                packet_sched_add(fa.packet_sched, fd);
         }
 
         ipcp_flow_get_qoscube(fd, &qc);
 
         assert(qc >= 0 && qc < QOS_CUBE_MAX);
 
-        if (dt_write_sdu(fa.r_addr[fd], qc, fa.fd, sdb)) {
+        if (dt_write_packet(fa.r_addr[fd], qc, fa.fd, sdb)) {
                 destroy_conn(fd);
                 pthread_rwlock_unlock(&fa.flows_lock);
                 ipcp_sdb_release(sdb);
@@ -360,7 +360,7 @@ int fa_dealloc(int fd)
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
-        sdu_sched_del(fa.sdu_sched, fd);
+        packet_sched_del(fa.packet_sched, fd);
 
         destroy_conn(fd);
 

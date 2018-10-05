@@ -120,11 +120,12 @@ void * writer(void * o)
         msg = (struct msg *) buf;
 
         if (client.flood)
-                printf("Flooding %s with %d byte SDUs for %d seconds.\n\n",
+                printf("Flooding %s with %d byte packets for %d seconds.\n\n",
                        client.server_name, client.size,
                        client.duration / 1000);
         else
-                printf("Sending %d byte SDUs for %d s to %s at %.3lf Mb/s.\n\n",
+                printf("Sending %d byte packets for %d s to %s "
+                       "at %.3lf Mb/s.\n\n",
                        client.size, client.duration / 1000,
                        client.server_name,
                        client.rate / (double) MILLION);
@@ -141,7 +142,7 @@ void * writer(void * o)
                 msg->id = client.sent;
 
                 if (flow_write(*fdp, buf, client.size) == -1) {
-                        printf("Failed to send SDU.\n");
+                        printf("Failed to send packet.\n");
                         flow_dealloc(*fdp);
                         free(buf);
                         return (void *) -1;
@@ -225,7 +226,7 @@ int client_main(void)
 
                 printf("\n");
                 printf("--- %s perf statistics ---\n", client.server_name);
-                printf("%ld SDUs transmitted, ", client.sent);
+                printf("%ld packets transmitted, ", client.sent);
                 printf("%ld received, ", client.rcvd);
                 printf("%ld%% packet loss, ", client.sent == 0 ? 0 :
                        100 - ((100 * client.rcvd) / client.sent));

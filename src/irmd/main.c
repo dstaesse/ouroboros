@@ -123,7 +123,7 @@ struct {
         pthread_rwlock_t     flows_lock;   /* lock for flows             */
 
         struct lockfile *    lf;           /* single irmd per system     */
-        struct shm_rdrbuff * rdrb;         /* rdrbuff for SDUs           */
+        struct shm_rdrbuff * rdrb;         /* rdrbuff for packets        */
 
         int                  sockfd;       /* UNIX socket                */
 

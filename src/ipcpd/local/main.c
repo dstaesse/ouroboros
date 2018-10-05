@@ -59,7 +59,7 @@ struct {
         fqueue_t *         fq;
 
         pthread_rwlock_t   lock;
-        pthread_t          sduloop;
+        pthread_t          packet_loop;
 } local_data;
 
 static int local_data_init(void)
@@ -97,7 +97,7 @@ static void local_data_fini(void){
         pthread_rwlock_destroy(&local_data.lock);
 }
 
-static void * ipcp_local_sdu_loop(void * o)
+static void * ipcp_local_packet_loop(void * o)
 {
         (void) o;
 
@@ -139,8 +139,8 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        if (pthread_create(&local_data.sduloop, NULL,
-                           ipcp_local_sdu_loop, NULL)) {
+        if (pthread_create(&local_data.packet_loop, NULL,
+                           ipcp_local_packet_loop, NULL)) {
                 ipcp_set_state(IPCP_INIT);
                 return -1;
         }
@@ -364,8 +364,8 @@ int main(int    argc,
         ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                pthread_cancel(local_data.sduloop);
-                pthread_join(local_data.sduloop, NULL);
+                pthread_cancel(local_data.packet_loop);
+                pthread_join(local_data.packet_loop, NULL);
         }
 
         local_data_fini();

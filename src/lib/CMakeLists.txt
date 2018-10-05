@@ -138,7 +138,7 @@ mark_as_advanced(LIBRT_LIBRARIES LIBPTHREAD_LIBRARIES
   LIBGCRYPT_INCLUDE_DIR SYS_RND_HDR)
 
 set(SHM_BUFFER_SIZE 4096 CACHE STRING
-    "Number of blocks in SDU buffer, must be a power of 2")
+    "Number of blocks in packet buffer, must be a power of 2")
 set(SYS_MAX_FLOWS 10240 CACHE STRING
   "Maximum number of total flows for this system")
 set(PROG_MAX_FLOWS 4096 CACHE STRING
@@ -171,9 +171,9 @@ set(SHM_FLOW_SET_PREFIX "/${SHM_PREFIX}.set." CACHE INTERNAL
 set(SHM_RDRB_NAME "/${SHM_PREFIX}.rdrb" CACHE INTERNAL
   "Name for the main POSIX shared memory buffer")
 set(SHM_RDRB_BLOCK_SIZE "sysconf(_SC_PAGESIZE)" CACHE STRING
-  "SDU buffer block size, multiple of pagesize for performance")
+  "Packet buffer block size, multiple of pagesize for performance")
 set(SHM_RDRB_MULTI_BLOCK true CACHE BOOL
-  "SDU buffer multiblock SDU support")
+  "Packet buffer multiblock packet support")
 set(SHM_RBUFF_LOCKLESS 0 CACHE BOOL
   "Enable shared memory lockless rbuff support")
 

@@ -90,8 +90,8 @@ static void handle_flow(int fd)
 
         bool stop = false;
 
-        long sdus            = 0;
-        long sdus_intv       = 0;
+        long packets         = 0;
+        long packets_intv    = 0;
         long bytes_read      = 0;
         long bytes_read_intv = 0;
 
@@ -109,7 +109,7 @@ static void handle_flow(int fd)
 
                 if (count > 0) {
                         clock_gettime(CLOCK_REALTIME, &alive);
-                        sdus++;
+                        packets++;
                         bytes_read += count;
                 }
 
@@ -121,17 +121,18 @@ static void handle_flow(int fd)
 
                 if (stop || ts_diff_ms(&now, &iv_end) < 0) {
                         long us = ts_diff_us(&iv_start, &now);
-                        printf("Flow %4d: %9ld SDUs (%12ld bytes) in %9ld ms"
-                               " => %9.4f p/s, %9.4f Mb/s\n",
+                        printf("Flow %4d: %9ld packets (%12ld bytes) in %9ld ms"
+                               " => %9.4f pps, %9.4f Mbps\n",
                                fd,
-                               sdus - sdus_intv,
+                               packets - packets_intv,
                                bytes_read - bytes_read_intv,
                                us / 1000,
-                               ((sdus - sdus_intv) / (double) us) * MILLION,
+                               ((packets - packets_intv) / (double) us)
+                               * MILLION,
                                8 * ((bytes_read - bytes_read_intv)
                                     / (double)(us)));
                         iv_start = iv_end;
-                        sdus_intv = sdus;
+                        packets_intv = packets;
                         bytes_read_intv = bytes_read;
                         ts_add(&iv_start, &intv, &iv_end);
                 }

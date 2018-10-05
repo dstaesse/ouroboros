@@ -123,7 +123,7 @@
 #define DIX_HEADER_SIZE      (DIX_EID_SIZE + DIX_LENGTH_SIZE)
 #define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + DIX_HEADER_SIZE)
 #define MAX_EIDS             (1 << (8 * DIX_EID_SIZE))
-#define ETH_MAX_SDU_SIZE     (ETH_MTU - DIX_HEADER_SIZE)
+#define ETH_MAX_PACKET_SIZE  (ETH_MTU - DIX_HEADER_SIZE)
 #define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + ETH_MTU_MAX)
 #elif defined(BUILD_ETH_LLC)
 #define THIS_TYPE            IPCP_ETH_LLC
@@ -131,7 +131,7 @@
 #define LLC_HEADER_SIZE      3
 #define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + LLC_HEADER_SIZE)
 #define MAX_SAPS             64
-#define ETH_MAX_SDU_SIZE     (ETH_MTU - LLC_HEADER_SIZE)
+#define ETH_MAX_PACKET_SIZE  (ETH_MTU - LLC_HEADER_SIZE)
 #define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + ETH_MTU_MAX)
 #endif
 
@@ -230,8 +230,8 @@ struct {
         fset_t *           np1_flows;
         pthread_rwlock_t   flows_lock;
 
-        pthread_t          sdu_writer[IPCP_ETH_WR_THR];
-        pthread_t          sdu_reader[IPCP_ETH_RD_THR];
+        pthread_t          packet_writer[IPCP_ETH_WR_THR];
+        pthread_t          packet_reader[IPCP_ETH_RD_THR];
 
 #ifdef __linux__
         pthread_t          if_monitor;
@@ -383,7 +383,7 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
 
         assert(frame);
 
-        if (len > (size_t) ETH_MAX_SDU_SIZE)
+        if (len > (size_t) ETH_MAX_PACKET_SIZE)
                 return -1;
 
         e_frame = (struct eth_frame *) frame;
@@ -808,7 +808,7 @@ static void * eth_ipcp_mgmt_handler(void * o)
         return (void *) 0;
 }
 
-static void * eth_ipcp_sdu_reader(void * o)
+static void * eth_ipcp_packet_reader(void * o)
 {
         uint8_t              br_addr[MAC_SIZE];
 #if defined(BUILD_ETH_DIX)
@@ -992,7 +992,7 @@ static void cleanup_writer(void * o)
         fqueue_destroy((fqueue_t *) o);
 }
 
-static void * eth_ipcp_sdu_writer(void * o)
+static void * eth_ipcp_packet_writer(void * o)
 {
         int                  fd;
         struct shm_du_buff * sdb;
@@ -1443,22 +1443,22 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         for (idx = 0; idx < IPCP_ETH_RD_THR; ++idx) {
-                if (pthread_create(&eth_data.sdu_reader[idx],
+                if (pthread_create(&eth_data.packet_reader[idx],
                                    NULL,
-                                   eth_ipcp_sdu_reader,
+                                   eth_ipcp_packet_reader,
                                    NULL)) {
                         ipcp_set_state(IPCP_INIT);
-                        goto fail_sdu_reader;
+                        goto fail_packet_reader;
                 }
         }
 
         for (idx = 0; idx < IPCP_ETH_WR_THR; ++idx) {
-                if (pthread_create(&eth_data.sdu_writer[idx],
+                if (pthread_create(&eth_data.packet_writer[idx],
                                    NULL,
-                                   eth_ipcp_sdu_writer,
+                                   eth_ipcp_packet_writer,
                                    NULL)) {
                         ipcp_set_state(IPCP_INIT);
-                        goto fail_sdu_writer;
+                        goto fail_packet_writer;
                 }
         }
 
@@ -1472,16 +1472,16 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 
         return 0;
 
- fail_sdu_writer:
+ fail_packet_writer:
         while (idx > 0) {
-                pthread_cancel(eth_data.sdu_writer[--idx]);
-                pthread_join(eth_data.sdu_writer[idx], NULL);
+                pthread_cancel(eth_data.packet_writer[--idx]);
+                pthread_join(eth_data.packet_writer[idx], NULL);
         }
         idx = IPCP_ETH_RD_THR;
- fail_sdu_reader:
+ fail_packet_reader:
         while (idx > 0) {
-                pthread_cancel(eth_data.sdu_reader[--idx]);
-                pthread_join(eth_data.sdu_reader[idx], NULL);
+                pthread_cancel(eth_data.packet_reader[--idx]);
+                pthread_join(eth_data.packet_reader[idx], NULL);
         }
         pthread_cancel(eth_data.mgmt_handler);
         pthread_join(eth_data.mgmt_handler, NULL);
@@ -1792,18 +1792,18 @@ int main(int    argc,
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 for (i = 0; i < IPCP_ETH_WR_THR; ++i)
-                        pthread_cancel(eth_data.sdu_writer[i]);
+                        pthread_cancel(eth_data.packet_writer[i]);
                 for (i = 0; i < IPCP_ETH_RD_THR; ++i)
-                        pthread_cancel(eth_data.sdu_reader[i]);
+                        pthread_cancel(eth_data.packet_reader[i]);
 
                 pthread_cancel(eth_data.mgmt_handler);
 #ifdef __linux__
                 pthread_cancel(eth_data.if_monitor);
 #endif
                 for (i = 0; i < IPCP_ETH_WR_THR; ++i)
-                        pthread_join(eth_data.sdu_writer[i], NULL);
+                        pthread_join(eth_data.packet_writer[i], NULL);
                 for (i = 0; i < IPCP_ETH_RD_THR; ++i)
-                        pthread_join(eth_data.sdu_reader[i], NULL);
+                        pthread_join(eth_data.packet_reader[i], NULL);
 
                 pthread_join(eth_data.mgmt_handler, NULL);
 #ifdef __linux__

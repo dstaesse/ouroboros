@@ -87,7 +87,7 @@ struct shm_rdrbuff {
         size_t *          tail;     /* start of ringbuffer tail */
         pthread_mutex_t * lock;     /* lock all free space in shm */
         pthread_cond_t *  full;     /* flag when full */
-        pthread_cond_t *  healthy;  /* flag when SDU is read */
+        pthread_cond_t *  healthy;  /* flag when packet is read */
         pid_t *           pid;      /* pid of the irmd owner */
 };
 

@@ -46,7 +46,7 @@
 #include "dt.h"
 #include "pff.h"
 #include "routing.h"
-#include "sdu_sched.h"
+#include "packet_sched.h"
 #include "comp.h"
 #include "fa.h"
 
@@ -65,7 +65,7 @@
 #endif
 
 struct comp_info {
-        void   (* post_sdu)(void * comp, struct shm_du_buff * sdb);
+        void (* post_packet)(void * comp, struct shm_du_buff * sdb);
         void * comp;
         char * name;
 };
@@ -154,7 +154,7 @@ static void dt_pci_shrink(struct shm_du_buff * sdb)
 }
 
 struct {
-        struct sdu_sched * sdu_sched;
+        struct packet_sched * packet_sched;
 
         struct pff *       pff[QOS_CUBE_MAX];
         struct routing_i * routing[QOS_CUBE_MAX];
@@ -421,24 +421,25 @@ static void handle_event(void *       self,
 #ifdef IPCP_FLOW_STATS
                 stat_used(c->flow_info.fd, c->conn_info.addr);
 #endif
-                sdu_sched_add(dt.sdu_sched, c->flow_info.fd);
-                log_dbg("Added fd %d to SDU scheduler.", c->flow_info.fd);
+                packet_sched_add(dt.packet_sched, c->flow_info.fd);
+                log_dbg("Added fd %d to packet scheduler.", c->flow_info.fd);
                 break;
         case NOTIFY_DT_CONN_DEL:
 #ifdef IPCP_FLOW_STATS
                 stat_used(c->flow_info.fd, INVALID_ADDR);
 #endif
-                sdu_sched_del(dt.sdu_sched, c->flow_info.fd);
-                log_dbg("Removed fd %d from SDU scheduler.", c->flow_info.fd);
+                packet_sched_del(dt.packet_sched, c->flow_info.fd);
+                log_dbg("Removed fd %d from "
+                        "packet scheduler.", c->flow_info.fd);
                 break;
         default:
                 break;
         }
 }
 
-static void sdu_handler(int                  fd,
-                        qoscube_t            qc,
-                        struct shm_du_buff * sdb)
+static void packet_handler(int                  fd,
+                           qoscube_t            qc,
+                           struct shm_du_buff * sdb)
 {
         struct dt_pci dt_pci;
         int           ret;
@@ -491,7 +492,7 @@ static void sdu_handler(int                  fd,
 
                 ret = ipcp_flow_write(ofd, sdb);
                 if (ret < 0) {
-                        log_dbg("Failed to write SDU to fd %d.", ofd);
+                        log_dbg("Failed to write packet to fd %d.", ofd);
                         if (ret == -EFLOWDOWN)
                                 notifier_event(NOTIFY_DT_FLOW_DOWN, &ofd);
                         ipcp_sdb_release(sdb);
@@ -560,7 +561,7 @@ static void sdu_handler(int                  fd,
                         return;
                 }
 
-                if (dt.comps[dt_pci.eid].post_sdu == NULL) {
+                if (dt.comps[dt_pci.eid].post_packet == NULL) {
                         log_err("No registered component on eid %d.",
                                 dt_pci.eid);
                         ipcp_sdb_release(sdb);
@@ -596,7 +597,8 @@ static void sdu_handler(int                  fd,
 
                 pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
 #endif
-                dt.comps[dt_pci.eid].post_sdu(dt.comps[dt_pci.eid].comp, sdb);
+                dt.comps[dt_pci.eid].post_packet(dt.comps[dt_pci.eid].comp,
+                                                 sdb);
         }
 }
 
@@ -761,15 +763,15 @@ void dt_fini(void)
 
 int dt_start(void)
 {
-        dt.sdu_sched = sdu_sched_create(sdu_handler);
-        if (dt.sdu_sched == NULL) {
-                log_err("Failed to create N-1 SDU scheduler.");
+        dt.packet_sched = packet_sched_create(packet_handler);
+        if (dt.packet_sched == NULL) {
+                log_err("Failed to create N-1 packet scheduler.");
                 return -1;
         }
 
         if (pthread_create(&dt.listener, NULL, dt_conn_handle, NULL)) {
                 log_err("Failed to create listener thread.");
-                sdu_sched_destroy(dt.sdu_sched);
+                packet_sched_destroy(dt.packet_sched);
                 return -1;
         }
 
@@ -780,7 +782,7 @@ void dt_stop(void)
 {
         pthread_cancel(dt.listener);
         pthread_join(dt.listener, NULL);
-        sdu_sched_destroy(dt.sdu_sched);
+        packet_sched_destroy(dt.packet_sched);
 }
 
 int dt_reg_comp(void * comp,
@@ -800,11 +802,11 @@ int dt_reg_comp(void * comp,
                 return -EBADF;
         }
 
-        assert(dt.comps[res_fd].post_sdu == NULL);
+        assert(dt.comps[res_fd].post_packet == NULL);
         assert(dt.comps[res_fd].comp == NULL);
         assert(dt.comps[res_fd].name == NULL);
 
-        dt.comps[res_fd].post_sdu = func;
+        dt.comps[res_fd].post_packet = func;
         dt.comps[res_fd].comp     = comp;
         dt.comps[res_fd].name     = name;
 
@@ -815,10 +817,10 @@ int dt_reg_comp(void * comp,
         return res_fd;
 }
 
-int dt_write_sdu(uint64_t             dst_addr,
-                 qoscube_t            qc,
-                 int                  np1_fd,
-                 struct shm_du_buff * sdb)
+int dt_write_packet(uint64_t             dst_addr,
+                    qoscube_t            qc,
+                    int                  np1_fd,
+                    struct shm_du_buff * sdb)
 {
         int           fd;
         struct dt_pci dt_pci;
@@ -863,7 +865,7 @@ int dt_write_sdu(uint64_t             dst_addr,
 #endif
         ret = ipcp_flow_write(fd, sdb);
         if (ret < 0) {
-                log_dbg("Failed to write SDU to fd %d.", fd);
+                log_dbg("Failed to write packet to fd %d.", fd);
                 if (ret == -EFLOWDOWN)
                         notifier_event(NOTIFY_DT_FLOW_DOWN, &fd);
                 goto fail_write;

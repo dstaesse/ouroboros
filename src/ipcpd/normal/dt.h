@@ -47,9 +47,9 @@ int  dt_reg_comp(void * comp,
                  void (* func)(void * comp, struct shm_du_buff * sdb),
                  char * name);
 
-int  dt_write_sdu(uint64_t             dst_addr,
-                  qoscube_t            qc,
-                  int                  res_fd,
-                  struct shm_du_buff * sdb);
+int  dt_write_packet(uint64_t             dst_addr,
+                     qoscube_t            qc,
+                     int                  res_fd,
+                     struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCPD_NORMAL_DT_H */

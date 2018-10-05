@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Ring buffer implementations for incoming SDUs
+ * Ring buffer implementations for incoming packets
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -63,8 +63,8 @@ struct shm_rbuff {
         size_t *          tail;     /* start of ringbuffer tail      */
         size_t *          acl;      /* access control                */
         pthread_mutex_t * lock;     /* lock all free space in shm    */
-        pthread_cond_t *  add;      /* SDU arrived                   */
-        pthread_cond_t *  del;      /* SDU removed                   */
+        pthread_cond_t *  add;      /* packet arrived                */
+        pthread_cond_t *  del;      /* packet removed                */
         pid_t             pid;      /* pid of the owner              */
         int               port_id;  /* port_id of the flow           */
 };

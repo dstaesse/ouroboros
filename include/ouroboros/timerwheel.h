@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Ring buffer for incoming SDUs
+ * Timerwheel
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>

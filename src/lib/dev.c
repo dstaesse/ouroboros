@@ -895,7 +895,7 @@ ssize_t flow_read(int    fd,
 {
         ssize_t              idx;
         ssize_t              n;
-        uint8_t *            sdu;
+        uint8_t *            packet;
         struct shm_rbuff *   rb;
         struct shm_du_buff * sdb;
         struct timespec      abs;
@@ -948,19 +948,19 @@ ssize_t flow_read(int    fd,
                 }
         }
 
-        n = shm_rdrbuff_read(&sdu, ai.rdrb, idx);
+        n = shm_rdrbuff_read(&packet, ai.rdrb, idx);
 
         assert(n >= 0);
 
         if (n <= (ssize_t) count) {
-                memcpy(buf, sdu, n);
+                memcpy(buf, packet, n);
                 shm_rdrbuff_remove(ai.rdrb, idx);
                 flow->part_idx = (partrd && n == (ssize_t) count) ?
                         DONE_PART : NO_PART;
                 return n;
         } else {
                 if (partrd) {
-                        memcpy(buf, sdu, count);
+                        memcpy(buf, packet, count);
                         sdb = shm_rdrbuff_get(ai.rdrb, idx);
                         shm_du_buff_head_release(sdb, n);
                         flow->part_idx = idx;
@@ -1042,7 +1042,7 @@ int fset_add(struct flow_set * set,
              int               fd)
 {
         int    ret;
-        size_t sdus;
+        size_t packets;
         size_t i;
 
         if (set == NULL || fd < 0 || fd > SYS_MAX_FLOWS)
@@ -1052,8 +1052,8 @@ int fset_add(struct flow_set * set,
 
         ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].port_id);
 
-        sdus = shm_rbuff_queued(ai.flows[fd].rx_rb);
-        for (i = 0; i < sdus; i++)
+        packets = shm_rbuff_queued(ai.flows[fd].rx_rb);
+        for (i = 0; i < packets; i++)
                 shm_flow_set_notify(ai.fqset, ai.flows[fd].port_id, FLOW_PKT);
 
         pthread_rwlock_unlock(&ai.lock);

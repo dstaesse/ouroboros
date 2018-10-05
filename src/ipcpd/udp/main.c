@@ -54,20 +54,20 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FLOW_REQ              1
-#define FLOW_REPLY            2
+#define FLOW_REQ                 1
+#define FLOW_REPLY               2
 
-#define THIS_TYPE             IPCP_UDP
-#define LISTEN_PORT           htons(0x0D1F)
-#define SHIM_UDP_BUF_SIZE     256
-#define SHIM_UDP_MSG_SIZE     256
-#define SHIM_UDP_MAX_SDU_SIZE 8980
-#define DNS_TTL               86400
-#define FD_UPDATE_TIMEOUT     100 /* microseconds */
+#define THIS_TYPE                IPCP_UDP
+#define LISTEN_PORT              htons(0x0D1F)
+#define SHIM_UDP_BUF_SIZE        256
+#define SHIM_UDP_MSG_SIZE        256
+#define SHIM_UDP_MAX_PACKET_SIZE 8980
+#define DNS_TTL                  86400
+#define FD_UPDATE_TIMEOUT        100 /* microseconds */
 
-#define local_ip              (udp_data.s_saddr.sin_addr.s_addr)
+#define local_ip                 (udp_data.s_saddr.sin_addr.s_addr)
 
-#define UDP_MAX_PORTS         0xFFFF
+#define UDP_MAX_PORTS            0xFFFF
 
 struct mgmt_msg {
         uint16_t src_udp_port;
@@ -106,9 +106,9 @@ struct {
         struct uf          fd_to_uf[SYS_MAX_FLOWS];
         pthread_rwlock_t   flows_lock;
 
-        pthread_t          sduloop;
+        pthread_t          packet_loop;
         pthread_t          handler;
-        pthread_t          sdu_reader;
+        pthread_t          packet_reader;
 
         bool               fd_set_mod;
         pthread_cond_t     fd_set_cond;
@@ -495,13 +495,13 @@ static void * ipcp_udp_listener(void * o)
         return 0;
 }
 
-static void * ipcp_udp_sdu_reader(void * o)
+static void * ipcp_udp_packet_reader(void * o)
 {
         ssize_t            n;
         int                skfd;
         int                fd;
         /* FIXME: avoid this copy */
-        char               buf[SHIM_UDP_MAX_SDU_SIZE];
+        char               buf[SHIM_UDP_MAX_PACKET_SIZE];
         struct sockaddr_in r_saddr;
         struct timeval     tv = {0, FD_UPDATE_TIMEOUT};
         fd_set             read_fds;
@@ -533,7 +533,7 @@ static void * ipcp_udp_sdu_reader(void * o)
                         n = sizeof(r_saddr);
                         if ((n = recvfrom(skfd,
                                           &buf,
-                                          SHIM_UDP_MAX_SDU_SIZE,
+                                          SHIM_UDP_MAX_PACKET_SIZE,
                                           0,
                                           (struct sockaddr *) &r_saddr,
                                           (unsigned *) &n)) <= 0)
@@ -552,7 +552,7 @@ static void * ipcp_udp_sdu_reader(void * o)
         return (void *) 0;
 }
 
-static void * ipcp_udp_sdu_loop(void * o)
+static void * ipcp_udp_packet_loop(void * o)
 {
         int fd;
         struct shm_du_buff * sdb;
@@ -582,7 +582,7 @@ static void * ipcp_udp_sdu_loop(void * o)
                         if (send(fd, shm_du_buff_head(sdb),
                                  shm_du_buff_tail(sdb) - shm_du_buff_head(sdb),
                                  0) < 0)
-                                log_err("Failed to send SDU.");
+                                log_err("Failed to send PACKET.");
 
                         pthread_cleanup_pop(true);
                 }
@@ -666,20 +666,20 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                 goto fail_bind;
         }
 
-        if (pthread_create(&udp_data.sdu_reader,
+        if (pthread_create(&udp_data.packet_reader,
                            NULL,
-                           ipcp_udp_sdu_reader,
+                           ipcp_udp_packet_reader,
                            NULL)) {
                 ipcp_set_state(IPCP_INIT);
-                goto fail_sdu_reader;
+                goto fail_packet_reader;
         }
 
-        if (pthread_create(&udp_data.sduloop,
+        if (pthread_create(&udp_data.packet_loop,
                            NULL,
-                           ipcp_udp_sdu_loop,
+                           ipcp_udp_packet_loop,
                            NULL)) {
                 ipcp_set_state(IPCP_INIT);
-                goto fail_sduloop;
+                goto fail_packet_loop;
         }
 
         log_dbg("Bootstrapped IPCP over UDP with pid %d.", getpid());
@@ -688,10 +688,10 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
 
         return 0;
 
- fail_sduloop:
-        pthread_cancel(udp_data.sdu_reader);
-        pthread_join(udp_data.sdu_reader, NULL);
- fail_sdu_reader:
+ fail_packet_loop:
+        pthread_cancel(udp_data.packet_reader);
+        pthread_join(udp_data.packet_reader, NULL);
+ fail_packet_reader:
         pthread_cancel(udp_data.handler);
         pthread_join(udp_data.handler, NULL);
  fail_bind:
@@ -1222,13 +1222,13 @@ int main(int    argc,
         ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                pthread_cancel(udp_data.sduloop);
+                pthread_cancel(udp_data.packet_loop);
                 pthread_cancel(udp_data.handler);
-                pthread_cancel(udp_data.sdu_reader);
+                pthread_cancel(udp_data.packet_reader);
 
-                pthread_join(udp_data.sduloop, NULL);
+                pthread_join(udp_data.packet_loop, NULL);
                 pthread_join(udp_data.handler, NULL);
-                pthread_join(udp_data.sdu_reader, NULL);
+                pthread_join(udp_data.packet_reader, NULL);
         }
 
         udp_data_fini();

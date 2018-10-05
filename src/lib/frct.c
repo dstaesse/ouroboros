@@ -294,7 +294,7 @@ static int __frcti_snd(struct frcti *       frcti,
         return 0;
 }
 
-/* Returns 0 when idx contains an SDU for the application. */
+/* Returns 0 when idx contains a packet for the application. */
 static int __frcti_rcv(struct frcti *       frcti,
                        struct shm_du_buff * sdb)
 {

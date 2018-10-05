@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Lockless ring buffer for incoming SDUs
+ * Lockless ring buffer for incoming packets
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
