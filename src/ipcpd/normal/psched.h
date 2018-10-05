@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_PACKET_SCHED_H
-#define OUROBOROS_IPCPD_NORMAL_PACKET_SCHED_H
+#ifndef OUROBOROS_IPCPD_NORMAL_PSCHED_H
+#define OUROBOROS_IPCPD_NORMAL_PSCHED_H
 
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
@@ -30,14 +30,14 @@ typedef void (* next_packet_fn_t)(int                  fd,
                                   qoscube_t            qc,
                                   struct shm_du_buff * sdb);
 
-struct packet_sched * packet_sched_create(next_packet_fn_t callback);
+struct psched * psched_create(next_packet_fn_t callback);
 
-void                  packet_sched_destroy(struct packet_sched * packet_sched);
+void            psched_destroy(struct psched * psched);
 
-void                  packet_sched_add(struct packet_sched * packet_sched,
-                                       int                   fd);
+void            psched_add(struct psched * psched,
+                           int             fd);
 
-void                  packet_sched_del(struct packet_sched * packet_sched,
-                                       int                   fd);
+void            psched_del(struct psched * psched,
+                           int             fd);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_PACKET_SCHED_H */
+#endif /* OUROBOROS_IPCPD_NORMAL_PSCHED_H */

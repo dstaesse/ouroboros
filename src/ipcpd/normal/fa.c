@@ -39,7 +39,7 @@
 
 #include "dir.h"
 #include "fa.h"
-#include "packet_sched.h"
+#include "psched.h"
 #include "ipcp.h"
 #include "dt.h"
 
@@ -74,7 +74,7 @@ struct {
         uint64_t           r_addr[PROG_MAX_FLOWS];
         int                fd;
 
-        struct packet_sched * packet_sched;
+        struct psched *    psched;
 } fa;
 
 static void packet_handler(int                  fd,
@@ -192,7 +192,7 @@ static void fa_post_packet(void *               comp,
                 if (msg->response < 0)
                         destroy_conn(ntoh32(msg->r_eid));
                 else
-                        packet_sched_add(fa.packet_sched, ntoh32(msg->r_eid));
+                        psched_add(fa.psched, ntoh32(msg->r_eid));
 
                 pthread_rwlock_unlock(&fa.flows_lock);
 
@@ -227,8 +227,8 @@ void fa_fini(void)
 
 int fa_start(void)
 {
-        fa.packet_sched = packet_sched_create(packet_handler);
-        if (fa.packet_sched == NULL) {
+        fa.psched = psched_create(packet_handler);
+        if (fa.psched == NULL) {
                 log_err("Failed to create packet scheduler.");
                 return -1;
         }
@@ -238,7 +238,7 @@ int fa_start(void)
 
 void fa_stop(void)
 {
-        packet_sched_destroy(fa.packet_sched);
+        psched_destroy(fa.psched);
 }
 
 int fa_alloc(int             fd,
@@ -335,7 +335,7 @@ int fa_alloc_resp(int fd,
                 destroy_conn(fd);
                 ipcp_sdb_release(sdb);
         } else {
-                packet_sched_add(fa.packet_sched, fd);
+                psched_add(fa.psched, fd);
         }
 
         ipcp_flow_get_qoscube(fd, &qc);
@@ -360,7 +360,7 @@ int fa_dealloc(int fd)
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
-        packet_sched_del(fa.packet_sched, fd);
+        psched_del(fa.psched, fd);
 
         destroy_conn(fd);
 

@@ -46,7 +46,7 @@
 #include "dt.h"
 #include "pff.h"
 #include "routing.h"
-#include "packet_sched.h"
+#include "psched.h"
 #include "comp.h"
 #include "fa.h"
 
@@ -154,7 +154,7 @@ static void dt_pci_shrink(struct shm_du_buff * sdb)
 }
 
 struct {
-        struct packet_sched * packet_sched;
+        struct psched *    psched;
 
         struct pff *       pff[QOS_CUBE_MAX];
         struct routing_i * routing[QOS_CUBE_MAX];
@@ -421,14 +421,14 @@ static void handle_event(void *       self,
 #ifdef IPCP_FLOW_STATS
                 stat_used(c->flow_info.fd, c->conn_info.addr);
 #endif
-                packet_sched_add(dt.packet_sched, c->flow_info.fd);
+                psched_add(dt.psched, c->flow_info.fd);
                 log_dbg("Added fd %d to packet scheduler.", c->flow_info.fd);
                 break;
         case NOTIFY_DT_CONN_DEL:
 #ifdef IPCP_FLOW_STATS
                 stat_used(c->flow_info.fd, INVALID_ADDR);
 #endif
-                packet_sched_del(dt.packet_sched, c->flow_info.fd);
+                psched_del(dt.psched, c->flow_info.fd);
                 log_dbg("Removed fd %d from "
                         "packet scheduler.", c->flow_info.fd);
                 break;
@@ -763,15 +763,15 @@ void dt_fini(void)
 
 int dt_start(void)
 {
-        dt.packet_sched = packet_sched_create(packet_handler);
-        if (dt.packet_sched == NULL) {
+        dt.psched = psched_create(packet_handler);
+        if (dt.psched == NULL) {
                 log_err("Failed to create N-1 packet scheduler.");
                 return -1;
         }
 
         if (pthread_create(&dt.listener, NULL, dt_conn_handle, NULL)) {
                 log_err("Failed to create listener thread.");
-                packet_sched_destroy(dt.packet_sched);
+                psched_destroy(dt.psched);
                 return -1;
         }
 
@@ -782,7 +782,7 @@ void dt_stop(void)
 {
         pthread_cancel(dt.listener);
         pthread_join(dt.listener, NULL);
-        packet_sched_destroy(dt.packet_sched);
+        psched_destroy(dt.psched);
 }
 
 int dt_reg_comp(void * comp,

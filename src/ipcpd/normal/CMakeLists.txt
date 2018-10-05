@@ -42,7 +42,7 @@ set(SOURCE_FILES
   main.c
   pff.c
   routing.c
-  packet_sched.c
+  psched.c
   # Add policies last
   pol/alternate_pff.c
   pol/flat.c

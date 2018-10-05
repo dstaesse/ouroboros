@@ -32,7 +32,7 @@
 #include <ouroboros/notifier.h>
 
 #include "ipcp.h"
-#include "packet_sched.h"
+#include "psched.h"
 #include "connmgr.h"
 
 #include <assert.h>
@@ -49,15 +49,15 @@ static int qos_prio [] = {
         QOS_PRIO_DATA
 };
 
-struct packet_sched {
+struct psched {
         fset_t *         set[QOS_CUBE_MAX];
         next_packet_fn_t callback;
         pthread_t        readers[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
 };
 
 struct sched_info {
-        struct packet_sched * sch;
-        qoscube_t             qc;
+        struct psched * sch;
+        qoscube_t       qc;
 };
 
 static void cleanup_reader(void * o)
@@ -67,7 +67,7 @@ static void cleanup_reader(void * o)
 
 static void * packet_reader(void * o)
 {
-        struct packet_sched * sched;
+        struct psched *       sched;
         struct shm_du_buff *  sdb;
         int                   fd;
         fqueue_t *            fq;
@@ -119,26 +119,26 @@ static void * packet_reader(void * o)
         return (void *) 0;
 }
 
-struct packet_sched * packet_sched_create(next_packet_fn_t callback)
+struct psched * psched_create(next_packet_fn_t callback)
 {
-        struct packet_sched * packet_sched;
+        struct psched *       psched;
         struct sched_info *   infos[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
         int                   i;
         int                   j;
 
         assert(callback);
 
-        packet_sched = malloc(sizeof(*packet_sched));
-        if (packet_sched == NULL)
+        psched = malloc(sizeof(*psched));
+        if (psched == NULL)
                 goto fail_malloc;
 
-        packet_sched->callback = callback;
+        psched->callback = callback;
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
-                packet_sched->set[i] = fset_create();
-                if (packet_sched->set[i] == NULL) {
+                psched->set[i] = fset_create();
+                if (psched->set[i] == NULL) {
                         for (j = 0; j < i; ++j)
-                                fset_destroy(packet_sched->set[j]);
+                                fset_destroy(psched->set[j]);
                         goto fail_flow_set;
                 }
         }
@@ -150,17 +150,17 @@ struct packet_sched * packet_sched_create(next_packet_fn_t callback)
                                 free(infos[j]);
                         goto fail_infos;
                 }
-                infos[i]->sch = packet_sched;
+                infos[i]->sch = psched;
                 infos[i]->qc  = i % QOS_CUBE_MAX;
         }
 
         for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
-                if (pthread_create(&packet_sched->readers[i], NULL,
+                if (pthread_create(&psched->readers[i], NULL,
                                    packet_reader, infos[i])) {
                         for (j = 0; j < i; ++j)
-                                pthread_cancel(packet_sched->readers[j]);
+                                pthread_cancel(psched->readers[j]);
                         for (j = 0; j < i; ++j)
-                                pthread_join(packet_sched->readers[j], NULL);
+                                pthread_join(psched->readers[j], NULL);
                         for (j = i; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                                 free(infos[i]);
                         goto fail_infos;
@@ -181,61 +181,61 @@ struct packet_sched * packet_sched_create(next_packet_fn_t callback)
                 par.sched_priority = min +
                         (qos_prio[i % QOS_CUBE_MAX] * (max - min) / 99);
 
-                if (pthread_setschedparam(packet_sched->readers[i], pol, &par))
+                if (pthread_setschedparam(psched->readers[i], pol, &par))
                         goto fail_sched;
         }
 
-        return packet_sched;
+        return psched;
 
  fail_sched:
         for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
-                pthread_cancel(packet_sched->readers[j]);
+                pthread_cancel(psched->readers[j]);
         for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
-                pthread_join(packet_sched->readers[j], NULL);
+                pthread_join(psched->readers[j], NULL);
  fail_infos:
         for (j = 0; j < QOS_CUBE_MAX; ++j)
-                fset_destroy(packet_sched->set[j]);
+                fset_destroy(psched->set[j]);
  fail_flow_set:
-        free(packet_sched);
+        free(psched);
  fail_malloc:
         return NULL;
 }
 
-void packet_sched_destroy(struct packet_sched * packet_sched)
+void psched_destroy(struct psched * psched)
 {
         int i;
 
-        assert(packet_sched);
+        assert(psched);
 
         for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
-                pthread_cancel(packet_sched->readers[i]);
-                pthread_join(packet_sched->readers[i], NULL);
+                pthread_cancel(psched->readers[i]);
+                pthread_join(psched->readers[i], NULL);
         }
 
         for (i = 0; i < QOS_CUBE_MAX; ++i)
-                fset_destroy(packet_sched->set[i]);
+                fset_destroy(psched->set[i]);
 
-        free(packet_sched);
+        free(psched);
 }
 
-void packet_sched_add(struct packet_sched * packet_sched,
-                      int                   fd)
+void psched_add(struct psched * psched,
+                      int       fd)
 {
         qoscube_t qc;
 
-        assert(packet_sched);
+        assert(psched);
 
         ipcp_flow_get_qoscube(fd, &qc);
-        fset_add(packet_sched->set[qc], fd);
+        fset_add(psched->set[qc], fd);
 }
 
-void packet_sched_del(struct packet_sched * packet_sched,
-                      int                   fd)
+void psched_del(struct psched * psched,
+                      int       fd)
 {
         qoscube_t qc;
 
-        assert(packet_sched);
+        assert(psched);
 
         ipcp_flow_get_qoscube(fd, &qc);
-        fset_del(packet_sched->set[qc], fd);
+        fset_del(psched->set[qc], fd);
 }
