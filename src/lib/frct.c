@@ -31,7 +31,6 @@
 #define TW_RESOLUTION  1     /* ms */
 
 #define FRCT_PCILEN    (sizeof(struct frct_pci))
-#define FRCT_CRCLEN    (sizeof(uint32_t))
 
 struct frct_cr {
         uint32_t lwe;
@@ -204,22 +203,6 @@ static ssize_t __frcti_queued_pdu(struct frcti * frcti)
         return idx;
 }
 
-static int frct_chk_crc(uint8_t * head,
-                        uint8_t * tail)
-{
-        uint32_t crc;
-
-        mem_hash(HASH_CRC32, &crc, head, tail - head);
-
-        return crc == *((uint32_t *) tail);
-}
-
-static void frct_add_crc(uint8_t * head,
-                         uint8_t * tail)
-{
-        mem_hash(HASH_CRC32, tail, head, tail - head);
-}
-
 static struct frct_pci * frcti_alloc_head(struct shm_du_buff * sdb)
 {
         struct frct_pci * pci = NULL;
@@ -251,18 +234,6 @@ static int __frcti_snd(struct frcti *       frcti,
         pthread_rwlock_wrlock(&frcti->lock);
 
         pci->flags |= FRCT_DATA;
-
-        if (snd_cr->cflags & FRCTFERRCHCK) {
-                uint8_t * tail = shm_du_buff_tail_alloc(sdb, FRCT_CRCLEN);
-                if (tail == NULL) {
-                        pthread_rwlock_unlock(&frcti->lock);
-                        return -1;
-                }
-
-                frct_add_crc((uint8_t *) pci, tail);
-
-                pci->flags |= FRCT_CRC;
-        }
 
         /* Set DRF if there are no unacknowledged packets. */
         if (frcti->seqno == snd_cr->lwe)
@@ -316,13 +287,6 @@ static int __frcti_rcv(struct frcti *       frcti,
         pthread_rwlock_wrlock(&frcti->lock);
 
         idx = shm_du_buff_get_idx(sdb);
-
-        /* PDU may be corrupted. */
-        if (pci->flags & FRCT_CRC) {
-                uint8_t * tail = shm_du_buff_tail_release(sdb, FRCT_CRCLEN);
-                if (frct_chk_crc((uint8_t *) pci, tail))
-                        goto drop_packet;
-        }
 
         seqno = ntoh32(pci->seqno);
 

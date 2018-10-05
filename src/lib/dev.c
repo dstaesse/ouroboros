@@ -61,6 +61,8 @@
 #define NO_PART      -1
 #define DONE_PART    -2
 
+#define CRCLEN    (sizeof(uint32_t))
+
 struct flow_set {
         size_t   idx;
 };
@@ -566,6 +568,10 @@ int flow_alloc(const char *            dst,
         irm_msg_t *   recv_msg;
         int           fd;
 
+#ifdef QOS_DISABLE_CRC
+        if (qs != NULL)
+                qs->ber = 1;
+#endif
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst     = (char *) dst;
         msg.has_pid = true;
@@ -813,16 +819,40 @@ int fccntl(int fd,
         return -EPERM;
 }
 
+static int chk_crc(struct shm_du_buff * sdb)
+{
+        uint32_t crc;
+        uint8_t * head = shm_du_buff_head(sdb);
+        uint8_t * tail = shm_du_buff_tail_release(sdb, CRCLEN);
+
+        mem_hash(HASH_CRC32, &crc, head, tail - head);
+
+        return !(crc == *((uint32_t *) tail));
+}
+
+static int add_crc(struct shm_du_buff * sdb)
+{
+        uint8_t * head = shm_du_buff_head(sdb);
+        uint8_t * tail = shm_du_buff_tail_alloc(sdb, CRCLEN);
+        if (tail == NULL)
+                return -1;
+
+        mem_hash(HASH_CRC32, tail, head, tail - head);
+
+        return 0;
+}
+
 ssize_t flow_write(int          fd,
                    const void * buf,
                    size_t       count)
 {
-        struct flow *     flow;
-        ssize_t           idx;
-        int               ret;
-        int               flags;
-        struct timespec   abs;
-        struct timespec * abstime = NULL;
+        struct flow *        flow;
+        ssize_t              idx;
+        int                  ret;
+        int                  flags;
+        struct timespec      abs;
+        struct timespec *    abstime = NULL;
+        struct shm_du_buff * sdb;
 
         if (buf == NULL)
                 return 0;
@@ -869,14 +899,21 @@ ssize_t flow_write(int          fd,
         if (idx < 0)
                 return idx;
 
-        if (frcti_snd(flow->frcti, shm_rdrbuff_get(ai.rdrb, idx)) < 0) {
+        sdb = shm_rdrbuff_get(ai.rdrb, idx);
+
+        if (frcti_snd(flow->frcti, sdb) < 0) {
+                shm_rdrbuff_remove(ai.rdrb, idx);
+                return -ENOMEM;
+        }
+
+        if (flow->spec.ber == 0 && add_crc(sdb) != 0) {
                 shm_rdrbuff_remove(ai.rdrb, idx);
                 return -ENOMEM;
         }
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        ret = shm_rbuff_write(ai.flows[fd].tx_rb, idx);
+        ret = shm_rbuff_write(flow->tx_rb, idx);
         if (ret < 0)
                 shm_rdrbuff_remove(ai.rdrb, idx);
         else
@@ -944,6 +981,8 @@ ssize_t flow_read(int    fd,
                                 if (idx < 0)
                                         return idx;
                                 sdb = shm_rdrbuff_get(ai.rdrb, idx);
+                                if (flow->spec.ber == 0  && chk_crc(sdb) != 0)
+                                        continue;
                         } while (frcti_rcv(flow->frcti, sdb) != 0);
                 }
         }
@@ -1341,6 +1380,8 @@ int ipcp_flow_read(int                   fd,
                 if (idx < 0)
                         return idx;
                 *sdb = shm_rdrbuff_get(ai.rdrb, idx);
+                if (flow->spec.ber == 0 && chk_crc(*sdb) != 0)
+                        continue;
         } while (frcti_rcv(flow->frcti, *sdb) != 0);
 
         return 0;
@@ -1373,6 +1414,12 @@ int ipcp_flow_write(int                  fd,
 
         if (frcti_snd(flow->frcti, sdb) < 0) {
                 pthread_rwlock_unlock(&ai.lock);
+                return -ENOMEM;
+        }
+
+        if (flow->spec.ber == 0 && add_crc(sdb) != 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                shm_rdrbuff_remove(ai.rdrb, idx);
                 return -ENOMEM;
         }
 

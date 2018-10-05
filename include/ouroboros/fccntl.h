@@ -47,7 +47,6 @@
 /* FRCT flags */
 #define FRCTFRESCNTRL 00000001 /* Feedback from receiver */
 #define FRCTFRTX      00000002 /* Reliable flow          */
-#define FRCTFERRCHCK  00000004 /* Check for errors       */
 
 /* Flow operations */
 #define FLOWSRCVTIMEO 00000001 /* Set read timeout       */
