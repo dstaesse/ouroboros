@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH FCCNTL 3 2018-02-28 Ouroboros "Ouroboros Programmer's Manual"
+.TH FCCNTL 3 2018-10-04 Ouroboros "Ouroboros Programmer's Manual"
 
 .SH NAME
 
@@ -74,21 +74,17 @@ buffer. Takes a \fBsize_t \fIqlen\fR as third argument.
 buffer. Takes a \fBsize_t \fIqlen\fR as third argument.
 
 \fBFRCTSFLAGS\fR    - set FRCT flags. Takes FRCT flags as third
-argument. Supported flags are:
+argument.
+
+.RE
+
+\fBFRCTGFLAGS\fR    - get the current flow flags. Takes an \fBuint16_t
+\fIflags\fR as third argument. Supported flags are:
 
 .RS 8
 \fIFRCTFRESCNTRL\fR - enable resource control.
 
 \fIFRCTFRTX\fR      - enable retransmission.
-
-\fIFRCTFERRCHCK\fR  - enable checksum (CRC32).
-
-\fIFRCTFPARTIAL\fR  - enable partial delivery.
-
-.RE
-
-\fBFRCTGFLAGS\fR    - get the current flow flags. Takes an \fBuint16_t
-\fIflags\fR as third argument.
 
 .SH RETURN VALUE
 
