@@ -64,9 +64,9 @@
 #include <sys/mman.h>
 
 #define THIS_TYPE          IPCP_RAPTOR
-#define MGMT_SAP           0x01
+#define MGMT_EID           0x01
 #define MAC_SIZE           6
-#define MAX_SAPS           64
+#define MAX_EIDS           64
 
 #define EVENT_WAIT_TIMEOUT 100  /* us */
 #define NAME_QUERY_TIMEOUT 2000 /* ms */
@@ -90,16 +90,23 @@
 #define NAME_QUERY_REPLY   3
 
 struct mgmt_msg {
-        uint8_t code;
-        uint8_t ssap;
-        uint8_t dsap;
-        uint8_t qoscube;
-        int8_t  response;
+        uint8_t  code;
+        uint8_t  seid;
+        uint8_t  deid;
+        int8_t   response;
+        /* QoS parameters from spec, aligned */
+        uint32_t loss;
+        uint64_t bandwidth;
+        uint32_t ber;
+        uint32_t max_gap;
+        uint32_t delay;
+        uint8_t  in_order;
+        uint8_t  availability;
 } __attribute__((packed));
 
 struct ef {
-        int8_t  sap;
-        int8_t  r_sap;
+        int8_t  eid;
+        int8_t  r_eid;
 };
 
 struct mgmt_frame {
@@ -113,7 +120,7 @@ struct {
 
         int                ioctl_fd;
 
-        struct bmp *       saps;
+        struct bmp *       eids;
         fset_t *           np1_flows;
         fqueue_t *         fq;
         int *              ef_to_fd;
@@ -145,13 +152,13 @@ static int raptor_data_init(void)
                 goto fail_fd_to_ef;
 
         raptor_data.ef_to_fd =
-                malloc(sizeof(*raptor_data.ef_to_fd) * MAX_SAPS);
+                malloc(sizeof(*raptor_data.ef_to_fd) * MAX_EIDS);
         if (raptor_data.ef_to_fd == NULL)
                 goto fail_ef_to_fd;
 
-        raptor_data.saps = bmp_create(MAX_SAPS, 2);
-        if (raptor_data.saps == NULL)
-                goto fail_saps;
+        raptor_data.eids = bmp_create(MAX_EIDS, 2);
+        if (raptor_data.eids == NULL)
+                goto fail_eids;
 
         raptor_data.np1_flows = fset_create();
         if (raptor_data.np1_flows == NULL)
@@ -161,12 +168,12 @@ static int raptor_data_init(void)
         if (raptor_data.fq == NULL)
                 goto fail_fq;
 
-        for (i = 0; i < MAX_SAPS; ++i)
+        for (i = 0; i < MAX_EIDS; ++i)
                 raptor_data.ef_to_fd[i] = -1;
 
         for (i = 0; i < SYS_MAX_FLOWS; ++i) {
-                raptor_data.fd_to_ef[i].sap   = -1;
-                raptor_data.fd_to_ef[i].r_sap = -1;
+                raptor_data.fd_to_ef[i].eid   = -1;
+                raptor_data.fd_to_ef[i].r_eid = -1;
         }
 
         raptor_data.shim_data = shim_data_create();
@@ -210,8 +217,8 @@ static int raptor_data_init(void)
  fail_fq:
         fset_destroy(raptor_data.np1_flows);
  fail_np1_flows:
-        bmp_destroy(raptor_data.saps);
- fail_saps:
+        bmp_destroy(raptor_data.eids);
+ fail_eids:
         free(raptor_data.ef_to_fd);
  fail_ef_to_fd:
         free(raptor_data.fd_to_ef);
@@ -227,13 +234,13 @@ static void raptor_data_fini(void)
         pthread_rwlock_destroy(&raptor_data.flows_lock);
         fqueue_destroy(raptor_data.fq);
         fset_destroy(raptor_data.np1_flows);
-        bmp_destroy(raptor_data.saps);
+        bmp_destroy(raptor_data.eids);
         free(raptor_data.fd_to_ef);
         free(raptor_data.ef_to_fd);
 }
 
 static int raptor_send_frame(struct shm_du_buff * sdb,
-                             uint8_t              dsap)
+                             uint8_t              deid)
 {
         uint8_t * frame;
         size_t    frame_len;
@@ -263,7 +270,7 @@ static int raptor_send_frame(struct shm_du_buff * sdb,
 
         frame[0] = (frame_len & 0x00FF) >> 0;
         frame[1] = (frame_len & 0xFF00) >> 8;
-        frame[2] = dsap;
+        frame[2] = deid;
 
         memcpy(&frame[RAPTOR_HEADER], payload, len);
 
@@ -276,9 +283,9 @@ static int raptor_send_frame(struct shm_du_buff * sdb,
         return 0;
 }
 
-static int raptor_sap_alloc(uint8_t         ssap,
+static int raptor_eid_alloc(uint8_t         seid,
                             const uint8_t * hash,
-                            qoscube_t       cube)
+                            qosspec_t       qs)
 {
         struct mgmt_msg *    msg;
         struct shm_du_buff * sdb;
@@ -288,14 +295,20 @@ static int raptor_sap_alloc(uint8_t         ssap,
                 return -1;
         }
 
-        msg          = (struct mgmt_msg *) shm_du_buff_head(sdb);
-        msg->code    = FLOW_REQ;
-        msg->ssap    = ssap;
-        msg->qoscube = cube;
+        msg               = (struct mgmt_msg *) shm_du_buff_head(sdb);
+        msg->code         = FLOW_REQ;
+        msg->seid         = seid;
+        msg->delay        = hton32(qs.delay);
+        msg->bandwidth    = hton64(qs.bandwidth);
+        msg->availability = qs.availability;
+        msg->loss         = hton32(qs.loss);
+        msg->ber          = hton32(qs.ber);
+        msg->in_order     = qs.in_order;
+        msg->max_gap      = hton32(qs.max_gap);
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
-        if (raptor_send_frame(sdb, MGMT_SAP)) {
+        if (raptor_send_frame(sdb, MGMT_EID)) {
                 log_err("Failed to send management frame.");
                 ipcp_sdb_release(sdb);
                 return -1;
@@ -306,25 +319,25 @@ static int raptor_sap_alloc(uint8_t         ssap,
         return 0;
 }
 
-static int raptor_sap_alloc_resp(uint8_t   ssap,
-                                 uint8_t   dsap,
-                                 int       response)
+static int raptor_eid_alloc_resp(uint8_t seid,
+                                 uint8_t deid,
+                                 int     response)
 {
-        struct mgmt_msg * msg;
+        struct mgmt_msg *    msg;
         struct shm_du_buff * sdb;
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg)) < 0) {
-                log_err("failed to reserve sdb for management frame.");
+                log_err("Failed to reserve sdb for management frame.");
                 return -1;
         }
 
         msg           = (struct mgmt_msg *) shm_du_buff_head(sdb);
         msg->code     = FLOW_REPLY;
-        msg->ssap     = ssap;
-        msg->dsap     = dsap;
+        msg->seid     = seid;
+        msg->deid     = deid;
         msg->response = response;
 
-        if (raptor_send_frame(sdb, MGMT_SAP)) {
+        if (raptor_send_frame(sdb, MGMT_EID)) {
                 log_err("Failed to send management frame.");
                 ipcp_sdb_release(sdb);
                 return -1;
@@ -335,9 +348,9 @@ static int raptor_sap_alloc_resp(uint8_t   ssap,
         return 0;
 }
 
-static int raptor_sap_req(uint8_t         r_sap,
+static int raptor_eid_req(uint8_t         r_eid,
                           const uint8_t * dst,
-                          qoscube_t       cube)
+                          qosspec_t       qs)
 {
         struct timespec ts = {0, EVENT_WAIT_TIMEOUT * 1000};
         struct timespec abstime;
@@ -361,7 +374,7 @@ static int raptor_sap_req(uint8_t         r_sap,
         }
 
         /* reply to IRM, called under lock to prevent race */
-        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), cube);
+        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), qs);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -370,7 +383,7 @@ static int raptor_sap_req(uint8_t         r_sap,
 
         pthread_rwlock_wrlock(&raptor_data.flows_lock);
 
-        raptor_data.fd_to_ef[fd].r_sap = r_sap;
+        raptor_data.fd_to_ef[fd].r_eid = r_eid;
 
         ipcpi.alloc_id = fd;
         pthread_cond_broadcast(&ipcpi.alloc_cond);
@@ -378,13 +391,13 @@ static int raptor_sap_req(uint8_t         r_sap,
         pthread_rwlock_unlock(&raptor_data.flows_lock);
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
-        log_dbg("New flow request, fd %d, remote SAP %d.", fd, r_sap);
+        log_dbg("New flow request, fd %d, remote EID %d.", fd, r_eid);
 
         return 0;
 }
 
-static int raptor_sap_alloc_reply(uint8_t ssap,
-                                  int     dsap,
+static int raptor_eid_alloc_reply(uint8_t seid,
+                                  int     deid,
                                   int     response)
 {
         int ret = 0;
@@ -392,21 +405,21 @@ static int raptor_sap_alloc_reply(uint8_t ssap,
 
         pthread_rwlock_wrlock(&raptor_data.flows_lock);
 
-        fd = raptor_data.ef_to_fd[dsap];
+        fd = raptor_data.ef_to_fd[deid];
         if (fd < 0) {
                 pthread_rwlock_unlock(& raptor_data.flows_lock);
-                log_err("No flow found with that SAP.");
+                log_err("No flow found with that EID.");
                 return -1; /* -EFLOWNOTFOUND */
         }
 
         if (response)
-                bmp_release(raptor_data.saps, raptor_data.fd_to_ef[fd].sap);
+                bmp_release(raptor_data.eids, raptor_data.fd_to_ef[fd].eid);
         else
-                raptor_data.fd_to_ef[fd].r_sap = ssap;
+                raptor_data.fd_to_ef[fd].r_eid = seid;
 
         pthread_rwlock_unlock(&raptor_data.flows_lock);
 
-        log_dbg("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
+        log_dbg("Flow reply, fd %d, SEID %d, DEID %d.", fd, seid, deid);
 
         if ((ret = ipcp_flow_alloc_reply(fd, response)) < 0)
                 return -1;
@@ -424,16 +437,16 @@ static int raptor_name_query_req(const uint8_t * hash)
                 return 0;
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()) < 0) {
-                log_err("failed to reserve sdb for management frame.");
+                log_err("Failed to reserve sdb for management frame.");
                 return -1;
         }
 
-        msg          = (struct mgmt_msg *) shm_du_buff_head(sdb);
-        msg->code    = NAME_QUERY_REPLY;
+        msg       = (struct mgmt_msg *) shm_du_buff_head(sdb);
+        msg->code = NAME_QUERY_REPLY;
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
-        if (raptor_send_frame(sdb, MGMT_SAP)) {
+        if (raptor_send_frame(sdb, MGMT_EID)) {
                 log_err("Failed to send management frame.");
                 ipcp_sdb_release(sdb);
                 return -1;
@@ -456,8 +469,9 @@ static int raptor_name_query_reply(const uint8_t * hash)
 static int raptor_mgmt_frame(const uint8_t * buf,
                              size_t          len)
 {
-        struct mgmt_msg * msg = (struct mgmt_msg *) buf;
-        uint8_t * hash = (uint8_t *) (msg + 1);
+        struct mgmt_msg * msg  = (struct mgmt_msg *) buf;
+        uint8_t *         hash = (uint8_t *) (msg + 1);
+        qosspec_t         qs;
 
         switch (msg->code) {
         case FLOW_REQ:
@@ -466,8 +480,16 @@ static int raptor_mgmt_frame(const uint8_t * buf,
                         return -1;
                 }
 
+                qs.delay        = ntoh32(msg->delay);
+                qs.bandwidth    = ntoh64(msg->bandwidth);
+                qs.availability = msg->availability;
+                qs.loss         = ntoh32(msg->loss);
+                qs.ber          = ntoh32(msg->ber);
+                qs.in_order     = msg->in_order;
+                qs.max_gap      = ntoh32(msg->max_gap);
+
                 if (shim_data_reg_has(raptor_data.shim_data, hash))
-                        raptor_sap_req(msg->ssap, hash, msg->qoscube);
+                        raptor_eid_req(msg->seid, hash, qs);
                 break;
         case FLOW_REPLY:
                 if (len != sizeof(*msg)) {
@@ -475,7 +497,7 @@ static int raptor_mgmt_frame(const uint8_t * buf,
                         return -1;
                 }
 
-                raptor_sap_alloc_reply(msg->ssap, msg->dsap, msg->response);
+                raptor_eid_alloc_reply(msg->seid, msg->deid, msg->response);
                 break;
         case NAME_QUERY_REQ:
                 if (len != sizeof(*msg) + ipcp_dir_hash_len()) {
@@ -552,7 +574,7 @@ static void * raptor_mgmt_handler(void * o)
 
 static void raptor_recv_frame(uint8_t * frame)
 {
-        uint8_t              dsap;
+        uint8_t              deid;
         uint8_t *            payload;
         size_t               frame_len;
         size_t               length;
@@ -577,14 +599,14 @@ static void raptor_recv_frame(uint8_t * frame)
                 return;
         }
 
-        dsap    = frame[2];
+        deid    = frame[2];
         payload = &frame[RAPTOR_HEADER];
         length  = frame_len - RAPTOR_HEADER;
 
         shm_du_buff_head_release(sdb, RAPTOR_HEADER);
         shm_du_buff_tail_release(sdb, RAPTOR_PAGE - frame_len);
 
-        if (dsap == MGMT_SAP) {
+        if (deid == MGMT_EID) {
                 pthread_mutex_lock(&raptor_data.mgmt_lock);
 
                 mgmt_frame = malloc(sizeof(*mgmt_frame));
@@ -604,7 +626,7 @@ static void raptor_recv_frame(uint8_t * frame)
         } else {
                 pthread_rwlock_rdlock(&raptor_data.flows_lock);
 
-                fd = raptor_data.ef_to_fd[dsap];
+                fd = raptor_data.ef_to_fd[deid];
                 if (fd < 0) {
                         pthread_rwlock_unlock(&raptor_data.flows_lock);
                         ipcp_sdb_release(sdb);
@@ -647,7 +669,7 @@ static void * raptor_send_thread(void * o)
         struct timespec      timeout = {0, EVENT_WAIT_TIMEOUT * 1000};
         int                  fd;
         struct shm_du_buff * sdb;
-        uint8_t              dsap;
+        uint8_t              deid;
 
         (void) o;
 
@@ -662,9 +684,9 @@ static void * raptor_send_thread(void * o)
                                 continue;
                         }
 
-                        dsap = raptor_data.fd_to_ef[fd].r_sap;
+                        deid = raptor_data.fd_to_ef[fd].r_eid;
 
-                        raptor_send_frame(sdb, dsap);
+                        raptor_send_frame(sdb, deid);
                 }
                 pthread_rwlock_unlock(&raptor_data.flows_lock);
         }
@@ -886,7 +908,7 @@ static int raptor_query(const uint8_t * hash)
                 return -1;
         }
 
-        if (raptor_send_frame(sdb, MGMT_SAP)) {
+        if (raptor_send_frame(sdb, MGMT_EID)) {
                 log_err("Failed to send management frame.");
                 ipcp_sdb_release(sdb);
                 return -1;
@@ -901,18 +923,13 @@ static int raptor_query(const uint8_t * hash)
 
 static int raptor_flow_alloc(int             fd,
                              const uint8_t * hash,
-                             qoscube_t       cube)
+                             qosspec_t       qs)
 {
-        uint8_t  ssap = 0;
+        uint8_t  seid = 0;
 
         log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(hash));
 
         assert(hash);
-
-        if (cube != QOS_CUBE_BE) {
-                log_dbg("Unsupported QoS requested.");
-                return -1;
-        }
 
         if (!shim_data_dir_has(raptor_data.shim_data, hash)) {
                 log_err("Destination unreachable.");
@@ -921,29 +938,29 @@ static int raptor_flow_alloc(int             fd,
 
         pthread_rwlock_wrlock(&raptor_data.flows_lock);
 
-        ssap =  bmp_allocate(raptor_data.saps);
-        if (!bmp_is_id_valid(raptor_data.saps, ssap)) {
+        seid =  bmp_allocate(raptor_data.eids);
+        if (!bmp_is_id_valid(raptor_data.eids, seid)) {
                 pthread_rwlock_unlock(&raptor_data.flows_lock);
                 return -1;
         }
 
-        raptor_data.fd_to_ef[fd].sap = ssap;
-        raptor_data.ef_to_fd[ssap]   = fd;
+        raptor_data.fd_to_ef[fd].eid = seid;
+        raptor_data.ef_to_fd[seid]   = fd;
 
         pthread_rwlock_unlock(&raptor_data.flows_lock);
 
-        if (raptor_sap_alloc(ssap, hash, cube) < 0) {
+        if (raptor_eid_alloc(seid, hash, qs) < 0) {
                 pthread_rwlock_wrlock(&raptor_data.flows_lock);
-                bmp_release(raptor_data.saps, raptor_data.fd_to_ef[fd].sap);
-                raptor_data.fd_to_ef[fd].sap = -1;
-                raptor_data.ef_to_fd[ssap]   = -1;
+                bmp_release(raptor_data.eids, raptor_data.fd_to_ef[fd].eid);
+                raptor_data.fd_to_ef[fd].eid = -1;
+                raptor_data.ef_to_fd[seid]   = -1;
                 pthread_rwlock_unlock(&raptor_data.flows_lock);
                 return -1;
         }
 
         fset_add(raptor_data.np1_flows, fd);
 
-        log_dbg("Pending flow with fd %d on SAP %d.", fd, ssap);
+        log_dbg("Pending flow with fd %d on EID %d.", fd, seid);
 
         return 0;
 }
@@ -953,8 +970,8 @@ static int raptor_flow_alloc_resp(int fd,
 {
         struct timespec ts    = {0, EVENT_WAIT_TIMEOUT * 1000};
         struct timespec abstime;
-        uint8_t         ssap  = 0;
-        uint8_t         r_sap = 0;
+        uint8_t         seid  = 0;
+        uint8_t         r_eid = 0;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -979,35 +996,35 @@ static int raptor_flow_alloc_resp(int fd,
 
         pthread_rwlock_wrlock(&raptor_data.flows_lock);
 
-        ssap = bmp_allocate(raptor_data.saps);
-        if (!bmp_is_id_valid(raptor_data.saps, ssap)) {
+        seid = bmp_allocate(raptor_data.eids);
+        if (!bmp_is_id_valid(raptor_data.eids, seid)) {
                 pthread_rwlock_unlock(&raptor_data.flows_lock);
                 return -1;
         }
 
-        raptor_data.fd_to_ef[fd].sap = ssap;
-        r_sap = raptor_data.fd_to_ef[fd].r_sap;
-        raptor_data.ef_to_fd[ssap] = fd;
+        raptor_data.fd_to_ef[fd].eid = seid;
+        r_eid = raptor_data.fd_to_ef[fd].r_eid;
+        raptor_data.ef_to_fd[seid] = fd;
 
         pthread_rwlock_unlock(&raptor_data.flows_lock);
 
-        if (raptor_sap_alloc_resp(ssap, r_sap, response) < 0) {
+        if (raptor_eid_alloc_resp(seid, r_eid, response) < 0) {
                 pthread_rwlock_wrlock(&raptor_data.flows_lock);
-                bmp_release(raptor_data.saps, raptor_data.fd_to_ef[fd].sap);
+                bmp_release(raptor_data.eids, raptor_data.fd_to_ef[fd].eid);
                 pthread_rwlock_unlock(&raptor_data.flows_lock);
                 return -1;
         }
 
         fset_add(raptor_data.np1_flows, fd);
 
-        log_dbg("Accepted flow, fd %d, SAP %d.", fd, (uint8_t)ssap);
+        log_dbg("Accepted flow, fd %d, EID %d.", fd, (uint8_t)seid);
 
         return 0;
 }
 
 static int raptor_flow_dealloc(int fd)
 {
-        uint8_t sap;
+        uint8_t eid;
 
         ipcp_flow_fini(fd);
 
@@ -1015,12 +1032,12 @@ static int raptor_flow_dealloc(int fd)
 
         fset_del(raptor_data.np1_flows, fd);
 
-        sap = raptor_data.fd_to_ef[fd].sap;
-        bmp_release(raptor_data.saps, sap);
-        raptor_data.fd_to_ef[fd].sap = -1;
-        raptor_data.fd_to_ef[fd].r_sap = -1;
+        eid = raptor_data.fd_to_ef[fd].eid;
+        bmp_release(raptor_data.eids, eid);
+        raptor_data.fd_to_ef[fd].eid = -1;
+        raptor_data.fd_to_ef[fd].r_eid = -1;
 
-        raptor_data.ef_to_fd[sap] = -1;
+        raptor_data.ef_to_fd[eid] = -1;
 
         pthread_rwlock_unlock(&raptor_data.flows_lock);
 

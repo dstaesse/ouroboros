@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH OUROBOROS-TUTORIAL 7 2017-12-02 Ouroboros "Ouroboros User Manual"
+.TH OUROBOROS-TUTORIAL 7 2018-10-05 Ouroboros "Ouroboros User Manual"
 
 .SH NAME
 
@@ -108,31 +108,31 @@ Pinging my.oping.server with 64 bytes of data:
 
 --- my.oping.server ping statistics ---
 .br
-3 SDUs transmitted, 3 received, 0% packet loss, time: 3001.011 ms
+3 packets transmitted, 3 received, 0% packet loss, time: 3001.011 ms
 .br
 rtt min/avg/max/mdev = 0.304/0.392/0.475/0.086 ms
 .RE
 
 That's all there is to it! The IRMd should log the flow
-allocation. There are two endpoints of the flow (port_id's 0 and 1),
+allocation. There are two endpoints of the flow (flow_id's 0 and 1),
 one for the server (1) and one for the client (0). After the flow
-request, a new port_id is created at the server side (port_id 1) and
-then a previously pending flow (on port_id 0) is allocated following
+request, a new flow_id is created at the server side (flow_id 1) and
+then a previously pending flow (on flow_id 0) is allocated following
 the response from the server.
 
 When the communication is done, the flow is deallocated and the
-resources (port_id's 0 and 1) are released.
+resources (flow_id's 0 and 1) are released.
 
 .RS 4
 ==23918== irmd(II): Flow request arrived for my.oping.server.
 .br
-==23918== irmd(II): Flow on port_id 1 allocated.
+==23918== irmd(II): Flow on flow_id 1 allocated.
 .br
-==23918== irmd(II): Flow on port_id 0 allocated.
+==23918== irmd(II): Flow on flow_id 0 allocated.
 .br
-==23918== irmd(II): Completed deallocation of port_id 0 by process 23932.
+==23918== irmd(II): Completed deallocation of flow_id 0 by process 23932.
 .br
-==23918== irmd(II): Completed deallocation of port_id 1 by process 23932.
+==23918== irmd(II): Completed deallocation of flow_id 1 by process 23932.
 .RE
 
 .SH TERMINOLOGY

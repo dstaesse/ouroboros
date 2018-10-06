@@ -176,7 +176,7 @@ void * writer(void * o)
                 msg->tv_nsec = now.tv_nsec;
 
                 if (flow_write(*fdp, buf, client.size) == -1) {
-                        printf("Failed to send SDU.\n");
+                        printf("Failed to send packet.\n");
                         flow_dealloc(*fdp);
                         free(buf);
                         return (void *) -1;
@@ -253,7 +253,7 @@ static int client_main(void)
 
         printf("\n");
         printf("--- %s ping statistics ---\n", client.s_apn);
-        printf("%d SDUs transmitted, ", client.sent);
+        printf("%d packets transmitted, ", client.sent);
         printf("%d received, ", client.rcvd);
         printf("%zd out-of-order, ", client.ooo);
         printf("%.0lf%% packet loss, ", client.sent == 0 ? 0 :

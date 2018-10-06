@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Lockless ring buffer for incoming SDUs
+ * Lockless ring buffer for incoming packets
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -29,7 +29,7 @@ void shm_rbuff_destroy(struct shm_rbuff * rb)
 
         assert(rb);
 
-        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->pid, rb->port_id);
+        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->pid, rb->flow_id);
 
         shm_rbuff_close(rb);
 

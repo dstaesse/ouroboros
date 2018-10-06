@@ -429,28 +429,29 @@ int ipcp_query(pid_t           pid,
 }
 
 int ipcp_flow_alloc(pid_t           pid,
-                    int             port_id,
+                    int             flow_id,
                     pid_t           n_pid,
                     const uint8_t * dst,
                     size_t          len,
-                    qoscube_t       cube)
+                    qosspec_t       qs)
 {
-        ipcp_msg_t   msg      = IPCP_MSG__INIT;
-        ipcp_msg_t * recv_msg = NULL;
-        int          ret      = -1;
+        ipcp_msg_t    msg      = IPCP_MSG__INIT;
+        qosspec_msg_t qs_msg;
+        ipcp_msg_t *  recv_msg = NULL;
+        int           ret      = -1;
 
         assert(dst);
 
         msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
-        msg.has_port_id  = true;
-        msg.port_id      = port_id;
+        msg.has_flow_id  = true;
+        msg.flow_id      = flow_id;
         msg.has_pid      = true;
         msg.pid          = n_pid;
         msg.has_hash     = true;
         msg.hash.len     = len;
         msg.hash.data    = (uint8_t *) dst;
-        msg.has_qoscube  = true;
-        msg.qoscube      = cube;
+        qs_msg           = spec_to_msg(&qs);
+        msg.qosspec      = &qs_msg;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)
@@ -468,7 +469,7 @@ int ipcp_flow_alloc(pid_t           pid,
 }
 
 int ipcp_flow_alloc_resp(pid_t pid,
-                         int   port_id,
+                         int   flow_id,
                          pid_t n_pid,
                          int   response)
 {
@@ -477,8 +478,8 @@ int ipcp_flow_alloc_resp(pid_t pid,
         int          ret      = -1;
 
         msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP;
-        msg.has_port_id  = true;
-        msg.port_id      = port_id;
+        msg.has_flow_id  = true;
+        msg.flow_id      = flow_id;
         msg.has_pid      = true;
         msg.pid          = n_pid;
         msg.has_response = true;
@@ -500,15 +501,15 @@ int ipcp_flow_alloc_resp(pid_t pid,
 }
 
 int ipcp_flow_dealloc(pid_t pid,
-                      int   port_id)
+                      int   flow_id)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int          ret      = -1;
 
         msg.code        = IPCP_MSG_CODE__IPCP_FLOW_DEALLOC;
-        msg.has_port_id = true;
-        msg.port_id     = port_id;
+        msg.has_flow_id = true;
+        msg.flow_id     = flow_id;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)

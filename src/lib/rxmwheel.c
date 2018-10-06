@@ -192,7 +192,7 @@ static int rxmwheel_move(void)
                                 continue;
                         }
 
-                        shm_flow_set_notify(f->set, f->port_id, FLOW_PKT);
+                        shm_flow_set_notify(f->set, f->flow_id, FLOW_PKT);
 
                         /* Reschedule. */
                         shm_du_buff_wait_ack(sdb);

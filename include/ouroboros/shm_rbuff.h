@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Ring buffer for incoming SDUs
+ * Ring buffer for incoming packets
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -35,10 +35,10 @@
 struct shm_rbuff;
 
 struct shm_rbuff * shm_rbuff_create(pid_t pid,
-                                    int   port_id);
+                                    int   flow_id);
 
 struct shm_rbuff * shm_rbuff_open(pid_t pid,
-                                  int   port_id);
+                                  int   flow_id);
 
 void               shm_rbuff_close(struct shm_rbuff * rb);
 

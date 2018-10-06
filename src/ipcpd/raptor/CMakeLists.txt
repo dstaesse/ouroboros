@@ -16,6 +16,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
   find_path(RAPTOR_KERNEL_MODULE
     NAMES
     raptor.ko.gz
+    raptor.ko.xz
     HINTS
     /lib/modules/${CMAKE_SYSTEM_VERSION}/extra
   )

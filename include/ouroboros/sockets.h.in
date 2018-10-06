@@ -23,6 +23,8 @@
 #ifndef OUROBOROS_SOCKETS_H
 #define OUROBOROS_SOCKETS_H
 
+#include <ouroboros/qos.h>
+
 #include <sys/types.h>
 
 #include "ipcp_config.pb-c.h"
@@ -35,6 +37,9 @@ typedef IpcpInfoMsg ipcp_info_msg_t;
 
 #include "ipcpd_messages.pb-c.h"
 typedef IpcpMsg ipcp_msg_t;
+
+#include "qosspec.pb-c.h"
+typedef QosspecMsg qosspec_msg_t;
 
 #define SOCK_PATH "/var/run/ouroboros/"
 #define SOCK_PATH_SUFFIX ".sock"
@@ -52,5 +57,11 @@ int         server_socket_open(char * file_name);
 int         client_socket_open(char * file_name);
 
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
+
+
+/* qos message conversion needed in different components */
+qosspec_msg_t spec_to_msg(qosspec_t * qs);
+
+qosspec_t     msg_to_spec(qosspec_msg_t * msg);
 
 #endif

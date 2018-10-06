@@ -26,7 +26,6 @@
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/list.h>
-#include <ouroboros/qoscube.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/tpm.h>
 
@@ -60,7 +59,7 @@ struct ipcp_ops {
 
         int   (* ipcp_flow_alloc)(int             fd,
                                   const uint8_t * dst,
-                                  qoscube_t       qos);
+                                  qosspec_t       qs);
 
         int   (* ipcp_flow_alloc_resp)(int fd,
                                        int response);

@@ -24,8 +24,8 @@
 #define OUROBOROS_IRMD_IRM_FLOW_H
 
 #include <ouroboros/list.h>
+#include <ouroboros/qos.h>
 #include <ouroboros/shm_rbuff.h>
-#include <ouroboros/qoscube.h>
 
 #include <sys/types.h>
 #include <pthread.h>
@@ -42,11 +42,12 @@ enum flow_state {
 struct irm_flow {
         struct list_head   next;
 
-        int                port_id;
-        qoscube_t          qc;
+        int                flow_id;
 
         pid_t              n_pid;
         pid_t              n_1_pid;
+
+        qosspec_t          qs;
 
         struct shm_rbuff * n_rb;
         struct shm_rbuff * n_1_rb;
@@ -60,8 +61,8 @@ struct irm_flow {
 
 struct irm_flow * irm_flow_create(pid_t     n_pid,
                                   pid_t     n_1_pid,
-                                  int       port_id,
-                                  qoscube_t qc);
+                                  int       flow_id,
+                                  qosspec_t qs);
 
 void              irm_flow_destroy(struct irm_flow * f);
 

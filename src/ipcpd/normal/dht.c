@@ -20,7 +20,11 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#else
 #define _POSIX_C_SOURCE 200112L
+#endif
 
 #include "config.h"
 
@@ -58,21 +62,21 @@ typedef KadContactMsg kad_contact_msg_t;
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
-#define DHT_MAX_REQS  2048 /* KAD recommends rnd(), bmp can be changed.  */
-#define KAD_ALPHA     3    /* Parallel factor, proven optimal value.     */
-#define KAD_K         8    /* Replication factor, MDHT value.            */
-#define KAD_T_REPL    900  /* Replication time, tied to k. MDHT value.   */
-#define KAD_T_REFR    900  /* Refresh time stale bucket, MDHT value.     */
-#define KAD_T_JOIN    8    /* Response time to wait for a join.          */
-#define KAD_T_RESP    5    /* Response time to wait for a response.      */
-#define KAD_R_PING    2    /* Ping retries before declaring peer dead.   */
-#define KAD_QUEER     15   /* Time to declare peer questionable.         */
-#define KAD_BETA      8    /* Bucket split factor, must be 1, 2, 4 or 8. */
-#define KAD_RESP_RETR 6    /* Number of retries on sending a response.   */
-#define KAD_JOIN_RETR 8    /* Number of retries sending a join.          */
-#define KAD_JOIN_INTV 1    /* Time (seconds) between join retries.       */
-#define HANDLE_TIMEO  1000 /* Timeout for dht_handle_sdu tpm check (ms)  */
-#define DHT_RETR_ADDR 1    /* Number of addresses to return on retrieve  */
+#define DHT_MAX_REQS  2048 /* KAD recommends rnd(), bmp can be changed.    */
+#define KAD_ALPHA     3    /* Parallel factor, proven optimal value.       */
+#define KAD_K         8    /* Replication factor, MDHT value.              */
+#define KAD_T_REPL    900  /* Replication time, tied to k. MDHT value.     */
+#define KAD_T_REFR    900  /* Refresh time stale bucket, MDHT value.       */
+#define KAD_T_JOIN    8    /* Response time to wait for a join.            */
+#define KAD_T_RESP    5    /* Response time to wait for a response.        */
+#define KAD_R_PING    2    /* Ping retries before declaring peer dead.     */
+#define KAD_QUEER     15   /* Time to declare peer questionable.           */
+#define KAD_BETA      8    /* Bucket split factor, must be 1, 2, 4 or 8.   */
+#define KAD_RESP_RETR 6    /* Number of retries on sending a response.     */
+#define KAD_JOIN_RETR 8    /* Number of retries sending a join.            */
+#define KAD_JOIN_INTV 1    /* Time (seconds) between join retries.         */
+#define HANDLE_TIMEO  1000 /* Timeout for dht_handle_packet tpm check (ms) */
+#define DHT_RETR_ADDR 1    /* Number of addresses to return on retrieve    */
 
 enum dht_state {
         DHT_INIT = 0,
@@ -247,7 +251,7 @@ struct join_info {
         uint64_t     addr;
 };
 
-struct sdu_info {
+struct packet_info {
         struct dht *         dht;
         struct shm_du_buff * sdb;
 };
@@ -1485,7 +1489,7 @@ static int send_msg(struct dht * dht,
 
                 kad_msg__pack(msg, shm_du_buff_head(sdb));
 
-                if (dt_write_sdu(addr, QOS_CUBE_BE, dht->fd, sdb) == 0)
+                if (dt_write_packet(addr, QOS_CUBE_BE, dht->fd, sdb) == 0)
                         break;
 
                 ipcp_sdb_release(sdb);
@@ -2396,7 +2400,7 @@ uint64_t dht_query(struct dht *    dht,
         return 0;
 }
 
-static void * dht_handle_sdu(void * o)
+static void * dht_handle_packet(void * o)
 {
         struct dht * dht = (struct dht *) o;
 
@@ -2580,8 +2584,8 @@ static void * dht_handle_sdu(void * o)
         return (void *) 0;
 }
 
-static void dht_post_sdu(void *               comp,
-                         struct shm_du_buff * sdb)
+static void dht_post_packet(void *               comp,
+                            struct shm_du_buff * sdb)
 {
         struct cmd * cmd;
         struct dht * dht = (struct dht *) comp;
@@ -2796,19 +2800,19 @@ struct dht * dht_create(uint64_t addr)
         dht->addr = addr;
         dht->id   = NULL;
 #ifndef __DHT_TEST__
-        dht->tpm = tpm_create(2, 1, dht_handle_sdu, dht);
+        dht->tpm = tpm_create(2, 1, dht_handle_packet, dht);
         if (dht->tpm == NULL)
                 goto fail_tpm_create;
 
         if (tpm_start(dht->tpm))
                 goto fail_tpm_start;
 
-        dht->fd   = dt_reg_comp(dht, &dht_post_sdu, DHT);
+        dht->fd   = dt_reg_comp(dht, &dht_post_packet, DHT);
         notifier_reg(handle_event, dht);
 #else
         (void) handle_event;
-        (void) dht_handle_sdu;
-        (void) dht_post_sdu;
+        (void) dht_handle_packet;
+        (void) dht_post_packet;
 #endif
         dht->state = DHT_INIT;
 

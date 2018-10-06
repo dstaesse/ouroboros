@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_NORMAL_FA_H
 #define OUROBOROS_IPCPD_NORMAL_FA_H
 
-#include <ouroboros/qoscube.h>
+#include <ouroboros/qos.h>
 #include <ouroboros/utils.h>
 
 int  fa_init(void);
@@ -36,7 +36,7 @@ void fa_stop(void);
 
 int  fa_alloc(int             fd,
               const uint8_t * dst,
-              qoscube_t       qos);
+              qosspec_t       qs);
 
 int  fa_alloc_resp(int fd,
                    int response);

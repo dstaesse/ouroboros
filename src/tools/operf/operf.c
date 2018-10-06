@@ -119,8 +119,8 @@ static void usage(void)
                "  -d, --duration            Test duration (default 60s)\n"
                "  -r, --rate                Rate (b/s)\n"
                "  -s, --size                Payload size (B, default 1500)\n"
-               "  -f, --flood               Send SDUs as fast as possible\n"
-               "      --sleep               Sleep in between sending SDUs\n"
+               "  -f, --flood               Send packets as fast as possible\n"
+               "      --sleep               Sleep in between sending packets\n"
                "\n"
                "      --help                Display this help text and exit\n");
 }

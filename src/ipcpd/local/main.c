@@ -20,7 +20,11 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#else
 #define _POSIX_C_SOURCE 200112L
+#endif
 
 #include "config.h"
 
@@ -55,7 +59,7 @@ struct {
         fqueue_t *         fq;
 
         pthread_rwlock_t   lock;
-        pthread_t          sduloop;
+        pthread_t          packet_loop;
 } local_data;
 
 static int local_data_init(void)
@@ -93,7 +97,7 @@ static void local_data_fini(void){
         pthread_rwlock_destroy(&local_data.lock);
 }
 
-static void * ipcp_local_sdu_loop(void * o)
+static void * ipcp_local_packet_loop(void * o)
 {
         (void) o;
 
@@ -135,8 +139,8 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        if (pthread_create(&local_data.sduloop, NULL,
-                           ipcp_local_sdu_loop, NULL)) {
+        if (pthread_create(&local_data.packet_loop, NULL,
+                           ipcp_local_packet_loop, NULL)) {
                 ipcp_set_state(IPCP_INIT);
                 return -1;
         }
@@ -179,7 +183,7 @@ static int ipcp_local_query(const uint8_t * hash)
 
 static int ipcp_local_flow_alloc(int             fd,
                                  const uint8_t * dst,
-                                 qoscube_t       cube)
+                                 qosspec_t       qs)
 {
         struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
         struct timespec abstime;
@@ -208,7 +212,7 @@ static int ipcp_local_flow_alloc(int             fd,
 
         assert(ipcpi.alloc_id == -1);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), cube);
+        out_fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), qs);
         if (out_fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Flow allocation failed: %d", out_fd);
@@ -360,8 +364,8 @@ int main(int    argc,
         ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                pthread_cancel(local_data.sduloop);
-                pthread_join(local_data.sduloop, NULL);
+                pthread_cancel(local_data.packet_loop);
+                pthread_join(local_data.packet_loop, NULL);
         }
 
         local_data_fini();

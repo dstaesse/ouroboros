@@ -47,8 +47,6 @@
 /* FRCT flags */
 #define FRCTFRESCNTRL 00000001 /* Feedback from receiver */
 #define FRCTFRTX      00000002 /* Reliable flow          */
-#define FRCTFERRCHCK  00000004 /* Check for errors       */
-#define FRCTFPARTIAL  00000010 /* Allow partial delivery */
 
 /* Flow operations */
 #define FLOWSRCVTIMEO 00000001 /* Set read timeout       */
@@ -62,8 +60,7 @@
 #define FLOWGTXQLEN   00000011 /* Get queue length on tx */
 
 /* FRCT operations */
-#define FRCTSFLAGS    00001000 /* Set flags for FRCT     */
-#define FRCTGFLAGS    00001001 /* Get flags for FRCT     */
+#define FRCTGFLAGS    00001000 /* Get flags for FRCT     */
 
 __BEGIN_DECLS
 

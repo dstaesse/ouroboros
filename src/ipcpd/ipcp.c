@@ -20,13 +20,24 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#else
+#define _POSIX_C_SOURCE 200112L
+#define __XSI_VISIBLE   500
+#endif
+
 #if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
 #define _GNU_SOURCE
 #define NPROC (sysconf(_SC_NPROCESSORS_ONLN))
 #endif
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#else
 #define _POSIX_C_SOURCE 200112L
 #define __XSI_VISIBLE   500
+#endif
 
 #include "config.h"
 
@@ -194,6 +205,7 @@ static void * mainloop(void * o)
                 layer_info_msg_t    layer_info = LAYER_INFO_MSG__INIT;
                 int                 fd         = -1;
                 struct cmd *        cmd;
+                qosspec_t           qs;
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
 
@@ -418,12 +430,13 @@ static void * mainloop(void * o)
                                 break;
                         }
 
+                        qs = msg_to_spec(msg->qosspec);
                         fd = np1_flow_alloc(msg->pid,
-                                            msg->port_id,
-                                            msg->qoscube);
+                                            msg->flow_id,
+                                            qs);
                         if (fd < 0) {
-                                log_err("Failed allocating fd on port_id %d.",
-                                        msg->port_id);
+                                log_err("Failed allocating fd on flow_id %d.",
+                                        msg->flow_id);
                                 ret_msg.result = -1;
                                 break;
                         }
@@ -431,7 +444,7 @@ static void * mainloop(void * o)
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc(fd,
                                                            msg->hash.data,
-                                                           msg->qoscube);
+                                                           qs);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         ret_msg.has_result = true;
@@ -448,10 +461,10 @@ static void * mainloop(void * o)
                         }
 
                         if (!msg->response) {
-                                fd = np1_flow_resp(msg->port_id);
+                                fd = np1_flow_resp(msg->flow_id);
                                 if (fd < 0) {
                                         log_warn("Port_id %d is not known.",
-                                                 msg->port_id);
+                                                 msg->flow_id);
                                         ret_msg.result = -1;
                                         break;
                                 }
@@ -475,10 +488,10 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        fd = np1_flow_dealloc(msg->port_id);
+                        fd = np1_flow_dealloc(msg->flow_id);
                         if (fd < 0) {
-                                log_warn("Could not deallocate port_id %d.",
-                                        msg->port_id);
+                                log_warn("Could not deallocate flow_id %d.",
+                                        msg->flow_id);
                                 ret_msg.result = -1;
                                 break;
                         }

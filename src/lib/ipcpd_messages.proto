@@ -23,6 +23,7 @@
 syntax = "proto2";
 
 import "ipcp_config.proto";
+import "qosspec.proto";
 
 enum ipcp_msg_code {
         IPCP_BOOTSTRAP       =  1;
@@ -41,9 +42,9 @@ enum ipcp_msg_code {
 message ipcp_msg {
         required ipcp_msg_code code        =  1;
         optional bytes hash                =  2;
-        optional int32 port_id             =  3;
+        optional int32 flow_id             =  3;
         optional string dst                =  4;
-        optional uint32 qoscube            =  5;
+        optional qosspec_msg qosspec       =  5;
         optional ipcp_config_msg conf      =  6;
         optional int32 pid                 =  7;
         optional layer_info_msg layer_info =  8;

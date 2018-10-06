@@ -22,7 +22,6 @@
 
 #include <ouroboros/ipcp.h>
 #include <ouroboros/sockets.h>
-#include <ouroboros/qoscube.h>
 
 #include <sys/types.h>
 
@@ -63,18 +62,18 @@ int   ipcp_query(pid_t           pid,
                  size_t          len);
 
 int   ipcp_flow_alloc(pid_t           pid,
-                      int             port_id,
+                      int             flow_id,
                       pid_t           n_pid,
                       const uint8_t * dst,
                       size_t          len,
-                      qoscube_t       qos);
+                      qosspec_t       qs);
 
 int   ipcp_flow_alloc_resp(pid_t pid,
-                           int   port_id,
+                           int   flow_id,
                            pid_t n_pid,
                            int   response);
 
 int   ipcp_flow_dealloc(pid_t pid,
-                        int   port_id);
+                        int   flow_id);
 
 #endif /* OUROBOROS_IRMD_IPCP_H */

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Ring buffer implementations for incoming SDUs
+ * Ring buffer implementations for incoming packets
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -63,10 +63,10 @@ struct shm_rbuff {
         size_t *          tail;     /* start of ringbuffer tail      */
         size_t *          acl;      /* access control                */
         pthread_mutex_t * lock;     /* lock all free space in shm    */
-        pthread_cond_t *  add;      /* SDU arrived                   */
-        pthread_cond_t *  del;      /* SDU removed                   */
+        pthread_cond_t *  add;      /* packet arrived                */
+        pthread_cond_t *  del;      /* packet removed                */
         pid_t             pid;      /* pid of the owner              */
-        int               port_id;  /* port_id of the flow           */
+        int               flow_id;  /* flow_id of the flow           */
 };
 
 void shm_rbuff_close(struct shm_rbuff * rb)
@@ -81,7 +81,7 @@ void shm_rbuff_close(struct shm_rbuff * rb)
 #define MM_FLAGS (PROT_READ | PROT_WRITE)
 
 struct shm_rbuff * rbuff_create(pid_t pid,
-                                int   port_id,
+                                int   flow_id,
                                 int   flags)
 {
         struct shm_rbuff * rb;
@@ -89,7 +89,7 @@ struct shm_rbuff * rbuff_create(pid_t pid,
         ssize_t *          shm_base;
         char               fn[FN_MAX_CHARS];
 
-        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", pid, port_id);
+        sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", pid, flow_id);
 
         rb = malloc(sizeof(*rb));
         if (rb == NULL)
@@ -116,7 +116,7 @@ struct shm_rbuff * rbuff_create(pid_t pid,
         rb->add      = (pthread_cond_t *) (rb->lock + 1);
         rb->del      = rb->add + 1;
         rb->pid      = pid;
-        rb->port_id  = port_id;
+        rb->flow_id  = flow_id;
 
         return rb;
 
@@ -131,7 +131,7 @@ struct shm_rbuff * rbuff_create(pid_t pid,
 }
 
 struct shm_rbuff * shm_rbuff_create(pid_t pid,
-                                    int   port_id)
+                                    int   flow_id)
 {
         struct shm_rbuff *  rb;
         pthread_mutexattr_t mattr;
@@ -140,7 +140,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t pid,
 
         mask = umask(0);
 
-        rb = rbuff_create(pid, port_id, O_CREAT | O_EXCL | O_RDWR);
+        rb = rbuff_create(pid, flow_id, O_CREAT | O_EXCL | O_RDWR);
 
         umask(mask);
 
@@ -175,7 +175,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t pid,
         *rb->tail = 0;
 
         rb->pid = pid;
-        rb->port_id = port_id;
+        rb->flow_id = flow_id;
 
         pthread_mutexattr_destroy(&mattr);
         pthread_condattr_destroy(&cattr);
@@ -197,9 +197,9 @@ struct shm_rbuff * shm_rbuff_create(pid_t pid,
 }
 
 struct shm_rbuff * shm_rbuff_open(pid_t pid,
-                                  int   port_id)
+                                  int   flow_id)
 {
-        return rbuff_create(pid, port_id, O_RDWR);
+        return rbuff_create(pid, flow_id, O_RDWR);
 }
 
 #if (defined(SHM_RBUFF_LOCKLESS) &&                            \

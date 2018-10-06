@@ -24,7 +24,6 @@
 #define OUROBOROS_SHM_RDRBUFF_H
 
 #include <ouroboros/shm_du_buff.h>
-#include <ouroboros/qoscube.h>
 #include <ouroboros/time_utils.h>
 
 #include <stdint.h>

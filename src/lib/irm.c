@@ -20,7 +20,11 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#else
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include <ouroboros/errno.h>
 #include <ouroboros/hash.h>
@@ -315,10 +319,10 @@ static int check_prog(const char * prog)
 
 static int check_prog_path(char ** prog)
 {
-        char * path = getenv("PATH");
-        char * path_end = path + strlen(path) + 1;
+        char * path;
+        char * path_end;
         char * pstart;
-        char * pstop = path;
+        char * pstop;
         char * tmp;
         char * tstop;
         char * tstart;
@@ -327,9 +331,15 @@ static int check_prog_path(char ** prog)
 
         assert(prog);
 
-        if (*prog == NULL || path == NULL)
+        if (*prog == NULL)
                 return -EINVAL;
 
+        path = getenv("PATH");
+        if (path == NULL)
+                return -ENOENT;
+
+        pstop = path;
+        path_end = path + strlen(path) + 1;
         if (!strlen(path) || strchr(*prog, '/') != NULL) {
                 if ((ret = check_prog(*prog)) < 0)
                         return ret;

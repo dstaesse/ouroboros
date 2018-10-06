@@ -89,6 +89,7 @@ int do_destroy_ipcp(int     argc,
                         break;
                 }
 
+        free(ipcps);
 
         return 0;
  fail_destroy:

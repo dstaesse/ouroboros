@@ -72,7 +72,7 @@ static int server_main(void)
 
                 count = flow_read(fd, &buf, BUF_SIZE);
                 if (count < 0) {
-                        printf("Failed to read SDU.\n");
+                        printf("Failed to read packet.\n");
                         flow_dealloc(fd);
                         continue;
                 }
@@ -80,7 +80,7 @@ static int server_main(void)
                 printf("Message from client is %.*s.\n", (int) count, buf);
 
                 if (flow_write(fd, buf, count) == -1) {
-                        printf("Failed to write SDU.\n");
+                        printf("Failed to write packet.\n");
                         flow_dealloc(fd);
                         continue;
                 }
@@ -105,14 +105,14 @@ static int client_main(void)
         }
 
         if (flow_write(fd, message, strlen(message) + 1) < 0) {
-                printf("Failed to write SDU.\n");
+                printf("Failed to write packet.\n");
                 flow_dealloc(fd);
                 return -1;
         }
 
         count = flow_read(fd, buf, BUF_SIZE);
         if (count < 0) {
-                printf("Failed to read SDU.\n");
+                printf("Failed to read packet.\n");
                 flow_dealloc(fd);
                 return -1;
         }

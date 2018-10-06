@@ -101,6 +101,9 @@ static int rib_read(const char *            path,
         char               comp[RIB_PATH_LEN + 1];
         char *             c;
 
+        if (strlen(path) > RIB_PATH_LEN)
+                return -1;
+
         strcpy(comp, path + 1);
 
         c = strstr(comp, "/");
@@ -182,6 +185,9 @@ static size_t __getattr(const char *  path,
         struct list_head * p;
         char               comp[RIB_PATH_LEN + 1];
         char *             c;
+
+        if (strlen(path) > RIB_PATH_LEN)
+                return -1;
 
         strcpy(comp, path + 1);
 
@@ -282,7 +288,8 @@ int rib_init(const char * mountpt)
         if (stat(rib.mnt, &st) == -1)
                 switch(errno) {
                 case ENOENT:
-                        mkdir(rib.mnt, 0777);
+                        if (mkdir(rib.mnt, 0777))
+                                return -1;
                         break;
                 case ENOTCONN:
                         fuse_unmount(rib.mnt, rib.ch);
@@ -383,6 +390,12 @@ int rib_reg(const char *     path,
         if (rc == NULL) {
                 pthread_rwlock_unlock(&rib.lock);
                 return -ENOMEM;
+        }
+
+        if (strlen(path) > RIB_PATH_LEN) {
+                pthread_rwlock_unlock(&rib.lock);
+                free(rc);
+                return -1;
         }
 
         strcpy(rc->path, path);

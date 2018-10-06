@@ -27,7 +27,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-#define LAYER_NAME_SIZE 256
+#define LAYER_NAME_SIZE 255
 
 /*
  * NOTE: the IRMd uses this order to select an IPCP
@@ -67,7 +67,7 @@ enum pol_dir_hash {
 
 /* Info reported back to the IRMd about the layer on enrollment */
 struct layer_info {
-        char layer_name[LAYER_NAME_SIZE];
+        char layer_name[LAYER_NAME_SIZE + 1];
         int  dir_hash_algo;
 };
 

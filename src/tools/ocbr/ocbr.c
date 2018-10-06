@@ -60,7 +60,7 @@ struct s {
 static void usage(void)
 {
         printf("Usage: cbr [OPTION]...\n"
-               "Sends SDUs from client to server at a constant bit rate.\n\n"
+               "Sends packets from client to server at a constant bit rate.\n\n"
                "  -l, --listen              Run in server mode\n"
                "\n"
                "Server options:\n"
@@ -70,10 +70,10 @@ static void usage(void)
                "Client options:\n"
                "  -n, --server_apn          Specify the name of the server.\n"
                "  -d, --duration            Duration for sending (s)\n"
-               "  -f, --flood               Send SDUs as fast as possible\n"
-               "  -s, --size                SDU size (B, max %ld B)\n"
+               "  -f, --flood               Send packets as fast as possible\n"
+               "  -s, --size                packet size (B, max %ld B)\n"
                "  -r, --rate                Rate (b/s)\n"
-               "      --sleep               Sleep in between sending SDUs\n"
+               "      --sleep               Sleep in between sending packets\n"
                "\n\n"
                "      --help                Display this help text and exit\n",
                BUF_SIZE);
@@ -82,7 +82,7 @@ static void usage(void)
 int main(int argc, char ** argv)
 {
         int    duration = 60;  /* One minute test */
-        int    size = 1000;    /* 1000 byte SDUs */
+        int    size = 1000;    /* 1000 byte packets */
         long   rate = 1000000; /* 1 Mb/s */
         bool   flood = false;
         bool   sleep = false;

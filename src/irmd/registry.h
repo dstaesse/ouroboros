@@ -26,7 +26,6 @@
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/list.h>
-#include <ouroboros/qoscube.h>
 
 #include "proc_table.h"
 #include "prog_table.h"

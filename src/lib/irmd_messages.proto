@@ -23,6 +23,7 @@
 syntax = "proto2";
 
 import "ipcp_config.proto";
+import "qosspec.proto";
 
 enum irm_msg_code {
         IRM_CREATE_IPCP       =  1;
@@ -66,8 +67,8 @@ message irm_msg {
         optional sint32 response      =  8;
         optional string dst           =  9;
         optional bytes  hash          = 10;
-        optional sint32 port_id       = 11;
-        optional sint32 qoscube       = 12;
+        optional sint32 flow_id       = 11;
+        optional qosspec_msg qosspec  = 12;
         optional ipcp_config_msg conf = 13;
         optional uint32 opts          = 14;
         repeated ipcp_info_msg ipcps  = 15;

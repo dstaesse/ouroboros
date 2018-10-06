@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * SDU scheduler component
+ * Packet scheduler component
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,7 +20,11 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#else
 #define _POSIX_C_SOURCE 200112L
+#endif
 
 #include "config.h"
 
@@ -28,7 +32,7 @@
 #include <ouroboros/notifier.h>
 
 #include "ipcp.h"
-#include "sdu_sched.h"
+#include "psched.h"
 #include "connmgr.h"
 
 #include <assert.h>
@@ -45,15 +49,15 @@ static int qos_prio [] = {
         QOS_PRIO_DATA
 };
 
-struct sdu_sched {
-        fset_t *      set[QOS_CUBE_MAX];
-        next_sdu_fn_t callback;
-        pthread_t     readers[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
+struct psched {
+        fset_t *         set[QOS_CUBE_MAX];
+        next_packet_fn_t callback;
+        pthread_t        readers[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
 };
 
 struct sched_info {
-        struct sdu_sched * sch;
-        qoscube_t          qc;
+        struct psched * sch;
+        qoscube_t       qc;
 };
 
 static void cleanup_reader(void * o)
@@ -61,13 +65,13 @@ static void cleanup_reader(void * o)
         fqueue_destroy((fqueue_t *) o);
 }
 
-static void * sdu_reader(void * o)
+static void * packet_reader(void * o)
 {
-        struct sdu_sched *   sched;
-        struct shm_du_buff * sdb;
-        int                  fd;
-        fqueue_t *           fq;
-        qoscube_t            qc;
+        struct psched *       sched;
+        struct shm_du_buff *  sdb;
+        int                   fd;
+        fqueue_t *            fq;
+        qoscube_t             qc;
 
         sched = ((struct sched_info *) o)->sch;
         qc    = ((struct sched_info *) o)->qc;
@@ -115,26 +119,26 @@ static void * sdu_reader(void * o)
         return (void *) 0;
 }
 
-struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
+struct psched * psched_create(next_packet_fn_t callback)
 {
-        struct sdu_sched *  sdu_sched;
-        struct sched_info * infos[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
-        int                 i;
-        int                 j;
+        struct psched *       psched;
+        struct sched_info *   infos[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
+        int                   i;
+        int                   j;
 
         assert(callback);
 
-        sdu_sched = malloc(sizeof(*sdu_sched));
-        if (sdu_sched == NULL)
+        psched = malloc(sizeof(*psched));
+        if (psched == NULL)
                 goto fail_malloc;
 
-        sdu_sched->callback = callback;
+        psched->callback = callback;
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
-                sdu_sched->set[i] = fset_create();
-                if (sdu_sched->set[i] == NULL) {
+                psched->set[i] = fset_create();
+                if (psched->set[i] == NULL) {
                         for (j = 0; j < i; ++j)
-                                fset_destroy(sdu_sched->set[j]);
+                                fset_destroy(psched->set[j]);
                         goto fail_flow_set;
                 }
         }
@@ -146,17 +150,17 @@ struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
                                 free(infos[j]);
                         goto fail_infos;
                 }
-                infos[i]->sch = sdu_sched;
+                infos[i]->sch = psched;
                 infos[i]->qc  = i % QOS_CUBE_MAX;
         }
 
         for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
-                if (pthread_create(&sdu_sched->readers[i], NULL,
-                                   sdu_reader, infos[i])) {
+                if (pthread_create(&psched->readers[i], NULL,
+                                   packet_reader, infos[i])) {
                         for (j = 0; j < i; ++j)
-                                pthread_cancel(sdu_sched->readers[j]);
+                                pthread_cancel(psched->readers[j]);
                         for (j = 0; j < i; ++j)
-                                pthread_join(sdu_sched->readers[j], NULL);
+                                pthread_join(psched->readers[j], NULL);
                         for (j = i; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                                 free(infos[i]);
                         goto fail_infos;
@@ -177,61 +181,61 @@ struct sdu_sched * sdu_sched_create(next_sdu_fn_t callback)
                 par.sched_priority = min +
                         (qos_prio[i % QOS_CUBE_MAX] * (max - min) / 99);
 
-                if (pthread_setschedparam(sdu_sched->readers[i], pol, &par))
+                if (pthread_setschedparam(psched->readers[i], pol, &par))
                         goto fail_sched;
         }
 
-        return sdu_sched;
+        return psched;
 
  fail_sched:
         for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
-                pthread_cancel(sdu_sched->readers[j]);
+                pthread_cancel(psched->readers[j]);
         for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
-                pthread_join(sdu_sched->readers[j], NULL);
+                pthread_join(psched->readers[j], NULL);
  fail_infos:
         for (j = 0; j < QOS_CUBE_MAX; ++j)
-                fset_destroy(sdu_sched->set[j]);
+                fset_destroy(psched->set[j]);
  fail_flow_set:
-        free(sdu_sched);
+        free(psched);
  fail_malloc:
         return NULL;
 }
 
-void sdu_sched_destroy(struct sdu_sched * sdu_sched)
+void psched_destroy(struct psched * psched)
 {
         int i;
 
-        assert(sdu_sched);
+        assert(psched);
 
         for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
-                pthread_cancel(sdu_sched->readers[i]);
-                pthread_join(sdu_sched->readers[i], NULL);
+                pthread_cancel(psched->readers[i]);
+                pthread_join(psched->readers[i], NULL);
         }
 
         for (i = 0; i < QOS_CUBE_MAX; ++i)
-                fset_destroy(sdu_sched->set[i]);
+                fset_destroy(psched->set[i]);
 
-        free(sdu_sched);
+        free(psched);
 }
 
-void sdu_sched_add(struct sdu_sched * sdu_sched,
-                   int                fd)
+void psched_add(struct psched * psched,
+                      int       fd)
 {
         qoscube_t qc;
 
-        assert(sdu_sched);
+        assert(psched);
 
         ipcp_flow_get_qoscube(fd, &qc);
-        fset_add(sdu_sched->set[qc], fd);
+        fset_add(psched->set[qc], fd);
 }
 
-void sdu_sched_del(struct sdu_sched * sdu_sched,
-                   int                fd)
+void psched_del(struct psched * psched,
+                      int       fd)
 {
         qoscube_t qc;
 
-        assert(sdu_sched);
+        assert(psched);
 
         ipcp_flow_get_qoscube(fd, &qc);
-        fset_del(sdu_sched->set[qc], fd);
+        fset_del(psched->set[qc], fd);
 }

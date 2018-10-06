@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2018
  *
- * Quality of Service specification
+ * QoS specification message
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,27 +20,14 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_QOS_H
-#define OUROBOROS_QOS_H
+syntax = "proto2";
 
-#include <stdint.h>
-#include <stdbool.h>
-
-typedef struct qos_spec {
-        uint32_t delay;         /* In ms */
-        uint64_t bandwidth;     /* In bits/s */
-        uint8_t  availability;  /* Class of 9s */
-        uint32_t loss;          /* Packet loss */
-        uint32_t ber;           /* Bit error rate, errors per billion bits */
-        uint8_t  in_order;      /* In-order delivery, enables FRCT */
-        uint32_t max_gap;       /* In ms */
-} qosspec_t;
-
-qosspec_t qos_raw;
-qosspec_t qos_raw_no_errors;
-qosspec_t qos_best_effort;
-qosspec_t qos_video;
-qosspec_t qos_voice;
-qosspec_t qos_data;
-
-#endif /* OUROBOROS_QOS_H */
+message qosspec_msg {
+        required uint32 delay        = 1; /* In ms */
+        required uint64 bandwidth    = 2; /* In bits/s */
+        required uint32 availability = 3; /* Class of 9s */
+        required uint32 loss         = 4; /* Packet loss */
+        required uint32 ber          = 5; /* Bit error rate, ppb */
+        required uint32 in_order     = 6; /* In-order delivery */
+        required uint32 max_gap      = 7; /* In ms */
+};

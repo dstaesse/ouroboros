@@ -28,6 +28,7 @@
 
 #cmakedefine                SHM_RBUFF_LOCKLESS
 #cmakedefine                SHM_RDRB_MULTI_BLOCK
+#cmakedefine                QOS_DISABLE_CRC
 
 #define SHM_RBUFF_PREFIX    "@SHM_RBUFF_PREFIX@"
 #define SHM_LOCKFILE_NAME   "@SHM_LOCKFILE_NAME@"

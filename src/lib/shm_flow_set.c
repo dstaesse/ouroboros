@@ -64,7 +64,7 @@
 #define fqueue_ptr(fs, idx) (fs->fqueues + (SHM_BUFFER_SIZE) * idx)
 
 struct portevent {
-        int port_id;
+        int flow_id;
         int event;
 };
 
@@ -98,17 +98,14 @@ struct shm_flow_set * shm_flow_set_create()
         mask = umask(0);
 
         shm_fd = shm_open(fn, O_CREAT | O_RDWR, 0666);
-        if (shm_fd == -1) {
-                free(set);
-                return NULL;
-        }
+        if (shm_fd == -1)
+                goto fail_shm_open;
 
         umask(mask);
 
         if (ftruncate(shm_fd, SHM_FLOW_SET_FILE_SIZE - 1) < 0) {
-                free(set);
                 close(shm_fd);
-                return NULL;
+                goto fail_shm_open;
         }
 
         shm_base = mmap(NULL,
@@ -120,11 +117,8 @@ struct shm_flow_set * shm_flow_set_create()
 
         close(shm_fd);
 
-        if (shm_base == MAP_FAILED) {
-                shm_unlink(fn);
-                free(set);
-                return NULL;
-        }
+        if (shm_base == MAP_FAILED)
+                goto fail_mmap;
 
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
@@ -133,21 +127,27 @@ struct shm_flow_set * shm_flow_set_create()
         set->lock    = (pthread_mutex_t *)
                 (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
-        pthread_mutexattr_init(&mattr);
-#ifdef HAVE_ROBUST_MUTEX
-        pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
-#endif
-        pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
-        pthread_mutex_init(set->lock, &mattr);
+        if (pthread_mutexattr_init(&mattr))
+                goto fail_mmap;
 
-        pthread_condattr_init(&cattr);
-        pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+#ifdef HAVE_ROBUST_MUTEX
+        if (pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST))
+                goto fail_mmap;
+#endif
+        if (pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED) ||
+            pthread_mutex_init(set->lock, &mattr) ||
+            pthread_condattr_init(&cattr) ||
+            pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED))
+                goto fail_mmap;
+
 #ifndef __APPLE__
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+        if (pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK))
+                goto fail_mmap;
 #endif
         for (i = 0; i < PROG_MAX_FQUEUES; ++i) {
                 set->heads[i] = 0;
-                pthread_cond_init(&set->conds[i], &cattr);
+                if (pthread_cond_init(&set->conds[i], &cattr))
+                        goto fail_mmap;
         }
 
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
@@ -156,6 +156,12 @@ struct shm_flow_set * shm_flow_set_create()
         set->pid = getpid();
 
         return set;
+
+ fail_mmap:
+        shm_unlink(fn);
+ fail_shm_open:
+        free(set);
+        return NULL;
 }
 
 struct shm_flow_set * shm_flow_set_open(pid_t pid)
@@ -262,20 +268,20 @@ void shm_flow_set_zero(struct shm_flow_set * set,
 
 int shm_flow_set_add(struct shm_flow_set * set,
                      size_t                idx,
-                     int                   port_id)
+                     int                   flow_id)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
         assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[port_id] != -1) {
+        if (set->mtable[flow_id] != -1) {
                 pthread_mutex_unlock(set->lock);
                 return -EPERM;
         }
 
-        set->mtable[port_id] = idx;
+        set->mtable[flow_id] = idx;
 
         pthread_mutex_unlock(set->lock);
 
@@ -284,33 +290,33 @@ int shm_flow_set_add(struct shm_flow_set * set,
 
 void shm_flow_set_del(struct shm_flow_set * set,
                       size_t                idx,
-                      int                   port_id)
+                      int                   flow_id)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
         assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[port_id] == (ssize_t) idx)
-                set->mtable[port_id] = -1;
+        if (set->mtable[flow_id] == (ssize_t) idx)
+                set->mtable[flow_id] = -1;
 
         pthread_mutex_unlock(set->lock);
 }
 
 int shm_flow_set_has(struct shm_flow_set * set,
                      size_t                idx,
-                     int                   port_id)
+                     int                   flow_id)
 {
         int ret = 0;
 
         assert(set);
-        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
         assert(idx < PROG_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[port_id] == (ssize_t) idx)
+        if (set->mtable[flow_id] == (ssize_t) idx)
                 ret = 1;
 
         pthread_mutex_unlock(set->lock);
@@ -319,25 +325,25 @@ int shm_flow_set_has(struct shm_flow_set * set,
 }
 
 void shm_flow_set_notify(struct shm_flow_set * set,
-                         int                   port_id,
+                         int                   flow_id,
                          int                   event)
 {
         assert(set);
-        assert(!(port_id < 0) && port_id < SYS_MAX_FLOWS);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[port_id] == -1) {
+        if (set->mtable[flow_id] == -1) {
                 pthread_mutex_unlock(set->lock);
                 return;
         }
 
-        (fqueue_ptr(set, set->mtable[port_id]) +
-         (set->heads[set->mtable[port_id]]))->port_id = port_id;
-        (fqueue_ptr(set, set->mtable[port_id]) +
-         (set->heads[set->mtable[port_id]])++)->event = event;
+        (fqueue_ptr(set, set->mtable[flow_id]) +
+         (set->heads[set->mtable[flow_id]]))->flow_id = flow_id;
+        (fqueue_ptr(set, set->mtable[flow_id]) +
+         (set->heads[set->mtable[flow_id]])++)->event = event;
 
-        pthread_cond_signal(&set->conds[set->mtable[port_id]]);
+        pthread_cond_signal(&set->conds[set->mtable[flow_id]]);
 
         pthread_mutex_unlock(set->lock);
 }

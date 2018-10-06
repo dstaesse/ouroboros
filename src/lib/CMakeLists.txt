@@ -6,6 +6,8 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS irmd_messages.proto)
 protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS ipcpd_messages.proto)
+protobuf_generate_c(QOSSPEC_PROTO_SRCS QOSSPEC_PROTO_HDRS
+  qosspec.proto)
 protobuf_generate_c(LAYER_CONFIG_PROTO_SRCS LAYER_CONFIG_PROTO_HDRS
   ipcp_config.proto)
 protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
@@ -136,7 +138,7 @@ mark_as_advanced(LIBRT_LIBRARIES LIBPTHREAD_LIBRARIES
   LIBGCRYPT_INCLUDE_DIR SYS_RND_HDR)
 
 set(SHM_BUFFER_SIZE 4096 CACHE STRING
-    "Number of blocks in SDU buffer, must be a power of 2")
+    "Number of blocks in packet buffer, must be a power of 2")
 set(SYS_MAX_FLOWS 10240 CACHE STRING
   "Maximum number of total flows for this system")
 set(PROG_MAX_FLOWS 4096 CACHE STRING
@@ -169,11 +171,13 @@ set(SHM_FLOW_SET_PREFIX "/${SHM_PREFIX}.set." CACHE INTERNAL
 set(SHM_RDRB_NAME "/${SHM_PREFIX}.rdrb" CACHE INTERNAL
   "Name for the main POSIX shared memory buffer")
 set(SHM_RDRB_BLOCK_SIZE "sysconf(_SC_PAGESIZE)" CACHE STRING
-  "SDU buffer block size, multiple of pagesize for performance")
+  "Packet buffer block size, multiple of pagesize for performance")
 set(SHM_RDRB_MULTI_BLOCK true CACHE BOOL
-  "SDU buffer multiblock SDU support")
+  "Packet buffer multiblock packet support")
 set(SHM_RBUFF_LOCKLESS 0 CACHE BOOL
   "Enable shared memory lockless rbuff support")
+set(QOS_DISABLE_CRC 0 CACHE BOOL
+  "Ignores ber setting on all QoS cubes")
 
 set(SOURCE_FILES_DEV
   # Add source files here
@@ -213,7 +217,7 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)
 
 add_library(ouroboros-common SHARED ${SOURCE_FILES_COMMON} ${IRM_PROTO_SRCS}
-  ${IPCP_PROTO_SRCS} ${LAYER_CONFIG_PROTO_SRCS})
+  ${IPCP_PROTO_SRCS} ${LAYER_CONFIG_PROTO_SRCS} ${QOSSPEC_PROTO_SRCS})
 
 add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CACEP_PROTO_SRCS})
 

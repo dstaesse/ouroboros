@@ -165,3 +165,38 @@ char * ipcp_sock_path(pid_t pid)
 
         return full_name;
 }
+
+qosspec_msg_t spec_to_msg(qosspec_t * qs)
+{
+        qosspec_t     spec;
+        qosspec_msg_t msg = QOSSPEC_MSG__INIT;
+
+        spec = (qs == NULL ? qos_raw : *qs);
+
+        msg.delay        = spec.delay;
+        msg.bandwidth    = spec.bandwidth;
+        msg.availability = spec.availability;
+        msg.loss         = spec.loss;
+        msg.ber          = spec.ber;
+        msg.in_order     = spec.in_order;
+        msg.max_gap      = spec.max_gap;
+
+        return msg;
+}
+
+qosspec_t msg_to_spec(qosspec_msg_t * msg)
+{
+        qosspec_t     spec;
+
+        assert(msg);
+
+        spec.delay        = msg->delay;
+        spec.bandwidth    = msg->bandwidth;
+        spec.availability = msg->availability;
+        spec.loss         = msg->loss;
+        spec.ber          = msg->ber;
+        spec.in_order     = msg->in_order;
+        spec.max_gap      = msg->max_gap;
+
+        return spec;
+}

@@ -155,7 +155,7 @@ int client_main(char * server,
         ms = ts_diff_ms(&start, &end);
 
         printf("sent statistics: "
-               "%9ld SDUs, %12ld bytes in %9d ms, %4.4f Mb/s\n",
+               "%9ld packets, %12ld bytes in %9d ms, %4.4f Mb/s\n",
                seqnr, seqnr * size, ms, (seqnr / (ms * 1000.0)) * size * 8.0);
 
         flow_dealloc(fd);

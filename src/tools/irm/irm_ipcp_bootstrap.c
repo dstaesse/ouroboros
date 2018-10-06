@@ -287,8 +287,13 @@ int do_bootstrap_ipcp(int     argc,
 
                         if (autobind && conf.type != IPCP_NORMAL) {
                                 printf("Can only bind normal IPCPs, "
-                                       "autobind disabled.\n");
+                                       "autobind disabled.\n\n");
                                 autobind = false;
+                        }
+
+                        if (strlen(layer) > LAYER_NAME_SIZE) {
+                                printf("Layer name too big.\n\n");
+                                goto fail_usage;
                         }
 
                         strcpy(conf.layer_info.layer_name, layer);

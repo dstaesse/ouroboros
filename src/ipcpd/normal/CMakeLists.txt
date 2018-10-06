@@ -37,13 +37,12 @@ set(SOURCE_FILES
   dht.c
   dir.c
   dt.c
-  dt_pci.c
   enroll.c
   fa.c
   main.c
   pff.c
   routing.c
-  sdu_sched.c
+  psched.c
   # Add policies last
   pol/alternate_pff.c
   pol/flat.c
