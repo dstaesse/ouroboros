@@ -37,6 +37,7 @@ struct frct_cr {
         uint32_t rwe;
 
         uint8_t  cflags;
+        uint32_t seqno;
 
         time_t   act;
         time_t   inact;
@@ -48,8 +49,6 @@ struct frcti {
         time_t           mpl;
         time_t           a;
         time_t           r;
-
-        uint32_t         seqno;
 
         struct frct_cr   snd_cr;
         struct frct_cr   rcv_cr;
@@ -236,22 +235,22 @@ static int __frcti_snd(struct frcti *       frcti,
         pci->flags |= FRCT_DATA;
 
         /* Set DRF if there are no unacknowledged packets. */
-        if (frcti->seqno == snd_cr->lwe)
+        if (snd_cr->seqno == snd_cr->lwe)
                 pci->flags |= FRCT_DRF;
 
         /* Choose a new sequence number if sender inactivity expired. */
         if (now.tv_sec - snd_cr->act > snd_cr->inact) {
                 /* There are no unacknowledged packets. */
-                assert(frcti->seqno == snd_cr->lwe);
+                assert(snd_cr->seqno == snd_cr->lwe);
 #ifdef CONFIG_OUROBOROS_DEBUG
-                frcti->seqno = 0;
+                snd_cr->seqno = 0;
 #else
-                random_buffer(&frcti->seqno, sizeof(frcti->seqno));
+                random_buffer(&snd_cr->seqno, sizeof(snd_cr->seqno));
 #endif
-                frcti->snd_cr.lwe = frcti->seqno;
+                frcti->snd_cr.lwe = snd_cr->seqno;
         }
 
-        pci->seqno = hton32(frcti->seqno++);
+        pci->seqno = hton32(snd_cr->seqno++);
         if (!(snd_cr->cflags & FRCTFRTX))
                 snd_cr->lwe++;
         else
@@ -294,27 +293,27 @@ static int __frcti_rcv(struct frcti *       frcti,
         if (now.tv_sec - rcv_cr->act > rcv_cr->inact) {
                 /* Inactive receiver, check for DRF. */
                 if (pci->flags & FRCT_DRF) /* New run. */
-                        rcv_cr->lwe = seqno;
+                        rcv_cr->seqno = seqno;
                 else
                         goto drop_packet;
         }
 
-        if (seqno == rcv_cr->lwe) {
-                ++rcv_cr->lwe;
+        if (seqno == rcv_cr->seqno) {
+                ++rcv_cr->seqno;
         } else { /* Out of order. */
-                if ((int32_t)(seqno - rcv_cr->lwe) < 0) /* Duplicate. */
+                if ((int32_t)(seqno - rcv_cr->seqno) < 0) /* Duplicate. */
                         goto drop_packet;
 
                 if (rcv_cr->cflags & FRCTFRTX) {
                         size_t pos = seqno & (RQ_SIZE - 1);
-                        if ((seqno - rcv_cr->lwe) > RQ_SIZE /* Out of rq. */
+                        if ((seqno - rcv_cr->seqno) > RQ_SIZE /* Out of rq. */
                             || frcti->rq[pos] != -1) /* Duplicate in rq. */
                                 goto drop_packet;
                         /* Queue. */
                         frcti->rq[pos] = idx;
                         ret = -EAGAIN;
                 } else {
-                        rcv_cr->lwe = seqno;
+                        rcv_cr->seqno = seqno;
                 }
         }
 
