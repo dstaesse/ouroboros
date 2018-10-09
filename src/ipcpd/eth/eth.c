@@ -1242,8 +1242,13 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 return -1;
         }
 
+        if (strlen(conf->dev) >= IFNAMSIZ) {
+                log_err("Invalid device name: %s.", conf->dev);
+                return -1;
+        }
+
         memset(&ifr, 0, sizeof(ifr));
-        memcpy(ifr.ifr_name, conf->dev, IFNAMSIZ);
+        strcpy(ifr.ifr_name, conf->dev);
 
 #ifdef BUILD_ETH_DIX
         if (conf->ethertype < 0x0600 || conf->ethertype == 0xFFFF) {
