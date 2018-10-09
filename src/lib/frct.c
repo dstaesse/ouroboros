@@ -177,10 +177,10 @@ static ssize_t __frcti_queued_pdu(struct frcti * frcti)
         /* See if we already have the next PDU. */
         pthread_rwlock_wrlock(&frcti->lock);
 
-        pos = frcti->rcv_cr.lwe & (RQ_SIZE - 1);
+        pos = frcti->rcv_cr.seqno & (RQ_SIZE - 1);
         idx = frcti->rq[pos];
         if (idx != -1) {
-                ++frcti->rcv_cr.lwe;
+                ++frcti->rcv_cr.seqno;
                 frcti->rq[pos] = -1;
         }
 
@@ -238,7 +238,7 @@ static int __frcti_snd(struct frcti *       frcti,
 #else
                 random_buffer(&snd_cr->seqno, sizeof(snd_cr->seqno));
 #endif
-                frcti->snd_cr.lwe = snd_cr->seqno;
+                frcti->snd_cr.lwe = snd_cr->seqno - 1;
         }
 
         pci->seqno = hton32(snd_cr->seqno);
@@ -246,7 +246,7 @@ static int __frcti_snd(struct frcti *       frcti,
                 snd_cr->lwe++;
         } else if (now.tv_sec - rcv_cr->act <= rcv_cr->inact) {
                 rxmwheel_add(frcti, snd_cr->seqno, sdb);
-                if (rcv_cr->lwe != rcv_cr->seqno) {
+                if (rcv_cr->lwe <= rcv_cr->seqno) {
                         pci->flags |= FRCT_ACK;
                         pci->ackno = hton32(rcv_cr->seqno);
                         rcv_cr->lwe = rcv_cr->seqno;
@@ -300,7 +300,7 @@ static int __frcti_rcv(struct frcti *       frcti,
         if (seqno == rcv_cr->seqno) {
                 ++rcv_cr->seqno;
         } else { /* Out of order. */
-                if ((int32_t)(seqno - rcv_cr->seqno) < 0) /* Duplicate. */
+                if ((int32_t)(seqno - rcv_cr->seqno) < 0)
                         goto drop_packet;
 
                 if (rcv_cr->cflags & FRCTFRTX) {
@@ -312,7 +312,7 @@ static int __frcti_rcv(struct frcti *       frcti,
                         frcti->rq[pos] = idx;
                         ret = -EAGAIN;
                 } else {
-                        rcv_cr->seqno = seqno;
+                        rcv_cr->seqno = seqno + 1;
                 }
         }
 
