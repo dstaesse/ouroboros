@@ -39,7 +39,6 @@ struct frct_cr {
         uint8_t  cflags;
         uint32_t seqno;
 
-        time_t   rto;     /* ms */
         time_t   act;     /* s */
         time_t   inact;   /* s */
 };
@@ -51,6 +50,8 @@ struct frcti {
         time_t           a;
         time_t           r;
 
+        time_t           rto; /* ms */
+
         struct frct_cr   snd_cr;
         struct frct_cr   rcv_cr;
 
@@ -61,7 +62,7 @@ struct frcti {
 enum frct_flags {
         FRCT_DATA = 0x01, /* PDU carries data */
         FRCT_DRF  = 0x02, /* Data run flag    */
-        FRCT_ACK  = 0x03, /* ACK field valid  */
+        FRCT_ACK  = 0x04, /* ACK field valid  */
         FRCT_FC   = 0x08, /* FC window valid  */
         FRCT_RDVZ = 0x10, /* Rendez-vous      */
         FRCT_MFGM = 0x20, /* More fragments   */
@@ -110,10 +111,12 @@ static struct frcti * frcti_create(int fd)
         frcti->snd_cr.inact  = 3 * delta_t;
         frcti->snd_cr.act    = now.tv_sec - (frcti->snd_cr.inact + 1);
         /* Initial rto. FIXME: recalc using Karn algorithm. */
-        frcti->snd_cr.rto    = 120;
+        frcti->rto           = 120;
 
-        if (ai.flows[fd].spec.loss == 0)
+        if (ai.flows[fd].spec.loss == 0) {
                 frcti->snd_cr.cflags |= FRCTFRTX;
+                frcti->rcv_cr.cflags |= FRCTFRTX;
+        }
 
         frcti->rcv_cr.inact  = 2 * delta_t;
         frcti->rcv_cr.act    = now.tv_sec - (frcti->rcv_cr.inact + 1);
@@ -243,8 +246,11 @@ static int __frcti_snd(struct frcti *       frcti,
                 snd_cr->lwe++;
         } else if (now.tv_sec - rcv_cr->act <= rcv_cr->inact) {
                 rxmwheel_add(frcti, snd_cr->seqno, sdb);
-                pci->flags |= FRCT_ACK;
-                pci->ackno = hton32(rcv_cr->lwe);
+                if (rcv_cr->lwe != rcv_cr->seqno) {
+                        pci->flags |= FRCT_ACK;
+                        pci->ackno = hton32(rcv_cr->seqno);
+                        rcv_cr->lwe = rcv_cr->seqno;
+                }
         }
 
         snd_cr->seqno++;
@@ -299,7 +305,7 @@ static int __frcti_rcv(struct frcti *       frcti,
 
                 if (rcv_cr->cflags & FRCTFRTX) {
                         size_t pos = seqno & (RQ_SIZE - 1);
-                        if ((seqno - rcv_cr->seqno) > RQ_SIZE /* Out of rq. */
+                        if ((seqno - rcv_cr->lwe) > RQ_SIZE /* Out of rq. */
                             || frcti->rq[pos] != -1) /* Duplicate in rq. */
                                 goto drop_packet;
                         /* Queue. */

@@ -201,7 +201,7 @@ static int rxmwheel_move(void)
                         r->tail = shm_du_buff_tail(sdb);
                         r->sdb  = sdb;
 
-                        newtime = ts_to_ms(now) + (snd_cr->rto << ++r->mul);
+                        newtime = ts_to_ms(now) + (f->frcti->rto << ++r->mul);
                         rslot   = (newtime >> RXMQ_R) & (RXMQ_SLOTS - 1);
 
                         list_add_tail(&r->next, &rw.wheel[rslot]);
@@ -239,8 +239,7 @@ static int rxmwheel_add(struct frcti *       frcti,
         r->tail  = shm_du_buff_tail(sdb);
         r->frcti = frcti;
 
-        slot = ((r->t0 + frcti->snd_cr.rto) >> RXMQ_R)
-                & (RXMQ_SLOTS - 1);
+        slot = ((r->t0 + frcti->rto) >> RXMQ_R) & (RXMQ_SLOTS - 1);
 
         list_add_tail(&r->next, &rw.wheel[slot]);
 
