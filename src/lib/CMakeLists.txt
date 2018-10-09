@@ -200,7 +200,6 @@ set(SOURCE_FILES_COMMON
   logs.c
   md5.c
   notifier.c
-  qos.c
   qoscube.c
   random.c
   rib.c

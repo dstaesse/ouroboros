@@ -36,11 +36,64 @@ typedef struct qos_spec {
         uint32_t max_gap;       /* In ms */
 } qosspec_t;
 
-qosspec_t qos_raw;
-qosspec_t qos_raw_no_errors;
-qosspec_t qos_best_effort;
-qosspec_t qos_video;
-qosspec_t qos_voice;
-qosspec_t qos_data;
+static const qosspec_t qos_raw = {
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 1,
+        .ber          = 1,
+        .in_order     = 0,
+        .max_gap      = UINT32_MAX
+};
+
+static const qosspec_t qos_raw_no_errors = {
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 0,
+        .max_gap      = UINT32_MAX
+};
+
+static const qosspec_t qos_best_effort = {
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = UINT32_MAX
+};
+
+static const qosspec_t qos_video   = {
+        .delay        = 100,
+        .bandwidth    = UINT64_MAX,
+        .availability = 3,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 100
+};
+
+static const qosspec_t qos_voice = {
+        .delay        = 50,
+        .bandwidth    = 100000,
+        .availability = 5,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 50
+};
+
+static const qosspec_t qos_data = {
+        .delay        = 1000,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 0,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 2000
+};
 
 #endif /* OUROBOROS_QOS_H */
