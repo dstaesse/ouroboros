@@ -86,7 +86,6 @@ struct shm_rdrbuff {
         size_t *          head;     /* start of ringbuffer head */
         size_t *          tail;     /* start of ringbuffer tail */
         pthread_mutex_t * lock;     /* lock all free space in shm */
-        pthread_cond_t *  full;     /* flag when full */
         pthread_cond_t *  healthy;  /* flag when packet is read */
         pid_t *           pid;      /* pid of the irmd owner */
 };
@@ -189,8 +188,7 @@ static struct shm_rdrbuff * rdrb_create(int flags)
         rdrb->head = (size_t *) ((uint8_t *) rdrb->shm_base + SHM_BLOCKS_SIZE);
         rdrb->tail = rdrb->head + 1;
         rdrb->lock = (pthread_mutex_t *) (rdrb->tail + 1);
-        rdrb->full = (pthread_cond_t *) (rdrb->lock + 1);
-        rdrb->healthy = rdrb->full + 1;
+        rdrb->healthy = (pthread_cond_t *) (rdrb->lock + 1);
         rdrb->pid = (pid_t *) (rdrb->healthy + 1);
 
         free(shm_rdrb_fn);
@@ -242,9 +240,6 @@ struct shm_rdrbuff * shm_rdrbuff_create()
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        if (pthread_cond_init(rdrb->full, &cattr))
-                goto fail_full;
-
         if (pthread_cond_init(rdrb->healthy, &cattr))
                 goto fail_healthy;
 
@@ -259,8 +254,6 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         return rdrb;
 
  fail_healthy:
-        pthread_cond_destroy(rdrb->full);
- fail_full:
         pthread_condattr_destroy(&cattr);
  fail_cattr:
         pthread_mutex_destroy(rdrb->lock);
@@ -328,7 +321,6 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
 #else
         if (!shm_rdrb_free(rdrb, 1)) {
 #endif
-                pthread_cond_broadcast(rdrb->full);
                 pthread_mutex_unlock(rdrb->lock);
                 return -EAGAIN;
         }
@@ -380,7 +372,6 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
 #ifdef SHM_RDRB_MULTI_BLOCK
         size_t               blocks    = 0;
         size_t               padblocks = 0;
-        size_t               rblocks;
 #endif
         ssize_t              sz        = size + sizeof(*sdb);
         int                  ret       = 0;
@@ -395,7 +386,6 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
                 sz -= SHM_RDRB_BLOCK_SIZE;
                 ++blocks;
         }
-        rblocks = blocks;
 #endif
 #ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rdrb->lock);
@@ -407,14 +397,13 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
                              (void *) rdrb->lock);
 
 #ifdef SHM_RDRB_MULTI_BLOCK
-        if (blocks > 1)
-                rblocks = blocks << 1;
+        if (blocks + *rdrb->head > (SHM_BUFFER_SIZE))
+                padblocks = (SHM_BUFFER_SIZE) - *rdrb->head;
 
-        while (!shm_rdrb_free(rdrb, rblocks) && ret != ETIMEDOUT) {
+        while (!shm_rdrb_free(rdrb, blocks + padblocks) && ret != ETIMEDOUT) {
 #else
         while (!shm_rdrb_free(rdrb, 1) && ret != ETIMEDOUT) {
 #endif
-                pthread_cond_broadcast(rdrb->full);
                 if (abstime != NULL)
                         ret = pthread_cond_timedwait(rdrb->healthy,
                                                      rdrb->lock,
