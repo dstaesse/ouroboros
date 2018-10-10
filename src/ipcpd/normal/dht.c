@@ -2729,6 +2729,10 @@ static void handle_event(void *       self,
                 pthread_t          thr;
                 struct join_info * inf;
                 struct conn *      c     = (struct conn *) o;
+                struct timespec    slack = {0, 10 * MILLION};
+
+                /* Give the pff some time to update for the new link. */
+                nanosleep(&slack, NULL);
 
                 switch(dht_get_state(dht)) {
                 case DHT_INIT:
