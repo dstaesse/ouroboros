@@ -176,7 +176,7 @@ set(SHM_RDRB_MULTI_BLOCK true CACHE BOOL
   "Packet buffer multiblock packet support")
 set(SHM_RBUFF_LOCKLESS 0 CACHE BOOL
   "Enable shared memory lockless rbuff support")
-set(QOS_DISABLE_CRC 0 CACHE BOOL
+set(QOS_DISABLE_CRC TRUE CACHE BOOL
   "Ignores ber setting on all QoS cubes")
 
 set(SOURCE_FILES_DEV
