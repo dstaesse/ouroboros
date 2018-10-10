@@ -26,9 +26,7 @@
 #include <ouroboros/qos.h>
 
 typedef enum qos_cube {
-        QOS_CUBE_RAW = 0,
-        QOS_CUBE_BE,
-        QOS_CUBE_DATA,
+        QOS_CUBE_BE = 0,
         QOS_CUBE_VIDEO,
         QOS_CUBE_VOICE,
         QOS_CUBE_MAX

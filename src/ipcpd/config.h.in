@@ -42,11 +42,9 @@
 #cmakedefine HAVE_LIBGCRYPT
 
 /* normal IPCP */
-#define QOS_PRIO_RAW        @IPCP_QOS_CUBE_RAW_PRIO@
 #define QOS_PRIO_BE         @IPCP_QOS_CUBE_BE_PRIO@
 #define QOS_PRIO_VIDEO      @IPCP_QOS_CUBE_VIDEO_PRIO@
 #define QOS_PRIO_VOICE      @IPCP_QOS_CUBE_VOICE_PRIO@
-#define QOS_PRIO_DATA       @IPCP_QOS_CUBE_DATA_PRIO@
 #define IPCP_SCHED_THR_MUL  @IPCP_SCHED_THR_MUL@
 #define PFT_SIZE            @PFT_SIZE@
 
