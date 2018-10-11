@@ -795,7 +795,9 @@ static void handle_event(void *       self,
                 if (lsdb_add_link(ipcpi.dt_addr, c->conn_info.addr, 0, &qs))
                         log_dbg("Failed to add new adjacency to LSDB.");
 
+                pthread_rwlock_rdlock(&ls.db_lock);
                 send_lsm(ipcpi.dt_addr, c->conn_info.addr, 0);
+                pthread_rwlock_unlock(&ls.db_lock);
 
                 break;
         case NOTIFY_DT_CONN_DEL:
