@@ -532,12 +532,14 @@ static void packet_handler(int                  fd,
                         if (ipcp_flow_write(dt_pci.eid, sdb)) {
                                 ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
-                                pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
+                                pthread_mutex_lock(&dt.stat[fd].lock);
                                 ++dt.stat[fd].rcv_pkt[qc];
                                 dt.stat[fd].rcv_bytes[qc] += len;
+                                pthread_mutex_unlock(&dt.stat[fd].lock);
+
+                                pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
                                 ++dt.stat[dt_pci.eid].w_drp_pkt[qc];
                                 dt.stat[dt_pci.eid].w_drp_bytes[qc] += len;
-
                                 pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
 #endif
 
