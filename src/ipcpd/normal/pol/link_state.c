@@ -374,105 +374,6 @@ static int lsdb_del_nb(uint64_t     addr,
         return -EPERM;
 }
 
-static void set_pff_modified(void)
-{
-        struct list_head * p;
-
-        pthread_mutex_lock(&ls.routing_i_lock);
-        list_for_each(p, &ls.routing_instances) {
-                struct routing_i * inst =
-                        list_entry(p, struct routing_i, next);
-                pthread_mutex_lock(&inst->lock);
-                inst->modified = true;
-                pthread_mutex_unlock(&inst->lock);
-        }
-        pthread_mutex_unlock(&ls.routing_i_lock);
-}
-
-static int lsdb_add_link(uint64_t    src,
-                         uint64_t    dst,
-                         uint64_t    seqno,
-                         qosspec_t * qs)
-{
-        struct list_head * p;
-        struct adjacency * adj;
-        struct timespec    now;
-        int                ret = -1;
-
-        clock_gettime(CLOCK_REALTIME_COARSE, &now);
-
-        pthread_rwlock_wrlock(&ls.db_lock);
-
-        list_for_each(p, &ls.db) {
-                struct adjacency * a = list_entry(p, struct adjacency, next);
-                if (a->dst == dst && a->src == src) {
-                        if (a->seqno < seqno) {
-                                a->stamp = now.tv_sec;
-                                a->seqno = seqno;
-                                ret = 0;
-                        }
-                        pthread_rwlock_unlock(&ls.db_lock);
-                        return ret;
-                }
-
-                if (a->dst > dst || (a->dst == dst && a->src > src))
-                        break;
-        }
-
-        adj = malloc(sizeof(*adj));
-        if (adj == NULL) {
-                pthread_rwlock_unlock(&ls.db_lock);
-                return -ENOMEM;
-        }
-
-        adj->dst   = dst;
-        adj->src   = src;
-        adj->seqno = seqno;
-        adj->stamp = now.tv_sec;
-
-        list_add_tail(&adj->next, p);
-
-        ls.db_len++;
-
-        if (graph_update_edge(ls.graph, src, dst, *qs))
-                log_warn("Failed to add edge to graph.");
-
-        pthread_rwlock_unlock(&ls.db_lock);
-
-        set_pff_modified();
-
-        return 0;
-}
-
-static int lsdb_del_link(uint64_t src,
-                         uint64_t dst)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        pthread_rwlock_wrlock(&ls.db_lock);
-
-        list_for_each_safe(p, h, &ls.db) {
-                struct adjacency * a = list_entry(p, struct adjacency, next);
-                if (a->dst == dst && a->src == src) {
-                        list_del(&a->next);
-                        if (graph_del_edge(ls.graph, src, dst))
-                                log_warn("Failed to delete edge from graph.");
-
-                        ls.db_len--;
-
-                        pthread_rwlock_unlock(&ls.db_lock);
-                        set_pff_modified();
-                        free(a);
-                        return 0;
-                }
-        }
-
-        pthread_rwlock_unlock(&ls.db_lock);
-
-        return -EPERM;
-}
-
 static int nbr_to_fd(uint64_t addr)
 {
         struct list_head * p;
@@ -530,6 +431,107 @@ static void calculate_pff(struct routing_i * instance)
         pff_unlock(instance->pff);
 
         graph_free_routing_table(ls.graph, &table);
+}
+
+static void set_pff_modified(bool calc)
+{
+        struct list_head * p;
+
+        pthread_mutex_lock(&ls.routing_i_lock);
+        list_for_each(p, &ls.routing_instances) {
+                struct routing_i * inst =
+                        list_entry(p, struct routing_i, next);
+                pthread_mutex_lock(&inst->lock);
+                inst->modified = true;
+                pthread_mutex_unlock(&inst->lock);
+                if (calc)
+                        calculate_pff(inst);
+        }
+        pthread_mutex_unlock(&ls.routing_i_lock);
+}
+
+static int lsdb_add_link(uint64_t    src,
+                         uint64_t    dst,
+                         uint64_t    seqno,
+                         qosspec_t * qs)
+{
+        struct list_head * p;
+        struct adjacency * adj;
+        struct timespec    now;
+        int                ret = -1;
+
+        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+
+        pthread_rwlock_wrlock(&ls.db_lock);
+
+        list_for_each(p, &ls.db) {
+                struct adjacency * a = list_entry(p, struct adjacency, next);
+                if (a->dst == dst && a->src == src) {
+                        if (a->seqno < seqno) {
+                                a->stamp = now.tv_sec;
+                                a->seqno = seqno;
+                                ret = 0;
+                        }
+                        pthread_rwlock_unlock(&ls.db_lock);
+                        return ret;
+                }
+
+                if (a->dst > dst || (a->dst == dst && a->src > src))
+                        break;
+        }
+
+        adj = malloc(sizeof(*adj));
+        if (adj == NULL) {
+                pthread_rwlock_unlock(&ls.db_lock);
+                return -ENOMEM;
+        }
+
+        adj->dst   = dst;
+        adj->src   = src;
+        adj->seqno = seqno;
+        adj->stamp = now.tv_sec;
+
+        list_add_tail(&adj->next, p);
+
+        ls.db_len++;
+
+        if (graph_update_edge(ls.graph, src, dst, *qs))
+                log_warn("Failed to add edge to graph.");
+
+        pthread_rwlock_unlock(&ls.db_lock);
+
+        set_pff_modified(true);
+
+        return 0;
+}
+
+static int lsdb_del_link(uint64_t src,
+                         uint64_t dst)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        pthread_rwlock_wrlock(&ls.db_lock);
+
+        list_for_each_safe(p, h, &ls.db) {
+                struct adjacency * a = list_entry(p, struct adjacency, next);
+                if (a->dst == dst && a->src == src) {
+                        list_del(&a->next);
+                        if (graph_del_edge(ls.graph, src, dst))
+                                log_warn("Failed to delete edge from graph.");
+
+                        ls.db_len--;
+
+                        pthread_rwlock_unlock(&ls.db_lock);
+                        set_pff_modified(false);
+                        free(a);
+                        return 0;
+                }
+        }
+
+        pthread_rwlock_unlock(&ls.db_lock);
+
+        return -EPERM;
 }
 
 static void * periodic_recalc_pff(void * o)

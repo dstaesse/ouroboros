@@ -345,7 +345,10 @@ static void init(int     argc,
                 prog = argv[1];
 
         ai.pid = getpid();
-
+#ifdef HAVE_LIBGCRYPT
+        if (!gcry_check_version(GCRYPT_VERSION))
+                goto fail_fds;
+#endif
         ai.fds = bmp_create(PROG_MAX_FLOWS - PROG_RES_FDS, PROG_RES_FDS);
         if (ai.fds == NULL)
                 goto fail_fds;
