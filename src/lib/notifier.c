@@ -75,12 +75,15 @@ void notifier_event(int          event,
 
         pthread_rwlock_rdlock(&notifier.lock);
 
+        pthread_cleanup_push((void (*) (void *)) pthread_rwlock_unlock,
+                             (void *) &notifier.lock)
+
         list_for_each(p, &notifier.listeners) {
                 struct listener * l = list_entry(p, struct listener, next);
                 l->callback(l->obj, event, o);
         }
 
-        pthread_rwlock_unlock(&notifier.lock);
+        pthread_cleanup_pop(true);
 }
 
 int notifier_reg(notifier_fn_t callback,
