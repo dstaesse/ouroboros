@@ -789,16 +789,15 @@ static void handle_event(void *       self,
 
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
+                pthread_rwlock_rdlock(&ls.db_lock);
+                send_lsm(ipcpi.dt_addr, c->conn_info.addr, 0);
+                pthread_rwlock_unlock(&ls.db_lock);
+
                 if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_DT))
                         log_dbg("Failed to add neighbor to LSDB.");
 
                 if (lsdb_add_link(ipcpi.dt_addr, c->conn_info.addr, 0, &qs))
                         log_dbg("Failed to add new adjacency to LSDB.");
-
-                pthread_rwlock_rdlock(&ls.db_lock);
-                send_lsm(ipcpi.dt_addr, c->conn_info.addr, 0);
-                pthread_rwlock_unlock(&ls.db_lock);
-
                 break;
         case NOTIFY_DT_CONN_DEL:
                 flow_event(c->flow_info.fd, false);
