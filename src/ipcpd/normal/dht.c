@@ -2729,7 +2729,7 @@ static void handle_event(void *       self,
                 pthread_t          thr;
                 struct join_info * inf;
                 struct conn *      c     = (struct conn *) o;
-                struct timespec    slack = {0, 10 * MILLION};
+                struct timespec    slack = {0, DHT_ENROLL_SLACK * MILLION};
 
                 /* Give the pff some time to update for the new link. */
                 nanosleep(&slack, NULL);

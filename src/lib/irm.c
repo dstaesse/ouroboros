@@ -117,6 +117,9 @@ int irm_bootstrap_ipcp(pid_t                      pid,
 
         config.ipcp_type = conf->type;
 
+        if (conf->type != IPCP_UDP)
+                layer_info.dir_hash_algo  = conf->layer_info.dir_hash_algo;
+
         switch (conf->type) {
         case IPCP_NORMAL:
                 config.has_addr_size      = true;
@@ -131,7 +134,6 @@ int irm_bootstrap_ipcp(pid_t                      pid,
                 config.routing_type       = conf->routing_type;
                 config.has_pff_type       = true;
                 config.pff_type           = conf->pff_type;
-                layer_info.dir_hash_algo  = conf->layer_info.dir_hash_algo;
                 break;
         case IPCP_UDP:
                 config.has_ip_addr  = true;
