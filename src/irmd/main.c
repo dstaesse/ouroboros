@@ -2041,10 +2041,8 @@ static void * mainloop(void * o)
                 pthread_cleanup_pop(true);
                 pthread_cleanup_pop(false);
 
-                if (result == -EPIPE) {
-                        log_warn("Peer closed socket.");
+                if (result == -EPIPE)
                         goto fail;
-                }
 
                 ret_msg->has_result = true;
                 ret_msg->result     = result;
