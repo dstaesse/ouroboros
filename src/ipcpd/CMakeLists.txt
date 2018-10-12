@@ -16,6 +16,8 @@ set(DISABLE_CORE_LOCK FALSE CACHE BOOL
   "Disable locking performance threads to a core")
 set(IPCP_CONN_WAIT_DIR TRUE CACHE BOOL
   "Check the running state of the directory when adding a dt connection")
+set(DHT_ENROLL_SLACK 50 CACHE STRING
+  "DHT enrollment waiting time (0-999, ms)")
 
 if ((IPCP_QOS_CUBE_BE_PRIO LESS 0) OR (IPCP_QOS_CUBE_BE_PRIO GREATER 99))
   message(FATAL_ERROR "Invalid priority for best effort QoS cube")
@@ -28,6 +30,11 @@ endif ()
 if ((IPCP_QOS_CUBE_VOICE_PRIO LESS 0) OR (IPCP_QOS_CUBE_VOICE_PRIO GREATER 99))
   message(FATAL_ERROR "Invalid priority for voice QoS cube")
 endif ()
+
+if ((DHT_ENROLL_SLACK LESS 0) OR (DHT_ENROLL_SLACK GREATER 999))
+  message(FATAL_ERROR "Invalid DHT slack value")
+endif ()
+
 
 set(IPCP_SOURCES
   # Add source files here
