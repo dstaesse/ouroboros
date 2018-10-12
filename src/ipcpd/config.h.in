@@ -63,3 +63,4 @@
 #cmakedefine HAVE_RAW_SOCKETS
 #define IPCP_ETH_RD_THR  @IPCP_ETH_RD_THR@
 #define IPCP_ETH_WR_THR  @IPCP_ETH_WR_THR@
+#cmakedefine IPCP_ETH_QDISC_BYPASS

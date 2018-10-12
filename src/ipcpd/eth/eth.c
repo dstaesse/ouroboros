@@ -1231,7 +1231,9 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         size_t           maxsz;
 #endif
 #if defined(HAVE_RAW_SOCKETS)
+    #if defined(IPCP_ETH_QDISC_BYPASS)
         int              qdisc_bypass = 1;
+    #endif /* ENABLE_QDISC_BYPASS */
         int              flags;
 #endif
         assert(conf);
@@ -1415,10 +1417,12 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_device;
         }
 
+    #if defined(IPCP_ETH_QDISC_BYPASS)
         if (setsockopt(eth_data.s_fd, SOL_PACKET, PACKET_QDISC_BYPASS,
                        &qdisc_bypass, sizeof(qdisc_bypass))) {
                 log_info("Qdisc bypass not supported.");
         }
+    #endif
 
         if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
                 sizeof(eth_data.device))) {
