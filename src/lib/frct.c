@@ -66,7 +66,6 @@ enum frct_flags {
         FRCT_FC   = 0x08, /* FC window valid  */
         FRCT_RDVZ = 0x10, /* Rendez-vous      */
         FRCT_MFGM = 0x20, /* More fragments   */
-        FRCT_CRC  = 0x40, /* CRC present      */
 };
 
 struct frct_pci {

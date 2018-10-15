@@ -88,7 +88,7 @@ static void rxmwheel_clear(int fd)
 {
         size_t i;
 
-        /* FIXME: Add list element to avoid looping over full rxmwheel */
+        /* FIXME: Add list element to avoid looping over full rxmwheel. */
         pthread_mutex_lock(&rw.lock);
 
         for (i = 0; i < RXMQ_SLOTS; ++i) {
@@ -174,11 +174,11 @@ static int rxmwheel_move(void)
                         head = shm_du_buff_head(sdb);
                         memcpy(head, r->head, r->tail - r->head);
 
-                        /* Release the old copy */
+                        /* Release the old copy. */
                         shm_du_buff_ack(r->sdb);
                         ipcp_sdb_release(r->sdb);
 
-                        /* Update ackno and make sure DRF is not set*/
+                        /* Update ackno and make sure DRF is not set. */
                         ((struct frct_pci *) head)->ackno = ntoh32(rcv_cr->lwe);
                         ((struct frct_pci *) head)->flags &= ~FRCT_DRF;
 
