@@ -1661,32 +1661,6 @@ static void irm_fini(void)
 #endif
 }
 
-void irmd_sig_handler(int         sig,
-                      siginfo_t * info,
-                      void *      c)
-{
-        (void) info;
-        (void) c;
-
-        switch(sig) {
-        case SIGINT:
-        case SIGTERM:
-        case SIGHUP:
-                if (irmd_get_state() == IRMD_NULL) {
-                        log_info("Patience is bitter, but its fruit is sweet.");
-                        return;
-                }
-
-                log_info("IRMd shutting down...");
-                irmd_set_state(IRMD_NULL);
-                break;
-        case SIGPIPE:
-                log_dbg("Ignored SIGPIPE.");
-        default:
-                return;
-        }
-}
-
 void * irm_sanitize(void * o)
 {
         struct timespec now;
@@ -1808,27 +1782,22 @@ void * irm_sanitize(void * o)
         }
 }
 
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
+
 static void * acceptloop(void * o)
 {
         int            csockfd;
         struct timeval tv = {(SOCKET_TIMEOUT / 1000),
                              (SOCKET_TIMEOUT % 1000) * 1000};
-#if defined(__FreeBSD__) || defined(__APPLE__)
-        fd_set         fds;
-        struct timeval timeout = {(IRMD_ACCEPT_TIMEOUT / 1000),
-                                  (IRMD_ACCEPT_TIMEOUT % 1000) * 1000};
-#endif
+
         (void) o;
 
         while (irmd_get_state() == IRMD_RUNNING) {
                 struct cmd * cmd;
 
-#if defined(__FreeBSD__) || defined(__APPLE__)
-                FD_ZERO(&fds);
-                FD_SET(irmd.sockfd, &fds);
-                if (select(irmd.sockfd + 1, &fds, NULL, NULL, &timeout) <= 0)
-                        continue;
-#endif
                 csockfd = accept(irmd.sockfd, 0, 0);
                 if (csockfd < 0)
                         continue;
@@ -1844,7 +1813,14 @@ static void * acceptloop(void * o)
                         break;
                 }
 
+                pthread_cleanup_push(close_ptr, &csockfd);
+                pthread_cleanup_push(free, cmd);
+
                 cmd->len = read(csockfd, cmd->cbuf, SOCK_BUF_SIZE);
+
+                pthread_cleanup_pop(false);
+                pthread_cleanup_pop(false);
+
                 if (cmd->len <= 0) {
                         log_err("Failed to read from socket.");
                         close(csockfd);
@@ -1864,11 +1840,6 @@ static void * acceptloop(void * o)
         }
 
         return (void *) 0;
-}
-
-static void close_ptr(void * o)
-{
-        close(*((int *) o));
 }
 
 static void free_msg(void * o)
@@ -2091,8 +2062,6 @@ static void * mainloop(void * o)
 static int irm_init(void)
 {
         struct stat        st;
-        struct timeval     timeout = {(IRMD_ACCEPT_TIMEOUT / 1000),
-                                      (IRMD_ACCEPT_TIMEOUT % 1000) * 1000};
         pthread_condattr_t cattr;
 
         memset(&st, 0, sizeof(st));
@@ -2185,15 +2154,9 @@ static int irm_init(void)
                 goto fail_sock_path;
         }
 
-        if (setsockopt(irmd.sockfd, SOL_SOCKET, SO_RCVTIMEO,
-                       (char *) &timeout, sizeof(timeout)) < 0) {
-                log_err("Failed setting socket option.");
-                goto fail_sock_opt;
-        }
-
         if (chmod(IRM_SOCK_PATH, 0666)) {
                 log_err("Failed to chmod socket.");
-                goto fail_sock_opt;
+                goto fail_sock_path;
         }
 
         if ((irmd.rdrb = shm_rdrbuff_create()) == NULL) {
@@ -2225,8 +2188,6 @@ static int irm_init(void)
         shm_rdrbuff_destroy(irmd.rdrb);
 #endif
  fail_rdrbuff:
-        shm_rdrbuff_destroy(irmd.rdrb);
- fail_sock_opt:
         close(irmd.sockfd);
  fail_sock_path:
         unlink(IRM_SOCK_PATH);
@@ -2259,14 +2220,15 @@ static void usage(void)
 int main(int     argc,
          char ** argv)
 {
-        struct sigaction sig_act;
         sigset_t  sigset;
-        bool use_stdout = false;
+        bool      use_stdout = false;
+        int       sig;
 
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGINT);
         sigaddset(&sigset, SIGQUIT);
         sigaddset(&sigset, SIGHUP);
+        sigaddset(&sigset, SIGTERM);
         sigaddset(&sigset, SIGPIPE);
 
         argc--;
@@ -2293,22 +2255,6 @@ int main(int     argc,
                 exit(EXIT_FAILURE);
         }
 
-        /* Init sig_act. */
-        memset(&sig_act, 0, sizeof sig_act);
-
-        /* Install signal traps. */
-        sig_act.sa_sigaction = &irmd_sig_handler;
-        sig_act.sa_flags     = SA_SIGINFO;
-
-        if (sigaction(SIGINT,  &sig_act, NULL) < 0)
-                exit(EXIT_FAILURE);
-        if (sigaction(SIGTERM, &sig_act, NULL) < 0)
-                exit(EXIT_FAILURE);
-        if (sigaction(SIGHUP,  &sig_act, NULL) < 0)
-                exit(EXIT_FAILURE);
-        if (sigaction(SIGPIPE, &sig_act, NULL) < 0)
-                exit(EXIT_FAILURE);
-
         log_init(!use_stdout);
 
         if (irm_init() < 0)
@@ -2320,6 +2266,8 @@ int main(int     argc,
                 irmd_set_state(IRMD_NULL);
                 goto fail_tpm_create;
         }
+
+        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (tpm_start(irmd.tpm)) {
                 irmd_set_state(IRMD_NULL);
@@ -2336,14 +2284,36 @@ int main(int     argc,
                 goto fail_acceptor;
         }
 
+        while (irmd_get_state() != IRMD_NULL) {
+                if (sigwait(&sigset, &sig) != 0) {
+                        log_warn("Bad signal.");
+                        continue;
+                }
+
+                switch(sig) {
+                case SIGINT:
+                case SIGQUIT:
+                case SIGTERM:
+                case SIGHUP:
+                        log_info("IRMd shutting down...");
+                        irmd_set_state(IRMD_NULL);
+                        break;
+                case SIGPIPE:
+                        log_dbg("Ignored SIGPIPE.");
+                        break;
+                default:
+                        break;
+                }
+        }
+
+        pthread_cancel(irmd.acceptor);
+
         pthread_join(irmd.acceptor, NULL);
         pthread_join(irmd.irm_sanitize, NULL);
 
         tpm_stop(irmd.tpm);
 
         tpm_destroy(irmd.tpm);
-
-        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         irm_fini();
 

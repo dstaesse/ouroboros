@@ -4,8 +4,6 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-set(IRMD_ACCEPT_TIMEOUT 100 CACHE STRING
-  "Timeout for accept in IRMD mainloop threads (ms)")
 set(IRMD_REQ_ARR_TIMEOUT 500 CACHE STRING
   "Timeout for an application to respond to a new flow (ms)")
 set(IRMD_FLOW_TIMEOUT 5000 CACHE STRING

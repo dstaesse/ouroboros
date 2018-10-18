@@ -1,5 +1,3 @@
-set(IPCP_ACCEPT_TIMEOUT 100 CACHE STRING
-  "Timeout for accept in IPCP mainloop threads (ms)")
 set(IPCP_QOS_CUBE_BE_PRIO 50 CACHE STRING
   "Priority for best effort QoS cube (0-99)")
 set(IPCP_QOS_CUBE_VIDEO_PRIO 90 CACHE STRING

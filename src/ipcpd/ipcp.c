@@ -71,29 +71,6 @@ struct cmd {
         int              fd;
 };
 
-static void ipcp_sig_handler(int         sig,
-                             siginfo_t * info,
-                             void *      c)
-{
-        (void) c;
-
-        switch(sig) {
-        case SIGINT:
-        case SIGTERM:
-        case SIGHUP:
-        case SIGQUIT:
-                if (info->si_pid == ipcpi.irmd_pid) {
-                        if (ipcp_get_state() == IPCP_INIT)
-                                ipcp_set_state(IPCP_NULL);
-
-                        if (ipcp_get_state() == IPCP_OPERATIONAL)
-                                ipcp_set_state(IPCP_SHUTDOWN);
-                }
-        default:
-                return;
-        }
-}
-
 uint8_t * ipcp_hash_dup(const uint8_t * hash)
 {
         uint8_t * dup = malloc(hash_len(ipcpi.dir_hash_algo));
@@ -120,28 +97,23 @@ void ipcp_hash_str(char *          buf,
         buf[2 * i] = '\0';
 }
 
+static void close_ptr(void * o)
+{
+        close(*((int *) o));
+}
+
 static void * acceptloop(void * o)
 {
         int            csockfd;
         struct timeval tv = {(SOCKET_TIMEOUT / 1000),
                              (SOCKET_TIMEOUT % 1000) * 1000};
-#if defined(__FreeBSD__) || defined(__APPLE__)
-        fd_set         fds;
-        struct timeval timeout = {(IPCP_ACCEPT_TIMEOUT / 1000),
-                                  (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
-#endif
+
         (void) o;
 
         while (ipcp_get_state() != IPCP_SHUTDOWN &&
                ipcp_get_state() != IPCP_NULL) {
                 struct cmd * cmd;
 
-#if defined(__FreeBSD__) || defined(__APPLE__)
-                FD_ZERO(&fds);
-                FD_SET(ipcpi.sockfd, &fds);
-                if (select(ipcpi.sockfd + 1, &fds, NULL, NULL, &timeout) <= 0)
-                        continue;
-#endif
                 csockfd = accept(ipcpi.sockfd, 0, 0);
                 if (csockfd < 0)
                         continue;
@@ -157,7 +129,14 @@ static void * acceptloop(void * o)
                         break;
                 }
 
+                pthread_cleanup_push(close_ptr, &csockfd);
+                pthread_cleanup_push(free, cmd);
+
                 cmd->len = read(csockfd, cmd->cbuf, SOCK_BUF_SIZE);
+
+                pthread_cleanup_pop(false);
+                pthread_cleanup_pop(false);
+
                 if (cmd->len <= 0) {
                         log_err("Failed to read from socket.");
                         close(csockfd);
@@ -177,11 +156,6 @@ static void * acceptloop(void * o)
         }
 
         return (void *) 0;
-}
-
-static void close_ptr(void * o)
-{
-        close(*((int *) o));
 }
 
 static void free_msg(void * o)
@@ -572,8 +546,6 @@ int ipcp_init(int               argc,
 {
         bool               log;
         pthread_condattr_t cattr;
-        struct timeval     tv  = {(IPCP_ACCEPT_TIMEOUT / 1000),
-                                  (IPCP_ACCEPT_TIMEOUT % 1000) * 1000};
         int                ret = -1;
 
         if (parse_args(argc, argv, &log))
@@ -593,10 +565,6 @@ int ipcp_init(int               argc,
                 log_err("Could not open server socket.");
                 goto fail_serv_sock;
         }
-
-        if (setsockopt(ipcpi.sockfd, SOL_SOCKET, SO_RCVTIMEO,
-                       (void *) &tv, sizeof(tv)))
-                log_warn("Failed to set timeout on socket.");
 
         ipcpi.ops = ops;
 
@@ -668,25 +636,12 @@ int ipcp_init(int               argc,
 
 int ipcp_boot()
 {
-        struct sigaction sig_act;
         sigset_t  sigset;
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGINT);
         sigaddset(&sigset, SIGQUIT);
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
-
-        /* init sig_act */
-        memset(&sig_act, 0, sizeof(sig_act));
-
-        /* install signal traps */
-        sig_act.sa_sigaction = &ipcp_sig_handler;
-        sig_act.sa_flags     = SA_SIGINFO;
-
-        sigaction(SIGINT,  &sig_act, NULL);
-        sigaction(SIGTERM, &sig_act, NULL);
-        sigaction(SIGHUP,  &sig_act, NULL);
-        sigaction(SIGPIPE, &sig_act, NULL);
 
         ipcpi.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
                                mainloop, NULL);
@@ -706,8 +661,6 @@ int ipcp_boot()
                 goto fail_acceptor;
         }
 
-        pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
-
         return 0;
 
  fail_acceptor:
@@ -720,6 +673,45 @@ int ipcp_boot()
 
 void ipcp_shutdown()
 {
+        siginfo_t info;
+        sigset_t  sigset;
+
+        sigemptyset(&sigset);
+        sigaddset(&sigset, SIGINT);
+        sigaddset(&sigset, SIGQUIT);
+        sigaddset(&sigset, SIGHUP);
+        sigaddset(&sigset, SIGTERM);
+        sigaddset(&sigset, SIGPIPE);
+
+        while(ipcp_get_state() != IPCP_NULL &&
+              ipcp_get_state() != IPCP_SHUTDOWN) {
+                if (sigwaitinfo(&sigset, &info) < 0) {
+                        log_warn("Bad signal.");
+                        continue;
+                }
+
+                switch(info.si_signo) {
+                case SIGINT:
+                case SIGTERM:
+                case SIGHUP:
+                case SIGQUIT:
+                        if (info.si_pid == ipcpi.irmd_pid) {
+                                if (ipcp_get_state() == IPCP_INIT)
+                                        ipcp_set_state(IPCP_NULL);
+
+                                if (ipcp_get_state() == IPCP_OPERATIONAL)
+                                        ipcp_set_state(IPCP_SHUTDOWN);
+                        }
+                        break;
+                case SIGPIPE:
+                        log_dbg("Ignored SIGPIPE.");
+                default:
+                        continue;
+                }
+        }
+
+        pthread_cancel(ipcpi.acceptor);
+
         pthread_join(ipcpi.acceptor, NULL);
         tpm_stop(ipcpi.tpm);
         tpm_destroy(ipcpi.tpm);
