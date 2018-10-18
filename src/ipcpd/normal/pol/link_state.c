@@ -409,7 +409,7 @@ static void calculate_pff(struct routing_i * instance)
 
         pff_flush(instance->pff);
 
-        /* Calulcate forwarding table from routing table. */
+        /* Calculate forwarding table from routing table. */
         list_for_each(p, &table) {
                 int                    i = 0;
                 struct routing_table * t =
@@ -424,8 +424,8 @@ static void calculate_pff(struct routing_i * instance)
 
                         fds[i++] = fd;
                 }
-
-                pff_add(instance->pff, t->dst, fds, i);
+                if (i > 0)
+                        pff_add(instance->pff, t->dst, fds, i);
         }
 
         pff_unlock(instance->pff);
