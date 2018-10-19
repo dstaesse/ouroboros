@@ -1403,7 +1403,10 @@ int ipcp_flow_write(int                  fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        assert(flow->flow_id >= 0);
+        if (flow->flow_id < 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                return -ENOTALLOC;
+        }
 
         if ((flow->oflags & FLOWFACCMODE) == FLOWFRDONLY) {
                 pthread_rwlock_unlock(&ai.lock);
