@@ -286,17 +286,21 @@ int ipcp_enroll(pid_t               pid,
 
 int ipcp_connect(pid_t        pid,
                  const char * dst,
-                 const char * component)
+                 const char * component,
+                 qosspec_t    qs)
 {
-        ipcp_msg_t   msg      = IPCP_MSG__INIT;
-        ipcp_msg_t * recv_msg = NULL;
-        int          ret      = -1;
+        ipcp_msg_t    msg    = IPCP_MSG__INIT;
+        qosspec_msg_t qs_msg = QOSSPEC_MSG__INIT;
+        int           ret    = -1;
+        ipcp_msg_t *  recv_msg;
 
         msg.code    = IPCP_MSG_CODE__IPCP_CONNECT;
         msg.dst     = (char *) dst;
         msg.comp    = (char *) component;
         msg.has_pid = true;
         msg.pid     = pid;
+        qs_msg      = spec_to_msg(&qs);
+        msg.qosspec = &qs_msg;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)

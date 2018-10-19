@@ -43,7 +43,8 @@ int   ipcp_bootstrap(pid_t               pid,
 
 int   ipcp_connect(pid_t        pid,
                    const char * dst,
-                   const char * component);
+                   const char * component,
+                   qosspec_t    qs);
 
 int   ipcp_disconnect(pid_t        pid,
                       const char * dst,

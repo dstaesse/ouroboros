@@ -54,7 +54,8 @@ int         connmgr_comp_init(enum comp_id             id,
 void        connmgr_comp_fini(enum comp_id id);
 
 int         connmgr_ipcp_connect(const char * dst,
-                                 const char * component);
+                                 const char * component,
+                                 qosspec_t    qs);
 
 int         connmgr_ipcp_disconnect(const char * dst,
                                     const char * component);

@@ -320,7 +320,8 @@ void connmgr_comp_fini(enum comp_id id)
 }
 
 int connmgr_ipcp_connect(const char * dst,
-                         const char * component)
+                         const char * component,
+                         qosspec_t    qs)
 {
         struct conn_el * ce;
         int              id;
@@ -341,8 +342,7 @@ int connmgr_ipcp_connect(const char * dst,
                 return -1;
         }
 
-        /* FIXME: get the correct qos for the component. */
-        if (connmgr_alloc(id, dst, NULL, &ce->conn)) {
+        if (connmgr_alloc(id, dst, &qs, &ce->conn)) {
                 free(ce);
                 return -1;
         }

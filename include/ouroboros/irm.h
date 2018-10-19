@@ -25,6 +25,7 @@
 
 #include <ouroboros/cdefs.h>
 #include <ouroboros/ipcp.h>
+#include <ouroboros/qos.h>
 
 #include <sys/types.h>
 
@@ -62,7 +63,8 @@ int     irm_bootstrap_ipcp(pid_t                      pid,
 
 int     irm_connect_ipcp(pid_t        pid,
                          const char * component,
-                         const char * dst);
+                         const char * dst,
+                         qosspec_t    qs);
 
 int     irm_disconnect_ipcp(pid_t        pid,
                             const char * component,

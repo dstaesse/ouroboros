@@ -604,7 +604,8 @@ static int enroll_ipcp(pid_t  pid,
 
 static int connect_ipcp(pid_t        pid,
                         const char * dst,
-                        const char * component)
+                        const char * component,
+                        qosspec_t    qs)
 {
         struct ipcp_entry * entry = NULL;
 
@@ -627,7 +628,7 @@ static int connect_ipcp(pid_t        pid,
 
         log_dbg("Connecting %s to %s.", component, dst);
 
-        if (ipcp_connect(pid, dst, component)) {
+        if (ipcp_connect(pid, dst, component, qs)) {
                 log_err("Could not connect IPCP.");
                 return -EPERM;
         }
@@ -1928,7 +1929,8 @@ static void * mainloop(void * o)
                         result = enroll_ipcp(msg->pid, msg->dst);
                         break;
                 case IRM_MSG_CODE__IRM_CONNECT_IPCP:
-                        result = connect_ipcp(msg->pid, msg->dst, msg->comp);
+                        result = connect_ipcp(msg->pid, msg->dst, msg->comp,
+                                              msg_to_spec(msg->qosspec));
                         break;
                 case IRM_MSG_CODE__IRM_DISCONNECT_IPCP:
                         result = disconnect_ipcp(msg->pid, msg->dst, msg->comp);

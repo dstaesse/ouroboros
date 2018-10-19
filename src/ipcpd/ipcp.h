@@ -46,7 +46,8 @@ struct ipcp_ops {
                               struct layer_info * info);
 
         int   (* ipcp_connect)(const char * dst,
-                               const char * component);
+                               const char * component,
+                               qosspec_t    qs);
 
         int   (* ipcp_disconnect)(const char * dst,
                                   const char * component);

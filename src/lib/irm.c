@@ -173,17 +173,22 @@ int irm_bootstrap_ipcp(pid_t                      pid,
 
 int irm_connect_ipcp(pid_t        pid,
                      const char * dst,
-                     const char * component)
+                     const char * component,
+                     qosspec_t    qs)
 {
-        irm_msg_t   msg      = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int         ret;
+        irm_msg_t     msg    = IRM_MSG__INIT;
+        qosspec_msg_t qs_msg = QOSSPEC_MSG__INIT;
+        irm_msg_t *   recv_msg;
+        int           ret;
+
 
         msg.code      = IRM_MSG_CODE__IRM_CONNECT_IPCP;
         msg.dst       = (char *) dst;
         msg.comp      = (char *) component;
         msg.has_pid   = true;
         msg.pid       = pid;
+        qs_msg        = spec_to_msg(&qs);
+        msg.qosspec   = &qs_msg;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -204,8 +209,8 @@ int irm_disconnect_ipcp(pid_t        pid,
                         const char * dst,
                         const char * component)
 {
-        irm_msg_t   msg      = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
+        irm_msg_t   msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg;
         int         ret;
 
         msg.code    = IRM_MSG_CODE__IRM_DISCONNECT_IPCP;
@@ -231,10 +236,10 @@ int irm_disconnect_ipcp(pid_t        pid,
 
 ssize_t irm_list_ipcps(struct ipcp_info ** ipcps)
 {
-        irm_msg_t msg        = IRM_MSG__INIT;
+        irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
-        size_t nr;
-        size_t i;
+        size_t      nr;
+        size_t      i;
 
         if (ipcps == NULL)
                 return -EINVAL;

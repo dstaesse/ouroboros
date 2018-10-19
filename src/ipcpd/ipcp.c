@@ -324,8 +324,10 @@ static void * mainloop(void * o)
                                 break;
                         }
 
+                        qs = msg_to_spec(msg->qosspec);
                         ret_msg.result = ipcpi.ops->ipcp_connect(msg->dst,
-                                                                 msg->comp);
+                                                                 msg->comp,
+                                                                 qs);
                         break;
                 case IPCP_MSG_CODE__IPCP_DISCONNECT:
                         ret_msg.has_result = true;
