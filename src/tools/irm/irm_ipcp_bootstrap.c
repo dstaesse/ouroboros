@@ -51,6 +51,7 @@
 #endif
 
 #define NORMAL                 "normal"
+#define BROADCAST              "broadcast"
 #define UDP                    "udp"
 #define ETH_LLC                "eth-llc"
 #define ETH_DIX                "eth-dix"
@@ -86,7 +87,7 @@ static void usage(void)
                "                name <ipcp name>\n"
                "                layer <layer name>\n"
                "                [type [TYPE]]\n"
-               "where TYPE = {" NORMAL " " LOCAL " "
+               "where TYPE = {" NORMAL " " BROADCAST " " LOCAL " "
                UDP " " ETH_LLC " " ETH_DIX " " RAPTOR "},\n\n"
                "if TYPE == " NORMAL "\n"
                "                [addr <address size> (default: %d)]\n"
@@ -125,7 +126,9 @@ static void usage(void)
                "if TYPE == " RAPTOR "\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
-               SHA3_384 " " SHA3_512 "}\n\n",
+               SHA3_384 " " SHA3_512 "}\n"
+               "if TYPE == " BROADCAST "\n"
+               "                [autobind]\n\n",
                DEFAULT_ADDR_SIZE, DEFAULT_EID_SIZE, DEFAULT_TTL,
                FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING, SIMPLE_PFF,
                SHA3_256, SHA3_256, 0xA000, SHA3_256, SHA3_256, SHA3_256);
@@ -250,6 +253,8 @@ int do_bootstrap_ipcp(int     argc,
         if (ipcp_type != NULL) {
                 if (strcmp(ipcp_type, NORMAL) == 0)
                         type = IPCP_NORMAL;
+                else if (strcmp(ipcp_type, BROADCAST) == 0)
+                        type = IPCP_BROADCAST;
                 else if (strcmp(ipcp_type, UDP) == 0)
                         type = IPCP_UDP;
                 else if (strcmp(ipcp_type, ETH_LLC) == 0)
@@ -285,8 +290,9 @@ int do_bootstrap_ipcp(int     argc,
                         }
                         conf.type = ipcps[i].type;
 
-                        if (autobind && conf.type != IPCP_NORMAL) {
-                                printf("Can only bind normal IPCPs, "
+                        if (autobind && (conf.type != IPCP_NORMAL &&
+                                         conf.type != IPCP_BROADCAST)) {
+                                printf("Can not bind this IPCP type,"
                                        "autobind disabled.\n\n");
                                 autobind = false;
                         }
@@ -326,6 +332,8 @@ int do_bootstrap_ipcp(int     argc,
                                 conf.dev = dev;
                                 conf.ethertype = ethertype;
                                 break;
+                        case IPCP_BROADCAST:
+                                /* FALLTHRU */
                         case IPCP_LOCAL:
                                 /* FALLTHRU */
                         case IPCP_RAPTOR:

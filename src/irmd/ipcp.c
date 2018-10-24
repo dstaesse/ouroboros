@@ -140,6 +140,9 @@ pid_t ipcp_create(const char *   name,
         case IPCP_NORMAL:
                 exec_name = IPCP_NORMAL_EXEC;
                 break;
+        case IPCP_BROADCAST:
+                exec_name = IPCP_BROADCAST_EXEC;
+                break;
         case IPCP_UDP:
                 exec_name = IPCP_UDP_EXEC;
                 break;

@@ -1,6 +1,7 @@
 add_subdirectory(irm)
 add_subdirectory(ocbr)
 add_subdirectory(oecho)
+add_subdirectory(obc)
 add_subdirectory(oping)
 add_subdirectory(operf)
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")

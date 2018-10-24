@@ -46,30 +46,39 @@
 
 #include <string.h>
 
+#define NORMAL    "normal"
+#define BROADCAST "broadcast"
+
 static void usage(void)
 {
         printf("Usage: irm ipcp enroll\n"
                "                name <ipcp name>\n"
                "                layer <layer to enroll in>\n"
-               "                [autobind]\n");
+               "                [type [TYPE], default = normal]\n"
+               "                [autobind]\n"
+               "where TYPE = {" NORMAL " " BROADCAST "}\n");
 }
 
 int do_enroll_ipcp(int     argc,
                    char ** argv)
 {
-        char *             ipcp     = NULL;
-        char *             layer    = NULL;
+        char *             ipcp      = NULL;
+        char *             layer     = NULL;
         struct ipcp_info * ipcps;
-        pid_t              pid      = -1;
-        ssize_t            len      = 0;
-        int                i        = 0;
-        bool               autobind = false;
+        pid_t              pid       = -1;
+        ssize_t            len       = 0;
+        int                i         = 0;
+        bool               autobind  = false;
         int                cargs;
+        char *             ipcp_type = NORMAL;
+        enum ipcp_type     type      = IPCP_INVALID;
 
         while (argc > 0) {
                 cargs = 2;
                 if (matches(*argv, "name") == 0) {
                         ipcp = *(argv + 1);
+                } else if (matches(*argv, "type") == 0) {
+                        ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
                         layer = *(argv + 1);
                 } else if (matches(*argv, "autobind") == 0) {
@@ -90,14 +99,19 @@ int do_enroll_ipcp(int     argc,
                 return -1;
         }
 
+        if (strcmp(ipcp_type, NORMAL) == 0)
+                type = IPCP_NORMAL;
+        else if (strcmp(ipcp_type, BROADCAST) == 0)
+                type = IPCP_BROADCAST;
+
         len = irm_list_ipcps(&ipcps);
         for (i = 0; i < len; i++)
                 if (wildcard_match(ipcps[i].name, ipcp) == 0 &&
-                    ipcps[i].type == IPCP_NORMAL)
+                    ipcps[i].type == type)
                         pid = ipcps[i].pid;
 
         if (pid < 0) {
-                pid = irm_create_ipcp(ipcp, IPCP_NORMAL);
+                pid = irm_create_ipcp(ipcp, type);
                 if (pid < 0)
                         goto fail;
                 free(ipcps);
@@ -105,7 +119,7 @@ int do_enroll_ipcp(int     argc,
         }
 
         for (i = 0; i < len; i++) {
-                if (ipcps[i].type != IPCP_NORMAL)
+                if (ipcps[i].type != type)
                         continue;
                 if (wildcard_match(ipcps[i].name, ipcp) == 0) {
                         pid = ipcps[i].pid;
@@ -121,7 +135,8 @@ int do_enroll_ipcp(int     argc,
                         }
 
                         if (autobind && irm_bind_process(pid, layer)) {
-                                printf("Failed to bind %d to %s.\n", pid, layer);
+                                printf("Failed to bind %d to %s.\n",
+                                       pid, layer);
                                 goto fail;
                         }
                 }

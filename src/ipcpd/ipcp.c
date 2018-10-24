@@ -256,8 +256,14 @@ static void * mainloop(void * o)
                                 layer_info.dir_hash_algo      = HASH_MD5;
                         }
 
-                        /* Only udp needs a fixed hash algorithm */
-                        if (conf_msg->ipcp_type != IPCP_UDP) {
+                        if (conf_msg->ipcp_type == IPCP_BROADCAST) {
+                                conf.layer_info.dir_hash_algo = HASH_SHA3_256;
+                                layer_info.dir_hash_algo      = HASH_SHA3_256;
+                        }
+
+                        /* UDP and broadcast have a fixed hash algorithm. */
+                        if (conf_msg->ipcp_type != IPCP_UDP &&
+                            conf_msg->ipcp_type != IPCP_BROADCAST) {
                                 switch(conf_msg->layer_info->dir_hash_algo) {
                                 case DIR_HASH_SHA3_224:
                                         conf.layer_info.dir_hash_algo =

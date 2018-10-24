@@ -618,7 +618,7 @@ static int connect_ipcp(pid_t        pid,
                 return -EIPCP;
         }
 
-        if (entry->type != IPCP_NORMAL) {
+        if (entry->type != IPCP_NORMAL && entry->type != IPCP_BROADCAST) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Cannot establish connections for this IPCP type.");
                 return -EIPCP;

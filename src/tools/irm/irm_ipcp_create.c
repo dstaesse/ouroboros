@@ -44,19 +44,20 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define NORMAL  "normal"
-#define UDP     "udp"
-#define ETH_LLC "eth-llc"
-#define ETH_DIX "eth-dix"
-#define LOCAL   "local"
-#define RAPTOR  "raptor"
+#define NORMAL    "normal"
+#define BROADCAST "broadcast"
+#define UDP       "udp"
+#define ETH_LLC   "eth-llc"
+#define ETH_DIX   "eth-dix"
+#define LOCAL     "local"
+#define RAPTOR    "raptor"
 
 static void usage(void)
 {
         printf("Usage: irm ipcp create\n"
                "                name <ipcp name>\n"
                "                type [TYPE]\n\n"
-               "where TYPE = {" NORMAL " " LOCAL " "
+               "where TYPE = {" NORMAL " " BROADCAST " " LOCAL " "
                UDP " " ETH_LLC " " RAPTOR "}\n");
 }
 
@@ -90,6 +91,8 @@ int do_create_ipcp(int     argc,
 
         if (strcmp(ipcp_type, NORMAL) == 0)
                 type = IPCP_NORMAL;
+        else if (strcmp(ipcp_type, BROADCAST) == 0)
+                type = IPCP_BROADCAST;
         else if (strcmp(ipcp_type, UDP) == 0)
                 type = IPCP_UDP;
         else if (strcmp(ipcp_type, LOCAL) == 0)

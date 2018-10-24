@@ -142,6 +142,7 @@ int irm_bootstrap_ipcp(pid_t                      pid,
                 config.dns_addr     = conf->dns_addr;
                 break;
         case IPCP_LOCAL:
+        case IPCP_BROADCAST:
         case IPCP_RAPTOR:
                 break;
         case IPCP_ETH_LLC:

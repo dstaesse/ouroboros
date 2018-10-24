@@ -40,6 +40,7 @@ set(IPCP_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/shim-data.c
   )
 
+add_subdirectory(broadcast)
 add_subdirectory(local)
 add_subdirectory(normal)
 add_subdirectory(raptor)
