@@ -89,7 +89,7 @@ static int tun_open(char *   dev,
 
         memset(&ifr, 0, sizeof(ifr));
 
-        ifr.ifr_flags = IFF_TUN;
+        ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 
         ret = ioctl(fd, TUNSETIFF, (void *) &ifr);
         if (ret < 0)
