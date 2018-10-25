@@ -147,9 +147,9 @@ set(PROG_RES_FDS 64 CACHE STRING
   "Number of reserved flow descriptors per application")
 set(PROG_MAX_FQUEUES 32 CACHE STRING
   "Maximum number of flow sets per application")
-set(DU_BUFF_HEADSPACE 128 CACHE STRING
+set(DU_BUFF_HEADSPACE 256 CACHE STRING
   "Bytes of headspace to reserve for future headers")
-set(DU_BUFF_TAILSPACE 16 CACHE STRING
+set(DU_BUFF_TAILSPACE 32 CACHE STRING
   "Bytes of tailspace to reserve for future tails")
 if (NOT APPLE)
   set(PTHREAD_COND_CLOCK "CLOCK_MONOTONIC" CACHE STRING

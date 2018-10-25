@@ -855,6 +855,7 @@ ssize_t flow_write(int          fd,
         struct timespec      abs;
         struct timespec *    abstime = NULL;
         struct shm_du_buff * sdb;
+        uint8_t *            ptr;
 
         if (buf == NULL)
                 return 0;
@@ -886,22 +887,20 @@ ssize_t flow_write(int          fd,
                 return -EPERM;
 
         if (flags & FLOWFWNOBLOCK)
-                idx = shm_rdrbuff_write(ai.rdrb,
-                                        DU_BUFF_HEADSPACE,
-                                        DU_BUFF_TAILSPACE,
-                                        buf,
-                                        count);
+                idx = shm_rdrbuff_alloc(ai.rdrb,
+                                        count,
+                                        &ptr,
+                                        &sdb);
         else  /* Blocking. */
-                idx = shm_rdrbuff_write_b(ai.rdrb,
-                                          DU_BUFF_HEADSPACE,
-                                          DU_BUFF_TAILSPACE,
-                                          buf,
+                idx = shm_rdrbuff_alloc_b(ai.rdrb,
                                           count,
+                                          &ptr,
+                                          &sdb,
                                           abstime);
         if (idx < 0)
                 return idx;
 
-        sdb = shm_rdrbuff_get(ai.rdrb, idx);
+        memcpy(ptr, buf, count);
 
         if (frcti_snd(flow->frcti, sdb) < 0) {
                 shm_rdrbuff_remove(ai.rdrb, idx);
@@ -1442,21 +1441,7 @@ int ipcp_flow_write(int                  fd,
 int ipcp_sdb_reserve(struct shm_du_buff ** sdb,
                      size_t                len)
 {
-        ssize_t idx;
-
-        idx = shm_rdrbuff_write_b(ai.rdrb,
-                                  DU_BUFF_HEADSPACE,
-                                  DU_BUFF_TAILSPACE,
-                                  NULL,
-                                  len,
-                                  NULL);
-
-        if (idx < 0)
-                return -1;
-
-        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
-
-        return 0;
+        return shm_rdrbuff_alloc_b(ai.rdrb, len, NULL, sdb, NULL) < 0 ? -1 : 0;
 }
 
 void ipcp_sdb_release(struct shm_du_buff * sdb)

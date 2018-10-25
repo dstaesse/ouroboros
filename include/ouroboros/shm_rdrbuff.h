@@ -42,18 +42,16 @@ void                 shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb);
 
 void                 shm_rdrbuff_purge(void);
 
-/* returns the index of the buffer in the DU map */
-ssize_t              shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
-                                       size_t               headspace,
-                                       size_t               tailspace,
-                                       const uint8_t *      data,
-                                       size_t               data_len);
+/* Returns block index, a ptr and du_buff.  */
+ssize_t              shm_rdrbuff_alloc(struct shm_rdrbuff *  rdrb,
+                                       size_t                count,
+                                       uint8_t **            ptr,
+                                       struct shm_du_buff ** sdb);
 
-ssize_t              shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
-                                         size_t                  headspace,
-                                         size_t                  tailspace,
-                                         const uint8_t *         data,
-                                         size_t                  data_len,
+ssize_t              shm_rdrbuff_alloc_b(struct shm_rdrbuff *    rdrb,
+                                         size_t                  count,
+                                         uint8_t **              ptr,
+                                         struct shm_du_buff **   sdb,
                                          const struct timespec * abstime);
 
 ssize_t              shm_rdrbuff_read(uint8_t **           dst,

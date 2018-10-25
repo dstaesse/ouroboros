@@ -45,6 +45,7 @@
 #define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 2 * sizeof(size_t)                    \
                        + sizeof(pthread_mutex_t) + 2 * sizeof(pthread_cond_t)  \
                        + sizeof(pid_t))
+#define DU_BUFF_OVERHEAD (DU_BUFF_HEADSPACE + DU_BUFF_TAILSPACE)
 
 #define get_head_ptr(rdrb)                                                     \
         idx_to_du_buff_ptr(rdrb, *rdrb->head)
@@ -277,14 +278,13 @@ void shm_rdrbuff_purge(void)
         free(shm_rdrb_fn);
 }
 
-ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
-                          size_t               headspace,
-                          size_t               tailspace,
-                          const uint8_t *      data,
-                          size_t               len)
+ssize_t shm_rdrbuff_alloc(struct shm_rdrbuff *  rdrb,
+                          size_t                len,
+                          uint8_t **            ptr,
+                          struct shm_du_buff ** psdb)
 {
         struct shm_du_buff * sdb;
-        size_t               size = headspace + len + tailspace;
+        size_t               size = DU_BUFF_OVERHEAD + len;
 #ifdef SHM_RDRB_MULTI_BLOCK
         size_t               blocks = 0;
         size_t               padblocks = 0;
@@ -292,6 +292,7 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         ssize_t              sz = size + sizeof(*sdb);
 
         assert(rdrb);
+        assert(psdb);
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE)
@@ -346,24 +347,24 @@ ssize_t shm_rdrbuff_write(struct shm_rdrbuff * rdrb,
         pthread_mutex_unlock(rdrb->lock);
 
         sdb->size    = size;
-        sdb->du_head = headspace;
+        sdb->du_head = DU_BUFF_HEADSPACE;
         sdb->du_tail = sdb->du_head + len;
 
-        if (data != NULL)
-                memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
+        *psdb = sdb;
+        if (ptr != NULL)
+                *ptr = (uint8_t *) (sdb + 1) + sdb->du_head;
 
         return sdb->idx;
 }
 
-ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
-                            size_t                  headspace,
-                            size_t                  tailspace,
-                            const uint8_t *         data,
+ssize_t shm_rdrbuff_alloc_b(struct shm_rdrbuff *    rdrb,
                             size_t                  len,
+                            uint8_t **              ptr,
+                            struct shm_du_buff **   psdb,
                             const struct timespec * abstime)
 {
         struct shm_du_buff * sdb;
-        size_t               size      = headspace + len + tailspace;
+        size_t               size      = DU_BUFF_OVERHEAD + len;
 #ifdef SHM_RDRB_MULTI_BLOCK
         size_t               blocks    = 0;
         size_t               padblocks = 0;
@@ -372,6 +373,7 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
         int                  ret       = 0;
 
         assert(rdrb);
+        assert(psdb);
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         if (sz > SHM_RDRB_BLOCK_SIZE)
@@ -444,11 +446,12 @@ ssize_t shm_rdrbuff_write_b(struct shm_rdrbuff *    rdrb,
                 return -ETIMEDOUT;
 
         sdb->size    = size;
-        sdb->du_head = headspace;
+        sdb->du_head = DU_BUFF_HEADSPACE;
         sdb->du_tail = sdb->du_head + len;
 
-        if (data != NULL)
-                memcpy(((uint8_t *) (sdb + 1)) + headspace, data, len);
+        *psdb = sdb;
+        if (ptr != NULL)
+                *ptr = (uint8_t *) (sdb + 1) + sdb->du_head;
 
         return sdb->idx;
 }
