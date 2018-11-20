@@ -65,7 +65,8 @@ enum frct_flags {
         FRCT_ACK  = 0x04, /* ACK field valid  */
         FRCT_FC   = 0x08, /* FC window valid  */
         FRCT_RDVZ = 0x10, /* Rendez-vous      */
-        FRCT_MFGM = 0x20, /* More fragments   */
+        FRCT_FFGM = 0x20, /* First Fragment   */
+        FRCT_MFGM = 0x40, /* More fragments   */
 };
 
 struct frct_pci {
