@@ -82,11 +82,13 @@ enum dtp_fields {
 /* Fixed field lengths */
 #define TTL_LEN 1
 #define QOS_LEN 1
+#define ECN_LEN 1
 
 struct dt_pci {
         uint64_t  dst_addr;
         qoscube_t qc;
         uint8_t   ttl;
+        uint8_t   ecn;
         uint32_t  eid;
 };
 
@@ -98,6 +100,7 @@ struct {
         /* Offsets */
         size_t          qc_o;
         size_t          ttl_o;
+        size_t          ecn_o;
         size_t          eid_o;
 
         /* Initial TTL value */
@@ -121,6 +124,7 @@ static int dt_pci_ser(struct shm_du_buff * sdb,
         memcpy(head, &dt_pci->dst_addr, dt_pci_info.addr_size);
         memcpy(head + dt_pci_info.qc_o, &dt_pci->qc, QOS_LEN);
         memcpy(head + dt_pci_info.ttl_o, &ttl, TTL_LEN);
+        memcpy(head + dt_pci_info.ecn_o,  &dt_pci->ecn, ECN_LEN);
         memcpy(head + dt_pci_info.eid_o, &dt_pci->eid, dt_pci_info.eid_size);
 
         return 0;
@@ -143,6 +147,7 @@ static void dt_pci_des(struct shm_du_buff * sdb,
         memcpy(&dt_pci->dst_addr, head, dt_pci_info.addr_size);
         memcpy(&dt_pci->qc, head + dt_pci_info.qc_o, QOS_LEN);
         memcpy(&dt_pci->ttl, head + dt_pci_info.ttl_o, TTL_LEN);
+        memcpy(&dt_pci->ecn, head + dt_pci_info.ecn_o, ECN_LEN);
         memcpy(&dt_pci->eid, head + dt_pci_info.eid_o, dt_pci_info.eid_size);
 }
 
@@ -649,7 +654,8 @@ int dt_init(enum pol_routing pr,
 
         dt_pci_info.qc_o      = dt_pci_info.addr_size;
         dt_pci_info.ttl_o     = dt_pci_info.qc_o + QOS_LEN;
-        dt_pci_info.eid_o     = dt_pci_info.ttl_o + TTL_LEN;
+        dt_pci_info.ecn_o     = dt_pci_info.ttl_o + TTL_LEN;
+        dt_pci_info.eid_o     = dt_pci_info.ecn_o + ECN_LEN;
         dt_pci_info.head_size = dt_pci_info.eid_o + dt_pci_info.eid_size;
 
         if (notifier_reg(handle_event, NULL)) {
