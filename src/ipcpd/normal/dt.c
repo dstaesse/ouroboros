@@ -70,15 +70,6 @@ struct comp_info {
         char * name;
 };
 
-/* Abstract syntax */
-enum dtp_fields {
-        DTP_DST = 0,   /* DST ADDRESS      */
-        DTP_QOS,       /* QOS ID           */
-        DTP_DEID,      /* DST Endpoint ID  */
-        DTP_TTL,       /* TTL FIELD        */
-        DTP_NUM_FIELDS /* Number of fields */
-};
-
 /* Fixed field lengths */
 #define TTL_LEN 1
 #define QOS_LEN 1
@@ -860,6 +851,7 @@ int dt_write_packet(uint64_t             dst_addr,
         dt_pci.dst_addr = dst_addr;
         dt_pci.qc       = qc;
         dt_pci.eid      = np1_fd;
+        dt_pci.ecn      = 0;
 
         if (dt_pci_ser(sdb, &dt_pci)) {
                 log_dbg("Failed to serialize PDU.");
