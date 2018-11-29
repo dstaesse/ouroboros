@@ -178,7 +178,7 @@ int main(int     argc,
                         client.interval *= time_mul(rem);
                         --argc;
                 } else if (strcmp(*argv, "-n") == 0 ||
-                           strcmp(*argv, "--server_name") == 0) {
+                           strcmp(*argv, "--server-name") == 0) {
                         client.s_apn = *(++argv);
                         --argc;
                 } else if (strcmp(*argv, "-c") == 0 ||
