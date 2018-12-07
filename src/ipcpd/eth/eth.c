@@ -380,6 +380,11 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
         uint8_t            cf = 0x03;
 #endif
         struct eth_frame * e_frame;
+#ifdef HAVE_RAW_SOCKETS
+        fd_set             fds;
+
+        FD_ZERO(&fds);
+#endif
 
         assert(frame);
 
@@ -424,13 +429,20 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
         }
 
 #elif defined(HAVE_RAW_SOCKETS)
+        FD_SET(eth_data.s_fd, &fds);
+        if (select(eth_data.s_fd + 1, NULL, &fds, NULL, NULL) < 0) {
+                log_dbg("Select() failed: %s.", strerror(errno));
+                return -1;
+        }
+        assert(FD_ISSET(eth_data.s_fd, &fds));
+
         if (sendto(eth_data.s_fd,
                    frame,
                    frame_len,
                    0,
                    (struct sockaddr *) &eth_data.device,
                    sizeof(eth_data.device)) <= 0) {
-                log_dbg("Failed to send message.");
+                log_dbg("Failed to send message: %s.", strerror(errno));
                 return -1;
         }
 #endif /* HAVE_NETMAP */
