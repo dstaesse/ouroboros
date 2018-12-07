@@ -751,7 +751,7 @@ int fccntl(int fd,
                 break;
         case FLOWGTXQLEN:
                 qlen  = va_arg(l, size_t *);
-                *qlen = shm_rbuff_queued(flow->rx_rb);
+                *qlen = shm_rbuff_queued(flow->tx_rb);
                 break;
         case FLOWSFLAGS:
                 flow->oflags = va_arg(l, uint32_t);
