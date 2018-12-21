@@ -23,7 +23,8 @@
 #ifndef OUROBOROS_IRMD_PROC_TABLE_H
 #define OUROBOROS_IRMD_PROC_TABLE_H
 
-#include "time.h"
+#include <ouroboros/shm_flow_set.h>
+
 #include "utils.h"
 
 #include <unistd.h>
@@ -38,18 +39,18 @@ enum proc_state {
 };
 
 struct proc_entry {
-        struct list_head   next;
-        pid_t              pid;
-        char *             prog;     /* program instantiated */
-        char *             daf_name; /* DAF this process belongs to */
-        struct list_head   names;    /* names for which process accepts flows */
+        struct list_head      next;
+        pid_t                 pid;
+        char *                prog;  /* program instantiated */
+        struct list_head      names; /* names for which process accepts flows */
+        struct shm_flow_set * set;
 
-        struct reg_entry * re;       /* reg_entry for which a flow arrived */
+        struct reg_entry *    re;    /* reg_entry for which a flow arrived */
 
         /* The process will block on this */
-        enum proc_state    state;
-        pthread_cond_t     cond;
-        pthread_mutex_t    lock;
+        enum proc_state       state;
+        pthread_cond_t        cond;
+        pthread_mutex_t       lock;
 };
 
 struct proc_entry * proc_entry_create(pid_t  proc,

@@ -357,10 +357,6 @@ static void init(int     argc,
         if (ai.fqueues == NULL)
                 goto fail_fqueues;
 
-        ai.fqset = shm_flow_set_create();
-        if (ai.fqset == NULL)
-                goto fail_fqset;
-
         ai.rdrb = shm_rdrbuff_open();
         if (ai.rdrb == NULL)
                 goto fail_rdrb;
@@ -407,8 +403,14 @@ static void init(int     argc,
         if (rxmwheel_init())
                 goto fail_rxmwheel;
 
+        ai.fqset = shm_flow_set_open(getpid());
+        if (ai.fqset == NULL)
+                goto fail_fqset;
+
         return;
 
+ fail_fqset:
+        rxmwheel_fini();
  fail_rxmwheel:
         pthread_rwlock_destroy(&ai.lock);
  fail_lock:
@@ -426,8 +428,6 @@ static void init(int     argc,
  fail_flows:
         shm_rdrbuff_close(ai.rdrb);
  fail_rdrb:
-        shm_flow_set_destroy(ai.fqset);
- fail_fqset:
         bmp_destroy(ai.fqueues);
  fail_fqueues:
         bmp_destroy(ai.fds);
@@ -462,7 +462,7 @@ static void fini(void)
                 }
         }
 
-        shm_flow_set_destroy(ai.fqset);
+        shm_flow_set_close(ai.fqset);
 
         for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 pthread_mutex_destroy(&ai.ports[i].state_lock);

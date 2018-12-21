@@ -50,41 +50,44 @@ struct proc_entry * proc_entry_create(pid_t  pid,
 
         e = malloc(sizeof(*e));
         if (e == NULL)
-                return NULL;
+                goto fail_malloc;
+
+        if (pthread_condattr_init(&cattr))
+                goto fail_condattr;
+
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+
+        if (pthread_mutex_init(&e->lock, NULL))
+                goto fail_mutex;
+
+        if (pthread_cond_init(&e->cond, &cattr))
+                goto fail_cond;
+
+        e->set = shm_flow_set_create(pid);
+        if (e->set == NULL)
+                goto fail_set;
 
         list_head_init(&e->next);
         list_head_init(&e->names);
 
         e->pid      = pid;
         e->prog     = prog;
-        e->daf_name = NULL;
-
         e->re       = NULL;
-
         e->state    = PROC_INIT;
 
-        if (pthread_condattr_init(&cattr)) {
-                free(e);
-                return NULL;
-        }
-
-#ifndef __APPLE__
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
-#endif
-
-        if (pthread_mutex_init(&e->lock, NULL)) {
-                free(e);
-                return NULL;
-        }
-
-
-        if (pthread_cond_init(&e->cond, &cattr)) {
-                pthread_mutex_destroy(&e->lock);
-                free(e);
-                return NULL;
-        }
-
         return e;
+ fail_set:
+        pthread_cond_destroy(&e->cond);;
+ fail_cond:
+        pthread_mutex_destroy(&e->lock);
+ fail_mutex:
+        pthread_condattr_destroy(&cattr);
+ fail_condattr:
+        free(e);
+ fail_malloc:
+        return NULL;
 }
 
 static void cancel_proc_entry(void * o)
@@ -123,6 +126,8 @@ void proc_entry_destroy(struct proc_entry * e)
         pthread_cleanup_pop(false);
 
         pthread_mutex_unlock(&e->lock);
+
+        shm_flow_set_destroy(e->set);
 
         pthread_cond_destroy(&e->cond);
         pthread_mutex_destroy(&e->lock);

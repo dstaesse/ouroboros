@@ -29,7 +29,7 @@
 
 struct shm_flow_set;
 
-struct shm_flow_set * shm_flow_set_create(void);
+struct shm_flow_set * shm_flow_set_create(pid_t pid);
 
 void                  shm_flow_set_destroy(struct shm_flow_set * set);
 

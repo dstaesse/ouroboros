@@ -78,30 +78,23 @@ struct shm_flow_set {
         pid_t pid;
 };
 
-struct shm_flow_set * shm_flow_set_create()
+static struct shm_flow_set * flow_set_create(pid_t pid,
+                                             int   flags)
 {
         struct shm_flow_set * set;
         ssize_t *             shm_base;
-        pthread_mutexattr_t   mattr;
-        pthread_condattr_t    cattr;
         char                  fn[FN_MAX_CHARS];
-        mode_t                mask;
         int                   shm_fd;
-        int                   i;
 
-        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", getpid());
+        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", pid);
 
         set = malloc(sizeof(*set));
         if (set == NULL)
-                return NULL;
+                goto fail_malloc;
 
-        mask = umask(0);
-
-        shm_fd = shm_open(fn, O_CREAT | O_RDWR, 0666);
+        shm_fd = shm_open(fn, flags, 0666);
         if (shm_fd == -1)
                 goto fail_shm_open;
-
-        umask(mask);
 
         if (ftruncate(shm_fd, SHM_FLOW_SET_FILE_SIZE - 1) < 0) {
                 close(shm_fd);
@@ -127,27 +120,61 @@ struct shm_flow_set * shm_flow_set_create()
         set->lock    = (pthread_mutex_t *)
                 (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
+        return set;
+
+ fail_mmap:
+        if (flags & O_CREAT)
+                shm_unlink(fn);
+ fail_shm_open:
+        free(set);
+ fail_malloc:
+        return NULL;
+}
+
+struct shm_flow_set * shm_flow_set_create(pid_t pid)
+{
+        struct shm_flow_set * set;
+        pthread_mutexattr_t   mattr;
+        pthread_condattr_t    cattr;
+        mode_t                mask;
+        int                   i;
+
+        mask = umask(0);
+
+        set = flow_set_create(pid, O_CREAT | O_RDWR);
+
+        umask(mask);
+
+        if (set == NULL)
+                goto fail_set;
+
         if (pthread_mutexattr_init(&mattr))
-                goto fail_mmap;
+                goto fail_mutexattr_init;
 
 #ifdef HAVE_ROBUST_MUTEX
         if (pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST))
-                goto fail_mmap;
+                goto fail_mattr_set;
 #endif
-        if (pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED) ||
-            pthread_mutex_init(set->lock, &mattr) ||
-            pthread_condattr_init(&cattr) ||
-            pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED))
-                goto fail_mmap;
+        if (pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED))
+                goto fail_mattr_set;
+
+        if (pthread_mutex_init(set->lock, &mattr))
+                goto fail_mattr_set;
+
+        if (pthread_condattr_init(&cattr))
+                goto fail_condattr_init;
+
+        if (pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED))
+                goto fail_condattr_set;
 
 #ifndef __APPLE__
         if (pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK))
-                goto fail_mmap;
+                goto fail_condattr_set;
 #endif
         for (i = 0; i < PROG_MAX_FQUEUES; ++i) {
                 set->heads[i] = 0;
                 if (pthread_cond_init(&set->conds[i], &cattr))
-                        goto fail_mmap;
+                        goto fail_init;
         }
 
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
@@ -157,84 +184,37 @@ struct shm_flow_set * shm_flow_set_create()
 
         return set;
 
- fail_mmap:
-        shm_unlink(fn);
- fail_shm_open:
-        free(set);
+ fail_init:
+        while (i-- > 0)
+                pthread_cond_destroy(&set->conds[i]);
+ fail_condattr_set:
+        pthread_condattr_destroy(&cattr);
+ fail_condattr_init:
+        pthread_mutex_destroy(set->lock);
+ fail_mattr_set:
+        pthread_mutexattr_destroy(&mattr);
+ fail_mutexattr_init:
+        shm_flow_set_destroy(set);
+ fail_set:
         return NULL;
 }
 
 struct shm_flow_set * shm_flow_set_open(pid_t pid)
 {
-        struct shm_flow_set * set;
-        ssize_t *             shm_base;
-        char                  fn[FN_MAX_CHARS];
-        int                   shm_fd;
-
-        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", pid);
-
-        set = malloc(sizeof(*set));
-        if (set == NULL)
-                return NULL;
-
-        shm_fd = shm_open(fn, O_RDWR, 0666);
-        if (shm_fd == -1) {
-                free(set);
-                return NULL;
-        }
-
-        shm_base = mmap(NULL,
-                        SHM_FLOW_SET_FILE_SIZE,
-                        PROT_READ | PROT_WRITE,
-                        MAP_SHARED,
-                        shm_fd,
-                        0);
-
-        close(shm_fd);
-
-        if (shm_base == MAP_FAILED) {
-                shm_unlink(fn);
-                free(set);
-                return NULL;
-        }
-
-        set->mtable  = shm_base;
-        set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
-        set->conds   = (pthread_cond_t *)(set->heads + PROG_MAX_FQUEUES);
-        set->fqueues = (struct portevent *) (set->conds + PROG_MAX_FQUEUES);
-        set->lock    = (pthread_mutex_t *)
-                (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
-        set->pid = pid;
-
-        return set;
+        return flow_set_create(pid, O_RDWR);
 }
 
 void shm_flow_set_destroy(struct shm_flow_set * set)
 {
         char fn[25];
-        struct lockfile * lf = NULL;
 
         assert(set);
 
-        if (set->pid != getpid()) {
-                lf = lockfile_open();
-                if (lf == NULL)
-                        return;
-
-                if (lockfile_owner(lf) == getpid()) {
-                        lockfile_close(lf);
-                } else {
-                        lockfile_close(lf);
-                        return;
-                }
-        }
-
         sprintf(fn, SHM_FLOW_SET_PREFIX "%d", set->pid);
 
-        munmap(set->mtable, SHM_FLOW_SET_FILE_SIZE);
-        shm_unlink(fn);
+        shm_flow_set_close(set);
 
-        free(set);
+        shm_unlink(fn);
 }
 
 void shm_flow_set_close(struct shm_flow_set * set)
@@ -242,7 +222,6 @@ void shm_flow_set_close(struct shm_flow_set * set)
         assert(set);
 
         munmap(set->mtable, SHM_FLOW_SET_FILE_SIZE);
-
         free(set);
 }
 
