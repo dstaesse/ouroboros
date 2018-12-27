@@ -446,7 +446,8 @@ int fa_alloc_resp(int fd,
 
 int fa_dealloc(int fd)
 {
-        ipcp_flow_fini(fd);
+        if (ipcp_flow_fini(fd) < 0)
+                return 0;
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 

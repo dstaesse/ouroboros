@@ -667,7 +667,10 @@ int flow_dealloc(int fd)
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        assert(ai.flows[fd].flow_id >= 0);
+        if (ai.flows[fd].flow_id < 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                return -ENOTALLOC;
+        }
 
         msg.flow_id = ai.flows[fd].flow_id;
 
@@ -1467,13 +1470,18 @@ void ipcp_sdb_release(struct shm_du_buff * sdb)
         shm_rdrbuff_remove(ai.rdrb, shm_du_buff_get_idx(sdb));
 }
 
-void ipcp_flow_fini(int fd)
+int ipcp_flow_fini(int fd)
 {
         struct shm_rbuff * rx_rb;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
 
         pthread_rwlock_rdlock(&ai.lock);
+
+        if (ai.flows[fd].flow_id < 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                return -1;
+        }
 
         shm_rbuff_set_acl(ai.flows[fd].rx_rb, ACL_FLOWDOWN);
         shm_rbuff_set_acl(ai.flows[fd].tx_rb, ACL_FLOWDOWN);
@@ -1489,6 +1497,7 @@ void ipcp_flow_fini(int fd)
         if (rx_rb != NULL)
                 shm_rbuff_fini(rx_rb);
 
+        return 0;
 }
 
 int ipcp_flow_get_qoscube(int         fd,

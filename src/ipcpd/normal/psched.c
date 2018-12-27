@@ -217,7 +217,7 @@ void psched_destroy(struct psched * psched)
 }
 
 void psched_add(struct psched * psched,
-                      int       fd)
+                int             fd)
 {
         qoscube_t qc;
 
@@ -228,7 +228,7 @@ void psched_add(struct psched * psched,
 }
 
 void psched_del(struct psched * psched,
-                      int       fd)
+                int             fd)
 {
         qoscube_t qc;
 
