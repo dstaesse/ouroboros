@@ -40,6 +40,11 @@ int     flow_alloc(const char *            dst_name,
 int     flow_accept(qosspec_t *             qs,
                     const struct timespec * timeo);
 
+/* Returns flow descriptor, qs updates to supplied QoS. */
+int     flow_join(const char *            bc,
+                  qosspec_t *             qs,
+                  const struct timespec * timeo);
+
 int     flow_dealloc(int fd);
 
 ssize_t flow_write(int          fd,

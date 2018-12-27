@@ -1183,6 +1183,7 @@ static struct ipcp_ops udp_ops = {
         .ipcp_unreg           = ipcp_udp_unreg,
         .ipcp_query           = ipcp_udp_query,
         .ipcp_flow_alloc      = ipcp_udp_flow_alloc,
+        .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = ipcp_udp_flow_alloc_resp,
         .ipcp_flow_dealloc    = ipcp_udp_flow_dealloc
 };

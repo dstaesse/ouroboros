@@ -428,6 +428,39 @@ static void * mainloop(void * o)
                                                            msg->hash.data,
                                                            qs);
                         break;
+                case IPCP_MSG_CODE__IPCP_FLOW_JOIN:
+                        ret_msg.has_result = true;
+
+                        if (ipcpi.ops->ipcp_flow_join == NULL) {
+                                log_err("Broadcast unsupported.");
+                                ret_msg.result = -ENOTSUP;
+                                break;
+                        }
+
+                        assert(msg->hash.len == ipcp_dir_hash_len());
+
+                        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                                log_err("IPCP in wrong state.");
+                                ret_msg.result = -EIPCPSTATE;
+                                break;
+                        }
+
+                        qs = msg_to_spec(msg->qosspec);
+                        fd = np1_flow_alloc(msg->pid,
+                                            msg->flow_id,
+                                            qs);
+                        if (fd < 0) {
+                                log_err("Failed allocating fd on flow_id %d.",
+                                        msg->flow_id);
+                                ret_msg.result = -1;
+                                break;
+                        }
+
+                        ret_msg.result =
+                                ipcpi.ops->ipcp_flow_join(fd,
+                                                          msg->hash.data,
+                                                          qs);
+                        break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         ret_msg.has_result = true;
                         if (ipcpi.ops->ipcp_flow_alloc_resp == NULL) {

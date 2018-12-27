@@ -32,11 +32,12 @@ enum ipcp_msg_code {
         IPCP_UNREG           =  4;
         IPCP_QUERY           =  5;
         IPCP_FLOW_ALLOC      =  6;
-        IPCP_FLOW_ALLOC_RESP =  7;
-        IPCP_FLOW_DEALLOC    =  8;
-        IPCP_CONNECT         =  9;
-        IPCP_DISCONNECT      = 10;
-        IPCP_REPLY           = 11;
+        IPCP_FLOW_JOIN       =  7;
+        IPCP_FLOW_ALLOC_RESP =  8;
+        IPCP_FLOW_DEALLOC    =  9;
+        IPCP_CONNECT         = 10;
+        IPCP_DISCONNECT      = 11;
+        IPCP_REPLY           = 12;
 };
 
 message ipcp_msg {

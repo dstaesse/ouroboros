@@ -1055,6 +1055,7 @@ static struct ipcp_ops raptor_ops = {
         .ipcp_unreg           = raptor_unreg,
         .ipcp_query           = raptor_query,
         .ipcp_flow_alloc      = raptor_flow_alloc,
+        .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = raptor_flow_alloc_resp,
         .ipcp_flow_dealloc    = raptor_flow_dealloc
 };

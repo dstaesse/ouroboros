@@ -198,31 +198,18 @@ static int broadcast_ipcp_bootstrap(const struct ipcp_config * conf)
         return -1;
 }
 
-static int broadcast_ipcp_query(const uint8_t * dst)
+static int name_check(const uint8_t * dst)
 {
         uint8_t * buf;
         size_t    len;
         int       ret;
-        char *    multicast_name;
-        char *    suffix = ".mc";
 
         len = hash_len(ipcpi.dir_hash_algo);
         buf =  malloc(len);
         if (buf == NULL)
                 return -ENOMEM;
 
-        multicast_name = malloc(strlen(ipcpi.layer_name) + strlen(suffix) + 1);
-        if (multicast_name == NULL) {
-                free(buf);
-                return -ENOMEM;
-        }
-
-        strcpy(multicast_name, ipcpi.layer_name);
-        strcat(multicast_name, suffix);
-
-        str_hash(ipcpi.dir_hash_algo, buf, multicast_name);
-
-        free(multicast_name);
+        str_hash(ipcpi.dir_hash_algo, buf, ipcpi.layer_name);
 
         ret = memcmp(buf, dst, len);
 
@@ -231,9 +218,9 @@ static int broadcast_ipcp_query(const uint8_t * dst)
         return ret;
 }
 
-static int broadcast_ipcp_alloc(int             fd,
-                                const uint8_t * dst,
-                                qosspec_t       qs)
+static int broadcast_ipcp_join(int             fd,
+                               const uint8_t * dst,
+                               qosspec_t       qs)
 {
         struct conn conn;
 
@@ -243,7 +230,7 @@ static int broadcast_ipcp_alloc(int             fd,
 
         conn.flow_info.fd = fd;
 
-        if (broadcast_ipcp_query(dst) != 0)
+        if (name_check(dst) != 0)
                 return -1;
 
         notifier_event(NOTIFY_DT_CONN_ADD, &conn);
@@ -276,8 +263,9 @@ static struct ipcp_ops broadcast_ops = {
         .ipcp_disconnect      = connmgr_ipcp_disconnect,
         .ipcp_reg             = NULL,
         .ipcp_unreg           = NULL,
-        .ipcp_query           = broadcast_ipcp_query,
-        .ipcp_flow_alloc      = broadcast_ipcp_alloc,
+        .ipcp_query           = NULL,
+        .ipcp_flow_alloc      = NULL,
+        .ipcp_flow_join       = broadcast_ipcp_join,
         .ipcp_flow_alloc_resp = NULL,
         .ipcp_flow_dealloc    = broadcast_ipcp_dealloc
 };

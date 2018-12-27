@@ -69,6 +69,13 @@ int   ipcp_flow_alloc(pid_t           pid,
                       size_t          len,
                       qosspec_t       qs);
 
+int   ipcp_flow_join(pid_t           pid,
+                     int             flow_id,
+                     pid_t           n_pid,
+                     const uint8_t * dst,
+                     size_t          len,
+                     qosspec_t       qs);
+
 int   ipcp_flow_alloc_resp(pid_t pid,
                            int   flow_id,
                            pid_t n_pid,

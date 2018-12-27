@@ -295,6 +295,7 @@ static struct ipcp_ops normal_ops = {
         .ipcp_unreg           = dir_unreg,
         .ipcp_query           = normal_ipcp_query,
         .ipcp_flow_alloc      = fa_alloc,
+        .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = fa_alloc_resp,
         .ipcp_flow_dealloc    = fa_dealloc
 };

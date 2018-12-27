@@ -63,9 +63,9 @@ static int reader_main(const char * dst)
 
         printf("Starting a reader.\n");
 
-        fd = flow_alloc(dst, NULL, NULL);
+        fd = flow_join(dst, NULL, NULL);
         if (fd < 0) {
-                printf("Failed to allocate multicast flow.\n");
+                printf("Failed to join broadcast.\n");
                 return -1;
         }
 
@@ -90,9 +90,9 @@ static int writer_main(const char * dst,
 {
         int     fd      = 0;
 
-        fd = flow_alloc(dst, NULL, NULL);
+        fd = flow_join(dst, NULL, NULL);
         if (fd < 0) {
-                printf("Failed to allocate multicast flow.\n");
+                printf("Failed to join broadcast.\n");
                 return -1;
         }
 

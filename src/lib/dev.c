@@ -561,9 +561,10 @@ int flow_accept(qosspec_t *             qs,
         return fd;
 }
 
-int flow_alloc(const char *            dst,
-               qosspec_t *             qs,
-               const struct timespec * timeo)
+static int __flow_alloc(const char *            dst,
+                        qosspec_t *             qs,
+                        const struct timespec * timeo,
+                        bool join)
 {
         irm_msg_t     msg    = IRM_MSG__INIT;
         qosspec_msg_t qs_msg = QOSSPEC_MSG__INIT;
@@ -574,7 +575,10 @@ int flow_alloc(const char *            dst,
         if (qs != NULL)
                 qs->ber = 1;
 #endif
-        msg.code    = IRM_MSG_CODE__IRM_FLOW_ALLOC;
+        if (join)
+                msg.code    = IRM_MSG_CODE__IRM_FLOW_JOIN;
+        else
+                msg.code    = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst     = (char *) dst;
         msg.has_pid = true;
         msg.pid     = ai.pid;
@@ -632,6 +636,20 @@ int flow_alloc(const char *            dst,
         pthread_rwlock_unlock(&ai.lock);
 
         return fd;
+}
+
+int flow_alloc(const char *            dst,
+               qosspec_t *             qs,
+               const struct timespec * timeo)
+{
+        return __flow_alloc(dst, qs, timeo, false);
+}
+
+int flow_join(const char *            dst,
+              qosspec_t *             qs,
+              const struct timespec * timeo)
+{
+        return __flow_alloc(dst, qs, timeo, true);
 }
 
 int flow_dealloc(int fd)

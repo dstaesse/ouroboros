@@ -435,12 +435,13 @@ int ipcp_query(pid_t           pid,
         return ret;
 }
 
-int ipcp_flow_alloc(pid_t           pid,
-                    int             flow_id,
-                    pid_t           n_pid,
-                    const uint8_t * dst,
-                    size_t          len,
-                    qosspec_t       qs)
+static int __ipcp_flow_alloc(pid_t           pid,
+                             int             flow_id,
+                             pid_t           n_pid,
+                             const uint8_t * dst,
+                             size_t          len,
+                             qosspec_t       qs,
+                             bool            join)
 {
         ipcp_msg_t    msg      = IPCP_MSG__INIT;
         qosspec_msg_t qs_msg;
@@ -449,7 +450,10 @@ int ipcp_flow_alloc(pid_t           pid,
 
         assert(dst);
 
-        msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
+        if (join)
+                msg.code         = IPCP_MSG_CODE__IPCP_FLOW_JOIN;
+        else
+                msg.code         = IPCP_MSG_CODE__IPCP_FLOW_ALLOC;
         msg.has_flow_id  = true;
         msg.flow_id      = flow_id;
         msg.has_pid      = true;
@@ -473,6 +477,26 @@ int ipcp_flow_alloc(pid_t           pid,
         ipcp_msg__free_unpacked(recv_msg, NULL);
 
         return ret;
+}
+
+int ipcp_flow_alloc(pid_t           pid,
+                    int             flow_id,
+                    pid_t           n_pid,
+                    const uint8_t * dst,
+                    size_t          len,
+                    qosspec_t       qs)
+{
+        return __ipcp_flow_alloc(pid, flow_id, n_pid, dst, len, qs, false);
+}
+
+int ipcp_flow_join(pid_t           pid,
+                   int             flow_id,
+                   pid_t           n_pid,
+                   const uint8_t * dst,
+                   size_t          len,
+                   qosspec_t       qs)
+{
+        return __ipcp_flow_alloc(pid, flow_id, n_pid, dst, len, qs, true);
 }
 
 int ipcp_flow_alloc_resp(pid_t pid,

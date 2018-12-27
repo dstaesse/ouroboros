@@ -43,10 +43,11 @@ enum irm_msg_code {
         IRM_UNREG             = 15;
         IRM_FLOW_ALLOC        = 16;
         IRM_FLOW_ACCEPT       = 17;
-        IRM_FLOW_DEALLOC      = 18;
-        IPCP_FLOW_REQ_ARR     = 19;
-        IPCP_FLOW_ALLOC_REPLY = 20;
-        IRM_REPLY             = 21;
+        IRM_FLOW_JOIN         = 18;
+        IRM_FLOW_DEALLOC      = 19;
+        IPCP_FLOW_REQ_ARR     = 20;
+        IPCP_FLOW_ALLOC_REPLY = 21;
+        IRM_REPLY             = 22;
 };
 
 message ipcp_info_msg {

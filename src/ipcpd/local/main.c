@@ -325,6 +325,7 @@ static struct ipcp_ops local_ops = {
         .ipcp_unreg           = ipcp_local_unreg,
         .ipcp_query           = ipcp_local_query,
         .ipcp_flow_alloc      = ipcp_local_flow_alloc,
+        .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = ipcp_local_flow_alloc_resp,
         .ipcp_flow_dealloc    = ipcp_local_flow_dealloc
 };

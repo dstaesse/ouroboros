@@ -1777,6 +1777,7 @@ static struct ipcp_ops eth_ops = {
         .ipcp_unreg           = eth_ipcp_unreg,
         .ipcp_query           = eth_ipcp_query,
         .ipcp_flow_alloc      = eth_ipcp_flow_alloc,
+        .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = eth_ipcp_flow_alloc_resp,
         .ipcp_flow_dealloc    = eth_ipcp_flow_dealloc
 };

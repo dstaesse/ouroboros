@@ -330,6 +330,19 @@ static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
         return NULL;
 }
 
+static struct ipcp_entry * get_ipcp_entry_by_layer(const char * layer)
+{
+        struct list_head * p;
+
+        list_for_each(p, &irmd.ipcps) {
+                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                if (strcmp(layer, e->layer) == 0)
+                        return e;
+        }
+
+        return NULL;
+}
+
 static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
                                                 pid_t        src)
 {
@@ -1267,7 +1280,8 @@ static int flow_alloc(pid_t              pid,
                       const char *       dst,
                       qosspec_t          qs,
                       struct timespec *  timeo,
-                      struct irm_flow ** e)
+                      struct irm_flow ** e,
+                      bool               join)
 {
         struct irm_flow *   f;
         struct ipcp_entry * ipcp;
@@ -1275,7 +1289,10 @@ static int flow_alloc(pid_t              pid,
         int                 state;
         uint8_t *           hash;
 
-        ipcp = get_ipcp_by_dst_name(dst, pid);
+        if (join)
+                ipcp = get_ipcp_entry_by_layer(dst);
+        else
+                ipcp = get_ipcp_by_dst_name(dst, pid);
         if (ipcp == NULL) {
                 log_info("Destination %s unreachable.", dst);
                 return -1;
@@ -1310,12 +1327,22 @@ static int flow_alloc(pid_t              pid,
 
         str_hash(ipcp->dir_hash_algo, hash, dst);
 
-        if (ipcp_flow_alloc(ipcp->pid, flow_id, pid, hash,
-                            IPCP_HASH_LEN(ipcp), qs)) {
-                /* sanitizer cleans this */
-                log_info("Flow_allocation failed.");
-                free(hash);
-                return -EAGAIN;
+        if (join) {
+                if (ipcp_flow_join(ipcp->pid, flow_id, pid, hash,
+                                   IPCP_HASH_LEN(ipcp), qs)) {
+                        /* sanitizer cleans this */
+                        log_info("Flow_join failed.");
+                        free(hash);
+                        return -EAGAIN;
+                }
+        } else {
+                if (ipcp_flow_alloc(ipcp->pid, flow_id, pid, hash,
+                                    IPCP_HASH_LEN(ipcp), qs)) {
+                        /* sanitizer cleans this */
+                        log_info("Flow_allocation failed.");
+                        free(hash);
+                        return -EAGAIN;
+                }
         }
 
         free(hash);
@@ -1978,7 +2005,18 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
                         result = flow_alloc(msg->pid, msg->dst,
                                             msg_to_spec(msg->qosspec),
-                                            timeo, &e);
+                                            timeo, &e, false);
+                        if (result == 0) {
+                                ret_msg->has_flow_id = true;
+                                ret_msg->flow_id     = e->flow_id;
+                                ret_msg->has_pid     = true;
+                                ret_msg->pid         = e->n_1_pid;
+                        }
+                        break;
+                case IRM_MSG_CODE__IRM_FLOW_JOIN:
+                        result = flow_alloc(msg->pid, msg->dst,
+                                            msg_to_spec(msg->qosspec),
+                                            timeo, &e, true);
                         if (result == 0) {
                                 ret_msg->has_flow_id = true;
                                 ret_msg->flow_id     = e->flow_id;
