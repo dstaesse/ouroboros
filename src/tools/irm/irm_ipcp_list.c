@@ -46,7 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NORMAL  "normal"
+#define NORMAL  "unicast"
 #define UDP     "udp"
 #define ETH_LLC "eth-llc"
 #define ETH_DIX "eth-dix"

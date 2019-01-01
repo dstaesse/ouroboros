@@ -50,7 +50,7 @@
 #include <sys/socket.h>
 #endif
 
-#define NORMAL                 "normal"
+#define NORMAL                 "unicast"
 #define BROADCAST              "broadcast"
 #define UDP                    "udp"
 #define ETH_LLC                "eth-llc"

@@ -44,13 +44,13 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define NORMAL    "normal"
-#define BROADCAST "broadcast"
-#define UDP       "udp"
-#define ETH_LLC   "eth-llc"
-#define ETH_DIX   "eth-dix"
-#define LOCAL     "local"
-#define RAPTOR    "raptor"
+#define NORMAL                 "unicast"
+#define BROADCAST              "broadcast"
+#define UDP                    "udp"
+#define ETH_LLC                "eth-llc"
+#define ETH_DIX                "eth-dix"
+#define LOCAL                  "local"
+#define RAPTOR                 "raptor"
 
 static void usage(void)
 {
