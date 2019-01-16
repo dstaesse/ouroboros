@@ -19,6 +19,9 @@ const struct timespec * \fItimeo\fB);
 int flow_alloc(const char * \fIdst_name\fB, qosspec_t * \fIqs\fB,
 const struct timespec * \fItimeo\fB);
 
+int flow_join(const char * \fIdst_name\fB, qosspec_t * \fIqs\fB, const
+struct timespec * \fItimeo\fB);
+
 \fBint flow_dealloc(int \fIfd\fB);\fR
 
 Compile and link with \fI-louroboros-dev\fR.
@@ -51,6 +54,9 @@ be updated to reflect the actual QoS provided by the IPC facility.
 The \fBflow_accept\fR() and \fBflow_alloc\fR() take a \fBconst struct
 timespec * \fItimeo\fR to specify a timeout. If \fItimeo\fR is NULL,
 the call will block indefinitely or until some error condition occurs.
+
+The \fBflow_join\fR() function allows applications to join a broadcast
+flow provided by a broadcast layer. The dst is the layer name.
 
 The \fBflow_dealloc\fR() function will release any resources
 associated with the flow.
@@ -101,6 +107,8 @@ _
 \fBflow_accept\fR() & Thread safety & MT-Safe
 _
 \fBflow_alloc\fR() & Thread safety & MT-Safe
+_
+\fBflow_join\fR() & Thread safety & MT-Safe
 _
 \fBflow_dealloc\fR() & Thread safety & MT-Safe
 .TE

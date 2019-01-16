@@ -90,7 +90,7 @@ may not have connections to the layer.
 layer, the name can be used as a destination handle for \fIflow
 allocation\fR.
 
-Ouroboros normal IPCPs are just like any other process, and will need
+Ouroboros unicast IPCPs are just like any other process, and will need
 to be bound and registered in a lower-rank layer before they can be
 accessed by other processes.
 
@@ -99,9 +99,9 @@ have to be reachable over a lower layer. IPCPs that wrap a legacy
 transmission technology are all bootstrapped and thus need not enroll
 as they work directly over a physical connection. Ouroboros currently
 supports IPCPs over shared memory (local), L1 (raptor, experimental),
-L2 (eth-llc and eth-dix) and L3 (udp). The normal layer requires
-connections to be established between IPCP components for its
-operation.
+L2 (eth-llc and eth-dix) and L3 (udp). The unicast and broadcast
+layers require connections to be established between IPCP components
+for its operation.
 
 \fBConnecting the management components\fR using \fImanagement
 flows\fR allows management information to be sent between IPCPs so
@@ -121,17 +121,19 @@ that rely on data transfer flows are the \fIdirectory\fR and the
 creates an IPCP process of type \fItype\fR in the system with name
 \fIname\fR. Allowable values for \fItype\fR are:
 .PP
-\fBlocal\fR    - create a loopback IPCP.
+\fBlocal\fR     - create a loopback IPCP.
 .PP
-\fBraptor\fR   - create an IPCP that attaches to a raptor NetFPGA device.
+\fBraptor\fR    - create an IPCP that attaches to a raptor NetFPGA device.
 .PP
-\fBeth-llc\fR  - create an IPCP that attaches to Ethernet using LLC frames.
+\fBeth-llc\fR   - create an IPCP that attaches to Ethernet using LLC frames.
 .PP
-\fBeth-dix\fR  - create an IPCP that attaches to Ethernet using DIX frames.
+\fBeth-dix\fR   - create an IPCP that attaches to Ethernet using DIX frames.
 .PP
-\fBudp\fR      - create an IPCP that attaches to a UDP socket.
+\fBudp\fR       - create an IPCP that attaches to a UDP socket.
 .PP
-\fBnormal\fR   - create a normal IPCP that uses lower level layers.
+\fBunicast\fR   - create a unicast IPCP that uses lower level layers.
+.PP
+\fBbroadcast\fR - create a broadcast IPCP that uses lower level layers.
 .RE
 
 .PP
@@ -172,6 +174,7 @@ default: SHA3_256.
 .PP
 \fBeth-llc\fR
 .RS 4
+.PP
 dev \fIinterface\fR specifies the interface to bind the IPCP to.
 .PP
 [hash \fIpolicy\fR] specifies the hash function used for the directory,
@@ -184,6 +187,7 @@ default: SHA3_256.
 .PP
 \fBeth-dix\fR
 .RS 4
+.PP
 dev \fIinterface\fR specifies the interface to bind the IPCP to.
 .PP
 [ethertype \fIethertype\fR] specifies the ethertype used for the layer.
@@ -200,15 +204,17 @@ default: SHA3_256.
 .PP
 \fBudp\fR
 .RS 4
+.PP
 ip \fIip\fR specifies the local IP address to bind to
-
+.PP
 [dns \fdns\fR] specifies an optional DDNS server that will be used for
 the directory.
 .RE
 
 .PP
-\fBnormal\fR
+\fBunicast\fR
 .RS 4
+.PP
 [addr \fIaddress_size\fR] specifies the size of an address in bytes.
 .br
 default: 4 bytes.
@@ -244,15 +250,36 @@ default: simple.
 .br
 default: SHA3_256.
 .PP
-[autobind] will automatically bind a normal IPCP to its name and the layer name.
+[autobind] will automatically bind a unicast or broadcast IPCP to its
+name and the layer name.
+.RE
+
+.PP
+\fBbroadcast\fR
+.RS 4
+.PP
+[hash \fIpolicy\fR] specifies the hash function used for the layer name,
+.br
+\fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
+.br
+default: SHA3_256.
 .RE
 .RE
 
 .PP
-\fBirm ipcp enroll\fR name \fIname\fR layer \fIlayer\fR [\fIautobind\fR]
+\fBirm ipcp enroll\fR name \fIname\fR [type \fItype\fR] [dst \fIdst\fR] \
+[layer \fIlayer\fR] [\fIautobind\fR]
 .RS 4
-enrolls a normal IPCP \fIname\fR to a layer for which the IPCPs accept flows for
-\fIname\fR.
+enrolls a unicast ot broadcast IPCP \fIname\fR with a dst IPCP into a
+layer. Either dst or layer need to be specified.
+.PP
+[type \fItype\fR] specifies the IPCP type (unicast or broadcast).
+.PP
+[dst \fIdst\fR] specifies the destination name to enroll with
+.PP
+[layer \fIlayer\fR] specifies the name of the layer. Only specifying
+the layer name is a shorthand for the destination name being the same
+as the layer name.
 .PP
 [autobind] will automatically bind this IPCP to its name and the layer name.
 .RE
@@ -260,17 +287,17 @@ enrolls a normal IPCP \fIname\fR to a layer for which the IPCPs accept flows for
 \fBirm ipcp connect\fR name \fIname\fR component \fIcomponent\fR dst
 \fIdestination\fR
 .RS 4
-connects a \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a normal IPCP
-with name \fIname\fR to that component of the destination IPCP within the
-same layer.
+connects a \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a unicast or
+broadcast IPCP with name \fIname\fR to that component of the
+destination IPCP within the same layer.
 .RE
 
 \fBirm ipcp disconnect\fR name \fIname\fR component \fIcomponent\fR dst
 \fIdestination\fR
 .RS 4
-disconnects \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a normal IPCP
-with name \fIname\fR from that component of the destination IPCP within the
-same layer.
+disconnects \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a unicast or
+broadcast IPCP with name \fIname\fR from that component of the
+destination IPCP within the same layer.
 .RE
 
 \fBirm ipcp list\fR type \fItype\fR name \fIname\fR layer \fIlayer\fR
