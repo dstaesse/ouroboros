@@ -46,17 +46,38 @@
 
 #include <string.h>
 
-#define NORMAL    "normal"
+#define NORMAL    "unicast"
 #define BROADCAST "broadcast"
 
 static void usage(void)
 {
         printf("Usage: irm ipcp enroll\n"
                "                name <ipcp name>\n"
-               "                layer <layer to enroll in>\n"
-               "                [type [TYPE], default = normal]\n"
+               "                [layer <layer to enroll with>]\n"
+               "                [dst <destination to enroll with>]\n"
+               "                [type [TYPE], default = " NORMAL "]\n"
                "                [autobind]\n"
                "where TYPE = {" NORMAL " " BROADCAST "}\n");
+}
+
+static int get_layer_name(const char * ipcp,
+                          char *       layer_name)
+{
+        struct ipcp_info * ipcps;
+        size_t             len;
+        size_t             i;
+
+        len = irm_list_ipcps(&ipcps);
+        for (i = 0; i < len; i++)
+                if (strcmp(ipcps[i].name, ipcp) == 0) {
+                        strcpy(layer_name, ipcps[i].layer);
+                        free(ipcps);
+                        return 0;
+                }
+
+        free(ipcps);
+
+        return -1;
 }
 
 int do_enroll_ipcp(int     argc,
@@ -64,6 +85,7 @@ int do_enroll_ipcp(int     argc,
 {
         char *             ipcp      = NULL;
         char *             layer     = NULL;
+        char *             dst       = NULL;
         struct ipcp_info * ipcps;
         pid_t              pid       = -1;
         ssize_t            len       = 0;
@@ -81,6 +103,8 @@ int do_enroll_ipcp(int     argc,
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
                         layer = *(argv + 1);
+                } else if (matches(*argv, "dst") == 0) {
+                        dst = *(argv + 1);
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
@@ -94,10 +118,13 @@ int do_enroll_ipcp(int     argc,
                 argv += cargs;
         }
 
-        if (layer == NULL || ipcp == NULL) {
+        if ((layer == NULL && dst == NULL) || ipcp == NULL) {
                 usage();
                 return -1;
         }
+
+        if (dst == NULL)
+                dst = layer;
 
         if (strcmp(ipcp_type, NORMAL) == 0)
                 type = IPCP_NORMAL;
@@ -121,22 +148,36 @@ int do_enroll_ipcp(int     argc,
         for (i = 0; i < len; i++) {
                 if (ipcps[i].type != type)
                         continue;
+
                 if (wildcard_match(ipcps[i].name, ipcp) == 0) {
+                        char enr_layer[LAYER_NAME_SIZE];
+
                         pid = ipcps[i].pid;
+
+                        if (irm_enroll_ipcp(pid, dst)) {
+                                printf("Failed to enroll IPCP.\n");
+                                goto fail;
+                        }
+
+                        if (get_layer_name(ipcps[i].name, enr_layer)) {
+                                printf("Could not get layer name.\n");
+                                goto fail;
+                        }
+
+                        if (layer != NULL && strcmp(enr_layer, layer)) {
+                                printf("Enrollment destination does not "
+                                       "match requested layer.\n");
+                                goto fail;
+                        }
+
                         if (autobind && irm_bind_process(pid, ipcp)) {
                                 printf("Failed to bind %d to %s.\n", pid, ipcp);
                                 goto fail;
                         }
 
-                        if (irm_enroll_ipcp(pid, layer)) {
-                                if (autobind)
-                                        irm_unbind_process(pid, ipcp);
-                                goto fail;
-                        }
-
-                        if (autobind && irm_bind_process(pid, layer)) {
+                        if (autobind && irm_bind_process(pid, enr_layer)) {
                                 printf("Failed to bind %d to %s.\n",
-                                       pid, layer);
+                                       pid, enr_layer);
                                 goto fail;
                         }
                 }
