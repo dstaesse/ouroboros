@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2018
+ * Ouroboros - Copyright (C) 2016 - 2019
  *
  * Functions of the IRM tool that are one level deep
  *
