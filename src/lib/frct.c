@@ -50,7 +50,11 @@ struct frcti {
         time_t           a;
         time_t           r;
 
-        time_t           rto; /* ms */
+        time_t           srtt_us;     /* smoothed rtt */
+        time_t           mdev_us;     /* mdev         */
+        uint32_t         rttseq;
+        struct timespec  t_probe;     /* probe time   */
+        bool             probe;       /* probe active */
 
         struct frct_cr   snd_cr;
         struct frct_cr   rcv_cr;
@@ -110,8 +114,11 @@ static struct frcti * frcti_create(int fd)
 
         frcti->snd_cr.inact  = 3 * delta_t;
         frcti->snd_cr.act    = now.tv_sec - (frcti->snd_cr.inact + 1);
-        /* Initial rto. FIXME: recalc using Karn algorithm. */
-        frcti->rto           = 120;
+        /* rtt estimator. rto is currently srtt + 2 * mdev */
+        frcti->srtt_us       = 0;      /* updated on first ACK */
+        frcti->mdev_us       = 100000; /* initial rxm will be after 200 ms */
+        frcti->rttseq        = 0;
+        frcti->probe         = false;
 
         if (ai.flows[fd].spec.loss == 0) {
                 frcti->snd_cr.cflags |= FRCTFRTX;
@@ -200,6 +207,18 @@ static struct frct_pci * frcti_alloc_head(struct shm_du_buff * sdb)
         return pci;
 }
 
+static bool before(uint32_t seq1,
+                   uint32_t seq2)
+{
+        return (int32_t)(seq1 - seq2) < 0;
+}
+
+static bool after(uint32_t seq1,
+                  uint32_t seq2)
+{
+        return (int32_t)(seq2 - seq1) < 0;
+}
+
 static int __frcti_snd(struct frcti *       frcti,
                        struct shm_du_buff * sdb)
 {
@@ -219,7 +238,7 @@ static int __frcti_snd(struct frcti *       frcti,
         if (pci == NULL)
                 return -1;
 
-        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+        clock_gettime(CLOCK_REALTIME, &now);
 
         pthread_rwlock_wrlock(&frcti->lock);
 
@@ -244,12 +263,20 @@ static int __frcti_snd(struct frcti *       frcti,
         pci->seqno = hton32(snd_cr->seqno);
         if (!(snd_cr->cflags & FRCTFRTX)) {
                 snd_cr->lwe++;
-        } else if (now.tv_sec - rcv_cr->act <= rcv_cr->inact) {
-                rxmwheel_add(frcti, snd_cr->seqno, sdb);
-                if (rcv_cr->lwe <= rcv_cr->seqno) {
-                        pci->flags |= FRCT_ACK;
-                        pci->ackno = hton32(rcv_cr->seqno);
-                        rcv_cr->lwe = rcv_cr->seqno;
+        } else {
+                if (!frcti->probe) {
+                        frcti->rttseq  = snd_cr->seqno;
+                        frcti->t_probe = now;
+                        frcti->probe   = true;
+                }
+
+                if (now.tv_sec - rcv_cr->act <= rcv_cr->inact) {
+                        rxmwheel_add(frcti, snd_cr->seqno, sdb);
+                        if (rcv_cr->lwe <= rcv_cr->seqno) {
+                                pci->flags |= FRCT_ACK;
+                                pci->ackno = hton32(rcv_cr->seqno);
+                                rcv_cr->lwe = rcv_cr->seqno;
+                        }
                 }
         }
 
@@ -259,6 +286,26 @@ static int __frcti_snd(struct frcti *       frcti,
         pthread_rwlock_unlock(&frcti->lock);
 
         return 0;
+}
+
+static void rtt_estimator(struct frcti * frcti,
+                          time_t         mrtt_us)
+{
+        time_t srtt = frcti->srtt_us;
+        time_t mdev = frcti->mdev_us;
+
+        if (srtt != 0) {
+                srtt -= (srtt >> 3);
+                srtt += mrtt_us >> 3;   /* rtt = 7/8 rtt + 1/8 new */
+                mdev -=  (mdev >> 2);
+                mdev += ABS(srtt - mrtt_us) >> 2;
+        } else {
+                srtt = mrtt_us << 3;    /* take the measured time to be rtt */
+                mdev = mrtt_us >> 1;    /* take half mrtt_us as deviation */
+        }
+
+        frcti->srtt_us = MAX(1U, srtt);
+        frcti->mdev_us = MAX(1U, mdev);
 }
 
 /* Returns 0 when idx contains a packet for the application. */
@@ -280,7 +327,7 @@ static int __frcti_rcv(struct frcti *       frcti,
 
         pci = (struct frct_pci *) shm_du_buff_head_release(sdb, FRCT_PCILEN);
 
-        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+        clock_gettime(CLOCK_REALTIME, &now);
 
         pthread_rwlock_wrlock(&frcti->lock);
 
@@ -300,7 +347,7 @@ static int __frcti_rcv(struct frcti *       frcti,
         if (seqno == rcv_cr->seqno) {
                 ++rcv_cr->seqno;
         } else { /* Out of order. */
-                if ((int32_t)(seqno - rcv_cr->seqno) < 0)
+                if (before(seqno, rcv_cr->seqno))
                         goto drop_packet;
 
                 if (rcv_cr->cflags & FRCTFRTX) {
@@ -321,6 +368,10 @@ static int __frcti_rcv(struct frcti *       frcti,
                 /* Check for duplicate (old) acks. */
                 if ((int32_t)(ackno - snd_cr->lwe) >= 0)
                         snd_cr->lwe = ackno;
+                if (frcti->probe && after(ackno, frcti->rttseq)) {
+                        rtt_estimator(frcti, ts_diff_us(&frcti->t_probe, &now));
+                        frcti->probe = false;
+                }
         }
 
         rcv_cr->act = now.tv_sec;

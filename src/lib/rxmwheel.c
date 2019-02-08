@@ -22,15 +22,16 @@
 
 #include <ouroboros/list.h>
 
-#define RXMQ_S     12                 /* defines #slots     */
-#define RXMQ_M     15                 /* defines max delay  */
+#define RXMQ_S     16                 /* defines #slots     */
+#define RXMQ_M     24                 /* defines max delay  */
 #define RXMQ_R     (RXMQ_M - RXMQ_S)  /* defines resolution */
 #define RXMQ_SLOTS (1 << RXMQ_S)
 #define RXMQ_MAX   (1 << RXMQ_M)      /* ms                 */
 
 /* Small inacurracy to avoid slow division by MILLION. */
 #define ts_to_ms(ts) (ts.tv_sec * 1000 + (ts.tv_nsec >> 20))
-#define ts_to_slot(ts) ((ts_to_ms(ts) >> RXMQ_R) & (RXMQ_SLOTS - 1))
+#define ts_to_us(ts) (ts.tv_sec * MILLION + (ts.tv_nsec >> 10))
+#define ts_to_slot(ts) ((ts_to_us(ts) >> RXMQ_R) & (RXMQ_SLOTS - 1))
 
 struct rxm {
         struct list_head     next;
@@ -109,6 +110,21 @@ static void rxmwheel_clear(int fd)
         pthread_mutex_unlock(&rw.lock);
 }
 
+static void check_probe(struct frcti * frcti,
+                        uint32_t       seqno)
+{
+        /* disable rtt probe if this packet */
+
+        /* TODO: This should be locked, but lock reversal! */
+
+        if (frcti->probe && ((frcti->rttseq + 1) == seqno)) {
+                /* Backoff to avoid never updating rtt */
+                frcti->srtt_us <<= 1;
+                frcti->probe = false;
+        }
+}
+
+#define rto(frcti) (frcti->srtt_us + (frcti->mdev_us << 1))
 /* Return fd on r-timer expiry. */
 static int rxmwheel_move(void)
 {
@@ -148,6 +164,10 @@ static int rxmwheel_move(void)
                                 free(r);
                                 continue;
                         }
+
+                        /* Disable using this seqno as rto probe. */
+                        check_probe(r->frcti, r->seqno);
+
                         /* Check for r-timer expiry. */
                         if (ts_to_ms(now) - r->t0 > r->frcti->r) {
                                 int fd = r->frcti->fd;
@@ -201,7 +221,7 @@ static int rxmwheel_move(void)
                         r->tail = shm_du_buff_tail(sdb);
                         r->sdb  = sdb;
 
-                        newtime = ts_to_ms(now) + (f->frcti->rto << ++r->mul);
+                        newtime = ts_to_us(now) + rto(f->frcti);
                         rslot   = (newtime >> RXMQ_R) & (RXMQ_SLOTS - 1);
 
                         list_add_tail(&r->next, &rw.wheel[rslot]);
@@ -231,7 +251,7 @@ static int rxmwheel_add(struct frcti *       frcti,
 
         pthread_mutex_lock(&rw.lock);
 
-        r->t0    = ts_to_ms(now);
+        r->t0    = ts_to_us(now);
         r->mul   = 0;
         r->seqno = seqno;
         r->sdb   = sdb;
@@ -239,7 +259,7 @@ static int rxmwheel_add(struct frcti *       frcti,
         r->tail  = shm_du_buff_tail(sdb);
         r->frcti = frcti;
 
-        slot = ((r->t0 + frcti->rto) >> RXMQ_R) & (RXMQ_SLOTS - 1);
+        slot = ((r->t0 + rto(frcti)) >> RXMQ_R) & (RXMQ_SLOTS - 1);
 
         list_add_tail(&r->next, &rw.wheel[slot]);
 
