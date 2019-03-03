@@ -344,7 +344,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         }
 
         /* reply to IRM */
-        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), qs);
+        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -1191,33 +1191,22 @@ static struct ipcp_ops udp_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, &udp_ops) < 0) {
-                ipcp_create_r(getpid(), -1);
-                exit(EXIT_FAILURE);
-        }
+        if (ipcp_init(argc, argv, &udp_ops) < 0)
+                goto fail_init;
 
         if (udp_data_init() < 0) {
                 log_err("Failed to init udp data.");
-                ipcp_create_r(getpid(), -1);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_data_init;
         }
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
-                ipcp_create_r(getpid(), -1);
-                udp_data_fini();
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_boot;
         }
 
-        if (ipcp_create_r(getpid(), 0)) {
+        if (ipcp_create_r(0)) {
                 log_err("Failed to notify IRMd we are initialized.");
-                ipcp_set_state(IPCP_NULL);
-                ipcp_shutdown();
-                udp_data_fini();
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_create_r;
         }
 
         ipcp_shutdown();
@@ -1237,4 +1226,14 @@ int main(int    argc,
         ipcp_fini();
 
         exit(EXIT_SUCCESS);
+ fail_create_r:
+        ipcp_set_state(IPCP_NULL);
+        ipcp_shutdown();
+ fail_boot:
+        udp_data_fini();
+ fail_data_init:
+        ipcp_fini();
+ fail_init:
+        ipcp_create_r(-1);
+        exit(EXIT_FAILURE);
 }

@@ -578,7 +578,7 @@ static int eth_ipcp_req(uint8_t *       r_addr,
         }
 
         /* reply to IRM, called under lock to prevent race */
-        fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), qs);
+        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -1804,7 +1804,7 @@ int main(int    argc,
                 goto fail_boot;
         }
 
-        if (ipcp_create_r(getpid(), 0)) {
+        if (ipcp_create_r(0)) {
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
                 goto fail_create_r;
@@ -1846,6 +1846,6 @@ int main(int    argc,
  fail_data_init:
         ipcp_fini();
  fail_init:
-        ipcp_create_r(getpid(), -1);
+        ipcp_create_r(-1);
         exit(EXIT_FAILURE);
 }

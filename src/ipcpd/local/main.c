@@ -212,7 +212,7 @@ static int ipcp_local_flow_alloc(int             fd,
 
         assert(ipcpi.alloc_id == -1);
 
-        out_fd = ipcp_flow_req_arr(getpid(), dst, ipcp_dir_hash_len(), qs);
+        out_fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs);
         if (out_fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Flow allocation failed: %d", out_fd);
@@ -333,33 +333,22 @@ static struct ipcp_ops local_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, &local_ops) < 0) {
-                ipcp_create_r(getpid(), -1);
-                exit(EXIT_FAILURE);
-        }
+        if (ipcp_init(argc, argv, &local_ops) < 0)
+                goto fail_init;
 
         if (local_data_init() < 0) {
                 log_err("Failed to init local data.");
-                ipcp_create_r(getpid(), -1);
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_data_init;
         }
 
         if (ipcp_boot() < 0) {
                 log_err("Failed to boot IPCP.");
-                ipcp_create_r(getpid(), -1);
-                local_data_fini();
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_boot;
         }
 
-        if (ipcp_create_r(getpid(), 0)) {
+        if (ipcp_create_r(0)) {
                 log_err("Failed to notify IRMd we are initialized.");
-                ipcp_set_state(IPCP_NULL);
-                ipcp_shutdown();
-                local_data_fini();
-                ipcp_fini();
-                exit(EXIT_FAILURE);
+                goto fail_create_r;
         }
 
         ipcp_shutdown();
@@ -374,4 +363,14 @@ int main(int    argc,
         ipcp_fini();
 
         exit(EXIT_SUCCESS);
+ fail_create_r:
+        ipcp_set_state(IPCP_NULL);
+        ipcp_shutdown();
+ fail_boot:
+        local_data_fini();
+ fail_data_init:
+        ipcp_fini();
+ fail_init:
+        ipcp_create_r(-1);
+        exit(EXIT_FAILURE);
 }

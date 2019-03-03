@@ -26,11 +26,9 @@
 #ifndef OUROBOROS_IPCP_DEV_H
 #define OUROBOROS_IPCP_DEV_H
 
-int  ipcp_create_r(pid_t pid,
-                   int   result);
+int  ipcp_create_r(int result);
 
-int  ipcp_flow_req_arr(pid_t           pid,
-                       const uint8_t * dst,
+int  ipcp_flow_req_arr(const uint8_t * dst,
                        size_t          len,
                        qosspec_t       qs);
 

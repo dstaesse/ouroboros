@@ -334,7 +334,7 @@ int main(int    argc,
                 goto fail_boot;
         }
 
-        if (ipcp_create_r(getpid(), 0)) {
+        if (ipcp_create_r(0)) {
                 log_err("Failed to notify IRMd we are initialized.");
                 ipcp_set_state(IPCP_NULL);
                 goto fail_create_r;
@@ -373,6 +373,6 @@ int main(int    argc,
  fail_rib_init:
        ipcp_fini();
  fail_init:
-        ipcp_create_r(getpid(), -1);
+        ipcp_create_r(-1);
         exit(EXIT_FAILURE);
 }

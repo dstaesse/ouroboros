@@ -218,8 +218,7 @@ static void * fa_handle_packet(void * o)
                         qs.in_order     = msg->in_order;
                         qs.max_gap      = ntoh32(msg->max_gap);
 
-                        fd = ipcp_flow_req_arr(getpid(),
-                                               (uint8_t *) (msg + 1),
+                        fd = ipcp_flow_req_arr((uint8_t *) (msg + 1),
                                                ipcp_dir_hash_len(),
                                                qs);
                         if (fd < 0) {

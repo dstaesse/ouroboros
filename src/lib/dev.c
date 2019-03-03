@@ -1262,8 +1262,7 @@ int np1_flow_resp(int flow_id)
         return fd;
 }
 
-int ipcp_create_r(pid_t pid,
-                  int   result)
+int ipcp_create_r(int result)
 {
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
@@ -1271,7 +1270,7 @@ int ipcp_create_r(pid_t pid,
 
         msg.code       = IRM_MSG_CODE__IPCP_CREATE_R;
         msg.has_pid    = true;
-        msg.pid        = pid;
+        msg.pid        = getpid();
         msg.has_result = true;
         msg.result     = result;
 
@@ -1290,8 +1289,7 @@ int ipcp_create_r(pid_t pid,
         return ret;
 }
 
-int ipcp_flow_req_arr(pid_t           pid,
-                      const uint8_t * dst,
+int ipcp_flow_req_arr(const uint8_t * dst,
                       size_t          len,
                       qosspec_t       qs)
 {
@@ -1304,7 +1302,7 @@ int ipcp_flow_req_arr(pid_t           pid,
 
         msg.code      = IRM_MSG_CODE__IPCP_FLOW_REQ_ARR;
         msg.has_pid   = true;
-        msg.pid       = pid;
+        msg.pid       = getpid();
         msg.has_hash  = true;
         msg.hash.len  = len;
         msg.hash.data = (uint8_t *) dst;
