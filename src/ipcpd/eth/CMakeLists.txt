@@ -78,9 +78,9 @@ endif ()
 if (HAVE_ETH)
   message(STATUS "Supported raw packet API found, building eth-llc and eth-dix")
 
-  set(IPCP_ETH_RD_THR 3 CACHE STRING
+  set(IPCP_ETH_RD_THR 1 CACHE STRING
     "Number of reader threads in Ethernet IPCP")
-  set(IPCP_ETH_WR_THR 3 CACHE STRING
+  set(IPCP_ETH_WR_THR 1 CACHE STRING
     "Number of writer threads in Ethernet IPCP")
   set(IPCP_ETH_QDISC_BYPASS false CACHE BOOL
     "Bypass the Qdisc in the kernel when using raw sockets")
