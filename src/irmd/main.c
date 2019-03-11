@@ -37,7 +37,6 @@
 #include <ouroboros/utils.h>
 #include <ouroboros/irm.h>
 #include <ouroboros/lockfile.h>
-#include <ouroboros/shm_flow_set.h>
 #include <ouroboros/shm_rbuff.h>
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/bitmap.h>
@@ -1775,13 +1774,9 @@ void * irm_sanitize(void * o)
                         }
 
                         if (kill(f->n_pid, 0) < 0) {
-                                struct shm_flow_set * set;
                                 log_dbg("Process %d gone, deallocating "
                                         "flow %d.",
                                          f->n_pid, f->flow_id);
-                                set = shm_flow_set_open(f->n_pid);
-                                if (set != NULL)
-                                        shm_flow_set_destroy(set);
                                 f->n_pid = -1;
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 ipcpi   = f->n_1_pid;
