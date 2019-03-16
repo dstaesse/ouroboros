@@ -231,37 +231,39 @@ static void * mainloop(void * o)
                         conf.type = conf_msg->ipcp_type;
                         strcpy(conf.layer_info.layer_name,
                                conf_msg->layer_info->layer_name);
-                        if (conf_msg->ipcp_type == IPCP_NORMAL) {
+
+                        switch(conf_msg->ipcp_type) {
+                        case IPCP_NORMAL:
                                 conf.addr_size      = conf_msg->addr_size;
                                 conf.eid_size       = conf_msg->eid_size;
                                 conf.max_ttl        = conf_msg->max_ttl;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
                                 conf.routing_type   = conf_msg->routing_type;
                                 conf.pff_type       = conf_msg->pff_type;
-                        }
-
-                        if (conf_msg->ipcp_type == IPCP_ETH_LLC)
-                                conf.dev = conf_msg->dev;
-
-                        if (conf_msg->ipcp_type == IPCP_ETH_DIX) {
-                                conf.dev = conf_msg->dev;
+                                break;
+                        case IPCP_ETH_DIX:
                                 conf.ethertype = conf_msg->ethertype;
-                        }
-
-                        if (conf_msg->ipcp_type == IPCP_UDP) {
+                                /* FALLTHRU */
+                        case IPCP_ETH_LLC:
+                                conf.dev = conf_msg->dev;
+                                break;
+                        case IPCP_UDP:
                                 conf.ip_addr  = conf_msg->ip_addr;
                                 conf.dns_addr = conf_msg->dns_addr;
-
+                                conf.clt_port = conf_msg->clt_port;
+                                conf.srv_port = conf_msg->srv_port;
                                 conf.layer_info.dir_hash_algo = HASH_MD5;
                                 layer_info.dir_hash_algo      = HASH_MD5;
-                        }
-
-                        if (conf_msg->ipcp_type == IPCP_BROADCAST) {
+                                break;
+                        case IPCP_BROADCAST:
                                 conf.layer_info.dir_hash_algo = HASH_SHA3_256;
                                 layer_info.dir_hash_algo      = HASH_SHA3_256;
+                                break;
+                        default:
+                                log_err("Unknown IPCP type.");
                         }
 
-                        /* UDP and broadcast have a fixed hash algorithm. */
+                        /* UDP and broadcast use fixed hash algorithm. */
                         if (conf_msg->ipcp_type != IPCP_UDP &&
                             conf_msg->ipcp_type != IPCP_BROADCAST) {
                                 switch(conf_msg->layer_info->dir_hash_algo) {

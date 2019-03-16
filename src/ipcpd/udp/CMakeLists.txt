@@ -16,9 +16,11 @@ set(IPCP_UDP_TARGET ipcpd-udp CACHE INTERNAL "")
 
 set(UDP_SOURCES
   # Add source files here
-  ${CMAKE_CURRENT_SOURCE_DIR}/main.c)
+  ${CMAKE_CURRENT_SOURCE_DIR}/main.c
+  )
 
 add_executable(ipcpd-udp ${UDP_SOURCES} ${IPCP_SOURCES})
+
 target_link_libraries(ipcpd-udp LINK_PUBLIC ouroboros-dev)
 
 # Find the nsupdate executable
@@ -51,6 +53,11 @@ else ()
     message(STATUS "Install nslookup and nsupdate to enable DDNS support")
   endif ()
 endif ()
+
+set(IPCP_UDP_RD_THR 3 CACHE STRING
+  "Number of reader threads in UDP IPCP")
+set(IPCP_UDP_WR_THR 3 CACHE STRING
+  "Number of writer threads in UDP IPCP")
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")

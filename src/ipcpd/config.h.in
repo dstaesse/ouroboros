@@ -39,7 +39,7 @@
 #define IPCP_ADD_THREADS    @IPCP_ADD_THREADS@
 #cmakedefine HAVE_LIBGCRYPT
 
-/* normal IPCP */
+/* unicast IPCP */
 #define QOS_PRIO_BE         @IPCP_QOS_CUBE_BE_PRIO@
 #define QOS_PRIO_VIDEO      @IPCP_QOS_CUBE_VIDEO_PRIO@
 #define QOS_PRIO_VOICE      @IPCP_QOS_CUBE_VOICE_PRIO@
@@ -55,11 +55,13 @@
 #cmakedefine HAVE_DDNS
 #define NSUPDATE_EXEC       "@NSUPDATE_EXECUTABLE@"
 #define NSLOOKUP_EXEC       "@NSLOOKUP_EXECUTABLE@"
+#define IPCP_UDP_RD_THR     @IPCP_UDP_RD_THR@
+#define IPCP_UDP_WR_THR     @IPCP_UDP_WR_THR@
 
 /* eth-llc */
 #cmakedefine HAVE_NETMAP
 #cmakedefine HAVE_BPF
 #cmakedefine HAVE_RAW_SOCKETS
-#define IPCP_ETH_RD_THR  @IPCP_ETH_RD_THR@
-#define IPCP_ETH_WR_THR  @IPCP_ETH_WR_THR@
 #cmakedefine IPCP_ETH_QDISC_BYPASS
+#define IPCP_ETH_RD_THR     @IPCP_ETH_RD_THR@
+#define IPCP_ETH_WR_THR     @IPCP_ETH_WR_THR@

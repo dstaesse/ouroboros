@@ -140,6 +140,10 @@ int irm_bootstrap_ipcp(pid_t                      pid,
                 config.ip_addr      = conf->ip_addr;
                 config.has_dns_addr = true;
                 config.dns_addr     = conf->dns_addr;
+                config.has_srv_port = true;
+                config.srv_port     = conf->srv_port;
+                config.has_clt_port = true;
+                config.clt_port     = conf->clt_port;
                 break;
         case IPCP_LOCAL:
         case IPCP_BROADCAST:
