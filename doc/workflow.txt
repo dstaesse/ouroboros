@@ -43,7 +43,7 @@ incremented when an urgent bugfix is incorporated.
 3.1. Repository structure
 
 The main git repository can be found at:
-https://ouroboros.ilabt.imec.be/git/ouroboros
+https://ouroboros.rocks/cgit/ouroboros
 
 It contains the following branches:
 
@@ -98,7 +98,7 @@ were made
 3.4 Bugs
 
 Bugs are reported through the Bugzilla issue tracker
-(https://ouroboros.ilabt.imec.be/bugzilla/). The process of reporting
+(https://ouroboros.rocks/bugzilla/). The process of reporting
 a bug is the following:
 
 a. Provide a description of the bug

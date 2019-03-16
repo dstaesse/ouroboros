@@ -13,8 +13,8 @@ set(PACKAGE_VERSION_PATCH  0)
 
 set(PACKAGE_NAME        "${CMAKE_PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "The Ouroboros prototype")
-set(PACKAGE_URL         "http://ouroboros.ilabt.imec.be")
-set(PACKAGE_BUGREPORT   "http://ouroboros.ilabt.imec.be/bugzilla/")
+set(PACKAGE_URL         "http://ouroboros.rocks")
+set(PACKAGE_BUGREPORT   "http://ouroboros.rocks/bugzilla/")
 set(PACKAGE_VERSION
   "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}.${PACKAGE_VERSION_PATCH}")
 
