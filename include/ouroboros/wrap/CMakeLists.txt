@@ -5,7 +5,7 @@ find_package(SWIG QUIET)
 if (NOT SWIG_FOUND)
   message(STATUS "Install SWIG to enable bindings for other languages")
 else ()
-  set(DISABLE_SWIG TRUE CACHE BOOL "Disable SWIG support")
+  set(DISABLE_SWIG FALSE CACHE BOOL "Disable SWIG support")
   if (NOT DISABLE_SWIG)
     message(STATUS "SWIG support enabled")
     include(${SWIG_USE_FILE})
@@ -24,7 +24,8 @@ else ()
       test_and_set_c_compiler_flag_global(-std=c99)
       # SWIG generates code for varargs with an unused parameter
       test_and_set_c_compiler_flag_global(-Wno-unused-parameter)
-
+      # SWIG generates code with unsafe strncpy()
+      test_and_set_c_compiler_flag_global(-Wno-stringop-truncation)
       # CMake > 3.8 deprecates swig_add_module
       if (${CMAKE_VERSION} VERSION_LESS 3.8.0)
         swig_add_module(ouroboros python ouroboros.i)
@@ -58,7 +59,7 @@ else ()
       endif ()
 
       install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/${SWIG_MODULE_ouroboros_REAL_NAME}.so
+        ${CMAKE_CURRENT_BINARY_DIR}/_${SWIG_MODULE_ouroboros_REAL_NAME}.so
         DESTINATION ${PYTHON_MODULE_PATH})
       install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ouroboros.py
         DESTINATION ${PYTHON_MODULE_PATH})
