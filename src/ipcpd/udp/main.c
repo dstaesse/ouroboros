@@ -438,14 +438,16 @@ static void * ipcp_udp_mgmt_handler(void * o)
 
 static void * ipcp_udp_packet_reader(void * o)
 {
-        uint8_t   buf[IPCP_UDP_MAX_PACKET_SIZE];
-        uint8_t * data;
-        ssize_t   n;
-        uint32_t  eid;
+        uint8_t    buf[IPCP_UDP_MAX_PACKET_SIZE];
+        uint8_t *  data;
+        ssize_t    n;
+        uint32_t   eid;
+        uint32_t * eid_p;
 
         (void) o;
 
-        data = buf + sizeof(uint32_t);
+        data  = buf + sizeof(uint32_t);
+        eid_p = (uint32_t *) buf;
 
         while (true) {
                 struct mgmt_frame * frame;
@@ -467,7 +469,7 @@ static void * ipcp_udp_packet_reader(void * o)
                         continue;
                 }
 
-                eid = ntoh32(*((uint32_t *) buf));
+                eid = ntoh32(*eid_p);
 
                 /* pass onto mgmt queue */
                 if (eid == MGMT_EID) {
