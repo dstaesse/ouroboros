@@ -84,6 +84,8 @@ if (HAVE_ETH)
     "Number of writer threads in Ethernet IPCP")
   set(IPCP_ETH_QDISC_BYPASS false CACHE BOOL
     "Bypass the Qdisc in the kernel when using raw sockets")
+  set(IPCP_ETH_LO_MTU 1500 CACHE STRING
+    "Restrict Ethernet MTU over loopback interfaces")
 
   set(ETH_LLC_SOURCES
     # Add source files here

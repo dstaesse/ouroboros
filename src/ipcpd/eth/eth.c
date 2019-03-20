@@ -1316,6 +1316,11 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         log_dbg("Device MTU is %d.", ifr.ifr_mtu);
 
         eth_data.mtu = MIN((int) ETH_MTU_MAX, ifr.ifr_mtu);
+        if (memcmp(conf->dev, "lo", 2) == 0 && eth_data.mtu > IPCP_ETH_LO_MTU) {
+                log_dbg("Using loopback interface. MTU restricted to %d.",
+                         IPCP_ETH_LO_MTU);
+                eth_data.mtu = IPCP_ETH_LO_MTU;
+        }
 
 #ifndef SHM_RDRB_MULTI_BLOCK
         maxsz = SHM_RDRB_BLOCK_SIZE - 5 * sizeof(size_t) -

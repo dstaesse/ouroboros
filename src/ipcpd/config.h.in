@@ -65,3 +65,4 @@
 #cmakedefine IPCP_ETH_QDISC_BYPASS
 #define IPCP_ETH_RD_THR     @IPCP_ETH_RD_THR@
 #define IPCP_ETH_WR_THR     @IPCP_ETH_WR_THR@
+#define IPCP_ETH_LO_MTU     @IPCP_ETH_LO_MTU@
