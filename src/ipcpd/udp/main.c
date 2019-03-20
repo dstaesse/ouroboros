@@ -118,7 +118,6 @@ struct {
         int                clt_port;
 
         fset_t *           np1_flows;
-        fqueue_t *         fq;
         struct uf          fd_to_uf[SYS_MAX_FLOWS];
         pthread_rwlock_t   flows_lock;
 
@@ -154,10 +153,6 @@ static int udp_data_init(void)
         if (udp_data.np1_flows == NULL)
                 goto fail_fset;
 
-        udp_data.fq = fqueue_create();
-        if (udp_data.fq == NULL)
-                goto fail_fqueue;
-
         udp_data.shim_data = shim_data_create();
         if (udp_data.shim_data == NULL)
                 goto fail_data;
@@ -166,8 +161,6 @@ static int udp_data_init(void)
 
         return 0;
  fail_data:
-        fqueue_destroy(udp_data.fq);
- fail_fqueue:
         fset_destroy(udp_data.np1_flows);
  fail_fset:
         pthread_mutex_destroy(&udp_data.mgmt_lock);
@@ -183,7 +176,6 @@ static void udp_data_fini(void)
 {
         shim_data_destroy(udp_data.shim_data);
 
-        fqueue_destroy(udp_data.fq);
         fset_destroy(udp_data.np1_flows);
 
         pthread_rwlock_destroy(&udp_data.flows_lock);
@@ -498,17 +490,30 @@ static void * ipcp_udp_packet_reader(void * o)
         return 0;
 }
 
+static void cleanup_writer(void * o)
+{
+        fqueue_destroy((fqueue_t *) o);
+}
+
 static void * ipcp_udp_packet_writer(void * o)
 {
+        fqueue_t * fq;
+
+        fq = fqueue_create();
+        if (fq == NULL)
+                return (void *) -1;
+
         (void) o;
 
         ipcp_lock_to_core();
 
+        pthread_cleanup_push(cleanup_writer, fq);
+
         while (true) {
                 int fd;
                 int eid;
-                fevent(udp_data.np1_flows, udp_data.fq, NULL);
-                while ((fd = fqueue_next(udp_data.fq)) >= 0) {
+                fevent(udp_data.np1_flows, fq, NULL);
+                while ((fd = fqueue_next(fq)) >= 0) {
                         struct shm_du_buff * sdb;
                         uint8_t *            buf;
                         uint16_t             len;
@@ -549,6 +554,8 @@ static void * ipcp_udp_packet_writer(void * o)
                         pthread_cleanup_pop(true);
                 }
         }
+
+        pthread_cleanup_pop(true);
 
         return (void *) 1;
 }
