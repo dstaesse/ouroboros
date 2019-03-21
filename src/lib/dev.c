@@ -26,8 +26,6 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include <ouroboros/endian.h>
-
 #include "config.h"
 
 #include <ouroboros/hash.h>

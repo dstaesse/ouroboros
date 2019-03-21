@@ -234,7 +234,6 @@ target_link_libraries(ouroboros-common ${LIBRT_LIBRARIES}
   ${LIBGCRYPT_LIBRARIES} ${FUSE_LIBRARIES})
 
 target_link_libraries(ouroboros-dev ouroboros-common)
-
 target_link_libraries(ouroboros-irm ouroboros-common)
 
 install(TARGETS ouroboros-common LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})

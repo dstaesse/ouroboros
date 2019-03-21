@@ -66,7 +66,6 @@ if (NOT HAVE_RAW_SOCKETS AND NOT HAVE_BPF AND NETMAP_C_INCLUDE_DIR)
     "Disable netmap support for ETH IPCPs")
   if (NOT DISABLE_NETMAP)
     message(STATUS "Netmap support for Ethernet IPCPs enabled")
-    test_and_set_c_compiler_flag_global(-std=c99)
     set(HAVE_NETMAP TRUE PARENT_SCOPE)
     set(HAVE_ETH TRUE)
   else ()
@@ -109,6 +108,10 @@ if (HAVE_ETH)
   endif ()
 
   if (HAVE_NETMAP AND NOT APPLE)
+    set_target_properties(ipcpd-eth-llc PROPERTIES
+        COMPILE_FLAGS "${CMAKE_C_FLAGS} -std=c99")
+    set_target_properties(ipcpd-eth-dix PROPERTIES
+        COMPILE_FLAGS "${CMAKE_C_FLAGS} -std=c99")
     target_include_directories(ipcpd-eth-llc PUBLIC
       ${NETMAP_C_INCLUDE_DIR})
     target_include_directories(ipcpd-eth-dix PUBLIC

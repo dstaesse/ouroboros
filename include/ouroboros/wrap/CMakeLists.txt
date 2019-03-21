@@ -20,12 +20,6 @@ else ()
       message(STATUS "Python found: Python bindings will be built")
       include_directories(${PYTHON_INCLUDE_PATH})
 
-      # Python assumes C99 since Python 3.6
-      test_and_set_c_compiler_flag_global(-std=c99)
-      # SWIG generates code for varargs with an unused parameter
-      test_and_set_c_compiler_flag_global(-Wno-unused-parameter)
-      # SWIG generates code with unsafe strncpy()
-      test_and_set_c_compiler_flag_global(-Wno-stringop-truncation)
       # CMake > 3.8 deprecates swig_add_module
       if (${CMAKE_VERSION} VERSION_LESS 3.8.0)
         swig_add_module(ouroboros python ouroboros.i)
@@ -36,6 +30,12 @@ else ()
           TYPE MODULE)
       endif()
 
+      # Python assumes C99 since Python 3.6
+      # SWIG generates code for varargs with an unused parameter
+      # SWIG generates code with unsafe strncpy()
+      set_target_properties(ouroboros PROPERTIES
+        COMPILE_FLAGS "${CMAKE_C_FLAGS} -std=c99 -Wno-unused-parameter \
+          -Wno-stringop-truncation")
       swig_link_libraries(ouroboros ${PYTHON_LIBRARIES} ouroboros-common
         ouroboros-dev ouroboros-irm)
 
@@ -58,9 +58,14 @@ else ()
           ${CMAKE_INSTALL_PREFIX} ${_ABS_PYTHON_MODULE_PATH})
       endif ()
 
-      install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/_${SWIG_MODULE_ouroboros_REAL_NAME}.so
-        DESTINATION ${PYTHON_MODULE_PATH})
+      if (${CMAKE_VERSION} VERSION_LESS "3.13")
+        install (
+          ${CMAKE_CURRENT_BINARY_DIR}/${SWIG_MODULE_${ouroboros}_REAL_NAME}.so
+          DESTINATION ${PYTHON_MODULE_PATH})
+      else ()
+          install (TARGETS ouroboros
+          DESTINATION ${PYTHON_MODULE_PATH})
+      endif ()
       install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ouroboros.py
         DESTINATION ${PYTHON_MODULE_PATH})
     endif ()
