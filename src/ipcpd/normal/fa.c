@@ -306,15 +306,44 @@ void fa_fini(void)
 
 int fa_start(void)
 {
-        fa.psched = psched_create(packet_handler);
-        if (fa.psched == NULL)
-                goto fail_psched;
+        struct sched_param  par;
+        int                 pol;
+        int                 max;
 
-        if (pthread_create(&fa.worker, NULL, fa_handle_packet, NULL))
+        fa.psched = psched_create(packet_handler);
+        if (fa.psched == NULL) {
+                log_err("Failed to start packet scheduler.");
+                goto fail_psched;
+        }
+
+        if (pthread_create(&fa.worker, NULL, fa_handle_packet, NULL)) {
+                log_err("Failed to create worker thread.");
                 goto fail_thread;
+        }
+
+        if (pthread_getschedparam(fa.worker, &pol, &par)) {
+                log_err("Failed to get worker thread scheduling parameters.");
+                goto fail_sched;
+        }
+
+        max = sched_get_priority_max(pol);
+        if (max < 0) {
+                log_err("Failed to get max priority for scheduler.");
+                goto fail_sched;
+        }
+
+        par.sched_priority = max;
+
+        if (pthread_setschedparam(fa.worker, pol, &par)) {
+                log_err("Failed to set scheduler priority to maximum.");
+                goto fail_sched;
+        }
 
         return 0;
 
+ fail_sched:
+        pthread_cancel(fa.worker);
+        pthread_join(fa.worker, NULL);
  fail_thread:
         psched_destroy(fa.psched);
  fail_psched:
