@@ -233,6 +233,8 @@ static void * mainloop(void * o)
                                conf_msg->layer_info->layer_name);
 
                         switch(conf_msg->ipcp_type) {
+                        case IPCP_LOCAL:
+                                break;
                         case IPCP_NORMAL:
                                 conf.addr_size      = conf_msg->addr_size;
                                 conf.eid_size       = conf_msg->eid_size;
@@ -260,7 +262,7 @@ static void * mainloop(void * o)
                                 layer_info.dir_hash_algo      = HASH_SHA3_256;
                                 break;
                         default:
-                                log_err("Unknown IPCP type.");
+                                log_err("Unknown IPCP type: %d.", conf_msg->ipcp_type);
                         }
 
                         /* UDP and broadcast use fixed hash algorithm. */
