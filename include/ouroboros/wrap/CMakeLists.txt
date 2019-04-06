@@ -34,8 +34,7 @@ else ()
       # SWIG generates code for varargs with an unused parameter
       # SWIG generates code with unsafe strncpy()
       set_target_properties(ouroboros PROPERTIES
-        COMPILE_FLAGS "${CMAKE_C_FLAGS} -std=c99 -Wno-unused-parameter \
-          -Wno-stringop-truncation")
+        COMPILE_FLAGS "${CMAKE_C_FLAGS} -std=c99 -Wno-unused-parameter -Wno-stringop-truncation")
       swig_link_libraries(ouroboros ${PYTHON_LIBRARIES} ouroboros-common
         ouroboros-dev ouroboros-irm)
 
