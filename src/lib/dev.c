@@ -933,7 +933,11 @@ ssize_t flow_write(int          fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        ret = shm_rbuff_write(flow->tx_rb, idx);
+        if (flags & FLOWFWNOBLOCK)
+                ret = shm_rbuff_write(flow->tx_rb, idx);
+        else
+                ret = shm_rbuff_write_b(flow->tx_rb, idx, abstime);
+
         if (ret < 0)
                 shm_rdrbuff_remove(ai.rdrb, idx);
         else
@@ -1444,9 +1448,11 @@ int ipcp_flow_write(int                  fd,
                 return -ENOMEM;
         }
 
-        ret = shm_rbuff_write(flow->tx_rb, idx);
+        ret = shm_rbuff_write_b(flow->tx_rb, idx, NULL);
         if (ret == 0)
                 shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
+        else
+                shm_rdrbuff_remove(ai.rdrb, idx);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1544,10 +1550,11 @@ int local_flow_write(int    fd,
                 pthread_rwlock_unlock(&ai.lock);
                 return -ENOTALLOC;
         }
-
-        ret = shm_rbuff_write(flow->tx_rb, idx);
+        ret = shm_rbuff_write_b(flow->tx_rb, idx, NULL);
         if (ret == 0)
                 shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
+        else
+                shm_rdrbuff_remove(ai.rdrb, idx);
 
         pthread_rwlock_unlock(&ai.lock);
 

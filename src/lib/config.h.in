@@ -36,6 +36,7 @@
 #define SHM_RDRB_NAME       "@SHM_RDRB_NAME@"
 #define SHM_RDRB_BLOCK_SIZE @SHM_RDRB_BLOCK_SIZE@
 #define SHM_BUFFER_SIZE     @SHM_BUFFER_SIZE@
+#define SHM_RBUFF_SIZE      @SHM_RBUFF_SIZE@
 
 #if defined(__linux__) || (defined(__MACH__) && !defined(__APPLE__))
 /* Avoid a bug in robust mutex implementation of glibc 2.25 */

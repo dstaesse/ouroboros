@@ -139,6 +139,8 @@ mark_as_advanced(LIBRT_LIBRARIES LIBPTHREAD_LIBRARIES
 
 set(SHM_BUFFER_SIZE 4096 CACHE STRING
     "Number of blocks in packet buffer, must be a power of 2")
+set(SHM_RBUFF_SIZE 1024 CACHE STRING
+    "Number of blocks in rbuff buffer, must be a power of 2")
 set(SYS_MAX_FLOWS 10240 CACHE STRING
   "Maximum number of total flows for this system")
 set(PROG_MAX_FLOWS 4096 CACHE STRING

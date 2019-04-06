@@ -54,6 +54,10 @@ void               shm_rbuff_fini(struct shm_rbuff * rb);
 int                shm_rbuff_write(struct shm_rbuff * rb,
                                    size_t             idx);
 
+int                shm_rbuff_write_b(struct shm_rbuff *      rb,
+                                     size_t                  idx,
+                                     const struct timespec * abstime);
+
 ssize_t            shm_rbuff_read(struct shm_rbuff * rb);
 
 ssize_t            shm_rbuff_read_b(struct shm_rbuff *      rb,

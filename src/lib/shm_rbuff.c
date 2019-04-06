@@ -45,14 +45,14 @@
 
 #define FN_MAX_CHARS 255
 
-#define SHM_RB_FILE_SIZE ((SHM_BUFFER_SIZE) * sizeof(ssize_t)           \
+#define SHM_RB_FILE_SIZE ((SHM_RBUFF_SIZE) * sizeof(ssize_t)            \
                           + 3 * sizeof(size_t)                          \
                           + sizeof(pthread_mutex_t)                     \
                           + 2 * sizeof (pthread_cond_t))
 
-#define shm_rbuff_used(rb) ((*rb->head + (SHM_BUFFER_SIZE) - *rb->tail)   \
-                            & ((SHM_BUFFER_SIZE) - 1))
-#define shm_rbuff_free(rb) (shm_rbuff_used(rb) + 1 < (SHM_BUFFER_SIZE))
+#define shm_rbuff_used(rb) ((*rb->head + (SHM_RBUFF_SIZE) - *rb->tail)   \
+                            & ((SHM_RBUFF_SIZE) - 1))
+#define shm_rbuff_free(rb) (shm_rbuff_used(rb) + 1 < (SHM_RBUFF_SIZE))
 #define shm_rbuff_empty(rb) (*rb->head == *rb->tail)
 #define head_el_ptr(rb) (rb->shm_base + *rb->head)
 #define tail_el_ptr(rb) (rb->shm_base + *rb->tail)
@@ -109,7 +109,7 @@ struct shm_rbuff * rbuff_create(pid_t pid,
         close(fd);
 
         rb->shm_base = shm_base;
-        rb->head     = (size_t *) (rb->shm_base + (SHM_BUFFER_SIZE));
+        rb->head     = (size_t *) (rb->shm_base + (SHM_RBUFF_SIZE));
         rb->tail     = rb->head + 1;
         rb->acl      = rb->tail + 1;
         rb->lock     = (pthread_mutex_t *) (rb->acl + 1);

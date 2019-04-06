@@ -65,7 +65,7 @@ int shm_rbuff_write(struct shm_rbuff * rb,
 
         do {
                 ohead = nhead;
-                nhead = (ohead + 1) & ((SHM_BUFFER_SIZE) - 1);
+                nhead = (ohead + 1) & ((SHM_RBUFF_SIZE) - 1);
                 nhead = __sync_val_compare_and_swap(rb->head, ohead, nhead);
         } while (nhead != ohead);
 
@@ -73,6 +73,63 @@ int shm_rbuff_write(struct shm_rbuff * rb,
                 pthread_cond_broadcast(rb->add);
 
         return 0;
+}
+
+/* FIXME: this is a copy of the pthr implementation */
+int shm_rbuff_write_b(struct shm_rbuff *      rb,
+                      size_t                  idx,
+                      const struct timespec * abstime)
+{
+        int ret = 0;
+
+        assert(rb);
+        assert(idx < SHM_BUFFER_SIZE);
+
+#ifndef HAVE_ROBUST_MUTEX
+        pthread_mutex_lock(rb->lock);
+#else
+        if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
+                pthread_mutex_consistent(rb->lock);
+#endif
+
+        if (*rb->acl != ACL_RDWR) {
+                if (*rb->acl & ACL_FLOWDOWN)
+                        ret = -EFLOWDOWN;
+                else if (*rb->acl & ACL_RDONLY)
+                        ret = -ENOTALLOC;
+                goto err;
+        }
+
+        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
+                             (void *) rb->lock);
+
+        while (!shm_rbuff_free(rb) && ret != -ETIMEDOUT) {
+                if (abstime != NULL)
+                        ret = -pthread_cond_timedwait(rb->add,
+                                                      rb->lock,
+                                                      abstime);
+                else
+                        ret = -pthread_cond_wait(rb->add, rb->lock);
+#ifdef HAVE_ROBUST_MUTEX
+                if (ret == -EOWNERDEAD)
+                        pthread_mutex_consistent(rb->lock);
+#endif
+        }
+
+        if (shm_rbuff_empty(rb))
+                pthread_cond_broadcast(rb->add);
+
+        if (ret != -ETIMEDOUT) {
+                *head_el_ptr(rb) = (ssize_t) idx;
+                *rb->head = (*rb->head + 1) & ((SHM_RBUFF_SIZE) -1);
+        }
+
+        pthread_cleanup_pop(true);
+
+        return ret;
+ err:
+        pthread_mutex_unlock(rb->lock);
+        return ret;
 }
 
 ssize_t shm_rbuff_read(struct shm_rbuff * rb)
@@ -90,7 +147,7 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 
         do {
                 otail = ntail;
-                ntail = (otail + 1) & ((SHM_BUFFER_SIZE) - 1);
+                ntail = (otail + 1) & ((SHM_RBUFF_SIZE) - 1);
                 ntail = __sync_val_compare_and_swap(rb->tail, otail, ntail);
         } while (ntail != otail);
 
@@ -136,7 +193,6 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
         if (idx != -ETIMEDOUT) {
                 /* do a nonblocking read */
                 idx = shm_rbuff_read(rb);
-
                 assert(idx >= 0);
         }
 
