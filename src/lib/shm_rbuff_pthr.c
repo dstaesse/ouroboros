@@ -111,21 +111,20 @@ int shm_rbuff_write_b(struct shm_rbuff *      rb,
 
         while (!shm_rbuff_free(rb) && ret != -ETIMEDOUT) {
                 if (abstime != NULL)
-                        ret = -pthread_cond_timedwait(rb->add,
+                        ret = -pthread_cond_timedwait(rb->del,
                                                       rb->lock,
                                                       abstime);
                 else
-                        ret = -pthread_cond_wait(rb->add, rb->lock);
+                        ret = -pthread_cond_wait(rb->del, rb->lock);
 #ifdef HAVE_ROBUST_MUTEX
                 if (ret == -EOWNERDEAD)
                         pthread_mutex_consistent(rb->lock);
 #endif
         }
 
-        if (shm_rbuff_empty(rb))
-                pthread_cond_broadcast(rb->add);
-
         if (ret != -ETIMEDOUT) {
+                if (shm_rbuff_empty(rb))
+                        pthread_cond_broadcast(rb->add);
                 *head_el_ptr(rb) = (ssize_t) idx;
                 *rb->head = (*rb->head + 1) & ((SHM_RBUFF_SIZE) - 1);
         }
