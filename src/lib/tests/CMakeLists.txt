@@ -9,6 +9,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   hashtable_test.c
   md5_test.c
   sha3_test.c
+  shm_rbuff_test.c
   time_utils_test.c
   )
 
