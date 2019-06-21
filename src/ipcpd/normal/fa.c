@@ -166,8 +166,8 @@ static void * fa_handle_packet(void * o)
                 buf = malloc(sizeof(*msg) + ipcp_dir_hash_len());
                 if (buf == NULL) {
                         log_err("Failed to allocate memory.");
-                        free(cmd);
                         ipcp_sdb_release(cmd->sdb);
+                        free(cmd);
                         continue;
                 }
 
