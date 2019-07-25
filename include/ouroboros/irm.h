@@ -29,7 +29,7 @@
 
 #include <sys/types.h>
 
-/* Normal IPCP components. */
+/* Unicast IPCP components. */
 #define DT_COMP   "Data Transfer"
 #define MGMT_COMP "Management"
 

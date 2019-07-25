@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_GRAPH_H
-#define OUROBOROS_IPCPD_NORMAL_GRAPH_H
+#ifndef OUROBOROS_IPCPD_UNICAST_GRAPH_H
+#define OUROBOROS_IPCPD_UNICAST_GRAPH_H
 
 #include <ouroboros/list.h>
 #include <ouroboros/qos.h>
@@ -65,4 +65,4 @@ int            graph_routing_table(struct graph *     graph,
 void           graph_free_routing_table(struct graph *     graph,
                                         struct list_head * table);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_GRAPH_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_GRAPH_H */

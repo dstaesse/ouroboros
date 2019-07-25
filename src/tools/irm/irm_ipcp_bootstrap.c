@@ -50,7 +50,7 @@
 #include <sys/socket.h>
 #endif
 
-#define NORMAL                 "unicast"
+#define UNICAST                 "unicast"
 #define BROADCAST              "broadcast"
 #define UDP                    "udp"
 #define ETH_LLC                "eth-llc"
@@ -89,9 +89,9 @@ static void usage(void)
                "                name <ipcp name>\n"
                "                layer <layer name>\n"
                "                [type [TYPE]]\n"
-               "where TYPE = {" NORMAL " " BROADCAST " " LOCAL " "
+               "where TYPE = {" UNICAST " " BROADCAST " " LOCAL " "
                UDP " " ETH_LLC " " ETH_DIX " " RAPTOR "},\n\n"
-               "if TYPE == " NORMAL "\n"
+               "if TYPE == " UNICAST "\n"
                "                [addr <address size> (default: %d)]\n"
                "                [eid <eid size> (default: %d)]\n"
                "                [ttl (max time-to-live value, default: %d)]\n"
@@ -262,8 +262,8 @@ int do_bootstrap_ipcp(int     argc,
         }
 
         if (ipcp_type != NULL) {
-                if (strcmp(ipcp_type, NORMAL) == 0)
-                        type = IPCP_NORMAL;
+                if (strcmp(ipcp_type, UNICAST) == 0)
+                        type = IPCP_UNICAST;
                 else if (strcmp(ipcp_type, BROADCAST) == 0)
                         type = IPCP_BROADCAST;
                 else if (strcmp(ipcp_type, UDP) == 0)
@@ -301,7 +301,7 @@ int do_bootstrap_ipcp(int     argc,
                         }
                         conf.type = ipcps[i].type;
 
-                        if (autobind && (conf.type != IPCP_NORMAL &&
+                        if (autobind && (conf.type != IPCP_UNICAST &&
                                          conf.type != IPCP_BROADCAST)) {
                                 printf("Can not bind this IPCP type,"
                                        "autobind disabled.\n\n");
@@ -318,7 +318,7 @@ int do_bootstrap_ipcp(int     argc,
                                 conf.layer_info.dir_hash_algo = hash_algo;
 
                         switch (conf.type) {
-                        case IPCP_NORMAL:
+                        case IPCP_UNICAST:
                                 conf.addr_size      = addr_size;
                                 conf.eid_size       = eid_size;
                                 conf.max_ttl        = max_ttl;

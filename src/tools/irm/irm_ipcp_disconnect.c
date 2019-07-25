@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Connect components of normal IPC Processes
+ * Connect components of unicast or broadcast IPC processes
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>

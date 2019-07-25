@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Address authority policy ops
+ * Flow allocator of the IPC Process
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,15 +20,27 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_POL_ADDR_AUTH_OPS_H
-#define OUROBOROS_IPCPD_NORMAL_POL_ADDR_AUTH_OPS_H
+#ifndef OUROBOROS_IPCPD_UNICAST_FA_H
+#define OUROBOROS_IPCPD_UNICAST_FA_H
 
-struct pol_addr_auth_ops {
-        int      (* init)(const void * info);
+#include <ouroboros/qos.h>
+#include <ouroboros/utils.h>
 
-        int      (* fini)(void);
+int  fa_init(void);
 
-        uint64_t (* address)(void);
-};
+void fa_fini(void);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_POL_ADDR_AUTH_OPS_H */
+int  fa_start(void);
+
+void fa_stop(void);
+
+int  fa_alloc(int             fd,
+              const uint8_t * dst,
+              qosspec_t       qs);
+
+int  fa_alloc_resp(int fd,
+                   int response);
+
+int  fa_dealloc(int fd);
+
+#endif /* OUROBOROS_IPCPD_UNICAST_FA_H */

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Enrollment Task
+ * Routing component of the IPCP
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,28 +20,22 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_ENROLL_H
-#define OUROBOROS_IPCPD_NORMAL_ENROLL_H
+#ifndef OUROBOROS_IPCPD_UNICAST_ROUTING_H
+#define OUROBOROS_IPCPD_UNICAST_ROUTING_H
 
 #include <ouroboros/ipcp.h>
+#include <ouroboros/qos.h>
 
-#include "comp.h"
+#include "pff.h"
 
-int                  enroll_init(void);
+#include <stdint.h>
 
-void                 enroll_fini(void);
+int                routing_init(enum pol_routing pr);
 
-int                  enroll_start(void);
+void               routing_fini(void);
 
-void                 enroll_stop(void);
+struct routing_i * routing_i_create(struct pff * pff);
 
-void                 enroll_bootstrap(const struct ipcp_config * conf);
+void               routing_i_destroy(struct routing_i * instance);
 
-int                  enroll_boot(struct conn * conn);
-
-int                  enroll_done(struct conn * conn,
-                                 int           result);
-
-struct ipcp_config * enroll_get_conf(void);
-
-#endif /* OUROBOROS_IPCPD_NORMAL_ENROLL_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_ROUTING_H */

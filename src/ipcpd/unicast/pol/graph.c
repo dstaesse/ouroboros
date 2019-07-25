@@ -601,7 +601,7 @@ int graph_routing_table(struct graph *     graph,
 
         pthread_mutex_lock(&graph->lock);
 
-        /* Get the normal next hops routing table. */
+        /* Get the simple next hops routing table. */
         if (graph_routing_table_simple(graph, s_addr, table, &s_dist))
                 goto fail_table_simple;
 

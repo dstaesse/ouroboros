@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_DT_H
-#define OUROBOROS_IPCPD_NORMAL_DT_H
+#ifndef OUROBOROS_IPCPD_UNICAST_DT_H
+#define OUROBOROS_IPCPD_UNICAST_DT_H
 
 #include <ouroboros/ipcp.h>
 #include <ouroboros/qoscube.h>
@@ -53,4 +53,4 @@ int  dt_write_packet(uint64_t             dst_addr,
                      int                  res_fd,
                      struct shm_du_buff * sdb);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_DT_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_DT_H */

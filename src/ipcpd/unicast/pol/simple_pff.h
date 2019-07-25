@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_SIMPLE_PFF_H
-#define OUROBOROS_IPCPD_NORMAL_SIMPLE_PFF_H
+#ifndef OUROBOROS_IPCPD_UNICAST_SIMPLE_PFF_H
+#define OUROBOROS_IPCPD_UNICAST_SIMPLE_PFF_H
 
 #include "pol-pff-ops.h"
 
@@ -54,4 +54,4 @@ int            simple_pff_nhop(struct pff_i * pff_i,
 
 struct pol_pff_ops simple_pff_ops;
 
-#endif /* OUROBOROS_IPCPD_NORMAL_SIMPLE_PFF_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_SIMPLE_PFF_H */

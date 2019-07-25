@@ -35,7 +35,7 @@
  */
 enum ipcp_type {
         IPCP_LOCAL = 0,
-        IPCP_NORMAL,
+        IPCP_UNICAST,
         IPCP_BROADCAST,
         IPCP_RAPTOR,
         IPCP_ETH_LLC,
@@ -44,7 +44,7 @@ enum ipcp_type {
         IPCP_INVALID
 };
 
-/* Normal IPCP policies */
+/* Unicast IPCP policies */
 enum pol_addr_auth {
         ADDR_AUTH_FLAT_RANDOM = 0
 };
@@ -78,7 +78,7 @@ struct ipcp_config {
 
         enum ipcp_type     type;
 
-        /* Normal */
+        /* Unicast */
         uint8_t            addr_size;
         uint8_t            eid_size;
         uint8_t            max_ttl;

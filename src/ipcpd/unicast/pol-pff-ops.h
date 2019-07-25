@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_POL_PFF_OPS_H
-#define OUROBOROS_IPCPD_NORMAL_POL_PFF_OPS_H
+#ifndef OUROBOROS_IPCPD_UNICAST_POL_PFF_OPS_H
+#define OUROBOROS_IPCPD_UNICAST_POL_PFF_OPS_H
 
 #include <stdbool.h>
 
@@ -60,4 +60,4 @@ struct pol_pff_ops {
                                              bool           up);
 };
 
-#endif /* OUROBOROS_IPCPD_NORMAL_POL_PFF_OPS_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_POL_PFF_OPS_H */

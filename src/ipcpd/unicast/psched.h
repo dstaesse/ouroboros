@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Flow allocator of the IPC Process
+ * Packet scheduler component
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,27 +20,24 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_FA_H
-#define OUROBOROS_IPCPD_NORMAL_FA_H
+#ifndef OUROBOROS_IPCPD_UNICAST_PSCHED_H
+#define OUROBOROS_IPCPD_UNICAST_PSCHED_H
 
-#include <ouroboros/qos.h>
-#include <ouroboros/utils.h>
+#include <ouroboros/ipcp-dev.h>
+#include <ouroboros/fqueue.h>
 
-int  fa_init(void);
+typedef void (* next_packet_fn_t)(int                  fd,
+                                  qoscube_t            qc,
+                                  struct shm_du_buff * sdb);
 
-void fa_fini(void);
+struct psched * psched_create(next_packet_fn_t callback);
 
-int  fa_start(void);
+void            psched_destroy(struct psched * psched);
 
-void fa_stop(void);
+void            psched_add(struct psched * psched,
+                           int             fd);
 
-int  fa_alloc(int             fd,
-              const uint8_t * dst,
-              qosspec_t       qs);
+void            psched_del(struct psched * psched,
+                           int             fd);
 
-int  fa_alloc_resp(int fd,
-                   int response);
-
-int  fa_dealloc(int fd);
-
-#endif /* OUROBOROS_IPCPD_NORMAL_FA_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_PSCHED_H */

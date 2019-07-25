@@ -40,12 +40,12 @@ set(IPCP_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/shim-data.c
   )
 
-add_subdirectory(broadcast)
 add_subdirectory(local)
-add_subdirectory(normal)
-add_subdirectory(raptor)
-add_subdirectory(udp)
 add_subdirectory(eth)
+add_subdirectory(udp)
+add_subdirectory(raptor)
+add_subdirectory(unicast)
+add_subdirectory(broadcast)
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)

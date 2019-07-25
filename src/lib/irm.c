@@ -121,7 +121,7 @@ int irm_bootstrap_ipcp(pid_t                      pid,
                 layer_info.dir_hash_algo  = conf->layer_info.dir_hash_algo;
 
         switch (conf->type) {
-        case IPCP_NORMAL:
+        case IPCP_UNICAST:
                 config.has_addr_size      = true;
                 config.addr_size          = conf->addr_size;
                 config.has_eid_size       = true;

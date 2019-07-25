@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Policy for flat addresses in a distributed way
+ * Routing policy ops
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,17 +20,19 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_FLAT_H
-#define OUROBOROS_IPCPD_NORMAL_FLAT_H
+#ifndef OUROBOROS_IPCPD_UNICAST_POL_ROUTING_OPS_H
+#define OUROBOROS_IPCPD_UNICAST_POL_ROUTING_OPS_H
 
-#include "pol-addr-auth-ops.h"
+#include "pff.h"
 
-int      flat_init(const void * info);
+struct pol_routing_ops {
+        int                (* init)(enum pol_routing pr);
 
-int      flat_fini(void);
+        void               (* fini)(void);
 
-uint64_t flat_address(void);
+        struct routing_i * (* routing_i_create)(struct pff * pff);
 
-struct pol_addr_auth_ops flat_ops;
+        void               (* routing_i_destroy)(struct routing_i * instance);
+};
 
-#endif /* OUROBOROS_IPCPD_NORMAL_FLAT_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_POL_ROUTING_OPS_H */

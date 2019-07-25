@@ -12,7 +12,7 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-set(IPCP_NORMAL_TARGET ipcpd-normal CACHE INTERNAL "")
+set(IPCP_UNICAST_TARGET ipcpd-unicast CACHE INTERNAL "")
 
 protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS kademlia.proto)
 
@@ -51,16 +51,16 @@ set(SOURCE_FILES
   pol/simple_pff.c
   )
 
-add_executable(ipcpd-normal ${SOURCE_FILES} ${IPCP_SOURCES}
+add_executable(ipcpd-unicast ${SOURCE_FILES} ${IPCP_SOURCES}
   ${KAD_PROTO_SRCS} ${LAYER_CONFIG_PROTO_SRCS})
-target_link_libraries(ipcpd-normal LINK_PUBLIC ouroboros-dev)
+target_link_libraries(ipcpd-unicast LINK_PUBLIC ouroboros-dev)
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")
-  add_compile_flags(ipcpd-normal -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ipcpd-unicast -DCONFIG_OUROBOROS_DEBUG)
 endif ()
 
-install(TARGETS ipcpd-normal RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
+install(TARGETS ipcpd-unicast RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 add_subdirectory(pol/tests)
 

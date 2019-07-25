@@ -46,7 +46,7 @@
 
 #include <string.h>
 
-#define NORMAL    "unicast"
+#define UNICAST    "unicast"
 #define BROADCAST "broadcast"
 
 static void usage(void)
@@ -55,9 +55,9 @@ static void usage(void)
                "                name <ipcp name>\n"
                "                [layer <layer to enroll with>]\n"
                "                [dst <destination to enroll with>]\n"
-               "                [type [TYPE], default = " NORMAL "]\n"
+               "                [type [TYPE], default = " UNICAST "]\n"
                "                [autobind]\n"
-               "where TYPE = {" NORMAL " " BROADCAST "}\n");
+               "where TYPE = {" UNICAST " " BROADCAST "}\n");
 }
 
 static int get_layer_name(const char * ipcp,
@@ -92,7 +92,7 @@ int do_enroll_ipcp(int     argc,
         int                i         = 0;
         bool               autobind  = false;
         int                cargs;
-        char *             ipcp_type = NORMAL;
+        char *             ipcp_type = UNICAST;
         enum ipcp_type     type      = IPCP_INVALID;
 
         while (argc > 0) {
@@ -126,8 +126,8 @@ int do_enroll_ipcp(int     argc,
         if (dst == NULL)
                 dst = layer;
 
-        if (strcmp(ipcp_type, NORMAL) == 0)
-                type = IPCP_NORMAL;
+        if (strcmp(ipcp_type, UNICAST) == 0)
+                type = IPCP_UNICAST;
         else if (strcmp(ipcp_type, BROADCAST) == 0)
                 type = IPCP_BROADCAST;
 

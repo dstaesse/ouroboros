@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Packet scheduler component
+ * Policy for flat addresses in a distributed way
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,24 +20,17 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_PSCHED_H
-#define OUROBOROS_IPCPD_NORMAL_PSCHED_H
+#ifndef OUROBOROS_IPCPD_UNICAST_FLAT_H
+#define OUROBOROS_IPCPD_UNICAST_FLAT_H
 
-#include <ouroboros/ipcp-dev.h>
-#include <ouroboros/fqueue.h>
+#include "pol-addr-auth-ops.h"
 
-typedef void (* next_packet_fn_t)(int                  fd,
-                                  qoscube_t            qc,
-                                  struct shm_du_buff * sdb);
+int      flat_init(const void * info);
 
-struct psched * psched_create(next_packet_fn_t callback);
+int      flat_fini(void);
 
-void            psched_destroy(struct psched * psched);
+uint64_t flat_address(void);
 
-void            psched_add(struct psched * psched,
-                           int             fd);
+struct pol_addr_auth_ops flat_ops;
 
-void            psched_del(struct psched * psched,
-                           int             fd);
-
-#endif /* OUROBOROS_IPCPD_NORMAL_PSCHED_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_FLAT_H */

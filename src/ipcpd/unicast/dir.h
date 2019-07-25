@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_DIR_H
-#define OUROBOROS_IPCPD_NORMAL_DIR_H
+#ifndef OUROBOROS_IPCPD_UNICAST_DIR_H
+#define OUROBOROS_IPCPD_UNICAST_DIR_H
 
 int      dir_init(void);
 
@@ -37,4 +37,4 @@ uint64_t dir_query(const uint8_t * hash);
 
 int      dir_wait_running(void);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_DIR_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_DIR_H */

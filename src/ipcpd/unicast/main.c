@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Normal IPC Process
+ * Unicast IPC Process
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -28,7 +28,7 @@
 
 #include "config.h"
 
-#define OUROBOROS_PREFIX "normal-ipcp"
+#define OUROBOROS_PREFIX "unicast-ipcp"
 
 #include <ouroboros/errno.h>
 #include <ouroboros/hash.h>
@@ -53,7 +53,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#define THIS_TYPE IPCP_NORMAL
+#define THIS_TYPE IPCP_UNICAST
 
 static int initialize_components(const struct ipcp_config * conf)
 {
@@ -186,8 +186,8 @@ static int bootstrap_components(void)
         return 0;
 }
 
-static int normal_ipcp_enroll(const char *        dst,
-                              struct layer_info * info)
+static int unicast_ipcp_enroll(const char *        dst,
+                               struct layer_info * info)
 {
         struct conn conn;
 
@@ -240,7 +240,7 @@ static int normal_ipcp_enroll(const char *        dst,
         return -1;
 }
 
-static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
+static int unicast_ipcp_bootstrap(const struct ipcp_config * conf)
 {
         assert(conf);
         assert(conf->type == THIS_TYPE);
@@ -281,19 +281,19 @@ static int normal_ipcp_bootstrap(const struct ipcp_config * conf)
         return -1;
 }
 
-static int normal_ipcp_query(const uint8_t * dst)
+static int unicast_ipcp_query(const uint8_t * dst)
 {
         return dir_query(dst) ? 0 : -1;
 }
 
-static struct ipcp_ops normal_ops = {
-        .ipcp_bootstrap       = normal_ipcp_bootstrap,
-        .ipcp_enroll          = normal_ipcp_enroll,
+static struct ipcp_ops unicast_ops = {
+        .ipcp_bootstrap       = unicast_ipcp_bootstrap,
+        .ipcp_enroll          = unicast_ipcp_enroll,
         .ipcp_connect         = connmgr_ipcp_connect,
         .ipcp_disconnect      = connmgr_ipcp_disconnect,
         .ipcp_reg             = dir_reg,
         .ipcp_unreg           = dir_unreg,
-        .ipcp_query           = normal_ipcp_query,
+        .ipcp_query           = unicast_ipcp_query,
         .ipcp_flow_alloc      = fa_alloc,
         .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = fa_alloc_resp,
@@ -303,7 +303,7 @@ static struct ipcp_ops normal_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, &normal_ops) < 0) {
+        if (ipcp_init(argc, argv, &unicast_ops) < 0) {
                 log_err("Failed to init IPCP.");
                 goto fail_init;
         }

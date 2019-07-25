@@ -235,7 +235,7 @@ static void * mainloop(void * o)
                         switch(conf_msg->ipcp_type) {
                         case IPCP_LOCAL:
                                 break;
-                        case IPCP_NORMAL:
+                        case IPCP_UNICAST:
                                 conf.addr_size      = conf_msg->addr_size;
                                 conf.eid_size       = conf_msg->eid_size;
                                 conf.max_ttl        = conf_msg->max_ttl;

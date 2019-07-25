@@ -44,7 +44,7 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define NORMAL                 "unicast"
+#define UNICAST                 "unicast"
 #define BROADCAST              "broadcast"
 #define UDP                    "udp"
 #define ETH_LLC                "eth-llc"
@@ -57,7 +57,7 @@ static void usage(void)
         printf("Usage: irm ipcp create\n"
                "                name <ipcp name>\n"
                "                type [TYPE]\n\n"
-               "where TYPE = {" NORMAL " " BROADCAST " " LOCAL " "
+               "where TYPE = {" UNICAST " " BROADCAST " " LOCAL " "
                UDP " " ETH_LLC " " RAPTOR "}\n");
 }
 
@@ -89,8 +89,8 @@ int do_create_ipcp(int     argc,
                 return -1;
         }
 
-        if (strcmp(ipcp_type, NORMAL) == 0)
-                type = IPCP_NORMAL;
+        if (strcmp(ipcp_type, UNICAST) == 0)
+                type = IPCP_UNICAST;
         else if (strcmp(ipcp_type, BROADCAST) == 0)
                 type = IPCP_BROADCAST;
         else if (strcmp(ipcp_type, UDP) == 0)

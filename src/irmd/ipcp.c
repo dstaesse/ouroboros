@@ -137,8 +137,8 @@ pid_t ipcp_create(const char *   name,
         char * argv[5];
 
         switch(ipcp_type) {
-        case IPCP_NORMAL:
-                exec_name = IPCP_NORMAL_EXEC;
+        case IPCP_UNICAST:
+                exec_name = IPCP_UNICAST_EXEC;
                 break;
         case IPCP_BROADCAST:
                 exec_name = IPCP_BROADCAST_EXEC;

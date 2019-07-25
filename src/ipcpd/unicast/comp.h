@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Routing policy ops
+ * Components for the unicast IPC process
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,19 +20,29 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_POL_ROUTING_OPS_H
-#define OUROBOROS_IPCPD_NORMAL_POL_ROUTING_OPS_H
+#ifndef OUROBOROS_IPCPD_UNICAST_COMP_H
+#define OUROBOROS_IPCPD_UNICAST_COMP_H
 
-#include "pff.h"
+#include <ouroboros/cacep.h>
 
-struct pol_routing_ops {
-        int                (* init)(enum pol_routing pr);
+#include "dt.h"
 
-        void               (* fini)(void);
+#define DST_MAX_STRLEN 64
 
-        struct routing_i * (* routing_i_create)(struct pff * pff);
-
-        void               (* routing_i_destroy)(struct routing_i * instance);
+enum comp_id {
+        COMPID_DT = 0,
+        COMPID_ENROLL,
+        COMPID_MGMT,
+        COMPID_MAX
 };
 
-#endif /* OUROBOROS_IPCPD_NORMAL_POL_ROUTING_OPS_H */
+struct conn {
+        struct conn_info conn_info;
+        struct {
+                char      dst[DST_MAX_STRLEN + 1];
+                int       fd;
+                qosspec_t qs;
+        } flow_info;
+};
+
+#endif /* OUROBOROS_IPCPD_UNICAST_COMP_H */

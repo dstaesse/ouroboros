@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_PFF_H
-#define OUROBOROS_IPCPD_NORMAL_PFF_H
+#ifndef OUROBOROS_IPCPD_UNICAST_PFF_H
+#define OUROBOROS_IPCPD_UNICAST_PFF_H
 
 #include <ouroboros/ipcp.h>
 
@@ -60,4 +60,4 @@ int          pff_flow_state_change(struct pff * pff,
                                    int          fd,
                                    bool         up);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_PFF_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_PFF_H */

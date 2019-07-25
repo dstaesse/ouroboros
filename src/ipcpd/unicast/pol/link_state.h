@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Routing component of the IPCP
+ * Link state routing policy
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,22 +20,22 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_ROUTING_H
-#define OUROBOROS_IPCPD_NORMAL_ROUTING_H
+#ifndef OUROBOROS_IPCPD_UNICAST_POL_LINK_STATE_H
+#define OUROBOROS_IPCPD_UNICAST_POL_LINK_STATE_H
 
-#include <ouroboros/ipcp.h>
-#include <ouroboros/qos.h>
+#define LS_COMP  "Management"
+#define LS_PROTO "LSP"
 
-#include "pff.h"
+#include "pol-routing-ops.h"
 
-#include <stdint.h>
+int                link_state_init(enum pol_routing pr);
 
-int                routing_init(enum pol_routing pr);
+void               link_state_fini(void);
 
-void               routing_fini(void);
+struct routing_i * link_state_routing_i_create(struct pff * pff);
 
-struct routing_i * routing_i_create(struct pff * pff);
+void               link_state_routing_i_destroy(struct routing_i * instance);
 
-void               routing_i_destroy(struct routing_i * instance);
+struct pol_routing_ops link_state_ops;
 
-#endif /* OUROBOROS_IPCPD_NORMAL_ROUTING_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_POL_LINK_STATE_H */

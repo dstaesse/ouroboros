@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H
-#define OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H
+#ifndef OUROBOROS_IPCPD_UNICAST_ADDR_AUTH_H
+#define OUROBOROS_IPCPD_UNICAST_ADDR_AUTH_H
 
 #include <ouroboros/ipcp.h>
 
@@ -34,4 +34,4 @@ int      addr_auth_fini(void);
 
 uint64_t addr_auth_address(void);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_ADDR_AUTH_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_ADDR_AUTH_H */

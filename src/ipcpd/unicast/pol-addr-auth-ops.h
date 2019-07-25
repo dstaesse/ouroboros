@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2019
  *
- * Link state routing policy
+ * Address authority policy ops
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,22 +20,15 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H
-#define OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H
+#ifndef OUROBOROS_IPCPD_UNICAST_POL_ADDR_AUTH_OPS_H
+#define OUROBOROS_IPCPD_UNICAST_POL_ADDR_AUTH_OPS_H
 
-#define LS_COMP  "Management"
-#define LS_PROTO "LSP"
+struct pol_addr_auth_ops {
+        int      (* init)(const void * info);
 
-#include "pol-routing-ops.h"
+        int      (* fini)(void);
 
-int                link_state_init(enum pol_routing pr);
+        uint64_t (* address)(void);
+};
 
-void               link_state_fini(void);
-
-struct routing_i * link_state_routing_i_create(struct pff * pff);
-
-void               link_state_routing_i_destroy(struct routing_i * instance);
-
-struct pol_routing_ops link_state_ops;
-
-#endif /* OUROBOROS_IPCPD_NORMAL_POL_LINK_STATE_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_POL_ADDR_AUTH_OPS_H */

@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_NORMAL_CONNMGR_H
-#define OUROBOROS_IPCPD_NORMAL_CONNMGR_H
+#ifndef OUROBOROS_IPCPD_UNICAST_CONNMGR_H
+#define OUROBOROS_IPCPD_UNICAST_CONNMGR_H
 
 #include <ouroboros/cacep.h>
 #include <ouroboros/qos.h>
@@ -71,4 +71,4 @@ int         connmgr_dealloc(enum comp_id  id,
 int         connmgr_wait(enum comp_id  id,
                          struct conn * conn);
 
-#endif /* OUROBOROS_IPCPD_NORMAL_CONNMGR_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_CONNMGR_H */

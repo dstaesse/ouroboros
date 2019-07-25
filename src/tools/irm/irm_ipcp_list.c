@@ -46,7 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NORMAL  "unicast"
+#define UNICAST  "unicast"
 #define UDP     "udp"
 #define ETH_LLC "eth-llc"
 #define ETH_DIX "eth-dix"
@@ -59,15 +59,15 @@ static void usage(void)
                "                [name  <ipcp name>]\n"
                "                [layer <layer_name>]\n\n"
                "                [type [TYPE]]\n\n"
-               "where TYPE = {" NORMAL " " LOCAL " "
+               "where TYPE = {" UNICAST " " LOCAL " "
                UDP " " ETH_LLC " " ETH_DIX " " RAPTOR "}\n");
 }
 
 static char * str_type(enum ipcp_type type)
 {
         switch(type) {
-        case IPCP_NORMAL:
-                return NORMAL;
+        case IPCP_UNICAST:
+                return UNICAST;
         case IPCP_ETH_LLC:
                 return ETH_LLC;
         case IPCP_ETH_DIX:
@@ -109,8 +109,8 @@ int do_list_ipcp(int     argc,
         }
 
         if (ipcp_type != NULL) {
-                if (strcmp(ipcp_type, NORMAL) == 0)
-                        type = IPCP_NORMAL;
+                if (strcmp(ipcp_type, UNICAST) == 0)
+                        type = IPCP_UNICAST;
                 else if (strcmp(ipcp_type, UDP) == 0)
                         type = IPCP_UDP;
                 else if (strcmp(ipcp_type, LOCAL) == 0)

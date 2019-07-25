@@ -30,7 +30,7 @@ message layer_info_msg {
 message ipcp_config_msg {
         required layer_info_msg layer_info =  1;
         required int32 ipcp_type           =  2;
-        // Config for normal IPCP
+        // Config for unicast IPCP
         optional uint32 addr_size          =  3;
         optional uint32 eid_size           =  4;
         optional uint32 max_ttl            =  5;
