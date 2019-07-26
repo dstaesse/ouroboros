@@ -344,8 +344,13 @@ static void init(int     argc,
 
         ai.pid = getpid();
 #ifdef HAVE_LIBGCRYPT
-        if (!gcry_check_version(GCRYPT_VERSION))
-                goto fail_fds;
+        if (!gcry_control (GCRYCTL_INITIALIZATION_FINISHED_P)) {
+                if (!gcry_check_version(GCRYPT_VERSION))
+                        goto fail_fds;
+                /* Needs to be enabled when we add encryption. */
+                gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
+                gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+        }
 #endif
         ai.fds = bmp_create(PROG_MAX_FLOWS - PROG_RES_FDS, PROG_RES_FDS);
         if (ai.fds == NULL)

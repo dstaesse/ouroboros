@@ -2206,12 +2206,18 @@ static int irm_init(void)
 #endif
 
 #ifdef HAVE_LIBGCRYPT
-        if (gcry_control(GCRYCTL_ANY_INITIALIZATION_P))
-                goto fail_gcry_control;
+        if (!gcry_check_version(GCRYPT_VERSION)) {
+                log_err("Error checking libgcrypt version.");
+                goto fail_gcry_version;
+        }
+
+        if (!gcry_control(GCRYCTL_ANY_INITIALIZATION_P)) {
+                log_err("Libgcrypt was not initialized.");
+                goto fail_gcry_version;
+        }
 
         gcry_control(GCRYCTL_INITIALIZATION_FINISHED);
 #endif
-
         irmd_set_state(IRMD_RUNNING);
 
         log_info("Ouroboros IPC Resource Manager daemon started...");
@@ -2219,7 +2225,10 @@ static int irm_init(void)
         return 0;
 
 #ifdef HAVE_LIBGCRYPT
- fail_gcry_control:
+ fail_gcry_version:
+#ifdef HAVE_FUSE
+        rmdir(FUSE_PREFIX);
+#endif
         shm_rdrbuff_destroy(irmd.rdrb);
 #endif
  fail_rdrbuff:
