@@ -166,7 +166,7 @@ char * ipcp_sock_path(pid_t pid)
         return full_name;
 }
 
-qosspec_msg_t spec_to_msg(qosspec_t * qs)
+qosspec_msg_t spec_to_msg(const qosspec_t * qs)
 {
         qosspec_t     spec;
         qosspec_msg_t msg = QOSSPEC_MSG__INIT;
@@ -180,11 +180,12 @@ qosspec_msg_t spec_to_msg(qosspec_t * qs)
         msg.ber          = spec.ber;
         msg.in_order     = spec.in_order;
         msg.max_gap      = spec.max_gap;
+        msg.cypher_s     = spec.cypher_s;
 
         return msg;
 }
 
-qosspec_t msg_to_spec(qosspec_msg_t * msg)
+qosspec_t msg_to_spec(const qosspec_msg_t * msg)
 {
         qosspec_t     spec;
 
@@ -197,6 +198,7 @@ qosspec_t msg_to_spec(qosspec_msg_t * msg)
         spec.ber          = msg->ber;
         spec.in_order     = msg->in_order;
         spec.max_gap      = msg->max_gap;
+        spec.cypher_s     = msg->cypher_s;
 
         return spec;
 }

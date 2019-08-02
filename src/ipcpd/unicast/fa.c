@@ -66,6 +66,7 @@ struct fa_msg {
         uint32_t loss;
         uint32_t ber;
         uint32_t max_gap;
+        uint16_t cypher_s;
 } __attribute__((packed));
 
 struct cmd {
@@ -217,6 +218,7 @@ static void * fa_handle_packet(void * o)
                         qs.ber          = ntoh32(msg->ber);
                         qs.in_order     = msg->in_order;
                         qs.max_gap      = ntoh32(msg->max_gap);
+                        qs.cypher_s     = ntoh16(msg->cypher_s);
 
                         fd = ipcp_flow_req_arr((uint8_t *) (msg + 1),
                                                ipcp_dir_hash_len(),
@@ -386,6 +388,7 @@ int fa_alloc(int             fd,
         msg->ber          = hton32(qs.ber);
         msg->in_order     = qs.in_order;
         msg->max_gap      = hton32(qs.max_gap);
+        msg->cypher_s     = hton16(qs.cypher_s);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
 

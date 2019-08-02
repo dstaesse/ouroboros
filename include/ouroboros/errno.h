@@ -25,11 +25,12 @@
 
 #include <errno.h>
 
-#define ENOTALLOC    1000 /* Flow is not allocated */
-#define EIPCPTYPE    1001 /* Unknown IPCP type */
+#define ENOTALLOC    1000 /* Flow is not allocated           */
+#define EIPCPTYPE    1001 /* Unknown IPCP type               */
 #define EIRMD        1002 /* Failed to communicate with IRMD */
 #define EIPCP        1003 /* Failed to communicate with IPCP */
-#define EIPCPSTATE   1004 /* Target in wrong state */
-#define EFLOWDOWN    1005 /* Flow is down */
+#define EIPCPSTATE   1004 /* Target in wrong state           */
+#define EFLOWDOWN    1005 /* Flow is down                    */
+#define ECRYPT       1006 /* Encryption error                */
 
 #endif /* OUROBOROS_ERRNO_H */

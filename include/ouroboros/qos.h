@@ -34,6 +34,7 @@ typedef struct qos_spec {
         uint32_t ber;           /* Bit error rate, errors per billion bits */
         uint8_t  in_order;      /* In-order delivery, enables FRCT */
         uint32_t max_gap;       /* In ms */
+        uint32_t cypher_s;      /* Cypher strength, 0 = no encryption */
 } qosspec_t;
 
 static const qosspec_t qos_raw = {
@@ -43,7 +44,8 @@ static const qosspec_t qos_raw = {
         .loss         = 1,
         .ber          = 1,
         .in_order     = 0,
-        .max_gap      = UINT32_MAX
+        .max_gap      = UINT32_MAX,
+        .cypher_s     = 0
 };
 
 static const qosspec_t qos_raw_no_errors = {
@@ -53,7 +55,19 @@ static const qosspec_t qos_raw_no_errors = {
         .loss         = 1,
         .ber          = 0,
         .in_order     = 0,
-        .max_gap      = UINT32_MAX
+        .max_gap      = UINT32_MAX,
+        .cypher_s     = 0
+};
+
+static const qosspec_t qos_raw_crypt = {
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 0,
+        .max_gap      = UINT32_MAX,
+        .cypher_s     = 256
 };
 
 static const qosspec_t qos_best_effort = {
@@ -63,7 +77,19 @@ static const qosspec_t qos_best_effort = {
         .loss         = 1,
         .ber          = 0,
         .in_order     = 1,
-        .max_gap      = UINT32_MAX
+        .max_gap      = UINT32_MAX,
+        .cypher_s     = 0
+};
+
+static const qosspec_t qos_best_effort_crypt = {
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = UINT32_MAX,
+        .cypher_s     = 256
 };
 
 static const qosspec_t qos_video   = {
@@ -73,7 +99,19 @@ static const qosspec_t qos_video   = {
         .loss         = 1,
         .ber          = 0,
         .in_order     = 1,
-        .max_gap      = 100
+        .max_gap      = 100,
+        .cypher_s     = 0
+};
+
+static const qosspec_t qos_video_crypt   = {
+        .delay        = 100,
+        .bandwidth    = UINT64_MAX,
+        .availability = 3,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 100,
+        .cypher_s     = 256
 };
 
 static const qosspec_t qos_voice = {
@@ -83,7 +121,19 @@ static const qosspec_t qos_voice = {
         .loss         = 1,
         .ber          = 0,
         .in_order     = 1,
-        .max_gap      = 50
+        .max_gap      = 50,
+        .cypher_s     = 0
+};
+
+static const qosspec_t qos_voice_crypt = {
+        .delay        = 50,
+        .bandwidth    = 100000,
+        .availability = 5,
+        .loss         = 1,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 50,
+        .cypher_s     = 256
 };
 
 static const qosspec_t qos_data = {
@@ -93,7 +143,19 @@ static const qosspec_t qos_data = {
         .loss         = 0,
         .ber          = 0,
         .in_order     = 1,
-        .max_gap      = 2000
+        .max_gap      = 2000,
+        .cypher_s     = 0
+};
+
+static const qosspec_t qos_data_crypt = {
+        .delay        = 1000,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = 0,
+        .ber          = 0,
+        .in_order     = 1,
+        .max_gap      = 2000,
+        .cypher_s     = 256
 };
 
 #endif /* OUROBOROS_QOS_H */

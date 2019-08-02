@@ -162,6 +162,7 @@ struct mgmt_msg {
         uint32_t ber;
         uint32_t max_gap;
         uint32_t delay;
+        uint16_t cypher_s;
         uint8_t  in_order;
 #if defined (BUILD_ETH_DIX)
         uint8_t  code;
@@ -485,6 +486,7 @@ static int eth_ipcp_alloc(const uint8_t * dst_addr,
         msg->ber          = hton32(qs.ber);
         msg->in_order     = qs.in_order;
         msg->max_gap      = hton32(qs.max_gap);
+        msg->cypher_s     = hton16(qs.cypher_s);
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
 
@@ -731,6 +733,7 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                 qs.ber = ntoh32(msg->ber);
                 qs.in_order = msg->in_order;
                 qs.max_gap = ntoh32(msg->max_gap);
+                qs.cypher_s = hton32(msg->cypher_s);
 
                 if (shim_data_reg_has(eth_data.shim_data,
                                       buf + sizeof(*msg))) {

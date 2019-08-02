@@ -91,6 +91,7 @@ struct mgmt_msg {
         uint32_t loss;
         uint32_t ber;
         uint32_t max_gap;
+        uint32_t cypher_s;
 } __attribute__((packed));
 
 struct mgmt_frame {
@@ -209,6 +210,7 @@ static int ipcp_udp_port_alloc(int             skfd,
         msg->ber          = hton32(qs.ber);
         msg->in_order     = qs.in_order;
         msg->max_gap      = hton32(qs.max_gap);
+        msg->cypher_s     = hton32(qs.cypher_s);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
 
@@ -383,6 +385,8 @@ static int ipcp_udp_mgmt_frame(const uint8_t *    buf,
                 qs.ber          = ntoh32(msg->ber);
                 qs.in_order     = msg->in_order;
                 qs.max_gap      = ntoh32(msg->max_gap);
+                qs.cypher_s     = ntoh16(msg->cypher_s);
+
                 return ipcp_udp_port_req(&c_saddr, ntoh32(msg->s_eid),
                                          (uint8_t *) (msg + 1), qs);
         case FLOW_REPLY:

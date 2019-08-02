@@ -29,6 +29,7 @@
 #include "config.h"
 
 #include <ouroboros/hash.h>
+#include <ouroboros/cacep.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
@@ -59,6 +60,8 @@
 #define DONE_PART    -2
 
 #define CRCLEN    (sizeof(uint32_t))
+#define SECMEMSZ  16384
+#define SYMMKEYSZ  32
 
 struct flow_set {
         size_t   idx;
@@ -97,6 +100,9 @@ struct flow {
         int                   oflags;
         qosspec_t             spec;
         ssize_t               part_idx;
+
+        void *                ctx;
+        uint8_t               key[SYMMKEYSZ];
 
         pid_t                 pid;
 
@@ -237,6 +243,8 @@ static void flow_clear(int fd)
         ai.flows[fd].pid      = -1;
 }
 
+#include "crypt.c"
+
 static void flow_fini(int fd)
 {
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
@@ -266,6 +274,9 @@ static void flow_fini(int fd)
         if (ai.flows[fd].frcti != NULL)
                 frcti_destroy(ai.flows[fd].frcti);
 
+        if (ai.flows[fd].spec.cypher_s > 0)
+                crypt_fini(&ai.flows[fd]);
+
         flow_clear(fd);
 }
 
@@ -286,21 +297,24 @@ static int flow_init(int       flow_id,
 
         ai.flows[fd].rx_rb = shm_rbuff_open(ai.pid, flow_id);
         if (ai.flows[fd].rx_rb == NULL)
-                goto fail;
+                goto fail_rx_rb;
 
         ai.flows[fd].tx_rb = shm_rbuff_open(pid, flow_id);
         if (ai.flows[fd].tx_rb == NULL)
-                goto fail;
+                goto fail_tx_rb;
 
         ai.flows[fd].set = shm_flow_set_open(pid);
         if (ai.flows[fd].set == NULL)
-                goto fail;
+                goto fail_set;
 
         ai.flows[fd].flow_id  = flow_id;
         ai.flows[fd].oflags   = FLOWFDEFAULT;
         ai.flows[fd].pid      = pid;
         ai.flows[fd].part_idx = NO_PART;
         ai.flows[fd].spec     = qs;
+
+        if (qs.cypher_s > 0 && crypt_init(&ai.flows[fd]) < 0)
+                goto fail_crypt;
 
         ai.ports[flow_id].fd = fd;
 
@@ -310,8 +324,14 @@ static int flow_init(int       flow_id,
 
         return fd;
 
- fail:
-        flow_fini(fd);
+ fail_crypt:
+        shm_flow_set_close(ai.flows[fd].set);
+ fail_set:
+        shm_rbuff_close(ai.flows[fd].tx_rb);
+ fail_tx_rb:
+        shm_rbuff_close(ai.flows[fd].rx_rb);
+ fail_rx_rb:
+        bmp_release(ai.fds, fd);
  fail_fds:
         pthread_rwlock_unlock(&ai.lock);
         return err;
@@ -344,12 +364,11 @@ static void init(int     argc,
 
         ai.pid = getpid();
 #ifdef HAVE_LIBGCRYPT
-        if (!gcry_control (GCRYCTL_INITIALIZATION_FINISHED_P)) {
+        if (!gcry_control(GCRYCTL_INITIALIZATION_FINISHED_P)) {
                 if (!gcry_check_version(GCRYPT_VERSION))
                         goto fail_fds;
-                /* Needs to be enabled when we add encryption. */
-                gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
-                gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+                gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
+                gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
         }
 #endif
         ai.fds = bmp_create(PROG_MAX_FLOWS - PROG_RES_FDS, PROG_RES_FDS);
@@ -550,8 +569,8 @@ int flow_accept(qosspec_t *             qs,
         if (ai.flows[fd].spec.in_order != 0) {
                 ai.flows[fd].frcti = frcti_create(fd);
                 if (ai.flows[fd].frcti == NULL) {
-                        flow_fini(fd);
                         pthread_rwlock_unlock(&ai.lock);
+                        flow_dealloc(fd);
                         return -ENOMEM;
                 }
         }
@@ -560,6 +579,31 @@ int flow_accept(qosspec_t *             qs,
                 *qs = ai.flows[fd].spec;
 
         pthread_rwlock_unlock(&ai.lock);
+
+        /* TODO: piggyback public keys at flow allocation. */
+        if (ai.flows[fd].spec.cypher_s > 0) {
+                uint8_t  key[SYMMKEYSZ];
+                uint16_t tmp;
+
+                pthread_rwlock_wrlock(&ai.lock);
+
+                tmp = ai.flows[fd].spec.cypher_s;
+                ai.flows[fd].spec.cypher_s = 0;
+
+                pthread_rwlock_unlock(&ai.lock);
+
+                if (crypt_dh_srv(fd, key) < 0) {
+                        flow_dealloc(fd);
+                        return -ECRYPT;
+                }
+
+                pthread_rwlock_wrlock(&ai.lock);
+
+                ai.flows[fd].spec.cypher_s = tmp;
+                memcpy(ai.flows[fd].key, key, SYMMKEYSZ);
+
+                pthread_rwlock_unlock(&ai.lock);
+        }
 
         return fd;
 }
@@ -579,9 +623,9 @@ static int __flow_alloc(const char *            dst,
                 qs->ber = 1;
 #endif
         if (join)
-                msg.code    = IRM_MSG_CODE__IRM_FLOW_JOIN;
+                msg.code = IRM_MSG_CODE__IRM_FLOW_JOIN;
         else
-                msg.code    = IRM_MSG_CODE__IRM_FLOW_ALLOC;
+                msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst     = (char *) dst;
         msg.has_pid = true;
         msg.pid     = ai.pid;
@@ -605,7 +649,7 @@ static int __flow_alloc(const char *            dst,
         }
 
         if (recv_msg->result != 0) {
-                int res =  recv_msg->result;
+                int res = recv_msg->result;
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return res;
         }
@@ -630,13 +674,38 @@ static int __flow_alloc(const char *            dst,
         if (ai.flows[fd].spec.in_order != 0) {
                 ai.flows[fd].frcti = frcti_create(fd);
                 if (ai.flows[fd].frcti == NULL) {
-                        flow_fini(fd);
                         pthread_rwlock_unlock(&ai.lock);
+                        flow_dealloc(fd);
                         return -ENOMEM;
                 }
         }
 
         pthread_rwlock_unlock(&ai.lock);
+
+        /* TODO: piggyback public keys at flow allocation. */
+        if (!join && ai.flows[fd].spec.cypher_s > 0) {
+                uint8_t  key[SYMMKEYSZ];
+                uint16_t tmp;
+
+                pthread_rwlock_wrlock(&ai.lock);
+
+                tmp = ai.flows[fd].spec.cypher_s;
+                ai.flows[fd].spec.cypher_s = 0;
+
+                pthread_rwlock_unlock(&ai.lock);
+
+                if (crypt_dh_clt(fd, key) < 0) {
+                        flow_dealloc(fd);
+                        return -ECRYPT;
+                }
+
+                pthread_rwlock_wrlock(&ai.lock);
+
+                ai.flows[fd].spec.cypher_s = tmp;
+                memcpy(ai.flows[fd].key, key, SYMMKEYSZ);
+
+                pthread_rwlock_unlock(&ai.lock);
+        }
 
         return fd;
 }
@@ -931,6 +1000,15 @@ ssize_t flow_write(int          fd,
                 return -ENOMEM;
         }
 
+        pthread_rwlock_wrlock(&ai.lock);
+        if (flow->spec.cypher_s > 0)
+                if (crypt_encrypt(flow, sdb) < 0) {
+                        pthread_rwlock_unlock(&ai.lock);
+                        shm_rdrbuff_remove(ai.rdrb, idx);
+                        return -ENOMEM;
+                }
+        pthread_rwlock_unlock(&ai.lock);
+
         if (flow->spec.ber == 0 && add_crc(sdb) != 0) {
                 shm_rdrbuff_remove(ai.rdrb, idx);
                 return -ENOMEM;
@@ -1009,9 +1087,22 @@ ssize_t flow_read(int    fd,
                                         shm_rbuff_read_b(rb, abstime);
                                 if (idx < 0)
                                         return idx;
+
                                 sdb = shm_rdrbuff_get(ai.rdrb, idx);
-                                if (flow->spec.ber == 0  && chk_crc(sdb) != 0)
+                                if (flow->spec.ber == 0 && chk_crc(sdb) != 0) {
+                                        shm_rdrbuff_remove(ai.rdrb, idx);
                                         continue;
+                                }
+
+                                pthread_rwlock_wrlock(&ai.lock);
+                                if (flow->spec.cypher_s > 0)
+                                        if (crypt_decrypt(flow, sdb) < 0) {
+                                                pthread_rwlock_unlock(&ai.lock);
+                                                shm_rdrbuff_remove(ai.rdrb,
+                                                                   idx);
+                                                return -ENOMEM;
+                                        }
+                                pthread_rwlock_unlock(&ai.lock);
                         } while (frcti_rcv(flow->frcti, sdb) != 0);
                 }
         }
