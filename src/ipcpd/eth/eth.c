@@ -733,7 +733,7 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                 qs.ber = ntoh32(msg->ber);
                 qs.in_order = msg->in_order;
                 qs.max_gap = ntoh32(msg->max_gap);
-                qs.cypher_s = hton32(msg->cypher_s);
+                qs.cypher_s = ntoh16(msg->cypher_s);
 
                 if (shim_data_reg_has(eth_data.shim_data,
                                       buf + sizeof(*msg))) {

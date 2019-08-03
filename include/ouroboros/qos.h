@@ -34,7 +34,7 @@ typedef struct qos_spec {
         uint32_t ber;           /* Bit error rate, errors per billion bits */
         uint8_t  in_order;      /* In-order delivery, enables FRCT */
         uint32_t max_gap;       /* In ms */
-        uint32_t cypher_s;      /* Cypher strength, 0 = no encryption */
+        uint16_t cypher_s;      /* Cypher strength, 0 = no encryption */
 } qosspec_t;
 
 static const qosspec_t qos_raw = {

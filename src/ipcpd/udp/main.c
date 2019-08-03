@@ -91,7 +91,7 @@ struct mgmt_msg {
         uint32_t loss;
         uint32_t ber;
         uint32_t max_gap;
-        uint32_t cypher_s;
+        uint16_t cypher_s;
 } __attribute__((packed));
 
 struct mgmt_frame {
@@ -210,7 +210,7 @@ static int ipcp_udp_port_alloc(int             skfd,
         msg->ber          = hton32(qs.ber);
         msg->in_order     = qs.in_order;
         msg->max_gap      = hton32(qs.max_gap);
-        msg->cypher_s     = hton32(qs.cypher_s);
+        msg->cypher_s     = hton16(qs.cypher_s);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
 
