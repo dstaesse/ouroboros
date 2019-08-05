@@ -418,7 +418,7 @@ static int crypt_dh_srv(int       fd,
                         uint8_t * s)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_ecdh_clt(fd, s);
+        return openssl_ecdh_srv(fd, s);
 #else
         (void) fd;
 
@@ -432,7 +432,7 @@ static int crypt_dh_clt(int       fd,
                         uint8_t * s)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_ecdh_srv(fd, s);
+        return openssl_ecdh_clt(fd, s);
 #else
         (void) fd;
 
