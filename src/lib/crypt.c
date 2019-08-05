@@ -83,7 +83,7 @@ static int __openssl_ecdh_derive_secret(EVP_PKEY * kp,
         return 0;
 
  fail_derive:
-        OPENSSL_free(s);
+        OPENSSL_free(secret);
  fail_ctx:
         EVP_PKEY_CTX_free(ctx);
  fail_new:
