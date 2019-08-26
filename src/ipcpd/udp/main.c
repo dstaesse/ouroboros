@@ -110,7 +110,6 @@ struct uf {
 struct {
         struct shim_data * shim_data;
 
-        uint32_t           ip_addr;
         uint32_t           dns_addr;
         /* server socket */
         struct sockaddr_in s_saddr;
@@ -614,7 +613,6 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                 goto fail_bind;
         }
 
-        udp_data.ip_addr  = conf->ip_addr;
         udp_data.dns_addr = conf->dns_addr;
         udp_data.clt_port = htons(conf->clt_port);
 
@@ -826,7 +824,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
         dns_addr = udp_data.dns_addr;
 
         if (dns_addr != 0) {
-                ip_addr = udp_data.ip_addr;
+                ip_addr = udp_data.s_saddr.sin_addr.s_addr;
 
                 if (inet_ntop(AF_INET, &ip_addr,
                               ipstr, INET_ADDRSTRLEN) == NULL) {
