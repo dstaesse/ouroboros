@@ -37,7 +37,6 @@
  */
 
 #include <ouroboros/dev.h>
-#include <ouroboros/time_utils.h>
 #include <ouroboros/fccntl.h>
 
 #include <stdbool.h>

@@ -39,6 +39,8 @@
 #define _POSIX_C_SOURCE 199506L
 #define __XSI_VISIBLE 500
 
+#include "time_utils.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
