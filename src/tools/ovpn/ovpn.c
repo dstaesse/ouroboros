@@ -68,6 +68,7 @@ static void usage(void)
                "server to connect to\n"
                "  -i, --ip                  IP address to give to TUN device\n"
                "  -m, --mask                Subnet mask to give to TUN device\n"
+               "  -C, --crypt               AES encryption (default: off)\n"
                "\n"
                "      --help                Display this help text and exit\n");
 }
@@ -187,13 +188,15 @@ int main(int     argc,
         sigset_t  sigset;
         int       sig;
         int       c;
+        qosspec_t qs;
 
         static struct option long_options[] =
-                {{"ip",   required_argument, NULL, 'i'},
-                 {"mask", required_argument, NULL, 'm'},
-                 {"name", optional_argument, NULL, 'n'},
-                 {"help", no_argument,       NULL, 'h'},
-                 {NULL,   0,                 NULL, 0}
+                {{"ip",    required_argument, NULL, 'i'},
+                 {"mask",  required_argument, NULL, 'm'},
+                 {"name",  optional_argument, NULL, 'n'},
+                 {"crypt", no_argument,       NULL, 'C'},
+                 {"help",  no_argument,       NULL, 'h'},
+                 {NULL,    0,                 NULL, 0}
                 };
 
         sigemptyset(&sigset);
@@ -207,7 +210,9 @@ int main(int     argc,
                 exit(EXIT_FAILURE);
         }
 
-        while ((c = getopt_long(argc, argv, "i:m:n:h",
+        qs = qos_raw;
+
+        while ((c = getopt_long(argc, argv, "i:m:n:Ch",
                                 long_options, NULL)) != -1) {
                 switch (c) {
                 case 'i':
@@ -225,6 +230,9 @@ int main(int     argc,
                         break;
                 case 'n':
                         name = optarg;
+                        break;
+                case 'C':
+                        qs = qos_raw_crypt;
                         break;
                 case 'h':
                         usage();
@@ -255,7 +263,7 @@ int main(int     argc,
         if (name != NULL) {
                 printf("Allocating a flow to %s.\n", name);
 
-                o_fd = flow_alloc(name, NULL, NULL);
+                o_fd = flow_alloc(name, &qs, NULL);
                 if (o_fd < 0) {
                         printf("Failed to allocate flow.\n");
                         goto fail_alloc;
