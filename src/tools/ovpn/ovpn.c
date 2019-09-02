@@ -193,7 +193,7 @@ int main(int     argc,
         static struct option long_options[] =
                 {{"ip",    required_argument, NULL, 'i'},
                  {"mask",  required_argument, NULL, 'm'},
-                 {"name",  optional_argument, NULL, 'n'},
+                 {"name",  required_argument, NULL, 'n'},
                  {"crypt", no_argument,       NULL, 'C'},
                  {"help",  no_argument,       NULL, 'h'},
                  {NULL,    0,                 NULL, 0}
