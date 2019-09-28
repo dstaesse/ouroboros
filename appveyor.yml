@@ -1,0 +1,34 @@
+image:
+  - Ubuntu1804
+  - Ubuntu
+
+platform:
+  - x64
+  - x86
+
+configuration:
+  - Release
+  - Debug
+
+environment:
+  matrix:
+    - CC: clang
+
+    - CC: gcc
+
+install:
+  - sudo apt-get update
+  - sudo apt-get install protobuf-c-compiler --yes
+  - sudo apt-get install libprotobuf-c-dev --yes || true
+  - sudo apt-get install libgcrypt20-dev libssl-dev libfuse-dev dnsutils --yes
+
+before_build:
+  - mkdir -p build
+  - cd build
+  - cmake -DCMAKE_BUILD_TYPE=%CONFIGURATION% ..
+
+build_script:
+  - make
+
+test_script:
+  - make check
