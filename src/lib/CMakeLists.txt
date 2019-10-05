@@ -99,6 +99,7 @@ endif ()
 
 find_package(OpenSSL QUIET)
 if (OPENSSL_FOUND)
+  set(HAVE_OPENSSL_RNG TRUE)
   if (OPENSSL_VERSION VERSION_LESS "1.1.0")
     message(STATUS "Install version >= \"1.1.0\" to enable OpenSSL support "
                    "(found version \"${OPENSSL_VERSION}\")")
@@ -114,7 +115,7 @@ if (OPENSSL_FOUND)
   endif ()
 endif ()
 
-if (NOT HAVE_OPENSSL)
+if (NOT HAVE_OPENSSL_RNG)
   set(OPENSSL_INCLUDE_DIR "")
   set(OPENSSL_LIBRARIES "")
 endif ()
@@ -133,7 +134,7 @@ else ()
 endif()
 
 if (NOT ((CMAKE_SYSTEM_NAME STREQUAL "FreeBSD") OR APPLE OR
-  HAVE_SYS_RANDOM OR HAVE_OPENSSL OR HAVE_LIBGCRYPT))
+  HAVE_SYS_RANDOM OR HAVE_OPENSSL_RNG OR HAVE_LIBGCRYPT))
   message(FATAL_ERROR "No secure random generator found, "
                       "please install libgcrypt (> 1.7.0) or OpenSSL")
 endif ()

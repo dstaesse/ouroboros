@@ -40,7 +40,7 @@
 #include <gcrypt.h>
 #elif defined(__FreeBSD__)
 #include <stdlib.h>
-#elif defined(HAVE_OPENSSL)
+#elif defined(HAVE_OPENSSL_RNG)
 #include <openssl/rand.h>
 #include <limits.h>
 #endif
@@ -58,7 +58,7 @@ int random_buffer(void * buf,
 #elif defined(HAVE_LIBGCRYPT)
         gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
         return 0;
-#elif defined(HAVE_OPENSSL)
+#elif defined(HAVE_OPENSSL_RNG)
         if (len > 0 && len < INT_MAX)
                 return RAND_bytes((unsigned char *) buf, (int) len);
         return -1;

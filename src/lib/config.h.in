@@ -33,6 +33,7 @@
 #cmakedefine                SHM_RBUFF_LOCKLESS
 #cmakedefine                SHM_RDRB_MULTI_BLOCK
 #cmakedefine                QOS_DISABLE_CRC
+#cmakedefine                HAVE_OPENSSL_RNG
 
 #define SHM_RBUFF_PREFIX    "@SHM_RBUFF_PREFIX@"
 #define SHM_LOCKFILE_NAME   "@SHM_LOCKFILE_NAME@"
