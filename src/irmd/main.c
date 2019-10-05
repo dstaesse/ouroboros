@@ -844,6 +844,11 @@ static int unbind_program(char * prog,
                 prog_table_del(&irmd.prog_table, prog);
         else {
                 struct prog_entry * en = prog_table_get(&irmd.prog_table, prog);
+                if (en == NULL) {
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        return -EINVAL;
+                }
+
                 prog_entry_del_name(en, name);
 
                 e = registry_get_entry(&irmd.registry, name);
