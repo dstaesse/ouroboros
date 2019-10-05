@@ -1209,6 +1209,11 @@ int fset_add(struct flow_set * set,
 
         pthread_rwlock_wrlock(&ai.lock);
 
+        if (ai.flows[fd].flow_id < 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                return -EINVAL;
+        }
+
         ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].flow_id);
 
         packets = shm_rbuff_queued(ai.flows[fd].rx_rb);
