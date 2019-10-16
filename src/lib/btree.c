@@ -83,22 +83,17 @@ static struct btnode * btnode_create(size_t k)
 
         node = malloc(sizeof(*node));
         if (node == NULL)
-                return NULL;
+                goto fail_node;
 
         assert(k > 0);
 
         node->keyvals = malloc(sizeof(*node->keyvals) * k);
-        if (node->keyvals == NULL) {
-                free(node);
-                return NULL;
-        }
+        if (node->keyvals == NULL)
+                goto fail_keyvals;
 
         node->children = malloc(sizeof(*node->children) * (k + 1));
-        if (node->children == NULL) {
-                free(node->keyvals);
-                free(node);
-                return NULL;
-        }
+        if (node->children == NULL)
+                goto fail_children;
 
         for (i = 0; i < k; ++i) {
                 node->children[i] = NULL;
@@ -111,6 +106,13 @@ static struct btnode * btnode_create(size_t k)
         node->leaf = true;
 
         return node;
+
+ fail_children:
+        free(node->keyvals);
+ fail_keyvals:
+        free(node);
+ fail_node:
+        return NULL;
 }
 
 static void btnode_destroy(struct btnode * node)
@@ -366,14 +368,14 @@ static int btnode_delete(struct btnode * node,
 
 struct btree * btree_create(size_t k)
 {
-        struct btree * tree = malloc(sizeof(*tree));
-        if (tree == NULL)
+        struct btree * tree;
+
+        if (k < 1 || k > BTREE_MAX_ORDER)
                 return NULL;
 
-        if (k < 1 || k > BTREE_MAX_ORDER) {
-                free(tree);
+        tree = malloc(sizeof(*tree));
+        if (tree == NULL)
                 return NULL;
-        }
 
         tree->k = k;
         tree->root = NULL;
