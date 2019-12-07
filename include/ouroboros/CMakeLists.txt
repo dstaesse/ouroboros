@@ -22,5 +22,3 @@ set(HEADER_FILES
   )
 
 install(FILES ${HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ouroboros)
-
-add_subdirectory(wrap)
