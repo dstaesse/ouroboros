@@ -111,12 +111,24 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc"
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-irm.pc"
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
-if (IS_DIRECTORY "/usr/lib/systemd")
-  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/irmd.service.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/irmd.service" @ONLY)
-
-  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/irmd.service"
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/systemd/system")
+# modified from https://github.com/ximion/limba
+pkg_check_modules(SYSTEMD "systemd")
+if (SYSTEMD_FOUND)
+  if ("${SYSTEMD_UNITDIR}" STREQUAL "")
+    execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE}
+      --variable=systemdsystemunitdir systemd
+      OUTPUT_VARIABLE SYSTEMD_UNITDIR)
+      string(REGEX REPLACE "[ \t\n]+" "" SYSTEMD_UNITDIR
+      "${SYSTEMD_UNITDIR}"
+    )
+  endif ()
+  if (NOT ${SYSTEMD_UNITDIR} STREQUAL "")
+    message(STATUS "Installing systemd service in: ${SYSTEMD_UNITDIR}")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/irmd.service.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/irmd.service" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/irmd.service"
+      DESTINATION "${SYSTEMD_UNITDIR}")
+  endif ()
 endif ()
 
 enable_testing()
