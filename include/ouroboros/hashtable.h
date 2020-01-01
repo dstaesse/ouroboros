@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2019
+ * Ouroboros - Copyright (C) 2016 - 2020
  *
  * Hash table with integer keys with separate chaining on collisions
  *

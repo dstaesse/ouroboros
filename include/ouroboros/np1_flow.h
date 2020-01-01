@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2019
+ * Ouroboros - Copyright (C) 2016 - 2020
  *
  * Adapter functions for N + 1 flow descriptors
  *
