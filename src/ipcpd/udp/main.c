@@ -520,6 +520,10 @@ static void * ipcp_udp_packet_writer(void * o)
                         struct shm_du_buff * sdb;
                         uint8_t *            buf;
                         uint16_t             len;
+
+                        if (fqueue_type(fq) != FLOW_PKT)
+                                continue;
+
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_dbg("Bad read from fd %d.", fd);
                                 continue;

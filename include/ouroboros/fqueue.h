@@ -29,11 +29,11 @@
 #include <time.h>
 
 enum fqtype {
-        FLOW_PKT = 0,
-        FLOW_DOWN,
-        FLOW_UP,
-        FLOW_ALLOC,
-        FLOW_DEALLOC
+        FLOW_PKT     = (1 << 0),
+        FLOW_DOWN    = (1 << 1),
+        FLOW_UP      = (1 << 2),
+        FLOW_ALLOC   = (1 << 3),
+        FLOW_DEALLOC = (1 << 4)
 };
 
 struct flow_set;

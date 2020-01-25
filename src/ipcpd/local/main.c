@@ -110,6 +110,9 @@ static void * ipcp_local_packet_loop(void * o)
                 fevent(local_data.flows, local_data.fq, NULL);
 
                 while ((fd = fqueue_next(local_data.fq)) >= 0) {
+                        if (fqueue_type(local_data.fq) != FLOW_PKT)
+                                continue;
+
                         idx = local_flow_read(fd);
                         if (idx < 0)
                                 continue;
