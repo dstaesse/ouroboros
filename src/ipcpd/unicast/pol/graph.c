@@ -578,12 +578,11 @@ static int add_lfa_to_table(struct list_head * table,
         return -1;
 }
 
-int graph_routing_table(struct graph *     graph,
-                        enum routing_algo  algo,
-                        uint64_t           s_addr,
-                        struct list_head * table)
+static int graph_routing_table_lfa(struct graph *     graph,
+                                   uint64_t           s_addr,
+                                   struct list_head * table,
+                                   int **             dist)
 {
-        int *              s_dist;
         int *              n_dist[PROG_MAX_FLOWS];
         uint64_t           addrs[PROG_MAX_FLOWS];
         int                n_index[PROG_MAX_FLOWS];
@@ -592,83 +591,104 @@ int graph_routing_table(struct graph *     graph,
         struct vertex *    v;
         struct edge *      e;
         struct vertex **   nhops;
-        int                i = 0;
-        int                j = 0;
+        int                i;
+        int                j;
         int                k;
+
+        if (graph_routing_table_lfa(graph, s_addr, table, dist))
+                goto fail_table;
+
+        for (j = 0; j < PROG_MAX_FLOWS; j++) {
+                n_dist[j] = NULL;
+                n_index[j] = -1;
+                addrs[j] = -1;
+        }
+
+        list_for_each(p, &graph->vertices) {
+                v = list_entry(p, struct vertex, next);
+
+                if (v->addr != s_addr)
+                        continue;
+
+                /*
+                 * Get the distances for every neighbor
+                 * of the source.
+                 */
+                list_for_each(q, &v->edges) {
+                        e = list_entry(q, struct edge, next);
+
+                        addrs[i] = e->nb->addr;
+                        n_index[i] = e->nb->index;
+                        if (dijkstra(graph, e->nb->addr,
+                                     &nhops, &(n_dist[i++])))
+                                goto fail_dijkstra;
+
+                        free(nhops);
+                }
+
+                break;
+        }
+
+        /* Loop though all nodes to see if we have a LFA for them. */
+        list_for_each(p, &graph->vertices) {
+                v = list_entry(p, struct vertex, next);
+
+                if (v->addr == s_addr)
+                        continue;
+
+                /*
+                 * Check for every neighbor if
+                 * dist(neighbor, destination) <
+                 * dist(neighbor, source) + dist(source, destination).
+                 */
+                for (j = 0; j < i; j++) {
+                        /* Exclude ourselves. */
+                        if (addrs[j] == v->addr)
+                                continue;
+
+                        if (n_dist[j][v->index] <
+                            *dist[n_index[j]] + *dist[v->index])
+                                if (add_lfa_to_table(table, v->addr,
+                                                     addrs[j]))
+                                        goto fail_add_lfa;
+                }
+        }
+
+        for (j = 0; j < i; j++)
+                free(n_dist[j]);
+
+        return 0;
+
+ fail_add_lfa:
+        for (k = j; k < i; k++)
+                free(n_dist[k]);
+ fail_dijkstra:
+        free_routing_table(table);
+ fail_table:
+        return -1;
+}
+
+int graph_routing_table(struct graph *     graph,
+                        enum routing_algo  algo,
+                        uint64_t           s_addr,
+                        struct list_head * table)
+{
+        int * s_dist;
 
         assert(graph);
         assert(table);
 
         pthread_mutex_lock(&graph->lock);
 
-        /* Get the simple next hops routing table. */
-        if (graph_routing_table_simple(graph, s_addr, table, &s_dist))
-                goto fail_table_simple;
-
-        /* Possibly augment the routing table. */
         switch (algo) {
         case ROUTING_SIMPLE:
+                /* LFA uses the s_dist this returns. */
+                if (graph_routing_table_simple(graph, s_addr, table, &s_dist))
+                        goto fail_table;
                 break;
         case ROUTING_LFA:
-                for (j = 0; j < PROG_MAX_FLOWS; j++) {
-                        n_dist[j] = NULL;
-                        n_index[j] = -1;
-                        addrs[j] = -1;
-                }
-
-                list_for_each(p, &graph->vertices) {
-                        v = list_entry(p, struct vertex, next);
-
-                        if (v->addr != s_addr)
-                                continue;
-
-                        /*
-                         * Get the distances for every neighbor
-                         * of the source.
-                         */
-                        list_for_each(q, &v->edges) {
-                                e = list_entry(q, struct edge, next);
-
-                                addrs[i] = e->nb->addr;
-                                n_index[i] = e->nb->index;
-                                if (dijkstra(graph, e->nb->addr,
-                                             &nhops, &(n_dist[i++])))
-                                        goto fail_dijkstra;
-
-                                free(nhops);
-                        }
-
-                        break;
-                }
-
-                /* Loop though all nodes to see if we have a LFA for them. */
-                list_for_each(p, &graph->vertices) {
-                        v = list_entry(p, struct vertex, next);
-
-                        if (v->addr == s_addr)
-                                continue;
-
-                        /*
-                         * Check for every neighbor if
-                         * dist(neighbor, destination) <
-                         * dist(neighbor, source) + dist(source, destination).
-                         */
-                        for (j = 0; j < i; j++) {
-                                /* Exclude ourselves. */
-                                if (addrs[j] == v->addr)
-                                        continue;
-
-                                if (n_dist[j][v->index] <
-                                    s_dist[n_index[j]] + s_dist[v->index])
-                                        if (add_lfa_to_table(table, v->addr,
-                                                             addrs[j]))
-                                                goto fail_add_lfa;
-                        }
-                }
-
-                for (j = 0; j < i; j++)
-                        free(n_dist[j]);
-
+                if (graph_routing_table_lfa(graph, s_addr, table, &s_dist))
+                        goto fail_table;
                 break;
         default:
                 log_err("Unsupported algorithm.");
@@ -681,15 +701,9 @@ int graph_routing_table(struct graph *     graph,
 
         return 0;
 
- fail_add_lfa:
-        for (k = j; k < i; k++)
-                free(n_dist[k]);
- fail_dijkstra:
-        free_routing_table(table);
  fail_algo:
         free(s_dist);
- fail_table_simple:
+ fail_table:
         pthread_mutex_unlock(&graph->lock);
-
         return -1;
 }
