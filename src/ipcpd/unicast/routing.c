@@ -24,6 +24,7 @@
 
 #include <ouroboros/errno.h>
 
+#include "pff.h"
 #include "routing.h"
 #include "pol/link_state.h"
 
@@ -31,16 +32,25 @@ struct pol_routing_ops * r_ops;
 
 int routing_init(enum pol_routing pr)
 {
+        enum pol_pff pff_type;
+
         switch (pr) {
         case ROUTING_LINK_STATE:
+                pff_type = PFF_SIMPLE;
+                r_ops = &link_state_ops;
+                break;
         case ROUTING_LINK_STATE_LFA:
+                pff_type = PFF_ALTERNATE;
                 r_ops = &link_state_ops;
                 break;
         default:
                 return -ENOTSUP;
         }
 
-        return r_ops->init(pr);
+        if (r_ops->init(pr))
+                return -1;
+
+        return pff_type;
 }
 
 struct routing_i * routing_i_create(struct pff * pff)

@@ -29,6 +29,11 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+enum pol_pff {
+        PFF_SIMPLE = 0,
+        PFF_ALTERNATE
+};
+
 struct pff * pff_create(enum pol_pff pol);
 
 void         pff_destroy(struct pff * pff);

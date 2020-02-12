@@ -70,7 +70,6 @@
 #define DEFAULT_TTL            60
 #define DEFAULT_ADDR_AUTH      ADDR_AUTH_FLAT_RANDOM
 #define DEFAULT_ROUTING        ROUTING_LINK_STATE
-#define DEFAULT_PFF            PFF_SIMPLE
 #define DEFAULT_HASH_ALGO      DIR_HASH_SHA3_256
 #define DEFAULT_ETHERTYPE      0xA000
 #define DEFAULT_CLIENT_PORT    0x0000 /* random port */
@@ -79,8 +78,6 @@
 #define FLAT_RANDOM_ADDR_AUTH  "flat"
 #define LINK_STATE_ROUTING     "link_state"
 #define LINK_STATE_LFA_ROUTING "lfa"
-#define SIMPLE_PFF             "simple"
-#define ALTERNATE_PFF          "alternate"
 
 static void usage(void)
 {
@@ -97,13 +94,11 @@ static void usage(void)
                "                [ttl (max time-to-live value, default: %d)]\n"
                "                [addr_auth <ADDRESS_POLICY> (default: %s)]\n"
                "                [routing <ROUTING_POLICY> (default: %s)]\n"
-               "                [pff [PFF_POLICY] (default: %s)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "                [autobind]\n"
                "where ADDRESS_POLICY = {"FLAT_RANDOM_ADDR_AUTH"}\n"
                "      ROUTING_POLICY = {"LINK_STATE_ROUTING " "
                LINK_STATE_LFA_ROUTING "}\n"
-               "      PFF_POLICY = {" SIMPLE_PFF " " ALTERNATE_PFF "}\n"
                "      ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n"
                "if TYPE == " UDP "\n"
@@ -134,7 +129,7 @@ static void usage(void)
                "if TYPE == " BROADCAST "\n"
                "                [autobind]\n\n",
                DEFAULT_ADDR_SIZE, DEFAULT_EID_SIZE, DEFAULT_TTL,
-               FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING, SIMPLE_PFF,
+               FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING,
                SHA3_256, DEFAULT_SERVER_PORT, SHA3_256, 0xA000, SHA3_256,
                SHA3_256, SHA3_256);
 }
@@ -150,7 +145,6 @@ int do_bootstrap_ipcp(int     argc,
         uint8_t            max_ttl        = DEFAULT_TTL;
         enum pol_addr_auth addr_auth_type = DEFAULT_ADDR_AUTH;
         enum pol_routing   routing_type   = DEFAULT_ROUTING;
-        enum pol_pff       pff_type       = DEFAULT_PFF;
         enum pol_dir_hash  hash_algo      = DEFAULT_HASH_ALGO;
         uint32_t           ip_addr        = 0;
         uint32_t           dns_addr       = DEFAULT_DDNS;
@@ -230,13 +224,6 @@ int do_bootstrap_ipcp(int     argc,
                         else if (strcmp(LINK_STATE_LFA_ROUTING,
                                         *(argv + 1)) == 0)
                                 routing_type = ROUTING_LINK_STATE_LFA;
-                        else
-                                goto unknown_param;
-                } else if (matches(*argv, "pff") == 0) {
-                        if (strcmp(SIMPLE_PFF, *(argv + 1)) == 0)
-                                pff_type = PFF_SIMPLE;
-                        else if (strcmp(ALTERNATE_PFF, *(argv + 1)) == 0)
-                                pff_type = PFF_ALTERNATE;
                         else
                                 goto unknown_param;
                 } else {
@@ -324,7 +311,6 @@ int do_bootstrap_ipcp(int     argc,
                                 conf.max_ttl        = max_ttl;
                                 conf.addr_auth_type = addr_auth_type;
                                 conf.routing_type   = routing_type;
-                                conf.pff_type       = pff_type;
                                 break;
                         case IPCP_UDP:
                                 if (ip_addr == 0)

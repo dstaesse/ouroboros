@@ -82,7 +82,6 @@ static int initialize_components(const struct ipcp_config * conf)
         log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
 
         if (dt_init(conf->routing_type,
-                    conf->pff_type,
                     conf->addr_size,
                     conf->eid_size,
                     conf->max_ttl)) {

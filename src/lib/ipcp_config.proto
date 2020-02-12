@@ -36,16 +36,15 @@ message ipcp_config_msg {
         optional uint32 max_ttl            =  5;
         optional uint32 addr_auth_type     =  6;
         optional uint32 routing_type       =  7;
-        optional uint32 pff_type           =  8;
         // Config for UDP
-        optional uint32 ip_addr            =  9;
-        optional uint32 dns_addr           = 10;
-        optional uint32 clt_port           = 11;
-        optional uint32 srv_port           = 12;
+        optional uint32 ip_addr            =  8;
+        optional uint32 dns_addr           =  9;
+        optional uint32 clt_port           = 10;
+        optional uint32 srv_port           = 11;
         // Config for the Ethernet
-        optional string dev                = 13;
+        optional string dev                = 12;
         // Config for DIX Ethernet
-        optional uint32 ethertype          = 14;
+        optional uint32 ethertype          = 13;
 }
 
 enum enroll_code {

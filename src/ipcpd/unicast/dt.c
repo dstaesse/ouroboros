@@ -621,7 +621,6 @@ static void * dt_conn_handle(void * o)
 }
 
 int dt_init(enum pol_routing pr,
-            enum pol_pff     pp,
             uint8_t          addr_size,
             uint8_t          eid_size,
             uint8_t          max_ttl)
@@ -629,6 +628,7 @@ int dt_init(enum pol_routing pr,
         int              i;
         int              j;
         char             dtstr[256];
+        enum pol_pff     pp;
         struct conn_info info;
 
         memset(&info, 0, sizeof(info));
@@ -659,7 +659,8 @@ int dt_init(enum pol_routing pr,
                 goto fail_connmgr_comp_init;
         }
 
-        if (routing_init(pr)) {
+        pp = routing_init(pr);
+        if (pp < 0) {
                 log_err("Failed to init routing.");
                 goto fail_routing;
         }

@@ -241,7 +241,6 @@ static void * mainloop(void * o)
                                 conf.max_ttl        = conf_msg->max_ttl;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
                                 conf.routing_type   = conf_msg->routing_type;
-                                conf.pff_type       = conf_msg->pff_type;
                                 break;
                         case IPCP_ETH_DIX:
                                 conf.ethertype = conf_msg->ethertype;
