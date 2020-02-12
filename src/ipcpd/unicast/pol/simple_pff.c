@@ -24,12 +24,12 @@
 
 #include "config.h"
 
-#include <ouroboros/hashtable.h>
 #include <ouroboros/errno.h>
 
 #include <assert.h>
 #include <pthread.h>
 
+#include "hashtable.h"
 #include "simple_pff.h"
 
 struct pff_i {

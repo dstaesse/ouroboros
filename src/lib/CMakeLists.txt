@@ -202,7 +202,6 @@ set(SOURCE_FILES_COMMON
   btree.c
   crc32.c
   hash.c
-  hashtable.c
   list.c
   lockfile.c
   logs.c

@@ -24,7 +24,6 @@
 
 #include "config.h"
 
-#include <ouroboros/hashtable.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 
@@ -32,6 +31,7 @@
 #include <assert.h>
 #include <pthread.h>
 
+#include "hashtable.h"
 #include "alternate_pff.h"
 
 struct nhop {
