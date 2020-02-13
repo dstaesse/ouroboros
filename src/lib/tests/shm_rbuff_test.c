@@ -93,11 +93,19 @@ int shm_rbuff_test(int     argc,
 
         printf("success [%zd entries].\n\n", shm_rbuff_queued(rb));
 
+        /* empty the rbuff */
+        while (shm_rbuff_read(rb) >= 0)
+                ;
+
         shm_rbuff_destroy(rb);
 
         return 0;
 
  error:
+        /* empty the rbuff */
+        while (shm_rbuff_read(rb) >= 0)
+                ;
+
         shm_rbuff_destroy(rb);
  err:
         printf("failed.\n\n");
