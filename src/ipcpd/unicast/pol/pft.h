@@ -1,8 +1,8 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2020
  *
-* Hash table with integer keys with separate chaining on collisions
-  *
+ * Packet forwarding table (PFT) with chaining on collisions
+ *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
  *
@@ -20,36 +20,36 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_HASHTABLE_H
-#define OUROBOROS_HASHTABLE_H
+#ifndef OUROBOROS_PFT_H
+#define OUROBOROS_PFT_H
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
-struct htable;
+struct pft;
 
 /* Buckets is rounded up to the nearest power of 2 */
-struct htable * htable_create(uint64_t buckets,
-                              bool     hash_key);
+struct pft * pft_create(uint64_t buckets,
+                        bool     hash_key);
 
-void            htable_destroy(struct htable * table);
+void         pft_destroy(struct pft * table);
 
-void            htable_flush(struct htable * table);
+void         pft_flush(struct pft * table);
 
 /* Passes ownership of the block of memory */
-int             htable_insert(struct htable * table,
-                              uint64_t        key,
-                              void *          val,
-                              size_t          len);
+int          pft_insert(struct pft * pft,
+                        uint64_t     dst,
+                        int *        fds,
+                        size_t       len);
 
 /* The block of memory returned is no copy */
-int             htable_lookup(struct htable * table,
-                              uint64_t        key,
-                              void **         val,
-                              size_t *        len);
+int          pft_lookup(struct pft * pft,
+                        uint64_t     dst,
+                        int **       fds,
+                        size_t *     len);
 
-int             htable_delete(struct htable * table,
-                              uint64_t        key);
+int          pft_delete(struct pft * pft,
+                        uint64_t     dst);
 
-#endif /* OUROBOROS_HASHTABLE_H */
+#endif /* OUROBOROS_PFT_H */

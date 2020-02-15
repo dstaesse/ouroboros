@@ -44,7 +44,7 @@ set(SOURCE_FILES
   routing.c
   psched.c
   # Add policies last
-  pol/hashtable.c
+  pol/pft.c
   pol/alternate_pff.c
   pol/flat.c
   pol/link_state.c

@@ -29,11 +29,11 @@
 #include <assert.h>
 #include <pthread.h>
 
-#include "hashtable.h"
+#include "pft.h"
 #include "simple_pff.h"
 
 struct pff_i {
-        struct htable *  table;
+        struct pft *  pft;
         pthread_rwlock_t lock;
 };
 
@@ -63,8 +63,8 @@ struct pff_i * simple_pff_create(void)
                 return NULL;
         }
 
-        tmp->table = htable_create(PFT_SIZE, false);
-        if (tmp->table == NULL) {
+        tmp->pft = pft_create(PFT_SIZE, false);
+        if (tmp->pft == NULL) {
                 pthread_rwlock_destroy(&tmp->lock);
                 free(tmp);
                 return NULL;
@@ -77,7 +77,7 @@ void simple_pff_destroy(struct pff_i * pff_i)
 {
         assert(pff_i);
 
-        htable_destroy(pff_i->table);
+        pft_destroy(pff_i->pft);
 
         pthread_rwlock_destroy(&pff_i->lock);
         free(pff_i);
@@ -98,21 +98,21 @@ int simple_pff_add(struct pff_i * pff_i,
                    int *          fd,
                    size_t         len)
 {
-        int * val;
+        int * fds;
 
         assert(pff_i);
         assert(len > 0);
 
         (void) len;
 
-        val = malloc(sizeof(*val));
-        if (val == NULL)
+        fds = malloc(sizeof(*fds));
+        if (fds == NULL)
                 return -ENOMEM;
 
-        *val = fd[0];
+        *fds = *fd;
 
-        if (htable_insert(pff_i->table, addr, val, 1)) {
-                free(val);
+        if (pft_insert(pff_i->pft, addr, fds, 1)) {
+                free(fds);
                 return -1;
         }
 
@@ -124,25 +124,26 @@ int simple_pff_update(struct pff_i * pff_i,
                       int *          fd,
                       size_t         len)
 {
-        int * val;
+        int * fds;
 
         assert(pff_i);
         assert(len > 0);
 
         (void) len;
 
-        val = malloc(sizeof(*val));
-        if (val == NULL)
+        fds = malloc(sizeof(*fds));
+        if (fds == NULL)
                 return -ENOMEM;
-        *val = fd[0];
 
-        if (htable_delete(pff_i->table, addr)) {
-                free(val);
+        *fds = *fd;
+
+        if (pft_delete(pff_i->pft, addr)) {
+                free(fds);
                 return -1;
         }
 
-        if (htable_insert(pff_i->table, addr, val, 1)) {
-                free(val);
+        if (pft_insert(pff_i->pft, addr, fds, 1)) {
+                free(fds);
                 return -1;
         }
 
@@ -154,7 +155,7 @@ int simple_pff_del(struct pff_i * pff_i,
 {
         assert(pff_i);
 
-        if (htable_delete(pff_i->table, addr))
+        if (pft_delete(pff_i->pft, addr))
                 return -1;
 
         return 0;
@@ -164,13 +165,13 @@ void simple_pff_flush(struct pff_i * pff_i)
 {
         assert(pff_i);
 
-        htable_flush(pff_i->table);
+        pft_flush(pff_i->pft);
 }
 
 int simple_pff_nhop(struct pff_i * pff_i,
                     uint64_t       addr)
 {
-        void * j;
+        int *  fds;
         size_t len;
         int    fd = -1;
 
@@ -178,8 +179,8 @@ int simple_pff_nhop(struct pff_i * pff_i,
 
         pthread_rwlock_rdlock(&pff_i->lock);
 
-        if (!htable_lookup(pff_i->table, addr, &j, &len))
-                fd = *((int *) j);
+        if (pft_lookup(pff_i->pft, addr, &fds, &len) == 0)
+                fd = *fds;
 
         pthread_rwlock_unlock(&pff_i->lock);
 

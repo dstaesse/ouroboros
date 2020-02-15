@@ -31,7 +31,7 @@
 #include <assert.h>
 #include <pthread.h>
 
-#include "hashtable.h"
+#include "pft.h"
 #include "alternate_pff.h"
 
 struct nhop {
@@ -45,7 +45,7 @@ struct addr {
 };
 
 struct pff_i {
-        struct htable *  table;
+        struct pft *     pft;
 
         struct list_head addrs;
 
@@ -86,11 +86,11 @@ static int add_addr(struct pff_i * pff_i,
 static void del_addr(struct pff_i * pff_i,
                      uint64_t       addr)
 {
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
-        list_for_each_safe(pos, n, &(pff_i->addrs)) {
-                struct addr * e = list_entry(pos, struct addr, next);
+        list_for_each_safe(p, h, &(pff_i->addrs)) {
+                struct addr * e = list_entry(p, struct addr, next);
                 if (e->addr == addr) {
                         list_del(&e->next);
                         free(e);
@@ -101,11 +101,11 @@ static void del_addr(struct pff_i * pff_i,
 
 static void del_addrs(struct pff_i * pff_i)
 {
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
-        list_for_each_safe(pos, n, &(pff_i->addrs)) {
-                struct addr * e = list_entry(pos, struct addr, next);
+        list_for_each_safe(p, h, &(pff_i->addrs)) {
+                struct addr * e = list_entry(p, struct addr, next);
                 list_del(&e->next);
                 free(e);
         }
@@ -113,11 +113,11 @@ static void del_addrs(struct pff_i * pff_i)
 
 static void del_nhops_down(struct pff_i * pff_i)
 {
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
-        list_for_each_safe(pos, n, &(pff_i->nhops_down)) {
-                struct nhop * e = list_entry(pos, struct nhop, next);
+        list_for_each_safe(p, h, &(pff_i->nhops_down)) {
+                struct nhop * e = list_entry(p, struct nhop, next);
                 list_del(&e->next);
                 free(e);
         }
@@ -126,11 +126,11 @@ static void del_nhops_down(struct pff_i * pff_i)
 static int del_nhop_down(struct pff_i * pff_i,
                          int            fd)
 {
-        struct list_head * pos = NULL;
-        struct list_head * n   = NULL;
+        struct list_head * p;
+        struct list_head * h;
 
-        list_for_each_safe(pos, n, &(pff_i->nhops_down)) {
-                struct nhop * e = list_entry(pos, struct nhop, next);
+        list_for_each_safe(p, h, &(pff_i->nhops_down)) {
+                struct nhop * e = list_entry(p, struct nhop, next);
                 if (e->fd == fd) {
                         list_del(&e->next);
                         free(e);
@@ -171,31 +171,31 @@ static bool nhops_down_has(struct pff_i * pff_i,
         return false;
 }
 
-static int add_to_htable(struct pff_i * pff_i,
-                         uint64_t       addr,
-                         int *          fd,
-                         size_t         len)
+static int add_to_pft(struct pff_i * pff_i,
+                      uint64_t       addr,
+                      int *          fd,
+                      size_t         len)
 {
-        int * val;
+        int * fds;
 
         assert(pff_i);
         assert(len > 0);
 
-        val = malloc(sizeof(*val) * (len + 1));
-        if (val == NULL)
+        fds = malloc(sizeof(*fds) * (len + 1));
+        if (fds == NULL)
                 goto fail_malloc;
 
-        memcpy(val, fd, len * sizeof(*val));
+        memcpy(fds, fd, len * sizeof(*fds));
         /* Put primary hop again at the end */
-        val[len] = val[0];
+        fds[len] = fds[0];
 
-        if (htable_insert(pff_i->table, addr, val, len))
+        if (pft_insert(pff_i->pft, addr, fds, len))
                 goto fail_insert;
 
         return 0;
 
  fail_insert:
-        free(val);
+        free(fds);
  fail_malloc:
         return -1;
 }
@@ -211,16 +211,16 @@ struct pff_i * alternate_pff_create(void)
         if (pthread_rwlock_init(&tmp->lock, NULL))
                 goto fail_lock;
 
-        tmp->table = htable_create(PFT_SIZE, false);
-        if (tmp->table == NULL)
-                goto fail_table;
+        tmp->pft = pft_create(PFT_SIZE, false);
+        if (tmp->pft == NULL)
+                goto fail_pft;
 
         list_head_init(&tmp->nhops_down);
         list_head_init(&tmp->addrs);
 
         return tmp;
 
- fail_table:
+ fail_pft:
         pthread_rwlock_destroy(&tmp->lock);
  fail_lock:
         free(tmp);
@@ -232,7 +232,7 @@ void alternate_pff_destroy(struct pff_i * pff_i)
 {
         assert(pff_i);
 
-        htable_destroy(pff_i->table);
+        pft_destroy(pff_i->pft);
         del_nhops_down(pff_i);
         del_addrs(pff_i);
         pthread_rwlock_destroy(&pff_i->lock);
@@ -257,11 +257,11 @@ int alternate_pff_add(struct pff_i * pff_i,
         assert(pff_i);
         assert(len > 0);
 
-        if (add_to_htable(pff_i, addr, fd, len))
+        if (add_to_pft(pff_i, addr, fd, len))
                 return -1;
 
         if (add_addr(pff_i, addr)) {
-                htable_delete(pff_i->table, addr);
+                pft_delete(pff_i->pft, addr);
                 return -1;
         }
 
@@ -276,10 +276,10 @@ int alternate_pff_update(struct pff_i * pff_i,
         assert(pff_i);
         assert(len > 0);
 
-        if (htable_delete(pff_i->table, addr))
+        if (pft_delete(pff_i->pft, addr))
                 return -1;
 
-        if (add_to_htable(pff_i, addr, fd, len))
+        if (add_to_pft(pff_i, addr, fd, len))
                 return -1;
 
         return 0;
@@ -292,7 +292,7 @@ int alternate_pff_del(struct pff_i * pff_i,
 
         del_addr(pff_i, addr);
 
-        if (htable_delete(pff_i->table, addr))
+        if (pft_delete(pff_i->pft, addr))
                 return -1;
 
         return 0;
@@ -302,7 +302,7 @@ void alternate_pff_flush(struct pff_i * pff_i)
 {
         assert(pff_i);
 
-        htable_flush(pff_i->table);
+        pft_flush(pff_i->pft);
 
         del_nhops_down(pff_i);
 
@@ -312,20 +312,20 @@ void alternate_pff_flush(struct pff_i * pff_i)
 int alternate_pff_nhop(struct pff_i * pff_i,
                        uint64_t       addr)
 {
-        int    fd = -1;
+        int    fd;
         size_t len;
-        void * el;
+        int *  fds;
 
         assert(pff_i);
 
         pthread_rwlock_rdlock(&pff_i->lock);
 
-        if (htable_lookup(pff_i->table, addr, &el, &len)) {
+        if (pft_lookup(pff_i->pft, addr, &fds, &len)) {
                 pthread_rwlock_unlock(&pff_i->lock);
                 return -1;
         }
 
-        fd = *((int *) el);
+        fd = *fds;
 
         pthread_rwlock_unlock(&pff_i->lock);
 
@@ -338,7 +338,6 @@ int alternate_flow_state_change(struct pff_i * pff_i,
 {
         struct list_head * pos = NULL;
         size_t             len;
-        void *             el;
         int *              fds;
         size_t             i;
         int                tmp;
@@ -361,12 +360,10 @@ int alternate_flow_state_change(struct pff_i * pff_i,
 
         list_for_each(pos, &pff_i->addrs) {
                 struct addr * e = list_entry(pos, struct addr, next);
-                if (htable_lookup(pff_i->table, e->addr, &el, &len)) {
+                if (pft_lookup(pff_i->pft, e->addr, &fds, &len)) {
                         pthread_rwlock_unlock(&pff_i->lock);
                         return -1;
                 }
-
-                fds = (int *) el;
 
                 if (up) {
                         /* It is using an alternate */
