@@ -144,6 +144,8 @@ static int str_adj(struct adjacency * adj,
         char        seqnobuf[64];
         struct tm * tm;
 
+        assert(adj);
+
         if (len < LS_ENTRY_SIZE)
                 return -1;
 
@@ -183,6 +185,9 @@ static int lsdb_getattr(const char *  path,
         struct adjacency * adj;
         struct timespec    now;
 
+        assert(path);
+        assert(st);
+
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
         pthread_rwlock_rdlock(&ls.db_lock);
@@ -213,6 +218,8 @@ static int lsdb_read(const char * path,
         struct adjacency * a;
         int                size;
 
+        assert(path);
+
         pthread_rwlock_rdlock(&ls.db_lock);
 
         if (ls.db_len + ls.nbs_len == 0)
@@ -239,6 +246,8 @@ static int lsdb_readdir(char *** buf)
         struct list_head * p;
         char               entry[RIB_PATH_LEN + 1];
         ssize_t            idx = 0;
+
+        assert(buf);
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
@@ -348,8 +357,8 @@ static int lsdb_add_nb(uint64_t     addr,
         return 0;
 }
 
-static int lsdb_del_nb(uint64_t     addr,
-                       int          fd)
+static int lsdb_del_nb(uint64_t addr,
+                       int      fd)
 {
         struct list_head * p;
         struct list_head * h;
@@ -377,14 +386,16 @@ static int lsdb_del_nb(uint64_t     addr,
 static int nbr_to_fd(uint64_t addr)
 {
         struct list_head * p;
+        int                fd;
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->addr == addr && nb->type == NB_DT) {
+                        fd = nb->fd;
                         pthread_rwlock_unlock(&ls.db_lock);
-                        return nb->fd;
+                        return fd;
                 }
         }
 
@@ -400,6 +411,8 @@ static void calculate_pff(struct routing_i * instance)
         struct list_head * p;
         struct list_head * q;
         int                fds[PROG_MAX_FLOWS];
+
+        assert(instance);
 
         if (graph_routing_table(ls.graph, ls.routing_algo,
                                 ipcpi.dt_addr, &table))
@@ -459,6 +472,8 @@ static int lsdb_add_link(uint64_t    src,
         struct adjacency * adj;
         struct timespec    now;
         int                ret = -1;
+
+        assert(qs);
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
@@ -537,7 +552,11 @@ static int lsdb_del_link(uint64_t src,
 static void * periodic_recalc_pff(void * o)
 {
         bool               modified;
-        struct routing_i * inst = (struct routing_i *) o;
+        struct routing_i * inst;
+
+        assert(o);
+
+        inst = (struct routing_i *) o;
 
         while (true) {
                 pthread_mutex_lock(&inst->lock);
@@ -547,6 +566,7 @@ static void * periodic_recalc_pff(void * o)
 
                 if (modified)
                         calculate_pff(inst);
+
                 sleep(RECALC_TIME);
         }
 
@@ -782,6 +802,8 @@ static void handle_event(void *       self,
         int                flags;
 
         (void) self;
+
+        assert(o);
 
         c = (struct conn *) o;
 

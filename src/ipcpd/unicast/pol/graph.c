@@ -41,18 +41,18 @@
 #include <limits.h>
 #include <string.h>
 
-struct edge {
-        struct list_head next;
-        struct vertex *  nb;
-        qosspec_t        qs;
-        int              announced;
-};
-
 struct vertex {
         struct list_head next;
         uint64_t         addr;
         struct list_head edges;
         int              index;
+};
+
+struct edge {
+        struct list_head next;
+        struct vertex *  nb;
+        qosspec_t        qs;
+        int              announced;
 };
 
 struct graph {
@@ -64,7 +64,9 @@ struct graph {
 static struct edge * find_edge_by_addr(struct vertex * vertex,
                                        uint64_t        dst_addr)
 {
-        struct list_head * p = NULL;
+        struct list_head * p;
+
+        assert(vertex);
 
         list_for_each(p, &vertex->edges) {
                 struct edge * e = list_entry(p, struct edge, next);
@@ -78,7 +80,9 @@ static struct edge * find_edge_by_addr(struct vertex * vertex,
 static struct vertex * find_vertex_by_addr(struct graph * graph,
                                            uint64_t       addr)
 {
-        struct list_head * p = NULL;
+        struct list_head * p;
+
+        assert(graph);
 
         list_for_each(p, &graph->vertices) {
                 struct vertex * e = list_entry(p, struct vertex, next);
@@ -94,11 +98,13 @@ static struct edge * add_edge(struct vertex * vertex,
 {
         struct edge * edge;
 
+        assert(vertex);
+        assert(nb);
+
         edge = malloc(sizeof(*edge));
         if (edge == NULL)
                 return NULL;
 
-        list_head_init(&edge->next);
         edge->nb = nb;
         edge->announced = 0;
 
@@ -109,8 +115,10 @@ static struct edge * add_edge(struct vertex * vertex,
 
 static void del_edge(struct edge * edge)
 {
-       list_del(&edge->next);
-       free(edge);
+        assert(edge);
+
+        list_del(&edge->next);
+        free(edge);
 }
 
 static struct vertex * add_vertex(struct graph * graph,
@@ -120,11 +128,12 @@ static struct vertex * add_vertex(struct graph * graph,
         struct list_head * p;
         int                i = 0;
 
+        assert(graph);
+
         vertex = malloc(sizeof(*vertex));
         if (vertex == NULL)
                 return NULL;
 
-        list_head_init(&vertex->next);
         list_head_init(&vertex->edges);
         vertex->addr = addr;
 
@@ -152,11 +161,14 @@ static struct vertex * add_vertex(struct graph * graph,
         return vertex;
 }
 
-static void del_vertex(struct graph * graph,
+static void del_vertex(struct graph *  graph,
                        struct vertex * vertex)
 {
-        struct list_head * p = NULL;
-        struct list_head * n = NULL;
+        struct list_head * p;
+        struct list_head * h;
+
+        assert(graph);
+        assert(vertex);
 
         list_del(&vertex->next);
 
@@ -167,7 +179,7 @@ static void del_vertex(struct graph * graph,
                         v->index--;
         }
 
-        list_for_each_safe(p, n, &vertex->edges) {
+        list_for_each_safe(p, h, &vertex->edges) {
                 struct edge * e = list_entry(p, struct edge, next);
                 del_edge(e);
         }
@@ -359,7 +371,12 @@ static int get_min_vertex(struct graph *   graph,
         int                min = INT_MAX;
         int                index = -1;
         int                i = 0;
-        struct list_head * p = NULL;
+        struct list_head * p;
+
+        assert(v);
+        assert(graph);
+        assert(dist);
+        assert(used);
 
         *v = NULL;
 
@@ -390,6 +407,10 @@ static int dijkstra(struct graph *    graph,
         struct vertex *    v = NULL;
         struct edge *      e = NULL;
         int                alt;
+
+        assert(graph);
+        assert(nhops);
+        assert(dist);
 
         *nhops = malloc(sizeof(**nhops) * graph->nr_vertices);
         if (*nhops == NULL)
@@ -460,6 +481,8 @@ static void free_routing_table(struct list_head * table)
         struct list_head * q;
         struct list_head * i;
 
+        assert(table);
+
         list_for_each_safe(p, h, table) {
                 struct routing_table * t =
                         list_entry(p, struct routing_table, next);
@@ -497,6 +520,10 @@ static int graph_routing_table_simple(struct graph *     graph,
         struct vertex *        v;
         struct routing_table * t;
         struct nhop *          n;
+
+        assert(graph);
+        assert(table);
+        assert(dist);
 
         /* We need at least 2 vertices for a table */
         if (graph->nr_vertices < 2)
@@ -555,8 +582,10 @@ static int add_lfa_to_table(struct list_head * table,
                             uint64_t           addr,
                             uint64_t           lfa)
 {
-        struct list_head * p = NULL;
+        struct list_head * p;
         struct nhop *      n;
+
+        assert(table);
 
         n = malloc(sizeof(*n));
         if (n == NULL)
