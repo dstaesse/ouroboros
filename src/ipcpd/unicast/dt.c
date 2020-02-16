@@ -628,7 +628,7 @@ int dt_init(enum pol_routing pr,
         int              i;
         int              j;
         char             dtstr[256];
-        enum pol_pff     pp;
+        int              pp;
         struct conn_info info;
 
         memset(&info, 0, sizeof(info));
