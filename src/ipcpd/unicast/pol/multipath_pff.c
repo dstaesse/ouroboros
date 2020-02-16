@@ -132,7 +132,7 @@ int multipath_pff_update(struct pff_i * pff_i,
         assert(len > 0);
 
         tmp = malloc(sizeof(*tmp));
-        if (fds == NULL)
+        if (tmp == NULL)
                 return -ENOMEM;
 
         memcpy(tmp,fds, len * sizeof(*tmp));
@@ -142,7 +142,7 @@ int multipath_pff_update(struct pff_i * pff_i,
                 return -1;
         }
 
-        if (pft_insert(pff_i->pft, addr, fds, 1)) {
+        if (pft_insert(pff_i->pft, addr, tmp, 1)) {
                 free(tmp);
                 return -1;
         }

@@ -734,14 +734,14 @@ static int graph_routing_table_ecmp(struct graph *     graph,
 
         src_v = find_vertex_by_addr(graph, s_addr);
         if (src_v == NULL)
-                goto fail_dijkstra;
+                goto fail_src_v;
 
         list_for_each(p, &src_v->edges) {
                 int * tmp_dist;
 
                 e = list_entry(p, struct edge, next);
                 if (dijkstra(graph, e->nb->addr, &nhops, &tmp_dist))
-                        goto fail_dijkstra;
+                        goto fail_src_v;
 
                 free(nhops);
 
@@ -751,7 +751,7 @@ static int graph_routing_table_ecmp(struct graph *     graph,
                                 n = malloc(sizeof(*n));
                                 if (n == NULL) {
                                         free(tmp_dist);
-                                        goto fail_dijkstra;
+                                        goto fail_src_v;
                                 }
                                 n->nhop = e->nb->addr;
                                 list_add_tail(&n->next, &forwarding[v->index]);
@@ -796,9 +796,10 @@ static int graph_routing_table_ecmp(struct graph *     graph,
 
  fail_t:
         free_routing_table(table);
+ fail_src_v:
+        free(*dist);
  fail_dijkstra:
         free(forwarding);
-        free(*dist);
  fail_vertices:
         *dist = NULL;
         return -1;
