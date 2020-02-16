@@ -1036,8 +1036,8 @@ static void * eth_ipcp_packet_writer(void * o)
                 fevent(eth_data.np1_flows, fq, NULL);
                 while ((fd = fqueue_next(fq)) >= 0) {
                         if (fqueue_type(fq) != FLOW_PKT)
-                                continue
-;
+                                continue;
+
                         if (ipcp_flow_read(fd, &sdb)) {
                                 log_dbg("Bad read from fd %d.", fd);
                                 continue;
