@@ -620,7 +620,7 @@ static int graph_routing_table_lfa(struct graph *     graph,
         struct vertex *    v;
         struct edge *      e;
         struct vertex **   nhops;
-        int                i;
+        int                i = 0;
         int                j;
         int                k;
 
