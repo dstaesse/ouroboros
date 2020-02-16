@@ -27,12 +27,12 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 
+#include "pft.h"
+#include "alternate_pff.h"
+
 #include <string.h>
 #include <assert.h>
 #include <pthread.h>
-
-#include "pft.h"
-#include "alternate_pff.h"
 
 struct nhop {
         struct list_head next;
@@ -336,7 +336,7 @@ int alternate_flow_state_change(struct pff_i * pff_i,
                                 int            fd,
                                 bool           up)
 {
-        struct list_head * pos = NULL;
+        struct list_head * p;
         size_t             len;
         int *              fds;
         size_t             i;
@@ -358,8 +358,8 @@ int alternate_flow_state_change(struct pff_i * pff_i,
                 }
         }
 
-        list_for_each(pos, &pff_i->addrs) {
-                struct addr * e = list_entry(pos, struct addr, next);
+        list_for_each(p, &pff_i->addrs) {
+                struct addr * e = list_entry(p, struct addr, next);
                 if (pft_lookup(pff_i->pft, e->addr, &fds, &len)) {
                         pthread_rwlock_unlock(&pff_i->lock);
                         return -1;

@@ -45,11 +45,12 @@ set(SOURCE_FILES
   psched.c
   # Add policies last
   pol/pft.c
-  pol/alternate_pff.c
   pol/flat.c
   pol/link_state.c
   pol/graph.c
   pol/simple_pff.c
+  pol/alternate_pff.c
+  pol/multipath_pff.c
   )
 
 add_executable(ipcpd-unicast ${SOURCE_FILES} ${IPCP_SOURCES}

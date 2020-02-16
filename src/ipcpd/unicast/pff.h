@@ -31,7 +31,8 @@
 
 enum pol_pff {
         PFF_SIMPLE = 0,
-        PFF_ALTERNATE
+        PFF_ALTERNATE,
+        PFF_MULTIPATH
 };
 
 struct pff * pff_create(enum pol_pff pol);

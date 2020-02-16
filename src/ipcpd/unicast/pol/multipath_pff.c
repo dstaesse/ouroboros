@@ -1,10 +1,11 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2020
  *
- * Simple PDU Forwarding Function
+ * Policy for PFF supporting multipath routing
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *    Nick Aerts        <nick.aerts@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -27,8 +28,9 @@
 #include <ouroboros/errno.h>
 
 #include "pft.h"
-#include "simple_pff.h"
+#include "multipath_pff.h"
 
+#include <string.h>
 #include <assert.h>
 #include <pthread.h>
 
@@ -37,20 +39,20 @@ struct pff_i {
         pthread_rwlock_t lock;
 };
 
-struct pol_pff_ops simple_pff_ops = {
-        .create            = simple_pff_create,
-        .destroy           = simple_pff_destroy,
-        .lock              = simple_pff_lock,
-        .unlock            = simple_pff_unlock,
-        .add               = simple_pff_add,
-        .update            = simple_pff_update,
-        .del               = simple_pff_del,
-        .flush             = simple_pff_flush,
-        .nhop              = simple_pff_nhop,
+struct pol_pff_ops multipath_pff_ops = {
+        .create            = multipath_pff_create,
+        .destroy           = multipath_pff_destroy,
+        .lock              = multipath_pff_lock,
+        .unlock            = multipath_pff_unlock,
+        .add               = multipath_pff_add,
+        .update            = multipath_pff_update,
+        .del               = multipath_pff_del,
+        .flush             = multipath_pff_flush,
+        .nhop              = multipath_pff_nhop,
         .flow_state_change = NULL
 };
 
-struct pff_i * simple_pff_create(void)
+struct pff_i * multipath_pff_create(void)
 {
         struct pff_i * tmp;
 
@@ -73,7 +75,7 @@ struct pff_i * simple_pff_create(void)
         return tmp;
 }
 
-void simple_pff_destroy(struct pff_i * pff_i)
+void multipath_pff_destroy(struct pff_i * pff_i)
 {
         assert(pff_i);
 
@@ -83,77 +85,73 @@ void simple_pff_destroy(struct pff_i * pff_i)
         free(pff_i);
 }
 
-void simple_pff_lock(struct pff_i * pff_i)
+void multipath_pff_lock(struct pff_i * pff_i)
 {
         pthread_rwlock_wrlock(&pff_i->lock);
 }
 
-void simple_pff_unlock(struct pff_i * pff_i)
+void multipath_pff_unlock(struct pff_i * pff_i)
 {
         pthread_rwlock_unlock(&pff_i->lock);
 }
 
-int simple_pff_add(struct pff_i * pff_i,
-                   uint64_t       addr,
-                   int *          fd,
-                   size_t         len)
-{
-        int * fds;
-
-        assert(pff_i);
-        assert(fd);
-        assert(len > 0);
-
-        (void) len;
-
-        fds = malloc(sizeof(*fds));
-        if (fds == NULL)
-                return -ENOMEM;
-
-        *fds = *fd;
-
-        if (pft_insert(pff_i->pft, addr, fds, 1)) {
-                free(fds);
-                return -1;
-        }
-
-        return 0;
-}
-
-int simple_pff_update(struct pff_i * pff_i,
+int multipath_pff_add(struct pff_i * pff_i,
                       uint64_t       addr,
-                      int *          fd,
+                      int *          fds,
                       size_t         len)
 {
-        int * fds;
+        int * tmp;
 
         assert(pff_i);
-        assert(fd);
+        assert(fds);
         assert(len > 0);
 
-        (void) len;
-
-        fds = malloc(sizeof(*fds));
-        if (fds == NULL)
+        tmp = malloc(len * sizeof(*tmp));
+        if (tmp == NULL)
                 return -ENOMEM;
 
-        *fds = *fd;
+        memcpy(tmp,fds, len * sizeof(*tmp));
 
-        if (pft_delete(pff_i->pft, addr)) {
-                free(fds);
-                return -1;
-        }
-
-        if (pft_insert(pff_i->pft, addr, fds, 1)) {
-                free(fds);
+        if (pft_insert(pff_i->pft, addr, tmp, len)) {
+                free(tmp);
                 return -1;
         }
 
         return 0;
 }
 
-int simple_pff_del(struct pff_i * pff_i,
-                   uint64_t       addr)
+int multipath_pff_update(struct pff_i * pff_i,
+                         uint64_t       addr,
+                         int *          fds,
+                         size_t         len)
+{
+        int * tmp;
+
+        assert(pff_i);
+        assert(fds);
+        assert(len > 0);
+
+        tmp = malloc(sizeof(*tmp));
+        if (fds == NULL)
+                return -ENOMEM;
+
+        memcpy(tmp,fds, len * sizeof(*tmp));
+
+        if (pft_delete(pff_i->pft, addr)) {
+                free(tmp);
+                return -1;
+        }
+
+        if (pft_insert(pff_i->pft, addr, fds, 1)) {
+                free(tmp);
+                return -1;
+        }
+
+        return 0;
+}
+
+int multipath_pff_del(struct pff_i * pff_i,
+                      uint64_t       addr)
 {
         assert(pff_i);
 
@@ -163,26 +161,36 @@ int simple_pff_del(struct pff_i * pff_i,
         return 0;
 }
 
-void simple_pff_flush(struct pff_i * pff_i)
+void multipath_pff_flush(struct pff_i * pff_i)
 {
         assert(pff_i);
 
         pft_flush(pff_i->pft);
 }
 
-int simple_pff_nhop(struct pff_i * pff_i,
-                    uint64_t       addr)
+int multipath_pff_nhop(struct pff_i * pff_i,
+                       uint64_t       addr)
 {
+        int    fd;
         int *  fds;
         size_t len;
-        int    fd = -1;
 
         assert(pff_i);
 
         pthread_rwlock_rdlock(&pff_i->lock);
 
-        if (pft_lookup(pff_i->pft, addr, &fds, &len) == 0)
-                fd = *fds;
+        if (pft_lookup(pff_i->pft, addr, &fds, &len)) {
+                pthread_rwlock_unlock(&pff_i->lock);
+                return -1;
+        }
+
+        fd = *fds;
+
+        assert(len > 0);
+
+        /* Rotate fds left. */
+        memcpy(fds, fds + 1, (len - 1) * sizeof(*fds));
+        fds[len - 1] = fd;
 
         pthread_rwlock_unlock(&pff_i->lock);
 

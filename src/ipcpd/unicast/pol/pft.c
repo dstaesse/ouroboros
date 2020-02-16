@@ -149,6 +149,7 @@ int pft_insert(struct pft * pft,
         struct list_head * p;
 
         assert(pft);
+        assert(len > 0);
 
         lookup_key = calc_key(pft, dst);
 

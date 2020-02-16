@@ -78,6 +78,7 @@
 #define FLAT_RANDOM_ADDR_AUTH  "flat"
 #define LINK_STATE_ROUTING     "link_state"
 #define LINK_STATE_LFA_ROUTING "lfa"
+#define LINK_STATE_ECM_ROUTING "ecmp"
 
 static void usage(void)
 {
@@ -98,7 +99,7 @@ static void usage(void)
                "                [autobind]\n"
                "where ADDRESS_POLICY = {"FLAT_RANDOM_ADDR_AUTH"}\n"
                "      ROUTING_POLICY = {"LINK_STATE_ROUTING " "
-               LINK_STATE_LFA_ROUTING "}\n"
+               LINK_STATE_LFA_ROUTING " " LINK_STATE_ECM_ROUTING "}\n"
                "      ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n"
                "if TYPE == " UDP "\n"
@@ -224,6 +225,9 @@ int do_bootstrap_ipcp(int     argc,
                         else if (strcmp(LINK_STATE_LFA_ROUTING,
                                         *(argv + 1)) == 0)
                                 routing_type = ROUTING_LINK_STATE_LFA;
+                        else if (strcmp(LINK_STATE_ECM_ROUTING,
+                                        *(argv + 1)) == 0)
+                                routing_type = ROUTING_LINK_STATE_ECMP;
                         else
                                 goto unknown_param;
                 } else {

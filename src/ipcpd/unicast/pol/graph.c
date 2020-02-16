@@ -5,6 +5,7 @@
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *    Nick Aerts        <nick.aerts@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -697,6 +698,112 @@ static int graph_routing_table_lfa(struct graph *     graph,
         return -1;
 }
 
+static int graph_routing_table_ecmp(struct graph *     graph,
+                                    uint64_t           s_addr,
+                                    struct list_head * table,
+                                    int **             dist)
+{
+        struct vertex **       nhops;
+        struct list_head *     p;
+        struct list_head *     h;
+        size_t                 i;
+        struct vertex *        v;
+        struct vertex *        src_v;
+        struct edge *          e;
+        struct routing_table * t;
+        struct nhop *          n;
+        struct list_head *     forwarding;
+
+        assert(graph);
+        assert(dist);
+
+        if (graph-> nr_vertices < 2)
+                goto fail_vertices;
+
+        forwarding = malloc(sizeof(*forwarding) * graph->nr_vertices);
+        if (forwarding == NULL)
+                goto fail_vertices;
+
+        for (i = 0; i < graph->nr_vertices; ++i)
+                list_head_init(&forwarding[i]);
+
+        if (dijkstra(graph, s_addr, &nhops, dist))
+                goto fail_dijkstra;
+
+        free(nhops);
+
+        src_v = find_vertex_by_addr(graph, s_addr);
+        if (src_v == NULL)
+                goto fail_dijkstra;
+
+        list_for_each(p, &src_v->edges) {
+                int * tmp_dist;
+
+                e = list_entry(p, struct edge, next);
+                if (dijkstra(graph, e->nb->addr, &nhops, &tmp_dist))
+                        goto fail_dijkstra;
+
+                free(nhops);
+
+                list_for_each(h, &graph->vertices) {
+                        v = list_entry(h, struct vertex, next);
+                        if (tmp_dist[v->index] + 1 == (*dist)[v->index]) {
+                                n = malloc(sizeof(*n));
+                                if (n == NULL) {
+                                        free(tmp_dist);
+                                        goto fail_dijkstra;
+                                }
+                                n->nhop = e->nb->addr;
+                                list_add_tail(&n->next, &forwarding[v->index]);
+                        }
+                }
+
+                free(tmp_dist);
+        }
+
+        list_head_init(table);
+        i = 0;
+        list_for_each(p, &graph->vertices) {
+                v = list_entry(p, struct vertex, next);
+                if (v->addr == s_addr) {
+                        ++i;
+                        continue;
+                }
+
+                t = malloc(sizeof(*t));
+                if (t == NULL)
+                        goto fail_t;
+
+                t->dst = v->addr;
+
+                list_head_init(&t->nhops);
+                if (&forwarding[i] != forwarding[i].nxt) {
+                        t->nhops.nxt = forwarding[i].nxt;
+                        t->nhops.prv = forwarding[i].prv;
+                        forwarding[i].prv->nxt = &t->nhops;
+                        forwarding[i].nxt->prv = &t->nhops;
+                }
+
+                list_add(&t->next, table);
+                ++i;
+        }
+
+        free(*dist);
+        *dist = NULL;
+        free(forwarding);
+
+        return 0;
+
+ fail_t:
+        free_routing_table(table);
+ fail_dijkstra:
+        free(forwarding);
+        free(*dist);
+ fail_vertices:
+        *dist = NULL;
+        return -1;
+}
+
 int graph_routing_table(struct graph *     graph,
                         enum routing_algo  algo,
                         uint64_t           s_addr,
@@ -717,6 +824,11 @@ int graph_routing_table(struct graph *     graph,
                 break;
         case ROUTING_LFA:
                 if (graph_routing_table_lfa(graph, s_addr, table, &s_dist))
+                        goto fail_table;
+                break;
+
+        case ROUTING_ECMP:
+                if (graph_routing_table_ecmp(graph, s_addr, table, &s_dist))
                         goto fail_table;
                 break;
         default:

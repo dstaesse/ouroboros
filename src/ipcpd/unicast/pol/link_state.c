@@ -934,6 +934,10 @@ int link_state_init(enum pol_routing pr)
                 log_dbg("Using Loop-Free Alternates policy.");
                 ls.routing_algo = ROUTING_LFA;
                 break;
+        case ROUTING_LINK_STATE_ECMP:
+                log_dbg("Using Equal-Cost Multipath policy.");
+                ls.routing_algo = ROUTING_ECMP;
+                break;
         default:
                 goto fail_graph;
         }
@@ -974,8 +978,8 @@ int link_state_init(enum pol_routing pr)
         if (rib_reg(LSDB, &r_ops))
                 goto fail_rib_reg;
 
-        ls.db_len      = 0;
-        ls.nbs_len     = 0;
+        ls.db_len  = 0;
+        ls.nbs_len = 0;
 
         return 0;
 

@@ -30,7 +30,8 @@
 
 enum routing_algo {
          ROUTING_SIMPLE = 0,
-         ROUTING_LFA
+         ROUTING_LFA,
+         ROUTING_ECMP
 };
 
 struct nhop {

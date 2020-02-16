@@ -28,6 +28,7 @@
 #include "pff.h"
 #include "pol-pff-ops.h"
 #include "pol/alternate_pff.h"
+#include "pol/multipath_pff.h"
 #include "pol/simple_pff.h"
 
 struct pff {
@@ -51,6 +52,10 @@ struct pff * pff_create(enum pol_pff pol)
         case PFF_SIMPLE:
                 log_dbg("Using simple PFF policy.");
                 pff->ops = &simple_pff_ops;
+                break;
+        case PFF_MULTIPATH:
+                log_dbg("Using multipath PFF policy.");
+                pff->ops = &multipath_pff_ops;
                 break;
         default:
                 goto err;

@@ -43,6 +43,10 @@ int routing_init(enum pol_routing pr)
                 pff_type = PFF_ALTERNATE;
                 r_ops = &link_state_ops;
                 break;
+        case ROUTING_LINK_STATE_ECMP:
+                pff_type=PFF_MULTIPATH;
+                r_ops = &link_state_ops;
+                break;
         default:
                 return -ENOTSUP;
         }
