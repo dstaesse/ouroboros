@@ -625,7 +625,7 @@ static int graph_routing_table_lfa(struct graph *     graph,
         int                j;
         int                k;
 
-        if (graph_routing_table_lfa(graph, s_addr, table, dist))
+        if (graph_routing_table_simple(graph, s_addr, table, dist))
                 goto fail_table;
 
         for (j = 0; j < PROG_MAX_FLOWS; j++) {
@@ -677,7 +677,7 @@ static int graph_routing_table_lfa(struct graph *     graph,
                                 continue;
 
                         if (n_dist[j][v->index] <
-                            *dist[n_index[j]] + *dist[v->index])
+                            (*dist)[n_index[j]] + (*dist)[v->index])
                                 if (add_lfa_to_table(table, v->addr,
                                                      addrs[j]))
                                         goto fail_add_lfa;
