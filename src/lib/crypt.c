@@ -27,9 +27,9 @@
 #include <openssl/ec.h>
 #include <openssl/pem.h>
 
-#define MSGBUFSZ 2048
+#include <openssl/bio.h>
+
 #define IVSZ     16
-#define DH_TIMEO 2 /* seconds */
 /* SYMMKEYSZ defined in dev.c */
 
 /*
@@ -90,7 +90,7 @@ static int __openssl_ecdh_derive_secret(EVP_PKEY * kp,
         return -ECRYPT;
 }
 
-static int __openssl_ecdh_gen_key(EVP_PKEY ** kp)
+static int __openssl_ecdh_gen_key(void ** kp)
 {
         EVP_PKEY_CTX * ctx    = NULL;
         EVP_PKEY_CTX * kctx   = NULL;
@@ -121,7 +121,7 @@ static int __openssl_ecdh_gen_key(EVP_PKEY ** kp)
         if (ret != 1)
                 goto fail_keygen;
 
-        ret = EVP_PKEY_keygen(kctx, kp);
+        ret = EVP_PKEY_keygen(kctx, (EVP_PKEY **) kp);
         if (ret != 1)
                 goto fail_keygen;
 
@@ -141,114 +141,57 @@ static int __openssl_ecdh_gen_key(EVP_PKEY ** kp)
         return -ECRYPT;
 }
 
-/* ECDH from the server side. */
-static int openssl_ecdh_srv(int       fd,
-                            uint8_t * s)
+static ssize_t openssl_ecdh_pkp_create(void **   pkp,
+                                       uint8_t * pk)
 {
-        EVP_PKEY *      kp    = NULL;
-        EVP_PKEY *      pub   = NULL;
-        uint8_t         buf[MSGBUFSZ];
-        ssize_t         len;
-        int             buf_sz;
         uint8_t *       pos;
-        struct timespec timeo = {DH_TIMEO,0};
+        ssize_t         len;
 
-        assert(s != NULL);
+        assert(pkp != NULL);
+        assert(*pkp == NULL);
+        assert(pk != NULL);
 
-        (void) fd;
-        (void) s;
+        if (__openssl_ecdh_gen_key(pkp) < 0)
+                return -ECRYPT;
 
-        if (__openssl_ecdh_gen_key(&kp) < 0)
-                goto fail_gen_key;
+        assert(*pkp != NULL);
 
-        fccntl(fd, FLOWSRCVTIMEO, &timeo);
-
-        len = flow_read(fd, buf, MSGBUFSZ);
+        pos = pk; /* i2d_PUBKEY increments the pointer, don't use buf! */
+        len = i2d_PUBKEY(*pkp, &pos);
         if (len < 0) {
-                fccntl(fd, FLOWSRCVTIMEO, NULL);
-                goto fail_get_key;
+                EVP_PKEY_free(*pkp);
+                return -ECRYPT;
         }
 
-        fccntl(fd, FLOWSRCVTIMEO, NULL);
-
-        pos = buf; /* i2d_PUBKEY increments the pointer, don't use buf! */
-        pub = d2i_PUBKEY(NULL, (const uint8_t **) &pos, (long) len);
-
-        pos = buf; /* i2d_PUBKEY increments the pointer, don't use buf! */
-        buf_sz = i2d_PUBKEY(kp, &pos);
-        if (buf_sz < 0)
-                goto fail_get_key;
-
-        if (flow_write(fd, buf, (size_t) buf_sz) < 0)
-                goto fail_get_key;
-
-        if (__openssl_ecdh_derive_secret(kp, pub, s) < 0)
-                goto fail_get_key;
-
-        EVP_PKEY_free(kp);
-        EVP_PKEY_free(pub);
-
-        return 0;
-
- fail_get_key:
-        EVP_PKEY_free(kp);
- fail_gen_key:
-        return -ECRYPT;
+        return len;
 }
 
-/* ECDH from the client side. */
-static int openssl_ecdh_clt(int       fd,
-                            uint8_t * s)
+static void openssl_ecdh_pkp_destroy(void * pkp)
 {
-        EVP_PKEY *      kp    = NULL;
-        EVP_PKEY *      pub   = NULL;
-        uint8_t         buf[MSGBUFSZ];
-        int             buf_sz;
-        uint8_t *       pos;
-        ssize_t         len;
-        struct timespec timeo = {DH_TIMEO,0};
+        EVP_PKEY_free((EVP_PKEY *) pkp);
+}
 
-        assert(s != NULL);
+static int openssl_ecdh_derive(void *    pkp,
+                               uint8_t * pk,
+                               size_t    len,
+                               uint8_t * s)
+{
+        uint8_t *  pos;
+        EVP_PKEY * pub;
 
-        (void) fd;
-        (void) s;
+        pos = pk; /* d2i_PUBKEY increments the pointer, don't use key ptr! */
+        pub = d2i_PUBKEY(NULL, (const uint8_t **) &pos, (long) len);
+        if (pub == NULL)
+                return -ECRYPT;
 
-        if (__openssl_ecdh_gen_key(&kp) < 0)
-                goto fail_gen_key;
-
-        pos = buf; /* i2d_PUBKEY increments the pointer, don't use buf! */
-        buf_sz = i2d_PUBKEY(kp, &pos);
-        if (buf_sz < 0)
-                goto fail_get_key;
-
-        if (flow_write(fd, buf, (size_t) buf_sz) < 0)
-                goto fail_get_key;
-
-        fccntl(fd, FLOWSRCVTIMEO, &timeo);
-
-        len = flow_read(fd, buf, MSGBUFSZ);
-        if (len < 0) {
-                fccntl(fd, FLOWSRCVTIMEO, NULL);
-                goto fail_get_key;
+        if (__openssl_ecdh_derive_secret(pkp, pub, s) < 0) {
+                EVP_PKEY_free(pub);
+                return -ECRYPT;
         }
 
-        fccntl(fd, FLOWSRCVTIMEO, NULL);
-
-        pos = buf; /* i2d_PUBKEY increments the pointer, don't use buf! */
-        pub = d2i_PUBKEY(NULL, (const uint8_t **) &pos, (long) len);
-
-        if (__openssl_ecdh_derive_secret(kp, pub, s) < 0)
-                goto fail_get_key;
-
-        EVP_PKEY_free(kp);
         EVP_PKEY_free(pub);
 
         return 0;
-
- fail_get_key:
-        EVP_PKEY_free(kp);
- fail_gen_key:
-        return -ECRYPT;
 }
 
 /*
@@ -394,51 +337,64 @@ static int openssl_decrypt(struct flow *        f,
 
 }
 
-static int openssl_crypt_init(struct flow * f)
+static int openssl_crypt_init(void ** ctx)
 {
-        f->ctx = EVP_CIPHER_CTX_new();
-        if (f->ctx == NULL)
-                goto fail_new;
+        *ctx = EVP_CIPHER_CTX_new();
+        if (*ctx == NULL)
+                return -ECRYPT;
 
         return 0;
-
- fail_new:
-        return -ECRYPT;
 }
 
-static void openssl_crypt_fini(struct flow * f)
+static void openssl_crypt_fini(void * ctx)
 {
-        EVP_CIPHER_CTX_free(f->ctx);
-        f->ctx = NULL;
+         EVP_CIPHER_CTX_free(ctx);
 }
 
 #endif /* HAVE_OPENSSL */
 
-static int crypt_dh_srv(int       fd,
-                        uint8_t * s)
+static int crypt_dh_pkp_create(void **   pkp,
+                               uint8_t * pk)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_ecdh_srv(fd, s);
+        assert(pkp != NULL);
+        *pkp = NULL;
+        return openssl_ecdh_pkp_create(pkp, pk);
 #else
-        (void) fd;
+        (void) pkp;
+        (void) pk;
 
-        memset(s, 0, SYMMKEYSZ);
+        memset(pk, 0, MSGBUFSZ);
 
         return -ECRYPT;
 #endif
 }
 
-static int crypt_dh_clt(int       fd,
-                        uint8_t * s)
+static void crypt_dh_pkp_destroy(void * pkp)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_ecdh_clt(fd, s);
+        openssl_ecdh_pkp_destroy(pkp);
 #else
-        (void) fd;
+        (void) pkp;
+        return 0;
+#endif
+}
+
+static int crypt_dh_derive(void *    pkp,
+                           uint8_t * pk,
+                           size_t    len,
+                           uint8_t * s)
+{
+#ifdef HAVE_OPENSSL
+        return openssl_ecdh_derive(pkp, pk, len, s);
+#else
+        (void) pkp;
+        (void) pk;
+        (void) len;
 
         memset(s, 0, SYMMKEYSZ);
 
-        return 0;
+        return -ECRYPT;
 #endif
 }
 
@@ -464,27 +420,28 @@ static int crypt_decrypt(struct flow *        f,
         (void) f;
         (void) sdb;
 
+        return -ECRYPT;
+#endif
+}
+
+static int crypt_init(void ** ctx)
+{
+#ifdef HAVE_OPENSSL
+        return openssl_crypt_init(ctx);
+#else
+        assert(ctx != NULL);
+        *ctx = NULL;
+
         return 0;
 #endif
 }
 
-
-static int crypt_init(struct flow * f)
+static void crypt_fini(void * ctx)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_crypt_init(f);
+        openssl_crypt_fini(ctx);
 #else
-        (void) f;
-
-        return 0;
-#endif
-}
-
-static void crypt_fini(struct flow * f)
-{
-#ifdef HAVE_OPENSSL
-        openssl_crypt_fini(f);
-#else
-        (void) f;
+        assert(ctx == NULL);
+        (void) ctx;
 #endif
 }

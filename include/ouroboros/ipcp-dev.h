@@ -30,10 +30,14 @@ int  ipcp_create_r(int result);
 
 int  ipcp_flow_req_arr(const uint8_t * dst,
                        size_t          len,
-                       qosspec_t       qs);
+                       qosspec_t       qs,
+                       const void *    data,
+                       size_t          dlen);
 
-int  ipcp_flow_alloc_reply(int fd,
-                           int response);
+int  ipcp_flow_alloc_reply(int          fd,
+                           int          response,
+                           const void * data,
+                           size_t       len);
 
 int  ipcp_flow_read(int                   fd,
                     struct shm_du_buff ** sdb);

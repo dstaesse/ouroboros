@@ -233,6 +233,8 @@ int main(int     argc,
                         client.qs = qos_voice;
                 else if (strcmp(qos, "data") == 0)
                         client.qs = qos_data;
+                else if (strcmp(qos, "raw_crypt") == 0)
+                        client.qs = qos_raw_crypt;
                 else
                         printf("Unknown QoS cube, defaulting to raw.\n");
         }

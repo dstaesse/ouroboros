@@ -120,7 +120,7 @@ static struct frcti * frcti_create(int fd)
         frcti->rttseq        = 0;
         frcti->probe         = false;
 
-        if (ai.flows[fd].spec.loss == 0) {
+        if (ai.flows[fd].qs.loss == 0) {
                 frcti->snd_cr.cflags |= FRCTFRTX;
                 frcti->rcv_cr.cflags |= FRCTFRTX;
         }

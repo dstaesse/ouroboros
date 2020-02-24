@@ -76,5 +76,6 @@ message irm_msg {
         optional uint32 timeo_sec     = 16;
         optional uint32 timeo_nsec    = 17;
         optional string comp          = 18;
-        optional sint32 result        = 19;
+        optional bytes pk             = 19; /* piggyback */
+        optional sint32 result        = 20;
 };

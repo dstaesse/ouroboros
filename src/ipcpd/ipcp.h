@@ -60,14 +60,18 @@ struct ipcp_ops {
 
         int   (* ipcp_flow_alloc)(int             fd,
                                   const uint8_t * dst,
-                                  qosspec_t       qs);
+                                  qosspec_t       qs,
+                                  const void *    data,
+                                  size_t          len);
 
         int   (* ipcp_flow_join)(int             fd,
                                  const uint8_t * dst,
                                  qosspec_t       qs);
 
-        int   (* ipcp_flow_alloc_resp)(int fd,
-                                       int response);
+        int   (* ipcp_flow_alloc_resp)(int          fd,
+                                       int          response,
+                                       const void * data,
+                                       size_t       len);
 
         int   (* ipcp_flow_dealloc)(int fd);
 };

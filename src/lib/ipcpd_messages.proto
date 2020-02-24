@@ -46,10 +46,11 @@ message ipcp_msg {
         optional int32 flow_id             =  3;
         optional string dst                =  4;
         optional qosspec_msg qosspec       =  5;
-        optional ipcp_config_msg conf      =  6;
-        optional int32 pid                 =  7;
-        optional layer_info_msg layer_info =  8;
-        optional int32 response            =  9;
-        optional string comp               = 10;
-        optional int32 result              = 11;
+        optional bytes pk                  =  6; /* piggyback */
+        optional ipcp_config_msg conf      =  7;
+        optional int32 pid                 =  8;
+        optional layer_info_msg layer_info =  9;
+        optional int32 response            = 10;
+        optional string comp               = 11;
+        optional int32 result              = 12;
 };

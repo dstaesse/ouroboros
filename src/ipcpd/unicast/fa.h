@@ -36,10 +36,14 @@ void fa_stop(void);
 
 int  fa_alloc(int             fd,
               const uint8_t * dst,
-              qosspec_t       qs);
+              qosspec_t       qs,
+              const void *    data,
+              size_t          len);
 
-int  fa_alloc_resp(int fd,
-                   int response);
+int  fa_alloc_resp(int          fd,
+                   int          response,
+                   const void * data,
+                   size_t       len);
 
 int  fa_dealloc(int fd);
 

@@ -408,6 +408,8 @@ static void * mainloop(void * o)
                         }
 
                         assert(msg->hash.len == ipcp_dir_hash_len());
+                        assert(msg->pk.len > 0 ? msg->pk.data != NULL
+                                               : msg->pk.data == NULL);
 
                         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                                 log_err("IPCP in wrong state.");
@@ -429,7 +431,9 @@ static void * mainloop(void * o)
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc(fd,
                                                            msg->hash.data,
-                                                           qs);
+                                                           qs,
+                                                           msg->pk.data,
+                                                           msg->pk.len);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_JOIN:
                         ret_msg.has_result = true;
@@ -488,9 +492,14 @@ static void * mainloop(void * o)
                                 }
                         }
 
+                        assert(msg->pk.len > 0 ? msg->pk.data != NULL
+                               : msg->pk.data == NULL);
+
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc_resp(fd,
-                                                                msg->response);
+                                                                msg->response,
+                                                                msg->pk.data,
+                                                                msg->pk.len);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                         ret_msg.has_result = true;
@@ -568,7 +577,7 @@ static int parse_args(int    argc,
         if (!(argc == 4 || argc == 3))
                 return -1;
 
-        /* argument 1: pid of irmd */
+        /* argument 1: pid of irm */
         if (atoi(argv[1]) == 0)
                 return -1;
 

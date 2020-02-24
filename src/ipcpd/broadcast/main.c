@@ -235,7 +235,7 @@ static int broadcast_ipcp_join(int             fd,
 
         notifier_event(NOTIFY_DT_CONN_ADD, &conn);
 
-        ipcp_flow_alloc_reply(fd, 0);
+        ipcp_flow_alloc_reply(fd, 0, NULL, 0);
 
         return 0;
 }

@@ -138,7 +138,7 @@
 #define ALLOC_TIMEO          10    /* ms */
 #define NAME_QUERY_TIMEO     2000  /* ms */
 #define MGMT_TIMEO           100   /* ms */
-#define MGMT_FRAME_SIZE      512
+#define MGMT_FRAME_SIZE      2048
 
 #define FLOW_REQ             0
 #define FLOW_REPLY           1
@@ -201,6 +201,7 @@ struct mgmt_frame {
         struct list_head next;
         uint8_t          r_addr[MAC_SIZE];
         uint8_t          buf[MGMT_FRAME_SIZE];
+        size_t           len;
 };
 
 struct {
@@ -458,7 +459,9 @@ static int eth_ipcp_alloc(const uint8_t * dst_addr,
                           uint8_t         ssap,
 #endif
                           const uint8_t * hash,
-                          qosspec_t       qs)
+                          qosspec_t       qs,
+                          const void *    data,
+                          size_t          dlen)
 {
         uint8_t *         buf;
         struct mgmt_msg * msg;
@@ -467,7 +470,7 @@ static int eth_ipcp_alloc(const uint8_t * dst_addr,
 
         len = sizeof(*msg) + ipcp_dir_hash_len();
 
-        buf = malloc(len + ETH_HEADER_TOT_SIZE);
+        buf = malloc(len + ETH_HEADER_TOT_SIZE + dlen);
         if (buf == NULL)
                 return -1;
 
@@ -489,6 +492,7 @@ static int eth_ipcp_alloc(const uint8_t * dst_addr,
         msg->cypher_s     = hton16(qs.cypher_s);
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
+        memcpy(buf + len + ETH_HEADER_TOT_SIZE, data, dlen);
 
         ret = eth_ipcp_send_frame(dst_addr,
 #if defined(BUILD_ETH_DIX)
@@ -497,26 +501,28 @@ static int eth_ipcp_alloc(const uint8_t * dst_addr,
                                   reverse_bits(MGMT_SAP),
                                   reverse_bits(MGMT_SAP),
 #endif
-                                  buf, len);
+                                  buf, len + dlen);
         free(buf);
 
         return ret;
 }
 
-static int eth_ipcp_alloc_resp(uint8_t * dst_addr,
+static int eth_ipcp_alloc_resp(uint8_t *    dst_addr,
 #if defined(BUILD_ETH_DIX)
-                               uint16_t  seid,
-                               uint16_t  deid,
+                               uint16_t     seid,
+                               uint16_t     deid,
 #elif defined(BUILD_ETH_LLC)
-                               uint8_t   ssap,
-                               uint8_t   dsap,
+                               uint8_t      ssap,
+                               uint8_t      dsap,
 #endif
-                               int       response)
+                               int          response,
+                               const void * data,
+                               size_t       len)
 {
         struct mgmt_msg * msg;
         uint8_t *         buf;
 
-        buf = malloc(sizeof(*msg) + ETH_HEADER_TOT_SIZE);
+        buf = malloc(sizeof(*msg) + ETH_HEADER_TOT_SIZE + len);
         if (buf == NULL)
                 return -1;
 
@@ -532,6 +538,8 @@ static int eth_ipcp_alloc_resp(uint8_t * dst_addr,
 #endif
         msg->response = response;
 
+        memcpy(msg + 1, data, len);
+
         if (eth_ipcp_send_frame(dst_addr,
 #if defined(BUILD_ETH_DIX)
                                 MGMT_EID,
@@ -539,7 +547,7 @@ static int eth_ipcp_alloc_resp(uint8_t * dst_addr,
                                 reverse_bits(MGMT_SAP),
                                 reverse_bits(MGMT_SAP),
 #endif
-                                buf, sizeof(*msg))) {
+                                buf, sizeof(*msg) + len)) {
                 free(buf);
                 return -1;
         }
@@ -556,7 +564,9 @@ static int eth_ipcp_req(uint8_t *       r_addr,
                         uint8_t         r_sap,
 #endif
                         const uint8_t * dst,
-                        qosspec_t       qs)
+                        qosspec_t       qs,
+                        const void *    data,
+                        size_t          len)
 {
         struct timespec ts = {0, ALLOC_TIMEO * MILLION};
         struct timespec abstime;
@@ -580,7 +590,7 @@ static int eth_ipcp_req(uint8_t *       r_addr,
         }
 
         /* reply to IRM, called under lock to prevent race */
-        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs);
+        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, data, len);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -607,19 +617,20 @@ static int eth_ipcp_req(uint8_t *       r_addr,
 #elif defined(BUILD_ETH_LLC)
         log_dbg("New flow request, fd %d, remote SAP %d.", fd, r_sap);
 #endif
-
         return 0;
 }
 
-static int eth_ipcp_alloc_reply(uint8_t * r_addr,
+static int eth_ipcp_alloc_reply(uint8_t *    r_addr,
 #if defined(BUILD_ETH_DIX)
-                                uint16_t  seid,
-                                uint16_t  deid,
+                                uint16_t     seid,
+                                uint16_t     deid,
 #elif defined(BUILD_ETH_LLC)
-                                uint8_t   ssap,
-                                int       dsap,
+                                uint8_t      ssap,
+                                int          dsap,
 #endif
-                                int       response)
+                                int          response,
+                                const void * data,
+                                size_t       len)
 {
         int ret = 0;
         int fd = -1;
@@ -657,7 +668,7 @@ static int eth_ipcp_alloc_reply(uint8_t * r_addr,
 #elif defined(BUILD_ETH_LLC)
         log_dbg("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
 #endif
-        if ((ret = ipcp_flow_alloc_reply(fd, response)) < 0)
+        if ((ret = ipcp_flow_alloc_reply(fd, response, data, len)) < 0)
                 return -1;
 
         return ret;
@@ -717,15 +728,21 @@ static int eth_ipcp_name_query_reply(const uint8_t * hash,
 }
 
 static int eth_ipcp_mgmt_frame(const uint8_t * buf,
+                               size_t          len,
                                uint8_t *       r_addr)
 {
         struct mgmt_msg * msg;
+        size_t            msg_len;
         qosspec_t         qs;
 
         msg = (struct mgmt_msg *) buf;
 
         switch (msg->code) {
         case FLOW_REQ:
+                msg_len = sizeof(*msg) + ipcp_dir_hash_len();
+
+                assert(len >= msg_len);
+
                 qs.delay = ntoh32(msg->delay);
                 qs.bandwidth = ntoh64(msg->bandwidth);
                 qs.availability = msg->availability;
@@ -744,10 +761,14 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                                      msg->ssap,
 #endif
                                      buf + sizeof(*msg),
-                                     qs);
+                                     qs,
+                                     buf + msg_len,
+                                     len - msg_len);
                 }
                 break;
         case FLOW_REPLY:
+                assert(len >= sizeof(*msg));
+
                 eth_ipcp_alloc_reply(r_addr,
 #if defined(BUILD_ETH_DIX)
                                      ntohs(msg->seid),
@@ -756,7 +777,9 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                                      msg->ssap,
                                      msg->dsap,
 #endif
-                                     msg->response);
+                                     msg->response,
+                                     buf + sizeof(*msg),
+                                     len - sizeof(*msg));
                 break;
         case NAME_QUERY_REQ:
                 eth_ipcp_name_query_req(buf + sizeof(*msg), r_addr);
@@ -814,7 +837,7 @@ static void * eth_ipcp_mgmt_handler(void * o)
                 list_del(&frame->next);
                 pthread_mutex_unlock(&eth_data.mgmt_lock);
 
-                eth_ipcp_mgmt_frame(frame->buf, frame->r_addr);
+                eth_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_addr);
                 free(frame);
         }
 
@@ -951,6 +974,7 @@ static void * eth_ipcp_packet_reader(void * o)
 
                         memcpy(frame->buf, &e_frame->payload, length);
                         memcpy(frame->r_addr, e_frame->src_hwaddr, MAC_SIZE);
+                        frame->len = length;
 
                         pthread_mutex_lock(&eth_data.mgmt_lock);
                         list_add(&frame->next, &eth_data.mgmt_frames);
@@ -1613,7 +1637,9 @@ static int eth_ipcp_query(const uint8_t * hash)
 
 static int eth_ipcp_flow_alloc(int             fd,
                                const uint8_t * hash,
-                               qosspec_t       qs)
+                               qosspec_t       qs,
+                               const void *    data,
+                               size_t          len)
 {
 #ifdef BUILD_ETH_LLC
         uint8_t  ssap = 0;
@@ -1652,7 +1678,10 @@ static int eth_ipcp_flow_alloc(int             fd,
 #elif defined(BUILD_ETH_LLC)
                            ssap,
 #endif
-                           hash, qs) < 0) {
+                           hash,
+                           qs,
+                           data,
+                           len) < 0) {
 #ifdef BUILD_ETH_LLC
                 pthread_rwlock_wrlock(&eth_data.flows_lock);
                 bmp_release(eth_data.saps, eth_data.fd_to_ef[fd].sap);
@@ -1672,8 +1701,10 @@ static int eth_ipcp_flow_alloc(int             fd,
         return 0;
 }
 
-static int eth_ipcp_flow_alloc_resp(int fd,
-                                    int response)
+static int eth_ipcp_flow_alloc_resp(int          fd,
+                                    int          response,
+                                    const void * data,
+                                    size_t       len)
 {
         struct timespec ts    = {0, ALLOC_TIMEO * MILLION};
         struct timespec abstime;
@@ -1730,7 +1761,9 @@ static int eth_ipcp_flow_alloc_resp(int fd,
 #elif defined(BUILD_ETH_LLC)
                                 ssap, r_sap,
 #endif
-                                response) < 0) {
+                                response,
+                                data,
+                                len) < 0) {
 #ifdef BUILD_ETH_LLC
                 pthread_rwlock_wrlock(&eth_data.flows_lock);
                 bmp_release(eth_data.saps, eth_data.fd_to_ef[fd].sap);

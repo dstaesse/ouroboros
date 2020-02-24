@@ -48,6 +48,8 @@ struct irm_flow {
         pid_t              n_1_pid;
 
         qosspec_t          qs;
+        void *             data;
+        size_t             len;
 
         struct shm_rbuff * n_rb;
         struct shm_rbuff * n_1_rb;

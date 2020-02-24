@@ -56,15 +56,16 @@
 #endif
 
 /* Partial read information. */
-#define NO_PART      -1
-#define DONE_PART    -2
+#define NO_PART   -1
+#define DONE_PART -2
 
 #define CRCLEN    (sizeof(uint32_t))
 #define SECMEMSZ  16384
-#define SYMMKEYSZ  32
+#define SYMMKEYSZ 32
+#define MSGBUFSZ  2048
 
 struct flow_set {
-        size_t   idx;
+        size_t idx;
 };
 
 struct fqueue {
@@ -98,7 +99,7 @@ struct flow {
         struct shm_flow_set * set;
         int                   flow_id;
         int                   oflags;
-        qosspec_t             spec;
+        qosspec_t             qs;
         ssize_t               part_idx;
 
         void *                ctx;
@@ -274,15 +275,16 @@ static void flow_fini(int fd)
         if (ai.flows[fd].frcti != NULL)
                 frcti_destroy(ai.flows[fd].frcti);
 
-        if (ai.flows[fd].spec.cypher_s > 0)
-                crypt_fini(&ai.flows[fd]);
+        if (ai.flows[fd].ctx != NULL)
+                crypt_fini(ai.flows[fd].ctx);
 
         flow_clear(fd);
 }
 
 static int flow_init(int       flow_id,
                      pid_t     pid,
-                     qosspec_t qs)
+                     qosspec_t qs,
+                     uint8_t * s)
 {
         int fd;
         int err = -ENOMEM;
@@ -311,10 +313,15 @@ static int flow_init(int       flow_id,
         ai.flows[fd].oflags   = FLOWFDEFAULT;
         ai.flows[fd].pid      = pid;
         ai.flows[fd].part_idx = NO_PART;
-        ai.flows[fd].spec     = qs;
+        ai.flows[fd].qs       = qs;
 
-        if (qs.cypher_s > 0 && crypt_init(&ai.flows[fd]) < 0)
-                goto fail_crypt;
+        if (qs.cypher_s > 0) {
+                assert(s != NULL);
+                if (crypt_init(&ai.flows[fd].ctx) < 0)
+                        goto fail_ctx;
+
+                memcpy(ai.flows[fd].key, s, SYMMKEYSZ);
+        }
 
         ai.ports[flow_id].fd = fd;
 
@@ -324,7 +331,7 @@ static int flow_init(int       flow_id,
 
         return fd;
 
- fail_crypt:
+ fail_ctx:
         shm_flow_set_close(ai.flows[fd].set);
  fail_set:
         shm_rbuff_close(ai.flows[fd].tx_rb);
@@ -521,6 +528,13 @@ int flow_accept(qosspec_t *             qs,
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
         int         fd;
+        void *      pkp;          /* public key pair     */
+        uint8_t     s[SYMMKEYSZ]; /* secret key for flow */
+        uint8_t     buf[MSGBUFSZ];
+        int         err = -EIRMD;
+        ssize_t     key_len;
+
+        memset(s, 0, SYMMKEYSZ);
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
@@ -533,29 +547,48 @@ int flow_accept(qosspec_t *             qs,
                 msg.timeo_nsec = timeo->tv_nsec;
         }
 
-        recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL)
-                return -EIRMD;
-
-        if (!recv_msg->has_result) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -EIRMD;
+        key_len = crypt_dh_pkp_create(&pkp, buf);
+        if (key_len < 0) {
+                err = -ECRYPT;
+                goto fail_crypt_pkp;
         }
 
+        msg.has_pk  = true;
+        msg.pk.data = buf;
+        msg.pk.len  = (uint32_t) key_len;
+
+        pthread_cleanup_push(crypt_dh_pkp_destroy, pkp);
+
+        recv_msg = send_recv_irm_msg(&msg);
+
+        pthread_cleanup_pop(false);
+
+        if (recv_msg == NULL)
+                goto fail_recv;
+
+        if (!recv_msg->has_result)
+                goto fail_result;
+
         if (recv_msg->result !=  0) {
-                int res = recv_msg->result;
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return res;
+                err = recv_msg->result;
+                goto fail_result;
         }
 
         if (!recv_msg->has_pid || !recv_msg->has_flow_id ||
-            recv_msg->qosspec == NULL) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -EIRMD;
+            recv_msg->qosspec == NULL)
+                goto fail_result;
+
+        if (recv_msg->pk.len != 0 &&
+            crypt_dh_derive(pkp, recv_msg->pk.data,
+                            recv_msg->pk.len, s) < 0) {
+                err = -ECRYPT;
+                goto fail_result;
         }
 
+        crypt_dh_pkp_destroy(pkp);
+
         fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       msg_to_spec(recv_msg->qosspec));
+                       msg_to_spec(recv_msg->qosspec), s);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -566,7 +599,7 @@ int flow_accept(qosspec_t *             qs,
 
         assert(ai.flows[fd].frcti == NULL);
 
-        if (ai.flows[fd].spec.in_order != 0) {
+        if (ai.flows[fd].qs.in_order != 0) {
                 ai.flows[fd].frcti = frcti_create(fd);
                 if (ai.flows[fd].frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
@@ -576,36 +609,18 @@ int flow_accept(qosspec_t *             qs,
         }
 
         if (qs != NULL)
-                *qs = ai.flows[fd].spec;
+                *qs = ai.flows[fd].qs;
 
         pthread_rwlock_unlock(&ai.lock);
 
-        /* TODO: piggyback public keys at flow allocation. */
-        if (ai.flows[fd].spec.cypher_s > 0) {
-                uint8_t  key[SYMMKEYSZ];
-                uint16_t tmp;
-
-                pthread_rwlock_wrlock(&ai.lock);
-
-                tmp = ai.flows[fd].spec.cypher_s;
-                ai.flows[fd].spec.cypher_s = 0;
-
-                pthread_rwlock_unlock(&ai.lock);
-
-                if (crypt_dh_srv(fd, key) < 0) {
-                        flow_dealloc(fd);
-                        return -ECRYPT;
-                }
-
-                pthread_rwlock_wrlock(&ai.lock);
-
-                ai.flows[fd].spec.cypher_s = tmp;
-                memcpy(ai.flows[fd].key, key, SYMMKEYSZ);
-
-                pthread_rwlock_unlock(&ai.lock);
-        }
-
         return fd;
+
+ fail_result:
+        irm_msg__free_unpacked(recv_msg, NULL);
+ fail_recv:
+        crypt_dh_pkp_destroy(pkp);
+ fail_crypt_pkp:
+        return err;
 }
 
 static int __flow_alloc(const char *            dst,
@@ -617,15 +632,19 @@ static int __flow_alloc(const char *            dst,
         qosspec_msg_t qs_msg = QOSSPEC_MSG__INIT;
         irm_msg_t *   recv_msg;
         int           fd;
+        void *        pkp = NULL;     /* public key pair     */
+        uint8_t       s[SYMMKEYSZ];   /* secret key for flow */
+        uint8_t       buf[MSGBUFSZ];
+        int           err = -EIRMD;
+
+        memset(s, 0, SYMMKEYSZ);
 
 #ifdef QOS_DISABLE_CRC
         if (qs != NULL)
                 qs->ber = 1;
 #endif
-        if (join)
-                msg.code = IRM_MSG_CODE__IRM_FLOW_JOIN;
-        else
-                msg.code = IRM_MSG_CODE__IRM_FLOW_ALLOC;
+        msg.code    = join ? IRM_MSG_CODE__IRM_FLOW_JOIN
+                           : IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst     = (char *) dst;
         msg.has_pid = true;
         msg.pid     = ai.pid;
@@ -639,28 +658,52 @@ static int __flow_alloc(const char *            dst,
                 msg.timeo_nsec = timeo->tv_nsec;
         }
 
+        if (!join && qs != NULL && qs->cypher_s != 0) {
+                ssize_t key_len;
+
+                key_len = crypt_dh_pkp_create(&pkp, buf);
+                if (key_len < 0) {
+                        err = -ECRYPT;
+                        goto fail_crypt_pkp;
+                }
+
+                msg.has_pk  = true;
+                msg.pk.data = buf;
+                msg.pk.len  = (uint32_t) key_len;
+        }
+
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
-                return -EIRMD;
+                goto fail_send;
 
-        if (!recv_msg->has_result) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -EIRMD;
-        }
+        if (!recv_msg->has_result)
+                goto fail_result;
 
         if (recv_msg->result != 0) {
-                int res = recv_msg->result;
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return res;
+                err = recv_msg->result;
+                goto fail_result;
         }
 
-        if (!recv_msg->has_pid || !recv_msg->has_flow_id) {
-                irm_msg__free_unpacked(recv_msg, NULL);
-                return -EIRMD;
+        if (!recv_msg->has_pid || !recv_msg->has_flow_id)
+                goto fail_result;
+
+        if (!join && qs != NULL && qs->cypher_s != 0) {
+                if (!recv_msg->has_pk || recv_msg->pk.len == 0) {
+                        err = -ECRYPT;
+                        goto fail_result;
+                }
+
+                if (crypt_dh_derive(pkp, recv_msg->pk.data,
+                                    recv_msg->pk.len, s) < 0) {
+                        err = -ECRYPT;
+                        goto fail_result;
+                }
+
+                crypt_dh_pkp_destroy(pkp);
         }
 
         fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       qs == NULL ? qos_raw : *qs);
+                       qs == NULL ? qos_raw : *qs, s);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -671,7 +714,7 @@ static int __flow_alloc(const char *            dst,
 
         assert(ai.flows[fd].frcti == NULL);
 
-        if (ai.flows[fd].spec.in_order != 0) {
+        if (ai.flows[fd].qs.in_order != 0) {
                 ai.flows[fd].frcti = frcti_create(fd);
                 if (ai.flows[fd].frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
@@ -682,32 +725,14 @@ static int __flow_alloc(const char *            dst,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        /* TODO: piggyback public keys at flow allocation. */
-        if (!join && ai.flows[fd].spec.cypher_s > 0) {
-                uint8_t  key[SYMMKEYSZ];
-                uint16_t tmp;
-
-                pthread_rwlock_wrlock(&ai.lock);
-
-                tmp = ai.flows[fd].spec.cypher_s;
-                ai.flows[fd].spec.cypher_s = 0;
-
-                pthread_rwlock_unlock(&ai.lock);
-
-                if (crypt_dh_clt(fd, key) < 0) {
-                        flow_dealloc(fd);
-                        return -ECRYPT;
-                }
-
-                pthread_rwlock_wrlock(&ai.lock);
-
-                ai.flows[fd].spec.cypher_s = tmp;
-                memcpy(ai.flows[fd].key, key, SYMMKEYSZ);
-
-                pthread_rwlock_unlock(&ai.lock);
-        }
-
         return fd;
+
+ fail_result:
+        irm_msg__free_unpacked(recv_msg, NULL);
+ fail_send:
+        crypt_dh_pkp_destroy(pkp);
+ fail_crypt_pkp:
+        return err;
 }
 
 int flow_alloc(const char *            dst,
@@ -721,6 +746,9 @@ int flow_join(const char *            dst,
               qosspec_t *             qs,
               const struct timespec * timeo)
 {
+        if (qs != NULL && qs->cypher_s != 0)
+                return -ECRYPT;
+
         return __flow_alloc(dst, qs, timeo, true);
 }
 
@@ -836,7 +864,7 @@ int fccntl(int fd,
                 qs = va_arg(l, qosspec_t *);
                 if (qs == NULL)
                         goto einval;
-                *qs = flow->spec;
+                *qs = flow->qs;
                 break;
         case FLOWGRXQLEN:
                 qlen  = va_arg(l, size_t *);
@@ -1001,7 +1029,7 @@ ssize_t flow_write(int          fd,
         }
 
         pthread_rwlock_wrlock(&ai.lock);
-        if (flow->spec.cypher_s > 0)
+        if (flow->qs.cypher_s > 0)
                 if (crypt_encrypt(flow, sdb) < 0) {
                         pthread_rwlock_unlock(&ai.lock);
                         shm_rdrbuff_remove(ai.rdrb, idx);
@@ -1009,7 +1037,7 @@ ssize_t flow_write(int          fd,
                 }
         pthread_rwlock_unlock(&ai.lock);
 
-        if (flow->spec.ber == 0 && add_crc(sdb) != 0) {
+        if (flow->qs.ber == 0 && add_crc(sdb) != 0) {
                 shm_rdrbuff_remove(ai.rdrb, idx);
                 return -ENOMEM;
         }
@@ -1089,13 +1117,13 @@ ssize_t flow_read(int    fd,
                                         return idx;
 
                                 sdb = shm_rdrbuff_get(ai.rdrb, idx);
-                                if (flow->spec.ber == 0 && chk_crc(sdb) != 0) {
+                                if (flow->qs.ber == 0 && chk_crc(sdb) != 0) {
                                         shm_rdrbuff_remove(ai.rdrb, idx);
                                         continue;
                                 }
 
                                 pthread_rwlock_wrlock(&ai.lock);
-                                if (flow->spec.cypher_s > 0)
+                                if (flow->qs.cypher_s > 0)
                                         if (crypt_decrypt(flow, sdb) < 0) {
                                                 pthread_rwlock_unlock(&ai.lock);
                                                 shm_rdrbuff_remove(ai.rdrb,
@@ -1333,7 +1361,8 @@ int np1_flow_alloc(pid_t     n_pid,
                    int       flow_id,
                    qosspec_t qs)
 {
-        return flow_init(flow_id, n_pid, qs);
+        qs.cypher_s = 0; /* No encryption ctx for np1 */
+        return flow_init(flow_id, n_pid, qs, NULL);
 }
 
 int np1_flow_dealloc(int flow_id)
@@ -1394,7 +1423,9 @@ int ipcp_create_r(int result)
 
 int ipcp_flow_req_arr(const uint8_t * dst,
                       size_t          len,
-                      qosspec_t       qs)
+                      qosspec_t       qs,
+                      const void *    data,
+                      size_t          dlen)
 {
         irm_msg_t     msg = IRM_MSG__INIT;
         irm_msg_t *   recv_msg;
@@ -1411,6 +1442,9 @@ int ipcp_flow_req_arr(const uint8_t * dst,
         msg.hash.data = (uint8_t *) dst;
         qs_msg        = spec_to_msg(&qs);
         msg.qosspec   = &qs_msg;
+        msg.has_pk    = true;
+        msg.pk.data   = (uint8_t *) data;
+        msg.pk.len    = dlen;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -1426,15 +1460,18 @@ int ipcp_flow_req_arr(const uint8_t * dst,
                 return -1;
         }
 
-        fd = flow_init(recv_msg->flow_id, recv_msg->pid, qs);
+        qs.cypher_s = 0; /* No encryption ctx for np1 */
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid, qs, NULL);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
         return fd;
 }
 
-int ipcp_flow_alloc_reply(int fd,
-                          int response)
+int ipcp_flow_alloc_reply(int          fd,
+                          int          response,
+                          const void * data,
+                          size_t       len)
 {
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
@@ -1444,6 +1481,9 @@ int ipcp_flow_alloc_reply(int fd,
 
         msg.code         = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
         msg.has_flow_id  = true;
+        msg.has_pk       = true;
+        msg.pk.data      = (uint8_t *) data;
+        msg.pk.len       = (uint32_t) len;
 
         pthread_rwlock_rdlock(&ai.lock);
 
@@ -1503,7 +1543,7 @@ int ipcp_flow_read(int                   fd,
                 if (idx < 0)
                         return idx;
                 *sdb = shm_rdrbuff_get(ai.rdrb, idx);
-                if (flow->spec.ber == 0 && chk_crc(*sdb) != 0)
+                if (flow->qs.ber == 0 && chk_crc(*sdb) != 0)
                         continue;
         } while (frcti_rcv(flow->frcti, *sdb) != 0);
 
@@ -1543,7 +1583,7 @@ int ipcp_flow_write(int                  fd,
                 return -ENOMEM;
         }
 
-        if (flow->spec.ber == 0 && add_crc(sdb) != 0) {
+        if (flow->qs.ber == 0 && add_crc(sdb) != 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 shm_rdrbuff_remove(ai.rdrb, idx);
                 return -ENOMEM;
@@ -1613,7 +1653,7 @@ int ipcp_flow_get_qoscube(int         fd,
 
         assert(ai.flows[fd].flow_id >= 0);
 
-        *cube = qos_spec_to_cube(ai.flows[fd].spec);
+        *cube = qos_spec_to_cube(ai.flows[fd].qs);
 
         pthread_rwlock_unlock(&ai.lock);
 

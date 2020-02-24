@@ -51,6 +51,7 @@
 
 #define FLOW_REQ   0
 #define FLOW_REPLY 1
+#define MSGBUFSZ   2048
 
 struct fa_msg {
         uint64_t s_addr;
@@ -106,7 +107,7 @@ static void packet_handler(int                  fd,
 
 static void destroy_conn(int fd)
 {
-        fa.r_eid[fd]   = -1;
+        fa.r_eid[fd]  = -1;
         fa.r_addr[fd] = INVALID_ADDR;
 }
 
@@ -146,10 +147,12 @@ static void * fa_handle_packet(void * o)
         while (true) {
                 struct timespec abstime;
                 int             fd;
-                uint8_t *       buf;
+                uint8_t         buf[MSGBUFSZ];
                 struct fa_msg * msg;
                 qosspec_t       qs;
                 struct cmd *    cmd;
+                size_t          len;
+                size_t          msg_len;
 
                 pthread_mutex_lock(&fa.mtx);
 
@@ -164,10 +167,10 @@ static void * fa_handle_packet(void * o)
 
                 pthread_cleanup_pop(true);
 
-                buf = malloc(sizeof(*msg) + ipcp_dir_hash_len());
-                if (buf == NULL) {
-                        log_err("Failed to allocate memory.");
-                        ipcp_sdb_release(cmd->sdb);
+                len = shm_du_buff_tail(cmd->sdb) - shm_du_buff_head(cmd->sdb);
+
+                if (len > MSGBUFSZ) {
+                        log_err("Message over buffer size.");
                         free(cmd);
                         continue;
                 }
@@ -176,12 +179,7 @@ static void * fa_handle_packet(void * o)
 
                 /* Depending on the message call the function in ipcp-dev.h */
 
-                assert(sizeof(*msg) + ipcp_dir_hash_len() >=
-                       (unsigned long int) (shm_du_buff_tail(cmd->sdb) -
-                                            shm_du_buff_head(cmd->sdb)));
-
-                memcpy(msg, shm_du_buff_head(cmd->sdb),
-                       shm_du_buff_tail(cmd->sdb) - shm_du_buff_head(cmd->sdb));
+                memcpy(msg, shm_du_buff_head(cmd->sdb), len);
 
                 ipcp_sdb_release(cmd->sdb);
 
@@ -189,6 +187,10 @@ static void * fa_handle_packet(void * o)
 
                 switch (msg->code) {
                 case FLOW_REQ:
+                        msg_len = sizeof(*msg) + ipcp_dir_hash_len();
+
+                        assert(len >= msg_len);
+
                         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
                         pthread_mutex_lock(&ipcpi.alloc_lock);
@@ -205,7 +207,6 @@ static void * fa_handle_packet(void * o)
                                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                                 log_dbg("Won't allocate over non-operational"
                                         "IPCP.");
-                                free(msg);
                                 continue;
                         }
 
@@ -222,11 +223,12 @@ static void * fa_handle_packet(void * o)
 
                         fd = ipcp_flow_req_arr((uint8_t *) (msg + 1),
                                                ipcp_dir_hash_len(),
-                                               qs);
+                                               qs,
+                                               buf + msg_len,
+                                               len - msg_len);
                         if (fd < 0) {
                                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                                 log_err("Failed to get fd for flow.");
-                                free(msg);
                                 continue;
                         }
 
@@ -244,12 +246,16 @@ static void * fa_handle_packet(void * o)
 
                         break;
                 case FLOW_REPLY:
+                        assert(len >= sizeof(*msg));
+
                         pthread_rwlock_wrlock(&fa.flows_lock);
 
                         fa.r_eid[ntoh32(msg->r_eid)] = ntoh32(msg->s_eid);
 
                         ipcp_flow_alloc_reply(ntoh32(msg->r_eid),
-                                              msg->response);
+                                              msg->response,
+                                              buf + sizeof(*msg),
+                                              len - sizeof(*msg));
 
                         if (msg->response < 0)
                                 destroy_conn(ntoh32(msg->r_eid));
@@ -263,8 +269,6 @@ static void * fa_handle_packet(void * o)
                         log_err("Got an unknown flow allocation message.");
                         break;
                 }
-
-                free(msg);
         }
 }
 
@@ -363,18 +367,23 @@ void fa_stop(void)
 
 int fa_alloc(int             fd,
              const uint8_t * dst,
-             qosspec_t       qs)
+             qosspec_t       qs,
+             const void *    data,
+             size_t          dlen)
 {
         struct fa_msg *      msg;
         uint64_t             addr;
         struct shm_du_buff * sdb;
         qoscube_t            qc;
+        size_t               len;
 
         addr = dir_query(dst);
         if (addr == 0)
                 return -1;
 
-        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len()))
+        len = sizeof(*msg) + ipcp_dir_hash_len();
+
+        if (ipcp_sdb_reserve(&sdb, len + dlen))
                 return -1;
 
         msg               = (struct fa_msg *) shm_du_buff_head(sdb);
@@ -391,6 +400,7 @@ int fa_alloc(int             fd,
         msg->cypher_s     = hton16(qs.cypher_s);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
+        memcpy(shm_du_buff_head(sdb) + len, data, dlen);
 
         qc = qos_spec_to_cube(qs);
 
@@ -409,8 +419,10 @@ int fa_alloc(int             fd,
         return 0;
 }
 
-int fa_alloc_resp(int fd,
-                  int response)
+int fa_alloc_resp(int          fd,
+                  int          response,
+                  const void * data,
+                  size_t       len)
 {
         struct timespec      ts = {0, TIMEOUT * 1000};
         struct timespec      abstime;
@@ -439,7 +451,7 @@ int fa_alloc_resp(int fd,
 
         pthread_mutex_unlock(&ipcpi.alloc_lock);
 
-        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + ipcp_dir_hash_len())) {
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + len)) {
                 destroy_conn(fd);
                 return -1;
         }
@@ -451,6 +463,8 @@ int fa_alloc_resp(int fd,
         msg->r_eid    = hton32(fa.r_eid[fd]);
         msg->s_eid    = hton32(fd);
         msg->response = response;
+
+        memcpy(msg + 1, data, len);
 
         if (response < 0) {
                 destroy_conn(fd);
