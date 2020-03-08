@@ -646,7 +646,7 @@ static void * lsupdate(void * o)
         while (true) {
                 clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
-                pthread_rwlock_rdlock(&ls.db_lock);
+                pthread_rwlock_wrlock(&ls.db_lock);
 
                 pthread_cleanup_push((void (*) (void *)) pthread_rwlock_unlock,
                                      (void *) &ls.db_lock);
@@ -1015,13 +1015,14 @@ void link_state_fini(void)
 
         rib_unreg(LSDB);
 
+        notifier_unreg(handle_event);
+
         pthread_cancel(ls.listener);
-        pthread_join(ls.listener, NULL);
-
         pthread_cancel(ls.lsreader);
-        pthread_join(ls.lsreader, NULL);
-
         pthread_cancel(ls.lsupdate);
+
+        pthread_join(ls.listener, NULL);
+        pthread_join(ls.lsreader, NULL);
         pthread_join(ls.lsupdate, NULL);
 
         fset_destroy(ls.mgmt_set);
@@ -1043,6 +1044,4 @@ void link_state_fini(void)
         pthread_rwlock_destroy(&ls.db_lock);
 
         pthread_mutex_destroy(&ls.routing_i_lock);
-
-        notifier_unreg(handle_event);
 }
