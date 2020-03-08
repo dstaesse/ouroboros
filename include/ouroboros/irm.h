@@ -39,11 +39,22 @@
 #define NAME_SIZE 256
 #define LAYER_SIZE LAYER_NAME_SIZE
 
+/* Load balancing policy for incoming flows. */
+enum pol_balance {
+        LB_RR = 0,
+        LB_SPILL
+};
+
 struct ipcp_info {
         pid_t          pid;
         enum ipcp_type type;
         char           name[NAME_SIZE];
-        char           layer[LAYER_SIZE];;
+        char           layer[LAYER_SIZE];
+};
+
+struct name_info {
+        char             name[NAME_SIZE];
+        enum pol_balance pol_lb;
 };
 
 __BEGIN_DECLS
@@ -85,11 +96,18 @@ int     irm_bind_process(pid_t        pid,
 int     irm_unbind_process(pid_t        pid,
                            const char * name);
 
-int     irm_reg(pid_t        pid,
-                const char * name);
+int     irm_create_name(const char *     name,
+                        enum pol_balance pol);
 
-int     irm_unreg(pid_t        pid,
-                  const char * name);
+int     irm_destroy_name(const char * name);
+
+ssize_t irm_list_names(struct name_info ** names);
+
+int     irm_reg_name(const char * name,
+                     pid_t        pid);
+
+int     irm_unreg_name(const char * name,
+                       pid_t        pid);
 
 __END_DECLS
 

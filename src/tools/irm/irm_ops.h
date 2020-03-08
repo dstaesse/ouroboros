@@ -84,8 +84,20 @@ int do_unbind_process(int     argc,
 int do_unbind_ipcp(int     argc,
                    char ** argv);
 
-int do_register(int     argc,
+int name_cmd(int     argc,
+             char ** argv);
+
+int do_create_name(int     argc,
+                   char ** argv);
+
+int do_destroy_name(int     argc,
+                    char ** argv);
+
+int do_reg_name(int     argc,
                 char ** argv);
 
-int do_unregister(int     argc,
+int do_unreg_name(int     argc,
                   char ** argv);
+
+int do_list_name(int     argc,
+                 char ** argv);

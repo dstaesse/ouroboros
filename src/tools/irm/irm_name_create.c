@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2020
  *
- * A tool to instruct the IRM daemon
+ * Create IPC Processes
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -37,77 +37,60 @@
  */
 
 #include <ouroboros/irm.h>
-#include <ouroboros/errno.h>
+
+#include <stdio.h>
+#include <string.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#define RR    "round-robin"
+#define SPILL "spillover"
 
 static void usage(void)
 {
-        printf("Usage: irm [OPERATION]\n\n"
-               "where OPERATION = {ipcp bind unbind name}\n");
+        printf("Usage: irm name create\n"
+               "                <name>\n"
+               "                lb [LB_POLICY], default: %s\n\n"
+               "where LB_POLICY = {" RR " " SPILL "}\n", RR);
 }
 
-static int do_help(int    argc,
-                   char **argv)
+int do_create_name(int     argc,
+                   char ** argv)
 {
-        (void) argc;
-        (void) argv;
+        char * name             = NULL;
+        char * lb_pol           = RR;
+        enum pol_balance pol_lb = LB_RR;
 
-        usage();
-        return 0;
-}
+        name = *(argv++);
+        --argc;
 
-static const struct cmd {
-        const char * cmd;
-        int (* func)(int argc, char ** argv);
-} cmds[] = {
-        { "ipcp",       ipcp_cmd },
-        { "bind",       bind_cmd },
-        { "unbind",     unbind_cmd },
-        { "name",       name_cmd },
-        { "help",       do_help },
-        { NULL,         NULL }
-};
+        while (argc > 0) {
+                if (matches(*argv, "lb") == 0) {
+                        lb_pol = *(argv + 1);
+                } else {
+                        printf("\"%s\" is unknown, try \"irm "
+                               "name create\".\n", *argv);
+                        return -1;
+                }
 
-static int do_cmd(const char * argv0,
-                  int          argc,
-                  char **      argv)
-{
-        const struct cmd * c;
-
-        for (c = cmds; c->cmd; ++c) {
-                if (matches(argv0, c->cmd) == 0)
-                        return c->func(argc - 1, argv + 1);
+                argc -= 2;
+                argv += 2;
         }
 
-        fprintf(stderr, "\"%s\" is unknown, try \"irm help\".\n", argv0);
-
-        return -1;
-}
-
-int main(int     argc,
-         char ** argv)
-{
-        int ret = 0;
-
-        if (argc < 2) {
+        if (name == NULL) {
                 usage();
                 return -1;
         }
 
-        ret = do_cmd(argv[1], argc - 1, argv + 1);
+        if (strcmp(lb_pol, RR) == 0)
+                pol_lb = LB_RR;
+        else if (strcmp(lb_pol, SPILL) == 0)
+                pol_lb = LB_SPILL;
+        else {
+                usage();
+                return -1;
+        }
 
-        if (ret == -EIRMD)
-                printf("Failed to communicate with the "
-                       "Ouroboros IPC Resource Manager daemon.\n");
-
-        if (ret)
-                exit(EXIT_FAILURE);
-
-        exit(EXIT_SUCCESS);
+        return irm_create_name(name, pol_lb);
 }

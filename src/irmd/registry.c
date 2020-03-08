@@ -32,7 +32,6 @@
 
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/irm.h>
 #include <ouroboros/time_utils.h>
 
 #include "registry.h"
@@ -72,7 +71,8 @@ static int reg_entry_init(struct reg_entry * e,
         list_head_init(&e->reg_progs);
         list_head_init(&e->reg_pids);
 
-        e->name = name;
+        e->name   = name;
+        e->pol_lb = 0;
 
         if (pthread_condattr_init(&cattr))
                 goto fail_cattr;
@@ -286,7 +286,17 @@ int reg_entry_add_pid(struct reg_entry * e,
 
         i->pid = pid;
 
-        list_add(&i->next, &e->reg_pids);
+        /* load balancing policy assigns queue order for this process. */
+        switch(e->pol_lb) {
+        case LB_RR:    /* Round robin policy. */
+                list_add_tail(&i->next, &e->reg_pids);
+                break;
+        case LB_SPILL: /* Keep accepting flows on the current process */
+                list_add(&i->next, &e->reg_pids);
+                break;
+        default:
+                assert(false);
+        };
 
         if (e->state == REG_NAME_IDLE ||
             e->state == REG_NAME_AUTO_ACCEPT ||
@@ -299,6 +309,13 @@ int reg_entry_add_pid(struct reg_entry * e,
 
         return 0;
 }
+
+void reg_entry_set_policy(struct reg_entry * e,
+                          enum pol_balance   p)
+{
+        e->pol_lb = p;
+}
+
 
 static void reg_entry_check_state(struct reg_entry * e)
 {

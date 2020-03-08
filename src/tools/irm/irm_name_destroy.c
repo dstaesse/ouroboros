@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2020
  *
- * A tool to instruct the IRM daemon
+ * Create IPC Processes
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -37,77 +37,36 @@
  */
 
 #include <ouroboros/irm.h>
-#include <ouroboros/errno.h>
+
+#include <stdio.h>
+#include <string.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-
 static void usage(void)
 {
-        printf("Usage: irm [OPERATION]\n\n"
-               "where OPERATION = {ipcp bind unbind name}\n");
+        printf("Usage: irm name destroy <name>\n");
 }
 
-static int do_help(int    argc,
-                   char **argv)
+int do_destroy_name(int     argc,
+                    char ** argv)
 {
-        (void) argc;
-        (void) argv;
+        char * name             = NULL;
 
-        usage();
-        return 0;
-}
+        name = *(argv++);
+        --argc;
 
-static const struct cmd {
-        const char * cmd;
-        int (* func)(int argc, char ** argv);
-} cmds[] = {
-        { "ipcp",       ipcp_cmd },
-        { "bind",       bind_cmd },
-        { "unbind",     unbind_cmd },
-        { "name",       name_cmd },
-        { "help",       do_help },
-        { NULL,         NULL }
-};
-
-static int do_cmd(const char * argv0,
-                  int          argc,
-                  char **      argv)
-{
-        const struct cmd * c;
-
-        for (c = cmds; c->cmd; ++c) {
-                if (matches(argv0, c->cmd) == 0)
-                        return c->func(argc - 1, argv + 1);
+        if (argc > 0) {
+                printf("\"%s\" is unknown, try \"irm "
+                       "name destroy\".\n", *argv);
+                return -1;
         }
 
-        fprintf(stderr, "\"%s\" is unknown, try \"irm help\".\n", argv0);
-
-        return -1;
-}
-
-int main(int     argc,
-         char ** argv)
-{
-        int ret = 0;
-
-        if (argc < 2) {
+        if (name == NULL) {
                 usage();
                 return -1;
         }
 
-        ret = do_cmd(argv[1], argc - 1, argv + 1);
-
-        if (ret == -EIRMD)
-                printf("Failed to communicate with the "
-                       "Ouroboros IPC Resource Manager daemon.\n");
-
-        if (ret)
-                exit(EXIT_FAILURE);
-
-        exit(EXIT_SUCCESS);
+        return irm_destroy_name(name);
 }

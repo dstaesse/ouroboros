@@ -39,15 +39,18 @@ enum irm_msg_code {
         IRM_PROC_ANNOUNCE     = 11;
         IRM_BIND_PROCESS      = 12;
         IRM_UNBIND_PROCESS    = 13;
-        IRM_REG               = 14;
-        IRM_UNREG             = 15;
-        IRM_FLOW_ALLOC        = 16;
-        IRM_FLOW_ACCEPT       = 17;
-        IRM_FLOW_JOIN         = 18;
-        IRM_FLOW_DEALLOC      = 19;
-        IPCP_FLOW_REQ_ARR     = 20;
-        IPCP_FLOW_ALLOC_REPLY = 21;
-        IRM_REPLY             = 22;
+        IRM_CREATE_NAME       = 14;
+        IRM_DESTROY_NAME      = 15;
+        IRM_LIST_NAMES        = 16;
+        IRM_REG_NAME          = 17;
+        IRM_UNREG_NAME        = 18;
+        IRM_FLOW_ALLOC        = 19;
+        IRM_FLOW_ACCEPT       = 20;
+        IRM_FLOW_JOIN         = 21;
+        IRM_FLOW_DEALLOC      = 22;
+        IPCP_FLOW_REQ_ARR     = 23;
+        IPCP_FLOW_ALLOC_REPLY = 24;
+        IRM_REPLY             = 25;
 };
 
 message ipcp_info_msg {
@@ -55,6 +58,11 @@ message ipcp_info_msg {
         required uint32 type  = 2;
         required string name  = 3;
         required string layer = 4;
+};
+
+message name_info_msg {
+        required string name   = 1;
+        required uint32 pol_lb = 2;
 };
 
 message irm_msg {
@@ -73,9 +81,10 @@ message irm_msg {
         optional ipcp_config_msg conf = 13;
         optional uint32 opts          = 14;
         repeated ipcp_info_msg ipcps  = 15;
-        optional uint32 timeo_sec     = 16;
-        optional uint32 timeo_nsec    = 17;
-        optional string comp          = 18;
-        optional bytes pk             = 19; /* piggyback */
-        optional sint32 result        = 20;
+        repeated name_info_msg names  = 16;
+        optional uint32 timeo_sec     = 17;
+        optional uint32 timeo_nsec    = 18;
+        optional string comp          = 19;
+        optional bytes pk             = 20; /* piggyback */
+        optional sint32 result        = 21;
 };

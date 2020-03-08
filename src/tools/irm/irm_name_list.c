@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2020
  *
- * A tool to instruct the IRM daemon
+ * List names
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -43,71 +43,73 @@
 #include "irm_utils.h"
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
-static void usage(void)
+#define RR    "round-robin"
+#define SPILL "spillover"
+
+static char * str_pol(enum pol_balance p)
 {
-        printf("Usage: irm [OPERATION]\n\n"
-               "where OPERATION = {ipcp bind unbind name}\n");
-}
-
-static int do_help(int    argc,
-                   char **argv)
-{
-        (void) argc;
-        (void) argv;
-
-        usage();
-        return 0;
-}
-
-static const struct cmd {
-        const char * cmd;
-        int (* func)(int argc, char ** argv);
-} cmds[] = {
-        { "ipcp",       ipcp_cmd },
-        { "bind",       bind_cmd },
-        { "unbind",     unbind_cmd },
-        { "name",       name_cmd },
-        { "help",       do_help },
-        { NULL,         NULL }
+        switch(p) {
+        case LB_RR:
+                return RR;
+        case LB_SPILL:
+                return SPILL;
+        default:
+                return "UNKNOWN";
+        }
 };
 
-static int do_cmd(const char * argv0,
-                  int          argc,
-                  char **      argv)
+int do_list_name(int     argc,
+                 char ** argv)
 {
-        const struct cmd * c;
+        char *             name = NULL;
+        struct name_info * names;
+        ssize_t            len;
+        ssize_t            i;
 
-        for (c = cmds; c->cmd; ++c) {
-                if (matches(argv0, c->cmd) == 0)
-                        return c->func(argc - 1, argv + 1);
+        while (argc > 0) {
+                if (matches(*argv, "list") == 0) {
+                        name = *(argv + 1);
+                } else {
+                        printf("\"%s\" is unknown, try \"irm "
+                               "name list.\n", *argv);
+                        return -1;
+                }
+
+                argc -= 2;
+                argv += 2;
         }
 
-        fprintf(stderr, "\"%s\" is unknown, try \"irm help\".\n", argv0);
-
-        return -1;
-}
-
-int main(int     argc,
-         char ** argv)
-{
-        int ret = 0;
-
-        if (argc < 2) {
-                usage();
-                return -1;
-        }
-
-        ret = do_cmd(argv[1], argc - 1, argv + 1);
-
-        if (ret == -EIRMD)
+        len = irm_list_names(&names);
+        if (len == 0) {
+                printf("No names in system.\n\n");
+                return 0;
+        } else if (len == -EIRMD) {
                 printf("Failed to communicate with the "
                        "Ouroboros IPC Resource Manager daemon.\n");
+                return -1;
+        } else if (len < 0)
+                return len;
 
-        if (ret)
-                exit(EXIT_FAILURE);
+        printf("+----------------------------------------------------"
+               "+----------------------+\n");
+        printf("| %50s | %20s |\n", "name", "load-balance policy");
+        printf("+----------------------------------------------------"
+               "+----------------------+\n");
 
-        exit(EXIT_SUCCESS);
+        for (i = 0; i < len; i++) {
+                if (name != NULL && matches(names[i].name, name))
+                        continue;
+                printf("| %50s | %20s |\n",
+                       names[i].name,
+                       str_pol(names[i].pol_lb));
+        }
+        printf("+----------------------------------------------------"
+               "+----------------------+\n");
+
+        free(names);
+
+        return 0;
 }

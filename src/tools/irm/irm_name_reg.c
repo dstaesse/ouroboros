@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2020
  *
- * Register names in IPCPs
+ * Register names with IPCPs
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -38,7 +38,6 @@
 
 #include <ouroboros/irm.h>
 
-
 #include "irm_ops.h"
 #include "irm_utils.h"
 
@@ -51,8 +50,7 @@
 
 static void usage(void)
 {
-        printf("Usage: irm register\n"
-               "           name <name>\n"
+        printf("Usage: irm name register <name>\n"
                "           ipcp <ipcp to register with>\n"
                "           [ipcp <ipcp to register with>]\n"
                "           [... (maximum %d ipcps)]\n"
@@ -63,7 +61,7 @@ static void usage(void)
 }
 
 
-int do_register(int     argc,
+int do_reg_name(int     argc,
                 char ** argv)
 {
         char *             name       = NULL;
@@ -72,14 +70,17 @@ int do_register(int     argc,
         char *             ipcp[MAX_IPCPS];
         size_t             ipcp_len   = 0;
         struct ipcp_info * ipcps;
-        ssize_t            len;
+        ssize_t            ipcps_len;
+        struct name_info * names;
+        ssize_t            names_len;
+        bool               name_create = true;
         ssize_t            i;
 
+        name = *(argv++);
+        --argc;
 
         while (argc > 0) {
-                if (matches(*argv, "name") == 0) {
-                        name = *(argv + 1);
-                } else if (matches(*argv, "layer") == 0) {
+                if (matches(*argv, "layer") == 0) {
                         layers[layers_len++] = *(argv + 1);
                         if (layers_len > MAX_LAYERS) {
                                 printf("Too many layers specified.\n");
@@ -92,7 +93,7 @@ int do_register(int     argc,
                                 return -1;
                         }
                 } else {
-                        printf("\"%s\" is unknown, try \"irm "
+                        printf("\"%s\" is unknown, try \"irm name "
                                "register\".\n", *argv);
                         return -1;
                 }
@@ -106,24 +107,46 @@ int do_register(int     argc,
                 return -1;
         }
 
-        len = irm_list_ipcps(&ipcps);
-        if (len < 0)
-                return len;
+        ipcps_len = irm_list_ipcps(&ipcps);
+        if (ipcps_len < 0)
+                return ipcps_len;
 
-        for (i = 0; i < len; ++i) {
+        names_len = irm_list_names(&names);
+        if (names_len < 0) {
+                free(ipcps);
+                return names_len;
+        }
+
+        for (i = 0; i < names_len; ++i) {
+                if (strcmp(names[i].name, name) == 0) {
+                        name_create = false;
+                        break;
+                }
+        }
+
+        if (name_create && irm_create_name(name, LB_SPILL)) {
+                printf("Error creating name.");
+                free(ipcps);
+                free(name);
+                return -1;
+        }
+
+        for (i = 0; i < ipcps_len; ++i) {
                 size_t j;
                 for (j = 0; j < layers_len; j++) {
                         if (wildcard_match(layers[j], ipcps[i].layer) == 0) {
-                                if (irm_reg(ipcps[i].pid, name)) {
+                                if (irm_reg_name(name, ipcps[i].pid)) {
                                         free(ipcps);
+                                        free(names);
                                         return -1;
                                 }
                         }
                 }
                 for (j = 0; j < ipcp_len; j++) {
                         if (wildcard_match(ipcp[j], ipcps[i].name) == 0) {
-                                if (irm_reg(ipcps[i].pid, name)) {
+                                if (irm_reg_name(name, ipcps[i].pid)) {
                                         free(ipcps);
+                                        free(names);
                                         return -1;
                                 }
                         }
@@ -131,6 +154,7 @@ int do_register(int     argc,
         }
 
         free(ipcps);
+        free(names);
 
         return 0;
 }

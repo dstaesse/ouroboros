@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2020
  *
- * Create IPC Processes
+ * List IPC Processes
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -46,7 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define UNICAST  "unicast"
+#define UNICAST "unicast"
 #define UDP     "udp"
 #define ETH_LLC "eth-llc"
 #define ETH_DIX "eth-dix"

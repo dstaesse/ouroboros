@@ -50,8 +50,7 @@
 
 static void usage(void)
 {
-        printf("Usage: irm unregister\n"
-               "           name <name>\n"
+        printf("Usage: irm name unregister <name>\n"
                "           ipcp <ipcp to register with>\n"
                "           [ipcp <ipcp to register with>]\n"
                "           [... (maximum %d ipcps)]\n"
@@ -61,7 +60,8 @@ static void usage(void)
                , MAX_IPCPS, MAX_LAYERS);
 }
 
-int do_unregister(int argc, char ** argv)
+int do_unreg_name(int     argc,
+                  char ** argv)
 {
         char *             name       = NULL;
         char *             layers[MAX_LAYERS];
@@ -72,10 +72,11 @@ int do_unregister(int argc, char ** argv)
         ssize_t            len;
         size_t             i;
 
+        name = *(argv++);
+        --argc;
+
         while (argc > 0) {
-                if (matches(*argv, "name") == 0) {
-                        name = *(argv + 1);
-                } else if (matches(*argv, "layer") == 0) {
+                if (matches(*argv, "layer") == 0) {
                         layers[layers_len++] = *(argv + 1);
                         if (layers_len > MAX_LAYERS) {
                                 printf("Too many layers specified.\n");
@@ -110,7 +111,7 @@ int do_unregister(int argc, char ** argv)
                 size_t j;
                 for (j = 0; j < layers_len; j++) {
                         if (wildcard_match(ipcps[i].layer, layers[j]) == 0) {
-                                if (irm_unreg(ipcps[i].pid, name)) {
+                                if (irm_unreg_name(name, ipcps[i].pid)) {
                                         free(ipcps);
                                         return -1;
                                 }
@@ -119,7 +120,7 @@ int do_unregister(int argc, char ** argv)
                 }
                 for (j = 0; j < ipcp_len; j++) {
                         if (wildcard_match(ipcps[i].name, ipcp[j]) == 0) {
-                                if (irm_unreg(ipcps[i].pid, name)) {
+                                if (irm_unreg_name(name, ipcps[i].pid)) {
                                         free(ipcps);
                                         return -1;
                                 }

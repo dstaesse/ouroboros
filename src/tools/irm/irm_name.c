@@ -36,24 +36,20 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ouroboros/irm.h>
-#include <ouroboros/errno.h>
+#include <stdio.h>
 
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-
 static void usage(void)
 {
-        printf("Usage: irm [OPERATION]\n\n"
-               "where OPERATION = {ipcp bind unbind name}\n");
+        printf("Usage: irm name [OPERATION]\n\n"
+               "where OPERATION = {create destroy\n"
+               "                   register unregister\n"
+               "                   list help}\n");
 }
 
-static int do_help(int    argc,
-                   char **argv)
+static int do_help(int argc, char **argv)
 {
         (void) argc;
         (void) argv;
@@ -66,10 +62,11 @@ static const struct cmd {
         const char * cmd;
         int (* func)(int argc, char ** argv);
 } cmds[] = {
-        { "ipcp",       ipcp_cmd },
-        { "bind",       bind_cmd },
-        { "unbind",     unbind_cmd },
-        { "name",       name_cmd },
+        { "create",     do_create_name },
+        { "destroy",    do_destroy_name },
+        { "register",   do_reg_name },
+        { "unregister", do_unreg_name },
+        { "list",       do_list_name},
         { "help",       do_help },
         { NULL,         NULL }
 };
@@ -85,29 +82,17 @@ static int do_cmd(const char * argv0,
                         return c->func(argc - 1, argv + 1);
         }
 
-        fprintf(stderr, "\"%s\" is unknown, try \"irm help\".\n", argv0);
+        fprintf(stderr, "\"%s\" is unknown, try \"irm ipcp help\".\n", argv0);
 
         return -1;
 }
 
-int main(int     argc,
-         char ** argv)
+int name_cmd(int argc, char ** argv)
 {
-        int ret = 0;
-
-        if (argc < 2) {
+        if (argc < 1) {
                 usage();
                 return -1;
         }
 
-        ret = do_cmd(argv[1], argc - 1, argv + 1);
-
-        if (ret == -EIRMD)
-                printf("Failed to communicate with the "
-                       "Ouroboros IPC Resource Manager daemon.\n");
-
-        if (ret)
-                exit(EXIT_FAILURE);
-
-        exit(EXIT_SUCCESS);
+        return do_cmd(argv[0], argc, argv);
 }

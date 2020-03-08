@@ -32,5 +32,6 @@
 #define EIPCPSTATE   1004 /* Target in wrong state           */
 #define EFLOWDOWN    1005 /* Flow is down                    */
 #define ECRYPT       1006 /* Encryption error                */
+#define ENAME        1007 /* Naming error                    */
 
 #endif /* OUROBOROS_ERRNO_H */

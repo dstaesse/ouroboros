@@ -34,6 +34,7 @@ typedef LayerInfoMsg layer_info_msg_t;
 #include "irmd_messages.pb-c.h"
 typedef IrmMsg irm_msg_t;
 typedef IpcpInfoMsg ipcp_info_msg_t;
+typedef NameInfoMsg name_info_msg_t;
 
 #include "ipcpd_messages.pb-c.h"
 typedef IpcpMsg ipcp_msg_t;

@@ -108,6 +108,7 @@ struct cmd {
 
 struct {
         struct list_head     registry;     /* registered names known     */
+        size_t               n_names;      /* number of names            */
 
         struct list_head     ipcps;        /* list of ipcps in system    */
         size_t               n_ipcps;      /* number of ipcps            */
@@ -918,7 +919,7 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
         if (*ipcps == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 *n_ipcps = 0;
-                return -1;
+                return -ENOMEM;
         }
 
         list_for_each(p, &irmd.ipcps) {
@@ -959,53 +960,140 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
         return -ENOMEM;
 }
 
-static int irm_update_name(const char * name)
+static int name_create(const char *     name,
+                       enum pol_balance pol)
 {
+        struct reg_entry * re;
         struct list_head * p;
+
+        assert(name);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        if (!registry_has_name(&irmd.registry, name)) {
-                struct reg_entry * re = registry_add_name(&irmd.registry, name);
-                if (re == NULL) {
-                        log_err("Failed creating registry entry for %s.", name);
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        return -1;
-                }
+        if (registry_has_name(&irmd.registry, name)) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("Registry entry for %s already exists.", name);
+                return -ENAME;
+        }
 
-                /* check the tables for client programs */
-                list_for_each(p, &irmd.proc_table) {
-                        struct list_head * q;
-                        struct proc_entry * e;
-                        e = list_entry(p, struct proc_entry, next);
-                        list_for_each(q, &e->names) {
-                                struct str_el * s;
-                                s = list_entry(q, struct str_el, next);
-                                if (!strcmp(s->str, name))
-                                        reg_entry_add_pid(re, e->pid);
-                        }
-                }
+        re = registry_add_name(&irmd.registry, name);
+        if (re == NULL) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("Failed creating registry entry for %s.", name);
+                return -ENOMEM;
+        }
+        ++irmd.n_names;
+        reg_entry_set_policy(re, pol);
 
-                list_for_each(p, &irmd.prog_table) {
-                        struct list_head * q;
-                        struct prog_entry * e;
-                        e = list_entry(p, struct prog_entry, next);
-                        list_for_each(q, &e->names) {
-                                struct str_el * s;
-                                s = list_entry(q, struct str_el, next);
-                                if (!strcmp(s->str, name))
-                                        reg_entry_add_prog(re, e);
-                        }
+        /* check the tables for existing bindings */
+        list_for_each(p, &irmd.proc_table) {
+                struct list_head * q;
+                struct proc_entry * e;
+                e = list_entry(p, struct proc_entry, next);
+                list_for_each(q, &e->names) {
+                        struct str_el * s;
+                        s = list_entry(q, struct str_el, next);
+                        if (!strcmp(s->str, name))
+                                reg_entry_add_pid(re, e->pid);
+                }
+        }
+
+        list_for_each(p, &irmd.prog_table) {
+                struct list_head * q;
+                struct prog_entry * e;
+                e = list_entry(p, struct prog_entry, next);
+                list_for_each(q, &e->names) {
+                        struct str_el * s;
+                        s = list_entry(q, struct str_el, next);
+                        if (!strcmp(s->str, name))
+                                reg_entry_add_prog(re, e);
                 }
         }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
+        log_info("Created new name: %s.", name);
+
         return 0;
 }
 
-static int name_reg(pid_t         pid,
-                    const char *  name)
+static int name_destroy(const char * name)
+{
+        assert(name);
+
+        pthread_rwlock_wrlock(&irmd.reg_lock);
+
+        if (!registry_has_name(&irmd.registry, name)) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_warn("Registry entry for %s does not exist.", name);
+                return -ENAME;
+        }
+
+        registry_del_name(&irmd.registry, name);
+        --irmd.n_names;
+
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
+        log_info("Destroyed name: %s.", name);
+
+        return 0;
+}
+
+static ssize_t list_names(name_info_msg_t *** names,
+                          size_t *            n_names)
+{
+        struct list_head * p;
+        int                i = 0;
+
+        pthread_rwlock_rdlock(&irmd.reg_lock);
+
+        *n_names = irmd.n_names;
+        if (*n_names == 0) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                return 0;
+        }
+
+        *names = malloc(irmd.n_names * sizeof(**names));
+        if (*names == NULL) {
+                *n_names = 0;
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                return -ENOMEM;
+        }
+
+        list_for_each(p, &irmd.registry) {
+                struct reg_entry * e = list_entry(p, struct reg_entry, next);
+
+                (*names)[i] = malloc(sizeof(***names));
+                if ((*names)[i] == NULL) {
+                        --i;
+                        goto fail;
+                }
+
+                name_info_msg__init((*names)[i]);
+                (*names)[i]->name = strdup(e->name);
+                if ((*names)[i]->name == NULL)
+                        goto fail;
+
+                (*names)[i++]->pol_lb = e->pol_lb;
+       }
+
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
+        return 0;
+
+ fail:
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        while (i >= 0) {
+                free((*names)[i]->name);
+                free(*names[i--]);
+        }
+        free(*names);
+        *n_names = 0;
+        return -ENOMEM;
+}
+
+static int name_reg(const char * name,
+                    pid_t        pid)
 {
         size_t              len;
         struct ipcp_entry * ipcp;
@@ -1015,6 +1103,11 @@ static int name_reg(pid_t         pid,
         assert(name);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
+
+        if (!registry_has_name(&irmd.registry, name)) {
+                err = -ENAME;
+                goto fail;
+        }
 
         ipcp = get_ipcp_entry_by_pid(pid);
         if (ipcp == NULL) {
@@ -1045,8 +1138,6 @@ static int name_reg(pid_t         pid,
                 return -1;
         }
 
-        irm_update_name(name);
-
         log_info("Registered %s with IPCP %d as " HASH_FMT ".",
                  name, pid, HASH_VAL(hash));
 
@@ -1059,8 +1150,8 @@ fail:
         return err;
 }
 
-static int name_unreg(pid_t         pid,
-                      const char *  name)
+static int name_unreg(const char * name,
+                      pid_t        pid)
 {
         struct ipcp_entry * ipcp;
         int                 err;
@@ -2021,11 +2112,21 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IRM_LIST_IPCPS:
                         result = list_ipcps(&ret_msg->ipcps, &ret_msg->n_ipcps);
                         break;
-                case IRM_MSG_CODE__IRM_REG:
-                        result = name_reg(msg->pid, msg->name);
+                case IRM_MSG_CODE__IRM_CREATE_NAME:
+                        result = name_create(msg->names[0]->name,
+                                             msg->names[0]->pol_lb);
                         break;
-                case IRM_MSG_CODE__IRM_UNREG:
-                        result = name_unreg(msg->pid, msg->name);
+                case IRM_MSG_CODE__IRM_DESTROY_NAME:
+                        result = name_destroy(msg->name);
+                        break;
+                case IRM_MSG_CODE__IRM_LIST_NAMES:
+                        result = list_names(&ret_msg->names, &ret_msg->n_names);
+                        break;
+                case IRM_MSG_CODE__IRM_REG_NAME:
+                        result = name_reg(msg->name, msg->pid);
+                        break;
+                case IRM_MSG_CODE__IRM_UNREG_NAME:
+                        result = name_unreg(msg->name, msg->pid);
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL

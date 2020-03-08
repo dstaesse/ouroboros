@@ -543,8 +543,48 @@ int irm_unbind_process(pid_t        pid,
         return ret;
 }
 
-int irm_reg(pid_t        pid,
-            const char * name)
+int irm_create_name(const char *     name,
+                    enum pol_balance pol)
+{
+        irm_msg_t       msg      = IRM_MSG__INIT;
+        name_info_msg_t ni_msg   = NAME_INFO_MSG__INIT;
+        irm_msg_t *     recv_msg;
+        int             ret;
+
+        if (name == NULL)
+                return -EINVAL;
+
+        msg.code      = IRM_MSG_CODE__IRM_CREATE_NAME;
+        ni_msg.name   = (char *) name;
+        ni_msg.pol_lb = pol;
+        msg.n_names   = 1;
+
+        msg.names = malloc(sizeof(*msg.names));
+        if (msg.names == NULL) {
+                return -ENOMEM;
+        }
+
+        msg.names[0]  = &ni_msg;
+
+        recv_msg = send_recv_irm_msg(&msg);
+
+        free(msg.names);
+
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        if (!recv_msg->has_result) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int irm_destroy_name(const char * name)
 {
         irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -553,7 +593,84 @@ int irm_reg(pid_t        pid,
         if (name == NULL)
                 return -EINVAL;
 
-        msg.code    = IRM_MSG_CODE__IRM_REG;
+        msg.code    = IRM_MSG_CODE__IRM_DESTROY_NAME;
+        msg.name    = (char *) name;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        if (!recv_msg->has_result) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -1;
+        }
+
+        ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+ssize_t irm_list_names(struct name_info ** names)
+{
+        irm_msg_t   msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg;
+        size_t      nr;
+        size_t      i;
+
+        if (names == NULL)
+                return -EINVAL;
+
+        *names = NULL;
+
+        msg.code = IRM_MSG_CODE__IRM_LIST_NAMES;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        if (recv_msg->names == NULL) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return 0;
+        }
+
+        nr = recv_msg->n_names;
+        if (nr == 0) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return 0;
+        }
+
+        *names = malloc(nr * sizeof(**names));
+        if (*names == NULL) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -ENOMEM;
+        }
+
+        for (i = 0; i < nr; i++) {
+                (*names)[i].pol_lb = recv_msg->names[i]->pol_lb;
+                /* Truncate names > NAME_SIZE */
+                if (strlen(recv_msg->names[i]->name) >= NAME_SIZE)
+                    recv_msg->names[i]->name[NAME_SIZE - 1] = 0;
+
+                strcpy((*names)[i].name, recv_msg->names[i]->name);
+        }
+
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return nr;
+}
+
+int irm_reg_name(const char * name,
+                 pid_t        pid)
+{
+        irm_msg_t   msg      = IRM_MSG__INIT;
+        irm_msg_t * recv_msg = NULL;
+        int         ret      = -1;
+
+        if (name == NULL)
+                return -EINVAL;
+
+        msg.code    = IRM_MSG_CODE__IRM_REG_NAME;
         msg.has_pid = true;
         msg.pid     = pid;
         msg.name    = (char *) name;
@@ -573,9 +690,8 @@ int irm_reg(pid_t        pid,
         return ret;
 }
 
-
-int irm_unreg(pid_t        pid,
-              const char * name)
+int irm_unreg_name(const char * name,
+                   pid_t        pid)
 {
         irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -584,7 +700,7 @@ int irm_unreg(pid_t        pid,
         if (name == NULL)
                 return -EINVAL;
 
-        msg.code    = IRM_MSG_CODE__IRM_UNREG;
+        msg.code    = IRM_MSG_CODE__IRM_UNREG_NAME;
         msg.has_pid = true;
         msg.pid     = pid;
         msg.name    = (char *) name;

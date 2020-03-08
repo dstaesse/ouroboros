@@ -26,6 +26,7 @@
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/list.h>
+#include <ouroboros/irm.h>
 
 #include "proc_table.h"
 #include "prog_table.h"
@@ -54,9 +55,11 @@ struct reg_entry {
         struct list_head    next;
         char *              name;
 
-        /* Programs that can be instantiated by the irmd */
+        /* Policies for this name. */
+        enum pol_balance    pol_lb;  /* Load balance incoming flows. */
+        /* Programs that can be instantiated by the irmd. */
         struct list_head    reg_progs;
-        /* Processes that are listening for this name */
+        /* Processes that are listening for this name. */
         struct list_head    reg_pids;
 
         enum reg_name_state state;
@@ -72,7 +75,6 @@ void                reg_entry_del_prog(struct reg_entry * e,
 
 char *              reg_entry_get_prog(struct reg_entry * e);
 
-
 int                 reg_entry_add_pid(struct reg_entry * e,
                                       pid_t              pid);
 
@@ -83,6 +85,9 @@ void                reg_entry_del_pid_el(struct reg_entry * e,
                                          struct pid_el *    a);
 
 pid_t               reg_entry_get_pid(struct reg_entry * e);
+
+void                reg_entry_set_policy(struct reg_entry * e,
+                                         enum pol_balance   p);
 
 enum reg_name_state reg_entry_get_state(struct reg_entry * e);
 

@@ -23,8 +23,12 @@ set(SOURCE_FILES
   irm_unbind.c
   irm_bind.c
   irm_ipcp.c
-  irm_register.c
-  irm_unregister.c
+  irm_name.c
+  irm_name_create.c
+  irm_name_destroy.c
+  irm_name_reg.c
+  irm_name_unreg.c
+  irm_name_list.c
   irm_utils.c
   )
 

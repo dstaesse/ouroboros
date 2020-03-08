@@ -313,7 +313,7 @@ lists IPCPs in the system. You can filter by type, by name or by layer.
 .RE
 .RE
 
-.SH IRM COMMANDS
+.SH IRM BIND COMMANDS
 .PP
 \fBirm bind\fR program \fiprogram\fR name \fIname\fR [[\fIauto\fR] -- \
 [\fIparam\fR] [\fIparam\fR] ... [\fIparam\fR]]
@@ -367,19 +367,43 @@ remove the binding between \fIipcp\fR and \fIname\fR. This IPCP will
 not accept future flow allocation requests for \fIname\fR.
 .RE
 
+.SH IRM NAME COMMANDS
 .PP
-\fBirm reg\fR name \fIname\fR \fIipcp\fR ipcp [\fIipcp\fR ...]
+\fBirm name create \fIname\fR \fIlb\fR policy
+.RS 4
+Create a name \fIname\fR with a load-balancing policy
+.br
+\fIpolicy\fR: round-robin, spillover
+.br
+.RE
+
+.PP
+\fBirm name destroy \fIname\fR
+.RS 4
+Destroy name \fIname\fR. This does not unregister or unbind it.
+.RE
+
+.PP
+\fBirm name register \fIname\fR \fIipcp\fR ipcp [\fIipcp\fR ...]
 layer [layer \fIlayer\fR ...]
 .RS 4
 Register name \fIname\fR in ipcps \fIipcp\fR ipcp and layers \fIlayer\fR.
 .RE
 
 .PP
-\fBirm unreg\fR name \fIname\fR \fIipcp\fR ipcp [\fIipcp\fR ...]
+\fBirm name unregister \fIname\fR \fIipcp\fR ipcp [\fIipcp\fR ...]
 layer [layer \fIlayer\fR ...]
 .RS 4
 Unregister name \fIname\fR in ipcps \fIipcp\fR ipcp and layers \fIlayer\fR.
 .RE
+
+.PP
+\fBirm name list \fIname\fR
+.RS 4
+List names in the system. \fIname\fR can be used as a prefix to filter
+the names.
+.RE
+
 
 .SH TERMINOLOGY
 Please see \fBouroboros-glossary\fR(7).
