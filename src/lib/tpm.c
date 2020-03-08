@@ -82,11 +82,19 @@ static void tpm_join(struct tpm * tpm)
                                 --tpm->cur;
                         }
                 }
+        }
 
+        list_for_each_safe(p, h, &tpm->pool) {
+                struct pthr_el * e = list_entry(p, struct pthr_el, next);
                 if (e->kill) {
-                        pthread_join(e->thr, NULL);
+                        pthread_t thr = e->thr;
                         list_del(&e->next);
                         free(e);
+                        pthread_mutex_unlock(&tpm->lock);
+
+                        pthread_join(thr, NULL);
+
+                        pthread_mutex_lock(&tpm->lock);
                 }
         }
 }
@@ -256,29 +264,35 @@ static struct pthr_el * tpm_pthr_el(struct tpm * tpm,
 
         }
 
-        assert(false);
-
         return NULL;
 }
 
 void tpm_inc(struct tpm * tpm)
 {
+        struct pthr_el * e;
+
         pthread_mutex_lock(&tpm->lock);
 
-        tpm_pthr_el(tpm, pthread_self())->busy = false;
-
-        --tpm->wrk;
+        e = tpm_pthr_el(tpm, pthread_self());
+        if (e != NULL) {
+                e->busy = false;
+                --tpm->wrk;
+        }
 
         pthread_mutex_unlock(&tpm->lock);
 }
 
 void tpm_dec(struct tpm * tpm)
 {
+        struct pthr_el * e;
+
         pthread_mutex_lock(&tpm->lock);
 
-        tpm_pthr_el(tpm, pthread_self())->busy = true;
-
-        ++tpm->wrk;
+        e = tpm_pthr_el(tpm, pthread_self());
+        if (e != NULL) {
+                e->busy = true;
+                ++tpm->wrk;
+        }
 
         pthread_cond_signal(&tpm->cond);
 
