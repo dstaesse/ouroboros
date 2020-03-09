@@ -125,9 +125,9 @@ if (SYSTEMD_FOUND)
   endif ()
   if (NOT ${SYSTEMD_UNITDIR} STREQUAL "")
     message(STATUS "Installing systemd service in: ${SYSTEMD_UNITDIR}")
-    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/irmd.service.in"
-      "${CMAKE_CURRENT_BINARY_DIR}/irmd.service" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/irmd.service"
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.service.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.service" @ONLY)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.service"
       DESTINATION "${SYSTEMD_UNITDIR}")
   endif ()
 endif ()
