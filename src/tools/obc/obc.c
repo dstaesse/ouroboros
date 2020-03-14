@@ -88,7 +88,8 @@ static int reader_main(const char * dst)
 static int writer_main(const char * dst,
                        const char * message)
 {
-        int     fd      = 0;
+        int     fd  = 0;
+        size_t  len = strlen(message) + 1;
 
         fd = flow_join(dst, NULL, NULL);
         if (fd < 0) {
@@ -96,7 +97,7 @@ static int writer_main(const char * dst,
                 return -1;
         }
 
-        if (flow_write(fd, message, strlen(message) + 1) < 0) {
+        if (flow_write(fd, message, len) < 0) {
                 printf("Failed to write packet.\n");
                 flow_dealloc(fd);
                 return -1;

@@ -28,19 +28,20 @@
 #include <sys/time.h>
 
 /* Flow flags, same values as fcntl.h */
-#define FLOWFRDONLY   00000000 /* Read-only flow        */
-#define FLOWFWRONLY   00000001 /* Write-only flow       */
-#define FLOWFRDWR     00000002 /* Read-write flow       */
-#define FLOWFACCMODE  00000003 /* Access mask           */
+#define FLOWFRDONLY   00000000 /* Read-only flow         */
+#define FLOWFWRONLY   00000001 /* Write-only flow        */
+#define FLOWFRDWR     00000002 /* Read-write flow        */
+#define FLOWFACCMODE  00000003 /* Access mask            */
 
-#define FLOWFDOWN     00000004 /* Flow is down          */
+#define FLOWFDOWN     00000004 /* Flow is down           */
 
-#define FLOWFRNOBLOCK 00001000 /* Non-blocking read     */
-#define FLOWFWNOBLOCK 00002000 /* Non-blocking write    */
+#define FLOWFRNOBLOCK 00001000 /* Non-blocking read      */
+#define FLOWFWNOBLOCK 00002000 /* Non-blocking write     */
 #define FLOWFNONBLOCK (FLOWFRNOBLOCK | FLOWFWNOBLOCK)
-#define FLOWFRNOPART  00004000 /* Disable partial reads */
+#define FLOWFRNOPART  00010000 /* Disable partial reads  */
+#define FLOWFWNOPART  00020000 /* Disable partial writes */
 
-#define FLOWFDEFAULT  FLOWFRDWR
+#define FLOWFDEFAULT  (FLOWFRDWR | FLOWFWNOPART)
 
 #define FLOWFINVALID  (FLOWFWRONLY | FLOWFRDWR)
 

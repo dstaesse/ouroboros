@@ -135,7 +135,7 @@ int client_main(char * server,
         } else { /* flood */
                 while (!stop) {
                         clock_gettime(CLOCK_REALTIME, &end);
-                        if (flow_write(fd, buf, (size_t) size) < 0) {
+                        if (flow_write(fd, buf, size) < 0) {
                                 stop = true;
                                 continue;
                         }

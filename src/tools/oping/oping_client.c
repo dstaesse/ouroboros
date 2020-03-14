@@ -175,7 +175,7 @@ void * writer(void * o)
                 msg->tv_sec = now.tv_sec;
                 msg->tv_nsec = now.tv_nsec;
 
-                if (flow_write(*fdp, buf, client.size) == -1) {
+                if (flow_write(*fdp, buf, client.size) < 0) {
                         printf("Failed to send packet.\n");
                         flow_dealloc(*fdp);
                         free(buf);

@@ -79,7 +79,7 @@ static int server_main(void)
 
                 printf("Message from client is %.*s.\n", (int) count, buf);
 
-                if (flow_write(fd, buf, count) == -1) {
+                if (flow_write(fd, buf, count) < 0) {
                         printf("Failed to write packet.\n");
                         flow_dealloc(fd);
                         continue;
@@ -93,10 +93,10 @@ static int server_main(void)
 
 static int client_main(void)
 {
-        int     fd      = 0;
+        int     fd;
         char    buf[BUF_SIZE];
         char *  message = "Client says hi!";
-        ssize_t count   = 0;
+        ssize_t count;
 
         fd = flow_alloc("oecho", NULL, NULL);
         if (fd < 0) {

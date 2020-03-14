@@ -163,7 +163,7 @@ void * t_reader(void * o)
                 if (len <= 0)
                         continue;
 
-                if (flow_write(o_fd, buf, len))
+                if (flow_write(o_fd, buf, len) < 0)
                         continue;
         }
 }

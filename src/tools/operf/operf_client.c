@@ -141,7 +141,7 @@ void * writer(void * o)
 
                 msg->id = client.sent;
 
-                if (flow_write(*fdp, buf, client.size) == -1) {
+                if (flow_write(*fdp, buf, client.size) < 0) {
                         printf("Failed to send packet.\n");
                         flow_dealloc(*fdp);
                         free(buf);
@@ -204,7 +204,7 @@ int client_main(void)
         else
                 printf("Doing a unidirectional test.\n");
 
-        if (flow_write(fd, &client.conf, sizeof(client.conf))) {
+        if (flow_write(fd, &client.conf, sizeof(client.conf)) < 0) {
                 printf("Failed to send configuration.\n");
                 flow_dealloc(fd);
                 return -1;

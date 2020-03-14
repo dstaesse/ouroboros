@@ -87,7 +87,7 @@ static int send_rcv_enroll_msg(int fd)
 
         clock_gettime(CLOCK_REALTIME, &t0);
 
-        if (flow_write(fd, buf, len)) {
+        if (flow_write(fd, buf, len) < 0) {
                 log_dbg("Failed to send request message.");
                 return -1;
         }
@@ -222,7 +222,7 @@ static void * enroll_handle(void * o)
 
                 log_dbg("Sending enrollment info (%zd bytes).", len);
 
-                if (flow_write(conn.flow_info.fd, reply, len)) {
+                if (flow_write(conn.flow_info.fd, reply, len) < 0) {
                         log_err("Failed respond to enrollment request.");
                         connmgr_dealloc(COMPID_ENROLL, &conn);
                         free(reply);
@@ -296,7 +296,7 @@ int enroll_done(struct conn * conn,
 
         enroll_msg__pack(&msg, buf);
 
-        if (flow_write(conn->flow_info.fd, buf, len)) {
+        if (flow_write(conn->flow_info.fd, buf, len) < 0) {
                 log_dbg("Failed to send acknowledgment.");
                 return -1;
         }

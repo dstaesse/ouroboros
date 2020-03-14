@@ -1007,6 +1007,7 @@ ssize_t flow_write(int          fd,
         if ((flags & FLOWFACCMODE) == FLOWFRDONLY)
                 return -EPERM;
 
+        /* TODO: partial writes. */
         if (flags & FLOWFWNOBLOCK)
                 idx = shm_rdrbuff_alloc(ai.rdrb,
                                         count,
@@ -1056,9 +1057,7 @@ ssize_t flow_write(int          fd,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        assert(ret <= 0);
-
-        return ret;
+        return ret < 0 ? (ssize_t) ret : (ssize_t) count;
 }
 
 ssize_t flow_read(int    fd,
