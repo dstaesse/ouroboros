@@ -68,7 +68,7 @@ int         fqueue_next(fqueue_t * fq);
 
 enum fqtype fqueue_type(fqueue_t * fq);
 
-int         fevent(fset_t *                set,
+ssize_t     fevent(fset_t *                set,
                    fqueue_t *              fq,
                    const struct timespec * timeo);
 

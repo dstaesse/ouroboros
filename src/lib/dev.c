@@ -1321,9 +1321,9 @@ enum fqtype fqueue_type(struct fqueue * fq)
         return fq->fqueue[fq->next - 1];
 }
 
-int fevent(struct flow_set *       set,
-           struct fqueue *         fq,
-           const struct timespec * timeo)
+ssize_t fevent(struct flow_set *       set,
+               struct fqueue *         fq,
+               const struct timespec * timeo)
 {
         ssize_t           ret;
         struct timespec   abstime;
