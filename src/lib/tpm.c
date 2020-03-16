@@ -159,7 +159,7 @@ static void * tpmgr(void * o)
 
                 if (pthread_cond_timedwait(&tpm->cond, &tpm->lock, &dl)
                     == ETIMEDOUT)
-                        if (tpm->cur > tpm->min)
+                        if (tpm->cur - tpm->wrk > tpm->min)
                                 tpm_kill(tpm);
 
                 pthread_mutex_unlock(&tpm->lock);
