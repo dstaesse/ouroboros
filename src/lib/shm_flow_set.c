@@ -148,7 +148,7 @@ struct shm_flow_set * shm_flow_set_create(pid_t pid)
         if (set == NULL)
                 goto fail_set;
 
-        set->pid = getpid();
+        set->pid = pid;
 
         if (pthread_mutexattr_init(&mattr))
                 goto fail_mutexattr_init;

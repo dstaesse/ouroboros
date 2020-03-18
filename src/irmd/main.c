@@ -1780,6 +1780,13 @@ static void irm_fini(void)
                 prog_entry_destroy(e);
         }
 
+        list_for_each_safe(p, h, &irmd.proc_table) {
+                struct proc_entry * e = list_entry(p, struct proc_entry, next);
+                list_del(&e->next);
+                e->state = PROC_INIT; /* sanitizer already joined */
+                proc_entry_destroy(e);
+        }
+
         registry_destroy(&irmd.registry);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
