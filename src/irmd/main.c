@@ -1358,6 +1358,11 @@ static int flow_accept(pid_t              pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
+        if (f->qs.cypher_s == 0) { /* no crypto requested, don't send pubkey */
+                data = NULL;
+                len = 0;
+        }
+
         if (ipcp_flow_alloc_resp(pid_n1, flow_id, pid_n, 0, data, len)) {
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
