@@ -271,6 +271,7 @@ int rib_init(const char * mountpt)
 {
 #ifdef HAVE_FUSE
         struct stat      st;
+        struct stat      prefix_st;
         char *           argv[] = {"-f",
                                    "-o",
                                    "ro,"
@@ -280,7 +281,7 @@ int rib_init(const char * mountpt)
                                    NULL};
         struct fuse_args args = FUSE_ARGS_INIT(3, argv);
 
-        if (stat(FUSE_PREFIX, &st) == -1)
+        if (stat(FUSE_PREFIX, &prefix_st) == -1)
                 return -1;
 
         sprintf(rib.mnt, FUSE_PREFIX "/%s", mountpt);
@@ -297,6 +298,14 @@ int rib_init(const char * mountpt)
                 default:
                         return -1;
                 }
+
+        /*
+         *  If parent directory is a different filesystem,
+         *  then directory was already mounted in a previous
+         *  Ouroboros instance that was killed.
+         */
+        if (st.st_dev != prefix_st.st_dev)
+                fuse_unmount(rib.mnt, rib.ch);
 
         fuse_opt_parse(&args, NULL, NULL, NULL);
 
