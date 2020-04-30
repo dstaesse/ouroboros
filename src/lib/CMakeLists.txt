@@ -186,6 +186,8 @@ set(SHM_RBUFF_LOCKLESS 0 CACHE BOOL
   "Enable shared memory lockless rbuff support")
 set(QOS_DISABLE_CRC TRUE CACHE BOOL
   "Ignores ber setting on all QoS cubes")
+set(FRCT_RTO_MIN 250 CACHE STRING
+  "Minimum Retransmission Timeout (RTO) for FRCT (us)")
 
 set(SOURCE_FILES_DEV
   # Add source files here

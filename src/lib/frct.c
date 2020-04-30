@@ -25,7 +25,7 @@
 #define DELT_A         3000   /* ms */
 #define DELT_R         20000  /* ms */
 
-#define RQ_SIZE        64
+#define RQ_SIZE        1024
 
 #define TW_ELEMENTS    6000
 #define TW_RESOLUTION  1     /* ms */
@@ -119,9 +119,9 @@ static struct frcti * frcti_create(int fd)
         frcti->rttseq        = 0;
         frcti->probe         = false;
 
-        frcti->srtt_us       = 0;       /* updated on first ACK */
-        frcti->mdev_us       = 100000;  /* initial rxm will be after 200 ms */
-        frcti->rto           = 200000;  /* initial rxm will be after 200 ms */
+        frcti->srtt_us       = 0;      /* updated on first ACK */
+        frcti->mdev_us       = 10000;  /* initial rxm will be after 20 ms */
+        frcti->rto           = 20000;  /* initial rxm will be after 20 ms */
 
         if (ai.flows[fd].qs.loss == 0) {
                 frcti->snd_cr.cflags |= FRCTFRTX;
@@ -304,7 +304,7 @@ static void rtt_estimator(struct frcti * frcti,
 
         frcti->srtt_us     = MAX(1U, srtt);
         frcti->mdev_us     = MAX(1U, rttvar);
-        frcti->rto         = srtt + (rttvar >> 2);
+        frcti->rto         = MAX(RTO_MIN, srtt + (rttvar >> 2));
 }
 
 /* Returns 0 when idx contains a packet for the application. */
@@ -391,6 +391,6 @@ static int __frcti_rcv(struct frcti *       frcti,
  drop_packet:
         pthread_rwlock_unlock(&frcti->lock);
         shm_rdrbuff_remove(ai.rdrb, idx);
-        rxmwheel_move();
+
         return -EAGAIN;
 }

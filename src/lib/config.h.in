@@ -66,3 +66,5 @@
 
 #define DU_BUFF_HEADSPACE   @DU_BUFF_HEADSPACE@
 #define DU_BUFF_TAILSPACE   @DU_BUFF_TAILSPACE@
+
+#define RTO_MIN             @FRCT_RTO_MIN@
