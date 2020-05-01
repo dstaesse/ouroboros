@@ -247,11 +247,18 @@ default: flat.
 .PP
 [routing \fIpolicy\fR] specifies the routing policy.
 .br
-\fIpolicy\fR: link_state, lfa.
+\fIpolicy\fR:
+.RS 4
+link_state: default shortest-path link-state routing.
+.br
+lfa: loop-free alternate resilient routing.
+.br
+ecmp: equal-cost multipath routing.
+.RE
 .br
 default: link_state.
 .PP
-[hash \fIpolicy\fR] specifies the hash function used for the directory,
+[hash \fIpolicy\fR] specifies the hash function used for the directory.
 .br
 \fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
 .br
@@ -265,7 +272,7 @@ name and the layer name.
 \fBbroadcast\fR
 .RS 4
 .PP
-[hash \fIpolicy\fR] specifies the hash function used for the layer name,
+[hash \fIpolicy\fR] specifies the hash function used for the layer name.
 .br
 \fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
 .br
