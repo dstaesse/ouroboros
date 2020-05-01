@@ -429,9 +429,6 @@ static void init(int     argc,
         if (pthread_rwlock_init(&ai.lock, NULL))
                 goto fail_lock;
 
-        if (rxmwheel_init())
-                goto fail_rxmwheel;
-
         ai.fqset = shm_flow_set_open(getpid());
         if (ai.fqset == NULL)
                 goto fail_fqset;
@@ -439,8 +436,6 @@ static void init(int     argc,
         return;
 
  fail_fqset:
-        rxmwheel_fini();
- fail_rxmwheel:
         pthread_rwlock_destroy(&ai.lock);
  fail_lock:
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
@@ -473,8 +468,6 @@ static void fini(void)
 
         if (ai.fds == NULL)
                 return;
-
-        rxmwheel_fini();
 
         if (ai.prog != NULL)
                 free(ai.prog);
@@ -1080,14 +1073,15 @@ ssize_t flow_read(int    fd,
 
         flow = &ai.flows[fd];
 
-        if (flow->part_idx == DONE_PART) {
-                flow->part_idx = NO_PART;
-                return 0;
-        }
-
         clock_gettime(PTHREAD_COND_CLOCK, &abs);
 
         pthread_rwlock_rdlock(&ai.lock);
+
+        if (flow->part_idx == DONE_PART) {
+                pthread_rwlock_unlock(&ai.lock);
+                flow->part_idx = NO_PART;
+                return 0;
+        }
 
         if (flow->flow_id < 0) {
                 pthread_rwlock_unlock(&ai.lock);
@@ -1141,8 +1135,13 @@ ssize_t flow_read(int    fd,
         if (n <= (ssize_t) count) {
                 memcpy(buf, packet, n);
                 shm_rdrbuff_remove(ai.rdrb, idx);
+
+                pthread_rwlock_wrlock(&ai.lock);
+
                 flow->part_idx = (partrd && n == (ssize_t) count) ?
                         DONE_PART : NO_PART;
+
+                pthread_rwlock_unlock(&ai.lock);
                 return n;
         } else {
                 if (partrd) {

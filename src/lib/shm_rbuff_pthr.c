@@ -109,7 +109,9 @@ int shm_rbuff_write_b(struct shm_rbuff *      rb,
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rb->lock);
 
-        while (!shm_rbuff_free(rb) && ret != -ETIMEDOUT) {
+        while (!shm_rbuff_free(rb)
+               && ret != -ETIMEDOUT
+               && !(*rb->acl & ACL_FLOWDOWN)) {
                 if (abstime != NULL)
                         ret = -pthread_cond_timedwait(rb->del,
                                                       rb->lock,
@@ -187,7 +189,9 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
         pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
                              (void *) rb->lock);
 
-        while (shm_rbuff_empty(rb) && (idx != -ETIMEDOUT)) {
+        while (shm_rbuff_empty(rb)
+               && (idx != -ETIMEDOUT)
+               && !(*rb->acl & ACL_FLOWDOWN)) {
                 if (abstime != NULL)
                         idx = -pthread_cond_timedwait(rb->add,
                                                       rb->lock,
@@ -223,6 +227,9 @@ void shm_rbuff_set_acl(struct shm_rbuff * rb,
                 pthread_mutex_consistent(rb->lock);
 #endif
         *rb->acl = (size_t) flags;
+
+        pthread_cond_broadcast(rb->del);
+        pthread_cond_broadcast(rb->add);
 
         pthread_mutex_unlock(rb->lock);
 }
