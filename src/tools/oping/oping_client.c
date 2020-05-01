@@ -179,6 +179,7 @@ void * writer(void * o)
                         printf("Failed to send packet.\n");
                         flow_dealloc(*fdp);
                         free(buf);
+                        stop = true;
                         return (void *) -1;
                 }
         }
