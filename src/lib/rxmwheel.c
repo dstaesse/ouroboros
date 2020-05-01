@@ -199,15 +199,11 @@ static void rxmwheel_move(struct rxmwheel * rw)
                         head = shm_du_buff_head(sdb);
                         memcpy(head, r->head, r->tail - r->head);
 
-                        /* Release the old copy. */
                         ipcp_sdb_release(r->sdb);
 
-                        /* Disable using this seqno as rto probe. */
                         check_probe(r->frcti, r->seqno);
 
-                        /* Update ackno and make sure DRF is not set. */
                         ((struct frct_pci *) head)->ackno = ntoh32(rcv_lwe);
-                        ((struct frct_pci *) head)->flags &= ~FRCT_DRF;
 
                         /* Retransmit the copy. */
                         if (shm_rbuff_write_b(f->tx_rb, idx, NULL)) {
