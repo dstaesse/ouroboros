@@ -64,7 +64,7 @@ test_and_set_c_compiler_flag_global(-Wall)
 # explicitly add other flags in -Wextra
 test_and_set_c_compiler_flag_global(-Wempty-body)
 test_and_set_c_compiler_flag_global(-Wignored-qualifiers)
-test_and_set_c_compiler_flag_global(-Wimplicit-fallthrough)
+test_and_set_c_compiler_flag_global(-Wimplicit-fallthrough=4)
 test_and_set_c_compiler_flag_global(-Wmissing-field-initializers)
 test_and_set_c_compiler_flag_global(-Wmissing-parameter-type)
 test_and_set_c_compiler_flag_global(-Wold-style-declaration)
