@@ -109,7 +109,7 @@ int wildcard_match(const char * pattern,
                                 return 0;
 
                         /* General case, use recursion. */
-                        while ((c = *string) != '\0') {
+                        while (*string != '\0') {
                                 if (!wildcard_match(pattern, string))
                                         return 0;
                                 ++string;

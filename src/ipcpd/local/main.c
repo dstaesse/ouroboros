@@ -250,7 +250,6 @@ static int ipcp_local_flow_alloc_resp(int          fd,
         struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
         struct timespec abstime;
         int             out_fd = -1;
-        int             ret    = -1;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -293,7 +292,7 @@ static int ipcp_local_flow_alloc_resp(int          fd,
 
         fset_add(local_data.flows, fd);
 
-        if ((ret = ipcp_flow_alloc_reply(out_fd, response, data, len)) < 0)
+        if (ipcp_flow_alloc_reply(out_fd, response, data, len) < 0)
                 return -1;
 
         log_info("Flow allocation completed, fds (%d, %d).", out_fd, fd);
