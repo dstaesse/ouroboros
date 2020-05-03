@@ -1102,29 +1102,25 @@ ssize_t flow_read(int    fd,
         idx = flow->part_idx;
         if (idx < 0) {
                 idx = frcti_queued_pdu(flow->frcti);
-                if (idx < 0) {
-                        do {
-                                idx = noblock ? shm_rbuff_read(rb) :
-                                        shm_rbuff_read_b(rb, abstime);
-                                if (idx < 0)
-                                        return idx;
+                while (idx < 0) {
+                        idx = noblock ? shm_rbuff_read(rb) :
+                                shm_rbuff_read_b(rb, abstime);
+                        if (idx < 0)
+                                return idx;
 
-                                sdb = shm_rdrbuff_get(ai.rdrb, idx);
-                                if (flow->qs.ber == 0 && chk_crc(sdb) != 0) {
-                                        shm_rdrbuff_remove(ai.rdrb, idx);
-                                        continue;
-                                }
+                        sdb = shm_rdrbuff_get(ai.rdrb, idx);
+                        if (flow->qs.ber == 0 && chk_crc(sdb) != 0) {
+                                shm_rdrbuff_remove(ai.rdrb, idx);
+                                continue;
+                        }
 
-                                pthread_rwlock_wrlock(&ai.lock);
-                                if (flow->qs.cypher_s > 0)
-                                        if (crypt_decrypt(flow, sdb) < 0) {
-                                                pthread_rwlock_unlock(&ai.lock);
-                                                shm_rdrbuff_remove(ai.rdrb,
-                                                                   idx);
-                                                return -ENOMEM;
-                                        }
-                                pthread_rwlock_unlock(&ai.lock);
-                        } while (frcti_rcv(flow->frcti, sdb) != 0);
+                        if (flow->qs.cypher_s > 0
+                            && crypt_decrypt(flow, sdb) < 0) {
+                                shm_rdrbuff_remove(ai.rdrb, idx);
+                                return -ENOMEM;
+                        }
+
+                        idx = frcti_rcv(flow->frcti, sdb);
                 }
         }
 
@@ -1528,22 +1524,19 @@ int ipcp_flow_read(int                   fd,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        if (flow->frcti != NULL) {
-                idx = frcti_queued_pdu(flow->frcti);
-                if (idx >= 0) {
-                        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
-                        return 0;
-                }
-        }
-
-        do {
+        idx = frcti_queued_pdu(flow->frcti);
+        while (idx < 0) {
                 idx = shm_rbuff_read(rb);
                 if (idx < 0)
                         return idx;
                 *sdb = shm_rdrbuff_get(ai.rdrb, idx);
                 if (flow->qs.ber == 0 && chk_crc(*sdb) != 0)
                         continue;
-        } while (frcti_rcv(flow->frcti, *sdb) != 0);
+
+                idx = frcti_rcv(flow->frcti, *sdb);
+        }
+
+        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
 
         return 0;
 }
