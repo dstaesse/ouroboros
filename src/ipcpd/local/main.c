@@ -51,6 +51,8 @@
 #define THIS_TYPE     IPCP_LOCAL
 #define ALLOC_TIMEOUT 10 /* ms */
 
+struct ipcp ipcpi;
+
 struct {
         struct shim_data * shim_data;
 

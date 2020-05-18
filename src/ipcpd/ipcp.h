@@ -79,7 +79,7 @@ struct ipcp_ops {
 #define ipcp_dir_hash_strlen() (hash_len(ipcpi.dir_hash_algo) * 2)
 #define ipcp_dir_hash_len() (hash_len(ipcpi.dir_hash_algo))
 
-struct ipcp {
+extern struct ipcp {
         pid_t              irmd_pid;
         char *             name;
 

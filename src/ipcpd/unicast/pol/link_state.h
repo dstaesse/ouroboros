@@ -36,6 +36,6 @@ struct routing_i * link_state_routing_i_create(struct pff * pff);
 
 void               link_state_routing_i_destroy(struct routing_i * instance);
 
-struct pol_routing_ops link_state_ops;
+extern struct pol_routing_ops link_state_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_POL_LINK_STATE_H */

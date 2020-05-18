@@ -53,6 +53,6 @@ void multipath_pff_flush(struct pff_i * pff_i);
 int            multipath_pff_nhop(struct pff_i * pff_i,
                                   uint64_t       addr);
 
-struct pol_pff_ops multipath_pff_ops;
+extern struct pol_pff_ops multipath_pff_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_MULTIPATH_PFF_H */

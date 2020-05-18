@@ -53,6 +53,8 @@
 
 #define THIS_TYPE IPCP_BROADCAST
 
+struct ipcp ipcpi;
+
 static int initialize_components(const struct ipcp_config * conf)
 {
         ipcpi.layer_name = strdup(conf->layer_info.layer_name);

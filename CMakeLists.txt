@@ -9,7 +9,7 @@ include(GNUInstallDirs)
 
 set(PACKAGE_VERSION_MAJOR  0)
 set(PACKAGE_VERSION_MINOR 17)
-set(PACKAGE_VERSION_PATCH  4)
+set(PACKAGE_VERSION_PATCH  5)
 
 set(PACKAGE_NAME        "${CMAKE_PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "The Ouroboros prototype")
@@ -20,7 +20,7 @@ set(PACKAGE_VERSION
 
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING
-      "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan)" FORCE)
+      "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan, DebugAnalyzer)" FORCE)
 endif()
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -98,6 +98,8 @@ elseif (CMAKE_BUILD_TYPE STREQUAL "DebugTSan")
   test_and_set_c_compiler_flag_global(-fsanitize=thread)
 elseif (CMAKE_BUILD_TYPE STREQUAL "DebugLSan")
   test_and_set_c_compiler_flag_global(-fsanitize=leak)
+elseif (CMAKE_BUILD_TYPE STREQUAL "DebugAnalyzer")
+  test_and_set_c_compiler_flag_global(-fanalyzer)
 endif ()
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros-dev.pc.in"

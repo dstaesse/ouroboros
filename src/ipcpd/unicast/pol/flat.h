@@ -31,6 +31,6 @@ int      flat_fini(void);
 
 uint64_t flat_address(void);
 
-struct pol_addr_auth_ops flat_ops;
+extern struct pol_addr_auth_ops flat_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_FLAT_H */

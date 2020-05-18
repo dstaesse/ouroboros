@@ -77,6 +77,8 @@
 #define MGMT_FRAME_SIZE          (sizeof(struct mgmt_msg))
 #define MGMT_FRAME_BUF_SIZE      2048
 
+struct ipcp ipcpi;
+
 /* Keep order for alignment. */
 struct mgmt_msg {
         uint32_t eid;

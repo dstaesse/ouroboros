@@ -56,6 +56,6 @@ int            alternate_flow_state_change(struct pff_i * pff_i,
                                            int            fd,
                                            bool           up);
 
-struct pol_pff_ops alternate_pff_ops;
+extern struct pol_pff_ops alternate_pff_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_ALTERNATE_PFF_H */

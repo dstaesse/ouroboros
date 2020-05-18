@@ -145,6 +145,8 @@
 #define NAME_QUERY_REQ       2
 #define NAME_QUERY_REPLY     3
 
+struct ipcp ipcpi;
+
 struct mgmt_msg {
 #if defined(BUILD_ETH_DIX)
         uint16_t seid;

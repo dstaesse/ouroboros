@@ -45,6 +45,7 @@
 
 #define KAD_B (hash_len(ipcpi.dir_hash_algo) * CHAR_BIT)
 
+struct ipcp icpci;
 struct dht * dht;
 
 int dir_init(void)
