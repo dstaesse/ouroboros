@@ -160,7 +160,7 @@ struct psched * psched_create(next_packet_fn_t callback)
                         for (j = 0; j < i; ++j)
                                 pthread_join(psched->readers[j], NULL);
                         for (j = i; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
-                                free(infos[i]);
+                                free(infos[j]);
                         goto fail_infos;
                 }
         }
