@@ -1946,6 +1946,7 @@ static ssize_t dht_get_contacts(struct dht *          dht,
         len = dht_contact_list(dht, &l, key);
         if (len == 0) {
                 pthread_rwlock_unlock(&dht->lock);
+                *msgs = NULL;
                 return 0;
         }
 
@@ -1963,6 +1964,7 @@ static ssize_t dht_get_contacts(struct dht *          dht,
                         while (i > 0)
                                 free(*msgs[--i]);
                         free(*msgs);
+                        *msgs = NULL;
                         return 0;
                 }
 
@@ -2552,7 +2554,7 @@ static void * dht_handle_packet(void * o)
                         if (dht_get_state(dht) == DHT_JOINING &&
                             dht->buckets == NULL) {
                                 pthread_rwlock_unlock(&dht->lock);
-                                break;
+                                goto finish;
                         }
 
                         if (dht_update_bucket(dht, msg->s_id.data, addr))
@@ -2563,6 +2565,7 @@ static void * dht_handle_packet(void * o)
                 if (msg->code < KAD_STORE && send_msg(dht, &resp_msg, addr) < 0)
                                 log_warn("Failed to send response.");
 
+ finish:
                 kad_msg__free_unpacked(msg, NULL);
 
                 if (resp_msg.n_addrs > 0)
