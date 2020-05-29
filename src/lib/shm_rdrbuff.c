@@ -101,12 +101,14 @@ static void garbage_collect(struct shm_rdrbuff * rdrb)
         pthread_cond_broadcast(rdrb->healthy);
 }
 
+#ifdef HAVE_ROBUST_MUTEX
 static void sanitize(struct shm_rdrbuff * rdrb)
 {
         --get_head_ptr(rdrb)->refs;
         garbage_collect(rdrb);
         pthread_mutex_consistent(rdrb->lock);
 }
+#endif
 
 static char * rdrb_filename(void)
 {
