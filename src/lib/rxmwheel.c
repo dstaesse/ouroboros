@@ -22,15 +22,15 @@
 
 #include <ouroboros/list.h>
 
-#define RXMQ_S     16                 /* defines #slots           */
-#define RXMQ_M     24                 /* defines max delay  (us)  */
-#define RXMQ_R     (RXMQ_M - RXMQ_S)  /* defines resolution (us)  */
+#define RXMQ_S     14                 /* defines #slots           */
+#define RXMQ_M     34                 /* defines max delay  (ns)  */
+#define RXMQ_R     (RXMQ_M - RXMQ_S)  /* defines resolution (ns)  */
 #define RXMQ_SLOTS (1 << RXMQ_S)
 #define RXMQ_MAX   (1 << RXMQ_M)      /* us                       */
 
-/* Small inacurracy to avoid slow division by MILLION. */
-#define ts_to_us(ts) (ts.tv_sec * MILLION + (ts.tv_nsec >> 10))
-#define ts_to_slot(ts) ((ts_to_us(ts) >> RXMQ_R) & (RXMQ_SLOTS - 1))
+/* Overflow limits range to about 6 hours. */
+#define ts_to_ns(ts) (ts.tv_sec * BILLION + ts.tv_nsec)
+#define ts_to_slot(ts) ((ts_to_ns(ts) >> RXMQ_R) & (RXMQ_SLOTS - 1))
 
 struct rxm {
         struct list_head     next;
@@ -95,22 +95,6 @@ static struct rxmwheel * rxmwheel_create(void)
         return rw;
 }
 
-static void check_probe(struct frcti * frcti,
-                        uint32_t       seqno)
-{
-        /* Disable rtt probe on retransmitted packet! */
-
-        pthread_rwlock_wrlock(&frcti->lock);
-
-        if (frcti->probe && ((frcti->rttseq + 1) == seqno)) {
-                /* Backoff to avoid never updating rtt */
-                frcti->srtt_us += frcti->mdev_us;
-                frcti->probe = false;
-        }
-
-        pthread_rwlock_unlock(&frcti->lock);
-}
-
 static void rxmwheel_move(struct rxmwheel * rw)
 {
         struct timespec    now;
@@ -159,11 +143,15 @@ static void rxmwheel_move(struct rxmwheel * rw)
 
                         shm_du_buff_ack(r->sdb);
 
-                        pthread_rwlock_rdlock(&r->frcti->lock);
+                        pthread_rwlock_wrlock(&r->frcti->lock);
 
                         snd_lwe = snd_cr->lwe;
                         rcv_lwe = rcv_cr->lwe;
                         rto     = r->frcti->rto;
+                        /* Assume last RTX is the one that's ACK'd. */
+                        if (r->frcti->probe
+                            && (r->frcti->rttseq + 1) == r->seqno)
+                                r->frcti->t_probe = now;
 
                         pthread_rwlock_unlock(&r->frcti->lock);
 
@@ -175,13 +163,11 @@ static void rxmwheel_move(struct rxmwheel * rw)
                         }
 
                         /* Check for r-timer expiry. */
-                        if (ts_to_us(now) - r->t0 > r->frcti->r) {
+                        if (ts_to_ns(now) - r->t0 > r->frcti->r) {
                                 ipcp_sdb_release(r->sdb);
                                 free(r);
-                                shm_rbuff_set_acl(ai.flows[fd].rx_rb,
-                                                  ACL_FLOWDOWN);
-                                shm_rbuff_set_acl(ai.flows[fd].tx_rb,
-                                                  ACL_FLOWDOWN);
+                                shm_rbuff_set_acl(f->rx_rb, ACL_FLOWDOWN);
+                                shm_rbuff_set_acl(f->tx_rb, ACL_FLOWDOWN);
                                 continue;
                         }
 
@@ -201,9 +187,7 @@ static void rxmwheel_move(struct rxmwheel * rw)
 
                         ipcp_sdb_release(r->sdb);
 
-                        check_probe(r->frcti, r->seqno);
-
-                        ((struct frct_pci *) head)->ackno = ntoh32(rcv_lwe);
+                        ((struct frct_pci *) head)->ackno = hton32(rcv_lwe);
 
                         /* Retransmit the copy. */
                         if (shm_rbuff_write_b(f->tx_rb, idx, NULL)) {
@@ -224,7 +208,7 @@ static void rxmwheel_move(struct rxmwheel * rw)
                         r->sdb  = sdb;
 
                         /* Schedule at least in the next time slot */
-                        rslot = (slot + MAX(rto >> RXMQ_R, 1))
+                        rslot = (slot + MAX((rto >> RXMQ_R), 1))
                                 & (RXMQ_SLOTS - 1);
 
                         list_add_tail(&r->next, &rw->wheel[rslot]);
@@ -251,7 +235,7 @@ static int rxmwheel_add(struct rxmwheel *    rw,
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        r->t0    = ts_to_us(now);
+        r->t0    = ts_to_ns(now);
         r->mul   = 0;
         r->seqno = seqno;
         r->sdb   = sdb;
