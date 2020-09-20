@@ -61,16 +61,21 @@ void * cleaner_thread(void * o)
 
         while (true) {
                 clock_gettime(CLOCK_REALTIME, &now);
-                pthread_mutex_lock(&server.lock);
-                for (i = 0; i < OPING_MAX_FLOWS; ++i)
-                        if (fset_has(server.flows, i) &&
-                            ts_diff_ms(&server.times[i], &now) > deadline_ms) {
-                                printf("Flow %d timed out.\n", i);
-                                fset_del(server.flows, i);
-                                flow_dealloc(i);
-                        }
 
-                pthread_mutex_unlock(&server.lock);
+                for (i = 0; i < OPING_MAX_FLOWS; ++i)
+                        if (fset_has(server.flows, i)) {
+                                time_t diff;
+
+                                pthread_mutex_lock(&server.lock);
+                                diff = ts_diff_ms(&server.times[i], &now);
+                                pthread_mutex_unlock(&server.lock);
+
+                                if (diff > deadline_ms) {
+                                        printf("Flow %d timed out.\n", i);
+                                        fset_del(server.flows, i);
+                                        flow_dealloc(i);
+                                }
+                        }
                 sleep(1);
         }
 }
@@ -139,8 +144,9 @@ void * accept_thread(void * o)
 
                 clock_gettime(CLOCK_REALTIME, &now);
 
-                pthread_mutex_lock(&server.lock);
                 fset_add(server.flows, fd);
+
+                pthread_mutex_lock(&server.lock);
                 server.times[fd] = now;
                 pthread_mutex_unlock(&server.lock);
 
