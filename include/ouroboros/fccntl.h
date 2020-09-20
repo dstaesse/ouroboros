@@ -48,6 +48,7 @@
 /* FRCT flags */
 #define FRCTFRESCNTRL 00000001 /* Feedback from receiver */
 #define FRCTFRTX      00000002 /* Reliable flow          */
+#define FRCTFLINGER   00000004 /* Sent unsent data       */
 
 /* Flow operations */
 #define FLOWSRCVTIMEO 00000001 /* Set read timeout       */
@@ -61,7 +62,8 @@
 #define FLOWGTXQLEN   00000011 /* Get queue length on tx */
 
 /* FRCT operations */
-#define FRCTGFLAGS    00001000 /* Get flags for FRCT     */
+#define FRCTSFLAGS    00001000 /* Set flags for FRCT     */
+#define FRCTGFLAGS    00002000 /* Get flags for FRCT     */
 
 __BEGIN_DECLS
 

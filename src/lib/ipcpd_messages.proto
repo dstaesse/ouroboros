@@ -52,5 +52,6 @@ message ipcp_msg {
         optional layer_info_msg layer_info =  9;
         optional int32 response            = 10;
         optional string comp               = 11;
-        optional int32 result              = 12;
+        optional uint32 timeo_sec          = 12;
+        optional int32 result              = 13;
 };

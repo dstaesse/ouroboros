@@ -85,7 +85,8 @@ int   ipcp_flow_alloc_resp(pid_t        pid,
                            const void * data,
                            size_t       len);
 
-int   ipcp_flow_dealloc(pid_t pid,
-                        int   flow_id);
+int   ipcp_flow_dealloc(pid_t  pid,
+                        int    flow_id,
+                        time_t timeo);
 
 #endif /* OUROBOROS_IRMD_IPCP_H */

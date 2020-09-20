@@ -543,16 +543,19 @@ int ipcp_flow_alloc_resp(pid_t        pid,
         return ret;
 }
 
-int ipcp_flow_dealloc(pid_t pid,
-                      int   flow_id)
+int ipcp_flow_dealloc(pid_t  pid,
+                      int    flow_id,
+                      time_t timeo)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
         int          ret      = -1;
 
-        msg.code        = IPCP_MSG_CODE__IPCP_FLOW_DEALLOC;
-        msg.has_flow_id = true;
-        msg.flow_id     = flow_id;
+        msg.code          = IPCP_MSG_CODE__IPCP_FLOW_DEALLOC;
+        msg.has_flow_id   = true;
+        msg.flow_id       = flow_id;
+        msg.has_timeo_sec = true;
+        msg.timeo_sec     = timeo;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)

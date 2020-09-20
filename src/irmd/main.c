@@ -68,10 +68,11 @@
 #endif
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
-#define SHM_SAN_HOLDOFF 1000 /* ms */
-#define IPCP_HASH_LEN(e) hash_len(e->dir_hash_algo)
-#define IB_LEN SOCK_BUF_SIZE
-#define BIND_TIMEOUT  10 /* ms */
+#define SHM_SAN_HOLDOFF    1000 /* ms */
+#define IPCP_HASH_LEN(e)   hash_len(e->dir_hash_algo)
+#define IB_LEN             SOCK_BUF_SIZE
+#define BIND_TIMEOUT       10   /* ms */
+#define DEALLOC_TIME       300  /*  s */
 
 enum init_state {
         IPCP_NULL = 0,
@@ -1475,7 +1476,8 @@ static int flow_alloc(pid_t              pid,
 }
 
 static int flow_dealloc(pid_t pid,
-                        int   flow_id)
+                        int   flow_id,
+                        time_t timeo)
 {
         pid_t n_1_pid = -1;
         int   ret = 0;
@@ -1521,7 +1523,7 @@ static int flow_dealloc(pid_t pid,
         pthread_rwlock_unlock(&irmd.flows_lock);
 
         if (n_1_pid != -1)
-                ret = ipcp_flow_dealloc(n_1_pid, flow_id);
+                ret = ipcp_flow_dealloc(n_1_pid, flow_id, timeo);
 
         return ret;
 }
@@ -1927,7 +1929,7 @@ void * irm_sanitize(void * o)
                                 ipcpi   = f->n_1_pid;
                                 flow_id = f->flow_id;
                                 pthread_rwlock_unlock(&irmd.flows_lock);
-                                ipcp_flow_dealloc(ipcpi, flow_id);
+                                ipcp_flow_dealloc(ipcpi, flow_id, DEALLOC_TIME);
                                 pthread_rwlock_wrlock(&irmd.flows_lock);
                                 continue;
                         }
@@ -2190,7 +2192,9 @@ static void * mainloop(void * o)
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
-                        result = flow_dealloc(msg->pid, msg->flow_id);
+                        result = flow_dealloc(msg->pid,
+                                              msg->flow_id,
+                                              msg->timeo_sec);
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
