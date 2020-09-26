@@ -1790,9 +1790,9 @@ static int eth_ipcp_flow_dealloc(int fd)
 #endif
         ipcp_flow_fini(fd);
 
-        pthread_rwlock_wrlock(&eth_data.flows_lock);
-
         fset_del(eth_data.np1_flows, fd);
+
+        pthread_rwlock_wrlock(&eth_data.flows_lock);
 
 #if defined(BUILD_ETH_DIX)
         eth_data.fd_to_ef[fd].r_eid = -1;

@@ -1069,9 +1069,9 @@ static int ipcp_udp_flow_alloc(int             fd,
         udp_data.fd_to_uf[fd].d_eid = -1;
         udp_data.fd_to_uf[fd].skfd  = skfd;
 
-        fset_add(udp_data.np1_flows, fd);
-
         pthread_rwlock_unlock(&udp_data.flows_lock);
+
+        fset_add(udp_data.np1_flows, fd);
 
         log_dbg("Flow pending on fd %d, UDP src port %d, dst port %d.",
                 fd, ntohs(c_saddr.sin_port), ntohs(r_saddr.sin_port));
@@ -1118,17 +1118,14 @@ static int ipcp_udp_flow_alloc_resp(int          fd,
         skfd  = udp_data.fd_to_uf[fd].skfd;
         d_eid = udp_data.fd_to_uf[fd].d_eid;
 
-        fset_add(udp_data.np1_flows, fd);
-
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
         if (ipcp_udp_port_alloc_resp(skfd, d_eid, fd, resp, data, len) < 0) {
-                pthread_rwlock_rdlock(&udp_data.flows_lock);
-                fset_del(udp_data.np1_flows, fd);
-                pthread_rwlock_unlock(&udp_data.flows_lock);
                 log_err("Failed to respond to flow request.");
                 return -1;
         }
+
+        fset_add(udp_data.np1_flows, fd);
 
         log_dbg("Accepted flow, fd %d on eid %d.",
                 fd, d_eid);
@@ -1142,18 +1139,18 @@ static int ipcp_udp_flow_dealloc(int fd)
 
         ipcp_flow_fini(fd);
 
-        pthread_rwlock_wrlock(&udp_data.flows_lock);
-
         fset_del(udp_data.np1_flows, fd);
+
+        pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         skfd = udp_data.fd_to_uf[fd].skfd;
 
         udp_data.fd_to_uf[fd].d_eid = -1;
         udp_data.fd_to_uf[fd].skfd  = -1;
 
-        close(skfd);
-
         pthread_rwlock_unlock(&udp_data.flows_lock);
+
+        close(skfd);
 
         flow_dealloc(fd);
 
