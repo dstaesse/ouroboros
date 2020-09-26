@@ -1729,7 +1729,7 @@ static struct lookup * kad_lookup(struct dht *    dht,
                 }
         }
 
-        assert(state = LU_COMPLETE);
+        assert(state == LU_COMPLETE);
 
         lookup_detach(dht, lu);
 
