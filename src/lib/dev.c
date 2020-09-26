@@ -1067,7 +1067,7 @@ ssize_t flow_write(int          fd,
 
         memcpy(ptr, buf, count);
 
-        pthread_rwlock_wrlock(&ai.lock);
+        pthread_rwlock_rdlock(&ai.lock);
 
         if (frcti_snd(flow->frcti, sdb) < 0) {
                 pthread_rwlock_unlock(&ai.lock);
@@ -1333,7 +1333,7 @@ void fset_del(struct flow_set * set,
         if (set == NULL || fd < 0 || fd > SYS_MAX_FLOWS)
                 return;
 
-        pthread_rwlock_wrlock(&ai.lock);
+        pthread_rwlock_rdlock(&ai.lock);
 
         if (ai.flows[fd].flow_id >= 0)
                 shm_flow_set_del(ai.fqset, set->idx, ai.flows[fd].flow_id);
@@ -1433,7 +1433,9 @@ ssize_t fevent(struct flow_set *       set,
                         }
                         ret = 0;
                         ts_add(t, &tic, t);
+                        pthread_rwlock_rdlock(&ai.lock);
                         timerwheel_move();
+                        pthread_rwlock_unlock(&ai.lock);
                         continue;
                 }
 
