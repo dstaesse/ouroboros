@@ -180,14 +180,42 @@ set(SHM_RDRB_NAME "/${SHM_PREFIX}.rdrb" CACHE INTERNAL
   "Name for the main POSIX shared memory buffer")
 set(SHM_RDRB_BLOCK_SIZE "sysconf(_SC_PAGESIZE)" CACHE STRING
   "Packet buffer block size, multiple of pagesize for performance")
-set(SHM_RDRB_MULTI_BLOCK true CACHE BOOL
+set(SHM_RDRB_MULTI_BLOCK TRUE CACHE BOOL
   "Packet buffer multiblock packet support")
-set(SHM_RBUFF_LOCKLESS 0 CACHE BOOL
+set(SHM_RBUFF_LOCKLESS TRUE CACHE BOOL
   "Enable shared memory lockless rbuff support")
 set(QOS_DISABLE_CRC TRUE CACHE BOOL
   "Ignores ber setting on all QoS cubes")
+set(DELTA_T_MPL 60 CACHE STRING
+  "Maximum packet lifetime (s)")
+set(DELTA_T_ACK 10 CACHE STRING
+  "Maximum time to acknowledge a packet (s)")
+set(DELTA_T_RTX 120 CACHE STRING
+  "Maximum time to retransmit a packet (s)")
+set(DELTA_T_ACK_DELAY 10 CACHE STRING
+  "Maximum time to wait before acknowledging a packet (ms)")
+set(FRCT_REORDER_QUEUE_SIZE 256 CACHE STRING
+  "Size of the reordering queue, must be a power of 2")
 set(FRCT_RTO_MIN 250 CACHE STRING
   "Minimum Retransmission Timeout (RTO) for FRCT (us)")
+set(FRCT_TICK_TIME 500 CACHE STRING
+  "Tick time for FRCT activity (retransmission, acknowledgments) (us)")
+set(RXM_BUFFER_ON_HEAP FALSE CACHE BOOL
+  "Store packets for retransmission on the heap instead of in packet buffer")
+set(RXM_BLOCKING TRUE CACHE BOOL
+  "Use blocking writes for retransmission")
+set(RXM_MIN_RESOLUTION 20 CACHE STRING
+  "Minimum retransmission delay (ns), as a power to 2")
+set(RXM_WHEEL_MULTIPLIER 4 CACHE STRING
+  "Factor for retransmission wheel levels as a power to 2")
+set(RXM_WHEEL_LEVELS 3 CACHE STRING
+  "Number of levels in the retransmission wheel")
+set(RXM_WHEEL_SLOTS_PER_LEVEL 256 CACHE STRING
+  "Number of slots per level in the retransmission wheel, must be a power of 2")
+set(ACK_WHEEL_SLOTS 128 CACHE STRING
+  "Number of slots in the acknowledgment wheel, must be a power of 2")
+set(ACK_WHEEL_RESOLUTION 20 CACHE STRING
+  "Minimum acknowledgment delay (ns), as a power to 2")
 
 set(SOURCE_FILES_DEV
   # Add source files here

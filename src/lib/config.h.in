@@ -55,7 +55,7 @@
 
 #cmakedefine HAVE_FUSE
 #ifdef HAVE_FUSE
-#define FUSE_PREFIX "@FUSE_PREFIX@"
+#define FUSE_PREFIX         "@FUSE_PREFIX@"
 #endif
 
 #define PTHREAD_COND_CLOCK  @PTHREAD_COND_CLOCK@
@@ -67,4 +67,26 @@
 #define DU_BUFF_HEADSPACE   @DU_BUFF_HEADSPACE@
 #define DU_BUFF_TAILSPACE   @DU_BUFF_TAILSPACE@
 
-#define RTO_MIN             @FRCT_RTO_MIN@
+/* Default Delta-t parameters */
+#define DELT_MPL            (@DELTA_T_MPL@ * BILLION)        /* ns */
+#define DELT_A              (@DELTA_T_ACK@ * BILLION)        /* ns */
+#define DELT_R              (@DELTA_T_RTX@ * BILLION)        /* ns */
+
+#define DELT_ACK            (@DELTA_T_ACK_DELAY@ * MILLION)  /* ns */
+
+#define RQ_SIZE             (@FRCT_REORDER_QUEUE_SIZE@)
+#define RTO_MIN             (@FRCT_RTO_MIN@ * 1000)
+
+#define TICTIME             (@FRCT_TICK_TIME@ * 1000)        /* ns */
+
+/* Retransmission tuning */
+#cmakedefine                RXM_BUFFER_ON_HEAP
+#cmakedefine                RXM_BLOCKING
+
+#define RXMQ_RES            (@RXM_MIN_RESOLUTION@)           /* 2^N ns */
+#define RXMQ_BUMP           (@RXM_WHEEL_MULTIPLIER@)
+#define RXMQ_LVLS           (@RXM_WHEEL_LEVELS@)
+#define RXMQ_SLOTS          (@RXM_WHEEL_SLOTS_PER_LEVEL@)
+
+#define ACKQ_SLOTS          (@ACK_WHEEL_SLOTS@)
+#define ACKQ_RES            (@ACK_WHEEL_RESOLUTION@)         /* 2^N ns */

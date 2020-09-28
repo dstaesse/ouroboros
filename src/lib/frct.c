@@ -20,15 +20,6 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-/* Default Delta-t parameters */
-#define DELT_MPL        (5 * BILLION) /* ns */
-#define DELT_A          (1 * BILLION) /* ns */
-#define DELT_R         (20 * BILLION) /* ns */
-
-#define DELT_ACK       (10 * MILLION) /* ns */
-
-#define RQ_SIZE        256
-
 #define FRCT_PCILEN    (sizeof(struct frct_pci))
 
 struct frct_cr {
@@ -96,7 +87,7 @@ static bool after(uint32_t seq1,
         return (int32_t)(seq2 - seq1) < 0;
 }
 
-static void __send_ack(int fd,
+static int __send_ack(int fd,
                        int ackno)
 {
         struct shm_du_buff * sdb;
@@ -105,9 +96,13 @@ static void __send_ack(int fd,
         struct flow *        f;
 
         /* Raw calls needed to bypass frcti. */
+#ifdef RXM_BLOCKING
         idx = shm_rdrbuff_alloc_b(ai.rdrb, sizeof(*pci), NULL, &sdb, NULL);
+#else
+        idx = shm_rdrbuff_alloc(ai.rdrb, sizeof(*pci), NULL, &sdb);
+#endif
         if (idx < 0)
-                return;
+                return -ENOMEM;
 
         pci = (struct frct_pci *) shm_du_buff_head(sdb);
         memset(pci, 0, sizeof(*pci));
@@ -116,13 +111,18 @@ static void __send_ack(int fd,
         pci->ackno = hton32(ackno);
 
         f = &ai.flows[fd];
-
+#ifdef RXM_BLOCKING
         if (shm_rbuff_write_b(f->tx_rb, idx, NULL)) {
+#else
+        if (shm_rbuff_write(f->tx_rb, idx)) {
+#endif
                 ipcp_sdb_release(sdb);
-                return;
+                return -ENOMEM;
         }
 
         shm_flow_set_notify(f->set, f->flow_id, FLOW_PKT);
+
+        return 0;
 }
 
 static void frct_send_ack(struct frcti * frcti)
@@ -153,7 +153,8 @@ static void frct_send_ack(struct frcti * frcti)
         if (diff > frcti->a || diff < DELT_ACK)
                 return;
 
-        __send_ack(fd, ackno);
+        if (__send_ack(fd, ackno) < 0)
+                return;
 
         pthread_rwlock_wrlock(&frcti->lock);
 
@@ -439,8 +440,7 @@ static void rtt_estimator(struct frcti * frcti,
 
         frcti->srtt     = MAX(1000U, srtt);
         frcti->mdev     = MAX(100U, rttvar);
-        frcti->rto      = MAX(RTO_MIN * 1000,
-                              frcti->srtt + (frcti->mdev << 1));
+        frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << 1));
 }
 
 static void __frcti_tick(void)

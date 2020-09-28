@@ -63,7 +63,6 @@
 #define SECMEMSZ  16384
 #define SYMMKEYSZ 32
 #define MSGBUFSZ  2048
-#define TICTIME   1000000  /* ns */
 
 struct flow_set {
         size_t idx;
@@ -801,7 +800,7 @@ int flow_dealloc(int fd)
 
                 timeo = frcti_dealloc(f->frcti);
 
-                if (ret == -ETIMEDOUT && timeo < 0)
+                if ((ret == -ETIMEDOUT || ret == -EFLOWDOWN) && timeo < 0)
                         timeo = -timeo;
         }
 
