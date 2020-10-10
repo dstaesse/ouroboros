@@ -177,10 +177,7 @@ void * writer(void * o)
 
                 if (flow_write(*fdp, buf, client.size) < 0) {
                         printf("Failed to send packet.\n");
-                        flow_dealloc(*fdp);
-                        free(buf);
                         stop = true;
-                        return (void *) -1;
                 }
         }
 
