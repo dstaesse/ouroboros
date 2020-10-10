@@ -75,6 +75,7 @@
 #define DELT_ACK            (@DELTA_T_ACK_DELAY@ * MILLION)  /* ns */
 
 #define RQ_SIZE             (@FRCT_REORDER_QUEUE_SIZE@)
+#define START_WINDOW        (@FRCT_START_WINDOW@)
 #define RTO_MIN             (@FRCT_RTO_MIN@ * 1000)
 
 #define TICTIME             (@FRCT_TICK_TIME@ * 1000)        /* ns */

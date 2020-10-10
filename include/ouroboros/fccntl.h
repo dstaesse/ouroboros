@@ -46,9 +46,9 @@
 #define FLOWFINVALID  (FLOWFWRONLY | FLOWFRDWR)
 
 /* FRCT flags */
-#define FRCTFRESCNTRL 00000001 /* Feedback from receiver */
-#define FRCTFRTX      00000002 /* Reliable flow          */
-#define FRCTFLINGER   00000004 /* Sent unsent data       */
+#define FRCTFRTX      00000001 /* Reliable flow          */
+#define FRCTFRESCNTL  00000002 /* Feedback from receiver */
+#define FRCTFLINGER   00000004 /* Send unsent data       */
 
 /* Flow operations */
 #define FLOWSRCVTIMEO 00000001 /* Set read timeout       */
