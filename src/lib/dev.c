@@ -1068,28 +1068,14 @@ ssize_t flow_write(int          fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        if (frcti_snd(flow->frcti, sdb) < 0) {
-                pthread_rwlock_unlock(&ai.lock);
-                shm_rdrbuff_remove(ai.rdrb, idx);
-                return -ENOMEM;
-        }
+        if (frcti_snd(flow->frcti, sdb) < 0)
+                goto enomem;
 
-        if (flow->qs.cypher_s > 0) {
-                if (crypt_encrypt(flow, sdb) < 0) {
-                        pthread_rwlock_unlock(&ai.lock);
-                        shm_rdrbuff_remove(ai.rdrb, idx);
-                        return -ENOMEM;
-                }
-        }
+        if (flow->qs.cypher_s > 0 && crypt_encrypt(flow, sdb) < 0)
+                goto enomem;
 
-        pthread_rwlock_unlock(&ai.lock);
-
-        if (flow->qs.ber == 0 && add_crc(sdb) != 0) {
-                shm_rdrbuff_remove(ai.rdrb, idx);
-                return -ENOMEM;
-        }
-
-        pthread_rwlock_rdlock(&ai.lock);
+        if (flow->qs.ber == 0 && add_crc(sdb) != 0)
+                goto enomem;
 
         if (flags & FLOWFWNOBLOCK)
                 ret = shm_rbuff_write(flow->tx_rb, idx);
@@ -1104,6 +1090,11 @@ ssize_t flow_write(int          fd,
         pthread_rwlock_unlock(&ai.lock);
 
         return ret < 0 ? (ssize_t) ret : (ssize_t) count;
+
+ enomem:
+        pthread_rwlock_unlock(&ai.lock);
+        shm_rdrbuff_remove(ai.rdrb, idx);
+        return -ENOMEM;
 }
 
 ssize_t flow_read(int    fd,
