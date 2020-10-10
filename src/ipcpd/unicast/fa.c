@@ -274,7 +274,8 @@ static void * fa_handle_packet(void * o)
 
 int fa_init(void)
 {
-        int i;
+        pthread_condattr_t cattr;
+        int                i;
 
         for (i = 0; i < PROG_MAX_FLOWS; ++i)
                 destroy_conn(i);
@@ -285,8 +286,16 @@ int fa_init(void)
         if (pthread_mutex_init(&fa.mtx, NULL))
                 goto fail_mtx;
 
-        if (pthread_cond_init(&fa.cond, NULL))
+        if (pthread_condattr_init(&cattr))
+                goto fail_cattr;
+
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+        if (pthread_cond_init(&fa.cond, &cattr))
                 goto fail_cond;
+
+        pthread_condattr_destroy(&cattr);
 
         list_head_init(&fa.cmds);
 
@@ -295,6 +304,8 @@ int fa_init(void)
         return 0;
 
  fail_cond:
+        pthread_condattr_destroy(&cattr);
+ fail_cattr:
         pthread_mutex_destroy(&fa.mtx);
  fail_mtx:
         pthread_rwlock_destroy(&fa.flows_lock);
