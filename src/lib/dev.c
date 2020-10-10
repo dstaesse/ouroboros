@@ -1017,6 +1017,8 @@ ssize_t flow_write(int          fd,
         int                  flags;
         struct timespec      abs;
         struct timespec *    abstime = NULL;
+        struct timespec      tic = {0, TICTIME};
+        struct timespec      tictime;
         struct shm_du_buff * sdb;
         uint8_t *            ptr;
 
@@ -1037,6 +1039,8 @@ ssize_t flow_write(int          fd,
                 return -ENOTALLOC;
         }
 
+        ts_add(&tic, &abs, &tictime);
+
         if (ai.flows[fd].snd_timesout) {
                 ts_add(&abs, &flow->snd_timeo, &abs);
                 abstime = &abs;
@@ -1049,18 +1053,26 @@ ssize_t flow_write(int          fd,
         if ((flags & FLOWFACCMODE) == FLOWFRDONLY)
                 return -EPERM;
 
-        /* TODO: partial writes. */
-        if (flags & FLOWFWNOBLOCK)
-                idx = shm_rdrbuff_alloc(ai.rdrb,
-                                        count,
-                                        &ptr,
-                                        &sdb);
-        else  /* Blocking. */
-                idx = shm_rdrbuff_alloc_b(ai.rdrb,
-                                          count,
-                                          &ptr,
-                                          &sdb,
-                                          abstime);
+        if (flags & FLOWFWNOBLOCK) {
+                if (!frcti_is_window_open(flow->frcti))
+                        return -EAGAIN;
+                idx = shm_rdrbuff_alloc(ai.rdrb, count, &ptr, &sdb);
+        } else {
+                while((ret = frcti_window_wait(flow->frcti, &tictime)) < 0) {
+
+                        if (ret != -ETIMEDOUT)
+                                return ret;
+
+                        if (abstime != NULL && ts_diff_ns(&tictime, &abs) <= 0)
+                                return -ETIMEDOUT;
+
+                        frcti_tick(flow->frcti);
+
+                        ts_add(&tictime, &tic, &tictime);
+                }
+                idx = shm_rdrbuff_alloc_b(ai.rdrb, count, &ptr, &sdb, abstime);
+        }
+
         if (idx < 0)
                 return idx;
 
@@ -1160,7 +1172,7 @@ ssize_t flow_read(int    fd,
                                         return idx;
 
                                 if (abstime != NULL
-                                    && ts_diff_ns(&tictime, &abs) < 0)
+                                    && ts_diff_ns(&tictime, &abs) <= 0)
                                         return -ETIMEDOUT;
 
                                 ts_add(&tictime, &tic, &tictime);
