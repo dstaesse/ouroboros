@@ -1058,8 +1058,7 @@ ssize_t flow_write(int          fd,
                         return -EAGAIN;
                 idx = shm_rdrbuff_alloc(ai.rdrb, count, &ptr, &sdb);
         } else {
-                while((ret = frcti_window_wait(flow->frcti, &tictime)) < 0) {
-
+                while ((ret = frcti_window_wait(flow->frcti, &tictime)) < 0) {
                         if (ret != -ETIMEDOUT)
                                 return ret;
 

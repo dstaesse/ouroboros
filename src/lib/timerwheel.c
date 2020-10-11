@@ -294,7 +294,7 @@ static void timerwheel_move(void)
                         rw.map[j & (ACKQ_SLOTS - 1)][a->fd] = false;
 
                         if (f->flow_id == a->flow_id && f->frcti != NULL)
-                                frct_send_ack(a->frcti);
+                                send_frct_pkt(a->frcti);
 
                         free(a);
 
