@@ -98,18 +98,13 @@ struct {
         uint8_t         max_ttl;
 } dt_pci_info;
 
-static int dt_pci_ser(struct shm_du_buff * sdb,
-                      struct dt_pci *      dt_pci)
+static void dt_pci_ser(uint8_t *       head,
+                       struct dt_pci * dt_pci)
 {
-        uint8_t * head;
-        uint8_t   ttl = dt_pci_info.max_ttl;
+        uint8_t ttl = dt_pci_info.max_ttl;
 
-        assert(sdb);
+        assert(head);
         assert(dt_pci);
-
-        head = shm_du_buff_head_alloc(sdb, dt_pci_info.head_size);
-        if (head == NULL)
-                return -EPERM;
 
         /* FIXME: Add check and operations for Big Endian machines. */
         memcpy(head, &dt_pci->dst_addr, dt_pci_info.addr_size);
@@ -118,7 +113,6 @@ static int dt_pci_ser(struct shm_du_buff * sdb,
         memcpy(head + dt_pci_info.ecn_o,  &dt_pci->ecn, ECN_LEN);
         memcpy(head + dt_pci_info.eid_o, &dt_pci->eid, dt_pci_info.eid_size);
 
-        return 0;
 }
 
 static void dt_pci_des(struct shm_du_buff * sdb,
@@ -440,14 +434,19 @@ static void packet_handler(int                  fd,
         struct dt_pci dt_pci;
         int           ret;
         int           ofd;
-#ifdef IPCP_FLOW_STATS
-        size_t        len;
-#else
+#ifndef IPCP_FLOW_STATS
         (void)        fd;
-#endif
+#else
+        size_t        len;
 
-#ifdef IPCP_FLOW_STATS
         len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+
+        pthread_mutex_lock(&dt.stat[fd].lock);
+
+        ++dt.stat[fd].rcv_pkt[qc];
+        dt.stat[fd].rcv_bytes[qc] += len;
+
+        pthread_mutex_unlock(&dt.stat[fd].lock);
 #endif
         memset(&dt_pci, 0, sizeof(dt_pci));
         dt_pci_des(sdb, &dt_pci);
@@ -458,8 +457,6 @@ static void packet_handler(int                  fd,
 #ifdef IPCP_FLOW_STATS
                         pthread_mutex_lock(&dt.stat[fd].lock);
 
-                        ++dt.stat[fd].rcv_pkt[qc];
-                        dt.stat[fd].rcv_bytes[qc] += len;
                         ++dt.stat[fd].r_drp_pkt[qc];
                         dt.stat[fd].r_drp_bytes[qc] += len;
 
@@ -476,8 +473,6 @@ static void packet_handler(int                  fd,
 #ifdef IPCP_FLOW_STATS
                         pthread_mutex_lock(&dt.stat[fd].lock);
 
-                        ++dt.stat[fd].rcv_pkt[qc];
-                        dt.stat[fd].rcv_bytes[qc] += len;
                         ++dt.stat[fd].f_nhp_pkt[qc];
                         dt.stat[fd].f_nhp_bytes[qc] += len;
 
@@ -493,12 +488,6 @@ static void packet_handler(int                  fd,
                                 notifier_event(NOTIFY_DT_FLOW_DOWN, &ofd);
                         ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
-                        pthread_mutex_lock(&dt.stat[fd].lock);
-
-                        ++dt.stat[fd].rcv_pkt[qc];
-                        dt.stat[fd].rcv_bytes[qc] += len;
-
-                        pthread_mutex_unlock(&dt.stat[fd].lock);
                         pthread_mutex_lock(&dt.stat[ofd].lock);
 
                         ++dt.stat[ofd].w_drp_pkt[qc];
@@ -509,12 +498,6 @@ static void packet_handler(int                  fd,
                         return;
                 }
 #ifdef IPCP_FLOW_STATS
-                pthread_mutex_lock(&dt.stat[fd].lock);
-
-                ++dt.stat[fd].rcv_pkt[qc];
-                dt.stat[fd].rcv_bytes[qc] += len;
-
-                pthread_mutex_unlock(&dt.stat[fd].lock);
                 pthread_mutex_lock(&dt.stat[ofd].lock);
 
                 ++dt.stat[ofd].snd_pkt[qc];
@@ -528,25 +511,16 @@ static void packet_handler(int                  fd,
                         if (ipcp_flow_write(dt_pci.eid, sdb)) {
                                 ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
-                                pthread_mutex_lock(&dt.stat[fd].lock);
-                                ++dt.stat[fd].rcv_pkt[qc];
-                                dt.stat[fd].rcv_bytes[qc] += len;
-                                pthread_mutex_unlock(&dt.stat[fd].lock);
-
                                 pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
+
                                 ++dt.stat[dt_pci.eid].w_drp_pkt[qc];
                                 dt.stat[dt_pci.eid].w_drp_bytes[qc] += len;
+
                                 pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
 #endif
 
                         }
 #ifdef IPCP_FLOW_STATS
-                        pthread_mutex_lock(&dt.stat[fd].lock);
-
-                        ++dt.stat[fd].rcv_pkt[qc];
-                        dt.stat[fd].rcv_bytes[qc] += len;
-
-                        pthread_mutex_unlock(&dt.stat[fd].lock);
                         pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
 
                         ++dt.stat[dt_pci.eid].rcv_pkt[qc];
@@ -564,12 +538,6 @@ static void packet_handler(int                  fd,
                                 dt_pci.eid);
                         ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
-                        pthread_mutex_lock(&dt.stat[fd].lock);
-
-                        ++dt.stat[fd].rcv_pkt[qc];
-                        dt.stat[fd].rcv_bytes[qc] += len;
-
-                        pthread_mutex_unlock(&dt.stat[fd].lock);
                         pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
 
                         ++dt.stat[dt_pci.eid].w_drp_pkt[qc];
@@ -582,8 +550,6 @@ static void packet_handler(int                  fd,
 #ifdef IPCP_FLOW_STATS
                 pthread_mutex_lock(&dt.stat[fd].lock);
 
-                ++dt.stat[fd].rcv_pkt[qc];
-                dt.stat[fd].rcv_bytes[qc] += len;
                 ++dt.stat[fd].lcl_r_pkt[qc];
                 dt.stat[fd].lcl_r_bytes[qc] += len;
 
@@ -822,31 +788,45 @@ int dt_write_packet(uint64_t             dst_addr,
                     int                  np1_fd,
                     struct shm_du_buff * sdb)
 {
-        int           fd;
         struct dt_pci dt_pci;
+        int           fd;
         int           ret;
+        uint8_t *     head;
 #ifdef IPCP_FLOW_STATS
         size_t        len;
 #endif
         assert(sdb);
         assert(dst_addr != ipcpi.dt_addr);
 
+#ifdef IPCP_FLOW_STATS
+        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+
+        pthread_mutex_lock(&dt.stat[np1_fd].lock);
+
+        ++dt.stat[np1_fd].lcl_r_pkt[qc];
+        dt.stat[np1_fd].lcl_r_bytes[qc] += len;
+
+        pthread_mutex_unlock(&dt.stat[np1_fd].lock);
+#endif
+
         fd = pff_nhop(dt.pff[qc], dst_addr);
         if (fd < 0) {
                 log_dbg("Could not get nhop for addr %" PRIu64 ".", dst_addr);
 #ifdef IPCP_FLOW_STATS
-                len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
-
                 pthread_mutex_lock(&dt.stat[np1_fd].lock);
 
-                ++dt.stat[np1_fd].lcl_r_pkt[qc];
-                dt.stat[np1_fd].lcl_r_bytes[qc] += len;
                 ++dt.stat[np1_fd].f_nhp_pkt[qc];
                 dt.stat[np1_fd].f_nhp_bytes[qc] += len;
 
                 pthread_mutex_unlock(&dt.stat[np1_fd].lock);
 #endif
-                return -1;
+                return -EPERM;
+        }
+
+        head = shm_du_buff_head_alloc(sdb, dt_pci_info.head_size);
+        if (head == NULL) {
+                log_dbg("Failed to allocate DT header.");
+                goto fail_write;
         }
 
         dt_pci.dst_addr = dst_addr;
@@ -854,13 +834,7 @@ int dt_write_packet(uint64_t             dst_addr,
         dt_pci.eid      = np1_fd;
         dt_pci.ecn      = 0;
 
-        if (dt_pci_ser(sdb, &dt_pci)) {
-                log_dbg("Failed to serialize PDU.");
-#ifdef IPCP_FLOW_STATS
-                len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
-#endif
-                goto fail_write;
-        }
+        dt_pci_ser(head, &dt_pci);
 #ifdef IPCP_FLOW_STATS
         len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
 #endif
@@ -872,12 +846,6 @@ int dt_write_packet(uint64_t             dst_addr,
                 goto fail_write;
         }
 #ifdef IPCP_FLOW_STATS
-        pthread_mutex_lock(&dt.stat[np1_fd].lock);
-
-        ++dt.stat[np1_fd].lcl_r_pkt[qc];
-        dt.stat[np1_fd].lcl_r_bytes[qc] += len;
-
-        pthread_mutex_unlock(&dt.stat[np1_fd].lock);
         pthread_mutex_lock(&dt.stat[fd].lock);
 
         if (dt_pci.eid < PROG_RES_FDS) {
@@ -893,15 +861,9 @@ int dt_write_packet(uint64_t             dst_addr,
 
  fail_write:
 #ifdef IPCP_FLOW_STATS
-        pthread_mutex_lock(&dt.stat[np1_fd].lock);
-
-        ++dt.stat[np1_fd].lcl_w_pkt[qc];
-        dt.stat[np1_fd].lcl_w_bytes[qc] += len;
-
-        pthread_mutex_unlock(&dt.stat[np1_fd].lock);
         pthread_mutex_lock(&dt.stat[fd].lock);
 
-        if (dt_pci.eid < PROG_RES_FDS) {
+        if (np1_fd < PROG_RES_FDS) {
                 ++dt.stat[fd].lcl_w_pkt[qc];
                 dt.stat[fd].lcl_w_bytes[qc] += len;
         }
