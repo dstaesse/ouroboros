@@ -1256,35 +1256,35 @@ static int proc_announce(pid_t  pid,
         return 0;
 }
 
-static int flow_accept(pid_t              pid,
-                       struct timespec *  timeo,
-                       struct irm_flow ** fl,
-                       const void *       data,
-                       size_t             len)
+static int flow_accept(pid_t             pid,
+                       struct timespec * timeo,
+                       struct irm_flow * f_out,
+                       const void *      data,
+                       size_t            len)
 {
         struct irm_flow  *  f  = NULL;
-        struct proc_entry * e  = NULL;
+        struct proc_entry * pe = NULL;
         struct reg_entry *  re = NULL;
         struct list_head *  p  = NULL;
 
-        pid_t pid_n1;
         pid_t pid_n;
+        pid_t pid_n_1;
         int   flow_id;
         int   ret;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        e = proc_table_get(&irmd.proc_table, pid);
-        if (e == NULL) {
+        pe = proc_table_get(&irmd.proc_table, pid);
+        if (pe == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Unknown process %d calling accept.", pid);
                 return -EINVAL;
         }
 
-        log_dbg("New instance (%d) of %s added.", pid, e->prog);
+        log_dbg("New instance (%d) of %s added.", pid, pe->prog);
         log_dbg("This process accepts flows for:");
 
-        list_for_each(p, &e->names) {
+        list_for_each(p, &pe->names) {
                 struct str_el * s = list_entry(p, struct str_el, next);
                 log_dbg("        %s", s->str);
                 re = registry_get_entry(&irmd.registry, s->str);
@@ -1294,7 +1294,7 @@ static int flow_accept(pid_t              pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        ret = proc_entry_sleep(e, timeo);
+        ret = proc_entry_sleep(pe, timeo);
         if (ret == -ETIMEDOUT)
                 return -ETIMEDOUT;
 
@@ -1314,20 +1314,20 @@ static int flow_accept(pid_t              pid,
         }
 
         pid_n   = f->n_pid;
-        pid_n1  = f->n_1_pid;
+        pid_n_1 = f->n_1_pid;
         flow_id = f->flow_id;
 
         pthread_rwlock_unlock(&irmd.flows_lock);
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        e = proc_table_get(&irmd.proc_table, pid);
-        if (e == NULL) {
+        pe = proc_table_get(&irmd.proc_table, pid);
+        if (pe == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
                 bmp_release(irmd.flow_ids, f->flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                ipcp_flow_alloc_resp(pid_n1, flow_id, pid_n, -1, NULL, 0);
+                ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, -1, NULL, 0);
                 clear_irm_flow(f);
                 irm_flow_set_state(f, FLOW_NULL);
                 irm_flow_destroy(f);
@@ -1335,11 +1335,11 @@ static int flow_accept(pid_t              pid,
                 return -EPERM;
         }
 
-        pthread_mutex_lock(&e->lock);
+        pthread_mutex_lock(&pe->lock);
 
-        re = e->re;
+        re = pe->re;
 
-        pthread_mutex_unlock(&e->lock);
+        pthread_mutex_unlock(&pe->lock);
 
         if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
@@ -1347,7 +1347,7 @@ static int flow_accept(pid_t              pid,
                 list_del(&f->next);
                 bmp_release(irmd.flow_ids, f->flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                ipcp_flow_alloc_resp(pid_n1, flow_id, pid_n, -1, NULL, 0);
+                ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, -1, NULL, 0);
                 clear_irm_flow(f);
                 irm_flow_set_state(f, FLOW_NULL);
                 irm_flow_destroy(f);
@@ -1359,12 +1359,25 @@ static int flow_accept(pid_t              pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
+        pthread_rwlock_wrlock(&irmd.flows_lock);
+
+        f_out->flow_id = f->flow_id;
+        f_out->n_pid   = f->n_pid;
+        f_out->n_1_pid = f->n_1_pid;
+        f_out->data    = f->data; /* pass owner */
+        f_out->len     = f->len;
+        f_out->qs      = f->qs;
+        f->data     = NULL;
+        f->len      = 0;
+
+        pthread_rwlock_unlock(&irmd.flows_lock);
+
         if (f->qs.cypher_s == 0) { /* no crypto requested, don't send pubkey */
                 data = NULL;
                 len = 0;
         }
 
-        if (ipcp_flow_alloc_resp(pid_n1, flow_id, pid_n, 0, data, len)) {
+        if (ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, 0, data, len)) {
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1379,8 +1392,6 @@ static int flow_accept(pid_t              pid,
 
         log_info("Flow on flow_id %d allocated.", f->flow_id);
 
-        *fl = f;
-
         return 0;
 }
 
@@ -1388,7 +1399,7 @@ static int flow_alloc(pid_t              pid,
                       const char *       dst,
                       qosspec_t          qs,
                       struct timespec *  timeo,
-                      struct irm_flow ** e,
+                      struct irm_flow *  f_out,
                       bool               join,
                       const void *       data,
                       size_t             len)
@@ -1407,6 +1418,7 @@ static int flow_alloc(pid_t              pid,
         }
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
+
         flow_id = bmp_allocate(irmd.flow_ids);
         if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1466,9 +1478,19 @@ static int flow_alloc(pid_t              pid,
                 return -EPIPE;
         }
 
+        pthread_rwlock_wrlock(&irmd.flows_lock);
+
         assert(irm_flow_get_state(f) == FLOW_ALLOCATED);
 
-        *e = f;
+        f_out->flow_id = f->flow_id;
+        f_out->n_pid   = f->n_pid;
+        f_out->n_1_pid = f->n_1_pid;
+        f_out->data    = f->data; /* pass owner */
+        f_out->len     = f->len;
+        f->data        = NULL;
+        f->len         = 0;
+
+        pthread_rwlock_unlock(&irmd.flows_lock);
 
         log_info("Flow on flow_id %d allocated.", flow_id);
 
@@ -1553,21 +1575,22 @@ static pid_t auto_execute(char ** argv)
         return pid;
 }
 
-static struct irm_flow * flow_req_arr(pid_t           pid,
-                                      const uint8_t * hash,
-                                      qosspec_t       qs,
-                                      const void *    data,
-                                      size_t          len)
+static int flow_req_arr(pid_t             pid,
+                        struct irm_flow * f_out,
+                        const uint8_t *   hash,
+                        qosspec_t         qs,
+                        const void *      data,
+                        size_t            len)
 {
         struct reg_entry *  re = NULL;
         struct prog_entry * a  = NULL;
-        struct proc_entry * e  = NULL;
+        struct proc_entry * pe = NULL;
         struct irm_flow *   f  = NULL;
 
         struct pid_el *     c_pid;
         struct ipcp_entry * ipcp;
-        pid_t               h_pid   = -1;
-        int                 flow_id = -1;
+        pid_t               h_pid;
+        int                 flow_id;
 
         struct timespec wt = {IRMD_REQ_ARR_TIMEOUT / 1000,
                               (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
@@ -1580,7 +1603,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
         ipcp = get_ipcp_entry_by_pid(pid);
         if (ipcp == NULL) {
                 log_err("IPCP died.");
-                return NULL;
+                return -EIPCP;
         }
 
         re = registry_get_entry_by_hash(&irmd.registry, ipcp->dir_hash_algo,
@@ -1588,7 +1611,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
         if (re == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Unknown hash: " HASH_FMT ".", HASH_VAL(hash));
-                return NULL;
+                return -1;
         }
 
         log_info("Flow request arrived for %s.", re->name);
@@ -1598,7 +1621,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
         /* Give the process a bit of slop time to call accept */
         if (reg_entry_leave_state(re, REG_NAME_IDLE, &wt) == -1) {
                 log_err("No processes for " HASH_FMT ".", HASH_VAL(hash));
-                return NULL;
+                return -1;
         }
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
@@ -1607,12 +1630,12 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
         case REG_NAME_IDLE:
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("No processes for " HASH_FMT ".", HASH_VAL(hash));
-                return NULL;
+                return -1;
         case REG_NAME_AUTO_ACCEPT:
                 c_pid = malloc(sizeof(*c_pid));
                 if (c_pid == NULL) {
                         pthread_rwlock_unlock(&irmd.reg_lock);
-                        return NULL;
+                        return -1;
                 }
 
                 reg_entry_set_state(re, REG_NAME_AUTO_EXEC);
@@ -1625,7 +1648,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                         log_err("Could not start program for reg_entry %s.",
                                 re->name);
                         free(c_pid);
-                        return NULL;
+                        return -1;
                 }
 
                 list_add(&c_pid->next, &irmd.spawned_pids);
@@ -1633,7 +1656,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                 pthread_rwlock_unlock(&irmd.reg_lock);
 
                 if (reg_entry_leave_state(re, REG_NAME_AUTO_EXEC, NULL))
-                        return NULL;
+                        return -1;
 
                 pthread_rwlock_wrlock(&irmd.reg_lock);
                 /* FALLTHRU */
@@ -1642,14 +1665,14 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                 if (h_pid == -1) {
                         pthread_rwlock_unlock(&irmd.reg_lock);
                         log_err("Invalid process id returned.");
-                        return NULL;
+                        return -1;
                 }
 
                 break;
         default:
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("IRMd in wrong state.");
-                return NULL;
+                return -1;
         }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
@@ -1658,7 +1681,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
         flow_id = bmp_allocate(irmd.flow_ids);
         if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
-                return NULL;
+                return -1;
         }
 
         f = irm_flow_create(h_pid, pid, flow_id, qs);
@@ -1666,7 +1689,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                 bmp_release(irmd.flow_ids, flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 log_err("Could not allocate flow_id.");
-                return NULL;
+                return -1;
         }
 
         if (len != 0) {
@@ -1676,7 +1699,7 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                         bmp_release(irmd.flow_ids, flow_id);
                         pthread_rwlock_unlock(&irmd.flows_lock);
                         log_err("Could not piggyback data.");
-                        return NULL;
+                        return -1;
                 }
 
                 f->len = len;
@@ -1691,8 +1714,8 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
 
         reg_entry_set_state(re, REG_NAME_FLOW_ARRIVED);
 
-        e = proc_table_get(&irmd.proc_table, h_pid);
-        if (e == NULL) {
+        pe = proc_table_get(&irmd.proc_table, h_pid);
+        if (pe == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 clear_irm_flow(f);
@@ -1703,16 +1726,19 @@ static struct irm_flow * flow_req_arr(pid_t           pid,
                 free(f->data);
                 f->len = 0;
                 irm_flow_destroy(f);
-                return NULL;
+                return -1;
         }
 
-        proc_entry_wake(e, re);
+        proc_entry_wake(pe, re);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         reg_entry_leave_state(re, REG_NAME_FLOW_ARRIVED, NULL);
 
-        return f;
+        f_out->flow_id = flow_id;
+        f_out->n_pid   = h_pid;
+
+        return 0;
 }
 
 static int flow_alloc_reply(int          flow_id,
@@ -1722,7 +1748,7 @@ static int flow_alloc_reply(int          flow_id,
 {
         struct irm_flow * f;
 
-        pthread_rwlock_rdlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.flows_lock);
 
         f = get_irm_flow(flow_id);
         if (f == NULL) {
@@ -1740,6 +1766,7 @@ static int flow_alloc_reply(int          flow_id,
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 return -1;
         }
+
         memcpy(f->data, data, len);
         f->len = len;
 
@@ -2027,11 +2054,13 @@ static void * mainloop(void * o)
 
         while (true) {
                 irm_msg_t       * ret_msg;
-                struct irm_flow * e       = NULL;
+                struct irm_flow   e;
                 struct timespec * timeo   = NULL;
                 struct timespec   ts      = {0, 0};
                 struct cmd *      cmd;
                 int               result;
+
+                memset(&e, 0, sizeof(e));
 
                 ret_msg = malloc(sizeof(*ret_msg));
                 if (ret_msg == NULL)
@@ -2150,15 +2179,14 @@ static void * mainloop(void * o)
                         if (result == 0) {
                                 qosspec_msg_t qs_msg;
                                 ret_msg->has_flow_id = true;
-                                ret_msg->flow_id     = e->flow_id;
+                                ret_msg->flow_id     = e.flow_id;
                                 ret_msg->has_pid     = true;
-                                ret_msg->pid         = e->n_1_pid;
-                                qs_msg = spec_to_msg(&e->qs);
+                                ret_msg->pid         = e.n_1_pid;
+                                qs_msg = spec_to_msg(&e.qs);
                                 ret_msg->qosspec     = &qs_msg;
                                 ret_msg->has_pk      = true;
-                                ret_msg->pk.data     = e->data;
-                                ret_msg->pk.len      = e->len;
-                                e->len = 0; /* Data is free'd with ret_msg */
+                                ret_msg->pk.data     = e.data;
+                                ret_msg->pk.len      = e.len;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
@@ -2170,13 +2198,12 @@ static void * mainloop(void * o)
                                             msg->pk.len);
                         if (result == 0) {
                                 ret_msg->has_flow_id = true;
-                                ret_msg->flow_id     = e->flow_id;
+                                ret_msg->flow_id     = e.flow_id;
                                 ret_msg->has_pid     = true;
-                                ret_msg->pid         = e->n_1_pid;
+                                ret_msg->pid         = e.n_1_pid;
                                 ret_msg->has_pk      = true;
-                                ret_msg->pk.data     = e->data;
-                                ret_msg->pk.len      = e->len;
-                                e->len = 0; /* Data is free'd with ret_msg */
+                                ret_msg->pk.data     = e.data;
+                                ret_msg->pk.len      = e.len;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_JOIN:
@@ -2186,9 +2213,9 @@ static void * mainloop(void * o)
                                             timeo, &e, true, NULL, 0);
                         if (result == 0) {
                                 ret_msg->has_flow_id = true;
-                                ret_msg->flow_id     = e->flow_id;
+                                ret_msg->flow_id     = e.flow_id;
                                 ret_msg->has_pid     = true;
-                                ret_msg->pid         = e->n_1_pid;
+                                ret_msg->pid         = e.n_1_pid;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
@@ -2199,17 +2226,17 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                                : msg->pk.data == NULL);
-                        e = flow_req_arr(msg->pid,
-                                         msg->hash.data,
-                                         msg_to_spec(msg->qosspec),
-                                         msg->pk.data,
-                                         msg->pk.len);
-                        result = (e == NULL ? -1 : 0);
+                        result = flow_req_arr(msg->pid,
+                                              &e,
+                                              msg->hash.data,
+                                              msg_to_spec(msg->qosspec),
+                                              msg->pk.data,
+                                              msg->pk.len);
                         if (result == 0) {
                                 ret_msg->has_flow_id = true;
-                                ret_msg->flow_id     = e->flow_id;
+                                ret_msg->flow_id     = e.flow_id;
                                 ret_msg->has_pid     = true;
-                                ret_msg->pid         = e->n_pid;
+                                ret_msg->pid         = e.n_pid;
                         }
                         break;
                 case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
