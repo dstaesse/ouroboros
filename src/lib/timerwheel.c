@@ -65,6 +65,8 @@ struct {
         size_t           prv_rxm; /* Last processed rxm slot at lvl 0. */
         size_t           prv_ack; /* Last processed ack slot.          */
         pthread_mutex_t  lock;
+
+        bool             in_use;
 } rw;
 
 static void timerwheel_fini(void)
@@ -139,6 +141,9 @@ static void timerwheel_move(void)
         size_t             ack_slot;
         size_t             i;
         size_t             j;
+
+        if (!__sync_bool_compare_and_swap(&rw.in_use, true, true))
+                return;
 
         pthread_mutex_lock(&rw.lock);
 
@@ -373,6 +378,8 @@ static int timerwheel_rxm(struct frcti *       frcti,
 #endif
         pthread_mutex_unlock(&rw.lock);
 
+        __sync_bool_compare_and_swap(&rw.in_use, false, true);
+
         return 0;
 }
 
@@ -415,6 +422,8 @@ static int timerwheel_ack(int            fd,
         list_add_tail(&a->next, &rw.acks[slot]);
 
         pthread_mutex_unlock(&rw.lock);
+
+        __sync_bool_compare_and_swap(&rw.in_use, false, true);
 
         return 0;
 }
