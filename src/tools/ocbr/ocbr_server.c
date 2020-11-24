@@ -83,6 +83,7 @@ static void handle_flow(int fd)
         struct timespec now;
         struct timespec alive;
         struct timespec intv = {server_settings.interval, 0};
+        struct timespec tic = {0, 100 * MILLION};
 
         struct timespec iv_start;
         struct timespec iv_end;
@@ -99,7 +100,8 @@ static void handle_flow(int fd)
         alive = iv_start;
         ts_add(&iv_start, &intv, &iv_end);
 
-        fccntl(fd, FLOWSFLAGS, FLOWFRNOBLOCK | FLOWFRDWR | FLOWFRNOPART);
+        fccntl(fd, FLOWSFLAGS, FLOWFRDWR | FLOWFRNOPART);
+        fccntl(fd, FLOWSRCVTIMEO, &tic);
 
         while (!stop) {
                 clock_gettime(CLOCK_REALTIME, &now);
