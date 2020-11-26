@@ -76,6 +76,7 @@ static void usage(void)
                "  -s, --size                packet size (B, max %ld B)\n"
                "  -r, --rate                Rate (b/s)\n"
                "      --sleep               Sleep in between sending packets\n"
+               "      --spin                Spin CPU between sending packets\n"
                "\n\n"
                "      --help                Display this help text and exit\n",
                BUF_SIZE);
@@ -87,7 +88,7 @@ int main(int argc, char ** argv)
         int    size = 1000;    /* 1000 byte packets */
         long   rate = 1000000; /* 1 Mb/s */
         bool   flood = false;
-        bool   sleep = false;
+        bool   sleep = true;
         int    ret = 0;
         char * rem = NULL;
         char * s_apn = NULL;
@@ -138,6 +139,8 @@ int main(int argc, char ** argv)
                         flood = true;
                 } else if (strcmp(*argv, "--sleep") == 0) {
                         sleep = true;
+                } else if (strcmp(*argv, "--spin") == 0) {
+                        sleep = false;
                 } else {
                         usage();
                         return 0;
