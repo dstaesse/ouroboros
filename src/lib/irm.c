@@ -132,6 +132,8 @@ int irm_bootstrap_ipcp(pid_t                      pid,
                 config.addr_auth_type     = conf->addr_auth_type;
                 config.has_routing_type   = true;
                 config.routing_type       = conf->routing_type;
+                config.has_cong_avoid     = true;
+                config.cong_avoid         = conf->cong_avoid;
                 break;
         case IPCP_UDP:
                 config.has_ip_addr  = true;

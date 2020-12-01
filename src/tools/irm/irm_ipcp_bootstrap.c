@@ -50,7 +50,7 @@
 #include <sys/socket.h>
 #endif
 
-#define UNICAST                 "unicast"
+#define UNICAST                "unicast"
 #define BROADCAST              "broadcast"
 #define UDP                    "udp"
 #define ETH_LLC                "eth-llc"
@@ -70,6 +70,7 @@
 #define DEFAULT_TTL            60
 #define DEFAULT_ADDR_AUTH      ADDR_AUTH_FLAT_RANDOM
 #define DEFAULT_ROUTING        ROUTING_LINK_STATE
+#define DEFAULT_CONG_AVOID     CA_MB_ECN
 #define DEFAULT_HASH_ALGO      DIR_HASH_SHA3_256
 #define DEFAULT_ETHERTYPE      0xA000
 #define DEFAULT_CLIENT_PORT    0x0000 /* random port */
@@ -79,6 +80,8 @@
 #define LINK_STATE_ROUTING     "link_state"
 #define LINK_STATE_LFA_ROUTING "lfa"
 #define LINK_STATE_ECM_ROUTING "ecmp"
+#define NONE_CA                "none"
+#define MB_ECN_CA              "mb-ecn"
 
 static void usage(void)
 {
@@ -95,11 +98,13 @@ static void usage(void)
                "                [ttl (max time-to-live value, default: %d)]\n"
                "                [addr_auth <ADDRESS_POLICY> (default: %s)]\n"
                "                [routing <ROUTING_POLICY> (default: %s)]\n"
+               "                [congestion <CONG_POLICY> (default: %s)]\n"
                "                [hash [ALGORITHM] (default: %s)]\n"
                "                [autobind]\n"
-               "where ADDRESS_POLICY = {"FLAT_RANDOM_ADDR_AUTH"}\n"
-               "      ROUTING_POLICY = {"LINK_STATE_ROUTING " "
+               "where ADDRESS_POLICY = {" FLAT_RANDOM_ADDR_AUTH "}\n"
+               "      ROUTING_POLICY = {" LINK_STATE_ROUTING " "
                LINK_STATE_LFA_ROUTING " " LINK_STATE_ECM_ROUTING "}\n"
+               "      CONG_POLICY = {" NONE_CA " " MB_ECN_CA "}\n"
                "      ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n"
                "if TYPE == " UDP "\n"
@@ -130,7 +135,7 @@ static void usage(void)
                "if TYPE == " BROADCAST "\n"
                "                [autobind]\n\n",
                DEFAULT_ADDR_SIZE, DEFAULT_EID_SIZE, DEFAULT_TTL,
-               FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING,
+               FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING, MB_ECN_CA,
                SHA3_256, DEFAULT_SERVER_PORT, SHA3_256, 0xA000, SHA3_256,
                SHA3_256, SHA3_256);
 }
@@ -138,29 +143,30 @@ static void usage(void)
 int do_bootstrap_ipcp(int     argc,
                       char ** argv)
 {
-        char *             ipcp           = NULL;
-        pid_t              pid            = -1;
-        struct ipcp_config conf;
-        uint8_t            addr_size      = DEFAULT_ADDR_SIZE;
-        uint8_t            eid_size       = DEFAULT_EID_SIZE;
-        uint8_t            max_ttl        = DEFAULT_TTL;
-        enum pol_addr_auth addr_auth_type = DEFAULT_ADDR_AUTH;
-        enum pol_routing   routing_type   = DEFAULT_ROUTING;
-        enum pol_dir_hash  hash_algo      = DEFAULT_HASH_ALGO;
-        uint32_t           ip_addr        = 0;
-        uint32_t           dns_addr       = DEFAULT_DDNS;
-        char *             ipcp_type      = NULL;
-        enum ipcp_type     type           = IPCP_INVALID;
-        char *             layer          = NULL;
-        char *             dev            = NULL;
-        uint16_t           ethertype      = DEFAULT_ETHERTYPE;
-        struct ipcp_info * ipcps;
-        ssize_t            len            = 0;
-        int                i              = 0;
-        bool               autobind       = false;
-        int                cargs;
-        int                cport          = DEFAULT_CLIENT_PORT;
-        int                sport          = DEFAULT_SERVER_PORT;
+        char *              ipcp           = NULL;
+        pid_t               pid            = -1;
+        struct ipcp_config  conf;
+        uint8_t             addr_size      = DEFAULT_ADDR_SIZE;
+        uint8_t             eid_size       = DEFAULT_EID_SIZE;
+        uint8_t             max_ttl        = DEFAULT_TTL;
+        enum pol_addr_auth  addr_auth_type = DEFAULT_ADDR_AUTH;
+        enum pol_routing    routing_type   = DEFAULT_ROUTING;
+        enum pol_dir_hash   hash_algo      = DEFAULT_HASH_ALGO;
+        enum pol_cong_avoid cong_avoid     = DEFAULT_CONG_AVOID;
+        uint32_t            ip_addr        = 0;
+        uint32_t            dns_addr       = DEFAULT_DDNS;
+        char *              ipcp_type      = NULL;
+        enum ipcp_type      type           = IPCP_INVALID;
+        char *              layer          = NULL;
+        char *              dev            = NULL;
+        uint16_t            ethertype      = DEFAULT_ETHERTYPE;
+        struct ipcp_info *  ipcps;
+        ssize_t             len            = 0;
+        int                 i              = 0;
+        bool                autobind       = false;
+        int                 cargs;
+        int                 cport          = DEFAULT_CLIENT_PORT;
+        int                 sport          = DEFAULT_SERVER_PORT;
 
         while (argc > 0) {
                 cargs = 2;
@@ -228,6 +234,14 @@ int do_bootstrap_ipcp(int     argc,
                         else if (strcmp(LINK_STATE_ECM_ROUTING,
                                         *(argv + 1)) == 0)
                                 routing_type = ROUTING_LINK_STATE_ECMP;
+                        else
+                                goto unknown_param;
+                } else if (matches(*argv, "congestion") == 0) {
+                        if (strcmp(NONE_CA, *(argv + 1)) == 0)
+                                cong_avoid = CA_NONE;
+                        else if (strcmp(MB_ECN_CA,
+                                        *(argv + 1)) == 0)
+                                cong_avoid = CA_MB_ECN;
                         else
                                 goto unknown_param;
                 } else {
@@ -315,6 +329,7 @@ int do_bootstrap_ipcp(int     argc,
                                 conf.max_ttl        = max_ttl;
                                 conf.addr_auth_type = addr_auth_type;
                                 conf.routing_type   = routing_type;
+                                conf.cong_avoid     = cong_avoid;
                                 break;
                         case IPCP_UDP:
                                 if (ip_addr == 0)

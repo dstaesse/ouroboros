@@ -2,7 +2,7 @@
 .\" Dimitri Staessens <dimitri.staessens@ugent.be>
 .\" Sander Vrijders <sander.vrijders@ugent.be>
 
-.TH OUROBOROS 8 2018-03-10 Ouroboros "Ouroboros User Manual"
+.TH OUROBOROS 8 2020-11-29 Ouroboros "Ouroboros User Manual"
 
 .SH NAME
 
@@ -257,6 +257,17 @@ ecmp: equal-cost multipath routing.
 .RE
 .br
 default: link_state.
+.PP
+[congestion \fIpolicy\fR] specifies the congestion avoidance policy.
+.br
+\fIpolicy\fR:
+.RS 4
+none: no congestion avoidance.
+.br
+mb-ecn: Multi-bit explicit congestion notification and avoidance.
+.RE
+.br
+default: mb-ecn.
 .PP
 [hash \fIpolicy\fR] specifies the hash function used for the directory.
 .br

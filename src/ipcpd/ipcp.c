@@ -241,6 +241,7 @@ static void * mainloop(void * o)
                                 conf.max_ttl        = conf_msg->max_ttl;
                                 conf.addr_auth_type = conf_msg->addr_auth_type;
                                 conf.routing_type   = conf_msg->routing_type;
+                                conf.cong_avoid     = conf_msg->cong_avoid;
                                 break;
                         case IPCP_ETH_DIX:
                                 conf.ethertype = conf_msg->ethertype;
@@ -261,7 +262,8 @@ static void * mainloop(void * o)
                                 layer_info.dir_hash_algo      = HASH_SHA3_256;
                                 break;
                         default:
-                                log_err("Unknown IPCP type: %d.", conf_msg->ipcp_type);
+                                log_err("Unknown IPCP type: %d.",
+                                        conf_msg->ipcp_type);
                         }
 
                         /* UDP and broadcast use fixed hash algorithm. */

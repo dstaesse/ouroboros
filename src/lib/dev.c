@@ -1768,6 +1768,21 @@ int ipcp_flow_get_qoscube(int         fd,
         return 0;
 }
 
+size_t ipcp_flow_queued(int fd)
+{
+        size_t q;
+
+        pthread_rwlock_rdlock(&ai.lock);
+
+        assert(ai.flows[fd].flow_id >= 0);
+
+        q = shm_rbuff_queued(ai.flows[fd].tx_rb);
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        return q;
+}
+
 ssize_t local_flow_read(int fd)
 {
         ssize_t ret;

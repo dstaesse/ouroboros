@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2020
  *
- * Flow allocator of the IPC Process
+ * Dummy Congestion Avoidance
  *
  *    Dimitri Staessens <dimitri.staessens@ugent.be>
  *    Sander Vrijders   <sander.vrijders@ugent.be>
@@ -20,35 +20,31 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_UNICAST_FA_H
-#define OUROBOROS_IPCPD_UNICAST_FA_H
+#ifndef OUROBOROS_IPCPD_UNICAST_CA_NOP_H
+#define OUROBOROS_IPCPD_UNICAST_CA_NOP_H
 
-#include <ouroboros/qos.h>
-#include <ouroboros/utils.h>
+#include "pol-ca-ops.h"
 
-int  fa_init(void);
+void *   nop_ctx_create(void);
 
-void fa_fini(void);
+void     nop_ctx_destroy(void * ctx);
 
-int  fa_start(void);
+ca_wnd_t nop_ctx_update_snd(void * ctx,
+                            size_t len);
 
-void fa_stop(void);
+bool     nop_ctx_update_rcv(void *     ctx,
+                            size_t     len,
+                            uint8_t    ecn,
+                            uint16_t * ece);
 
-int  fa_alloc(int             fd,
-              const uint8_t * dst,
-              qosspec_t       qs,
-              const void *    data,
-              size_t          len);
+void     nop_ctx_update_ece(void *   ctx,
+                            uint16_t ece);
 
-int  fa_alloc_resp(int          fd,
-                   int          response,
-                   const void * data,
-                   size_t       len);
+void     nop_wnd_wait(ca_wnd_t wnd);
 
-int  fa_dealloc(int fd);
+uint8_t  nop_calc_ecn(int    fd,
+                      size_t len);
 
-void fa_ecn_update(int     eid,
-                   uint8_t ecn,
-                   size_t  len);
+extern struct pol_ca_ops nop_ca_ops;
 
-#endif /* OUROBOROS_IPCPD_UNICAST_FA_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_CA_NOP_H */

@@ -33,6 +33,7 @@ endif ()
 set(SOURCE_FILES
   # Add source files here
   addr_auth.c
+  ca.c
   connmgr.c
   dht.c
   dir.c
@@ -51,6 +52,8 @@ set(SOURCE_FILES
   pol/simple_pff.c
   pol/alternate_pff.c
   pol/multipath_pff.c
+  pol/ca-mb-ecn.c
+  pol/ca-nop.c
   )
 
 add_executable(ipcpd-unicast ${SOURCE_FILES} ${IPCP_SOURCES}

@@ -55,6 +55,11 @@ enum pol_routing {
         ROUTING_LINK_STATE_ECMP
 };
 
+enum pol_cong_avoid {
+        CA_NONE = 0,
+        CA_MB_ECN
+};
+
 enum pol_dir_hash {
         DIR_HASH_SHA3_224 = 0,
         DIR_HASH_SHA3_256,
@@ -70,29 +75,30 @@ struct layer_info {
 
 /* Structure to configure the first IPCP */
 struct ipcp_config {
-        struct layer_info  layer_info;
+        struct layer_info   layer_info;
 
-        enum ipcp_type     type;
+        enum ipcp_type      type;
 
         /* Unicast */
-        uint8_t            addr_size;
-        uint8_t            eid_size;
-        uint8_t            max_ttl;
+        uint8_t             addr_size;
+        uint8_t             eid_size;
+        uint8_t             max_ttl;
 
-        enum pol_addr_auth addr_auth_type;
-        enum pol_routing   routing_type;
+        enum pol_addr_auth  addr_auth_type;
+        enum pol_routing    routing_type;
+        enum pol_cong_avoid cong_avoid;
 
         /* UDP */
-        uint32_t           ip_addr;
-        uint32_t           dns_addr;
-        uint16_t           clt_port;
-        uint16_t           srv_port;
+        uint32_t            ip_addr;
+        uint32_t            dns_addr;
+        uint16_t            clt_port;
+        uint16_t            srv_port;
 
         /* Ethernet */
-        char *             dev;
+        char *              dev;
 
         /* Ethernet DIX */
-        uint16_t           ethertype;
+        uint16_t            ethertype;
 };
 
 #endif /* OUROBOROS_IPCP_H */

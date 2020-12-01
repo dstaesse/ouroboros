@@ -39,6 +39,7 @@
 #include <ouroboros/time_utils.h>
 
 #include "addr_auth.h"
+#include "ca.h"
 #include "connmgr.h"
 #include "dir.h"
 #include "dt.h"
@@ -83,6 +84,11 @@ static int initialize_components(const struct ipcp_config * conf)
 
         log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
 
+        if (ca_init(conf->cong_avoid)) {
+                log_err("Failed to initialize congestion avoidance.");
+                goto fail_ca;
+        }
+
         if (dt_init(conf->routing_type,
                     conf->addr_size,
                     conf->eid_size,
@@ -110,6 +116,8 @@ static int initialize_components(const struct ipcp_config * conf)
  fail_fa:
         dt_fini();
  fail_dt:
+        ca_fini();
+ fail_ca:
         addr_auth_fini();
  fail_addr_auth:
         free(ipcpi.layer_name);
@@ -124,6 +132,8 @@ static void finalize_components(void)
         fa_fini();
 
         dt_fini();
+
+        ca_fini();
 
         addr_auth_fini();
 

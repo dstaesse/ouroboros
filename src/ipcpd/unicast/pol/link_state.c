@@ -812,8 +812,12 @@ static void handle_event(void *       self,
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
                 pthread_rwlock_rdlock(&ls.db_lock);
+
+                pthread_cleanup_push((void (*) (void *)) pthread_rwlock_unlock,
+                                     (void *) &ls.db_lock);
+
                 send_lsm(ipcpi.dt_addr, c->conn_info.addr, 0);
-                pthread_rwlock_unlock(&ls.db_lock);
+                pthread_cleanup_pop(true);
 
                 if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_DT))
                         log_dbg("Failed to add neighbor to LSDB.");

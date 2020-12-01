@@ -41,6 +41,7 @@
 #include <ouroboros/fccntl.h>
 #endif
 
+#include "ca.h"
 #include "connmgr.h"
 #include "ipcp.h"
 #include "dt.h"
@@ -115,15 +116,11 @@ static void dt_pci_ser(uint8_t *       head,
 
 }
 
-static void dt_pci_des(struct shm_du_buff * sdb,
-                       struct dt_pci *      dt_pci)
+static void dt_pci_des(uint8_t *       head,
+                       struct dt_pci * dt_pci)
 {
-        uint8_t * head;
-
-        assert(sdb);
+        assert(head);
         assert(dt_pci);
-
-        head = shm_du_buff_head(sdb);
 
         /* Decrease TTL */
         --*(head + dt_pci_info.ttl_o);
@@ -226,7 +223,6 @@ static int dt_stat_read(const char * path,
                 "Queued packets (rx):      %20zu\n"
                 "Queued packets (tx):      %20zu\n\n",
                 tmstr, addrstr, rxqlen, txqlen);
-
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 sprintf(str,
                         "Qos cube %3d:\n"
@@ -434,13 +430,14 @@ static void packet_handler(int                  fd,
         struct dt_pci dt_pci;
         int           ret;
         int           ofd;
-#ifndef IPCP_FLOW_STATS
-        (void)        fd;
-#else
+        uint8_t *     head;
         size_t        len;
 
         len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
 
+#ifndef IPCP_FLOW_STATS
+        (void)        fd;
+#else
         pthread_mutex_lock(&dt.stat[fd].lock);
 
         ++dt.stat[fd].rcv_pkt[qc];
@@ -449,7 +446,10 @@ static void packet_handler(int                  fd,
         pthread_mutex_unlock(&dt.stat[fd].lock);
 #endif
         memset(&dt_pci, 0, sizeof(dt_pci));
-        dt_pci_des(sdb, &dt_pci);
+
+        head = shm_du_buff_head(sdb);
+
+        dt_pci_des(head, &dt_pci);
         if (dt_pci.dst_addr != ipcpi.dt_addr) {
                 if (dt_pci.ttl == 0) {
                         log_dbg("TTL was zero.");
@@ -481,6 +481,8 @@ static void packet_handler(int                  fd,
                         return;
                 }
 
+                *(head + dt_pci_info.ecn_o) |= ca_calc_ecn(ofd, len);
+
                 ret = ipcp_flow_write(ofd, sdb);
                 if (ret < 0) {
                         log_dbg("Failed to write packet to fd %d.", ofd);
@@ -508,6 +510,9 @@ static void packet_handler(int                  fd,
         } else {
                 dt_pci_shrink(sdb);
                 if (dt_pci.eid >= PROG_RES_FDS) {
+                        uint8_t ecn = *(head + dt_pci_info.ecn_o);
+                        fa_ecn_update(dt_pci.eid, ecn, len);
+
                         if (ipcp_flow_write(dt_pci.eid, sdb)) {
                                 ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
@@ -792,14 +797,14 @@ int dt_write_packet(uint64_t             dst_addr,
         int           fd;
         int           ret;
         uint8_t *     head;
-#ifdef IPCP_FLOW_STATS
         size_t        len;
-#endif
+
         assert(sdb);
         assert(dst_addr != ipcpi.dt_addr);
 
-#ifdef IPCP_FLOW_STATS
         len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+
+#ifdef IPCP_FLOW_STATS
 
         pthread_mutex_lock(&dt.stat[np1_fd].lock);
 
@@ -829,15 +834,15 @@ int dt_write_packet(uint64_t             dst_addr,
                 goto fail_write;
         }
 
+        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+
         dt_pci.dst_addr = dst_addr;
         dt_pci.qc       = qc;
         dt_pci.eid      = np1_fd;
-        dt_pci.ecn      = 0;
+        dt_pci.ecn      = ca_calc_ecn(fd, len);
 
         dt_pci_ser(head, &dt_pci);
-#ifdef IPCP_FLOW_STATS
-        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
-#endif
+
         ret = ipcp_flow_write(fd, sdb);
         if (ret < 0) {
                 log_dbg("Failed to write packet to fd %d.", fd);

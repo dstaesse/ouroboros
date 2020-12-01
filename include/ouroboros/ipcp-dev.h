@@ -26,33 +26,35 @@
 #ifndef OUROBOROS_IPCP_DEV_H
 #define OUROBOROS_IPCP_DEV_H
 
-int  ipcp_create_r(int result);
+int   ipcp_create_r(int result);
 
-int  ipcp_flow_req_arr(const uint8_t * dst,
-                       size_t          len,
-                       qosspec_t       qs,
-                       const void *    data,
-                       size_t          dlen);
+int   ipcp_flow_req_arr(const uint8_t * dst,
+                        size_t           len,
+                        qosspec_t        qs,
+                        const void *     data,
+                        size_t           dlen);
 
-int  ipcp_flow_alloc_reply(int          fd,
-                           int          response,
-                           const void * data,
-                           size_t       len);
+int    ipcp_flow_alloc_reply(int        fd,
+                             int          response,
+                             const void * data,
+                             size_t       len);
 
-int  ipcp_flow_read(int                   fd,
-                    struct shm_du_buff ** sdb);
+int    ipcp_flow_read(int                   fd,
+                      struct shm_du_buff ** sdb);
 
-int  ipcp_flow_write(int                  fd,
-                     struct shm_du_buff * sdb);
+int    ipcp_flow_write(int                  fd,
+                       struct shm_du_buff * sdb);
 
-int  ipcp_flow_fini(int fd);
+int    ipcp_flow_fini(int fd);
 
-int  ipcp_flow_get_qoscube(int         fd,
-                           qoscube_t * cube);
+int    ipcp_flow_get_qoscube(int         fd,
+                             qoscube_t * cube);
 
-int  ipcp_sdb_reserve(struct shm_du_buff ** sdb,
-                      size_t                len);
+size_t ipcp_flow_queued(int fd);
 
-void ipcp_sdb_release(struct shm_du_buff * sdb);
+int    ipcp_sdb_reserve(struct shm_du_buff ** sdb,
+                        size_t                len);
+
+void   ipcp_sdb_release(struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCP_DEV_H */
