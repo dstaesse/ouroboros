@@ -37,26 +37,32 @@
 #include <string.h>
 
 /* congestion avoidance constants */
-#define CA_SHFT      5
-#define CA_WND       (1 << CA_SHFT)
-#define CA_UPD       (1 << (CA_SHFT - 3))
-#define CA_SLOT      18
-#define CA_AI        20000
+#define CA_SHFT      5                    /* Average over 32 pkts   */
+#define CA_WND       (1 << CA_SHFT)       /* 32 pkts receiver wnd   */
+#define CA_UPD       (1 << (CA_SHFT - 3)) /* Update snd every 8 pkt */
+#define CA_SLOT      24                   /* Initial slot = 16 ms   */
+#define CA_INC       1 << 16              /* ~4MiB/s^2 additive inc */
+#define CA_IWL       1 << 16              /* Initial limit ~4MiB/s  */
+#define CA_MINPS     8                    /* Mimimum pkts / slot    */
+#define CA_MAXPS     64                   /* Maximum pkts / slot    */
 #define ECN_Q_SHFT   5
 #define ts_to_ns(ts) (ts.tv_sec * BILLION + ts.tv_nsec)
 
 struct mb_ecn_ctx {
-        uint16_t        rx_ece; /* level of congestion (upstream)   */
-        size_t          rx_ctr; /* receiver side packet counter     */
+        uint16_t        rx_ece; /* Level of congestion (upstream)   */
+        size_t          rx_ctr; /* Receiver side packet counter     */
 
-        uint16_t        tx_ece; /* level of congestion (downstream) */
-        size_t          tx_ctr; /* sender side packet counter       */
-        size_t          tx_aps; /* average packet size              */
-        time_t          tx_wnd; /* tgt time to send packets (ns)    */
+        uint16_t        tx_ece; /* Level of congestion (downstream) */
+        size_t          tx_ctr; /* Sender side packet counter       */
+        size_t          tx_wbc; /* Window byte count                */
+        size_t          tx_wpc; /* Window packet count              */
+        size_t          tx_wbl; /* Window byte limit                */
         bool            tx_cav; /* Congestion avoidance             */
+        size_t          tx_mul; /* Slot size multiplier             */
+        size_t          tx_inc; /* Additive increase                */
         size_t          tx_slot;
 
-        struct timespec t_sent; /* last sent packet                 */
+        struct timespec t_sent; /* Last sent packet                 */
 };
 
 struct pol_ca_ops mb_ecn_ca_ops = {
@@ -71,14 +77,21 @@ struct pol_ca_ops mb_ecn_ca_ops = {
 
 void * mb_ecn_ctx_create(void)
 {
-
+        struct timespec     now;
         struct mb_ecn_ctx * ctx;
 
         ctx = malloc(sizeof(*ctx));
         if (ctx == NULL)
                 return NULL;
 
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+
         memset(ctx, 0, sizeof(*ctx));
+
+        ctx->tx_mul  = CA_SLOT;
+        ctx->tx_wbl  = CA_IWL;
+        ctx->tx_inc  = CA_INC;
+        ctx->tx_slot = ts_to_ns(now) >> ctx->tx_mul;
 
         return (void *) ctx;
 }
@@ -91,54 +104,59 @@ void mb_ecn_ctx_destroy(void * ctx)
 ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
                                size_t len)
 {
-        struct timespec  now;
-        size_t           slot;
-        time_t           gap;
-        ca_wnd_t         wnd;
-
+        struct timespec     now;
+        size_t              slot;
+        ca_wnd_t            wnd;
         struct mb_ecn_ctx * ctx = _ctx;
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        if (ctx->tx_wnd == 0) { /* 10 ms initial window estimate */
-                ctx->tx_wnd = 10 * MILLION;
-                gap          = ctx->tx_wnd >> CA_SHFT;
-                ctx->tx_aps = len >> CA_SHFT;
-                ctx->tx_slot = ts_to_ns(now) >> CA_SLOT;
-        } else {
-                gap           = ts_diff_ns(&ctx->t_sent, &now);
-                ctx->tx_aps -= ctx->tx_aps >> CA_SHFT;
-                ctx->tx_aps += len;
-        }
-
         ctx->t_sent = now;
 
-        slot = ts_to_ns(now) >> CA_SLOT;
+        slot = ts_to_ns(now) >> ctx->tx_mul;
 
         ctx->tx_ctr++;
+        ctx->tx_wpc++;
 
-        if (slot - ctx->tx_slot > 0) {
+        if (ctx->tx_ctr > CA_WND)
+                ctx->tx_ece = 0;
+
+        if (slot > ctx->tx_slot) {
                 ctx->tx_slot = slot;
 
-                if (ctx->tx_ctr > CA_WND)
-                        ctx->tx_ece = 0;
-
-                /* Slow start */
-                if (!ctx->tx_cav) {
-                        ctx->tx_wnd >>= 1;
-                /* Multiplicative Decrease */
-                } else if (ctx->tx_ece) { /* MD */
-                        ctx->tx_wnd += (ctx->tx_wnd * ctx->tx_ece)
+                if (!ctx->tx_cav && ctx->tx_wbc > ctx->tx_wbl) /* Slow start */
+                        ctx->tx_wbl <<= 1;
+                else if (ctx->tx_ece) /* Multiplicative Decrease */
+                        ctx->tx_wbl -= (ctx->tx_wbl * ctx->tx_ece)
                                 >> (CA_SHFT + 8);
-                /* Additive Increase */
-                } else {
-                        size_t bw = ctx->tx_aps * BILLION / ctx->tx_wnd;
-                        bw += CA_AI;
-                        ctx->tx_wnd = ctx->tx_aps * BILLION / bw;
+                else /* Additive Increase */
+                        ctx->tx_wbl = ctx->tx_wbl + ctx->tx_inc;
+
+                /* Window scaling */
+                if (ctx->tx_wpc < CA_MINPS) {
+                        ++ctx->tx_mul;
+                        ctx->tx_slot >>= 1;
+                        ctx->tx_wbl <<= 1;
+                        ctx->tx_inc <<= 1;
                 }
+
+                if (ctx->tx_wpc > CA_MAXPS) {
+                        --ctx->tx_mul; /* Underflows at ~CA_MAXPS billion pps */
+                        ctx->tx_slot <<= 1;
+                        ctx->tx_wbl >>= 1;
+                        ctx->tx_inc >>= 1;
+                }
+
+                ctx->tx_wbc = 0;
+                ctx->tx_wpc = 0;
         }
 
-        wnd.wait = (ctx->tx_wnd >> CA_SHFT) - gap;
+        ctx->tx_wbc += len;
+
+        if (ctx->tx_wbc > ctx->tx_wbl)
+                wnd.wait = ((ctx->tx_slot + 1) << ctx->tx_mul) - ts_to_ns(now);
+        else
+                wnd.wait = 0;
 
         return wnd;
 }
@@ -147,7 +165,7 @@ void mb_ecn_wnd_wait(ca_wnd_t wnd)
 {
         if (wnd.wait > 0) {
                 struct timespec s = {0, 0};
-                if (wnd.wait > BILLION) /* Don't care throttling < 1pps */
+                if (wnd.wait > BILLION) /* Don't care throttling < 1s */
                         s.tv_sec = 1;
                 else
                         s.tv_nsec = wnd.wait;
@@ -169,18 +187,15 @@ bool mb_ecn_ctx_update_rcv(void *     _ctx,
         if ((ctx->rx_ece | ecn) == 0)
                 return false;
 
-        if (ecn == 0) {
-                /* end of congestion */
+        if (ecn == 0) { /* End of congestion */
                 ctx->rx_ece >>= 2;
                 update = ctx->rx_ece == 0;
         } else {
-                if (ctx->rx_ece == 0) {
-                        /* start of congestion */
+                if (ctx->rx_ece == 0) { /* Start of congestion */
                         ctx->rx_ece = ecn;
                         ctx->rx_ctr = 0;
                         update = true;
-                } else {
-                        /* congestion update */
+                } else { /* Congestion update */
                         ctx->rx_ece -= ctx->rx_ece >> CA_SHFT;
                         ctx->rx_ece += ecn;
                         update = (ctx->rx_ctr++ & (CA_UPD - 1)) == true;
