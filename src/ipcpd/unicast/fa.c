@@ -627,6 +627,11 @@ void  fa_ecn_update(int     eid,
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
+        if (flow->r_eid == -1) {
+                pthread_rwlock_unlock(&fa.flows_lock);
+                return;
+        }
+
         update = ca_ctx_update_rcv(flow->ctx, len, ecn, &ece);
 
         pthread_rwlock_unlock(&fa.flows_lock);
