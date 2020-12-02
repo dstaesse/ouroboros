@@ -136,6 +136,7 @@ static int send_rcv_enroll_msg(int fd)
         enroll.conf.max_ttl        = reply->conf->max_ttl;
         enroll.conf.addr_auth_type = reply->conf->addr_auth_type;
         enroll.conf.routing_type   = reply->conf->routing_type;
+        enroll.conf.cong_avoid     = reply->conf->cong_avoid;
         enroll.conf.layer_info.dir_hash_algo
                 = reply->conf->layer_info->dir_hash_algo;
 
@@ -172,6 +173,8 @@ static ssize_t enroll_pack(uint8_t ** buf)
         config.addr_auth_type     = enroll.conf.addr_auth_type;
         config.has_routing_type   = true;
         config.routing_type       = enroll.conf.routing_type;
+        config.has_cong_avoid     = true;
+        config.cong_avoid         = enroll.conf.cong_avoid;
         config.layer_info         = &layer_info;
 
         layer_info.layer_name     = (char *) enroll.conf.layer_info.layer_name;
