@@ -119,6 +119,7 @@ ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
 
         ctx->tx_ctr++;
         ctx->tx_wpc++;
+        ctx->tx_wbc += len;
 
         if (ctx->tx_ctr > CA_WND)
                 ctx->tx_ece = 0;
@@ -152,8 +153,6 @@ ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
                 ctx->tx_wbc = 0;
                 ctx->tx_wpc = 0;
         }
-
-        ctx->tx_wbc += len;
 
         if (ctx->tx_wbc > ctx->tx_wbl)
                 wnd.wait = ((ctx->tx_slot + 1) << ctx->tx_mul) - ts_to_ns(now);
