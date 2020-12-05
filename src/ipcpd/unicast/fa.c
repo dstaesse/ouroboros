@@ -36,6 +36,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
+#include <ouroboros/rib.h>
 
 #include "dir.h"
 #include "fa.h"
@@ -44,6 +45,7 @@
 #include "dt.h"
 #include "ca.h"
 
+#include <inttypes.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,6 +56,8 @@
 #define FLOW_REPLY  1
 #define FLOW_UPDATE 2
 #define MSGBUFSZ    2048
+
+#define STAT_FILE_LEN 0
 
 struct fa_msg {
         uint64_t s_addr;
@@ -79,6 +83,9 @@ struct cmd {
 };
 
 struct fa_flow {
+#ifdef IPCP_FLOW_STATS
+        time_t   stamp;
+#endif
         int      r_eid;  /* remote endpoint id               */
         uint64_t r_addr; /* remote address                   */
         void *   ctx;    /* congestion avoidance context     */
@@ -87,7 +94,9 @@ struct fa_flow {
 struct {
         pthread_rwlock_t flows_lock;
         struct fa_flow   flows[PROG_MAX_FLOWS];
-
+#ifdef IPCP_FLOW_STATS
+        size_t           n_flows;
+#endif
         int              fd;
 
         struct list_head cmds;
@@ -97,6 +106,156 @@ struct {
 
         struct psched *  psched;
 } fa;
+
+static int fa_stat_read(const char * path,
+                        char *       buf,
+                        size_t       len)
+{
+#ifdef IPCP_FLOW_STATS
+        struct fa_flow * flow;
+        int              fd;
+        char             r_addrstr[20];
+        char             tmstr[20];
+        char             castr[1024];
+        struct tm *      tm;
+
+        fd = atoi(path);
+
+        if (fd < 0 || fd > PROG_MAX_FLOWS)
+                return -1;
+
+        if (len < 1536)
+                return 0;
+
+        flow = &fa.flows[fd];
+
+        buf[0] = '\0';
+
+        pthread_rwlock_rdlock(&fa.flows_lock);
+
+        if (flow->stamp ==0) {
+                pthread_rwlock_unlock(&fa.flows_lock);
+                return 0;
+        }
+
+        sprintf(r_addrstr, "%" PRIu64, flow->r_addr);
+
+        tm = localtime(&flow->stamp);
+        strftime(tmstr, sizeof(tmstr), "%F %T", tm);
+
+        ca_print_stats(flow->ctx, castr, 1024);
+
+        sprintf(buf,
+                "Flow established at:             %20s\n"
+                "Remote address:                  %20s\n"
+                "Local endpoint ID:               %20d\n"
+                "Remote endpoint ID:              %20d\n"
+                "%s",
+                tmstr, r_addrstr, fd, flow->r_eid,
+                castr);
+
+        pthread_rwlock_unlock(&fa.flows_lock);
+
+        return strlen(buf);
+#else
+        (void) path;
+        (void) buf;
+        (void) len;
+        return 0;
+#endif
+}
+
+static int fa_stat_readdir(char *** buf)
+{
+#ifdef IPCP_FLOW_STATS
+        char   entry[RIB_PATH_LEN + 1];
+        size_t i;
+        int    idx = 0;
+
+        pthread_rwlock_rdlock(&fa.flows_lock);
+
+        if (fa.n_flows < 1) {
+                pthread_rwlock_unlock(&fa.flows_lock);
+                return 0;
+        }
+
+        *buf = malloc(sizeof(**buf) * fa.n_flows);
+        if (*buf == NULL) {
+                pthread_rwlock_unlock(&fa.flows_lock);
+                return -ENOMEM;
+        }
+
+        for (i = 0; i < PROG_MAX_FLOWS; ++i) {
+                struct fa_flow * flow;
+
+                flow = &fa.flows[i];
+                if (flow->stamp == 0)
+                        continue;
+
+                sprintf(entry, "%zu", i);
+
+                (*buf)[idx] = malloc(strlen(entry) + 1);
+                if ((*buf)[idx] == NULL) {
+                        while (idx-- > 0)
+                                free((*buf)[idx]);
+                        free(buf);
+                        pthread_rwlock_unlock(&fa.flows_lock);
+                        return -ENOMEM;
+                }
+
+                strcpy((*buf)[idx++], entry);
+        }
+
+        assert((size_t) idx == fa.n_flows);
+
+        pthread_rwlock_unlock(&fa.flows_lock);
+
+        return idx;
+#else
+        (void) buf;
+        return 0;
+#endif
+}
+
+static int fa_stat_getattr(const char *  path,
+                           struct stat * st)
+{
+#ifdef IPCP_FLOW_STATS
+        int              fd;
+        struct fa_flow * flow;
+
+        fd = atoi(path);
+
+        st->st_mode  = S_IFREG | 0755;
+        st->st_nlink = 1;
+        st->st_uid   = getuid();
+        st->st_gid   = getgid();
+
+        flow = &fa.flows[fd];
+
+        pthread_rwlock_rdlock(&fa.flows_lock);
+
+        if (flow->stamp != 0) {
+                st->st_size  = 1536;
+                st->st_mtime = flow->stamp;
+        } else {
+                st->st_size  = 0;
+                st->st_mtime = 0;
+        }
+
+        pthread_rwlock_unlock(&fa.flows_lock);
+#else
+        (void) path;
+        (void) st;
+#endif
+        return 0;
+}
+
+static struct rib_ops r_ops = {
+        .read    = fa_stat_read,
+        .readdir = fa_stat_readdir,
+        .getattr = fa_stat_getattr
+};
 
 static void packet_handler(int                  fd,
                            qoscube_t            qc,
@@ -132,6 +291,9 @@ static void packet_handler(int                  fd,
 
 static int fa_flow_init(struct fa_flow * flow)
 {
+#ifdef IPCP_FLOW_STATS
+        struct timespec now;
+#endif
         memset(flow, 0, sizeof(*flow));
 
         flow->r_eid  = -1;
@@ -141,6 +303,13 @@ static int fa_flow_init(struct fa_flow * flow)
         if (flow->ctx == NULL)
                 return -1;
 
+#ifdef IPCP_FLOW_STATS
+        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+
+        flow->stamp = now.tv_sec;
+
+        ++fa.n_flows;
+#endif
         return 0;
 }
 
@@ -152,6 +321,10 @@ static void fa_flow_fini(struct fa_flow * flow)
 
         flow->r_eid  = -1;
         flow->r_addr = INVALID_ADDR;
+
+#ifdef IPCP_FLOW_STATS
+        --fa.n_flows;
+#endif
 }
 
 static void fa_post_packet(void *               comp,
@@ -336,6 +509,7 @@ static void * fa_handle_packet(void * o)
 int fa_init(void)
 {
         pthread_condattr_t cattr;
+        char               fastr[256];
 
         if (pthread_rwlock_init(&fa.flows_lock, NULL))
                 goto fail_rwlock;
@@ -358,8 +532,14 @@ int fa_init(void)
 
         fa.fd = dt_reg_comp(&fa, &fa_post_packet, FA);
 
+        sprintf(fastr, "%s", FA);
+        if (rib_reg(fastr, &r_ops))
+                goto fail_rib_reg;
+
         return 0;
 
+ fail_rib_reg:
+        pthread_cond_destroy(&fa.cond);
  fail_cond:
         pthread_condattr_destroy(&cattr);
  fail_cattr:
@@ -586,6 +766,7 @@ static int fa_update_remote(int      fd,
         struct shm_du_buff * sdb;
         qoscube_t            qc = QOS_CUBE_BE;
         struct fa_flow *     flow;
+        uint64_t             r_addr;
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg))) {
                 return -1;
@@ -603,14 +784,15 @@ static int fa_update_remote(int      fd,
         msg->r_eid = hton32(flow->r_eid);
         msg->ece   = hton16(ece);
 
-        if (dt_write_packet(flow->r_addr, qc, fa.fd, sdb)) {
-                pthread_rwlock_unlock(&fa.flows_lock);
-                ipcp_sdb_release(sdb);
-                return -1;
-        }
+        r_addr = flow->r_addr;
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
+
+        if (dt_write_packet(r_addr, qc, fa.fd, sdb)) {
+                ipcp_sdb_release(sdb);
+                return -1;
+        }
 
         return 0;
 }
@@ -638,5 +820,4 @@ void  fa_ecn_update(int     eid,
 
         if (update)
                 fa_update_remote(eid, ece);
-
 }

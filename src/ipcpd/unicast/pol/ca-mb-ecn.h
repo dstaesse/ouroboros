@@ -45,6 +45,10 @@ void     mb_ecn_wnd_wait(ca_wnd_t wnd);
 uint8_t  mb_ecn_calc_ecn(int    fd,
                          size_t len);
 
+ssize_t  mb_ecn_print_stats(void * ctx,
+                            char * buf,
+                            size_t len);
+
 extern struct pol_ca_ops mb_ecn_ca_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_CA_MB_ECN_H */

@@ -97,3 +97,13 @@ uint8_t ca_calc_ecn(int    fd,
 {
         return ca.ops->calc_ecn(fd, len);
 }
+
+ssize_t ca_print_stats(void * ctx,
+                       char * buf,
+                       size_t len)
+{
+        if (ca.ops->print_stats == NULL)
+                return 0;
+
+        return ca.ops->print_stats(ctx, buf, len);
+}

@@ -317,10 +317,9 @@ static int dt_stat_readdir(char *** buf)
 
                 pthread_mutex_unlock(&dt.stat[i].lock);
         }
+        assert((size_t) idx == dt.n_flows);
 
         pthread_rwlock_unlock(&dt.lock);
-
-        assert((size_t) idx == dt.n_flows);
 
         return idx;
 #else
@@ -367,7 +366,6 @@ static struct rib_ops r_ops = {
 };
 
 #ifdef IPCP_FLOW_STATS
-
 static void stat_used(int      fd,
                       uint64_t addr)
 {

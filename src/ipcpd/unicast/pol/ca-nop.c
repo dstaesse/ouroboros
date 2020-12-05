@@ -31,7 +31,8 @@ struct pol_ca_ops nop_ca_ops = {
         .ctx_update_rcv = nop_ctx_update_rcv,
         .ctx_update_ece = nop_ctx_update_ece,
         .wnd_wait       = nop_wnd_wait,
-        .calc_ecn       = nop_calc_ecn
+        .calc_ecn       = nop_calc_ecn,
+        .print_stats    = NULL
 };
 
 void * nop_ctx_create(void)

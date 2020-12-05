@@ -45,6 +45,12 @@ struct pol_ca_ops {
 
         uint8_t  (* calc_ecn)(int    fd,
                               size_t len);
+
+        /* Optional, can be NULL */
+        ssize_t  (* print_stats)(void * ctx,
+                                 char * buf,
+                                 size_t len);
+
 };
 
 #endif /* OUROBOROS_IPCPD_UNICAST_POL_CA_OPS_H */

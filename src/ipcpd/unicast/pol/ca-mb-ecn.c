@@ -35,6 +35,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 /* congestion avoidance constants */
 #define CA_SHFT      5                    /* Average over 32 pkts   */
@@ -72,7 +73,8 @@ struct pol_ca_ops mb_ecn_ca_ops = {
         .ctx_update_rcv = mb_ecn_ctx_update_rcv,
         .ctx_update_ece = mb_ecn_ctx_update_ece,
         .wnd_wait       = mb_ecn_wnd_wait,
-        .calc_ecn       = mb_ecn_calc_ecn
+        .calc_ecn       = mb_ecn_calc_ecn,
+        .print_stats    = mb_ecn_print_stats
 };
 
 void * mb_ecn_ctx_create(void)
@@ -228,4 +230,41 @@ uint8_t mb_ecn_calc_ecn(int    fd,
         q = ipcp_flow_queued(fd);
 
         return (uint8_t) (q >> ECN_Q_SHFT);
+}
+
+ssize_t  mb_ecn_print_stats(void * _ctx,
+                            char * buf,
+                            size_t len)
+{
+        struct mb_ecn_ctx* ctx = _ctx;
+        char *             regime;
+
+        if (len < 1024)
+                return 0;
+
+        if (!ctx->tx_cav)
+                regime = "Slow start";
+        else if (ctx->tx_ece)
+                regime = "Multiplicative dec";
+        else
+                regime = "Additive inc";
+
+        sprintf(buf,
+                "Congestion avoidance algorithm:  %20s\n"
+                "Upstream congestion level:       %20u\n"
+                "Upstream packet counter:         %20zu\n"
+                "Downstream congestion level:     %20u\n"
+                "Downstream packet counter:       %20zu\n"
+                "Congestion window size (ns):     %20zu\n"
+                "Packets in this window:          %20zu\n"
+                "Bytes in this window:            %20zu\n"
+                "Max bytes in this window:        %20zu\n"
+                "Current congestion regime:       %20s\n",
+                "Multi-bit ECN",
+                ctx->rx_ece, ctx->rx_ctr,
+                ctx->tx_ece, ctx->tx_ctr, (size_t) (1 << ctx->tx_mul),
+                ctx->tx_wpc, ctx->tx_wbc, ctx->tx_wbl,
+                regime);
+
+        return strlen(buf);
 }
