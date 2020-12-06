@@ -46,7 +46,7 @@
 #define CA_IWL       1 << 16              /* Initial limit ~4MiB/s  */
 #define CA_MINPS     8                    /* Mimimum pkts / slot    */
 #define CA_MAXPS     64                   /* Maximum pkts / slot    */
-#define ECN_Q_SHFT   5
+#define ECN_Q_SHFT   4
 #define ts_to_ns(ts) (ts.tv_sec * BILLION + ts.tv_nsec)
 
 struct mb_ecn_ctx {
@@ -127,13 +127,16 @@ ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
         if (slot > ctx->tx_slot) {
                 ctx->tx_slot = slot;
 
-                if (!ctx->tx_cav && ctx->tx_wbc > ctx->tx_wbl) /* Slow start */
-                        ctx->tx_wbl <<= 1;
-                else if (ctx->tx_ece) /* Multiplicative Decrease */
-                        ctx->tx_wbl -= (ctx->tx_wbl * ctx->tx_ece)
-                                >> (CA_SHFT + 8);
-                else /* Additive Increase */
-                        ctx->tx_wbl = ctx->tx_wbl + ctx->tx_inc;
+                if (!ctx->tx_cav) { /* Slow start */
+                        if (ctx->tx_wbc > ctx->tx_wbl)
+                                ctx->tx_wbl <<= 1;
+                } else {
+                        if (ctx->tx_ece) /* Mult. Decrease */
+                                ctx->tx_wbl -= (ctx->tx_wbl * ctx->tx_ece)
+                                        >> (CA_SHFT + 8);
+                        else if (ctx->tx_wbc > ctx->tx_wbl) /* Add. Increase */
+                                ctx->tx_wbl = ctx->tx_wbl + ctx->tx_inc;
+                }
 
                 /* Window scaling */
                 if (ctx->tx_wpc < CA_MINPS) {
