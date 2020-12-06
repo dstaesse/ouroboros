@@ -239,7 +239,7 @@ struct dht {
 
         pthread_rwlock_t lock;
 
-        int              fd;
+        uint32_t         eid;
 
         struct tpm *     tpm;
 
@@ -1489,7 +1489,7 @@ static int send_msg(struct dht * dht,
 
                 kad_msg__pack(msg, shm_du_buff_head(sdb));
 
-                if (dt_write_packet(addr, QOS_CUBE_BE, dht->fd, sdb) == 0)
+                if (dt_write_packet(addr, QOS_CUBE_BE, dht->eid, sdb) == 0)
                         break;
 
                 ipcp_sdb_release(sdb);
@@ -2814,7 +2814,7 @@ struct dht * dht_create(uint64_t addr)
         if (tpm_start(dht->tpm))
                 goto fail_tpm_start;
 
-        dht->fd   = dt_reg_comp(dht, &dht_post_packet, DHT);
+        dht->eid   = dt_reg_comp(dht, &dht_post_packet, DHT);
         notifier_reg(handle_event, dht);
 #else
         (void) handle_event;

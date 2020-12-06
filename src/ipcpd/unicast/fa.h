@@ -47,8 +47,8 @@ int  fa_alloc_resp(int          fd,
 
 int  fa_dealloc(int fd);
 
-void fa_ecn_update(int     eid,
-                   uint8_t ecn,
-                   size_t  len);
+void fa_np1_rcv(uint32_t             eid,
+                uint8_t              ecn,
+                struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCPD_UNICAST_FA_H */

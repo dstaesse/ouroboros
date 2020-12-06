@@ -509,30 +509,7 @@ static void packet_handler(int                  fd,
                 dt_pci_shrink(sdb);
                 if (dt_pci.eid >= PROG_RES_FDS) {
                         uint8_t ecn = *(head + dt_pci_info.ecn_o);
-                        fa_ecn_update(dt_pci.eid, ecn, len);
-
-                        if (ipcp_flow_write(dt_pci.eid, sdb)) {
-                                ipcp_sdb_release(sdb);
-#ifdef IPCP_FLOW_STATS
-                                pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
-
-                                ++dt.stat[dt_pci.eid].w_drp_pkt[qc];
-                                dt.stat[dt_pci.eid].w_drp_bytes[qc] += len;
-
-                                pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
-#endif
-
-                        }
-#ifdef IPCP_FLOW_STATS
-                        pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
-
-                        ++dt.stat[dt_pci.eid].rcv_pkt[qc];
-                        dt.stat[dt_pci.eid].rcv_bytes[qc] += len;
-                        ++dt.stat[dt_pci.eid].lcl_r_pkt[qc];
-                        dt.stat[dt_pci.eid].lcl_r_bytes[qc] += len;
-
-                        pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
-#endif
+                        fa_np1_rcv(dt_pci.eid, ecn, sdb);
                         return;
                 }
 
@@ -540,14 +517,6 @@ static void packet_handler(int                  fd,
                         log_err("No registered component on eid %d.",
                                 dt_pci.eid);
                         ipcp_sdb_release(sdb);
-#ifdef IPCP_FLOW_STATS
-                        pthread_mutex_lock(&dt.stat[dt_pci.eid].lock);
-
-                        ++dt.stat[dt_pci.eid].w_drp_pkt[qc];
-                        dt.stat[dt_pci.eid].w_drp_bytes[qc] += len;
-
-                        pthread_mutex_unlock(&dt.stat[dt_pci.eid].lock);
-#endif
                         return;
                 }
 #ifdef IPCP_FLOW_STATS
@@ -788,7 +757,7 @@ int dt_reg_comp(void * comp,
 
 int dt_write_packet(uint64_t             dst_addr,
                     qoscube_t            qc,
-                    int                  np1_fd,
+                    uint32_t             eid,
                     struct shm_du_buff * sdb)
 {
         struct dt_pci dt_pci;
@@ -803,25 +772,27 @@ int dt_write_packet(uint64_t             dst_addr,
         len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
 
 #ifdef IPCP_FLOW_STATS
+        if (eid < PROG_RES_FDS) {
+                pthread_mutex_lock(&dt.stat[eid].lock);
 
-        pthread_mutex_lock(&dt.stat[np1_fd].lock);
+                ++dt.stat[eid].lcl_r_pkt[qc];
+                dt.stat[eid].lcl_r_bytes[qc] += len;
 
-        ++dt.stat[np1_fd].lcl_r_pkt[qc];
-        dt.stat[np1_fd].lcl_r_bytes[qc] += len;
-
-        pthread_mutex_unlock(&dt.stat[np1_fd].lock);
+                pthread_mutex_unlock(&dt.stat[eid].lock);
+        }
 #endif
-
         fd = pff_nhop(dt.pff[qc], dst_addr);
         if (fd < 0) {
                 log_dbg("Could not get nhop for addr %" PRIu64 ".", dst_addr);
 #ifdef IPCP_FLOW_STATS
-                pthread_mutex_lock(&dt.stat[np1_fd].lock);
+                if (eid < PROG_RES_FDS) {
+                        pthread_mutex_lock(&dt.stat[eid].lock);
 
-                ++dt.stat[np1_fd].f_nhp_pkt[qc];
-                dt.stat[np1_fd].f_nhp_bytes[qc] += len;
+                        ++dt.stat[eid].lcl_r_pkt[qc];
+                        dt.stat[eid].lcl_r_bytes[qc] += len;
 
-                pthread_mutex_unlock(&dt.stat[np1_fd].lock);
+                        pthread_mutex_unlock(&dt.stat[eid].lock);
+                }
 #endif
                 return -EPERM;
         }
@@ -836,7 +807,7 @@ int dt_write_packet(uint64_t             dst_addr,
 
         dt_pci.dst_addr = dst_addr;
         dt_pci.qc       = qc;
-        dt_pci.eid      = np1_fd;
+        dt_pci.eid      = eid;
         dt_pci.ecn      = ca_calc_ecn(fd, len);
 
         dt_pci_ser(head, &dt_pci);
@@ -866,7 +837,7 @@ int dt_write_packet(uint64_t             dst_addr,
 #ifdef IPCP_FLOW_STATS
         pthread_mutex_lock(&dt.stat[fd].lock);
 
-        if (np1_fd < PROG_RES_FDS) {
+        if (eid < PROG_RES_FDS) {
                 ++dt.stat[fd].lcl_w_pkt[qc];
                 dt.stat[fd].lcl_w_bytes[qc] += len;
         }

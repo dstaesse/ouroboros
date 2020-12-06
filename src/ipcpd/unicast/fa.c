@@ -84,7 +84,15 @@ struct cmd {
 
 struct fa_flow {
 #ifdef IPCP_FLOW_STATS
-        time_t   stamp;
+        time_t   stamp;    /* Flow creation                  */
+        size_t   p_snd;    /* Packets sent                   */
+        size_t   p_snd_f;  /* Packets sent fail              */
+        size_t   b_snd;    /* Bytes sent                     */
+        size_t   b_snd_f;  /* Bytes sent fail                */
+        size_t   p_rcv;    /* Packets received               */
+        size_t   p_rcv_f;  /* Packets received fail          */
+        size_t   b_rcv;    /* Bytes received                 */
+        size_t   b_rcv_f;  /* Bytes received fail            */
 #endif
         int      r_eid;  /* remote endpoint id               */
         uint64_t r_addr; /* remote address                   */
@@ -97,7 +105,7 @@ struct {
 #ifdef IPCP_FLOW_STATS
         size_t           n_flows;
 #endif
-        int              fd;
+        uint32_t         eid;
 
         struct list_head cmds;
         pthread_cond_t   cond;
@@ -150,8 +158,20 @@ static int fa_stat_read(const char * path,
                 "Remote address:                  %20s\n"
                 "Local endpoint ID:               %20d\n"
                 "Remote endpoint ID:              %20d\n"
+                "Sent (packets):                  %20zu\n"
+                "Sent (bytes):                    %20zu\n"
+                "Send failed (packets):           %20zu\n"
+                "Send failed (bytes):             %20zu\n"
+                "Received (packets):              %20zu\n"
+                "Received (bytes):                %20zu\n"
+                "Receive failed (packets):        %20zu\n"
+                "Receive failed (bytes):          %20zu\n"
                 "%s",
                 tmstr, r_addrstr, fd, flow->r_eid,
+                flow->p_snd, flow->b_snd,
+                flow->p_snd_f, flow->b_snd_f,
+                flow->p_rcv, flow->b_rcv,
+                flow->b_rcv_f, flow->b_rcv_f,
                 castr);
 
         pthread_rwlock_unlock(&fa.flows_lock);
@@ -273,6 +293,10 @@ static void packet_handler(int                  fd,
 
         len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
 
+#ifdef IPCP_FLOW_STATS
+        ++flow->p_snd;
+        flow->b_snd += len;
+#endif
         wnd = ca_ctx_update_snd(flow->ctx, len);
 
         r_addr = flow->r_addr;
@@ -285,6 +309,12 @@ static void packet_handler(int                  fd,
         if (dt_write_packet(r_addr, qc, r_eid, sdb)) {
                 ipcp_sdb_release(sdb);
                 log_warn("Failed to forward packet.");
+#ifdef IPCP_FLOW_STATS
+                pthread_rwlock_wrlock(&fa.flows_lock);
+                ++flow->p_snd_f;
+                flow->b_snd_f += len;
+                pthread_rwlock_unlock(&fa.flows_lock);
+#endif
                 return;
         }
 }
@@ -530,7 +560,7 @@ int fa_init(void)
 
         list_head_init(&fa.cmds);
 
-        fa.fd = dt_reg_comp(&fa, &fa_post_packet, FA);
+        fa.eid = dt_reg_comp(&fa, &fa_post_packet, FA);
 
         sprintf(fastr, "%s", FA);
         if (rib_reg(fastr, &r_ops))
@@ -653,7 +683,7 @@ int fa_alloc(int             fd,
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
         memcpy(shm_du_buff_head(sdb) + len, data, dlen);
 
-        if (dt_write_packet(addr, qc, fa.fd, sdb)) {
+        if (dt_write_packet(addr, qc, fa.eid, sdb)) {
                 ipcp_sdb_release(sdb);
                 return -1;
         }
@@ -729,7 +759,7 @@ int fa_alloc_resp(int          fd,
                 psched_add(fa.psched, fd);
         }
 
-        if (dt_write_packet(flow->r_addr, qc, fa.fd, sdb)) {
+        if (dt_write_packet(flow->r_addr, qc, fa.eid, sdb)) {
                 fa_flow_fini(flow);
                 pthread_rwlock_unlock(&fa.flows_lock);
                 ipcp_sdb_release(sdb);
@@ -789,7 +819,7 @@ static int fa_update_remote(int      fd,
         pthread_rwlock_unlock(&fa.flows_lock);
 
 
-        if (dt_write_packet(r_addr, qc, fa.fd, sdb)) {
+        if (dt_write_packet(r_addr, qc, fa.eid, sdb)) {
                 ipcp_sdb_release(sdb);
                 return -1;
         }
@@ -797,26 +827,50 @@ static int fa_update_remote(int      fd,
         return 0;
 }
 
-void  fa_ecn_update(int     eid,
-                    uint8_t ecn,
-                    size_t  len)
+void  fa_np1_rcv(uint32_t             eid,
+                 uint8_t              ecn,
+                 struct shm_du_buff * sdb)
 {
         struct fa_flow * flow;
         bool             update;
         uint16_t         ece;
+        int              fd;
+        size_t           len;
 
-        flow = &fa.flows[eid];
+        fd = (int) eid;
+        if (fd < 0) {
+                ipcp_sdb_release(sdb);
+                return;
+        }
+
+        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+
+        flow = &fa.flows[fd];
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
         if (flow->r_eid == -1) {
                 pthread_rwlock_unlock(&fa.flows_lock);
+                ipcp_sdb_release(sdb);
                 return;
         }
-
+#ifdef IPCP_FLOW_STATS
+        ++flow->p_rcv;
+        flow->b_rcv += len;
+#endif
         update = ca_ctx_update_rcv(flow->ctx, len, ecn, &ece);
 
         pthread_rwlock_unlock(&fa.flows_lock);
+
+        if (ipcp_flow_write(fd, sdb) < 0) {
+                ipcp_sdb_release(sdb);
+#ifdef IPCP_FLOW_STATS
+                pthread_rwlock_wrlock(&fa.flows_lock);
+                ++flow->p_rcv_f;
+                flow->b_rcv_f += len;
+                pthread_rwlock_unlock(&fa.flows_lock);
+#endif
+        }
 
         if (update)
                 fa_update_remote(eid, ece);
