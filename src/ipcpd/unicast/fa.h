@@ -47,7 +47,7 @@ int  fa_alloc_resp(int          fd,
 
 int  fa_dealloc(int fd);
 
-void fa_np1_rcv(uint32_t             eid,
+void fa_np1_rcv(uint64_t             eid,
                 uint8_t              ecn,
                 struct shm_du_buff * sdb);
 

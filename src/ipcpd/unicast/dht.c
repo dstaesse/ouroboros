@@ -239,7 +239,7 @@ struct dht {
 
         pthread_rwlock_t lock;
 
-        uint32_t         eid;
+        uint64_t         eid;
 
         struct tpm *     tpm;
 
@@ -2815,6 +2815,9 @@ struct dht * dht_create(uint64_t addr)
                 goto fail_tpm_start;
 
         dht->eid   = dt_reg_comp(dht, &dht_post_packet, DHT);
+        if ((int) dht->eid < 0)
+                goto fail_tpm_start;
+
         notifier_reg(handle_event, dht);
 #else
         (void) handle_event;

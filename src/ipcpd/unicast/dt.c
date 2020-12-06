@@ -81,7 +81,7 @@ struct dt_pci {
         qoscube_t qc;
         uint8_t   ttl;
         uint8_t   ecn;
-        uint32_t  eid;
+        uint64_t  eid;
 };
 
 struct {
@@ -111,7 +111,7 @@ static void dt_pci_ser(uint8_t *       head,
         memcpy(head, &dt_pci->dst_addr, dt_pci_info.addr_size);
         memcpy(head + dt_pci_info.qc_o, &dt_pci->qc, QOS_LEN);
         memcpy(head + dt_pci_info.ttl_o, &ttl, TTL_LEN);
-        memcpy(head + dt_pci_info.ecn_o,  &dt_pci->ecn, ECN_LEN);
+        memcpy(head + dt_pci_info.ecn_o, &dt_pci->ecn, ECN_LEN);
         memcpy(head + dt_pci_info.eid_o, &dt_pci->eid, dt_pci_info.eid_size);
 
 }
@@ -466,7 +466,8 @@ static void packet_handler(int                  fd,
                 /* FIXME: Use qoscube from PCI instead of incoming flow. */
                 ofd = pff_nhop(dt.pff[qc], dt_pci.dst_addr);
                 if (ofd < 0) {
-                        log_dbg("No next hop for %" PRIu64, dt_pci.dst_addr);
+                        log_dbg("No next hop for %" PRIu64 ".",
+                                dt_pci.dst_addr);
                         ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
                         pthread_mutex_lock(&dt.stat[fd].lock);
@@ -514,7 +515,7 @@ static void packet_handler(int                  fd,
                 }
 
                 if (dt.comps[dt_pci.eid].post_packet == NULL) {
-                        log_err("No registered component on eid %d.",
+                        log_err("No registered component on eid %" PRIu64 ".",
                                 dt_pci.eid);
                         ipcp_sdb_release(sdb);
                         return;
@@ -576,6 +577,11 @@ int dt_init(enum pol_routing pr,
         info.pref_version = 1;
         info.pref_syntax  = PROTO_FIXED;
         info.addr         = ipcpi.dt_addr;
+
+        if (eid_size != 8) { /* only support 64 bits from now */
+                log_warn("Invalid EID size. Only 64 bit is supported.");
+                eid_size = 8;
+        }
 
         dt_pci_info.addr_size = addr_size;
         dt_pci_info.eid_size  = eid_size;
@@ -727,37 +733,37 @@ int dt_reg_comp(void * comp,
                 void (* func)(void * func, struct shm_du_buff *),
                 char * name)
 {
-        int res_fd;
+        int eid;
 
         assert(func);
 
         pthread_rwlock_wrlock(&dt.lock);
 
-        res_fd = bmp_allocate(dt.res_fds);
-        if (!bmp_is_id_valid(dt.res_fds, res_fd)) {
-                log_warn("Reserved fds depleted.");
+        eid = bmp_allocate(dt.res_fds);
+        if (!bmp_is_id_valid(dt.res_fds, eid)) {
+                log_warn("Reserved EIDs depleted.");
                 pthread_rwlock_unlock(&dt.lock);
                 return -EBADF;
         }
 
-        assert(dt.comps[res_fd].post_packet == NULL);
-        assert(dt.comps[res_fd].comp == NULL);
-        assert(dt.comps[res_fd].name == NULL);
+        assert(dt.comps[eid].post_packet == NULL);
+        assert(dt.comps[eid].comp == NULL);
+        assert(dt.comps[eid].name == NULL);
 
-        dt.comps[res_fd].post_packet = func;
-        dt.comps[res_fd].comp     = comp;
-        dt.comps[res_fd].name     = name;
+        dt.comps[eid].post_packet = func;
+        dt.comps[eid].comp        = comp;
+        dt.comps[eid].name        = name;
 
         pthread_rwlock_unlock(&dt.lock);
 #ifdef IPCP_FLOW_STATS
-        stat_used(res_fd, ipcpi.dt_addr);
+        stat_used(eid, ipcpi.dt_addr);
 #endif
-        return res_fd;
+        return eid;
 }
 
 int dt_write_packet(uint64_t             dst_addr,
                     qoscube_t            qc,
-                    uint32_t             eid,
+                    uint64_t             eid,
                     struct shm_du_buff * sdb)
 {
         struct dt_pci dt_pci;

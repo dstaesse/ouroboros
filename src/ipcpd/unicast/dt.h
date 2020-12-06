@@ -49,7 +49,7 @@ int  dt_reg_comp(void * comp,
 
 int  dt_write_packet(uint64_t             dst_addr,
                      qoscube_t            qc,
-                     uint32_t             eid,
+                     uint64_t             eid,
                      struct shm_du_buff * sdb);
 
 #endif /* OUROBOROS_IPCPD_UNICAST_DT_H */

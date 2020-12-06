@@ -65,7 +65,7 @@
 #define SHA3_512               "SHA3_512"
 
 #define DEFAULT_ADDR_SIZE      4
-#define DEFAULT_EID_SIZE       2
+#define DEFAULT_EID_SIZE       8
 #define DEFAULT_DDNS           0
 #define DEFAULT_TTL            60
 #define DEFAULT_ADDR_AUTH      ADDR_AUTH_FLAT_RANDOM
