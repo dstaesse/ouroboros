@@ -376,7 +376,7 @@ static void crypt_dh_pkp_destroy(void * pkp)
         openssl_ecdh_pkp_destroy(pkp);
 #else
         (void) pkp;
-        return 0;
+        return;
 #endif
 }
 
