@@ -365,8 +365,9 @@ static int crypt_dh_pkp_create(void **   pkp,
         (void) pk;
 
         memset(pk, 0, MSGBUFSZ);
+        *pkp = NULL;
 
-        return -ECRYPT;
+        return 0;
 #endif
 }
 

@@ -552,10 +552,11 @@ int flow_accept(qosspec_t *             qs,
                 err = -ECRYPT;
                 goto fail_crypt_pkp;
         }
-
-        msg.has_pk  = true;
-        msg.pk.data = buf;
-        msg.pk.len  = (uint32_t) key_len;
+        if (key_len > 0) {
+                msg.has_pk  = true;
+                msg.pk.data = buf;
+                msg.pk.len  = (uint32_t) key_len;
+        }
 
         pthread_cleanup_push(crypt_dh_pkp_destroy, pkp);
 
