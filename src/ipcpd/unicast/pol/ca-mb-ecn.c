@@ -222,8 +222,9 @@ void mb_ecn_ctx_update_ece(void *   _ctx,
         ctx->tx_cav = true;
 }
 
-uint8_t mb_ecn_calc_ecn(int    fd,
-                        size_t len)
+int  mb_ecn_calc_ecn(int       fd,
+                     uint8_t * ecn,
+                     size_t    len)
 {
         size_t q;
 
@@ -231,7 +232,9 @@ uint8_t mb_ecn_calc_ecn(int    fd,
 
         q = ipcp_flow_queued(fd);
 
-        return (uint8_t) (q >> ECN_Q_SHFT);
+        *ecn |= (uint8_t) (q >> ECN_Q_SHFT);
+
+        return 0;
 }
 
 ssize_t  mb_ecn_print_stats(void * _ctx,

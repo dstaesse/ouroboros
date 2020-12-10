@@ -480,7 +480,7 @@ static void packet_handler(int                  fd,
                         return;
                 }
 
-                *(head + dt_pci_info.ecn_o) |= ca_calc_ecn(ofd, len);
+                (void) ca_calc_ecn(ofd, head + dt_pci_info.ecn_o, len);
 
                 ret = ipcp_flow_write(ofd, sdb);
                 if (ret < 0) {
@@ -814,7 +814,9 @@ int dt_write_packet(uint64_t             dst_addr,
         dt_pci.dst_addr = dst_addr;
         dt_pci.qc       = qc;
         dt_pci.eid      = eid;
-        dt_pci.ecn      = ca_calc_ecn(fd, len);
+        dt_pci.ecn      = 0;
+
+        (void) ca_calc_ecn(fd, &dt_pci.ecn, len);
 
         dt_pci_ser(head, &dt_pci);
 

@@ -84,11 +84,13 @@ void nop_ctx_update_ece(void *   ctx,
 }
 
 
-uint8_t nop_calc_ecn(int    fd,
-                     size_t len)
+int nop_calc_ecn(int       fd,
+                 uint8_t * ecn,
+                 size_t    len)
 {
         (void) fd;
         (void) len;
+        (void) ecn;
 
         return 0;
 }

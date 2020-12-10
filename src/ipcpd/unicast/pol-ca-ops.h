@@ -43,8 +43,9 @@ struct pol_ca_ops {
 
         void     (* wnd_wait)(ca_wnd_t wnd);
 
-        uint8_t  (* calc_ecn)(int    fd,
-                              size_t len);
+        int      (* calc_ecn)(int       fd,
+                              uint8_t * ecn,
+                              size_t    len);
 
         /* Optional, can be NULL */
         ssize_t  (* print_stats)(void * ctx,

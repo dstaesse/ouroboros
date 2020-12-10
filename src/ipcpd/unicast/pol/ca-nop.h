@@ -42,8 +42,9 @@ void     nop_ctx_update_ece(void *   ctx,
 
 void     nop_wnd_wait(ca_wnd_t wnd);
 
-uint8_t  nop_calc_ecn(int    fd,
-                      size_t len);
+int      nop_calc_ecn(int       fd,
+                      uint8_t * ecn,
+                      size_t    len);
 
 extern struct pol_ca_ops nop_ca_ops;
 

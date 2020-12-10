@@ -55,8 +55,9 @@ void     ca_ctx_update_ece(void *   ctx,
 
 void     ca_wnd_wait(ca_wnd_t wnd);
 
-uint8_t  ca_calc_ecn(int    fd,
-                     size_t len);
+int      ca_calc_ecn(int       fd,
+                     uint8_t * ecn,
+                     size_t    len);
 
 ssize_t  ca_print_stats(void * ctx,
                         char * buf,

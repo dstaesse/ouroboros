@@ -92,10 +92,11 @@ void ca_wnd_wait(ca_wnd_t wnd)
         return ca.ops->wnd_wait(wnd);
 }
 
-uint8_t ca_calc_ecn(int    fd,
-                    size_t len)
+int  ca_calc_ecn(int       fd,
+                 uint8_t * ecn,
+                 size_t    len)
 {
-        return ca.ops->calc_ecn(fd, len);
+        return ca.ops->calc_ecn(fd, ecn, len);
 }
 
 ssize_t ca_print_stats(void * ctx,
