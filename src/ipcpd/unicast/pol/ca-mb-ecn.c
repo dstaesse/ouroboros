@@ -62,8 +62,6 @@ struct mb_ecn_ctx {
         size_t          tx_mul; /* Slot size multiplier             */
         size_t          tx_inc; /* Additive increase                */
         size_t          tx_slot;
-
-        struct timespec t_sent; /* Last sent packet                 */
 };
 
 struct pol_ca_ops mb_ecn_ca_ops = {
@@ -112,8 +110,6 @@ ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
         struct mb_ecn_ctx * ctx = _ctx;
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
-
-        ctx->t_sent = now;
 
         slot = ts_to_ns(now) >> ctx->tx_mul;
 
