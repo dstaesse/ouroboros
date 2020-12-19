@@ -220,11 +220,13 @@ void mb_ecn_ctx_update_ece(void *   _ctx,
 
 int  mb_ecn_calc_ecn(int       fd,
                      uint8_t * ecn,
+                     qoscube_t qc,
                      size_t    len)
 {
         size_t q;
 
         (void) len;
+        (void) qc;
 
         q = ipcp_flow_queued(fd);
 

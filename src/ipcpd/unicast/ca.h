@@ -24,6 +24,7 @@
 #define OUROBOROS_IPCPD_UNICAST_CA_H
 
 #include <ouroboros/ipcp.h>
+#include <ouroboros/qoscube.h>
 
 #include <stdbool.h>
 #include <sys/types.h>
@@ -57,6 +58,7 @@ void     ca_wnd_wait(ca_wnd_t wnd);
 
 int      ca_calc_ecn(int       fd,
                      uint8_t * ecn,
+                     qoscube_t qc,
                      size_t    len);
 
 ssize_t  ca_print_stats(void * ctx,

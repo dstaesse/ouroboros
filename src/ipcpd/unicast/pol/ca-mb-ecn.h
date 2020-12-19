@@ -44,6 +44,7 @@ void     mb_ecn_wnd_wait(ca_wnd_t wnd);
 
 int      mb_ecn_calc_ecn(int       fd,
                          uint8_t * ecn,
+                         qoscube_t qc,
                          size_t    len);
 
 ssize_t  mb_ecn_print_stats(void * ctx,

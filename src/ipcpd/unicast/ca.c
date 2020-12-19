@@ -94,9 +94,10 @@ void ca_wnd_wait(ca_wnd_t wnd)
 
 int  ca_calc_ecn(int       fd,
                  uint8_t * ecn,
+                 qoscube_t qc,
                  size_t    len)
 {
-        return ca.ops->calc_ecn(fd, ecn, len);
+        return ca.ops->calc_ecn(fd, ecn, qc, len);
 }
 
 ssize_t ca_print_stats(void * ctx,

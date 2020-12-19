@@ -44,6 +44,7 @@ void     nop_wnd_wait(ca_wnd_t wnd);
 
 int      nop_calc_ecn(int       fd,
                       uint8_t * ecn,
+                      qoscube_t qc,
                       size_t    len);
 
 extern struct pol_ca_ops nop_ca_ops;

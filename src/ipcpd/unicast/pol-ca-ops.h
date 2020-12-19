@@ -45,6 +45,7 @@ struct pol_ca_ops {
 
         int      (* calc_ecn)(int       fd,
                               uint8_t * ecn,
+                              qoscube_t qc,
                               size_t    len);
 
         /* Optional, can be NULL */

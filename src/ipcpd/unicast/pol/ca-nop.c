@@ -86,11 +86,13 @@ void nop_ctx_update_ece(void *   ctx,
 
 int nop_calc_ecn(int       fd,
                  uint8_t * ecn,
+                 qoscube_t qc,
                  size_t    len)
 {
         (void) fd;
         (void) len;
         (void) ecn;
+        (void) qc;
 
         return 0;
 }
