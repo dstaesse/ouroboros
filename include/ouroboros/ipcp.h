@@ -91,8 +91,7 @@ struct ipcp_config {
         /* UDP */
         uint32_t            ip_addr;
         uint32_t            dns_addr;
-        uint16_t            clt_port;
-        uint16_t            srv_port;
+        uint16_t            port;
 
         /* Ethernet */
         char *              dev;

@@ -252,8 +252,7 @@ static void * mainloop(void * o)
                         case IPCP_UDP:
                                 conf.ip_addr  = conf_msg->ip_addr;
                                 conf.dns_addr = conf_msg->dns_addr;
-                                conf.clt_port = conf_msg->clt_port;
-                                conf.srv_port = conf_msg->srv_port;
+                                conf.port     = conf_msg->port;
                                 conf.layer_info.dir_hash_algo = HASH_MD5;
                                 layer_info.dir_hash_algo      = HASH_MD5;
                                 break;

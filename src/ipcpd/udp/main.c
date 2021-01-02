@@ -67,10 +67,8 @@
 #define DNS_TTL                  86400
 #define FD_UPDATE_TIMEOUT        100 /* microseconds */
 
-#define SERV_PORT                udp_data.s_saddr.sin_port;
-#define SERV_SADDR               ((struct sockaddr *) &udp_data.s_saddr)
-#define CLNT_SADDR               ((struct sockaddr *) &udp_data.c_saddr)
-#define SERV_SADDR_SIZE          (sizeof(udp_data.s_saddr))
+#define SADDR                    ((struct sockaddr *) &udp_data.s_saddr)
+#define SADDR_SIZE               (sizeof(udp_data.s_saddr))
 #define LOCAL_IP                 (udp_data.s_saddr.sin_addr.s_addr)
 
 #define MGMT_EID                 0
@@ -106,20 +104,17 @@ struct mgmt_frame {
 
 /* UDP flow */
 struct uf {
-        int d_eid;
-        /* IP details are stored through connect(). */
-        int skfd;
+        int                d_eid;
+        struct sockaddr_in r_saddr;
 };
 
 struct {
         struct shim_data * shim_data;
 
         uint32_t           dns_addr;
-        /* server socket */
+
         struct sockaddr_in s_saddr;
         int                s_fd;
-        /* client port */
-        int                clt_port;
 
         fset_t *           np1_flows;
         struct uf          fd_to_uf[SYS_MAX_FLOWS];
@@ -148,10 +143,8 @@ static int udp_data_init(void)
         if (pthread_mutex_init(&udp_data.mgmt_lock, NULL))
                 goto fail_mgmt_lock;
 
-        for (i = 0; i < SYS_MAX_FLOWS; ++i) {
-                udp_data.fd_to_uf[i].skfd  = -1;
+        for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 udp_data.fd_to_uf[i].d_eid = -1;
-        }
 
         udp_data.np1_flows = fset_create();
         if (udp_data.np1_flows == NULL)
@@ -187,12 +180,12 @@ static void udp_data_fini(void)
         pthread_mutex_destroy(&udp_data.mgmt_lock);
 }
 
-static int ipcp_udp_port_alloc(int             skfd,
-                               uint32_t        s_eid,
-                               const uint8_t * dst,
-                               qosspec_t       qs,
-                               const void *    data,
-                               size_t          dlen)
+static int ipcp_udp_port_alloc(const struct sockaddr_in * r_saddr,
+                               uint32_t                   s_eid,
+                               const uint8_t *            dst,
+                               qosspec_t                  qs,
+                               const void *               data,
+                               size_t                     dlen)
 {
         uint8_t *         buf;
         struct mgmt_msg * msg;
@@ -222,7 +215,9 @@ static int ipcp_udp_port_alloc(int             skfd,
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
         memcpy(buf + len, data, dlen);
 
-        if (write(skfd, msg, len + dlen) < 0) {
+        if (sendto(udp_data.s_fd, msg, len + dlen,
+                   MSG_CONFIRM,
+                   (const struct sockaddr *) r_saddr, sizeof(*r_saddr)) < 0) {
                 free(buf);
                 return -1;
         }
@@ -232,14 +227,14 @@ static int ipcp_udp_port_alloc(int             skfd,
         return 0;
 }
 
-static int ipcp_udp_port_alloc_resp(int          skfd,
-                                    uint32_t     s_eid,
-                                    uint32_t     d_eid,
-                                    int8_t       response,
-                                    const void * data,
-                                    size_t       len)
+static int ipcp_udp_port_alloc_resp(const struct sockaddr_in * r_saddr,
+                                    uint32_t                   s_eid,
+                                    uint32_t                   d_eid,
+                                    int8_t                     response,
+                                    const void *               data,
+                                    size_t                     len)
 {
-        struct mgmt_msg *  msg;
+        struct mgmt_msg * msg;
 
         msg = malloc(sizeof(*msg) + len);
         if (msg == NULL)
@@ -253,7 +248,9 @@ static int ipcp_udp_port_alloc_resp(int          skfd,
 
         memcpy(msg + 1, data, len);
 
-        if (write(skfd, msg, sizeof(*msg) + len) < 0) {
+        if (sendto(udp_data.s_fd, msg, sizeof(*msg) + len,
+                   MSG_CONFIRM,
+                   (const struct sockaddr *) r_saddr, sizeof(*r_saddr)) < 0 ) {
                 free(msg);
                 return -1;
         }
@@ -270,26 +267,9 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
                              const void *         data,
                              size_t               len)
 {
-        struct timespec ts        = {0, FD_UPDATE_TIMEOUT * 1000};
-        struct timespec abstime;
-        int             skfd;
-        int             fd;
-
-        skfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (skfd < 0) {
-                log_err("Could not create UDP socket.");
-                return -1;
-        }
-
-        /* Remote listens on server port. Mod of c_saddr allowed. */
-        c_saddr->sin_port = udp_data.s_saddr.sin_port;
-
-        /* Connect stores the remote address in the file descriptor. */
-        if (connect(skfd, (struct sockaddr *) c_saddr, sizeof(*c_saddr)) < 0) {
-                log_err("Could not connect to remote UDP client.");
-                close(skfd);
-                return -1;
-        }
+        struct timespec    ts        = {0, FD_UPDATE_TIMEOUT * 1000};
+        struct timespec    abstime;
+        int                fd;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -304,7 +284,6 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_dbg("Won't allocate over non-operational IPCP.");
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
-                close(skfd);
                 return -1;
         }
 
@@ -313,14 +292,13 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
-                close(skfd);
                 return -1;
         }
 
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
-        udp_data.fd_to_uf[fd].skfd  = skfd;
-        udp_data.fd_to_uf[fd].d_eid = d_eid;
+        udp_data.fd_to_uf[fd].r_saddr = *c_saddr;
+        udp_data.fd_to_uf[fd].d_eid   = d_eid;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
@@ -335,43 +313,26 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         return 0;
 }
 
-static int ipcp_udp_port_alloc_reply(uint32_t     s_eid,
-                                     uint32_t     d_eid,
-                                     int8_t       response,
-                                     const void * data,
-                                     size_t       len)
+static int ipcp_udp_port_alloc_reply(const struct sockaddr_in * saddr,
+                                     uint32_t                   s_eid,
+                                     uint32_t                   d_eid,
+                                     int8_t                     response,
+                                     const void *               data,
+                                     size_t                     len)
 {
-        struct sockaddr_in t_saddr;
-        socklen_t          t_saddr_len;
-        int                ret         = 0;
-        int                skfd        = -1;
-
-        t_saddr_len = sizeof(t_saddr);
-
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
-        skfd = udp_data.fd_to_uf[s_eid].skfd;
-        if (skfd < 0) {
+        if (memcmp(&udp_data.fd_to_uf[s_eid].r_saddr, saddr, sizeof(*saddr))) {
                 pthread_rwlock_unlock(&udp_data.flows_lock);
-                log_err("Got reply for unknown UDP eid: %u.", s_eid);
+                log_warn("Flow allocation reply for %u from wrong source.",
+                         s_eid);
                 return -1;
         }
 
-        udp_data.fd_to_uf[s_eid].d_eid = d_eid;
+        if (response == 0)
+                udp_data.fd_to_uf[s_eid].d_eid = d_eid;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-
-        if (getpeername(skfd, (struct sockaddr *) &t_saddr, &t_saddr_len) < 0) {
-                log_dbg("Flow with fd %d has no peer.", s_eid);
-                close(skfd);
-                return -1;
-        }
-
-        if (connect(skfd, (struct sockaddr *) &t_saddr, sizeof(t_saddr)) < 0) {
-                log_dbg("Could not connect flow to remote.");
-                close(skfd);
-                return -1;
-        }
 
         if (ipcp_flow_alloc_reply(s_eid, response, data, len) < 0) {
                 log_dbg("Failed to reply to flow allocation.");
@@ -381,7 +342,7 @@ static int ipcp_udp_port_alloc_reply(uint32_t     s_eid,
         log_dbg("Flow allocation completed on eids (%d, %d).",
                  s_eid, d_eid);
 
-        return ret;
+        return 0;
 }
 
 static int ipcp_udp_mgmt_frame(const uint8_t *    buf,
@@ -416,7 +377,8 @@ static int ipcp_udp_mgmt_frame(const uint8_t *    buf,
         case FLOW_REPLY:
                 assert(len >= sizeof(*msg));
 
-                return ipcp_udp_port_alloc_reply(ntoh32(msg->s_eid),
+                return ipcp_udp_port_alloc_reply(&c_saddr,
+                                                 ntoh32(msg->s_eid),
                                                  ntoh32(msg->d_eid),
                                                  msg->response,
                                                  buf + sizeof(*msg),
@@ -543,8 +505,9 @@ static void * ipcp_udp_packet_writer(void * o)
         pthread_cleanup_push(cleanup_writer, fq);
 
         while (true) {
-                int fd;
-                int eid;
+                struct sockaddr_in saddr;
+                int                eid;
+                int                fd;
                 fevent(udp_data.np1_flows, fq, NULL);
                 while ((fd = fqueue_next(fq)) >= 0) {
                         struct shm_du_buff * sdb;
@@ -576,7 +539,7 @@ static void * ipcp_udp_packet_writer(void * o)
                         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
                         eid = hton32(udp_data.fd_to_uf[fd].d_eid);
-                        fd = udp_data.fd_to_uf[fd].skfd;
+                        saddr = udp_data.fd_to_uf[fd].r_saddr;
 
                         pthread_rwlock_unlock(&udp_data.flows_lock);
 
@@ -585,7 +548,10 @@ static void * ipcp_udp_packet_writer(void * o)
                         pthread_cleanup_push((void (*)(void *))
                                              ipcp_sdb_release, (void *) sdb);
 
-                        if (write(fd, buf, len + OUR_HEADER_LEN) < 0)
+                        if (sendto(udp_data.s_fd, buf, len + OUR_HEADER_LEN,
+                                   MSG_CONFIRM,
+                                   (const struct sockaddr *) &saddr,
+                                   sizeof(saddr)) < 0)
                                 log_err("Failed to send packet.");
 
                         pthread_cleanup_pop(true);
@@ -633,22 +599,17 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                 goto fail_socket;
         }
 
-        if (setsockopt(udp_data.s_fd, SOL_SOCKET, SO_REUSEADDR,
-                       &i, sizeof(i)) < 0)
-                log_warn("Failed to set SO_REUSEADDR.");
-
         memset((char *) &udp_data.s_saddr, 0, sizeof(udp_data.s_saddr));
         udp_data.s_saddr.sin_family      = AF_INET;
         udp_data.s_saddr.sin_addr.s_addr = conf->ip_addr;
-        udp_data.s_saddr.sin_port        = htons(conf->srv_port);
+        udp_data.s_saddr.sin_port        = htons(conf->port);
 
-        if (bind(udp_data.s_fd, SERV_SADDR, SERV_SADDR_SIZE) < 0) {
+        if (bind(udp_data.s_fd, SADDR, SADDR_SIZE) < 0) {
                 log_err("Couldn't bind to %s.", ipstr);
                 goto fail_bind;
         }
 
         udp_data.dns_addr = conf->dns_addr;
-        udp_data.clt_port = htons(conf->clt_port);
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
@@ -674,12 +635,11 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                 }
         }
 
-        sprintf(portstr, "%d", conf->clt_port);
+        sprintf(portstr, "%d", conf->port);
 
         log_dbg("Bootstrapped IPCP over UDP with pid %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
-        log_dbg("Client port is %s.", conf->clt_port == 0 ? "random" : portstr);
-        log_dbg("Server port is %u.", conf->srv_port);
+        log_dbg("Using port %u.", conf->port);
         log_dbg("DNS server address is %s.", dnsstr);
 
         return 0;
@@ -997,13 +957,8 @@ static int ipcp_udp_flow_alloc(int             fd,
                                size_t          len)
 {
         struct sockaddr_in r_saddr; /* Server address */
-        struct sockaddr_in c_saddr; /* Client address */
-        socklen_t          c_saddr_len;
-        int                skfd;
         uint32_t           ip_addr = 0;
-        char               ip_str[INET_ADDRSTRLEN];
-
-        c_saddr_len = sizeof(c_saddr);
+        char               ipstr[INET_ADDRSTRLEN];
 
         log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(dst));
 
@@ -1011,70 +966,36 @@ static int ipcp_udp_flow_alloc(int             fd,
 
         assert(dst);
 
-        skfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (skfd < 0) {
-                log_err("Could not create socket.");
-                return -1;
-        }
-
-        /* This socket is for the flow. */
-        memset((char *) &c_saddr, 0, sizeof(c_saddr));
-        c_saddr.sin_family      = AF_INET;
-        c_saddr.sin_addr.s_addr = LOCAL_IP;
-        c_saddr.sin_port        = udp_data.clt_port;
-
-        if (bind(skfd, (struct sockaddr *) &c_saddr, sizeof(c_saddr)) < 0) {
-                log_dbg("Could not bind socket to client address.");
-                close(skfd);
-                return -1;
-        }
-
-        if (getsockname(skfd, (struct sockaddr *) &c_saddr, &c_saddr_len) < 0) {
-                log_err("Could not get address from fd.");
-                close(skfd);
-                return -1;
-        }
-
         if (!shim_data_dir_has(udp_data.shim_data, dst)) {
                 log_dbg("Could not resolve destination.");
-                close(skfd);
                 return -1;
         }
 
         ip_addr = (uint32_t) shim_data_dir_get_addr(udp_data.shim_data, dst);
 
-        inet_ntop(AF_INET, &ip_addr, ip_str, INET_ADDRSTRLEN);
-        log_dbg("Destination UDP ipcp resolved at %s.", ip_str);
+        inet_ntop(AF_INET, &ip_addr, ipstr, INET_ADDRSTRLEN);
+        log_dbg("Destination UDP ipcp resolved at %s.", ipstr);
 
-        /* Connect to server and store the remote IP address in the skfd. */
         memset((char *) &r_saddr, 0, sizeof(r_saddr));
         r_saddr.sin_family      = AF_INET;
         r_saddr.sin_addr.s_addr = ip_addr;
         r_saddr.sin_port        = udp_data.s_saddr.sin_port;
 
-        if (connect(skfd, (struct sockaddr *) &r_saddr, sizeof(r_saddr)) < 0) {
-                log_dbg("Could not connect socket to remote.");
-                close(skfd);
-                return -1;
-        }
-
-        if (ipcp_udp_port_alloc(skfd, fd, dst, qs, data, len) < 0) {
+        if (ipcp_udp_port_alloc(&r_saddr, fd, dst, qs, data, len) < 0) {
                 log_err("Could not allocate port.");
-                close(skfd);
                 return -1;
         }
 
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
-        udp_data.fd_to_uf[fd].d_eid = -1;
-        udp_data.fd_to_uf[fd].skfd  = skfd;
+        udp_data.fd_to_uf[fd].d_eid   = -1;
+        udp_data.fd_to_uf[fd].r_saddr = r_saddr;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
         fset_add(udp_data.np1_flows, fd);
 
-        log_dbg("Flow pending on fd %d, UDP src port %d, dst port %d.",
-                fd, ntohs(c_saddr.sin_port), ntohs(r_saddr.sin_port));
+        log_dbg("Flow to %s pending on fd %d.", ipstr, fd);
 
         return 0;
 }
@@ -1084,10 +1005,10 @@ static int ipcp_udp_flow_alloc_resp(int          fd,
                                     const void * data,
                                     size_t       len)
 {
-        struct timespec ts  = {0, FD_UPDATE_TIMEOUT * 1000};
-        struct timespec abstime;
-        int             skfd;
-        int             d_eid;
+        struct timespec    ts  = {0, FD_UPDATE_TIMEOUT * 1000};
+        struct timespec    abstime;
+        struct sockaddr_in saddr;
+        int                d_eid;
 
         if (resp)
                 return 0;
@@ -1115,12 +1036,13 @@ static int ipcp_udp_flow_alloc_resp(int          fd,
 
         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
-        skfd  = udp_data.fd_to_uf[fd].skfd;
+        saddr = udp_data.fd_to_uf[fd].r_saddr;
         d_eid = udp_data.fd_to_uf[fd].d_eid;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        if (ipcp_udp_port_alloc_resp(skfd, d_eid, fd, resp, data, len) < 0) {
+        if (ipcp_udp_port_alloc_resp(&saddr, d_eid, fd, resp, data, len) < 0) {
+                fset_del(udp_data.np1_flows, fd);
                 log_err("Failed to respond to flow request.");
                 return -1;
         }
@@ -1135,22 +1057,16 @@ static int ipcp_udp_flow_alloc_resp(int          fd,
 
 static int ipcp_udp_flow_dealloc(int fd)
 {
-        int skfd = -1;
-
         ipcp_flow_fini(fd);
 
         fset_del(udp_data.np1_flows, fd);
 
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
-        skfd = udp_data.fd_to_uf[fd].skfd;
-
         udp_data.fd_to_uf[fd].d_eid = -1;
-        udp_data.fd_to_uf[fd].skfd  = -1;
+        memset(&udp_data.fd_to_uf[fd].r_saddr, 0, SADDR_SIZE);
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-
-        close(skfd);
 
         flow_dealloc(fd);
 

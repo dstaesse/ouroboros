@@ -73,8 +73,7 @@
 #define DEFAULT_CONG_AVOID     CA_MB_ECN
 #define DEFAULT_HASH_ALGO      DIR_HASH_SHA3_256
 #define DEFAULT_ETHERTYPE      0xA000
-#define DEFAULT_CLIENT_PORT    0x0000 /* random port */
-#define DEFAULT_SERVER_PORT    0x0D6B /* 3435 */
+#define DEFAULT_UDP_PORT       0x0D6B /* 3435 */
 
 #define FLAT_RANDOM_ADDR_AUTH  "flat"
 #define LINK_STATE_ROUTING     "link_state"
@@ -109,8 +108,7 @@ static void usage(void)
                SHA3_384 " " SHA3_512 "}\n\n"
                "if TYPE == " UDP "\n"
                "                ip <IP address in dotted notation>\n"
-               "                [cport <client port> (default: random)]\n"
-               "                [sport <server port> (default: %d)]\n"
+               "                [port <UDP port> (default: %d)]\n"
                "                [dns <DDNS IP address in dotted notation>"
                " (default: none)]\n\n"
                "if TYPE == " ETH_LLC "\n"
@@ -136,7 +134,7 @@ static void usage(void)
                "                [autobind]\n\n",
                DEFAULT_ADDR_SIZE, DEFAULT_EID_SIZE, DEFAULT_TTL,
                FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING, MB_ECN_CA,
-               SHA3_256, DEFAULT_SERVER_PORT, SHA3_256, 0xA000, SHA3_256,
+               SHA3_256, DEFAULT_UDP_PORT, SHA3_256, 0xA000, SHA3_256,
                SHA3_256, SHA3_256);
 }
 
@@ -165,8 +163,7 @@ int do_bootstrap_ipcp(int     argc,
         int                 i              = 0;
         bool                autobind       = false;
         int                 cargs;
-        int                 cport          = DEFAULT_CLIENT_PORT;
-        int                 sport          = DEFAULT_SERVER_PORT;
+        int                 port           = DEFAULT_UDP_PORT;
 
         while (argc > 0) {
                 cargs = 2;
@@ -213,10 +210,8 @@ int do_bootstrap_ipcp(int     argc,
                         eid_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "ttl") == 0) {
                         max_ttl = atoi(*(argv + 1));
-                } else if (matches(*argv, "cport") == 0) {
-                        cport = atoi(*(argv + 1));
-                } else if (matches(*argv, "sport") == 0) {
-                        sport = atoi(*(argv + 1));
+                } else if (matches(*argv, "port") == 0) {
+                        port = atoi(*(argv + 1));
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
@@ -336,8 +331,7 @@ int do_bootstrap_ipcp(int     argc,
                                         goto fail_usage;
                                 conf.ip_addr  = ip_addr;
                                 conf.dns_addr = dns_addr;
-                                conf.clt_port    = cport;
-                                conf.srv_port    = sport;
+                                conf.port     = port;
                                 break;
                         case IPCP_ETH_LLC:
                                 if (dev == NULL)
