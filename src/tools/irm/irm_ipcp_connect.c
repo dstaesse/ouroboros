@@ -3,8 +3,8 @@
  *
  * Connect components of unicast or broadcast IPC processes
  *
- *    Dimitri Staessens <dimitri.staessens@ugent.be>
- *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *    Dimitri Staessens <dimitri@ouroboros.rocks>
+ *    Sander Vrijders   <sander@ouroboros.rocks>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions

@@ -3,8 +3,8 @@
  *
  * Hashing
  *
- *    Dimitri Staessens <dimitri.staessens@ugent.be>
- *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *    Dimitri Staessens <dimitri@ouroboros.rocks>
+ *    Sander Vrijders   <sander@ouroboros.rocks>
  *
  * This implementation is adapted and redistributed from the RHASH
  * project

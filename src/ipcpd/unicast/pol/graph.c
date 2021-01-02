@@ -3,8 +3,8 @@
  *
  * Undirected graph structure
  *
- *    Dimitri Staessens <dimitri.staessens@ugent.be>
- *    Sander Vrijders   <sander.vrijders@ugent.be>
+ *    Dimitri Staessens <dimitri@ouroboros.rocks>
+ *    Sander Vrijders   <sander@ouroboros.rocks>
  *    Nick Aerts        <nick.aerts@ugent.be>
  *
  * This program is free software; you can redistribute it and/or modify
