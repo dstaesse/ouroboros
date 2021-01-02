@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2020
+ * Ouroboros - Copyright (C) 2016 - 2021
  *
  * Connect components of unicast or broadcast IPC processes
  *

@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2020
+ * Ouroboros - Copyright (C) 2016 - 2021
  *
  * Handles the different AP connections
  *
