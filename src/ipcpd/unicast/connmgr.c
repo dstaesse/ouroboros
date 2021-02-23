@@ -38,7 +38,6 @@
 #include "comp.h"
 #include "connmgr.h"
 #include "dir.h"
-#include "enroll.h"
 #include "ipcp.h"
 
 #include <pthread.h>
