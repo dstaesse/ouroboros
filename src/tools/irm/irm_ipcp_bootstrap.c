@@ -56,7 +56,6 @@
 #define ETH_LLC                "eth-llc"
 #define ETH_DIX                "eth-dix"
 #define LOCAL                  "local"
-#define RAPTOR                 "raptor"
 
 #define MD5                    "MD5"
 #define SHA3_224               "SHA3_224"
@@ -90,7 +89,7 @@ static void usage(void)
                "                layer <layer name>\n"
                "                [type [TYPE]]\n"
                "where TYPE = {" UNICAST " " BROADCAST " " LOCAL " "
-               UDP " " ETH_LLC " " ETH_DIX " " RAPTOR "},\n\n"
+               UDP " " ETH_LLC " " ETH_DIX "},\n\n"
                "if TYPE == " UNICAST "\n"
                "                [addr <address size> (default: %d)]\n"
                "                [eid <eid size> (default: %d)]\n"
@@ -126,16 +125,12 @@ static void usage(void)
                "                [hash [ALGORITHM] (default: %s)]\n"
                "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
                SHA3_384 " " SHA3_512 "}\n\n"
-               "if TYPE == " RAPTOR "\n"
-               "                [hash [ALGORITHM] (default: %s)]\n"
-               "where ALGORITHM = {" SHA3_224 " " SHA3_256 " "
-               SHA3_384 " " SHA3_512 "}\n\n"
                "if TYPE == " BROADCAST "\n"
                "                [autobind]\n\n",
                DEFAULT_ADDR_SIZE, DEFAULT_EID_SIZE, DEFAULT_TTL,
                FLAT_RANDOM_ADDR_AUTH, LINK_STATE_ROUTING, MB_ECN_CA,
                SHA3_256, DEFAULT_UDP_PORT, SHA3_256, 0xA000, SHA3_256,
-               SHA3_256, SHA3_256);
+               SHA3_256);
 }
 
 int do_bootstrap_ipcp(int     argc,
@@ -274,8 +269,6 @@ int do_bootstrap_ipcp(int     argc,
                         type = IPCP_ETH_DIX;
                 else if (strcmp(ipcp_type, LOCAL) == 0)
                         type = IPCP_LOCAL;
-                else if (strcmp(ipcp_type, RAPTOR) == 0)
-                        type = IPCP_RAPTOR;
                 else goto fail_usage;
         }
 
@@ -347,8 +340,6 @@ int do_bootstrap_ipcp(int     argc,
                         case IPCP_BROADCAST:
                                 /* FALLTHRU */
                         case IPCP_LOCAL:
-                                /* FALLTHRU */
-                        case IPCP_RAPTOR:
                                 break;
                         default:
                                 assert(false);

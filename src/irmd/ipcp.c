@@ -155,9 +155,6 @@ pid_t ipcp_create(const char *   name,
         case IPCP_LOCAL:
                 exec_name = IPCP_LOCAL_EXEC;
                 break;
-        case IPCP_RAPTOR:
-                exec_name = IPCP_RAPTOR_EXEC;
-                break;
         default:
                 return -1;
         }

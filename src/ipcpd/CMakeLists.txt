@@ -43,7 +43,6 @@ set(IPCP_SOURCES
 add_subdirectory(local)
 add_subdirectory(eth)
 add_subdirectory(udp)
-add_subdirectory(raptor)
 add_subdirectory(unicast)
 add_subdirectory(broadcast)
 

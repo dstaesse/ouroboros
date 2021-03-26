@@ -50,7 +50,6 @@
 #define ETH_LLC                "eth-llc"
 #define ETH_DIX                "eth-dix"
 #define LOCAL                  "local"
-#define RAPTOR                 "raptor"
 
 static void usage(void)
 {
@@ -58,7 +57,7 @@ static void usage(void)
                "                name <ipcp name>\n"
                "                type [TYPE]\n\n"
                "where TYPE = {" UNICAST " " BROADCAST " " LOCAL " "
-               UDP " " ETH_LLC " " RAPTOR "}\n");
+               UDP " " ETH_LLC "}\n");
 }
 
 int do_create_ipcp(int     argc,
@@ -101,8 +100,6 @@ int do_create_ipcp(int     argc,
                 type = IPCP_ETH_LLC;
         else if (strcmp(ipcp_type, ETH_DIX) == 0)
                 type = IPCP_ETH_DIX;
-        else if (strcmp(ipcp_type, RAPTOR) == 0)
-                type = IPCP_RAPTOR;
         else {
                 usage();
                 return -1;

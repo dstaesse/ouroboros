@@ -51,7 +51,6 @@
 #define ETH_LLC "eth-llc"
 #define ETH_DIX "eth-dix"
 #define LOCAL   "local"
-#define RAPTOR  "raptor"
 
 static void usage(void)
 {
@@ -60,7 +59,7 @@ static void usage(void)
                "                [layer <layer_name>]\n\n"
                "                [type [TYPE]]\n\n"
                "where TYPE = {" UNICAST " " LOCAL " "
-               UDP " " ETH_LLC " " ETH_DIX " " RAPTOR "}\n");
+               UDP " " ETH_LLC " " ETH_DIX "}\n");
 }
 
 static char * str_type(enum ipcp_type type)
@@ -74,8 +73,6 @@ static char * str_type(enum ipcp_type type)
                 return ETH_DIX;
         case IPCP_UDP:
                 return UDP;
-        case IPCP_RAPTOR:
-                return RAPTOR;
         case IPCP_LOCAL:
                 return LOCAL;
         default:
@@ -119,8 +116,6 @@ int do_list_ipcp(int     argc,
                         type = IPCP_ETH_LLC;
                 else if (strcmp(ipcp_type, ETH_DIX) == 0)
                         type = IPCP_ETH_DIX;
-                else if (strcmp(ipcp_type, RAPTOR) == 0)
-                        type = IPCP_RAPTOR;
                 else {
                         usage();
                         return -1;

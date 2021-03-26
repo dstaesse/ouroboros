@@ -144,8 +144,8 @@ int irm_bootstrap_ipcp(pid_t                      pid,
                 config.port         = conf->port;
                 break;
         case IPCP_LOCAL:
+                /* FALLTHRU */
         case IPCP_BROADCAST:
-        case IPCP_RAPTOR:
                 break;
         case IPCP_ETH_LLC:
                 config.dev = conf->dev;
