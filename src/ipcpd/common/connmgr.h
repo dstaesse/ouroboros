@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_BROADCAST_CONNMGR_H
-#define OUROBOROS_IPCPD_BROADCAST_CONNMGR_H
+#ifndef OUROBOROS_IPCPD_COMMON_CONNMGR_H
+#define OUROBOROS_IPCPD_COMMON_CONNMGR_H
 
 #include <ouroboros/cacep.h>
 #include <ouroboros/qos.h>
@@ -36,6 +36,9 @@
 #define NOTIFY_DT_FLOW_UP      0x00D5
 #define NOTIFY_DT_FLOW_DOWN    0x00D6
 #define NOTIFY_DT_FLOW_DEALLOC 0x00D7
+
+#define NOTIFY_MGMT_CONN_ADD   0x00F0
+#define NOTIFY_MGMT_CONN_DEL   0x00F1
 
 int         connmgr_init(void);
 
@@ -68,4 +71,4 @@ int         connmgr_dealloc(enum comp_id  id,
 int         connmgr_wait(enum comp_id  id,
                          struct conn * conn);
 
-#endif /* OUROBOROS_IPCPD_BROADCAST_CONNMGR_H */
+#endif /* OUROBOROS_IPCPD_COMMON_CONNMGR_H */

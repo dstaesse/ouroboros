@@ -29,6 +29,7 @@
 #include "config.h"
 
 #define OUROBOROS_PREFIX "broadcast-ipcp"
+#define THIS_TYPE IPCP_BROADCAST
 
 #include <ouroboros/errno.h>
 #include <ouroboros/hash.h>
@@ -39,9 +40,9 @@
 #include <ouroboros/rib.h>
 #include <ouroboros/time_utils.h>
 
-#include "connmgr.h"
+#include "common/connmgr.h"
+#include "common/enroll.h"
 #include "dt.h"
-#include "enroll.h"
 #include "ipcp.h"
 
 #include <stdbool.h>
@@ -50,8 +51,6 @@
 #include <string.h>
 #include <assert.h>
 #include <inttypes.h>
-
-#define THIS_TYPE IPCP_BROADCAST
 
 struct ipcp ipcpi;
 

@@ -42,8 +42,8 @@
 #include <ouroboros/notifier.h>
 #include <ouroboros/utils.h>
 
-#include "comp.h"
-#include "connmgr.h"
+#include "common/comp.h"
+#include "common/connmgr.h"
 #include "dt.h"
 #include "ipcp.h"
 

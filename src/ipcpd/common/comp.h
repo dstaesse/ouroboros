@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2021
  *
- * Enrollment Task
+ * Components for the unicast/broadcast IPC process
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,28 +20,27 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_UNICAST_ENROLL_H
-#define OUROBOROS_IPCPD_UNICAST_ENROLL_H
+#ifndef OUROBOROS_IPCPD_COMMON_COMP_H
+#define OUROBOROS_IPCPD_COMMON_COMP_H
 
-#include <ouroboros/ipcp.h>
+#include <ouroboros/cacep.h>
 
-#include "comp.h"
+#define DST_MAX_STRLEN 64
 
-int                  enroll_init(void);
+enum comp_id {
+        COMPID_DT = 0,
+        COMPID_ENROLL,
+        COMPID_MGMT,
+        COMPID_MAX
+};
 
-void                 enroll_fini(void);
+struct conn {
+        struct conn_info conn_info;
+        struct {
+                char      dst[DST_MAX_STRLEN + 1];
+                int       fd;
+                qosspec_t qs;
+        } flow_info;
+};
 
-int                  enroll_start(void);
-
-void                 enroll_stop(void);
-
-void                 enroll_bootstrap(const struct ipcp_config * conf);
-
-int                  enroll_boot(struct conn * conn);
-
-int                  enroll_done(struct conn * conn,
-                                 int           result);
-
-struct ipcp_config * enroll_get_conf(void);
-
-#endif /* OUROBOROS_IPCPD_UNICAST_ENROLL_H */
+#endif /* OUROBOROS_IPCPD_COMMON_COMP_H */

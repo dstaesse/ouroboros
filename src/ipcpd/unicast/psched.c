@@ -31,9 +31,9 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/notifier.h>
 
+#include "common/connmgr.h"
 #include "ipcp.h"
 #include "psched.h"
-#include "connmgr.h"
 
 #include <assert.h>
 #include <sched.h>

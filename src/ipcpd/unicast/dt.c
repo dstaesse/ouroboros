@@ -41,14 +41,14 @@
 #include <ouroboros/fccntl.h>
 #endif
 
+#include "common/comp.h"
+#include "common/connmgr.h"
 #include "ca.h"
-#include "connmgr.h"
 #include "ipcp.h"
 #include "dt.h"
 #include "pff.h"
 #include "routing.h"
 #include "psched.h"
-#include "comp.h"
 #include "fa.h"
 
 #include <stdlib.h>

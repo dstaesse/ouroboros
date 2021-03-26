@@ -23,6 +23,8 @@
 #ifndef OUROBOROS_IPCPD_UNICAST_DIR_H
 #define OUROBOROS_IPCPD_UNICAST_DIR_H
 
+#include <inttypes.h>
+
 int      dir_init(void);
 
 void     dir_fini(void);

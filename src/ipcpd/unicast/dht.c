@@ -43,7 +43,7 @@
 #include <ouroboros/tpm.h>
 #include <ouroboros/utils.h>
 
-#include "connmgr.h"
+#include "common/connmgr.h"
 #include "dht.h"
 #include "dt.h"
 

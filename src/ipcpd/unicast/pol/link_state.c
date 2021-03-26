@@ -41,8 +41,8 @@
 #include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
 
-#include "comp.h"
-#include "connmgr.h"
+#include "common/comp.h"
+#include "common/connmgr.h"
 #include "graph.h"
 #include "ipcp.h"
 #include "link_state.h"

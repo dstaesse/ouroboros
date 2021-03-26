@@ -29,7 +29,6 @@ if (HAVE_FUSE)
     endif ()
 endif ()
 
-
 set(SOURCE_FILES
   # Add source files here
   addr_auth.c

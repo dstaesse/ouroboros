@@ -29,6 +29,7 @@
 #include "config.h"
 
 #define OUROBOROS_PREFIX "unicast-ipcp"
+#define THIS_TYPE IPCP_UNICAST
 
 #include <ouroboros/errno.h>
 #include <ouroboros/hash.h>
@@ -38,12 +39,12 @@
 #include <ouroboros/rib.h>
 #include <ouroboros/time_utils.h>
 
+#include "common/connmgr.h"
+#include "common/enroll.h"
 #include "addr_auth.h"
 #include "ca.h"
-#include "connmgr.h"
 #include "dir.h"
 #include "dt.h"
-#include "enroll.h"
 #include "fa.h"
 #include "ipcp.h"
 
@@ -53,8 +54,6 @@
 #include <string.h>
 #include <assert.h>
 #include <inttypes.h>
-
-#define THIS_TYPE IPCP_UNICAST
 
 struct ipcp ipcpi;
 
