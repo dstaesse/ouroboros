@@ -30,15 +30,13 @@
 
 struct prog_entry {
         struct list_head next;
-        char *           progn;   /* name for irmd */
         char *           prog;    /* name of binary */
         uint32_t         flags;
         char **          argv;
         struct list_head names; /* names that all instances will listen for */
 };
 
-struct prog_entry * prog_entry_create(char *   progn,
-                                      char *   prog,
+struct prog_entry * prog_entry_create(char *   prog,
                                       uint32_t flags,
                                       char **  argv);
 
@@ -58,8 +56,5 @@ void                prog_table_del(struct list_head * prog_table,
 
 struct prog_entry * prog_table_get(struct list_head * prog_table,
                                    char *             prog);
-
-struct prog_entry * prog_table_get_by_progn(struct list_head * prog_table,
-                                            char *             progn);
 
 #endif /* OUROBOROS_IRMD_PROG_TABLE_H */

@@ -699,7 +699,6 @@ static int bind_program(char *   prog,
                         char **  argv)
 {
         char *              progs;
-        char *              progn;
         char **             argv_dup = NULL;
         int                 i;
         char *              name_dup = NULL;
@@ -719,13 +718,6 @@ static int bind_program(char *   prog,
                         return -ENOMEM;
                 }
 
-                progn = strdup(name);
-                if (progn == NULL) {
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        free(progs);
-                        return -ENOMEM;
-                }
-
                 if ((flags & BIND_AUTO) && argc) {
                 /* We need to duplicate argv and set argv[0] to prog. */
                         argv_dup = malloc((argc + 2) * sizeof(*argv_dup));
@@ -739,17 +731,15 @@ static int bind_program(char *   prog,
                                                 "%s to %s.",
                                                 prog, name);
                                         free(progs);
-                                        free(progn);
                                         return -ENOMEM;
                                 }
                         }
                         argv_dup[argc + 1] = NULL;
                 }
-                e = prog_entry_create(progn, progs, flags, argv_dup);
+                e = prog_entry_create(progs, flags, argv_dup);
                 if (e == NULL) {
                         pthread_rwlock_unlock(&irmd.reg_lock);
                         free(progs);
-                        free(progn);
                         argvfree(argv_dup);
                         return -ENOMEM;
                 }

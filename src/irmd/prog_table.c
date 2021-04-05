@@ -30,14 +30,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct prog_entry * prog_entry_create(char *   progn,
-                                      char *   prog,
+struct prog_entry * prog_entry_create(char *   prog,
                                       uint32_t flags,
                                       char **  argv)
 {
         struct prog_entry * e;
 
-        assert(progn);
         assert(prog);
 
         e = malloc(sizeof(*e));
@@ -47,7 +45,6 @@ struct prog_entry * prog_entry_create(char *   progn,
         list_head_init(&e->next);
         list_head_init(&e->names);
 
-        e->progn = progn;
         e->prog  = prog;
         e->flags = flags;
 
@@ -68,9 +65,6 @@ void prog_entry_destroy(struct prog_entry * e)
 
         if (e == NULL)
                 return;
-
-        if (e->progn != NULL)
-                free(e->progn);
 
         if (e->prog != NULL)
                 free(e->prog);
@@ -163,23 +157,6 @@ struct prog_entry * prog_table_get(struct list_head * prog_table,
         list_for_each(p, prog_table) {
                 struct prog_entry * e = list_entry(p, struct prog_entry, next);
                 if (!strcmp(e->prog, prog))
-                        return e;
-        }
-
-        return NULL;
-}
-
-struct prog_entry * prog_table_get_by_progn(struct list_head * prog_table,
-                                            char *             progn)
-{
-        struct list_head * p;
-
-        assert(prog_table);
-        assert(progn);
-
-        list_for_each(p, prog_table) {
-                struct prog_entry * e = list_entry(p, struct prog_entry, next);
-                if (!strcmp(e->progn, progn))
                         return e;
         }
 
