@@ -834,7 +834,7 @@ int graph_routing_table(struct graph *     graph,
                 break;
         default:
                 log_err("Unsupported algorithm.");
-                goto fail_algo;
+                goto fail_table;
         }
 
         pthread_mutex_unlock(&graph->lock);
@@ -843,8 +843,6 @@ int graph_routing_table(struct graph *     graph,
 
         return 0;
 
- fail_algo:
-        free(s_dist);
  fail_table:
         pthread_mutex_unlock(&graph->lock);
         return -1;

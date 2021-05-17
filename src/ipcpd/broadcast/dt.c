@@ -33,7 +33,6 @@
 #define DT               "dt"
 #define OUROBOROS_PREFIX DT
 
-#include <ouroboros/endian.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/fqueue.h>
@@ -45,7 +44,6 @@
 #include "common/comp.h"
 #include "common/connmgr.h"
 #include "dt.h"
-#include "ipcp.h"
 
 #include <assert.h>
 #include <stdlib.h>
