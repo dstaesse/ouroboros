@@ -35,6 +35,7 @@
 enum ipcp_state {
         IPCP_NULL = 0,
         IPCP_INIT,
+        /* Layer name must be set for states below. */
         IPCP_OPERATIONAL,
         IPCP_SHUTDOWN
 };
@@ -116,7 +117,8 @@ extern struct ipcp {
 
 int             ipcp_init(int               argc,
                           char **           argv,
-                          struct ipcp_ops * ops);
+                          struct ipcp_ops * ops,
+                          enum ipcp_type    type);
 
 int             ipcp_boot(void);
 

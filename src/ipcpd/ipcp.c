@@ -41,7 +41,8 @@
 
 #include "config.h"
 
-#define OUROBOROS_PREFIX "ipcpd/ipcp"
+#define OUROBOROS_PREFIX  "ipcpd/ipcp"
+#define IPCP_INFO         "info"
 
 #include <ouroboros/hash.h>
 #include <ouroboros/logs.h>
@@ -52,6 +53,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/np1_flow.h>
+#include <ouroboros/rib.h>
 
 #include "ipcp.h"
 
@@ -62,6 +64,13 @@
 #if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
 #include <unistd.h>
 #endif
+
+char * info[LAYER_NAME_SIZE + 1] = {
+        "_state",
+        "_type",
+        "_layer",
+        NULL
+};
 
 struct cmd {
         struct list_head next;
@@ -96,6 +105,107 @@ void ipcp_hash_str(char *          buf,
 
         buf[2 * i] = '\0';
 }
+
+static int ipcp_stat_read(const char * path,
+                          char *       buf,
+                          size_t       len)
+{
+        if (len < LAYER_NAME_SIZE + 2) /* trailing \n */
+                return 0;
+
+        if (strcmp(path, info[0]) == 0) { /* _state */
+                enum ipcp_state state = ipcp_get_state();
+                if (state == IPCP_NULL)
+                        strcpy(buf, "null\n");
+                else if (state == IPCP_INIT)
+                        strcpy(buf, "init\n");
+                else if (state == IPCP_OPERATIONAL)
+                        strcpy(buf, "operational\n");
+                else if (state == IPCP_SHUTDOWN)
+                        strcpy(buf, "shutdown\n");
+                else
+                        strcpy(buf, "bug\n");
+        }
+
+        if (strcmp(path, info[1]) == 0) { /* _type */
+                if (ipcpi.type == IPCP_LOCAL)
+                        strcpy(buf, "local\n");
+                else if (ipcpi.type == IPCP_UNICAST)
+                        strcpy(buf, "unicast\n");
+                else if (ipcpi.type == IPCP_BROADCAST)
+                        strcpy(buf, "broadcast\n");
+                else if (ipcpi.type == IPCP_ETH_LLC)
+                        strcpy(buf, "eth-llc\n");
+                else if (ipcpi.type == IPCP_ETH_DIX)
+                        strcpy(buf, "eth-dix\n");
+                else if (ipcpi.type == IPCP_UDP)
+                        strcpy(buf, "udp\n");
+                else
+                        strcpy(buf, "bug\n");
+        }
+
+        if (strcmp(path, info[2]) == 0) { /* _layer */
+                memset(buf, 0, LAYER_NAME_SIZE + 1);
+                if (ipcp_get_state() < IPCP_OPERATIONAL)
+                        strcpy(buf, "(null)");
+                else
+                        strcpy(buf, ipcpi.layer_name);
+
+                buf[strlen(buf)] = '\n';
+        }
+
+        return strlen(buf);
+}
+
+static int ipcp_stat_readdir(char *** buf)
+{
+        int  i = 0;
+
+        while (info[i] != NULL)
+                i++;
+
+        *buf = malloc(sizeof(**buf) * i);
+        if (*buf == NULL)
+                goto fail;
+
+        i = 0;
+
+        while (info[i] != NULL) {
+                (*buf)[i] = strdup(info[i]);
+                if (*buf == NULL)
+                        goto fail_dup;
+                i++;
+        }
+
+        return i;
+ fail_dup:
+        while (--i > 0)
+                free((*buf)[i]);
+ fail:
+        free(*buf);
+
+        return -1;
+}
+
+static int ipcp_stat_getattr(const char * path,
+                             struct stat * st)
+{
+        (void) path;
+
+        st->st_mode  = S_IFREG | 0755;
+        st->st_nlink = 1;
+        st->st_uid   = getuid();
+        st->st_gid   = getgid();
+        st->st_size  = LAYER_NAME_SIZE;
+
+        return 0;
+}
+
+static struct rib_ops r_ops = {
+        .read    = ipcp_stat_read,
+        .readdir = ipcp_stat_readdir,
+        .getattr = ipcp_stat_getattr
+};
 
 static void close_ptr(void * o)
 {
@@ -263,6 +373,8 @@ static void * mainloop(void * o)
                         default:
                                 log_err("Unknown IPCP type: %d.",
                                         conf_msg->ipcp_type);
+                                ret_msg.result = -EIPCP;
+                                goto exit; /* break from outer switch/case */
                         }
 
                         /* UDP and broadcast use fixed hash algorithm. */
@@ -292,8 +404,6 @@ static void * mainloop(void * o)
                                 layer_info.dir_hash_algo =
                                         conf.layer_info.dir_hash_algo;
                         }
-
-                        ipcpi.dir_hash_algo = conf.layer_info.dir_hash_algo;
 
                         ret_msg.result = ipcpi.ops->ipcp_bootstrap(&conf);
                         if (ret_msg.result == 0) {
@@ -533,7 +643,7 @@ static void * mainloop(void * o)
                         log_err("Don't know that message code");
                         break;
                 }
-
+        exit:
                 pthread_cleanup_pop(true);
                 pthread_cleanup_pop(false);
 
@@ -596,7 +706,8 @@ static int parse_args(int    argc,
 
 int ipcp_init(int               argc,
               char **           argv,
-              struct ipcp_ops * ops)
+              struct ipcp_ops * ops,
+              enum ipcp_type    type)
 {
         bool               log;
         pthread_condattr_t cattr;
@@ -609,6 +720,7 @@ int ipcp_init(int               argc,
 
         ipcpi.irmd_fd   = -1;
         ipcpi.state     = IPCP_NULL;
+        ipcpi.type      = type;
 
         ipcpi.sock_path = ipcp_sock_path(getpid());
         if (ipcpi.sock_path == NULL)
@@ -660,6 +772,11 @@ int ipcp_init(int               argc,
                 goto fail_cmd_cond;
         }
 
+        if (rib_init(ipcpi.name)) {
+                log_err("Failed to initialize RIB.");
+                goto fail_rib_init;
+        }
+
         list_head_init(&ipcpi.cmds);
 
         ipcpi.alloc_id = -1;
@@ -668,6 +785,8 @@ int ipcp_init(int               argc,
 
         return 0;
 
+ fail_rib_init:
+        pthread_cond_destroy(&ipcpi.cmd_cond);
  fail_cmd_cond:
         pthread_mutex_destroy(&ipcpi.cmd_lock);
  fail_cmd_lock:
@@ -709,6 +828,9 @@ int ipcp_boot()
 
         ipcp_set_state(IPCP_INIT);
 
+        if (rib_reg(IPCP_INFO, &r_ops))
+                goto fail_rib_reg;
+
         if (pthread_create(&ipcpi.acceptor, NULL, acceptloop, NULL)) {
                 log_err("Failed to create acceptor thread.");
                 ipcp_set_state(IPCP_NULL);
@@ -717,7 +839,10 @@ int ipcp_boot()
 
         return 0;
 
+
  fail_acceptor:
+        rib_unreg(IPCP_INFO);
+ fail_rib_reg:
         tpm_stop(ipcpi.tpm);
  fail_tpm_start:
         tpm_destroy(ipcpi.tpm);
@@ -775,6 +900,9 @@ void ipcp_shutdown()
 
 void ipcp_fini()
 {
+
+        rib_fini();
+
         close(ipcpi.sockfd);
         if (unlink(ipcpi.sock_path))
                 log_warn("Could not unlink %s.", ipcpi.sock_path);

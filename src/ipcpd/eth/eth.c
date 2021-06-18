@@ -1283,6 +1283,13 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
+        ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
+        ipcpi.layer_name = strdup(conf->layer_info.layer_name);
+        if (ipcpi.layer_name == NULL) {
+                log_err("Failed to set layer name");
+                return -ENOMEM;
+        }
+
         if (conf->dev == NULL) {
                 log_err("Device name is NULL.");
                 return -1;
@@ -1833,7 +1840,7 @@ int main(int    argc,
 {
         int i;
 
-        if (ipcp_init(argc, argv, &eth_ops) < 0)
+        if (ipcp_init(argc, argv, &eth_ops, THIS_TYPE) < 0)
                 goto fail_init;
 
         if (eth_data_init() < 0) {

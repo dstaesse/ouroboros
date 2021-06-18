@@ -373,6 +373,9 @@ int rib_reg(const char *     path,
         struct reg_comp *  rc;
         struct list_head * p;
 
+        if (strlen(rib.mnt) == 0)
+                return 0;
+
         pthread_rwlock_wrlock(&rib.lock);
 
         list_for_each(p, &rib.reg_comps) {
@@ -416,6 +419,9 @@ void rib_unreg(const char * path)
 #ifdef HAVE_FUSE
         struct list_head * p;
         struct list_head * h;
+
+        if (strlen(rib.mnt) == 0)
+                return;
 
         pthread_rwlock_wrlock(&rib.lock);
 

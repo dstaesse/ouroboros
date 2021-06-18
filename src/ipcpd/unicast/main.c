@@ -313,15 +313,9 @@ static struct ipcp_ops unicast_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, &unicast_ops) < 0) {
+        if (ipcp_init(argc, argv, &unicast_ops, THIS_TYPE) < 0) {
                 log_err("Failed to init IPCP.");
                 goto fail_init;
-        }
-
-        /* These components must be init at creation. */
-        if (rib_init(ipcpi.name)) {
-                log_err("Failed to initialize RIB.");
-                goto fail_rib_init;
         }
 
         if (notifier_init()) {
@@ -364,8 +358,6 @@ int main(int    argc,
 
         notifier_fini();
 
-        rib_fini();
-
         ipcp_fini();
 
         exit(EXIT_SUCCESS);
@@ -379,8 +371,6 @@ int main(int    argc,
  fail_connmgr_init:
         notifier_fini();
  fail_notifier_init:
-        rib_fini();
- fail_rib_init:
        ipcp_fini();
  fail_init:
         ipcp_create_r(-1);

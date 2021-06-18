@@ -140,7 +140,12 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        (void) conf;
+        ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
+        ipcpi.layer_name = strdup(conf->layer_info.layer_name);
+        if (ipcpi.layer_name == NULL) {
+                log_err("Failed to set layer name");
+                return -ENOMEM;
+        }
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
@@ -340,7 +345,7 @@ static struct ipcp_ops local_ops = {
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, &local_ops) < 0)
+        if (ipcp_init(argc, argv, &local_ops, THIS_TYPE) < 0)
                 goto fail_init;
 
         if (local_data_init() < 0) {
