@@ -124,9 +124,9 @@ static int fa_stat_read(const char * path,
 #ifdef IPCP_FLOW_STATS
         struct fa_flow * flow;
         int              fd;
-        char             r_addrstr[20];
-        char             s_eidstr[20];
-        char             r_eidstr[20];
+        char             r_addrstr[21];
+        char             s_eidstr[21];
+        char             r_eidstr[21];
         char             tmstr[20];
         char             castr[1024];
         struct tm *      tm;
