@@ -33,6 +33,7 @@
 
 #include "ca-mb-ecn.h"
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -42,12 +43,12 @@
 #define CA_WND       (1 << CA_SHFT)       /* 32 pkts receiver wnd   */
 #define CA_UPD       (1 << (CA_SHFT - 3)) /* Update snd every 8 pkt */
 #define CA_SLOT      24                   /* Initial slot = 16 ms   */
-#define CA_INC       1 << 16              /* ~4MiB/s^2 additive inc */
-#define CA_IWL       1 << 16              /* Initial limit ~4MiB/s  */
+#define CA_INC       1UL << 16            /* ~4MiB/s^2 additive inc */
+#define CA_IWL       1UL << 16            /* Initial limit ~4MiB/s  */
 #define CA_MINPS     8                    /* Mimimum pkts / slot    */
 #define CA_MAXPS     64                   /* Maximum pkts / slot    */
 #define ECN_Q_SHFT   4
-#define ts_to_ns(ts) (ts.tv_sec * BILLION + ts.tv_nsec)
+#define ts_to_ns(ts) ((size_t) ts.tv_sec * BILLION + ts.tv_nsec)
 
 struct mb_ecn_ctx {
         uint16_t        rx_ece; /* Level of congestion (upstream)   */
@@ -101,6 +102,8 @@ void mb_ecn_ctx_destroy(void * ctx)
         free(ctx);
 }
 
+#define _slot_after(new, old) ((int64_t) (old - new) < 0)
+
 ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
                                size_t len)
 {
@@ -120,7 +123,9 @@ ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
         if (ctx->tx_ctr > CA_WND)
                 ctx->tx_ece = 0;
 
-        if (slot > ctx->tx_slot) {
+        if (_slot_after(slot, ctx->tx_slot)) {
+                bool carry = false; /* may carry over if window increases */
+
                 ctx->tx_slot = slot;
 
                 if (!ctx->tx_cav) { /* Slow start */
@@ -136,21 +141,39 @@ ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
 
                 /* Window scaling */
                 if (ctx->tx_wpc < CA_MINPS) {
-                        ++ctx->tx_mul;
-                        ctx->tx_slot >>= 1;
-                        ctx->tx_wbl <<= 1;
-                        ctx->tx_inc <<= 1;
+                        size_t fact = 0; /* factor to scale the window up */
+                        size_t pkts = ctx->tx_wpc;
+                        while (pkts < CA_MINPS) {
+                                pkts <<= 1;
+                                fact++;
+                        }
+                        ctx->tx_mul += fact;
+                        ctx->tx_slot >>= fact;
+                        if ((ctx->tx_slot & ((1 << fact)  - 1)) == 0) {
+                                carry = true;
+                                ctx->tx_slot += 1;
+                        }
+                        ctx->tx_wbl <<= fact;
+                        ctx->tx_inc <<= fact;
+                } else if (ctx->tx_wpc > CA_MAXPS) {
+                        size_t fact = 0; /* factor to scale the window down */
+                        size_t pkts = ctx->tx_wpc;
+                        while (pkts > CA_MAXPS) {
+                                pkts >>= 1;
+                                fact++;
+                        }
+                        ctx->tx_mul -= fact;
+                        ctx->tx_slot <<= fact;
+                        ctx->tx_wbl >>= fact;
+                        ctx->tx_inc >>= fact;
+                } else {
+                        ctx->tx_slot = slot;
                 }
 
-                if (ctx->tx_wpc > CA_MAXPS) {
-                        --ctx->tx_mul; /* Underflows at ~CA_MAXPS billion pps */
-                        ctx->tx_slot <<= 1;
-                        ctx->tx_wbl >>= 1;
-                        ctx->tx_inc >>= 1;
+                if (!carry) {
+                        ctx->tx_wbc = 0;
+                        ctx->tx_wpc = 0;
                 }
-
-                ctx->tx_wbc = 0;
-                ctx->tx_wpc = 0;
         }
 
         if (ctx->tx_wbc > ctx->tx_wbl)
@@ -258,14 +281,14 @@ ssize_t  mb_ecn_print_stats(void * _ctx,
                 "Upstream packet counter:         %20zu\n"
                 "Downstream congestion level:     %20u\n"
                 "Downstream packet counter:       %20zu\n"
-                "Congestion window size (ns):     %20zu\n"
+                "Congestion window size (ns):     %20" PRIu64 "\n"
                 "Packets in this window:          %20zu\n"
                 "Bytes in this window:            %20zu\n"
                 "Max bytes in this window:        %20zu\n"
                 "Current congestion regime:       %20s\n",
                 "Multi-bit ECN",
                 ctx->rx_ece, ctx->rx_ctr,
-                ctx->tx_ece, ctx->tx_ctr, (size_t) (1 << ctx->tx_mul),
+                ctx->tx_ece, ctx->tx_ctr, (size_t) (1UL << ctx->tx_mul),
                 ctx->tx_wpc, ctx->tx_wbc, ctx->tx_wbl,
                 regime);
 
