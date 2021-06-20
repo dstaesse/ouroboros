@@ -497,7 +497,7 @@ int shm_rdrbuff_remove(struct shm_rdrbuff * rdrb,
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 sanitize(rdrb);
 #endif
-        assert(!shm_rdrb_empty(rdrb));
+        /* assert(!shm_rdrb_empty(rdrb)); */
 
         sdb = idx_to_du_buff_ptr(rdrb, idx);
 
