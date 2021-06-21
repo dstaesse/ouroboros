@@ -74,6 +74,9 @@ static void destroy_dir_query(struct dir_query * query)
         case QUERY_DESTROY:
                 pthread_mutex_unlock(&query->lock);
                 return;
+        default:
+                assert(false);
+                return;
         }
 
         while (query->state != QUERY_DONE)
