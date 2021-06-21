@@ -29,8 +29,8 @@
 #include <ouroboros/time_utils.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/fccntl.h>
+#include <ouroboros/pthread.h>
 
-#include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <stdlib.h>

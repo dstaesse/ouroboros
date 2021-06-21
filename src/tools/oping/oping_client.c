@@ -163,7 +163,7 @@ void * writer(void * o)
                 printf("Pinging %s with %d bytes of data (%u packets):\n\n",
                        client.s_apn, client.size, client.count);
 
-        pthread_cleanup_push((void (*) (void *)) free, buf);
+        pthread_cleanup_push(free, buf);
 
         while (!stop && client.sent < client.count) {
                 nanosleep(&wait, NULL);

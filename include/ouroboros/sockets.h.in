@@ -65,4 +65,7 @@ qosspec_msg_t spec_to_msg(const qosspec_t * qs);
 
 qosspec_t     msg_to_spec(const qosspec_msg_t * msg);
 
+/* cleanup socket when cancelling thread */
+void __cleanup_close_ptr(void * o);
+
 #endif

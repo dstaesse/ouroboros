@@ -100,8 +100,7 @@ int shm_rbuff_write_b(struct shm_rbuff *      rb,
                 goto err;
         }
 
-        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void *) rb->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, rb->lock);
 
         while (!shm_rbuff_free(rb) && ret != -ETIMEDOUT) {
                 if (abstime != NULL)
@@ -174,8 +173,7 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
         if (pthread_mutex_lock(rb->lock) == EOWNERDEAD)
                 pthread_mutex_consistent(rb->lock);
 #endif
-        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void *) rb->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, rb->lock);
 
         while (shm_rbuff_empty(rb) && (idx != -ETIMEDOUT)) {
                 if (abstime != NULL)
@@ -230,8 +228,7 @@ void shm_rbuff_fini(struct shm_rbuff * rb)
                 pthread_mutex_consistent(rb->lock);
 #endif
 
-        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void *) rb->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, rb->lock);
 
         while (!shm_rbuff_empty(rb))
 #ifndef HAVE_ROBUST_MUTEX

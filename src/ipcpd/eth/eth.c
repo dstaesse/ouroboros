@@ -48,13 +48,13 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/fccntl.h>
+#include <ouroboros/pthread.h>
 
 #include "ipcp.h"
 #include "shim-data.h"
 
 #include <signal.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
@@ -807,8 +807,7 @@ static void * eth_ipcp_mgmt_handler(void * o)
 
         (void) o;
 
-        pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
-                             (void *) &eth_data.mgmt_lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &eth_data.mgmt_lock);
 
         while (true) {
                 ret = 0;
@@ -1162,12 +1161,6 @@ static void change_flows_state(bool up)
         pthread_rwlock_unlock(&eth_data.flows_lock);
 }
 
-static void close_ptr(void * o)
-{
-        close(*((int *) o));
-}
-
-
 static void * eth_ipcp_if_monitor(void * o)
 {
         int                fd;
@@ -1188,7 +1181,7 @@ static void * eth_ipcp_if_monitor(void * o)
                 return (void *) -1;
         }
 
-        pthread_cleanup_push(close_ptr, &fd);
+        pthread_cleanup_push(__cleanup_close_ptr, &fd);
 
         while (true) {
                 status = recvmsg(fd, &msg, 0);

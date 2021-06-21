@@ -147,8 +147,7 @@ static void timerwheel_move(void)
 
         pthread_mutex_lock(&rw.lock);
 
-        pthread_cleanup_push((void (*) (void *)) pthread_mutex_unlock,
-                             (void *) &rw.lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &rw.lock);
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 

@@ -28,8 +28,8 @@
 #include <ouroboros/time_utils.h>
 #include <ouroboros/shm_flow_set.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/pthread.h>
 
-#include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -346,8 +346,7 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                 pthread_mutex_consistent(set->lock);
 #endif
 
-        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void *) set->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, set->lock);
 
         while (set->heads[idx] == 0 && ret != -ETIMEDOUT) {
                 if (abstime != NULL) {

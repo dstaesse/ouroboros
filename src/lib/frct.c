@@ -413,8 +413,7 @@ static int __frcti_window_wait(struct frcti *    frcti,
                         frcti->open   = false;
                 }
 
-                pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                                     (void *) &frcti->mtx);
+                pthread_cleanup_push(__cleanup_mutex_unlock, &frcti->mtx);
 
                 ret = -pthread_cond_timedwait(&frcti->cond,
                                               &frcti->mtx,

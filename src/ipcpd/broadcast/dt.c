@@ -40,6 +40,7 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/utils.h>
+#include <ouroboros/pthread.h>
 
 #include "common/comp.h"
 #include "common/connmgr.h"
@@ -49,7 +50,6 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <string.h>
-#include <pthread.h>
 
 struct nb {
         struct list_head next;
@@ -156,8 +156,7 @@ static void dt_packet(uint8_t * buf,
 
         pthread_rwlock_rdlock(&fwd.nbs_lock);
 
-        pthread_cleanup_push((void (*))(void *) pthread_rwlock_unlock,
-                             &fwd.nbs_lock);
+        pthread_cleanup_push(__cleanup_rwlock_unlock, &fwd.nbs_lock);
 
         list_for_each(p, &fwd.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
@@ -166,6 +165,11 @@ static void dt_packet(uint8_t * buf,
         }
 
         pthread_cleanup_pop(true);
+}
+
+static void __cleanup_fqueue_destroy(void * fq)
+{
+        fqueue_destroy((fqueue_t *) fq);
 }
 
 static void * dt_reader(void * o)
@@ -182,8 +186,7 @@ static void * dt_reader(void * o)
         if (fq == NULL)
                 return (void *) -1;
 
-        pthread_cleanup_push((void (*) (void *)) fqueue_destroy,
-                             (void *) fq);
+        pthread_cleanup_push(__cleanup_fqueue_destroy, (void *) fq);
 
         while (true) {
                 ret = fevent(fwd.set, fq, NULL);

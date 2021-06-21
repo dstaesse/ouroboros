@@ -142,6 +142,11 @@ static void handle_flow(int fd)
         flow_dealloc(fd);
 }
 
+static void __cleanup_mutex_unlock(void * mutex)
+{
+        pthread_mutex_unlock((pthread_mutex_t *) mutex);
+}
+
 static void * worker(void * o)
 {
         int cli_fd;
@@ -150,8 +155,7 @@ static void * worker(void * o)
 
         while (true) {
                 pthread_mutex_lock(&fds_lock);
-                pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
-                                     (void *) &fds_lock);
+                pthread_cleanup_push(__cleanup_mutex_unlock, &fds_lock);
                 while (fds[fds_index] == -1)
                         pthread_cond_wait(&fds_signal, &fds_lock);
 
@@ -184,8 +188,7 @@ static void * listener(void * o)
 
         while (true) {
                 pthread_mutex_lock(&fds_lock);
-                pthread_cleanup_push((void(*)(void *)) pthread_mutex_unlock,
-                                     (void *) &fds_lock);
+                pthread_cleanup_push(__cleanup_mutex_unlock, &fds_lock);
 
                 while (fds_count == THREADS_SIZE) {
                         printf("Can't accept any more flows, waiting.\n");

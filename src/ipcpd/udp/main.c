@@ -39,6 +39,7 @@
 #include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/pthread.h>
 
 #include "ipcp.h"
 #include "shim-data.h"
@@ -51,7 +52,6 @@
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 
@@ -393,8 +393,7 @@ static void * ipcp_udp_mgmt_handler(void * o)
 {
         (void) o;
 
-        pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
-                             (void *) &udp_data.mgmt_lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &udp_data.mgmt_lock);
 
         while (true) {
                 struct mgmt_frame * frame;
@@ -485,9 +484,14 @@ static void * ipcp_udp_packet_reader(void * o)
         return 0;
 }
 
-static void cleanup_writer(void * o)
+static void cleanup_fqueue(void * fq)
 {
-        fqueue_destroy((fqueue_t *) o);
+        fqueue_destroy((fqueue_t *) fq);
+}
+
+static void cleanup_sdb(void * sdb)
+{
+        ipcp_sdb_release((struct shm_du_buff *) sdb);
 }
 
 static void * ipcp_udp_packet_writer(void * o)
@@ -502,7 +506,7 @@ static void * ipcp_udp_packet_writer(void * o)
 
         ipcp_lock_to_core();
 
-        pthread_cleanup_push(cleanup_writer, fq);
+        pthread_cleanup_push(cleanup_fqueue, fq);
 
         while (true) {
                 struct sockaddr_in saddr;
@@ -545,8 +549,7 @@ static void * ipcp_udp_packet_writer(void * o)
 
                         memcpy(buf, &eid, sizeof(eid));
 
-                        pthread_cleanup_push((void (*)(void *))
-                                             ipcp_sdb_release, (void *) sdb);
+                        pthread_cleanup_push(cleanup_sdb, sdb);
 
                         if (sendto(udp_data.s_fd, buf, len + OUR_HEADER_LEN,
                                    MSG_CONFIRM,

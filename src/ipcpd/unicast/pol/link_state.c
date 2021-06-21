@@ -38,6 +38,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
+#include <ouroboros/pthread.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
 
@@ -52,7 +53,6 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <string.h>
-#include <pthread.h>
 
 #define RECALC_TIME    4
 #define LS_UPDATE_TIME 15
@@ -648,8 +648,7 @@ static void * lsupdate(void * o)
 
                 pthread_rwlock_wrlock(&ls.db_lock);
 
-                pthread_cleanup_push((void (*) (void *)) pthread_rwlock_unlock,
-                                     (void *) &ls.db_lock);
+                pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.db_lock);
 
                 list_for_each_safe(p, h, &ls.db) {
                         struct adjacency * adj;
@@ -709,8 +708,7 @@ static void forward_lsm(uint8_t * buf,
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
-        pthread_cleanup_push((void (*))(void *) pthread_rwlock_unlock,
-                             &ls.db_lock);
+        pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.db_lock);
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
@@ -719,6 +717,11 @@ static void forward_lsm(uint8_t * buf,
         }
 
         pthread_cleanup_pop(true);
+}
+
+static void cleanup_fqueue(void * fq)
+{
+        fqueue_destroy((fqueue_t *) fq);
 }
 
 static void * lsreader(void * o)
@@ -739,8 +742,7 @@ static void * lsreader(void * o)
         if (fq == NULL)
                 return (void *) -1;
 
-        pthread_cleanup_push((void (*) (void *)) fqueue_destroy,
-                             (void *) fq);
+        pthread_cleanup_push(cleanup_fqueue, fq);
 
         while (true) {
                 ret = fevent(ls.mgmt_set, fq, NULL);
@@ -813,8 +815,7 @@ static void handle_event(void *       self,
         case NOTIFY_DT_CONN_ADD:
                 pthread_rwlock_rdlock(&ls.db_lock);
 
-                pthread_cleanup_push((void (*) (void *)) pthread_rwlock_unlock,
-                                     (void *) &ls.db_lock);
+                pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.db_lock);
 
                 send_lsm(ipcpi.dt_addr, c->conn_info.addr, 0);
                 pthread_cleanup_pop(true);

@@ -54,6 +54,7 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/np1_flow.h>
 #include <ouroboros/rib.h>
+#include <ouroboros/pthread.h>
 
 #include "ipcp.h"
 
@@ -207,11 +208,6 @@ static struct rib_ops r_ops = {
         .getattr = ipcp_stat_getattr
 };
 
-static void close_ptr(void * o)
-{
-        close(*((int *) o));
-}
-
 static void * acceptloop(void * o)
 {
         int            csockfd;
@@ -239,7 +235,7 @@ static void * acceptloop(void * o)
                         break;
                 }
 
-                pthread_cleanup_push(close_ptr, &csockfd);
+                pthread_cleanup_push(__cleanup_close_ptr, &csockfd);
                 pthread_cleanup_push(free, cmd);
 
                 cmd->len = read(csockfd, cmd->cbuf, SOCK_BUF_SIZE);
@@ -295,8 +291,7 @@ static void * mainloop(void * o)
 
                 pthread_mutex_lock(&ipcpi.cmd_lock);
 
-                pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                                     &ipcpi.cmd_lock);
+                pthread_cleanup_push(__cleanup_mutex_unlock, &ipcpi.cmd_lock);
 
                 while (list_is_empty(&ipcpi.cmds))
                         pthread_cond_wait(&ipcpi.cmd_cond, &ipcpi.cmd_lock);
@@ -318,7 +313,7 @@ static void * mainloop(void * o)
 
                 tpm_dec(ipcpi.tpm);
 
-                pthread_cleanup_push(close_ptr, &sfd);
+                pthread_cleanup_push(__cleanup_close_ptr, &sfd);
                 pthread_cleanup_push(free_msg, msg);
 
                 switch (msg->code) {
@@ -665,7 +660,7 @@ static void * mainloop(void * o)
 
                 ipcp_msg__pack(&ret_msg, buffer.data);
 
-                pthread_cleanup_push(close_ptr, &sfd);
+                pthread_cleanup_push(__cleanup_close_ptr, &sfd);
 
                 if (write(sfd, buffer.data, buffer.len) == -1)
                         log_warn("Failed to send reply message");
@@ -955,8 +950,7 @@ int ipcp_wait_state(enum ipcp_state         state,
 
         pthread_mutex_lock(&ipcpi.state_mtx);
 
-        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                             &ipcpi.state_mtx);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &ipcpi.state_mtx);
 
         while (ipcpi.state != state
                && ipcpi.state != IPCP_SHUTDOWN

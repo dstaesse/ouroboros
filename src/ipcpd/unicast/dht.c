@@ -42,12 +42,12 @@
 #include <ouroboros/time_utils.h>
 #include <ouroboros/tpm.h>
 #include <ouroboros/utils.h>
+#include <ouroboros/pthread.h>
 
 #include "common/connmgr.h"
 #include "dht.h"
 #include "dt.h"
 
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -308,8 +308,7 @@ int dht_wait_running(struct dht * dht)
 
         pthread_mutex_lock(&dht->mtx);
 
-        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                             &dht->mtx);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &dht->mtx);
 
         while (dht->state == DHT_JOINING)
                 pthread_cond_wait(&dht->cond, &dht->mtx);
@@ -466,8 +465,7 @@ static int kad_req_wait(struct kad_req * req,
 
         req->state = REQ_PENDING;
 
-        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                             &req->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &req->lock);
 
         while (req->state == REQ_PENDING && ret != -ETIMEDOUT)
                 ret = -pthread_cond_timedwait(&req->cond, &req->lock, &abs);
@@ -819,8 +817,7 @@ static void lookup_update(struct dht *    dht,
                 return;
         }
 
-        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                             &lu->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &lu->lock);
 
         while (lu->state == LU_INIT) {
                 pthread_rwlock_unlock(&dht->lock);
@@ -967,7 +964,7 @@ static void lookup_set_state(struct lookup *   lu,
         pthread_mutex_unlock(&lu->lock);
 }
 
-static void cleanup_wait(void * o)
+static void cancel_lookup_wait(void * o)
 {
         struct lookup * lu = (struct lookup *) o;
         lu->state = LU_NULL;
@@ -991,7 +988,7 @@ static enum lookup_state lookup_wait(struct lookup * lu)
         if (lu->state == LU_INIT || lu->state == LU_UPDATE)
                 lu->state = LU_PENDING;
 
-        pthread_cleanup_push(cleanup_wait, lu);
+        pthread_cleanup_push(cancel_lookup_wait, lu);
 
         while (lu->state == LU_PENDING && ret != -ETIMEDOUT)
                 ret = -pthread_cond_timedwait(&lu->cond, &lu->lock, &abs);
@@ -2421,8 +2418,7 @@ static void * dht_handle_packet(void * o)
 
                 pthread_mutex_lock(&dht->mtx);
 
-                pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                                     &dht->mtx);
+                pthread_cleanup_push(__cleanup_mutex_unlock, &dht->mtx);
 
                 while (list_is_empty(&dht->cmds))
                         pthread_cond_wait(&dht->cond, &dht->mtx);

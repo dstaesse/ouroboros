@@ -45,6 +45,7 @@
 #include <ouroboros/tpm.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/version.h>
+#include <ouroboros/pthread.h>
 
 #include "utils.h"
 #include "registry.h"
@@ -58,7 +59,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <spawn.h>
@@ -1969,11 +1969,6 @@ void * irm_sanitize(void * o)
         }
 }
 
-static void close_ptr(void * o)
-{
-        close(*((int *) o));
-}
-
 static void * acceptloop(void * o)
 {
         int            csockfd;
@@ -2000,7 +1995,7 @@ static void * acceptloop(void * o)
                         break;
                 }
 
-                pthread_cleanup_push(close_ptr, &csockfd);
+                pthread_cleanup_push(__cleanup_close_ptr, &csockfd);
                 pthread_cleanup_push(free, cmd);
 
                 cmd->len = read(csockfd, cmd->cbuf, SOCK_BUF_SIZE);
@@ -2063,8 +2058,7 @@ static void * mainloop(void * o)
                 pthread_mutex_lock(&irmd.cmd_lock);
 
                 pthread_cleanup_push(free_msg, ret_msg);
-                pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                                     &irmd.cmd_lock);
+                pthread_cleanup_push(__cleanup_mutex_unlock, &irmd.cmd_lock);
 
                 while (list_is_empty(&irmd.cmds))
                         pthread_cond_wait(&irmd.cmd_cond, &irmd.cmd_lock);
@@ -2096,7 +2090,7 @@ static void * mainloop(void * o)
                         timeo = &ts;
                 }
 
-                pthread_cleanup_push(close_ptr, &sfd);
+                pthread_cleanup_push(__cleanup_close_ptr, &sfd);
                 pthread_cleanup_push(free_msg, msg);
                 pthread_cleanup_push(free_msg, ret_msg);
 
@@ -2271,7 +2265,7 @@ static void * mainloop(void * o)
                 ret_msg->qosspec = NULL;
                 irm_msg__free_unpacked(ret_msg, NULL);
 
-                pthread_cleanup_push(close_ptr, &sfd);
+                pthread_cleanup_push(__cleanup_close_ptr, &sfd);
 
                 if (write(sfd, buffer.data, buffer.len) == -1)
                         if (result != -EIRMD)

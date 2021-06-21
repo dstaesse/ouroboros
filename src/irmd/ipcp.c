@@ -44,11 +44,6 @@
 #include <sys/time.h>
 #include <spawn.h>
 
-static void close_ptr(void * o)
-{
-        close(*(int *) o);
-}
-
 ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                                 ipcp_msg_t * msg)
 {
@@ -111,7 +106,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                       (void *) &tv, sizeof(tv)))
                log_warn("Failed to set timeout on socket.");
 
-       pthread_cleanup_push(close_ptr, (void *) &sockfd);
+       pthread_cleanup_push(__cleanup_close_ptr, (void *) &sockfd);
 
        ipcp_msg__pack(msg, buf);
 

@@ -37,6 +37,7 @@
 #include <ouroboros/sockets.h>
 #include <ouroboros/fccntl.h>
 #include <ouroboros/bitmap.h>
+#include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
 #include <ouroboros/shm_flow_set.h>
 #include <ouroboros/shm_rdrbuff.h>

@@ -40,6 +40,11 @@
 #define SOCK_TYPE SOCK_SEQPACKET
 #endif
 
+void __cleanup_close_ptr(void * fd)
+{
+        close(*(int *) fd);
+}
+
 int client_socket_open(char * file_name)
 {
         int sockfd;
@@ -95,11 +100,6 @@ int server_socket_open(char * file_name)
         return sockfd;
 }
 
-static void close_ptr(void * o)
-{
-        close(*(int *) o);
-}
-
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 {
         int         sockfd;
@@ -117,7 +117,7 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
                 return NULL;
         }
 
-        pthread_cleanup_push(close_ptr, &sockfd);
+        pthread_cleanup_push(__cleanup_close_ptr, &sockfd);
 
         irm_msg__pack(msg, buf);
 

@@ -38,6 +38,7 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/random.h>
+#include <ouroboros/pthread.h>
 
 #include "dir.h"
 #include "fa.h"
@@ -47,7 +48,6 @@
 #include "ca.h"
 
 #include <inttypes.h>
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -442,8 +442,7 @@ static void * fa_handle_packet(void * o)
 
                 pthread_mutex_lock(&fa.mtx);
 
-                pthread_cleanup_push((void (*)(void *)) pthread_mutex_unlock,
-                                     &fa.mtx);
+                pthread_cleanup_push(__cleanup_mutex_unlock, &fa.mtx);
 
                 while (list_is_empty(&fa.cmds))
                         pthread_cond_wait(&fa.cond, &fa.mtx);

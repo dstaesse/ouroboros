@@ -25,8 +25,9 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/list.h>
+#include <ouroboros/utils.h>
+#include <ouroboros/pthread.h>
 
-#include <pthread.h>
 #include <stdlib.h>
 
 struct listener {
@@ -75,8 +76,7 @@ void notifier_event(int          event,
 
         pthread_rwlock_rdlock(&notifier.lock);
 
-        pthread_cleanup_push((void (*) (void *)) pthread_rwlock_unlock,
-                             (void *) &notifier.lock)
+        pthread_cleanup_push(__cleanup_rwlock_unlock, &notifier.lock)
 
         list_for_each(p, &notifier.listeners) {
                 struct listener * l = list_entry(p, struct listener, next);

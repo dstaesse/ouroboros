@@ -28,11 +28,11 @@
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
+#include <ouroboros/pthread.h>
 
 #include "connmgr.h"
 #include "ipcp.h"
 
-#include <pthread.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -493,8 +493,7 @@ int connmgr_wait(enum comp_id  id,
 
         pthread_mutex_lock(&comp->lock);
 
-        pthread_cleanup_push((void(*)(void *))pthread_mutex_unlock,
-                             (void *) &comp->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &comp->lock);
 
         while (list_is_empty(&comp->pending))
                 pthread_cond_wait(&comp->cond, &comp->lock);

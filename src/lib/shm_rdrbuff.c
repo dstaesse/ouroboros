@@ -28,8 +28,8 @@
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_du_buff.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/pthread.h>
 
-#include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -392,8 +392,7 @@ ssize_t shm_rdrbuff_alloc_b(struct shm_rdrbuff *    rdrb,
         if (pthread_mutex_lock(rdrb->lock) == EOWNERDEAD)
                 sanitize(rdrb);
 #endif
-        pthread_cleanup_push((void (*) (void *)) pthread_mutex_unlock,
-                             (void *) rdrb->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, rdrb->lock);
 
 #ifdef SHM_RDRB_MULTI_BLOCK
         if (blocks + *rdrb->head > (SHM_BUFFER_SIZE))

@@ -29,6 +29,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/pthread.h>
 
 #include "irm_flow.h"
 
@@ -195,8 +196,7 @@ int irm_flow_wait_state(struct irm_flow * f,
 
         assert(f->state != FLOW_NULL);
 
-        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                             &f->state_lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &f->state_lock);
 
         while (!(f->state == state ||
                  f->state == FLOW_DESTROY ||

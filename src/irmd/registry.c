@@ -33,6 +33,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
+#include <ouroboros/pthread.h>
 
 #include "registry.h"
 #include "utils.h"
@@ -431,8 +432,7 @@ int reg_entry_leave_state(struct reg_entry *  e,
 
         pthread_mutex_lock(&e->state_lock);
 
-        pthread_cleanup_push((void *)(void *) pthread_mutex_unlock,
-                             &e->state_lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &e->state_lock);
 
         while (e->state == state && ret != -ETIMEDOUT)
                 if (timeout)
