@@ -585,6 +585,8 @@ static void * fa_handle_packet(void * o)
                         break;
                 }
         }
+
+        return (void *) 0;
 }
 
 int fa_init(void)
