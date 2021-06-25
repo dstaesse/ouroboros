@@ -75,6 +75,12 @@
 #define MGMT_FRAME_SIZE          (sizeof(struct mgmt_msg))
 #define MGMT_FRAME_BUF_SIZE      2048
 
+#ifdef __linux__
+#define SENDTO_FLAGS MSG_CONFIRM
+#else
+#define SENDTO_FLAGS 0
+#endif
+
 struct ipcp ipcpi;
 
 /* Keep order for alignment. */
@@ -216,7 +222,7 @@ static int ipcp_udp_port_alloc(const struct sockaddr_in * r_saddr,
         memcpy(buf + len, data, dlen);
 
         if (sendto(udp_data.s_fd, msg, len + dlen,
-                   MSG_CONFIRM,
+                   SENDTO_FLAGS,
                    (const struct sockaddr *) r_saddr, sizeof(*r_saddr)) < 0) {
                 free(buf);
                 return -1;
@@ -249,7 +255,7 @@ static int ipcp_udp_port_alloc_resp(const struct sockaddr_in * r_saddr,
         memcpy(msg + 1, data, len);
 
         if (sendto(udp_data.s_fd, msg, sizeof(*msg) + len,
-                   MSG_CONFIRM,
+                   SENDTO_FLAGS,
                    (const struct sockaddr *) r_saddr, sizeof(*r_saddr)) < 0 ) {
                 free(msg);
                 return -1;
@@ -552,7 +558,7 @@ static void * ipcp_udp_packet_writer(void * o)
                         pthread_cleanup_push(cleanup_sdb, sdb);
 
                         if (sendto(udp_data.s_fd, buf, len + OUR_HEADER_LEN,
-                                   MSG_CONFIRM,
+                                   SENDTO_FLAGS,
                                    (const struct sockaddr *) &saddr,
                                    sizeof(saddr)) < 0)
                                 log_err("Failed to send packet.");

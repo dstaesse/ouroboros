@@ -24,6 +24,7 @@
 #define _DEFAULT_SOURCE
 #else
 #define _POSIX_C_SOURCE 200112L
+#define __XSI_VISIBLE 500
 #endif
 
 #include "config.h"
@@ -50,6 +51,10 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined (IPCP_FLOW_STATS) && !defined(CLOCK_REALTIME_COARSE)
+#define CLOCK_REALTIME_COARSE CLOCK_REALTIME
+#endif
 
 #define TIMEOUT 10000 /* nanoseconds */
 

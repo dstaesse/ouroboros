@@ -24,6 +24,10 @@
 
 #include "config.h"
 
+#if defined (__FreeBSD__)
+#define __XSI_VISIBLE 500
+#endif
+
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 #include <ouroboros/rib.h>
@@ -41,9 +45,7 @@
 #define FUSE_USE_VERSION  26
 #if defined (__linux__)
 #define __USE_XOPEN
-#elif defined (__FreeBSD__)
-#define __XSI_VISIBLE 500
-#endif
+#endif /* __linux__ */
 #include <fuse.h>
 
 #ifndef CLOCK_REALTIME_COARSE
@@ -265,7 +267,6 @@ static void * fuse_thr(void * o)
         return (void *) 0;
 }
 #endif /* HAVE_FUSE */
-
 
 int rib_init(const char * mountpt)
 {

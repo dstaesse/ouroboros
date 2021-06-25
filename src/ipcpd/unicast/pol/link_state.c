@@ -24,6 +24,7 @@
 #define _DEFAULT_SOURCE
 #else
 #define _POSIX_C_SOURCE 200112L
+#define __XSI_VISIBLE 500
 #endif
 
 #include "config.h"
