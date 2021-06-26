@@ -24,7 +24,6 @@
 #define _DEFAULT_SOURCE
 #else
 #define _POSIX_C_SOURCE 200112L
-#define __XSI_VISIBLE 500
 #endif
 
 #include "config.h"
@@ -122,9 +121,9 @@ struct {
         struct psched *  psched;
 } fa;
 
-static int fa_stat_read(const char * path,
-                        char *       buf,
-                        size_t       len)
+static int fa_rib_read(const char * path,
+                       char *       buf,
+                       size_t       len)
 {
 #ifdef IPCP_FLOW_STATS
         struct fa_flow * flow;
@@ -197,7 +196,7 @@ static int fa_stat_read(const char * path,
 #endif
 }
 
-static int fa_stat_readdir(char *** buf)
+static int fa_rib_readdir(char *** buf)
 {
 #ifdef IPCP_FLOW_STATS
         char   entry[RIB_PATH_LEN + 1];
@@ -249,8 +248,8 @@ static int fa_stat_readdir(char *** buf)
 #endif
 }
 
-static int fa_stat_getattr(const char *  path,
-                           struct stat * st)
+static int fa_rib_getattr(const char *      path,
+                          struct rib_attr * attr)
 {
 #ifdef IPCP_FLOW_STATS
         int              fd;
@@ -258,35 +257,30 @@ static int fa_stat_getattr(const char *  path,
 
         fd = atoi(path);
 
-        st->st_mode  = S_IFREG | 0755;
-        st->st_nlink = 1;
-        st->st_uid   = getuid();
-        st->st_gid   = getgid();
-
         flow = &fa.flows[fd];
 
         pthread_rwlock_rdlock(&fa.flows_lock);
 
         if (flow->stamp != 0) {
-                st->st_size  = 1536;
-                st->st_mtime = flow->stamp;
+                attr->size  = 1536;
+                attr->mtime = flow->stamp;
         } else {
-                st->st_size  = 0;
-                st->st_mtime = 0;
+                attr->size  = 0;
+                attr->mtime = 0;
         }
 
         pthread_rwlock_unlock(&fa.flows_lock);
 #else
         (void) path;
-        (void) st;
+        (void) attr;
 #endif
         return 0;
 }
 
 static struct rib_ops r_ops = {
-        .read    = fa_stat_read,
-        .readdir = fa_stat_readdir,
-        .getattr = fa_stat_getattr
+        .read    = fa_rib_read,
+        .readdir = fa_rib_readdir,
+        .getattr = fa_rib_getattr
 };
 
 static int eid_to_fd(uint64_t eid)

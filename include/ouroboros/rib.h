@@ -25,18 +25,22 @@
 
 #define RIB_PATH_LEN 128
 
-#include <sys/stat.h>
 #include <sys/types.h>
 
 struct rib;
+
+struct rib_attr {
+        size_t size;  /* Size of RIB document  */
+        time_t mtime; /* Last modified time    */
+};
 
 struct rib_ops {
         int (* read)(const char * path,
                      char *       buf,
                      size_t       len);
         int (* readdir)(char *** entries);
-        int (* getattr)(const char *  path,
-                        struct stat * st);
+        int (* getattr)(const char *      path,
+                        struct rib_attr * attr);
 };
 
 int  rib_init(const char * prefix);

@@ -24,7 +24,6 @@
 #define _DEFAULT_SOURCE
 #else
 #define _POSIX_C_SOURCE 200112L
-#define __XSI_VISIBLE 500
 #endif
 
 #include "config.h"
@@ -176,9 +175,9 @@ struct {
         pthread_t          listener;
 } dt;
 
-static int dt_stat_read(const char * path,
-                        char *       buf,
-                        size_t       len)
+static int dt_rib_read(const char * path,
+                       char *       buf,
+                       size_t       len)
 {
 #ifdef IPCP_FLOW_STATS
         int         fd;
@@ -271,7 +270,7 @@ static int dt_stat_read(const char * path,
 #endif
 }
 
-static int dt_stat_readdir(char *** buf)
+static int dt_rib_readdir(char *** buf)
 {
 #ifdef IPCP_FLOW_STATS
         char   entry[RIB_PATH_LEN + 1];
@@ -329,41 +328,36 @@ static int dt_stat_readdir(char *** buf)
 #endif
 }
 
-static int dt_stat_getattr(const char *  path,
-                           struct stat * st)
+static int dt_rib_getattr(const char *      path,
+                          struct rib_attr * attr)
 {
 #ifdef IPCP_FLOW_STATS
         int fd;
 
         fd = atoi(path);
 
-        st->st_mode  = S_IFREG | 0755;
-        st->st_nlink = 1;
-        st->st_uid   = getuid();
-        st->st_gid   = getgid();
-
         pthread_mutex_lock(&dt.stat[fd].lock);
 
         if (dt.stat[fd].stamp != -1) {
-                st->st_size  = STAT_FILE_LEN;
-                st->st_mtime = dt.stat[fd].stamp;
+                attr->size  = STAT_FILE_LEN;
+                attr->mtime = dt.stat[fd].stamp;
         } else {
-                st->st_size  = 0;
-                st->st_mtime = 0;
+                attr->size  = 0;
+                attr->mtime = 0;
         }
 
         pthread_mutex_unlock(&dt.stat[fd].lock);
 #else
         (void) path;
-        (void) st;
+        (void) attr;
 #endif
         return 0;
 }
 
 static struct rib_ops r_ops = {
-        .read    = dt_stat_read,
-        .readdir = dt_stat_readdir,
-        .getattr = dt_stat_getattr
+        .read    = dt_rib_read,
+        .readdir = dt_rib_readdir,
+        .getattr = dt_rib_getattr
 };
 
 #ifdef IPCP_FLOW_STATS

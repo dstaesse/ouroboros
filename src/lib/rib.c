@@ -24,14 +24,11 @@
 
 #include "config.h"
 
-#if defined (__FreeBSD__)
-#define __XSI_VISIBLE 500
-#endif
-
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
+
 
 #include <assert.h>
 #include <pthread.h>
@@ -45,7 +42,10 @@
 #define FUSE_USE_VERSION  26
 #if defined (__linux__)
 #define __USE_XOPEN
+#elif defined (__FreeBSD__)
+#define __XSI_VISIBLE 500
 #endif /* __linux__ */
+#include <sys/stat.h>
 #include <fuse.h>
 
 #ifndef CLOCK_REALTIME_COARSE
@@ -187,6 +187,7 @@ static size_t __getattr(const char *  path,
         struct list_head * p;
         char               comp[RIB_PATH_LEN + 1];
         char *             c;
+        struct rib_attr    attr;
 
         if (strlen(path) > RIB_PATH_LEN)
                 return -1;
@@ -198,13 +199,21 @@ static size_t __getattr(const char *  path,
         if (c != NULL)
                 *c = '\0';
 
+        memset(&attr, 0, sizeof(attr));
+
         pthread_rwlock_rdlock(&rib.lock);
 
         list_for_each(p, &rib.reg_comps) {
                 struct reg_comp * r = list_entry(p, struct reg_comp, next);
                 if (strcmp(comp, r->path) == 0) {
-                        size_t ret = r->ops->getattr(c + 1, st);
+                        size_t ret = r->ops->getattr(c + 1, &attr);
                         pthread_rwlock_unlock(&rib.lock);
+                        st->st_mode  = S_IFREG | 0755;
+                        st->st_nlink = 1;
+                        st->st_uid   = getuid();
+                        st->st_gid   = getgid();
+                        st->st_size  = attr.size;
+                        st->st_mtime = attr.mtime;
                         return ret;
                 }
         }

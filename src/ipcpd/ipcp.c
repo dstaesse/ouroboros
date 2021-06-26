@@ -24,19 +24,11 @@
 #define _DEFAULT_SOURCE
 #else
 #define _POSIX_C_SOURCE 200112L
-#define __XSI_VISIBLE   500
 #endif
 
 #if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
 #define _GNU_SOURCE
 #define NPROC (sysconf(_SC_NPROCESSORS_ONLN))
-#endif
-
-#if defined(__linux__) || defined(__CYGWIN__)
-#define _DEFAULT_SOURCE
-#else
-#define _POSIX_C_SOURCE 200112L
-#define __XSI_VISIBLE   500
 #endif
 
 #include "config.h"
@@ -107,9 +99,9 @@ void ipcp_hash_str(char *          buf,
         buf[2 * i] = '\0';
 }
 
-static int ipcp_stat_read(const char * path,
-                          char *       buf,
-                          size_t       len)
+static int ipcp_rib_read(const char * path,
+                         char *       buf,
+                         size_t       len)
 {
         if (len < LAYER_NAME_SIZE + 2) /* trailing \n */
                 return 0;
@@ -158,7 +150,7 @@ static int ipcp_stat_read(const char * path,
         return strlen(buf);
 }
 
-static int ipcp_stat_readdir(char *** buf)
+static int ipcp_rib_readdir(char *** buf)
 {
         int  i = 0;
 
@@ -188,24 +180,20 @@ static int ipcp_stat_readdir(char *** buf)
         return -1;
 }
 
-static int ipcp_stat_getattr(const char * path,
-                             struct stat * st)
+static int ipcp_rib_getattr(const char *      path,
+                            struct rib_attr * attr)
 {
         (void) path;
 
-        st->st_mode  = S_IFREG | 0755;
-        st->st_nlink = 1;
-        st->st_uid   = getuid();
-        st->st_gid   = getgid();
-        st->st_size  = LAYER_NAME_SIZE;
+        attr->size = LAYER_NAME_SIZE;
 
         return 0;
 }
 
 static struct rib_ops r_ops = {
-        .read    = ipcp_stat_read,
-        .readdir = ipcp_stat_readdir,
-        .getattr = ipcp_stat_getattr
+        .read    = ipcp_rib_read,
+        .readdir = ipcp_rib_readdir,
+        .getattr = ipcp_rib_getattr
 };
 
 static void * acceptloop(void * o)

@@ -24,7 +24,6 @@
 #define _DEFAULT_SOURCE
 #else
 #define _POSIX_C_SOURCE 200112L
-#define __XSI_VISIBLE 500
 #endif
 
 #include "config.h"
@@ -180,14 +179,14 @@ static struct adjacency * get_adj(const char * path)
         return NULL;
 }
 
-static int lsdb_getattr(const char *  path,
-                        struct stat * st)
+static int lsdb_rib_getattr(const char *      path,
+                            struct rib_attr * attr)
 {
         struct adjacency * adj;
         struct timespec    now;
 
         assert(path);
-        assert(st);
+        assert(attr);
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
@@ -195,26 +194,21 @@ static int lsdb_getattr(const char *  path,
 
         adj = get_adj(path);
         if (adj != NULL) {
-                st->st_mtime = adj->stamp;
-                st->st_size  = LS_ENTRY_SIZE;
+                attr->mtime = adj->stamp;
+                attr->size  = LS_ENTRY_SIZE;
         } else {
-                st->st_mtime = now.tv_sec;
-                st->st_size  = 0;
+                attr->mtime = now.tv_sec;
+                attr->size  = 0;
         }
-
-        st->st_mode  = S_IFREG | 0755;
-        st->st_nlink = 1;
-        st->st_uid   = getuid();
-        st->st_gid   = getgid();
 
         pthread_rwlock_unlock(&ls.db_lock);
 
         return 0;
 }
 
-static int lsdb_read(const char * path,
-                     char *       buf,
-                     size_t       len)
+static int lsdb_rib_read(const char * path,
+                         char *       buf,
+                         size_t       len)
 {
         struct adjacency * a;
         int                size;
@@ -242,7 +236,7 @@ static int lsdb_read(const char * path,
         return -1;
 }
 
-static int lsdb_readdir(char *** buf)
+static int lsdb_rib_readdir(char *** buf)
 {
         struct list_head * p;
         char               entry[RIB_PATH_LEN + 1];
@@ -305,9 +299,9 @@ static int lsdb_readdir(char *** buf)
 }
 
 static struct rib_ops r_ops = {
-        .read    = lsdb_read,
-        .readdir = lsdb_readdir,
-        .getattr = lsdb_getattr
+        .read    = lsdb_rib_read,
+        .readdir = lsdb_rib_readdir,
+        .getattr = lsdb_rib_getattr
 };
 
 static int lsdb_add_nb(uint64_t     addr,
