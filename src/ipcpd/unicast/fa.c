@@ -591,7 +591,6 @@ static void * fa_handle_packet(void * o)
 int fa_init(void)
 {
         pthread_condattr_t cattr;
-        char               fastr[256];
 
         if (pthread_rwlock_init(&fa.flows_lock, NULL))
                 goto fail_rwlock;
@@ -612,8 +611,7 @@ int fa_init(void)
 
         list_head_init(&fa.cmds);
 
-        sprintf(fastr, "%s", FA);
-        if (rib_reg(fastr, &r_ops))
+        if (rib_reg(FA, &r_ops))
                 goto fail_rib_reg;
 
         fa.eid = dt_reg_comp(&fa, &fa_post_packet, FA);
@@ -637,6 +635,8 @@ int fa_init(void)
 
 void fa_fini(void)
 {
+        rib_unreg(FA);
+
         pthread_cond_destroy(&fa.cond);;
         pthread_mutex_destroy(&fa.mtx);
         pthread_rwlock_destroy(&fa.flows_lock);

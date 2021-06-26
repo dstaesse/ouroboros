@@ -58,8 +58,9 @@
 #include <inttypes.h>
 #include <assert.h>
 
-#define QOS_BLOCK_LEN 672
-#define STAT_FILE_LEN (189 + QOS_BLOCK_LEN * QOS_CUBE_MAX)
+#define QOS_BLOCK_LEN   672
+#define RIB_FILE_STRLEN (189 + QOS_BLOCK_LEN * QOS_CUBE_MAX)
+#define RIB_NAME_STRLEN 256
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
@@ -192,7 +193,7 @@ static int dt_rib_read(const char * path,
         /* NOTE: we may need stronger checks. */
         fd = atoi(path);
 
-        if (len < STAT_FILE_LEN)
+        if (len < RIB_FILE_STRLEN)
                 return 0;
 
         buf[0] = '\0';
@@ -261,7 +262,7 @@ static int dt_rib_read(const char * path,
 
         pthread_mutex_unlock(&dt.stat[fd].lock);
 
-        return STAT_FILE_LEN;
+        return RIB_FILE_STRLEN;
 #else
         (void) path;
         (void) buf;
@@ -339,7 +340,7 @@ static int dt_rib_getattr(const char *      path,
         pthread_mutex_lock(&dt.stat[fd].lock);
 
         if (dt.stat[fd].stamp != -1) {
-                attr->size  = STAT_FILE_LEN;
+                attr->size  = RIB_FILE_STRLEN;
                 attr->mtime = dt.stat[fd].stamp;
         } else {
                 attr->size  = 0;
@@ -561,7 +562,7 @@ int dt_init(enum pol_routing pr,
 {
         int              i;
         int              j;
-        char             dtstr[256];
+        char             dtstr[RIB_NAME_STRLEN + 1];
         int              pp;
         struct conn_info info;
 
@@ -676,9 +677,11 @@ int dt_init(enum pol_routing pr,
 
 void dt_fini(void)
 {
+        char dtstr[RIB_NAME_STRLEN + 1];
         int i;
 
-        rib_unreg(DT);
+        sprintf(dtstr, "%s.%" PRIu64, DT, ipcpi.dt_addr);
+        rib_unreg(dtstr);
 #ifdef IPCP_FLOW_STATS
         for (i = 0; i < PROG_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&dt.stat[i].lock);
