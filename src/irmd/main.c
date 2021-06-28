@@ -2292,6 +2292,7 @@ static int irm_init(void)
 {
         struct stat        st;
         pthread_condattr_t cattr;
+        mode_t             mask;
 
         memset(&st, 0, sizeof(st));
 
@@ -2393,10 +2394,14 @@ static int irm_init(void)
                 goto fail_rdrbuff;
         }
 #ifdef HAVE_FUSE
+        mask = umask(0);
+
         if (stat(FUSE_PREFIX, &st) != -1)
                 log_warn(FUSE_PREFIX " already exists...");
         else
                 mkdir(FUSE_PREFIX, 0777);
+
+        umask(mask);
 #endif
 
 #ifdef HAVE_LIBGCRYPT
