@@ -133,9 +133,13 @@ static int fa_rib_read(const char * path,
         char             r_eidstr[21];
         char             tmstr[20];
         char             castr[1024];
+        char *           entry;
         struct tm *      tm;
 
-        fd = atoi(path);
+        entry = strstr(path, RIB_SEPARATOR) + 1;
+        assert(entry);
+
+        fd = atoi(entry);
 
         if (fd < 0 || fd > PROG_MAX_FLOWS)
                 return -1;
@@ -253,9 +257,13 @@ static int fa_rib_getattr(const char *      path,
 {
 #ifdef IPCP_FLOW_STATS
         int              fd;
+        char *           entry;
         struct fa_flow * flow;
 
-        fd = atoi(path);
+        entry = strstr(path, RIB_SEPARATOR) + 1;
+        assert(entry);
+
+        fd = atoi(entry);
 
         flow = &fa.flows[fd];
 

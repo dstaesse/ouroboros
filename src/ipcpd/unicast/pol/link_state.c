@@ -184,15 +184,19 @@ static int lsdb_rib_getattr(const char *      path,
 {
         struct adjacency * adj;
         struct timespec    now;
+        char *             entry;
 
         assert(path);
         assert(attr);
+
+        entry = strstr(path, RIB_SEPARATOR) + 1;
+        assert(entry);
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
-        adj = get_adj(path);
+        adj = get_adj(entry);
         if (adj != NULL) {
                 attr->mtime = adj->stamp;
                 attr->size  = LS_ENTRY_SIZE;
@@ -211,16 +215,20 @@ static int lsdb_rib_read(const char * path,
                          size_t       len)
 {
         struct adjacency * a;
+        char *             entry;
         int                size;
 
         assert(path);
+
+        entry = strstr(path, RIB_SEPARATOR) + 1;
+        assert(entry);
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
         if (ls.db_len + ls.nbs_len == 0)
                 goto fail;
 
-        a = get_adj(path);
+        a = get_adj(entry);
         if (a == NULL)
                 goto fail;
 

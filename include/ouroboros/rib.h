@@ -23,7 +23,8 @@
 #ifndef OUROBOROS_LIB_RIB_H
 #define OUROBOROS_LIB_RIB_H
 
-#define RIB_PATH_LEN 128
+#define RIB_PATH_LEN  128
+#define RIB_SEPARATOR "/"
 
 #include <sys/types.h>
 

@@ -52,8 +52,6 @@
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
-#define RT "/"
-
 struct reg_comp {
         struct list_head next;
 
@@ -108,8 +106,7 @@ static int rib_read(const char *            path,
 
         strcpy(comp, path + 1);
 
-        c = strstr(comp, "/");
-
+        c = strstr(comp, RIB_SEPARATOR);
         if (c != NULL)
                 *c = '\0';
 
@@ -121,7 +118,7 @@ static int rib_read(const char *            path,
         list_for_each(p, &rib.reg_comps) {
                 struct reg_comp * r = list_entry(p, struct reg_comp, next);
                 if (strcmp(comp, r->path) == 0) {
-                        int ret = r->ops->read(c + 1, buf, size);
+                        int ret = r->ops->read(path + 1, buf, size);
                         pthread_rwlock_unlock(&rib.lock);
                         return ret;
                 }
@@ -148,7 +145,7 @@ static int rib_readdir(const char *            path,
 
         pthread_rwlock_rdlock(&rib.lock);
 
-        if (strcmp(path, RT) == 0) {
+        if (strcmp(path, RIB_SEPARATOR) == 0) {
                 list_for_each(p, &rib.reg_comps) {
                         struct reg_comp * c;
                         c = list_entry(p, struct reg_comp, next);
@@ -194,8 +191,7 @@ static size_t __getattr(const char *  path,
 
         strcpy(comp, path + 1);
 
-        c = strstr(comp, "/");
-
+        c = strstr(comp, RIB_SEPARATOR);
         if (c != NULL)
                 *c = '\0';
 
@@ -206,7 +202,7 @@ static size_t __getattr(const char *  path,
         list_for_each(p, &rib.reg_comps) {
                 struct reg_comp * r = list_entry(p, struct reg_comp, next);
                 if (strcmp(comp, r->path) == 0) {
-                        size_t ret = r->ops->getattr(c + 1, &attr);
+                        size_t ret = r->ops->getattr(path + 1, &attr);
                         pthread_rwlock_unlock(&rib.lock);
                         st->st_mode  = S_IFREG | 0755;
                         st->st_nlink = 1;
@@ -231,7 +227,7 @@ static int rib_getattr(const char *  path,
 
         memset(st, 0, sizeof(*st));
 
-        if (strcmp(path, RT) == 0)
+        if (strcmp(path, RIB_SEPARATOR) == 0)
                 goto finish_dir;
 
         pthread_rwlock_rdlock(&rib.lock);
@@ -351,6 +347,9 @@ void rib_fini(void)
 #ifdef HAVE_FUSE
         struct list_head * p;
         struct list_head * h;
+
+        if (strlen(rib.mnt) == 0)
+                return;
 
         fuse_exit(rib.fuse);
 

@@ -185,13 +185,17 @@ static int dt_rib_read(const char * path,
         int         i;
         char        str[QOS_BLOCK_LEN + 1];
         char        addrstr[20];
+        char *      entry;
         char        tmstr[20];
         size_t      rxqlen = 0;
         size_t      txqlen = 0;
         struct tm * tm;
 
         /* NOTE: we may need stronger checks. */
-        fd = atoi(path);
+        entry = strstr(path, RIB_SEPARATOR) + 1;
+        assert(entry);
+
+        fd = atoi(entry);
 
         if (len < RIB_FILE_STRLEN)
                 return 0;
@@ -333,9 +337,13 @@ static int dt_rib_getattr(const char *      path,
                           struct rib_attr * attr)
 {
 #ifdef IPCP_FLOW_STATS
-        int fd;
+        int    fd;
+        char * entry;
 
-        fd = atoi(path);
+        entry = strstr(path, RIB_SEPARATOR) + 1;
+        assert(entry);
+
+        fd = atoi(entry);
 
         pthread_mutex_lock(&dt.stat[fd].lock);
 
