@@ -2292,8 +2292,9 @@ static int irm_init(void)
 {
         struct stat        st;
         pthread_condattr_t cattr;
+#ifdef HAVE_FUSE
         mode_t             mask;
-
+#endif
         memset(&st, 0, sizeof(st));
 
         if (pthread_rwlock_init(&irmd.state_lock, NULL)) {
