@@ -20,10 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define DELT_RDV      (100 * MILLION) /* ns */
-#define MAX_RDV         (1 * BILLION) /* ns */
+#define DELT_RDV         (100 * MILLION) /* ns */
+#define MAX_RDV            (1 * BILLION) /* ns */
 
-#define FRCT_PCILEN    (sizeof(struct frct_pci))
+#define FRCT             "frct"
+#define FRCT_PCILEN      (sizeof(struct frct_pci))
+#define FRCT_NAME_STRLEN 32
 
 struct frct_cr {
         uint32_t        lwe;     /* Left window edge               */
@@ -83,6 +85,103 @@ struct frct_pci {
         uint32_t seqno;
         uint32_t ackno;
 } __attribute__((packed));
+
+#ifdef PROC_FLOW_STATS
+
+static int frct_rib_read(const char * path,
+                         char *       buf,
+                         size_t       len)
+{
+        struct timespec now;
+        char *          entry;
+        struct flow *   flow;
+        struct frcti *  frcti;
+        int             fd;
+
+        (void) len;
+
+        entry = strstr(path, RIB_SEPARATOR);
+        assert(entry);
+        *entry = '\0';
+
+        fd = atoi(path);
+
+        flow = &ai.flows[fd];
+
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+
+        pthread_rwlock_rdlock(&ai.lock);
+
+        frcti = flow->frcti;
+
+        pthread_rwlock_rdlock(&frcti->lock);
+
+        sprintf(buf,
+                "Maximum packet lifetime (ns):    %20ld\n"
+                "Max time to Ack (ns):            %20ld\n"
+                "Max time to Retransmit (ns):     %20ld\n"
+                "Smoothed rtt (ns):               %20ld\n"
+                "RTT standard deviation (ns):     %20ld\n"
+                "Retransmit timeout RTO (ns):     %20ld\n"
+                "Sender left window edge:         %20u\n"
+                "Sender right window edge:        %20u\n"
+                "Sender inactive (ns):            %20ld\n"
+                "Sender current sequence number:  %20u\n"
+                "Receiver left window edge:       %20u\n"
+                "Receiver right window edge:      %20u\n"
+                "Receiver inactive (ns):          %20ld\n"
+                "Receiver last ack:               %20u\n",
+                frcti->mpl,
+                frcti->a,
+                frcti->r,
+                frcti->srtt,
+                frcti->mdev,
+                frcti->rto,
+                frcti->snd_cr.lwe,
+                frcti->snd_cr.rwe,
+                ts_diff_ns(&frcti->snd_cr.act, &now),
+                frcti->snd_cr.seqno,
+                frcti->rcv_cr.lwe,
+                frcti->rcv_cr.rwe,
+                ts_diff_ns(&frcti->rcv_cr.act, &now),
+                frcti->rcv_cr.seqno);
+
+        pthread_rwlock_unlock(&flow->frcti->lock);
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        return strlen(buf);
+}
+
+static int frct_rib_readdir(char *** buf)
+{
+        *buf = malloc(sizeof(**buf));
+
+        (*buf)[0] = strdup("frct");
+
+        return 1;
+}
+
+static int frct_rib_getattr(const char *      path,
+                            struct rib_attr * attr)
+{
+        (void) path;
+        (void) attr;
+
+        attr->size  = 1024;
+        attr->mtime = 0;
+
+        return 0;
+}
+
+
+static struct rib_ops r_ops = {
+        .read    = frct_rib_read,
+        .readdir = frct_rib_readdir,
+        .getattr = frct_rib_getattr
+};
+
+#endif /* PROC_FLOW_STATS */
 
 static bool before(uint32_t seq1,
                    uint32_t seq2)
@@ -205,14 +304,16 @@ static void __send_rdv(int fd)
 
 static struct frcti * frcti_create(int fd)
 {
-        struct frcti *     frcti;
-        ssize_t            idx;
-        struct timespec    now;
-        time_t             mpl;
-        time_t             a;
-        time_t             r;
-        pthread_condattr_t cattr;
-
+        struct frcti *      frcti;
+        ssize_t             idx;
+        struct timespec     now;
+        time_t              mpl;
+        time_t              a;
+        time_t              r;
+        pthread_condattr_t  cattr;
+#ifdef PROC_FLOW_STATS
+        char                frctstr[FRCT_NAME_STRLEN + 1];
+#endif
         frcti = malloc(sizeof(*frcti));
         if (frcti == NULL)
                 goto fail_malloc;
@@ -232,6 +333,13 @@ static struct frcti * frcti_create(int fd)
 #endif
         if (pthread_cond_init(&frcti->cond, &cattr))
                 goto fail_cond;
+
+#ifdef PROC_FLOW_STATS
+        sprintf(frctstr, "%d", fd);
+        if (rib_reg(frctstr, &r_ops))
+                goto fail_rib_reg;
+#endif
+        pthread_condattr_destroy(&cattr);
 
         for (idx = 0; idx < RQ_SIZE; ++idx)
                 frcti->rq[idx] = -1;
@@ -269,9 +377,13 @@ static struct frcti * frcti_create(int fd)
 
         return frcti;
 
+#ifdef PROC_FLOW_STATS
+ fail_rib_reg:
+        pthread_cond_destroy(&frcti->cond);
+#endif
  fail_cond:
         pthread_condattr_destroy(&cattr);
-fail_cattr:
+ fail_cattr:
         pthread_mutex_destroy(&frcti->mtx);
  fail_mutex:
         pthread_rwlock_destroy(&frcti->lock);
@@ -283,6 +395,11 @@ fail_cattr:
 
 static void frcti_destroy(struct frcti * frcti)
 {
+#ifdef PROC_FLOW_STATS
+        char frctstr[FRCT_NAME_STRLEN + 1];
+        sprintf(frctstr, "%d", frcti->fd);
+        rib_unreg(frctstr);
+#endif
         pthread_cond_destroy(&frcti->cond);
         pthread_mutex_destroy(&frcti->mtx);
         pthread_rwlock_destroy(&frcti->lock);

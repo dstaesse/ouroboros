@@ -56,6 +56,7 @@
 #cmakedefine HAVE_FUSE
 #ifdef HAVE_FUSE
 #define FUSE_PREFIX         "@FUSE_PREFIX@"
+#cmakedefine PROC_FLOW_STATS
 #endif
 
 #define PTHREAD_COND_CLOCK  @PTHREAD_COND_CLOCK@

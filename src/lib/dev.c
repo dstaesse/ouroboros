@@ -44,6 +44,9 @@
 #include <ouroboros/shm_rbuff.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/fqueue.h>
+#ifdef PROC_FLOW_STATS
+#include <ouroboros/rib.h>
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -361,7 +364,9 @@ static void init(int     argc,
 {
         const char * prog = argv[0];
         int          i;
-
+#ifdef PROC_FLOW_STATS
+        char         procstr[32];
+#endif
         (void) argc;
         (void) envp;
 
@@ -437,6 +442,11 @@ static void init(int     argc,
         if (timerwheel_init() < 0)
                 goto fail_timerwheel;
 
+#if defined PROC_FLOW_STATS
+        sprintf(procstr, "proc.%d", getpid());
+        /* Don't bail, it just won't show metrics */
+        rib_init(procstr);
+#endif
         return;
 
  fail_timerwheel:
@@ -470,7 +480,13 @@ static void init(int     argc,
 
 static void fini(void)
 {
-        int i = 0;
+        int  i = 0;
+#ifdef PROC_FLOW_STATS
+        char procstr[32];
+
+        sprintf(procstr, "proc.%d", getpid());
+        rib_fini();
+#endif
 
         if (ai.fds == NULL)
                 return;

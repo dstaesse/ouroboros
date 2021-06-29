@@ -219,6 +219,16 @@ set(ACK_WHEEL_SLOTS 128 CACHE STRING
 set(ACK_WHEEL_RESOLUTION 20 CACHE STRING
   "Minimum acknowledgment delay (ns), as a power to 2")
 
+if (HAVE_FUSE)
+  set(PROC_FLOW_STATS TRUE CACHE BOOL
+    "Enable flow statistics tracking for application flows")
+    if (PROC_FLOW_STATS)
+       message(STATUS "Application flow statistics enabled")
+    else ()
+       message(STATUS "Application flow statistics disabled")
+    endif ()
+endif ()
+
 set(SOURCE_FILES_DEV
   # Add source files here
   cacep.c

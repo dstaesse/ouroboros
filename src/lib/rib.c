@@ -286,8 +286,17 @@ int rib_init(const char * mountpt)
                                    NULL};
         struct fuse_args args = FUSE_ARGS_INIT(3, argv);
 
+        if (access("/dev/fuse", R_OK))
+                goto fail;
+
         if (stat(FUSE_PREFIX, &st) == -1)
-                return -1;
+                goto fail;
+
+        /* This is crap to allow IPCP RIB to remount to a different name */
+        if (strlen(rib.mnt) > 0) {
+                fuse_unmount(rib.mnt, rib.ch);
+                rmdir(rib.mnt);
+        }
 
         sprintf(rib.mnt, FUSE_PREFIX "/%s", mountpt);
 
@@ -295,13 +304,13 @@ int rib_init(const char * mountpt)
                 switch(errno) {
                 case ENOENT:
                         if (mkdir(rib.mnt, 0777))
-                                return -1;
+                                goto fail_mnt;
                         break;
                 case ENOTCONN:
                         fuse_unmount(rib.mnt, rib.ch);
                         break;
                 default:
-                        return -1;
+                        goto fail_mnt;
                 }
 
         fuse_opt_parse(&args, NULL, NULL, NULL);
@@ -335,6 +344,9 @@ int rib_init(const char * mountpt)
  fail_mount:
         fuse_opt_free_args(&args);
         rmdir(rib.mnt);
+ fail_mnt:
+        memset(rib.mnt, 0, RIB_PATH_LEN + 1);
+ fail:
         return -1;
 #else
         (void) mountpt;
