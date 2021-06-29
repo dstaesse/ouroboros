@@ -103,10 +103,15 @@ static int ipcp_rib_read(const char * path,
                          char *       buf,
                          size_t       len)
 {
+        char * entry;
+
         if (len < LAYER_NAME_SIZE + 2) /* trailing \n */
                 return 0;
 
-        if (strcmp(path, info[0]) == 0) { /* _state */
+        entry = strstr(path, RIB_SEPARATOR) + 1;
+        assert(entry);
+
+        if (strcmp(entry, info[0]) == 0) { /* _state */
                 enum ipcp_state state = ipcp_get_state();
                 if (state == IPCP_NULL)
                         strcpy(buf, "null\n");
@@ -120,7 +125,7 @@ static int ipcp_rib_read(const char * path,
                         strcpy(buf, "bug\n");
         }
 
-        if (strcmp(path, info[1]) == 0) { /* _type */
+        if (strcmp(entry, info[1]) == 0) { /* _type */
                 if (ipcpi.type == IPCP_LOCAL)
                         strcpy(buf, "local\n");
                 else if (ipcpi.type == IPCP_UNICAST)
@@ -137,7 +142,7 @@ static int ipcp_rib_read(const char * path,
                         strcpy(buf, "bug\n");
         }
 
-        if (strcmp(path, info[2]) == 0) { /* _layer */
+        if (strcmp(entry, info[2]) == 0) { /* _layer */
                 memset(buf, 0, LAYER_NAME_SIZE + 1);
                 if (ipcp_get_state() < IPCP_OPERATIONAL)
                         strcpy(buf, "(null)");
