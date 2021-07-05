@@ -29,7 +29,6 @@
 #include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
 
-
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -291,12 +290,6 @@ int rib_init(const char * mountpt)
 
         if (stat(FUSE_PREFIX, &st) == -1)
                 goto fail;
-
-        /* This is crap to allow IPCP RIB to remount to a different name */
-        if (strlen(rib.mnt) > 0) {
-                fuse_unmount(rib.mnt, rib.ch);
-                rmdir(rib.mnt);
-        }
 
         sprintf(rib.mnt, FUSE_PREFIX "/%s", mountpt);
 

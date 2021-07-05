@@ -443,9 +443,11 @@ static void init(int     argc,
                 goto fail_timerwheel;
 
 #if defined PROC_FLOW_STATS
-        sprintf(procstr, "proc.%d", getpid());
-        /* Don't bail, it just won't show metrics */
-        rib_init(procstr);
+        if (strstr(argv[0], "ipcpd") == NULL) {
+                sprintf(procstr, "proc.%d", getpid());
+                /* Don't bail on fail, it just won't show metrics */
+                rib_init(procstr);
+        }
 #endif
         return;
 
