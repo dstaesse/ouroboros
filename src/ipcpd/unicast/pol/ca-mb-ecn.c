@@ -287,8 +287,8 @@ ssize_t  mb_ecn_print_stats(void * _ctx,
                 "Max bytes in this window:        %20zu\n"
                 "Current congestion regime:       %20s\n",
                 "Multi-bit ECN",
-                ctx->rx_ece, ctx->rx_ctr,
-                ctx->tx_ece, ctx->tx_ctr, (size_t) (1UL << ctx->tx_mul),
+                ctx->tx_ece, ctx->tx_ctr,
+                ctx->rx_ece, ctx->rx_ctr, (size_t) (1UL << ctx->tx_mul),
                 ctx->tx_wpc, ctx->tx_wbc, ctx->tx_wbl,
                 regime);
 
