@@ -41,7 +41,7 @@
 /* congestion avoidance constants */
 #define CA_SHFT      5                    /* Average over 32 pkts   */
 #define CA_WND       (1 << CA_SHFT)       /* 32 pkts receiver wnd   */
-#define CA_UPD       (1 << (CA_SHFT - 3)) /* Update snd every 8 pkt */
+#define CA_UPD       (1 << (CA_SHFT - 2)) /* Update snd every 8 pkt */
 #define CA_SLOT      24                   /* Initial slot = 16 ms   */
 #define CA_INC       1UL << 16            /* ~4MiB/s^2 additive inc */
 #define CA_IWL       1UL << 16            /* Initial limit ~4MiB/s  */
