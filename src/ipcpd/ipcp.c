@@ -53,6 +53,7 @@
 #include <signal.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/prctl.h>
 #include <stdlib.h>
 #if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
 #include <unistd.h>
@@ -710,6 +711,9 @@ int ipcp_init(int               argc,
         ipcpi.state     = IPCP_NULL;
         ipcpi.type      = type;
 
+#if defined (__linux__)
+        prctl(PR_SET_TIMERSLACK, IPCP_LINUX_SLACK_NS, 0, 0, 0);
+#endif
         ipcpi.sock_path = ipcp_sock_path(getpid());
         if (ipcpi.sock_path == NULL)
                 goto fail_sock_path;
