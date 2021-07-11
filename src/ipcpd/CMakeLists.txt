@@ -16,6 +16,10 @@ set(IPCP_CONN_WAIT_DIR TRUE CACHE BOOL
   "Check the running state of the directory when adding a dt connection")
 set(DHT_ENROLL_SLACK 50 CACHE STRING
   "DHT enrollment waiting time (0-999, ms)")
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+   set(IPCP_LINUX_TIMERSLACK_NS 1000 CACHE STRING
+       "Slack value for high resolution timers on Linux systems.")
+endif ()
 
 if ((IPCP_QOS_CUBE_BE_PRIO LESS 0) OR (IPCP_QOS_CUBE_BE_PRIO GREATER 99))
   message(FATAL_ERROR "Invalid priority for best effort QoS cube")
