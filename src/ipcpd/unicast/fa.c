@@ -98,6 +98,8 @@ struct fa_flow {
         size_t   p_rcv_f;  /* Packets received fail          */
         size_t   b_rcv;    /* Bytes received                 */
         size_t   b_rcv_f;  /* Bytes received fail            */
+        size_t   u_snd;    /* Flow updates sent              */
+        size_t   u_rcv;    /* Flow updates received          */
 #endif
         uint64_t s_eid;  /* Local endpoint id                */
         uint64_t r_eid;  /* Remote endpoint id               */
@@ -180,6 +182,8 @@ static int fa_rib_read(const char * path,
                 "Received (bytes):                %20zu\n"
                 "Receive failed (packets):        %20zu\n"
                 "Receive failed (bytes):          %20zu\n"
+                "Sent flow updates (packets):     %20zu\n"
+                "Received flow updates (packets): %20zu\n"
                 "%s",
                 tmstr, r_addrstr,
                 s_eidstr, r_eidstr,
@@ -187,6 +191,7 @@ static int fa_rib_read(const char * path,
                 flow->p_snd_f, flow->b_snd_f,
                 flow->p_rcv, flow->b_rcv,
                 flow->b_rcv_f, flow->b_rcv_f,
+                flow->u_snd, flow->u_rcv,
                 castr);
 
         pthread_rwlock_unlock(&fa.flows_lock);
@@ -582,6 +587,8 @@ static void * fa_handle_packet(void * o)
 
                         flow = &fa.flows[fd];
 
+                        flow->u_rcv++;
+
                         ca_ctx_update_ece(flow->ctx, ntoh16(msg->ece));
 
                         pthread_rwlock_unlock(&fa.flows_lock);
@@ -874,13 +881,14 @@ static int fa_update_remote(int      fd,
 
         flow = &fa.flows[fd];
 
-        pthread_rwlock_rdlock(&fa.flows_lock);
+        pthread_rwlock_wrlock(&fa.flows_lock);
 
         msg->code  = FLOW_UPDATE;
         msg->r_eid = hton64(flow->r_eid);
         msg->ece   = hton16(ece);
 
         r_addr = flow->r_addr;
+        flow->u_snd++;
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
