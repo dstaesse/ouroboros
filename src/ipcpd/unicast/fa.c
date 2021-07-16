@@ -586,9 +586,9 @@ static void * fa_handle_packet(void * o)
                         }
 
                         flow = &fa.flows[fd];
-
+#ifdef IPCP_FLOW_STATS
                         flow->u_rcv++;
-
+#endif
                         ca_ctx_update_ece(flow->ctx, ntoh16(msg->ece));
 
                         pthread_rwlock_unlock(&fa.flows_lock);
@@ -888,8 +888,9 @@ static int fa_update_remote(int      fd,
         msg->ece   = hton16(ece);
 
         r_addr = flow->r_addr;
+#ifdef IPCP_FLOW_STATS
         flow->u_snd++;
-
+#endif
         pthread_rwlock_unlock(&fa.flows_lock);
 
 
