@@ -135,8 +135,8 @@ ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
                         if (ctx->tx_ece) /* Mult. Decrease */
                                 ctx->tx_wbl -= (ctx->tx_wbl * ctx->tx_ece)
                                         >> (CA_SHFT + 8);
-                        else if (ctx->tx_wbc > ctx->tx_wbl) /* Add. Increase */
-                                ctx->tx_wbl = ctx->tx_wbl + ctx->tx_inc;
+                        else /* Add. Increase */
+                                ctx->tx_wbl = ctx->tx_wbc + ctx->tx_inc;
                 }
 
                 /* Window scaling */
