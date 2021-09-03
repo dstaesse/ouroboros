@@ -53,10 +53,12 @@
 #include <signal.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/prctl.h>
 #include <stdlib.h>
-#if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
+#if defined(__linux__)
+#include <sys/prctl.h>
+#ifndef DISABLE_CORE_LOCK
 #include <unistd.h>
+#endif
 #endif
 
 char * info[LAYER_NAME_SIZE + 1] = {
