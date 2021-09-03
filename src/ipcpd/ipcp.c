@@ -844,9 +844,12 @@ int ipcp_boot()
 
 void ipcp_shutdown()
 {
+
         siginfo_t info;
         sigset_t  sigset;
-
+#ifdef __APPLE__
+        int       sig;
+#endif
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGINT);
         sigaddset(&sigset, SIGQUIT);
@@ -856,11 +859,20 @@ void ipcp_shutdown()
 
         while(ipcp_get_state() != IPCP_NULL &&
               ipcp_get_state() != IPCP_SHUTDOWN) {
+#ifdef __APPLE__
+                if (sigwait(&sigset, &sig) < 0) {
+#else
                 if (sigwaitinfo(&sigset, &info) < 0) {
+#endif
                         log_warn("Bad signal.");
                         continue;
                 }
 
+#ifdef __APPLE__
+                memset(&info, 0, sizeof(info));
+                info.si_signo = sig;
+                info.si_pid   = ipcpi.irmd_pid;
+#endif
                 switch(info.si_signo) {
                 case SIGINT:
                 case SIGTERM:
