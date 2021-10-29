@@ -24,7 +24,13 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "/usr" CACHE STRING "Installation Prefix" FORCE)
+  if (APPLE)
+    set(CMAKE_INSTALL_PREFIX "/usr/local" CACHE STRING
+      "Installation Prefix" FORCE)
+  else()
+    set(CMAKE_INSTALL_PREFIX "/usr" CACHE STRING
+      "Installation Prefix" FORCE)
+  endif()
 endif ()
 
 if (APPLE)
