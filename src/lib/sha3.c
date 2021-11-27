@@ -52,8 +52,7 @@
 #include <assert.h>
 #include <string.h>
 
-#define IS_ALIGNED_64(p) (0 == (7 & ((const uint8_t *) (p)      \
-                                     - (const uint8_t *) 0)))
+#define IS_ALIGNED_64(p) (0 == (7 & ((uintptr_t) (p))))
 #define I64(x) x##LL
 #define ROTL64(qword, n) ((qword) << (n) ^ ((qword) >> (64 - (n))))
 
