@@ -877,8 +877,11 @@ void ipcp_shutdown()
 #endif
                 switch(info.si_signo) {
                 case SIGINT:
+                        /* FALLTHRU */
                 case SIGTERM:
+                        /* FALLTHRU */
                 case SIGHUP:
+                        /* FALLTHRU */
                 case SIGQUIT:
                         if (info.si_pid == ipcpi.irmd_pid) {
                                 if (ipcp_get_state() == IPCP_INIT)
@@ -890,6 +893,7 @@ void ipcp_shutdown()
                         break;
                 case SIGPIPE:
                         log_dbg("Ignored SIGPIPE.");
+                        continue;
                 default:
                         continue;
                 }
