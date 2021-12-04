@@ -484,9 +484,6 @@ static void fini(void)
 {
         int  i = 0;
 #ifdef PROC_FLOW_STATS
-        char procstr[32];
-
-        sprintf(procstr, "proc.%d", getpid());
         rib_fini();
 #endif
 
