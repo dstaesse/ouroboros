@@ -25,6 +25,8 @@
 
 #include <ouroboros/ipcp-dev.h>
 
+#include "ops.h"
+
 #include <stdint.h>
 #include <sys/types.h>
 

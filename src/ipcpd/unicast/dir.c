@@ -34,8 +34,7 @@
 #include <ouroboros/utils.h>
 
 #include "dir.h"
-#include "dir/ops.h"
-#include "dir/dht.h"
+#include "dir/pol.h"
 
 #include <stdlib.h>
 #include <string.h>

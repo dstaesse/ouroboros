@@ -25,9 +25,7 @@
 #include <ouroboros/logs.h>
 
 #include "ca.h"
-#include "ca/ops.h"
-#include "ca/mb-ecn.h"
-#include "ca/nop.h"
+#include "ca/pol.h"
 
 struct {
         struct ca_ops * ops;

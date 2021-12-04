@@ -26,7 +26,7 @@
 
 #include "pff.h"
 #include "routing.h"
-#include "routing/link-state.h"
+#include "routing/pol.h"
 
 struct routing_ops * r_ops;
 

@@ -26,10 +26,7 @@
 #include <ouroboros/logs.h>
 
 #include "pff.h"
-#include "pff/ops.h"
-#include "pff/alternate.h"
-#include "pff/multipath.h"
-#include "pff/simple.h"
+#include "pff/pol.h"
 
 struct pff {
         struct pff_ops * ops;
