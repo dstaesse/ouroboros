@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2021
  *
- * Address authority
+ * Address authority policy ops
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,39 +20,15 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define OUROBOROS_PREFIX "addr_auth"
+#ifndef OUROBOROS_IPCPD_UNICAST_ADDR_AUTH_OPS_H
+#define OUROBOROS_IPCPD_UNICAST_ADDR_AUTH_OPS_H
 
-#include <ouroboros/logs.h>
+struct addr_auth_ops {
+        int      (* init)(const void * info);
 
-#include "addr_auth.h"
-#include "pol-addr-auth-ops.h"
-#include "pol/flat.h"
+        int      (* fini)(void);
 
-#include <stdlib.h>
+        uint64_t (* address)(void);
+};
 
-struct pol_addr_auth_ops * ops;
-
-int addr_auth_init(enum pol_addr_auth type,
-                   const void *       info)
-{
-        switch (type) {
-        case ADDR_AUTH_FLAT_RANDOM:
-                ops = &flat_ops;
-                break;
-        default:
-                log_err("Unknown address authority type.");
-                return -1;
-        }
-
-        return ops->init(info);
-}
-
-uint64_t addr_auth_address(void)
-{
-        return ops->address();
-}
-
-int addr_auth_fini(void)
-{
-        return ops->fini();
-}
+#endif /* OUROBOROS_IPCPD_UNICAST_ADDR_AUTH_OPS_H */

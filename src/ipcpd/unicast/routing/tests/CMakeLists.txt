@@ -18,7 +18,6 @@ get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   # Add new tests here
   graph_test.c
-  pft_test.c
   )
 
 add_executable(${PARENT_DIR}_test EXCLUDE_FROM_ALL ${${PARENT_DIR}_tests})

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2021
  *
- * Link state routing policy
+ * Routing policy ops
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,22 +20,19 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_UNICAST_POL_LINK_STATE_H
-#define OUROBOROS_IPCPD_UNICAST_POL_LINK_STATE_H
+#ifndef OUROBOROS_IPCPD_UNICAST_ROUTING_OPS_H
+#define OUROBOROS_IPCPD_UNICAST_ROUTING_OPS_H
 
-#define LS_COMP  "Management"
-#define LS_PROTO "LSP"
+#include "pff.h"
 
-#include "pol-routing-ops.h"
+struct routing_ops {
+        int                (* init)(enum pol_routing pr);
 
-int                link_state_init(enum pol_routing pr);
+        void               (* fini)(void);
 
-void               link_state_fini(void);
+        struct routing_i * (* routing_i_create)(struct pff * pff);
 
-struct routing_i * link_state_routing_i_create(struct pff * pff);
+        void               (* routing_i_destroy)(struct routing_i * instance);
+};
 
-void               link_state_routing_i_destroy(struct routing_i * instance);
-
-extern struct pol_routing_ops link_state_ops;
-
-#endif /* OUROBOROS_IPCPD_UNICAST_POL_LINK_STATE_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_ROUTING_OPS_H */

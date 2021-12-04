@@ -20,14 +20,14 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_UNICAST_POL_PFF_OPS_H
-#define OUROBOROS_IPCPD_UNICAST_POL_PFF_OPS_H
+#ifndef OUROBOROS_IPCPD_UNICAST_PFF_OPS_H
+#define OUROBOROS_IPCPD_UNICAST_PFF_OPS_H
 
 #include <stdbool.h>
 
 struct pff_i;
 
-struct pol_pff_ops {
+struct pff_ops {
         struct pff_i * (* create)(void);
 
         void           (* destroy)(struct pff_i * pff_i);
@@ -60,4 +60,4 @@ struct pol_pff_ops {
                                              bool           up);
 };
 
-#endif /* OUROBOROS_IPCPD_UNICAST_POL_PFF_OPS_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_PFF_OPS_H */

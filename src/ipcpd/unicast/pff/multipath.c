@@ -28,7 +28,7 @@
 #include <ouroboros/errno.h>
 
 #include "pft.h"
-#include "multipath_pff.h"
+#include "multipath.h"
 
 #include <string.h>
 #include <assert.h>
@@ -39,7 +39,7 @@ struct pff_i {
         pthread_rwlock_t lock;
 };
 
-struct pol_pff_ops multipath_pff_ops = {
+struct pff_ops multipath_pff_ops = {
         .create            = multipath_pff_create,
         .destroy           = multipath_pff_destroy,
         .lock              = multipath_pff_lock,

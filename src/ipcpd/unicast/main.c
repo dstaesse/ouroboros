@@ -41,7 +41,7 @@
 
 #include "common/connmgr.h"
 #include "common/enroll.h"
-#include "addr_auth.h"
+#include "addr-auth.h"
 #include "ca.h"
 #include "dir.h"
 #include "dt.h"

@@ -20,11 +20,11 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include "ca-nop.h"
+#include "nop.h"
 
 #include <string.h>
 
-struct pol_ca_ops nop_ca_ops = {
+struct ca_ops nop_ca_ops = {
         .ctx_create     = nop_ctx_create,
         .ctx_destroy    = nop_ctx_destroy,
         .ctx_update_snd = nop_ctx_update_snd,

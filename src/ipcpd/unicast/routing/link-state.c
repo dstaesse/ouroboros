@@ -46,7 +46,7 @@
 #include "common/connmgr.h"
 #include "graph.h"
 #include "ipcp.h"
-#include "link_state.h"
+#include "link-state.h"
 #include "pff.h"
 
 #include <assert.h>
@@ -127,7 +127,7 @@ struct {
         enum routing_algo routing_algo;
 } ls;
 
-struct pol_routing_ops link_state_ops = {
+struct routing_ops link_state_ops = {
         .init              = link_state_init,
         .fini              = link_state_fini,
         .routing_i_create  = link_state_routing_i_create,

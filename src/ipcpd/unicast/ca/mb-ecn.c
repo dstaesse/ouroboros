@@ -31,7 +31,7 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/time_utils.h>
 
-#include "ca-mb-ecn.h"
+#include "mb-ecn.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -65,7 +65,7 @@ struct mb_ecn_ctx {
         size_t          tx_slot;
 };
 
-struct pol_ca_ops mb_ecn_ca_ops = {
+struct ca_ops mb_ecn_ca_ops = {
         .ctx_create     = mb_ecn_ctx_create,
         .ctx_destroy    = mb_ecn_ctx_destroy,
         .ctx_update_snd = mb_ecn_ctx_update_snd,

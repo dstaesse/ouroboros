@@ -26,9 +26,9 @@
 
 #include "pff.h"
 #include "routing.h"
-#include "pol/link_state.h"
+#include "routing/link-state.h"
 
-struct pol_routing_ops * r_ops;
+struct routing_ops * r_ops;
 
 int routing_init(enum pol_routing pr)
 {

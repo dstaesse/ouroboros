@@ -27,7 +27,7 @@
 #include <ouroboros/errno.h>
 
 #include "pft.h"
-#include "simple_pff.h"
+#include "simple.h"
 
 #include <assert.h>
 #include <pthread.h>
@@ -37,7 +37,7 @@ struct pff_i {
         pthread_rwlock_t lock;
 };
 
-struct pol_pff_ops simple_pff_ops = {
+struct pff_ops simple_pff_ops = {
         .create            = simple_pff_create,
         .destroy           = simple_pff_destroy,
         .lock              = simple_pff_lock,

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2021
  *
- * Policy for flat addresses in a distributed way
+ * Address authority
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,17 +20,39 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_UNICAST_FLAT_H
-#define OUROBOROS_IPCPD_UNICAST_FLAT_H
+#define OUROBOROS_PREFIX "addr_auth"
 
-#include "pol-addr-auth-ops.h"
+#include <ouroboros/logs.h>
 
-int      flat_init(const void * info);
+#include "addr-auth.h"
+#include "addr-auth/ops.h"
+#include "addr-auth/flat.h"
 
-int      flat_fini(void);
+#include <stdlib.h>
 
-uint64_t flat_address(void);
+struct addr_auth_ops * ops;
 
-extern struct pol_addr_auth_ops flat_ops;
+int addr_auth_init(enum pol_addr_auth type,
+                   const void *       info)
+{
+        switch (type) {
+        case ADDR_AUTH_FLAT_RANDOM:
+                ops = &flat_ops;
+                break;
+        default:
+                log_err("Unknown address authority type.");
+                return -1;
+        }
 
-#endif /* OUROBOROS_IPCPD_UNICAST_FLAT_H */
+        return ops->init(info);
+}
+
+uint64_t addr_auth_address(void)
+{
+        return ops->address();
+}
+
+int addr_auth_fini(void)
+{
+        return ops->fini();
+}

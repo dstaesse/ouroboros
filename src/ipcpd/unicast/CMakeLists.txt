@@ -31,7 +31,7 @@ endif ()
 
 set(SOURCE_FILES
   # Add source files here
-  addr_auth.c
+  addr-auth.c
   ca.c
   connmgr.c
   dht.c
@@ -44,15 +44,15 @@ set(SOURCE_FILES
   routing.c
   psched.c
   # Add policies last
-  pol/pft.c
-  pol/flat.c
-  pol/link_state.c
-  pol/graph.c
-  pol/simple_pff.c
-  pol/alternate_pff.c
-  pol/multipath_pff.c
-  pol/ca-mb-ecn.c
-  pol/ca-nop.c
+  addr-auth/flat.c
+  ca/mb-ecn.c
+  ca/nop.c
+  pff/simple.c
+  pff/alternate.c
+  pff/multipath.c
+  pff/pft.c
+  routing/link-state.c
+  routing/graph.c
   )
 
 add_executable(ipcpd-unicast ${SOURCE_FILES} ${IPCP_SOURCES}
@@ -66,7 +66,8 @@ endif ()
 
 install(TARGETS ipcpd-unicast RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
-add_subdirectory(pol/tests)
+add_subdirectory(pff/tests)
+add_subdirectory(routing/tests)
 
 if (NOT GNU)
   add_subdirectory(tests)

@@ -28,7 +28,7 @@
 #include <ouroboros/list.h>
 
 #include "pft.h"
-#include "alternate_pff.h"
+#include "alternate.h"
 
 #include <string.h>
 #include <assert.h>
@@ -54,7 +54,7 @@ struct pff_i {
         pthread_rwlock_t lock;
 };
 
-struct pol_pff_ops alternate_pff_ops = {
+struct pff_ops alternate_pff_ops = {
         .create            = alternate_pff_create,
         .destroy           = alternate_pff_destroy,
         .lock              = alternate_pff_lock,

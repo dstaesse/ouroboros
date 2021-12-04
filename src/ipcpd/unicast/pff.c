@@ -26,14 +26,14 @@
 #include <ouroboros/logs.h>
 
 #include "pff.h"
-#include "pol-pff-ops.h"
-#include "pol/alternate_pff.h"
-#include "pol/multipath_pff.h"
-#include "pol/simple_pff.h"
+#include "pff/ops.h"
+#include "pff/alternate.h"
+#include "pff/multipath.h"
+#include "pff/simple.h"
 
 struct pff {
-        struct pol_pff_ops * ops;
-        struct pff_i *       pff_i;
+        struct pff_ops * ops;
+        struct pff_i *   pff_i;
 };
 
 struct pff * pff_create(enum pol_pff pol)

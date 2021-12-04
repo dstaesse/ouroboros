@@ -50,7 +50,7 @@ struct {
 
 #define INVALID_ADDRESS 0
 
-struct pol_addr_auth_ops flat_ops = {
+struct addr_auth_ops flat_ops = {
         .init    = flat_init,
         .fini    = flat_fini,
         .address = flat_address

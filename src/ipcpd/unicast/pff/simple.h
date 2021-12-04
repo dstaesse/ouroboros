@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_UNICAST_SIMPLE_PFF_H
 #define OUROBOROS_IPCPD_UNICAST_SIMPLE_PFF_H
 
-#include "pol-pff-ops.h"
+#include "ops.h"
 
 struct pff_i * simple_pff_create(void);
 
@@ -52,6 +52,6 @@ void           simple_pff_flush(struct pff_i * pff_i);
 int            simple_pff_nhop(struct pff_i * pff_i,
                                uint64_t       addr);
 
-extern struct pol_pff_ops simple_pff_ops;
+extern struct pff_ops simple_pff_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_SIMPLE_PFF_H */

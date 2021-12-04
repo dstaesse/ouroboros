@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_UNICAST_CA_NOP_H
 #define OUROBOROS_IPCPD_UNICAST_CA_NOP_H
 
-#include "pol-ca-ops.h"
+#include "ops.h"
 
 void *   nop_ctx_create(void);
 
@@ -47,6 +47,6 @@ int      nop_calc_ecn(int       fd,
                       qoscube_t qc,
                       size_t    len);
 
-extern struct pol_ca_ops nop_ca_ops;
+extern struct ca_ops nop_ca_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_CA_NOP_H */

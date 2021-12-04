@@ -20,12 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_UNICAST_POL_CA_OPS_H
-#define OUROBOROS_IPCPD_UNICAST_POL_CA_OPS_H
+#ifndef OUROBOROS_IPCPD_UNICAST_CA_OPS_H
+#define OUROBOROS_IPCPD_UNICAST_CA_OPS_H
 
 #include "ca.h"
 
-struct pol_ca_ops {
+struct ca_ops {
         void *   (* ctx_create)(void);
 
         void     (* ctx_destroy)(void * ctx);
@@ -55,4 +55,4 @@ struct pol_ca_ops {
 
 };
 
-#endif /* OUROBOROS_IPCPD_UNICAST_POL_CA_OPS_H */
+#endif /* OUROBOROS_IPCPD_UNICAST_CA_OPS_H */

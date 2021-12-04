@@ -25,12 +25,12 @@
 #include <ouroboros/logs.h>
 
 #include "ca.h"
-#include "pol-ca-ops.h"
-#include "pol/ca-mb-ecn.h"
-#include "pol/ca-nop.h"
+#include "ca/ops.h"
+#include "ca/mb-ecn.h"
+#include "ca/nop.h"
 
 struct {
-        struct pol_ca_ops * ops;
+        struct ca_ops * ops;
 } ca;
 
 int ca_init(enum pol_cong_avoid pol)

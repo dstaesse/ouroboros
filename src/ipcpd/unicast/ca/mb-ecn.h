@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_UNICAST_CA_MB_ECN_H
 #define OUROBOROS_IPCPD_UNICAST_CA_MB_ECN_H
 
-#include "pol-ca-ops.h"
+#include "ops.h"
 
 void *   mb_ecn_ctx_create(void);
 
@@ -51,6 +51,6 @@ ssize_t  mb_ecn_print_stats(void * ctx,
                             char * buf,
                             size_t len);
 
-extern struct pol_ca_ops mb_ecn_ca_ops;
+extern struct ca_ops mb_ecn_ca_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_CA_MB_ECN_H */
