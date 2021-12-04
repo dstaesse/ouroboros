@@ -28,25 +28,18 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-struct dht;
+int          dht_init(void);
 
-struct dht * dht_create(uint64_t addr);
+int          dht_bootstrap(void);
 
-int          dht_bootstrap(struct dht * dht,
-                           size_t       b,
-                           time_t       t_expire);
+void         dht_fini(void);
 
-void         dht_destroy(struct dht * dht);
+int          dht_reg(const uint8_t * key);
 
-int          dht_reg(struct dht *    dht,
-                     const uint8_t * key);
+int          dht_unreg(const uint8_t * key);
 
-int          dht_unreg(struct dht *    dht,
-                       const uint8_t * key);
+uint64_t     dht_query(const uint8_t * key);
 
-uint64_t     dht_query(struct dht *    dht,
-                       const uint8_t * key);
-
-int          dht_wait_running(struct dht * dht);
+int          dht_wait_running(void);
 
 #endif /* OUROBOROS_IPCPD_UNICAST_DHT_H */

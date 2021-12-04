@@ -35,7 +35,6 @@
 
 #include "dir.h"
 #include "dht.h"
-#include "ipcp.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -43,15 +42,9 @@
 #include <inttypes.h>
 #include <limits.h>
 
-#define KAD_B (hash_len(ipcpi.dir_hash_algo) * CHAR_BIT)
-
-struct ipcp icpci;
-struct dht * dht;
-
 int dir_init(void)
 {
-        dht = dht_create(ipcpi.dt_addr);
-        if (dht == NULL)
+        if (dht_init() < 0)
                 return -ENOMEM;
 
         return 0;
@@ -59,15 +52,14 @@ int dir_init(void)
 
 void dir_fini(void)
 {
-        dht_destroy(dht);
+        dht_fini();
 }
 
 int dir_bootstrap(void) {
         log_dbg("Bootstrapping directory.");
 
-        /* TODO: get parameters for bootstrap from IRM tool. */
-        if (dht_bootstrap(dht, KAD_B, 86400)) {
-                dht_destroy(dht);
+        if (dht_bootstrap()) {
+                dht_fini();
                 return -ENOMEM;
         }
 
@@ -78,22 +70,22 @@ int dir_bootstrap(void) {
 
 int dir_reg(const uint8_t * hash)
 {
-        return dht_reg(dht, hash);
+        return dht_reg(hash);
 }
 
 int dir_unreg(const uint8_t * hash)
 {
-        return dht_unreg(dht, hash);
+        return dht_unreg(hash);
 }
 
 uint64_t dir_query(const uint8_t * hash)
 {
-        return dht_query(dht, hash);
+        return dht_query(hash);
 }
 
 int dir_wait_running(void)
 {
-        if (dht_wait_running(dht)) {
+        if (dht_wait_running()) {
                 log_warn("Directory did not bootstrap.");
                 return -1;
         }
