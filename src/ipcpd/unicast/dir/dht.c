@@ -48,6 +48,7 @@
 #include "dht.h"
 #include "dt.h"
 #include "ipcp.h"
+#include "ops.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -207,6 +208,16 @@ struct cmd {
         struct list_head     next;
 
         struct shm_du_buff * sdb;
+};
+
+struct dir_ops dht_dir_ops = {
+        .init         = dht_init,
+        .fini         = dht_fini,
+        .bootstrap    = dht_bootstrap,
+        .reg          = dht_reg,
+        .unreg        = dht_unreg,
+        .query        = dht_query,
+        .wait_running = dht_wait_running
 };
 
 struct {

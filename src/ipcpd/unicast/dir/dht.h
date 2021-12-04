@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IPCPD_UNICAST_DHT_H
-#define OUROBOROS_IPCPD_UNICAST_DHT_H
+#ifndef OUROBOROS_IPCPD_UNICAST_DIR_DHT_H
+#define OUROBOROS_IPCPD_UNICAST_DIR_DHT_H
 
 #include <ouroboros/ipcp-dev.h>
 
@@ -42,4 +42,6 @@ uint64_t     dht_query(const uint8_t * key);
 
 int          dht_wait_running(void);
 
-#endif /* OUROBOROS_IPCPD_UNICAST_DHT_H */
+extern struct dir_ops dht_dir_ops;
+
+#endif /* OUROBOROS_IPCPD_UNICAST_DIR_DHT_H */

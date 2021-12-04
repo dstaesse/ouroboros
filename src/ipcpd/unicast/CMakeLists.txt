@@ -14,7 +14,7 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(IPCP_UNICAST_TARGET ipcpd-unicast CACHE INTERNAL "")
 
-protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS kademlia.proto)
+protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS dir/kademlia.proto)
 
 math(EXPR PFT_EXPR "1 << 12")
 set(PFT_SIZE ${PFT_EXPR} CACHE STRING
@@ -34,7 +34,6 @@ set(SOURCE_FILES
   addr-auth.c
   ca.c
   connmgr.c
-  dht.c
   dir.c
   dt.c
   enroll.c
@@ -47,6 +46,7 @@ set(SOURCE_FILES
   addr-auth/flat.c
   ca/mb-ecn.c
   ca/nop.c
+  dir/dht.c
   pff/simple.c
   pff/alternate.c
   pff/multipath.c
@@ -70,5 +70,5 @@ add_subdirectory(pff/tests)
 add_subdirectory(routing/tests)
 
 if (NOT GNU)
-  add_subdirectory(tests)
+  add_subdirectory(dir/tests)
 endif ()

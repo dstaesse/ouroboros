@@ -34,7 +34,8 @@
 #include <ouroboros/utils.h>
 
 #include "dir.h"
-#include "dht.h"
+#include "dir/ops.h"
+#include "dir/dht.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -42,53 +43,49 @@
 #include <inttypes.h>
 #include <limits.h>
 
+struct {
+        struct dir_ops * ops;
+} dir;
+
 int dir_init(void)
 {
-        if (dht_init() < 0)
+        dir.ops = &dht_dir_ops;
+
+        if (dir.ops->init() < 0) {
+                dir.ops = NULL;
                 return -ENOMEM;
+        }
 
         return 0;
 }
 
 void dir_fini(void)
 {
-        dht_fini();
+        dir.ops->fini();
+        dir.ops = NULL;
 }
 
-int dir_bootstrap(void) {
-        log_dbg("Bootstrapping directory.");
-
-        if (dht_bootstrap()) {
-                dht_fini();
-                return -ENOMEM;
-        }
-
-        log_info("Directory bootstrapped.");
-
-        return 0;
+int dir_bootstrap(void)
+{
+        return dir.ops->bootstrap();
 }
 
 int dir_reg(const uint8_t * hash)
 {
-        return dht_reg(hash);
+        return dir.ops->reg(hash);
 }
 
 int dir_unreg(const uint8_t * hash)
 {
-        return dht_unreg(hash);
+        return dir.ops->unreg(hash);
 }
 
 uint64_t dir_query(const uint8_t * hash)
 {
-        return dht_query(hash);
+        return dir.ops->query(hash);
 }
 
 int dir_wait_running(void)
 {
-        if (dht_wait_running()) {
-                log_warn("Directory did not bootstrap.");
-                return -1;
-        }
-
-        return 0;
+        return dir.ops->wait_running();
 }
