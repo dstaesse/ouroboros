@@ -145,6 +145,11 @@ static int start_components(void)
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
+        if (dt_start()) {
+                log_err("Failed to start data transfer.");
+                goto fail_dt_start;
+        }
+
         if (fa_start()) {
                 log_err("Failed to start flow allocator.");
                 goto fail_fa_start;
@@ -167,6 +172,8 @@ static int start_components(void)
  fail_enroll_start:
         fa_stop();
  fail_fa_start:
+        dt_stop();
+ fail_dt_start:
         ipcp_set_state(IPCP_INIT);
         return -1;
 }
@@ -182,6 +189,8 @@ static void stop_components(void)
 
         fa_stop();
 
+        dt_stop();
+
         ipcp_set_state(IPCP_INIT);
 }
 
@@ -189,7 +198,6 @@ static int bootstrap_components(void)
 {
         if (dir_bootstrap()) {
                 log_err("Failed to bootstrap directory.");
-                dt_stop();
                 return -1;
         }
 
@@ -217,11 +225,6 @@ static int unicast_ipcp_enroll(const char *        dst,
                 goto fail_enroll_boot;
         }
 
-        if (dt_start()) {
-                log_err("Failed to initialize IPCP components.");
-                goto fail_dt_start;
-        }
-
         if (start_components()) {
                 log_err("Failed to start components.");
                 goto fail_start_comp;
@@ -241,8 +244,6 @@ static int unicast_ipcp_enroll(const char *        dst,
         return 0;
 
  fail_start_comp:
-        dt_stop();
- fail_dt_start:
         finalize_components();
  fail_enroll_boot:
         connmgr_dealloc(COMPID_ENROLL, &conn);
@@ -262,11 +263,6 @@ static int unicast_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_init;
         }
 
-        if (dt_start()) {
-                log_err("Failed to initialize IPCP components.");
-                goto fail_dt_start;
-        };
-
         if (start_components()) {
                 log_err("Failed to init IPCP components.");
                 goto fail_start;
@@ -284,8 +280,6 @@ static int unicast_ipcp_bootstrap(const struct ipcp_config * conf)
  fail_bootstrap:
         stop_components();
  fail_start:
-        dt_stop();
- fail_dt_start:
         finalize_components();
  fail_init:
         return -1;
@@ -347,7 +341,6 @@ int main(int    argc,
         ipcp_shutdown();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                dt_stop();
                 stop_components();
                 finalize_components();
         }
