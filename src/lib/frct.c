@@ -631,6 +631,7 @@ static time_t __frcti_dealloc(struct frcti * frcti)
 
         wait = MAX(frcti->rcv_cr.inact - now.tv_sec + frcti->rcv_cr.act.tv_sec,
                    frcti->snd_cr.inact - now.tv_sec + frcti->snd_cr.act.tv_sec);
+        wait = MAX(wait, 0);
 
         if (frcti->snd_cr.cflags & FRCTFLINGER
             && before(frcti->snd_cr.lwe, frcti->snd_cr.seqno))
