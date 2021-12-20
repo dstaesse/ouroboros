@@ -684,7 +684,7 @@ static int __frcti_snd(struct frcti *       frcti,
                 /* There are no unacknowledged packets. */
                 assert(snd_cr->seqno == snd_cr->lwe);
                 random_buffer(&snd_cr->seqno, sizeof(snd_cr->seqno));
-                snd_cr->lwe = snd_cr->seqno - 1;
+                snd_cr->lwe = snd_cr->seqno;
                 snd_cr->rwe = snd_cr->lwe + START_WINDOW;
         }
 
