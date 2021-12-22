@@ -800,14 +800,14 @@ int flow_dealloc(int fd)
 
         timeo = frcti_dealloc(f->frcti);
         while (timeo < 0) { /* keep the flow active for rtx */
-                ssize_t ret;
-                uint8_t buf[128];
+                ssize_t         ret;
+                uint8_t         buf[128];
+                struct timespec tic = {0, TICTIME};
 
                 f->oflags = FLOWFDEFAULT | FLOWFRNOPART;
 
                 f->rcv_timesout = true;
-                f->rcv_timeo.tv_sec = -timeo;
-                f->rcv_timeo.tv_nsec = 0;
+                f->rcv_timeo = tic;
 
                 pthread_rwlock_unlock(&ai.lock);
 
@@ -817,7 +817,7 @@ int flow_dealloc(int fd)
 
                 timeo = frcti_dealloc(f->frcti);
 
-                if ((ret == -ETIMEDOUT || ret == -EFLOWDOWN) && timeo < 0)
+                if (ret == -EFLOWDOWN && timeo < 0)
                         timeo = -timeo;
         }
 
@@ -1432,7 +1432,7 @@ ssize_t fevent(struct flow_set *       set,
                 return -EINVAL;
 
         if (fq->fqsize > 0 && fq->next != fq->fqsize)
-                return fq->fqsize;
+                return 1;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abs);
 
