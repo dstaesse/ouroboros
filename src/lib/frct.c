@@ -273,6 +273,7 @@ static void send_frct_pkt(struct frcti * frcti)
                 frcti->rcv_cr.seqno = frcti->rcv_cr.lwe;
 
         pthread_rwlock_unlock(&frcti->lock);
+
 }
 
 static void __send_rdv(int fd)
@@ -463,7 +464,7 @@ static void frcti_setflags(struct frcti * frcti,
 static bool __frcti_is_window_open(struct frcti * frcti)
 {
         struct frct_cr * snd_cr = &frcti->snd_cr;
-        int ret                 = true;
+        bool             ret    = true;
 
         pthread_rwlock_rdlock(&frcti->lock);
 
@@ -471,7 +472,7 @@ static bool __frcti_is_window_open(struct frcti * frcti)
                 ret = before(snd_cr->seqno, snd_cr->rwe);
 
         if (!ret) {
-                 struct timespec now;
+                struct timespec now;
 
                 clock_gettime(PTHREAD_COND_CLOCK, &now);
 
@@ -485,6 +486,7 @@ static bool __frcti_is_window_open(struct frcti * frcti)
                         diff = ts_diff_ns(&frcti->t_wnd, &now);
                         if (diff > MAX_RDV) {
                                 pthread_mutex_unlock(&frcti->mtx);
+                                pthread_rwlock_unlock(&frcti->lock);
                                 return false;
                         }
 
