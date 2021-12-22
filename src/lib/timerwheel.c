@@ -189,7 +189,7 @@ static void timerwheel_move(void)
                                     || f->flow_id != r->flow_id)
                                         goto cleanup;
 
-                                pthread_rwlock_wrlock(&r->frcti->lock);
+                                pthread_rwlock_rdlock(&r->frcti->lock);
 
                                 snd_lwe = snd_cr->lwe;
                                 rcv_lwe = rcv_cr->lwe;
@@ -198,7 +198,7 @@ static void timerwheel_move(void)
                                 pthread_rwlock_unlock(&r->frcti->lock);
 
                                 /* Has been ack'd, remove. */
-                                if ((int) (r->seqno - snd_lwe) < 0)
+                                if (before(r->seqno, snd_lwe))
                                         goto cleanup;
 
                                 /* Check for r-timer expiry. */
