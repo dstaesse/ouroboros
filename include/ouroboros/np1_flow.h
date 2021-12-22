@@ -33,6 +33,7 @@ int  np1_flow_alloc(pid_t     n_pid,
 
 int  np1_flow_resp(int flow_id);
 
-int  np1_flow_dealloc(int flow_id);
+int  np1_flow_dealloc(int flow_id,
+                      time_t timeo);
 
 #endif /* OUROBOROS_NP1_FLOW_H */

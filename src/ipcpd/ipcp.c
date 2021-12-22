@@ -617,7 +617,7 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        fd = np1_flow_dealloc(msg->flow_id);
+                        fd = np1_flow_dealloc(msg->flow_id, msg->timeo_sec);
                         if (fd < 0) {
                                 log_warn("Could not deallocate flow_id %d.",
                                         msg->flow_id);
