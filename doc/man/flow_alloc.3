@@ -59,7 +59,8 @@ The \fBflow_join\fR() function allows applications to join a broadcast
 flow provided by a broadcast layer. The dst is the layer name.
 
 The \fBflow_dealloc\fR() function will release any resources
-associated with the flow.
+associated with the flow. This call may block and keep reliable flows
+active until all packets are acknowledged.
 
 A \fBqosspec_t\fR specifies the following QoS characteristics of a
 flow:

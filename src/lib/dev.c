@@ -853,6 +853,7 @@ int fccntl(int fd,
 {
         uint32_t *        fflags;
         uint16_t *        cflags;
+        uint16_t          csflags;
         va_list           l;
         struct timespec * timeo;
         qosspec_t *       qs;
@@ -963,15 +964,13 @@ int fccntl(int fd,
                 *fflags = flow->oflags;
                 break;
         case FRCTSFLAGS:
-                cflags = va_arg(l, uint16_t *);
-                if (cflags == NULL)
-                        goto einval;
+                csflags = (uint16_t) va_arg(l, uint32_t);
                 if (flow->frcti == NULL)
                         goto eperm;
-                frcti_setflags(flow->frcti, *cflags);
+                frcti_setflags(flow->frcti, csflags);
                 break;
         case FRCTGFLAGS:
-                cflags = (uint16_t *) va_arg(l, int *);
+                cflags = (uint16_t *) va_arg(l, uint32_t *);
                 if (cflags == NULL)
                         goto einval;
                 if (flow->frcti == NULL)

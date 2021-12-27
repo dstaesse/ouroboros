@@ -40,8 +40,8 @@ disables the timeout.
 \fBFLOWGQOSSPEC\fR  - retrieve the current QoS specification of the
 flow. Takes a \fBqosspec_t * \fIqs\fR as third argument.
 
-\fBFLOWSFLAGS\fR    - set flow flags. Takes flow flags as third
-argument. Supported flags are:
+\fBFLOWSFLAGS\fR - set flow flags. Takes flow \fBuint32_t\fR
+\fIflags\fR as third argument. Supported flags are:
 
 .RS 8
 \fIFLOWFRDONLY\fR   - set flow to read-only.
@@ -67,25 +67,30 @@ no partial writes).
 
 .RE
 
-\fBFLOWGFLAGS\fR    - get the current flow flags. Takes an \fBuint32_t
+\fBFLOWGFLAGS\fR    - get the current flow flags. Takes an \fBuint32_t *
 \fIflags\fR as third argument.
 
 \fBFLOWGRXQLEN\fR   - get the current number of packets in the receive
-buffer. Takes a \fBsize_t \fIqlen\fR as third argument.
+buffer. Takes a \fBsize_t \fIqlen\fR * as third argument.
 
 \fBFLOWGTXQLEN\fR   - get the current number of packets in the transmit
-buffer. Takes a \fBsize_t \fIqlen\fR as third argument.
+buffer. Takes a \fBsize_t \fIqlen\fR * as third argument.
 
-\fBFRCTGFLAGS\fR    - get the current flow flags. Takes an \fBuint16_t
+\fBFRCTSFLAGS\fR    - set the current flow flags. Takes an \fBuint16_t
 \fIflags\fR as third argument. Supported flags are:
 
 .RS 8
 \fIFRCTFRESCNTRL\fR - resource control enabled.
 
-\fIFRCTFRTX\fR      - retransmission enabled.
+\fIFRCTFRTX\fR      - retransmission enabled. Cannot be modified and will
+be ignored on set.
+
+\fIFRCTFLINGER\fR   - finish connection on flow deallocation.
 
 .RE
 
+\fBFRCTGFLAGS\fR    - get the current flow flags. Takes an \fBuint16_t *
+\fIflags\fR as third argument.
 
 .SH RETURN VALUE
 
