@@ -58,21 +58,23 @@ struct pff_i * multipath_pff_create(void)
 
         tmp = malloc(sizeof(*tmp));
         if (tmp == NULL)
-                return NULL;
+                goto fail_malloc;
 
-        if (pthread_rwlock_init(&tmp->lock, NULL)) {
-                free(tmp);
-                return NULL;
-        }
+        if (pthread_rwlock_init(&tmp->lock, NULL))
+                goto fail_rwlock;
 
         tmp->pft = pft_create(PFT_SIZE, false);
-        if (tmp->pft == NULL) {
-                pthread_rwlock_destroy(&tmp->lock);
-                free(tmp);
-                return NULL;
-        }
+        if (tmp->pft == NULL)
+                goto fail_pft;
 
         return tmp;
+
+ fail_pft:
+        pthread_rwlock_destroy(&tmp->lock);
+ fail_rwlock:
+        free(tmp);
+ fail_malloc:
+        return NULL;
 }
 
 void multipath_pff_destroy(struct pff_i * pff_i)
@@ -80,8 +82,8 @@ void multipath_pff_destroy(struct pff_i * pff_i)
         assert(pff_i);
 
         pft_destroy(pff_i->pft);
-
         pthread_rwlock_destroy(&pff_i->lock);
+
         free(pff_i);
 }
 
@@ -177,7 +179,7 @@ int multipath_pff_nhop(struct pff_i * pff_i,
 
         assert(pff_i);
 
-        pthread_rwlock_rdlock(&pff_i->lock);
+        pthread_rwlock_wrlock(&pff_i->lock);
 
         if (pft_lookup(pff_i->pft, addr, &fds, &len)) {
                 pthread_rwlock_unlock(&pff_i->lock);
