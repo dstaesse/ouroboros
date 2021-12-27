@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2021
  *
- * Directory
+ * Directory Management
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -44,14 +44,16 @@
 
 struct {
         struct dir_ops * ops;
-} dir;
+        void *           dir;
+} dirmgr;
 
 int dir_init(void)
 {
-        dir.ops = &dht_dir_ops;
+        dirmgr.ops = &dht_dir_ops;
 
-        if (dir.ops->init() < 0) {
-                dir.ops = NULL;
+        dirmgr.dir = dirmgr.ops->create();
+        if (dirmgr.dir == NULL) {
+                dirmgr.ops = NULL;
                 return -ENOMEM;
         }
 
@@ -60,31 +62,32 @@ int dir_init(void)
 
 void dir_fini(void)
 {
-        dir.ops->fini();
-        dir.ops = NULL;
+        dirmgr.ops->destroy(dirmgr.dir);
+        dirmgr.ops = NULL;
+        dirmgr.dir = NULL;
 }
 
 int dir_bootstrap(void)
 {
-        return dir.ops->bootstrap();
+        return dirmgr.ops->bootstrap(dirmgr.dir);
 }
 
 int dir_reg(const uint8_t * hash)
 {
-        return dir.ops->reg(hash);
+        return dirmgr.ops->reg(dirmgr.dir, hash);
 }
 
 int dir_unreg(const uint8_t * hash)
 {
-        return dir.ops->unreg(hash);
+        return dirmgr.ops->unreg(dirmgr.dir, hash);
 }
 
 uint64_t dir_query(const uint8_t * hash)
 {
-        return dir.ops->query(hash);
+        return dirmgr.ops->query(dirmgr.dir, hash);
 }
 
 int dir_wait_running(void)
 {
-        return dir.ops->wait_running();
+        return dirmgr.ops->wait_running(dirmgr.dir);
 }

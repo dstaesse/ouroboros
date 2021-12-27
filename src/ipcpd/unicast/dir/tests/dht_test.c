@@ -23,7 +23,6 @@
 #define __DHT_TEST__
 #define DHT_TEST_KEY_LEN  32
 
-
 #include "dht.c"
 
 #include <pthread.h>
@@ -31,45 +30,49 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define CONTACTS 1000
+#define CONTACTS          1000
 
 int dht_test(int     argc,
              char ** argv)
 {
+        struct dht * dht;
         uint8_t      key[DHT_TEST_KEY_LEN];
         size_t       i;
 
         (void) argc;
         (void) argv;
 
-        if (dht_init() < 0) {
+        dht = dht_create();
+        if (dht == NULL) {
                 printf("Failed to create dht.\n");
                 return -1;
         }
 
-        dht_fini();
+        dht_destroy(dht);
 
-        if (dht_init() < 0) {
+        dht = dht_create();
+        if (dht == NULL) {
                 printf("Failed to re-create dht.\n");
                 return -1;
         }
 
-        if (dht_bootstrap()) {
+        if (dht_bootstrap(dht)) {
                 printf("Failed to bootstrap dht.\n");
-                dht_fini();
+                dht_destroy(dht);
                 return -1;
         }
 
-        dht_fini();
+        dht_destroy(dht);
 
-        if (dht_init() < 0) {
+        dht = dht_create();
+        if (dht == NULL) {
                 printf("Failed to re-create dht.\n");
                 return -1;
         }
 
-        if (dht_bootstrap()) {
+        if (dht_bootstrap(dht)) {
                 printf("Failed to bootstrap dht.\n");
-                dht_fini();
+                dht_destroy(dht);
                 return -1;
         }
 
@@ -77,17 +80,17 @@ int dht_test(int     argc,
                 uint64_t addr;
                 random_buffer(&addr, sizeof(addr));
                 random_buffer(key, DHT_TEST_KEY_LEN);
-                pthread_rwlock_wrlock(&dht.lock);
-                if (dht_update_bucket(key, addr)) {
-                        pthread_rwlock_unlock(&dht.lock);
+                pthread_rwlock_wrlock(&dht->lock);
+                if (dht_update_bucket(dht, key, addr)) {
+                        pthread_rwlock_unlock(&dht->lock);
                         printf("Failed to update bucket.\n");
-                        dht_fini();
+                        dht_destroy(dht);
                         return -1;
                 }
-                pthread_rwlock_unlock(&dht.lock);
+                pthread_rwlock_unlock(&dht->lock);
         }
 
-        dht_fini();
+        dht_destroy(dht);
 
         return 0;
 }
