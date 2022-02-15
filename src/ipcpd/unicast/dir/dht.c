@@ -2249,6 +2249,12 @@ int dht_bootstrap(void * dir)
 
         pthread_rwlock_wrlock(&dht->lock);
 
+#ifndef __DHT_TEST__
+        dht->b        = hash_len(ipcpi.dir_hash_algo);
+#else
+        dht->b        = DHT_TEST_KEY_LEN;
+#endif
+
         dht->id = create_id(dht->b);
         if (dht->id == NULL)
                 goto fail_id;
@@ -2259,11 +2265,7 @@ int dht_bootstrap(void * dir)
 
         dht->buckets->depth = 0;
         dht->buckets->mask  = 0;
-#ifndef __DHT_TEST__
-        dht->b        = hash_len(ipcpi.dir_hash_algo);
-#else
-        dht->b        = DHT_TEST_KEY_LEN;
-#endif
+
         dht->t_expire = 86400; /* 1 day */
         dht->t_repub  = dht->t_expire - 10;
         dht->k        = KAD_K;
