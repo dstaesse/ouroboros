@@ -39,9 +39,9 @@ void argvfree(char ** argv)
 
 char ** argvdup(char ** argv)
 {
-        int argc = 0;
+        int     argc = 0;
         char ** argv_dup = argv;
-        int i;
+        int     i;
 
         if (argv == NULL)
                 return NULL;
@@ -49,16 +49,18 @@ char ** argvdup(char ** argv)
         while (*(argv_dup++) != NULL)
                 argc++;
 
-        if (argc != 0) {
-                argv_dup = malloc((argc + 1) * sizeof(*argv_dup));
-                for (i = 0; i < argc; ++i) {
-                        argv_dup[i] = strdup(argv[i]);
-                        if (argv_dup[i] == NULL) {
-                                argvfree(argv_dup);
-                                return NULL;
-                        }
+        argv_dup = malloc((argc + 1) * sizeof(*argv_dup));
+        if (argv_dup == NULL)
+                return NULL;
+
+        for (i = 0; i < argc; ++i) {
+                argv_dup[i] = strdup(argv[i]);
+                if (argv_dup[i] == NULL) {
+                        argvfree(argv_dup);
+                        return NULL;
                 }
         }
+
         argv_dup[argc] = NULL;
         return argv_dup;
 }
