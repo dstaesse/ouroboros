@@ -156,10 +156,19 @@ static int frct_rib_read(const char * path,
 static int frct_rib_readdir(char *** buf)
 {
         *buf = malloc(sizeof(**buf));
+        if (*buf == NULL)
+                goto fail_malloc;
 
         (*buf)[0] = strdup("frct");
+        if ((*buf)[0] == NULL)
+                goto fail_strdup;
 
         return 1;
+
+ fail_strdup:
+        free(*buf);
+ fail_malloc:
+        return -ENOMEM;
 }
 
 static int frct_rib_getattr(const char *      path,

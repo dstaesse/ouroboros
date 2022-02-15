@@ -273,7 +273,7 @@ static int lsdb_rib_readdir(char *** buf)
                 if ((*buf)[idx] == NULL) {
                         while (idx-- > 0)
                                 free((*buf)[idx]);
-                        free(buf);
+                        free(*buf);
                         pthread_rwlock_unlock(&ls.db_lock);
                         return -ENOMEM;
                 }

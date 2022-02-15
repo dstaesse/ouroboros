@@ -312,7 +312,7 @@ static int dt_rib_readdir(char *** buf)
                 if ((*buf)[idx] == NULL) {
                         while (idx-- > 0)
                                 free((*buf)[idx]);
-                        free(buf);
+                        free(*buf);
                         pthread_mutex_unlock(&dt.stat[i].lock);
                         pthread_rwlock_unlock(&dt.lock);
                         return -ENOMEM;
