@@ -115,19 +115,11 @@ void pft_flush(struct pft * pft)
 
 static uint64_t hash(uint64_t key)
 {
-        void *   res;
-        uint64_t ret;
-        uint8_t  keys[4];
+        uint64_t res[2];
 
-        memcpy(keys, &key, 4);
+        mem_hash(HASH_MD5, res, (uint8_t *) &key, sizeof(key));
 
-        mem_hash(HASH_MD5, &res, keys, 4);
-
-        ret = (* (uint64_t *) res);
-
-        free(res);
-
-        return ret;
+        return res[0];
 }
 
 static uint64_t calc_key(struct pft * pft,

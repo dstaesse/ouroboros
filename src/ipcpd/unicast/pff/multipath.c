@@ -191,7 +191,7 @@ int multipath_pff_nhop(struct pff_i * pff_i,
         assert(len > 0);
 
         /* Rotate fds left. */
-        memcpy(fds, fds + 1, (len - 1) * sizeof(*fds));
+        memmove(fds, fds + 1, (len - 1) * sizeof(*fds));
         fds[len - 1] = fd;
 
         pthread_rwlock_unlock(&pff_i->lock);
