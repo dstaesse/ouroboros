@@ -130,9 +130,6 @@ void            ipcp_set_state(enum ipcp_state state);
 
 enum ipcp_state ipcp_get_state(void);
 
-int             ipcp_wait_state(enum ipcp_state         state,
-                                const struct timespec * timeout);
-
 int             ipcp_parse_arg(int    argc,
                                char * argv[]);
 

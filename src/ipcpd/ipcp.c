@@ -954,37 +954,6 @@ enum ipcp_state ipcp_get_state()
         return state;
 }
 
-int ipcp_wait_state(enum ipcp_state         state,
-                    const struct timespec * timeout)
-{
-        struct timespec abstime;
-        int ret = 0;
-
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-        ts_add(&abstime, timeout, &abstime);
-
-        pthread_mutex_lock(&ipcpi.state_mtx);
-
-        pthread_cleanup_push(__cleanup_mutex_unlock, &ipcpi.state_mtx);
-
-        while (ipcpi.state != state
-               && ipcpi.state != IPCP_SHUTDOWN
-               && ipcpi.state != IPCP_NULL
-               && ret != -ETIMEDOUT) {
-                if (timeout == NULL)
-                        ret = -pthread_cond_wait(&ipcpi.state_cond,
-                                                 &ipcpi.state_mtx);
-                else
-                        ret = -pthread_cond_timedwait(&ipcpi.state_cond,
-                                                      &ipcpi.state_mtx,
-                                                      &abstime);
-        }
-
-        pthread_cleanup_pop(true);
-
-        return ret;
-}
-
 void ipcp_lock_to_core(void)
 {
 #if defined(__linux__) && !defined(DISABLE_CORE_LOCK)
