@@ -187,7 +187,7 @@ static ssize_t enroll_pack(uint8_t ** buf)
 
         *buf = malloc(len);
         if (*buf == NULL)
-                return -1;
+                return -ENOMEM;
 
         enroll_msg__pack(&msg, *buf);
 
@@ -236,7 +236,7 @@ static void * enroll_handle(void * o)
                 enroll_msg__free_unpacked(msg, NULL);
 
                 len = enroll_pack(&reply);
-                if (reply == NULL) {
+                if (len < 0) {
                         log_err("Failed to pack enrollment message.");
                         connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
