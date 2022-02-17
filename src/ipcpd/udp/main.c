@@ -765,7 +765,7 @@ static uint32_t ddns_resolve(char *   name,
 
         close(pipe_fd[1]);
 
-        count = read(pipe_fd[0], buf, IPCP_UDP_BUF_SIZE);
+        count = read(pipe_fd[0], buf, IPCP_UDP_BUF_SIZE - 1);
         if (count <= 0) {
                 log_err("Failed to communicate with nslookup.");
                 close(pipe_fd[0]);
