@@ -143,7 +143,7 @@ static int fa_rib_read(const char * path,
 
         fd = atoi(entry);
 
-        if (fd < 0 || fd > PROG_MAX_FLOWS)
+        if (fd < 0 || fd >= PROG_MAX_FLOWS)
                 return -1;
 
         if (len < 1536)
@@ -303,7 +303,7 @@ static int eid_to_fd(uint64_t eid)
 
         fd = eid & 0xFFFFFFFF;
 
-        if (fd < 0 || fd > PROG_MAX_FLOWS)
+        if (fd < 0 || fd >= PROG_MAX_FLOWS)
                 return -1;
 
         flow = &fa.flows[fd];
