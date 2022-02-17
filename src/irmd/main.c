@@ -1872,6 +1872,7 @@ void * irm_sanitize(void * o)
                         return (void *) 0;
 
                 pthread_rwlock_wrlock(&irmd.reg_lock);
+                pthread_cleanup_push(__cleanup_rwlock_unlock, &irmd.reg_lock);
 
                 list_for_each_safe(p, h, &irmd.spawned_pids) {
                         struct pid_el * e = list_entry(p, struct pid_el, next);
@@ -1919,8 +1920,10 @@ void * irm_sanitize(void * o)
                         }
                 }
 
-                pthread_rwlock_unlock(&irmd.reg_lock);
+                pthread_cleanup_pop(true);
+
                 pthread_rwlock_wrlock(&irmd.flows_lock);
+                pthread_cleanup_push(__cleanup_rwlock_unlock, &irmd.flows_lock);
 
                 list_for_each_safe(p, h, &irmd.irm_flows) {
                         int ipcpi;
@@ -1945,9 +1948,7 @@ void * irm_sanitize(void * o)
                                 irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 ipcpi   = f->n_1_pid;
                                 flow_id = f->flow_id;
-                                pthread_rwlock_unlock(&irmd.flows_lock);
                                 ipcp_flow_dealloc(ipcpi, flow_id, DEALLOC_TIME);
-                                pthread_rwlock_wrlock(&irmd.flows_lock);
                                 continue;
                         }
 
@@ -1963,7 +1964,7 @@ void * irm_sanitize(void * o)
                         }
                 }
 
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_cleanup_pop(true);
 
                 nanosleep(&timeout, NULL);
         }
