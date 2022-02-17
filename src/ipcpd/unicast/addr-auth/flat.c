@@ -29,18 +29,10 @@
 #define OUROBOROS_PREFIX "flat-addr-auth"
 
 #include <ouroboros/logs.h>
-#include <ouroboros/errno.h>
-#include <ouroboros/time_utils.h>
-#include <ouroboros/utils.h>
+#include <ouroboros/random.h>
 
 #include "ipcp.h"
 #include "flat.h"
-
-#include <time.h>
-#include <stdlib.h>
-#include <math.h>
-#include <string.h>
-#include <assert.h>
 
 #define NAME_LEN 8
 
@@ -75,13 +67,10 @@ int flat_fini(void)
 
 uint64_t flat_address(void)
 {
-        struct timespec t;
-        uint32_t        addr;
+        uint32_t addr = INVALID_ADDRESS;
 
-        clock_gettime(CLOCK_REALTIME, &t);
-        srand(t.tv_nsec);
-
-        addr = (rand() % (RAND_MAX - 1) + 1) & 0xFFFFFFFF;
+        while (addr == INVALID_ADDRESS)
+                random_buffer(&addr,sizeof(addr));
 
         return addr;
 }
