@@ -1883,17 +1883,12 @@ static int dht_del(struct dht *    dht,
 {
         struct dht_entry * e;
 
-        pthread_rwlock_wrlock(&dht->lock);
-
         e = dht_find_entry(dht, key);
         if (e == NULL) {
-                pthread_rwlock_unlock(&dht->lock);
                 return -EPERM;
         }
 
         dht_entry_del_addr(e, addr);
-
-        pthread_rwlock_unlock(&dht->lock);
 
         return 0;
 }
@@ -1917,11 +1912,11 @@ static buffer_t dht_retrieve(struct dht *    dht,
         if (buf.len == 0)
                 goto fail;
 
-        pos = malloc(sizeof(dht->addr) * buf.len);
-        if (pos == NULL)
+        buf.data = malloc(sizeof(dht->addr) * buf.len);
+        if (buf.data == NULL)
                 goto fail;
 
-        buf.data = (uint8_t *) pos;
+        pos = (uint64_t *) buf.data;
 
         list_for_each(p, &e->vals) {
                 struct val * v = list_entry(p, struct val, next);
