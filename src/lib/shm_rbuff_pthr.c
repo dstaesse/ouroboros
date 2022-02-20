@@ -203,9 +203,13 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
         }
 
         if (idx != -ETIMEDOUT) {
-                idx = *tail_el_ptr(rb);
-                *rb->tail = (*rb->tail + 1) & ((SHM_RBUFF_SIZE) - 1);
-                pthread_cond_broadcast(rb->del);
+                if (*rb->acl & ACL_FLOWDOWN)
+                        idx = -EFLOWDOWN;
+                else {
+                        idx = *tail_el_ptr(rb);
+                        *rb->tail = (*rb->tail + 1) & ((SHM_RBUFF_SIZE) - 1);
+                        pthread_cond_broadcast(rb->del);
+                }
         }
 
         pthread_cleanup_pop(true);
