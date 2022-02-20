@@ -799,50 +799,42 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
 
 static void * eth_ipcp_mgmt_handler(void * o)
 {
-        int                 ret;
-        struct timespec     timeout = {(MGMT_TIMEO / 1000),
-                                       (MGMT_TIMEO % 1000) * MILLION};
-        struct timespec     abstime;
-        struct mgmt_frame * frame;
-
         (void) o;
 
-        pthread_cleanup_push(__cleanup_mutex_unlock, &eth_data.mgmt_lock);
-
         while (true) {
-                ret = 0;
+                int                 ret = 0;
+                struct timespec     timeout = {(MGMT_TIMEO / 1000),
+                                               (MGMT_TIMEO % 1000) * MILLION};
+                struct timespec     abstime;
+                struct mgmt_frame * frame = NULL;
 
                 clock_gettime(PTHREAD_COND_CLOCK, &abstime);
                 ts_add(&abstime, &timeout, &abstime);
 
                 pthread_mutex_lock(&eth_data.mgmt_lock);
+                pthread_cleanup_push(__cleanup_mutex_unlock,
+                                     &eth_data.mgmt_lock);
 
                 while (list_is_empty(&eth_data.mgmt_frames) &&
                        ret != -ETIMEDOUT)
                         ret = -pthread_cond_timedwait(&eth_data.mgmt_cond,
                                                       &eth_data.mgmt_lock,
                                                       &abstime);
+                if (ret != -ETIMEDOUT)
+                        frame = list_first_entry((&eth_data.mgmt_frames),
+                                                 struct mgmt_frame, next);
+                if (frame != NULL)
+                        list_del(&frame->next);
 
-                if (ret == -ETIMEDOUT) {
-                        pthread_mutex_unlock(&eth_data.mgmt_lock);
+                pthread_cleanup_pop(true);
+
+                if (frame == NULL)
                         continue;
-                }
-
-                frame = list_first_entry((&eth_data.mgmt_frames),
-                                         struct mgmt_frame, next);
-                if (frame == NULL) {
-                        pthread_mutex_unlock(&eth_data.mgmt_lock);
-                        continue;
-                }
-
-                list_del(&frame->next);
-                pthread_mutex_unlock(&eth_data.mgmt_lock);
 
                 eth_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_addr);
+
                 free(frame);
         }
-
-        pthread_cleanup_pop(false);
 
         return (void *) 0;
 }
