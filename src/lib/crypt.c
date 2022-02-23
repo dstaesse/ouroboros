@@ -217,6 +217,9 @@ static int openssl_encrypt(struct flow *        f,
         in = shm_du_buff_head(sdb);
         in_sz = shm_du_buff_tail(sdb) - in;
 
+        if (in_sz == 0)
+                return 0;
+
         if (random_buffer(iv, IVSZ) < 0)
                 goto fail_iv;
 
