@@ -33,6 +33,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
+#include <ouroboros/list.h>
 #include <ouroboros/local-dev.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/fccntl.h>
@@ -67,16 +68,6 @@
 #define SECMEMSZ  16384
 #define SYMMKEYSZ 32
 #define MSGBUFSZ  2048
-
-struct flow_set {
-        size_t idx;
-};
-
-struct fqueue {
-        int    fqueue[2 * SHM_BUFFER_SIZE]; /* Safe copy from shm. */
-        size_t fqsize;
-        size_t next;
-};
 
 enum port_state {
         PORT_NULL = 0,
@@ -117,6 +108,25 @@ struct flow {
         struct timespec       rcv_timeo;
 
         struct frcti *        frcti;
+};
+
+struct flow_set_entry {
+        struct list_head next;
+
+        int fd;
+};
+
+struct flow_set {
+        size_t idx;
+
+        struct list_head flows;
+        pthread_rwlock_t lock;
+};
+
+struct fqueue {
+        int    fqueue[2 * SHM_BUFFER_SIZE]; /* Safe copy from shm. */
+        size_t fqsize;
+        size_t next;
 };
 
 struct {
@@ -1254,24 +1264,36 @@ ssize_t flow_read(int    fd,
 
 struct flow_set * fset_create()
 {
-        struct flow_set * set = malloc(sizeof(*set));
+        struct flow_set * set;
+
+        set = malloc(sizeof(*set));
         if (set == NULL)
-                return NULL;
+                goto fail_malloc;
+
+        if (pthread_rwlock_init(&set->lock, NULL))
+                goto fail_lock_init;
 
         assert(ai.fqueues);
 
         pthread_rwlock_wrlock(&ai.lock);
 
         set->idx = bmp_allocate(ai.fqueues);
-        if (!bmp_is_id_valid(ai.fqueues, set->idx)) {
-                pthread_rwlock_unlock(&ai.lock);
-                free(set);
-                return NULL;
-        }
+        if (!bmp_is_id_valid(ai.fqueues, set->idx))
+                goto fail_bmp_alloc;
 
         pthread_rwlock_unlock(&ai.lock);
 
+        list_head_init(&set->flows);
+
         return set;
+
+ fail_bmp_alloc:
+        pthread_rwlock_unlock(&ai.lock);
+        pthread_rwlock_destroy(&set->lock);
+ fail_lock_init:
+        free(set);
+ fail_malloc:
+        return NULL;
 }
 
 void fset_destroy(struct flow_set * set)
@@ -1286,6 +1308,8 @@ void fset_destroy(struct flow_set * set)
         bmp_release(ai.fqueues, set->idx);
 
         pthread_rwlock_unlock(&ai.lock);
+
+        pthread_rwlock_destroy(&set->lock);
 
         free(set);
 }
@@ -1310,8 +1334,22 @@ void fqueue_destroy(struct fqueue * fq)
 
 void fset_zero(struct flow_set * set)
 {
+        struct list_head * p;
+        struct list_head * h;
+
         if (set == NULL)
                 return;
+
+        pthread_rwlock_wrlock(&set->lock);
+
+        list_for_each_safe(p, h, &set->flows) {
+                struct flow_set_entry * e;
+                e = list_entry(p, struct flow_set_entry, next);
+                list_del(&e->next);
+                free(e);
+        }
+
+        pthread_rwlock_unlock(&set->lock);
 
         shm_flow_set_zero(ai.fqset, set->idx);
 }
@@ -1319,21 +1357,34 @@ void fset_zero(struct flow_set * set)
 int fset_add(struct flow_set * set,
              int               fd)
 {
-        int    ret;
-        size_t packets;
-        size_t i;
+        struct flow_set_entry * fse;
+        int                     ret;
+        size_t                  packets;
+        size_t                  i;
 
-        if (set == NULL || fd < 0 || fd > SYS_MAX_FLOWS)
+        if (set == NULL || fd < 0 || fd >= SYS_MAX_FLOWS)
                 return -EINVAL;
+
+        fse = malloc(sizeof(*fse));
+        if (fse == NULL)
+                return -ENOMEM;
 
         pthread_rwlock_wrlock(&ai.lock);
 
         if (ai.flows[fd].flow_id < 0) {
-                pthread_rwlock_unlock(&ai.lock);
-                return -EINVAL;
+                ret = -EINVAL;
+                goto fail;
         }
 
         ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].flow_id);
+        if (ret < 0)
+                goto fail;
+
+        pthread_rwlock_wrlock(&set->lock);
+
+        list_add_tail(&fse->next, &set->flows);
+
+        pthread_rwlock_unlock(&set->lock);
 
         packets = shm_rbuff_queued(ai.flows[fd].rx_rb);
         for (i = 0; i < packets; i++)
@@ -1342,12 +1393,20 @@ int fset_add(struct flow_set * set,
         pthread_rwlock_unlock(&ai.lock);
 
         return ret;
+
+ fail:
+        pthread_rwlock_unlock(&ai.lock);
+        free(fse);
+        return ret;
 }
 
 void fset_del(struct flow_set * set,
               int               fd)
 {
-        if (set == NULL || fd < 0 || fd > SYS_MAX_FLOWS)
+        struct list_head * p;
+        struct list_head * h;
+
+        if (set == NULL || fd < 0 || fd >= SYS_MAX_FLOWS)
                 return;
 
         pthread_rwlock_rdlock(&ai.lock);
@@ -1355,15 +1414,29 @@ void fset_del(struct flow_set * set,
         if (ai.flows[fd].flow_id >= 0)
                 shm_flow_set_del(ai.fqset, set->idx, ai.flows[fd].flow_id);
 
+        pthread_rwlock_wrlock(&set->lock);
+
+        list_for_each_safe(p, h, &set->flows) {
+                struct flow_set_entry * e;
+                e = list_entry(p, struct flow_set_entry, next);
+                if (e->fd == fd) {
+                        list_del(&e->next);
+                        free(e);
+                        break;
+                }
+        }
+
+        pthread_rwlock_unlock(&set->lock);
+
         pthread_rwlock_unlock(&ai.lock);
 }
 
 bool fset_has(const struct flow_set * set,
               int                     fd)
 {
-        bool ret = false;
+        bool ret;
 
-        if (set == NULL || fd < 0 || fd > SYS_MAX_FLOWS)
+        if (set == NULL || fd < 0 || fd >= SYS_MAX_FLOWS)
                 return false;
 
         pthread_rwlock_rdlock(&ai.lock);
