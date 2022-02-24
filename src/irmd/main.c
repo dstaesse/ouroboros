@@ -2078,6 +2078,7 @@ static void * mainloop(void * o)
                 if (msg == NULL) {
                         close(sfd);
                         irm_msg__free_unpacked(msg, NULL);
+                        free(ret_msg);
                         continue;
                 }
 
