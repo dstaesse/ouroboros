@@ -395,12 +395,6 @@ static int timerwheel_ack(int            fd,
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        slot = DELT_ACK >> ACKQ_RES;
-        if (slot >= ACKQ_SLOTS) { /* Out of timerwheel range. */
-                free(a);
-                return -EPERM;
-        }
-
         slot = (((ts_to_ns(now) + DELT_ACK) >> ACKQ_RES) + 1)
                 & (ACKQ_SLOTS - 1);
 
