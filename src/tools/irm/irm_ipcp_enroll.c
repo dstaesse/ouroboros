@@ -64,8 +64,8 @@ static int get_layer_name(const char * ipcp,
                           char *       layer_name)
 {
         struct ipcp_info * ipcps;
-        size_t             len;
-        size_t             i;
+        ssize_t            len;
+        ssize_t            i;
 
         len = irm_list_ipcps(&ipcps);
         for (i = 0; i < len; i++)
@@ -146,40 +146,39 @@ int do_enroll_ipcp(int     argc,
         }
 
         for (i = 0; i < len; i++) {
+                char enr_layer[LAYER_NAME_SIZE];
                 if (ipcps[i].type != type)
                         continue;
 
-                if (wildcard_match(ipcps[i].name, ipcp) == 0) {
-                        char enr_layer[LAYER_NAME_SIZE];
+                if (wildcard_match(ipcps[i].name, ipcp) != 0)
+                        continue;
 
-                        pid = ipcps[i].pid;
+                pid = ipcps[i].pid;
 
-                        if (irm_enroll_ipcp(pid, dst)) {
-                                printf("Failed to enroll IPCP.\n");
-                                goto fail;
-                        }
+                if (irm_enroll_ipcp(pid, dst)) {
+                        printf("Failed to enroll IPCP.\n");
+                        goto fail;
+                }
 
-                        if (get_layer_name(ipcps[i].name, enr_layer)) {
-                                printf("Could not get layer name.\n");
-                                goto fail;
-                        }
+                if (get_layer_name(ipcps[i].name, enr_layer)) {
+                        printf("Could not get layer name.\n");
+                        goto fail;
+                }
 
-                        if (layer != NULL && strcmp(enr_layer, layer)) {
-                                printf("Enrollment destination does not "
-                                       "match requested layer.\n");
-                                goto fail;
-                        }
+                if (layer != NULL && strcmp(enr_layer, layer)) {
+                        printf("Enrollment destination does not "
+                               "match requested layer.\n");
+                        goto fail;
+                }
 
-                        if (autobind && irm_bind_process(pid, ipcp)) {
-                                printf("Failed to bind %d to %s.\n", pid, ipcp);
-                                goto fail;
-                        }
+                if (autobind && irm_bind_process(pid, ipcp)) {
+                        printf("Failed to bind %d to %s.\n", pid, ipcp);
+                        goto fail;
+                }
 
-                        if (autobind && irm_bind_process(pid, enr_layer)) {
-                                printf("Failed to bind %d to %s.\n",
-                                       pid, enr_layer);
-                                goto fail;
-                        }
+                if (autobind && irm_bind_process(pid, enr_layer)) {
+                        printf("Failed to bind %d to %s.\n", pid, enr_layer);
+                        goto fail;
                 }
         }
 
