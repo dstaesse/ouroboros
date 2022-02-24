@@ -72,24 +72,28 @@ static int local_data_init(void)
 
         local_data.flows = fset_create();
         if (local_data.flows == NULL)
-                return -ENFILE;
+                goto fail_fset;
 
         local_data.fq = fqueue_create();
-        if (local_data.fq == NULL) {
-                fset_destroy(local_data.flows);
-                return -ENOMEM;
-        }
+        if (local_data.fq == NULL)
+                goto fail_fqueue;
 
         local_data.shim_data = shim_data_create();
-        if (local_data.shim_data == NULL) {
-                fqueue_destroy(local_data.fq);
-                fset_destroy(local_data.flows);
-                return -ENOMEM;
-        }
+        if (local_data.shim_data == NULL)
+                goto fail_shim_data;
 
-        pthread_rwlock_init(&local_data.lock, NULL);
-
+        if (pthread_rwlock_init(&local_data.lock, NULL) < 0)
+                goto fail_rwlock_init;
         return 0;
+
+ fail_rwlock_init:
+        shim_data_destroy(local_data.shim_data);
+ fail_shim_data:
+        fqueue_destroy(local_data.fq);
+ fail_fqueue:
+        fset_destroy(local_data.flows);
+ fail_fset:
+        return -ENOMEM;
 }
 
 static void local_data_fini(void){

@@ -1269,7 +1269,7 @@ static void bucket_refresh(struct dht *       dht,
                 struct contact * d;
                 c = list_first_entry(&b->contacts, struct contact, next);
                 d = contact_create(c->id, dht->b, c->addr);
-                if (c != NULL)
+                if (d != NULL)
                         list_add(&d->next, r);
                 return;
         }
@@ -1912,11 +1912,11 @@ static buffer_t dht_retrieve(struct dht *    dht,
         if (buf.len == 0)
                 goto fail;
 
-        buf.data = malloc(sizeof(dht->addr) * buf.len);
-        if (buf.data == NULL)
+        pos = malloc(sizeof(dht->addr) * buf.len);
+        if (pos == NULL)
                 goto fail;
 
-        pos = (uint64_t *) buf.data;
+        buf.data = (uint8_t *) pos;
 
         list_for_each(p, &e->vals) {
                 struct val * v = list_entry(p, struct val, next);
@@ -1931,8 +1931,8 @@ static buffer_t dht_retrieve(struct dht *    dht,
 
  fail:
         pthread_rwlock_unlock(&dht->lock);
-        buf.len = 0;
-
+        buf.len  = 0;
+        buf.data = NULL;
         return buf;
 }
 
@@ -2844,7 +2844,8 @@ void * dht_create(void)
         if ((int) dht->eid < 0)
                 goto fail_tpm_start;
 
-        notifier_reg(handle_event, dht);
+        if (notifier_reg(handle_event, dht))
+                goto fail_notifier_reg;
 #else
         (void) handle_event;
         (void) dht_handle_packet;
@@ -2854,6 +2855,8 @@ void * dht_create(void)
 
         return (void *) dht;
 #ifndef __DHT_TEST__
+ fail_notifier_reg:
+        tpm_stop(dht->tpm);
  fail_tpm_start:
         tpm_destroy(dht->tpm);
  fail_tpm_create:

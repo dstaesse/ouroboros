@@ -141,7 +141,9 @@ static void dir_entry_destroy(struct dir_entry * entry)
 
 struct shim_data * shim_data_create()
 {
-        struct shim_data * sd = malloc(sizeof(*sd));
+        struct shim_data * sd;
+
+        sd = malloc(sizeof(*sd));
         if (sd == NULL)
                 return NULL;
 
@@ -151,11 +153,23 @@ struct shim_data * shim_data_create()
         list_head_init(&sd->dir_queries);
 
         /* init the locks */
-        pthread_rwlock_init(&sd->reg_lock, NULL);
-        pthread_rwlock_init(&sd->dir_lock, NULL);
-        pthread_mutex_init(&sd->dir_queries_lock, NULL);
+        if (pthread_rwlock_init(&sd->reg_lock, NULL) < 0)
+                goto fail_reg_lock_init;
+
+        if (pthread_rwlock_init(&sd->dir_lock, NULL) < 0)
+                goto fail_dir_lock_init;
+
+        if (pthread_mutex_init(&sd->dir_queries_lock, NULL) < 0)
+                goto fail_mutex_init;
 
         return sd;
+
+ fail_mutex_init:
+        pthread_rwlock_destroy(&sd->dir_lock);
+ fail_dir_lock_init:
+        pthread_rwlock_destroy(&sd->reg_lock);
+ fail_reg_lock_init:
+        return NULL;
 }
 
 static void clear_registry(struct shim_data * data)

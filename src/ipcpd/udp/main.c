@@ -776,7 +776,7 @@ static uint32_t ddns_resolve(char *   name,
 
         waitpid(pid, &wstatus, 0);
         if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0 &&
-            count != IPCP_UDP_BUF_SIZE)
+            count != IPCP_UDP_BUF_SIZE - 1)
                 log_dbg("Succesfully communicated with nslookup.");
         else
                 log_err("Failed to resolve DNS address.");
