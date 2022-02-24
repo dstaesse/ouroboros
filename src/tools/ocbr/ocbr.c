@@ -155,17 +155,22 @@ int main(int argc, char ** argv)
                 if (s_apn == NULL) {
                         printf("No server specified.\n");
                         usage();
-                        return 0;
+                        return 1;
                 }
 
                 if (size > BUF_SIZE) {
                         printf("Maximum size: %ld.\n", BUF_SIZE);
-                        return 0;
+                        return 1;
                 }
 
                 if (size < 0) {
                         printf("Size overflow.\n");
-                        return 0;
+                        return 1;
+                }
+
+                if (rate <= 0) {
+                        printf("Invalid rate.\n");
+                        return 1;
                 }
 
                 ret = client_main(s_apn, duration, size, rate, flood, sleep);
