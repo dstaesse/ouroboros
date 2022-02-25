@@ -217,8 +217,7 @@ static int openssl_encrypt(struct flow *        f,
         in = shm_du_buff_head(sdb);
         in_sz = shm_du_buff_tail(sdb) - in;
 
-        if (in_sz == 0)
-                return 0;
+        assert(in_sz > 0);
 
         if (random_buffer(iv, IVSZ) < 0)
                 goto fail_iv;
@@ -229,11 +228,7 @@ static int openssl_encrypt(struct flow *        f,
 
         EVP_CIPHER_CTX_reset(f->ctx);
 
-        ret = EVP_EncryptInit_ex(f->ctx,
-                                 EVP_aes_256_cbc(),
-                                 NULL,
-                                 f->key,
-                                 iv);
+        ret = EVP_EncryptInit_ex(f->ctx, EVP_aes_256_cbc(), NULL, f->key, iv);
         if (ret != 1)
                 goto fail_encrypt_init;
 
@@ -287,13 +282,17 @@ static int openssl_decrypt(struct flow *        f,
         int       in_sz;
         int       tmp_sz;
 
+        in = shm_du_buff_head(sdb);
+        in_sz = shm_du_buff_tail(sdb) - in;
+        if (in_sz < IVSZ)
+                return -ECRYPT;
+
         in = shm_du_buff_head_release(sdb, IVSZ);
 
         memcpy(iv, in, IVSZ);
 
         in = shm_du_buff_head(sdb);
-
-        in_sz = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+        in_sz = shm_du_buff_tail(sdb) - in;
 
         out = malloc(in_sz);
         if (out == NULL)
@@ -301,11 +300,7 @@ static int openssl_decrypt(struct flow *        f,
 
         EVP_CIPHER_CTX_reset(f->ctx);
 
-        ret = EVP_DecryptInit_ex(f->ctx,
-                                 EVP_aes_256_cbc(),
-                                 NULL,
-                                 f->key,
-                                 iv);
+        ret = EVP_DecryptInit_ex(f->ctx, EVP_aes_256_cbc(), NULL, f->key, iv);
         if (ret != 1)
                 goto fail_decrypt_init;
 

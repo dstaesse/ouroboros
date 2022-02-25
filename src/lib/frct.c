@@ -232,16 +232,29 @@ static void __send_frct_pkt(int      fd,
         pci->ackno = hton32(ackno);
 
         f = &ai.flows[fd];
+
+        pthread_rwlock_rdlock(&ai.lock);
+
+        if (f->qs.cypher_s > 0 && crypt_encrypt(f, sdb) < 0)
+                goto fail;
+
 #ifdef RXM_BLOCKING
-        if (shm_rbuff_write_b(f->tx_rb, idx, NULL)) {
+        if (shm_rbuff_write_b(f->tx_rb, idx, NULL))
 #else
-        if (shm_rbuff_write(f->tx_rb, idx)) {
+        if (shm_rbuff_write(f->tx_rb, idx))
 #endif
-                ipcp_sdb_release(sdb);
-                return;
-        }
+                goto fail;
 
         shm_flow_set_notify(f->set, f->flow_id, FLOW_PKT);
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        return;
+
+ fail:
+        pthread_rwlock_unlock(&ai.lock);
+        ipcp_sdb_release(sdb);
+        return;
 }
 
 static void send_frct_pkt(struct frcti * frcti)
@@ -287,29 +300,7 @@ static void send_frct_pkt(struct frcti * frcti)
 
 static void __send_rdv(int fd)
 {
-        struct shm_du_buff * sdb;
-        struct frct_pci *    pci;
-        ssize_t              idx;
-        struct flow *        f;
-
-        /* Raw calls needed to bypass frcti. */
-        idx = shm_rdrbuff_alloc_b(ai.rdrb, sizeof(*pci), NULL, &sdb, NULL);
-        if (idx < 0)
-                return;
-
-        pci = (struct frct_pci *) shm_du_buff_head(sdb);
-        memset(pci, 0, sizeof(*pci));
-
-        pci->flags = FRCT_RDVS;
-
-        f = &ai.flows[fd];
-
-        if (shm_rbuff_write_b(f->tx_rb, idx, NULL)) {
-                ipcp_sdb_release(sdb);
-                return;
-        }
-
-        shm_flow_set_notify(f->set, f->flow_id, FLOW_PKT);
+        __send_frct_pkt(fd, FRCT_RDVS, 0, 0);
 }
 
 static struct frcti * frcti_create(int fd)

@@ -153,8 +153,6 @@ struct {
         pthread_rwlock_t      lock;
 } ai;
 
-#include "frct.c"
-
 static void port_destroy(struct port * p)
 {
         pthread_mutex_lock(&p->state_lock);
@@ -265,6 +263,7 @@ static void flow_clear(int fd)
 }
 
 #include "crypt.c"
+#include "frct.c"
 
 static void flow_fini(int fd)
 {
