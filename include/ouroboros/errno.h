@@ -31,7 +31,8 @@
 #define EIPCP        1003 /* Failed to communicate with IPCP */
 #define EIPCPSTATE   1004 /* Target in wrong state           */
 #define EFLOWDOWN    1005 /* Flow is down                    */
-#define ECRYPT       1006 /* Encryption error                */
-#define ENAME        1007 /* Naming error                    */
+#define EFLOWPEER    1006 /* Flow is down (peer timed out)   */
+#define ECRYPT       1007 /* Encryption error                */
+#define ENAME        1008 /* Naming error                    */
 
 #endif /* OUROBOROS_ERRNO_H */

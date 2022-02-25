@@ -26,15 +26,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define DEFAULT_PEER_TIMEOUT 120000
+
 typedef struct qos_spec {
-        uint32_t delay;         /* In ms */
-        uint64_t bandwidth;     /* In bits/s */
-        uint8_t  availability;  /* Class of 9s */
-        uint32_t loss;          /* Packet loss */
-        uint32_t ber;           /* Bit error rate, errors per billion bits */
-        uint8_t  in_order;      /* In-order delivery, enables FRCT */
-        uint32_t max_gap;       /* In ms */
-        uint16_t cypher_s;      /* Cypher strength, 0 = no encryption */
+        uint32_t delay;         /* In ms.                                     */
+        uint64_t bandwidth;     /* In bits/s.                                 */
+        uint8_t  availability;  /* Class of 9s.                               */
+        uint32_t loss;          /* Packet loss.                               */
+        uint32_t ber;           /* Bit error rate, errors per billion bits.   */
+        uint8_t  in_order;      /* In-order delivery, enables FRCT.           */
+        uint32_t max_gap;       /* In ms.                                     */
+        uint16_t cypher_s;      /* Cypher strength (bits), 0 = no encryption. */
+        uint32_t timeout;       /* Peer timeout time, in ms, 0 = no timeout.  */
 } qosspec_t;
 
 static const qosspec_t qos_raw = {
@@ -45,7 +48,8 @@ static const qosspec_t qos_raw = {
         .ber          = 1,
         .in_order     = 0,
         .max_gap      = UINT32_MAX,
-        .cypher_s     = 0
+        .cypher_s     = 0,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_raw_no_errors = {
@@ -56,7 +60,8 @@ static const qosspec_t qos_raw_no_errors = {
         .ber          = 0,
         .in_order     = 0,
         .max_gap      = UINT32_MAX,
-        .cypher_s     = 0
+        .cypher_s     = 0,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_raw_crypt = {
@@ -67,7 +72,8 @@ static const qosspec_t qos_raw_crypt = {
         .ber          = 0,
         .in_order     = 0,
         .max_gap      = UINT32_MAX,
-        .cypher_s     = 256
+        .cypher_s     = 256,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_best_effort = {
@@ -78,7 +84,8 @@ static const qosspec_t qos_best_effort = {
         .ber          = 0,
         .in_order     = 1,
         .max_gap      = UINT32_MAX,
-        .cypher_s     = 0
+        .cypher_s     = 0,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_best_effort_crypt = {
@@ -89,7 +96,8 @@ static const qosspec_t qos_best_effort_crypt = {
         .ber          = 0,
         .in_order     = 1,
         .max_gap      = UINT32_MAX,
-        .cypher_s     = 256
+        .cypher_s     = 256,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_video   = {
@@ -100,7 +108,8 @@ static const qosspec_t qos_video   = {
         .ber          = 0,
         .in_order     = 1,
         .max_gap      = 100,
-        .cypher_s     = 0
+        .cypher_s     = 0,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_video_crypt   = {
@@ -111,7 +120,8 @@ static const qosspec_t qos_video_crypt   = {
         .ber          = 0,
         .in_order     = 1,
         .max_gap      = 100,
-        .cypher_s     = 256
+        .cypher_s     = 256,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_voice = {
@@ -122,7 +132,8 @@ static const qosspec_t qos_voice = {
         .ber          = 0,
         .in_order     = 1,
         .max_gap      = 50,
-        .cypher_s     = 0
+        .cypher_s     = 0,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_voice_crypt = {
@@ -133,7 +144,8 @@ static const qosspec_t qos_voice_crypt = {
         .ber          = 0,
         .in_order     = 1,
         .max_gap      = 50,
-        .cypher_s     = 256
+        .cypher_s     = 256,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_data = {
@@ -144,7 +156,8 @@ static const qosspec_t qos_data = {
         .ber          = 0,
         .in_order     = 1,
         .max_gap      = 2000,
-        .cypher_s     = 0
+        .cypher_s     = 0,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 static const qosspec_t qos_data_crypt = {
@@ -155,7 +168,8 @@ static const qosspec_t qos_data_crypt = {
         .ber          = 0,
         .in_order     = 1,
         .max_gap      = 2000,
-        .cypher_s     = 256
+        .cypher_s     = 256,
+        .timeout      = DEFAULT_PEER_TIMEOUT
 };
 
 #endif /* OUROBOROS_QOS_H */

@@ -72,14 +72,15 @@ struct fa_msg {
         int8_t   response;
         uint16_t ece;
         /* QoS parameters from spec, aligned */
-        uint8_t  availability;
-        uint8_t  in_order;
         uint32_t delay;
         uint64_t bandwidth;
         uint32_t loss;
         uint32_t ber;
         uint32_t max_gap;
+        uint32_t timeout;
         uint16_t cypher_s;
+        uint8_t  availability;
+        uint8_t  in_order;
 } __attribute__((packed));
 
 struct cmd {
@@ -569,6 +570,7 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         qs.in_order     = msg->in_order;
         qs.max_gap      = ntoh32(msg->max_gap);
         qs.cypher_s     = ntoh16(msg->cypher_s);
+        qs.timeout      = ntoh32(msg->timeout);
 
         fd = fa_wait_irmd_alloc((uint8_t *) (msg + 1), qs, data, dlen);
         if (fd < 0)
@@ -840,6 +842,7 @@ int fa_alloc(int             fd,
         msg->in_order     = qs.in_order;
         msg->max_gap      = hton32(qs.max_gap);
         msg->cypher_s     = hton16(qs.cypher_s);
+        msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
         memcpy(shm_du_buff_head(sdb) + len, data, dlen);

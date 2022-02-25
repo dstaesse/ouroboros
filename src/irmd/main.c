@@ -648,7 +648,7 @@ static int connect_ipcp(pid_t        pid,
         log_dbg("Connecting %s to %s.", component, dst);
 
         if (ipcp_connect(pid, dst, component, qs)) {
-                log_err("Could not connect IPCP.");
+                log_err("Could not connect IPCP %d to %s.", pid, dst);
                 return -EPERM;
         }
 

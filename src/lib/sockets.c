@@ -181,6 +181,7 @@ qosspec_msg_t spec_to_msg(const qosspec_t * qs)
         msg.in_order     = spec.in_order;
         msg.max_gap      = spec.max_gap;
         msg.cypher_s     = spec.cypher_s;
+        msg.timeout      = spec.timeout;
 
         return msg;
 }
@@ -199,6 +200,7 @@ qosspec_t msg_to_spec(const qosspec_msg_t * msg)
         spec.in_order     = msg->in_order;
         spec.max_gap      = msg->max_gap;
         spec.cypher_s     = msg->cypher_s;
+        spec.timeout      = msg->timeout;
 
         return spec;
 }
