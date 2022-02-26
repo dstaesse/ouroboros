@@ -233,8 +233,6 @@ static void __send_frct_pkt(int      fd,
 
         f = &ai.flows[fd];
 
-        pthread_rwlock_rdlock(&ai.lock);
-
         if (f->qs.cypher_s > 0 && crypt_encrypt(f, sdb) < 0)
                 goto fail;
 
@@ -247,12 +245,9 @@ static void __send_frct_pkt(int      fd,
 
         shm_flow_set_notify(f->set, f->flow_id, FLOW_PKT);
 
-        pthread_rwlock_unlock(&ai.lock);
-
         return;
 
  fail:
-        pthread_rwlock_unlock(&ai.lock);
         ipcp_sdb_release(sdb);
         return;
 }
