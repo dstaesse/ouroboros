@@ -69,20 +69,11 @@ struct shm_rbuff {
         int               flow_id;  /* flow_id of the flow           */
 };
 
-void shm_rbuff_close(struct shm_rbuff * rb)
-{
-        assert(rb);
-
-        munmap(rb->shm_base, SHM_RB_FILE_SIZE);
-
-        free(rb);
-}
-
 #define MM_FLAGS (PROT_READ | PROT_WRITE)
 
-struct shm_rbuff * rbuff_create(pid_t pid,
-                                int   flow_id,
-                                int   flags)
+static struct shm_rbuff * rbuff_create(pid_t pid,
+                                       int   flow_id,
+                                       int   flags)
 {
         struct shm_rbuff * rb;
         int                fd;
@@ -128,6 +119,13 @@ struct shm_rbuff * rbuff_create(pid_t pid,
         free(rb);
  fail_malloc:
         return NULL;
+}
+
+static void rbuff_destroy(struct shm_rbuff * rb)
+{
+        munmap(rb->shm_base, SHM_RB_FILE_SIZE);
+
+        free(rb);
 }
 
 struct shm_rbuff * shm_rbuff_create(pid_t pid,
@@ -200,6 +198,13 @@ struct shm_rbuff * shm_rbuff_open(pid_t pid,
                                   int   flow_id)
 {
         return rbuff_create(pid, flow_id, O_RDWR);
+}
+
+void shm_rbuff_close(struct shm_rbuff * rb)
+{
+        assert(rb);
+
+        rbuff_destroy(rb);
 }
 
 #if (defined(SHM_RBUFF_LOCKLESS) &&                            \

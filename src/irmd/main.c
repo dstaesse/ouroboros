@@ -1846,8 +1846,9 @@ static void irm_fini(void)
         pthread_rwlock_destroy(&irmd.state_lock);
 
 #ifdef HAVE_FUSE
+        sleep(1);
         if (rmdir(FUSE_PREFIX))
-                log_dbg("Failed to remove " FUSE_PREFIX);
+                log_warn("Failed to remove " FUSE_PREFIX);
 #endif
 }
 

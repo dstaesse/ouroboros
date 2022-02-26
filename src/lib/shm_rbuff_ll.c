@@ -31,6 +31,11 @@ void shm_rbuff_destroy(struct shm_rbuff * rb)
 
         sprintf(fn, SHM_RBUFF_PREFIX "%d.%d", rb->pid, rb->flow_id);
 
+        __sync_bool_compare_and_swap(rb->acl, *rb->acl, ACL_FLOWDOWN);
+
+        pthread_cond_broadcast(rb->del);
+        pthread_cond_broadcast(rb->add);
+
         shm_rbuff_close(rb);
 
         shm_unlink(fn);

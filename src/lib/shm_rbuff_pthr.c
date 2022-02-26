@@ -29,7 +29,10 @@ void shm_rbuff_destroy(struct shm_rbuff * rb)
 #ifdef CONFIG_OUROBOROS_DEBUG
         pthread_mutex_lock(rb->lock);
 
-        assert(shm_rbuff_empty(rb));
+        *rb->acl = *rb->acl & ACL_FLOWDOWN;
+
+        pthread_cond_broadcast(rb->del);
+        pthread_cond_broadcast(rb->add);
 
         pthread_mutex_unlock(rb->lock);
 #endif
