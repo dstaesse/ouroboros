@@ -466,11 +466,16 @@ static void init(int     argc,
         if (strstr(argv[0], "ipcpd") == NULL) {
                 sprintf(procstr, "proc.%d", getpid());
                 /* Don't bail on fail, it just won't show metrics */
-                rib_init(procstr);
+                if (rib_init(procstr) < 0)
+                        goto fail_rib_init;
         }
 #endif
         return;
 
+#if defined PROC_FLOW_STATS
+ fail_rib_init:
+        timerwheel_fini();
+#endif
  fail_timerwheel:
         shm_flow_set_close(ai.fqset);
  fail_fqset:
