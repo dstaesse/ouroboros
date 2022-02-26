@@ -338,7 +338,7 @@ int rib_init(const char * mountpt)
         fuse_opt_free_args(&args);
         rmdir(rib.mnt);
  fail_mnt:
-        memset(rib.mnt, 0, RIB_PATH_LEN + 1);
+        memset(rib.mnt, 0, sizeof(rib.mnt));
  fail:
         return -1;
 #else
@@ -377,6 +377,8 @@ void rib_fini(void)
         pthread_rwlock_unlock(&rib.lock);
 
         pthread_rwlock_destroy(&rib.lock);
+
+        memset(rib.mnt, 0, sizeof(rib.mnt));
 #endif
 }
 
