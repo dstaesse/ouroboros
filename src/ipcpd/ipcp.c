@@ -204,11 +204,10 @@ static struct rib_ops r_ops = {
         .getattr = ipcp_rib_getattr
 };
 
+__attribute__((no_sanitize_address))
 static void * acceptloop(void * o)
 {
         int            csockfd;
-        struct timeval tv = {(SOCKET_TIMEOUT / 1000),
-                             (SOCKET_TIMEOUT % 1000) * 1000};
 
         (void) o;
 
@@ -219,10 +218,6 @@ static void * acceptloop(void * o)
                 csockfd = accept(ipcpi.sockfd, 0, 0);
                 if (csockfd < 0)
                         continue;
-
-                if (setsockopt(csockfd, SOL_SOCKET, SO_RCVTIMEO,
-                               (void *) &tv, sizeof(tv)))
-                        log_warn("Failed to set timeout on socket.");
 
                 cmd = malloc(sizeof(*cmd));
                 if (cmd == NULL) {

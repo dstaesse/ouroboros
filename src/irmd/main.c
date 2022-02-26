@@ -70,7 +70,6 @@
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 #define SHM_SAN_HOLDOFF    1000 /* ms */
 #define IPCP_HASH_LEN(e)   hash_len(e->dir_hash_algo)
-#define IB_LEN             SOCK_BUF_SIZE
 #define BIND_TIMEOUT       10   /* ms */
 #define DEALLOC_TIME       300  /*  s */
 
@@ -102,7 +101,7 @@ enum irm_state {
 struct cmd {
         struct list_head next;
 
-        uint8_t          cbuf[IB_LEN];
+        uint8_t          cbuf[SOCK_BUF_SIZE];
         size_t           len;
         int              fd;
 };
@@ -1970,11 +1969,10 @@ void * irm_sanitize(void * o)
         }
 }
 
+__attribute__((no_sanitize_address))
 static void * acceptloop(void * o)
 {
         int            csockfd;
-        struct timeval tv = {(SOCKET_TIMEOUT / 1000),
-                             (SOCKET_TIMEOUT % 1000) * 1000};
 
         (void) o;
 
@@ -1984,10 +1982,6 @@ static void * acceptloop(void * o)
                 csockfd = accept(irmd.sockfd, 0, 0);
                 if (csockfd < 0)
                         continue;
-
-                if (setsockopt(csockfd, SOL_SOCKET, SO_RCVTIMEO,
-                               (void *) &tv, sizeof(tv)))
-                        log_warn("Failed to set timeout on socket.");
 
                 cmd = malloc(sizeof(*cmd));
                 if (cmd == NULL) {
