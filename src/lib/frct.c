@@ -803,7 +803,7 @@ static void __frcti_rcv(struct frcti *       frcti,
                 if (after(ackno, frcti->snd_cr.lwe))
                         frcti->snd_cr.lwe = ackno;
 
-                if (frcti->probe && after(ackno, frcti->rttseq)) {
+                if (frcti->probe && !before(frcti->rttseq, ackno)) {
                         rtt_estimator(frcti, ts_diff_ns(&frcti->t_probe, &now));
                         frcti->probe = false;
                 }
