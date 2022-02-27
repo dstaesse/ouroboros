@@ -1084,7 +1084,7 @@ static int flow_keepalive(int fd)
                 return -EFLOWPEER;
         }
 
-        if (ts_diff_ns(&s_act, &now) > (timeo >> 2) * MILLION)
+        if (ts_diff_ns(&s_act, &now) > (timeo * MILLION) >> 2)
                 flow_send_keepalive(fd);
 
         return 0;
