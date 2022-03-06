@@ -279,6 +279,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         struct timespec    ts        = {0, FD_UPDATE_TIMEOUT * 1000};
         struct timespec    abstime;
         int                fd;
+        time_t             mpl = IPCP_UDP_MPL;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -297,7 +298,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         }
 
         /* reply to IRM */
-        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, data, len);
+        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl, data, len);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -329,6 +330,8 @@ static int ipcp_udp_port_alloc_reply(const struct sockaddr_in * saddr,
                                      const void *               data,
                                      size_t                     len)
 {
+        time_t mpl = IPCP_UDP_MPL;
+
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         if (memcmp(&udp_data.fd_to_uf[s_eid].r_saddr, saddr, sizeof(*saddr))) {
@@ -343,7 +346,7 @@ static int ipcp_udp_port_alloc_reply(const struct sockaddr_in * saddr,
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        if (ipcp_flow_alloc_reply(s_eid, response, data, len) < 0) {
+        if (ipcp_flow_alloc_reply(s_eid, response, mpl, data, len) < 0) {
                 log_dbg("Failed to reply to flow allocation.");
                 return -1;
         }

@@ -574,6 +574,7 @@ int flow_accept(qosspec_t *             qs,
         uint8_t     buf[MSGBUFSZ];
         int         err = -EIRMD;
         ssize_t     key_len;
+        time_t      mpl;
 
         memset(s, 0, SYMMKEYSZ);
 
@@ -617,7 +618,7 @@ int flow_accept(qosspec_t *             qs,
         }
 
         if (!recv_msg->has_pid || !recv_msg->has_flow_id ||
-            recv_msg->qosspec == NULL)
+            !recv_msg->has_mpl || recv_msg->qosspec == NULL)
                 goto fail_result;
 
         if (recv_msg->pk.len != 0 &&
@@ -632,6 +633,8 @@ int flow_accept(qosspec_t *             qs,
         fd = flow_init(recv_msg->flow_id, recv_msg->pid,
                        msg_to_spec(recv_msg->qosspec), s);
 
+        mpl = recv_msg->mpl;
+
         irm_msg__free_unpacked(recv_msg, NULL);
 
         if (fd < 0)
@@ -642,7 +645,7 @@ int flow_accept(qosspec_t *             qs,
         assert(ai.flows[fd].frcti == NULL);
 
         if (ai.flows[fd].qs.in_order != 0) {
-                ai.flows[fd].frcti = frcti_create(fd, DELT_A, DELT_R, DELT_MPL);
+                ai.flows[fd].frcti = frcti_create(fd, DELT_A, DELT_R, mpl);
                 if (ai.flows[fd].frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
                         flow_dealloc(fd);
@@ -678,6 +681,7 @@ static int __flow_alloc(const char *            dst,
         uint8_t       s[SYMMKEYSZ];   /* secret key for flow */
         uint8_t       buf[MSGBUFSZ];
         int           err = -EIRMD;
+        time_t        mpl;
 
         memset(s, 0, SYMMKEYSZ);
 
@@ -726,7 +730,8 @@ static int __flow_alloc(const char *            dst,
                 goto fail_result;
         }
 
-        if (!recv_msg->has_pid || !recv_msg->has_flow_id)
+        if (!recv_msg->has_pid || !recv_msg->has_flow_id ||
+            !recv_msg->has_mpl)
                 goto fail_result;
 
         if (!join && qs != NULL && qs->cypher_s != 0) {
@@ -747,6 +752,8 @@ static int __flow_alloc(const char *            dst,
         fd = flow_init(recv_msg->flow_id, recv_msg->pid,
                        qs == NULL ? qos_raw : *qs, s);
 
+        mpl = recv_msg->mpl;
+
         irm_msg__free_unpacked(recv_msg, NULL);
 
         if (fd < 0)
@@ -757,7 +764,7 @@ static int __flow_alloc(const char *            dst,
         assert(ai.flows[fd].frcti == NULL);
 
         if (ai.flows[fd].qs.in_order != 0) {
-                ai.flows[fd].frcti = frcti_create(fd, DELT_A, DELT_R, DELT_MPL);
+                ai.flows[fd].frcti = frcti_create(fd, DELT_A, DELT_R, mpl);
                 if (ai.flows[fd].frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
                         flow_dealloc(fd);
@@ -1771,6 +1778,7 @@ int ipcp_create_r(int result)
 int ipcp_flow_req_arr(const uint8_t * dst,
                       size_t          len,
                       qosspec_t       qs,
+                      time_t          mpl,
                       const void *    data,
                       size_t          dlen)
 {
@@ -1789,6 +1797,8 @@ int ipcp_flow_req_arr(const uint8_t * dst,
         msg.hash.data = (uint8_t *) dst;
         qs_msg        = spec_to_msg(&qs);
         msg.qosspec   = &qs_msg;
+        msg.has_mpl   = true;
+        msg.mpl       = mpl;
         msg.has_pk    = true;
         msg.pk.data   = (uint8_t *) data;
         msg.pk.len    = dlen;
@@ -1817,6 +1827,7 @@ int ipcp_flow_req_arr(const uint8_t * dst,
 
 int ipcp_flow_alloc_reply(int          fd,
                           int          response,
+                          time_t       mpl,
                           const void * data,
                           size_t       len)
 {
@@ -1831,6 +1842,8 @@ int ipcp_flow_alloc_reply(int          fd,
         msg.has_pk       = true;
         msg.pk.data      = (uint8_t *) data;
         msg.pk.len       = (uint32_t) len;
+        msg.has_mpl      = true;
+        msg.mpl          = mpl;
 
         pthread_rwlock_rdlock(&ai.lock);
 

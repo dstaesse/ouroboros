@@ -13,6 +13,8 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(IPCP_UNICAST_TARGET ipcpd-unicast CACHE INTERNAL "")
+set(IPCP_UNICAST_MPL 60 CACHE STRING
+    "Default maximum packet lifetime for the unicast IPCP, in seconds")
 
 protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS dir/kademlia.proto)
 

@@ -13,6 +13,8 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(IPCP_BROADCAST_TARGET ipcpd-broadcast CACHE INTERNAL "")
+set(IPCP_BROADCAST_MPL 60 CACHE STRING
+    "Default maximum packet lifetime for the broadcast IPCP, in seconds")
 
 set(SOURCE_FILES
   # Add source files here

@@ -477,6 +477,7 @@ static int fa_wait_irmd_alloc(uint8_t *    dst,
         struct timespec ts  = {0, TIMEOUT * 1000};
         struct timespec abstime;
         int             fd;
+        time_t          mpl = IPCP_UNICAST_MPL;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -497,7 +498,7 @@ static int fa_wait_irmd_alloc(uint8_t *    dst,
 
         assert(ipcpi.alloc_id == -1);
 
-        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, data, len);
+        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl, data, len);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Failed to get fd for flow.");
@@ -598,6 +599,7 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
         struct fa_flow * flow;
         uint8_t *        data;  /* Piggbacked data on flow alloc request. */
         size_t           dlen;  /* Length of piggybacked data.            */
+        time_t           mpl = IPCP_UNICAST_MPL;
 
         assert(len >= sizeof(*msg));
 
@@ -623,7 +625,7 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (ipcp_flow_alloc_reply(fd, msg->response, data, dlen))
+        if (ipcp_flow_alloc_reply(fd, msg->response, mpl, data, dlen))
                 return -EIRMD;
 
         return 0;

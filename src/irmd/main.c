@@ -1353,11 +1353,13 @@ static int flow_accept(pid_t             pid,
         f_out->flow_id = f->flow_id;
         f_out->n_pid   = f->n_pid;
         f_out->n_1_pid = f->n_1_pid;
+        f_out->qs      = f->qs;
+        f_out->mpl     = f->mpl;
         f_out->data    = f->data; /* pass owner */
         f_out->len     = f->len;
-        f_out->qs      = f->qs;
-        f->data     = NULL;
-        f->len      = 0;
+
+        f->data = NULL;
+        f->len  = 0;
 
         pthread_rwlock_unlock(&irmd.flows_lock);
 
@@ -1476,6 +1478,7 @@ static int flow_alloc(pid_t              pid,
         f_out->n_1_pid = f->n_1_pid;
         f_out->data    = f->data; /* pass owner */
         f_out->len     = f->len;
+        f_out->mpl     = f->mpl;
         f->data        = NULL;
         f->len         = 0;
 
@@ -1567,6 +1570,7 @@ static pid_t auto_execute(char ** argv)
 static int flow_req_arr(pid_t             pid,
                         struct irm_flow * f_out,
                         const uint8_t *   hash,
+                        time_t            mpl,
                         qosspec_t         qs,
                         const void *      data,
                         size_t            len)
@@ -1681,6 +1685,8 @@ static int flow_req_arr(pid_t             pid,
                 return -1;
         }
 
+        f->mpl = mpl;
+
         if (len != 0) {
                 assert(data);
                 f->data = malloc(len);
@@ -1732,18 +1738,20 @@ static int flow_req_arr(pid_t             pid,
 
 static int flow_alloc_reply(int          flow_id,
                             int          response,
+                            time_t       mpl,
                             const void * data,
                             size_t       len)
 {
         struct irm_flow * f;
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
-
         f = get_irm_flow(flow_id);
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 return -1;
         }
+
+        f->mpl = mpl;
 
         if (!response)
                 irm_flow_set_state(f, FLOW_ALLOCATED);
@@ -2168,6 +2176,8 @@ static void * mainloop(void * o)
                                 ret_msg->has_pk      = true;
                                 ret_msg->pk.data     = e.data;
                                 ret_msg->pk.len      = e.len;
+                                ret_msg->has_mpl     = true;
+                                ret_msg->mpl         = e.mpl;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_ALLOC:
@@ -2185,6 +2195,8 @@ static void * mainloop(void * o)
                                 ret_msg->has_pk      = true;
                                 ret_msg->pk.data     = e.data;
                                 ret_msg->pk.len      = e.len;
+                                ret_msg->has_mpl     = true;
+                                ret_msg->mpl         = e.mpl;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_JOIN:
@@ -2197,6 +2209,8 @@ static void * mainloop(void * o)
                                 ret_msg->flow_id     = e.flow_id;
                                 ret_msg->has_pid     = true;
                                 ret_msg->pid         = e.n_1_pid;
+                                ret_msg->has_mpl     = true;
+                                ret_msg->mpl         = e.mpl;
                         }
                         break;
                 case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
@@ -2210,6 +2224,7 @@ static void * mainloop(void * o)
                         result = flow_req_arr(msg->pid,
                                               &e,
                                               msg->hash.data,
+                                              msg->mpl,
                                               msg_to_spec(msg->qosspec),
                                               msg->pk.data,
                                               msg->pk.len);
@@ -2225,6 +2240,7 @@ static void * mainloop(void * o)
                                                : msg->pk.data == NULL);
                         result = flow_alloc_reply(msg->flow_id,
                                                   msg->response,
+                                                  msg->mpl,
                                                   msg->pk.data,
                                                   msg->pk.len);
                         break;

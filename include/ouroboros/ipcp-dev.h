@@ -31,11 +31,13 @@ int   ipcp_create_r(int result);
 int   ipcp_flow_req_arr(const uint8_t * dst,
                         size_t           len,
                         qosspec_t        qs,
+                        time_t           mpl,
                         const void *     data,
                         size_t           dlen);
 
-int    ipcp_flow_alloc_reply(int        fd,
+int    ipcp_flow_alloc_reply(int          fd,
                              int          response,
+                             time_t       mpl,
                              const void * data,
                              size_t       len);
 

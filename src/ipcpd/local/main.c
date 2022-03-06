@@ -204,6 +204,7 @@ static int ipcp_local_flow_alloc(int             fd,
         struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
         struct timespec abstime;
         int             out_fd = -1;
+        time_t          mpl    = IPCP_LOCAL_MPL;
 
         log_dbg("Allocating flow to " HASH_FMT " on fd %d.", HASH_VAL(dst), fd);
         assert(dst);
@@ -227,7 +228,8 @@ static int ipcp_local_flow_alloc(int             fd,
 
         assert(ipcpi.alloc_id == -1);
 
-        out_fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, data, len);
+        out_fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl,
+                                   data, len);
         if (out_fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Flow allocation failed: %d", out_fd);
@@ -261,6 +263,7 @@ static int ipcp_local_flow_alloc_resp(int          fd,
         struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
         struct timespec abstime;
         int             out_fd = -1;
+        time_t          mpl    = IPCP_LOCAL_MPL;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -303,7 +306,7 @@ static int ipcp_local_flow_alloc_resp(int          fd,
 
         fset_add(local_data.flows, fd);
 
-        if (ipcp_flow_alloc_reply(out_fd, response, data, len) < 0)
+        if (ipcp_flow_alloc_reply(out_fd, response, mpl, data, len) < 0)
                 return -1;
 
         log_info("Flow allocation completed, fds (%d, %d).", out_fd, fd);

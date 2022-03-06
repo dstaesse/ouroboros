@@ -62,6 +62,7 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
         f->n_pid   = n_pid;
         f->n_1_pid = n_1_pid;
         f->flow_id = flow_id;
+        f->mpl     = 0;
         f->qs      = qs;
         f->data    = NULL;
         f->len     = 0;

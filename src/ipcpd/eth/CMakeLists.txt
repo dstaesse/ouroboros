@@ -85,6 +85,8 @@ if (HAVE_ETH)
     "Bypass the Qdisc in the kernel when using raw sockets")
   set(IPCP_ETH_LO_MTU 1500 CACHE STRING
     "Restrict Ethernet MTU over loopback interfaces")
+  set(IPCP_ETH_MPL 5 CACHE STRING
+    "Default maximum packet lifetime for the Ethernet IPCPs, in seconds")
 
   set(ETH_LLC_SOURCES
     # Add source files here

@@ -224,6 +224,7 @@ static int broadcast_ipcp_join(int             fd,
                                qosspec_t       qs)
 {
         struct conn conn;
+        time_t      mpl = IPCP_BROADCAST_MPL;
 
         (void) qs;
 
@@ -236,7 +237,7 @@ static int broadcast_ipcp_join(int             fd,
 
         notifier_event(NOTIFY_DT_CONN_ADD, &conn);
 
-        ipcp_flow_alloc_reply(fd, 0, NULL, 0);
+        ipcp_flow_alloc_reply(fd, 0, mpl, NULL, 0);
 
         return 0;
 }

@@ -84,7 +84,8 @@ message irm_msg {
         repeated name_info_msg names  = 16;
         optional uint32 timeo_sec     = 17;
         optional uint32 timeo_nsec    = 18;
-        optional string comp          = 19;
-        optional bytes pk             = 20; /* piggyback */
-        optional sint32 result        = 21;
+        optional sint32 mpl           = 19;
+        optional string comp          = 20;
+        optional bytes pk             = 21; /* piggyback */
+        optional sint32 result        = 22;
 };

@@ -575,6 +575,7 @@ static int eth_ipcp_req(uint8_t *       r_addr,
         struct timespec ts = {0, ALLOC_TIMEO * MILLION};
         struct timespec abstime;
         int             fd;
+        time_t          mpl = IPCP_ETH_MPL;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -594,7 +595,7 @@ static int eth_ipcp_req(uint8_t *       r_addr,
         }
 
         /* reply to IRM, called under lock to prevent race */
-        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, data, len);
+        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl, data, len);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
@@ -636,8 +637,9 @@ static int eth_ipcp_alloc_reply(uint8_t *    r_addr,
                                 const void * data,
                                 size_t       len)
 {
-        int ret = 0;
-        int fd = -1;
+        int    ret = 0;
+        int    fd  = -1;
+        time_t mpl = IPCP_ETH_MPL;
 
         pthread_rwlock_wrlock(&eth_data.flows_lock);
 
@@ -672,7 +674,7 @@ static int eth_ipcp_alloc_reply(uint8_t *    r_addr,
 #elif defined(BUILD_ETH_LLC)
         log_dbg("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
 #endif
-        if ((ret = ipcp_flow_alloc_reply(fd, response, data, len)) < 0)
+        if ((ret = ipcp_flow_alloc_reply(fd, response, mpl, data, len)) < 0)
                 return -1;
 
         return ret;

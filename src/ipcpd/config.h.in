@@ -48,6 +48,7 @@
 #define IPCP_SCHED_THR_MUL  @IPCP_SCHED_THR_MUL@
 #define PFT_SIZE            @PFT_SIZE@
 #define DHT_ENROLL_SLACK    @DHT_ENROLL_SLACK@
+#define IPCP_UNICAST_MPL    @IPCP_UNICAST_MPL@
 
 #cmakedefine IPCP_CONN_WAIT_DIR
 #cmakedefine DISABLE_CORE_LOCK
@@ -59,8 +60,9 @@
 #define NSLOOKUP_EXEC       "@NSLOOKUP_EXECUTABLE@"
 #define IPCP_UDP_RD_THR     @IPCP_UDP_RD_THR@
 #define IPCP_UDP_WR_THR     @IPCP_UDP_WR_THR@
+#define IPCP_UDP_MPL        @IPCP_UDP_MPL@
 
-/* eth-llc */
+/* eth */
 #cmakedefine HAVE_NETMAP
 #cmakedefine HAVE_BPF
 #cmakedefine HAVE_RAW_SOCKETS
@@ -68,3 +70,11 @@
 #define IPCP_ETH_RD_THR     @IPCP_ETH_RD_THR@
 #define IPCP_ETH_WR_THR     @IPCP_ETH_WR_THR@
 #define IPCP_ETH_LO_MTU     @IPCP_ETH_LO_MTU@
+#define IPCP_ETH_MPL        @IPCP_ETH_MPL@
+
+/* local */
+#define IPCP_LOCAL_MPL      @IPCP_LOCAL_MPL@
+
+/* broadcast */
+/* local */
+#define IPCP_BROADCAST_MPL  @IPCP_BROADCAST_MPL@
