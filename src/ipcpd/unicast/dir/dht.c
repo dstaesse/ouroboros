@@ -361,13 +361,13 @@ static void kad_req_create(struct dht * dht,
         struct timespec    t;
         size_t             b;
 
+        clock_gettime(CLOCK_REALTIME_COARSE, &t);
+
         req = malloc(sizeof(*req));
         if (req == NULL)
-                return;
+                goto fail_malloc;
 
         list_head_init(&req->next);
-
-        clock_gettime(CLOCK_REALTIME_COARSE, &t);
 
         req->t_exp  = t.tv_sec + KAD_T_RESP;
         req->addr   = addr;
@@ -382,30 +382,22 @@ static void kad_req_create(struct dht * dht,
 
         if (msg->has_key) {
                 req->key = dht_dup_key(msg->key.data, b);
-                if (req->key == NULL) {
-                        free(req);
-                        return;
-                }
+                if (req->key == NULL)
+                        goto fail_dup_key;
         }
 
-        if (pthread_mutex_init(&req->lock, NULL)) {
-                free(req->key);
-                free(req);
-                return;
-        }
+        if (pthread_mutex_init(&req->lock, NULL))
+                goto fail_mutex;
 
-        pthread_condattr_init(&cattr);
+
+        if (pthread_condattr_init(&cattr))
+                goto fail_condattr;
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
 
-        if (pthread_cond_init(&req->cond, &cattr)) {
-                pthread_condattr_destroy(&cattr);
-                pthread_mutex_destroy(&req->lock);
-                free(req->key);
-                free(req);
-                return;
-        }
+        if (pthread_cond_init(&req->cond, &cattr))
+                goto fail_cond_init;
 
         pthread_condattr_destroy(&cattr);
 
@@ -414,6 +406,19 @@ static void kad_req_create(struct dht * dht,
         list_add(&req->next, &dht->requests);
 
         pthread_rwlock_unlock(&dht->lock);
+
+        return;
+
+ fail_cond_init:
+        pthread_condattr_destroy(&cattr);
+ fail_condattr:
+        pthread_mutex_destroy(&req->lock);
+ fail_mutex:
+        free(req->key);
+ fail_dup_key:
+        free(req);
+ fail_malloc:
+        return;
 }
 
 static void cancel_req_destroy(void * o)
