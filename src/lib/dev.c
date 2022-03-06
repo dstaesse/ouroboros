@@ -642,7 +642,7 @@ int flow_accept(qosspec_t *             qs,
         assert(ai.flows[fd].frcti == NULL);
 
         if (ai.flows[fd].qs.in_order != 0) {
-                ai.flows[fd].frcti = frcti_create(fd);
+                ai.flows[fd].frcti = frcti_create(fd, DELT_A, DELT_R, DELT_MPL);
                 if (ai.flows[fd].frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
                         flow_dealloc(fd);
@@ -757,7 +757,7 @@ static int __flow_alloc(const char *            dst,
         assert(ai.flows[fd].frcti == NULL);
 
         if (ai.flows[fd].qs.in_order != 0) {
-                ai.flows[fd].frcti = frcti_create(fd);
+                ai.flows[fd].frcti = frcti_create(fd, DELT_A, DELT_R, DELT_MPL);
                 if (ai.flows[fd].frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
                         flow_dealloc(fd);

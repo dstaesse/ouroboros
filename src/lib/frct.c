@@ -298,14 +298,14 @@ static void __send_rdv(int fd)
         __send_frct_pkt(fd, FRCT_RDVS, 0, 0);
 }
 
-static struct frcti * frcti_create(int fd)
+static struct frcti * frcti_create(int    fd,
+                                   time_t a,
+                                   time_t r,
+                                   time_t mpl)
 {
         struct frcti *      frcti;
         ssize_t             idx;
         struct timespec     now;
-        time_t              mpl;
-        time_t              a;
-        time_t              r;
         pthread_condattr_t  cattr;
 #ifdef PROC_FLOW_STATS
         char                frctstr[FRCT_NAME_STRLEN + 1];
@@ -342,9 +342,9 @@ static struct frcti * frcti_create(int fd)
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        frcti->mpl = mpl = DELT_MPL;
-        frcti->a   = a   = DELT_A;
-        frcti->r   = r   = DELT_R;
+        frcti->mpl = mpl;
+        frcti->a   = a;
+        frcti->r   = r;
         frcti->rdv = DELT_RDV;
         frcti->fd  = fd;
 
