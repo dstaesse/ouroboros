@@ -20,7 +20,7 @@ set(PACKAGE_VERSION
 
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING
-      "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan, DebugAnalyzer)" FORCE)
+      "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan, DebugUSan, DebugAnalyzer)" FORCE)
 endif()
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -104,6 +104,8 @@ elseif (CMAKE_BUILD_TYPE STREQUAL "DebugTSan")
   test_and_set_c_compiler_flag_global(-fsanitize=thread)
 elseif (CMAKE_BUILD_TYPE STREQUAL "DebugLSan")
   test_and_set_c_compiler_flag_global(-fsanitize=leak)
+elseif (CMAKE_BUILD_TYPE STREQUAL "DebugUSan")
+  test_and_set_c_compiler_flag_global(-fsanitize=undefined)
 elseif (CMAKE_BUILD_TYPE STREQUAL "DebugAnalyzer")
   test_and_set_c_compiler_flag_global(-fanalyzer)
 endif ()
