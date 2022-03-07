@@ -222,7 +222,8 @@ static int ipcp_udp_port_alloc(const struct sockaddr_in * r_saddr,
         msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
-        memcpy(buf + len, data, dlen);
+        if (dlen > 0)
+                memcpy(buf + len, data, dlen);
 
         if (sendto(udp_data.s_fd, msg, len + dlen,
                    SENDTO_FLAGS,
@@ -255,7 +256,8 @@ static int ipcp_udp_port_alloc_resp(const struct sockaddr_in * r_saddr,
         msg->d_eid    = hton32(d_eid);
         msg->response = response;
 
-        memcpy(msg + 1, data, len);
+        if (len > 0)
+                memcpy(msg + 1, data, len);
 
         if (sendto(udp_data.s_fd, msg, sizeof(*msg) + len,
                    SENDTO_FLAGS,

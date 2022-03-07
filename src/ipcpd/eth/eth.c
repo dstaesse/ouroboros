@@ -496,7 +496,8 @@ static int eth_ipcp_alloc(const uint8_t * dst_addr,
         msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
-        memcpy(buf + len + ETH_HEADER_TOT_SIZE, data, dlen);
+        if (dlen > 0)
+                memcpy(buf + len + ETH_HEADER_TOT_SIZE, data, dlen);
 
         ret = eth_ipcp_send_frame(dst_addr,
 #if defined(BUILD_ETH_DIX)
@@ -542,7 +543,8 @@ static int eth_ipcp_alloc_resp(uint8_t *    dst_addr,
 #endif
         msg->response = response;
 
-        memcpy(msg + 1, data, len);
+        if (len > 0)
+                memcpy(msg + 1, data, len);
 
         if (eth_ipcp_send_frame(dst_addr,
 #if defined(BUILD_ETH_DIX)

@@ -847,7 +847,8 @@ int fa_alloc(int             fd,
         msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
-        memcpy(shm_du_buff_head(sdb) + len, data, dlen);
+        if (dlen > 0)
+                memcpy(shm_du_buff_head(sdb) + len, data, dlen);
 
         if (dt_write_packet(addr, qc, fa.eid, sdb)) {
                 ipcp_sdb_release(sdb);
@@ -897,7 +898,8 @@ int fa_alloc_resp(int          fd,
         msg->s_eid    = hton64(flow->s_eid);
         msg->response = response;
 
-        memcpy(msg + 1, data, len);
+        if (len > 0)
+                memcpy(msg + 1, data, len);
 
         if (response < 0) {
                 fa_flow_fini(flow);

@@ -1698,8 +1698,8 @@ static int flow_req_arr(pid_t             pid,
                 }
 
                 f->len = len;
-
-                memcpy(f->data, data, len);
+                if (len > 0)
+                        memcpy(f->data, data, len);
         }
 
         list_add(&f->next, &irmd.irm_flows);
@@ -1764,7 +1764,9 @@ static int flow_alloc_reply(int          flow_id,
                 return -1;
         }
 
-        memcpy(f->data, data, len);
+        if (len > 0)
+                memcpy(f->data, data, len);
+
         f->len = len;
 
         pthread_rwlock_unlock(&irmd.flows_lock);
