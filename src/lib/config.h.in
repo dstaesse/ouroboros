@@ -69,9 +69,8 @@
 #define DU_BUFF_TAILSPACE   @DU_BUFF_TAILSPACE@
 
 /* Default Delta-t parameters */
-#define DELT_MPL            (@DELTA_T_MPL@ * BILLION)        /* ns */
-#define DELT_A              (@DELTA_T_ACK@ * BILLION)        /* ns */
-#define DELT_R              (@DELTA_T_RTX@ * BILLION)        /* ns */
+#define DELT_A              (@DELTA_T_ACK@)                  /* ns */
+#define DELT_R              (@DELTA_T_RTX@)                  /* ns */
 
 #define DELT_ACK            (@DELTA_T_ACK_DELAY@ * MILLION)  /* ns */
 

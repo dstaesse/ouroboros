@@ -1401,6 +1401,9 @@ static int flow_alloc(pid_t              pid,
         int                 state;
         uint8_t *           hash;
 
+        log_info("Allocating flow for %d to %s.\n",
+                 pid, dst);
+
         ipcp = join ? get_ipcp_entry_by_layer(dst)
                     : get_ipcp_by_dst_name(dst, pid);
         if (ipcp == NULL) {

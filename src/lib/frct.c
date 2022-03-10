@@ -53,6 +53,8 @@ struct frcti {
         struct timespec   t_probe;     /* Probe time             */
         bool              probe;       /* Probe active           */
 
+        size_t            n_rtx;       /* Number of rxm packets  */
+
         struct frct_cr    snd_cr;
         struct frct_cr    rcv_cr;
 
@@ -130,7 +132,8 @@ static int frct_rib_read(const char * path,
                 "Receiver left window edge:       %20u\n"
                 "Receiver right window edge:      %20u\n"
                 "Receiver inactive (ns):          %20ld\n"
-                "Receiver last ack:               %20u\n",
+                "Receiver last ack:               %20u\n"
+                "Number of pkt retransmissions:   %20zu\n",
                 frcti->mpl,
                 frcti->a,
                 frcti->r,
@@ -144,7 +147,8 @@ static int frct_rib_read(const char * path,
                 frcti->rcv_cr.lwe,
                 frcti->rcv_cr.rwe,
                 ts_diff_ns(&frcti->rcv_cr.act, &now),
-                frcti->rcv_cr.seqno);
+                frcti->rcv_cr.seqno,
+                frcti->n_rtx);
 
         pthread_rwlock_unlock(&flow->frcti->lock);
 
@@ -310,6 +314,10 @@ static struct frcti * frcti_create(int    fd,
 #ifdef PROC_FLOW_STATS
         char                frctstr[FRCT_NAME_STRLEN + 1];
 #endif
+        mpl *= BILLION;
+        a   *= BILLION;
+        r   *= BILLION;
+
         frcti = malloc(sizeof(*frcti));
         if (frcti == NULL)
                 goto fail_malloc;
@@ -354,7 +362,9 @@ static struct frcti * frcti_create(int    fd,
 
         frcti->srtt = 0;            /* Updated on first ACK */
         frcti->mdev = 10 * MILLION; /* Initial rxm will be after 20 ms */
-        frcti->rto  = 20 * MILLION; /* Initial rxm will be after 20 ms */
+        frcti->rto  = BILLION;      /* Initial rxm will be after 1 s   */
+
+        frcti->n_rtx = 0;
 
         if (ai.flows[fd].qs.loss == 0) {
                 frcti->snd_cr.cflags |= FRCTFRTX | FRCTFLINGER;
@@ -739,7 +749,7 @@ static void rtt_estimator(struct frcti * frcti,
 
         frcti->srtt     = MAX(1000U, srtt);
         frcti->mdev     = MAX(100U, rttvar);
-        frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << 1));
+        frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << 2));
 }
 
 static void __frcti_tick(void)
@@ -803,7 +813,7 @@ static void __frcti_rcv(struct frcti *       frcti,
                 if (after(ackno, frcti->snd_cr.lwe))
                         frcti->snd_cr.lwe = ackno;
 
-                if (frcti->probe && !before(frcti->rttseq, ackno)) {
+                if (frcti->probe && after(ackno, frcti->rttseq)) {
                         rtt_estimator(frcti, ts_diff_ns(&frcti->t_probe, &now));
                         frcti->probe = false;
                 }

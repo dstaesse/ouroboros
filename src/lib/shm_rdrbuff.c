@@ -578,7 +578,7 @@ uint8_t * shm_du_buff_head_release(struct shm_du_buff * sdb,
 }
 
 uint8_t * shm_du_buff_tail_release(struct shm_du_buff * sdb,
-                              size_t               size)
+                                   size_t               size)
 {
         assert(sdb);
         assert(!(size > sdb->du_tail - sdb->du_head));

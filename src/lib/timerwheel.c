@@ -174,6 +174,7 @@ static void timerwheel_move(void)
                                 uint32_t             snd_lwe;
                                 uint32_t             rcv_lwe;
                                 time_t               rto;
+                                size_t               new_i;
 
                                 r = list_entry(p, struct rxm, next);
 
@@ -205,26 +206,36 @@ static void timerwheel_move(void)
                                 if (ts_to_ns(now) - r->t0 > r->frcti->r)
                                         goto flow_down;
 
+                                pthread_rwlock_wrlock(&r->frcti->lock);
+
                                 if (r->frcti->probe
-                                    && (r->frcti->rttseq + 1) == r->seqno)
+                                    && (r->frcti->rttseq == r->seqno)) {
                                         r->frcti->probe = false;
+                                        r->frcti->rto += (rto >> 3);
+                                }
+
+                                r->frcti->n_rtx++;
+
+                                pthread_rwlock_unlock(&r->frcti->lock);
 #ifdef RXM_BLOCKING
   #ifdef RXM_BUFFER_ON_HEAP
-                                if (ipcp_sdb_reserve(&sdb, r->pkt_len))
+                                if (ipcp_sdb_reserve(&sdb, r->pkt_len) < 0)
   #else
-                                if (ipcp_sdb_reserve(&sdb, r->tail - r->head))
+                                if (ipcp_sdb_reserve(&sdb,
+                                                     r->tail - r->head) < 0)
   #endif
 #else
   #ifdef RXM_BUFFER_ON_HEAP
                                 if (shm_rdrbuff_alloc(ai.rdrb, r->pkt_len, NULL,
-                                                      &sdb))
+                                                      &sdb) < 0)
   #else
                                 if (shm_rdrbuff_alloc(ai.rdrb,
                                                       r->tail - r->head, NULL,
-                                                      &sdb))
+                                                      &sdb) < 0)
   #endif
 #endif
                                         goto reschedule; /* rbuff full */
+
                                 idx = shm_du_buff_get_idx(sdb);
 
                                 head = shm_du_buff_head(sdb);
@@ -248,15 +259,24 @@ static void timerwheel_move(void)
 #endif
                                         shm_flow_set_notify(f->set, f->flow_id,
                                                             FLOW_PKT);
+
                         reschedule:
-                                r->mul++;
+                                rslot = (rto << r->mul++) >> (RXMQ_RES * i);
+
+                                new_i = i;
+                                while (rslot >= RXMQ_SLOTS) {
+                                        ++ new_i;
+                                        rslot >>= RXMQ_BUMP;
+                                }
+
+                                if (new_i >= RXMQ_LVLS) /* Can't reschedule */
+                                        continue;
 
                                 /* Schedule at least in the next time slot. */
-                                rslot = (rxm_slot
-                                         + MAX(((rto * r->mul) >> RXMQ_RES), 1))
+                                rslot = ((rxm_slot >> (RXMQ_BUMP * (new_i - 1))) + MAX(rslot, 1))
                                         & (RXMQ_SLOTS - 1);
 
-                                list_add_tail(&r->next, &rw.rxms[i][rslot]);
+                                list_add_tail(&r->next, &rw.rxms[new_i][rslot]);
 
                                 continue;
 
