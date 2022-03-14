@@ -211,9 +211,9 @@ static void timerwheel_move(void)
                                 if (r->frcti->probe
                                     && (r->frcti->rttseq == r->seqno))
                                         r->frcti->probe = false;
-
+#ifdef PROC_FLOW_STATS
                                 r->frcti->n_rtx++;
-
+#endif
                                 pthread_rwlock_unlock(&r->frcti->lock);
 
                                 if (ts_to_ns(now) - act > (rto << 2))

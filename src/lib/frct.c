@@ -52,11 +52,16 @@ struct frcti {
         uint32_t          rttseq;
         struct timespec   t_probe;     /* Probe time             */
         bool              probe;       /* Probe active           */
-
+#ifdef PROC_FLOW_STATS
         size_t            n_rtx;       /* Number of rxm packets  */
-
+        size_t            n_dup;       /* Duplicates received    */
+        size_t            n_rdv;       /* Number of rdv packets  */
+        size_t            n_out;       /* Packets out of window  */
+        size_t            n_rqo;       /* Packets out of rqueue  */
+#endif
         struct frct_cr    snd_cr;
         struct frct_cr    rcv_cr;
+
 
         ssize_t           rq[RQ_SIZE];
         pthread_rwlock_t  lock;
@@ -133,7 +138,11 @@ static int frct_rib_read(const char * path,
                 "Receiver right window edge:      %20u\n"
                 "Receiver inactive (ns):          %20ld\n"
                 "Receiver last ack:               %20u\n"
-                "Number of pkt retransmissions:   %20zu\n",
+                "Number of pkt retransmissions:   %20zu\n"
+                "Number of duplicates received:   %20zu\n"
+                "Number of rendez-vous sent:      %20zu\n"
+                "Number of packets out of window: %20zu\n"
+                "Number of packets out of rqueue: %20zu\n",
                 frcti->mpl,
                 frcti->a,
                 frcti->r,
@@ -148,7 +157,11 @@ static int frct_rib_read(const char * path,
                 frcti->rcv_cr.rwe,
                 ts_diff_ns(&frcti->rcv_cr.act, &now),
                 frcti->rcv_cr.seqno,
-                frcti->n_rtx);
+                frcti->n_rtx,
+                frcti->n_dup,
+                frcti->n_rdv,
+                frcti->n_out,
+                frcti->n_rqo);
 
         pthread_rwlock_unlock(&flow->frcti->lock);
 
@@ -181,7 +194,7 @@ static int frct_rib_getattr(const char *      path,
         (void) path;
         (void) attr;
 
-        attr->size  = 1024;
+        attr->size  = 1027;
         attr->mtime = 0;
 
         return 0;
@@ -363,9 +376,13 @@ static struct frcti * frcti_create(int    fd,
         frcti->srtt = 0;            /* Updated on first ACK */
         frcti->mdev = 10 * MILLION; /* Initial rxm will be after 20 ms */
         frcti->rto  = BILLION;      /* Initial rxm will be after 1 s   */
-
+#ifdef PROC_FLOW_STATS
         frcti->n_rtx = 0;
-
+        frcti->n_dup = 0;
+        frcti->n_rdv = 0;
+        frcti->n_out = 0;
+        frcti->n_rqo = 0;
+#endif
         if (ai.flows[fd].qs.loss == 0) {
                 frcti->snd_cr.cflags |= FRCTFRTX | FRCTFLINGER;
                 frcti->rcv_cr.cflags |= FRCTFRTX;
@@ -499,6 +516,10 @@ static bool __frcti_is_window_open(struct frcti * frcti)
                         if  (diff > frcti->rdv) {
                                 frcti->t_rdvs = now;
                                 __send_rdv(frcti->fd);
+#ifdef PROC_FLOW_STATS
+                                frcti->n_rdv++;
+#endif
+
                         }
                 }
 
@@ -844,20 +865,33 @@ static void __frcti_rcv(struct frcti *       frcti,
 
         if (before(seqno, rcv_cr->lwe)) {
                 rcv_cr->seqno = seqno; /* Ensures we send a new ACK. */
+#ifdef PROC_FLOW_STATS
+                frcti->n_dup++;
+#endif
                 goto drop_packet;
         }
 
         if (rcv_cr->cflags & FRCTFRTX) {
 
-                if (!before(seqno, rcv_cr->rwe)) /* Out of window. */
+                if (!before(seqno, rcv_cr->rwe)) {  /* Out of window. */
+#ifdef PROC_FLOW_STATS
+                        frcti->n_out++;
+#endif
                         goto drop_packet;
+                }
 
-                if (!before(seqno, rcv_cr->lwe + RQ_SIZE))
+                if (!before(seqno, rcv_cr->lwe + RQ_SIZE))  {
+#ifdef PROC_FLOW_STATS
+                        frcti->n_rqo++;
+#endif
                         goto drop_packet; /* Out of rq. */
-
-                if (frcti->rq[pos] != -1)
+                }
+                if (frcti->rq[pos] != -1) {
+#ifdef PROC_FLOW_STATS
+                        frcti->n_dup++;
+#endif
                         goto drop_packet; /* Duplicate in rq. */
-
+                }
                 fd = frcti->fd;
         } else {
                 rcv_cr->lwe = seqno;
