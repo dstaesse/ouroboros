@@ -279,9 +279,11 @@ static void send_frct_pkt(struct frcti * frcti)
 
         assert(frcti);
 
-        pthread_rwlock_rdlock(&frcti->lock);
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        if (frcti->rcv_cr.lwe == frcti->rcv_cr.seqno) {
+        pthread_rwlock_wrlock(&frcti->lock);
+
+        if (!after(frcti->rcv_cr.lwe, frcti->rcv_cr.seqno)) {
                 pthread_rwlock_unlock(&frcti->lock);
                 return;
         }
@@ -290,23 +292,18 @@ static void send_frct_pkt(struct frcti * frcti)
         ackno = frcti->rcv_cr.lwe;
         rwe   = frcti->rcv_cr.rwe;
 
-        clock_gettime(PTHREAD_COND_CLOCK, &now);
-
         diff = ts_diff_ns(&frcti->rcv_cr.act, &now);
 
-        pthread_rwlock_unlock(&frcti->lock);
-
-        if (diff > frcti->a || diff < DELT_ACK)
+        if (diff > frcti->a || diff < frcti->mdev) {
+                pthread_rwlock_unlock(&frcti->lock);
                 return;
+        }
+
+        frcti->rcv_cr.seqno = frcti->rcv_cr.lwe;
+
+        pthread_rwlock_unlock(&frcti->lock);
 
         __send_frct_pkt(fd, FRCT_ACK | FRCT_FC, ackno, rwe);
-
-        pthread_rwlock_wrlock(&frcti->lock);
-
-        if (after(frcti->rcv_cr.lwe, frcti->rcv_cr.seqno))
-                frcti->rcv_cr.seqno = frcti->rcv_cr.lwe;
-
-        pthread_rwlock_unlock(&frcti->lock);
 
 }
 
@@ -734,8 +731,7 @@ static int __frcti_snd(struct frcti *       frcti,
                         frcti->t_probe = now;
                         frcti->probe   = true;
                 }
-
-                if (now.tv_sec - rcv_cr->act.tv_sec <= frcti->a) {
+                if ((now.tv_sec - rcv_cr->act.tv_sec) * BILLION <= frcti->a) {
                         pci->flags |= FRCT_ACK;
                         pci->ackno = hton32(rcv_cr->lwe);
                         rcv_cr->seqno = rcv_cr->lwe;

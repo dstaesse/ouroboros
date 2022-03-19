@@ -218,8 +218,6 @@ static void timerwheel_move(void)
 
                                 if (ts_to_ns(now) - act > (rto << 2))
                                         rto <<= r->mul++;
-                                else
-                                        r->mul = 0;
 
                                 /* Schedule at least in the next time slot. */
                                 slot = ts_to_ns(now) >> RXMQ_RES;
@@ -234,7 +232,7 @@ static void timerwheel_move(void)
                                 if (lvl >= RXMQ_LVLS) /* Can't reschedule */
                                         goto flow_down;
 
-                                rslot = (rslot + slot) & (RXMQ_SLOTS - 1);
+                                rslot = (rslot + slot + 1) & (RXMQ_SLOTS - 1);
 
 #ifdef RXM_BLOCKING
                                 if (ipcp_sdb_reserve(&sdb, r->len) < 0)
@@ -256,6 +254,7 @@ static void timerwheel_move(void)
 
                                 /* Retransmit the copy. */
                                 pci->ackno = hton32(rcv_lwe);
+
 #ifdef RXM_BLOCKING
                                 if (shm_rbuff_write_b(f->tx_rb, idx, NULL) < 0)
 #else
@@ -264,15 +263,14 @@ static void timerwheel_move(void)
                                         goto flow_down;
                                 shm_flow_set_notify(f->set, f->flow_id,
                                                     FLOW_PKT);
-
-                        reschedule:
+                         reschedule:
                                 list_add(&r->next, &rw.rxms[lvl][rslot]);
                                 continue;
 
-                        flow_down:
+                         flow_down:
                                 shm_rbuff_set_acl(f->tx_rb, ACL_FLOWDOWN);
                                 shm_rbuff_set_acl(f->rx_rb, ACL_FLOWDOWN);
-                        cleanup:
+                         cleanup:
 #ifdef RXM_BUFFER_ON_HEAP
                                 free(r->pkt);
 #else
@@ -375,7 +373,7 @@ static int timerwheel_rxm(struct frcti *       frcti,
                 return -EPERM;
         }
 
-        slot = (slot + rto_slot) & (RXMQ_SLOTS - 1);
+        slot = (slot + rto_slot + 1) & (RXMQ_SLOTS - 1);
 
         pthread_mutex_lock(&rw.lock);
 
@@ -403,8 +401,12 @@ static int timerwheel_ack(int            fd,
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        slot = (((ts_to_ns(now) + DELT_ACK) >> ACKQ_RES) + 1)
+        pthread_rwlock_rdlock(&frcti->lock);
+
+        slot = (((ts_to_ns(now) + frcti->mdev) >> ACKQ_RES) + 1)
                 & (ACKQ_SLOTS - 1);
+
+        pthread_rwlock_unlock(&frcti->lock);
 
         a->fd    = fd;
         a->frcti = frcti;

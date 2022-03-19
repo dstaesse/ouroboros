@@ -192,8 +192,6 @@ set(DELTA_T_ACK 10 CACHE STRING
   "Maximum time to acknowledge a packet (s)")
 set(DELTA_T_RTX 120 CACHE STRING
   "Maximum time to retransmit a packet (s)")
-set(DELTA_T_ACK_DELAY 10 CACHE STRING
-  "Maximum time to wait before acknowledging a packet (ms)")
 set(FRCT_REORDER_QUEUE_SIZE 256 CACHE STRING
   "Size of the reordering queue, must be a power of 2")
 set(FRCT_START_WINDOW 64 CACHE STRING
@@ -214,9 +212,9 @@ set(RXM_WHEEL_LEVELS 3 CACHE STRING
   "Number of levels in the retransmission wheel")
 set(RXM_WHEEL_SLOTS_PER_LEVEL 256 CACHE STRING
   "Number of slots per level in the retransmission wheel, must be a power of 2")
-set(ACK_WHEEL_SLOTS 128 CACHE STRING
+set(ACK_WHEEL_SLOTS 256 CACHE STRING
   "Number of slots in the acknowledgment wheel, must be a power of 2")
-set(ACK_WHEEL_RESOLUTION 20 CACHE STRING
+set(ACK_WHEEL_RESOLUTION 18 CACHE STRING
   "Minimum acknowledgment delay (ns), as a power to 2")
 
 if (HAVE_FUSE)
