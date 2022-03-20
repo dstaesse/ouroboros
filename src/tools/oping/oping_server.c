@@ -105,7 +105,8 @@ void * server_thread(void *o)
                                 continue;
                         }
 
-                        printf("Received %d bytes on fd %d.\n", msg_len, fd);
+                        if (!server.quiet)
+                                printf("Received %d bytes on fd %d.\n", msg_len, fd);
 
                         clock_gettime(CLOCK_REALTIME, &now);
 

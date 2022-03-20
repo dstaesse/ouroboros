@@ -96,6 +96,8 @@ struct s {
         fqueue_t *      fq;
         pthread_mutex_t lock;
 
+        bool quiet;
+
         pthread_t cleaner_pt;
         pthread_t accept_pt;
         pthread_t server_pt;
@@ -170,6 +172,7 @@ int main(int     argc,
         client.timestamp = false;
         client.qs        = qos_raw;
         client.quiet     = false;
+        server.quiet     = false;
 
         while (argc > 0) {
                 if (strcmp(*argv, "-i") == 0 ||
@@ -207,7 +210,7 @@ int main(int     argc,
                 } else if (strcmp(*argv, "-Q") == 0 ||
                            strcmp(*argv, "--quiet") == 0) {
                         client.quiet = true;
-
+                        server.quiet = true;
                 } else {
                         goto fail;
                 }
