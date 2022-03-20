@@ -51,8 +51,7 @@ extern bool log_syslog;
 #define __olog(CLR, LVL, SYSLVL, ...)                                   \
         do {                                                            \
                 if (log_syslog) {                                       \
-                        syslog(SYSLVL, OUROBOROS_PREFIX ": "            \
-                               __VA_ARGS__);                            \
+                        syslog(SYSLVL, __VA_ARGS__);                    \
                 } else {                                                \
                         printf(CLR "==%05d== " OUROBOROS_PREFIX         \
                                "(" LVL "): ", getpid());                \
