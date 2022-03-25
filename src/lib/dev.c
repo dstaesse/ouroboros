@@ -1459,8 +1459,6 @@ int fset_add(struct flow_set * set,
         struct flow *           flow;
         struct flow_set_entry * fse;
         int                     ret;
-        size_t                  packets;
-        size_t                  i;
 
         if (set == NULL || fd < 0 || fd >= SYS_MAX_FLOWS)
                 return -EINVAL;
@@ -1493,8 +1491,7 @@ int fset_add(struct flow_set * set,
 
         pthread_rwlock_unlock(&set->lock);
 
-        packets = shm_rbuff_queued(ai.flows[fd].rx_rb);
-        for (i = 0; i < packets; i++)
+        if (shm_rbuff_queued(ai.flows[fd].rx_rb))
                 shm_flow_set_notify(ai.fqset, ai.flows[fd].flow_id, FLOW_PKT);
 
         pthread_rwlock_unlock(&ai.lock);
