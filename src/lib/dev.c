@@ -1082,6 +1082,60 @@ static int flow_keepalive(int fd)
         return 0;
 }
 
+static int flow_tx_sdb(struct flow *        flow,
+                       struct shm_du_buff * sdb,
+                       bool                 block,
+                       struct timespec *    abstime)
+{
+        struct timespec now;
+        ssize_t         idx;
+        int             ret;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+
+        pthread_rwlock_wrlock(&ai.lock);
+
+        flow->snd_act = now;
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        idx = shm_du_buff_get_idx(sdb);
+
+        pthread_rwlock_rdlock(&ai.lock);
+
+        if (shm_du_buff_len(sdb) > 0) {
+                if (frcti_snd(flow->frcti, sdb) < 0)
+                        goto enomem;
+
+                if (flow->qs.cypher_s > 0 && crypt_encrypt(flow, sdb) < 0)
+                        goto enomem;
+
+                if (flow->qs.ber == 0 && add_crc(sdb) != 0)
+                        goto enomem;
+        }
+
+        pthread_cleanup_push(__cleanup_rwlock_unlock, &ai.lock);
+
+        if (!block)
+                ret = shm_rbuff_write(flow->tx_rb, idx);
+        else
+                ret = shm_rbuff_write_b(flow->tx_rb, idx, abstime);
+
+        if (ret < 0)
+                shm_rdrbuff_remove(ai.rdrb, idx);
+        else
+                shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
+
+        pthread_cleanup_pop(true);
+
+        return 0;
+
+enomem:
+        pthread_rwlock_unlock(&ai.lock);
+        shm_rdrbuff_remove(ai.rdrb, idx);
+        return -ENOMEM;
+}
+
 ssize_t flow_write(int          fd,
                    const void * buf,
                    size_t       count)
@@ -1153,50 +1207,12 @@ ssize_t flow_write(int          fd,
         if (idx < 0)
                 return idx;
 
-        clock_gettime(PTHREAD_COND_CLOCK, &abs);
-
-        pthread_rwlock_wrlock(&ai.lock);
-
-        flow->snd_act = abs;
-
-        pthread_rwlock_unlock(&ai.lock);
-
         if (count > 0)
                 memcpy(ptr, buf, count);
 
-        pthread_rwlock_rdlock(&ai.lock);
-
-        if (count > 0) {
-                if (frcti_snd(flow->frcti, sdb) < 0)
-                        goto enomem;
-
-                if (flow->qs.cypher_s > 0 && crypt_encrypt(flow, sdb) < 0)
-                        goto enomem;
-
-                if (flow->qs.ber == 0 && add_crc(sdb) != 0)
-                        goto enomem;
-        }
-
-        pthread_cleanup_push(__cleanup_rwlock_unlock, &ai.lock);
-
-        if (flags & FLOWFWNOBLOCK)
-                ret = shm_rbuff_write(flow->tx_rb, idx);
-        else
-                ret = shm_rbuff_write_b(flow->tx_rb, idx, abstime);
-
-        if (ret < 0)
-                shm_rdrbuff_remove(ai.rdrb, idx);
-        else
-                shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
-
-        pthread_cleanup_pop(true);
+        ret = flow_tx_sdb(flow, sdb, flags & FLOWFWNOBLOCK, abstime);
 
         return ret < 0 ? (ssize_t) ret : (ssize_t) count;
-
- enomem:
-        pthread_rwlock_unlock(&ai.lock);
-        shm_rdrbuff_remove(ai.rdrb, idx);
-        return -ENOMEM;
 }
 
 static bool invalid_pkt(struct flow *        flow,
@@ -1917,15 +1933,11 @@ int ipcp_flow_read(int                   fd,
 int ipcp_flow_write(int                  fd,
                     struct shm_du_buff * sdb)
 {
-        struct timespec now;
         struct flow *   flow;
         int             ret;
-        ssize_t         idx;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
         assert(sdb);
-
-        clock_gettime(PTHREAD_COND_CLOCK, &now);
 
         flow = &ai.flows[fd];
 
@@ -1941,32 +1953,7 @@ int ipcp_flow_write(int                  fd,
                 return -EPERM;
         }
 
-        assert(flow->tx_rb);
-
-        idx = shm_du_buff_get_idx(sdb);
-
-        if (frcti_snd(flow->frcti, sdb) < 0) {
-                pthread_rwlock_unlock(&ai.lock);
-                return -ENOMEM;
-        }
-
-        if (flow->qs.ber == 0 && add_crc(sdb) != 0) {
-                pthread_rwlock_unlock(&ai.lock);
-                shm_rdrbuff_remove(ai.rdrb, idx);
-                return -ENOMEM;
-        }
-
-        ret = shm_rbuff_write_b(flow->tx_rb, idx, NULL);
-        if (ret == 0)
-                shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
-        else
-                shm_rdrbuff_remove(ai.rdrb, idx);
-
-        flow->snd_act = now;
-
-        pthread_rwlock_unlock(&ai.lock);
-
-        assert(ret <= 0);
+        ret = flow_tx_sdb(flow, sdb, false, NULL);
 
         return ret;
 }
@@ -2075,6 +2062,7 @@ int local_flow_write(int    fd,
                 pthread_rwlock_unlock(&ai.lock);
                 return -ENOTALLOC;
         }
+
         ret = shm_rbuff_write_b(flow->tx_rb, idx, NULL);
         if (ret == 0)
                 shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
