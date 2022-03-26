@@ -141,6 +141,17 @@ int shm_rbuff_write_b(struct shm_rbuff *      rb,
         return ret;
 }
 
+static int check_rb_acl(struct shm_rbuff * rb)
+{
+        if (*rb->acl & ACL_FLOWDOWN)
+                return -EFLOWDOWN;
+
+        if (*rb->acl & ACL_FLOWPEER)
+                return -EFLOWPEER;
+
+        return -EAGAIN;
+}
+
 ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 {
         ssize_t ret = 0;
@@ -155,7 +166,7 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 #endif
 
         if (shm_rbuff_empty(rb)) {
-                ret = *rb->acl & ACL_FLOWDOWN ? -EFLOWDOWN : -EAGAIN;
+                ret = check_rb_acl(rb);
                 pthread_mutex_unlock(rb->lock);
                 return ret;
         }
@@ -190,9 +201,9 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
 
         pthread_cleanup_push(__cleanup_mutex_unlock, rb->lock);
 
-        while (shm_rbuff_empty(rb)
-               && (idx != -ETIMEDOUT)
-               && !(*rb->acl & ACL_FLOWDOWN)) {
+        while (shm_rbuff_empty(rb) &&
+               idx != -ETIMEDOUT &&
+               check_rb_acl(rb) == -EAGAIN) {
                 if (abstime != NULL)
                         idx = -pthread_cond_timedwait(rb->add,
                                                       rb->lock,
@@ -205,17 +216,17 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
 #endif
         }
 
-        if (idx != -ETIMEDOUT) {
-                if (*rb->acl & ACL_FLOWDOWN)
-                        idx = -EFLOWDOWN;
-                else {
-                        idx = *tail_el_ptr(rb);
-                        *rb->tail = (*rb->tail + 1) & ((SHM_RBUFF_SIZE) - 1);
-                        pthread_cond_broadcast(rb->del);
-                }
+        if (!shm_rbuff_empty(rb)) {
+                idx = *tail_el_ptr(rb);
+                *rb->tail = (*rb->tail + 1) & ((SHM_RBUFF_SIZE) - 1);
+                pthread_cond_broadcast(rb->del);
+        } else if (idx != -ETIMEDOUT) {
+                idx = check_rb_acl(rb);
         }
 
         pthread_cleanup_pop(true);
+
+        assert(idx != -EAGAIN);
 
         return idx;
 }

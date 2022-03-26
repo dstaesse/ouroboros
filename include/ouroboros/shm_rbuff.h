@@ -31,6 +31,7 @@
 #define ACL_RDWR     0000
 #define ACL_RDONLY   0001
 #define ACL_FLOWDOWN 0002
+#define ACL_FLOWPEER 0004
 
 struct shm_rbuff;
 

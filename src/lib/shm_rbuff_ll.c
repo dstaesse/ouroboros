@@ -143,9 +143,15 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 
         assert(rb);
 
-        if (shm_rbuff_empty(rb))
-                return __sync_fetch_and_add(rb->acl, 0) & ACL_FLOWDOWN ?
-                        -EFLOWDOWN : -EAGAIN;
+        if (shm_rbuff_empty(rb)) {
+                if (_sync_fetch_and_add(rb->acl, 0) & ACL_FLOWDOWN)
+                        return -EFLOWDOWN;
+
+                if (_sync_fetch_and_add(rb->acl, 0) & ACL_FLOWPEER)
+                        return -EFLOWPEER;
+
+                return -EAGAIN;
+        }
 
         ntail = RB_TAIL;
 
