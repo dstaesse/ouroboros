@@ -435,7 +435,7 @@ static void packet_handler(int                  fd,
         uint8_t *     head;
         size_t        len;
 
-        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+        len = shm_du_buff_len(sdb);
 
 #ifndef IPCP_FLOW_STATS
         (void)        fd;
@@ -781,7 +781,7 @@ int dt_write_packet(uint64_t             dst_addr,
         assert(sdb);
         assert(dst_addr != ipcpi.dt_addr);
 
-        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+        len = shm_du_buff_len(sdb);
 
 #ifdef IPCP_FLOW_STATS
         if (eid < PROG_RES_FDS) {
@@ -815,7 +815,7 @@ int dt_write_packet(uint64_t             dst_addr,
                 goto fail_write;
         }
 
-        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+        len = shm_du_buff_len(sdb);
 
         dt_pci.dst_addr = dst_addr;
         dt_pci.qc       = qc;

@@ -532,6 +532,13 @@ uint8_t * shm_du_buff_tail(struct shm_du_buff * sdb)
         return (uint8_t *) (sdb + 1) + sdb->du_tail;
 }
 
+size_t shm_du_buff_len(struct shm_du_buff * sdb)
+{
+        assert(sdb);
+
+        return sdb->du_tail - sdb->du_head;
+}
+
 uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
                                  size_t               size)
 {

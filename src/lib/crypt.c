@@ -282,8 +282,7 @@ static int openssl_decrypt(struct flow *        f,
         int       in_sz;
         int       tmp_sz;
 
-        in = shm_du_buff_head(sdb);
-        in_sz = shm_du_buff_tail(sdb) - in;
+        in_sz = shm_du_buff_len(sdb);
         if (in_sz < IVSZ)
                 return -ECRYPT;
 

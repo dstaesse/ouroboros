@@ -950,7 +950,7 @@ static void * eth_ipcp_packet_reader(void * o)
                 deid = ntohs(e_frame->eid);
                 if (deid == MGMT_EID) {
 #elif defined (BUILD_ETH_LLC)
-                if (length > 0x05FF) {/* DIX */
+                if (length > 0x05FF) { /* DIX */
 #ifndef HAVE_NETMAP
                         ipcp_sdb_release(sdb);
 #endif
@@ -1067,7 +1067,7 @@ static void * eth_ipcp_packet_writer(void * o)
                                 continue;
                         }
 
-                        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+                        len = shm_du_buff_len(sdb);
 
                         if (shm_du_buff_head_alloc(sdb, ETH_HEADER_TOT_SIZE)
                             == NULL) {

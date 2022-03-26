@@ -681,7 +681,7 @@ static int __frcti_snd(struct frcti *       frcti,
         bool              rtx;
 
         assert(frcti);
-        assert(shm_du_buff_head(sdb) != shm_du_buff_tail(sdb));
+        assert(shm_du_buff_len(sdb) != 0);
 
         snd_cr = &frcti->snd_cr;
         rcv_cr = &frcti->rcv_cr;

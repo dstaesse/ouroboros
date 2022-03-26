@@ -337,7 +337,7 @@ static int timerwheel_rxm(struct frcti *       frcti,
         r->mul   = 0;
         r->seqno = seqno;
         r->frcti = frcti;
-        r->len  = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+        r->len  = shm_du_buff_len(sdb);
 #ifdef RXM_BUFFER_ON_HEAP
         r->pkt = malloc(r->len);
         if (r->pkt == NULL) {

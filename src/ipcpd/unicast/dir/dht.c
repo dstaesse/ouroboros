@@ -2461,7 +2461,7 @@ static void * dht_handle_packet(void * o)
 
                 pthread_cleanup_pop(true);
 
-                i = shm_du_buff_tail(cmd->sdb) - shm_du_buff_head(cmd->sdb);
+                i = shm_du_buff_len(cmd->sdb);
 
                 msg = kad_msg__unpack(NULL, i, shm_du_buff_head(cmd->sdb));
 #ifndef __DHT_TEST__

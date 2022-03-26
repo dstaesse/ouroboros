@@ -341,7 +341,7 @@ static void packet_handler(int                  fd,
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
-        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+        len = shm_du_buff_len(sdb);
 
 #ifdef IPCP_FLOW_STATS
         ++flow->p_snd;
@@ -453,7 +453,7 @@ static size_t fa_wait_for_fa_msg(struct fa_msg * msg)
 
         pthread_cleanup_pop(true);
 
-        len = shm_du_buff_tail(cmd->sdb) - shm_du_buff_head(cmd->sdb);
+        len = shm_du_buff_len(cmd->sdb);
         if (len > MSGBUFSZ || len < sizeof(*msg)) {
                 log_warn("Invalid flow allocation message (len: %zd)\n", len);
                 free(cmd);
@@ -988,7 +988,7 @@ void  fa_np1_rcv(uint64_t             eid,
         int              fd;
         size_t           len;
 
-        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+        len = shm_du_buff_len(sdb);
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 

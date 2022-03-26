@@ -541,7 +541,7 @@ static void * ipcp_udp_packet_writer(void * o)
                                 continue;
                         }
 
-                        len = shm_du_buff_tail(sdb) - shm_du_buff_head(sdb);
+                        len = shm_du_buff_len(sdb);
                         if (len > IPCP_UDP_MAX_PACKET_SIZE) {
                                 log_dbg("Packet length exceeds MTU.");
                                 ipcp_sdb_release(sdb);

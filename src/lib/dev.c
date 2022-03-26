@@ -93,7 +93,7 @@ struct flow {
         struct shm_rbuff *    tx_rb;
         struct shm_flow_set * set;
         int                   flow_id;
-        int                   oflags;
+        uint16_t              oflags;
         qosspec_t             qs;
         ssize_t               part_idx;
 
@@ -120,7 +120,7 @@ struct flow_set_entry {
 };
 
 struct flow_set {
-        size_t idx;
+        size_t           idx;
 
         struct timespec  chk;   /* Last keepalive check.          */
         uint32_t         min;   /* Minimum keepalive time in set. */
@@ -1214,6 +1214,52 @@ ssize_t flow_write(int          fd,
         return -ENOMEM;
 }
 
+static bool invalid_pkt(struct flow *        flow,
+                        struct shm_du_buff * sdb)
+{
+        if (shm_du_buff_len(sdb) == 0)
+                return true;
+
+        if (flow->qs.ber == 0 && chk_crc(sdb) != 0)
+                return true;
+
+        if (flow->qs.cypher_s > 0 && crypt_decrypt(flow, sdb) < 0)
+                return true;
+
+        return false;
+}
+
+static ssize_t flow_rx_sdb(struct flow *         flow,
+                           struct shm_du_buff ** sdb,
+                           bool                  block,
+                           struct timespec *     abstime)
+{
+        ssize_t         idx;
+        struct timespec now;
+
+        idx = block ? shm_rbuff_read_b(flow->rx_rb, abstime) :
+                shm_rbuff_read(flow->rx_rb);
+        if (idx < 0)
+                return idx;
+
+        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
+
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+
+        pthread_rwlock_wrlock(&ai.lock);
+
+        flow->rcv_act = now;
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        if (invalid_pkt(flow, *sdb)) {
+                shm_rdrbuff_remove(ai.rdrb, idx);
+                return -EAGAIN;
+        }
+
+        return idx;
+}
+
 ssize_t flow_read(int    fd,
                   void * buf,
                   size_t count)
@@ -1221,7 +1267,6 @@ ssize_t flow_read(int    fd,
         ssize_t              idx;
         ssize_t              n;
         uint8_t *            packet;
-        struct shm_rbuff *   rb;
         struct shm_du_buff * sdb;
         struct timespec      abs;
         struct timespec      now;
@@ -1229,10 +1274,10 @@ ssize_t flow_read(int    fd,
         struct timespec      tictime;
         struct timespec *    abstime = NULL;
         struct flow *        flow;
-        bool                 noblock;
+        bool                 block;
         bool                 partrd;
 
-        if (fd < 0 || fd > PROG_MAX_FLOWS)
+        if (fd < 0 || fd >= PROG_MAX_FLOWS)
                 return -EBADF;
 
         flow = &ai.flows[fd];
@@ -1241,24 +1286,23 @@ ssize_t flow_read(int    fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
+        if (flow->flow_id < 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                return -ENOTALLOC;
+        }
+
         if (flow->part_idx == DONE_PART) {
                 pthread_rwlock_unlock(&ai.lock);
                 flow->part_idx = NO_PART;
                 return 0;
         }
 
-        if (flow->flow_id < 0) {
-                pthread_rwlock_unlock(&ai.lock);
-                return -ENOTALLOC;
-        }
-
-        rb   = flow->rx_rb;
-        noblock = flow->oflags & FLOWFRNOBLOCK;
+        block  = !(flow->oflags & FLOWFRNOBLOCK);
         partrd = !(flow->oflags & FLOWFRNOPART);
 
         ts_add(&now, &tic, &tictime);
 
-        if (ai.flows[fd].rcv_timesout) {
+        if (flow->rcv_timesout) {
                 ts_add(&now, &flow->rcv_timeo, &abs);
                 abstime = &abs;
         }
@@ -1268,8 +1312,7 @@ ssize_t flow_read(int    fd,
                 while ((idx = frcti_queued_pdu(flow->frcti)) < 0) {
                         pthread_rwlock_unlock(&ai.lock);
 
-                        idx = noblock ? shm_rbuff_read(rb) :
-                                shm_rbuff_read_b(rb, &tictime);
+                        idx = flow_rx_sdb(flow, &sdb, block, &tictime);
                         if (idx < 0) {
                                 frcti_tick(flow->frcti);
 
@@ -1285,45 +1328,31 @@ ssize_t flow_read(int    fd,
 
                                 ts_add(&tictime, &tic, &tictime);
 
-                                pthread_rwlock_wrlock(&ai.lock);
+                                pthread_rwlock_rdlock(&ai.lock);
                                 continue;
                         }
 
-                        sdb = shm_rdrbuff_get(ai.rdrb, idx);
-
-                        pthread_rwlock_wrlock(&ai.lock);
-
-                        flow->rcv_act = tictime;
-
-                        if ((flow->qs.ber == 0 && chk_crc(sdb) != 0) ||
-                            shm_du_buff_head(sdb) == shm_du_buff_tail(sdb)) {
-                                shm_rdrbuff_remove(ai.rdrb, idx);
-                                idx = -EAGAIN;
-                                continue;
-                        }
-
-                        if (flow->qs.cypher_s > 0
-                            && crypt_decrypt(flow, sdb) < 0) {
-                                pthread_rwlock_unlock(&ai.lock);
-                                shm_rdrbuff_remove(ai.rdrb, idx);
-                                return -ENOMEM;
-                        }
+                        pthread_rwlock_rdlock(&ai.lock);
 
                         frcti_rcv(flow->frcti, sdb);
                 }
         }
 
+        sdb = shm_rdrbuff_get(ai.rdrb, idx);
+
         frcti_tick(flow->frcti);
 
         pthread_rwlock_unlock(&ai.lock);
 
-        n = shm_rdrbuff_read(&packet, ai.rdrb, idx);
+        packet = shm_du_buff_head(sdb);
+
+        n = shm_du_buff_len(sdb);
 
         assert(n >= 0);
 
         if (n <= (ssize_t) count) {
                 memcpy(buf, packet, n);
-                shm_rdrbuff_remove(ai.rdrb, idx);
+                ipcp_sdb_release(sdb);
 
                 pthread_rwlock_wrlock(&ai.lock);
 
@@ -1337,7 +1366,6 @@ ssize_t flow_read(int    fd,
         } else {
                 if (partrd) {
                         memcpy(buf, packet, count);
-                        sdb = shm_rdrbuff_get(ai.rdrb, idx);
                         shm_du_buff_head_release(sdb, n);
                         pthread_rwlock_wrlock(&ai.lock);
                         flow->part_idx = idx;
@@ -1347,7 +1375,7 @@ ssize_t flow_read(int    fd,
                         pthread_rwlock_unlock(&ai.lock);
                         return count;
                 } else {
-                        shm_rdrbuff_remove(ai.rdrb, idx);
+                        ipcp_sdb_release(sdb);
                         return -EMSGSIZE;
                 }
         }
@@ -1870,10 +1898,8 @@ int ipcp_flow_alloc_reply(int          fd,
 int ipcp_flow_read(int                   fd,
                    struct shm_du_buff ** sdb)
 {
-        struct timespec    now;
-        struct flow *      flow;
-        struct shm_rbuff * rb;
-        ssize_t            idx = -1;
+        struct flow * flow;
+        ssize_t       idx = -1;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
         assert(sdb);
@@ -1884,27 +1910,14 @@ int ipcp_flow_read(int                   fd,
 
         assert(flow->flow_id >= 0);
 
-        rb = flow->rx_rb;
-
         while ((idx = frcti_queued_pdu(flow->frcti)) < 0) {
                 pthread_rwlock_unlock(&ai.lock);
 
-                idx = shm_rbuff_read(rb);
+                idx = flow_rx_sdb(flow, sdb, false, NULL);
                 if (idx < 0)
                         return idx;
 
-                clock_gettime(PTHREAD_COND_CLOCK, &now);
-
-                pthread_rwlock_wrlock(&ai.lock);
-
-                *sdb = shm_rdrbuff_get(ai.rdrb, idx);
-                if ((flow->qs.ber == 0 && chk_crc(*sdb) != 0) ||
-                    (shm_du_buff_head(*sdb) == shm_du_buff_tail(*sdb))) {
-                        shm_rdrbuff_remove(ai.rdrb, idx);
-                        continue;
-                }
-
-                flow->rcv_act = now;
+                pthread_rwlock_rdlock(&ai.lock);
 
                 frcti_rcv(flow->frcti, *sdb);
         }
@@ -1912,8 +1925,6 @@ int ipcp_flow_read(int                   fd,
         frcti_tick(flow->frcti);
 
         pthread_rwlock_unlock(&ai.lock);
-
-        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
 
         return 0;
 }

@@ -96,10 +96,8 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
         if (shm_fd == -1)
                 goto fail_shm_open;
 
-        if (ftruncate(shm_fd, SHM_FLOW_SET_FILE_SIZE - 1) < 0) {
-                close(shm_fd);
-                goto fail_shm_open;
-        }
+        if (ftruncate(shm_fd, SHM_FLOW_SET_FILE_SIZE - 1) < 0)
+                goto fail_truncate;
 
         shm_base = mmap(NULL,
                         SHM_FLOW_SET_FILE_SIZE,
@@ -108,10 +106,10 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
                         shm_fd,
                         0);
 
-        close(shm_fd);
-
         if (shm_base == MAP_FAILED)
                 goto fail_mmap;
+
+        close(shm_fd);
 
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
@@ -125,6 +123,8 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
  fail_mmap:
         if (flags & O_CREAT)
                 shm_unlink(fn);
+ fail_truncate:
+        close(shm_fd);
  fail_shm_open:
         free(set);
  fail_malloc:
