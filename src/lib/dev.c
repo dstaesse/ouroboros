@@ -147,6 +147,9 @@ struct {
         struct flow *         flows;
         struct port *         ports;
 
+        pthread_t             tx;
+        size_t                n_frcti;
+
         pthread_rwlock_t      lock;
 } ai;
 
@@ -262,17 +265,39 @@ static void flow_clear(int fd)
 #include "crypt.c"
 #include "frct.c"
 
+void * frct_tx(void * o)
+{
+        struct timespec tic = {0, TICTIME};
+
+        (void) o;
+
+        while (true) {
+                timerwheel_move();
+
+                nanosleep(&tic, NULL);
+        }
+
+        return (void *) 0;
+}
+
 static void flow_fini(int fd)
 {
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
+
+        if (ai.flows[fd].frcti != NULL) {
+                ai.n_frcti--;
+                if (ai.n_frcti == 0) {
+                        pthread_cancel(ai.tx);
+                        pthread_join(ai.tx, NULL);
+                }
+                frcti_destroy(ai.flows[fd].frcti);
+        }
 
         if (ai.flows[fd].flow_id != -1) {
                 port_destroy(&ai.ports[ai.flows[fd].flow_id]);
                 bmp_release(ai.fds, fd);
         }
 
-        if (ai.flows[fd].frcti != NULL)
-                frcti_destroy(ai.flows[fd].frcti);
 
         if (ai.flows[fd].rx_rb != NULL) {
                 shm_rbuff_set_acl(ai.flows[fd].rx_rb, ACL_FLOWDOWN);
@@ -354,6 +379,11 @@ static int flow_init(int       flow_id,
                 flow->frcti = frcti_create(fd, DELT_A, DELT_R, mpl);
                 if (flow->frcti == NULL)
                         goto fail_frcti;
+
+                ++ai.n_frcti;
+                if (ai.n_frcti == 1 &&
+                    pthread_create(&ai.tx, NULL, frct_tx, NULL) < 0)
+                        goto fail_tx_thread;
         }
 
         ai.ports[flow_id].fd = fd;
@@ -364,6 +394,8 @@ static int flow_init(int       flow_id,
 
         return fd;
 
+ fail_tx_thread:
+        frcti_destroy(flow->frcti);
  fail_frcti:
         crypt_fini(flow->ctx);
  fail_ctx:
@@ -1182,8 +1214,6 @@ ssize_t flow_write(int          fd,
                         if (flow_keepalive(fd))
                                 return -EFLOWPEER;
 
-                        frcti_tick(flow->frcti);
-
                         ts_add(&tictime, &tic, &tictime);
                 }
                 idx = shm_rdrbuff_alloc_b(ai.rdrb, count, &ptr, &sdb, abstime);
@@ -1300,8 +1330,6 @@ ssize_t flow_read(int    fd,
 
                         idx = flow_rx_sdb(flow, &sdb, block, &tictime);
                         if (idx < 0) {
-                                frcti_tick(flow->frcti);
-
                                 if (idx != -ETIMEDOUT)
                                         return idx;
 
@@ -1325,8 +1353,6 @@ ssize_t flow_read(int    fd,
         }
 
         sdb = shm_rdrbuff_get(ai.rdrb, idx);
-
-        frcti_tick(flow->frcti);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1909,8 +1935,6 @@ int ipcp_flow_read(int                   fd,
 
                 frcti_rcv(flow->frcti, *sdb);
         }
-
-        frcti_tick(flow->frcti);
 
         pthread_rwlock_unlock(&ai.lock);
 

@@ -467,9 +467,6 @@ static void frcti_setflags(struct frcti * frcti,
 #define frcti_rcv(frcti, sdb)                           \
         (frcti == NULL ? 0 : __frcti_rcv(frcti, sdb))
 
-#define frcti_tick(frcti)                               \
-        (frcti == NULL ? 0 : __frcti_tick())
-
 #define frcti_dealloc(frcti)                            \
         (frcti == NULL ? 0 : __frcti_dealloc(frcti))
 
@@ -767,11 +764,6 @@ static void rtt_estimator(struct frcti * frcti,
         frcti->srtt     = MAX(1000U, srtt);
         frcti->mdev     = MAX(100U, rttvar);
         frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << 2));
-}
-
-static void __frcti_tick(void)
-{
-        timerwheel_move();
 }
 
 /* Always queues the next application packet on the RQ. */
