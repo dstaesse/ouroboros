@@ -300,9 +300,11 @@ static void flow_fini(int fd)
 static int flow_init(int       flow_id,
                      pid_t     pid,
                      qosspec_t qs,
-                     uint8_t * s)
+                     uint8_t * s,
+                     time_t    mpl)
 {
         struct timespec now;
+        struct flow *   flow;
         int             fd;
         int             err = -ENOMEM;
 
@@ -316,32 +318,42 @@ static int flow_init(int       flow_id,
                 goto fail_fds;
         }
 
-        ai.flows[fd].rx_rb = shm_rbuff_open(getpid(), flow_id);
-        if (ai.flows[fd].rx_rb == NULL)
+        flow = &ai.flows[fd];
+
+        flow->rx_rb = shm_rbuff_open(getpid(), flow_id);
+        if (flow->rx_rb == NULL)
                 goto fail_rx_rb;
 
-        ai.flows[fd].tx_rb = shm_rbuff_open(pid, flow_id);
-        if (ai.flows[fd].tx_rb == NULL)
+        flow->tx_rb = shm_rbuff_open(pid, flow_id);
+        if (flow->tx_rb == NULL)
                 goto fail_tx_rb;
 
-        ai.flows[fd].set = shm_flow_set_open(pid);
-        if (ai.flows[fd].set == NULL)
+        flow->set = shm_flow_set_open(pid);
+        if (flow->set == NULL)
                 goto fail_set;
 
-        ai.flows[fd].flow_id  = flow_id;
-        ai.flows[fd].oflags   = FLOWFDEFAULT;
-        ai.flows[fd].pid      = pid;
-        ai.flows[fd].part_idx = NO_PART;
-        ai.flows[fd].qs       = qs;
-        ai.flows[fd].snd_act  = now;
-        ai.flows[fd].rcv_act  = now;
+        flow->flow_id  = flow_id;
+        flow->oflags   = FLOWFDEFAULT;
+        flow->pid      = pid;
+        flow->part_idx = NO_PART;
+        flow->qs       = qs;
+        flow->snd_act  = now;
+        flow->rcv_act  = now;
 
         if (qs.cypher_s > 0) {
                 assert(s != NULL);
-                if (crypt_init(&ai.flows[fd].ctx) < 0)
+                if (crypt_init(&flow->ctx) < 0)
                         goto fail_ctx;
 
-                memcpy(ai.flows[fd].key, s, SYMMKEYSZ);
+                memcpy(flow->key, s, SYMMKEYSZ);
+        }
+
+        assert(flow->frcti == NULL);
+
+        if (flow->qs.in_order != 0) {
+                flow->frcti = frcti_create(fd, DELT_A, DELT_R, mpl);
+                if (flow->frcti == NULL)
+                        goto fail_frcti;
         }
 
         ai.ports[flow_id].fd = fd;
@@ -352,12 +364,14 @@ static int flow_init(int       flow_id,
 
         return fd;
 
+ fail_frcti:
+        crypt_fini(flow->ctx);
  fail_ctx:
-        shm_flow_set_close(ai.flows[fd].set);
+        shm_flow_set_close(flow->set);
  fail_set:
-        shm_rbuff_close(ai.flows[fd].tx_rb);
+        shm_rbuff_close(flow->tx_rb);
  fail_tx_rb:
-        shm_rbuff_close(ai.flows[fd].rx_rb);
+        shm_rbuff_close(flow->rx_rb);
  fail_rx_rb:
         bmp_release(ai.fds, fd);
  fail_fds:
@@ -595,48 +609,36 @@ int flow_accept(qosspec_t *             qs,
                 goto fail_recv;
 
         if (!recv_msg->has_result)
-                goto fail_result;
+                goto fail_msg;
 
         if (recv_msg->result !=  0) {
                 err = recv_msg->result;
-                goto fail_result;
+                goto fail_msg;
         }
 
         if (!recv_msg->has_pid || !recv_msg->has_flow_id ||
             !recv_msg->has_mpl || recv_msg->qosspec == NULL)
-                goto fail_result;
+                goto fail_msg;
 
         if (recv_msg->pk.len != 0 &&
             crypt_dh_derive(pkp, recv_msg->pk.data,
                             recv_msg->pk.len, s) < 0) {
                 err = -ECRYPT;
-                goto fail_result;
+                goto fail_msg;
         }
 
         crypt_dh_pkp_destroy(pkp);
-
-        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       msg_to_spec(recv_msg->qosspec), s);
 
         mpl = recv_msg->mpl;
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
+                       msg_to_spec(recv_msg->qosspec), s, mpl);
         if (fd < 0)
                 return fd;
 
         pthread_rwlock_wrlock(&ai.lock);
-
-        assert(ai.flows[fd].frcti == NULL);
-
-        if (ai.flows[fd].qs.in_order != 0) {
-                ai.flows[fd].frcti = frcti_create(fd, DELT_A, DELT_R, mpl);
-                if (ai.flows[fd].frcti == NULL) {
-                        pthread_rwlock_unlock(&ai.lock);
-                        flow_dealloc(fd);
-                        return -ENOMEM;
-                }
-        }
 
         if (qs != NULL)
                 *qs = ai.flows[fd].qs;
@@ -645,7 +647,7 @@ int flow_accept(qosspec_t *             qs,
 
         return fd;
 
- fail_result:
+ fail_msg:
         irm_msg__free_unpacked(recv_msg, NULL);
  fail_recv:
         crypt_dh_pkp_destroy(pkp);
@@ -734,30 +736,13 @@ static int __flow_alloc(const char *            dst,
                 crypt_dh_pkp_destroy(pkp);
         }
 
-        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       qs == NULL ? qos_raw : *qs, s);
 
         mpl = recv_msg->mpl;
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
-        if (fd < 0)
-                return fd;
-
-        pthread_rwlock_wrlock(&ai.lock);
-
-        assert(ai.flows[fd].frcti == NULL);
-
-        if (ai.flows[fd].qs.in_order != 0) {
-                ai.flows[fd].frcti = frcti_create(fd, DELT_A, DELT_R, mpl);
-                if (ai.flows[fd].frcti == NULL) {
-                        pthread_rwlock_unlock(&ai.lock);
-                        flow_dealloc(fd);
-                        return -ENOMEM;
-                }
-        }
-
-        pthread_rwlock_unlock(&ai.lock);
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
+                       qs == NULL ? qos_raw : *qs, s, mpl);
 
         return fd;
 
@@ -1733,7 +1718,8 @@ int np1_flow_alloc(pid_t     n_pid,
                    qosspec_t qs)
 {
         qs.cypher_s = 0; /* No encryption ctx for np1 */
-        return flow_init(flow_id, n_pid, qs, NULL);
+        qs.in_order = 0; /* No frct for np1           */
+        return flow_init(flow_id, n_pid, qs, NULL, 0);
 }
 
 int np1_flow_dealloc(int    flow_id,
@@ -1844,7 +1830,8 @@ int ipcp_flow_req_arr(const uint8_t * dst,
         }
 
         qs.cypher_s = 0; /* No encryption ctx for np1 */
-        fd = flow_init(recv_msg->flow_id, recv_msg->pid, qs, NULL);
+        qs.in_order = 0; /* No frct for np1           */
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid, qs, NULL, 0);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
