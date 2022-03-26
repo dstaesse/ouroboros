@@ -136,9 +136,6 @@ struct fqueue {
 };
 
 struct {
-        char *                prog;
-        pid_t                 pid;
-
         struct shm_rdrbuff *  rdrb;
         struct shm_flow_set * fqset;
 
@@ -236,7 +233,7 @@ static int proc_announce(char * prog)
 
         msg.code    = IRM_MSG_CODE__IRM_PROC_ANNOUNCE;
         msg.has_pid = true;
-        msg.pid     = ai.pid;
+        msg.pid     = getpid();
         msg.prog    = prog;
 
         recv_msg = send_recv_irm_msg(&msg);
@@ -319,7 +316,7 @@ static int flow_init(int       flow_id,
                 goto fail_fds;
         }
 
-        ai.flows[fd].rx_rb = shm_rbuff_open(ai.pid, flow_id);
+        ai.flows[fd].rx_rb = shm_rbuff_open(getpid(), flow_id);
         if (ai.flows[fd].rx_rb == NULL)
                 goto fail_rx_rb;
 
@@ -382,20 +379,17 @@ static void init(int     argc,
                  char ** argv,
                  char ** envp)
 {
-        const char * prog = argv[0];
-        int          i;
+        char * prog = argv[0];
+        int    i;
 #ifdef PROC_FLOW_STATS
-        char         procstr[32];
+        char   procstr[32];
 #endif
         (void) argc;
         (void) envp;
 
-        assert(ai.prog == NULL);
-
         if (check_python(argv[0]))
                 prog = argv[1];
 
-        ai.pid = getpid();
 #ifdef HAVE_LIBGCRYPT
         if (!gcry_control(GCRYCTL_INITIALIZATION_FINISHED_P)) {
                 if (!gcry_check_version(GCRYPT_VERSION))
@@ -428,11 +422,8 @@ static void init(int     argc,
                 goto fail_ports;
 
         if (prog != NULL) {
-                ai.prog = strdup(path_strip((char *) prog));
-                if (ai.prog == NULL)
-                        goto fail_prog;
-
-                if (proc_announce((char *) ai.prog))
+                prog = path_strip(prog);
+                if (proc_announce(prog))
                         goto fail_announce;
         }
 
@@ -487,8 +478,6 @@ static void init(int     argc,
         for (i = 0; i < SYS_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
  fail_announce:
-        free(ai.prog);
- fail_prog:
         free(ai.ports);
  fail_ports:
         free(ai.flows);
@@ -511,12 +500,8 @@ static void fini(void)
 #ifdef PROC_FLOW_STATS
         rib_fini();
 #endif
-
         if (ai.fds == NULL)
                 return;
-
-        if (ai.prog != NULL)
-                free(ai.prog);
 
         pthread_rwlock_wrlock(&ai.lock);
 
@@ -580,7 +565,7 @@ int flow_accept(qosspec_t *             qs,
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
-        msg.pid     = ai.pid;
+        msg.pid     = getpid();
 
         if (timeo != NULL) {
                 msg.has_timeo_sec = true;
@@ -693,7 +678,7 @@ static int __flow_alloc(const char *            dst,
                            : IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst     = (char *) dst;
         msg.has_pid = true;
-        msg.pid     = ai.pid;
+        msg.pid     = getpid();
         qs_msg      = spec_to_msg(qs);
         msg.qosspec = &qs_msg;
 
@@ -814,7 +799,7 @@ int flow_dealloc(int fd)
         msg.code           = IRM_MSG_CODE__IRM_FLOW_DEALLOC;
         msg.has_flow_id    = true;
         msg.has_pid        = true;
-        msg.pid            = ai.pid;
+        msg.pid            = getpid();
         msg.has_timeo_sec  = true;
         msg.has_timeo_nsec = true;
         msg.timeo_nsec     = 0;
