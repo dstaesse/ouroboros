@@ -450,9 +450,11 @@ static void * ipcp_udp_packet_reader(void * o)
         eid_p = (uint32_t *) buf;
 
         while (true) {
-                struct mgmt_frame * frame;
-                struct sockaddr_in  r_saddr;
-                socklen_t           len;
+                struct mgmt_frame *  frame;
+                struct sockaddr_in   r_saddr;
+                socklen_t            len;
+                struct shm_du_buff * sdb;
+                uint8_t *            head;
 
                 len = sizeof(r_saddr);
 
@@ -493,7 +495,15 @@ static void * ipcp_udp_packet_reader(void * o)
                         continue;
                 }
 
-                flow_write(eid, data, n - sizeof(eid));
+                n-= sizeof(eid);
+
+                if (ipcp_sdb_reserve(&sdb, n))
+                        continue;
+
+                head = shm_du_buff_head(sdb);
+                memcpy(head, data, n);
+                if (np1_flow_write(eid, sdb) < 0)
+                        ipcp_sdb_release(sdb);
         }
 
         return 0;
@@ -536,7 +546,7 @@ static void * ipcp_udp_packet_writer(void * o)
                         if (fqueue_type(fq) != FLOW_PKT)
                                 continue;
 
-                        if (ipcp_flow_read(fd, &sdb)) {
+                        if (np1_flow_read(fd, &sdb)) {
                                 log_dbg("Bad read from fd %d.", fd);
                                 continue;
                         }

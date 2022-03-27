@@ -1016,10 +1016,15 @@ static void * eth_ipcp_packet_reader(void * o)
 #ifndef HAVE_NETMAP
                         shm_du_buff_head_release(sdb, ETH_HEADER_TOT_SIZE);
                         shm_du_buff_truncate(sdb, length);
-                        ipcp_flow_write(fd, sdb);
 #else
-                        flow_write(fd, &e_frame->payload, length);
+                        if (ipcp_sdb_reserve(&sdb, length))
+                                continue;
+
+                        buf = shm_du_buff_head(sdb);
+                        memcpy(buf, &e_frame->payload, length);
 #endif
+                        if (np1_flow_write(fd, sdb) < 0)
+                                ipcp_sdb_release(sdb);
                 }
         }
 
@@ -1062,7 +1067,7 @@ static void * eth_ipcp_packet_writer(void * o)
                         if (fqueue_type(fq) != FLOW_PKT)
                                 continue;
 
-                        if (ipcp_flow_read(fd, &sdb)) {
+                        if (np1_flow_read(fd, &sdb)) {
                                 log_dbg("Bad read from fd %d.", fd);
                                 continue;
                         }

@@ -713,7 +713,7 @@ void dt_fini(void)
 
 int dt_start(void)
 {
-        dt.psched = psched_create(packet_handler);
+        dt.psched = psched_create(packet_handler, ipcp_flow_read);
         if (dt.psched == NULL) {
                 log_err("Failed to create N-1 packet scheduler.");
                 return -1;

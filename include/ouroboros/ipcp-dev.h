@@ -47,6 +47,12 @@ int    ipcp_flow_read(int                   fd,
 int    ipcp_flow_write(int                  fd,
                        struct shm_du_buff * sdb);
 
+int    np1_flow_read(int                   fd,
+                     struct shm_du_buff ** sdb);
+
+int    np1_flow_write(int                  fd,
+                      struct shm_du_buff * sdb);
+
 int    ipcp_flow_fini(int fd);
 
 int    ipcp_flow_get_qoscube(int         fd,

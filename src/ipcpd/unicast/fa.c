@@ -756,7 +756,7 @@ int fa_start(void)
         int                 pol;
         int                 max;
 
-        fa.psched = psched_create(packet_handler);
+        fa.psched = psched_create(packet_handler, np1_flow_read);
         if (fa.psched == NULL) {
                 log_err("Failed to start packet scheduler.");
                 goto fail_psched;

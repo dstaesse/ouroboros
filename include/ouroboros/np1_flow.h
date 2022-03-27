@@ -27,13 +27,24 @@
 
 #include <unistd.h>
 
-int  np1_flow_alloc(pid_t     n_pid,
-                    int       flow_id,
-                    qosspec_t qs);
+int  np1_flow_alloc(pid_t n_pid,
+                    int   flow_id);
 
 int  np1_flow_resp(int flow_id);
 
-int  np1_flow_dealloc(int flow_id,
+int  np1_flow_dealloc(int    flow_id,
                       time_t timeo);
+
+static const qosspec_t qos_np1 = {
+        .delay        = UINT32_MAX,
+        .bandwidth    = 0,
+        .availability = 0,
+        .loss         = UINT32_MAX,
+        .ber          = UINT32_MAX,
+        .in_order     = 0,
+        .max_gap      = UINT32_MAX,
+        .cypher_s     = 0,
+        .timeout      = 0
+};
 
 #endif /* OUROBOROS_NP1_FLOW_H */

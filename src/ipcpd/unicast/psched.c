@@ -50,6 +50,7 @@ static int qos_prio [] = {
 struct psched {
         fset_t *         set[QOS_CUBE_MAX];
         next_packet_fn_t callback;
+        read_fn_t        read;
         pthread_t        readers[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
 };
 
@@ -101,7 +102,7 @@ static void * packet_reader(void * o)
                                 notifier_event(NOTIFY_DT_FLOW_UP, &fd);
                                 break;
                         case FLOW_PKT:
-                                if (ipcp_flow_read(fd, &sdb))
+                                if (sched->read(fd, &sdb) < 0)
                                         continue;
 
                                 sched->callback(fd, qc, sdb);
@@ -117,7 +118,8 @@ static void * packet_reader(void * o)
         return (void *) 0;
 }
 
-struct psched * psched_create(next_packet_fn_t callback)
+struct psched * psched_create(next_packet_fn_t callback,
+                              read_fn_t        read)
 {
         struct psched *       psched;
         struct sched_info *   infos[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
@@ -131,6 +133,7 @@ struct psched * psched_create(next_packet_fn_t callback)
                 goto fail_malloc;
 
         psched->callback = callback;
+        psched->read     = read;
 
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 psched->set[i] = fset_create();

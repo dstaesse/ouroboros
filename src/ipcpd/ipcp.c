@@ -514,10 +514,8 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        qs = msg_to_spec(msg->qosspec);
                         fd = np1_flow_alloc(msg->pid,
-                                            msg->flow_id,
-                                            qs);
+                                            msg->flow_id);
                         if (fd < 0) {
                                 log_err("Failed allocating fd on flow_id %d.",
                                         msg->flow_id);
@@ -525,6 +523,7 @@ static void * mainloop(void * o)
                                 break;
                         }
 
+                        qs = msg_to_spec(msg->qosspec);
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_alloc(fd,
                                                            msg->hash.data,
@@ -549,10 +548,8 @@ static void * mainloop(void * o)
                                 break;
                         }
 
-                        qs = msg_to_spec(msg->qosspec);
                         fd = np1_flow_alloc(msg->pid,
-                                            msg->flow_id,
-                                            qs);
+                                            msg->flow_id);
                         if (fd < 0) {
                                 log_err("Failed allocating fd on flow_id %d.",
                                         msg->flow_id);
@@ -560,6 +557,7 @@ static void * mainloop(void * o)
                                 break;
                         }
 
+                        qs = msg_to_spec(msg->qosspec);
                         ret_msg.result =
                                 ipcpi.ops->ipcp_flow_join(fd,
                                                           msg->hash.data,

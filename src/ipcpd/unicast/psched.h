@@ -30,7 +30,11 @@ typedef void (* next_packet_fn_t)(int                  fd,
                                   qoscube_t            qc,
                                   struct shm_du_buff * sdb);
 
-struct psched * psched_create(next_packet_fn_t callback);
+typedef int (* read_fn_t)(int                   fd,
+                          struct shm_du_buff ** sdb);
+
+struct psched * psched_create(next_packet_fn_t callback,
+                              read_fn_t        read);
 
 void            psched_destroy(struct psched * psched);
 

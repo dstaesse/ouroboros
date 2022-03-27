@@ -38,6 +38,7 @@
 #include <ouroboros/sockets.h>
 #include <ouroboros/fccntl.h>
 #include <ouroboros/bitmap.h>
+#include <ouroboros/np1_flow.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
 #include <ouroboros/shm_flow_set.h>
@@ -1330,7 +1331,7 @@ ssize_t flow_read(int    fd,
 
                         idx = flow_rx_sdb(flow, &sdb, block, &tictime);
                         if (idx < 0) {
-                                if (idx != -ETIMEDOUT)
+                                if (idx != -ETIMEDOUT && idx != -EAGAIN)
                                         return idx;
 
                                 if (abstime != NULL
@@ -1740,12 +1741,9 @@ ssize_t fevent(struct flow_set *       set,
 /* ipcp-dev functions. */
 
 int np1_flow_alloc(pid_t     n_pid,
-                   int       flow_id,
-                   qosspec_t qs)
+                   int       flow_id)
 {
-        qs.cypher_s = 0; /* No encryption ctx for np1 */
-        qs.in_order = 0; /* No frct for np1           */
-        return flow_init(flow_id, n_pid, qs, NULL, 0);
+        return flow_init(flow_id, n_pid, qos_np1, NULL, 0);
 }
 
 int np1_flow_dealloc(int    flow_id,
@@ -1855,9 +1853,7 @@ int ipcp_flow_req_arr(const uint8_t * dst,
                 return -1;
         }
 
-        qs.cypher_s = 0; /* No encryption ctx for np1 */
-        qs.in_order = 0; /* No frct for np1           */
-        fd = flow_init(recv_msg->flow_id, recv_msg->pid, qs, NULL, 0);
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid, qos_np1, NULL, 0);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
@@ -1928,8 +1924,14 @@ int ipcp_flow_read(int                   fd,
                 pthread_rwlock_unlock(&ai.lock);
 
                 idx = flow_rx_sdb(flow, sdb, false, NULL);
-                if (idx < 0)
+                if (idx < 0) {
+                        if (idx == -EAGAIN) {
+                                pthread_rwlock_rdlock(&ai.lock);
+                                continue;
+                        }
+
                         return idx;
+                }
 
                 pthread_rwlock_rdlock(&ai.lock);
 
@@ -1964,7 +1966,74 @@ int ipcp_flow_write(int                  fd,
                 return -EPERM;
         }
 
-        ret = flow_tx_sdb(flow, sdb, false, NULL);
+        pthread_rwlock_unlock(&ai.lock);
+
+        ret = flow_tx_sdb(flow, sdb, true, NULL);
+
+        return ret;
+}
+
+int np1_flow_read(int                   fd,
+                  struct shm_du_buff ** sdb)
+{
+        struct flow *    flow;
+        ssize_t          idx = -1;
+
+        assert(fd >= 0 && fd < SYS_MAX_FLOWS);
+        assert(sdb);
+
+        flow = &ai.flows[fd];
+
+        assert(flow->flow_id >= 0);
+
+        pthread_rwlock_rdlock(&ai.lock);
+
+        idx = shm_rbuff_read(flow->rx_rb);;
+        if (idx < 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                return idx;
+        }
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
+
+        return 0;
+}
+
+int np1_flow_write(int                  fd,
+                   struct shm_du_buff * sdb)
+{
+        struct flow * flow;
+        int           ret;
+        ssize_t       idx;
+
+        assert(fd >= 0 && fd < SYS_MAX_FLOWS);
+        assert(sdb);
+
+        flow = &ai.flows[fd];
+
+        pthread_rwlock_rdlock(&ai.lock);
+
+        if (flow->flow_id < 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                return -ENOTALLOC;
+        }
+
+        if ((flow->oflags & FLOWFACCMODE) == FLOWFRDONLY) {
+                pthread_rwlock_unlock(&ai.lock);
+                return -EPERM;
+        }
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        idx = shm_du_buff_get_idx(sdb);
+
+        ret = shm_rbuff_write_b(flow->tx_rb, idx, NULL);
+        if (ret < 0)
+                shm_rdrbuff_remove(ai.rdrb, idx);
+        else
+                shm_flow_set_notify(flow->set, flow->flow_id, FLOW_PKT);
 
         return ret;
 }
