@@ -294,7 +294,7 @@ static void send_frct_pkt(struct frcti * frcti)
 
         diff = ts_diff_ns(&frcti->rcv_cr.act, &now);
 
-        if (diff > frcti->a || diff < frcti->mdev) {
+        if (diff > frcti->a || diff < TICTIME) {
                 pthread_rwlock_unlock(&frcti->lock);
                 return;
         }
@@ -371,7 +371,7 @@ static struct frcti * frcti_create(int    fd,
         frcti->probe  = false;
 
         frcti->srtt = 0;            /* Updated on first ACK */
-        frcti->mdev = 10 * MILLION; /* Initial rxm will be after 20 ms */
+        frcti->mdev = 10 * MILLION; /* Updated on first ACK */
         frcti->rto  = BILLION;      /* Initial rxm will be after 1 s   */
 #ifdef PROC_FLOW_STATS
         frcti->n_rtx = 0;
@@ -540,7 +540,6 @@ static int __frcti_window_wait(struct frcti *    frcti,
 
         while (snd_cr->seqno == snd_cr->rwe && ret != -ETIMEDOUT) {
                 struct timespec now;
-
                 pthread_rwlock_unlock(&frcti->lock);
                 pthread_mutex_lock(&frcti->mtx);
 
@@ -554,9 +553,12 @@ static int __frcti_window_wait(struct frcti *    frcti,
 
                 pthread_cleanup_push(__cleanup_mutex_unlock, &frcti->mtx);
 
-                ret = -pthread_cond_timedwait(&frcti->cond,
-                                              &frcti->mtx,
-                                              abstime);
+                if (abstime != NULL)
+                        ret = -pthread_cond_timedwait(&frcti->cond,
+                                                      &frcti->mtx,
+                                                      abstime);
+                else
+                        ret = -pthread_cond_wait(&frcti->cond, &frcti->mtx);
 
                 pthread_cleanup_pop(false);
 
@@ -800,7 +802,7 @@ static void __frcti_rcv(struct frcti *       frcti,
                 if (pci->flags & FRCT_DRF)  { /* New run. */
                         rcv_cr->lwe = seqno;
                         rcv_cr->rwe = seqno + RQ_SIZE;
-                } else {
+                } else if (pci->flags & FRCT_DATA) {
                         goto drop_packet;
                 }
         }

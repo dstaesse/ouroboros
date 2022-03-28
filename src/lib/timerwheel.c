@@ -228,7 +228,6 @@ static void timerwheel_move(void)
                                         goto flow_down;
 
                                 rslot = (rslot + slot + 1) & (RXMQ_SLOTS - 1);
-
 #ifdef RXM_BLOCKING
                                 if (ipcp_sdb_reserve(&sdb, r->len) < 0)
 #else
@@ -249,7 +248,6 @@ static void timerwheel_move(void)
 
                                 /* Retransmit the copy. */
                                 pci->ackno = hton32(rcv_lwe);
-
 #ifdef RXM_BLOCKING
                                 if (shm_rbuff_write_b(f->tx_rb, idx, NULL) < 0)
 #else
