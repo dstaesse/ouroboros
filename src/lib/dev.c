@@ -114,16 +114,8 @@ struct flow {
         struct frcti *        frcti;
 };
 
-struct flow_set_entry {
-        struct list_head next;
-
-        int fd;
-};
-
 struct flow_set {
         size_t           idx;
-
-        struct list_head flows;
         pthread_rwlock_t lock;
 };
 
@@ -369,6 +361,7 @@ static void flow_fini(int fd)
                         pthread_cancel(ai.tx);
                         pthread_join(ai.tx, NULL);
                 }
+
                 frcti_destroy(ai.flows[fd].frcti);
         }
 
@@ -1438,9 +1431,6 @@ struct flow_set * fset_create()
         if (set == NULL)
                 goto fail_malloc;
 
-        if (pthread_rwlock_init(&set->lock, NULL))
-                goto fail_lock_init;
-
         assert(ai.fqueues);
 
         pthread_rwlock_wrlock(&ai.lock);
@@ -1451,14 +1441,10 @@ struct flow_set * fset_create()
 
         pthread_rwlock_unlock(&ai.lock);
 
-        list_head_init(&set->flows);
-
         return set;
 
  fail_bmp_alloc:
         pthread_rwlock_unlock(&ai.lock);
-        pthread_rwlock_destroy(&set->lock);
- fail_lock_init:
         free(set);
  fail_malloc:
         return NULL;
@@ -1476,8 +1462,6 @@ void fset_destroy(struct flow_set * set)
         bmp_release(ai.fqueues, set->idx);
 
         pthread_rwlock_unlock(&ai.lock);
-
-        pthread_rwlock_destroy(&set->lock);
 
         free(set);
 }
@@ -1502,22 +1486,8 @@ void fqueue_destroy(struct fqueue * fq)
 
 void fset_zero(struct flow_set * set)
 {
-        struct list_head * p;
-        struct list_head * h;
-
         if (set == NULL)
                 return;
-
-        pthread_rwlock_wrlock(&set->lock);
-
-        list_for_each_safe(p, h, &set->flows) {
-                struct flow_set_entry * e;
-                e = list_entry(p, struct flow_set_entry, next);
-                list_del(&e->next);
-                free(e);
-        }
-
-        pthread_rwlock_unlock(&set->lock);
 
         shm_flow_set_zero(ai.fqset, set->idx);
 }
@@ -1526,19 +1496,12 @@ int fset_add(struct flow_set * set,
              int               fd)
 {
         struct flow *           flow;
-        struct flow_set_entry * fse;
         int                     ret;
 
         if (set == NULL || fd < 0 || fd >= SYS_MAX_FLOWS)
                 return -EINVAL;
 
         flow = &ai.flows[fd];
-
-        fse = malloc(sizeof(*fse));
-        if (fse == NULL)
-                return -ENOMEM;
-
-        fse->fd = fd;
 
         pthread_rwlock_rdlock(&ai.lock);
 
@@ -1551,12 +1514,6 @@ int fset_add(struct flow_set * set,
         if (ret < 0)
                 goto fail;
 
-        pthread_rwlock_wrlock(&set->lock);
-
-        list_add_tail(&fse->next, &set->flows);
-
-        pthread_rwlock_unlock(&set->lock);
-
         if (shm_rbuff_queued(ai.flows[fd].rx_rb))
                 shm_flow_set_notify(ai.fqset, ai.flows[fd].flow_id, FLOW_PKT);
 
@@ -1566,16 +1523,13 @@ int fset_add(struct flow_set * set,
 
  fail:
         pthread_rwlock_unlock(&ai.lock);
-        free(fse);
         return ret;
 }
 
 void fset_del(struct flow_set * set,
               int               fd)
 {
-        struct list_head * p;
-        struct list_head * h;
-        struct flow *      flow;
+        struct flow * flow;
 
         if (set == NULL || fd < 0 || fd >= SYS_MAX_FLOWS)
                 return;
@@ -1586,20 +1540,6 @@ void fset_del(struct flow_set * set,
 
         if (flow->flow_id >= 0)
                 shm_flow_set_del(ai.fqset, set->idx, flow->flow_id);
-
-        pthread_rwlock_wrlock(&set->lock);
-
-        list_for_each_safe(p, h, &set->flows) {
-                struct flow_set_entry * e;
-                e = list_entry(p, struct flow_set_entry, next);
-                if (e->fd == fd) {
-                        list_del(&e->next);
-                        free(e);
-                        break;
-                }
-        }
-
-        pthread_rwlock_unlock(&set->lock);
 
         pthread_rwlock_unlock(&ai.lock);
 }
