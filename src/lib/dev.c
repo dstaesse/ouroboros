@@ -1626,6 +1626,58 @@ bool fset_has(const struct flow_set * set,
         return ret;
 }
 
+/* Filter fqueue events for non-data packets */
+static int fqueue_filter(struct fqueue * fq)
+{
+        struct shm_du_buff * sdb;
+        int                  fd;
+        ssize_t              idx;
+        struct frcti *       frcti;
+
+        while (fq->next < fq->fqsize) {
+                if (fq->fqueue[fq->next + 1] != FLOW_PKT)
+                        return 1;
+
+                pthread_rwlock_rdlock(&ai.lock);
+
+                fd = ai.ports[fq->fqueue[fq->next]].fd;
+                frcti = ai.flows[fd].frcti;
+
+                if (frcti == NULL) {
+                        pthread_rwlock_unlock(&ai.lock);
+                        return 1;
+                }
+
+                if (__frcti_pdu_ready(frcti) >= 0) {
+                        pthread_rwlock_unlock(&ai.lock);
+                        return 1;
+                }
+
+                pthread_rwlock_unlock(&ai.lock);
+
+                idx = flow_rx_sdb(&ai.flows[fd], &sdb, false, NULL);
+                if (idx < 0)
+                        return 0;
+
+                pthread_rwlock_rdlock(&ai.lock);
+
+                sdb = shm_rdrbuff_get(ai.rdrb, idx);
+
+                __frcti_rcv(frcti, sdb);
+
+                if (__frcti_pdu_ready(frcti) >= 0) {
+                        pthread_rwlock_unlock(&ai.lock);
+                        return 1;
+                }
+
+                pthread_rwlock_unlock(&ai.lock);
+
+                fq->next += 2;
+        }
+
+        return fq->next < fq->fqsize;
+}
+
 int fqueue_next(struct fqueue * fq)
 {
         int fd;
@@ -1638,7 +1690,7 @@ int fqueue_next(struct fqueue * fq)
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        if (fq->next != 0 && frcti_filter(fq) == 0) {
+        if (fq->next != 0 && fqueue_filter(fq) == 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 return -EPERM;
         }
@@ -1692,7 +1744,7 @@ ssize_t fevent(struct flow_set *       set,
                 fq->fqsize = ret << 1;
                 fq->next   = 0;
 
-                ret = frcti_filter(fq);
+                ret = fqueue_filter(fq);
         }
 
         assert(ret);
