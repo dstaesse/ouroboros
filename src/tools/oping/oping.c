@@ -175,30 +175,36 @@ int main(int     argc,
         server.quiet     = false;
 
         while (argc > 0) {
-                if (strcmp(*argv, "-i") == 0 ||
-                    strcmp(*argv, "--interval") == 0) {
+                if ((strcmp(*argv, "-i") == 0 ||
+                     strcmp(*argv, "--interval") == 0) &&
+                    argc > 1) {
                         client.interval = strtol(*(++argv), &rem, 10);
                         client.interval *= time_mul(rem);
                         --argc;
-                } else if (strcmp(*argv, "-n") == 0 ||
-                           strcmp(*argv, "--server-name") == 0) {
+                } else if ((strcmp(*argv, "-n") == 0 ||
+                            strcmp(*argv, "--server-name") == 0) &&
+                           argc > 1) {
                         client.s_apn = *(++argv);
                         --argc;
-                } else if (strcmp(*argv, "-c") == 0 ||
-                           strcmp(*argv, "--count") == 0) {
+                } else if ((strcmp(*argv, "-c") == 0 ||
+                            strcmp(*argv, "--count") == 0) &&
+                           argc > 1) {
                         client.count = strtol(*(++argv), &rem, 10);
                         --argc;
-                } else if (strcmp(*argv, "-d") == 0 ||
-                           strcmp(*argv, "--duration") == 0) {
+                } else if ((strcmp(*argv, "-d") == 0 ||
+                            strcmp(*argv, "--duration") == 0) &&
+                           argc > 1) {
                         duration = strtol(*(++argv), &rem, 10);
                         duration *= time_mul(rem);
                         --argc;
-                } else if (strcmp(*argv, "-s") == 0 ||
-                           strcmp(*argv, "--size") == 0) {
+                } else if ((strcmp(*argv, "-s") == 0 ||
+                            strcmp(*argv, "--size") == 0) &&
+                           argc > 1) {
                         client.size = strtol(*(++argv), &rem, 10);
                         --argc;
-                } else if (strcmp(*argv, "-q") == 0 ||
-                           strcmp(*argv, "--qos") == 0) {
+                } else if ((strcmp(*argv, "-q") == 0 ||
+                            strcmp(*argv, "--qos") == 0) &&
+                           argc > 1) {
                         qos = *(++argv);
                         --argc;
                 } else if (strcmp(*argv, "-l") == 0 ||
