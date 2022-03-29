@@ -63,11 +63,6 @@
 
 #define fqueue_ptr(fs, idx) (fs->fqueues + (SHM_BUFFER_SIZE) * idx)
 
-struct portevent {
-        int flow_id;
-        int event;
-};
-
 struct shm_flow_set {
         ssize_t *          mtable;
         size_t *           heads;
@@ -307,6 +302,8 @@ void shm_flow_set_notify(struct shm_flow_set * set,
                          int                   flow_id,
                          int                   event)
 {
+        struct portevent * e;
+
         assert(set);
         assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
 
@@ -317,10 +314,14 @@ void shm_flow_set_notify(struct shm_flow_set * set,
                 return;
         }
 
-        (fqueue_ptr(set, set->mtable[flow_id]) +
-         (set->heads[set->mtable[flow_id]]))->flow_id = flow_id;
-        (fqueue_ptr(set, set->mtable[flow_id]) +
-         (set->heads[set->mtable[flow_id]])++)->event = event;
+
+        e = fqueue_ptr(set, set->mtable[flow_id]) +
+                set->heads[set->mtable[flow_id]];
+
+        e->flow_id = flow_id;
+        e->event = event;
+
+        ++set->heads[set->mtable[flow_id]];
 
         pthread_cond_signal(&set->conds[set->mtable[flow_id]]);
 
@@ -330,7 +331,7 @@ void shm_flow_set_notify(struct shm_flow_set * set,
 
 ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                           size_t                      idx,
-                          int *                       fqueue,
+                          struct portevent *          fqueue,
                           const struct timespec *     abstime)
 {
         ssize_t ret = 0;

@@ -122,9 +122,9 @@ struct flow_set {
 };
 
 struct fqueue {
-        int    fqueue[2 * SHM_BUFFER_SIZE]; /* Safe copy from shm. */
-        size_t fqsize;
-        size_t next;
+        struct portevent fqueue[SHM_BUFFER_SIZE]; /* Safe copy from shm. */
+        size_t           fqsize;
+        size_t           next;
 };
 
 struct {
@@ -1509,7 +1509,7 @@ struct fqueue * fqueue_create()
         if (fq == NULL)
                 return NULL;
 
-        memset(fq->fqueue, -1, (SHM_BUFFER_SIZE) * sizeof(*fq->fqueue));
+        memset(fq->fqueue, -1, SHM_BUFFER_SIZE * sizeof(*fq->fqueue));
         fq->fqsize = 0;
         fq->next   = 0;
 
@@ -1618,12 +1618,12 @@ static int fqueue_filter(struct fqueue * fq)
         struct frcti *       frcti;
 
         while (fq->next < fq->fqsize) {
-                if (fq->fqueue[fq->next + 1] != FLOW_PKT)
+                if (fq->fqueue[fq->next].event != FLOW_PKT)
                         return 1;
 
                 pthread_rwlock_rdlock(&ai.lock);
 
-                fd = ai.ports[fq->fqueue[fq->next]].fd;
+                fd = ai.ports[fq->fqueue[fq->next].flow_id].fd;
                 frcti = ai.flows[fd].frcti;
                 if (frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
@@ -1654,7 +1654,7 @@ static int fqueue_filter(struct fqueue * fq)
 
                 pthread_rwlock_unlock(&ai.lock);
 
-                fq->next += 2;
+                ++fq->next;
         }
 
         return fq->next < fq->fqsize;
@@ -1662,7 +1662,8 @@ static int fqueue_filter(struct fqueue * fq)
 
 int fqueue_next(struct fqueue * fq)
 {
-        int fd;
+        int                fd;
+        struct portevent * e;
 
         if (fq == NULL)
                 return -EINVAL;
@@ -1675,9 +1676,11 @@ int fqueue_next(struct fqueue * fq)
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        fd = ai.ports[fq->fqueue[fq->next]].fd;
+        e = fq->fqueue + fq->next;
 
-        fq->next += 2;
+        fd = ai.ports[e->flow_id].fd;
+
+        ++fq->next;
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1692,7 +1695,7 @@ enum fqtype fqueue_type(struct fqueue * fq)
         if (fq->fqsize == 0 || fq->next == 0)
                 return -EPERM;
 
-        return fq->fqueue[fq->next - 1];
+        return fq->fqueue[(fq->next - 1)].event;
 }
 
 ssize_t fevent(struct flow_set *       set,
@@ -1721,7 +1724,7 @@ ssize_t fevent(struct flow_set *       set,
                 if (ret == -ETIMEDOUT)
                         return -ETIMEDOUT;
 
-                fq->fqsize = ret << 1;
+                fq->fqsize = ret;
                 fq->next   = 0;
 
                 ret = fqueue_filter(fq);
