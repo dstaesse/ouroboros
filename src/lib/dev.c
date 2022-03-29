@@ -738,7 +738,6 @@ int flow_accept(qosspec_t *             qs,
         uint8_t     buf[MSGBUFSZ];
         int         err = -EIRMD;
         ssize_t     key_len;
-        time_t      mpl;
 
         memset(s, 0, SYMMKEYSZ);
 
@@ -794,14 +793,15 @@ int flow_accept(qosspec_t *             qs,
 
         crypt_dh_pkp_destroy(pkp);
 
-        mpl = recv_msg->mpl;
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
+                       msg_to_spec(recv_msg->qosspec), s,
+                       recv_msg->mpl);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
-        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       msg_to_spec(recv_msg->qosspec), s, mpl);
         if (fd < 0)
                 return fd;
+
 
         pthread_rwlock_rdlock(&ai.lock);
 
@@ -833,7 +833,6 @@ static int __flow_alloc(const char *            dst,
         uint8_t       s[SYMMKEYSZ];   /* secret key for flow */
         uint8_t       buf[MSGBUFSZ];
         int           err = -EIRMD;
-        time_t        mpl;
 
         memset(s, 0, SYMMKEYSZ);
 
@@ -902,12 +901,11 @@ static int __flow_alloc(const char *            dst,
         }
 
 
-        mpl = recv_msg->mpl;
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
+                       qs == NULL ? qos_raw : *qs, s,
+                       recv_msg->mpl);
 
         irm_msg__free_unpacked(recv_msg, NULL);
-
-        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       qs == NULL ? qos_raw : *qs, s, mpl);
 
         return fd;
 
@@ -1627,7 +1625,6 @@ static int fqueue_filter(struct fqueue * fq)
 
                 fd = ai.ports[fq->fqueue[fq->next]].fd;
                 frcti = ai.flows[fd].frcti;
-
                 if (frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
                         return 1;
