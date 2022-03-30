@@ -54,7 +54,10 @@ struct frcti {
         bool              probe;       /* Probe active           */
 #ifdef PROC_FLOW_STATS
         size_t            n_rtx;       /* Number of rxm packets  */
+        size_t            n_prb;       /* Number of rtt probes   */
+        size_t            n_rtt;       /* Number of estimates    */
         size_t            n_dup;       /* Duplicates received    */
+        size_t            n_dak;       /* Delayed ACKs received  */
         size_t            n_rdv;       /* Number of rdv packets  */
         size_t            n_out;       /* Packets out of window  */
         size_t            n_rqo;       /* Packets out of rqueue  */
@@ -139,7 +142,10 @@ static int frct_rib_read(const char * path,
                 "Receiver inactive (ns):          %20ld\n"
                 "Receiver last ack:               %20u\n"
                 "Number of pkt retransmissions:   %20zu\n"
+                "Number of rtt probes:            %20zu\n"
+                "Number of rtt estimates:         %20zu\n"
                 "Number of duplicates received:   %20zu\n"
+                "Number of delayed acks received: %20zu\n"
                 "Number of rendez-vous sent:      %20zu\n"
                 "Number of packets out of window: %20zu\n"
                 "Number of packets out of rqueue: %20zu\n",
@@ -158,7 +164,10 @@ static int frct_rib_read(const char * path,
                 ts_diff_ns(&frcti->rcv_cr.act, &now),
                 frcti->rcv_cr.seqno,
                 frcti->n_rtx,
+                frcti->n_prb,
+                frcti->n_rtt,
                 frcti->n_dup,
+                frcti->n_dak,
                 frcti->n_rdv,
                 frcti->n_out,
                 frcti->n_rqo);
@@ -194,7 +203,7 @@ static int frct_rib_getattr(const char *      path,
         (void) path;
         (void) attr;
 
-        attr->size  = 1027;
+        attr->size  = 1189;
         attr->mtime = 0;
 
         return 0;
@@ -293,7 +302,6 @@ static void send_frct_pkt(struct frcti * frcti)
         rwe   = frcti->rcv_cr.rwe;
 
         diff = ts_diff_ns(&frcti->rcv_cr.act, &now);
-
         if (diff > frcti->a || diff < TICTIME) {
                 pthread_rwlock_unlock(&frcti->lock);
                 return;
@@ -304,7 +312,6 @@ static void send_frct_pkt(struct frcti * frcti)
         pthread_rwlock_unlock(&frcti->lock);
 
         __send_frct_pkt(fd, FRCT_ACK | FRCT_FC, ackno, rwe);
-
 }
 
 static void __send_rdv(int fd)
@@ -375,7 +382,10 @@ static struct frcti * frcti_create(int    fd,
         frcti->rto  = BILLION;      /* Initial rxm will be after 1 s   */
 #ifdef PROC_FLOW_STATS
         frcti->n_rtx = 0;
+        frcti->n_prb = 0;
+        frcti->n_rtt = 0;
         frcti->n_dup = 0;
+        frcti->n_dak = 0;
         frcti->n_rdv = 0;
         frcti->n_out = 0;
         frcti->n_rqo = 0;
@@ -729,6 +739,9 @@ static int __frcti_snd(struct frcti *       frcti,
                         frcti->rttseq  = snd_cr->seqno;
                         frcti->t_probe = now;
                         frcti->probe   = true;
+#ifdef PROC_FLOW_STATS
+                        frcti->n_prb++;
+#endif
                 }
                 if ((now.tv_sec - rcv_cr->act.tv_sec) * BILLION <= frcti->a) {
                         pci->flags |= FRCT_ACK;
@@ -762,10 +775,12 @@ static void rtt_estimator(struct frcti * frcti,
                 srtt += (delta >> 3);
                 rttvar += (ABS(delta) - rttvar) >> 2;
         }
-
+#ifdef PROC_FLOW_STATS
+        frcti->n_rtt++;
+#endif
         frcti->srtt     = MAX(1000U, srtt);
         frcti->mdev     = MAX(100U, rttvar);
-        frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << 2));
+        frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << 3));
 }
 
 /* Always queues the next application packet on the RQ. */
@@ -802,6 +817,7 @@ static void __frcti_rcv(struct frcti *       frcti,
                 if (pci->flags & FRCT_DRF)  { /* New run. */
                         rcv_cr->lwe = seqno;
                         rcv_cr->rwe = seqno + RQ_SIZE;
+                        rcv_cr->seqno = seqno;
                 } else if (pci->flags & FRCT_DATA) {
                         goto drop_packet;
                 }
@@ -825,6 +841,10 @@ static void __frcti_rcv(struct frcti *       frcti,
                         frcti->snd_cr.lwe = ackno;
 
                 if (frcti->probe && after(ackno, frcti->rttseq)) {
+#ifdef PROC_FLOW_STATS
+                        if (!(pci->flags & FRCT_DATA))
+                                frcti->n_dak++;
+#endif
                         rtt_estimator(frcti, ts_diff_ns(&frcti->t_probe, &now));
                         frcti->probe = false;
                 }

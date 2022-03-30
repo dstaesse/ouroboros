@@ -301,7 +301,6 @@ static void timerwheel_move(void)
                                 send_frct_pkt(a->frcti);
 
                         free(a);
-
                 }
         }
 
@@ -394,7 +393,7 @@ static int timerwheel_ack(int            fd,
 
         pthread_rwlock_rdlock(&frcti->lock);
 
-        slot = (((ts_to_ns(now) + frcti->mdev) >> ACKQ_RES) + 1)
+        slot = (((ts_to_ns(now) + (TICTIME << 1)) >> ACKQ_RES) + 1)
                 & (ACKQ_SLOTS - 1);
 
         pthread_rwlock_unlock(&frcti->lock);
