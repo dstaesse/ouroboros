@@ -167,7 +167,7 @@ static void port_destroy(struct port * p)
         while (p->state != PORT_NULL)
                 pthread_cond_wait(&p->state_cond, &p->state_lock);
 
-        p->fd = -1;
+        p->fd    = -1;
         p->state = PORT_INIT;
 
         pthread_mutex_unlock(&p->state_lock);
@@ -1624,6 +1624,12 @@ static int fqueue_filter(struct fqueue * fq)
                 pthread_rwlock_rdlock(&ai.lock);
 
                 fd = ai.ports[fq->fqueue[fq->next].flow_id].fd;
+                if (fd < 0) {
+                        ++fq->next;
+                        pthread_rwlock_unlock(&ai.lock);
+                        continue;
+                }
+
                 frcti = ai.flows[fd].frcti;
                 if (frcti == NULL) {
                         pthread_rwlock_unlock(&ai.lock);
@@ -1657,7 +1663,7 @@ static int fqueue_filter(struct fqueue * fq)
                 ++fq->next;
         }
 
-        return fq->next < fq->fqsize;
+        return 0;
 }
 
 int fqueue_next(struct fqueue * fq)

@@ -314,7 +314,6 @@ void shm_flow_set_notify(struct shm_flow_set * set,
                 return;
         }
 
-
         e = fqueue_ptr(set, set->mtable[flow_id]) +
                 set->heads[set->mtable[flow_id]];
 
