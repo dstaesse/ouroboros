@@ -69,12 +69,14 @@
 #define DU_BUFF_TAILSPACE   @DU_BUFF_TAILSPACE@
 
 /* Default Delta-t parameters */
+#cmakedefine                FRCT_LINUX_RTT_ESTIMATOR
 #define DELT_A              (@DELTA_T_ACK@)                  /* ns */
 #define DELT_R              (@DELTA_T_RTX@)                  /* ns */
 
 #define RQ_SIZE             (@FRCT_REORDER_QUEUE_SIZE@)
 #define START_WINDOW        (@FRCT_START_WINDOW@)
 #define RTO_MIN             (@FRCT_RTO_MIN@ * 1000)
+#define MDEV_MUL            (@FRCT_RTO_MDEV_MULTIPLIER@)
 
 #define TICTIME             (@FRCT_TICK_TIME@ * 1000)        /* ns */
 

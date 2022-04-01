@@ -773,14 +773,19 @@ static void rtt_estimator(struct frcti * frcti,
         } else {
                 time_t delta = mrtt - srtt;
                 srtt += (delta >> 3);
-                rttvar += (ABS(delta) - rttvar) >> 2;
+                delta = (ABS(delta) - rttvar) >> 2;
+#ifdef FRCT_LINUX_RTT_ESTIMATOR
+                if (delta < 0)
+                        delta >>= 3;
+#endif
+                rttvar += delta;
         }
 #ifdef PROC_FLOW_STATS
         frcti->n_rtt++;
 #endif
         frcti->srtt     = MAX(1000U, srtt);
         frcti->mdev     = MAX(100U, rttvar);
-        frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << 3));
+        frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << MDEV_MUL));
 }
 
 /* Always queues the next application packet on the RQ. */

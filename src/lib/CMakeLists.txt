@@ -196,6 +196,10 @@ set(FRCT_REORDER_QUEUE_SIZE 256 CACHE STRING
   "Size of the reordering queue, must be a power of 2")
 set(FRCT_START_WINDOW 64 CACHE STRING
   "Start window, must be a power of 2")
+set(FRCT_LINUX_RTT_ESTIMATOR TRUE CACHE BOOL
+  "Use Linux RTT estimator formula instead of the TCP RFC formula")
+set(FRCT_RTO_MDEV_MULTIPLIER 2 CACHE STRING
+  "Multiplier for deviation term in the RTO: RTO = sRTT + (mdev << X)")
 set(FRCT_RTO_MIN 250 CACHE STRING
   "Minimum Retransmission Timeout (RTO) for FRCT (us)")
 set(FRCT_TICK_TIME 5000 CACHE STRING
