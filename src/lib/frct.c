@@ -302,7 +302,13 @@ static void send_frct_pkt(struct frcti * frcti)
         rwe   = frcti->rcv_cr.rwe;
 
         diff = ts_diff_ns(&frcti->rcv_cr.act, &now);
-        if (diff > frcti->a || diff < TICTIME) {
+        if (diff > frcti->a) {
+                pthread_rwlock_unlock(&frcti->lock);
+                return;
+        }
+
+        diff = ts_diff_ns(&frcti->snd_cr.act, &now);
+        if (diff < TICTIME) {
                 pthread_rwlock_unlock(&frcti->lock);
                 return;
         }
@@ -828,6 +834,8 @@ static void __frcti_rcv(struct frcti *       frcti,
                 }
         }
 
+        rcv_cr->act = now;
+
         /* For now, just send an immediate window update. */
         if (pci->flags & FRCT_RDVS) {
                 fd = frcti->fd;
@@ -913,8 +921,6 @@ static void __frcti_rcv(struct frcti *       frcti,
         }
 
         frcti->rq[pos] = idx;
-
-        rcv_cr->act = now;
 
         pthread_rwlock_unlock(&frcti->lock);
 
