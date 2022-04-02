@@ -131,8 +131,6 @@ struct {
         struct shm_rdrbuff *  rdrb;
         struct shm_flow_set * fqset;
 
-        struct timerwheel *   tw;
-
         struct bmp *          fds;
         struct bmp *          fqueues;
 
