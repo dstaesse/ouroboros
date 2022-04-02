@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2021
+ * Ouroboros - Copyright (C) 2016 - 2022
  *
  * Lockless ring buffer for incoming packets
  *

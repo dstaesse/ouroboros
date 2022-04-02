@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2021
+ * Ouroboros - Copyright (C) 2016 - 2022
  *
  * Ring buffer implementations for incoming packets
  *
