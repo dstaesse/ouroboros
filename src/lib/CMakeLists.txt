@@ -200,6 +200,8 @@ set(FRCT_LINUX_RTT_ESTIMATOR TRUE CACHE BOOL
   "Use Linux RTT estimator formula instead of the TCP RFC formula")
 set(FRCT_RTO_MDEV_MULTIPLIER 2 CACHE STRING
   "Multiplier for deviation term in the RTO: RTO = sRTT + (mdev << X)")
+set(FRCT_RTO_INC_FACTOR 0 CACHE STRING
+  "Divisor for RTO increase after timeout: RTO += RTX >> X, 0: Karn/Partridge")
 set(FRCT_RTO_MIN 250 CACHE STRING
   "Minimum Retransmission Timeout (RTO) for FRCT (us)")
 set(FRCT_TICK_TIME 5000 CACHE STRING

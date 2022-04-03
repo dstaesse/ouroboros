@@ -36,7 +36,6 @@ struct rxm {
         struct frct_pci *    pkt;
         size_t               len;
         time_t               t0;      /* Time when original was sent (us). */
-        size_t               mul;     /* RTO multiplier.                   */
         struct frcti *       frcti;
         int                  fd;
         int                  flow_id; /* Prevent rtx when fd reused.       */
@@ -166,9 +165,7 @@ static void timerwheel_move(void)
                                 struct flow *        f;
                                 uint32_t             snd_lwe;
                                 uint32_t             rcv_lwe;
-                                time_t               rto;
                                 size_t               lvl = 0;
-                                time_t               act;
 
                                 r = list_entry(p, struct rxm, next);
 
@@ -188,8 +185,6 @@ static void timerwheel_move(void)
 
                                 snd_lwe = snd_cr->lwe;
                                 rcv_lwe = rcv_cr->lwe;
-                                rto     = r->frcti->rto;
-                                act     = ts_to_ns(r->frcti->rcv_cr.act);
 
                                 pthread_rwlock_unlock(&r->frcti->lock);
 
@@ -203,20 +198,20 @@ static void timerwheel_move(void)
 
                                 pthread_rwlock_wrlock(&r->frcti->lock);
 
-                                if (r->frcti->probe
-                                    && (r->frcti->rttseq == r->seqno))
+                                if (r->seqno == r->frcti->rttseq) {
+                                        r->frcti->rto +=
+                                                f->frcti->rto >> RTO_DIV;
                                         r->frcti->probe = false;
+                                }
 #ifdef PROC_FLOW_STATS
                                 r->frcti->n_rtx++;
 #endif
-                                pthread_rwlock_unlock(&r->frcti->lock);
+                                rslot = r->frcti->rto >> RXMQ_RES;
 
-                                if (ts_to_ns(now) - act > (rto << 2))
-                                        rto <<= r->mul++;
+                                pthread_rwlock_unlock(&r->frcti->lock);
 
                                 /* Schedule at least in the next time slot. */
                                 slot = ts_to_ns(now) >> RXMQ_RES;
-                                rslot = rto >> RXMQ_RES;
 
                                 while (rslot >= RXMQ_SLOTS) {
                                         ++lvl;
@@ -326,7 +321,6 @@ static int timerwheel_rxm(struct frcti *       frcti,
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
         r->t0    = ts_to_ns(now);
-        r->mul   = 0;
         r->seqno = seqno;
         r->frcti = frcti;
         r->len  = shm_du_buff_len(sdb);

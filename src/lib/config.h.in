@@ -76,6 +76,7 @@
 #define RQ_SIZE             (@FRCT_REORDER_QUEUE_SIZE@)
 #define START_WINDOW        (@FRCT_START_WINDOW@)
 #define RTO_MIN             (@FRCT_RTO_MIN@ * 1000)
+#define RTO_DIV             (@FRCT_RTO_INC_FACTOR@)
 #define MDEV_MUL            (@FRCT_RTO_MDEV_MULTIPLIER@)
 
 #define TICTIME             (@FRCT_TICK_TIME@ * 1000)        /* ns */
