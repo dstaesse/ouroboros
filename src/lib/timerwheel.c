@@ -200,7 +200,7 @@ static void timerwheel_move(void)
 
                                 if (r->seqno == r->frcti->rttseq) {
                                         r->frcti->rto +=
-                                                f->frcti->rto >> RTO_DIV;
+                                                r->frcti->rto >> RTO_DIV;
                                         r->frcti->probe = false;
                                 }
 #ifdef PROC_FLOW_STATS
@@ -372,8 +372,8 @@ static int timerwheel_rxm(struct frcti *       frcti,
         return 0;
 }
 
-static int timerwheel_ack(int            fd,
-                          struct frcti * frcti)
+static int timerwheel_delayed_ack(int            fd,
+                                  struct frcti * frcti)
 {
         struct timespec now;
         struct ack *    a;

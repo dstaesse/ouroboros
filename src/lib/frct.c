@@ -925,15 +925,13 @@ static void __frcti_rcv(struct frcti *       frcti,
         pthread_rwlock_unlock(&frcti->lock);
 
         if (fd != -1)
-                timerwheel_ack(fd, frcti);
+                timerwheel_delayed_ack(fd, frcti);
 
         return;
 
  drop_packet:
         pthread_rwlock_unlock(&frcti->lock);
-
-        send_frct_pkt(frcti);
-
         shm_rdrbuff_remove(ai.rdrb, idx);
+        send_frct_pkt(frcti);
         return;
 }
