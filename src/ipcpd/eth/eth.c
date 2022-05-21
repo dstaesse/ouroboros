@@ -1883,9 +1883,9 @@ int main(int    argc,
 #endif
         }
 
-        eth_data_fini();
-
         ipcp_fini();
+
+        eth_data_fini();
 
         exit(EXIT_SUCCESS);
 

@@ -1163,9 +1163,9 @@ int main(int    argc,
                 pthread_join(udp_data.mgmt_handler, NULL);
         }
 
-        udp_data_fini();
-
         ipcp_fini();
+
+        udp_data_fini();
 
         exit(EXIT_SUCCESS);
  fail_create_r:

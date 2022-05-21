@@ -377,9 +377,9 @@ int main(int    argc,
                 pthread_join(local_data.packet_loop, NULL);
         }
 
-        local_data_fini();
-
         ipcp_fini();
+
+        local_data_fini();
 
         exit(EXIT_SUCCESS);
  fail_create_r:
