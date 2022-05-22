@@ -934,10 +934,12 @@ int flow_join(const char *            dst,
 
 int flow_dealloc(int fd)
 {
-        irm_msg_t     msg = IRM_MSG__INIT;
-        irm_msg_t *   recv_msg;
-        struct flow * f;
-        time_t        timeo;
+        irm_msg_t       msg = IRM_MSG__INIT;
+        irm_msg_t *     recv_msg;
+        uint8_t         buf[128];
+        struct timespec tic = {0, TICTIME};
+        struct flow *   f;
+        time_t          timeo;
 
         if (fd < 0 || fd >= SYS_MAX_FLOWS )
                 return -EINVAL;
@@ -961,16 +963,20 @@ int flow_dealloc(int fd)
 
         msg.flow_id = f->flow_id;
 
+        f->oflags = FLOWFDEFAULT | FLOWFRNOPART;
+
+        f->rcv_timesout = true;
+        f->rcv_timeo = tic;
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        flow_read(fd, buf, 128);
+
+        pthread_rwlock_rdlock(&ai.lock);
+
         timeo = frcti_dealloc(f->frcti);
         while (timeo < 0) { /* keep the flow active for rtx */
                 ssize_t         ret;
-                uint8_t         buf[128];
-                struct timespec tic = {0, TICTIME};
-
-                f->oflags = FLOWFDEFAULT | FLOWFRNOPART;
-
-                f->rcv_timesout = true;
-                f->rcv_timeo = tic;
 
                 pthread_rwlock_unlock(&ai.lock);
 
@@ -986,9 +992,11 @@ int flow_dealloc(int fd)
 
         msg.timeo_sec = timeo;
 
+        pthread_cleanup_push(__cleanup_rwlock_unlock, &ai.lock);
+
         shm_rbuff_fini(ai.flows[fd].tx_rb);
 
-        pthread_rwlock_unlock(&ai.lock);
+        pthread_cleanup_pop(true);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
