@@ -43,6 +43,7 @@
 #include <ouroboros/sockets.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/ipcp-dev.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/np1_flow.h>
 #include <ouroboros/rib.h>
@@ -624,7 +625,7 @@ static void * mainloop(void * o)
                 default:
                         ret_msg.has_result = true;
                         ret_msg.result     = -1;
-                        log_err("Don't know that message code");
+                        log_err("Unknown message code: %d.", msg->code);
                         break;
                 }
         exit:
@@ -764,6 +765,15 @@ int ipcp_init(int               argc,
                 goto fail_rib_init;
         }
 
+        if (rib_reg(IPCP_INFO, &r_ops))
+                goto fail_rib_reg;
+
+        ipcpi.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
+                               mainloop, NULL);
+        if (ipcpi.tpm == NULL)
+                goto fail_tpm_create;
+
+
         list_head_init(&ipcpi.cmds);
 
         ipcpi.alloc_id = -1;
@@ -772,6 +782,10 @@ int ipcp_init(int               argc,
 
         return 0;
 
+ fail_tpm_create:
+        rib_unreg(IPCP_INFO);
+ fail_rib_reg:
+        rib_fini();
  fail_rib_init:
         pthread_cond_destroy(&ipcpi.cmd_cond);
  fail_cmd_cond:
@@ -794,7 +808,7 @@ int ipcp_init(int               argc,
         return ret;
 }
 
-int ipcp_boot()
+int ipcp_start()
 {
         sigset_t  sigset;
         sigemptyset(&sigset);
@@ -803,11 +817,6 @@ int ipcp_boot()
         sigaddset(&sigset, SIGHUP);
         sigaddset(&sigset, SIGPIPE);
 
-        ipcpi.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
-                               mainloop, NULL);
-        if (ipcpi.tpm == NULL)
-                goto fail_tpm_create;
-
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (tpm_start(ipcpi.tpm))
@@ -815,29 +824,31 @@ int ipcp_boot()
 
         ipcp_set_state(IPCP_INIT);
 
-        if (rib_reg(IPCP_INFO, &r_ops))
-                goto fail_rib_reg;
-
         if (pthread_create(&ipcpi.acceptor, NULL, acceptloop, NULL)) {
                 log_err("Failed to create acceptor thread.");
-                ipcp_set_state(IPCP_NULL);
                 goto fail_acceptor;
+        }
+
+        if (ipcp_create_r(0)) {
+                log_err("Failed to notify IRMd we are initialized.");
+                goto fail_create_r;
         }
 
         return 0;
 
-
+ fail_create_r:
+        pthread_cancel(ipcpi.acceptor);
+        pthread_join(ipcpi.acceptor, NULL);
  fail_acceptor:
-        rib_unreg(IPCP_INFO);
- fail_rib_reg:
+        ipcp_set_state(IPCP_NULL);
         tpm_stop(ipcpi.tpm);
  fail_tpm_start:
         tpm_destroy(ipcpi.tpm);
- fail_tpm_create:
+        ipcp_create_r(-1);
         return -1;
 }
 
-void ipcp_shutdown()
+void ipcp_sigwait()
 {
 
         siginfo_t info;
@@ -891,18 +902,24 @@ void ipcp_shutdown()
                         continue;
                 }
         }
+}
+
+void ipcp_stop()
+{
+        log_info("IPCP %d shutting down.", getpid());
 
         pthread_cancel(ipcpi.acceptor);
-
         pthread_join(ipcpi.acceptor, NULL);
-        tpm_stop(ipcpi.tpm);
-        tpm_destroy(ipcpi.tpm);
 
-        log_info("IPCP %d shutting down.", getpid());
+        tpm_stop(ipcpi.tpm);
 }
 
 void ipcp_fini()
 {
+
+        tpm_destroy(ipcpi.tpm);
+
+        rib_unreg(IPCP_INFO);
 
         rib_fini();
 

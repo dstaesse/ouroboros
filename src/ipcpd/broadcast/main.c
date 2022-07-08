@@ -295,23 +295,19 @@ int main(int    argc,
                 goto fail_enroll_init;
         }
 
-        if (ipcp_boot() < 0) {
+        if (ipcp_start() < 0) {
                 log_err("Failed to boot IPCP.");
-                goto fail_boot;
+                goto fail_start;
         }
 
-        if (ipcp_create_r(0)) {
-                log_err("Failed to notify IRMd we are initialized.");
-                ipcp_set_state(IPCP_NULL);
-                goto fail_create_r;
-        }
-
-        ipcp_shutdown();
+        ipcp_sigwait();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 stop_components();
                 finalize_components();
         }
+
+        ipcp_stop();
 
         enroll_fini();
 
@@ -323,9 +319,7 @@ int main(int    argc,
 
         exit(EXIT_SUCCESS);
 
- fail_create_r:
-        ipcp_shutdown();
- fail_boot:
+ fail_start:
         enroll_fini();
  fail_enroll_init:
         connmgr_fini();
@@ -334,6 +328,5 @@ int main(int    argc,
  fail_notifier_init:
         ipcp_fini();
  fail_init:
-        ipcp_create_r(-1);
         exit(EXIT_FAILURE);
 }

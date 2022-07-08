@@ -1849,18 +1849,12 @@ int main(int    argc,
                 goto fail_data_init;
         }
 
-        if (ipcp_boot() < 0) {
-                log_err("Failed to boot IPCP.");
-                goto fail_boot;
+        if (ipcp_start() < 0) {
+                log_err("Failed to start IPCP.");
+                goto fail_start;
         }
 
-        if (ipcp_create_r(0)) {
-                log_err("Failed to notify IRMd we are initialized.");
-                ipcp_set_state(IPCP_NULL);
-                goto fail_create_r;
-        }
-
-        ipcp_shutdown();
+        ipcp_sigwait();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 for (i = 0; i < IPCP_ETH_WR_THR; ++i)
@@ -1883,19 +1877,18 @@ int main(int    argc,
 #endif
         }
 
+        ipcp_stop();
+
         ipcp_fini();
 
         eth_data_fini();
 
         exit(EXIT_SUCCESS);
 
- fail_create_r:
-        ipcp_shutdown();
- fail_boot:
+ fail_start:
         eth_data_fini();
  fail_data_init:
         ipcp_fini();
  fail_init:
-        ipcp_create_r(-1);
         exit(EXIT_FAILURE);
 }

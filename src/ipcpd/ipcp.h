@@ -120,9 +120,11 @@ int             ipcp_init(int               argc,
                           struct ipcp_ops * ops,
                           enum ipcp_type    type);
 
-int             ipcp_boot(void);
+int             ipcp_start(void);
 
-void            ipcp_shutdown(void);
+void            ipcp_sigwait(void);
+
+void            ipcp_stop(void);
 
 void            ipcp_fini(void);
 

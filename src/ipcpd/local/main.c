@@ -360,36 +360,30 @@ int main(int    argc,
                 goto fail_data_init;
         }
 
-        if (ipcp_boot() < 0) {
-                log_err("Failed to boot IPCP.");
-                goto fail_boot;
+        if (ipcp_start() < 0) {
+                log_err("Failed to start IPCP.");
+                goto fail_start;
         }
 
-        if (ipcp_create_r(0)) {
-                log_err("Failed to notify IRMd we are initialized.");
-                goto fail_create_r;
-        }
-
-        ipcp_shutdown();
+        ipcp_sigwait();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 pthread_cancel(local_data.packet_loop);
                 pthread_join(local_data.packet_loop, NULL);
         }
 
+        ipcp_stop();
+
         ipcp_fini();
 
         local_data_fini();
 
         exit(EXIT_SUCCESS);
- fail_create_r:
-        ipcp_set_state(IPCP_NULL);
-        ipcp_shutdown();
- fail_boot:
+
+ fail_start:
         local_data_fini();
  fail_data_init:
         ipcp_fini();
  fail_init:
-        ipcp_create_r(-1);
         exit(EXIT_FAILURE);
 }
