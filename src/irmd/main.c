@@ -107,6 +107,8 @@ struct cmd {
 };
 
 struct {
+        bool                 log_stdout;   /* log to stdout              */
+
         struct list_head     registry;     /* registered names known     */
         size_t               n_names;      /* number of names            */
 
@@ -1492,14 +1494,17 @@ static int flow_alloc(pid_t              pid,
         return 0;
 }
 
-static int flow_dealloc(pid_t pid,
-                        int   flow_id,
+static int flow_dealloc(pid_t  pid,
+                        int    flow_id,
                         time_t timeo)
 {
         pid_t n_1_pid = -1;
         int   ret = 0;
 
         struct irm_flow * f = NULL;
+
+        log_dbg("Deallocating flow %d for process %d.",
+                flow_id, pid);
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
 
@@ -1775,94 +1780,6 @@ static int flow_alloc_reply(int          flow_id,
         pthread_rwlock_unlock(&irmd.flows_lock);
 
         return 0;
-}
-
-static void irm_fini(void)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        if (irmd_get_state() != IRMD_NULL)
-                log_warn("Unsafe destroy.");
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        /* Clear the lists. */
-        list_for_each_safe(p, h, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                list_del(&e->next);
-                ipcp_entry_destroy(e);
-        }
-
-        list_for_each(p, &irmd.spawned_pids) {
-                struct pid_el * e = list_entry(p, struct pid_el, next);
-                if (kill(e->pid, SIGTERM))
-                        log_dbg("Could not send kill signal to %d.", e->pid);
-        }
-
-        list_for_each_safe(p, h, &irmd.spawned_pids) {
-                struct pid_el * e = list_entry(p, struct pid_el, next);
-                int status;
-                if (waitpid(e->pid, &status, 0) < 0)
-                        log_dbg("Error waiting for %d to exit.", e->pid);
-                list_del(&e->next);
-                registry_del_process(&irmd.registry, e->pid);
-                free(e);
-        }
-
-        list_for_each_safe(p, h, &irmd.prog_table) {
-                struct prog_entry * e = list_entry(p, struct prog_entry, next);
-                list_del(&e->next);
-                prog_entry_destroy(e);
-        }
-
-        list_for_each_safe(p, h, &irmd.proc_table) {
-                struct proc_entry * e = list_entry(p, struct proc_entry, next);
-                list_del(&e->next);
-                e->state = PROC_INIT; /* sanitizer already joined */
-                proc_entry_destroy(e);
-        }
-
-        registry_destroy(&irmd.registry);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        close(irmd.sockfd);
-
-        if (unlink(IRM_SOCK_PATH))
-                log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
-
-        pthread_rwlock_wrlock(&irmd.flows_lock);
-
-        if (irmd.flow_ids != NULL)
-                bmp_destroy(irmd.flow_ids);
-
-        list_for_each_safe(p, h, &irmd.irm_flows) {
-                struct irm_flow * f = list_entry(p, struct irm_flow, next);
-                list_del(&f->next);
-                irm_flow_destroy(f);
-        }
-
-        pthread_rwlock_unlock(&irmd.flows_lock);
-
-
-        if (irmd.rdrb != NULL)
-                shm_rdrbuff_destroy(irmd.rdrb);
-
-        if (irmd.lf != NULL)
-                lockfile_destroy(irmd.lf);
-
-        pthread_mutex_destroy(&irmd.cmd_lock);
-        pthread_cond_destroy(&irmd.cmd_cond);
-        pthread_rwlock_destroy(&irmd.flows_lock);
-        pthread_rwlock_destroy(&irmd.reg_lock);
-        pthread_rwlock_destroy(&irmd.state_lock);
-
-#ifdef HAVE_FUSE
-        sleep(1);
-        if (rmdir(FUSE_PREFIX))
-                log_warn("Failed to remove " FUSE_PREFIX);
-#endif
 }
 
 void * irm_sanitize(void * o)
@@ -2306,6 +2223,96 @@ static void * mainloop(void * o)
         return (void *) 0;
 }
 
+static void irm_fini(void)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        if (irmd_get_state() != IRMD_NULL)
+                log_warn("Unsafe destroy.");
+
+        tpm_destroy(irmd.tpm);
+
+        pthread_rwlock_wrlock(&irmd.reg_lock);
+
+        /* Clear the lists. */
+        list_for_each_safe(p, h, &irmd.ipcps) {
+                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                list_del(&e->next);
+                ipcp_entry_destroy(e);
+        }
+
+        list_for_each(p, &irmd.spawned_pids) {
+                struct pid_el * e = list_entry(p, struct pid_el, next);
+                if (kill(e->pid, SIGTERM))
+                        log_dbg("Could not send kill signal to %d.", e->pid);
+        }
+
+        list_for_each_safe(p, h, &irmd.spawned_pids) {
+                struct pid_el * e = list_entry(p, struct pid_el, next);
+                int status;
+                if (waitpid(e->pid, &status, 0) < 0)
+                        log_dbg("Error waiting for %d to exit.", e->pid);
+                list_del(&e->next);
+                registry_del_process(&irmd.registry, e->pid);
+                free(e);
+        }
+
+        list_for_each_safe(p, h, &irmd.prog_table) {
+                struct prog_entry * e = list_entry(p, struct prog_entry, next);
+                list_del(&e->next);
+                prog_entry_destroy(e);
+        }
+
+        list_for_each_safe(p, h, &irmd.proc_table) {
+                struct proc_entry * e = list_entry(p, struct proc_entry, next);
+                list_del(&e->next);
+                e->state = PROC_INIT; /* sanitizer already joined */
+                proc_entry_destroy(e);
+        }
+
+        registry_destroy(&irmd.registry);
+
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
+        close(irmd.sockfd);
+
+        if (unlink(IRM_SOCK_PATH))
+                log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
+
+        pthread_rwlock_wrlock(&irmd.flows_lock);
+
+        if (irmd.flow_ids != NULL)
+                bmp_destroy(irmd.flow_ids);
+
+        list_for_each_safe(p, h, &irmd.irm_flows) {
+                struct irm_flow * f = list_entry(p, struct irm_flow, next);
+                list_del(&f->next);
+                irm_flow_destroy(f);
+        }
+
+        pthread_rwlock_unlock(&irmd.flows_lock);
+
+
+        if (irmd.rdrb != NULL)
+                shm_rdrbuff_destroy(irmd.rdrb);
+
+        if (irmd.lf != NULL)
+                lockfile_destroy(irmd.lf);
+
+        pthread_mutex_destroy(&irmd.cmd_lock);
+        pthread_cond_destroy(&irmd.cmd_cond);
+        pthread_rwlock_destroy(&irmd.flows_lock);
+        pthread_rwlock_destroy(&irmd.reg_lock);
+        pthread_rwlock_destroy(&irmd.state_lock);
+
+#ifdef HAVE_FUSE
+        sleep(1);
+        if (rmdir(FUSE_PREFIX))
+                log_warn("Failed to remove " FUSE_PREFIX);
+#endif
+}
+
 static int irm_init(void)
 {
         struct stat        st;
@@ -2314,6 +2321,8 @@ static int irm_init(void)
         mode_t             mask;
 #endif
         memset(&st, 0, sizeof(st));
+
+        log_init(!irmd.log_stdout);
 
         if (pthread_rwlock_init(&irmd.state_lock, NULL)) {
                 log_err("Failed to initialize rwlock.");
@@ -2412,6 +2421,13 @@ static int irm_init(void)
                 log_err("Failed to create rdrbuff.");
                 goto fail_rdrbuff;
         }
+
+        irmd.tpm = tpm_create(IRMD_MIN_THREADS, IRMD_ADD_THREADS,
+                              mainloop, NULL);
+        if (irmd.tpm == NULL) {
+                log_err("Failed to greate thread pool.");
+                goto fail_tpm_create;
+        }
 #ifdef HAVE_FUSE
         mask = umask(0);
 
@@ -2436,19 +2452,18 @@ static int irm_init(void)
 
         gcry_control(GCRYCTL_INITIALIZATION_FINISHED);
 #endif
-        irmd_set_state(IRMD_RUNNING);
-
-        log_info("Ouroboros IPC Resource Manager daemon started...");
 
         return 0;
 
 #ifdef HAVE_LIBGCRYPT
  fail_gcry_version:
-#ifdef HAVE_FUSE
+ #ifdef HAVE_FUSE
         rmdir(FUSE_PREFIX);
+ #endif
+        tpm_destroy(irmd.tpm);
 #endif
+ fail_tpm_create:
         shm_rdrbuff_destroy(irmd.rdrb);
-#endif
  fail_rdrbuff:
         close(irmd.sockfd);
  fail_sock_path:
@@ -2468,6 +2483,7 @@ static int irm_init(void)
  fail_reg_lock:
         pthread_rwlock_destroy(&irmd.state_lock);
  fail_state_lock:
+        log_fini();
         return -1;
 }
 
@@ -2479,72 +2495,37 @@ static void usage(void)
                "\n");
 }
 
-int main(int     argc,
-         char ** argv)
+static int irm_start(void)
 {
-        sigset_t  sigset;
-        bool      use_stdout = false;
-        int       sig;
-
-        sigemptyset(&sigset);
-        sigaddset(&sigset, SIGINT);
-        sigaddset(&sigset, SIGQUIT);
-        sigaddset(&sigset, SIGHUP);
-        sigaddset(&sigset, SIGTERM);
-        sigaddset(&sigset, SIGPIPE);
-
-        argc--;
-        argv++;
-        while (argc > 0) {
-                if (strcmp(*argv, "--stdout") == 0) {
-                        use_stdout = true;
-                        argc--;
-                        argv++;
-                } else if (strcmp(*argv, "--version") == 0) {
-                        printf("Ouroboros version %d.%d.%d\n",
-                               OUROBOROS_VERSION_MAJOR,
-                               OUROBOROS_VERSION_MINOR,
-                               OUROBOROS_VERSION_PATCH);
-                        exit(EXIT_SUCCESS);
-                } else {
-                        usage();
-                        exit(EXIT_FAILURE);
-                }
-        }
-
-        if (geteuid() != 0) {
-                printf("IPC Resource Manager must be run as root.\n");
-                exit(EXIT_FAILURE);
-        }
-
-        log_init(!use_stdout);
-
-        if (irm_init() < 0)
-                goto fail_irm_init;
-
-        irmd.tpm = tpm_create(IRMD_MIN_THREADS, IRMD_ADD_THREADS,
-                              mainloop, NULL);
-        if (irmd.tpm == NULL) {
-                irmd_set_state(IRMD_NULL);
-                goto fail_tpm_create;
-        }
-
-        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-
-        if (tpm_start(irmd.tpm)) {
-                irmd_set_state(IRMD_NULL);
+        if (tpm_start(irmd.tpm))
                 goto fail_tpm_start;
-        }
 
-        if (pthread_create(&irmd.irm_sanitize, NULL, irm_sanitize, NULL)) {
-                irmd_set_state(IRMD_NULL);
+        irmd_set_state(IRMD_RUNNING);
+
+        if (pthread_create(&irmd.irm_sanitize, NULL, irm_sanitize, NULL))
                 goto fail_irm_sanitize;
-        }
 
-        if (pthread_create(&irmd.acceptor, NULL, acceptloop, NULL)) {
-                irmd_set_state(IRMD_NULL);
+        if (pthread_create(&irmd.acceptor, NULL, acceptloop, NULL))
                 goto fail_acceptor;
-        }
+
+        log_info("Ouroboros IPC Resource Manager daemon started...");
+
+        return 0;
+
+ fail_acceptor:
+        pthread_cancel(irmd.irm_sanitize);
+        pthread_join(irmd.irm_sanitize, NULL);
+ fail_irm_sanitize:
+        irmd_set_state(IRMD_NULL);
+        tpm_stop(irmd.tpm);
+ fail_tpm_start:
+        return -1;
+
+}
+
+static void irm_sigwait(sigset_t sigset)
+{
+        int sig;
 
         while (irmd_get_state() != IRMD_NULL) {
                 if (sigwait(&sigset, &sig) != 0) {
@@ -2567,19 +2548,75 @@ int main(int     argc,
                         break;
                 }
         }
+}
 
+static void irm_stop(void)
+{
         pthread_cancel(irmd.acceptor);
 
         pthread_join(irmd.acceptor, NULL);
         pthread_join(irmd.irm_sanitize, NULL);
 
         tpm_stop(irmd.tpm);
+}
 
-        tpm_destroy(irmd.tpm);
+static void irm_argparse(int     argc,
+                         char ** argv)
+{
+        argc--;
+        argv++;
+        while (argc > 0) {
+                if (strcmp(*argv, "--stdout") == 0) {
+                        irmd.log_stdout = true;
+                        argc--;
+                        argv++;
+                } else if (strcmp(*argv, "--version") == 0) {
+                        printf("Ouroboros version %d.%d.%d\n",
+                               OUROBOROS_VERSION_MAJOR,
+                               OUROBOROS_VERSION_MINOR,
+                               OUROBOROS_VERSION_PATCH);
+                        exit(EXIT_SUCCESS);
+                } else {
+                        usage();
+                        exit(EXIT_FAILURE);
+                }
+        }
+}
 
-        irm_fini();
+int main(int     argc,
+         char ** argv)
+{
+        sigset_t sigset;
+
+        sigemptyset(&sigset);
+        sigaddset(&sigset, SIGINT);
+        sigaddset(&sigset, SIGQUIT);
+        sigaddset(&sigset, SIGHUP);
+        sigaddset(&sigset, SIGTERM);
+        sigaddset(&sigset, SIGPIPE);
+
+        irm_argparse(argc, argv);
+
+        if (geteuid() != 0) {
+                printf("IPC Resource Manager must be run as root.\n");
+                exit(EXIT_FAILURE);
+        }
+
+        if (irm_init() < 0)
+                goto fail_irm_init;
+
+        pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
+        if (irm_start() < 0)
+                goto fail_irm_start;
+
+        irm_sigwait(sigset);
+
+        irm_stop();
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
+
+        irm_fini();
 
         log_info("Bye.");
 
@@ -2587,15 +2624,8 @@ int main(int     argc,
 
         exit(EXIT_SUCCESS);
 
- fail_acceptor:
-        pthread_join(irmd.irm_sanitize, NULL);
- fail_irm_sanitize:
-        tpm_stop(irmd.tpm);
- fail_tpm_start:
-        tpm_destroy(irmd.tpm);
- fail_tpm_create:
+ fail_irm_start:
         irm_fini();
  fail_irm_init:
-        log_fini();
         exit(EXIT_FAILURE);
 }
