@@ -275,6 +275,16 @@ add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CACEP_PROTO_SRCS})
 
 add_library(ouroboros-irm SHARED ${SOURCE_FILES_IRM})
 
+set_target_properties(ouroboros-common PROPERTIES
+  VERSION ${PACKAGE_VERSION}
+  SOVERSION ${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR})
+set_target_properties(ouroboros-dev PROPERTIES
+  VERSION ${PACKAGE_VERSION}
+  SOVERSION ${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR})
+set_target_properties(ouroboros-irm PROPERTIES
+  VERSION ${PACKAGE_VERSION}
+  SOVERSION ${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR})
+
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(ouroboros-common -DCONFIG_OUROBOROS_DEBUG)
