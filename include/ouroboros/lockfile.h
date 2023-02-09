@@ -37,4 +37,4 @@ void              lockfile_destroy(struct lockfile * lf);
 
 pid_t             lockfile_owner(struct lockfile * lf);
 
-#endif
+#endif /* OUROBOROS_LOCKFILE_H */

@@ -205,7 +205,7 @@ static struct shm_rdrbuff * rdrb_create(int flags)
         return NULL;
 }
 
-struct shm_rdrbuff * shm_rdrbuff_create()
+struct shm_rdrbuff * shm_rdrbuff_create(void)
 {
         struct shm_rdrbuff * rdrb;
         mode_t               mask;
@@ -263,7 +263,7 @@ struct shm_rdrbuff * shm_rdrbuff_create()
         return NULL;
 }
 
-struct shm_rdrbuff * shm_rdrbuff_open()
+struct shm_rdrbuff * shm_rdrbuff_open(void)
 {
         return rdrb_create(O_RDWR);
 }

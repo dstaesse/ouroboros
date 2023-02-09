@@ -808,7 +808,7 @@ int ipcp_init(int               argc,
         return ret;
 }
 
-int ipcp_start()
+int ipcp_start(void)
 {
         sigset_t  sigset;
         sigemptyset(&sigset);
@@ -848,7 +848,7 @@ int ipcp_start()
         return -1;
 }
 
-void ipcp_sigwait()
+void ipcp_sigwait(void)
 {
 
         siginfo_t info;
@@ -904,7 +904,7 @@ void ipcp_sigwait()
         }
 }
 
-void ipcp_stop()
+void ipcp_stop(void)
 {
         log_info("IPCP %d shutting down.", getpid());
 
@@ -914,7 +914,7 @@ void ipcp_stop()
         tpm_stop(ipcpi.tpm);
 }
 
-void ipcp_fini()
+void ipcp_fini(void)
 {
 
         tpm_destroy(ipcpi.tpm);
@@ -951,7 +951,7 @@ void ipcp_set_state(enum ipcp_state state)
         pthread_mutex_unlock(&ipcpi.state_mtx);
 }
 
-enum ipcp_state ipcp_get_state()
+enum ipcp_state ipcp_get_state(void)
 {
         enum ipcp_state state;
 

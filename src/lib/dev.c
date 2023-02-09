@@ -1466,7 +1466,7 @@ ssize_t flow_read(int    fd,
 
 /* fqueue functions. */
 
-struct flow_set * fset_create()
+struct flow_set * fset_create(void)
 {
         struct flow_set * set;
 
@@ -1509,7 +1509,7 @@ void fset_destroy(struct flow_set * set)
         free(set);
 }
 
-struct fqueue * fqueue_create()
+struct fqueue * fqueue_create(void)
 {
         struct fqueue * fq = malloc(sizeof(*fq));
         if (fq == NULL)
@@ -1929,7 +1929,7 @@ int ipcp_flow_read(int                   fd,
 
         assert(flow->flow_id >= 0);
 
-        while ((idx = frcti_queued_pdu(flow->frcti)) < 0) {
+        while (frcti_queued_pdu(flow->frcti) < 0) {
                 pthread_rwlock_unlock(&ai.lock);
 
                 idx = flow_rx_sdb(flow, sdb, false, NULL);

@@ -139,7 +139,7 @@ static void dir_entry_destroy(struct dir_entry * entry)
         free(entry);
 }
 
-struct shim_data * shim_data_create()
+struct shim_data * shim_data_create(void)
 {
         struct shim_data * sd;
 

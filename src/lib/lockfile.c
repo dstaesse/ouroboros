@@ -41,7 +41,8 @@ struct lockfile {
         pid_t * pid;
 };
 
-struct lockfile * lockfile_create() {
+struct lockfile * lockfile_create(void)
+{
         int fd;
         mode_t mask;
         struct lockfile * lf = malloc(sizeof(*lf));
@@ -82,7 +83,8 @@ struct lockfile * lockfile_create() {
         return lf;
 }
 
-struct lockfile * lockfile_open() {
+struct lockfile * lockfile_open(void)
+{
         int fd;
         struct lockfile * lf = malloc(sizeof(*lf));
         if (lf == NULL)
