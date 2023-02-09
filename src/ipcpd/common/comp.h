@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2022
+ * Ouroboros - Copyright (C) 2016 - 2023
  *
  * Components for the unicast/broadcast IPC process
  *
