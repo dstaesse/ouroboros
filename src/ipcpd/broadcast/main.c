@@ -56,36 +56,24 @@ struct ipcp ipcpi;
 
 static int initialize_components(const struct ipcp_config * conf)
 {
-        ipcpi.layer_name = strdup(conf->layer_info.layer_name);
-        if (ipcpi.layer_name == NULL) {
-                log_err("Failed to set layer name.");
-                goto fail_layer_name;
-        }
-
+        strcpy(ipcpi.layer_name, conf->layer_info.layer_name);
         ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
 
         assert(ipcp_dir_hash_len() != 0);
 
         if (dt_init()) {
                 log_err("Failed to initialize forwarding component.");
-                goto fail_dt;
+                return -1;
         }
 
         ipcp_set_state(IPCP_INIT);
 
         return 0;
-
- fail_dt:
-        free(ipcpi.layer_name);
- fail_layer_name:
-        return -1;
 }
 
 static void finalize_components(void)
 {
         dt_fini();
-
-        free(ipcpi.layer_name);
 }
 
 static int start_components(void)

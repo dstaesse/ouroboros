@@ -27,24 +27,36 @@ message layer_info_msg {
         required uint32 dir_hash_algo =  2;
 }
 
+message dt_config_msg {
+        required uint32 addr_size    = 1;
+        required uint32 eid_size     = 2;
+        required uint32 max_ttl      = 3;
+        required uint32 routing_type = 4;
+}
+
+message uni_config_msg {
+        required dt_config_msg dt      = 1;
+        required uint32 addr_auth_type = 2;
+        required uint32 cong_avoid     = 3;
+}
+
+message eth_config_msg {
+        required string dev       = 1;
+        optional uint32 ethertype = 2;
+}
+
+message udp_config_msg {
+        required uint32 ip_addr  = 1;
+        required uint32 port     = 2;
+        required uint32 dns_addr = 3; /* set to 0 if unused */
+}
+
 message ipcp_config_msg {
         required layer_info_msg layer_info =  1;
         required int32 ipcp_type           =  2;
-        // Config for unicast IPCP
-        optional uint32 addr_size          =  3;
-        optional uint32 eid_size           =  4;
-        optional uint32 max_ttl            =  5;
-        optional uint32 addr_auth_type     =  6;
-        optional uint32 routing_type       =  7;
-        optional uint32 cong_avoid         =  8;
-        // Config for UDP
-        optional uint32 ip_addr            =  9;
-        optional uint32 dns_addr           = 10;
-        optional uint32 port               = 11;
-        // Config for the Ethernet
-        optional string dev                = 12;
-        // Config for DIX Ethernet
-        optional uint32 ethertype          = 13;
+        optional uni_config_msg unicast    =  3;
+        optional udp_config_msg udp        =  4;
+        optional eth_config_msg eth        =  5;
 }
 
 enum enroll_code {

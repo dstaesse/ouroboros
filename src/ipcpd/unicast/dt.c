@@ -563,10 +563,7 @@ static void * dt_conn_handle(void * o)
         return 0;
 }
 
-int dt_init(enum pol_routing pr,
-            uint8_t          addr_size,
-            uint8_t          eid_size,
-            uint8_t          max_ttl)
+int dt_init(struct dt_config cfg)
 {
         int              i;
         int              j;
@@ -582,14 +579,14 @@ int dt_init(enum pol_routing pr,
         info.pref_syntax  = PROTO_FIXED;
         info.addr         = ipcpi.dt_addr;
 
-        if (eid_size != 8) { /* only support 64 bits from now */
+        if (cfg.eid_size != 8) { /* only support 64 bits from now */
                 log_warn("Invalid EID size. Only 64 bit is supported.");
-                eid_size = 8;
+                cfg.eid_size = 8;
         }
 
-        dt_pci_info.addr_size = addr_size;
-        dt_pci_info.eid_size  = eid_size;
-        dt_pci_info.max_ttl   = max_ttl;
+        dt_pci_info.addr_size = cfg.addr_size;
+        dt_pci_info.eid_size  = cfg.eid_size;
+        dt_pci_info.max_ttl   = cfg.max_ttl;
 
         dt_pci_info.qc_o      = dt_pci_info.addr_size;
         dt_pci_info.ttl_o     = dt_pci_info.qc_o + QOS_LEN;
@@ -607,7 +604,7 @@ int dt_init(enum pol_routing pr,
                 goto fail_connmgr_comp_init;
         }
 
-        pp = routing_init(pr);
+        pp = routing_init(cfg.routing_type);
         if (pp < 0) {
                 log_err("Failed to init routing.");
                 goto fail_routing;

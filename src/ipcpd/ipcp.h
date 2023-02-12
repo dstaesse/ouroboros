@@ -85,7 +85,7 @@ extern struct ipcp {
         char *             name;
 
         enum ipcp_type     type;
-        char *             layer_name;
+        char               layer_name[LAYER_NAME_SIZE + 1];
 
         uint64_t           dt_addr;
 

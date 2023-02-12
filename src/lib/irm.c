@@ -98,11 +98,15 @@ int irm_destroy_ipcp(pid_t pid)
 int irm_bootstrap_ipcp(pid_t                      pid,
                        const struct ipcp_config * conf)
 {
-        irm_msg_t         msg        = IRM_MSG__INIT;
-        ipcp_config_msg_t config     = IPCP_CONFIG_MSG__INIT;
-        layer_info_msg_t  layer_info = LAYER_INFO_MSG__INIT;
-        irm_msg_t *       recv_msg   = NULL;
-        int               ret        = -1;
+        irm_msg_t         msg            = IRM_MSG__INIT;
+        ipcp_config_msg_t cfg_msg        = IPCP_CONFIG_MSG__INIT;
+        layer_info_msg_t  layer_info_msg = LAYER_INFO_MSG__INIT;
+        dt_config_msg_t   dt_cfg_msg     = DT_CONFIG_MSG__INIT;
+        uni_config_msg_t  uni_cfg_msg    = UNI_CONFIG_MSG__INIT;
+        eth_config_msg_t  eth_cfg_msg    = ETH_CONFIG_MSG__INIT;
+        udp_config_msg_t  udp_cfg_msg    = UDP_CONFIG_MSG__INIT;
+        irm_msg_t *       recv_msg       = NULL;
+        int               ret            = -1;
 
         if (pid == -1 || conf == NULL)
                 return -EINVAL;
@@ -111,53 +115,45 @@ int irm_bootstrap_ipcp(pid_t                      pid,
         msg.has_pid = true;
         msg.pid     = pid;
 
-        config.layer_info     = &layer_info;
-        msg.conf              = &config;
-        layer_info.layer_name = (char *) conf->layer_info.layer_name;
-
-        config.ipcp_type = conf->type;
-
-        if (conf->type != IPCP_UDP)
-                layer_info.dir_hash_algo  = conf->layer_info.dir_hash_algo;
+        cfg_msg.ipcp_type = conf->type;
+        layer_info_msg.layer_name = (char *) conf->layer_info.layer_name;
+        layer_info_msg.dir_hash_algo  = conf->layer_info.dir_hash_algo;
 
         switch (conf->type) {
         case IPCP_UNICAST:
-                config.has_addr_size      = true;
-                config.addr_size          = conf->addr_size;
-                config.has_eid_size       = true;
-                config.eid_size           = conf->eid_size;
-                config.has_max_ttl        = true;
-                config.max_ttl            = conf->max_ttl;
-                config.has_addr_auth_type = true;
-                config.addr_auth_type     = conf->addr_auth_type;
-                config.has_routing_type   = true;
-                config.routing_type       = conf->routing_type;
-                config.has_cong_avoid     = true;
-                config.cong_avoid         = conf->cong_avoid;
+                dt_cfg_msg.addr_size       = conf->unicast.dt.addr_size;
+                dt_cfg_msg.eid_size        = conf->unicast.dt.eid_size;
+                dt_cfg_msg.max_ttl         = conf->unicast.dt.max_ttl;
+                dt_cfg_msg.routing_type    = conf->unicast.dt.routing_type;
+                uni_cfg_msg.dt             = &dt_cfg_msg;
+                uni_cfg_msg.addr_auth_type = conf->unicast.addr_auth_type;
+                uni_cfg_msg.cong_avoid     = conf->unicast.cong_avoid;
+                cfg_msg.unicast            = &uni_cfg_msg;
                 break;
         case IPCP_UDP:
-                config.has_ip_addr  = true;
-                config.ip_addr      = conf->ip_addr;
-                config.has_dns_addr = true;
-                config.dns_addr     = conf->dns_addr;
-                config.has_port     = true;
-                config.port         = conf->port;
+                udp_cfg_msg.ip_addr  = conf->udp.ip_addr;
+                udp_cfg_msg.dns_addr = conf->udp.dns_addr;
+                udp_cfg_msg.port     = conf->udp.port;
+                cfg_msg.udp          = &udp_cfg_msg;
                 break;
         case IPCP_LOCAL:
                 /* FALLTHRU */
         case IPCP_BROADCAST:
                 break;
-        case IPCP_ETH_LLC:
-                config.dev = conf->dev;
-                break;
         case IPCP_ETH_DIX:
-                config.dev = conf->dev;
-                config.has_ethertype = true;
-                config.ethertype = conf->ethertype;
+                eth_cfg_msg.has_ethertype = true;
+                eth_cfg_msg.ethertype     = conf->eth.ethertype;
+                /* FALLTHRU */
+        case IPCP_ETH_LLC:
+                eth_cfg_msg.dev = conf->eth.dev;
+                cfg_msg.eth = &eth_cfg_msg;
                 break;
         default:
                 return -EIPCPTYPE;
         }
+
+        cfg_msg.layer_info = &layer_info_msg;
+        msg.conf           = &cfg_msg;
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)

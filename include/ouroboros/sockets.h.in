@@ -30,6 +30,10 @@
 #include "ipcp_config.pb-c.h"
 typedef IpcpConfigMsg ipcp_config_msg_t;
 typedef LayerInfoMsg layer_info_msg_t;
+typedef DtConfigMsg dt_config_msg_t;
+typedef EthConfigMsg eth_config_msg_t;
+typedef UdpConfigMsg udp_config_msg_t;
+typedef UniConfigMsg uni_config_msg_t;
 
 #include "irmd_messages.pb-c.h"
 typedef IrmMsg irm_msg_t;

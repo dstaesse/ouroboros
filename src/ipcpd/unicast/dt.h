@@ -31,11 +31,7 @@
 #define DT_PROTO     "dtp"
 #define INVALID_ADDR 0
 
-int  dt_init(enum pol_routing pr,
-             uint8_t          addr_size,
-             uint8_t          eid_size,
-             uint8_t          max_ttl
-);
+int  dt_init(struct dt_config cfg);
 
 void dt_fini(void);
 

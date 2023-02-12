@@ -591,6 +591,12 @@ static void * ipcp_udp_packet_writer(void * o)
         return (void *) 1;
 }
 
+static const char * inet4_ntop(const void * addr,
+                         char *       buf)
+{
+        return inet_ntop(AF_INET, &addr, buf, INET_ADDRSTRLEN);
+}
+
 static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
 {
         char ipstr[INET_ADDRSTRLEN];
@@ -602,21 +608,15 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
         assert(conf->type == THIS_TYPE);
 
         ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
-        ipcpi.layer_name = strdup(conf->layer_info.layer_name);
-        if (ipcpi.layer_name == NULL) {
-                log_err("Failed to set layer name");
-                return -ENOMEM;
-        }
+        strcpy(ipcpi.layer_name, conf->layer_info.layer_name);
 
-        if (inet_ntop(AF_INET, &conf->ip_addr, ipstr, INET_ADDRSTRLEN)
-            == NULL) {
+        if (inet4_ntop(&conf->udp.ip_addr, ipstr) == NULL) {
                 log_err("Failed to convert IP address");
                 return -1;
         }
 
-        if (conf->dns_addr != 0) {
-                if (inet_ntop(AF_INET, &conf->dns_addr, dnsstr, INET_ADDRSTRLEN)
-                    == NULL) {
+        if (conf->udp.dns_addr != 0) {
+                if (inet4_ntop(&conf->udp.dns_addr, dnsstr) == NULL) {
                         log_err("Failed to convert DNS address");
                         return -1;
                 }
@@ -636,15 +636,15 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
 
         memset((char *) &udp_data.s_saddr, 0, sizeof(udp_data.s_saddr));
         udp_data.s_saddr.sin_family      = AF_INET;
-        udp_data.s_saddr.sin_addr.s_addr = conf->ip_addr;
-        udp_data.s_saddr.sin_port        = htons(conf->port);
+        udp_data.s_saddr.sin_addr.s_addr = conf->udp.ip_addr;
+        udp_data.s_saddr.sin_port        = htons(conf->udp.port);
 
         if (bind(udp_data.s_fd, SADDR, SADDR_SIZE) < 0) {
                 log_err("Couldn't bind to %s.", ipstr);
                 goto fail_bind;
         }
 
-        udp_data.dns_addr = conf->dns_addr;
+        udp_data.dns_addr = conf->udp.dns_addr;
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
@@ -670,11 +670,11 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
                 }
         }
 
-        sprintf(portstr, "%d", conf->port);
+        sprintf(portstr, "%d", conf->udp.port);
 
         log_dbg("Bootstrapped IPCP over UDP with pid %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
-        log_dbg("Using port %u.", conf->port);
+        log_dbg("Using port %u.", conf->udp.port);
         log_dbg("DNS server address is %s.", dnsstr);
 
         return 0;
@@ -759,7 +759,7 @@ static uint32_t ddns_resolve(char *   name,
         char *   addr_str = "Address:";
         uint32_t ip_addr  = 0;
 
-        if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN) == NULL)
+        if (inet4_ntop(&dns_addr, dnsstr) == NULL)
                 return 0;
 
         if (pipe(pipe_fd)) {
@@ -855,14 +855,12 @@ static int ipcp_udp_reg(const uint8_t * hash)
         if (dns_addr != 0) {
                 ip_addr = udp_data.s_saddr.sin_addr.s_addr;
 
-                if (inet_ntop(AF_INET, &ip_addr,
-                              ipstr, INET_ADDRSTRLEN) == NULL) {
+                if (inet4_ntop(&ip_addr, ipstr) == NULL) {
                         free(hashstr);
                         return -1;
                 }
 
-                if (inet_ntop(AF_INET, &dns_addr,
-                              dnsstr, INET_ADDRSTRLEN) == NULL) {
+                if (inet4_ntop(&dns_addr, dnsstr) == NULL) {
                         free(hashstr);
                         return -1;
                 }
@@ -908,8 +906,7 @@ static int ipcp_udp_unreg(const uint8_t * hash)
         dns_addr = udp_data.dns_addr;
 
         if (dns_addr != 0) {
-                if (inet_ntop(AF_INET, &dns_addr, dnsstr, INET_ADDRSTRLEN)
-                    == NULL) {
+                if (inet4_ntop(&dns_addr, dnsstr) == NULL) {
                         free(hashstr);
                         return -1;
                 }
@@ -1002,13 +999,16 @@ static int ipcp_udp_flow_alloc(int             fd,
         assert(dst);
 
         if (!shim_data_dir_has(udp_data.shim_data, dst)) {
-                log_dbg("Could not resolve destination.");
+                log_err("Could not resolve destination.");
                 return -1;
         }
 
         ip_addr = (uint32_t) shim_data_dir_get_addr(udp_data.shim_data, dst);
 
-        inet_ntop(AF_INET, &ip_addr, ipstr, INET_ADDRSTRLEN);
+        if (inet4_ntop(&ip_addr, ipstr) == NULL) {
+                log_err("Could not convert IP address.");
+                return -1;
+        }
         log_dbg("Destination UDP ipcp resolved at %s.", ipstr);
 
         memset((char *) &r_saddr, 0, sizeof(r_saddr));

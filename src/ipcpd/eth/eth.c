@@ -1281,31 +1281,27 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         assert(conf->type == THIS_TYPE);
 
         ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
-        ipcpi.layer_name = strdup(conf->layer_info.layer_name);
-        if (ipcpi.layer_name == NULL) {
-                log_err("Failed to set layer name");
-                return -ENOMEM;
-        }
+        strcpy(ipcpi.layer_name, conf->layer_info.layer_name);
 
-        if (conf->dev == NULL) {
+        if (conf->eth.dev == NULL) {
                 log_err("Device name is NULL.");
                 return -1;
         }
 
-        if (strlen(conf->dev) >= IFNAMSIZ) {
-                log_err("Invalid device name: %s.", conf->dev);
+        if (strlen(conf->eth.dev) >= IFNAMSIZ) {
+                log_err("Invalid device name: %s.", conf->eth.dev);
                 return -1;
         }
 
         memset(&ifr, 0, sizeof(ifr));
-        strcpy(ifr.ifr_name, conf->dev);
+        strcpy(ifr.ifr_name, conf->eth.dev);
 
 #ifdef BUILD_ETH_DIX
-        if (conf->ethertype < 0x0600 || conf->ethertype == 0xFFFF) {
+        if (conf->eth.ethertype < 0x0600 || conf->eth.ethertype == 0xFFFF) {
                 log_err("Invalid Ethertype.");
                 return -1;
         }
-        eth_data.ethertype = htons(conf->ethertype);
+        eth_data.ethertype = htons(conf->eth.ethertype);
 #endif
 
 #if defined(__FreeBSD__) || defined(__APPLE__)
@@ -1315,9 +1311,9 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         for (ifa = ifaddr, idx = 0; ifa != NULL; ifa = ifa->ifa_next, ++idx) {
-                if (strcmp(ifa->ifa_name, conf->dev))
+                if (strcmp(ifa->ifa_name, conf->eth.dev))
                         continue;
-                log_dbg("Interface %s found.", conf->dev);
+                log_dbg("Interface %s found.", conf->eth.dev);
 
     #if defined(HAVE_NETMAP) || defined(HAVE_BPF)
                 memcpy(eth_data.hw_addr,
@@ -1352,7 +1348,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         log_dbg("Device MTU is %d.", ifr.ifr_mtu);
 
         eth_data.mtu = MIN((int) ETH_MTU_MAX, ifr.ifr_mtu);
-        if (memcmp(conf->dev, "lo", 2) == 0 && eth_data.mtu > IPCP_ETH_LO_MTU) {
+        if (memcmp(conf->eth.dev, "lo", 2) == 0 &&
+                   eth_data.mtu > IPCP_ETH_LO_MTU) {
                 log_dbg("Using loopback interface. MTU restricted to %d.",
                          IPCP_ETH_LO_MTU);
                 eth_data.mtu = IPCP_ETH_LO_MTU;
@@ -1376,7 +1373,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 
         close(skfd);
 
-        idx = if_nametoindex(conf->dev);
+        idx = if_nametoindex(conf->eth.dev);
         if (idx == 0) {
                 log_err("Failed to retrieve interface index.");
                 return -1;
@@ -1386,7 +1383,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 
 #if defined(HAVE_NETMAP)
         strcpy(ifn, "netmap:");
-        strcat(ifn, conf->dev);
+        strcat(ifn, conf->eth.dev);
 
         eth_data.nmd = nm_open(ifn, NULL, 0, NULL);
         if (eth_data.nmd == NULL) {
@@ -1526,7 +1523,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 
 #if defined(BUILD_ETH_DIX)
         log_dbg("Bootstrapped IPCP over DIX Ethernet with pid %d "
-                "and Ethertype 0x%X.", getpid(), conf->ethertype);
+                "and Ethertype 0x%X.", getpid(), conf->eth.ethertype);
 #elif defined(BUILD_ETH_LLC)
         log_dbg("Bootstrapped IPCP over Ethernet with LLC with pid %d.",
                 getpid());

@@ -74,7 +74,9 @@ static int send_rcv_enroll_msg(int fd)
         ssize_t         delta_t;
         struct timespec t0;
         struct timespec rtt;
-
+#ifdef BUILD_IPCP_UNICAST
+        uni_config_msg_t * uni_cfg_msg;
+#endif
         req.code = ENROLL_CODE__ENROLL_REQ;
 
         len = enroll_msg__get_packed_size(&req);
@@ -132,12 +134,14 @@ static int send_rcv_enroll_msg(int fd)
                reply->conf->layer_info->layer_name);
         enroll.conf.type           = reply->conf->ipcp_type;
 #ifdef BUILD_IPCP_UNICAST
-        enroll.conf.addr_size      = reply->conf->addr_size;
-        enroll.conf.eid_size       = reply->conf->eid_size;
-        enroll.conf.max_ttl        = reply->conf->max_ttl;
-        enroll.conf.addr_auth_type = reply->conf->addr_auth_type;
-        enroll.conf.routing_type   = reply->conf->routing_type;
-        enroll.conf.cong_avoid     = reply->conf->cong_avoid;
+        uni_cfg_msg = reply->conf->unicast;
+
+        enroll.conf.unicast.dt.addr_size    = uni_cfg_msg->dt->addr_size;
+        enroll.conf.unicast.dt.eid_size     = uni_cfg_msg->dt->eid_size;
+        enroll.conf.unicast.dt.max_ttl      = uni_cfg_msg->dt->max_ttl;
+        enroll.conf.unicast.dt.routing_type = uni_cfg_msg->dt->routing_type;
+        enroll.conf.unicast.addr_auth_type  = uni_cfg_msg->addr_auth_type;
+        enroll.conf.unicast.cong_avoid      = uni_cfg_msg->cong_avoid;
 #endif
         enroll.conf.layer_info.dir_hash_algo
                 = reply->conf->layer_info->dir_hash_algo;
@@ -151,6 +155,10 @@ static ssize_t enroll_pack(uint8_t ** buf)
         enroll_msg_t      msg        = ENROLL_MSG__INIT;
         ipcp_config_msg_t config     = IPCP_CONFIG_MSG__INIT;
         layer_info_msg_t  layer_info = LAYER_INFO_MSG__INIT;
+#ifdef BUILD_IPCP_UNICAST
+        dt_config_msg_t   dt_cfg_msg  = DT_CONFIG_MSG__INIT;
+        uni_config_msg_t  uni_cfg_msg = UNI_CONFIG_MSG__INIT;
+#endif
         struct timespec   now;
         ssize_t           len;
 
@@ -161,27 +169,23 @@ static ssize_t enroll_pack(uint8_t ** buf)
         msg.t_sec      = now.tv_sec;
         msg.has_t_nsec = true;
         msg.t_nsec     = now.tv_nsec;
-        msg.conf       = &config;
 
-        config.ipcp_type          = enroll.conf.type;
+        config.ipcp_type           = enroll.conf.type;
 #ifdef BUILD_IPCP_UNICAST
-        config.has_addr_size      = true;
-        config.addr_size          = enroll.conf.addr_size;
-        config.has_eid_size       = true;
-        config.eid_size           = enroll.conf.eid_size;
-        config.has_max_ttl        = true;
-        config.max_ttl            = enroll.conf.max_ttl;
-        config.has_addr_auth_type = true;
-        config.addr_auth_type     = enroll.conf.addr_auth_type;
-        config.has_routing_type   = true;
-        config.routing_type       = enroll.conf.routing_type;
-        config.has_cong_avoid     = true;
-        config.cong_avoid         = enroll.conf.cong_avoid;
+        dt_cfg_msg.addr_size       = enroll.conf.unicast.dt.addr_size;
+        dt_cfg_msg.eid_size        = enroll.conf.unicast.dt.eid_size;
+        dt_cfg_msg.max_ttl         = enroll.conf.unicast.dt.max_ttl;
+        dt_cfg_msg.routing_type    = enroll.conf.unicast.dt.routing_type;
+        uni_cfg_msg.dt             = &dt_cfg_msg;
+        uni_cfg_msg.addr_auth_type = enroll.conf.unicast.addr_auth_type;
+        uni_cfg_msg.cong_avoid     = enroll.conf.unicast.cong_avoid;
+        config.unicast             = &uni_cfg_msg;
 #endif
-        config.layer_info         = &layer_info;
-
         layer_info.layer_name     = (char *) enroll.conf.layer_info.layer_name;
         layer_info.dir_hash_algo  = enroll.conf.layer_info.dir_hash_algo;
+
+        config.layer_info = &layer_info;
+        msg.conf          = &config;
 
         len = enroll_msg__get_packed_size(&msg);
 

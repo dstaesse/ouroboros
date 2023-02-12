@@ -29,10 +29,7 @@
 
 #define LAYER_NAME_SIZE 255
 
-/*
- * NOTE: the IRMd uses this order to select an IPCP
- * for flow allocation.
- */
+/* NOTE: The IRMd uses this order to select an IPCP for flow allocation. */
 enum ipcp_type {
         IPCP_LOCAL = 0,
         IPCP_UNICAST,
@@ -66,6 +63,31 @@ enum pol_dir_hash {
         DIR_HASH_SHA3_512
 };
 
+struct dt_config {
+        uint8_t          addr_size;
+        uint8_t          eid_size;
+        uint8_t          max_ttl;
+        enum pol_routing routing_type;
+};
+
+/* IPCP configuration */
+struct uni_config {
+        struct dt_config    dt;
+        enum pol_addr_auth  addr_auth_type;
+        enum pol_cong_avoid cong_avoid;
+};
+
+struct eth_config {
+        char *   dev;
+        uint16_t ethertype; /* DIX only*/
+};
+
+struct udp_config {
+        uint32_t ip_addr;
+        uint32_t dns_addr;
+        uint16_t port;
+};
+
 /* Info reported back to the IRMd about the layer on enrollment */
 struct layer_info {
         char layer_name[LAYER_NAME_SIZE + 1];
@@ -74,29 +96,14 @@ struct layer_info {
 
 /* Structure to configure the first IPCP */
 struct ipcp_config {
-        struct layer_info   layer_info;
+        struct layer_info layer_info;
+        enum ipcp_type    type;
 
-        enum ipcp_type      type;
-
-        /* Unicast */
-        uint8_t             addr_size;
-        uint8_t             eid_size;
-        uint8_t             max_ttl;
-
-        enum pol_addr_auth  addr_auth_type;
-        enum pol_routing    routing_type;
-        enum pol_cong_avoid cong_avoid;
-
-        /* UDP */
-        uint32_t            ip_addr;
-        uint32_t            dns_addr;
-        uint16_t            port;
-
-        /* Ethernet */
-        char *              dev;
-
-        /* Ethernet DIX */
-        uint16_t            ethertype;
+        union {
+                struct uni_config unicast;
+                struct udp_config udp;
+                struct eth_config eth;
+        };
 };
 
 #endif /* OUROBOROS_IPCP_H */

@@ -59,18 +59,13 @@ struct ipcp ipcpi;
 
 static int initialize_components(const struct ipcp_config * conf)
 {
-        ipcpi.layer_name = strdup(conf->layer_info.layer_name);
-        if (ipcpi.layer_name == NULL) {
-                log_err("Failed to set layer name.");
-                goto fail_layer_name;
-        }
-
+        strcpy(ipcpi.layer_name, conf->layer_info.layer_name);
         ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
 
         assert(ipcp_dir_hash_len() != 0);
 
-        if (addr_auth_init(conf->addr_auth_type,
-                           &conf->addr_size)) {
+        if (addr_auth_init(conf->unicast.addr_auth_type,
+                           &conf->unicast.dt.addr_size)) {
                 log_err("Failed to init address authority.");
                 goto fail_addr_auth;
         }
@@ -83,15 +78,12 @@ static int initialize_components(const struct ipcp_config * conf)
 
         log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
 
-        if (ca_init(conf->cong_avoid)) {
+        if (ca_init(conf->unicast.cong_avoid)) {
                 log_err("Failed to initialize congestion avoidance.");
                 goto fail_ca;
         }
 
-        if (dt_init(conf->routing_type,
-                    conf->addr_size,
-                    conf->eid_size,
-                    conf->max_ttl)) {
+        if (dt_init(conf->unicast.dt)) {
                 log_err("Failed to initialize data transfer component.");
                 goto fail_dt;
         }
@@ -119,8 +111,6 @@ static int initialize_components(const struct ipcp_config * conf)
  fail_ca:
         addr_auth_fini();
  fail_addr_auth:
-        free(ipcpi.layer_name);
- fail_layer_name:
         return -1;
 }
 
@@ -135,8 +125,6 @@ static void finalize_components(void)
         ca_fini();
 
         addr_auth_fini();
-
-        free(ipcpi.layer_name);
 }
 
 static int start_components(void)

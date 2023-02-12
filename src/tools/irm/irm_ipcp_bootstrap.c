@@ -292,6 +292,7 @@ int do_bootstrap_ipcp(int     argc,
                                 printf("Types do not match.\n\n");
                                 goto fail;
                         }
+
                         conf.type = ipcps[i].type;
 
                         if (autobind && (conf.type != IPCP_UNICAST &&
@@ -302,40 +303,36 @@ int do_bootstrap_ipcp(int     argc,
                         }
 
                         if (strlen(layer) > LAYER_NAME_SIZE) {
-                                printf("Layer name too big.\n\n");
+                                printf("Layer name too long.\n\n");
                                 goto fail_usage;
                         }
 
                         strcpy(conf.layer_info.layer_name, layer);
-                        if (conf.type != IPCP_UDP)
-                                conf.layer_info.dir_hash_algo = hash_algo;
+                        conf.layer_info.dir_hash_algo = hash_algo;
 
                         switch (conf.type) {
                         case IPCP_UNICAST:
-                                conf.addr_size      = addr_size;
-                                conf.eid_size       = eid_size;
-                                conf.max_ttl        = max_ttl;
-                                conf.addr_auth_type = addr_auth_type;
-                                conf.routing_type   = routing_type;
-                                conf.cong_avoid     = cong_avoid;
+                                conf.unicast.dt.addr_size    = addr_size;
+                                conf.unicast.dt.eid_size     = eid_size;
+                                conf.unicast.dt.max_ttl      = max_ttl;
+                                conf.unicast.dt.routing_type = routing_type;
+                                conf.unicast.addr_auth_type  = addr_auth_type;
+                                conf.unicast.cong_avoid      = cong_avoid;
                                 break;
                         case IPCP_UDP:
                                 if (ip_addr == 0)
                                         goto fail_usage;
-                                conf.ip_addr  = ip_addr;
-                                conf.dns_addr = dns_addr;
-                                conf.port     = port;
+                                conf.udp.ip_addr  = ip_addr;
+                                conf.udp.dns_addr = dns_addr;
+                                conf.udp.port     = port;
                                 break;
+                        case IPCP_ETH_DIX:
+                                conf.eth.ethertype = ethertype;
+                                /* FALLTHRU */
                         case IPCP_ETH_LLC:
                                 if (dev == NULL)
                                         goto fail_usage;
-                                conf.dev = dev;
-                                break;
-                        case IPCP_ETH_DIX:
-                                if (dev == NULL)
-                                        goto fail_usage;
-                                conf.dev = dev;
-                                conf.ethertype = ethertype;
+                                conf.eth.dev = dev;
                                 break;
                         case IPCP_BROADCAST:
                                 /* FALLTHRU */
