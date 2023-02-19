@@ -57,7 +57,7 @@ enum pol_cong_avoid {
 };
 
 enum pol_dir_hash {
-        DIR_HASH_SHA3_224 = 0,
+        DIR_HASH_SHA3_224,
         DIR_HASH_SHA3_256,
         DIR_HASH_SHA3_384,
         DIR_HASH_SHA3_512

@@ -50,6 +50,9 @@
 #include <ouroboros/rib.h>
 #endif
 
+#ifdef HAVE_LIBGCRYPT
+#include <gcrypt.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

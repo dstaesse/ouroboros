@@ -31,41 +31,47 @@
 
 #include <ouroboros/hash.h>
 
-#ifndef HAVE_LIBGCRYPT
+#ifdef HAVE_LIBGCRYPT
+#include <gcrypt.h>
+#else
 #include <ouroboros/crc32.h>
 #include <ouroboros/md5.h>
 #include <ouroboros/sha3.h>
-#else
-#include <gcrypt.h>
 #endif
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
 
+#ifdef HAVE_LIBGCRYPT
+int gcry_algo_tbl [] = {
+        /* DIR_HASH policies first */
+        GCRY_MD_SHA3_224,
+        GCRY_MD_SHA3_256,
+        GCRY_MD_SHA3_384,
+        GCRY_MD_SHA3_512,
+        /* Below for internal use only */
+        GCRY_MD_CRC32,
+        GCRY_MD_MD5,
+};
+#else
+int hash_len_tbl [] = {
+        /* DIR_HASH policies first */
+        SHA3_224_HASH_LEN,
+        SHA3_256_HASH_LEN,
+        SHA3_384_HASH_LEN,
+        SHA3_512_HASH_LEN,
+        /* Below for internal use only */
+        CRC32_HASH_LEN,
+        MD5_HASH_LEN
+};
+#endif
+
 uint16_t hash_len(enum hash_algo algo)
 {
 #ifdef HAVE_LIBGCRYPT
-        return (uint16_t) gcry_md_get_algo_dlen(algo);
+        return (uint16_t) gcry_md_get_algo_dlen(gcry_algo_tbl[algo]);
 #else
-        switch (algo) {
-        case HASH_CRC32:
-                return CRC32_HASH_LEN;
-        case HASH_MD5:
-                return MD5_HASH_LEN;
-        case HASH_SHA3_224:
-                return SHA3_224_HASH_LEN;
-        case HASH_SHA3_256:
-                return SHA3_256_HASH_LEN;
-        case HASH_SHA3_384:
-                return SHA3_384_HASH_LEN;
-        case HASH_SHA3_512:
-                return SHA3_512_HASH_LEN;
-        default:
-                assert(false);
-                break;
-        }
-
-        return 0;
+        return hash_len_tbl[algo];
 #endif
 }
 
@@ -75,7 +81,7 @@ void mem_hash(enum hash_algo  algo,
               size_t          len)
 {
 #ifdef HAVE_LIBGCRYPT
-        gcry_md_hash_buffer(algo, dst, buf, len);
+        gcry_md_hash_buffer(gcry_algo_tbl[algo], dst, buf, len);
 #else
         struct sha3_ctx sha3_ctx;
         struct md5_ctx md5_ctx;

@@ -288,6 +288,8 @@ static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
 
         ipcp_type = conf_msg->ipcp_type;
 
+        conf.layer_info.dir_hash_algo = conf_msg->layer_info->dir_hash_algo;
+
         switch(ipcp_type) {
         case IPCP_LOCAL:
                 break;
@@ -320,26 +322,6 @@ static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
                 log_err("Unknown IPCP type: %d.", conf_msg->ipcp_type);
                 ret_msg->result = -EIPCP;
                 return;
-        }
-
-        /* UDP and broadcast use fixed hash algorithm. */
-        if (ipcp_type != IPCP_UDP && ipcp_type != IPCP_BROADCAST) {
-                switch(conf_msg->layer_info->dir_hash_algo) {
-                case DIR_HASH_SHA3_224:
-                        conf.layer_info.dir_hash_algo = HASH_SHA3_224;
-                        break;
-                case DIR_HASH_SHA3_256:
-                        conf.layer_info.dir_hash_algo = HASH_SHA3_256;
-                        break;
-                case DIR_HASH_SHA3_384:
-                        conf.layer_info.dir_hash_algo = HASH_SHA3_384;
-                        break;
-                case DIR_HASH_SHA3_512:
-                        conf.layer_info.dir_hash_algo = HASH_SHA3_512;
-                        break;
-                default:
-                        assert(false);
-                }
         }
 
         ret_msg->result = ipcpi.ops->ipcp_bootstrap(&conf);

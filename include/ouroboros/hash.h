@@ -26,30 +26,19 @@
 #include "config.h"
 
 #include <ouroboros/endian.h>
+#include <ouroboros/ipcp.h>
 
-#ifdef HAVE_LIBGCRYPT
-#include <gcrypt.h>
-#endif
 #include <stdint.h>
 #include <stddef.h>
 
 /* Hash algorithms */
 enum hash_algo {
-#ifdef HAVE_LIBGCRYPT
-        HASH_CRC32    = GCRY_MD_CRC32,
-        HASH_MD5      = GCRY_MD_MD5,
-        HASH_SHA3_224 = GCRY_MD_SHA3_224,
-        HASH_SHA3_256 = GCRY_MD_SHA3_256,
-        HASH_SHA3_384 = GCRY_MD_SHA3_384,
-        HASH_SHA3_512 = GCRY_MD_SHA3_512
-#else
-        HASH_CRC32 = 0,
+        HASH_SHA3_224 = DIR_HASH_SHA3_224,
+        HASH_SHA3_256 = DIR_HASH_SHA3_256,
+        HASH_SHA3_384 = DIR_HASH_SHA3_384,
+        HASH_SHA3_512 = DIR_HASH_SHA3_512,
+        HASH_CRC32,
         HASH_MD5,
-        HASH_SHA3_224,
-        HASH_SHA3_256,
-        HASH_SHA3_384,
-        HASH_SHA3_512
-#endif
 };
 
 #define HASH_FMT "%02x%02x%02x%02x"
