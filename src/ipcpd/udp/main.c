@@ -592,9 +592,9 @@ static void * ipcp_udp_packet_writer(void * o)
 }
 
 static const char * inet4_ntop(const void * addr,
-                         char *       buf)
+                               char *       buf)
 {
-        return inet_ntop(AF_INET, &addr, buf, INET_ADDRSTRLEN);
+        return inet_ntop(AF_INET, addr, buf, INET_ADDRSTRLEN);
 }
 
 static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
