@@ -4,6 +4,39 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
+find_library(TOML_LIBRARIES toml QUIET)
+if (TOML_LIBRARIES)
+  set(DISABLE_CONFIGFILE FALSE CACHE BOOL
+    "Disable configuration file support")
+  if (NOT DISABLE_CONFIGFILE)
+    set(OUROBOROS_CONFIG_DIR /etc/ouroboros/ CACHE STRING
+      "Configuration directory")
+    set(OUROBOROS_CONFIG_FILE irmd.conf CACHE STRING
+      "Name of the IRMd configuration file")
+    set(HAVE_TOML TRUE)
+    message(STATUS "Found TOML C99 library: " ${TOML_LIBRARIES})
+    message(STATUS "Configuration file support enabled")
+    message(STATUS "Configuration directory: ${OUROBOROS_CONFIG_DIR}")
+    set(INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}")
+    configure_file("${CMAKE_SOURCE_DIR}/irmd.conf.in"
+      "${CMAKE_BINARY_DIR}/irmd.conf.example" @ONLY)
+    install(FILES "${CMAKE_BINARY_DIR}/irmd.conf.example"
+      DESTINATION "${OUROBOROS_CONFIG_DIR}")
+    unset(INSTALL_DIR)
+    mark_as_advanced(TOML_LIBRARIES)
+  else ()
+    message(STATUS "Configuration file support disabled by user")
+    unset(OUROBOROS_CONFIG_FILE CACHE)
+    unset(OUROBOROS_CONFIG_DIR CACHE)
+    set(HAVE_TOML FALSE)
+  endif ()
+else ()
+  message(STATUS "Install tomlc99 for config file support")
+  message(STATUS "     https://github.com/cktan/tomlc99")
+  unset(DISABLE_CONFIGFILE CACHE)
+  unset(HAVE_TOML)
+endif ()
+
 set(IRMD_REQ_ARR_TIMEOUT 500 CACHE STRING
   "Timeout for an application to respond to a new flow (ms)")
 set(IRMD_FLOW_TIMEOUT 5000 CACHE STRING
@@ -31,6 +64,7 @@ set(SOURCE_FILES
   proc_table.c
   prog_table.c
   ipcp.c
+  configfile.c
   irm_flow.c
   main.c
   registry.c
@@ -39,7 +73,8 @@ set(SOURCE_FILES
 
 add_executable (irmd ${SOURCE_FILES})
 
-target_link_libraries (irmd LINK_PUBLIC ouroboros-common)
+target_link_libraries (irmd LINK_PUBLIC ouroboros-common
+  ${TOML_LIBRARIES} ${CONFINI_LIBRARIES})
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")

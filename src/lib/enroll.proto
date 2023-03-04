@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2023
  *
- * The sockets layer to communicate between daemons
+ * Enrollment protocol
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,33 +20,21 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_SOCKETS_H
-#define OUROBOROS_SOCKETS_H
+syntax = "proto2";
+import "ipcp_config.proto";
 
-#include <sys/types.h>
+message enroll_req_msg {
+        /* TODO authentication */
+        required uint32 magic = 1;
+}
 
-#include "irmd_messages.pb-c.h"
-typedef IrmMsg irm_msg_t;
+message enroll_resp_msg {
+        required int64           t_sec    = 1;
+        required int32           t_nsec   = 2;
+        required int32           response = 3;
+        optional ipcp_config_msg conf     = 4;
+}
 
-#define SOCK_PATH "/var/run/ouroboros/"
-#define SOCK_PATH_SUFFIX ".sock"
-
-#define IRM_SOCK_PATH SOCK_PATH "irm" SOCK_PATH_SUFFIX
-#define IPCP_SOCK_PATH_PREFIX SOCK_PATH "ipcp"
-
-#define SOCK_BUF_SIZE @SOCK_BUF_SIZE@
-
-/* Returns the full socket path of an IPCP */
-char *      ipcp_sock_path(pid_t pid);
-
-int         server_socket_open(char * file_name);
-
-int         client_socket_open(char * file_name);
-
-irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
-
-
-/* cleanup socket when cancelling thread */
-void __cleanup_close_ptr(void * o);
-
-#endif
+message enroll_ack_msg {
+        required int32 response = 1;
+}

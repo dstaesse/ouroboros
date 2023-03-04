@@ -1,0 +1,111 @@
+### Example Ouroboros configuration file
+#
+# This file contains a summary of current machine configuration
+# options for the O7s prototype. The IRMd will attempt to load its
+# configuration file during startup from the file
+# @OUROBOROS_CONFIG_DIR@@OUROBOROS_CONFIG_FILE@.
+#
+# At the top level, it accepts configuration of
+# services via the "name" directive, and configuration of the network
+# specifying different IPCPs in the system. So, the list of accepted
+# top level stanza is:
+#
+# [name.<name of service>] add a new name to the system.
+# [local.<name for IPCP>] add a new local IPCP to the system.
+# [eth-llc.<name for IPCP>] add a new IPCP over Ethernet (LLC) to the system.
+# [eth-dix.<name for IPCP>] add a new IPCP over Ethernet (DIX) to the system.
+# [eth-udp.<name for IPCP>] add a new IPCP over UDP/IPv4 to the system.
+# [broadcast.<name of IPCP>] add a new broadcast IPCP to the system.
+# [unicast.<name of IPCP>] add a new unicast IPCP to the system.
+#
+# Options for names:
+#
+# A name can be created without any parameters. The following options will
+# allow more useful configurations:
+# prog: bind programs to this name. Whenever an instance of one of these
+#       programs is started, it will accept incoming flows for this name.
+# args: When provided the program at the same index in the prog list will be
+#       automatically started if there is an incoming flow for that name.
+# lb:   Load-balancing option, if there are multiple processes accepting flows
+#       for that name, the flow will get assigned to the process according to
+#       the specified load-balancing algorithm.
+#
+# Options for IPCPs:
+#
+# bootstrap=<layer_name>: Immediately bootstrap this IPCP in this layer.
+# enrol=<dst>:            Enrol with this neigbor (broadcast and unicast only).
+# conn=[<dst>]:           Create mgmt and data flows with these neighbors.
+# reg=[<names>]:          Register these names with the IPCP.
+# Bootstrap options can be set as in the examples below.
+# For more details on the configuration options for each of the IPCP types,
+# please refer to the Ouroboros man page.
+
+[name.oping]
+prog=["@INSTALL_DIR@/oping"] # Defaults to [].
+args=["-l"]             # Defaults to disabled. Autostart server with these args.
+lb="round-robin"        # Defaults to spill (load-balancing options: spill, round-robin).
+
+[name.oecho]
+lb="round-robin"        # Defaults to spill (load-balancing options: spill, round-robin).
+args="-l"               # Defaults to disabled. Autostart server with these args.
+
+[name.ocbr]
+prog=["@INSTALL_DIR@/ocbr"]  # Defaults to [].
+
+[name.ovpn]
+prog=["@INSTALL_DIR@/ovpn"]  # Defaults to [].
+
+[local.local1]
+bootstrap="local1"      # Defaults to not set.
+   # BOOTSTRAP CONFIGURATION
+# hash="SHA3_224"       # Defaults to SHA3_256.
+   # NAMES KNOWN
+reg=["bc1", "LAN"]      # Defaults to [].
+
+[eth-llc.ethl]
+bootstrap="ethl1"       # Defaults to not set.
+   # BOOTSTRAP CONFIGURATION
+dev="lo"
+# hash="SHA3_224"       # Defaults to SHA3_256.
+
+[eth-dix.eth1]
+bootstrap="eth1"        # Defaults to not set.
+   # BOOTSTRAP CONFIGURATION
+dev="lo"
+# ethertype=0xA007      # Defaults to 0xA000.
+# hash="SHA3_224"       # Defaults to SHA3_256.
+reg=["lan1"]
+
+[udp.udp1]
+bootstrap="udp"         # Defaults to not set.
+   # BOOTSTRAP CONFIGURATION
+ip="127.0.0.1"
+# port=9000             # Defaults to 3435.
+# dns="127.0.0.1"       # Requires a DDNS server. Disables DDNS support if not set.
+
+[broadcast.bc1]
+bootstrap="broadcast"   # Defaults to not set.
+autobind=true           # Defaults to false.
+
+[broadcast.bc2]
+enrol="bc1"
+# autobind=true         # Defaults to false.
+
+[unicast.lan1]
+bootstrap="LAN"         # Defaults to not set.
+autobind=true           # Defaults to false.
+   # BOOTSTRAP CONFIGURATION
+# hash="SHA3_224"       # Defaults to SHA3_256.
+# addr_size=4           # Defaults to 4 (32-bit addresses).
+# eid_size=8            # Defaults to 8 (64-bit endpoint IDs, only accepted option).
+# max_ttl=60            # Defaults to 60 (max 255).
+# addr-auth="flat"      # Defaults to flat (currently only option).
+# routing="lfa"         # Defaults to link-state (options: link-state, lfa, ecmp).
+# congestion="none"     # Defaults to mb-ecn (options: none, mb-ecn).
+   # NAMES KNOWN
+reg=["oping"]           # Defaults to [].
+
+[unicast.lan2]
+enrol="LAN"             # Defaults to not set.
+conn=["lan1"]           # Defaults to [].
+autobind=true           # Defaults to false.

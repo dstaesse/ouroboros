@@ -39,6 +39,7 @@
 #include <ouroboros/fccntl.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/np1_flow.h>
+#include <ouroboros/protobuf.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
 #include <ouroboros/shm_flow_set.h>
@@ -795,7 +796,7 @@ int flow_accept(qosspec_t *             qs,
         crypt_dh_pkp_destroy(pkp);
 
         fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       msg_to_spec(recv_msg->qosspec), s,
+                       qos_spec_msg_to_s(recv_msg->qosspec), s,
                        recv_msg->mpl);
 
         irm_msg__free_unpacked(recv_msg, NULL);
@@ -827,7 +828,6 @@ static int __flow_alloc(const char *            dst,
                         bool join)
 {
         irm_msg_t     msg    = IRM_MSG__INIT;
-        qosspec_msg_t qs_msg = QOSSPEC_MSG__INIT;
         irm_msg_t *   recv_msg;
         int           fd;
         void *        pkp = NULL;     /* public key pair     */
@@ -846,8 +846,7 @@ static int __flow_alloc(const char *            dst,
         msg.dst     = (char *) dst;
         msg.has_pid = true;
         msg.pid     = getpid();
-        qs_msg      = spec_to_msg(qs);
-        msg.qosspec = &qs_msg;
+        msg.qosspec = qos_spec_s_to_msg(qs);
 
         if (timeo != NULL) {
                 msg.has_timeo_sec = true;
@@ -871,6 +870,8 @@ static int __flow_alloc(const char *            dst,
         }
 
         recv_msg = send_recv_irm_msg(&msg);
+        qosspec_msg__free_unpacked(msg.qosspec, NULL);
+
         if (recv_msg == NULL)
                 goto fail_send;
 
@@ -1832,7 +1833,6 @@ int ipcp_flow_req_arr(const uint8_t * dst,
 {
         irm_msg_t     msg = IRM_MSG__INIT;
         irm_msg_t *   recv_msg;
-        qosspec_msg_t qs_msg;
         int           fd;
 
         assert(dst != NULL);
@@ -1843,8 +1843,7 @@ int ipcp_flow_req_arr(const uint8_t * dst,
         msg.has_hash  = true;
         msg.hash.len  = len;
         msg.hash.data = (uint8_t *) dst;
-        qs_msg        = spec_to_msg(&qs);
-        msg.qosspec   = &qs_msg;
+        msg.qosspec   = qos_spec_s_to_msg(&qs);
         msg.has_mpl   = true;
         msg.mpl       = mpl;
         msg.has_pk    = true;
@@ -1852,6 +1851,8 @@ int ipcp_flow_req_arr(const uint8_t * dst,
         msg.pk.len    = dlen;
 
         recv_msg = send_recv_irm_msg(&msg);
+        qosspec_msg__free_unpacked(msg.qosspec, NULL);
+
         if (recv_msg == NULL)
                 return -EIRMD;
 

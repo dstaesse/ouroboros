@@ -20,7 +20,7 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define _POSIX_C_SOURCE 199309L
+#define _POSIX_C_SOURCE 200112L
 
 #include "config.h"
 
@@ -194,9 +194,9 @@ int ipcp_destroy(pid_t pid)
         return 0;
 }
 
-int ipcp_bootstrap(pid_t               pid,
-                   ipcp_config_msg_t * conf,
-                   struct layer_info * info)
+int ipcp_bootstrap(pid_t                pid,
+                   struct ipcp_config * conf,
+                   struct layer_info *  info)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
@@ -206,9 +206,10 @@ int ipcp_bootstrap(pid_t               pid,
                 return -EINVAL;
 
         msg.code = IPCP_MSG_CODE__IPCP_BOOTSTRAP;
-        msg.conf = conf;
+        msg.conf = ipcp_config_s_to_msg(conf);
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
+        ipcp_config_msg__free_unpacked(msg.conf, NULL);
         if (recv_msg == NULL)
                 return -EIPCP;
 
@@ -285,7 +286,6 @@ int ipcp_connect(pid_t        pid,
                  qosspec_t    qs)
 {
         ipcp_msg_t    msg    = IPCP_MSG__INIT;
-        qosspec_msg_t qs_msg = QOSSPEC_MSG__INIT;
         int           ret    = -1;
         ipcp_msg_t *  recv_msg;
 
@@ -294,10 +294,10 @@ int ipcp_connect(pid_t        pid,
         msg.comp    = (char *) component;
         msg.has_pid = true;
         msg.pid     = pid;
-        qs_msg      = spec_to_msg(&qs);
-        msg.qosspec = &qs_msg;
+        msg.qosspec = qos_spec_s_to_msg(&qs);
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
+        free(msg.qosspec);
         if (recv_msg == NULL)
                 return -EIPCP;
 
@@ -438,7 +438,6 @@ static int __ipcp_flow_alloc(pid_t           pid,
                              size_t          dlen)
 {
         ipcp_msg_t    msg      = IPCP_MSG__INIT;
-        qosspec_msg_t qs_msg;
         ipcp_msg_t *  recv_msg = NULL;
         int           ret      = -1;
 
@@ -453,13 +452,13 @@ static int __ipcp_flow_alloc(pid_t           pid,
         msg.has_hash     = true;
         msg.hash.len     = len;
         msg.hash.data    = (uint8_t *) dst;
-        qs_msg           = spec_to_msg(&qs);
-        msg.qosspec      = &qs_msg;
+        msg.qosspec      = qos_spec_s_to_msg(&qs);;
         msg.has_pk       = true;
         msg.pk.data      = (uint8_t *) data;
         msg.pk.len       = (uint32_t) dlen;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
+        free(msg.qosspec);
         if (recv_msg == NULL)
                 return -EIPCP;
 

@@ -29,10 +29,6 @@
 
 #include <sys/types.h>
 
-/* Unicast IPCP components. */
-#define DT_COMP   "Data Transfer"
-#define MGMT_COMP "Management"
-
 /* Name binding options. */
 #define BIND_AUTO   0x01
 
@@ -42,7 +38,8 @@
 /* Load balancing policy for incoming flows. */
 enum pol_balance {
         LB_RR = 0,
-        LB_SPILL
+        LB_SPILL,
+        LB_INVALID
 };
 
 struct ipcp_info {

@@ -100,6 +100,7 @@ int server_socket_open(char * file_name)
         return sockfd;
 }
 
+__attribute__((no_sanitize_address))
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 {
         int         sockfd;
@@ -117,17 +118,17 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
                 return NULL;
         }
 
-        pthread_cleanup_push(__cleanup_close_ptr, &sockfd);
-
         irm_msg__pack(msg, buf);
+
+        pthread_cleanup_push(__cleanup_close_ptr, &sockfd);
 
         if (write(sockfd, buf, len) != -1)
                 len = read(sockfd, buf, SOCK_BUF_SIZE);
 
+        pthread_cleanup_pop(true);
+
         if (len > 0)
                 recv_msg = irm_msg__unpack(NULL, len, buf);
-
-        pthread_cleanup_pop(true);
 
         return recv_msg;
 }
@@ -164,43 +165,4 @@ char * ipcp_sock_path(pid_t pid)
         free(pid_string);
 
         return full_name;
-}
-
-qosspec_msg_t spec_to_msg(const qosspec_t * qs)
-{
-        qosspec_t     spec;
-        qosspec_msg_t msg = QOSSPEC_MSG__INIT;
-
-        spec = (qs == NULL ? qos_raw : *qs);
-
-        msg.delay        = spec.delay;
-        msg.bandwidth    = spec.bandwidth;
-        msg.availability = spec.availability;
-        msg.loss         = spec.loss;
-        msg.ber          = spec.ber;
-        msg.in_order     = spec.in_order;
-        msg.max_gap      = spec.max_gap;
-        msg.cypher_s     = spec.cypher_s;
-        msg.timeout      = spec.timeout;
-
-        return msg;
-}
-
-qosspec_t msg_to_spec(const qosspec_msg_t * msg)
-{
-        qosspec_t     spec;
-
-        assert(msg);
-
-        spec.delay        = msg->delay;
-        spec.bandwidth    = msg->bandwidth;
-        spec.availability = msg->availability;
-        spec.loss         = msg->loss;
-        spec.ber          = msg->ber;
-        spec.in_order     = msg->in_order;
-        spec.max_gap      = msg->max_gap;
-        spec.cypher_s     = msg->cypher_s;
-        spec.timeout      = msg->timeout;
-
-        return spec;
 }

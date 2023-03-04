@@ -34,7 +34,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
-#include <ouroboros/sockets.h>
+#include <ouroboros/serdes-oep.h>
 
 #include "common/connmgr.h"
 #include "common/enroll.h"
@@ -44,9 +44,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-
-#include "ipcp_config.pb-c.h"
-typedef EnrollMsg enroll_msg_t;
 
 #define ENROLL_COMP             "Enrollment"
 #define ENROLL_PROTO            "OEP" /* Ouroboros enrollment protocol */
@@ -67,56 +64,60 @@ struct {
 
 static int send_rcv_enroll_msg(int fd)
 {
-        enroll_msg_t    req = ENROLL_MSG__INIT;
-        enroll_msg_t *  reply;
-        uint8_t         buf[ENROLL_BUF_LEN];
-        ssize_t         len;
-        ssize_t         delta_t;
-        struct timespec t0;
-        struct timespec rtt;
-#ifdef BUILD_IPCP_UNICAST
-        uni_config_msg_t * uni_cfg_msg;
-#endif
-        req.code = ENROLL_CODE__ENROLL_REQ;
+        uint8_t            __buf[ENROLL_BUF_LEN];
+        buffer_t           buf;
+        buffer_t           msg;
+        ssize_t            len;
+        ssize_t            delta_t;
+        struct timespec    t0;
+        struct timespec    rtt;
+        int                ret;
+        struct enroll_resp resp;
 
-        len = enroll_msg__get_packed_size(&req);
+        buf.data = __buf;
+        buf.len  = sizeof(__buf);
+
+        len = enroll_req_ser(buf);
         if (len < 0) {
-                log_dbg("Failed pack request message.");
+                log_dbg("Failed to pack request message.");
                 return -1;
         }
 
-        enroll_msg__pack(&req, buf);
-
         clock_gettime(CLOCK_REALTIME, &t0);
 
-        if (flow_write(fd, buf, len) < 0) {
+        log_dbg("Sending request message.");
+
+        if (flow_write(fd, buf.data, len) < 0) {
                 log_dbg("Failed to send request message.");
                 return -1;
         }
 
-        len = flow_read(fd, buf, ENROLL_BUF_LEN);
+        log_dbg("Waiting for reply message.");
+
+        len = flow_read(fd, buf.data, buf.len);
         if (len < 0) {
-                log_dbg("No enrollment reply received.");
+                log_dbg("No reply received.");
                 return -1;
         }
 
-        log_dbg("Received enrollment info (%zd bytes).", len);
+        log_dbg("Received configuration info (%zd bytes).", len);
 
-        reply = enroll_msg__unpack(NULL, len, buf);
-        if (reply == NULL) {
-                log_dbg("No enrollment response.");
+        msg.data = buf.data;
+        msg.len  = len;
+
+        ret = enroll_resp_des(&resp, msg);
+        if (ret < 0) {
+                log_dbg("Failed to unpack response message.");
                 return -1;
         }
 
-        if (reply->code != ENROLL_CODE__ENROLL_BOOT) {
-                log_dbg("Failed to unpack enrollment response.");
-                enroll_msg__free_unpacked(reply, NULL);
+        if (resp.response < 0) {
+                log_dbg("Remote denied request: %d.", resp.response);
                 return -1;
         }
 
-        if (!(reply->has_t_sec && reply->has_t_nsec)) {
-                log_dbg("No time in response message.");
-                enroll_msg__free_unpacked(reply, NULL);
+        if (resp.conf.type != ipcpi.type) {
+                log_dbg("Wrong type in enrollment response %d (%d).", resp.conf.type, ipcpi.type);
                 return -1;
         }
 
@@ -124,168 +125,107 @@ static int send_rcv_enroll_msg(int fd)
 
         delta_t = ts_diff_ms(&t0, &rtt);
 
-        rtt.tv_sec  = reply->t_sec;
-        rtt.tv_nsec = reply->t_nsec;
+        rtt.tv_sec  = resp.t.tv_sec;
+        rtt.tv_nsec = resp.t.tv_nsec;
 
         if (labs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
                 log_warn("Clock offset above threshold.");
 
-        strcpy(enroll.conf.layer_info.layer_name,
-               reply->conf->layer_info->layer_name);
-        enroll.conf.type           = reply->conf->ipcp_type;
-#ifdef BUILD_IPCP_UNICAST
-        uni_cfg_msg = reply->conf->unicast;
-
-        enroll.conf.unicast.dt.addr_size    = uni_cfg_msg->dt->addr_size;
-        enroll.conf.unicast.dt.eid_size     = uni_cfg_msg->dt->eid_size;
-        enroll.conf.unicast.dt.max_ttl      = uni_cfg_msg->dt->max_ttl;
-        enroll.conf.unicast.dt.routing_type = uni_cfg_msg->dt->routing_type;
-        enroll.conf.unicast.addr_auth_type  = uni_cfg_msg->addr_auth_type;
-        enroll.conf.unicast.cong_avoid      = uni_cfg_msg->cong_avoid;
-#endif
-        enroll.conf.layer_info.dir_hash_algo
-                = reply->conf->layer_info->dir_hash_algo;
-        enroll_msg__free_unpacked(reply, NULL);
+        enroll.conf = resp.conf;
 
         return 0;
 }
 
-static ssize_t enroll_pack(uint8_t ** buf)
-{
-        enroll_msg_t      msg        = ENROLL_MSG__INIT;
-        ipcp_config_msg_t config     = IPCP_CONFIG_MSG__INIT;
-        layer_info_msg_t  layer_info = LAYER_INFO_MSG__INIT;
-#ifdef BUILD_IPCP_UNICAST
-        dt_config_msg_t   dt_cfg_msg  = DT_CONFIG_MSG__INIT;
-        uni_config_msg_t  uni_cfg_msg = UNI_CONFIG_MSG__INIT;
-#endif
-        struct timespec   now;
-        ssize_t           len;
-
-        clock_gettime(CLOCK_REALTIME, &now);
-
-        msg.code       = ENROLL_CODE__ENROLL_BOOT;
-        msg.has_t_sec  = true;
-        msg.t_sec      = now.tv_sec;
-        msg.has_t_nsec = true;
-        msg.t_nsec     = now.tv_nsec;
-
-        config.ipcp_type           = enroll.conf.type;
-#ifdef BUILD_IPCP_UNICAST
-        dt_cfg_msg.addr_size       = enroll.conf.unicast.dt.addr_size;
-        dt_cfg_msg.eid_size        = enroll.conf.unicast.dt.eid_size;
-        dt_cfg_msg.max_ttl         = enroll.conf.unicast.dt.max_ttl;
-        dt_cfg_msg.routing_type    = enroll.conf.unicast.dt.routing_type;
-        uni_cfg_msg.dt             = &dt_cfg_msg;
-        uni_cfg_msg.addr_auth_type = enroll.conf.unicast.addr_auth_type;
-        uni_cfg_msg.cong_avoid     = enroll.conf.unicast.cong_avoid;
-        config.unicast             = &uni_cfg_msg;
-#endif
-        layer_info.layer_name     = (char *) enroll.conf.layer_info.layer_name;
-        layer_info.dir_hash_algo  = enroll.conf.layer_info.dir_hash_algo;
-
-        config.layer_info = &layer_info;
-        msg.conf          = &config;
-
-        len = enroll_msg__get_packed_size(&msg);
-
-        *buf = malloc(len);
-        if (*buf == NULL)
-                return -ENOMEM;
-
-        enroll_msg__pack(&msg, *buf);
-
-        return len;
-}
 
 static void * enroll_handle(void * o)
 {
-        struct conn    conn;
-        uint8_t        buf[ENROLL_BUF_LEN];
-        uint8_t *      reply;
-        ssize_t        len;
-        enroll_msg_t * msg;
+        struct enroll_resp resp;
+        struct conn        conn;
+        uint8_t             __buf[ENROLL_BUF_LEN];
+        buffer_t           buf;
+        ssize_t            len;
+        int                response;
 
         (void) o;
 
+        buf.data = __buf;
+        buf.len  = sizeof(__buf);
+
+        resp.conf = enroll.conf;
+
         while (true) {
+                buffer_t msg;
+
                 if (connmgr_wait(COMPID_ENROLL, &conn)) {
                         log_err("Failed to get next connection.");
                         continue;
                 }
 
-                len = flow_read(conn.flow_info.fd, buf, ENROLL_BUF_LEN);
+                log_info("New enrollment connection.");
+
+                len = flow_read(conn.flow_info.fd, buf.data, buf.len);
                 if (len < 0) {
                         log_err("Failed to read from flow.");
                         connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
-                msg = enroll_msg__unpack(NULL, len, buf);
-                if (msg == NULL) {
-                        log_err("Failed to unpack message.");
+                log_dbg("Read request from flow (%zd bytes).", len);
+                msg.data = buf.data;
+                msg.len = (size_t) len;
+
+                if (enroll_req_des(msg) < 0) {
+                        log_err("Failed to unpack request message.");
                         connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
-                if (msg->code != ENROLL_CODE__ENROLL_REQ) {
-                        log_err("Wrong message type.");
-                        connmgr_dealloc(COMPID_ENROLL, &conn);
-                        enroll_msg__free_unpacked(msg, NULL);
-                        continue;
-                }
+                /* TODO: authentication */
 
                 log_dbg("Enrolling a new neighbor.");
 
-                enroll_msg__free_unpacked(msg, NULL);
+                clock_gettime(CLOCK_REALTIME, &resp.t);
 
-                len = enroll_pack(&reply);
+                resp.response = 0;
+
+                len = enroll_resp_ser(&resp, buf);
                 if (len < 0) {
-                        log_err("Failed to pack enrollment message.");
+                        log_err("Failed to pack reply.");
                         connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
                 log_dbg("Sending enrollment info (%zd bytes).", len);
 
-                if (flow_write(conn.flow_info.fd, reply, len) < 0) {
-                        log_err("Failed respond to enrollment request.");
+                if (flow_write(conn.flow_info.fd, buf.data, len) < 0) {
+                        log_err("Failed respond to request.");
                         connmgr_dealloc(COMPID_ENROLL, &conn);
-                        free(reply);
                         continue;
                 }
 
-                free(reply);
-
-                len = flow_read(conn.flow_info.fd, buf, ENROLL_BUF_LEN);
+                len = flow_read(conn.flow_info.fd, buf.data, buf.len);
                 if (len < 0) {
                         log_err("Failed to read from flow.");
                         connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
 
-                msg = enroll_msg__unpack(NULL, len, buf);
-                if (msg == NULL) {
-                        log_err("Failed to unpack message.");
+                msg.data = buf.data;
+                msg.len = (size_t) len;
+
+                if (enroll_ack_des(&response, msg) < 0) {
+                        log_err("Failed to unpack acknowledgment.");
                         connmgr_dealloc(COMPID_ENROLL, &conn);
                         continue;
                 }
-
-                if (msg->code != ENROLL_CODE__ENROLL_DONE || !msg->has_result) {
-                        log_err("Wrong message type.");
-                        enroll_msg__free_unpacked(msg, NULL);
-                        connmgr_dealloc(COMPID_ENROLL, &conn);
-                        continue;
-                }
-
-                if (msg->result == 0)
-                        log_dbg("Neighbor enrollment successful.");
+                if (response == 0)
+                        log_info("Neighbor enrollment successful.");
                 else
-                        log_dbg("Neigbor reported failed enrollment.");
-
-                enroll_msg__free_unpacked(msg, NULL);
+                        log_info("Neigbor enrolment failed at remote.");
 
                 connmgr_dealloc(COMPID_ENROLL, &conn);
+
+                log_info("Enrollment connection closed.");
         }
 
         return 0;
@@ -293,36 +233,35 @@ static void * enroll_handle(void * o)
 
 int enroll_boot(struct conn * conn)
 {
-        log_dbg("Getting boot information.");
+        log_dbg("Starting enrollment.");
 
         if (send_rcv_enroll_msg(conn->flow_info.fd)) {
                 log_err("Failed to enroll.");
                 return -1;
         }
 
+        log_dbg("Enrollment complete.");
+
         return 0;
 }
 
-int enroll_done(struct conn * conn,
-                int           result)
+int enroll_ack(struct conn * conn,
+                int          result)
 {
-        enroll_msg_t msg = ENROLL_MSG__INIT;
-        uint8_t      buf[ENROLL_BUF_LEN];
-        ssize_t       len;
+        uint8_t            __buf[ENROLL_BUF_LEN];
+        buffer_t           buf;
+        ssize_t            len;
 
-        msg.code       = ENROLL_CODE__ENROLL_DONE;
-        msg.has_result = true;
-        msg.result     = result;
+        buf.data = __buf;
+        buf.len  = sizeof(__buf);
 
-        len = enroll_msg__get_packed_size(&msg);
+        len = enroll_ack_ser(result, buf);
         if (len < 0) {
-                log_dbg("Failed pack request message.");
+                log_err("Failed to pack acknowledgement.");
                 return -1;
         }
 
-        enroll_msg__pack(&msg, buf);
-
-        if (flow_write(conn->flow_info.fd, buf, len) < 0) {
+        if (flow_write(conn->flow_info.fd, buf.data, len) < 0) {
                 log_dbg("Failed to send acknowledgment.");
                 return -1;
         }

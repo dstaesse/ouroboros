@@ -193,7 +193,7 @@ int do_bootstrap_ipcp(int     argc,
                                 ethertype = strtol(*(argv + 1), NULL, 0);
                         else
                                 ethertype = strtol(*(argv + 1), NULL, 16);
-                        if (ethertype < 0x0600 || ethertype == 0xFFFF) {
+                        if (ethertype < 0x0600 || ethertype >= 0xFFFF) {
                                 printf("Invalid Ethertype: \"%s\".\n"
                                        "Recommended range: 0xA000-0xEFFF.\n",
                                        *(argv + 1));
@@ -332,7 +332,12 @@ int do_bootstrap_ipcp(int     argc,
                         case IPCP_ETH_LLC:
                                 if (dev == NULL)
                                         goto fail_usage;
-                                conf.eth.dev = dev;
+                                if (strlen(dev) > DEV_NAME_SIZE) {
+                                        printf("Device name too long.\n\n");
+                                        goto fail_usage;
+                                }
+
+                                strcpy(conf.eth.dev, dev);
                                 break;
                         case IPCP_BROADCAST:
                                 /* FALLTHRU */

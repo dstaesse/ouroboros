@@ -195,18 +195,14 @@ default: SHA3_256.
 .PP
 ip \fIip\fR specifies the local IP address to bind to
 .PP
-[dns \fdns\fR] specifies an optional DDNS server that will be used for
+[dns \fIdns\fR] specifies an optional DDNS server that will be used for
 the directory.
 .PP
-[cport \fcport\fR] specifies a client UDP port that will be used for
-sending packets.
-.br
-default: A random UDP port in the ephemeral range
-.PP
-[sport \fsport\fR] specifies a server UDP port that is used for
+[port \fIport\fR] specifies a UDP port that is used for sending and
 receiving ouroboros traffic. This must be the same for the entire UDP
 layer. Parallel UDP layers should use different ports. This UDP port
-needs to be forwarded if the server is behind a NAT.
+needs to be forwarded if the server is behind a NAT and wants to
+receive incoming requests.
 .br
 default: 3435
 .RE

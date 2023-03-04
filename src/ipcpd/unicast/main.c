@@ -218,7 +218,7 @@ static int unicast_ipcp_enroll(const char *        dst,
                 goto fail_start_comp;
         }
 
-        if (enroll_done(&conn, 0))
+        if (enroll_ack(&conn, 0))
                 log_warn("Failed to confirm enrollment with peer.");
 
         if (connmgr_dealloc(COMPID_ENROLL, &conn))

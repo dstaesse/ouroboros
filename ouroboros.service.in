@@ -2,7 +2,7 @@
 Description=Ouroboros IPC Resource Manager Daemon
 
 [Service]
-ExecStart=@CMAKE_INSTALL_PREFIX@/sbin/irmd
+ExecStart=@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_SBINDIR@/irmd
 User=root
 
 [Install]

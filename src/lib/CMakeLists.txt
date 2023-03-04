@@ -4,13 +4,18 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS irmd_messages.proto)
-protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS ipcpd_messages.proto)
 protobuf_generate_c(QOSSPEC_PROTO_SRCS QOSSPEC_PROTO_HDRS
   qosspec.proto)
-protobuf_generate_c(LAYER_CONFIG_PROTO_SRCS LAYER_CONFIG_PROTO_HDRS
+protobuf_generate_c(IPCP_CONFIG_PROTO_SRCS IPCP_CONFIG_PROTO_HDRS
   ipcp_config.proto)
-protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS cacep.proto)
+protobuf_generate_c(ENROLL_PROTO_SRCS ENROLL_PROTO_HDRS
+  enroll.proto)
+protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS
+  cacep.proto)
+protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS
+  irmd_messages.proto)
+protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS
+  ipcpd_messages.proto)
 
 if (NOT APPLE)
   find_library(LIBRT_LIBRARIES rt)
@@ -253,9 +258,11 @@ set(SOURCE_FILES_COMMON
   logs.c
   md5.c
   notifier.c
+  protobuf.c
   qoscube.c
   random.c
   rib.c
+  serdes-oep.c
   sha3.c
   shm_flow_set.c
   shm_rbuff.c
@@ -269,7 +276,8 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)
 
 add_library(ouroboros-common SHARED ${SOURCE_FILES_COMMON} ${IRM_PROTO_SRCS}
-  ${IPCP_PROTO_SRCS} ${LAYER_CONFIG_PROTO_SRCS} ${QOSSPEC_PROTO_SRCS})
+  ${IPCP_PROTO_SRCS} ${IPCP_CONFIG_PROTO_SRCS} ${QOSSPEC_PROTO_SRCS}
+  ${ENROLL_PROTO_SRCS})
 
 add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CACEP_PROTO_SRCS})
 

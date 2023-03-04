@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2023
  *
- * Utils of the IPC Resource Manager
+ * The IPC Resource Manager / Configuration from file
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,26 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IRMD_UTILS_H
-#define OUROBOROS_IRMD_UTILS_H
 
-#include <ouroboros/list.h>
+#ifndef OUROBOROS_IRMD_CONFIGURATION_H
+#define OUROBOROS_IRMD_CONFIGURATION_H
 
-#include <sys/types.h>
+int irm_configure(const char * path);
 
-struct str_el {
-        struct list_head next;
-        char *           str;
-};
-
-struct pid_el {
-        struct list_head next;
-        pid_t            pid;
-};
-
-/* functions for copying and destroying arguments list */
-char ** argvdup(char ** argv);
-
-void    argvfree(char ** argv);
-
-#endif /* OUROBOROS_IRM_UTILS_H */
+#endif /* OUROBOROS_IRMD_CONFIGURATION_H */

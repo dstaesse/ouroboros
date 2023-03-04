@@ -1283,11 +1283,6 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
         strcpy(ipcpi.layer_name, conf->layer_info.layer_name);
 
-        if (conf->eth.dev == NULL) {
-                log_err("Device name is NULL.");
-                return -1;
-        }
-
         if (strlen(conf->eth.dev) >= IFNAMSIZ) {
                 log_err("Invalid device name: %s.", conf->eth.dev);
                 return -1;
@@ -1298,7 +1293,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 
 #ifdef BUILD_ETH_DIX
         if (conf->eth.ethertype < 0x0600 || conf->eth.ethertype == 0xFFFF) {
-                log_err("Invalid Ethertype.");
+                log_err("Invalid Ethertype: %d.", conf->eth.ethertype);
                 return -1;
         }
         eth_data.ethertype = htons(conf->eth.ethertype);

@@ -21,6 +21,7 @@
  */
 
 #include <ouroboros/ipcp.h>
+#include <ouroboros/protobuf.h>
 #include <ouroboros/sockets.h>
 
 #include <sys/types.h>
@@ -37,9 +38,9 @@ int   ipcp_enroll(pid_t               pid,
                   const char *        dst,
                   struct layer_info * info);
 
-int   ipcp_bootstrap(pid_t               pid,
-                     ipcp_config_msg_t * conf,
-                     struct layer_info * info);
+int   ipcp_bootstrap(pid_t                pid,
+                     struct ipcp_config * conf,
+                     struct layer_info *  info);
 
 int   ipcp_connect(pid_t        pid,
                    const char * dst,

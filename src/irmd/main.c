@@ -49,9 +49,11 @@
 
 #include "utils.h"
 #include "registry.h"
+#include "irmd.h"
 #include "irm_flow.h"
 #include "proc_table.h"
 #include "ipcp.h"
+#include "configfile.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -123,7 +125,9 @@ struct {
         struct bmp *         flow_ids;     /* flow_ids for flows         */
         struct list_head     irm_flows;    /* flow information           */
         pthread_rwlock_t     flows_lock;   /* lock for flows             */
-
+#ifdef HAVE_TOML
+        char *               cfg_file;     /* configuration file path    */
+#endif
         struct lockfile *    lf;           /* single irmd per system     */
         struct shm_rdrbuff * rdrb;         /* rdrbuff for packets        */
 
@@ -363,7 +367,7 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
 
         list_for_each_safe(p, h, &irmd.ipcps) {
                 struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->layer == NULL || e->pid == src)
+                if (e->layer == NULL || e->pid == src || e->type == IPCP_BROADCAST)
                         continue;
 
                 len = IPCP_HASH_LEN(e);
@@ -395,8 +399,31 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
         return NULL;
 }
 
-static pid_t create_ipcp(const char *   name,
-                         enum ipcp_type type)
+int get_layer_for_ipcp(pid_t  pid,
+                       char * buf)
+{
+        struct ipcp_entry * entry;
+
+        pthread_rwlock_rdlock(&irmd.reg_lock);
+
+        entry = get_ipcp_entry_by_pid(pid);
+        if (entry == NULL || entry->layer == NULL)
+                goto fail;
+
+        strcpy(buf, entry->layer);
+
+        pthread_rwlock_unlock(&irmd.reg_lock);
+
+        return 0;
+
+ fail:
+        pthread_rwlock_unlock(&irmd.reg_lock);
+        return -1;
+}
+
+
+pid_t create_ipcp(const char *   name,
+                  enum ipcp_type type)
 {
         struct pid_el *     ppid;
         struct ipcp_entry * entry;
@@ -524,8 +551,8 @@ static int destroy_ipcp(pid_t pid)
         return 0;
 }
 
-static int bootstrap_ipcp(pid_t               pid,
-                          ipcp_config_msg_t * conf)
+int bootstrap_ipcp(pid_t                pid,
+                   struct ipcp_config * conf)
 {
         struct ipcp_entry * entry;
         struct layer_info   info;
@@ -539,7 +566,7 @@ static int bootstrap_ipcp(pid_t               pid,
                 return -1;
         }
 
-        if (entry->type != (enum ipcp_type) conf->ipcp_type) {
+        if (entry->type != conf->type) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Configuration does not match IPCP type.");
                 return -1;
@@ -563,13 +590,13 @@ static int bootstrap_ipcp(pid_t               pid,
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Bootstrapped IPCP %d in layer %s.",
-                 pid, conf->layer_info->layer_name);
+                 pid, conf->layer_info.layer_name);
 
         return 0;
 }
 
-static int enroll_ipcp(pid_t  pid,
-                       char * dst)
+int enroll_ipcp(pid_t        pid,
+                const char * dst)
 {
         struct ipcp_entry * entry = NULL;
         struct layer_info   info;
@@ -622,10 +649,10 @@ static int enroll_ipcp(pid_t  pid,
         return 0;
 }
 
-static int connect_ipcp(pid_t        pid,
-                        const char * dst,
-                        const char * component,
-                        qosspec_t    qs)
+int connect_ipcp(pid_t        pid,
+                const char * dst,
+                const char * component,
+                qosspec_t    qs)
 {
         struct ipcp_entry * entry = NULL;
 
@@ -693,11 +720,11 @@ static int disconnect_ipcp(pid_t        pid,
         return 0;
 }
 
-static int bind_program(char *   prog,
-                        char *   name,
-                        uint16_t flags,
-                        int      argc,
-                        char **  argv)
+int bind_program(char *       prog,
+                 const char * name,
+                 uint16_t     flags,
+                 int          argc,
+                 char **      argv)
 {
         char *              progs;
         char **             argv_dup = NULL;
@@ -719,21 +746,21 @@ static int bind_program(char *   prog,
                         return -ENOMEM;
                 }
 
-                if ((flags & BIND_AUTO) && argc) {
+                if ((flags & BIND_AUTO) && argc > 0) {
                 /* We need to duplicate argv and set argv[0] to prog. */
                         argv_dup = malloc((argc + 2) * sizeof(*argv_dup));
                         argv_dup[0] = strdup(prog);
                         for (i = 1; i <= argc; ++i) {
                                 argv_dup[i] = strdup(argv[i - 1]);
-                                if (argv_dup[i] == NULL) {
-                                        pthread_rwlock_unlock(&irmd.reg_lock);
-                                        argvfree(argv_dup);
-                                        log_err("Failed to bind program "
-                                                "%s to %s.",
-                                                prog, name);
-                                        free(progs);
-                                        return -ENOMEM;
-                                }
+                                if (argv_dup[i] != NULL)
+                                        continue;
+
+                                pthread_rwlock_unlock(&irmd.reg_lock);
+                                log_err("Failed to bind program %s to %s.",
+                                        prog, name);
+                                argvfree(argv_dup);
+                                free(progs);
+                                return -ENOMEM;
                         }
                         argv_dup[argc + 1] = NULL;
                 }
@@ -771,8 +798,8 @@ static int bind_program(char *   prog,
         return 0;
 }
 
-static int bind_process(pid_t  pid,
-                        char * name)
+int bind_process(pid_t        pid,
+                 const char * name)
 {
         char * name_dup        = NULL;
         struct proc_entry * e  = NULL;
@@ -952,8 +979,8 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
         return -ENOMEM;
 }
 
-static int name_create(const char *     name,
-                       enum pol_balance pol)
+int name_create(const char *     name,
+                enum pol_balance pol)
 {
         struct reg_entry * re;
         struct list_head * p;
@@ -964,8 +991,8 @@ static int name_create(const char *     name,
 
         if (registry_has_name(&irmd.registry, name)) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Registry entry for %s already exists.", name);
-                return -ENAME;
+                log_warn("Registry entry for %s already exists.", name);
+                return 0;
         }
 
         re = registry_add_name(&irmd.registry, name);
@@ -1084,8 +1111,8 @@ static ssize_t list_names(name_info_msg_t *** names,
         return -ENOMEM;
 }
 
-static int name_reg(const char * name,
-                    pid_t        pid)
+int name_reg(const char * name,
+             pid_t        pid)
 {
         size_t              len;
         struct ipcp_entry * ipcp;
@@ -1403,8 +1430,7 @@ static int flow_alloc(pid_t              pid,
         int                 state;
         uint8_t *           hash;
 
-        log_info("Allocating flow for %d to %s.\n",
-                 pid, dst);
+        log_info("Allocating flow for %d to %s.", pid, dst);
 
         ipcp = join ? get_ipcp_entry_by_layer(dst)
                     : get_ipcp_by_dst_name(dst, pid);
@@ -1967,12 +1993,13 @@ static void * mainloop(void * o)
         (void) o;
 
         while (true) {
-                irm_msg_t       * ret_msg;
-                struct irm_flow   e;
-                struct timespec * timeo   = NULL;
-                struct timespec   ts      = {0, 0};
-                struct cmd *      cmd;
-                int               result;
+                irm_msg_t *        ret_msg;
+                struct irm_flow    e;
+                struct ipcp_config conf;
+                struct timespec *  timeo   = NULL;
+                struct timespec    ts      = {0, 0};
+                struct cmd *       cmd;
+                int                result;
 
                 memset(&e, 0, sizeof(e));
 
@@ -2035,14 +2062,15 @@ static void * mainloop(void * o)
                         result = destroy_ipcp(msg->pid);
                         break;
                 case IRM_MSG_CODE__IRM_BOOTSTRAP_IPCP:
-                        result = bootstrap_ipcp(msg->pid, msg->conf);
+                        conf = ipcp_config_msg_to_s(msg->conf);
+                        result = bootstrap_ipcp(msg->pid, &conf);
                         break;
                 case IRM_MSG_CODE__IRM_ENROLL_IPCP:
                         result = enroll_ipcp(msg->pid, msg->dst);
                         break;
                 case IRM_MSG_CODE__IRM_CONNECT_IPCP:
                         result = connect_ipcp(msg->pid, msg->dst, msg->comp,
-                                              msg_to_spec(msg->qosspec));
+                                              qos_spec_msg_to_s(msg->qosspec));
                         break;
                 case IRM_MSG_CODE__IRM_DISCONNECT_IPCP:
                         result = disconnect_ipcp(msg->pid, msg->dst, msg->comp);
@@ -2091,13 +2119,11 @@ static void * mainloop(void * o)
                         result = flow_accept(msg->pid, timeo, &e,
                                              msg->pk.data, msg->pk.len);
                         if (result == 0) {
-                                qosspec_msg_t qs_msg;
                                 ret_msg->has_flow_id = true;
                                 ret_msg->flow_id     = e.flow_id;
                                 ret_msg->has_pid     = true;
                                 ret_msg->pid         = e.n_1_pid;
-                                qs_msg = spec_to_msg(&e.qs);
-                                ret_msg->qosspec     = &qs_msg;
+                                ret_msg->qosspec     = qos_spec_s_to_msg(&e.qs);
                                 ret_msg->has_pk      = true;
                                 ret_msg->pk.data     = e.data;
                                 ret_msg->pk.len      = e.len;
@@ -2109,7 +2135,7 @@ static void * mainloop(void * o)
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                                : msg->pk.data == NULL);
                         result = flow_alloc(msg->pid, msg->dst,
-                                            msg_to_spec(msg->qosspec),
+                                            qos_spec_msg_to_s(msg->qosspec),
                                             timeo, &e, false, msg->pk.data,
                                             msg->pk.len);
                         if (result == 0) {
@@ -2127,7 +2153,7 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IRM_FLOW_JOIN:
                         assert(msg->pk.len == 0 && msg->pk.data == NULL);
                         result = flow_alloc(msg->pid, msg->dst,
-                                            msg_to_spec(msg->qosspec),
+                                            qos_spec_msg_to_s(msg->qosspec),
                                             timeo, &e, true, NULL, 0);
                         if (result == 0) {
                                 ret_msg->has_flow_id = true;
@@ -2150,7 +2176,7 @@ static void * mainloop(void * o)
                                               &e,
                                               msg->hash.data,
                                               msg->mpl,
-                                              msg_to_spec(msg->qosspec),
+                                              qos_spec_msg_to_s(msg->qosspec),
                                               msg->pk.data,
                                               msg->pk.len);
                         if (result == 0) {
@@ -2199,8 +2225,6 @@ static void * mainloop(void * o)
 
                 irm_msg__pack(ret_msg, buffer.data);
 
-                /* Can't free the qosspec. */
-                ret_msg->qosspec = NULL;
                 irm_msg__free_unpacked(ret_msg, NULL);
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
@@ -2493,6 +2517,9 @@ static int irm_init(void)
 static void usage(void)
 {
         printf("Usage: irmd \n"
+#ifdef OUROBOROS_CONFIG_INI
+               "         [--config <path> (Path to configuration file)]\n"
+#endif
                "         [--stdout  (Log to stdout instead of system log)]\n"
                "         [--version (Print version number and exit)]\n"
                "\n");
@@ -2566,6 +2593,9 @@ static void irm_stop(void)
 static void irm_argparse(int     argc,
                          char ** argv)
 {
+#ifdef HAVE_TOML
+        irmd.cfg_file = OUROBOROS_CONFIG_DIR OUROBOROS_CONFIG_FILE;
+#endif
         argc--;
         argv++;
         while (argc > 0) {
@@ -2579,6 +2609,12 @@ static void irm_argparse(int     argc,
                                OUROBOROS_VERSION_MINOR,
                                OUROBOROS_VERSION_PATCH);
                         exit(EXIT_SUCCESS);
+#ifdef HAVE_TOML
+                } else if (strcmp (*argv, "--config") == 0) {
+                        irmd.cfg_file = *(argv + 1);
+                        argc -= 2;
+                        argv += 2;
+#endif
                 } else {
                         usage();
                         exit(EXIT_FAILURE);
@@ -2613,6 +2649,10 @@ int main(int     argc,
         if (irm_start() < 0)
                 goto fail_irm_start;
 
+#ifdef HAVE_TOML
+        if (irm_configure(irmd.cfg_file) < 0)
+                irmd_set_state(IRMD_NULL);
+#endif
         irm_sigwait(sigset);
 
         irm_stop();

@@ -296,6 +296,7 @@ int reg_entry_add_pid(struct reg_entry * e,
                 list_add(&i->next, &e->reg_pids);
                 break;
         default:
+                free(i);
                 assert(false);
         };
 

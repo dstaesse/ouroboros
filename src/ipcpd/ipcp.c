@@ -47,6 +47,7 @@
 #include <ouroboros/bitmap.h>
 #include <ouroboros/np1_flow.h>
 #include <ouroboros/rib.h>
+#include <ouroboros/protobuf.h>
 #include <ouroboros/pthread.h>
 
 #include "ipcp.h"
@@ -263,12 +264,9 @@ static void free_msg(void * o)
 
 
 static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
-                             layer_info_msg_t *  layer_info_msg,
                              ipcp_msg_t *        ret_msg)
 {
         struct ipcp_config conf;
-        enum ipcp_type     ipcp_type;
-        uni_config_msg_t * uni_cfg_msg;
 
         if (ipcpi.ops->ipcp_bootstrap == NULL) {
                 log_err("Bootstrap unsupported.");
@@ -282,58 +280,13 @@ static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
                 return;
         }
 
-        conf.type = conf_msg->ipcp_type;
-
-        strcpy(conf.layer_info.layer_name, conf_msg->layer_info->layer_name);
-
-        ipcp_type = conf_msg->ipcp_type;
-
-        conf.layer_info.dir_hash_algo = conf_msg->layer_info->dir_hash_algo;
-
-        switch(ipcp_type) {
-        case IPCP_LOCAL:
-                break;
-        case IPCP_UNICAST:
-                uni_cfg_msg = conf_msg->unicast;
-
-                conf.unicast.dt.addr_size    = uni_cfg_msg->dt->addr_size;
-                conf.unicast.dt.eid_size     = uni_cfg_msg->dt->eid_size;
-                conf.unicast.dt.max_ttl      = uni_cfg_msg->dt->max_ttl;
-                conf.unicast.dt.routing_type = uni_cfg_msg->dt->routing_type;
-                conf.unicast.addr_auth_type  = uni_cfg_msg->addr_auth_type;
-                conf.unicast.cong_avoid      = uni_cfg_msg->cong_avoid;
-                break;
-        case IPCP_ETH_DIX:
-                conf.eth.ethertype = conf_msg->eth->ethertype;
-                /* FALLTHRU */
-        case IPCP_ETH_LLC:
-                conf.eth.dev = conf_msg->eth->dev;
-                break;
-        case IPCP_UDP:
-                conf.udp.ip_addr  = conf_msg->udp->ip_addr;
-                conf.udp.dns_addr = conf_msg->udp->dns_addr;
-                conf.udp.port     = conf_msg->udp->port;
-                conf.layer_info.dir_hash_algo = HASH_MD5;
-                break;
-        case IPCP_BROADCAST:
-                conf.layer_info.dir_hash_algo = HASH_SHA3_256;
-                break;
-        default:
-                log_err("Unknown IPCP type: %d.", conf_msg->ipcp_type);
-                ret_msg->result = -EIPCP;
-                return;
-        }
-
+        conf = ipcp_config_msg_to_s(conf_msg);
         ret_msg->result = ipcpi.ops->ipcp_bootstrap(&conf);
-        if (ret_msg->result == 0) {
-                layer_info_msg->layer_name = strdup(conf.layer_info.layer_name);
-                layer_info_msg->dir_hash_algo = conf.layer_info.dir_hash_algo;
-                ret_msg->layer_info           = layer_info_msg;
-        }
+        if (ret_msg->result == 0)
+                ret_msg->layer_info = layer_info_s_to_msg(&conf.layer_info);
 }
 
 static void handle_enroll(const char *       dst,
-                          layer_info_msg_t * layer_info_msg,
                           ipcp_msg_t *       ret_msg)
 {
         struct layer_info info;
@@ -351,12 +304,8 @@ static void handle_enroll(const char *       dst,
         }
 
         ret_msg->result = ipcpi.ops->ipcp_enroll(dst, &info);
-        if (ret_msg->result == 0) {
-                layer_info_msg->layer_name = strdup(info.layer_name);
-                layer_info_msg->dir_hash_algo = info.dir_hash_algo;
-                ret_msg->layer_info           = layer_info_msg;
-
-        }
+        if (ret_msg->result == 0)
+                ret_msg->layer_info = layer_info_s_to_msg(&info);
 }
 
 static void handle_connect(const char * dst,
@@ -563,7 +512,6 @@ static void * mainloop(void * o)
 
         while (true) {
                 ipcp_msg_t       ret_msg        = IPCP_MSG__INIT;
-                layer_info_msg_t layer_info_msg = LAYER_INFO_MSG__INIT;
                 qosspec_t        qs;
                 struct cmd *     cmd;
 
@@ -600,13 +548,13 @@ static void * mainloop(void * o)
 
                 switch (msg->code) {
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
-                        handle_bootstrap(msg->conf, &layer_info_msg, &ret_msg);
+                        handle_bootstrap(msg->conf, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
-                        handle_enroll(msg->dst, &layer_info_msg, &ret_msg);
+                        handle_enroll(msg->dst, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_CONNECT:
-                        qs = msg_to_spec(msg->qosspec);
+                        qs = qos_spec_msg_to_s(msg->qosspec);
                         handle_connect(msg->dst, msg->comp, qs, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_DISCONNECT:
@@ -628,7 +576,7 @@ static void * mainloop(void * o)
                         assert(msg->hash.len == ipcp_dir_hash_len());
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                                : msg->pk.data == NULL);
-                        qs = msg_to_spec(msg->qosspec);
+                        qs = qos_spec_msg_to_s(msg->qosspec);
                         handle_flow_alloc(msg->pid, msg->flow_id,
                                           msg->hash.data, qs,
                                           msg->pk.data, msg->pk.len,
@@ -636,7 +584,7 @@ static void * mainloop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_JOIN:
                         assert(msg->hash.len == ipcp_dir_hash_len());
-                        qs = msg_to_spec(msg->qosspec);
+                        qs = qos_spec_msg_to_s(msg->qosspec);
                         handle_flow_join(msg->pid, msg->flow_id,
                                          msg->hash.data, qs, &ret_msg);
                         break;
@@ -680,7 +628,7 @@ static void * mainloop(void * o)
                 ipcp_msg__pack(&ret_msg, buffer.data);
 
                 if (ret_msg.layer_info != NULL)
-                        free(ret_msg.layer_info->layer_name);
+                        layer_info_msg__free_unpacked(ret_msg.layer_info, NULL);
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
                 pthread_cleanup_push(free, buffer.data)
