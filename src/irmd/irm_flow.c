@@ -135,7 +135,7 @@ void irm_flow_destroy(struct irm_flow * f)
         else
                 f->state = FLOW_NULL;
 
-        pthread_cond_signal(&f->state_cond);
+        pthread_cond_broadcast(&f->state_cond);
 
         pthread_cleanup_push(cancel_irm_destroy, f);
 

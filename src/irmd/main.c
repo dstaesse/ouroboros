@@ -200,8 +200,8 @@ static struct irm_flow * get_irm_flow_n(pid_t n_pid)
 
         list_for_each(pos, &irmd.irm_flows) {
                 struct irm_flow * e = list_entry(pos, struct irm_flow, next);
-                if (e->n_pid == n_pid &&
-                    irm_flow_get_state(e) == FLOW_ALLOC_PENDING)
+                enum flow_state state = irm_flow_get_state(e);
+                if (e->n_pid == n_pid && state == FLOW_ALLOC_REQ_PENDING)
                         return e;
         }
 
@@ -1446,6 +1446,7 @@ static int flow_alloc(pid_t              pid,
         if (join) {
                 if (ipcp_flow_join(ipcp->pid, flow_id, pid, hash,
                                    IPCP_HASH_LEN(ipcp), qs)) {
+                        irm_flow_set_state(f, FLOW_NULL);
                         /* sanitizer cleans this */
                         log_info("Flow_join failed.");
                         free(hash);
@@ -1454,6 +1455,7 @@ static int flow_alloc(pid_t              pid,
         } else {
                 if (ipcp_flow_alloc(ipcp->pid, flow_id, pid, hash,
                                     IPCP_HASH_LEN(ipcp), qs, data, len)) {
+                        irm_flow_set_state(f, FLOW_NULL);
                         /* sanitizer cleans this */
                         log_info("Flow_allocation failed.");
                         free(hash);
@@ -1693,6 +1695,7 @@ static int flow_req_arr(pid_t             pid,
                 return -1;
         }
 
+        f->state = FLOW_ALLOC_REQ_PENDING;
         f->mpl = mpl;
 
         if (len != 0) {
