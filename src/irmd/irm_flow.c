@@ -176,22 +176,15 @@ void irm_flow_set_state(struct irm_flow * f,
 
 int irm_flow_wait_state(struct irm_flow * f,
                         enum flow_state   state,
-                        struct timespec * timeo)
+                        struct timespec * dl)
 {
         int ret = 0;
         int s;
-
-        struct timespec dl;
 
         assert(f);
         assert(state != FLOW_NULL);
         assert(state != FLOW_DESTROY);
         assert(state != FLOW_DEALLOC_PENDING);
-
-        if (timeo != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &dl);
-                ts_add(&dl, timeo, &dl);
-        }
 
         pthread_mutex_lock(&f->state_lock);
 
@@ -203,13 +196,13 @@ int irm_flow_wait_state(struct irm_flow * f,
                  f->state == FLOW_DESTROY ||
                  f->state == FLOW_DEALLOC_PENDING) &&
                ret != -ETIMEDOUT) {
-                if (timeo == NULL)
-                        ret = -pthread_cond_wait(&f->state_cond,
-                                                 &f->state_lock);
-                else
+                if (dl != NULL)
                         ret = -pthread_cond_timedwait(&f->state_cond,
                                                       &f->state_lock,
-                                                      &dl);
+                                                      dl);
+                else
+                        ret = -pthread_cond_wait(&f->state_cond,
+                                                 &f->state_lock);
         }
 
         if (f->state == FLOW_DESTROY ||

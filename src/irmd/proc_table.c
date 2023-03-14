@@ -184,18 +184,12 @@ void proc_entry_del_name(struct proc_entry * e,
 }
 
 int proc_entry_sleep(struct proc_entry * e,
-                     struct timespec *   timeo)
+                     struct timespec *   dl)
 {
-        struct timespec dl;
 
         int ret = 0;
 
         assert(e);
-
-        if (timeo != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &dl);
-                ts_add(&dl, timeo, &dl);
-        }
 
         pthread_mutex_lock(&e->lock);
 
@@ -205,8 +199,8 @@ int proc_entry_sleep(struct proc_entry * e,
         pthread_cleanup_push(cancel_proc_entry, e);
 
         while (e->state == PROC_SLEEP && ret != -ETIMEDOUT)
-                if (timeo)
-                        ret = -pthread_cond_timedwait(&e->cond, &e->lock, &dl);
+                if (dl != NULL)
+                        ret = -pthread_cond_timedwait(&e->cond, &e->lock, dl);
                 else
                         ret = -pthread_cond_wait(&e->cond, &e->lock);
 

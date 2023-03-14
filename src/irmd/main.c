@@ -1275,7 +1275,7 @@ static int proc_announce(pid_t  pid,
 }
 
 static int flow_accept(pid_t             pid,
-                       struct timespec * timeo,
+                       struct timespec * dl,
                        struct irm_flow * f_out,
                        const void *      data,
                        size_t            len)
@@ -1312,7 +1312,7 @@ static int flow_accept(pid_t             pid,
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        ret = proc_entry_sleep(pe, timeo);
+        ret = proc_entry_sleep(pe, dl);
         if (ret == -ETIMEDOUT)
                 return -ETIMEDOUT;
 
@@ -1418,7 +1418,7 @@ static int flow_accept(pid_t             pid,
 static int flow_join(pid_t              pid,
                      const char *       dst,
                      qosspec_t          qs,
-                     struct timespec *  timeo,
+                     struct timespec *  dl,
                      struct irm_flow *  f_out)
 {
         struct irm_flow *   f;
@@ -1476,7 +1476,7 @@ static int flow_join(pid_t              pid,
 
         free(hash);
 
-        state = irm_flow_wait_state(f, FLOW_ALLOCATED, timeo);
+        state = irm_flow_wait_state(f, FLOW_ALLOCATED, dl);
         if (state != FLOW_ALLOCATED) {
                 if (state == -ETIMEDOUT) {
                         log_dbg("Flow allocation timed out");
@@ -1510,7 +1510,7 @@ static int flow_join(pid_t              pid,
 static int flow_alloc(pid_t              pid,
                       const char *       dst,
                       qosspec_t          qs,
-                      struct timespec *  timeo,
+                      struct timespec *  dl,
                       struct irm_flow *  f_out,
                       const void *       data,
                       size_t             len)
@@ -1570,7 +1570,7 @@ static int flow_alloc(pid_t              pid,
 
         free(hash);
 
-        state = irm_flow_wait_state(f, FLOW_ALLOCATED, timeo);
+        state = irm_flow_wait_state(f, FLOW_ALLOCATED, dl);
         if (state != FLOW_ALLOCATED) {
                 if (state == -ETIMEDOUT) {
                         log_dbg("Flow allocation timed out");
@@ -2075,7 +2075,7 @@ static void * mainloop(void * o)
                 irm_msg_t *        ret_msg;
                 struct irm_flow    e;
                 struct ipcp_config conf;
-                struct timespec *  timeo   = NULL;
+                struct timespec *  dl      = NULL;
                 struct timespec    ts      = {0, 0};
                 struct cmd *       cmd;
                 int                result;
@@ -2119,11 +2119,16 @@ static void * mainloop(void * o)
                 tpm_dec(irmd.tpm);
 
                 if (msg->has_timeo_sec) {
+                        struct timespec now;
+                        clock_gettime(PTHREAD_COND_CLOCK, &now);
                         assert(msg->has_timeo_nsec);
 
                         ts.tv_sec  = msg->timeo_sec;
                         ts.tv_nsec = msg->timeo_nsec;
-                        timeo = &ts;
+
+                        ts_add(&ts, &now, &ts);
+
+                        dl = &ts;
                 }
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
@@ -2195,7 +2200,7 @@ static void * mainloop(void * o)
                 case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                : msg->pk.data == NULL);
-                        result = flow_accept(msg->pid, timeo, &e,
+                        result = flow_accept(msg->pid, dl, &e,
                                              msg->pk.data, msg->pk.len);
                         if (result == 0) {
                                 ret_msg->has_flow_id = true;
@@ -2215,7 +2220,7 @@ static void * mainloop(void * o)
                                                : msg->pk.data == NULL);
                         result = flow_alloc(msg->pid, msg->dst,
                                             qos_spec_msg_to_s(msg->qosspec),
-                                            timeo, &e, msg->pk.data,
+                                            dl, &e, msg->pk.data,
                                             msg->pk.len);
                         if (result == 0) {
                                 ret_msg->has_flow_id = true;
@@ -2233,7 +2238,7 @@ static void * mainloop(void * o)
                         assert(msg->pk.len == 0 && msg->pk.data == NULL);
                         result = flow_join(msg->pid, msg->dst,
                                            qos_spec_msg_to_s(msg->qosspec),
-                                           timeo, &e);
+                                           dl, &e);
                         if (result == 0) {
                                 ret_msg->has_flow_id = true;
                                 ret_msg->flow_id     = e.flow_id;
