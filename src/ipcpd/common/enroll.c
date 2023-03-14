@@ -117,7 +117,8 @@ static int send_rcv_enroll_msg(int fd)
         }
 
         if (resp.conf.type != ipcpi.type) {
-                log_dbg("Wrong type in enrollment response %d (%d).", resp.conf.type, ipcpi.type);
+                log_dbg("Wrong type in enrollment response %d (%d).",
+                        resp.conf.type, ipcpi.type);
                 return -1;
         }
 
