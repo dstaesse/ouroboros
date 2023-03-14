@@ -51,19 +51,19 @@ enum irm_msg_code {
         IPCP_FLOW_REQ_ARR     = 23;
         IPCP_FLOW_ALLOC_REPLY = 24;
         IRM_REPLY             = 25;
-};
+}
 
 message ipcp_info_msg {
         required uint32 pid   = 1;
         required uint32 type  = 2;
         required string name  = 3;
         required string layer = 4;
-};
+}
 
 message name_info_msg {
         required string name   = 1;
         required uint32 pol_lb = 2;
-};
+}
 
 message irm_msg {
         required irm_msg_code code    =  1;
@@ -88,4 +88,4 @@ message irm_msg {
         optional string comp          = 20;
         optional bytes pk             = 21; /* piggyback */
         optional sint32 result        = 22;
-};
+}

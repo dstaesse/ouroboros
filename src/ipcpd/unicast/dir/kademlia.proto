@@ -25,7 +25,7 @@ syntax = "proto2";
 message kad_contact_msg {
         required bytes  id   = 1;
         required uint64 addr = 2;
-};
+}
 
 message kad_msg {
         required uint32 code              =  1;
@@ -42,4 +42,4 @@ message kad_msg {
         optional uint32 t_expire          = 11;
         optional uint32 t_refresh         = 12;
         optional uint32 t_replicate       = 13;
-};
+}

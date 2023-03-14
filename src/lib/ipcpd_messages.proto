@@ -38,7 +38,7 @@ enum ipcp_msg_code {
         IPCP_CONNECT         = 10;
         IPCP_DISCONNECT      = 11;
         IPCP_REPLY           = 12;
-};
+}
 
 message ipcp_msg {
         required ipcp_msg_code code        =  1;
@@ -55,4 +55,4 @@ message ipcp_msg {
         optional uint32 timeo_sec          = 12;
         optional sint32 mpl                = 13;
         optional int32 result              = 14;
-};
+}

@@ -32,4 +32,4 @@ message qosspec_msg {
         required uint32 max_gap      = 7; /* In ms.                   */
         required uint32 cypher_s     = 8; /* Crypto strength in bits. */
         required uint32 timeout      = 9; /* Timeout in ms.           */
-};
+}
