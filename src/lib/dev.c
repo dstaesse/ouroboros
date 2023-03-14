@@ -1347,10 +1347,9 @@ ssize_t flow_write(int          fd,
                         return -EAGAIN;
                 idx = shm_rdrbuff_alloc(ai.rdrb, count, &ptr, &sdb);
         } else {
-                while ((ret = frcti_window_wait(flow->frcti, abstime)) < 0) {
-                        if (ret < 0)
-                                return ret;
-                }
+                ret = frcti_window_wait(flow->frcti, abstime);
+                if (ret < 0)
+                        return ret;
                 idx = shm_rdrbuff_alloc_b(ai.rdrb, count, &ptr, &sdb, abstime);
         }
 
