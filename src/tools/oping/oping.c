@@ -60,14 +60,31 @@
 #include <errno.h>
 #include <float.h>
 
-#define OPING_BUF_SIZE 1500
-
-#define ECHO_REQUEST 0
-#define ECHO_REPLY 1
-
+#define OPING_BUF_SIZE  1500
+#define ECHO_REQUEST    0
+#define ECHO_REPLY      1
 #define OPING_MAX_FLOWS 256
 
-struct c {
+#define USAGE_STRING                                                         \
+"Usage: oping [OPTION]...\n"                                                 \
+"\n"                                                                         \
+"Checks liveness between a client and a server\n"                            \
+"and reports the Round Trip Time (RTT)\n"                                    \
+"\n"                                                                         \
+"  -l, --listen            Run in server mode\n"                             \
+"\n"                                                                         \
+"  -c, --count             Number of packets\n"                              \
+"  -d, --duration          Duration of the test (default 1s)\n"              \
+"  -i, --interval          Interval (default 1000ms)\n"                      \
+"  -n, --server-name       Name of the oping server\n"                       \
+"  -q, --qos               QoS (raw, raw_crypt, best, video, voice, data)\n" \
+"  -s, --size              Payload size (B, default 64)\n"                   \
+"  -Q, --quiet             Only print final statistics\n"                    \
+"  -D, --timeofday         Print time of day before each line\n"             \
+"\n"                                                                         \
+"      --help              Display this help text and exit\n"                \
+
+struct {
         char *    s_apn;
         int       interval;
         uint32_t  count;
@@ -90,7 +107,7 @@ struct c {
         pthread_t writer_pt;
 } client;
 
-struct s {
+struct {
         struct timespec times[OPING_MAX_FLOWS];
         fset_t *        flows;
         fqueue_t *      fq;
@@ -116,22 +133,7 @@ struct oping_msg {
 
 static void usage(void)
 {
-        printf("Usage: oping [OPTION]...\n"
-               "Checks liveness between a client and a server\n"
-               "and reports the Round Trip Time (RTT)\n\n"
-               "  -l, --listen              Run in server mode\n"
-               "\n"
-               "  -c, --count               Number of packets\n"
-               "  -d, --duration            Duration of the test (default 1s)\n"
-               "  -i, --interval            Interval (default 1000ms)\n"
-               "  -n, --server-name         Name of the oping server\n"
-               "  -q, --qos                 QoS (raw, best, video, voice, data)"
-               "\n"
-               "  -s, --size                Payload size (B, default 64)\n"
-               "  -Q, --quiet               Only print final statistics\n"
-               "  -D, --timeofday           Print time of day before each line"
-               "\n"
-               "      --help                Display this help text and exit\n");
+        printf(USAGE_STRING);
 }
 
 /* Times are in ms. */
