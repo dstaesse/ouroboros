@@ -301,8 +301,9 @@ struct ipcp_config ipcp_config_msg_to_s(const ipcp_config_msg_t * msg)
 
 qosspec_msg_t * qos_spec_s_to_msg(const struct qos_spec * s)
 {
-        struct qos_spec spec;
         qosspec_msg_t  * msg;
+
+        assert(s != NULL);
 
         msg = malloc(sizeof(*msg));
         if (msg == NULL)
@@ -310,17 +311,15 @@ qosspec_msg_t * qos_spec_s_to_msg(const struct qos_spec * s)
 
         qosspec_msg__init(msg);
 
-        spec = (s == NULL ? qos_raw : *s);
-
-        msg->delay        = spec.delay;
-        msg->bandwidth    = spec.bandwidth;
-        msg->availability = spec.availability;
-        msg->loss         = spec.loss;
-        msg->ber          = spec.ber;
-        msg->in_order     = spec.in_order;
-        msg->max_gap      = spec.max_gap;
-        msg->cypher_s     = spec.cypher_s;
-        msg->timeout      = spec.timeout;
+        msg->delay        = s->delay;
+        msg->bandwidth    = s->bandwidth;
+        msg->availability = s->availability;
+        msg->loss         = s->loss;
+        msg->ber          = s->ber;
+        msg->in_order     = s->in_order;
+        msg->max_gap      = s->max_gap;
+        msg->cypher_s     = s->cypher_s;
+        msg->timeout      = s->timeout;
 
         return msg;
 }

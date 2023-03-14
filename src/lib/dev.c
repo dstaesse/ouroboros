@@ -476,7 +476,6 @@ static int flow_init(int       flow_id,
         flow->rcv_act  = now;
 
         if (qs.cypher_s > 0) {
-                assert(s != NULL);
                 if (crypt_init(&flow->ctx) < 0)
                         goto fail_ctx;
 
@@ -822,10 +821,9 @@ int flow_accept(qosspec_t *             qs,
         return err;
 }
 
-static int __flow_alloc(const char *            dst,
-                        qosspec_t *             qs,
-                        const struct timespec * timeo,
-                        bool join)
+int flow_alloc(const char *            dst,
+               qosspec_t *             qs,
+               const struct timespec * timeo)
 {
         irm_msg_t     msg    = IRM_MSG__INIT;
         irm_msg_t *   recv_msg;
@@ -841,12 +839,11 @@ static int __flow_alloc(const char *            dst,
         if (qs != NULL)
                 qs->ber = 1;
 #endif
-        msg.code    = join ? IRM_MSG_CODE__IRM_FLOW_JOIN
-                           : IRM_MSG_CODE__IRM_FLOW_ALLOC;
+        msg.code    = IRM_MSG_CODE__IRM_FLOW_ALLOC;
         msg.dst     = (char *) dst;
         msg.has_pid = true;
         msg.pid     = getpid();
-        msg.qosspec = qos_spec_s_to_msg(qs);
+        msg.qosspec = qos_spec_s_to_msg(qs == NULL ? &qos_raw : qs);
 
         if (timeo != NULL) {
                 msg.has_timeo_sec = true;
@@ -855,7 +852,7 @@ static int __flow_alloc(const char *            dst,
                 msg.timeo_nsec = timeo->tv_nsec;
         }
 
-        if (!join && qs != NULL && qs->cypher_s != 0) {
+        if (qs != NULL && qs->cypher_s != 0) {
                 ssize_t key_len;
 
                 key_len = crypt_dh_pkp_create(&pkp, buf);
@@ -887,7 +884,7 @@ static int __flow_alloc(const char *            dst,
             !recv_msg->has_mpl)
                 goto fail_result;
 
-        if (!join && qs != NULL && qs->cypher_s != 0) {
+        if (qs != NULL && qs->cypher_s != 0) {
                 if (!recv_msg->has_pk || recv_msg->pk.len == 0) {
                         err = -ECRYPT;
                         goto fail_result;
@@ -902,6 +899,76 @@ static int __flow_alloc(const char *            dst,
                 crypt_dh_pkp_destroy(pkp);
         }
 
+        /* TODO: Make sure qosspec is set in msg */
+        if (qs != NULL && recv_msg->qosspec != NULL)
+                *qs = qos_spec_msg_to_s(recv_msg->qosspec);
+
+        fd = flow_init(recv_msg->flow_id, recv_msg->pid,
+                       qs == NULL ? qos_raw : *qs, s,
+                       recv_msg->mpl);
+
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+
+        return fd;
+
+ fail_result:
+        irm_msg__free_unpacked(recv_msg, NULL);
+ fail_send:
+        crypt_dh_pkp_destroy(pkp);
+ fail_crypt_pkp:
+        return err;
+}
+
+int flow_join(const char *            dst,
+              qosspec_t *             qs,
+              const struct timespec * timeo)
+{
+        irm_msg_t     msg    = IRM_MSG__INIT;
+        irm_msg_t *   recv_msg;
+        uint8_t       s[SYMMKEYSZ];
+        int           fd;
+        int           err = -EIRMD;
+
+#ifdef QOS_DISABLE_CRC
+        if (qs != NULL)
+                qs->ber = 1;
+#endif
+        if (qs != NULL && qs->cypher_s > 0)
+                return -ENOTSUP; /* TODO: Encrypted broadcast */
+
+        memset(s, 0, SYMMKEYSZ);
+
+        msg.code    = IRM_MSG_CODE__IRM_FLOW_JOIN;
+        msg.dst     = (char *) dst;
+        msg.has_pid = true;
+        msg.pid     = getpid();
+        msg.qosspec = qos_spec_s_to_msg(qs == NULL ? &qos_raw : qs);
+
+        if (timeo != NULL) {
+                msg.has_timeo_sec = true;
+                msg.has_timeo_nsec = true;
+                msg.timeo_sec  = timeo->tv_sec;
+                msg.timeo_nsec = timeo->tv_nsec;
+        }
+
+        recv_msg = send_recv_irm_msg(&msg);
+        qosspec_msg__free_unpacked(msg.qosspec, NULL);
+
+        if (recv_msg == NULL)
+                goto fail_send;
+
+        if (!recv_msg->has_result)
+                goto fail_result;
+
+        if (recv_msg->result != 0) {
+                err = recv_msg->result;
+                goto fail_result;
+        }
+
+        if (!recv_msg->has_pid || !recv_msg->has_flow_id ||
+            !recv_msg->has_mpl)
+                goto fail_result;
 
         fd = flow_init(recv_msg->flow_id, recv_msg->pid,
                        qs == NULL ? qos_raw : *qs, s,
@@ -914,26 +981,7 @@ static int __flow_alloc(const char *            dst,
  fail_result:
         irm_msg__free_unpacked(recv_msg, NULL);
  fail_send:
-        crypt_dh_pkp_destroy(pkp);
- fail_crypt_pkp:
         return err;
-}
-
-int flow_alloc(const char *            dst,
-               qosspec_t *             qs,
-               const struct timespec * timeo)
-{
-        return __flow_alloc(dst, qs, timeo, false);
-}
-
-int flow_join(const char *            dst,
-              qosspec_t *             qs,
-              const struct timespec * timeo)
-{
-        if (qs != NULL && qs->cypher_s != 0)
-                return -ECRYPT;
-
-        return __flow_alloc(dst, qs, timeo, true);
 }
 
 int flow_dealloc(int fd)
