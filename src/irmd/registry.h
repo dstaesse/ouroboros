@@ -98,10 +98,6 @@ int                 reg_entry_leave_state(struct reg_entry *  e,
                                           enum reg_name_state state,
                                           struct timespec *   timeout);
 
-int                 reg_entry_wait_state(struct reg_entry *   e,
-                                         enum reg_name_state  state,
-                                         struct timespec *    timeout);
-
 struct reg_entry *  registry_add_name(struct list_head * registry,
                                       const char *       name);
 

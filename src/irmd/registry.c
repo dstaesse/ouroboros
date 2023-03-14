@@ -455,45 +455,6 @@ int reg_entry_leave_state(struct reg_entry *  e,
         return ret;
 }
 
-int reg_entry_wait_state(struct reg_entry *  e,
-                         enum reg_name_state state,
-                         struct timespec *   timeout)
-{
-        struct timespec abstime;
-        int ret = 0;
-
-        assert(e);
-        assert(state != REG_NAME_DESTROY);
-
-        if (timeout != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-                ts_add(&abstime, timeout, &abstime);
-        }
-
-        pthread_mutex_lock(&e->state_lock);
-
-        while (e->state != state &&
-               e->state != REG_NAME_DESTROY &&
-               ret != -ETIMEDOUT)
-                if (timeout)
-                        ret = -pthread_cond_timedwait(&e->state_cond,
-                                                      &e->state_lock,
-                                                      &abstime);
-                else
-                        ret = -pthread_cond_wait(&e->state_cond,
-                                                 &e->state_lock);
-
-        if (e->state == REG_NAME_DESTROY) {
-                ret = -1;
-                e->state = REG_NAME_NULL;
-                pthread_cond_broadcast(&e->state_cond);
-        }
-
-        pthread_mutex_unlock(&e->state_lock);
-
-        return ret;
-}
-
 struct reg_entry * registry_get_entry(struct list_head * registry,
                                       const char *       name)
 {
