@@ -33,9 +33,10 @@
 
 #include "irm_flow.h"
 
-#include <stdlib.h>
-#include <stdbool.h>
 #include <assert.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 struct irm_flow * irm_flow_create(pid_t     n_pid,
                                   pid_t     n_1_pid,
@@ -43,9 +44,13 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
                                   qosspec_t qs)
 {
         pthread_condattr_t cattr;
-        struct irm_flow *  f = malloc(sizeof(*f));
+        struct irm_flow *  f;
+
+        f = malloc(sizeof(*f));
         if (f == NULL)
                 goto fail_malloc;
+
+        memset(f, 0, sizeof(*f));
 
         if (pthread_condattr_init(&cattr))
                 goto fail_cattr;
@@ -59,14 +64,6 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
         if (pthread_mutex_init(&f->state_lock, NULL))
                 goto fail_mutex;
 
-        f->n_pid   = n_pid;
-        f->n_1_pid = n_1_pid;
-        f->flow_id = flow_id;
-        f->mpl     = 0;
-        f->qs      = qs;
-        f->data    = NULL;
-        f->len     = 0;
-
         f->n_rb = shm_rbuff_create(n_pid, flow_id);
         if (f->n_rb == NULL) {
                 log_err("Could not create ringbuffer for process %d.", n_pid);
@@ -79,10 +76,15 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
                 goto fail_n_1_rbuff;
         }
 
-        f->state = FLOW_ALLOC_PENDING;
-
         if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
                 log_warn("Failed to set timestamp.");
+
+        f->n_pid   = n_pid;
+        f->n_1_pid = n_1_pid;
+        f->flow_id = flow_id;
+        f->qs      = qs;
+
+        f->state = FLOW_ALLOC_PENDING;
 
         pthread_condattr_destroy(&cattr);
 
@@ -123,7 +125,7 @@ void irm_flow_destroy(struct irm_flow * f)
 
         pthread_mutex_lock(&f->state_lock);
 
-        assert(f->len == 0);
+        assert(f->data.len == 0);
 
         if (f->state == FLOW_DESTROY) {
                 pthread_mutex_unlock(&f->state_lock);

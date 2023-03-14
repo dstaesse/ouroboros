@@ -99,6 +99,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
        default:
                tv.tv_sec  = SOCKET_TIMEOUT / 1000;
                tv.tv_usec = (SOCKET_TIMEOUT % 1000) * 1000;
+
                break;
        }
 
@@ -176,7 +177,7 @@ pid_t ipcp_create(const char *   name,
 
         argv[4] = NULL;
 
-        if (posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL)) {
+        if (posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL) != 0) {
                 log_err("Failed to spawn new process");
                 return -1;
         }
@@ -434,8 +435,7 @@ static int __ipcp_flow_alloc(pid_t           pid,
                              size_t          len,
                              qosspec_t       qs,
                              bool            join,
-                             const void *    data,
-                             size_t          dlen)
+                             const buffer_t  data)
 {
         ipcp_msg_t    msg      = IPCP_MSG__INIT;
         ipcp_msg_t *  recv_msg = NULL;
@@ -454,8 +454,8 @@ static int __ipcp_flow_alloc(pid_t           pid,
         msg.hash.data    = (uint8_t *) dst;
         msg.qosspec      = qos_spec_s_to_msg(&qs);;
         msg.has_pk       = true;
-        msg.pk.data      = (uint8_t *) data;
-        msg.pk.len       = (uint32_t) dlen;
+        msg.pk.data      = data.data;
+        msg.pk.len       = data.len;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         free(msg.qosspec);
@@ -479,11 +479,10 @@ int ipcp_flow_alloc(pid_t           pid,
                     const uint8_t * dst,
                     size_t          len,
                     qosspec_t       qs,
-                    const void *    data,
-                    size_t          dlen)
+                    const buffer_t  data)
 {
-        return __ipcp_flow_alloc(pid, flow_id, n_pid, dst, len, qs, false,
-                                 data, dlen);
+        return __ipcp_flow_alloc(pid, flow_id, n_pid, dst,
+                                 len, qs, false, data);
 }
 
 int ipcp_flow_join(pid_t           pid,
@@ -493,16 +492,16 @@ int ipcp_flow_join(pid_t           pid,
                    size_t          len,
                    qosspec_t       qs)
 {
-        return __ipcp_flow_alloc(pid, flow_id, n_pid, dst, len, qs, true,
-                                 NULL, 0);
+        buffer_t data = {NULL, 0};
+        return __ipcp_flow_alloc(pid, flow_id, n_pid, dst,
+                                 len, qs, true, data);
 }
 
-int ipcp_flow_alloc_resp(pid_t        pid,
-                         int          flow_id,
-                         pid_t        n_pid,
-                         int          response,
-                         const void * data,
-                         size_t       len)
+int ipcp_flow_alloc_resp(pid_t          pid,
+                         int            flow_id,
+                         pid_t          n_pid,
+                         int            response,
+                         const buffer_t data)
 {
         ipcp_msg_t   msg      = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg = NULL;
@@ -516,8 +515,8 @@ int ipcp_flow_alloc_resp(pid_t        pid,
         msg.has_response = true;
         msg.response     = response;
         msg.has_pk       = true;
-        msg.pk.data      = (uint8_t *) data;
-        msg.pk.len       = (uint32_t) len;
+        msg.pk.data      = data.data;
+        msg.pk.len       = data.len;
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)

@@ -25,15 +25,19 @@
 
 #include <stdint.h>
 #include <unistd.h>
+#include <string.h>
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define ABS(a)   ((a) > 0 ? (a) : -(a))
+#define clrbuf(buf) do { memset(&(buf), 0, sizeof(buf)); } while (0);
+#define freebuf(buf) do { free((buf).data); clrbuf(buf); } while (0);
 
 typedef struct {
         uint8_t * data;
         size_t    len;
 } buffer_t;
+
 
 /*
  * Returns the number of characters a uint would

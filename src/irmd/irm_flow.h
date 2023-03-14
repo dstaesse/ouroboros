@@ -26,6 +26,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/qos.h>
 #include <ouroboros/shm_rbuff.h>
+#include <ouroboros/utils.h>
 
 #include <sys/types.h>
 #include <pthread.h>
@@ -50,8 +51,7 @@ struct irm_flow {
 
         qosspec_t          qs;
         time_t             mpl;
-        void *             data;
-        size_t             len;
+        buffer_t           data;
 
         struct shm_rbuff * n_rb;
         struct shm_rbuff * n_1_rb;
