@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2023
  *
- * The IPC Resource Manager - Program Table
+ * The IPC Resource Manager - Registry - Programs
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,15 +20,15 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IRMD_PROG_TABLE_H
-#define OUROBOROS_IRMD_PROG_TABLE_H
+#ifndef OUROBOROS_IRMD_REG_PROG_H
+#define OUROBOROS_IRMD_REG_PROG_H
 
 #include <ouroboros/list.h>
 
 #include <unistd.h>
 #include <stdint.h>
 
-struct prog_entry {
+struct reg_prog {
         struct list_head next;
         char *           prog;    /* name of binary */
         uint32_t         flags;
@@ -36,25 +36,17 @@ struct prog_entry {
         struct list_head names; /* names that all instances will listen for */
 };
 
-struct prog_entry * prog_entry_create(char *   prog,
-                                      uint32_t flags,
-                                      char **  argv);
+struct reg_prog * reg_prog_create(const char *  prog,
+                                  uint32_t      flags,
+                                  int           argc,
+                                  char **       argv);
 
-void                prog_entry_destroy(struct prog_entry * e);
+void              reg_prog_destroy(struct reg_prog * prog);
 
-int                 prog_entry_add_name(struct prog_entry * e,
-                                        char *              name);
+int               reg_prog_add_name(struct reg_prog * prog,
+                                    const char *      name);
 
-void                prog_entry_del_name(struct prog_entry * e,
-                                        char *              name);
+void              reg_prog_del_name(struct reg_prog * prog,
+                                    const char *      name);
 
-int                 prog_table_add(struct list_head * prog_table,
-                                   struct prog_entry * e);
-
-void                prog_table_del(struct list_head * prog_table,
-                                   char *             prog);
-
-struct prog_entry * prog_table_get(struct list_head * prog_table,
-                                   char *             prog);
-
-#endif /* OUROBOROS_IRMD_PROG_TABLE_H */
+#endif /* OUROBOROS_IRMD_REG_PROG_H */

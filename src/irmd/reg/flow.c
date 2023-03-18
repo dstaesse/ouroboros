@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2023
  *
- * The IPC Resource Manager - Flows
+ * The IPC Resource Manager - Registry - Flows
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -24,27 +24,27 @@
 
 #include "config.h"
 
-#define OUROBOROS_PREFIX "irm_flow"
+#define OUROBOROS_PREFIX "reg-flow"
 
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/pthread.h>
 
-#include "irm_flow.h"
+#include "flow.h"
 
 #include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
-struct irm_flow * irm_flow_create(pid_t     n_pid,
+struct reg_flow * reg_flow_create(pid_t     n_pid,
                                   pid_t     n_1_pid,
                                   int       flow_id,
                                   qosspec_t qs)
 {
         pthread_condattr_t cattr;
-        struct irm_flow *  f;
+        struct reg_flow *  f;
 
         f = malloc(sizeof(*f));
         if (f == NULL)
@@ -58,10 +58,10 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        if (pthread_cond_init(&f->state_cond, &cattr))
-                goto fail_state_cond;
+        if (pthread_cond_init(&f->cond, &cattr))
+                goto fail_cond;
 
-        if (pthread_mutex_init(&f->state_lock, NULL))
+        if (pthread_mutex_init(&f->mtx, NULL))
                 goto fail_mutex;
 
         f->n_rb = shm_rbuff_create(n_pid, flow_id);
@@ -79,6 +79,8 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
         if (clock_gettime(CLOCK_MONOTONIC, &f->t0) < 0)
                 log_warn("Failed to set timestamp.");
 
+        pthread_condattr_destroy(&cattr);
+
         f->n_pid   = n_pid;
         f->n_1_pid = n_1_pid;
         f->flow_id = flow_id;
@@ -86,17 +88,15 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
 
         f->state = FLOW_ALLOC_PENDING;
 
-        pthread_condattr_destroy(&cattr);
-
         return f;
 
  fail_n_1_rbuff:
         shm_rbuff_destroy(f->n_rb);
  fail_n_rbuff:
-        pthread_mutex_destroy(&f->state_lock);
+        pthread_mutex_destroy(&f->mtx);
  fail_mutex:
-        pthread_cond_destroy(&f->state_cond);
- fail_state_cond:
+        pthread_cond_destroy(&f->cond);
+ fail_cond:
         pthread_condattr_destroy(&cattr);
  fail_cattr:
         free(f);
@@ -106,12 +106,12 @@ struct irm_flow * irm_flow_create(pid_t     n_pid,
 
 static void cancel_irm_destroy(void * o)
 {
-        struct irm_flow * f = (struct irm_flow *) o;
+        struct reg_flow * f = (struct reg_flow *) o;
 
-        pthread_mutex_unlock(&f->state_lock);
+        pthread_mutex_unlock(&f->mtx);
 
-        pthread_cond_destroy(&f->state_cond);
-        pthread_mutex_destroy(&f->state_lock);
+        pthread_cond_destroy(&f->cond);
+        pthread_mutex_destroy(&f->mtx);
 
         shm_rbuff_destroy(f->n_rb);
         shm_rbuff_destroy(f->n_1_rb);
@@ -119,16 +119,16 @@ static void cancel_irm_destroy(void * o)
         free(f);
 }
 
-void irm_flow_destroy(struct irm_flow * f)
+void reg_flow_destroy(struct reg_flow * f)
 {
         assert(f);
 
-        pthread_mutex_lock(&f->state_lock);
+        pthread_mutex_lock(&f->mtx);
 
         assert(f->data.len == 0);
 
         if (f->state == FLOW_DESTROY) {
-                pthread_mutex_unlock(&f->state_lock);
+                pthread_mutex_unlock(&f->mtx);
                 return;
         }
 
@@ -137,46 +137,46 @@ void irm_flow_destroy(struct irm_flow * f)
         else
                 f->state = FLOW_NULL;
 
-        pthread_cond_broadcast(&f->state_cond);
+        pthread_cond_broadcast(&f->cond);
 
         pthread_cleanup_push(cancel_irm_destroy, f);
 
         while (f->state != FLOW_NULL)
-                pthread_cond_wait(&f->state_cond, &f->state_lock);
+                pthread_cond_wait(&f->cond, &f->mtx);
 
         pthread_cleanup_pop(true);
 }
 
-enum flow_state irm_flow_get_state(struct irm_flow * f)
+enum flow_state reg_flow_get_state(struct reg_flow * f)
 {
         enum flow_state state;
 
         assert(f);
 
-        pthread_mutex_lock(&f->state_lock);
+        pthread_mutex_lock(&f->mtx);
 
         state = f->state;
 
-        pthread_mutex_unlock(&f->state_lock);
+        pthread_mutex_unlock(&f->mtx);
 
         return state;
 }
 
-void irm_flow_set_state(struct irm_flow * f,
+void reg_flow_set_state(struct reg_flow * f,
                         enum flow_state   state)
 {
         assert(f);
         assert(state != FLOW_DESTROY);
 
-        pthread_mutex_lock(&f->state_lock);
+        pthread_mutex_lock(&f->mtx);
 
         f->state = state;
-        pthread_cond_broadcast(&f->state_cond);
+        pthread_cond_broadcast(&f->cond);
 
-        pthread_mutex_unlock(&f->state_lock);
+        pthread_mutex_unlock(&f->mtx);
 }
 
-int irm_flow_wait_state(struct irm_flow * f,
+int reg_flow_wait_state(struct reg_flow * f,
                         enum flow_state   state,
                         struct timespec * dl)
 {
@@ -188,30 +188,30 @@ int irm_flow_wait_state(struct irm_flow * f,
         assert(state != FLOW_DESTROY);
         assert(state != FLOW_DEALLOC_PENDING);
 
-        pthread_mutex_lock(&f->state_lock);
+        pthread_mutex_lock(&f->mtx);
 
         assert(f->state != FLOW_NULL);
 
-        pthread_cleanup_push(__cleanup_mutex_unlock, &f->state_lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &f->mtx);
 
         while (!(f->state == state ||
                  f->state == FLOW_DESTROY ||
                  f->state == FLOW_DEALLOC_PENDING) &&
                ret != -ETIMEDOUT) {
                 if (dl != NULL)
-                        ret = -pthread_cond_timedwait(&f->state_cond,
-                                                      &f->state_lock,
+                        ret = -pthread_cond_timedwait(&f->cond,
+                                                      &f->mtx,
                                                       dl);
                 else
-                        ret = -pthread_cond_wait(&f->state_cond,
-                                                 &f->state_lock);
+                        ret = -pthread_cond_wait(&f->cond,
+                                                 &f->mtx);
         }
 
         if (f->state == FLOW_DESTROY ||
             f->state == FLOW_DEALLOC_PENDING ||
             ret == -ETIMEDOUT) {
                 f->state = FLOW_NULL;
-                pthread_cond_broadcast(&f->state_cond);
+                pthread_cond_broadcast(&f->cond);
         }
 
         s = f->state;

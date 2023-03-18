@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2023
  *
- * Utils of the IPC Resource Manager
+ * The IPC Resource Manager - Registry - IPCPs
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,28 +20,39 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IRMD_UTILS_H
-#define OUROBOROS_IRMD_UTILS_H
+#ifndef OUROBOROS_IRMD_REG_IPCP_H
+#define OUROBOROS_IRMD_REG_IPCP_H
 
 #include <ouroboros/list.h>
 
-#include <sys/types.h>
-
-struct str_el {
-        struct list_head next;
-        char *           str;
+enum ipcp_state {
+        IPCP_NULL = 0,
+        IPCP_BOOT,
+        IPCP_LIVE
 };
 
-struct pid_el {
+struct reg_ipcp {
         struct list_head next;
+
+        char *           name;
         pid_t            pid;
+        enum ipcp_type   type;
+        enum hash_algo   dir_hash_algo;
+        char *           layer;
+
+        enum ipcp_state  state;
+        pthread_cond_t   cond;
+        pthread_mutex_t  mtx;
 };
 
-/* functions for copying and destroying arguments list */
-size_t  argvlen(char ** argv);
+struct reg_ipcp * reg_ipcp_create(const char *   name,
+                                  enum ipcp_type type);
 
-char ** argvdup(char ** argv);
+void              reg_ipcp_destroy(struct reg_ipcp * i);
 
-void    argvfree(char ** argv);
+void              reg_ipcp_set_state(struct reg_ipcp * i,
+                                     enum ipcp_state   state);
 
-#endif /* OUROBOROS_IRM_UTILS_H */
+int               reg_ipcp_wait_boot(struct reg_ipcp * i);
+
+#endif /* OUROBOROS_IRMD_REG_IPCP_H */

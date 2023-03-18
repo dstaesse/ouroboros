@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2023
  *
- * The IPC Resource Manager - Process Table
+ * The IPC Resource Manager - Registry - Processes
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_IRMD_PROC_TABLE_H
-#define OUROBOROS_IRMD_PROC_TABLE_H
+#ifndef OUROBOROS_IRMD_REG_PROC_H
+#define OUROBOROS_IRMD_REG_PROC_H
 
 #include <ouroboros/shm_flow_set.h>
 
@@ -38,14 +38,14 @@ enum proc_state {
         PROC_DESTROY
 };
 
-struct proc_entry {
+struct reg_proc {
         struct list_head      next;
         pid_t                 pid;
         char *                prog;  /* program instantiated */
         struct list_head      names; /* names for which process accepts flows */
         struct shm_flow_set * set;
 
-        struct reg_entry *    re;    /* reg_entry for which a flow arrived */
+        struct reg_name *     name;  /* name for which a flow arrived */
 
         /* The process will block on this */
         enum proc_state       state;
@@ -53,32 +53,23 @@ struct proc_entry {
         pthread_mutex_t       lock;
 };
 
-struct proc_entry * proc_entry_create(pid_t  proc,
-                                      char * prog);
+struct reg_proc * reg_proc_create(pid_t        proc,
+                                  const char * prog);
 
-void                proc_entry_destroy(struct proc_entry * e);
+void              reg_proc_destroy(struct reg_proc * proc);
 
-int                 proc_entry_sleep(struct proc_entry * e,
-                                     struct timespec *   timeo);
+int               reg_proc_sleep(struct reg_proc * proc,
+                                 struct timespec * timeo);
 
-void                proc_entry_wake(struct proc_entry * e,
-                                    struct reg_entry *  re);
+void              reg_proc_wake(struct reg_proc * proc,
+                                struct reg_name * name);
 
-void                proc_entry_cancel(struct proc_entry * e);
+void              reg_proc_cancel(struct reg_proc * proc);
 
-int                 proc_entry_add_name(struct proc_entry * e,
-                                        char *              name);
+int               reg_proc_add_name(struct reg_proc * proc,
+                                    const char *      name);
 
-void                proc_entry_del_name(struct proc_entry * e,
-                                        const char *        name);
+void              reg_proc_del_name(struct reg_proc * proc,
+                                    const char *      name);
 
-int                 proc_table_add(struct list_head *  proc_table,
-                                   struct proc_entry * e);
-
-void                proc_table_del(struct list_head * proc_table,
-                                   pid_t              pid);
-
-struct proc_entry * proc_table_get(struct list_head * proc_table,
-                                   pid_t              pid);
-
-#endif /* OUROBOROS_IRMD_PROC_TABLE_H */
+#endif /* OUROBOROS_IRMD_REG_PROC_H */

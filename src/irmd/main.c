@@ -47,13 +47,15 @@
 #include <ouroboros/version.h>
 #include <ouroboros/pthread.h>
 
-#include "utils.h"
-#include "registry.h"
 #include "irmd.h"
-#include "irm_flow.h"
-#include "proc_table.h"
 #include "ipcp.h"
+#include "reg/flow.h"
+#include "reg/ipcp.h"
+#include "reg/name.h"
+#include "reg/proc.h"
+#include "reg/prog.h"
 #include "configfile.h"
+#include "utils.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -71,29 +73,12 @@
 
 #define IRMD_CLEANUP_TIMER ((IRMD_FLOW_TIMEOUT / 20) * MILLION) /* ns */
 #define SHM_SAN_HOLDOFF    1000 /* ms */
-#define IPCP_HASH_LEN(e)   hash_len(e->dir_hash_algo)
+#define IPCP_HASH_LEN(p)   hash_len((p)->dir_hash_algo)
 #define BIND_TIMEOUT       10   /* ms */
 #define DEALLOC_TIME       300  /*  s */
 
-enum init_state {
-        IPCP_NULL = 0,
-        IPCP_BOOT,
-        IPCP_LIVE
-};
-
-struct ipcp_entry {
-        struct list_head next;
-
-        char *           name;
-        pid_t            pid;
-        enum ipcp_type   type;
-        enum hash_algo   dir_hash_algo;
-        char *           layer;
-
-        enum init_state  state;
-        pthread_cond_t   cond;
-        pthread_mutex_t  lock;
-};
+#define registry_has_name(name) \
+        (registry_get_name(name) != NULL)
 
 enum irm_state {
         IRMD_NULL = 0,
@@ -111,19 +96,19 @@ struct cmd {
 struct {
         bool                 log_stdout;   /* log to stdout              */
 
-        struct list_head     registry;     /* registered names known     */
+        struct list_head     names;        /* registered names known     */
         size_t               n_names;      /* number of names            */
 
         struct list_head     ipcps;        /* list of ipcps in system    */
         size_t               n_ipcps;      /* number of ipcps            */
 
-        struct list_head     proc_table;   /* processes                  */
-        struct list_head     prog_table;   /* programs known             */
+        struct list_head     procs;        /* processes                  */
+        struct list_head     progs;        /* programs known             */
         struct list_head     spawned_pids; /* child processes            */
         pthread_rwlock_t     reg_lock;     /* lock for registration info */
 
         struct bmp *         flow_ids;     /* flow_ids for flows         */
-        struct list_head     irm_flows;    /* flow information           */
+        struct list_head     flows;        /* flow information           */
         pthread_rwlock_t     flows_lock;   /* lock for flows             */
 #ifdef HAVE_TOML
         char *               cfg_file;     /* configuration file path    */
@@ -168,7 +153,7 @@ static void irmd_set_state(enum irm_state state)
         pthread_rwlock_unlock(&irmd.state_lock);
 }
 
-static void clear_irm_flow(struct irm_flow * f) {
+static void clear_reg_flow(struct reg_flow * f) {
         ssize_t idx;
 
         assert(f);
@@ -185,26 +170,26 @@ static void clear_irm_flow(struct irm_flow * f) {
                 shm_rdrbuff_remove(irmd.rdrb, idx);
 }
 
-static struct irm_flow * get_irm_flow(int flow_id)
+static struct reg_flow * registry_get_flow(int flow_id)
 {
-        struct list_head * pos = NULL;
+        struct list_head * p;
 
-        list_for_each(pos, &irmd.irm_flows) {
-                struct irm_flow * e = list_entry(pos, struct irm_flow, next);
-                if (e->flow_id == flow_id)
-                        return e;
+        list_for_each(p, &irmd.flows) {
+                struct reg_flow * f = list_entry(p, struct reg_flow, next);
+                if (f->flow_id == flow_id)
+                        return f;
         }
 
         return NULL;
 }
 
-static struct irm_flow * get_irm_flow_n(pid_t n_pid)
+static struct reg_flow * registry_get_pending_flow_for_pid(pid_t n_pid)
 {
-        struct list_head * pos = NULL;
+        struct list_head * p;
 
-        list_for_each(pos, &irmd.irm_flows) {
-                struct irm_flow * e = list_entry(pos, struct irm_flow, next);
-                enum flow_state state = irm_flow_get_state(e);
+        list_for_each(p, &irmd.flows) {
+                struct reg_flow * e = list_entry(p, struct reg_flow, next);
+                enum flow_state state = reg_flow_get_state(e);
                 if (e->n_pid == n_pid && state == FLOW_ALLOC_REQ_PENDING)
                         return e;
         }
@@ -212,115 +197,29 @@ static struct irm_flow * get_irm_flow_n(pid_t n_pid)
         return NULL;
 }
 
-static struct ipcp_entry * ipcp_entry_create(const char *   name,
-                                             enum ipcp_type type)
+static int registry_add_ipcp(struct reg_ipcp * ipcp)
 {
-        struct ipcp_entry * e;
-        pthread_condattr_t  cattr;
+        struct list_head * p;
 
-        e = malloc(sizeof(*e));
-        if (e == NULL)
-                goto fail_malloc;
+        assert(ipcp);
 
-        e->layer = NULL;
-        e->type  = type;
-        e->state = IPCP_BOOT;
-        e->name  = strdup(name);
-        if (e->name == NULL)
-                goto fail_name;
-
-        if (pthread_condattr_init(&cattr))
-                goto fail_cattr;
-#ifndef __APPLE__
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
-#endif
-        if (pthread_cond_init(&e->cond, &cattr))
-                goto fail_cond;
-
-        if (pthread_mutex_init(&e->lock, NULL))
-                goto fail_mutex;
-
-
-        list_head_init(&e->next);
-
-        pthread_condattr_destroy(&cattr);
-
-        return e;
-
- fail_mutex:
-        pthread_cond_destroy(&e->cond);
- fail_cond:
-        pthread_condattr_destroy(&cattr);
- fail_cattr:
-        free(e->name);
- fail_name:
-        free(e);
- fail_malloc:
-        return NULL;
-}
-
-static void ipcp_entry_destroy(struct ipcp_entry * e)
-{
-        assert(e);
-
-        pthread_mutex_lock(&e->lock);
-
-        while (e->state == IPCP_BOOT)
-                pthread_cond_wait(&e->cond, &e->lock);
-
-        pthread_mutex_unlock(&e->lock);
-
-        free(e->name);
-        free(e->layer);
-        free(e);
-}
-
-static void ipcp_entry_set_state(struct ipcp_entry * e,
-                                 enum init_state     state)
-{
-        pthread_mutex_lock(&e->lock);
-        e->state = state;
-        pthread_cond_broadcast(&e->cond);
-        pthread_mutex_unlock(&e->lock);
-}
-
-static int ipcp_entry_wait_boot(struct ipcp_entry * e)
-{
-        int             ret = 0;
-        struct timespec dl;
-        struct timespec to = {SOCKET_TIMEOUT / 1000,
-                              (SOCKET_TIMEOUT % 1000) * MILLION};
-
-        clock_gettime(PTHREAD_COND_CLOCK, &dl);
-        ts_add(&dl, &to, &dl);
-
-        pthread_mutex_lock(&e->lock);
-
-        while (e->state == IPCP_BOOT && ret != ETIMEDOUT)
-                ret = pthread_cond_timedwait(&e->cond, &e->lock, &dl);
-
-        if (ret == ETIMEDOUT) {
-                kill(e->pid, SIGTERM);
-                e->state = IPCP_NULL;
-                pthread_cond_signal(&e->cond);
+        list_for_each(p, &irmd.ipcps) {
+                if (list_entry(p, struct reg_ipcp, next)->type > ipcp->type)
+                        break;
         }
 
-        if (e->state != IPCP_LIVE) {
-                pthread_mutex_unlock(&e->lock);
-                return -1;
-        }
-
-        pthread_mutex_unlock(&e->lock);
+        list_add_tail(&ipcp->next, p);
+        ++irmd.n_ipcps;
 
         return 0;
 }
 
-static struct ipcp_entry * get_ipcp_entry_by_pid(pid_t pid)
+static struct reg_ipcp * registry_get_ipcp_by_pid(pid_t pid)
 {
         struct list_head * p;
 
         list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
                 if (e->pid == pid)
                         return e;
         }
@@ -328,12 +227,25 @@ static struct ipcp_entry * get_ipcp_entry_by_pid(pid_t pid)
         return NULL;
 }
 
-static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
+static void registry_del_ipcp(pid_t pid)
+{
+        struct reg_ipcp * ipcp;
+
+        ipcp = registry_get_ipcp_by_pid(pid);
+        if (ipcp == NULL)
+                return;
+
+        list_del(&ipcp->next);
+        reg_ipcp_destroy(ipcp);
+        --irmd.n_ipcps;
+}
+
+static struct reg_ipcp * registry_get_ipcp_by_name(const char * name)
 {
         struct list_head * p;
 
         list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
                 if (strcmp(name, e->name) == 0)
                         return e;
         }
@@ -341,12 +253,12 @@ static struct ipcp_entry * get_ipcp_entry_by_name(const char * name)
         return NULL;
 }
 
-static struct ipcp_entry * get_ipcp_entry_by_layer(const char * layer)
+static struct reg_ipcp * registry_get_ipcp_by_layer(const char * layer)
 {
         struct list_head * p;
 
         list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
                 if (strcmp(layer, e->layer) == 0)
                         return e;
         }
@@ -354,8 +266,8 @@ static struct ipcp_entry * get_ipcp_entry_by_layer(const char * layer)
         return NULL;
 }
 
-static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
-                                                pid_t        src)
+static struct reg_ipcp *registry_get_ipcp_by_dst_name(const char * name,
+                                                      pid_t        src)
 {
         struct list_head * p;
         struct list_head * h;
@@ -366,7 +278,7 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
         list_for_each_safe(p, h, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
                 if (e->layer == NULL || e->pid == src || e->type == IPCP_BROADCAST)
                         continue;
 
@@ -402,15 +314,15 @@ static struct ipcp_entry * get_ipcp_by_dst_name(const char * name,
 int get_layer_for_ipcp(pid_t  pid,
                        char * buf)
 {
-        struct ipcp_entry * entry;
+        struct reg_ipcp * ipcp;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        entry = get_ipcp_entry_by_pid(pid);
-        if (entry == NULL || entry->layer == NULL)
+        ipcp = registry_get_ipcp_by_pid(pid);
+        if (ipcp == NULL || ipcp->layer == NULL)
                 goto fail;
 
-        strcpy(buf, entry->layer);
+        strcpy(buf, ipcp->layer);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -421,19 +333,183 @@ int get_layer_for_ipcp(pid_t  pid,
         return -1;
 }
 
+static struct reg_name * registry_get_name(const char * name)
+{
+        struct list_head * p;
+
+        list_for_each(p, &irmd.names) {
+                struct reg_name * e = list_entry(p, struct reg_name, next);
+                if (!strcmp(name, e->name))
+                        return e;
+        }
+
+        return NULL;
+}
+
+static struct reg_name * registry_get_name_by_hash(enum hash_algo     algo,
+                                                   const uint8_t *    hash,
+                                                   size_t             len)
+{
+        struct list_head * p;
+        uint8_t * thash;
+
+        thash = malloc(len);
+        if (thash == NULL)
+                return NULL;
+
+        list_for_each(p, &irmd.names) {
+                struct reg_name * n = list_entry(p, struct reg_name, next);
+                str_hash(algo, thash, n->name);
+                if (memcmp(thash, hash, len) == 0) {
+                        free(thash);
+                        return n;
+                }
+        }
+
+        free(thash);
+
+        return NULL;
+}
+
+static int registry_add_name(struct reg_name * n)
+{
+
+        assert(n);
+
+        list_add(&n->next, &irmd.names);
+
+        ++irmd.n_names;
+
+        return 0;
+}
+
+static void registry_del_name(const char * name)
+{
+        struct reg_name * n;
+
+        n = registry_get_name(name);
+        if (n == NULL)
+                return;
+
+        list_del(&n->next);
+        reg_name_destroy(n);
+        --irmd.n_names;
+}
+
+static void registry_names_del_proc(pid_t pid)
+{
+        struct list_head * p;
+
+        assert(pid > 0);
+
+        list_for_each(p, &irmd.names) {
+                struct reg_name * n = list_entry(p, struct reg_name, next);
+                reg_name_del_pid(n, pid);
+        }
+
+        return;
+}
+
+static void registry_destroy_names(void)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        list_for_each_safe(p, h, &irmd.names) {
+                struct reg_name * n = list_entry(p, struct reg_name, next);
+                list_del(&n->next);
+                reg_name_set_state(n, NAME_NULL);
+                reg_name_destroy(n);
+        }
+}
+
+static int registry_add_prog(struct reg_prog * p)
+{
+        assert(p);
+
+        list_add(&p->next, &irmd.progs);
+
+        return 0;
+}
+
+static void registry_del_prog(const char * prog)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        assert(prog);
+
+        list_for_each_safe(p, h, &irmd.progs) {
+                struct reg_prog * e = list_entry(p, struct reg_prog, next);
+                if (!strcmp(prog, e->prog)) {
+                        list_del(&e->next);
+                        reg_prog_destroy(e);
+                }
+        }
+}
+
+static struct reg_prog * registry_get_prog(const char * prog)
+{
+        struct list_head * p;
+
+        assert(prog);
+
+        list_for_each(p, &irmd.progs) {
+                struct reg_prog * e = list_entry(p, struct reg_prog, next);
+                if (!strcmp(e->prog, prog))
+                        return e;
+        }
+
+        return NULL;
+}
+
+static int registry_add_proc(struct reg_proc * p)
+{
+        assert(p);
+
+        list_add(&p->next, &irmd.procs);
+
+        return 0;
+}
+
+static void registry_del_proc(pid_t pid)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        list_for_each_safe(p, h, &irmd.procs) {
+                struct reg_proc * e = list_entry(p, struct reg_proc, next);
+                if (pid == e->pid) {
+                        list_del(&e->next);
+                        reg_proc_destroy(e);
+                }
+        }
+}
+
+static struct reg_proc * registry_get_proc(pid_t pid)
+{
+        struct list_head * p;
+
+        list_for_each(p, &irmd.procs) {
+                struct reg_proc * e = list_entry(p, struct reg_proc, next);
+                if (pid == e->pid)
+                        return e;
+        }
+
+        return NULL;
+}
 
 pid_t create_ipcp(const char *   name,
                   enum ipcp_type type)
 {
-        struct pid_el *     ppid;
-        struct ipcp_entry * entry;
-        struct list_head *  p;
-        pid_t               pid;
+        struct pid_el *    ppid;
+        struct reg_ipcp *  ipcp;
+        pid_t              pid;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        entry = get_ipcp_entry_by_name(name);
-        if (entry != NULL) {
+        ipcp = registry_get_ipcp_by_name(name);
+        if (ipcp != NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("IPCP by that name already exists.");
                 return -EPERM;
@@ -445,10 +521,10 @@ pid_t create_ipcp(const char *   name,
         if (ppid == NULL)
                 goto fail_ppid;
 
-        entry = ipcp_entry_create(name, type);
-        if (entry == NULL) {
+        ipcp = reg_ipcp_create(name, type);
+        if (ipcp == NULL) {
                 log_err("Failed to create IPCP entry.");
-                goto fail_ipcp_entry;
+                goto fail_reg_ipcp;
         }
 
         pid = ipcp_create(name, type);
@@ -457,25 +533,19 @@ pid_t create_ipcp(const char *   name,
                 goto fail_ipcp;
         }
 
-        entry->pid = pid;
+        ipcp->pid = pid;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        list_for_each(p, &irmd.ipcps) {
-                if (list_entry(p, struct ipcp_entry, next)->type > type)
-                        break;
-        }
+        registry_add_ipcp(ipcp);
 
-        list_add_tail(&entry->next, p);
-        ++irmd.n_ipcps;
-
-        ppid->pid = entry->pid;
+        ppid->pid = ipcp->pid;
         list_add(&ppid->next, &irmd.spawned_pids);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         /* IRMd maintenance will clean up if booting fails. */
-        if (ipcp_entry_wait_boot(entry)) {
+        if (reg_ipcp_wait_boot(ipcp)) {
                 log_err("IPCP %d failed to boot.", pid);
                 return -1;
         }
@@ -485,8 +555,8 @@ pid_t create_ipcp(const char *   name,
         return pid;
 
  fail_ipcp:
-        ipcp_entry_destroy(entry);
- fail_ipcp_entry:
+        reg_ipcp_destroy(ipcp);
+ fail_reg_ipcp:
         free(ppid);
  fail_ppid:
         return -1;
@@ -500,9 +570,9 @@ static int create_ipcp_r(pid_t pid,
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
         list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
                 if (e->pid == pid) {
-                        ipcp_entry_set_state(e, result ? IPCP_NULL : IPCP_LIVE);
+                        reg_ipcp_set_state(e, result ? IPCP_NULL : IPCP_LIVE);
                         break;
                 }
         }
@@ -528,25 +598,16 @@ static void clear_spawned_process(pid_t pid)
 
 static int destroy_ipcp(pid_t pid)
 {
-        struct list_head * p;
-        struct list_head * h;
-
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        list_for_each_safe(p, h, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
-                if (e->pid == pid) {
-                        clear_spawned_process(pid);
-                        if (ipcp_destroy(pid))
-                                log_err("Could not destroy IPCP.");
-                        list_del(&e->next);
-                        ipcp_entry_destroy(e);
-                        --irmd.n_ipcps;
-                        log_info("Destroyed IPCP %d.", pid);
-                }
-        }
+        registry_del_ipcp(pid);
+
+        clear_spawned_process(pid);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
+
+        if (ipcp_destroy(pid))
+                log_err("Could not destroy IPCP.");
 
         return 0;
 }
@@ -554,12 +615,12 @@ static int destroy_ipcp(pid_t pid)
 int bootstrap_ipcp(pid_t                pid,
                    struct ipcp_config * conf)
 {
-        struct ipcp_entry * entry;
+        struct reg_ipcp * entry;
         struct layer_info   info;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        entry = get_ipcp_entry_by_pid(pid);
+        entry = registry_get_ipcp_by_pid(pid);
         if (entry == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("No such IPCP.");
@@ -598,19 +659,19 @@ int bootstrap_ipcp(pid_t                pid,
 int enroll_ipcp(pid_t        pid,
                 const char * dst)
 {
-        struct ipcp_entry * entry = NULL;
-        struct layer_info   info;
+        struct reg_ipcp * ipcp;
+        struct layer_info info;
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        entry = get_ipcp_entry_by_pid(pid);
-        if (entry == NULL) {
+        ipcp = registry_get_ipcp_by_pid(pid);
+        if (ipcp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("No such IPCP.");
                 return -1;
         }
 
-        if (entry->layer != NULL) {
+        if (ipcp->layer != NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("IPCP in wrong state");
                 return -1;
@@ -625,21 +686,21 @@ int enroll_ipcp(pid_t        pid,
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        entry = get_ipcp_entry_by_pid(pid);
-        if (entry == NULL) {
+        ipcp = registry_get_ipcp_by_pid(pid);
+        if (ipcp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("No such IPCP.");
                 return -1;
         }
 
-        entry->layer = strdup(info.layer_name);
-        if (entry->layer == NULL) {
+        ipcp->layer = strdup(info.layer_name);
+        if (ipcp->layer == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Failed to strdup layer_name.");
                 return -ENOMEM;
         }
 
-        entry->dir_hash_algo = info.dir_hash_algo;
+        ipcp->dir_hash_algo = info.dir_hash_algo;
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -650,22 +711,22 @@ int enroll_ipcp(pid_t        pid,
 }
 
 int connect_ipcp(pid_t        pid,
-                const char * dst,
-                const char * component,
-                qosspec_t    qs)
+                 const char * dst,
+                 const char * component,
+                 qosspec_t    qs)
 {
-        struct ipcp_entry * entry = NULL;
+        struct reg_ipcp * ipcp;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        entry = get_ipcp_entry_by_pid(pid);
-        if (entry == NULL) {
+        ipcp = registry_get_ipcp_by_pid(pid);
+        if (ipcp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("No such IPCP.");
                 return -EIPCP;
         }
 
-        if (entry->type != IPCP_UNICAST && entry->type != IPCP_BROADCAST) {
+        if (ipcp->type != IPCP_UNICAST && ipcp->type != IPCP_BROADCAST) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Cannot establish connections for this IPCP type.");
                 return -EIPCP;
@@ -690,18 +751,18 @@ static int disconnect_ipcp(pid_t        pid,
                            const char * dst,
                            const char * component)
 {
-        struct ipcp_entry * entry = NULL;
+        struct reg_ipcp * ipcp;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        entry = get_ipcp_entry_by_pid(pid);
-        if (entry == NULL) {
+        ipcp = registry_get_ipcp_by_pid(pid);
+        if (ipcp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("No such IPCP.");
                 return -EIPCP;
         }
 
-        if (entry->type != IPCP_UNICAST) {
+        if (ipcp->type != IPCP_UNICAST && ipcp->type != IPCP_BROADCAST) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Cannot tear down connections for this IPCP type.");
                 return -EIPCP;
@@ -720,75 +781,39 @@ static int disconnect_ipcp(pid_t        pid,
         return 0;
 }
 
-int bind_program(char *       prog,
-                 const char * name,
-                 uint16_t     flags,
-                 int          argc,
-                 char **      argv)
+int bind_program(const char *  prog,
+                 const char *  name,
+                 uint16_t      flags,
+                 int           argc,
+                 char **       argv)
 {
-        char *              progs;
-        char **             argv_dup = NULL;
-        int                 i;
-        char *              name_dup = NULL;
-        struct prog_entry * e        = NULL;
-        struct reg_entry *  re       = NULL;
+        struct reg_prog * p;
+        struct reg_name * n;
 
         if (prog == NULL || name == NULL)
                 return -EINVAL;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        e = prog_table_get(&irmd.prog_table, path_strip(prog));
-        if (e == NULL) {
-                progs = strdup(path_strip(prog));
-                if (progs == NULL) {
+        p = registry_get_prog(path_strip(prog));
+        if (p == NULL) {
+                p = reg_prog_create(prog, flags, argc, argv);
+                if (p == NULL) {
                         pthread_rwlock_unlock(&irmd.reg_lock);
                         return -ENOMEM;
                 }
 
-                if ((flags & BIND_AUTO) && argc > 0) {
-                /* We need to duplicate argv and set argv[0] to prog. */
-                        argv_dup = malloc((argc + 2) * sizeof(*argv_dup));
-                        argv_dup[0] = strdup(prog);
-                        for (i = 1; i <= argc; ++i) {
-                                argv_dup[i] = strdup(argv[i - 1]);
-                                if (argv_dup[i] != NULL)
-                                        continue;
-
-                                pthread_rwlock_unlock(&irmd.reg_lock);
-                                log_err("Failed to bind program %s to %s.",
-                                        prog, name);
-                                argvfree(argv_dup);
-                                free(progs);
-                                return -ENOMEM;
-                        }
-                        argv_dup[argc + 1] = NULL;
-                }
-                e = prog_entry_create(progs, flags, argv_dup);
-                if (e == NULL) {
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        free(progs);
-                        argvfree(argv_dup);
-                        return -ENOMEM;
-                }
-                prog_table_add(&irmd.prog_table, e);
+                registry_add_prog(p);
         }
 
-        name_dup = strdup(name);
-        if (name_dup == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return -ENOMEM;
-        }
-
-        if (prog_entry_add_name(e, name_dup)) {
+        if (reg_prog_add_name(p, name)) {
                 log_err("Failed adding name.");
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                free(name_dup);
                 return -ENOMEM;
         }
 
-        re = registry_get_entry(&irmd.registry, name);
-        if (re != NULL && reg_entry_add_prog(re, e) < 0)
+        n = registry_get_name(name);
+        if (n != NULL && reg_name_add_prog(n, p) < 0)
                 log_err("Failed adding program %s for name %s.", prog, name);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
@@ -801,11 +826,10 @@ int bind_program(char *       prog,
 int bind_process(pid_t        pid,
                  const char * name)
 {
-        char * name_dup        = NULL;
-        struct proc_entry * e  = NULL;
-        struct reg_entry *  re = NULL;
-        struct timespec     now;
-        struct timespec     dl = {0, 10 * MILLION};
+        struct reg_proc * pc = NULL;
+        struct reg_name * rn;
+        struct timespec   now;
+        struct timespec   dl = {0, 10 * MILLION};
 
         if (name == NULL)
                 return -EINVAL;
@@ -817,35 +841,28 @@ int bind_process(pid_t        pid,
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
         while (!kill(pid, 0)) {
-                e = proc_table_get(&irmd.proc_table, pid);
-                if (e != NULL || ts_diff_ms(&now, &dl) > 0)
+                pc = registry_get_proc(pid);
+                if (pc != NULL || ts_diff_ms(&now, &dl) > 0)
                         break;
                 clock_gettime(PTHREAD_COND_CLOCK, &now);
                 sched_yield();
         }
 
-        if (e == NULL) {
+        if (pc == NULL) {
                 log_err("Process %d does not %s.", pid,
                         kill(pid, 0) ? "exist" : "respond");
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 return -1;
         }
 
-        name_dup = strdup(name);
-        if (name_dup == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return -ENOMEM;
-        }
-
-        if (proc_entry_add_name(e, name_dup)) {
+        if (reg_proc_add_name(pc, name)) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Failed to add name %s to process %d.", name, pid);
-                free(name_dup);
                 return -1;
         }
 
-        re = registry_get_entry(&irmd.registry, name);
-        if (re != NULL && reg_entry_add_pid(re, pid) < 0)
+        rn = registry_get_name(name);
+        if (rn != NULL && reg_name_add_pid(rn, pid) < 0)
                 log_err("Failed adding process %d for name %s.", pid, name);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
@@ -855,30 +872,31 @@ int bind_process(pid_t        pid,
         return 0;
 }
 
-static int unbind_program(char * prog,
-                          char * name)
+static int unbind_program(const char * prog,
+                          const char * name)
 {
-        struct reg_entry * e;
-
         if (prog == NULL)
                 return -EINVAL;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
         if (name == NULL)
-                prog_table_del(&irmd.prog_table, prog);
+                registry_del_prog(prog);
         else {
-                struct prog_entry * en = prog_table_get(&irmd.prog_table, prog);
-                if (en == NULL) {
+                struct reg_name * rn;
+                struct reg_prog * pg;
+
+                pg = registry_get_prog(prog);
+                if (pg == NULL) {
                         pthread_rwlock_unlock(&irmd.reg_lock);
                         return -EINVAL;
                 }
 
-                prog_entry_del_name(en, name);
+                reg_prog_del_name(pg, name);
 
-                e = registry_get_entry(&irmd.registry, name);
-                if (e != NULL)
-                        reg_entry_del_prog(e, prog);
+                rn = registry_get_name(name);
+                if (rn != NULL)
+                        reg_name_del_prog(rn, prog);
         }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
@@ -894,20 +912,21 @@ static int unbind_program(char * prog,
 static int unbind_process(pid_t        pid,
                           const char * name)
 {
-        struct reg_entry * e;
-
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
         if (name == NULL)
-                proc_table_del(&irmd.proc_table, pid);
+                registry_del_proc(pid);
         else {
-                struct proc_entry * en = proc_table_get(&irmd.proc_table, pid);
-                if (en != NULL)
-                        proc_entry_del_name(en, name);
+                struct reg_name * n;
+                struct reg_proc * p;
 
-                e = registry_get_entry(&irmd.registry, name);
-                if (e != NULL)
-                        reg_entry_del_pid(e, pid);
+                p = registry_get_proc(pid);
+                if (p != NULL)
+                        reg_proc_del_name(p, name);
+
+                n = registry_get_name(name);
+                if (n != NULL)
+                        reg_name_del_pid(n, pid);
         }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
@@ -942,7 +961,7 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
         }
 
         list_for_each(p, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
                 (*ipcps)[i] = malloc(sizeof(***ipcps));
                 if ((*ipcps)[i] == NULL) {
                         --i;
@@ -980,52 +999,56 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
 }
 
 int name_create(const char *     name,
-                enum pol_balance pol)
+                enum pol_balance lb)
 {
-        struct reg_entry * re;
+        struct reg_name *  n;
         struct list_head * p;
 
         assert(name);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        if (registry_has_name(&irmd.registry, name)) {
+        if (registry_has_name(name)) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_warn("Registry entry for %s already exists.", name);
+                log_warn("Name %s already exists.", name);
                 return 0;
         }
 
-        re = registry_add_name(&irmd.registry, name);
-        if (re == NULL) {
+        n = reg_name_create(name, lb);
+        if (n == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Failed creating registry entry for %s.", name);
+                log_dbg("Could not create name.");
                 return -ENOMEM;
         }
-        ++irmd.n_names;
-        reg_entry_set_policy(re, pol);
+
+        if (registry_add_name(n) < 0) {
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("Failed to add name %s.", name);
+                return -ENOMEM;
+        }
 
         /* check the tables for existing bindings */
-        list_for_each(p, &irmd.proc_table) {
+        list_for_each(p, &irmd.procs) {
                 struct list_head * q;
-                struct proc_entry * e;
-                e = list_entry(p, struct proc_entry, next);
+                struct reg_proc * e;
+                e = list_entry(p, struct reg_proc, next);
                 list_for_each(q, &e->names) {
                         struct str_el * s;
                         s = list_entry(q, struct str_el, next);
                         if (!strcmp(s->str, name))
-                                reg_entry_add_pid(re, e->pid);
+                                reg_name_add_pid(n, e->pid);
                 }
         }
 
-        list_for_each(p, &irmd.prog_table) {
+        list_for_each(p, &irmd.progs) {
                 struct list_head * q;
-                struct prog_entry * e;
-                e = list_entry(p, struct prog_entry, next);
+                struct reg_prog * e;
+                e = list_entry(p, struct reg_prog, next);
                 list_for_each(q, &e->names) {
                         struct str_el * s;
                         s = list_entry(q, struct str_el, next);
                         if (!strcmp(s->str, name))
-                                reg_entry_add_prog(re, e);
+                                reg_name_add_prog(n, e);
                 }
         }
 
@@ -1042,14 +1065,13 @@ static int name_destroy(const char * name)
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        if (!registry_has_name(&irmd.registry, name)) {
+        if (!registry_has_name(name)) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Registry entry for %s does not exist.", name);
                 return -ENAME;
         }
 
-        registry_del_name(&irmd.registry, name);
-        --irmd.n_names;
+        registry_del_name(name);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -1079,8 +1101,8 @@ static ssize_t list_names(name_info_msg_t *** names,
                 return -ENOMEM;
         }
 
-        list_for_each(p, &irmd.registry) {
-                struct reg_entry * e = list_entry(p, struct reg_entry, next);
+        list_for_each(p, &irmd.names) {
+                struct reg_name * e = list_entry(p, struct reg_name, next);
 
                 (*names)[i] = malloc(sizeof(***names));
                 if ((*names)[i] == NULL) {
@@ -1114,21 +1136,21 @@ static ssize_t list_names(name_info_msg_t *** names,
 int name_reg(const char * name,
              pid_t        pid)
 {
-        size_t              len;
-        struct ipcp_entry * ipcp;
-        uint8_t *           hash;
-        int                 err;
+        size_t            len;
+        struct reg_ipcp * ipcp;
+        uint8_t *         hash;
+        int               err;
 
         assert(name);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        if (!registry_has_name(&irmd.registry, name)) {
+        if (!registry_has_name(name)) {
                 err = -ENAME;
                 goto fail;
         }
 
-        ipcp = get_ipcp_entry_by_pid(pid);
+        ipcp = registry_get_ipcp_by_pid(pid);
         if (ipcp == NULL) {
                 err = -EIPCP;
                 goto fail;
@@ -1172,16 +1194,16 @@ fail:
 static int name_unreg(const char * name,
                       pid_t        pid)
 {
-        struct ipcp_entry * ipcp;
-        int                 err;
-        uint8_t *           hash;
-        size_t              len;
+        struct reg_ipcp * ipcp;
+        int               err;
+        uint8_t *         hash;
+        size_t            len;
 
         assert(name);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        ipcp = get_ipcp_entry_by_pid(pid);
+        ipcp = registry_get_ipcp_by_pid(pid);
         if (ipcp == NULL) {
                 err = -EIPCP;
                 goto fail;
@@ -1221,34 +1243,27 @@ static int name_unreg(const char * name,
         return err;
 }
 
-static int proc_announce(pid_t  pid,
-                         char * prog)
+static int proc_announce(pid_t        pid,
+                         const char * prog)
 {
-        struct proc_entry * e;
-        struct prog_entry * a;
-        char *              prog_dup;
+        struct reg_proc * rpc;
+        struct reg_prog * rpg;
 
         assert(prog);
 
-        prog_dup = strdup(prog);
-        if (prog_dup == NULL)
+        rpc = reg_proc_create(pid, prog);
+        if (rpc == NULL)
                 return -ENOMEM;
-
-        e = proc_entry_create(pid, prog_dup);
-        if (e == NULL) {
-                free(prog_dup);
-                return -ENOMEM;
-        }
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        proc_table_add(&irmd.proc_table, e);
+        registry_add_proc(rpc);
 
         /* Copy listen names from program if it exists. */
-        a = prog_table_get(&irmd.prog_table, e->prog);
-        if (a != NULL) {
+        rpg = registry_get_prog(rpc->prog);
+        if (rpg != NULL) {
                 struct list_head * p;
-                list_for_each(p, &a->names) {
+                list_for_each(p, &rpg->names) {
                         struct str_el * s = list_entry(p, struct str_el, next);
                         struct str_el * n = malloc(sizeof(*n));
                         if (n == NULL) {
@@ -1263,9 +1278,9 @@ static int proc_announce(pid_t  pid,
                                 return -ENOMEM;
                         }
 
-                        list_add(&n->next, &e->names);
+                        list_add(&n->next, &rpc->names);
                         log_dbg("Process %d inherits name %s from program %s.",
-                                pid, n->str, e->prog);
+                                pid, n->str, rpc->prog);
                 }
         }
 
@@ -1276,42 +1291,42 @@ static int proc_announce(pid_t  pid,
 
 static int flow_accept(pid_t             pid,
                        struct timespec * dl,
-                       struct irm_flow * f_out,
+                       struct reg_flow * f_out,
                        buffer_t *        data)
 {
-        struct irm_flow  *  f;
-        struct proc_entry * pe;
-        struct reg_entry *  re;
-        struct list_head *  p;
-        pid_t               pid_n;
-        pid_t               pid_n_1;
-        int                 flow_id;
-        int                 ret;
-        buffer_t            tmp = {NULL, 0};
+        struct reg_flow *  f;
+        struct reg_proc *  rp;
+        struct reg_name *  n;
+        struct list_head * p;
+        pid_t              pid_n;
+        pid_t              pid_n_1;
+        int                flow_id;
+        int                ret;
+        buffer_t           tmp = {NULL, 0};
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        pe = proc_table_get(&irmd.proc_table, pid);
-        if (pe == NULL) {
+        rp = registry_get_proc(pid);
+        if (rp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Unknown process %d calling accept.", pid);
                 return -EINVAL;
         }
 
-        log_dbg("New instance (%d) of %s added.", pid, pe->prog);
+        log_dbg("New instance (%d) of %s added.", pid, rp->prog);
         log_dbg("This process accepts flows for:");
 
-        list_for_each(p, &pe->names) {
+        list_for_each(p, &rp->names) {
                 struct str_el * s = list_entry(p, struct str_el, next);
                 log_dbg("        %s", s->str);
-                re = registry_get_entry(&irmd.registry, s->str);
-                if (re != NULL)
-                        reg_entry_add_pid(re, pid);
+                n = registry_get_name(s->str);
+                if (n != NULL)
+                        reg_name_add_pid(n, pid);
         }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        ret = proc_entry_sleep(pe, dl);
+        ret = reg_proc_sleep(rp, dl);
         if (ret == -ETIMEDOUT)
                 return -ETIMEDOUT;
 
@@ -1323,7 +1338,7 @@ static int flow_accept(pid_t             pid,
 
         pthread_rwlock_rdlock(&irmd.flows_lock);
 
-        f = get_irm_flow_n(pid);
+        f = registry_get_pending_flow_for_pid(pid);
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 log_warn("Port_id was not created yet.");
@@ -1337,42 +1352,42 @@ static int flow_accept(pid_t             pid,
         pthread_rwlock_unlock(&irmd.flows_lock);
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        pe = proc_table_get(&irmd.proc_table, pid);
-        if (pe == NULL) {
+        rp = registry_get_proc(pid);
+        if (rp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
                 bmp_release(irmd.flow_ids, f->flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, -1, tmp);
-                clear_irm_flow(f);
-                irm_flow_set_state(f, FLOW_NULL);
-                irm_flow_destroy(f);
+                clear_reg_flow(f);
+                reg_flow_set_state(f, FLOW_NULL);
+                reg_flow_destroy(f);
                 log_dbg("Process gone while accepting flow.");
                 return -EPERM;
         }
 
-        pthread_mutex_lock(&pe->lock);
+        pthread_mutex_lock(&rp->lock);
 
-        re = pe->re;
+        n = rp->name;
 
-        pthread_mutex_unlock(&pe->lock);
+        pthread_mutex_unlock(&rp->lock);
 
-        if (reg_entry_get_state(re) != REG_NAME_FLOW_ARRIVED) {
+        if (reg_name_get_state(n) != NAME_FLOW_ARRIVED) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
                 bmp_release(irmd.flow_ids, f->flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, -1, tmp);
-                clear_irm_flow(f);
-                irm_flow_set_state(f, FLOW_NULL);
-                irm_flow_destroy(f);
+                clear_reg_flow(f);
+                reg_flow_set_state(f, FLOW_NULL);
+                reg_flow_destroy(f);
                 log_err("Entry in wrong state.");
                 return -EPERM;
         }
 
-        registry_del_process(&irmd.registry, pid);
+        registry_names_del_proc(pid);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -1397,13 +1412,13 @@ static int flow_accept(pid_t             pid,
                 list_del(&f->next);
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 log_dbg("Failed to respond to alloc. Port_id invalidated.");
-                clear_irm_flow(f);
-                irm_flow_set_state(f, FLOW_NULL);
-                irm_flow_destroy(f);
+                clear_reg_flow(f);
+                reg_flow_set_state(f, FLOW_NULL);
+                reg_flow_destroy(f);
                 return -EPERM;
         }
 
-        irm_flow_set_state(f, FLOW_ALLOCATED);
+        reg_flow_set_state(f, FLOW_ALLOCATED);
 
         log_info("Flow on flow_id %d allocated.", f->flow_id);
 
@@ -1414,17 +1429,17 @@ static int flow_join(pid_t              pid,
                      const char *       dst,
                      qosspec_t          qs,
                      struct timespec *  dl,
-                     struct irm_flow *  f_out)
+                     struct reg_flow *  f_out)
 {
-        struct irm_flow *   f;
-        struct ipcp_entry * ipcp;
+        struct reg_flow *   f;
+        struct reg_ipcp * ipcp;
         int                 flow_id;
         int                 state;
         uint8_t *           hash;
 
         log_info("Allocating flow for %d to %s.", pid, dst);
 
-        ipcp = get_ipcp_entry_by_layer(dst);
+        ipcp = registry_get_ipcp_by_layer(dst);
         if (ipcp == NULL) {
                 log_info("Layer %s unreachable.", dst);
                 return -1;
@@ -1439,7 +1454,7 @@ static int flow_join(pid_t              pid,
                 return -EBADF;
         }
 
-        f = irm_flow_create(pid, ipcp->pid, flow_id, qs);
+        f = reg_flow_create(pid, ipcp->pid, flow_id, qs);
         if (f == NULL) {
                 bmp_release(irmd.flow_ids, flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1447,11 +1462,11 @@ static int flow_join(pid_t              pid,
                 return -ENOMEM;
         }
 
-        list_add(&f->next, &irmd.irm_flows);
+        list_add(&f->next, &irmd.flows);
 
         pthread_rwlock_unlock(&irmd.flows_lock);
 
-        assert(irm_flow_get_state(f) == FLOW_ALLOC_PENDING);
+        assert(reg_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
         hash = malloc(IPCP_HASH_LEN(ipcp));
         if  (hash == NULL)
@@ -1462,7 +1477,7 @@ static int flow_join(pid_t              pid,
 
         if (ipcp_flow_join(ipcp->pid, flow_id, pid, hash,
                                 IPCP_HASH_LEN(ipcp), qs)) {
-                irm_flow_set_state(f, FLOW_NULL);
+                reg_flow_set_state(f, FLOW_NULL);
                 /* sanitizer cleans this */
                 log_info("Flow_join failed.");
                 free(hash);
@@ -1471,7 +1486,7 @@ static int flow_join(pid_t              pid,
 
         free(hash);
 
-        state = irm_flow_wait_state(f, FLOW_ALLOCATED, dl);
+        state = reg_flow_wait_state(f, FLOW_ALLOCATED, dl);
         if (state != FLOW_ALLOCATED) {
                 if (state == -ETIMEDOUT) {
                         log_dbg("Flow allocation timed out");
@@ -1484,7 +1499,7 @@ static int flow_join(pid_t              pid,
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
 
-        assert(irm_flow_get_state(f) == FLOW_ALLOCATED);
+        assert(reg_flow_get_state(f) == FLOW_ALLOCATED);
 
         f_out->flow_id = f->flow_id;
         f_out->n_pid   = f->n_pid;
@@ -1505,18 +1520,18 @@ static int flow_alloc(pid_t              pid,
                       const char *       dst,
                       qosspec_t          qs,
                       struct timespec *  dl,
-                      struct irm_flow *  f_out,
+                      struct reg_flow *  f_out,
                       buffer_t *         data)
 {
-        struct irm_flow *   f;
-        struct ipcp_entry * ipcp;
+        struct reg_flow *   f;
+        struct reg_ipcp * ipcp;
         int                 flow_id;
         int                 state;
         uint8_t *           hash;
 
         log_info("Allocating flow for %d to %s.", pid, dst);
 
-        ipcp = get_ipcp_by_dst_name(dst, pid);
+        ipcp = registry_get_ipcp_by_dst_name(dst, pid);
         if (ipcp == NULL) {
                 log_info("Destination %s unreachable.", dst);
                 return -1;
@@ -1531,7 +1546,7 @@ static int flow_alloc(pid_t              pid,
                 return -EBADF;
         }
 
-        f = irm_flow_create(pid, ipcp->pid, flow_id, qs);
+        f = reg_flow_create(pid, ipcp->pid, flow_id, qs);
         if (f == NULL) {
                 bmp_release(irmd.flow_ids, flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1539,11 +1554,11 @@ static int flow_alloc(pid_t              pid,
                 return -ENOMEM;
         }
 
-        list_add(&f->next, &irmd.irm_flows);
+        list_add(&f->next, &irmd.flows);
 
         pthread_rwlock_unlock(&irmd.flows_lock);
 
-        assert(irm_flow_get_state(f) == FLOW_ALLOC_PENDING);
+        assert(reg_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
         hash = malloc(IPCP_HASH_LEN(ipcp));
         if  (hash == NULL)
@@ -1554,7 +1569,7 @@ static int flow_alloc(pid_t              pid,
 
         if (ipcp_flow_alloc(ipcp->pid, flow_id, pid, hash,
                             IPCP_HASH_LEN(ipcp), qs, *data)) {
-                irm_flow_set_state(f, FLOW_NULL);
+                reg_flow_set_state(f, FLOW_NULL);
                 /* sanitizer cleans this */
                 log_info("Flow_allocation failed.");
                 free(hash);
@@ -1563,7 +1578,7 @@ static int flow_alloc(pid_t              pid,
 
         free(hash);
 
-        state = irm_flow_wait_state(f, FLOW_ALLOCATED, dl);
+        state = reg_flow_wait_state(f, FLOW_ALLOCATED, dl);
         if (state != FLOW_ALLOCATED) {
                 if (state == -ETIMEDOUT) {
                         log_dbg("Flow allocation timed out");
@@ -1576,7 +1591,7 @@ static int flow_alloc(pid_t              pid,
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
 
-        assert(irm_flow_get_state(f) == FLOW_ALLOCATED);
+        assert(reg_flow_get_state(f) == FLOW_ALLOCATED);
 
         f_out->flow_id = f->flow_id;
         f_out->n_pid   = f->n_pid;
@@ -1599,14 +1614,14 @@ static int flow_dealloc(pid_t  pid,
         pid_t n_1_pid = -1;
         int   ret = 0;
 
-        struct irm_flow * f = NULL;
+        struct reg_flow * f = NULL;
 
         log_dbg("Deallocating flow %d for process %d.",
                 flow_id, pid);
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
 
-        f = get_irm_flow(flow_id);
+        f = registry_get_flow(flow_id);
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 log_dbg("Deallocate unknown port %d by %d.", flow_id, pid);
@@ -1624,18 +1639,18 @@ static int flow_dealloc(pid_t  pid,
                 return -EPERM;
         }
 
-        if (irm_flow_get_state(f) == FLOW_DEALLOC_PENDING) {
+        if (reg_flow_get_state(f) == FLOW_DEALLOC_PENDING) {
                 list_del(&f->next);
                 if ((kill(f->n_pid, 0) < 0 && f->n_1_pid == -1) ||
                     (kill(f->n_1_pid, 0) < 0 && f->n_pid == -1))
-                        irm_flow_set_state(f, FLOW_NULL);
-                clear_irm_flow(f);
-                irm_flow_destroy(f);
+                        reg_flow_set_state(f, FLOW_NULL);
+                clear_reg_flow(f);
+                reg_flow_destroy(f);
                 bmp_release(irmd.flow_ids, flow_id);
                 log_info("Completed deallocation of flow_id %d by process %d.",
                          flow_id, pid);
         } else {
-                irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
+                reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
                 log_dbg("Partial deallocation of flow_id %d by process %d.",
                         flow_id, pid);
         }
@@ -1674,77 +1689,76 @@ static pid_t auto_execute(char ** argv)
 }
 
 static int flow_req_arr(pid_t             pid,
-                        struct irm_flow * f_out,
+                        struct reg_flow * f_out,
                         const uint8_t *   hash,
                         time_t            mpl,
                         qosspec_t         qs,
                         buffer_t          data)
 {
-        struct reg_entry *  re;
-        struct prog_entry * a;
-        struct proc_entry * pe;
-        struct irm_flow *   f;
+        struct reg_name * n;
+        struct reg_prog * rpg;
+        struct reg_proc * rpc;
+        struct reg_flow * f;
+        struct reg_ipcp * ipcp;
 
-        struct pid_el *     c_pid;
-        struct ipcp_entry * ipcp;
-        pid_t               h_pid;
-        int                 flow_id;
+        struct pid_el *   c_pid;
+        pid_t             h_pid;
+        int               flow_id;
 
-        struct timespec wt = {IRMD_REQ_ARR_TIMEOUT / 1000,
-                              (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
+        struct timespec   wt = {IRMD_REQ_ARR_TIMEOUT / 1000,
+                                (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
 
         log_dbg("Flow req arrived from IPCP %d for " HASH_FMT ".",
                 pid, HASH_VAL(hash));
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        ipcp = get_ipcp_entry_by_pid(pid);
+        ipcp = registry_get_ipcp_by_pid(pid);
         if (ipcp == NULL) {
                 log_err("IPCP died.");
                 return -EIPCP;
         }
 
-        re = registry_get_entry_by_hash(&irmd.registry, ipcp->dir_hash_algo,
-                                        hash, IPCP_HASH_LEN(ipcp));
-        if (re == NULL) {
+        n = registry_get_name_by_hash(ipcp->dir_hash_algo,
+                                      hash, IPCP_HASH_LEN(ipcp));
+        if (n == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Unknown hash: " HASH_FMT ".", HASH_VAL(hash));
                 return -1;
         }
 
-        log_info("Flow request arrived for %s.", re->name);
+        log_info("Flow request arrived for %s.", n->name);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         /* Give the process a bit of slop time to call accept */
-        if (reg_entry_leave_state(re, REG_NAME_IDLE, &wt) == -1) {
+        if (reg_name_leave_state(n, NAME_IDLE, &wt) == -1) {
                 log_err("No processes for " HASH_FMT ".", HASH_VAL(hash));
                 return -1;
         }
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        switch (reg_entry_get_state(re)) {
-        case REG_NAME_IDLE:
+        switch (reg_name_get_state(n)) {
+        case NAME_IDLE:
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("No processes for " HASH_FMT ".", HASH_VAL(hash));
                 return -1;
-        case REG_NAME_AUTO_ACCEPT:
+        case NAME_AUTO_ACCEPT:
                 c_pid = malloc(sizeof(*c_pid));
                 if (c_pid == NULL) {
                         pthread_rwlock_unlock(&irmd.reg_lock);
                         return -1;
                 }
 
-                reg_entry_set_state(re, REG_NAME_AUTO_EXEC);
-                a = prog_table_get(&irmd.prog_table,
-                                   reg_entry_get_prog(re));
-
-                if (a == NULL || (c_pid->pid = auto_execute(a->argv)) < 0) {
-                        reg_entry_set_state(re, REG_NAME_AUTO_ACCEPT);
+                reg_name_set_state(n, NAME_AUTO_EXEC);
+                rpg = registry_get_prog(reg_name_get_prog(n));
+                if (rpg == NULL
+                    || (c_pid->pid = auto_execute(rpg->argv)) < 0) {
+                        reg_name_set_state(n, NAME_AUTO_ACCEPT);
                         pthread_rwlock_unlock(&irmd.reg_lock);
                         log_err("Could not start program for reg_entry %s.",
-                                re->name);
+                                n->name);
                         free(c_pid);
                         return -1;
                 }
@@ -1753,13 +1767,13 @@ static int flow_req_arr(pid_t             pid,
 
                 pthread_rwlock_unlock(&irmd.reg_lock);
 
-                if (reg_entry_leave_state(re, REG_NAME_AUTO_EXEC, NULL))
+                if (reg_name_leave_state(n, NAME_AUTO_EXEC, NULL))
                         return -1;
 
                 pthread_rwlock_wrlock(&irmd.reg_lock);
                 /* FALLTHRU */
-        case REG_NAME_FLOW_ACCEPT:
-                h_pid = reg_entry_get_pid(re);
+        case NAME_FLOW_ACCEPT:
+                h_pid = reg_name_get_pid(n);
                 if (h_pid == -1) {
                         pthread_rwlock_unlock(&irmd.reg_lock);
                         log_err("Invalid process id returned.");
@@ -1782,7 +1796,7 @@ static int flow_req_arr(pid_t             pid,
                 return -1;
         }
 
-        f = irm_flow_create(h_pid, pid, flow_id, qs);
+        f = reg_flow_create(h_pid, pid, flow_id, qs);
         if (f == NULL) {
                 bmp_release(irmd.flow_ids, flow_id);
                 pthread_rwlock_unlock(&irmd.flows_lock);
@@ -1794,32 +1808,32 @@ static int flow_req_arr(pid_t             pid,
         f->mpl   = mpl;
         f->data  = data;
 
-        list_add(&f->next, &irmd.irm_flows);
+        list_add(&f->next, &irmd.flows);
 
         pthread_rwlock_unlock(&irmd.flows_lock);
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        reg_entry_set_state(re, REG_NAME_FLOW_ARRIVED);
+        reg_name_set_state(n, NAME_FLOW_ARRIVED);
 
-        pe = proc_table_get(&irmd.proc_table, h_pid);
-        if (pe == NULL) {
+        rpc = registry_get_proc(h_pid);
+        if (rpc == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 pthread_rwlock_wrlock(&irmd.flows_lock);
-                clear_irm_flow(f);
+                clear_reg_flow(f);
                 bmp_release(irmd.flow_ids, f->flow_id);
                 list_del(&f->next);
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 log_err("Could not get process table entry for %d.", h_pid);
                 freebuf(f->data);
-                irm_flow_destroy(f);
+                reg_flow_destroy(f);
                 return -1;
         }
 
-        proc_entry_wake(pe, re);
+        reg_proc_wake(rpc, n);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
-        reg_entry_leave_state(re, REG_NAME_FLOW_ARRIVED, NULL);
+        reg_name_leave_state(n, NAME_FLOW_ARRIVED, NULL);
 
         f_out->flow_id = flow_id;
         f_out->n_pid   = h_pid;
@@ -1832,10 +1846,11 @@ static int flow_alloc_reply(int      flow_id,
                             time_t   mpl,
                             buffer_t data)
 {
-        struct irm_flow * f;
+        struct reg_flow * f;
 
         pthread_rwlock_wrlock(&irmd.flows_lock);
-        f = get_irm_flow(flow_id);
+
+        f = registry_get_flow(flow_id);
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 return -1;
@@ -1844,9 +1859,9 @@ static int flow_alloc_reply(int      flow_id,
         f->mpl = mpl;
 
         if (!response)
-                irm_flow_set_state(f, FLOW_ALLOCATED);
+                reg_flow_set_state(f, FLOW_ALLOCATED);
         else
-                irm_flow_set_state(f, FLOW_NULL);
+                reg_flow_set_state(f, FLOW_NULL);
 
         f->data = data;
 
@@ -1887,31 +1902,31 @@ void * irm_sanitize(void * o)
                         free(e);
                 }
 
-                list_for_each_safe(p, h, &irmd.proc_table) {
-                        struct proc_entry * e =
-                                list_entry(p, struct proc_entry, next);
+                list_for_each_safe(p, h, &irmd.procs) {
+                        struct reg_proc * e =
+                                list_entry(p, struct reg_proc, next);
                         if (kill(e->pid, 0) >= 0)
                                 continue;
                         log_dbg("Dead process removed: %d.", e->pid);
                         list_del(&e->next);
-                        proc_entry_destroy(e);
+                        reg_proc_destroy(e);
                 }
 
                 list_for_each_safe(p, h, &irmd.ipcps) {
-                        struct ipcp_entry * e =
-                                list_entry(p, struct ipcp_entry, next);
+                        struct reg_ipcp * e =
+                                list_entry(p, struct reg_ipcp, next);
                         if (kill(e->pid, 0) >= 0)
                                 continue;
                         log_dbg("Dead IPCP removed: %d.", e->pid);
                         list_del(&e->next);
-                        ipcp_entry_destroy(e);
+                        reg_ipcp_destroy(e);
                 }
 
-                list_for_each_safe(p, h, &irmd.registry) {
+                list_for_each_safe(p, h, &irmd.names) {
                         struct list_head * p2;
                         struct list_head * h2;
-                        struct reg_entry * e =
-                                list_entry(p, struct reg_entry, next);
+                        struct reg_name * e =
+                                list_entry(p, struct reg_name, next);
                         list_for_each_safe(p2, h2, &e->reg_pids) {
                                 struct pid_el * a =
                                         list_entry(p2, struct pid_el, next);
@@ -1919,7 +1934,7 @@ void * irm_sanitize(void * o)
                                         continue;
                                 log_dbg("Dead process removed from: %d %s.",
                                         a->pid, e->name);
-                                reg_entry_del_pid_el(e, a);
+                                reg_name_del_pid_el(e, a);
                         }
                 }
 
@@ -1928,18 +1943,18 @@ void * irm_sanitize(void * o)
                 pthread_rwlock_wrlock(&irmd.flows_lock);
                 pthread_cleanup_push(__cleanup_rwlock_unlock, &irmd.flows_lock);
 
-                list_for_each_safe(p, h, &irmd.irm_flows) {
+                list_for_each_safe(p, h, &irmd.flows) {
                         int ipcpi;
                         int flow_id;
-                        struct irm_flow * f =
-                                list_entry(p, struct irm_flow, next);
+                        struct reg_flow * f =
+                                list_entry(p, struct reg_flow, next);
 
-                        if (irm_flow_get_state(f) == FLOW_ALLOC_PENDING
+                        if (reg_flow_get_state(f) == FLOW_ALLOC_PENDING
                             && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
                                 log_dbg("Pending flow_id %d timed out.",
                                          f->flow_id);
                                 f->n_pid = -1;
-                                irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
+                                reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 continue;
                         }
 
@@ -1948,7 +1963,7 @@ void * irm_sanitize(void * o)
                                         "flow %d.",
                                          f->n_pid, f->flow_id);
                                 f->n_pid = -1;
-                                irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
+                                reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 ipcpi   = f->n_1_pid;
                                 flow_id = f->flow_id;
                                 ipcp_flow_dealloc(ipcpi, flow_id, DEALLOC_TIME);
@@ -1963,7 +1978,7 @@ void * irm_sanitize(void * o)
                                 if (set != NULL)
                                         shm_flow_set_destroy(set);
                                 f->n_1_pid = -1;
-                                irm_flow_set_state(f, FLOW_DEALLOC_PENDING);
+                                reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
                         }
                 }
 
@@ -2038,7 +2053,7 @@ static void * mainloop(void * o)
 
         while (true) {
                 irm_msg_t *        ret_msg;
-                struct irm_flow    f;
+                struct reg_flow    f;
                 struct ipcp_config conf;
                 struct timespec *  dl      = NULL;
                 struct timespec    ts      = {0, 0};
@@ -2326,9 +2341,9 @@ static void irm_fini(void)
 
         /* Clear the lists. */
         list_for_each_safe(p, h, &irmd.ipcps) {
-                struct ipcp_entry * e = list_entry(p, struct ipcp_entry, next);
+                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
                 list_del(&e->next);
-                ipcp_entry_destroy(e);
+                reg_ipcp_destroy(e);
         }
 
         list_for_each(p, &irmd.spawned_pids) {
@@ -2343,24 +2358,24 @@ static void irm_fini(void)
                 if (waitpid(e->pid, &status, 0) < 0)
                         log_dbg("Error waiting for %d to exit.", e->pid);
                 list_del(&e->next);
-                registry_del_process(&irmd.registry, e->pid);
+                registry_names_del_proc(e->pid);
                 free(e);
         }
 
-        list_for_each_safe(p, h, &irmd.prog_table) {
-                struct prog_entry * e = list_entry(p, struct prog_entry, next);
+        list_for_each_safe(p, h, &irmd.progs) {
+                struct reg_prog * e = list_entry(p, struct reg_prog, next);
                 list_del(&e->next);
-                prog_entry_destroy(e);
+                reg_prog_destroy(e);
         }
 
-        list_for_each_safe(p, h, &irmd.proc_table) {
-                struct proc_entry * e = list_entry(p, struct proc_entry, next);
+        list_for_each_safe(p, h, &irmd.procs) {
+                struct reg_proc * e = list_entry(p, struct reg_proc, next);
                 list_del(&e->next);
                 e->state = PROC_INIT; /* sanitizer already joined */
-                proc_entry_destroy(e);
+                reg_proc_destroy(e);
         }
 
-        registry_destroy(&irmd.registry);
+        registry_destroy_names();
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -2374,10 +2389,10 @@ static void irm_fini(void)
         if (irmd.flow_ids != NULL)
                 bmp_destroy(irmd.flow_ids);
 
-        list_for_each_safe(p, h, &irmd.irm_flows) {
-                struct irm_flow * f = list_entry(p, struct irm_flow, next);
+        list_for_each_safe(p, h, &irmd.flows) {
+                struct reg_flow * f = list_entry(p, struct reg_flow, next);
                 list_del(&f->next);
-                irm_flow_destroy(f);
+                reg_flow_destroy(f);
         }
 
         pthread_rwlock_unlock(&irmd.flows_lock);
@@ -2450,11 +2465,11 @@ static int irm_init(void)
         pthread_condattr_destroy(&cattr);
 
         list_head_init(&irmd.ipcps);
-        list_head_init(&irmd.proc_table);
-        list_head_init(&irmd.prog_table);
+        list_head_init(&irmd.procs);
+        list_head_init(&irmd.progs);
         list_head_init(&irmd.spawned_pids);
-        list_head_init(&irmd.registry);
-        list_head_init(&irmd.irm_flows);
+        list_head_init(&irmd.names);
+        list_head_init(&irmd.flows);
         list_head_init(&irmd.cmds);
 
         irmd.flow_ids = bmp_create(SYS_MAX_FLOWS, 0);

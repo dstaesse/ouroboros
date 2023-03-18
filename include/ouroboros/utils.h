@@ -38,7 +38,6 @@ typedef struct {
         size_t    len;
 } buffer_t;
 
-
 /*
  * Returns the number of characters a uint would
  * need when represented as a string
@@ -46,7 +45,7 @@ typedef struct {
 int n_digits(unsigned i);
 
 /* gets the application name */
-char * path_strip(char * src);
+char * path_strip(const char * src);
 
 /* destroy a ** */
 #define freepp(type, ptr, len)                          \

@@ -35,14 +35,14 @@ int n_digits(unsigned i)
     return n;
 }
 
-char * path_strip(char * src)
+char * path_strip(const char * src)
 {
-        char * dst = NULL;
+        char * dst;
 
         if (src == NULL)
                 return NULL;
 
-        dst = src + strlen(src);
+        dst = (char *) src + strlen(src);
 
         while (dst > src && *dst != '/')
                 --dst;

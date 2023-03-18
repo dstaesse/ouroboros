@@ -603,7 +603,7 @@ static int toml_prog(char *       prog,
                      const char * name)
 {
         uint16_t flags = 0;
-        int      argc  = 0;
+        int      argc;
         char **  argv;
         int      ret;
 

@@ -52,10 +52,10 @@ int name_reg(const char * name,
 int bind_process(pid_t        pid,
                  const char * name);
 
-int bind_program(char *       prog,
-                 const char * name,
-                 uint16_t     flags,
-                 int          argc,
-                 char **      argv);
+int bind_program(const char *  prog,
+                 const char *  name,
+                 uint16_t      flags,
+                 int           argc,
+                 char **       argv);
 
 #endif /* OUROBOROS_IRMD_H*/

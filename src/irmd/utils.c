@@ -25,12 +25,27 @@
 #include <stdlib.h>
 #include <string.h>
 
+size_t argvlen(char ** argv)
+{
+        size_t argc   = 0;
+
+        if (argv == NULL)
+                return 0;
+
+        while (*argv++ != NULL)
+                argc++;
+
+        return argc;
+}
+
 void argvfree(char ** argv)
 {
-        char ** argv_dup = argv;
+        char ** argv_dup;
+
         if (argv == NULL)
                 return;
 
+        argv_dup = argv;
         while (*argv_dup != NULL)
                 free(*(argv_dup++));
 

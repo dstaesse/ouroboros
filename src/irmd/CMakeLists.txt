@@ -62,14 +62,15 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
 
 set(SOURCE_FILES
   # Add source files here
-  proc_table.c
-  prog_table.c
   ipcp.c
   configfile.c
-  irm_flow.c
   main.c
-  registry.c
   utils.c
+  reg/flow.c
+  reg/ipcp.c
+  reg/proc.c
+  reg/prog.c
+  reg/name.c
   )
 
 add_executable (irmd ${SOURCE_FILES})
