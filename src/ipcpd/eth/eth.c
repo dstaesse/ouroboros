@@ -1829,9 +1829,6 @@ int main(int    argc,
 {
         int i;
 
-        if (ipcp_init(argc, argv, &eth_ops, THIS_TYPE) < 0)
-                goto fail_init;
-
         if (eth_data_init() < 0) {
 #if defined(BUILD_ETH_DIX)
                 log_err("Failed to init eth-llc data.");
@@ -1840,6 +1837,9 @@ int main(int    argc,
 #endif
                 goto fail_data_init;
         }
+
+        if (ipcp_init(argc, argv, &eth_ops, THIS_TYPE) < 0)
+                goto fail_init;
 
         if (ipcp_start() < 0) {
                 log_err("Failed to start IPCP.");
@@ -1878,9 +1878,9 @@ int main(int    argc,
         exit(EXIT_SUCCESS);
 
  fail_start:
-        eth_data_fini();
- fail_data_init:
         ipcp_fini();
  fail_init:
+        eth_data_fini();
+ fail_data_init:
         exit(EXIT_FAILURE);
 }

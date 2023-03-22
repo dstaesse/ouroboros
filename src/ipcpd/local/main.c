@@ -84,6 +84,7 @@ static int local_data_init(void)
 
         if (pthread_rwlock_init(&local_data.lock, NULL) < 0)
                 goto fail_rwlock_init;
+
         return 0;
 
  fail_rwlock_init:
@@ -97,13 +98,13 @@ static int local_data_init(void)
 }
 
 static void local_data_fini(void){
-        shim_data_destroy(local_data.shim_data);
-        fset_destroy(local_data.flows);
-        fqueue_destroy(local_data.fq);
         pthread_rwlock_destroy(&local_data.lock);
+        shim_data_destroy(local_data.shim_data);
+        fqueue_destroy(local_data.fq);
+        fset_destroy(local_data.flows);
 }
 
-static void * ipcp_local_packet_loop(void * o)
+static void * local_ipcp_packet_loop(void * o)
 {
         (void) o;
 
@@ -139,7 +140,7 @@ static void * ipcp_local_packet_loop(void * o)
         return (void *) 0;
 }
 
-static int ipcp_local_bootstrap(const struct ipcp_config * conf)
+static int local_ipcp_bootstrap(const struct ipcp_config * conf)
 {
         assert(conf);
         assert(conf->type == THIS_TYPE);
@@ -150,7 +151,7 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
         ipcp_set_state(IPCP_OPERATIONAL);
 
         if (pthread_create(&local_data.packet_loop, NULL,
-                           ipcp_local_packet_loop, NULL)) {
+                           local_ipcp_packet_loop, NULL)) {
                 ipcp_set_state(IPCP_INIT);
                 return -1;
         }
@@ -160,7 +161,7 @@ static int ipcp_local_bootstrap(const struct ipcp_config * conf)
         return 0;
 }
 
-static int ipcp_local_reg(const uint8_t * hash)
+static int local_ipcp_reg(const uint8_t * hash)
 {
         if (shim_data_reg_add_entry(local_data.shim_data, hash)) {
                 log_dbg("Failed to add " HASH_FMT " to local registry.",
@@ -173,7 +174,7 @@ static int ipcp_local_reg(const uint8_t * hash)
         return 0;
 }
 
-static int ipcp_local_unreg(const uint8_t * hash)
+static int local_ipcp_unreg(const uint8_t * hash)
 {
         shim_data_reg_del_entry(local_data.shim_data, hash);
 
@@ -182,7 +183,7 @@ static int ipcp_local_unreg(const uint8_t * hash)
         return 0;
 }
 
-static int ipcp_local_query(const uint8_t * hash)
+static int local_ipcp_query(const uint8_t * hash)
 {
         int ret;
 
@@ -191,7 +192,7 @@ static int ipcp_local_query(const uint8_t * hash)
         return ret;
 }
 
-static int ipcp_local_flow_alloc(int             fd,
+static int local_ipcp_flow_alloc(int             fd,
                                  const uint8_t * dst,
                                  qosspec_t       qs,
                                  const void *    data,
@@ -251,7 +252,7 @@ static int ipcp_local_flow_alloc(int             fd,
         return 0;
 }
 
-static int ipcp_local_flow_alloc_resp(int          fd,
+static int local_ipcp_flow_alloc_resp(int          fd,
                                       int          response,
                                       const void * data,
                                       size_t       len)
@@ -310,7 +311,7 @@ static int ipcp_local_flow_alloc_resp(int          fd,
         return 0;
 }
 
-static int ipcp_local_flow_dealloc(int fd)
+static int local_ipcp_flow_dealloc(int fd)
 {
         assert(!(fd < 0));
 
@@ -332,29 +333,29 @@ static int ipcp_local_flow_dealloc(int fd)
 }
 
 static struct ipcp_ops local_ops = {
-        .ipcp_bootstrap       = ipcp_local_bootstrap,
+        .ipcp_bootstrap       = local_ipcp_bootstrap,
         .ipcp_enroll          = NULL,
         .ipcp_connect         = NULL,
         .ipcp_disconnect      = NULL,
-        .ipcp_reg             = ipcp_local_reg,
-        .ipcp_unreg           = ipcp_local_unreg,
-        .ipcp_query           = ipcp_local_query,
-        .ipcp_flow_alloc      = ipcp_local_flow_alloc,
+        .ipcp_reg             = local_ipcp_reg,
+        .ipcp_unreg           = local_ipcp_unreg,
+        .ipcp_query           = local_ipcp_query,
+        .ipcp_flow_alloc      = local_ipcp_flow_alloc,
         .ipcp_flow_join       = NULL,
-        .ipcp_flow_alloc_resp = ipcp_local_flow_alloc_resp,
-        .ipcp_flow_dealloc    = ipcp_local_flow_dealloc
+        .ipcp_flow_alloc_resp = local_ipcp_flow_alloc_resp,
+        .ipcp_flow_dealloc    = local_ipcp_flow_dealloc
 };
 
 int main(int    argc,
          char * argv[])
 {
-        if (ipcp_init(argc, argv, &local_ops, THIS_TYPE) < 0)
-                goto fail_init;
-
         if (local_data_init() < 0) {
                 log_err("Failed to init local data.");
                 goto fail_data_init;
         }
+
+        if (ipcp_init(argc, argv, &local_ops, THIS_TYPE) < 0)
+                goto fail_init;
 
         if (ipcp_start() < 0) {
                 log_err("Failed to start IPCP.");
@@ -377,9 +378,9 @@ int main(int    argc,
         exit(EXIT_SUCCESS);
 
  fail_start:
-        local_data_fini();
- fail_data_init:
         ipcp_fini();
  fail_init:
+        local_data_fini();
+ fail_data_init:
         exit(EXIT_FAILURE);
 }

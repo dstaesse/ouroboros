@@ -199,7 +199,7 @@ static void udp_data_fini(void)
         pthread_mutex_destroy(&udp_data.mgmt_lock);
 }
 
-static int ipcp_udp_port_alloc(const struct sockaddr_in * r_saddr,
+static int udp_ipcp_port_alloc(const struct sockaddr_in * r_saddr,
                                uint32_t                   s_eid,
                                const uint8_t *            dst,
                                qosspec_t                  qs,
@@ -248,7 +248,7 @@ static int ipcp_udp_port_alloc(const struct sockaddr_in * r_saddr,
         return 0;
 }
 
-static int ipcp_udp_port_alloc_resp(const struct sockaddr_in * r_saddr,
+static int udp_ipcp_port_alloc_resp(const struct sockaddr_in * r_saddr,
                                     uint32_t                   s_eid,
                                     uint32_t                   d_eid,
                                     int8_t                     response,
@@ -282,7 +282,7 @@ static int ipcp_udp_port_alloc_resp(const struct sockaddr_in * r_saddr,
         return 0;
 }
 
-static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
+static int udp_ipcp_port_req(struct sockaddr_in * c_saddr,
                              int                  d_eid,
                              const uint8_t *      dst,
                              qosspec_t            qs,
@@ -336,7 +336,7 @@ static int ipcp_udp_port_req(struct sockaddr_in * c_saddr,
         return 0;
 }
 
-static int ipcp_udp_port_alloc_reply(const struct sockaddr_in * saddr,
+static int udp_ipcp_port_alloc_reply(const struct sockaddr_in * saddr,
                                      uint32_t                   s_eid,
                                      uint32_t                   d_eid,
                                      int8_t                     response,
@@ -370,7 +370,7 @@ static int ipcp_udp_port_alloc_reply(const struct sockaddr_in * saddr,
         return 0;
 }
 
-static int ipcp_udp_mgmt_frame(const uint8_t *    buf,
+static int udp_ipcp_mgmt_frame(const uint8_t *    buf,
                                size_t             len,
                                struct sockaddr_in c_saddr)
 {
@@ -396,14 +396,14 @@ static int ipcp_udp_mgmt_frame(const uint8_t *    buf,
                 qs.cypher_s     = ntoh16(msg->cypher_s);
                 qs.timeout      = ntoh32(msg->timeout);
 
-                return ipcp_udp_port_req(&c_saddr, ntoh32(msg->s_eid),
+                return udp_ipcp_port_req(&c_saddr, ntoh32(msg->s_eid),
                                          (uint8_t *) (msg + 1), qs,
                                          buf + msg_len,
                                          len - msg_len);
         case FLOW_REPLY:
                 assert(len >= sizeof(*msg));
 
-                return ipcp_udp_port_alloc_reply(&c_saddr,
+                return udp_ipcp_port_alloc_reply(&c_saddr,
                                                  ntoh32(msg->s_eid),
                                                  ntoh32(msg->d_eid),
                                                  msg->response,
@@ -415,7 +415,7 @@ static int ipcp_udp_mgmt_frame(const uint8_t *    buf,
         }
 }
 
-static void * ipcp_udp_mgmt_handler(void * o)
+static void * udp_ipcp_mgmt_handler(void * o)
 {
         (void) o;
 
@@ -437,7 +437,7 @@ static void * ipcp_udp_mgmt_handler(void * o)
 
                 pthread_mutex_unlock(&udp_data.mgmt_lock);
 
-                ipcp_udp_mgmt_frame(frame->buf, frame->len, frame->r_saddr);
+                udp_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_saddr);
 
                 free(frame);
         }
@@ -447,7 +447,7 @@ static void * ipcp_udp_mgmt_handler(void * o)
         return (void *) 0;
 }
 
-static void * ipcp_udp_packet_reader(void * o)
+static void * udp_ipcp_packet_reader(void * o)
 {
         uint8_t    buf[IPCP_UDP_MAX_PACKET_SIZE];
         uint8_t *  data;
@@ -517,7 +517,7 @@ static void * ipcp_udp_packet_reader(void * o)
                         ipcp_sdb_release(sdb);
         }
 
-        return 0;
+        return (void *) 0;
 }
 
 static void cleanup_fqueue(void * fq)
@@ -530,7 +530,7 @@ static void cleanup_sdb(void * sdb)
         ipcp_sdb_release((struct shm_du_buff *) sdb);
 }
 
-static void * ipcp_udp_packet_writer(void * o)
+static void * udp_ipcp_packet_writer(void * o)
 {
         fqueue_t * fq;
 
@@ -608,11 +608,10 @@ static const char * inet4_ntop(const void * addr,
         return inet_ntop(AF_INET, addr, buf, INET_ADDRSTRLEN);
 }
 
-static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
+static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
 {
         char ipstr[INET_ADDRSTRLEN];
         char dnsstr[INET_ADDRSTRLEN];
-        char portstr[128]; /* port is max 64535 = 5 chars */
         int  i = 1;
 
         assert(conf);
@@ -661,14 +660,14 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
         ipcp_set_state(IPCP_OPERATIONAL);
 
         if (pthread_create(&udp_data.mgmt_handler, NULL,
-                           ipcp_udp_mgmt_handler, NULL)) {
+                           udp_ipcp_mgmt_handler, NULL)) {
                 ipcp_set_state(IPCP_INIT);
                 goto fail_bind;
         }
 
         for (i = 0; i < IPCP_UDP_RD_THR; ++i) {
                 if (pthread_create(&udp_data.packet_reader[i], NULL,
-                                   ipcp_udp_packet_reader, NULL)) {
+                                   udp_ipcp_packet_reader, NULL)) {
                         ipcp_set_state(IPCP_INIT);
                         goto fail_packet_reader;
                 }
@@ -676,13 +675,11 @@ static int ipcp_udp_bootstrap(const struct ipcp_config * conf)
 
         for (i = 0; i < IPCP_UDP_WR_THR; ++i) {
                 if (pthread_create(&udp_data.packet_writer[i], NULL,
-                        ipcp_udp_packet_writer, NULL)) {
+                        udp_ipcp_packet_writer, NULL)) {
                         ipcp_set_state(IPCP_INIT);
                         goto fail_packet_writer;
                 }
         }
-
-        sprintf(portstr, "%d", conf->udp.port);
 
         log_dbg("Bootstrapped IPCP over UDP with pid %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
@@ -833,7 +830,7 @@ static uint32_t ddns_resolve(char *   name,
 }
 #endif
 
-static int ipcp_udp_reg(const uint8_t * hash)
+static int udp_ipcp_reg(const uint8_t * hash)
 {
 #ifdef HAVE_DDNS
         char     ipstr[INET_ADDRSTRLEN];
@@ -894,7 +891,7 @@ static int ipcp_udp_reg(const uint8_t * hash)
         return 0;
 }
 
-static int ipcp_udp_unreg(const uint8_t * hash)
+static int udp_ipcp_unreg(const uint8_t * hash)
 {
 #ifdef HAVE_DDNS
         char     dnsstr[INET_ADDRSTRLEN];
@@ -938,7 +935,7 @@ static int ipcp_udp_unreg(const uint8_t * hash)
         return 0;
 }
 
-static int ipcp_udp_query(const uint8_t * hash)
+static int udp_ipcp_query(const uint8_t * hash)
 {
         uint32_t         ip_addr  = 0;
         char *           hashstr;
@@ -994,7 +991,7 @@ static int ipcp_udp_query(const uint8_t * hash)
         return 0;
 }
 
-static int ipcp_udp_flow_alloc(int             fd,
+static int udp_ipcp_flow_alloc(int             fd,
                                const uint8_t * dst,
                                qosspec_t       qs,
                                const void *    data,
@@ -1028,7 +1025,7 @@ static int ipcp_udp_flow_alloc(int             fd,
         r_saddr.sin_addr.s_addr = ip_addr;
         r_saddr.sin_port        = udp_data.s_saddr.sin_port;
 
-        if (ipcp_udp_port_alloc(&r_saddr, fd, dst, qs, data, len) < 0) {
+        if (udp_ipcp_port_alloc(&r_saddr, fd, dst, qs, data, len) < 0) {
                 log_err("Could not allocate port.");
                 return -1;
         }
@@ -1047,7 +1044,7 @@ static int ipcp_udp_flow_alloc(int             fd,
         return 0;
 }
 
-static int ipcp_udp_flow_alloc_resp(int          fd,
+static int udp_ipcp_flow_alloc_resp(int          fd,
                                     int          resp,
                                     const void * data,
                                     size_t       len)
@@ -1088,7 +1085,7 @@ static int ipcp_udp_flow_alloc_resp(int          fd,
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        if (ipcp_udp_port_alloc_resp(&saddr, d_eid, fd, resp, data, len) < 0) {
+        if (udp_ipcp_port_alloc_resp(&saddr, d_eid, fd, resp, data, len) < 0) {
                 fset_del(udp_data.np1_flows, fd);
                 log_err("Failed to respond to flow request.");
                 return -1;
@@ -1102,7 +1099,7 @@ static int ipcp_udp_flow_alloc_resp(int          fd,
         return 0;
 }
 
-static int ipcp_udp_flow_dealloc(int fd)
+static int udp_ipcp_flow_dealloc(int fd)
 {
         ipcp_flow_fini(fd);
 
@@ -1123,17 +1120,17 @@ static int ipcp_udp_flow_dealloc(int fd)
 }
 
 static struct ipcp_ops udp_ops = {
-        .ipcp_bootstrap       = ipcp_udp_bootstrap,
+        .ipcp_bootstrap       = udp_ipcp_bootstrap,
         .ipcp_enroll          = NULL,
         .ipcp_connect         = NULL,
         .ipcp_disconnect      = NULL,
-        .ipcp_reg             = ipcp_udp_reg,
-        .ipcp_unreg           = ipcp_udp_unreg,
-        .ipcp_query           = ipcp_udp_query,
-        .ipcp_flow_alloc      = ipcp_udp_flow_alloc,
+        .ipcp_reg             = udp_ipcp_reg,
+        .ipcp_unreg           = udp_ipcp_unreg,
+        .ipcp_query           = udp_ipcp_query,
+        .ipcp_flow_alloc      = udp_ipcp_flow_alloc,
         .ipcp_flow_join       = NULL,
-        .ipcp_flow_alloc_resp = ipcp_udp_flow_alloc_resp,
-        .ipcp_flow_dealloc    = ipcp_udp_flow_dealloc
+        .ipcp_flow_alloc_resp = udp_ipcp_flow_alloc_resp,
+        .ipcp_flow_dealloc    = udp_ipcp_flow_dealloc
 };
 
 int main(int    argc,
@@ -1141,13 +1138,14 @@ int main(int    argc,
 {
         int i;
 
-        if (ipcp_init(argc, argv, &udp_ops, THIS_TYPE) < 0)
-                goto fail_init;
 
         if (udp_data_init() < 0) {
                 log_err("Failed to init udp data.");
                 goto fail_data_init;
         }
+
+        if (ipcp_init(argc, argv, &udp_ops, THIS_TYPE) < 0)
+                goto fail_init;
 
         if (ipcp_start() < 0) {
                 log_err("Failed to start IPCP.");
@@ -1157,17 +1155,18 @@ int main(int    argc,
         ipcp_sigwait();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                for (i = 0; i < IPCP_UDP_RD_THR; ++i)
-                        pthread_cancel(udp_data.packet_reader[i]);
                 for (i = 0; i < IPCP_UDP_WR_THR; ++i)
                         pthread_cancel(udp_data.packet_writer[i]);
+                for (i = 0; i < IPCP_UDP_RD_THR; ++i)
+                        pthread_cancel(udp_data.packet_reader[i]);
                 pthread_cancel(udp_data.mgmt_handler);
 
-                for (i = 0; i < IPCP_UDP_RD_THR; ++i)
-                        pthread_join(udp_data.packet_reader[i], NULL);
                 for (i = 0; i < IPCP_UDP_WR_THR; ++i)
                         pthread_join(udp_data.packet_writer[i], NULL);
+                for (i = 0; i < IPCP_UDP_RD_THR; ++i)
+                        pthread_join(udp_data.packet_reader[i], NULL);
                 pthread_join(udp_data.mgmt_handler, NULL);
+                close(udp_data.s_fd);
         }
 
         ipcp_stop();
@@ -1179,9 +1178,9 @@ int main(int    argc,
         exit(EXIT_SUCCESS);
 
  fail_start:
-        udp_data_fini();
- fail_data_init:
         ipcp_fini();
  fail_init:
+        udp_data_fini();
+ fail_data_init:
         exit(EXIT_FAILURE);
 }
