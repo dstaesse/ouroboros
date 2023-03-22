@@ -164,6 +164,7 @@ static int broadcast_ipcp_bootstrap(const struct ipcp_config * conf)
 {
         assert(conf);
         assert(conf->type == THIS_TYPE);
+        ((struct ipcp_config *) conf)->layer_info.dir_hash_algo = HASH_SHA3_256;
 
         enroll_bootstrap(conf);
 
@@ -244,7 +245,6 @@ int broadcast_ipcp_dealloc(int fd)
 
         return 0;
 }
-
 
 static struct ipcp_ops broadcast_ops = {
         .ipcp_bootstrap       = broadcast_ipcp_bootstrap,

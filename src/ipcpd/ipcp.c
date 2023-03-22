@@ -206,10 +206,9 @@ static struct rib_ops r_ops = {
         .getattr = ipcp_rib_getattr
 };
 
-__attribute__((no_sanitize_address))
 static void * acceptloop(void * o)
 {
-        int            csockfd;
+        int csockfd;
 
         (void) o;
 
@@ -286,8 +285,8 @@ static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
                 ret_msg->layer_info = layer_info_s_to_msg(&conf.layer_info);
 }
 
-static void handle_enroll(const char *       dst,
-                          ipcp_msg_t *       ret_msg)
+static void handle_enroll(const char * dst,
+                          ipcp_msg_t * ret_msg)
 {
         struct layer_info info;
 
