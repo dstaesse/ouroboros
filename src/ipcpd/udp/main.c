@@ -140,12 +140,18 @@ struct {
 
 static int udp_data_init(void)
 {
-        int i;
+        int                i;
+        pthread_condattr_t cattr;
 
         if (pthread_rwlock_init(&udp_data.flows_lock, NULL))
                 goto fail_rwlock_init;
 
-        if (pthread_cond_init(&udp_data.mgmt_cond, NULL))
+        if (pthread_condattr_init(&cattr))
+                goto fail_condattr;
+#ifndef __APPLE__
+        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
+#endif
+        if (pthread_cond_init(&udp_data.mgmt_cond, &cattr))
                 goto fail_mgmt_cond;
 
         if (pthread_mutex_init(&udp_data.mgmt_lock, NULL))
@@ -162,9 +168,12 @@ static int udp_data_init(void)
         if (udp_data.shim_data == NULL)
                 goto fail_data;
 
+        pthread_condattr_destroy(&cattr);
+
         list_head_init(&udp_data.mgmt_frames);
 
         return 0;
+
  fail_data:
         fset_destroy(udp_data.np1_flows);
  fail_fset:
@@ -172,6 +181,8 @@ static int udp_data_init(void)
  fail_mgmt_lock:
         pthread_cond_destroy(&udp_data.mgmt_cond);
  fail_mgmt_cond:
+        pthread_condattr_destroy(&cattr);
+ fail_condattr:
         pthread_rwlock_destroy(&udp_data.flows_lock);
  fail_rwlock_init:
         return -1;
