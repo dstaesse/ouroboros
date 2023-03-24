@@ -20,6 +20,7 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+
 #define IPCP_UDP_EXEC           "@IPCP_UDP_TARGET@"
 #define IPCP_ETH_LLC_EXEC       "@IPCP_ETH_LLC_TARGET@"
 #define IPCP_ETH_DIX_EXEC       "@IPCP_ETH_DIX_TARGET@"
@@ -28,6 +29,7 @@
 #define IPCP_LOCAL_EXEC         "@IPCP_LOCAL_TARGET@"
 
 #define INSTALL_PREFIX          "@CMAKE_INSTALL_PREFIX@"
+#define INSTALL_SBINDIR         "@CMAKE_INSTALL_SBINDIR@"
 
 #define PTHREAD_COND_CLOCK      @PTHREAD_COND_CLOCK@
 
@@ -47,15 +49,15 @@
 #define IRMD_MIN_THREADS        @IRMD_MIN_THREADS@
 #define IRMD_ADD_THREADS        @IRMD_ADD_THREADS@
 
-#define OUROBOROS_CONFIG_DIR   "@OUROBOROS_CONFIG_DIR@"
-#define OUROBOROS_CONFIG_FILE  "@OUROBOROS_CONFIG_FILE@"
-
 #cmakedefine HAVE_FUSE
 #ifdef HAVE_FUSE
 #define FUSE_PREFIX "@FUSE_PREFIX@"
 #endif
 
 #cmakedefine HAVE_TOML
-#cmakedefine HAVE_CONFINI
-#cmakedefine OUROBOROS_CONFIG_INI
+#ifdef HAVE_TOML
+#define OUROBOROS_CONFIG_DIR   "@OUROBOROS_CONFIG_DIR@"
+#define OUROBOROS_CONFIG_FILE  "@OUROBOROS_CONFIG_FILE@"
+#endif
+
 #cmakedefine HAVE_LIBGCRYPT

@@ -125,9 +125,8 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
 pid_t ipcp_create(const char *   name,
                   enum ipcp_type ipcp_type)
 {
-        pid_t  pid       = -1;
-        char * ipcp_dir  = "/sbin/";
-        char * exec_name = NULL;
+        pid_t  pid;
+        char * exec_name;
         char   irmd_pid[10];
         char   full_name[256];
         char * argv[5];
@@ -162,8 +161,7 @@ pid_t ipcp_create(const char *   name,
 
         sprintf(irmd_pid, "%u", getpid());
 
-        strcpy(full_name, INSTALL_PREFIX);
-        strcat(full_name, ipcp_dir);
+        strcpy(full_name, INSTALL_PREFIX"/"INSTALL_SBINDIR"/");
         strcat(full_name, exec_name);
 
         /* log_file to be placed at the end */
