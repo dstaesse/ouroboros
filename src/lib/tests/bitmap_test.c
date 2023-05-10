@@ -27,7 +27,8 @@
 
 #define BITMAP_SIZE 200
 
-int bitmap_test(int argc, char ** argv)
+int bitmap_test(int     argc,
+                char ** argv)
 {
         struct bmp * bmp;
         ssize_t bits = BITMAP_SIZE;
@@ -60,27 +61,23 @@ int bitmap_test(int argc, char ** argv)
                 if (!bmp_is_id_valid(bmp, id)) {
                         if (i < BITMAP_SIZE + offset) {
                                 printf("Failed valid ID %d (%zd).\n", i, id);
-                                bmp_destroy(bmp);
-                                return -1;
+                                goto fail;
                         }
                         if (id >= offset && id < bits + offset) {
                                 printf("Valid ID %zd returned invalid.\n", id);
-                                bmp_destroy(bmp);
-                                return -1;
+                                goto fail;
                         }
                         continue;
                 }
 
                 if (!bmp_is_id_used(bmp, id)) {
                         printf("ID not marked in use.\n");
-                        bmp_destroy(bmp);
-                        return -1;
+                        goto fail;
                 }
 
                 if (id != i) {
                         printf("Wrong ID returned.\n");
-                        bmp_destroy(bmp);
-                        return -1;
+                        goto fail;
                 }
         }
 
@@ -89,20 +86,24 @@ int bitmap_test(int argc, char ** argv)
 
                 if (bmp_release(bmp, r)) {
                         printf("Failed to release ID.\n");
-                        return -1;
+                        goto fail;
                 }
 
                 id = bmp_allocate(bmp);
                 if (!bmp_is_id_valid(bmp, id))
                         continue;
+
                 if (id != r) {
                         printf("Wrong prev ID returned.\n");
-                        bmp_destroy(bmp);
-                        return -1;
+                        goto fail;
                 }
         }
 
         bmp_destroy(bmp);
 
         return 0;
+
+ fail:
+        bmp_destroy(bmp);
+        return -1;
 }
