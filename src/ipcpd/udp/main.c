@@ -712,7 +712,7 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
 /* NOTE: Disgusted with this crap */
 static int ddns_send(char * cmd)
 {
-        pid_t pid     = -1;
+        pid_t pid;
         int   wstatus;
         int   pipe_fd[2];
         char * argv[] = {NSUPDATE_EXEC, 0};
@@ -726,6 +726,8 @@ static int ddns_send(char * cmd)
         pid = fork();
         if (pid == -1) {
                 log_err("Failed to fork.");
+                close(pipe_fd[0]);
+                close(pipe_fd[1]);
                 return -1;
         }
 
@@ -733,6 +735,8 @@ static int ddns_send(char * cmd)
                 close(pipe_fd[1]);
                 dup2(pipe_fd[0], 0);
                 execve(argv[0], &argv[0], envp);
+                log_err("Failed to execute: %s", strerror(errno));
+                exit(1);
         }
 
         close(pipe_fd[0]);
@@ -779,7 +783,9 @@ static uint32_t ddns_resolve(char *   name,
         pid = fork();
         if (pid == -1) {
                 log_err("Failed to fork.");
-                return 0;
+                close(pipe_fd[0]);
+                close(pipe_fd[1]);
+                return -1;
         }
 
         if (pid == 0) {
@@ -789,6 +795,8 @@ static uint32_t ddns_resolve(char *   name,
                 close(pipe_fd[0]);
                 dup2(pipe_fd[1], 1);
                 execve(argv[0], &argv[0], envp);
+                log_err("Failed to execute: %s", strerror(errno));
+                exit(1);
         }
 
         close(pipe_fd[1]);
