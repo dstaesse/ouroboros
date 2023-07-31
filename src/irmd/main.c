@@ -939,6 +939,38 @@ static int unbind_process(pid_t        pid,
         return 0;
 }
 
+static int get_ipcp_info(ipcp_info_msg_t ** msg,
+                         struct reg_ipcp *  ipcp)
+{
+        *msg = malloc(sizeof(**msg));
+        if (*msg == NULL)
+                goto fail;
+
+        ipcp_info_msg__init(*msg);
+
+        (*msg)->name = strdup(ipcp->name);
+        if ((*msg)->name == NULL)
+                goto fail_name;
+
+        (*msg)->layer = strdup(
+                ipcp->layer != NULL ? ipcp->layer : "Not enrolled");
+        if ((*msg)->layer == NULL)
+                goto fail_layer;
+
+        (*msg)->pid  = ipcp->pid;
+        (*msg)->type = ipcp->type;
+
+        return 0;
+
+ fail_layer:
+        free((*msg)->name);
+ fail_name:
+        free(*msg);
+        *msg = NULL;
+ fail:
+        return -1;
+}
+
 static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
                           size_t *            n_ipcps)
 {
@@ -962,25 +994,10 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
 
         list_for_each(p, &irmd.ipcps) {
                 struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
-                (*ipcps)[i] = malloc(sizeof(***ipcps));
-                if ((*ipcps)[i] == NULL) {
-                        --i;
+                if (get_ipcp_info(&((*ipcps)[i]), e) < 0)
                         goto fail;
-                }
-
-                ipcp_info_msg__init((*ipcps)[i]);
-                (*ipcps)[i]->name = strdup(e->name);
-                if ((*ipcps)[i]->name == NULL)
-                        goto fail;
-
-                (*ipcps)[i]->layer = strdup(
-                        e->layer != NULL ? e->layer : "Not enrolled");
-                if ((*ipcps)[i]->layer == NULL)
-                        goto fail;
-
-                (*ipcps)[i]->pid    = e->pid;
-                (*ipcps)[i++]->type = e->type;
-       }
+                ++i;
+        }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -988,11 +1005,9 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
 
  fail:
         pthread_rwlock_unlock(&irmd.reg_lock);
-        while (i >= 0) {
-                free((*ipcps)[i]->layer);
-                free((*ipcps)[i]->name);
-                free(*ipcps[i--]);
-        }
+        while (i > 0)
+                ipcp_info_msg__free_unpacked((*ipcps)[--i], NULL);
+
         free(*ipcps);
         *n_ipcps = 0;
         return -ENOMEM;
@@ -1080,6 +1095,30 @@ static int name_destroy(const char * name)
         return 0;
 }
 
+static int get_name_info(name_info_msg_t ** msg,
+                         struct reg_name *  n)
+{
+        *msg = malloc(sizeof(**msg));
+        if (*msg == NULL)
+                goto fail;
+
+        name_info_msg__init(*msg);
+
+        (*msg)->name = strdup(n->name);
+        if ((*msg)->name == NULL)
+                goto fail_name;
+
+        (*msg)->pol_lb = n->pol_lb;
+
+        return 0;
+
+ fail_name:
+        free(*msg);
+        *msg = NULL;
+ fail:
+        return -1;
+}
+
 static ssize_t list_names(name_info_msg_t *** names,
                           size_t *            n_names)
 {
@@ -1102,21 +1141,11 @@ static ssize_t list_names(name_info_msg_t *** names,
         }
 
         list_for_each(p, &irmd.names) {
-                struct reg_name * e = list_entry(p, struct reg_name, next);
-
-                (*names)[i] = malloc(sizeof(***names));
-                if ((*names)[i] == NULL) {
-                        --i;
+                struct reg_name * n = list_entry(p, struct reg_name, next);
+                if (get_name_info(&((*names)[i]), n) < 0)
                         goto fail;
-                }
-
-                name_info_msg__init((*names)[i]);
-                (*names)[i]->name = strdup(e->name);
-                if ((*names)[i]->name == NULL)
-                        goto fail;
-
-                (*names)[i++]->pol_lb = e->pol_lb;
-       }
+                ++i;
+        }
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -1124,10 +1153,9 @@ static ssize_t list_names(name_info_msg_t *** names,
 
  fail:
         pthread_rwlock_unlock(&irmd.reg_lock);
-        while (i >= 0) {
-                free((*names)[i]->name);
-                free(*names[i--]);
-        }
+        while (i > 0)
+                name_info_msg__free_unpacked((*names)[--i], NULL);
+
         free(*names);
         *n_names = 0;
         return -ENOMEM;
