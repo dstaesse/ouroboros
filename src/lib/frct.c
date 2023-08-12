@@ -789,8 +789,8 @@ static void rtt_estimator(struct frcti * frcti,
 #ifdef PROC_FLOW_STATS
         frcti->n_rtt++;
 #endif
-        frcti->srtt     = MAX(1000U, srtt);
-        frcti->mdev     = MAX(100U, rttvar);
+        frcti->srtt     = MAX(1000L, srtt);
+        frcti->mdev     = MAX(100L, rttvar);
         frcti->rto      = MAX(RTO_MIN, frcti->srtt + (frcti->mdev << MDEV_MUL));
 }
 

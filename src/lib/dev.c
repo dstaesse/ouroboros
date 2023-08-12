@@ -299,7 +299,7 @@ static void _flow_keepalive(struct flow * flow)
         struct timespec    s_act;
         struct timespec    r_act;
         int                flow_id;
-        uint32_t           timeo;
+        time_t             timeo;
         uint32_t           acl;
 
         s_act = flow->snd_act;
