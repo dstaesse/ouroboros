@@ -36,47 +36,58 @@
 #include <sys/stat.h>
 
 #define LF_SIZE (sizeof(pid_t))
+#define LF_PROT (PROT_READ | PROT_WRITE)
 
 struct lockfile {
         pid_t * pid;
 };
 
-struct lockfile * lockfile_create(void)
+static struct lockfile * __lockfile_open(int oflag)
 {
-        int fd;
-        mode_t mask;
-        struct lockfile * lf = malloc(sizeof(*lf));
+        int    fd;
+        struct lockfile * lf;
+
+        lf = malloc(sizeof(*lf));
         if (lf == NULL)
-                return NULL;
+                goto fail_lockfile;
 
-        mask = umask(0);
+        fd = shm_open(SHM_LOCKFILE_NAME, oflag, 0666);
+        if (fd == -1)
+                goto fail_shm_open;
 
-        fd = shm_open(SHM_LOCKFILE_NAME, O_CREAT | O_EXCL | O_RDWR, 0666);
-        if (fd == -1) {
-                free(lf);
-                return NULL;
-        }
+        if ((oflag & O_CREAT) && ftruncate(fd, LF_SIZE) < 0)
+                goto fail_truncate;
 
-        umask(mask);
-
-        if (ftruncate(fd, LF_SIZE - 1) < 0) {
-                free(lf);
-                return NULL;
-        }
-
-        lf->pid = mmap(NULL,
-                       LF_SIZE, PROT_READ | PROT_WRITE,
-                       MAP_SHARED,
-                       fd,
-                       0);
+        lf->pid = mmap(NULL, LF_SIZE, LF_PROT, MAP_SHARED, fd, 0);
+        if (lf->pid == MAP_FAILED)
+                goto fail_mmap;
 
         close (fd);
 
-        if (lf->pid == MAP_FAILED) {
-                shm_unlink(SHM_LOCKFILE_NAME);
-                free(lf);
+        return lf;
+
+ fail_mmap:
+        shm_unlink(SHM_LOCKFILE_NAME);
+ fail_truncate:
+        close(fd);
+ fail_shm_open:
+        free(lf);
+ fail_lockfile:
+        return NULL;
+}
+
+struct lockfile * lockfile_create(void)
+{
+        struct lockfile * lf;
+        mode_t            mask;
+
+        mask = umask(0);
+
+        lf = __lockfile_open(O_CREAT | O_EXCL | O_RDWR);
+        if (lf == NULL)
                 return NULL;
-        }
+
+        umask(mask);
 
         *lf->pid = getpid();
 
@@ -85,32 +96,7 @@ struct lockfile * lockfile_create(void)
 
 struct lockfile * lockfile_open(void)
 {
-        int fd;
-        struct lockfile * lf = malloc(sizeof(*lf));
-        if (lf == NULL)
-                return NULL;
-
-        fd = shm_open(SHM_LOCKFILE_NAME, O_RDWR, 0666);
-        if (fd < 0) {
-                free(lf);
-                return NULL;
-        }
-
-        lf->pid = mmap(NULL,
-                       LF_SIZE, PROT_READ | PROT_WRITE,
-                       MAP_SHARED,
-                       fd,
-                       0);
-
-        close(fd);
-
-        if (lf->pid == MAP_FAILED) {
-                shm_unlink(SHM_LOCKFILE_NAME);
-                free(lf);
-                return NULL;
-        }
-
-        return lf;
+        return __lockfile_open(O_RDWR);
 }
 
 void lockfile_close(struct lockfile * lf)
@@ -129,11 +115,9 @@ void lockfile_destroy(struct lockfile * lf)
         if (getpid() != *lf->pid && kill(*lf->pid, 0) == 0)
                 return;
 
-        munmap(lf->pid, LF_SIZE);
+        lockfile_close(lf);
 
         shm_unlink(SHM_LOCKFILE_NAME);
-
-        free(lf);
 }
 
 pid_t lockfile_owner(struct lockfile * lf)
