@@ -2445,6 +2445,14 @@ static void irm_fini(void)
 #endif
 }
 
+static int ouroboros_reset(void)
+{
+        shm_rdrbuff_purge();
+        lockfile_destroy(irmd.lf);
+
+        return 0;
+}
+
 static int irm_init(void)
 {
         struct stat        st;
@@ -2455,6 +2463,37 @@ static int irm_init(void)
         memset(&st, 0, sizeof(st));
 
         log_init(!irmd.log_stdout);
+
+        irmd.lf = lockfile_create();
+        if (irmd.lf == NULL) {
+                irmd.lf = lockfile_open();
+                if (irmd.lf == NULL) {
+                        log_err("Lockfile error.");
+                        goto fail_lockfile;
+                }
+
+                if (kill(lockfile_owner(irmd.lf), 0) < 0) {
+                        log_warn("IRMd didn't properly shut down last time.");
+                        if (ouroboros_reset() < 0) {
+                                log_err("Failed to clean stale resources.");
+                                lockfile_close(irmd.lf);
+                                goto fail_lockfile;
+                        }
+
+                        log_warn("Stale resources cleaned.");
+                        irmd.lf = lockfile_create();
+                } else {
+                        log_warn("IRMd already running (%d), exiting.",
+                                 lockfile_owner(irmd.lf));
+                        lockfile_close(irmd.lf);
+                        goto fail_lockfile;
+                }
+        }
+
+        if (irmd.lf == NULL) {
+                log_err("Failed to create lockfile.");
+                goto fail_lockfile;
+        }
 
         if (pthread_rwlock_init(&irmd.state_lock, NULL)) {
                 log_err("Failed to initialize rwlock.");
@@ -2504,31 +2543,6 @@ static int irm_init(void)
         if (irmd.flow_ids == NULL) {
                 log_err("Failed to create flow_ids bitmap.");
                 goto fail_flow_ids;
-        }
-
-        if ((irmd.lf = lockfile_create()) == NULL) {
-                if ((irmd.lf = lockfile_open()) == NULL) {
-                        log_err("Lockfile error.");
-                        goto fail_lockfile;
-                }
-
-                if (kill(lockfile_owner(irmd.lf), 0) < 0) {
-                        log_info("IRMd didn't properly shut down last time.");
-                        shm_rdrbuff_purge();
-                        log_info("Stale resources cleaned.");
-                        lockfile_destroy(irmd.lf);
-                        irmd.lf = lockfile_create();
-                } else {
-                        log_info("IRMd already running (%d), exiting.",
-                                 lockfile_owner(irmd.lf));
-                        lockfile_close(irmd.lf);
-                        goto fail_lockfile;
-                }
-        }
-
-        if (irmd.lf == NULL) {
-                log_err("Failed to create lockfile.");
-                goto fail_lockfile;
         }
 
         if (stat(SOCK_PATH, &st) == -1) {
@@ -2601,8 +2615,6 @@ static int irm_init(void)
  fail_sock_path:
         unlink(IRM_SOCK_PATH);
  fail_stat:
-        lockfile_destroy(irmd.lf);
- fail_lockfile:
         bmp_destroy(irmd.flow_ids);
  fail_flow_ids:
         pthread_cond_destroy(&irmd.cmd_cond);
@@ -2615,6 +2627,8 @@ static int irm_init(void)
  fail_reg_lock:
         pthread_rwlock_destroy(&irmd.state_lock);
  fail_state_lock:
+        lockfile_destroy(irmd.lf);
+ fail_lockfile:
         log_fini();
         return -1;
 }
