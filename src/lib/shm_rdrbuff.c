@@ -173,7 +173,7 @@ static struct shm_rdrbuff * rdrb_create(int flags)
         if (fd == -1)
                 goto fail_open;
 
-        if ((flags & O_CREAT) && ftruncate(fd, SHM_FILE_SIZE - 1) < 0)
+        if ((flags & O_CREAT) && ftruncate(fd, SHM_FILE_SIZE) < 0)
                 goto fail_truncate;
 
         shm_base = mmap(NULL, SHM_FILE_SIZE, MM_FLAGS, MAP_SHARED, fd, 0);

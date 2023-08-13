@@ -90,7 +90,7 @@ static struct shm_rbuff * rbuff_create(pid_t pid,
         if (fd == -1)
                 goto fail_open;
 
-        if ((flags & O_CREAT) && ftruncate(fd, SHM_RB_FILE_SIZE - 1) < 0)
+        if ((flags & O_CREAT) && ftruncate(fd, SHM_RB_FILE_SIZE) < 0)
                 goto fail_truncate;
 
         shm_base = mmap(NULL, SHM_RB_FILE_SIZE, MM_FLAGS, MAP_SHARED, fd, 0);

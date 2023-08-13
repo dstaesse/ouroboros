@@ -52,14 +52,15 @@
 #endif
 
 #define FN_MAX_CHARS 255
+#define FS_PROT      (PROT_READ | PROT_WRITE)
 
 #define QUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(struct portevent))
 
-#define SHM_FLOW_SET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)             \
-                                + PROG_MAX_FQUEUES * sizeof(size_t)         \
-                                + PROG_MAX_FQUEUES * sizeof(pthread_cond_t) \
-                                + PROG_MAX_FQUEUES * QUEUESIZE              \
-                                + sizeof(pthread_mutex_t))
+#define SHM_FSET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)             \
+                            + PROG_MAX_FQUEUES * sizeof(size_t)         \
+                            + PROG_MAX_FQUEUES * sizeof(pthread_cond_t) \
+                            + PROG_MAX_FQUEUES * QUEUESIZE              \
+                            + sizeof(pthread_mutex_t))
 
 #define fqueue_ptr(fs, idx) (fs->fqueues + (SHM_BUFFER_SIZE) * idx)
 
@@ -74,12 +75,12 @@ struct shm_flow_set {
 };
 
 static struct shm_flow_set * flow_set_create(pid_t pid,
-                                             int   flags)
+                                             int   oflags)
 {
         struct shm_flow_set * set;
         ssize_t *             shm_base;
         char                  fn[FN_MAX_CHARS];
-        int                   shm_fd;
+        int                   fd;
 
         sprintf(fn, SHM_FLOW_SET_PREFIX "%d", pid);
 
@@ -87,24 +88,18 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
         if (set == NULL)
                 goto fail_malloc;
 
-        shm_fd = shm_open(fn, flags, 0666);
-        if (shm_fd == -1)
+        fd = shm_open(fn, oflags, 0666);
+        if (fd == -1)
                 goto fail_shm_open;
 
-        if (ftruncate(shm_fd, SHM_FLOW_SET_FILE_SIZE - 1) < 0)
+        if ((oflags & O_CREAT) && ftruncate(fd, SHM_FSET_FILE_SIZE) < 0)
                 goto fail_truncate;
 
-        shm_base = mmap(NULL,
-                        SHM_FLOW_SET_FILE_SIZE,
-                        PROT_READ | PROT_WRITE,
-                        MAP_SHARED,
-                        shm_fd,
-                        0);
-
+        shm_base = mmap(NULL, SHM_FSET_FILE_SIZE, FS_PROT, MAP_SHARED, fd, 0);
         if (shm_base == MAP_FAILED)
                 goto fail_mmap;
 
-        close(shm_fd);
+        close(fd);
 
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
@@ -116,10 +111,10 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
         return set;
 
  fail_mmap:
-        if (flags & O_CREAT)
+        if (oflags & O_CREAT)
                 shm_unlink(fn);
  fail_truncate:
-        close(shm_fd);
+        close(fd);
  fail_shm_open:
         free(set);
  fail_malloc:
@@ -216,7 +211,7 @@ void shm_flow_set_close(struct shm_flow_set * set)
 {
         assert(set);
 
-        munmap(set->mtable, SHM_FLOW_SET_FILE_SIZE);
+        munmap(set->mtable, SHM_FSET_FILE_SIZE);
         free(set);
 }
 
