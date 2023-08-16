@@ -2745,6 +2745,7 @@ int main(int     argc,
          char ** argv)
 {
         sigset_t sigset;
+        int      ret = EXIT_SUCCESS;
 
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGINT);
@@ -2769,8 +2770,10 @@ int main(int     argc,
                 goto fail_irm_start;
 
 #ifdef HAVE_TOML
-        if (irm_configure(irmd.cfg_file) < 0)
+        if (irm_configure(irmd.cfg_file) < 0) {
                 irmd_set_state(IRMD_NULL);
+                ret = EXIT_FAILURE;
+        }
 #endif
         irm_sigwait(sigset);
 
@@ -2784,7 +2787,7 @@ int main(int     argc,
 
         log_fini();
 
-        exit(EXIT_SUCCESS);
+        exit(ret);
 
  fail_irm_start:
         irm_fini();
