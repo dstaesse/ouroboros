@@ -297,8 +297,8 @@ int shim_data_reg_add_entry(struct shim_data * data,
 
         if (find_reg_entry_by_hash(data, hash)) {
                 pthread_rwlock_unlock(&data->reg_lock);
-                log_dbg(HASH_FMT " was already in the directory.",
-                        HASH_VAL(hash));
+                log_dbg(HASH_FMT32 " was already in the directory.",
+                        HASH_VAL32(hash));
                 return 0;
         }
 

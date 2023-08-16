@@ -37,6 +37,7 @@
 
 #include "config.h"
 
+#include <ouroboros/endian.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
@@ -1470,7 +1471,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
     #endif
 
         if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
-                sizeof(eth_data.device))) {
+                 sizeof(eth_data.device))) {
                 log_err("Failed to bind socket to interface.");
                 goto fail_device;
         }
@@ -1560,12 +1561,12 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 static int eth_ipcp_reg(const uint8_t * hash)
 {
         if (shim_data_reg_add_entry(eth_data.shim_data, hash)) {
-                log_err("Failed to add " HASH_FMT " to local registry.",
-                        HASH_VAL(hash));
+                log_err("Failed to add " HASH_FMT32 " to local registry.",
+                        HASH_VAL32(hash));
                 return -1;
         }
 
-        log_dbg("Registered " HASH_FMT ".", HASH_VAL(hash));
+        log_dbg("Registered " HASH_FMT32 ".", HASH_VAL32(hash));
 
         return 0;
 }
@@ -1645,7 +1646,7 @@ static int eth_ipcp_flow_alloc(int             fd,
         uint8_t  r_addr[MAC_SIZE];
         uint64_t addr = 0;
 
-        log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(hash));
+        log_dbg("Allocating flow to " HASH_FMT32 ".", HASH_VAL32(hash));
 
         assert(hash);
 

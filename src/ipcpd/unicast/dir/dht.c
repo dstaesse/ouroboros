@@ -31,6 +31,7 @@
 #define DHT              "dht"
 #define OUROBOROS_PREFIX DHT
 
+#include <ouroboros/endian.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/bitmap.h>

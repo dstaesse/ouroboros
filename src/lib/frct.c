@@ -20,6 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#include <ouroboros/endian.h>
+
 #define DELT_RDV         (100 * MILLION) /* ns */
 #define MAX_RDV            (1 * BILLION) /* ns */
 

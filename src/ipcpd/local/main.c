@@ -164,12 +164,12 @@ static int local_ipcp_bootstrap(const struct ipcp_config * conf)
 static int local_ipcp_reg(const uint8_t * hash)
 {
         if (shim_data_reg_add_entry(local_data.shim_data, hash)) {
-                log_dbg("Failed to add " HASH_FMT " to local registry.",
-                        HASH_VAL(hash));
+                log_dbg("Failed to add " HASH_FMT32 " to local registry.",
+                        HASH_VAL32(hash));
                 return -1;
         }
 
-        log_info("Registered " HASH_FMT ".", HASH_VAL(hash));
+        log_info("Registered " HASH_FMT32 ".", HASH_VAL32(hash));
 
         return 0;
 }
@@ -178,7 +178,7 @@ static int local_ipcp_unreg(const uint8_t * hash)
 {
         shim_data_reg_del_entry(local_data.shim_data, hash);
 
-        log_info("Unregistered " HASH_FMT ".",  HASH_VAL(hash));
+        log_info("Unregistered " HASH_FMT32 ".",  HASH_VAL32(hash));
 
         return 0;
 }
@@ -203,7 +203,8 @@ static int local_ipcp_flow_alloc(int             fd,
         int             out_fd = -1;
         time_t          mpl    = IPCP_LOCAL_MPL;
 
-        log_dbg("Allocating flow to " HASH_FMT " on fd %d.", HASH_VAL(dst), fd);
+        log_dbg("Allocating flow to " HASH_FMT32 " on fd %d.",
+                HASH_VAL32(dst), fd);
         assert(dst);
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);

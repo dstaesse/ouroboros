@@ -6,6 +6,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   bitmap_test.c
   btree_test.c
   crc32_test.c
+  hash_test.c
   md5_test.c
   sha3_test.c
   shm_rbuff_test.c

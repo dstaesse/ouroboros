@@ -31,6 +31,7 @@
 #define OUROBOROS_PREFIX "ipcpd/udp"
 
 #include <ouroboros/bitmap.h>
+#include <ouroboros/endian.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
@@ -858,8 +859,8 @@ static int udp_ipcp_reg(const uint8_t * hash)
         ipcp_hash_str(hashstr, hash);
 
         if (shim_data_reg_add_entry(udp_data.shim_data, hash)) {
-                log_err("Failed to add " HASH_FMT " to local registry.",
-                        HASH_VAL(hash));
+                log_err("Failed to add " HASH_FMT32 " to local registry.",
+                        HASH_VAL32(hash));
                 free(hashstr);
                 return -1;
         }
@@ -892,7 +893,7 @@ static int udp_ipcp_reg(const uint8_t * hash)
                 }
         }
 #endif
-        log_dbg("Registered " HASH_FMT ".", HASH_VAL(hash));
+        log_dbg("Registered " HASH_FMT32 ".", HASH_VAL32(hash));
 
         free(hashstr);
 
@@ -936,7 +937,7 @@ static int udp_ipcp_unreg(const uint8_t * hash)
 
         shim_data_reg_del_entry(udp_data.shim_data, hash);
 
-        log_dbg("Unregistered " HASH_FMT ".", HASH_VAL(hash));
+        log_dbg("Unregistered " HASH_FMT32 ".", HASH_VAL32(hash));
 
         free(hashstr);
 
@@ -1009,7 +1010,7 @@ static int udp_ipcp_flow_alloc(int             fd,
         uint32_t           ip_addr = 0;
         char               ipstr[INET_ADDRSTRLEN];
 
-        log_dbg("Allocating flow to " HASH_FMT ".", HASH_VAL(dst));
+        log_dbg("Allocating flow to " HASH_FMT32 ".", HASH_VAL32(dst));
 
         (void) qs;
 

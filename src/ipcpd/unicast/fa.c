@@ -31,6 +31,7 @@
 #define FA               "flow-allocator"
 #define OUROBOROS_PREFIX FA
 
+#include <ouroboros/endian.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>

@@ -1201,14 +1201,14 @@ int name_reg(const char * name,
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         if (ipcp_reg(pid, hash, len)) {
-                log_err("Could not register " HASH_FMT " with IPCP %d.",
-                        HASH_VAL(hash), pid);
+                log_err("Could not register " HASH_FMT32 " with IPCP %d.",
+                        HASH_VAL32(hash), pid);
                 free(hash);
                 return -1;
         }
 
-        log_info("Registered %s with IPCP %d as " HASH_FMT ".",
-                 name, pid, HASH_VAL(hash));
+        log_info("Registered %s with IPCP %d as " HASH_FMT32 ".",
+                 name, pid, HASH_VAL32(hash));
 
         free(hash);
 
@@ -1736,8 +1736,8 @@ static int flow_req_arr(pid_t             pid,
         struct timespec   wt = {IRMD_REQ_ARR_TIMEOUT / 1000,
                                 (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
 
-        log_dbg("Flow req arrived from IPCP %d for " HASH_FMT ".",
-                pid, HASH_VAL(hash));
+        log_dbg("Flow req arrived from IPCP %d for " HASH_FMT32 ".",
+                pid, HASH_VAL32(hash));
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
@@ -1751,7 +1751,7 @@ static int flow_req_arr(pid_t             pid,
                                       hash, IPCP_HASH_LEN(ipcp));
         if (n == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Unknown hash: " HASH_FMT ".", HASH_VAL(hash));
+                log_err("Unknown hash: " HASH_FMT32 ".", HASH_VAL32(hash));
                 return -1;
         }
 
@@ -1761,7 +1761,7 @@ static int flow_req_arr(pid_t             pid,
 
         /* Give the process a bit of slop time to call accept */
         if (reg_name_leave_state(n, NAME_IDLE, &wt) == -1) {
-                log_err("No processes for " HASH_FMT ".", HASH_VAL(hash));
+                log_err("No processes for " HASH_FMT32 ".", HASH_VAL32(hash));
                 return -1;
         }
 
@@ -1770,7 +1770,7 @@ static int flow_req_arr(pid_t             pid,
         switch (reg_name_get_state(n)) {
         case NAME_IDLE:
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("No processes for " HASH_FMT ".", HASH_VAL(hash));
+                log_err("No processes for " HASH_FMT32 ".", HASH_VAL32(hash));
                 return -1;
         case NAME_AUTO_ACCEPT:
                 c_pid = malloc(sizeof(*c_pid));
