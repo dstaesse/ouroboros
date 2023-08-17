@@ -84,16 +84,16 @@ struct qos_spec     qos_spec_msg_to_s(const qosspec_msg_t * msg);
 
 /* Enrollment */
 
-enroll_req_msg_t *  enroll_req_s_to_msg(void);
+enroll_req_msg_t *  enroll_req_s_to_msg(const struct enroll_req * s);
 
-int                 enroll_req_msg_to_s(const enroll_req_msg_t * msg);
+struct enroll_req   enroll_req_msg_to_s(const enroll_req_msg_t * msg);
 
 enroll_resp_msg_t * enroll_resp_s_to_msg(const struct enroll_resp * s);
 
-struct enroll_resp  enroll_resp_msg_to_s(enroll_resp_msg_t * msg);
+struct enroll_resp  enroll_resp_msg_to_s(const enroll_resp_msg_t * msg);
 
-enroll_ack_msg_t *  enroll_ack_s_to_msg(const int response);
+enroll_ack_msg_t *  enroll_ack_s_to_msg(const struct enroll_ack * s);
 
-int                 enroll_ack_msg_to_s(const enroll_ack_msg_t * msg);
+struct enroll_ack   enroll_ack_msg_to_s(const enroll_ack_msg_t * msg);
 
 #endif /* OUROBOROS_PROTOBUF_H */

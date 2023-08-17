@@ -32,10 +32,10 @@
 #define THIS_TYPE IPCP_UNICAST
 
 #include <ouroboros/errno.h>
-#include <ouroboros/hash.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
+#include <ouroboros/random.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/time_utils.h>
 
@@ -133,22 +133,22 @@ static int start_components(void)
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        if (dt_start()) {
+        if (dt_start() < 0) {
                 log_err("Failed to start data transfer.");
                 goto fail_dt_start;
         }
 
-        if (fa_start()) {
+        if (fa_start() < 0) {
                 log_err("Failed to start flow allocator.");
                 goto fail_fa_start;
         }
 
-        if (enroll_start()) {
+        if (enroll_start() < 0) {
                 log_err("Failed to start enrollment.");
                 goto fail_enroll_start;
         }
 
-        if (connmgr_start()) {
+        if (connmgr_start() < 0) {
                 log_err("Failed to start AP connection manager.");
                 goto fail_connmgr_start;
         }
@@ -196,35 +196,43 @@ static int unicast_ipcp_enroll(const char *        dst,
                                struct layer_info * info)
 {
         struct conn conn;
+        uint8_t     id[ENROLL_ID_LEN];
 
-        if (connmgr_alloc(COMPID_ENROLL, dst, NULL, &conn)) {
-                log_err("Failed to get connection.");
-                goto fail_er_flow;
+        if (random_buffer(id, ENROLL_ID_LEN) < 0) {
+                log_err("Failed to generate enrollment ID.");
+                goto fail_id;
+        }
+
+        log_info_id(id, "Requesting enrollment.");
+
+        if (connmgr_alloc(COMPID_ENROLL, dst, NULL, &conn) < 0) {
+                log_err_id(id, "Failed to get connection.");
+                goto fail_id;
         }
 
         /* Get boot state from peer. */
-        if (enroll_boot(&conn)) {
-                log_err("Failed to get boot information.");
+        if (enroll_boot(&conn, id) < 0) {
+                log_err_id(id, "Failed to get boot information.");
                 goto fail_enroll_boot;
         }
 
-        if (initialize_components(enroll_get_conf())) {
-                log_err("Failed to initialize IPCP components.");
+        if (initialize_components(enroll_get_conf()) < 0) {
+                log_err_id(id, "Failed to initialize components.");
                 goto fail_enroll_boot;
         }
 
-        if (start_components()) {
-                log_err("Failed to start components.");
+        if (start_components() < 0) {
+                log_err_id(id, "Failed to start components.");
                 goto fail_start_comp;
         }
 
-        if (enroll_ack(&conn, 0))
-                log_warn("Failed to confirm enrollment with peer.");
+        if (enroll_ack(&conn, id, 0) < 0)
+                log_err_id(id, "Failed to confirm enrollment.");
 
-        if (connmgr_dealloc(COMPID_ENROLL, &conn))
-                log_warn("Failed to deallocate enrollment flow.");
+        if (connmgr_dealloc(COMPID_ENROLL, &conn) < 0)
+                log_warn_id(id, "Failed to dealloc enrollment flow.");
 
-        log_info("Enrolled with %s.", dst);
+        log_info_id(id, "Enrolled with %s.", dst);
 
         info->dir_hash_algo = ipcpi.dir_hash_algo;
         strcpy(info->layer_name, ipcpi.layer_name);
@@ -235,7 +243,7 @@ static int unicast_ipcp_enroll(const char *        dst,
         finalize_components();
  fail_enroll_boot:
         connmgr_dealloc(COMPID_ENROLL, &conn);
- fail_er_flow:
+ fail_id:
         return -1;
 }
 
@@ -246,17 +254,17 @@ static int unicast_ipcp_bootstrap(const struct ipcp_config * conf)
 
         enroll_bootstrap(conf);
 
-        if (initialize_components(conf)) {
+        if (initialize_components(conf) < 0) {
                 log_err("Failed to init IPCP components.");
                 goto fail_init;
         }
 
-        if (start_components()) {
+        if (start_components() < 0) {
                 log_err("Failed to init IPCP components.");
                 goto fail_start;
         }
 
-        if (bootstrap_components()) {
+        if (bootstrap_components() < 0) {
                 log_err("Failed to bootstrap IPCP components.");
                 goto fail_bootstrap;
         }
@@ -300,17 +308,17 @@ int main(int    argc,
                 goto fail_init;
         }
 
-        if (notifier_init()) {
+        if (notifier_init() < 0) {
                 log_err("Failed to initialize notifier component.");
                 goto fail_notifier_init;
         }
 
-        if (connmgr_init()) {
+        if (connmgr_init() < 0) {
                 log_err("Failed to initialize connection manager.");
                 goto fail_connmgr_init;
         }
 
-        if (enroll_init()) {
+        if (enroll_init() < 0) {
                 log_err("Failed to initialize enrollment component.");
                 goto fail_enroll_init;
         }

@@ -28,7 +28,6 @@
 
 #define OUROBOROS_PREFIX "enrollment"
 
-#include <ouroboros/endian.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/dev.h>
@@ -62,7 +61,114 @@ struct {
         pthread_t          listener;
 } enroll;
 
-static int send_rcv_enroll_msg(int fd)
+static void * enroll_handle(void * o)
+{
+        struct enroll_req  req;
+        struct enroll_resp resp;
+        struct enroll_ack  ack;
+        struct conn        conn;
+        uint8_t             __buf[ENROLL_BUF_LEN];
+        buffer_t           buf;
+        ssize_t            len;
+
+        (void) o;
+
+        buf.data = __buf;
+        buf.len  = sizeof(__buf);
+
+        resp.response = 0;
+        resp.conf = enroll.conf;
+
+        while (true) {
+                buffer_t msg;
+                int      fd;
+
+                if (connmgr_wait(COMPID_ENROLL, &conn)) {
+                        log_err("Failed to get next connection.");
+                        continue;
+                }
+
+                fd = conn.flow_info.fd;
+
+                log_info("Incoming enrollment connection on flow %d.", fd);
+
+                len = flow_read(fd, buf.data, buf.len);
+                if (len < 0) {
+                        log_warn("Failed to read from flow %d.", fd);
+                        goto finish_flow;
+                }
+
+                msg.data = buf.data;
+                msg.len = (size_t) len;
+
+                if (enroll_req_des(&req, msg) < 0) {
+                        log_warn("Failed to unpack request message.");
+                        goto finish_flow;
+                }
+
+                log_info_id(req.id, "Handling incoming enrollment.");
+
+                /* TODO: authentication, timezone handling (UTC). */
+
+                ack.result = -100;
+
+                clock_gettime(CLOCK_REALTIME, &resp.t);
+
+                memcpy(resp.id, req.id, ENROLL_ID_LEN);
+
+                len = enroll_resp_ser(&resp, buf);
+                if (len < 0) {
+                        log_err_id(req.id, "Failed to pack reply.");
+                        goto finish_enroll;
+                }
+
+                log_dbg_id(req.id, "Sending enrollment info (%zd bytes).", len);
+
+                if (flow_write(conn.flow_info.fd, buf.data, len) < 0) {
+                        log_err_id(req.id, "Failed te send response.");
+                        goto finish_enroll;
+                }
+
+                len = flow_read(conn.flow_info.fd, buf.data, buf.len);
+                if (len < 0) {
+                        log_err_id(req.id, "Failed to read from flow.");
+                        goto finish_enroll;
+
+                }
+
+                msg.data = buf.data;
+                msg.len = (size_t) len;
+
+                if (enroll_ack_des(&ack, msg) < 0) {
+                        log_err_id(req.id, "Failed to unpack ack.");
+                        goto finish_enroll;
+                }
+
+                if (memcmp(req.id, ack.id, ENROLL_ID_LEN) != 0)
+                       log_warn_id(req.id, "Enrollment ID mismatch.");
+
+         finish_enroll:
+                switch(ack.result) {
+                case 0:
+                        log_info_id(req.id, "Enrollment completed.");
+                        break;
+                case -100:
+                        log_warn_id(req.id, "Enrollment failed.");
+                        break;
+                default:
+                        log_warn_id(req.id, "Enrollment failed at remote.");
+                }
+         finish_flow:
+                connmgr_dealloc(COMPID_ENROLL, &conn);
+
+                log_info("Enrollment flow %d closed.", fd);
+        }
+
+        return 0;
+}
+
+int enroll_boot(struct conn *   conn,
+                const uint8_t * id)
 {
         uint8_t            __buf[ENROLL_BUF_LEN];
         buffer_t           buf;
@@ -71,54 +177,61 @@ static int send_rcv_enroll_msg(int fd)
         ssize_t            delta_t;
         struct timespec    t0;
         struct timespec    rtt;
+        int                fd;
         int                ret;
+        struct enroll_req  req;
         struct enroll_resp resp;
+
+        fd = conn->flow_info.fd;
 
         buf.data = __buf;
         buf.len  = sizeof(__buf);
 
-        len = enroll_req_ser(buf);
+        memcpy(req.id, id, ENROLL_ID_LEN);
+
+        len = enroll_req_ser(&req, buf);
         if (len < 0) {
-                log_dbg("Failed to pack request message.");
+                log_err_id(id, "Failed to pack request message.");
                 return -1;
         }
 
         clock_gettime(CLOCK_REALTIME, &t0);
 
-        log_dbg("Sending request message.");
-
         if (flow_write(fd, buf.data, len) < 0) {
-                log_dbg("Failed to send request message.");
+                log_err_id(id, "Failed to send request message.");
                 return -1;
         }
-
-        log_dbg("Waiting for reply message.");
 
         len = flow_read(fd, buf.data, buf.len);
         if (len < 0) {
-                log_dbg("No reply received.");
+                log_err_id(id, "No reply received.");
                 return -1;
         }
 
-        log_dbg("Received configuration info (%zd bytes).", len);
+        log_dbg_id(id, "Received configuration info (%zd bytes).", len);
 
         msg.data = buf.data;
         msg.len  = len;
 
         ret = enroll_resp_des(&resp, msg);
         if (ret < 0) {
-                log_dbg("Failed to unpack response message.");
+                log_err_id(id, "Failed to unpack response message.");
+                return -1;
+        }
+
+        if (memcmp(resp.id, id, ENROLL_ID_LEN) != 0) {
+                log_err_id(id, "Enrollment ID mismatch.");
                 return -1;
         }
 
         if (resp.response < 0) {
-                log_dbg("Remote denied request: %d.", resp.response);
+                log_warn_id(id, "Remote denied request: %d.", resp.response);
                 return -1;
         }
 
         if (resp.conf.type != ipcpi.type) {
-                log_dbg("Wrong type in enrollment response %d (%d).",
-                        resp.conf.type, ipcpi.type);
+                log_err_id(id, "Wrong type in enrollment response %d (%d).",
+                           resp.conf.type, ipcpi.type);
                 return -1;
         }
 
@@ -130,140 +243,37 @@ static int send_rcv_enroll_msg(int fd)
         rtt.tv_nsec = resp.t.tv_nsec;
 
         if (labs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
-                log_warn("Clock offset above threshold.");
+                log_warn_id(id, "Clock offset above threshold.");
 
         enroll.conf = resp.conf;
 
         return 0;
 }
 
-
-static void * enroll_handle(void * o)
+int enroll_ack(struct conn *   conn,
+               const uint8_t * id,
+               const int       result)
 {
-        struct enroll_resp resp;
-        struct conn        conn;
-        uint8_t             __buf[ENROLL_BUF_LEN];
-        buffer_t           buf;
-        ssize_t            len;
-        int                response;
-
-        (void) o;
+        struct enroll_ack ack;
+        uint8_t           __buf[ENROLL_BUF_LEN];
+        buffer_t          buf;
+        ssize_t           len;
 
         buf.data = __buf;
         buf.len  = sizeof(__buf);
 
-        resp.conf = enroll.conf;
+        ack.result = result;
 
-        while (true) {
-                buffer_t msg;
+        memcpy(ack.id, id, ENROLL_ID_LEN);
 
-                if (connmgr_wait(COMPID_ENROLL, &conn)) {
-                        log_err("Failed to get next connection.");
-                        continue;
-                }
-
-                log_info("New enrollment connection.");
-
-                len = flow_read(conn.flow_info.fd, buf.data, buf.len);
-                if (len < 0) {
-                        log_err("Failed to read from flow.");
-                        connmgr_dealloc(COMPID_ENROLL, &conn);
-                        continue;
-                }
-
-                log_dbg("Read request from flow (%zd bytes).", len);
-                msg.data = buf.data;
-                msg.len = (size_t) len;
-
-                if (enroll_req_des(msg) < 0) {
-                        log_err("Failed to unpack request message.");
-                        connmgr_dealloc(COMPID_ENROLL, &conn);
-                        continue;
-                }
-
-                /* TODO: authentication */
-
-                log_dbg("Enrolling a new neighbor.");
-
-                clock_gettime(CLOCK_REALTIME, &resp.t);
-
-                resp.response = 0;
-
-                len = enroll_resp_ser(&resp, buf);
-                if (len < 0) {
-                        log_err("Failed to pack reply.");
-                        connmgr_dealloc(COMPID_ENROLL, &conn);
-                        continue;
-                }
-
-                log_dbg("Sending enrollment info (%zd bytes).", len);
-
-                if (flow_write(conn.flow_info.fd, buf.data, len) < 0) {
-                        log_err("Failed respond to request.");
-                        connmgr_dealloc(COMPID_ENROLL, &conn);
-                        continue;
-                }
-
-                len = flow_read(conn.flow_info.fd, buf.data, buf.len);
-                if (len < 0) {
-                        log_err("Failed to read from flow.");
-                        connmgr_dealloc(COMPID_ENROLL, &conn);
-                        continue;
-                }
-
-                msg.data = buf.data;
-                msg.len = (size_t) len;
-
-                if (enroll_ack_des(&response, msg) < 0) {
-                        log_err("Failed to unpack acknowledgment.");
-                        connmgr_dealloc(COMPID_ENROLL, &conn);
-                        continue;
-                }
-                if (response == 0)
-                        log_info("Neighbor enrollment successful.");
-                else
-                        log_info("Neigbor enrolment failed at remote.");
-
-                connmgr_dealloc(COMPID_ENROLL, &conn);
-
-                log_info("Enrollment connection closed.");
-        }
-
-        return 0;
-}
-
-int enroll_boot(struct conn * conn)
-{
-        log_dbg("Starting enrollment.");
-
-        if (send_rcv_enroll_msg(conn->flow_info.fd)) {
-                log_err("Failed to enroll.");
-                return -1;
-        }
-
-        log_dbg("Enrollment complete.");
-
-        return 0;
-}
-
-int enroll_ack(struct conn * conn,
-                int          result)
-{
-        uint8_t            __buf[ENROLL_BUF_LEN];
-        buffer_t           buf;
-        ssize_t            len;
-
-        buf.data = __buf;
-        buf.len  = sizeof(__buf);
-
-        len = enroll_ack_ser(result, buf);
+        len = enroll_ack_ser(&ack, buf);
         if (len < 0) {
-                log_err("Failed to pack acknowledgement.");
+                log_err_id(id, "Failed to pack acknowledgement.");
                 return -1;
         }
 
         if (flow_write(conn->flow_info.fd, buf.data, len) < 0) {
-                log_dbg("Failed to send acknowledgment.");
+                log_err_id(id, "Failed to send acknowledgment.");
                 return -1;
         }
 

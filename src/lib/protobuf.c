@@ -343,62 +343,86 @@ struct qos_spec qos_spec_msg_to_s(const qosspec_msg_t * msg)
         return s;
 }
 
-enroll_req_msg_t * enroll_req_s_to_msg(void)
+enroll_req_msg_t * enroll_req_s_to_msg(const struct enroll_req * s)
 {
         enroll_req_msg_t * msg;
+        uint8_t *          id;
 
         msg = malloc(sizeof(*msg));
         if (msg == NULL)
-                return NULL;
+                goto fail_msg;
+
+        id = malloc(ENROLL_ID_LEN);
+        if (id == NULL)
+                goto fail_id;
+
+        memcpy(id, s->id, ENROLL_ID_LEN);
 
         enroll_req_msg__init(msg);
 
-        msg->magic = 0xC0FFEE;
+        msg->id.len  = ENROLL_ID_LEN;
+        msg->id.data = id;
 
         return msg;
+
+ fail_id:
+        free(msg);
+ fail_msg:
+        return NULL;
 }
 
-int enroll_req_msg_to_s(const enroll_req_msg_t * msg)
+struct enroll_req enroll_req_msg_to_s(const enroll_req_msg_t * msg)
 {
-        (void) msg;
+        struct enroll_req s;
 
         assert(msg != NULL);
 
-        return 0;
+        memcpy(s.id, msg->id.data, ENROLL_ID_LEN);
+
+        return s;
 }
 
 enroll_resp_msg_t * enroll_resp_s_to_msg(const struct enroll_resp * s)
 {
         enroll_resp_msg_t * msg;
+        uint8_t *           id;
 
         assert(s != NULL);
 
         msg = malloc(sizeof(*msg));
         if (msg == NULL)
-                goto fail_malloc;
+                goto fail_msg;
+
+        id = malloc(ENROLL_ID_LEN);
+        if (id == NULL)
+                goto fail_id;
+
+        memcpy(id, s->id, ENROLL_ID_LEN);
 
         enroll_resp_msg__init(msg);
+
+        msg->id.len   = ENROLL_ID_LEN;
+        msg->id.data  = id;
 
         msg->t_sec    = s->t.tv_sec;
         msg->t_nsec   = s->t.tv_nsec;
         msg->response = s->response;
-
         if (msg->response < 0)
                 return msg;
 
         msg->conf = ipcp_config_s_to_msg(&s->conf);
         if (msg->conf == NULL)
-                goto fail_conf;
+                goto fail_id;
 
         return msg;
 
- fail_conf:
+ fail_id:
         enroll_resp_msg__free_unpacked(msg, NULL);
- fail_malloc:
+ fail_msg:
         return NULL;
 }
 
-struct enroll_resp enroll_resp_msg_to_s(enroll_resp_msg_t * msg)
+struct enroll_resp enroll_resp_msg_to_s(const enroll_resp_msg_t * msg)
 {
         struct enroll_resp s;
 
@@ -411,27 +435,50 @@ struct enroll_resp enroll_resp_msg_to_s(enroll_resp_msg_t * msg)
         s.t.tv_sec  = msg->t_sec;
         s.t.tv_nsec = msg->t_nsec;
 
+        memcpy(s.id, msg->id.data, ENROLL_ID_LEN);
+
         return s;
 }
 
-enroll_ack_msg_t * enroll_ack_s_to_msg(int response)
+enroll_ack_msg_t * enroll_ack_s_to_msg(const struct enroll_ack * s)
 {
         enroll_ack_msg_t * msg;
+        uint8_t *          id;
 
         msg = malloc(sizeof(*msg));
         if (msg == NULL)
-                return NULL;
+                goto fail_msg;
+
+        id = malloc(ENROLL_ID_LEN);
+        if (id == NULL)
+                goto fail_id;
+
+        memcpy(id, s->id, ENROLL_ID_LEN);
 
         enroll_ack_msg__init(msg);
 
-        msg->response = response;
+        msg->id.len   = ENROLL_ID_LEN;
+        msg->id.data  = id;
+
+        msg->result = s->result;
 
         return msg;
+
+ fail_id:
+        enroll_ack_msg__free_unpacked(msg, NULL);
+ fail_msg:
+        return NULL;
 }
 
-int enroll_ack_msg_to_s(const enroll_ack_msg_t * msg)
+struct enroll_ack enroll_ack_msg_to_s(const enroll_ack_msg_t * msg)
 {
+        struct enroll_ack s;
+
         assert(msg != NULL);
 
-        return msg->response;
+        memcpy(s.id, msg->id.data, ENROLL_ID_LEN);
+
+        s.result = msg->result;
+
+        return s;
 }

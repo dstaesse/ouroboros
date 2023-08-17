@@ -26,12 +26,13 @@
 #include <ouroboros/serdes-oep.h>
 
 
-ssize_t enroll_req_ser(buffer_t buf)
+ssize_t enroll_req_ser(const struct enroll_req * req,
+                       buffer_t                  buf)
 {
         enroll_req_msg_t * msg;
         ssize_t            sz;
 
-        msg = enroll_req_s_to_msg();
+        msg = enroll_req_s_to_msg(req);
         if (msg == NULL)
                 goto fail_msg;
 
@@ -46,24 +47,33 @@ ssize_t enroll_req_ser(buffer_t buf)
         return sz;
 
  fail_pack:
-    enroll_req_msg__free_unpacked(msg, NULL);
+        enroll_req_msg__free_unpacked(msg, NULL);
  fail_msg:
     return -1;
 }
 
-int enroll_req_des(const buffer_t buf)
+int enroll_req_des(struct enroll_req * req,
+                   const buffer_t      buf)
 {
         enroll_req_msg_t * msg;
 
         msg = enroll_req_msg__unpack(NULL, buf.len, buf.data);
         if (msg == NULL)
-                return -1;
+                goto fail_unpack;
 
-        /* Nothing in request yet, if it unpacks, it's good. */
+        if (msg->id.len != ENROLL_ID_LEN)
+                goto fail_id;
+
+        *req = enroll_req_msg_to_s(msg);
 
         enroll_req_msg__free_unpacked(msg, NULL);
 
         return 0;
+
+ fail_id:
+        enroll_req_msg__free_unpacked(msg, NULL);
+ fail_unpack:
+        return -1;
 }
 
 ssize_t enroll_resp_ser(const struct enroll_resp * resp,
@@ -79,9 +89,6 @@ ssize_t enroll_resp_ser(const struct enroll_resp * resp,
         sz = enroll_resp_msg__get_packed_size(msg);
         if (sz < 0 || (size_t) sz > buf.len)
                 goto fail_pack;
-
-        msg->t_sec = resp->t.tv_sec;
-        msg->t_nsec = resp->t.tv_nsec;
 
         enroll_resp_msg__pack(msg, buf.data);
 
@@ -111,13 +118,13 @@ int enroll_resp_des(struct enroll_resp * resp,
         return 0;
 }
 
-ssize_t enroll_ack_ser(const int response,
-                       buffer_t  buf)
+ssize_t enroll_ack_ser(const struct enroll_ack * ack,
+                       buffer_t                  buf)
 {
         enroll_ack_msg_t * msg;
         ssize_t            sz;
 
-        msg = enroll_ack_s_to_msg(response);
+        msg = enroll_ack_s_to_msg(ack);
         if (msg == NULL)
                 goto fail_msg;
 
@@ -138,8 +145,8 @@ ssize_t enroll_ack_ser(const int response,
 
 }
 
-int enroll_ack_des(int *          response,
-                   const buffer_t buf)
+int enroll_ack_des(struct enroll_ack * ack,
+                   const buffer_t      buf)
 {
         enroll_ack_msg_t * msg;
 
@@ -147,7 +154,7 @@ int enroll_ack_des(int *          response,
         if (msg == NULL)
                 return -1;
 
-        *response = enroll_ack_msg_to_s(msg);
+        *ack = enroll_ack_msg_to_s(msg);
 
         enroll_ack_msg__free_unpacked(msg, NULL);
 

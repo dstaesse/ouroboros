@@ -37,10 +37,12 @@ void                 enroll_stop(void);
 
 void                 enroll_bootstrap(const struct ipcp_config * conf);
 
-int                  enroll_boot(struct conn * conn);
+int                  enroll_boot(struct conn *   conn,
+                                 const uint8_t * id);
 
-int                  enroll_ack(struct conn * conn,
-                                int           result);
+int                  enroll_ack(struct conn *   conn,
+                                const uint8_t * id,
+                                const int       result);
 
 struct ipcp_config * enroll_get_conf(void);
 

@@ -32,11 +32,11 @@
 #define THIS_TYPE IPCP_BROADCAST
 
 #include <ouroboros/errno.h>
-#include <ouroboros/hash.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
+#include <ouroboros/random.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/time_utils.h>
 
@@ -61,7 +61,7 @@ static int initialize_components(const struct ipcp_config * conf)
 
         assert(ipcp_dir_hash_len() != 0);
 
-        if (dt_init()) {
+        if (dt_init() < 0) {
                 log_err("Failed to initialize forwarding component.");
                 return -1;
         }
@@ -82,12 +82,12 @@ static int start_components(void)
 
         ipcp_set_state(IPCP_OPERATIONAL);
 
-        if (enroll_start()) {
+        if (enroll_start() < 0) {
                 log_err("Failed to start enrollment.");
                 goto fail_enroll_start;
         }
 
-        if (connmgr_start()) {
+        if (connmgr_start() < 0) {
                 log_err("Failed to start AP connection manager.");
                 goto fail_connmgr_start;
         }
@@ -117,35 +117,44 @@ static int broadcast_ipcp_enroll(const char *        dst,
                                  struct layer_info * info)
 {
         struct conn conn;
+        uint8_t     id[ENROLL_ID_LEN];
 
-        if (connmgr_alloc(COMPID_ENROLL, dst, NULL, &conn)) {
-                log_err("Failed to get connection.");
-                goto fail_er_flow;
+        if (random_buffer(id, ENROLL_ID_LEN) < 0) {
+                log_err("Failed to generate enrollment ID.");
+                goto fail_id;
+        }
+
+        log_info_id(id, "Requesting enrollment.");
+
+        if (connmgr_alloc(COMPID_ENROLL, dst, NULL, &conn) < 0) {
+                log_err_id(id, "Failed to get connection.");
+                goto fail_id;
         }
 
         /* Get boot state from peer. */
-        if (enroll_boot(&conn)) {
-                log_err("Failed to get boot information.");
+        if (enroll_boot(&conn, id) < 0) {
+                log_err_id(id, "Failed to get boot information.");
                 goto fail_enroll_boot;
         }
 
-        if (initialize_components(enroll_get_conf())) {
-                log_err("Failed to initialize IPCP components.");
+        if (initialize_components(enroll_get_conf()) < 0) {
+                log_err_id(id, "Failed to initialize components.");
                 goto fail_enroll_boot;
         }
 
-        if (start_components()) {
-                log_err("Failed to start components.");
+        if (start_components() < 0) {
+                log_err_id(id, "Failed to start components.");
                 goto fail_start_comp;
         }
 
-        if (enroll_ack(&conn, 0))
-                log_warn("Failed to confirm enrollment with peer.");
+        if (enroll_ack(&conn, id, 0) < 0)
+                log_err_id(id, "Failed to confirm enrollment.");
 
-        if (connmgr_dealloc(COMPID_ENROLL, &conn))
-                log_warn("Failed to deallocate enrollment flow.");
+        if (connmgr_dealloc(COMPID_ENROLL, &conn) < 0)
+                log_warn_id(id, "Failed to dealloc enrollment flow.");
 
-        log_info("Enrolled with %s.", dst);
+        log_info_id(id, "Enrolled with %s.", dst);
+
 
         info->dir_hash_algo = ipcpi.dir_hash_algo;
         strcpy(info->layer_name, ipcpi.layer_name);
@@ -156,7 +165,7 @@ static int broadcast_ipcp_enroll(const char *        dst,
         finalize_components();
  fail_enroll_boot:
         connmgr_dealloc(COMPID_ENROLL, &conn);
- fail_er_flow:
+ fail_id:
         return -1;
 }
 

@@ -30,18 +30,31 @@
 
 /* Enrollment */
 
-/* no structs yet for req and ack. TODO: authentication. */
+#define ENROLL_ID_LEN 8
+
+struct enroll_req {
+        /* TODO: Authentication */
+        uint8_t id[ENROLL_ID_LEN];
+};
 
 struct enroll_resp {
-    struct timespec    t;
-    int                response;
-    struct ipcp_config conf;
+        uint8_t            id[ENROLL_ID_LEN];
+        struct timespec    t;
+        int                response;
+        struct ipcp_config conf;
+};
+
+struct enroll_ack {
+        uint8_t id[ENROLL_ID_LEN];
+        int     result;
 };
 
 
-ssize_t enroll_req_ser(buffer_t buf);
+ssize_t enroll_req_ser(const struct enroll_req * req,
+                       buffer_t                  buf);
 
-int     enroll_req_des(const buffer_t buf);
+int     enroll_req_des(struct enroll_req * req,
+                       const buffer_t      buf);
 
 ssize_t enroll_resp_ser(const struct enroll_resp * resp,
                         buffer_t                   buf);
@@ -49,10 +62,10 @@ ssize_t enroll_resp_ser(const struct enroll_resp * resp,
 int     enroll_resp_des(struct enroll_resp * resp,
                         buffer_t             buf);
 
-ssize_t enroll_ack_ser(const int response,
-                       buffer_t  buf);
+ssize_t enroll_ack_ser(const struct enroll_ack * ack,
+                       buffer_t                  buf);
 
-int     enroll_ack_des(int *          response,
-                       const buffer_t buf);
+int     enroll_ack_des(struct enroll_ack * ack,
+                       const buffer_t      buf);
 
 #endif /* OUROBOROS_LIB_SERDES_OEP_H*/

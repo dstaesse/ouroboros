@@ -25,16 +25,18 @@ import "ipcp_config.proto";
 
 message enroll_req_msg {
         /* TODO authentication */
-        required uint32 magic = 1;
+        required bytes id = 1;
 }
 
 message enroll_resp_msg {
-        required int64           t_sec    = 1;
-        required int32           t_nsec   = 2;
-        required int32           response = 3;
-        optional ipcp_config_msg conf     = 4;
+        required bytes           id       = 1;
+        required int64           t_sec    = 2;
+        required int32           t_nsec   = 3;
+        required int32           response = 4;
+        optional ipcp_config_msg conf     = 5;
 }
 
 message enroll_ack_msg {
-        required int32 response = 1;
+        required bytes id     = 1;
+        required int32 result = 2;
 }
