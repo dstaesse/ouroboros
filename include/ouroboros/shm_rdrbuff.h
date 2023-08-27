@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_SHM_RDRBUFF_H
-#define OUROBOROS_SHM_RDRBUFF_H
+#ifndef OUROBOROS_LIB_SHM_RDRBUFF_H
+#define OUROBOROS_LIB_SHM_RDRBUFF_H
 
 #include <ouroboros/shm_du_buff.h>
 #include <ouroboros/time_utils.h>
@@ -64,4 +64,4 @@ struct shm_du_buff * shm_rdrbuff_get(struct shm_rdrbuff * rdrb,
 int                  shm_rdrbuff_remove(struct shm_rdrbuff  * rdrb,
                                         size_t                idx);
 
-#endif /* OUROBOROS_SHM_RDRBUFF_H */
+#endif /* OUROBOROS_LIB_SHM_RDRBUFF_H */

@@ -16,7 +16,7 @@ set(IPCP_UNICAST_TARGET ipcpd-unicast CACHE INTERNAL "")
 set(IPCP_UNICAST_MPL 60 CACHE STRING
     "Default maximum packet lifetime for the unicast IPCP, in seconds")
 
-protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS dir/kademlia.proto)
+protobuf_generate_c(DHT_PROTO_SRCS DHT_PROTO_HDRS dir/dht.proto)
 
 math(EXPR PFT_EXPR "1 << 12")
 set(PFT_SIZE ${PFT_EXPR} CACHE STRING
@@ -57,7 +57,7 @@ set(SOURCE_FILES
   )
 
 add_executable(ipcpd-unicast ${SOURCE_FILES} ${IPCP_SOURCES} ${COMMON_SOURCES}
-  ${KAD_PROTO_SRCS} ${LAYER_CONFIG_PROTO_SRCS})
+  ${DHT_PROTO_SRCS} ${LAYER_CONFIG_PROTO_SRCS})
 target_link_libraries(ipcpd-unicast LINK_PUBLIC ouroboros-dev)
 
 include(AddCompileFlags)

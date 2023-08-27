@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_NP1_FLOW_H
-#define OUROBOROS_NP1_FLOW_H
+#ifndef OUROBOROS_LIB_NP1_FLOW_H
+#define OUROBOROS_LIB_NP1_FLOW_H
 
 #include <ouroboros/qos.h>
 
@@ -47,4 +47,4 @@ static const qosspec_t qos_np1 = {
         .timeout      = 0
 };
 
-#endif /* OUROBOROS_NP1_FLOW_H */
+#endif /* OUROBOROS_LIB_NP1_FLOW_H */

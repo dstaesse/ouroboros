@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_SHM_RBUFF_H
-#define OUROBOROS_SHM_RBUFF_H
+#ifndef OUROBOROS_LIB_SHM_RBUFF_H
+#define OUROBOROS_LIB_SHM_RBUFF_H
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -66,4 +66,4 @@ ssize_t            shm_rbuff_read_b(struct shm_rbuff *      rb,
 
 size_t             shm_rbuff_queued(struct shm_rbuff * rb);
 
-#endif /* OUROBOROS_SHM_RBUFF_H */
+#endif /* OUROBOROS_LIB_SHM_RBUFF_H */

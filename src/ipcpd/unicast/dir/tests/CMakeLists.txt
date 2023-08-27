@@ -20,10 +20,9 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   dht_test.c
   )
 
-protobuf_generate_c(KAD_PROTO_SRCS KAD_PROTO_HDRS ../kademlia.proto)
-
+protobuf_generate_c(DHT_PROTO_SRCS KAD_PROTO_HDRS ../dht.proto)
 add_executable(${PARENT_DIR}_test EXCLUDE_FROM_ALL ${${PARENT_DIR}_tests}
-  ${KAD_PROTO_SRCS})
+  ${DHT_PROTO_SRCS})
 target_link_libraries(${PARENT_DIR}_test ouroboros-common)
 
 add_dependencies(check ${PARENT_DIR}_test)

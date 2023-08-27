@@ -49,7 +49,6 @@ struct enroll_ack {
         int     result;
 };
 
-
 ssize_t enroll_req_ser(const struct enroll_req * req,
                        buffer_t                  buf);
 

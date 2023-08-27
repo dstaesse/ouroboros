@@ -23,7 +23,7 @@
 syntax = "proto2";
 
 import "ipcp_config.proto";
-import "qosspec.proto";
+import "qos.proto";
 
 enum irm_msg_code {
         IRM_CREATE_IPCP       =  1;

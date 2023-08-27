@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_SHM_FLOW_SET_H
-#define OUROBOROS_SHM_FLOW_SET_H
+#ifndef OUROBOROS_LIB_SHM_FLOW_SET_H
+#define OUROBOROS_LIB_SHM_FLOW_SET_H
 
 #include <ouroboros/fqueue.h>
 
@@ -66,4 +66,4 @@ ssize_t               shm_flow_set_wait(const struct shm_flow_set * shm_set,
                                         struct portevent *          fqueue,
                                         const struct timespec *     abstime);
 
-#endif /* OUROBOROS_SHM_FLOW_SET_H */
+#endif /* OUROBOROS_LIB_SHM_FLOW_SET_H */

@@ -20,9 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_ENDIAN_H
-#define OUROBOROS_ENDIAN_H
-
+#ifndef OUROBOROS_LIB_ENDIAN_H
+#define OUROBOROS_LIB_ENDIAN_H
 
 #if defined(__linux__) || defined(__CYGWIN__) || \
         (defined(__MACH__) && !defined(__APPLE__))
@@ -73,4 +72,4 @@
 #define hton16(x) htobe16(x)
 #define ntoh16(x) betoh16(x)
 
-#endif /* OUROBOROS_ENDIAN_H */
+#endif /* OUROBOROS_LIB_ENDIAN_H */

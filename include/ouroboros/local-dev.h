@@ -20,12 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LOCAL_DEV_H
-#define OUROBOROS_LOCAL_DEV_H
+#ifndef OUROBOROS_LIB_LOCAL_DEV_H
+#define OUROBOROS_LIB_LOCAL_DEV_H
 
 ssize_t local_flow_read(int fd);
 
 int     local_flow_write(int    fd,
                          size_t idx);
 
-#endif /* OUROBOROS_LOCAL_DEV_H */
+#endif /* OUROBOROS_LIB_LOCAL_DEV_H */

@@ -23,8 +23,8 @@
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/qoscube.h>
 
-#ifndef OUROBOROS_IPCP_DEV_H
-#define OUROBOROS_IPCP_DEV_H
+#ifndef OUROBOROS_LIB_IPCP_DEV_H
+#define OUROBOROS_LIB_IPCP_DEV_H
 
 int   ipcp_create_r(int result);
 
@@ -65,4 +65,4 @@ int    ipcp_sdb_reserve(struct shm_du_buff ** sdb,
 
 void   ipcp_sdb_release(struct shm_du_buff * sdb);
 
-#endif /* OUROBOROS_IPCP_DEV_H */
+#endif /* OUROBOROS_LIB_IPCP_DEV_H */

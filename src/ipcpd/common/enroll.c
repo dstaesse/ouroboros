@@ -133,7 +133,6 @@ static void * enroll_handle(void * o)
                 if (len < 0) {
                         log_err_id(req.id, "Failed to read from flow.");
                         goto finish_enroll;
-
                 }
 
                 msg.data = buf.data;

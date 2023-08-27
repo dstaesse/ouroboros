@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_TIME_UTILS_H
-#define OUROBOROS_TIME_UTILS_H
+#ifndef OUROBOROS_LIB_TIME_UTILS_H
+#define OUROBOROS_LIB_TIME_UTILS_H
 
 #ifdef MILLION
 #undef MILLION
@@ -118,4 +118,4 @@
                 (tv)->tv_usec = (ts)->tv_nsec / 1000L;  \
         } while (0);
 
-#endif /* OUROBOROS_TIME_UTILS_H */
+#endif /* OUROBOROS_LIB_TIME_UTILS_H */

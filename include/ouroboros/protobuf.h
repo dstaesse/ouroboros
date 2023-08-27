@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_PROTOBUF_H
-#define OUROBOROS_PROTOBUF_H
+#ifndef OUROBOROS_LIB_PROTOBUF_H
+#define OUROBOROS_LIB_PROTOBUF_H
 
 #include <ouroboros/qos.h>
 #include <ouroboros/ipcp.h>
@@ -35,14 +35,14 @@ typedef EthConfigMsg eth_config_msg_t;
 typedef UdpConfigMsg udp_config_msg_t;
 typedef UniConfigMsg uni_config_msg_t;
 
-#include "ipcpd_messages.pb-c.h"
+#include "ipcp.pb-c.h"
 typedef IpcpMsg ipcp_msg_t;
 
-#include "irmd_messages.pb-c.h"
+#include "irm.pb-c.h"
 typedef IpcpInfoMsg ipcp_info_msg_t;
 typedef NameInfoMsg name_info_msg_t;
 
-#include "qosspec.pb-c.h"
+#include "qos.pb-c.h"
 typedef QosspecMsg qosspec_msg_t;
 
 #include "enroll.pb-c.h"
@@ -96,4 +96,4 @@ enroll_ack_msg_t *  enroll_ack_s_to_msg(const struct enroll_ack * s);
 
 struct enroll_ack   enroll_ack_msg_to_s(const enroll_ack_msg_t * msg);
 
-#endif /* OUROBOROS_PROTOBUF_H */
+#endif /* OUROBOROS_LIB_PROTOBUF_H */

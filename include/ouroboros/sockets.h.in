@@ -20,12 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_SOCKETS_H
-#define OUROBOROS_SOCKETS_H
+#ifndef OUROBOROS_LIB_SOCKETS_H
+#define OUROBOROS_LIB_SOCKETS_H
 
 #include <sys/types.h>
 
-#include "irmd_messages.pb-c.h"
+#include "irm.pb-c.h"
 typedef IrmMsg irm_msg_t;
 
 #define SOCK_PATH "/var/run/ouroboros/"
@@ -49,4 +49,4 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
 /* cleanup socket when cancelling thread */
 void __cleanup_close_ptr(void * o);
 
-#endif
+#endif /* OUROBOROS_LIB_SOCKETS_H */

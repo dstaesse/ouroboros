@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_BITMAP_H
-#define OUROBOROS_BITMAP_H
+#ifndef OUROBOROS_LIB_BITMAP_H
+#define OUROBOROS_LIB_BITMAP_H
 
 #include <stddef.h>
 #include <unistd.h>
@@ -45,4 +45,4 @@ bool         bmp_is_id_valid(struct bmp * bmp,
 bool         bmp_is_id_used(struct bmp * bmp,
                             ssize_t      id);
 
-#endif /* OUROBOROS_BITMAP_H */
+#endif /* OUROBOROS_LIB_BITMAP_H */

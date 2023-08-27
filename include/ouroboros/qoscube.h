@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_QOSCUBE_H
-#define OUROBOROS_QOSCUBE_H
+#ifndef OUROBOROS_LIB_QOSCUBE_H
+#define OUROBOROS_LIB_QOSCUBE_H
 
 #include <ouroboros/qos.h>
 
@@ -35,4 +35,4 @@ typedef enum qos_cube {
 qoscube_t qos_spec_to_cube(qosspec_t qs);
 qosspec_t qos_cube_to_spec(qoscube_t qc);
 
-#endif
+#endif /* OUROBOROS_LIB_QOSCUBE_H */

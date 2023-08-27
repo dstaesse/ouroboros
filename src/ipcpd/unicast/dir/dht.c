@@ -57,9 +57,9 @@
 #include <inttypes.h>
 #include <limits.h>
 
-#include "kademlia.pb-c.h"
-typedef KadMsg kad_msg_t;
-typedef KadContactMsg kad_contact_msg_t;
+#include "dht.pb-c.h"
+typedef DhtMsg dht_msg_t;
+typedef DhtContactMsg dht_contact_msg_t;
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
@@ -354,7 +354,7 @@ static uint8_t * create_id(size_t len)
 }
 
 static void kad_req_create(struct dht * dht,
-                           kad_msg_t *  msg,
+                           dht_msg_t *  msg,
                            uint64_t     addr)
 {
         struct kad_req *   req;
@@ -793,7 +793,7 @@ static void lookup_destroy(struct lookup * lu)
 
 static void lookup_update(struct dht *    dht,
                           struct lookup * lu,
-                          kad_msg_t *     msg)
+                          dht_msg_t *     msg)
 {
         struct list_head * p = NULL;
         struct list_head * h;
@@ -1027,7 +1027,7 @@ static enum lookup_state lookup_wait(struct lookup * lu)
 }
 
 static struct kad_req * dht_find_request(struct dht * dht,
-                                         kad_msg_t *  msg)
+                                         dht_msg_t *  msg)
 {
         struct list_head * p;
 
@@ -1464,7 +1464,7 @@ static int dht_update_bucket(struct dht *    dht,
 }
 
 static int send_msg(struct dht * dht,
-                    kad_msg_t *  msg,
+                    dht_msg_t *  msg,
                     uint64_t     addr)
 {
 #ifndef __DHT_TEST__
@@ -1497,7 +1497,7 @@ static int send_msg(struct dht * dht,
         pthread_rwlock_unlock(&dht->lock);
 
 #ifndef __DHT_TEST__
-        len = kad_msg__get_packed_size(msg);
+        len = dht_msg__get_packed_size(msg);
         if (len == 0)
                 goto fail_msg;
 
@@ -1505,7 +1505,7 @@ static int send_msg(struct dht * dht,
                 if (ipcp_sdb_reserve(&sdb, len))
                         goto fail_msg;
 
-                kad_msg__pack(msg, shm_du_buff_head(sdb));
+                dht_msg__pack(msg, shm_du_buff_head(sdb));
 
                 if (dt_write_packet(addr, QOS_CUBE_BE, dht->eid, sdb) == 0)
                         break;
@@ -1552,7 +1552,7 @@ static struct dht_entry * dht_find_entry(struct dht *    dht,
 }
 
 static int kad_add(struct dht *              dht,
-                   const kad_contact_msg_t * contacts,
+                   const dht_contact_msg_t * contacts,
                    ssize_t                   n,
                    time_t                    exp)
 {
@@ -1591,7 +1591,7 @@ static int kad_add(struct dht *              dht,
 }
 
 static int wait_resp(struct dht * dht,
-                     kad_msg_t *  msg,
+                     dht_msg_t *  msg,
                      time_t       timeo)
 {
         struct kad_req * req;
@@ -1618,9 +1618,9 @@ static int kad_store(struct dht *    dht,
                      uint64_t        r_addr,
                      time_t          ttl)
 {
-        kad_msg_t msg = KAD_MSG__INIT;
-        kad_contact_msg_t cmsg = KAD_CONTACT_MSG__INIT;
-        kad_contact_msg_t * cmsgp[1];
+        dht_msg_t msg = DHT_MSG__INIT;
+        dht_contact_msg_t cmsg = DHT_CONTACT_MSG__INIT;
+        dht_contact_msg_t * cmsgp[1];
 
         cmsg.id.data = (uint8_t *) key;
         cmsg.addr    = addr;
@@ -1650,7 +1650,7 @@ static ssize_t kad_find(struct dht *     dht,
                         const uint64_t * addrs,
                         enum kad_code    code)
 {
-        kad_msg_t msg  = KAD_MSG__INIT;
+        dht_msg_t msg  = DHT_MSG__INIT;
         ssize_t   sent = 0;
 
         assert(dht);
@@ -1790,7 +1790,7 @@ static void kad_publish(struct dht *    dht,
 
         while (n-- > 0) {
                 if (addrs[n] == dht->addr) {
-                        kad_contact_msg_t msg = KAD_CONTACT_MSG__INIT;
+                        dht_contact_msg_t msg = DHT_CONTACT_MSG__INIT;
                         msg.id.data = (uint8_t *) key;
                         msg.id.len  = dht->b;
                         msg.addr    = addr;
@@ -1809,7 +1809,7 @@ static void kad_publish(struct dht *    dht,
 static int kad_join(struct dht * dht,
                     uint64_t     addr)
 {
-        kad_msg_t       msg = KAD_MSG__INIT;
+        dht_msg_t       msg = DHT_MSG__INIT;
 
         msg.code = KAD_JOIN;
 
@@ -1944,7 +1944,7 @@ static buffer_t dht_retrieve(struct dht *    dht,
 
 static ssize_t dht_get_contacts(struct dht *          dht,
                                 const uint8_t *       key,
-                                kad_contact_msg_t *** msgs)
+                                dht_contact_msg_t *** msgs)
 {
         struct list_head   l;
         struct list_head * p;
@@ -1981,7 +1981,7 @@ static ssize_t dht_get_contacts(struct dht *          dht,
                         return 0;
                 }
 
-                kad_contact_msg__init((*msgs)[i]);
+                dht_contact_msg__init((*msgs)[i]);
 
                 (*msgs)[i]->id.data = c->id;
                 (*msgs)[i]->id.len  = dht->b;
@@ -2118,7 +2118,7 @@ static void * work(void * o)
 
 static int kad_handle_join_resp(struct dht *     dht,
                                 struct kad_req * req,
-                                kad_msg_t *      msg)
+                                dht_msg_t *      msg)
 {
         assert(dht);
         assert(req);
@@ -2178,7 +2178,7 @@ static int kad_handle_join_resp(struct dht *     dht,
 
 static int kad_handle_find_resp(struct dht *     dht,
                                 struct kad_req * req,
-                                kad_msg_t *      msg)
+                                dht_msg_t *      msg)
 {
         struct lookup * lu;
 
@@ -2202,7 +2202,7 @@ static int kad_handle_find_resp(struct dht *     dht,
 }
 
 static void kad_handle_response(struct dht * dht,
-                                kad_msg_t *  msg)
+                                dht_msg_t *  msg)
 {
         struct kad_req * req;
 
@@ -2440,9 +2440,9 @@ static void * dht_handle_packet(void * o)
         assert(dht);
 
         while (true) {
-                kad_msg_t *          msg;
-                kad_contact_msg_t ** cmsgs;
-                kad_msg_t            resp_msg = KAD_MSG__INIT;
+                dht_msg_t *          msg;
+                dht_contact_msg_t ** cmsgs;
+                dht_msg_t            resp_msg = DHT_MSG__INIT;
                 uint64_t             addr;
                 buffer_t             buf;
                 size_t               i;
@@ -2464,7 +2464,7 @@ static void * dht_handle_packet(void * o)
 
                 i = shm_du_buff_len(cmd->sdb);
 
-                msg = kad_msg__unpack(NULL, i, shm_du_buff_head(cmd->sdb));
+                msg = dht_msg__unpack(NULL, i, shm_du_buff_head(cmd->sdb));
 #ifndef __DHT_TEST__
                 ipcp_sdb_release(cmd->sdb);
 #endif
@@ -2476,7 +2476,7 @@ static void * dht_handle_packet(void * o)
                 }
 
                 if (msg->code != KAD_RESPONSE && dht_wait_running(dht)) {
-                        kad_msg__free_unpacked(msg, NULL);
+                        dht_msg__free_unpacked(msg, NULL);
                         log_dbg("Got a request message when not running.");
                         continue;
                 }
@@ -2489,13 +2489,13 @@ static void * dht_handle_packet(void * o)
                 pthread_rwlock_unlock(&dht->lock);
 
                 if (msg->has_key && msg->key.len != b) {
-                        kad_msg__free_unpacked(msg, NULL);
+                        dht_msg__free_unpacked(msg, NULL);
                         log_warn("Bad key in message.");
                         continue;
                 }
 
                 if (msg->has_s_id && !msg->has_b && msg->s_id.len != b) {
-                        kad_msg__free_unpacked(msg, NULL);
+                        dht_msg__free_unpacked(msg, NULL);
                         log_warn("Bad source ID in message of type %d.",
                                  msg->code);
                         continue;
@@ -2596,7 +2596,7 @@ static void * dht_handle_packet(void * o)
                                 log_warn("Failed to send response.");
 
  finish:
-                kad_msg__free_unpacked(msg, NULL);
+                dht_msg__free_unpacked(msg, NULL);
 
                 if (resp_msg.n_addrs > 0)
                         free(resp_msg.addrs);
@@ -2607,7 +2607,7 @@ static void * dht_handle_packet(void * o)
                 }
 
                 for (i = 0; i < resp_msg.n_contacts; ++i)
-                        kad_contact_msg__free_unpacked(resp_msg.contacts[i],
+                        dht_contact_msg__free_unpacked(resp_msg.contacts[i],
                                                        NULL);
                 free(resp_msg.contacts);
 

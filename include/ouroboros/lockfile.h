@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LOCKFILE_H
-#define OUROBOROS_LOCKFILE_H
+#ifndef OUROBOROS_LIB_LOCKFILE_H
+#define OUROBOROS_LIB_LOCKFILE_H
 
 #include <sys/types.h>
 
@@ -37,4 +37,4 @@ void              lockfile_destroy(struct lockfile * lf);
 
 pid_t             lockfile_owner(struct lockfile * lf);
 
-#endif /* OUROBOROS_LOCKFILE_H */
+#endif /* OUROBOROS_LIB_LOCKFILE_H */

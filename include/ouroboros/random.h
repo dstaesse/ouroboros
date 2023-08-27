@@ -20,12 +20,12 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_RANDOM_H
-#define OUROBOROS_RANDOM_H
+#ifndef OUROBOROS_LIB_RANDOM_H
+#define OUROBOROS_LIB_RANDOM_H
 
 #include <sys/types.h>
 
 int random_buffer(void * buf,
                   size_t len);
 
-#endif /* OUROBOROS_RANDOM_H */
+#endif /* OUROBOROS_LIB_RANDOM_H */

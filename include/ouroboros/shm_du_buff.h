@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_SHM_DU_BUFF_H
-#define OUROBOROS_SHM_DU_BUFF_H
+#ifndef OUROBOROS_LIB_SHM_DU_BUFF_H
+#define OUROBOROS_LIB_SHM_DU_BUFF_H
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -55,4 +55,4 @@ int       shm_du_buff_wait_ack(struct shm_du_buff * sdb);
 
 int       shm_du_buff_ack(struct shm_du_buff * sdb);
 
-#endif /* OUROBOROS_SHM_DU_BUFF_H */
+#endif /* OUROBOROS_LIB_SHM_DU_BUFF_H */

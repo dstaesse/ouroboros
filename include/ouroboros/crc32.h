@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_CRC32_H
-#define OUROBOROS_CRC32_H
+#ifndef OUROBOROS_LIB_CRC32_H
+#define OUROBOROS_LIB_CRC32_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -32,4 +32,4 @@ void crc32(uint32_t *   crc,
            const void * buf,
            size_t       len);
 
-#endif /* OUROBOROS_CRC32_H */
+#endif /* OUROBOROS_LIB_CRC32_H */

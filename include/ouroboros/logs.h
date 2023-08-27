@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LOGS_H
-#define OUROBOROS_LOGS_H
+#ifndef OUROBOROS_LIB_LOGS_H
+#define OUROBOROS_LIB_LOGS_H
 
 #ifndef OUROBOROS_PREFIX
 #error You must define OUROBOROS_PREFIX before including this file
@@ -103,4 +103,4 @@ void log_fini(void);
 #define log_dbg_id(...)  do { } while (0)
 #endif
 
-#endif /* OUROBOROS_LOGS_H */
+#endif /* OUROBOROS_LIB_LOGS_H */

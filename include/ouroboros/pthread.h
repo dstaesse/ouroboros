@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_PTHREAD_H
-#define OUROBOROS_PTHREAD_H
+#ifndef OUROBOROS_LIB_PTHREAD_H
+#define OUROBOROS_LIB_PTHREAD_H
 
 #include <pthread.h>
 
@@ -36,4 +36,4 @@ static void __attribute__((unused)) __cleanup_mutex_unlock(void * mutex)
         pthread_mutex_unlock((pthread_mutex_t *) mutex);
 }
 
-#endif /* OUROBOROS_PTHREAD_H */
+#endif /* OUROBOROS_LIB_PTHREAD_H */

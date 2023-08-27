@@ -5,17 +5,17 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
 protobuf_generate_c(QOSSPEC_PROTO_SRCS QOSSPEC_PROTO_HDRS
-  qosspec.proto)
+  pb/qos.proto)
 protobuf_generate_c(IPCP_CONFIG_PROTO_SRCS IPCP_CONFIG_PROTO_HDRS
-  ipcp_config.proto)
+  pb/ipcp_config.proto)
 protobuf_generate_c(ENROLL_PROTO_SRCS ENROLL_PROTO_HDRS
-  enroll.proto)
+  pb/enroll.proto)
 protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS
-  cacep.proto)
+  pb/cacep.proto)
 protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS
-  irmd_messages.proto)
+  pb/irm.proto)
 protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS
-  ipcpd_messages.proto)
+  pb/ipcp.proto)
 
 if (NOT APPLE)
   find_library(LIBRT_LIBRARIES rt)

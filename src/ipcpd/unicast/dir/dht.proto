@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2023
  *
- * KAD protocol
+ * DHT protocol, based on Kademlia
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -22,19 +22,19 @@
 
 syntax = "proto2";
 
-message kad_contact_msg {
+message dht_contact_msg {
         required bytes  id   = 1;
         required uint64 addr = 2;
 }
 
-message kad_msg {
+message dht_msg {
         required uint32 code              =  1;
         required uint32 cookie            =  2;
         required uint64 s_addr            =  3;
         optional bytes  s_id              =  4;
         optional bytes  key               =  5;
         repeated uint64 addrs             =  6;
-        repeated kad_contact_msg contacts =  7;
+        repeated dht_contact_msg contacts =  7;
         // enrolment parameters
         optional uint32 alpha             =  8;
         optional uint32 b                 =  9;
