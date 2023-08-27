@@ -38,7 +38,6 @@ set(SOURCE_FILES
   connmgr.c
   dir.c
   dt.c
-  enroll.c
   fa.c
   main.c
   pff.c
@@ -57,7 +56,7 @@ set(SOURCE_FILES
   routing/graph.c
   )
 
-add_executable(ipcpd-unicast ${SOURCE_FILES} ${IPCP_SOURCES}
+add_executable(ipcpd-unicast ${SOURCE_FILES} ${IPCP_SOURCES} ${COMMON_SOURCES}
   ${KAD_PROTO_SRCS} ${LAYER_CONFIG_PROTO_SRCS})
 target_link_libraries(ipcpd-unicast LINK_PUBLIC ouroboros-dev)
 

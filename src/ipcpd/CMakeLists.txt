@@ -44,6 +44,10 @@ set(IPCP_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/shim-data.c
   )
 
+set (COMMON_SOURCES
+   ${CMAKE_CURRENT_SOURCE_DIR}/common/enroll.c
+  )
+
 add_subdirectory(local)
 add_subdirectory(eth)
 add_subdirectory(udp)

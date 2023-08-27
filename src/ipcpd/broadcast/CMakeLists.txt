@@ -20,11 +20,10 @@ set(SOURCE_FILES
   # Add source files here
   connmgr.c
   dt.c
-  enroll.c
   main.c
   )
 
-add_executable(ipcpd-broadcast ${SOURCE_FILES} ${IPCP_SOURCES}
+add_executable(ipcpd-broadcast ${SOURCE_FILES} ${IPCP_SOURCES} ${COMMON_SOURCES}
   ${LAYER_CONFIG_PROTO_SRCS})
 target_link_libraries(ipcpd-broadcast LINK_PUBLIC ouroboros-dev)
 
