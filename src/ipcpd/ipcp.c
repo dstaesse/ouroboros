@@ -267,6 +267,8 @@ static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
 {
         struct ipcp_config conf;
 
+        assert(ipcp_get_state() == IPCP_INIT);
+
         if (ipcpi.ops->ipcp_bootstrap == NULL) {
                 log_err("Bootstrap unsupported.");
                 ret_msg->result = -ENOTSUP;
@@ -281,14 +283,18 @@ static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
 
         conf = ipcp_config_msg_to_s(conf_msg);
         ret_msg->result = ipcpi.ops->ipcp_bootstrap(&conf);
-        if (ret_msg->result == 0)
+        if (ret_msg->result == 0) {
                 ret_msg->layer_info = layer_info_s_to_msg(&conf.layer_info);
+                ipcp_set_state(IPCP_OPERATIONAL);
+        }
 }
 
 static void handle_enroll(const char * dst,
                           ipcp_msg_t * ret_msg)
 {
         struct layer_info info;
+
+        assert(ipcp_get_state() == IPCP_INIT);
 
         if (ipcpi.ops->ipcp_enroll == NULL) {
                 log_err("Enroll unsupported.");
@@ -303,8 +309,10 @@ static void handle_enroll(const char * dst,
         }
 
         ret_msg->result = ipcpi.ops->ipcp_enroll(dst, &info);
-        if (ret_msg->result == 0)
+        if (ret_msg->result == 0) {
                 ret_msg->layer_info = layer_info_s_to_msg(&info);
+                ipcp_set_state(IPCP_OPERATIONAL);
+        }
 }
 
 static void handle_connect(const char * dst,
@@ -760,6 +768,8 @@ int ipcp_init(int               argc,
 
         pthread_condattr_destroy(&cattr);
 
+        ipcp_set_state(IPCP_INIT);
+
         return 0;
 
  fail_tpm_create:
@@ -801,8 +811,6 @@ int ipcp_start(void)
 
         if (tpm_start(ipcpi.tpm))
                 goto fail_tpm_start;
-
-        ipcp_set_state(IPCP_INIT);
 
         if (pthread_create(&ipcpi.acceptor, NULL, acceptloop, NULL)) {
                 log_err("Failed to create acceptor thread.");

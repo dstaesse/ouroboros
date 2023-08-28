@@ -658,8 +658,6 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
 
         udp_data.dns_addr = conf->udp.dns_addr;
 
-        ipcp_set_state(IPCP_OPERATIONAL);
-
         if (pthread_create(&udp_data.mgmt_handler, NULL,
                            udp_ipcp_mgmt_handler, NULL)) {
                 ipcp_set_state(IPCP_INIT);

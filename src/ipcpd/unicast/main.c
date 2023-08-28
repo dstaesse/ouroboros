@@ -129,10 +129,6 @@ static void finalize_components(void)
 
 static int start_components(void)
 {
-        assert(ipcp_get_state() == IPCP_INIT);
-
-        ipcp_set_state(IPCP_OPERATIONAL);
-
         if (dt_start() < 0) {
                 log_err("Failed to start data transfer.");
                 goto fail_dt_start;
@@ -168,9 +164,6 @@ static int start_components(void)
 
 static void stop_components(void)
 {
-        assert(ipcp_get_state() == IPCP_OPERATIONAL ||
-               ipcp_get_state() == IPCP_SHUTDOWN);
-
         connmgr_stop();
 
         enroll_stop();

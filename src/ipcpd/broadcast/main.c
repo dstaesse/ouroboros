@@ -78,10 +78,6 @@ static void finalize_components(void)
 
 static int start_components(void)
 {
-        assert(ipcp_get_state() == IPCP_INIT);
-
-        ipcp_set_state(IPCP_OPERATIONAL);
-
         if (enroll_start() < 0) {
                 log_err("Failed to start enrollment.");
                 goto fail_enroll_start;
@@ -103,14 +99,9 @@ static int start_components(void)
 
 static void stop_components(void)
 {
-        assert(ipcp_get_state() == IPCP_OPERATIONAL ||
-               ipcp_get_state() == IPCP_SHUTDOWN);
-
         connmgr_stop();
 
         enroll_stop();
-
-        ipcp_set_state(IPCP_INIT);
 }
 
 static int broadcast_ipcp_enroll(const char *        dst,

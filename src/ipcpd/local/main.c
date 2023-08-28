@@ -148,8 +148,6 @@ static int local_ipcp_bootstrap(const struct ipcp_config * conf)
         ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
         strcpy(ipcpi.layer_name,conf->layer_info.layer_name);
 
-        ipcp_set_state(IPCP_OPERATIONAL);
-
         if (pthread_create(&local_data.packet_loop, NULL,
                            local_ipcp_packet_loop, NULL)) {
                 ipcp_set_state(IPCP_INIT);

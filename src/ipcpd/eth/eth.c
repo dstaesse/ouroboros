@@ -1477,7 +1477,6 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
 #endif /* HAVE_NETMAP */
-        ipcp_set_state(IPCP_OPERATIONAL);
 
 #if defined(__linux__)
         if (pthread_create(&eth_data.if_monitor,
