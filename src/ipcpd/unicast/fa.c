@@ -470,81 +470,6 @@ static size_t fa_wait_for_fa_msg(struct fa_msg * msg)
         return len;
 }
 
-static int fa_wait_irmd_alloc(uint8_t *    dst,
-                              qosspec_t    qs,
-                              const void * data,
-                              size_t       len)
-{
-        struct timespec ts  = {0, TIMEOUT};
-        struct timespec abstime;
-        int             fd;
-        time_t          mpl = IPCP_UNICAST_MPL;
-
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-
-        pthread_mutex_lock(&ipcpi.alloc_lock);
-
-        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL) {
-                ts_add(&abstime, &ts, &abstime);
-                pthread_cond_timedwait(&ipcpi.alloc_cond,
-                                       &ipcpi.alloc_lock,
-                                       &abstime);
-        }
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
-                log_dbg("Won't allocate over non-operational IPCP.");
-                return -EIPCPSTATE;
-        }
-
-        assert(ipcpi.alloc_id == -1);
-
-        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl, data, len);
-        if (fd < 0) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
-                log_dbg("Failed to get fd for flow.");
-                return -ENOTALLOC;
-        }
-
-        ipcpi.alloc_id = fd;
-        pthread_cond_broadcast(&ipcpi.alloc_cond);
-
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
-
-        return fd;
-}
-
-static int fa_wait_irmd_alloc_resp(int fd)
-{
-        struct timespec      ts = {0, TIMEOUT};
-        struct timespec      abstime;
-
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-
-        pthread_mutex_lock(&ipcpi.alloc_lock);
-
-        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
-                ts_add(&abstime, &ts, &abstime);
-                pthread_cond_timedwait(&ipcpi.alloc_cond,
-                                       &ipcpi.alloc_lock,
-                                       &abstime);
-        }
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
-                return -1;
-        }
-
-        assert(ipcpi.alloc_id == fd);
-
-        ipcpi.alloc_id = -1;
-        pthread_cond_broadcast(&ipcpi.alloc_cond);
-
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
-
-        return 0;
-}
-
 static int fa_handle_flow_req(struct fa_msg * msg,
                               size_t          len)
 {
@@ -552,6 +477,7 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         int              fd;
         qosspec_t        qs;
         struct fa_flow * flow;
+        uint8_t *        dst;
         uint8_t *        data;  /* Piggbacked data on flow alloc request. */
         size_t           dlen;  /* Length of piggybacked data.            */
 
@@ -561,6 +487,7 @@ static int fa_handle_flow_req(struct fa_msg * msg,
                 return -EPERM;
         }
 
+        dst  = (uint8_t *)(msg + 1);
         data = (uint8_t *) msg + msg_len;
         dlen = len - msg_len;
 
@@ -574,7 +501,7 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         qs.cypher_s     = ntoh16(msg->cypher_s);
         qs.timeout      = ntoh32(msg->timeout);
 
-        fd = fa_wait_irmd_alloc((uint8_t *) (msg + 1), qs, data, dlen);
+        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UNICAST_MPL, data, dlen);
         if (fd < 0)
                 return fd;
 
@@ -881,7 +808,7 @@ int fa_alloc_resp(int          fd,
 
         flow = &fa.flows[fd];
 
-        if (fa_wait_irmd_alloc_resp(fd) < 0)
+        if (ipcp_wait_flow_resp(fd) < 0)
                 goto fail_alloc_resp;
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + len)) {

@@ -66,7 +66,6 @@
 #define IPCP_UDP_BUF_SIZE        8980
 #define IPCP_UDP_MSG_SIZE        8980
 #define DNS_TTL                  86400
-#define FD_UPDATE_TIMEOUT        100 /* microseconds */
 
 #define SADDR                    ((struct sockaddr *) &udp_data.s_saddr)
 #define SADDR_SIZE               (sizeof(udp_data.s_saddr))
@@ -290,31 +289,10 @@ static int udp_ipcp_port_req(struct sockaddr_in * c_saddr,
                              const void *         data,
                              size_t               len)
 {
-        struct timespec    ts        = {0, FD_UPDATE_TIMEOUT * 1000};
-        struct timespec    abstime;
-        int                fd;
-        time_t             mpl = IPCP_UDP_MPL;
+        int fd;
 
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-
-        pthread_mutex_lock(&ipcpi.alloc_lock);
-
-        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL) {
-                ts_add(&abstime, &ts, &abstime);
-                pthread_cond_timedwait(&ipcpi.alloc_cond, &ipcpi.alloc_lock,
-                                       &abstime);
-        }
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                log_dbg("Won't allocate over non-operational IPCP.");
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
-                return -1;
-        }
-
-        /* reply to IRM */
-        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl, data, len);
+        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UDP_MPL, data, len);
         if (fd < 0) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Could not get new flow from IRMd.");
                 return -1;
         }
@@ -325,11 +303,6 @@ static int udp_ipcp_port_req(struct sockaddr_in * c_saddr,
         udp_data.fd_to_uf[fd].d_eid   = d_eid;
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
-
-        ipcpi.alloc_id = fd;
-        pthread_cond_broadcast(&ipcpi.alloc_cond);
-
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         log_dbg("Pending allocation request, fd %d, remote eid %d.",
                 fd, d_eid);
@@ -1056,34 +1029,11 @@ static int udp_ipcp_flow_alloc_resp(int          fd,
                                     const void * data,
                                     size_t       len)
 {
-        struct timespec    ts  = {0, FD_UPDATE_TIMEOUT * 1000};
-        struct timespec    abstime;
         struct sockaddr_in saddr;
         int                d_eid;
 
-        if (resp)
-                return 0;
-
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-
-        pthread_mutex_lock(&ipcpi.alloc_lock);
-
-        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
-                ts_add(&abstime, &ts, &abstime);
-                pthread_cond_timedwait(&ipcpi.alloc_cond,
-                                       &ipcpi.alloc_lock,
-                                       &abstime);
-        }
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
+        if (ipcp_wait_flow_resp(fd) < 0)
                 return -1;
-        }
-
-        ipcpi.alloc_id = -1;
-        pthread_cond_broadcast(&ipcpi.alloc_cond);
-
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         pthread_rwlock_rdlock(&udp_data.flows_lock);
 

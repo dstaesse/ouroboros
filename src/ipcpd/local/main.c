@@ -48,8 +48,7 @@
 #include <sys/wait.h>
 #include <assert.h>
 
-#define THIS_TYPE     IPCP_LOCAL
-#define ALLOC_TIMEOUT 10 /* ms */
+#define THIS_TYPE IPCP_LOCAL
 
 struct ipcp ipcpi;
 
@@ -196,38 +195,14 @@ static int local_ipcp_flow_alloc(int             fd,
                                  const void *    data,
                                  size_t          len)
 {
-        struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
-        struct timespec abstime;
-        int             out_fd = -1;
-        time_t          mpl    = IPCP_LOCAL_MPL;
+        int out_fd = -1;
 
         log_dbg("Allocating flow to " HASH_FMT32 " on fd %d.",
                 HASH_VAL32(dst), fd);
         assert(dst);
 
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-
-        pthread_mutex_lock(&ipcpi.alloc_lock);
-
-        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL) {
-                ts_add(&abstime, &ts, &abstime);
-                pthread_cond_timedwait(&ipcpi.alloc_cond,
-                                       &ipcpi.alloc_lock,
-                                       &abstime);
-        }
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                log_dbg("Won't allocate over non-operational IPCP.");
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
-                return -1;
-        }
-
-        assert(ipcpi.alloc_id == -1);
-
-        out_fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl,
-                                   data, len);
+        out_fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_LOCAL_MPL, data, len);
         if (out_fd < 0) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_dbg("Flow allocation failed: %d", out_fd);
                 return -1;
         }
@@ -238,11 +213,6 @@ static int local_ipcp_flow_alloc(int             fd,
         local_data.in_out[out_fd] = fd;
 
         pthread_rwlock_unlock(&local_data.lock);
-
-        ipcpi.alloc_id = out_fd;
-        pthread_cond_broadcast(&ipcpi.alloc_cond);
-
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         fset_add(local_data.flows, fd);
 
@@ -256,31 +226,11 @@ static int local_ipcp_flow_alloc_resp(int          fd,
                                       const void * data,
                                       size_t       len)
 {
-        struct timespec ts     = {0, ALLOC_TIMEOUT * MILLION};
-        struct timespec abstime;
         int             out_fd = -1;
         time_t          mpl    = IPCP_LOCAL_MPL;
 
-        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-
-        pthread_mutex_lock(&ipcpi.alloc_lock);
-
-        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
-                ts_add(&abstime, &ts, &abstime);
-                pthread_cond_timedwait(&ipcpi.alloc_cond,
-                                       &ipcpi.alloc_lock,
-                                       &abstime);
-        }
-
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
+        if (ipcp_wait_flow_resp(fd) < 0)
                 return -1;
-        }
-
-        ipcpi.alloc_id = -1;
-        pthread_cond_broadcast(&ipcpi.alloc_cond);
-
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
 
         pthread_rwlock_wrlock(&local_data.lock);
 

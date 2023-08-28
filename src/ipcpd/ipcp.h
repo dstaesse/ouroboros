@@ -136,6 +136,15 @@ enum ipcp_state ipcp_get_state(void);
 int             ipcp_parse_arg(int    argc,
                                char * argv[]);
 
+/* Helper functions to handle races during flow allocation */
+int             ipcp_wait_flow_req_arr(const uint8_t * dst,
+                                       qosspec_t       qs,
+                                       time_t          mpl,
+                                       const void *    data,
+                                       size_t          len);
+
+int             ipcp_wait_flow_resp(const int fd);
+
 /* Helper functions for directory entries, could be moved */
 uint8_t *       ipcp_hash_dup(const uint8_t * hash);
 

@@ -35,6 +35,7 @@
 
 #define OUROBOROS_PREFIX  "ipcpd/ipcp"
 #define IPCP_INFO         "info"
+#define ALLOC_TIMEOUT     10 * MILLION /* 10 ms */
 
 #include <ouroboros/hash.h>
 #include <ouroboros/logs.h>
@@ -254,6 +255,82 @@ static void * acceptloop(void * o)
         }
 
         return (void *) 0;
+}
+
+int ipcp_wait_flow_req_arr(const uint8_t * dst,
+                           qosspec_t       qs,
+                           time_t          mpl,
+                           const void *    data,
+                           size_t          len)
+{
+        struct timespec ts  = {0, ALLOC_TIMEOUT};
+        struct timespec abstime;
+        int             fd;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
+        pthread_mutex_lock(&ipcpi.alloc_lock);
+
+        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL) {
+                ts_add(&abstime, &ts, &abstime);
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &abstime);
+        }
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                log_err("Won't allocate over non-operational IPCP.");
+                return -EIPCPSTATE;
+        }
+
+        assert(ipcpi.alloc_id == -1);
+
+        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl, data, len);
+        if (fd < 0) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                log_err("Failed to get fd for flow.");
+                return -ENOTALLOC;
+        }
+
+        ipcpi.alloc_id = fd;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
+
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
+
+        return fd;
+
+}
+
+int ipcp_wait_flow_resp(const int fd)
+{
+        struct timespec      ts = {0, ALLOC_TIMEOUT};
+        struct timespec      abstime;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
+        pthread_mutex_lock(&ipcpi.alloc_lock);
+
+        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
+                ts_add(&abstime, &ts, &abstime);
+                pthread_cond_timedwait(&ipcpi.alloc_cond,
+                                       &ipcpi.alloc_lock,
+                                       &abstime);
+        }
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                return -1;
+        }
+
+        assert(ipcpi.alloc_id == fd);
+
+        ipcpi.alloc_id = -1;
+        pthread_cond_broadcast(&ipcpi.alloc_cond);
+
+        pthread_mutex_unlock(&ipcpi.alloc_lock);
+
+        return 0;
 }
 
 static void free_msg(void * o)
