@@ -56,7 +56,7 @@
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
-#define TIMEOUT 10000 /* nanoseconds */
+#define TIMEOUT 10 * MILLION /* nanoseconds */
 
 #define FLOW_REQ    0
 #define FLOW_REPLY  1
@@ -475,7 +475,7 @@ static int fa_wait_irmd_alloc(uint8_t *    dst,
                               const void * data,
                               size_t       len)
 {
-        struct timespec ts  = {0, TIMEOUT * 1000};
+        struct timespec ts  = {0, TIMEOUT};
         struct timespec abstime;
         int             fd;
         time_t          mpl = IPCP_UNICAST_MPL;
@@ -516,7 +516,7 @@ static int fa_wait_irmd_alloc(uint8_t *    dst,
 
 static int fa_wait_irmd_alloc_resp(int fd)
 {
-        struct timespec      ts = {0, TIMEOUT * 1000};
+        struct timespec      ts = {0, TIMEOUT};
         struct timespec      abstime;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
@@ -882,43 +882,48 @@ int fa_alloc_resp(int          fd,
         flow = &fa.flows[fd];
 
         if (fa_wait_irmd_alloc_resp(fd) < 0)
-                return -1;
+                goto fail_alloc_resp;
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + len)) {
-                fa_flow_fini(flow);
-                return -1;
+                goto fail_reserve;
         }
 
         msg = (struct fa_msg *) shm_du_buff_head(sdb);
         memset(msg, 0, sizeof(*msg));
 
-        pthread_rwlock_wrlock(&fa.flows_lock);
-
         msg->code     = FLOW_REPLY;
-        msg->r_eid    = hton64(flow->r_eid);
-        msg->s_eid    = hton64(flow->s_eid);
         msg->response = response;
-
         if (len > 0)
                 memcpy(msg + 1, data, len);
 
+        pthread_rwlock_rdlock(&fa.flows_lock);
+
+        msg->r_eid    = hton64(flow->r_eid);
+        msg->s_eid    = hton64(flow->s_eid);
+
+        pthread_rwlock_unlock(&fa.flows_lock);
+
+        if (dt_write_packet(flow->r_addr, qc, fa.eid, sdb))
+                goto fail_packet;
+
         if (response < 0) {
+                pthread_rwlock_rdlock(&fa.flows_lock);
                 fa_flow_fini(flow);
-                ipcp_sdb_release(sdb);
+                pthread_rwlock_unlock(&fa.flows_lock);
         } else {
                 psched_add(fa.psched, fd);
         }
 
-        if (dt_write_packet(flow->r_addr, qc, fa.eid, sdb)) {
-                fa_flow_fini(flow);
-                pthread_rwlock_unlock(&fa.flows_lock);
-                ipcp_sdb_release(sdb);
-                return -1;
-        }
-
-        pthread_rwlock_unlock(&fa.flows_lock);
-
         return 0;
+
+ fail_packet:
+        ipcp_sdb_release(sdb);
+ fail_reserve:
+        pthread_rwlock_wrlock(&fa.flows_lock);
+        fa_flow_fini(flow);
+        pthread_rwlock_unlock(&fa.flows_lock);
+ fail_alloc_resp:
+        return -1;
 }
 
 int fa_dealloc(int fd)
