@@ -97,9 +97,8 @@ extern struct ipcp {
         int                irmd_fd;
 
         enum ipcp_state    state;
-        pthread_rwlock_t   state_lock;
-        pthread_mutex_t    state_mtx;
         pthread_cond_t     state_cond;
+        pthread_mutex_t    state_mtx;
 
         int                sockfd;
         char *             sock_path;
