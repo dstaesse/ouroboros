@@ -78,15 +78,16 @@ static int dt_add_nb(int fd)
         list_for_each(p, &fwd.nbs) {
                 struct nb * el = list_entry(p, struct nb, next);
                 if (el->fd == fd) {
-                        log_dbg("Already know neighbor.");
                         pthread_rwlock_unlock(&fwd.nbs_lock);
-                        return -EPERM;
+                        log_warn("Already know neighbor on fd %d.", fd);
+                        return 0;
                 }
         }
 
         nb = malloc(sizeof(*nb));
         if (nb == NULL) {
                 pthread_rwlock_unlock(&fwd.nbs_lock);
+                log_err("Failed to malloc neighbor struct.");
                 return -ENOMEM;
         }
 
@@ -96,9 +97,9 @@ static int dt_add_nb(int fd)
 
         ++fwd.nbs_len;
 
-        log_dbg("Neighbor %d added.", fd);
-
         pthread_rwlock_unlock(&fwd.nbs_lock);
+
+        log_dbg("Neighbor %d added.", fd);
 
         return 0;
 }
@@ -123,6 +124,8 @@ static int dt_del_nb(int fd)
         }
 
         pthread_rwlock_unlock(&fwd.nbs_lock);
+
+        log_err("Neighbor not found on fd %d.", fd);
 
         return -EPERM;
 }
@@ -191,7 +194,7 @@ static void * dt_reader(void * o)
         while (true) {
                 ret = fevent(fwd.set, fq, NULL);
                 if (ret < 0) {
-                        log_warn("Event error: %d.", ret);
+                        log_warn("Event warning: %d.", ret);
                         continue;
                 }
 
@@ -226,13 +229,13 @@ static void handle_event(void *       self,
 
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
-                if (dt_add_nb(c->flow_info.fd))
-                        log_dbg("Failed to add neighbor.");
+                if (dt_add_nb(c->flow_info.fd) < 0)
+                        log_err("Failed to add neighbor.");
                 fset_add(fwd.set, c->flow_info.fd);
                 break;
         case NOTIFY_DT_CONN_DEL:
-                if (dt_del_nb(c->flow_info.fd))
-                        log_dbg("Failed to delete neighbor.");
+                if (dt_del_nb(c->flow_info.fd) < 0)
+                        log_err("Failed to delete neighbor.");
                 fset_del(fwd.set, c->flow_info.fd);
                 break;
         default:

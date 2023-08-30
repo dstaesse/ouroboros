@@ -30,7 +30,7 @@
 
 #define OUROBOROS_PREFIX "shim-data"
 
-#include <ouroboros/endian.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/list.h>
 #include <ouroboros/time_utils.h>
@@ -446,9 +446,9 @@ uint64_t shim_data_dir_get_addr(struct shim_data * data,
         pthread_rwlock_rdlock(&data->dir_lock);
 
         entry = find_dir_entry_any(data, hash);
-
         if (entry == NULL) {
                 pthread_rwlock_unlock(&data->dir_lock);
+                log_warn("No address for " HASH_FMT32 ".", HASH_VAL32(hash));
                 return 0; /* undefined behaviour, 0 may be a valid address */
         }
 

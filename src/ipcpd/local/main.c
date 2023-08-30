@@ -149,11 +149,10 @@ static int local_ipcp_bootstrap(const struct ipcp_config * conf)
 
         if (pthread_create(&local_data.packet_loop, NULL,
                            local_ipcp_packet_loop, NULL)) {
+                log_err("Failed to create pthread: %s", strerror(errno));
                 ipcp_set_state(IPCP_INIT);
                 return -1;
         }
-
-        log_info("Bootstrapped local IPCP with pid %d.", getpid());
 
         return 0;
 }
@@ -161,12 +160,10 @@ static int local_ipcp_bootstrap(const struct ipcp_config * conf)
 static int local_ipcp_reg(const uint8_t * hash)
 {
         if (shim_data_reg_add_entry(local_data.shim_data, hash)) {
-                log_dbg("Failed to add " HASH_FMT32 " to local registry.",
+                log_err("Failed to add " HASH_FMT32 " to local registry.",
                         HASH_VAL32(hash));
                 return -1;
         }
-
-        log_info("Registered " HASH_FMT32 ".", HASH_VAL32(hash));
 
         return 0;
 }
@@ -226,8 +223,8 @@ static int local_ipcp_flow_alloc_resp(int          fd,
                                       const void * data,
                                       size_t       len)
 {
-        int             out_fd = -1;
-        time_t          mpl    = IPCP_LOCAL_MPL;
+        int    out_fd;
+        time_t mpl = IPCP_LOCAL_MPL;
 
         if (ipcp_wait_flow_resp(fd) < 0)
                 return -1;

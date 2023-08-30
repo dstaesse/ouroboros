@@ -323,8 +323,8 @@ static int udp_ipcp_port_alloc_reply(const struct sockaddr_in * saddr,
 
         if (memcmp(&udp_data.fd_to_uf[s_eid].r_saddr, saddr, sizeof(*saddr))) {
                 pthread_rwlock_unlock(&udp_data.flows_lock);
-                log_warn("Flow allocation reply for %u from wrong source.",
-                         s_eid);
+                log_err("Flow allocation reply for %u from wrong source.",
+                        s_eid);
                 return -1;
         }
 
@@ -334,7 +334,7 @@ static int udp_ipcp_port_alloc_reply(const struct sockaddr_in * saddr,
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
         if (ipcp_flow_alloc_reply(s_eid, response, mpl, data, len) < 0) {
-                log_dbg("Failed to reply to flow allocation.");
+                log_err("Failed to reply to flow allocation.");
                 return -1;
         }
 
@@ -596,17 +596,17 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
         strcpy(ipcpi.layer_name, conf->layer_info.layer_name);
 
         if (inet4_ntop(&conf->udp.ip_addr, ipstr) == NULL) {
-                log_err("Failed to convert IP address");
+                log_err("Failed to convert IP address.");
                 return -1;
         }
 
         if (conf->udp.dns_addr != 0) {
                 if (inet4_ntop(&conf->udp.dns_addr, dnsstr) == NULL) {
-                        log_err("Failed to convert DNS address");
+                        log_err("Failed to convert DNS address.");
                         return -1;
                 }
 #ifndef HAVE_DDNS
-                log_warn("DNS disabled at compile time, address ignored");
+                log_warn("DNS disabled at compile time, address ignored.");
 #endif
         } else {
                 strcpy(dnsstr, "not set");
@@ -633,14 +633,14 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
 
         if (pthread_create(&udp_data.mgmt_handler, NULL,
                            udp_ipcp_mgmt_handler, NULL)) {
-                ipcp_set_state(IPCP_INIT);
+                log_err("Failed to create management thread.");
                 goto fail_bind;
         }
 
         for (i = 0; i < IPCP_UDP_RD_THR; ++i) {
                 if (pthread_create(&udp_data.packet_reader[i], NULL,
                                    udp_ipcp_packet_reader, NULL)) {
-                        ipcp_set_state(IPCP_INIT);
+                        log_err("Failed to create reader thread.");
                         goto fail_packet_reader;
                 }
         }
@@ -648,7 +648,7 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
         for (i = 0; i < IPCP_UDP_WR_THR; ++i) {
                 if (pthread_create(&udp_data.packet_writer[i], NULL,
                         udp_ipcp_packet_writer, NULL)) {
-                        ipcp_set_state(IPCP_INIT);
+                        log_err("failed to create writer thread.");
                         goto fail_packet_writer;
                 }
         }
@@ -822,8 +822,10 @@ static int udp_ipcp_reg(const uint8_t * hash)
         char *   hashstr;
 
         hashstr = malloc(ipcp_dir_hash_strlen() + 1);
-        if (hashstr == NULL)
+        if (hashstr == NULL) {
+                log_err("Failed to malloc hashstr.");
                 return -1;
+        }
 
         assert(hash);
 
@@ -845,11 +847,13 @@ static int udp_ipcp_reg(const uint8_t * hash)
                 ip_addr = udp_data.s_saddr.sin_addr.s_addr;
 
                 if (inet4_ntop(&ip_addr, ipstr) == NULL) {
+                        log_err("Failed to convert IP address to string.");
                         free(hashstr);
                         return -1;
                 }
 
                 if (inet4_ntop(&dns_addr, dnsstr) == NULL) {
+                        log_err("Failed to convert DNS address to string.");
                         free(hashstr);
                         return -1;
                 }
@@ -858,14 +862,13 @@ static int udp_ipcp_reg(const uint8_t * hash)
                         dnsstr, hashstr, DNS_TTL, ipstr);
 
                 if (ddns_send(cmd)) {
+                        log_err("Failed to send DDNS message.");
                         shim_data_reg_del_entry(udp_data.shim_data, hash);
                         free(hashstr);
                         return -1;
                 }
         }
 #endif
-        log_dbg("Registered " HASH_FMT32 ".", HASH_VAL32(hash));
-
         free(hashstr);
 
         return 0;
@@ -884,8 +887,10 @@ static int udp_ipcp_unreg(const uint8_t * hash)
         assert(hash);
 
         hashstr = malloc(ipcp_dir_hash_strlen() + 1);
-        if (hashstr == NULL)
+        if (hashstr == NULL) {
+                log_err("Failed to malloc hashstr.");
                 return -1;
+        }
 
         ipcp_hash_str(hashstr, hash);
 
@@ -896,6 +901,7 @@ static int udp_ipcp_unreg(const uint8_t * hash)
 
         if (dns_addr != 0) {
                 if (inet4_ntop(&dns_addr, dnsstr) == NULL) {
+                        log_err("Failed to convert DNS address to string.");
                         free(hashstr);
                         return -1;
                 }
@@ -907,8 +913,6 @@ static int udp_ipcp_unreg(const uint8_t * hash)
 #endif
 
         shim_data_reg_del_entry(udp_data.shim_data, hash);
-
-        log_dbg("Unregistered " HASH_FMT32 ".", HASH_VAL32(hash));
 
         free(hashstr);
 
@@ -926,8 +930,10 @@ static int udp_ipcp_query(const uint8_t * hash)
         assert(hash);
 
         hashstr = malloc(ipcp_dir_hash_strlen() + 1);
-        if (hashstr == NULL)
+        if (hashstr == NULL) {
+                log_err("Failed to malloc hashstr.");
                 return -ENOMEM;
+        }
 
         ipcp_hash_str(hashstr, hash);
 
@@ -942,7 +948,7 @@ static int udp_ipcp_query(const uint8_t * hash)
         if (dns_addr != 0) {
                 ip_addr = ddns_resolve(hashstr, dns_addr);
                 if (ip_addr == 0) {
-                        log_dbg("Could not resolve %s.", hashstr);
+                        log_err("Could not resolve %s.", hashstr);
                         free(hashstr);
                         return -1;
                 }
@@ -950,7 +956,7 @@ static int udp_ipcp_query(const uint8_t * hash)
 #endif
                 h = gethostbyname(hashstr);
                 if (h == NULL) {
-                        log_dbg("Could not resolve %s.", hashstr);
+                        log_err("Could not resolve %s.", hashstr);
                         free(hashstr);
                         return -1;
                 }
@@ -981,8 +987,6 @@ static int udp_ipcp_flow_alloc(int             fd,
         uint32_t           ip_addr = 0;
         char               ipstr[INET_ADDRSTRLEN];
 
-        log_dbg("Allocating flow to " HASH_FMT32 ".", HASH_VAL32(dst));
-
         (void) qs;
 
         assert(dst);
@@ -998,6 +1002,7 @@ static int udp_ipcp_flow_alloc(int             fd,
                 log_err("Could not convert IP address.");
                 return -1;
         }
+
         log_dbg("Destination UDP ipcp resolved at %s.", ipstr);
 
         memset((char *) &r_saddr, 0, sizeof(r_saddr));
@@ -1019,8 +1024,6 @@ static int udp_ipcp_flow_alloc(int             fd,
 
         fset_add(udp_data.np1_flows, fd);
 
-        log_dbg("Flow to %s pending on fd %d.", ipstr, fd);
-
         return 0;
 }
 
@@ -1032,8 +1035,10 @@ static int udp_ipcp_flow_alloc_resp(int          fd,
         struct sockaddr_in saddr;
         int                d_eid;
 
-        if (ipcp_wait_flow_resp(fd) < 0)
+        if (ipcp_wait_flow_resp(fd) < 0) {
+                log_err("Failed to wait for flow response.");
                 return -1;
+        }
 
         pthread_rwlock_rdlock(&udp_data.flows_lock);
 
@@ -1049,9 +1054,6 @@ static int udp_ipcp_flow_alloc_resp(int          fd,
         }
 
         fset_add(udp_data.np1_flows, fd);
-
-        log_dbg("Accepted flow, fd %d on eid %d.",
-                fd, d_eid);
 
         return 0;
 }
@@ -1070,8 +1072,6 @@ static int udp_ipcp_flow_dealloc(int fd)
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
         flow_dealloc(fd);
-
-        log_dbg("Flow with fd %d deallocated.", fd);
 
         return 0;
 }
@@ -1101,8 +1101,10 @@ int main(int    argc,
                 goto fail_data_init;
         }
 
-        if (ipcp_init(argc, argv, &udp_ops, THIS_TYPE) < 0)
+        if (ipcp_init(argc, argv, &udp_ops, THIS_TYPE) < 0) {
+                log_err("Failed to initialize IPCP.");
                 goto fail_init;
+        }
 
         if (ipcp_start() < 0) {
                 log_err("Failed to start IPCP.");

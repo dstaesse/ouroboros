@@ -339,23 +339,23 @@ static void free_msg(void * o)
 }
 
 
-static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
-                             ipcp_msg_t *        ret_msg)
+static void do_bootstrap(ipcp_config_msg_t * conf_msg,
+                         ipcp_msg_t *        ret_msg)
 {
         struct ipcp_config conf;
 
-        assert(ipcp_get_state() == IPCP_INIT);
+        log_info("Bootstrapping...");
 
         if (ipcpi.ops->ipcp_bootstrap == NULL) {
                 log_err("Bootstrap unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         if (ipcp_get_state() != IPCP_INIT) {
                 log_err("IPCP in wrong state.");
                 ret_msg->result = -EIPCPSTATE;
-                return;
+                goto finish;
         }
 
         conf = ipcp_config_msg_to_s(conf_msg);
@@ -364,25 +364,27 @@ static void handle_bootstrap(ipcp_config_msg_t * conf_msg,
                 ret_msg->layer_info = layer_info_s_to_msg(&conf.layer_info);
                 ipcp_set_state(IPCP_OPERATIONAL);
         }
+ finish:
+        log_info("Finished bootstrapping:  %d.", ret_msg->result);
 }
 
-static void handle_enroll(const char * dst,
-                          ipcp_msg_t * ret_msg)
+static void do_enroll(const char * dst,
+                      ipcp_msg_t * ret_msg)
 {
         struct layer_info info;
 
-        assert(ipcp_get_state() == IPCP_INIT);
+        log_info("Enrolling with %s...", dst);
 
         if (ipcpi.ops->ipcp_enroll == NULL) {
                 log_err("Enroll unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         if (ipcp_get_state() != IPCP_INIT) {
                 log_err("IPCP in wrong state.");
                 ret_msg->result = -EIPCPSTATE;
-                return;
+                goto finish;
         }
 
         ret_msg->result = ipcpi.ops->ipcp_enroll(dst, &info);
@@ -390,63 +392,87 @@ static void handle_enroll(const char * dst,
                 ret_msg->layer_info = layer_info_s_to_msg(&info);
                 ipcp_set_state(IPCP_OPERATIONAL);
         }
+ finish:
+        log_info("Finished enrolling with %s: %d.", dst, ret_msg->result);
 }
 
-static void handle_connect(const char * dst,
-                           const char * comp,
-                           qosspec_t    qs,
-                           ipcp_msg_t * ret_msg)
+static void do_connect(const char * dst,
+                       const char * comp,
+                       qosspec_t    qs,
+                       ipcp_msg_t * ret_msg)
 {
+        log_info("Connecting %s to %s...", comp, dst);
+
         if (ipcpi.ops->ipcp_connect == NULL) {
                 log_err("Connect unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         ret_msg->result = ipcpi.ops->ipcp_connect(dst, comp, qs);
+ finish:
+        log_info("Finished connecting: %d.", ret_msg->result);
 }
 
-static void handle_disconnect(const char * dst,
-                              const char * comp,
-                              ipcp_msg_t * ret_msg)
+static void do_disconnect(const char * dst,
+                          const char * comp,
+                          ipcp_msg_t * ret_msg)
 {
+        log_info("Disconnecting %s from %s...", comp, dst);
+
         if (ipcpi.ops->ipcp_disconnect == NULL) {
                 log_err("Disconnect unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         ret_msg->result = ipcpi.ops->ipcp_disconnect(dst, comp);
+
+ finish:
+        log_info("Finished disconnecting %s from %s: %d.",
+                 comp, dst, ret_msg->result);
 }
 
-static void handle_reg(const uint8_t * hash,
-                       ipcp_msg_t *    ret_msg)
+static void do_reg(const uint8_t * hash,
+                   ipcp_msg_t *    ret_msg)
 {
+
+        log_info("Registering " HASH_FMT32 "...", HASH_VAL32(hash));
 
         if (ipcpi.ops->ipcp_reg == NULL) {
                 log_err("Registration unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         ret_msg->result = ipcpi.ops->ipcp_reg(hash);
+ finish:
+        log_info("Finished registering " HASH_FMT32 " : %d.",
+                 HASH_VAL32(hash), ret_msg->result);
 }
 
-static void handle_unreg(const uint8_t * hash,
-                         ipcp_msg_t *    ret_msg)
+static void do_unreg(const uint8_t * hash,
+                     ipcp_msg_t *    ret_msg)
 {
+        log_info("Unregistering " HASH_FMT32 "...", HASH_VAL32(hash));
+
         if (ipcpi.ops->ipcp_unreg == NULL) {
                 log_err("Unregistration unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         ret_msg->result = ipcpi.ops->ipcp_unreg(hash);
+ finish:
+        log_info("Finished unregistering " HASH_FMT32 ": %d.",
+                 HASH_VAL32(hash), ret_msg->result);
 }
 
-static void handle_query(const uint8_t * hash,
-                         ipcp_msg_t * ret_msg)
+static void do_query(const uint8_t * hash,
+                     ipcp_msg_t *    ret_msg)
 {
+        /*  TODO: Log this operation when IRMd has internal caches. */
+
         if (ipcpi.ops->ipcp_query == NULL) {
                 log_err("Directory query unsupported.");
                 ret_msg->result = -ENOTSUP;
@@ -462,87 +488,99 @@ static void handle_query(const uint8_t * hash,
         ret_msg->result = ipcpi.ops->ipcp_query(hash);
 }
 
-static void handle_flow_alloc(pid_t        pid,
-                              int          flow_id,
-                              uint8_t *    dst,
-                              qosspec_t    qs,
-                              void *       data,
-                              size_t       len,
-                              ipcp_msg_t * ret_msg)
+static void do_flow_alloc(pid_t        pid,
+                          int          flow_id,
+                          uint8_t *    dst,
+                          qosspec_t    qs,
+                          void *       data,
+                          size_t       len,
+                          ipcp_msg_t * ret_msg)
 {
         int fd;
+
+        log_info("Allocating flow %d to " HASH_FMT32 ".",
+                 flow_id, HASH_VAL32(dst));
 
         if (ipcpi.ops->ipcp_flow_alloc == NULL) {
                 log_err("Flow allocation unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_err("IPCP in wrong state.");
                 ret_msg->result = -EIPCPSTATE;
-                return;
+                goto finish;
         }
 
         fd = np1_flow_alloc(pid, flow_id);
         if (fd < 0) {
-                log_err("Failed allocating fd on flow_id %d.", flow_id);
+                log_err("Failed allocating n + 1 fd on flow_id %d.", flow_id);
                 ret_msg->result = -EFLOWDOWN;
-                return;
+                goto finish;
         }
 
         ret_msg->result = ipcpi.ops->ipcp_flow_alloc(fd, dst, qs, data, len);
+ finish:
+        log_info("Finished allocating flow %d to " HASH_FMT32 ": %d.",
+                 flow_id, HASH_VAL32(dst), ret_msg->result);
 }
 
 
-static void handle_flow_join(pid_t           pid,
-                             int             flow_id,
-                             const uint8_t * dst,
-                             qosspec_t       qs,
-                             ipcp_msg_t *    ret_msg)
+static void do_flow_join(pid_t           pid,
+                         int             flow_id,
+                         const uint8_t * dst,
+                         qosspec_t       qs,
+                         ipcp_msg_t *    ret_msg)
 {
         int fd;
+
+        log_info("Joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
 
         if (ipcpi.ops->ipcp_flow_join == NULL) {
                 log_err("Broadcast unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_err("IPCP in wrong state.");
                 ret_msg->result = -EIPCPSTATE;
-                return;
+                goto finish;
         }
 
         fd = np1_flow_alloc(pid, flow_id);
         if (fd < 0) {
-                log_err("Failed allocating fd on flow_id %d.", flow_id);
+                log_err("Failed allocating n + 1 fd on flow_id %d.", flow_id);
                 ret_msg->result = -1;
-                return;
+                goto finish;
         }
 
         ret_msg->result = ipcpi.ops->ipcp_flow_join(fd, dst, qs);
+ finish:
+        log_info("Finished joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
 }
 
-static void handle_flow_alloc_resp(int          resp,
-                                   int          flow_id,
-                                   const void * data,
-                                   size_t       len,
-                                   ipcp_msg_t * ret_msg)
+static void do_flow_alloc_resp(int          resp,
+                               int          flow_id,
+                               const void * data,
+                               size_t       len,
+                               ipcp_msg_t * ret_msg)
 {
         int fd = -1;
+
+        log_info("Responding %d to alloc on flow_id %d.", resp, flow_id);
 
         if (ipcpi.ops->ipcp_flow_alloc_resp == NULL) {
                 log_err("Flow_alloc_resp unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_err("IPCP in wrong state.");
                 ret_msg->result = -EIPCPSTATE;
-                return;
+                goto finish;
         }
 
         if (resp == 0) {
@@ -550,39 +588,47 @@ static void handle_flow_alloc_resp(int          resp,
                 if (fd < 0) {
                         log_warn("Flow_id %d is not known.", flow_id);
                         ret_msg->result = -1;
-                        return;
+                        goto finish;
                 }
         }
 
         ret_msg->result = ipcpi.ops->ipcp_flow_alloc_resp(fd, resp, data, len);
+ finish:
+        log_info("Finished responding to allocation request: %d",
+                 ret_msg->result);
 }
 
-static void handle_flow_dealloc(int          flow_id,
-                                int          timeo_sec,
-                                ipcp_msg_t * ret_msg)
+static void do_flow_dealloc(int          flow_id,
+                            int          timeo_sec,
+                            ipcp_msg_t * ret_msg)
 {
         int fd;
+
+        log_info("Deallocating flow %d.", flow_id);
 
         if (ipcpi.ops->ipcp_flow_dealloc == NULL) {
                 log_err("Flow deallocation unsupported.");
                 ret_msg->result = -ENOTSUP;
-                return;
+                goto finish;
         }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_err("IPCP in wrong state.");
                 ret_msg->result = -EIPCPSTATE;
-                return;
+                goto finish;
         }
 
         fd = np1_flow_dealloc(flow_id, timeo_sec);
         if (fd < 0) {
                 log_warn("Could not deallocate flow_id %d.", flow_id);
                 ret_msg->result = -1;
-                return;
+                goto finish;
         }
 
         ret_msg->result = ipcpi.ops->ipcp_flow_dealloc(fd);
+ finish:
+        log_info("Finished deallocating flow %d: %d.",
+                 flow_id, ret_msg->result);
 }
 
 
@@ -632,60 +678,59 @@ static void * mainloop(void * o)
 
                 switch (msg->code) {
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
-                        handle_bootstrap(msg->conf, &ret_msg);
+                        do_bootstrap(msg->conf, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
-                        handle_enroll(msg->dst, &ret_msg);
+                        do_enroll(msg->dst, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_CONNECT:
                         qs = qos_spec_msg_to_s(msg->qosspec);
-                        handle_connect(msg->dst, msg->comp, qs, &ret_msg);
+                        do_connect(msg->dst, msg->comp, qs, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_DISCONNECT:
-                        handle_disconnect(msg->dst, msg->comp, &ret_msg);
+                        do_disconnect(msg->dst, msg->comp, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_REG:
                         assert(msg->hash.len == ipcp_dir_hash_len());
-                        handle_reg(msg->hash.data, &ret_msg);
+                        do_reg(msg->hash.data, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_UNREG:
                         assert(msg->hash.len == ipcp_dir_hash_len());
-                        handle_unreg(msg->hash.data, &ret_msg);
+                        do_unreg(msg->hash.data, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_QUERY:
                         assert(msg->hash.len == ipcp_dir_hash_len());
-                        handle_query(msg->hash.data, &ret_msg);
+                        do_query(msg->hash.data, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
                         assert(msg->hash.len == ipcp_dir_hash_len());
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                                : msg->pk.data == NULL);
                         qs = qos_spec_msg_to_s(msg->qosspec);
-                        handle_flow_alloc(msg->pid, msg->flow_id,
-                                          msg->hash.data, qs,
-                                          msg->pk.data, msg->pk.len,
-                                          &ret_msg);
+                        do_flow_alloc(msg->pid, msg->flow_id,
+                                      msg->hash.data, qs,
+                                      msg->pk.data, msg->pk.len,
+                                      &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_JOIN:
                         assert(msg->hash.len == ipcp_dir_hash_len());
                         qs = qos_spec_msg_to_s(msg->qosspec);
-                        handle_flow_join(msg->pid, msg->flow_id,
-                                         msg->hash.data, qs, &ret_msg);
+                        do_flow_join(msg->pid, msg->flow_id,
+                                     msg->hash.data, qs, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                                : msg->pk.data == NULL);
 
-                        handle_flow_alloc_resp(msg->response, msg->flow_id,
-                                               msg->pk.data, msg->pk.len,
-                                               &ret_msg);
+                        do_flow_alloc_resp(msg->response, msg->flow_id,
+                                           msg->pk.data, msg->pk.len,
+                                           &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
-                        handle_flow_dealloc(msg->flow_id, msg->timeo_sec,
-                                            &ret_msg);
+                        do_flow_dealloc(msg->flow_id, msg->timeo_sec, &ret_msg);
                         break;
                 default:
-                        ret_msg.result     = -1;
+                        ret_msg.result = -1;
                         log_err("Unknown message code: %d.", msg->code);
                         break;
                 }
@@ -830,14 +875,17 @@ int ipcp_init(int               argc,
                 goto fail_rib_init;
         }
 
-        if (rib_reg(IPCP_INFO, &r_ops))
+        if (rib_reg(IPCP_INFO, &r_ops)) {
+                log_err("Failed to register rib.");
                 goto fail_rib_reg;
+        }
 
         ipcpi.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
                                mainloop, NULL);
-        if (ipcpi.tpm == NULL)
+        if (ipcpi.tpm == NULL) {
+                log_err("Failed to create threadpool manager.");
                 goto fail_tpm_create;
-
+        }
 
         list_head_init(&ipcpi.cmds);
 

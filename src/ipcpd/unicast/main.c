@@ -76,7 +76,7 @@ static int initialize_components(const struct ipcp_config * conf)
                 goto fail_addr_auth;
         }
 
-        log_dbg("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
+        log_info("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
 
         if (ca_init(conf->unicast.cong_avoid)) {
                 log_err("Failed to initialize congestion avoidance.");
@@ -261,8 +261,6 @@ static int unicast_ipcp_bootstrap(const struct ipcp_config * conf)
                 log_err("Failed to bootstrap IPCP components.");
                 goto fail_bootstrap;
         }
-
-        log_dbg("Bootstrapped in layer %s.", conf->layer_info.layer_name);
 
         return 0;
 

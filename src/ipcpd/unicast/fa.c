@@ -359,7 +359,7 @@ static void packet_handler(int                  fd,
 
         if (dt_write_packet(r_addr, qc, r_eid, sdb)) {
                 ipcp_sdb_release(sdb);
-                log_warn("Failed to forward packet.");
+                log_dbg("Failed to forward packet.");
 #ifdef IPCP_FLOW_STATS
                 pthread_rwlock_wrlock(&fa.flows_lock);
                 ++flow->p_snd_f;
@@ -456,7 +456,7 @@ static size_t fa_wait_for_fa_msg(struct fa_msg * msg)
 
         len = shm_du_buff_len(cmd->sdb);
         if (len > MSGBUFSZ || len < sizeof(*msg)) {
-                log_warn("Invalid flow allocation message (len: %zd)\n", len);
+                log_warn("Invalid flow allocation message (len: %zd).", len);
                 free(cmd);
                 return 0; /* No valid message */
         }
@@ -539,6 +539,8 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
         fd = eid_to_fd(ntoh64(msg->r_eid));
         if (fd < 0) {
                 pthread_rwlock_unlock(&fa.flows_lock);
+                log_err("Flow reply for unknown EID %" PRIu64 ".",
+                        ntoh64(msg->r_eid));
                 return -ENOTALLOC;
         }
 
@@ -553,8 +555,10 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (ipcp_flow_alloc_reply(fd, msg->response, mpl, data, dlen))
+        if (ipcp_flow_alloc_reply(fd, msg->response, mpl, data, dlen) < 0) {
+                log_err("Failed to reply for flow allocation on fd %d.", fd);
                 return -EIRMD;
+        }
 
         return 0;
 }
@@ -573,6 +577,8 @@ static int fa_handle_flow_update(struct fa_msg * msg,
         fd = eid_to_fd(ntoh64(msg->r_eid));
         if (fd < 0) {
                 pthread_rwlock_unlock(&fa.flows_lock);
+                log_err("Flow update for unknown EID %" PRIu64 ".",
+                        ntoh64(msg->r_eid));
                 return -EPERM;
         }
 
@@ -665,7 +671,7 @@ int fa_init(void)
  fail_mtx:
         pthread_rwlock_destroy(&fa.flows_lock);
  fail_rwlock:
-        log_err("Failed to initialize flow allocator.");
+
         return -1;
 }
 
@@ -721,7 +727,6 @@ int fa_start(void)
  fail_thread:
         psched_destroy(fa.psched);
  fail_psched:
-        log_err("Failed to start flow allocator.");
         return -1;
 }
 
@@ -779,6 +784,7 @@ int fa_alloc(int             fd,
                 memcpy(shm_du_buff_head(sdb) + len, data, dlen);
 
         if (dt_write_packet(addr, qc, fa.eid, sdb)) {
+                log_err("Failed to send flow allocation request packet.");
                 ipcp_sdb_release(sdb);
                 return -1;
         }
@@ -808,10 +814,14 @@ int fa_alloc_resp(int          fd,
 
         flow = &fa.flows[fd];
 
-        if (ipcp_wait_flow_resp(fd) < 0)
+        if (ipcp_wait_flow_resp(fd) < 0) {
+                log_err("Failed to wait for flow response.");
                 goto fail_alloc_resp;
+        }
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + len)) {
+                log_err("Failed to reserve sdb (%zu  bytes).",
+                        sizeof(*msg) + len);
                 goto fail_reserve;
         }
 
@@ -830,8 +840,10 @@ int fa_alloc_resp(int          fd,
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (dt_write_packet(flow->r_addr, qc, fa.eid, sdb))
+        if (dt_write_packet(flow->r_addr, qc, fa.eid, sdb)) {
+                log_err("Failed to send flow allocation response packet.");
                 goto fail_packet;
+        }
 
         if (response < 0) {
                 pthread_rwlock_rdlock(&fa.flows_lock);
@@ -881,6 +893,7 @@ static int fa_update_remote(int      fd,
         uint64_t             r_addr;
 
         if (ipcp_sdb_reserve(&sdb, sizeof(*msg))) {
+                log_err("Failed to reserve sdb (%zu  bytes).", sizeof(*msg));
                 return -1;
         }
 
@@ -904,6 +917,7 @@ static int fa_update_remote(int      fd,
 
 
         if (dt_write_packet(r_addr, qc, fa.eid, sdb)) {
+                log_err("Failed to send flow update packet.");
                 ipcp_sdb_release(sdb);
                 return -1;
         }
@@ -928,6 +942,7 @@ void  fa_np1_rcv(uint64_t             eid,
         fd = eid_to_fd(eid);
         if (fd < 0) {
                 pthread_rwlock_unlock(&fa.flows_lock);
+                log_dbg("Received packet for unknown EID %" PRIu64 ".", eid);
                 ipcp_sdb_release(sdb);
                 return;
         }
@@ -943,6 +958,7 @@ void  fa_np1_rcv(uint64_t             eid,
         pthread_rwlock_unlock(&fa.flows_lock);
 
         if (ipcp_flow_write(fd, sdb) < 0) {
+                log_dbg("Failed to write to flow %d.", fd);
                 ipcp_sdb_release(sdb);
 #ifdef IPCP_FLOW_STATS
                 pthread_rwlock_wrlock(&fa.flows_lock);

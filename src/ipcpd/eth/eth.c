@@ -649,11 +649,12 @@ static int eth_ipcp_alloc_reply(uint8_t *    r_addr,
 #elif defined(BUILD_ETH_LLC)
         log_dbg("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
 #endif
-        if ((ret = ipcp_flow_alloc_reply(fd, response, mpl, data, len)) < 0)
+        if ((ret = ipcp_flow_alloc_reply(fd, response, mpl, data, len)) < 0) {
+                log_err("Failed to reply to flow allocation.");
                 return -1;
+        }
 
         return ret;
-
 }
 
 static int eth_ipcp_name_query_req(const uint8_t * hash,
@@ -856,7 +857,7 @@ static void * eth_ipcp_packet_reader(void * o)
 
                 buf = nm_nextpkt(eth_data.nmd, &hdr);
                 if (buf == NULL) {
-                        log_err("Bad read from netmap device.");
+                        log_dbg("Bad read from netmap device.");
                         continue;
                 }
 #else
@@ -887,6 +888,7 @@ static void * eth_ipcp_packet_reader(void * o)
                                  ETH_MTU + ETH_HEADER_TOT_SIZE, 0);
     #endif
                 if (frame_len <= 0) {
+                        log_dbg("Failed to receive frame.");
                         ipcp_sdb_release(sdb);
                         continue;
                 }
@@ -939,10 +941,8 @@ static void * eth_ipcp_packet_reader(void * o)
 #endif
                         frame = malloc(sizeof(*frame));
                         if (frame == NULL) {
-#ifndef HAVE_NETMAP
-                                ipcp_sdb_release(sdb);
-#endif
-                                continue;
+                                log_err("Failed to allocate frame.");
+                                goto fail_frame;
                         }
 
                         memcpy(frame->buf, &e_frame->payload, length);
@@ -954,9 +954,6 @@ static void * eth_ipcp_packet_reader(void * o)
                         pthread_cond_signal(&eth_data.mgmt_cond);
                         pthread_mutex_unlock(&eth_data.mgmt_lock);
 
-#ifndef HAVE_NETMAP
-                        ipcp_sdb_release(sdb);
-#endif
                 } else {
                         pthread_rwlock_rdlock(&eth_data.flows_lock);
 
@@ -967,10 +964,7 @@ static void * eth_ipcp_packet_reader(void * o)
 #endif
                         if (fd < 0) {
                                 pthread_rwlock_unlock(&eth_data.flows_lock);
-#ifndef HAVE_NETMAP
-                                ipcp_sdb_release(sdb);
-#endif
-                                continue;
+                                goto fail_frame;
                         }
 
 #ifdef BUILD_ETH_LLC
@@ -978,10 +972,7 @@ static void * eth_ipcp_packet_reader(void * o)
                             || memcmp(eth_data.fd_to_ef[fd].r_addr,
                                       e_frame->src_hwaddr, MAC_SIZE)) {
                                 pthread_rwlock_unlock(&eth_data.flows_lock);
-#ifndef HAVE_NETMAP
-                                ipcp_sdb_release(sdb);
-#endif
-                                continue;
+                                goto fail_frame;
                         }
 #endif
                         pthread_rwlock_unlock(&eth_data.flows_lock);
@@ -998,6 +989,12 @@ static void * eth_ipcp_packet_reader(void * o)
 #endif
                         if (np1_flow_write(fd, sdb) < 0)
                                 ipcp_sdb_release(sdb);
+
+                        continue;
+ fail_frame:
+#ifndef HAVE_NETMAP
+                        ipcp_sdb_release(sdb);
+#endif
                 }
         }
 
@@ -1455,7 +1452,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                            NULL,
                            eth_ipcp_if_monitor,
                            NULL)) {
-                ipcp_set_state(IPCP_INIT);
+                log_err("Failed to create monitor thread: %s.",
+                        strerror(errno));
                 goto fail_device;
         }
 #endif
@@ -1464,7 +1462,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                            NULL,
                            eth_ipcp_mgmt_handler,
                            NULL)) {
-                ipcp_set_state(IPCP_INIT);
+                log_err("Failed to create mgmt handler thread: %s.",
+                        strerror(errno));
                 goto fail_mgmt_handler;
         }
 
@@ -1473,7 +1472,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                                    NULL,
                                    eth_ipcp_packet_reader,
                                    NULL)) {
-                        ipcp_set_state(IPCP_INIT);
+                        log_err("Failed to create packet reader thread: %s",
+                                strerror(errno));
                         goto fail_packet_reader;
                 }
         }
@@ -1483,7 +1483,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                                    NULL,
                                    eth_ipcp_packet_writer,
                                    NULL)) {
-                        ipcp_set_state(IPCP_INIT);
+                        log_err("Failed to create packet writer thread: %s",
+                                strerror(errno));
                         goto fail_packet_writer;
                 }
         }
@@ -1536,8 +1537,6 @@ static int eth_ipcp_reg(const uint8_t * hash)
                         HASH_VAL32(hash));
                 return -1;
         }
-
-        log_dbg("Registered " HASH_FMT32 ".", HASH_VAL32(hash));
 
         return 0;
 }
@@ -1617,12 +1616,11 @@ static int eth_ipcp_flow_alloc(int             fd,
         uint8_t  r_addr[MAC_SIZE];
         uint64_t addr = 0;
 
-        log_dbg("Allocating flow to " HASH_FMT32 ".", HASH_VAL32(hash));
-
         assert(hash);
 
         if (!shim_data_dir_has(eth_data.shim_data, hash)) {
-                log_err("Destination unreachable.");
+                log_err("Destination "HASH_FMT32 "unreachable.",
+                        HASH_VAL32(hash));
                 return -1;
         }
         addr = shim_data_dir_get_addr(eth_data.shim_data, hash);
@@ -1632,6 +1630,7 @@ static int eth_ipcp_flow_alloc(int             fd,
         ssap = bmp_allocate(eth_data.saps);
         if (!bmp_is_id_valid(eth_data.saps, ssap)) {
                 pthread_rwlock_unlock(&eth_data.flows_lock);
+                log_err("Failed to allocate SSAP.");
                 return -1;
         }
 
@@ -1658,15 +1657,14 @@ static int eth_ipcp_flow_alloc(int             fd,
                 eth_data.fd_to_ef[fd].sap = -1;
                 eth_data.ef_to_fd[ssap]   = -1;
                 pthread_rwlock_unlock(&eth_data.flows_lock);
+                log_err("Failed to allocate with peer.");
 #endif
                 return -1;
         }
 
         fset_add(eth_data.np1_flows, fd);
-#if defined(BUILD_ETH_DIX)
-        log_dbg("Pending flow with fd %d.", fd);
-#elif defined(BUILD_ETH_LLC)
-        log_dbg("Pending flow with fd %d on SAP %d.", fd, ssap);
+#if defined(BUILD_ETH_LLC)
+        log_dbg("Assigned SAP %d for fd %d.", ssap, fd);
 #endif
         return 0;
 }
@@ -1684,8 +1682,10 @@ static int eth_ipcp_flow_alloc_resp(int          fd,
 #endif
         uint8_t         r_addr[MAC_SIZE];
 
-        if (ipcp_wait_flow_resp(fd) < 0)
+        if (ipcp_wait_flow_resp(fd) < 0) {
+                log_err("Failed to wait for flow response.");
                 return -1;
+        }
 
         pthread_rwlock_wrlock(&eth_data.flows_lock);
 #if defined(BUILD_ETH_DIX)
@@ -1694,6 +1694,7 @@ static int eth_ipcp_flow_alloc_resp(int          fd,
         ssap = bmp_allocate(eth_data.saps);
         if (!bmp_is_id_valid(eth_data.saps, ssap)) {
                 pthread_rwlock_unlock(&eth_data.flows_lock);
+                log_err("Failed to allocate SSAP.");
                 return -1;
         }
 
@@ -1719,14 +1720,13 @@ static int eth_ipcp_flow_alloc_resp(int          fd,
                 bmp_release(eth_data.saps, eth_data.fd_to_ef[fd].sap);
                 pthread_rwlock_unlock(&eth_data.flows_lock);
 #endif
+                log_err("Failed to respond to peer.");
                 return -1;
         }
 
         fset_add(eth_data.np1_flows, fd);
-#if defined(BUILD_ETH_DIX)
-        log_dbg("Accepted flow, fd %d.", fd);
-#elif defined(BUILD_ETH_LLC)
-        log_dbg("Accepted flow, fd %d, SAP %d.", fd, (uint8_t)ssap);
+#if defined(BUILD_ETH_LLC)
+        log_dbg("Assigned SAP %d for fd %d.", ssap, fd);
 #endif
         return 0;
 }
@@ -1756,8 +1756,6 @@ static int eth_ipcp_flow_dealloc(int fd)
         pthread_rwlock_unlock(&eth_data.flows_lock);
 
         flow_dealloc(fd);
-
-        log_dbg("Flow with fd %d deallocated.", fd);
 
         return 0;
 }
@@ -1790,8 +1788,10 @@ int main(int    argc,
                 goto fail_data_init;
         }
 
-        if (ipcp_init(argc, argv, &eth_ops, THIS_TYPE) < 0)
+        if (ipcp_init(argc, argv, &eth_ops, THIS_TYPE) < 0) {
+                log_err("Failed to initialize IPCP.");
                 goto fail_init;
+        }
 
         if (ipcp_start() < 0) {
                 log_err("Failed to start IPCP.");

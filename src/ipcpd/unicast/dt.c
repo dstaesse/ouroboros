@@ -399,26 +399,28 @@ static void handle_event(void *       self,
                          const void * o)
 {
         struct conn * c;
+        int           fd;
 
         (void) self;
 
         c = (struct conn *) o;
 
+        fd = c->flow_info.fd;
+
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
 #ifdef IPCP_FLOW_STATS
-                stat_used(c->flow_info.fd, c->conn_info.addr);
+                stat_used(fd, c->conn_info.addr);
 #endif
-                psched_add(dt.psched, c->flow_info.fd);
-                log_dbg("Added fd %d to packet scheduler.", c->flow_info.fd);
+                psched_add(dt.psched, fd);
+                log_dbg("Added fd %d to packet scheduler.", fd);
                 break;
         case NOTIFY_DT_CONN_DEL:
 #ifdef IPCP_FLOW_STATS
-                stat_used(c->flow_info.fd, INVALID_ADDR);
+                stat_used(fd, INVALID_ADDR);
 #endif
-                psched_del(dt.psched, c->flow_info.fd);
-                log_dbg("Removed fd %d from "
-                        "packet scheduler.", c->flow_info.fd);
+                psched_del(dt.psched, fd);
+                log_dbg("Removed fd %d from packet scheduler.", fd);
                 break;
         default:
                 break;
@@ -642,6 +644,7 @@ int dt_init(struct dt_config cfg)
 
         for (i = 0; i < PROG_MAX_FLOWS; ++i)
                 if (pthread_mutex_init(&dt.stat[i].lock, NULL)) {
+                        log_err("Failed to init mutex for flow %d.", i);
                         for (j = 0; j < i; ++j)
                                 pthread_mutex_destroy(&dt.stat[j].lock);
                         goto fail_stat_lock;
@@ -650,8 +653,10 @@ int dt_init(struct dt_config cfg)
         dt.n_flows = 0;
 #endif
         sprintf(dtstr, "%s.%" PRIu64, DT, ipcpi.dt_addr);
-        if (rib_reg(dtstr, &r_ops))
+        if (rib_reg(dtstr, &r_ops)) {
+                log_err("Failed to register RIB.");
                 goto fail_rib_reg;
+        }
 
         return 0;
 
@@ -744,7 +749,7 @@ int dt_reg_comp(void * comp,
 
         eid = bmp_allocate(dt.res_fds);
         if (!bmp_is_id_valid(dt.res_fds, eid)) {
-                log_warn("Reserved EIDs depleted.");
+                log_err("Cannot allocate EID.");
                 pthread_rwlock_unlock(&dt.lock);
                 return -EBADF;
         }

@@ -59,8 +59,10 @@ struct pff * pff_create(enum pol_pff pol)
         }
 
         pff->pff_i = pff->ops->create();
-        if (pff->pff_i == NULL)
+        if (pff->pff_i == NULL) {
+                log_err("Failed to create PFF instance.");
                 goto err;
+        }
 
         return pff;
  err:

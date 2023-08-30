@@ -94,7 +94,7 @@ static void * enroll_handle(void * o)
 
                 len = flow_read(fd, buf.data, buf.len);
                 if (len < 0) {
-                        log_warn("Failed to read from flow %d.", fd);
+                        log_err("Failed to read from flow %d.", fd);
                         goto finish_flow;
                 }
 
@@ -102,7 +102,7 @@ static void * enroll_handle(void * o)
                 msg.len = (size_t) len;
 
                 if (enroll_req_des(&req, msg) < 0) {
-                        log_warn("Failed to unpack request message.");
+                        log_err("Failed to unpack request message.");
                         goto finish_flow;
                 }
 

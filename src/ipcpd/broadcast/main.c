@@ -146,7 +146,6 @@ static int broadcast_ipcp_enroll(const char *        dst,
 
         log_info_id(id, "Enrolled with %s.", dst);
 
-
         info->dir_hash_algo = ipcpi.dir_hash_algo;
         strcpy(info->layer_name, ipcpi.layer_name);
 
@@ -177,8 +176,6 @@ static int broadcast_ipcp_bootstrap(const struct ipcp_config * conf)
                 log_err("Failed to init IPCP components.");
                 goto fail_start;
         }
-
-        log_dbg("Bootstrapped in layer %s.", conf->layer_info.layer_name);
 
         return 0;
 
@@ -221,8 +218,10 @@ static int broadcast_ipcp_join(int             fd,
 
         conn.flow_info.fd = fd;
 
-        if (name_check(dst) != 0)
+        if (name_check(dst) != 0) {
+                log_err("Failed to check name.");
                 return -1;
+        }
 
         notifier_event(NOTIFY_DT_CONN_ADD, &conn);
 
@@ -264,7 +263,7 @@ int main(int    argc,
          char * argv[])
 {
         if (ipcp_init(argc, argv, &broadcast_ops, THIS_TYPE) < 0) {
-                log_err("Failed to init IPCP.");
+                log_err("Failed to initialize IPCP.");
                 goto fail_init;
         }
 

@@ -143,38 +143,43 @@ static void * flow_acceptor(void * o)
                 fd = flow_accept(&qs, NULL);
                 if (fd < 0) {
                         if (fd != -EIRMD)
-                                log_warn("Flow accept failed: %d", fd);
+                                log_err("Flow accept failed: %d", fd);
                         continue;
                 }
 
+                log_info("Handling incoming flow %d",fd);
+
                 if (cacep_rcv(fd, &rcv_info)) {
-                        log_dbg("Error establishing application connection.");
+                        log_err("Error receiving CACEP info.");
                         flow_dealloc(fd);
                         continue;
                 }
 
+                log_info("Request to connect to %s.", rcv_info.comp_name);
+
                 id = get_id_by_name(rcv_info.comp_name);
                 if (id < 0) {
-                        log_dbg("Connection request for unknown component %s.",
+                        log_err("Connection request for unknown component %s.",
                                 rcv_info.comp_name);
                         cacep_snd(fd, &fail_info);
                         flow_dealloc(fd);
                         continue;
                 }
 
-                assert(id < COMPID_MAX);
-
                 if (cacep_snd(fd, &connmgr.comps[id].info)) {
-                        log_dbg("Failed to respond to request.");
+                        log_err("Failed to respond to CACEP request.");
                         flow_dealloc(fd);
                         continue;
                 }
 
                 if (add_comp_conn(id, fd, qs, &rcv_info)) {
-                        log_dbg("Failed to add new connection.");
+                        log_err("Failed to add new connection.");
                         flow_dealloc(fd);
                         continue;
                 }
+
+                log_info("Finished handling incoming flow %d for %s: 0.",
+                         fd, rcv_info.comp_name);
         }
 
         return (void *) 0;
@@ -215,8 +220,10 @@ int connmgr_init(void)
 {
         connmgr.state = CONNMGR_INIT;
 
-        if (notifier_reg(handle_event, NULL))
+        if (notifier_reg(handle_event, NULL)) {
+                log_err("Failed to register notifier.");
                 return -1;
+        }
 
         return 0;
 }
@@ -236,8 +243,10 @@ void connmgr_fini(void)
 
 int connmgr_start(void)
 {
-        if (pthread_create(&connmgr.acceptor, NULL, flow_acceptor, NULL))
+        if (pthread_create(&connmgr.acceptor, NULL, flow_acceptor, NULL)) {
+                log_err("Failed to create pthread: %s.", strerror(errno));
                 return -1;
+        }
 
         connmgr.state = CONNMGR_RUNNING;
 
@@ -259,12 +268,14 @@ int connmgr_comp_init(enum comp_id             id,
 
         comp = connmgr.comps + id;
 
-        if (pthread_mutex_init(&comp->lock, NULL))
-                return -1;
+        if (pthread_mutex_init(&comp->lock, NULL)) {
+                log_err("Failed to initialize mutex: %s.", strerror(errno));
+                goto fail_mutex;
+        }
 
         if (pthread_cond_init(&comp->cond, NULL)) {
-                pthread_mutex_destroy(&comp->lock);
-                return -1;
+                log_err("Failed to initialize condvar: %s.", strerror(errno));
+                goto fail_cond;
         }
 
         list_head_init(&comp->conns);
@@ -273,6 +284,11 @@ int connmgr_comp_init(enum comp_id             id,
         memcpy(&connmgr.comps[id].info, info, sizeof(connmgr.comps[id].info));
 
         return 0;
+
+ fail_cond:
+        pthread_mutex_destroy(&comp->lock);
+ fail_mutex:
+        return -1;
 }
 
 void connmgr_comp_fini(enum comp_id id)
@@ -322,20 +338,19 @@ int connmgr_ipcp_connect(const char * dst,
 
         ce = malloc(sizeof(*ce));
         if (ce == NULL) {
-                log_dbg("Out of memory.");
-                return -1;
+                log_err("Out of memory.");
+                goto fail_malloc;
         }
 
         id = get_id_by_name(component);
         if (id < 0) {
-                log_dbg("No such component: %s", component);
-                free(ce);
-                return -1;
+                log_err("No such component: %s", component);
+                goto fail_id;
         }
 
         if (connmgr_alloc(id, dst, &qs, &ce->conn)) {
-                free(ce);
-                return -1;
+                log_err("Failed to allocate flow.");
+                goto fail_id;
         }
 
         if (strlen(dst) > DST_MAX_STRLEN) {
@@ -353,6 +368,11 @@ int connmgr_ipcp_connect(const char * dst,
         pthread_mutex_unlock(&connmgr.comps[id].lock);
 
         return 0;
+
+ fail_id:
+        free(ce);
+ fail_malloc:
+        return -1;
 }
 
 int connmgr_ipcp_disconnect(const char * dst,
@@ -366,8 +386,10 @@ int connmgr_ipcp_disconnect(const char * dst,
         assert(component);
 
         id = get_id_by_name(component);
-        if (id < 0)
+        if (id < 0) {
+                log_err("No such component: %s.", component);
                 return -1;
+        }
 
         pthread_mutex_lock(&connmgr.comps[id].lock);
 
@@ -393,14 +415,21 @@ int connmgr_alloc(enum comp_id  id,
                   qosspec_t *   qs,
                   struct conn * conn)
 {
+        struct comp * comp;
+        int           fd;
+
         assert(id >= 0 && id < COMPID_MAX);
         assert(dst);
 
-        conn->flow_info.fd = flow_alloc(dst, qs, NULL);
-        if (conn->flow_info.fd < 0) {
-                log_dbg("Failed to allocate flow to %s.", dst);
-                return -1;
+        comp = connmgr.comps + id;
+
+        fd = flow_alloc(dst, qs, NULL);
+        if (fd < 0) {
+                log_err("Failed to allocate flow to %s.", dst);
+                goto fail_alloc;
         }
+
+        conn->flow_info.fd = fd;
 
         if (qs != NULL)
                 conn->flow_info.qs = *qs;
@@ -408,39 +437,33 @@ int connmgr_alloc(enum comp_id  id,
                 memset(&conn->flow_info.qs, 0, sizeof(conn->flow_info.qs));
 
         log_dbg("Sending cacep info for protocol %s to fd %d.",
-                connmgr.comps[id].info.protocol, conn->flow_info.fd);
+                comp->info.protocol, conn->flow_info.fd);
 
-        if (cacep_snd(conn->flow_info.fd, &connmgr.comps[id].info)) {
-                log_dbg("Failed to create application connection.");
-                flow_dealloc(conn->flow_info.fd);
-                return -1;
+        if (cacep_snd(fd, &comp->info)) {
+                log_err("Failed to send CACEP info.");
+                goto fail_cacep;
         }
 
-        if (cacep_rcv(conn->flow_info.fd, &conn->conn_info)) {
-                log_dbg("Failed to connect to application.");
-                flow_dealloc(conn->flow_info.fd);
-                return -1;
+        if (cacep_rcv(fd, &conn->conn_info)) {
+                log_err("Failed to receive CACEP info.");
+                goto fail_cacep;
         }
 
-        if (strcmp(connmgr.comps[id].info.protocol, conn->conn_info.protocol)) {
-                log_dbg("Unknown protocol (requested %s, got %s).",
-                        connmgr.comps[id].info.protocol,
-                        conn->conn_info.protocol);
-                flow_dealloc(conn->flow_info.fd);
-                return -1;
+        if (strcmp(comp->info.protocol, conn->conn_info.protocol)) {
+                log_err("Unknown protocol (requested %s, got %s).",
+                        comp->info.protocol, conn->conn_info.protocol);
+                goto fail_cacep;
         }
 
-        if (connmgr.comps[id].info.pref_version !=
-            conn->conn_info.pref_version) {
-                log_dbg("Unknown protocol version.");
-                flow_dealloc(conn->flow_info.fd);
-                return -1;
+        if (comp->info.pref_version != conn->conn_info.pref_version) {
+                log_err("Unknown protocol version %d.",
+                        conn->conn_info.pref_version);
+                goto fail_cacep;
         }
 
-        if (connmgr.comps[id].info.pref_syntax != conn->conn_info.pref_syntax) {
-                log_dbg("Unknown protocol syntax.");
-                flow_dealloc(conn->flow_info.fd);
-                return -1;
+        if (comp->info.pref_syntax != conn->conn_info.pref_syntax) {
+                log_err("Unknown protocol syntax.");
+                goto fail_cacep;
         }
 
         switch (id) {
@@ -458,6 +481,11 @@ int connmgr_alloc(enum comp_id  id,
         }
 
         return 0;
+
+ fail_cacep:
+        flow_dealloc(conn->flow_info.fd);
+ fail_alloc:
+        return -1;
 }
 
 int connmgr_dealloc(enum comp_id  id,
@@ -503,6 +531,7 @@ int connmgr_wait(enum comp_id  id,
         el = list_first_entry((&comp->pending), struct conn_el, next);
         if (el == NULL) {
                 pthread_mutex_unlock(&comp->lock);
+                log_err("Failed to get connection element.");
                 return -1;
         }
 
