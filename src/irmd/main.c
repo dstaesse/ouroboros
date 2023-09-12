@@ -1599,7 +1599,7 @@ static int flow_alloc(pid_t              pid,
                             IPCP_HASH_LEN(ipcp), qs, *data)) {
                 reg_flow_set_state(f, FLOW_NULL);
                 /* sanitizer cleans this */
-                log_info("Flow_allocation failed.");
+                log_warn("Flow_allocation %d failed.", flow_id);
                 free(hash);
                 return -EAGAIN;
         }
@@ -1820,6 +1820,7 @@ static int flow_req_arr(pid_t             pid,
 
         flow_id = bmp_allocate(irmd.flow_ids);
         if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
+                log_err("Out of flow ids.");
                 pthread_rwlock_unlock(&irmd.flows_lock);
                 return -1;
         }
@@ -2755,6 +2756,9 @@ int main(int     argc,
         sigaddset(&sigset, SIGPIPE);
 
         irm_argparse(argc, argv);
+
+        if (irmd.log_stdout)
+                printf(O7S_ASCII_ART);
 
         if (geteuid() != 0) {
                 printf("IPC Resource Manager must be run as root.\n");
