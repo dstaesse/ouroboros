@@ -27,7 +27,7 @@
 
 #include <sys/time.h>
 
-struct portevent {
+struct flowevent {
         int flow_id;
         int event;
 };
@@ -63,7 +63,7 @@ void                  shm_flow_set_notify(struct shm_flow_set * set,
 
 ssize_t               shm_flow_set_wait(const struct shm_flow_set * shm_set,
                                         size_t                      idx,
-                                        struct portevent *          fqueue,
+                                        struct flowevent *          fqueue,
                                         const struct timespec *     abstime);
 
 #endif /* OUROBOROS_LIB_SHM_FLOW_SET_H */

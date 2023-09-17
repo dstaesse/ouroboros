@@ -54,7 +54,7 @@
 #define FN_MAX_CHARS 255
 #define FS_PROT      (PROT_READ | PROT_WRITE)
 
-#define QUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(struct portevent))
+#define QUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(struct flowevent))
 
 #define SHM_FSET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)             \
                             + PROG_MAX_FQUEUES * sizeof(size_t)         \
@@ -68,7 +68,7 @@ struct shm_flow_set {
         ssize_t *          mtable;
         size_t *           heads;
         pthread_cond_t *   conds;
-        struct portevent * fqueues;
+        struct flowevent * fqueues;
         pthread_mutex_t *  lock;
 
         pid_t pid;
@@ -104,7 +104,7 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
         set->conds   = (pthread_cond_t *)(set->heads + PROG_MAX_FQUEUES);
-        set->fqueues = (struct portevent *) (set->conds + PROG_MAX_FQUEUES);
+        set->fqueues = (struct flowevent *) (set->conds + PROG_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
                 (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
 
@@ -297,7 +297,7 @@ void shm_flow_set_notify(struct shm_flow_set * set,
                          int                   flow_id,
                          int                   event)
 {
-        struct portevent * e;
+        struct flowevent * e;
 
         assert(set);
         assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
@@ -313,7 +313,7 @@ void shm_flow_set_notify(struct shm_flow_set * set,
                 set->heads[set->mtable[flow_id]];
 
         e->flow_id = flow_id;
-        e->event = event;
+        e->event   = event;
 
         ++set->heads[set->mtable[flow_id]];
 
@@ -325,7 +325,7 @@ void shm_flow_set_notify(struct shm_flow_set * set,
 
 ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
                           size_t                      idx,
-                          struct portevent *          fqueue,
+                          struct flowevent *          fqueue,
                           const struct timespec *     abstime)
 {
         ssize_t ret = 0;
@@ -365,7 +365,7 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
         if (ret != -ETIMEDOUT) {
                 memcpy(fqueue,
                        fqueue_ptr(set, idx),
-                       set->heads[idx] * sizeof(struct portevent));
+                       set->heads[idx] * sizeof(*fqueue));
                 ret = set->heads[idx];
                 set->heads[idx] = 0;
         }

@@ -126,7 +126,7 @@ struct flow_set {
 };
 
 struct fqueue {
-        struct portevent fqueue[SHM_BUFFER_SIZE]; /* Safe copy from shm. */
+        struct flowevent fqueue[SHM_BUFFER_SIZE]; /* Safe copy from shm. */
         size_t           fqsize;
         size_t           next;
 };
@@ -908,7 +908,6 @@ int flow_alloc(const char *            dst,
                        recv_msg->mpl);
 
         irm_msg__free_unpacked(recv_msg, NULL);
-
 
         return fd;
 
@@ -1726,7 +1725,7 @@ static int fqueue_filter(struct fqueue * fq)
 int fqueue_next(struct fqueue * fq)
 {
         int                fd;
-        struct portevent * e;
+        struct flowevent * e;
 
         if (fq == NULL)
                 return -EINVAL;
