@@ -552,27 +552,44 @@ static void init(int     argc,
         if (check_python(argv[0]))
                 prog = argv[1];
 
+        prog = path_strip(prog);
+        if (prog == NULL) {
+                fprintf(stderr, "FATAL: Could not find program name.");
+                goto fail_prog;
+        }
+
+        if (proc_announce(prog)) {
+                fprintf(stderr, "FATAL: Could not announce to IRMd.");
+                goto fail_prog;
+        }
+
 #ifdef HAVE_LIBGCRYPT
         if (!gcry_control(GCRYCTL_INITIALIZATION_FINISHED_P)) {
-                if (!gcry_check_version(GCRYPT_VERSION))
-                        goto fail_fds;
+                if (!gcry_check_version(GCRYPT_VERSION)) {
+                        fprintf(stderr, "FATAL: Could not get gcry version.");
+                        goto fail_prog;
+                }
                 gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
                 gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
         }
 #endif
-        list_head_init(&ai.flow_list);
-
         ai.fds = bmp_create(PROG_MAX_FLOWS - PROG_RES_FDS, PROG_RES_FDS);
-        if (ai.fds == NULL)
+        if (ai.fds == NULL) {
+                fprintf(stderr, "FATAL: Could not create fd bitmap.");
                 goto fail_fds;
+        }
 
         ai.fqueues = bmp_create(PROG_MAX_FQUEUES, 0);
-        if (ai.fqueues == NULL)
+        if (ai.fqueues == NULL) {
+                fprintf(stderr, "FATAL: Could not create fqueue bitmap.");
                 goto fail_fqueues;
+        }
 
         ai.rdrb = shm_rdrbuff_open();
-        if (ai.rdrb == NULL)
+        if (ai.rdrb == NULL) {
+                fprintf(stderr, "FATAL: Could not open packet buffer.");
                 goto fail_rdrb;
+        }
 
         ai.flows = malloc(sizeof(*ai.flows) * PROG_MAX_FLOWS);
         if (ai.flows == NULL)
@@ -585,52 +602,56 @@ static void init(int     argc,
         if (ai.ports == NULL)
                 goto fail_ports;
 
-        if (prog != NULL) {
-                prog = path_strip(prog);
-                if (proc_announce(prog))
-                        goto fail_announce;
-        }
-
         for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 ai.ports[i].state = PORT_INIT;
                 if (pthread_mutex_init(&ai.ports[i].state_lock, NULL)) {
-                        int j;
-                        for (j = 0; j < i; ++j)
-                                pthread_mutex_destroy(&ai.ports[j].state_lock);
-                        goto fail_announce;
+                        fprintf(stderr, "FATAL: Could not init lock %d.", i);
+                        goto fail_flow_lock;
                 }
                 if (pthread_cond_init(&ai.ports[i].state_cond, NULL)) {
-                        int j;
-                        for (j = 0; j < i; ++j)
-                                pthread_cond_destroy(&ai.ports[j].state_cond);
-                        goto fail_state_cond;
+                        pthread_mutex_destroy(&ai.ports[i].state_lock);
+                        fprintf(stderr, "FATAL: Could not init cond %d.", i);
+                        goto fail_flow_lock;
                 }
+        } /* Do not reuse i after this ! */
+
+        if (pthread_rwlock_init(&ai.lock, NULL)) {
+                fprintf(stderr, "FATAL: Could not initialize flow lock");
+                goto fail_flow_lock;
         }
 
-        if (pthread_rwlock_init(&ai.lock, NULL))
-                goto fail_lock;
-
         ai.fqset = shm_flow_set_open(getpid());
-        if (ai.fqset == NULL)
+        if (ai.fqset == NULL) {
+                fprintf(stderr, "FATAL: Could not open flow set.");
                 goto fail_fqset;
+        }
 
         ai.frct_set = fset_create();
-        if (ai.frct_set == NULL || ai.frct_set->idx != 0)
+        if (ai.frct_set == NULL || ai.frct_set->idx != 0) {
+                fprintf(stderr, "FATAL: Could not create FRCT set.");
                 goto fail_frct_set;
+        }
 
-        if (timerwheel_init() < 0)
+        if (timerwheel_init() < 0) {
+                fprintf(stderr, "FATAL: Could not initialize timerwheel.");
                 goto fail_timerwheel;
+        }
 
 #if defined PROC_FLOW_STATS
         if (strstr(argv[0], "ipcpd") == NULL) {
                 sprintf(procstr, "proc.%d", getpid());
-                /* Don't bail on fail, it just won't show metrics */
-                if (rib_init(procstr) < 0)
+                if (rib_init(procstr) < 0) {
+                        fprintf(stderr, "FATAL: Could not initialize RIB.");
                         goto fail_rib_init;
+                }
         }
 #endif
-        if (pthread_create(&ai.rx, NULL, flow_rx, NULL) < 0)
+        if (pthread_create(&ai.rx, NULL, flow_rx, NULL) < 0) {
+                fprintf(stderr, "FATAL: Could not start monitor thread.");
                 goto fail_monitor;
+        }
+
+        list_head_init(&ai.flow_list);
 
         return;
 
@@ -646,13 +667,11 @@ static void init(int     argc,
         shm_flow_set_close(ai.fqset);
  fail_fqset:
         pthread_rwlock_destroy(&ai.lock);
- fail_lock:
-        for (i = 0; i < SYS_MAX_FLOWS; ++i)
-                pthread_cond_destroy(&ai.ports[i].state_cond);
- fail_state_cond:
-        for (i = 0; i < SYS_MAX_FLOWS; ++i)
+ fail_flow_lock:
+        while (i-- > 0) {
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
- fail_announce:
+                pthread_cond_destroy(&ai.ports[i].state_cond);
+        }
         free(ai.ports);
  fail_ports:
         free(ai.flows);
@@ -663,25 +682,20 @@ static void init(int     argc,
  fail_fqueues:
         bmp_destroy(ai.fds);
  fail_fds:
-        fprintf(stderr, "FATAL: ouroboros-dev init failed. "
-                        "Make sure an IRMd is running.\n\n");
         memset(&ai, 0, sizeof(ai));
+ fail_prog:
         exit(EXIT_FAILURE);
 }
 
 static void fini(void)
 {
-        int  i = 0;
-#ifdef PROC_FLOW_STATS
-        rib_fini();
-#endif
+        int  i;
+
         if (ai.fds == NULL)
                 return;
 
         pthread_cancel(ai.rx);
         pthread_join(ai.rx, NULL);
-
-        fset_destroy(ai.frct_set);
 
         pthread_rwlock_wrlock(&ai.lock);
 
@@ -695,26 +709,34 @@ static void fini(void)
                 }
         }
 
-        shm_flow_set_close(ai.fqset);
-
         for (i = 0; i < SYS_MAX_FLOWS; ++i) {
                 pthread_mutex_destroy(&ai.ports[i].state_lock);
                 pthread_cond_destroy(&ai.ports[i].state_cond);
         }
 
+        pthread_rwlock_unlock(&ai.lock);
+
+#ifdef PROC_FLOW_STATS
+        rib_fini();
+#endif
+
         timerwheel_fini();
 
-        shm_rdrbuff_close(ai.rdrb);
+        fset_destroy(ai.frct_set);
+
+        shm_flow_set_close(ai.fqset);
+
+        pthread_rwlock_destroy(&ai.lock);
 
         free(ai.flows);
         free(ai.ports);
 
+        shm_rdrbuff_close(ai.rdrb);
+
         bmp_destroy(ai.fds);
         bmp_destroy(ai.fqueues);
 
-        pthread_rwlock_unlock(&ai.lock);
-
-        pthread_rwlock_destroy(&ai.lock);
+        memset(&ai, 0, sizeof(ai));
 }
 
 #if defined(__MACH__) && defined(__APPLE__)
