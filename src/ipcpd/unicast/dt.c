@@ -405,10 +405,9 @@ static void handle_event(void *       self,
 
         c = (struct conn *) o;
 
-        fd = c->flow_info.fd;
-
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
+                fd = c->flow_info.fd;
 #ifdef IPCP_FLOW_STATS
                 stat_used(fd, c->conn_info.addr);
 #endif
@@ -416,6 +415,7 @@ static void handle_event(void *       self,
                 log_dbg("Added fd %d to packet scheduler.", fd);
                 break;
         case NOTIFY_DT_CONN_DEL:
+                fd = c->flow_info.fd;
 #ifdef IPCP_FLOW_STATS
                 stat_used(fd, INVALID_ADDR);
 #endif
