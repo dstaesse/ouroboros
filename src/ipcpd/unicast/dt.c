@@ -596,11 +596,6 @@ int dt_init(struct dt_config cfg)
         dt_pci_info.eid_o     = dt_pci_info.ecn_o + ECN_LEN;
         dt_pci_info.head_size = dt_pci_info.eid_o + dt_pci_info.eid_size;
 
-        if (notifier_reg(handle_event, NULL)) {
-                log_err("Failed to register with notifier.");
-                goto fail_notifier_reg;
-        }
-
         if (connmgr_comp_init(COMPID_DT, &info)) {
                 log_err("Failed to register with connmgr.");
                 goto fail_connmgr_comp_init;
@@ -680,8 +675,6 @@ int dt_init(struct dt_config cfg)
  fail_routing:
         connmgr_comp_fini(COMPID_DT);
  fail_connmgr_comp_init:
-        notifier_unreg(&handle_event);
- fail_notifier_reg:
         return -1;
 }
 
@@ -709,8 +702,6 @@ void dt_fini(void)
         routing_fini();
 
         connmgr_comp_fini(COMPID_DT);
-
-        notifier_unreg(&handle_event);
 }
 
 int dt_start(void)
@@ -718,7 +709,12 @@ int dt_start(void)
         dt.psched = psched_create(packet_handler, ipcp_flow_read);
         if (dt.psched == NULL) {
                 log_err("Failed to create N-1 packet scheduler.");
-                return -1;
+                goto fail_psched;
+        }
+
+        if (notifier_reg(handle_event, NULL)) {
+                log_err("Failed to register with notifier.");
+                goto fail_notifier_reg;
         }
 
         if (pthread_create(&dt.listener, NULL, dt_conn_handle, NULL)) {
@@ -728,12 +724,21 @@ int dt_start(void)
         }
 
         return 0;
+
+ fail_notifier_reg:
+        psched_destroy(dt.psched);
+ fail_psched:
+        return -1;
+
 }
 
 void dt_stop(void)
 {
         pthread_cancel(dt.listener);
         pthread_join(dt.listener, NULL);
+
+        notifier_unreg(&handle_event);
+
         psched_destroy(dt.psched);
 }
 
