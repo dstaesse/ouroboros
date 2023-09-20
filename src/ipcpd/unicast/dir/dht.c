@@ -449,7 +449,7 @@ static void kad_req_destroy(struct kad_req * req)
                 return;
         case REQ_PENDING:
                 req->state = REQ_DESTROY;
-                pthread_cond_signal(&req->cond);
+                pthread_cond_broadcast(&req->cond);
                 break;
         case REQ_INIT:
         case REQ_DONE:
