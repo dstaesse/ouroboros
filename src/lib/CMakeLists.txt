@@ -253,6 +253,7 @@ set(SOURCE_FILES_COMMON
   bitmap.c
   btree.c
   crc32.c
+  crypt.c
   hash.c
   list.c
   lockfile.c

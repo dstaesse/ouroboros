@@ -30,6 +30,7 @@
 
 #include <ouroboros/hash.h>
 #include <ouroboros/cacep.h>
+#include <ouroboros/crypt.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
@@ -71,7 +72,6 @@
 
 #define CRCLEN    (sizeof(uint32_t))
 #define SECMEMSZ  16384
-#define SYMMKEYSZ 32
 #define MSGBUFSZ  2048
 
 enum flow_state {
@@ -102,8 +102,7 @@ struct flow {
         qosspec_t             qs;
         ssize_t               part_idx;
 
-        void *                ctx;
-        uint8_t               key[SYMMKEYSZ];
+        struct crypt_info     crypt;
 
         pid_t                 pid;
 
@@ -256,7 +255,6 @@ static int proc_announce(char * prog)
         return ret;
 }
 
-#include "crypt.c"
 #include "frct.c"
 
 void * flow_tx(void * o)
@@ -429,8 +427,7 @@ static void flow_fini(int fd)
                 shm_flow_set_close(ai.flows[fd].set);
         }
 
-        if (ai.flows[fd].ctx != NULL)
-                crypt_fini(ai.flows[fd].ctx);
+        crypt_fini(&ai.flows[fd].crypt);
 
         list_del(&ai.flows[fd].next);
 
@@ -480,12 +477,15 @@ static int flow_init(int       flow_id,
         flow->snd_act  = now;
         flow->rcv_act  = now;
 
-        if (qs.cypher_s > 0) {
-                if (crypt_init(&flow->ctx) < 0)
-                        goto fail_ctx;
+        flow->crypt.flags = qs.cypher_s; /* TODO: remove cypher_s from qos */
 
-                memcpy(flow->key, s, SYMMKEYSZ);
-        }
+        if (flow->crypt.flags > 0)
+                memcpy(flow->crypt.key, s ,SYMMKEYSZ);
+        else
+                memset(flow->crypt.key, 0, SYMMKEYSZ);
+
+        if (crypt_init(&flow->crypt) < 0)
+                goto fail_crypt;
 
         assert(flow->frcti == NULL);
 
@@ -518,8 +518,8 @@ static int flow_init(int       flow_id,
  fail_flow_set_add:
         frcti_destroy(flow->frcti);
  fail_frcti:
-        crypt_fini(flow->ctx);
- fail_ctx:
+        crypt_fini(&flow->crypt);
+ fail_crypt:
         shm_flow_set_close(flow->set);
  fail_set:
         shm_rbuff_close(flow->tx_rb);
@@ -1299,7 +1299,7 @@ static int flow_tx_sdb(struct flow *        flow,
                 if (frcti_snd(flow->frcti, sdb) < 0)
                         goto enomem;
 
-                if (flow->qs.cypher_s > 0 && crypt_encrypt(flow, sdb) < 0)
+                if (crypt_encrypt(&flow->crypt, sdb) < 0)
                         goto enomem;
 
                 if (flow->qs.ber == 0 && add_crc(sdb) != 0)
@@ -1401,7 +1401,7 @@ static bool invalid_pkt(struct flow *        flow,
         if (flow->qs.ber == 0 && chk_crc(sdb) != 0)
                 return true;
 
-        if (flow->qs.cypher_s > 0 && crypt_decrypt(flow, sdb) < 0)
+        if (crypt_decrypt(&flow->crypt, sdb) < 0)
                 return true;
 
         return false;

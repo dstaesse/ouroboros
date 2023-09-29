@@ -20,8 +20,18 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
+#include <config.h>
+
+#include <ouroboros/crypt.h>
+#include <ouroboros/errno.h>
+
+#include <assert.h>
+#include <string.h>
 
 #ifdef HAVE_OPENSSL
+
+#include <ouroboros/hash.h>
+#include <ouroboros/random.h>
 
 #include <openssl/evp.h>
 #include <openssl/ec.h>
@@ -202,7 +212,8 @@ static int openssl_ecdh_derive(void *    pkp,
  * encryption context for each packet.
  */
 
-static int openssl_encrypt(struct flow *        f,
+static int openssl_encrypt(void *               ctx,
+                           uint8_t *            key,
                            struct shm_du_buff * sdb)
 {
         uint8_t * out;
@@ -226,24 +237,24 @@ static int openssl_encrypt(struct flow *        f,
         if (out == NULL)
                 goto fail_iv;
 
-        EVP_CIPHER_CTX_reset(f->ctx);
+        EVP_CIPHER_CTX_reset(ctx);
 
-        ret = EVP_EncryptInit_ex(f->ctx, EVP_aes_256_cbc(), NULL, f->key, iv);
+        ret = EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
         if (ret != 1)
                 goto fail_encrypt_init;
 
-        ret = EVP_EncryptUpdate(f->ctx, out, &tmp_sz, in, in_sz);
+        ret = EVP_EncryptUpdate(ctx, out, &tmp_sz, in, in_sz);
         if (ret != 1)
                 goto fail_encrypt;
 
         out_sz = tmp_sz;
-        ret =  EVP_EncryptFinal_ex(f->ctx, out + tmp_sz, &tmp_sz);
+        ret =  EVP_EncryptFinal_ex(ctx, out + tmp_sz, &tmp_sz);
         if (ret != 1)
                 goto fail_encrypt;
 
         out_sz += tmp_sz;
 
-        EVP_CIPHER_CTX_cleanup(f->ctx);
+        EVP_CIPHER_CTX_cleanup(ctx);
 
         assert(out_sz >= in_sz);
 
@@ -264,14 +275,15 @@ static int openssl_encrypt(struct flow *        f,
  fail_tail_alloc:
         shm_du_buff_head_release(sdb, IVSZ);
  fail_encrypt:
-        EVP_CIPHER_CTX_cleanup(f->ctx);
+        EVP_CIPHER_CTX_cleanup(ctx);
  fail_encrypt_init:
         free(out);
  fail_iv:
         return -ECRYPT;
 }
 
-static int openssl_decrypt(struct flow *        f,
+static int openssl_decrypt(void *               ctx,
+                           uint8_t *            key,
                            struct shm_du_buff * sdb)
 {
         uint8_t * in;
@@ -297,19 +309,19 @@ static int openssl_decrypt(struct flow *        f,
         if (out == NULL)
                 goto fail_malloc;
 
-        EVP_CIPHER_CTX_reset(f->ctx);
+        EVP_CIPHER_CTX_reset(ctx);
 
-        ret = EVP_DecryptInit_ex(f->ctx, EVP_aes_256_cbc(), NULL, f->key, iv);
+        ret = EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
         if (ret != 1)
                 goto fail_decrypt_init;
 
-        ret = EVP_DecryptUpdate(f->ctx, out, &tmp_sz, in, in_sz);
+        ret = EVP_DecryptUpdate(ctx, out, &tmp_sz, in, in_sz);
         if (ret != 1)
                 goto fail_decrypt;
 
         out_sz = tmp_sz;
 
-        ret = EVP_DecryptFinal_ex(f->ctx, out + tmp_sz, &tmp_sz);
+        ret = EVP_DecryptFinal_ex(ctx, out + tmp_sz, &tmp_sz);
         if (ret != 1)
                 goto fail_decrypt;
 
@@ -326,7 +338,7 @@ static int openssl_decrypt(struct flow *        f,
         return 0;
 
  fail_decrypt:
-        EVP_CIPHER_CTX_cleanup(f->ctx);
+        EVP_CIPHER_CTX_cleanup(ctx);
  fail_decrypt_init:
         free(out);
  fail_malloc:
@@ -350,8 +362,8 @@ static void openssl_crypt_fini(void * ctx)
 
 #endif /* HAVE_OPENSSL */
 
-static int crypt_dh_pkp_create(void **   pkp,
-                               uint8_t * pk)
+int crypt_dh_pkp_create(void **   pkp,
+                        uint8_t * pk)
 {
 #ifdef HAVE_OPENSSL
         assert(pkp != NULL);
@@ -361,14 +373,13 @@ static int crypt_dh_pkp_create(void **   pkp,
         (void) pkp;
         (void) pk;
 
-        memset(pk, 0, MSGBUFSZ);
         *pkp = NULL;
 
         return 0;
 #endif
 }
 
-static void crypt_dh_pkp_destroy(void * pkp)
+void crypt_dh_pkp_destroy(void * pkp)
 {
 #ifdef HAVE_OPENSSL
         openssl_ecdh_pkp_destroy(pkp);
@@ -378,10 +389,10 @@ static void crypt_dh_pkp_destroy(void * pkp)
 #endif
 }
 
-static int crypt_dh_derive(void *    pkp,
-                           uint8_t * pk,
-                           size_t    len,
-                           uint8_t * s)
+int crypt_dh_derive(void *    pkp,
+                    uint8_t * pk,
+                    size_t    len,
+                    uint8_t * s)
 {
 #ifdef HAVE_OPENSSL
         return openssl_ecdh_derive(pkp, pk, len, s);
@@ -396,50 +407,52 @@ static int crypt_dh_derive(void *    pkp,
 #endif
 }
 
-static int crypt_encrypt(struct flow *        f,
-                         struct shm_du_buff * sdb)
+int crypt_encrypt(struct crypt_info *  info,
+                  struct shm_du_buff * sdb)
 {
+        if (info->flags == 0)
+                return 0;
+
 #ifdef HAVE_OPENSSL
-        return openssl_encrypt(f, sdb);
+        return openssl_encrypt(info->ctx, info->key, sdb);
 #else
-        (void) f;
         (void) sdb;
 
         return 0;
 #endif
 }
 
-static int crypt_decrypt(struct flow *        f,
-                         struct shm_du_buff * sdb)
+int crypt_decrypt(struct crypt_info *  info,
+                  struct shm_du_buff * sdb)
 {
+        if (info->flags == 0)
+                return 0;
+
 #ifdef HAVE_OPENSSL
-        return openssl_decrypt(f, sdb);
+        return openssl_decrypt(info->ctx, info->key, sdb);
 #else
-        (void) f;
         (void) sdb;
 
         return -ECRYPT;
 #endif
 }
 
-static int crypt_init(void ** ctx)
+int crypt_init(struct crypt_info * info)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_crypt_init(ctx);
+        return openssl_crypt_init(&info->ctx);
 #else
-        assert(ctx != NULL);
-        *ctx = NULL;
-
+        info->ctx = NULL;
         return 0;
 #endif
 }
 
-static void crypt_fini(void * ctx)
+void crypt_fini(struct crypt_info * info)
 {
 #ifdef HAVE_OPENSSL
-        openssl_crypt_fini(ctx);
+        openssl_crypt_fini(info->ctx);
 #else
-        assert(ctx == NULL);
-        (void) ctx;
+        (void) info;
+        assert(info->ctx == NULL);
 #endif
 }
