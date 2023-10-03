@@ -104,8 +104,6 @@ struct flow {
 
         struct crypt_info     crypt;
 
-        pid_t                 pid;
-
         struct timespec       snd_act;
         struct timespec       rcv_act;
 
@@ -386,7 +384,6 @@ static void flow_clear(int fd)
         memset(&ai.flows[fd], 0, sizeof(ai.flows[fd]));
 
         ai.flows[fd].flow_id  = -1;
-        ai.flows[fd].pid      = -1;
 }
 
 static void flow_fini(int fd)
@@ -471,7 +468,6 @@ static int flow_init(int       flow_id,
 
         flow->flow_id  = flow_id;
         flow->oflags   = FLOWFDEFAULT;
-        flow->pid      = pid;
         flow->part_idx = NO_PART;
         flow->qs       = qs;
         flow->snd_act  = now;
