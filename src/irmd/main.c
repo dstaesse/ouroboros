@@ -105,11 +105,12 @@ struct {
         struct list_head     procs;        /* processes                  */
         struct list_head     progs;        /* programs known             */
         struct list_head     spawned_pids; /* child processes            */
-        pthread_rwlock_t     reg_lock;     /* lock for registration info */
 
         struct bmp *         flow_ids;     /* flow_ids for flows         */
         struct list_head     flows;        /* flow information           */
-        pthread_rwlock_t     flows_lock;   /* lock for flows             */
+
+        pthread_rwlock_t     reg_lock;     /* lock for registration info */
+
 #ifdef HAVE_TOML
         char *               cfg_file;     /* configuration file path    */
 #endif
@@ -1364,11 +1365,11 @@ static int flow_accept(pid_t             pid,
         if (irmd_get_state() != IRMD_RUNNING)
                 return -EIRMD;
 
-        pthread_rwlock_rdlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         f = registry_get_pending_flow_for_pid(pid);
         if (f == NULL) {
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Port_id was not created yet.");
                 return -EPERM;
         }
@@ -1377,16 +1378,11 @@ static int flow_accept(pid_t             pid,
         pid_n_1 = f->n_1_pid;
         flow_id = f->flow_id;
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
         rp = registry_get_proc(pid);
         if (rp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
                 bmp_release(irmd.flow_ids, f->flow_id);
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, -1, tmp);
                 clear_reg_flow(f);
                 reg_flow_set_state(f, FLOW_NULL);
@@ -1402,11 +1398,9 @@ static int flow_accept(pid_t             pid,
         pthread_mutex_unlock(&rp->lock);
 
         if (reg_name_get_state(n) != NAME_FLOW_ARRIVED) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                pthread_rwlock_wrlock(&irmd.flows_lock);
                 list_del(&f->next);
                 bmp_release(irmd.flow_ids, f->flow_id);
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, -1, tmp);
                 clear_reg_flow(f);
                 reg_flow_set_state(f, FLOW_NULL);
@@ -1416,10 +1410,6 @@ static int flow_accept(pid_t             pid,
         }
 
         registry_names_del_proc(pid);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        pthread_rwlock_wrlock(&irmd.flows_lock);
 
         f_out->flow_id = f->flow_id;
         f_out->n_pid   = f->n_pid;
@@ -1433,12 +1423,12 @@ static int flow_accept(pid_t             pid,
         *data = f->data; /* pass owner */
         clrbuf (f->data);
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
         if (ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, 0, tmp)) {
-                pthread_rwlock_wrlock(&irmd.flows_lock);
+                pthread_rwlock_wrlock(&irmd.reg_lock);
                 list_del(&f->next);
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_dbg("Failed to respond to alloc. Port_id invalidated.");
                 clear_reg_flow(f);
                 reg_flow_set_state(f, FLOW_NULL);
@@ -1473,11 +1463,11 @@ static int flow_join(pid_t              pid,
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         flow_id = bmp_allocate(irmd.flow_ids);
         if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not allocate flow_id.");
                 return -EBADF;
         }
@@ -1485,14 +1475,14 @@ static int flow_join(pid_t              pid,
         f = reg_flow_create(pid, ipcp->pid, flow_id, qs);
         if (f == NULL) {
                 bmp_release(irmd.flow_ids, flow_id);
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not allocate flow_id.");
                 return -ENOMEM;
         }
 
         list_add(&f->next, &irmd.flows);
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
         assert(reg_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
@@ -1525,7 +1515,7 @@ static int flow_join(pid_t              pid,
                 return -EPIPE;
         }
 
-        pthread_rwlock_wrlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         assert(reg_flow_get_state(f) == FLOW_ALLOCATED);
 
@@ -1537,7 +1527,7 @@ static int flow_join(pid_t              pid,
         assert(f->data.data == NULL);
         assert(f->data.len  == 0);
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Flow on flow_id %d allocated.", flow_id);
 
@@ -1565,11 +1555,11 @@ static int flow_alloc(pid_t              pid,
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         flow_id = bmp_allocate(irmd.flow_ids);
         if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not allocate flow_id.");
                 return -EBADF;
         }
@@ -1577,14 +1567,14 @@ static int flow_alloc(pid_t              pid,
         f = reg_flow_create(pid, ipcp->pid, flow_id, qs);
         if (f == NULL) {
                 bmp_release(irmd.flow_ids, flow_id);
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not allocate flow_id.");
                 return -ENOMEM;
         }
 
         list_add(&f->next, &irmd.flows);
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
         assert(reg_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
@@ -1617,7 +1607,7 @@ static int flow_alloc(pid_t              pid,
                 return -EPIPE;
         }
 
-        pthread_rwlock_wrlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         assert(reg_flow_get_state(f) == FLOW_ALLOCATED);
 
@@ -1628,7 +1618,7 @@ static int flow_alloc(pid_t              pid,
         *data          = f->data; /* pass owner */
         clrbuf(f->data);
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Flow on flow_id %d allocated.", flow_id);
 
@@ -1647,11 +1637,11 @@ static int flow_dealloc(pid_t  pid,
         log_dbg("Deallocating flow %d for process %d.",
                 flow_id, pid);
 
-        pthread_rwlock_wrlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         f = registry_get_flow(flow_id);
         if (f == NULL) {
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_dbg("Deallocate unknown port %d by %d.", flow_id, pid);
                 return 0;
         }
@@ -1662,7 +1652,7 @@ static int flow_dealloc(pid_t  pid,
         } else if (pid == f->n_1_pid) {
                 f->n_1_pid = -1;
         } else {
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_dbg("Dealloc called by wrong process.");
                 return -EPERM;
         }
@@ -1683,7 +1673,7 @@ static int flow_dealloc(pid_t  pid,
                         flow_id, pid);
         }
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
         if (n_1_pid != -1)
                 ret = ipcp_flow_dealloc(n_1_pid, flow_id, timeo);
@@ -1815,20 +1805,17 @@ static int flow_req_arr(pid_t             pid,
                 return -1;
         }
 
-        pthread_rwlock_unlock(&irmd.reg_lock);
-        pthread_rwlock_wrlock(&irmd.flows_lock);
-
         flow_id = bmp_allocate(irmd.flow_ids);
         if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
                 log_err("Out of flow ids.");
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 return -1;
         }
 
         f = reg_flow_create(h_pid, pid, flow_id, qs);
         if (f == NULL) {
                 bmp_release(irmd.flow_ids, flow_id);
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not allocate flow_id.");
                 return -1;
         }
@@ -1839,19 +1826,14 @@ static int flow_req_arr(pid_t             pid,
 
         list_add(&f->next, &irmd.flows);
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
         reg_name_set_state(n, NAME_FLOW_ARRIVED);
 
         rpc = registry_get_proc(h_pid);
         if (rpc == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                pthread_rwlock_wrlock(&irmd.flows_lock);
                 clear_reg_flow(f);
                 bmp_release(irmd.flow_ids, f->flow_id);
                 list_del(&f->next);
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not get process table entry for %d.", h_pid);
                 freebuf(f->data);
                 reg_flow_destroy(f);
@@ -1877,11 +1859,11 @@ static int flow_alloc_reply(int      flow_id,
 {
         struct reg_flow * f;
 
-        pthread_rwlock_wrlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         f = registry_get_flow(flow_id);
         if (f == NULL) {
-                pthread_rwlock_unlock(&irmd.flows_lock);
+                pthread_rwlock_unlock(&irmd.reg_lock);
                 return -1;
         }
 
@@ -1894,7 +1876,7 @@ static int flow_alloc_reply(int      flow_id,
 
         f->data = data;
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
         return 0;
 }
@@ -1969,8 +1951,8 @@ void * irm_sanitize(void * o)
 
                 pthread_cleanup_pop(true);
 
-                pthread_rwlock_wrlock(&irmd.flows_lock);
-                pthread_cleanup_push(__cleanup_rwlock_unlock, &irmd.flows_lock);
+                pthread_rwlock_wrlock(&irmd.reg_lock);
+                pthread_cleanup_push(__cleanup_rwlock_unlock, &irmd.reg_lock);
 
                 list_for_each_safe(p, h, &irmd.flows) {
                         int ipcpi;
@@ -2414,7 +2396,7 @@ static void irm_fini(void)
         if (unlink(IRM_SOCK_PATH))
                 log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
 
-        pthread_rwlock_wrlock(&irmd.flows_lock);
+        pthread_rwlock_wrlock(&irmd.reg_lock);
 
         if (irmd.flow_ids != NULL)
                 bmp_destroy(irmd.flow_ids);
@@ -2425,7 +2407,7 @@ static void irm_fini(void)
                 reg_flow_destroy(f);
         }
 
-        pthread_rwlock_unlock(&irmd.flows_lock);
+        pthread_rwlock_unlock(&irmd.reg_lock);
 
 
         if (irmd.rdrb != NULL)
@@ -2436,7 +2418,6 @@ static void irm_fini(void)
 
         pthread_mutex_destroy(&irmd.cmd_lock);
         pthread_cond_destroy(&irmd.cmd_cond);
-        pthread_rwlock_destroy(&irmd.flows_lock);
         pthread_rwlock_destroy(&irmd.reg_lock);
         pthread_rwlock_destroy(&irmd.state_lock);
 
@@ -2505,11 +2486,6 @@ static int irm_init(void)
         if (pthread_rwlock_init(&irmd.reg_lock, NULL)) {
                 log_err("Failed to initialize rwlock.");
                 goto fail_reg_lock;
-        }
-
-        if (pthread_rwlock_init(&irmd.flows_lock, NULL)) {
-                log_err("Failed to initialize rwlock.");
-                goto fail_flows_lock;
         }
 
         if (pthread_mutex_init(&irmd.cmd_lock, NULL)) {
@@ -2623,8 +2599,6 @@ static int irm_init(void)
  fail_cmd_cond:
         pthread_mutex_destroy(&irmd.cmd_lock);
  fail_cmd_lock:
-        pthread_rwlock_destroy(&irmd.flows_lock);
- fail_flows_lock:
         pthread_rwlock_destroy(&irmd.reg_lock);
  fail_reg_lock:
         pthread_rwlock_destroy(&irmd.state_lock);
