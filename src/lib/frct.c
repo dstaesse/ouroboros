@@ -571,12 +571,7 @@ static int __frcti_window_wait(struct frcti *    frcti,
 
                 pthread_cleanup_push(__cleanup_mutex_unlock, &frcti->mtx);
 
-                if (abstime != NULL)
-                        ret = -pthread_cond_timedwait(&frcti->cond,
-                                                      &frcti->mtx,
-                                                      abstime);
-                else
-                        ret = -pthread_cond_wait(&frcti->cond, &frcti->mtx);
+                ret = -__timedwait(&frcti->cond, &frcti->mtx, abstime);
 
                 pthread_cleanup_pop(false);
 

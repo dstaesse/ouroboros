@@ -25,6 +25,16 @@
 
 #include <pthread.h>
 
+static int __attribute__((unused)) __timedwait(pthread_cond_t *        cond,
+                                               pthread_mutex_t *       mtx,
+                                               const struct timespec * abstime)
+{
+        if (abstime == NULL)
+                return pthread_cond_wait(cond, mtx);
+
+        return pthread_cond_timedwait(cond, mtx, abstime);
+}
+
 /* various cleanup functions for pthread_cleanup_push */
 static void __attribute__((unused)) __cleanup_rwlock_unlock(void * rwlock)
 {

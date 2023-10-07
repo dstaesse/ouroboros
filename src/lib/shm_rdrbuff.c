@@ -402,13 +402,7 @@ ssize_t shm_rdrbuff_alloc_b(struct shm_rdrbuff *    rdrb,
 #else
         while (!shm_rdrb_free(rdrb, 1) && ret != ETIMEDOUT) {
 #endif
-                if (abstime != NULL)
-                        ret = pthread_cond_timedwait(rdrb->healthy,
-                                                     rdrb->lock,
-                                                     abstime);
-                else
-                        ret = pthread_cond_wait(rdrb->healthy, rdrb->lock);
-
+                ret = __timedwait(rdrb->healthy, rdrb->lock, abstime);
 #ifdef SHM_RDRB_MULTI_BLOCK
                 if (blocks + *rdrb->head > (SHM_BUFFER_SIZE))
                         padblocks = (SHM_BUFFER_SIZE) - *rdrb->head;

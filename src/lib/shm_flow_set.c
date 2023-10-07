@@ -344,18 +344,11 @@ ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
         pthread_cleanup_push(__cleanup_mutex_unlock, set->lock);
 
         while (set->heads[idx] == 0 && ret != -ETIMEDOUT) {
-                if (abstime != NULL) {
-                        ret = -pthread_cond_timedwait(set->conds + idx,
-                                                      set->lock,
-                                                      abstime);
+                ret = -__timedwait(set->conds + idx, set->lock, abstime);
 #ifdef HAVE_CANCEL_BUG
-                        if (ret == -ETIMEDOUT)
-                                pthread_testcancel();
+                if (ret == -ETIMEDOUT)
+                        pthread_testcancel();
 #endif
-                } else {
-                        ret = -pthread_cond_wait(set->conds + idx,
-                                                 set->lock);
-                }
 #ifdef HAVE_ROBUST_MUTEX
                 if (ret == -EOWNERDEAD)
                         pthread_mutex_consistent(set->lock);

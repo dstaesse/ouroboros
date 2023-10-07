@@ -211,11 +211,7 @@ int reg_proc_sleep(struct reg_proc * proc,
         pthread_cleanup_push(cancel_reg_proc, proc);
 
         while (proc->state == PROC_SLEEP && ret != -ETIMEDOUT)
-                if (dl != NULL)
-                        ret = -pthread_cond_timedwait(&proc->cond,
-                                                      &proc->lock, dl);
-                else
-                        ret = -pthread_cond_wait(&proc->cond, &proc->lock);
+                ret = -__timedwait(&proc->cond, &proc->lock, dl);
 
         pthread_cleanup_pop(false);
 

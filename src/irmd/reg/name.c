@@ -415,15 +415,17 @@ int reg_name_leave_state(struct reg_name * name,
                          enum name_state   state,
                          struct timespec * timeout)
 {
-        struct timespec abstime;
-        int ret = 0;
+        struct timespec   ts;
+        struct timespec * abstime = NULL;
+        int               ret;
 
         assert(name);
         assert(state != NAME_DESTROY);
 
         if (timeout != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
-                ts_add(&abstime, timeout, &abstime);
+                clock_gettime(PTHREAD_COND_CLOCK, &ts);
+                ts_add(&ts, timeout, &ts);
+                abstime = &ts;
         }
 
         pthread_mutex_lock(&name->mtx);
@@ -431,13 +433,7 @@ int reg_name_leave_state(struct reg_name * name,
         pthread_cleanup_push(__cleanup_mutex_unlock, &name->mtx);
 
         while (name->state == state && ret != -ETIMEDOUT)
-                if (timeout)
-                        ret = -pthread_cond_timedwait(&name->cond,
-                                                      &name->mtx,
-                                                      &abstime);
-                else
-                        ret = -pthread_cond_wait(&name->cond,
-                                                 &name->mtx);
+                ret = -__timedwait(&name->cond,&name->mtx, abstime);
 
         if (name->state == NAME_DESTROY) {
                 ret = -1;

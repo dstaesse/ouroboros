@@ -28,7 +28,7 @@
 #include "utils.h"
 
 #include <unistd.h>
-#include <pthread.h>
+#include <ouroboros/pthread.h>
 
 enum proc_state {
         PROC_NULL = 0,

@@ -197,15 +197,8 @@ int reg_flow_wait_state(struct reg_flow * f,
         while (!(f->state == state ||
                  f->state == FLOW_DESTROY ||
                  f->state == FLOW_DEALLOC_PENDING) &&
-               ret != -ETIMEDOUT) {
-                if (dl != NULL)
-                        ret = -pthread_cond_timedwait(&f->cond,
-                                                      &f->mtx,
-                                                      dl);
-                else
-                        ret = -pthread_cond_wait(&f->cond,
-                                                 &f->mtx);
-        }
+               ret != -ETIMEDOUT)
+                ret = -__timedwait(&f->cond, &f->mtx, dl);
 
         if (f->state == FLOW_DESTROY ||
             f->state == FLOW_DEALLOC_PENDING ||

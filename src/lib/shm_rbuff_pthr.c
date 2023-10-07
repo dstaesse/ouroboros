@@ -114,12 +114,7 @@ int shm_rbuff_write_b(struct shm_rbuff *      rb,
         while (!shm_rbuff_free(rb)
                && ret != -ETIMEDOUT
                && !(*rb->acl & ACL_FLOWDOWN)) {
-                if (abstime != NULL)
-                        ret = -pthread_cond_timedwait(rb->del,
-                                                      rb->lock,
-                                                      abstime);
-                else
-                        ret = -pthread_cond_wait(rb->del, rb->lock);
+                ret = -__timedwait(rb->del, rb->lock, abstime);
 #ifdef HAVE_ROBUST_MUTEX
                 if (ret == -EOWNERDEAD)
                         pthread_mutex_consistent(rb->lock);
@@ -204,12 +199,7 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
         while (shm_rbuff_empty(rb) &&
                idx != -ETIMEDOUT &&
                check_rb_acl(rb) == -EAGAIN) {
-                if (abstime != NULL)
-                        idx = -pthread_cond_timedwait(rb->add,
-                                                      rb->lock,
-                                                      abstime);
-                else
-                        idx = -pthread_cond_wait(rb->add, rb->lock);
+                idx = -__timedwait(rb->add, rb->lock, abstime);
 #ifdef HAVE_ROBUST_MUTEX
                 if (idx == -EOWNERDEAD)
                         pthread_mutex_consistent(rb->lock);
