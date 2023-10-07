@@ -625,7 +625,8 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
         udp_data.s_saddr.sin_port        = htons(conf->udp.port);
 
         if (bind(udp_data.s_fd, SADDR, SADDR_SIZE) < 0) {
-                log_err("Couldn't bind to %s.", ipstr);
+                log_err("Couldn't bind to %s:%d. %s.",
+                        ipstr, conf->udp.port, strerror(errno));
                 goto fail_bind;
         }
 
@@ -648,7 +649,7 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
         for (i = 0; i < IPCP_UDP_WR_THR; ++i) {
                 if (pthread_create(&udp_data.packet_writer[i], NULL,
                         udp_ipcp_packet_writer, NULL)) {
-                        log_err("failed to create writer thread.");
+                        log_err("Failed to create writer thread.");
                         goto fail_packet_writer;
                 }
         }
@@ -656,7 +657,10 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
         log_dbg("Bootstrapped IPCP over UDP with pid %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
         log_dbg("Using port %u.", conf->udp.port);
-        log_dbg("DNS server address is %s.", dnsstr);
+        if (conf->udp.dns_addr != 0)
+                log_dbg("DNS server address is %s.", dnsstr);
+        else
+                log_dbg("DNS server not in use.");
 
         return 0;
 
@@ -691,13 +695,13 @@ static int ddns_send(char * cmd)
         char * envp[] = {0};
 
         if (pipe(pipe_fd)) {
-                log_err("Failed to create pipe.");
+                log_err("Failed to create pipe: %s.", strerror(errno));
                 return -1;
         }
 
         pid = fork();
         if (pid == -1) {
-                log_err("Failed to fork.");
+                log_err("Failed to fork: %s.", strerror(errno));
                 close(pipe_fd[0]);
                 close(pipe_fd[1]);
                 return -1;
@@ -714,7 +718,8 @@ static int ddns_send(char * cmd)
         close(pipe_fd[0]);
 
         if (write(pipe_fd[1], cmd, strlen(cmd)) == -1) {
-                log_err("Failed to communicate with nsupdate.");
+                log_err("Failed to communicate with nsupdate: %s.",
+                        strerror(errno));
                 close(pipe_fd[1]);
                 return -1;
         }
@@ -748,13 +753,13 @@ static uint32_t ddns_resolve(char *   name,
                 return 0;
 
         if (pipe(pipe_fd)) {
-                log_err("Failed to create pipe.");
+                log_err("Failed to create pipe: %s.", strerror(errno));
                 return 0;
         }
 
         pid = fork();
         if (pid == -1) {
-                log_err("Failed to fork.");
+                log_err("Failed to fork: %s.", strerror(errno));
                 close(pipe_fd[0]);
                 close(pipe_fd[1]);
                 return -1;
@@ -1003,7 +1008,7 @@ static int udp_ipcp_flow_alloc(int             fd,
                 return -1;
         }
 
-        log_dbg("Destination UDP ipcp resolved at %s.", ipstr);
+        log_dbg("Destination %s UDP ipcp resolved at %s.", dst, ipstr);
 
         memset((char *) &r_saddr, 0, sizeof(r_saddr));
         r_saddr.sin_family      = AF_INET;
