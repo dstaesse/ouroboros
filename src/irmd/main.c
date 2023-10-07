@@ -2689,7 +2689,7 @@ static void irm_argparse(int     argc,
                          char ** argv)
 {
 #ifdef HAVE_TOML
-        irmd.cfg_file = OUROBOROS_CONFIG_DIR OUROBOROS_CONFIG_FILE;
+        irmd.cfg_file = NULL;
 #endif
         argc--;
         argv++;

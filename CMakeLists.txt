@@ -135,6 +135,11 @@ if (SYSTEMD_FOUND)
   endif ()
   if (NOT ${SYSTEMD_UNITDIR} STREQUAL "")
     message(STATUS "Installing systemd service in: ${SYSTEMD_UNITDIR}")
+    if (LIBTOML_LIBRARIES AND NOT DISABLE_CONFIGFILE)
+      set (CONFIGURE_STRING "--config ${OUROBOROS_CONFIG_DIR}${OUROBOROS_CONFIG_FILE}")
+    else ()
+      set (CONFIGURE_STRING "")
+    endif ()
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.service.in"
       "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.service" @ONLY)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.service"
