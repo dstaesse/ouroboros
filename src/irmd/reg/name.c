@@ -417,7 +417,7 @@ int reg_name_leave_state(struct reg_name * name,
 {
         struct timespec   ts;
         struct timespec * abstime = NULL;
-        int               ret;
+        int               ret     = 0;
 
         assert(name);
         assert(state != NAME_DESTROY);
