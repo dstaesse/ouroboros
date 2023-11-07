@@ -1008,7 +1008,8 @@ static int udp_ipcp_flow_alloc(int             fd,
                 return -1;
         }
 
-        log_dbg("Destination %s UDP ipcp resolved at %s.", dst, ipstr);
+        log_dbg("Destination " HASH_FMT32 " resolved at IP %s.",
+                HASH_VAL32(dst), ipstr);
 
         memset((char *) &r_saddr, 0, sizeof(r_saddr));
         r_saddr.sin_family      = AF_INET;
