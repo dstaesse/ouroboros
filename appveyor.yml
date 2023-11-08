@@ -1,6 +1,6 @@
 image:
-  - Ubuntu1804
-  - Ubuntu
+  - Ubuntu2004
+  - Ubuntu2204
 
 platform:
   - x64
@@ -13,11 +13,11 @@ configuration:
 environment:
   matrix:
     - CC: clang
-
     - CC: gcc
 
 install:
   - sudo apt-get update
+  - sudo apt-get install clang
   - sudo apt-get install protobuf-c-compiler --yes
   - sudo apt-get install libprotobuf-c-dev --yes || true
   - sudo apt-get install libgcrypt20-dev libssl-dev libfuse-dev dnsutils --yes
