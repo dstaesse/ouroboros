@@ -139,6 +139,10 @@ static int rib_readdir(const char *            path,
         (void) offset;
         (void) info;
 
+        /* Fix ls calling readdir in an infinite loop on raspbian. */
+        if (info != NULL && info->nonseekable != 0)
+                return -ENOENT;
+
         filler(buf, ".", NULL, 0);
         filler(buf, "..", NULL, 0);
 

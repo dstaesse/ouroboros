@@ -176,7 +176,7 @@ static int ipcp_rib_readdir(char *** buf)
 
         while (info[i] != NULL) {
                 (*buf)[i] = strdup(info[i]);
-                if (*buf == NULL)
+                if ((*buf)[i] == NULL)
                         goto fail_dup;
                 i++;
         }
