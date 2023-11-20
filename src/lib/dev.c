@@ -555,19 +555,19 @@ static void init(int     argc,
 
         prog = path_strip(prog);
         if (prog == NULL) {
-                fprintf(stderr, "FATAL: Could not find program name.");
+                fprintf(stderr, "FATAL: Could not find program name.\n");
                 goto fail_prog;
         }
 
         if (proc_announce(prog)) {
-                fprintf(stderr, "FATAL: Could not announce to IRMd.");
+                fprintf(stderr, "FATAL: Could not announce to IRMd.\n");
                 goto fail_prog;
         }
 
 #ifdef HAVE_LIBGCRYPT
         if (!gcry_control(GCRYCTL_INITIALIZATION_FINISHED_P)) {
                 if (!gcry_check_version(GCRYPT_VERSION)) {
-                        fprintf(stderr, "FATAL: Could not get gcry version.");
+                        fprintf(stderr, "FATAL: Could not get gcry version.\n");
                         goto fail_prog;
                 }
                 gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
@@ -576,25 +576,25 @@ static void init(int     argc,
 #endif
         ai.fds = bmp_create(PROG_MAX_FLOWS - PROG_RES_FDS, PROG_RES_FDS);
         if (ai.fds == NULL) {
-                fprintf(stderr, "FATAL: Could not create fd bitmap.");
+                fprintf(stderr, "FATAL: Could not create fd bitmap.\n");
                 goto fail_fds;
         }
 
         ai.fqueues = bmp_create(PROG_MAX_FQUEUES, 0);
         if (ai.fqueues == NULL) {
-                fprintf(stderr, "FATAL: Could not create fqueue bitmap.");
+                fprintf(stderr, "FATAL: Could not create fqueue bitmap.\n");
                 goto fail_fqueues;
         }
 
         ai.rdrb = shm_rdrbuff_open();
         if (ai.rdrb == NULL) {
-                fprintf(stderr, "FATAL: Could not open packet buffer.");
+                fprintf(stderr, "FATAL: Could not open packet buffer.\n");
                 goto fail_rdrb;
         }
 
         ai.flows = malloc(sizeof(*ai.flows) * PROG_MAX_FLOWS);
         if (ai.flows == NULL) {
-                fprintf(stderr, "FATAL: Could not allocate flows.");
+                fprintf(stderr, "FATAL: Could not allocate flows.\n");
                 goto fail_flows;
         }
 
@@ -603,7 +603,7 @@ static void init(int     argc,
 
         ai.id_to_fd = malloc(sizeof(*ai.id_to_fd) * SYS_MAX_FLOWS);
         if (ai.id_to_fd == NULL) {
-                fprintf(stderr, "FATAL: Could not allocate id_to_fd.");
+                fprintf(stderr, "FATAL: Could not allocate id_to_fd.\n");
                 goto fail_id_to_fd;
         }
 
@@ -611,34 +611,34 @@ static void init(int     argc,
                 ai.id_to_fd[i].state = FLOW_INIT;
 
         if (pthread_mutex_init(&ai.mtx, NULL)) {
-                fprintf(stderr, "FATAL: Could not init mutex.");
+                fprintf(stderr, "FATAL: Could not init mutex.\n");
                 goto fail_mtx;
         }
 
         if (pthread_cond_init(&ai.cond, NULL) < 0) {
-                fprintf(stderr, "FATAL: Could not init condvar.");
+                fprintf(stderr, "FATAL: Could not init condvar.\n");
                 goto fail_cond;
         }
 
         if (pthread_rwlock_init(&ai.lock, NULL) < 0) {
-                fprintf(stderr, "FATAL: Could not initialize flow lock");
+                fprintf(stderr, "FATAL: Could not initialize flow lock.\n");
                 goto fail_flow_lock;
         }
 
         ai.fqset = shm_flow_set_open(getpid());
         if (ai.fqset == NULL) {
-                fprintf(stderr, "FATAL: Could not open flow set.");
+                fprintf(stderr, "FATAL: Could not open flow set.\n");
                 goto fail_fqset;
         }
 
         ai.frct_set = fset_create();
         if (ai.frct_set == NULL || ai.frct_set->idx != 0) {
-                fprintf(stderr, "FATAL: Could not create FRCT set.");
+                fprintf(stderr, "FATAL: Could not create FRCT set.\n");
                 goto fail_frct_set;
         }
 
         if (timerwheel_init() < 0) {
-                fprintf(stderr, "FATAL: Could not initialize timerwheel.");
+                fprintf(stderr, "FATAL: Could not initialize timerwheel.\n");
                 goto fail_timerwheel;
         }
 
@@ -646,13 +646,13 @@ static void init(int     argc,
         if (strstr(argv[0], "ipcpd") == NULL) {
                 sprintf(procstr, "proc.%d", getpid());
                 if (rib_init(procstr) < 0) {
-                        fprintf(stderr, "FATAL: Could not initialize RIB.");
+                        fprintf(stderr, "FATAL: Could not initialize RIB.\n");
                         goto fail_rib_init;
                 }
         }
 #endif
         if (pthread_create(&ai.rx, NULL, flow_rx, NULL) < 0) {
-                fprintf(stderr, "FATAL: Could not start monitor thread.");
+                fprintf(stderr, "FATAL: Could not start monitor thread.\n");
                 goto fail_monitor;
         }
 
