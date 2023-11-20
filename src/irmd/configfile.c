@@ -564,6 +564,11 @@ static int args_to_argv(const char * args,
         char * str;
         int    argc = 0;
 
+        if (args == NULL) {
+                *argv = NULL;
+                return 0;
+        }
+
         str = (char *) args;
 
         tok = strtok(str, " ");
