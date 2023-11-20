@@ -194,9 +194,13 @@ static int ipcp_rib_readdir(char *** buf)
 static int ipcp_rib_getattr(const char *      path,
                             struct rib_attr * attr)
 {
-        (void) path;
+        char buf[LAYER_NAME_SIZE + 2];
+        struct timespec now;
 
-        attr->size = LAYER_NAME_SIZE;
+        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+
+        attr->size = ipcp_rib_read(path, buf, LAYER_NAME_SIZE + 2);
+        attr->mtime = now.tv_sec;
 
         return 0;
 }

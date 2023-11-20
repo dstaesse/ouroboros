@@ -207,12 +207,15 @@ static size_t __getattr(const char *  path,
                 if (strcmp(comp, r->path) == 0) {
                         size_t ret = r->ops->getattr(path + 1, &attr);
                         pthread_rwlock_unlock(&rib.lock);
-                        st->st_mode  = S_IFREG | 0755;
-                        st->st_nlink = 1;
-                        st->st_uid   = getuid();
-                        st->st_gid   = getgid();
-                        st->st_size  = attr.size;
-                        st->st_mtime = attr.mtime;
+                        st->st_mode   = S_IFREG | 0644;
+                        st->st_blocks = 1;
+                        st->st_nlink  = 1;
+                        st->st_uid    = getuid();
+                        st->st_gid    = getgid();
+                        st->st_size   = attr.size;
+                        st->st_atime  = attr.mtime;
+                        st->st_mtime  = attr.mtime;
+                        st->st_ctime  = attr.mtime;
                         return ret;
                 }
         }
@@ -256,6 +259,8 @@ static int rib_getattr(const char *  path,
         st->st_uid   = getuid();
         st->st_gid   = getgid();
         st->st_mtime = now.tv_sec;
+        st->st_atime = now.tv_sec;
+        st->st_ctime = now.tv_sec;
         return 0;
 }
 
