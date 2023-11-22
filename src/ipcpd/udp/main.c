@@ -431,6 +431,8 @@ static void * udp_ipcp_packet_reader(void * o)
 
         (void) o;
 
+        ipcp_lock_to_core();
+
         data  = buf + sizeof(uint32_t);
         eid_p = (uint32_t *) buf;
 

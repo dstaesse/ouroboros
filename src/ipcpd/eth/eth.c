@@ -782,6 +782,8 @@ static void * eth_ipcp_mgmt_handler(void * o)
 {
         (void) o;
 
+        pthread_cleanup_push(__cleanup_mutex_unlock, &eth_data.mgmt_lock);
+
         while (true) {
                 int                 ret = 0;
                 struct timespec     timeout = {(MGMT_TIMEO / 1000),
@@ -793,8 +795,6 @@ static void * eth_ipcp_mgmt_handler(void * o)
                 ts_add(&abstime, &timeout, &abstime);
 
                 pthread_mutex_lock(&eth_data.mgmt_lock);
-                pthread_cleanup_push(__cleanup_mutex_unlock,
-                                     &eth_data.mgmt_lock);
 
                 while (list_is_empty(&eth_data.mgmt_frames) &&
                        ret != -ETIMEDOUT)
@@ -807,7 +807,7 @@ static void * eth_ipcp_mgmt_handler(void * o)
                 if (frame != NULL)
                         list_del(&frame->next);
 
-                pthread_cleanup_pop(true);
+                pthread_mutex_unlock(&eth_data.mgmt_lock);
 
                 if (frame == NULL)
                         continue;
@@ -816,6 +816,8 @@ static void * eth_ipcp_mgmt_handler(void * o)
 
                 free(frame);
         }
+
+        pthread_cleanup_pop(false);
 
         return (void *) 0;
 }
@@ -915,22 +917,14 @@ static void * eth_ipcp_packet_reader(void * o)
 #endif
                 length = ntohs(e_frame->length);
 #if defined(BUILD_ETH_DIX)
-                if (e_frame->ethertype != eth_data.ethertype) {
-#ifndef HAVE_NETMAP
-                        ipcp_sdb_release(sdb);
-#endif
-                        continue;
-                }
+                if (e_frame->ethertype != eth_data.ethertype)
+                        goto fail_frame;
 
                 deid = ntohs(e_frame->eid);
                 if (deid == MGMT_EID) {
 #elif defined (BUILD_ETH_LLC)
-                if (length > 0x05FF) { /* DIX */
-#ifndef HAVE_NETMAP
-                        ipcp_sdb_release(sdb);
-#endif
-                        continue;
-                }
+                if (length > 0x05FF) /* DIX */
+                        goto fail_frame;
 
                 length -= LLC_HEADER_SIZE;
 
@@ -939,6 +933,8 @@ static void * eth_ipcp_packet_reader(void * o)
 
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
 #endif
+                        ipcp_sdb_release(sdb); /* No need for the N+1 buffer. */
+
                         frame = malloc(sizeof(*frame));
                         if (frame == NULL) {
                                 log_err("Failed to allocate frame.");
@@ -953,7 +949,6 @@ static void * eth_ipcp_packet_reader(void * o)
                         list_add(&frame->next, &eth_data.mgmt_frames);
                         pthread_cond_signal(&eth_data.mgmt_cond);
                         pthread_mutex_unlock(&eth_data.mgmt_lock);
-
                 } else {
                         pthread_rwlock_rdlock(&eth_data.flows_lock);
 
@@ -1027,9 +1022,9 @@ static void * eth_ipcp_packet_writer(void * o)
 
         (void) o;
 
-        pthread_cleanup_push(cleanup_writer, fq);
-
         ipcp_lock_to_core();
+
+        pthread_cleanup_push(cleanup_writer, fq);
 
         while (true) {
                 fevent(eth_data.np1_flows, fq, NULL);
@@ -1048,6 +1043,7 @@ static void * eth_ipcp_packet_writer(void * o)
                             == NULL) {
                                 log_dbg("Failed to allocate header.");
                                 ipcp_sdb_release(sdb);
+                                continue;
                         }
 
                         pthread_rwlock_rdlock(&eth_data.flows_lock);
@@ -1063,14 +1059,15 @@ static void * eth_ipcp_packet_writer(void * o)
 
                         pthread_rwlock_unlock(&eth_data.flows_lock);
 
-                        eth_ipcp_send_frame(r_addr,
+                        if (eth_ipcp_send_frame(r_addr,
 #if defined(BUILD_ETH_DIX)
                                             deid,
 #elif defined(BUILD_ETH_LLC)
                                             dsap, ssap,
 #endif
                                             shm_du_buff_head(sdb),
-                                            len);
+                                            len))
+                                log_dbg("Failed to send frame.");
                         ipcp_sdb_release(sdb);
                 }
         }
