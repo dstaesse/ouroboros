@@ -99,7 +99,7 @@ struct udp_config {
 
 /* Info reported back to the IRMd about the layer on enrollment */
 struct layer_info {
-        char layer_name[LAYER_NAME_SIZE + 1];
+        char name[LAYER_NAME_SIZE + 1];
         int  dir_hash_algo;
 };
 

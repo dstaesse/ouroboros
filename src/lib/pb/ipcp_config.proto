@@ -23,8 +23,8 @@
 syntax = "proto2";
 
 message layer_info_msg {
-        required string layer_name    =  1;
-        required uint32 dir_hash_algo =  2;
+        required string name          = 1;
+        required uint32 dir_hash_algo = 2;
 }
 
 message dt_config_msg {

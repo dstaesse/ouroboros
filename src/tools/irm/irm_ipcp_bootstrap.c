@@ -307,7 +307,7 @@ int do_bootstrap_ipcp(int     argc,
                                 goto fail_usage;
                         }
 
-                        strcpy(conf.layer_info.layer_name, layer);
+                        strcpy(conf.layer_info.name, layer);
                         conf.layer_info.dir_hash_algo = hash_algo;
 
                         switch (conf.type) {

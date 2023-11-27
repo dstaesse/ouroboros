@@ -516,13 +516,13 @@ static int toml_ipcp(toml_table_t *       table,
         if (ret < 0)
                 return -1;
 
-        strcpy(conf->layer_info.layer_name, bootstrap.u.s);
+        strcpy(conf->layer_info.name, bootstrap.u.s);
         free(bootstrap.u.s);
 
         if (bootstrap_ipcp(pid, conf) < 0)
                 return -1;
 
-        if (toml_autobind(table, pid, name, conf->layer_info.layer_name) < 0)
+        if (toml_autobind(table, pid, name, conf->layer_info.name) < 0)
                 return -1;
 
         if (toml_register(table, pid) < 0) {

@@ -595,7 +595,7 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
         ((struct ipcp_config *) conf)->layer_info.dir_hash_algo = HASH_MD5;
 
         ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
-        strcpy(ipcpi.layer_name, conf->layer_info.layer_name);
+        strcpy(ipcpi.layer_name, conf->layer_info.name);
 
         if (inet4_ntop(&conf->udp.ip_addr, ipstr) == NULL) {
                 log_err("Failed to convert IP address.");

@@ -229,7 +229,7 @@ int ipcp_bootstrap(pid_t                pid,
         }
 
         info->dir_hash_algo = recv_msg->layer_info->dir_hash_algo;
-        strcpy(info->layer_name, recv_msg->layer_info->layer_name);
+        strcpy(info->name, recv_msg->layer_info->name);
 
         ret = recv_msg->result;
         ipcp_msg__free_unpacked(recv_msg, NULL);
@@ -272,7 +272,7 @@ int ipcp_enroll(pid_t               pid,
         }
 
         info->dir_hash_algo = recv_msg->layer_info->dir_hash_algo;
-        strcpy(info->layer_name, recv_msg->layer_info->layer_name);
+        strcpy(info->name, recv_msg->layer_info->name);
 
         ipcp_msg__free_unpacked(recv_msg, NULL);
 

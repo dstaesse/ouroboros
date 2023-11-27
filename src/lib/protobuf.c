@@ -40,8 +40,8 @@ layer_info_msg_t * layer_info_s_to_msg(const struct layer_info * s)
 
         layer_info_msg__init(msg);
 
-        msg->layer_name = strdup(s->layer_name);
-        if (msg->layer_name == NULL)
+        msg->name = strdup(s->name);
+        if (msg->name == NULL)
                 goto fail_msg;
 
         msg->dir_hash_algo  = s->dir_hash_algo;
@@ -59,10 +59,10 @@ struct layer_info layer_info_msg_to_s(const layer_info_msg_t * msg)
         struct layer_info s;
 
         assert(msg != NULL);
-        assert(strlen(msg->layer_name) <= LAYER_NAME_SIZE);
+        assert(strlen(msg->name) <= LAYER_NAME_SIZE);
 
         s.dir_hash_algo = msg->dir_hash_algo;
-        strcpy(s.layer_name, msg->layer_name);
+        strcpy(s.name, msg->name);
 
         return s;
 }

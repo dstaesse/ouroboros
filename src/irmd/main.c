@@ -640,7 +640,7 @@ int bootstrap_ipcp(pid_t                pid,
                 return -1;
         }
 
-        entry->layer = strdup(info.layer_name);
+        entry->layer = strdup(info.name);
         if (entry->layer == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Failed to set name of layer.");
@@ -652,7 +652,7 @@ int bootstrap_ipcp(pid_t                pid,
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Bootstrapped IPCP %d in layer %s.",
-                 pid, conf->layer_info.layer_name);
+                 pid, conf->layer_info.name);
 
         return 0;
 }
@@ -694,7 +694,7 @@ int enroll_ipcp(pid_t        pid,
                 return -1;
         }
 
-        ipcp->layer = strdup(info.layer_name);
+        ipcp->layer = strdup(info.name);
         if (ipcp->layer == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Failed to strdup layer_name.");
@@ -706,7 +706,7 @@ int enroll_ipcp(pid_t        pid,
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Enrolled IPCP %d in layer %s.",
-                 pid, info.layer_name);
+                 pid, info.name);
 
         return 0;
 }
