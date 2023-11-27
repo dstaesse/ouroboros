@@ -57,11 +57,11 @@ static void usage(void)
 int do_unbind_ipcp(int     argc,
                    char ** argv)
 {
-        char *             ipcp = NULL;
-        char *             name = NULL;
-        struct ipcp_info * ipcps;
-        ssize_t            len;
-        ssize_t            i;
+        char *                  ipcp = NULL;
+        char *                  name = NULL;
+        struct ipcp_list_info * ipcps;
+        ssize_t                 len;
+        ssize_t                 i;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {

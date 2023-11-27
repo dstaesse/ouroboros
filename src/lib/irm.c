@@ -190,7 +190,7 @@ int irm_disconnect_ipcp(pid_t        pid,
         return ret;
 }
 
-ssize_t irm_list_ipcps(struct ipcp_info ** ipcps)
+ssize_t irm_list_ipcps(struct ipcp_list_info ** ipcps)
 {
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;

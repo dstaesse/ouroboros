@@ -60,14 +60,14 @@ static void usage(void)
 int do_disconnect_ipcp(int     argc,
                        char ** argv)
 {
-        char *             ipcp = NULL;
-        char *             dst  = NULL;
-        char *             comp = "*";
-        char *             component = NULL;
-        struct ipcp_info * ipcps;
-        ssize_t            len  = 0;
-        pid_t              pid  = -1;
-        ssize_t            i;
+        char *                  ipcp = NULL;
+        char *                  dst  = NULL;
+        char *                  comp = "*";
+        char *                  component = NULL;
+        struct ipcp_list_info * ipcps;
+        ssize_t                 len  = 0;
+        pid_t                   pid  = -1;
+        ssize_t                 i;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {

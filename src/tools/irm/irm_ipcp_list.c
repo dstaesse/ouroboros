@@ -86,12 +86,12 @@ static char * str_type(enum ipcp_type type)
 int do_list_ipcp(int     argc,
                  char ** argv)
 {
-        char *             ipcp_type = NULL;
-        char *             ipcp_name = NULL;
-        enum ipcp_type     type      = -1;
-        struct ipcp_info * ipcps;
-        ssize_t            len;
-        ssize_t            i;
+        char *                  ipcp_type = NULL;
+        char *                  ipcp_name = NULL;
+        enum ipcp_type          type      = -1;
+        struct ipcp_list_info * ipcps;
+        ssize_t                 len;
+        ssize_t                 i;
 
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {

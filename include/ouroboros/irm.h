@@ -42,7 +42,7 @@ enum pol_balance {
         LB_INVALID
 };
 
-struct ipcp_info {
+struct ipcp_list_info {
         pid_t          pid;
         enum ipcp_type type;
         char           name[NAME_SIZE];
@@ -61,7 +61,7 @@ pid_t   irm_create_ipcp(const char *   name,
 
 int     irm_destroy_ipcp(pid_t pid);
 
-ssize_t irm_list_ipcps(struct ipcp_info ** ipcps);
+ssize_t irm_list_ipcps(struct ipcp_list_info ** ipcps);
 
 int     irm_enroll_ipcp(pid_t        pid,
                         const char * dst);

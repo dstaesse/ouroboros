@@ -136,29 +136,29 @@ static void usage(void)
 int do_bootstrap_ipcp(int     argc,
                       char ** argv)
 {
-        char *              ipcp           = NULL;
-        pid_t               pid            = -1;
-        struct ipcp_config  conf;
-        uint8_t             addr_size      = DEFAULT_ADDR_SIZE;
-        uint8_t             eid_size       = DEFAULT_EID_SIZE;
-        uint8_t             max_ttl        = DEFAULT_TTL;
-        enum pol_addr_auth  addr_auth_type = DEFAULT_ADDR_AUTH;
-        enum pol_routing    routing_type   = DEFAULT_ROUTING;
-        enum pol_dir_hash   hash_algo      = DEFAULT_HASH_ALGO;
-        enum pol_cong_avoid cong_avoid     = DEFAULT_CONG_AVOID;
-        uint32_t            ip_addr        = 0;
-        uint32_t            dns_addr       = DEFAULT_DDNS;
-        char *              ipcp_type      = NULL;
-        enum ipcp_type      type           = IPCP_INVALID;
-        char *              layer          = NULL;
-        char *              dev            = NULL;
-        uint16_t            ethertype      = DEFAULT_ETHERTYPE;
-        struct ipcp_info *  ipcps;
-        ssize_t             len            = 0;
-        int                 i              = 0;
-        bool                autobind       = false;
-        int                 cargs;
-        int                 port           = DEFAULT_UDP_PORT;
+        char *                  ipcp           = NULL;
+        pid_t                   pid            = -1;
+        struct ipcp_config      conf;
+        uint8_t                 addr_size      = DEFAULT_ADDR_SIZE;
+        uint8_t                 eid_size       = DEFAULT_EID_SIZE;
+        uint8_t                 max_ttl        = DEFAULT_TTL;
+        enum pol_addr_auth      addr_auth_type = DEFAULT_ADDR_AUTH;
+        enum pol_routing        routing_type   = DEFAULT_ROUTING;
+        enum pol_dir_hash       hash_algo      = DEFAULT_HASH_ALGO;
+        enum pol_cong_avoid     cong_avoid     = DEFAULT_CONG_AVOID;
+        uint32_t                ip_addr        = 0;
+        uint32_t                dns_addr       = DEFAULT_DDNS;
+        char *                  ipcp_type      = NULL;
+        enum ipcp_type          type           = IPCP_INVALID;
+        char *                  layer          = NULL;
+        char *                  dev            = NULL;
+        uint16_t                ethertype      = DEFAULT_ETHERTYPE;
+        struct ipcp_list_info * ipcps;
+        ssize_t                 len            = 0;
+        int                     i              = 0;
+        bool                    autobind       = false;
+        int                     cargs;
+        int                     port           = DEFAULT_UDP_PORT;
 
         while (argc > 0) {
                 cargs = 2;

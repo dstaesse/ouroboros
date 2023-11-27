@@ -53,7 +53,7 @@ enum irm_msg_code {
         IRM_REPLY             = 25;
 }
 
-message ipcp_info_msg {
+message ipcp_list_msg {
         required uint32 pid   = 1;
         required uint32 type  = 2;
         required string name  = 3;
@@ -80,7 +80,7 @@ message irm_msg {
         optional qosspec_msg qosspec  = 12;
         optional ipcp_config_msg conf = 13;
         optional uint32 opts          = 14;
-        repeated ipcp_info_msg ipcps  = 15;
+        repeated ipcp_list_msg ipcps  = 15;
         repeated name_info_msg names  = 16;
         optional uint32 timeo_sec     = 17;
         optional uint32 timeo_nsec    = 18;

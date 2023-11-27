@@ -63,14 +63,14 @@ static void usage(void)
 int do_unreg_name(int     argc,
                   char ** argv)
 {
-        char *             name       = NULL;
-        char *             layers[MAX_LAYERS];
-        size_t             layers_len = 0;
-        char *             ipcp[MAX_IPCPS];
-        size_t             ipcp_len   = 0;
-        struct ipcp_info * ipcps;
-        ssize_t            len;
-        size_t             i;
+        char *                  name       = NULL;
+        char *                  layers[MAX_LAYERS];
+        size_t                  layers_len = 0;
+        char *                  ipcp[MAX_IPCPS];
+        size_t                  ipcp_len   = 0;
+        struct ipcp_list_info * ipcps;
+        ssize_t                 len;
+        size_t                  i;
 
         name = *(argv++);
         --argc;

@@ -55,10 +55,10 @@ static void usage(void)
 int do_destroy_ipcp(int     argc,
                     char ** argv)
 {
-        char *             ipcp = NULL;
-        struct ipcp_info * ipcps;
-        ssize_t            len;
-        int                i;
+        char *                  ipcp = NULL;
+        struct ipcp_list_info * ipcps;
+        ssize_t                 len;
+        int                     i;
 
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {

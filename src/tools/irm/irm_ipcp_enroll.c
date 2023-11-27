@@ -63,9 +63,9 @@ static void usage(void)
 static int get_layer_name(const char * ipcp,
                           char *       layer_name)
 {
-        struct ipcp_info * ipcps;
-        ssize_t            len;
-        ssize_t            i;
+        struct ipcp_list_info * ipcps;
+        ssize_t                 len;
+        ssize_t                 i;
 
         len = irm_list_ipcps(&ipcps);
         for (i = 0; i < len; i++)
@@ -83,17 +83,17 @@ static int get_layer_name(const char * ipcp,
 int do_enroll_ipcp(int     argc,
                    char ** argv)
 {
-        char *             ipcp      = NULL;
-        char *             layer     = NULL;
-        char *             dst       = NULL;
-        struct ipcp_info * ipcps;
-        pid_t              pid       = -1;
-        ssize_t            len       = 0;
-        int                i         = 0;
-        bool               autobind  = false;
-        int                cargs;
-        char *             ipcp_type = UNICAST;
-        enum ipcp_type     type      = IPCP_INVALID;
+        char *                  ipcp      = NULL;
+        char *                  layer     = NULL;
+        char *                  dst       = NULL;
+        struct ipcp_list_info * ipcps;
+        pid_t                   pid       = -1;
+        ssize_t                 len       = 0;
+        int                     i         = 0;
+        bool                    autobind  = false;
+        int                     cargs;
+        char *                  ipcp_type = UNICAST;
+        enum ipcp_type          type      = IPCP_INVALID;
 
         while (argc > 0) {
                 cargs = 2;

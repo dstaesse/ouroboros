@@ -39,7 +39,7 @@ typedef UniConfigMsg uni_config_msg_t;
 typedef IpcpMsg ipcp_msg_t;
 
 #include "irm.pb-c.h"
-typedef IpcpInfoMsg ipcp_info_msg_t;
+typedef IpcpListMsg ipcp_list_msg_t;
 typedef NameInfoMsg name_info_msg_t;
 
 #include "qos.pb-c.h"

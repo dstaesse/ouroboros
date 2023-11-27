@@ -940,14 +940,14 @@ static int unbind_process(pid_t        pid,
         return 0;
 }
 
-static int get_ipcp_info(ipcp_info_msg_t ** msg,
+static int get_ipcp_info(ipcp_list_msg_t ** msg,
                          struct reg_ipcp *  ipcp)
 {
         *msg = malloc(sizeof(**msg));
         if (*msg == NULL)
                 goto fail;
 
-        ipcp_info_msg__init(*msg);
+        ipcp_list_msg__init(*msg);
 
         (*msg)->name = strdup(ipcp->name);
         if ((*msg)->name == NULL)
@@ -972,7 +972,7 @@ static int get_ipcp_info(ipcp_info_msg_t ** msg,
         return -1;
 }
 
-static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
+static ssize_t list_ipcps(ipcp_list_msg_t *** ipcps,
                           size_t *            n_ipcps)
 {
         struct list_head * p;
@@ -1007,7 +1007,7 @@ static ssize_t list_ipcps(ipcp_info_msg_t *** ipcps,
  fail:
         pthread_rwlock_unlock(&irmd.reg_lock);
         while (i > 0)
-                ipcp_info_msg__free_unpacked((*ipcps)[--i], NULL);
+                ipcp_list_msg__free_unpacked((*ipcps)[--i], NULL);
 
         free(*ipcps);
         *n_ipcps = 0;
