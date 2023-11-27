@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 
+#define IPCP_NAME_SIZE  255
 #define LAYER_NAME_SIZE 255
 #define DEV_NAME_SIZE   255
 
@@ -97,6 +98,12 @@ struct udp_config {
         uint16_t port;
 };
 
+/* Info about the IPCP */
+struct ipcp_info {
+        enum ipcp_type type;
+        char name[IPCP_NAME_SIZE + 1];
+};
+
 /* Info reported back to the IRMd about the layer on enrollment */
 struct layer_info {
         char name[LAYER_NAME_SIZE + 1];
@@ -156,7 +163,7 @@ static const struct ipcp_config uni_default_conf = {
                 .dt = {
                         .addr_size    = 4,
                         .eid_size     = 8,
-                        .max_ttl      = 6,
+                        .max_ttl      = 60,
                         .routing_type = ROUTING_LINK_STATE
                 },
                 .addr_auth_type = ADDR_AUTH_FLAT_RANDOM,

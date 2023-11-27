@@ -205,7 +205,9 @@ static int registry_add_ipcp(struct reg_ipcp * ipcp)
         assert(ipcp);
 
         list_for_each(p, &irmd.ipcps) {
-                if (list_entry(p, struct reg_ipcp, next)->type > ipcp->type)
+                struct reg_ipcp * i;
+                i = list_entry(p, struct reg_ipcp, next);
+                if (i->info.type > ipcp->info.type)
                         break;
         }
 
@@ -220,9 +222,10 @@ static struct reg_ipcp * registry_get_ipcp_by_pid(pid_t pid)
         struct list_head * p;
 
         list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
-                if (e->pid == pid)
-                        return e;
+                struct reg_ipcp * ipcp;
+                ipcp = list_entry(p, struct reg_ipcp, next);
+                if (ipcp->pid == pid)
+                        return ipcp;
         }
 
         return NULL;
@@ -246,9 +249,10 @@ static struct reg_ipcp * registry_get_ipcp_by_name(const char * name)
         struct list_head * p;
 
         list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
-                if (strcmp(name, e->name) == 0)
-                        return e;
+                struct reg_ipcp * ipcp;
+                ipcp = list_entry(p, struct reg_ipcp, next);
+                if (strcmp(name, ipcp->info.name) == 0)
+                        return ipcp;
         }
 
         return NULL;
@@ -259,9 +263,10 @@ static struct reg_ipcp * registry_get_ipcp_by_layer(const char * layer)
         struct list_head * p;
 
         list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
-                if (strcmp(layer, e->layer) == 0)
-                        return e;
+                struct reg_ipcp * ipcp;
+                ipcp = list_entry(p, struct reg_ipcp, next);
+                if (strcmp(layer, ipcp->layer) == 0)
+                        return ipcp;
         }
 
         return NULL;
@@ -279,11 +284,18 @@ static struct reg_ipcp * registry_get_ipcp_by_dst_name(const char * name,
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
         list_for_each_safe(p, h, &irmd.ipcps) {
-                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
-                if (e->layer == NULL || e->pid == src || e->type == IPCP_BROADCAST)
+                struct reg_ipcp * ipcp;
+                ipcp = list_entry(p, struct reg_ipcp, next);
+                if (ipcp->layer == NULL)
                         continue;
 
-                len = IPCP_HASH_LEN(e);
+                if (ipcp->pid == src)
+                        continue;
+
+                if (ipcp->info.type == IPCP_BROADCAST)
+                        continue;
+
+                len = IPCP_HASH_LEN(ipcp);
 
                 hash = malloc(len);
                 if (hash == NULL) {
@@ -291,15 +303,15 @@ static struct reg_ipcp * registry_get_ipcp_by_dst_name(const char * name,
                         return NULL;
                 }
 
-                str_hash(e->dir_hash_algo, hash, name);
+                str_hash(ipcp->dir_hash_algo, hash, name);
 
-                pid = e->pid;
+                pid = ipcp->pid;
 
                 pthread_rwlock_unlock(&irmd.reg_lock);
 
                 if (ipcp_query(pid, hash, len) == 0) {
                         free(hash);
-                        return e;
+                        return ipcp;
                 }
 
                 free(hash);
@@ -500,8 +512,7 @@ static struct reg_proc * registry_get_proc(pid_t pid)
         return NULL;
 }
 
-pid_t create_ipcp(const char *   name,
-                  enum ipcp_type type)
+pid_t create_ipcp(const struct ipcp_info * info)
 {
         struct pid_el *    ppid;
         struct reg_ipcp *  ipcp;
@@ -509,7 +520,7 @@ pid_t create_ipcp(const char *   name,
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
-        ipcp = registry_get_ipcp_by_name(name);
+        ipcp = registry_get_ipcp_by_name(info->name);
         if (ipcp != NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("IPCP by that name already exists.");
@@ -522,13 +533,13 @@ pid_t create_ipcp(const char *   name,
         if (ppid == NULL)
                 goto fail_ppid;
 
-        ipcp = reg_ipcp_create(name, type);
+        ipcp = reg_ipcp_create(info);
         if (ipcp == NULL) {
                 log_err("Failed to create IPCP entry.");
                 goto fail_reg_ipcp;
         }
 
-        pid = ipcp_create(name, type);
+        pid = ipcp_create(info);
         if (pid == -1) {
                 log_err("Failed to create IPCP.");
                 goto fail_ipcp;
@@ -616,38 +627,38 @@ static int destroy_ipcp(pid_t pid)
 int bootstrap_ipcp(pid_t                pid,
                    struct ipcp_config * conf)
 {
-        struct reg_ipcp * entry;
-        struct layer_info   info;
+        struct reg_ipcp * ipcp;
+        struct layer_info info;
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
-        entry = registry_get_ipcp_by_pid(pid);
-        if (entry == NULL) {
+        ipcp = registry_get_ipcp_by_pid(pid);
+        if (ipcp == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("No such IPCP.");
+                log_err("No such IPCP: %d.", pid);
                 return -1;
         }
 
-        if (entry->type != conf->type) {
+        if (ipcp->info.type != conf->type) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Configuration does not match IPCP type.");
                 return -1;
         }
 
-        if (ipcp_bootstrap(entry->pid, conf, &info)) {
+        if (ipcp_bootstrap(ipcp->pid, conf, &info)) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not bootstrap IPCP.");
                 return -1;
         }
 
-        entry->layer = strdup(info.name);
-        if (entry->layer == NULL) {
+        ipcp->layer = strdup(info.name);
+        if (ipcp->layer == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Failed to set name of layer.");
                 return -ENOMEM;
         }
 
-        entry->dir_hash_algo = info.dir_hash_algo;
+        ipcp->dir_hash_algo = info.dir_hash_algo;
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -716,7 +727,8 @@ int connect_ipcp(pid_t        pid,
                  const char * component,
                  qosspec_t    qs)
 {
-        struct reg_ipcp * ipcp;
+        struct reg_ipcp *  ipcp;
+        struct ipcp_info * info;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
@@ -727,7 +739,9 @@ int connect_ipcp(pid_t        pid,
                 return -EIPCP;
         }
 
-        if (ipcp->type != IPCP_UNICAST && ipcp->type != IPCP_BROADCAST) {
+        info = &ipcp->info;
+
+        if (info->type != IPCP_UNICAST && info->type != IPCP_BROADCAST) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Cannot establish connections for this IPCP type.");
                 return -EIPCP;
@@ -752,7 +766,8 @@ static int disconnect_ipcp(pid_t        pid,
                            const char * dst,
                            const char * component)
 {
-        struct reg_ipcp * ipcp;
+        struct reg_ipcp *  ipcp;
+        struct ipcp_info * info;
 
         pthread_rwlock_rdlock(&irmd.reg_lock);
 
@@ -763,7 +778,9 @@ static int disconnect_ipcp(pid_t        pid,
                 return -EIPCP;
         }
 
-        if (ipcp->type != IPCP_UNICAST && ipcp->type != IPCP_BROADCAST) {
+        info = &ipcp->info;
+
+        if (info->type != IPCP_UNICAST && info->type != IPCP_BROADCAST) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Cannot tear down connections for this IPCP type.");
                 return -EIPCP;
@@ -949,7 +966,7 @@ static int get_ipcp_info(ipcp_list_msg_t ** msg,
 
         ipcp_list_msg__init(*msg);
 
-        (*msg)->name = strdup(ipcp->name);
+        (*msg)->name = strdup(ipcp->info.name);
         if ((*msg)->name == NULL)
                 goto fail_name;
 
@@ -959,7 +976,7 @@ static int get_ipcp_info(ipcp_list_msg_t ** msg,
                 goto fail_layer;
 
         (*msg)->pid  = ipcp->pid;
-        (*msg)->type = ipcp->type;
+        (*msg)->type = ipcp->info.type;
 
         return 0;
 
@@ -2057,6 +2074,7 @@ static void free_msg(void * o)
 static irm_msg_t * do_command_msg(irm_msg_t * msg)
 {
         struct ipcp_config conf;
+        struct ipcp_info   info;
         irm_msg_t *        ret_msg;
         buffer_t           data;
         struct reg_flow    f;
@@ -2094,7 +2112,8 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
 
         switch (msg->code) {
         case IRM_MSG_CODE__IRM_CREATE_IPCP:
-                res = create_ipcp(msg->name, msg->ipcp_type);
+                info = ipcp_info_msg_to_s(msg->ipcp_info);
+                res = create_ipcp(&info);
                 break;
         case IRM_MSG_CODE__IPCP_CREATE_R:
                 res = create_ipcp_r(msg->pid, msg->result);

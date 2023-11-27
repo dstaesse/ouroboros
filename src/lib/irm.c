@@ -41,17 +41,19 @@
 pid_t irm_create_ipcp(const char *   name,
                       enum ipcp_type type)
 {
-        irm_msg_t   msg      = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int         ret      = -1;
+        irm_msg_t        msg      = IRM_MSG__INIT;
+        irm_msg_t *      recv_msg;
+        int              ret;
+        struct ipcp_info info;
 
-        if (name == NULL)
+        if (name == NULL || strlen(name) > IPCP_NAME_SIZE)
                 return -EINVAL;
 
-        msg.code          = IRM_MSG_CODE__IRM_CREATE_IPCP;
-        msg.name          = (char *) name;
-        msg.has_ipcp_type = true;
-        msg.ipcp_type     = type;
+        info.type = type;
+        strcpy(info.name, name);
+
+        msg.code      = IRM_MSG_CODE__IRM_CREATE_IPCP;
+        msg.ipcp_info = ipcp_info_s_to_msg(&info);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)

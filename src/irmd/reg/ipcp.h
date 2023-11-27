@@ -34,9 +34,9 @@ enum ipcp_state {
 struct reg_ipcp {
         struct list_head next;
 
-        char *           name;
+        struct ipcp_info info;
+
         pid_t            pid;
-        enum ipcp_type   type;
         enum hash_algo   dir_hash_algo;
         char *           layer;
 
@@ -45,8 +45,7 @@ struct reg_ipcp {
         pthread_mutex_t  mtx;
 };
 
-struct reg_ipcp * reg_ipcp_create(const char *   name,
-                                  enum ipcp_type type);
+struct reg_ipcp * reg_ipcp_create(const struct ipcp_info * info);
 
 void              reg_ipcp_destroy(struct reg_ipcp * i);
 

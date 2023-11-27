@@ -29,8 +29,7 @@
 #ifndef OUROBOROS_IRMD_IPCP_H
 #define OUROBOROS_IRMD_IPCP_H
 
-pid_t ipcp_create(const char *   name,
-                  enum ipcp_type ipcp_type);
+pid_t ipcp_create(const struct ipcp_info * info);
 
 int   ipcp_destroy(pid_t pid);
 

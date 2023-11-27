@@ -25,6 +25,7 @@
 
 #include <ouroboros/qos.h>
 #include <ouroboros/ipcp.h>
+#include <ouroboros/irm.h>
 #include <ouroboros/serdes-oep.h>
 
 #include "ipcp_config.pb-c.h"
@@ -39,6 +40,7 @@ typedef UniConfigMsg uni_config_msg_t;
 typedef IpcpMsg ipcp_msg_t;
 
 #include "irm.pb-c.h"
+typedef IpcpInfoMsg ipcp_info_msg_t;
 typedef IpcpListMsg ipcp_list_msg_t;
 typedef NameInfoMsg name_info_msg_t;
 
@@ -55,6 +57,10 @@ typedef EnrollAckMsg enroll_ack_msg_t;
 layer_info_msg_t *  layer_info_s_to_msg(const struct layer_info * s);
 
 struct layer_info   layer_info_msg_to_s(const layer_info_msg_t * msg);
+
+ipcp_info_msg_t *  ipcp_info_s_to_msg(const struct ipcp_info * s);
+
+struct ipcp_info   ipcp_info_msg_to_s(const ipcp_info_msg_t * msg);
 
 dt_config_msg_t *   dt_config_s_to_msg(const struct dt_config * s);
 

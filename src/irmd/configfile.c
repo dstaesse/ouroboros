@@ -422,20 +422,20 @@ static int toml_connect(toml_table_t * table,
         return ret;
 }
 
-static int toml_ipcp(toml_table_t *       table,
-                     const char *         name,
-                     struct ipcp_config * conf)
+static int toml_ipcp(toml_table_t *           table,
+                     const struct ipcp_info * info,
+                     struct ipcp_config *     conf)
 {
         toml_datum_t bootstrap;
         toml_datum_t enrol;
         pid_t        pid;
         int          ret;
 
-        log_dbg("Found IPCP %s in configuration file.", name);
+        log_dbg("Found IPCP %s in configuration file.", info->name);
 
-        pid = create_ipcp(name, conf->type);
+        pid = create_ipcp(info);
         if (pid < 0) {
-                log_err("Failed to create IPCP %s.", name);
+                log_err("Failed to create IPCP %s.", info->name);
                 return -1;
         }
 
@@ -443,13 +443,13 @@ static int toml_ipcp(toml_table_t *       table,
         enrol     = toml_string_in(table, "enrol");
 
         if (bootstrap.ok && enrol.ok) {
-                log_err("Ignoring bootstrap for IPCP %s.", name);
+                log_err("Ignoring bootstrap for IPCP %s.", info->name);
                 free(bootstrap.u.s);
                 bootstrap.ok = false;
         }
 
         if (!bootstrap.ok && !enrol.ok) {
-                log_dbg("Nothing more to do for %s.", name);
+                log_dbg("Nothing more to do for %s.", info->name);
                 return 0;
         }
 
@@ -458,14 +458,14 @@ static int toml_ipcp(toml_table_t *       table,
                 ret = enroll_ipcp(pid, enrol.u.s);
                 free(enrol.u.s);
                 if (ret < 0) {
-                        log_err("Failed to enrol %s.", name);
+                        log_err("Failed to enrol %s.", info->name);
                         return -1;
                 }
 
                 if (get_layer_for_ipcp(pid, layer) < 0)
                         return -1;
 
-                if (toml_autobind(table, pid, name, layer))
+                if (toml_autobind(table, pid, info->name, layer))
                         return -1;
 
                 if (toml_register(table, pid) < 0) {
@@ -522,7 +522,7 @@ static int toml_ipcp(toml_table_t *       table,
         if (bootstrap_ipcp(pid, conf) < 0)
                 return -1;
 
-        if (toml_autobind(table, pid, name, conf->layer_info.name) < 0)
+        if (toml_autobind(table, pid, info->name, conf->layer_info.name) < 0)
                 return -1;
 
         if (toml_register(table, pid) < 0) {
@@ -541,17 +541,25 @@ static int toml_ipcp_list(toml_table_t * table,
 
         for (i = 0; ret == 0; i++) {
                 const char *       key;
+                struct ipcp_info   info;
                 struct ipcp_config conf;
 
                 key = toml_key_in(table, i);
                 if (key == NULL)
                         break;
 
+                if (strlen(key) > IPCP_NAME_SIZE) {
+                        log_err("IPCP name too long: %s,", key);
+                        return -1;
+                }
+
                 memset(&conf, 0, sizeof(conf));
 
+                info.type = type;
+                strcpy(info.name,key);
                 conf.type = type;
 
-                ret = toml_ipcp(toml_table_in(table, key), key, &conf);
+                ret = toml_ipcp(toml_table_in(table, key), &info, &conf);
         }
 
         return ret;

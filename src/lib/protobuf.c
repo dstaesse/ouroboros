@@ -67,6 +67,45 @@ struct layer_info layer_info_msg_to_s(const layer_info_msg_t * msg)
         return s;
 }
 
+ipcp_info_msg_t * ipcp_info_s_to_msg(const struct ipcp_info * s)
+{
+        ipcp_info_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        ipcp_info_msg__init(msg);
+
+        msg->name = strdup(s->name);
+        if (msg->name == NULL)
+                goto fail_msg;
+
+        msg->type = s->type;
+
+        return msg;
+ fail_msg:
+        ipcp_info_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return NULL;
+}
+
+struct ipcp_info ipcp_info_msg_to_s(const ipcp_info_msg_t * msg)
+{
+        struct ipcp_info s;
+
+        assert(msg != NULL);
+        assert(msg->name != NULL);
+        assert(strlen(msg->name) <= NAME_SIZE);
+
+        s.type = msg->type;
+        strcpy(s.name, msg->name);
+
+        return s;
+}
+
 dt_config_msg_t * dt_config_s_to_msg(const struct dt_config * s)
 {
         dt_config_msg_t * msg;

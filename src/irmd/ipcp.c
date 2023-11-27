@@ -122,16 +122,15 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
        return recv_msg;
 }
 
-pid_t ipcp_create(const char *   name,
-                  enum ipcp_type ipcp_type)
+pid_t ipcp_create(const struct ipcp_info * info)
 {
         pid_t  pid;
-        char * exec_name;
+        char * exec_name = NULL;
         char   irmd_pid[10];
         char   full_name[256];
         char * argv[5];
 
-        switch(ipcp_type) {
+        switch(info->type) {
         case IPCP_UNICAST:
                 exec_name = IPCP_UNICAST_EXEC;
                 break;
@@ -154,7 +153,7 @@ pid_t ipcp_create(const char *   name,
                 return -1;
         }
 
-        if (strlen(exec_name) == 0) {
+        if (exec_name == NULL) {
                 log_err("IPCP type not installed.");
                 return -1;
         }
@@ -167,7 +166,7 @@ pid_t ipcp_create(const char *   name,
         /* log_file to be placed at the end */
         argv[0] = full_name;
         argv[1] = irmd_pid;
-        argv[2] = (char *) name;
+        argv[2] = (char *) info->name;
         if (log_syslog)
                 argv[3] = "1";
         else

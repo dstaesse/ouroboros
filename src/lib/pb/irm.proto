@@ -53,6 +53,11 @@ enum irm_msg_code {
         IRM_REPLY             = 25;
 }
 
+message ipcp_info_msg {
+        required uint32 type = 1;
+        required string name = 2;
+}
+
 message ipcp_list_msg {
         required uint32 pid   = 1;
         required uint32 type  = 2;
@@ -66,26 +71,26 @@ message name_info_msg {
 }
 
 message irm_msg {
-        required irm_msg_code code    =  1;
-        optional string prog          =  2;
-        optional sint32 pid           =  3;
-        optional string name          =  4;
-        optional uint32 ipcp_type     =  5;
-        optional string layer         =  6;
-        repeated string args          =  7;
-        optional sint32 response      =  8;
-        optional string dst           =  9;
-        optional bytes  hash          = 10;
-        optional sint32 flow_id       = 11;
-        optional qosspec_msg qosspec  = 12;
-        optional ipcp_config_msg conf = 13;
-        optional uint32 opts          = 14;
-        repeated ipcp_list_msg ipcps  = 15;
-        repeated name_info_msg names  = 16;
-        optional uint32 timeo_sec     = 17;
-        optional uint32 timeo_nsec    = 18;
-        optional sint32 mpl           = 19;
-        optional string comp          = 20;
-        optional bytes pk             = 21; /* piggyback */
-        optional sint32 result        = 22;
+        required irm_msg_code code       =  1;
+        optional string prog             =  2;
+        optional sint32 pid              =  3;
+        optional string name             =  4;
+        optional ipcp_info_msg ipcp_info =  5;
+        optional string layer            =  6;
+        repeated string args             =  7;
+        optional sint32 response         =  8;
+        optional string dst              =  9;
+        optional bytes  hash             = 10;
+        optional sint32 flow_id          = 11;
+        optional qosspec_msg qosspec     = 12;
+        optional ipcp_config_msg conf    = 13;
+        optional uint32 opts             = 14;
+        repeated ipcp_list_msg ipcps     = 15;
+        repeated name_info_msg names     = 16;
+        optional uint32 timeo_sec        = 17;
+        optional uint32 timeo_nsec       = 18;
+        optional sint32 mpl              = 19;
+        optional string comp             = 20;
+        optional bytes pk                = 21; /* piggyback */
+        optional sint32 result           = 22;
 }

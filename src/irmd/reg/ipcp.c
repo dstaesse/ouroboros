@@ -42,8 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct reg_ipcp * reg_ipcp_create(const char *   name,
-                                  enum ipcp_type type)
+struct reg_ipcp * reg_ipcp_create(const struct ipcp_info * info)
 {
         struct reg_ipcp *  ipcp;
         pthread_condattr_t cattr;
@@ -63,22 +62,17 @@ struct reg_ipcp * reg_ipcp_create(const char *   name,
         if (pthread_cond_init(&ipcp->cond, &cattr))
                 goto fail_cond;
 
-        ipcp->name = strdup(name);
-        if (ipcp->name == NULL)
-                goto fail_name;
+        memcpy(&ipcp->info, info, sizeof(*info));
 
         pthread_condattr_destroy(&cattr);
 
         ipcp->layer = NULL;
-        ipcp->type  = type;
         ipcp->state = IPCP_BOOT;
 
         list_head_init(&ipcp->next);
 
         return ipcp;
 
- fail_name:
-        pthread_cond_destroy(&ipcp->cond);
  fail_cond:
         pthread_condattr_destroy(&cattr);
  fail_cattr:
@@ -99,7 +93,6 @@ void reg_ipcp_destroy(struct reg_ipcp * ipcp)
                 pthread_cond_wait(&ipcp->cond, &ipcp->mtx);
 
         free(ipcp->layer);
-        free(ipcp->name);
 
         pthread_mutex_unlock(&ipcp->mtx);
 

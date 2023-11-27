@@ -26,8 +26,7 @@
 #include <ouroboros/ipcp.h>
 #include <ouroboros/irm.h>
 
-int create_ipcp(const char *   name,
-                enum ipcp_type type);
+int create_ipcp(const struct ipcp_info * info);
 
 int bootstrap_ipcp(pid_t                pid,
                    struct ipcp_config * conf);
