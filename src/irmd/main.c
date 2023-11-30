@@ -2314,8 +2314,13 @@ static void * mainloop(void * o)
                         goto fail_msg;
                 }
 
-                if (ret_msg->result == -EPIPE || ret_msg->result == -EIRMD) {
-                        log_err("Failed to execute command: %d.", ret_msg->result);
+                if (ret_msg->result == -EPIPE) {
+                        log_dbg("Terminated command: application closed socket.");
+                        goto fail;
+                }
+
+                if (ret_msg->result == -EIRMD) {
+                        log_dbg("Terminated command: IRMd not in running state.");
                         goto fail;
                 }
 
