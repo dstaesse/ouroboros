@@ -54,19 +54,19 @@ static void usage(void)
                "                name      <ipcp name>\n"
                "                dst       <name of destination IPCP>\n"
                "                [component [COMPONENT]]\n\n"
-               "where COMPONENT = {" DT " " MGMT "}\n");
+               "where COMPONENT in {" DT " " MGMT "}\n");
 }
 
 int do_disconnect_ipcp(int     argc,
                        char ** argv)
 {
-        char *                  ipcp = NULL;
-        char *                  dst  = NULL;
-        char *                  comp = "*";
+        char *                  ipcp      = NULL;
+        char *                  dst       = NULL;
+        char *                  comp      = "*";
         char *                  component = NULL;
         struct ipcp_list_info * ipcps;
-        ssize_t                 len  = 0;
-        pid_t                   pid  = -1;
+        ssize_t                 len       = 0;
+        pid_t                   pid       = -1;
         ssize_t                 i;
 
         while (argc > 0) {

@@ -47,7 +47,7 @@ static void usage(void)
 {
         printf("Usage: irm unbind [OPERATION]\n"
                "\n"
-               "where OPERATION = {program process ipcp help}\n");
+               "where OPERATION in {program process ipcp help}\n");
 }
 
 static int do_help(int     argc,

@@ -44,9 +44,10 @@
 static void usage(void)
 {
         printf("Usage: irm name [OPERATION]\n\n"
-               "where OPERATION = {create destroy\n"
-               "                   register unregister\n"
-               "                   list help}\n");
+               "where OPERATION in {create destroy\n"
+               "                    register unregister\n"
+               "                    list\n"
+               "                    help}\n");
 }
 
 static int do_help(int argc, char **argv)

@@ -57,7 +57,7 @@ static void usage(void)
                "                [dst <destination to enroll with>]\n"
                "                [type [TYPE], default = " UNICAST "]\n"
                "                [autobind]\n"
-               "where TYPE = {" UNICAST " " BROADCAST "}\n");
+               "where TYPE in {" UNICAST " " BROADCAST "}\n");
 }
 
 static int get_layer_name(const char * ipcp,

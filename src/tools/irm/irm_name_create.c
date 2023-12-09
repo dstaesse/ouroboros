@@ -52,7 +52,7 @@ static void usage(void)
         printf("Usage: irm name create\n"
                "                <name>\n"
                "                lb [LB_POLICY], default: %s\n\n"
-               "where LB_POLICY = {" RR " " SPILL "}\n", RR);
+               "where LB_POLICY in {" RR " " SPILL "}\n", RR);
 }
 
 int do_create_name(int     argc,

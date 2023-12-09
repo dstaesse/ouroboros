@@ -49,7 +49,7 @@
 static void usage(void)
 {
         printf("Usage: irm [OPERATION]\n\n"
-               "where OPERATION = {ipcp bind unbind name}\n");
+               "where OPERATION in { ipcp bind unbind name }\n");
 }
 
 static int do_help(int    argc,

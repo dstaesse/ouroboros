@@ -55,10 +55,10 @@ static void usage(void)
                "                name      <ipcp name>\n"
                "                dst       <name of destination IPCP>\n"
                "                [component [COMPONENT]]\n"
-               "where COMPONENT = {" DT " " MGMT "}\n\n"
+               "where COMPONENT in {" DT " " MGMT "}\n\n"
                "if COMPONENT == " DT "\n"
                "                [qos       [QOS]\n"
-               "where QOS       = {raw, best, voice, video, data}\n\n");
+               "where QOS in {raw, best, voice, video, data}\n");
 }
 
 int do_connect_ipcp(int     argc,

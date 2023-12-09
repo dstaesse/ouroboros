@@ -44,7 +44,7 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
-#define UNICAST                 "unicast"
+#define UNICAST                "unicast"
 #define BROADCAST              "broadcast"
 #define UDP                    "udp"
 #define ETH_LLC                "eth-llc"
@@ -56,17 +56,17 @@ static void usage(void)
         printf("Usage: irm ipcp create\n"
                "                name <ipcp name>\n"
                "                type [TYPE]\n\n"
-               "where TYPE = {" UNICAST " " BROADCAST " " LOCAL " "
-               UDP " " ETH_LLC "}\n");
+               "where TYPE in {" UNICAST " " BROADCAST " " LOCAL " "
+               UDP " " ETH_LLC " " ETH_DIX "}\n");
 }
 
 int do_create_ipcp(int     argc,
                    char ** argv)
 {
-        char * ipcp_type = NULL;
-        char * ipcp_name = NULL;
-        enum ipcp_type type = 0;
-        pid_t pid;
+        char *         ipcp_type = NULL;
+        char *         ipcp_name = NULL;
+        enum ipcp_type type      = 0;
+        pid_t          pid;
 
         while (argc > 0) {
                 if (matches(*argv, "type") == 0) {
@@ -101,6 +101,7 @@ int do_create_ipcp(int     argc,
         else if (strcmp(ipcp_type, ETH_DIX) == 0)
                 type = IPCP_ETH_DIX;
         else {
+                printf("IPCP type \"%s\" is unknown.\n", ipcp_type);
                 usage();
                 return -1;
         }
