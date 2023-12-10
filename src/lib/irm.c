@@ -54,8 +54,12 @@ pid_t irm_create_ipcp(const char *   name,
 
         msg.code      = IRM_MSG_CODE__IRM_CREATE_IPCP;
         msg.ipcp_info = ipcp_info_s_to_msg(&info);
+        if (msg.ipcp_info == NULL)
+                return -ENOMEM;
 
         recv_msg = send_recv_irm_msg(&msg);
+        ipcp_info_msg__free_unpacked(msg.ipcp_info, NULL);
+
         if (recv_msg == NULL)
                 return -EIRMD;
 
