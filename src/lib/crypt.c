@@ -154,8 +154,8 @@ static int __openssl_ecdh_gen_key(void ** kp)
 static ssize_t openssl_ecdh_pkp_create(void **   pkp,
                                        uint8_t * pk)
 {
-        uint8_t *       pos;
-        ssize_t         len;
+        uint8_t * pos;
+        ssize_t   len;
 
         assert(pkp != NULL);
         assert(*pkp == NULL);

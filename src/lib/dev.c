@@ -759,13 +759,8 @@ int flow_accept(qosspec_t *             qs,
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
         int         fd;
-        void *      pkp;          /* public key pair     */
-        uint8_t     s[SYMMKEYSZ]; /* secret key for flow */
-        uint8_t     buf[MSGBUFSZ];
         int         err = -EIRMD;
-        ssize_t     key_len;
-
-        memset(s, 0, SYMMKEYSZ);
+        uint8_t *   symmkey;
 
         msg.code    = IRM_MSG_CODE__IRM_FLOW_ACCEPT;
         msg.has_pid = true;
@@ -778,23 +773,7 @@ int flow_accept(qosspec_t *             qs,
                 msg.timeo_nsec = timeo->tv_nsec;
         }
 
-        key_len = crypt_dh_pkp_create(&pkp, buf);
-        if (key_len < 0) {
-                err = -ECRYPT;
-                goto fail_crypt_pkp;
-        }
-        if (key_len > 0) {
-                msg.has_pk  = true;
-                msg.pk.data = buf;
-                msg.pk.len  = (uint32_t) key_len;
-        }
-
-        pthread_cleanup_push(crypt_dh_pkp_destroy, pkp);
-
         recv_msg = send_recv_irm_msg(&msg);
-
-        pthread_cleanup_pop(false);
-
         if (recv_msg == NULL)
                 goto fail_recv;
 
@@ -810,24 +789,17 @@ int flow_accept(qosspec_t *             qs,
             !recv_msg->has_mpl || recv_msg->qosspec == NULL)
                 goto fail_msg;
 
-        if (recv_msg->pk.len != 0 &&
-            crypt_dh_derive(pkp, recv_msg->pk.data,
-                            recv_msg->pk.len, s) < 0) {
-                err = -ECRYPT;
-                goto fail_msg;
-        }
-
-        crypt_dh_pkp_destroy(pkp);
+        symmkey = recv_msg->has_symmkey ? recv_msg->symmkey.data : NULL;
 
         fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       qos_spec_msg_to_s(recv_msg->qosspec), s,
+                       qos_spec_msg_to_s(recv_msg->qosspec),
+                       symmkey,
                        recv_msg->mpl);
 
         irm_msg__free_unpacked(recv_msg, NULL);
 
         if (fd < 0)
                 return fd;
-
 
         pthread_rwlock_rdlock(&ai.lock);
 
@@ -841,8 +813,6 @@ int flow_accept(qosspec_t *             qs,
  fail_msg:
         irm_msg__free_unpacked(recv_msg, NULL);
  fail_recv:
-        crypt_dh_pkp_destroy(pkp);
- fail_crypt_pkp:
         return err;
 }
 
@@ -850,15 +820,10 @@ int flow_alloc(const char *            dst,
                qosspec_t *             qs,
                const struct timespec * timeo)
 {
-        irm_msg_t     msg    = IRM_MSG__INIT;
-        irm_msg_t *   recv_msg;
-        int           fd;
-        void *        pkp = NULL;     /* public key pair     */
-        uint8_t       s[SYMMKEYSZ];   /* secret key for flow */
-        uint8_t       buf[MSGBUFSZ];
-        int           err = -EIRMD;
-
-        memset(s, 0, SYMMKEYSZ);
+        irm_msg_t   msg    = IRM_MSG__INIT;
+        irm_msg_t * recv_msg;
+        int         fd;
+        int         err = -EIRMD;
 
 #ifdef QOS_DISABLE_CRC
         if (qs != NULL)
@@ -877,25 +842,10 @@ int flow_alloc(const char *            dst,
                 msg.timeo_nsec = timeo->tv_nsec;
         }
 
-        if (qs != NULL && qs->cypher_s != 0) {
-                ssize_t key_len;
-
-                key_len = crypt_dh_pkp_create(&pkp, buf);
-                if (key_len < 0) {
-                        err = -ECRYPT;
-                        goto fail_crypt_pkp;
-                }
-
-                msg.has_pk  = true;
-                msg.pk.data = buf;
-                msg.pk.len  = (uint32_t) key_len;
-        }
-
         recv_msg = send_recv_irm_msg(&msg);
         qosspec_msg__free_unpacked(msg.qosspec, NULL);
-
         if (recv_msg == NULL)
-                goto fail_send;
+                goto fail_send_recv;
 
         if (!recv_msg->has_result)
                 goto fail_result;
@@ -909,19 +859,10 @@ int flow_alloc(const char *            dst,
             !recv_msg->has_mpl)
                 goto fail_result;
 
-        if (qs != NULL && qs->cypher_s != 0) {
-                if (!recv_msg->has_pk || recv_msg->pk.len == 0) {
+        if ((qs != NULL && qs->cypher_s != 0) &&
+            (!recv_msg->has_symmkey || recv_msg->symmkey.len != SYMMKEYSZ)) {
                         err = -ECRYPT;
                         goto fail_result;
-                }
-
-                if (crypt_dh_derive(pkp, recv_msg->pk.data,
-                                    recv_msg->pk.len, s) < 0) {
-                        err = -ECRYPT;
-                        goto fail_result;
-                }
-
-                crypt_dh_pkp_destroy(pkp);
         }
 
         /* TODO: Make sure qosspec is set in msg */
@@ -929,7 +870,7 @@ int flow_alloc(const char *            dst,
                 *qs = qos_spec_msg_to_s(recv_msg->qosspec);
 
         fd = flow_init(recv_msg->flow_id, recv_msg->pid,
-                       qs == NULL ? qos_raw : *qs, s,
+                       qs == NULL ? qos_raw : *qs, recv_msg->symmkey.data,
                        recv_msg->mpl);
 
         irm_msg__free_unpacked(recv_msg, NULL);
@@ -938,9 +879,7 @@ int flow_alloc(const char *            dst,
 
  fail_result:
         irm_msg__free_unpacked(recv_msg, NULL);
- fail_send:
-        crypt_dh_pkp_destroy(pkp);
- fail_crypt_pkp:
+ fail_send_recv:
         return err;
 }
 

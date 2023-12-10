@@ -92,5 +92,6 @@ message irm_msg {
         optional sint32 mpl              = 19;
         optional string comp             = 20;
         optional bytes pk                = 21; /* piggyback */
-        optional sint32 result           = 22;
+        optional bytes symmkey           = 22;
+        optional sint32 result           = 23;
 }

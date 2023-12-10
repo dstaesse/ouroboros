@@ -30,6 +30,7 @@
 
 #define OUROBOROS_PREFIX "irmd"
 
+#include <ouroboros/crypt.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/sockets.h>
@@ -76,6 +77,7 @@
 #define IPCP_HASH_LEN(p)   hash_len((p)->dir_hash_algo)
 #define BIND_TIMEOUT       10   /* ms */
 #define DEALLOC_TIME       300  /*  s */
+#define MSGBUFSZ           2048
 
 #define registry_has_name(name) \
         (registry_get_name(name) != NULL)
@@ -1349,6 +1351,14 @@ static int flow_accept(pid_t             pid,
         int                flow_id;
         int                ret;
         buffer_t           tmp = {NULL, 0};
+        void *             pkp; /* my public key pair */
+        ssize_t            key_len;
+        uint8_t            buf[MSGBUFSZ];
+        uint8_t *          s = NULL;
+        int                err;
+
+        /* piggyback of user data not yet implemented */
+        assert(data != NULL && data->len == 0 && data->data == NULL);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -1379,8 +1389,26 @@ static int flow_accept(pid_t             pid,
         if (ret == -1)
                 return -EPIPE;
 
-        if (irmd_get_state() != IRMD_RUNNING)
+        if (irmd_get_state() != IRMD_RUNNING) {
+                log_dbg("Terminating accept: IRMd shutting down.");
                 return -EIRMD;
+        }
+
+        s = malloc(SYMMKEYSZ);
+        if (s == NULL) {
+                log_err("Failed to malloc symmetric key.");
+                err = -ENOMEM;
+                goto fail_malloc_s;
+        }
+
+        key_len = crypt_dh_pkp_create(&pkp, buf);
+        if (key_len < 0) {
+                log_err("Failed to generate key pair.");
+                err = -ECRYPT;
+                goto fail_pkp;
+        }
+
+        log_dbg("Generated ephemeral keys for %d.", pid);
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
 
@@ -1388,7 +1416,8 @@ static int flow_accept(pid_t             pid,
         if (f == NULL) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_warn("Port_id was not created yet.");
-                return -EPERM;
+                err = -EPERM;
+                goto fail_rp;
         }
 
         pid_n   = f->n_pid;
@@ -1405,7 +1434,8 @@ static int flow_accept(pid_t             pid,
                 reg_flow_set_state(f, FLOW_NULL);
                 reg_flow_destroy(f);
                 log_dbg("Process gone while accepting flow.");
-                return -EPERM;
+                err = -EPERM;
+                goto fail_rp;
         }
 
         pthread_mutex_lock(&rp->lock);
@@ -1423,7 +1453,8 @@ static int flow_accept(pid_t             pid,
                 reg_flow_set_state(f, FLOW_NULL);
                 reg_flow_destroy(f);
                 log_err("Entry in wrong state.");
-                return -EPERM;
+                err = -EPERM;
+                goto fail_rp;
         }
 
         registry_names_del_proc(pid);
@@ -1434,11 +1465,26 @@ static int flow_accept(pid_t             pid,
         f_out->qs      = f->qs;
         f_out->mpl     = f->mpl;
 
-        if (f->qs.cypher_s != 0) /* crypto requested, send pubkey */
-                tmp = *data;
+        if (f->qs.cypher_s != 0) { /* crypto requested */
+                tmp.len = key_len; /* send this pubkey */
+                tmp.data = (uint8_t *) buf;
 
-        *data = f->data; /* pass owner */
-        clrbuf (f->data);
+                if (crypt_dh_derive(pkp, f->data.data, f->data.len, s) < 0) {
+                        list_del(&f->next);
+                        bmp_release(irmd.flow_ids, f->flow_id);
+                        freebuf(f->data);
+                        pthread_rwlock_unlock(&irmd.reg_lock);
+                        clear_reg_flow(f);
+                        reg_flow_set_state(f, FLOW_NULL);
+                        reg_flow_destroy(f);
+                        log_err("Failed to derive common secret for %d.",
+                                flow_id);
+                        err = -ECRYPT;
+                        goto fail_rp;
+                }
+        }
+
+        freebuf(f->data);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -1450,14 +1496,29 @@ static int flow_accept(pid_t             pid,
                 clear_reg_flow(f);
                 reg_flow_set_state(f, FLOW_NULL);
                 reg_flow_destroy(f);
-                return -EPERM;
+                err = -EPERM;
+                goto fail_rp;
         }
 
         reg_flow_set_state(f, FLOW_ALLOCATED);
 
+        crypt_dh_pkp_destroy(pkp);
+
+        if (f_out->qs.cypher_s > 0) {
+                data->data = s;
+                data->len  = SYMMKEYSZ;
+        }
+
         log_info("Flow on flow_id %d allocated.", f->flow_id);
 
         return 0;
+
+ fail_rp:
+        crypt_dh_pkp_destroy(pkp);
+ fail_pkp:
+        free(s);
+ fail_malloc_s:
+        return err;
 }
 
 static int flow_join(pid_t              pid,
@@ -1466,11 +1527,11 @@ static int flow_join(pid_t              pid,
                      struct timespec *  dl,
                      struct reg_flow *  f_out)
 {
-        struct reg_flow *   f;
+        struct reg_flow * f;
         struct reg_ipcp * ipcp;
-        int                 flow_id;
-        int                 state;
-        uint8_t *           hash;
+        int               flow_id;
+        int               state;
+        uint8_t *         hash;
 
         log_info("Allocating flow for %d to %s.", pid, dst);
 
@@ -1563,13 +1624,44 @@ static int flow_alloc(pid_t              pid,
         int               flow_id;
         int               state;
         uint8_t *         hash;
+        ssize_t           key_len;
+        void *            pkp; /* my public key pair */
+        buffer_t          tmp; /* buffer for public key */
+        uint8_t           buf[MSGBUFSZ];
+        uint8_t *         s = NULL;
+        int               err;
 
         log_info("Allocating flow for %d to %s.", pid, dst);
+
+        /* piggyback of user data not yet implemented */
+        assert(data != NULL && data->len == 0 && data->data == NULL);
+
+        if (qs.cypher_s > 0) {
+                s = malloc(SYMMKEYSZ);
+                if (s == NULL) {
+                        log_err("Failed to malloc symmetric key.");
+                        err = -ENOMEM;
+                        goto fail_malloc_s;
+                }
+
+                key_len = crypt_dh_pkp_create(&pkp, buf);
+                if (key_len < 0) {
+                        log_err("Failed to generate key pair.");
+                        err = -ECRYPT;
+                        goto fail_pkp;
+                }
+
+                log_dbg("Generated ephemeral keys for %d.", pid);
+
+                tmp.data = (uint8_t *) buf;
+                tmp.len  = (size_t)    key_len;
+        }
 
         ipcp = registry_get_ipcp_by_dst_name(dst, pid);
         if (ipcp == NULL) {
                 log_info("Destination %s unreachable.", dst);
-                return -1;
+                err = -ENOTALLOC;
+                goto fail_ipcp;
         }
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
@@ -1578,15 +1670,16 @@ static int flow_alloc(pid_t              pid,
         if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not allocate flow_id.");
-                return -EBADF;
+                err = -EBADF;
+                goto fail_ipcp;
         }
 
         f = reg_flow_create(pid, ipcp->pid, flow_id, qs);
         if (f == NULL) {
-                bmp_release(irmd.flow_ids, flow_id);
                 pthread_rwlock_unlock(&irmd.reg_lock);
                 log_err("Could not allocate flow_id.");
-                return -ENOMEM;
+                err = -ENOMEM;
+                goto fail_flow;
         }
 
         list_add(&f->next, &irmd.flows);
@@ -1596,32 +1689,34 @@ static int flow_alloc(pid_t              pid,
         assert(reg_flow_get_state(f) == FLOW_ALLOC_PENDING);
 
         hash = malloc(IPCP_HASH_LEN(ipcp));
-        if  (hash == NULL)
-                /* sanitizer cleans this */
-                return -ENOMEM;
+        if  (hash == NULL) {
+                /* sanitizer cleans regflow */
+                err = -ENOMEM;
+                goto fail_flow;
+        }
 
         str_hash(ipcp->dir_hash_algo, hash, dst);
 
         if (ipcp_flow_alloc(ipcp->pid, flow_id, pid, hash,
-                            IPCP_HASH_LEN(ipcp), qs, *data)) {
+                            IPCP_HASH_LEN(ipcp), qs, tmp)) {
                 reg_flow_set_state(f, FLOW_NULL);
                 /* sanitizer cleans this */
                 log_warn("Flow_allocation %d failed.", flow_id);
-                free(hash);
-                return -EAGAIN;
+                err = -ENOTALLOC;
+                goto fail_alloc;
         }
-
-        free(hash);
 
         state = reg_flow_wait_state(f, FLOW_ALLOCATED, dl);
         if (state != FLOW_ALLOCATED) {
                 if (state == -ETIMEDOUT) {
                         log_err("Flow allocation timed out");
-                        return -ETIMEDOUT;
+                        err = -ETIMEDOUT;
+                        goto fail_alloc;
                 }
 
                 log_warn("Pending flow to %s torn down.", dst);
-                return -EPIPE;
+                err = -EPIPE;
+                goto fail_alloc;
         }
 
         pthread_rwlock_wrlock(&irmd.reg_lock);
@@ -1632,14 +1727,41 @@ static int flow_alloc(pid_t              pid,
         f_out->n_pid   = f->n_pid;
         f_out->n_1_pid = f->n_1_pid;
         f_out->mpl     = f->mpl;
-        *data          = f->data; /* pass owner */
-        clrbuf(f->data);
+        if (qs.cypher_s > 0 &&
+            crypt_dh_derive(pkp, f->data.data, f->data.len, s) < 0) {
+                freebuf(f->data);
+                pthread_rwlock_unlock(&irmd.reg_lock);
+                log_err("Failed to derive common secret for %d.", flow_id);
+                err = -ECRYPT;
+                goto fail_alloc;
+        }
+
+        freebuf(f->data);
 
         pthread_rwlock_unlock(&irmd.reg_lock);
+
+        free(hash);
+        crypt_dh_pkp_destroy(pkp);
+
+        data->data = s;
+        data->len  = SYMMKEYSZ;
 
         log_info("Flow on flow_id %d allocated.", flow_id);
 
         return 0;
+
+ fail_alloc:
+        free(hash);
+ fail_flow:
+        bmp_release(irmd.flow_ids, flow_id);
+ fail_ipcp:
+        if (qs.cypher_s > 0)
+                crypt_dh_pkp_destroy(pkp);
+ fail_pkp:
+        free(s);
+ fail_malloc_s:
+        return err;
+
 }
 
 static int flow_dealloc(pid_t  pid,
@@ -2178,34 +2300,35 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 if (res == 0) {
                         qosspec_msg_t * qs_msg;
                         qs_msg = qos_spec_s_to_msg(&f.qs);
-                        ret_msg->has_flow_id = true;
-                        ret_msg->flow_id     = f.flow_id;
-                        ret_msg->has_pid     = true;
-                        ret_msg->pid         = f.n_1_pid;
-                        ret_msg->qosspec     = qs_msg;
-                        ret_msg->has_mpl     = true;
-                        ret_msg->mpl         = f.mpl;
-                        ret_msg->has_pk      = true;
-                        ret_msg->pk.data     = data.data;
-                        ret_msg->pk.len      = data.len;
+                        ret_msg->has_flow_id  = true;
+                        ret_msg->flow_id      = f.flow_id;
+                        ret_msg->has_pid      = true;
+                        ret_msg->pid          = f.n_1_pid;
+                        ret_msg->qosspec      = qs_msg;
+                        ret_msg->has_mpl      = true;
+                        ret_msg->mpl          = f.mpl;
+                        ret_msg->has_symmkey  = data.len != 0;
+                        ret_msg->symmkey.data = data.data;
+                        ret_msg->symmkey.len  = data.len;
                 }
                 break;
         case IRM_MSG_CODE__IRM_FLOW_ALLOC:
                 data.len  = msg->pk.len;
                 data.data = msg->pk.data;
+                msg->has_pk = false;
                 qs = qos_spec_msg_to_s(msg->qosspec);
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
                 res = flow_alloc(msg->pid, msg->dst, qs, dl, &f, &data);
                 if (res == 0) {
-                        ret_msg->has_flow_id = true;
-                        ret_msg->flow_id     = f.flow_id;
-                        ret_msg->has_pid     = true;
-                        ret_msg->pid         = f.n_1_pid;
-                        ret_msg->has_mpl     = true;
-                        ret_msg->mpl         = f.mpl;
-                        ret_msg->has_pk      = true;
-                        ret_msg->pk.data     = data.data;
-                        ret_msg->pk.len      = data.len;
+                        ret_msg->has_flow_id  = true;
+                        ret_msg->flow_id      = f.flow_id;
+                        ret_msg->has_pid      = true;
+                        ret_msg->pid          = f.n_1_pid;
+                        ret_msg->has_mpl      = true;
+                        ret_msg->mpl          = f.mpl;
+                        ret_msg->has_symmkey  = data.len != 0;
+                        ret_msg->symmkey.data = data.data;
+                        ret_msg->symmkey.len  = data.len;
                 }
                 break;
         case IRM_MSG_CODE__IRM_FLOW_JOIN:
