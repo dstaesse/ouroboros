@@ -42,12 +42,13 @@
 
 [name.oping]
 prog=["@INSTALL_DIR@/oping"] # Defaults to [].
-args=["-l"]             # Defaults to disabled. Autostart server with these args.
+args=["--listen"]       # Defaults to disabled. Autostart server with these args.
 lb="round-robin"        # Defaults to spill (load-balancing options: spill, round-robin).
 
 [name.oecho]
+prog=["@INSTALL_DIR@/oecho"] # Defaults to [].
+args=["--listen"]       # Defaults to disabled. Autostart server with these args.
 lb="round-robin"        # Defaults to spill (load-balancing options: spill, round-robin).
-args="-l"               # Defaults to disabled. Autostart server with these args.
 
 [name.ocbr]
 prog=["@INSTALL_DIR@/ocbr"]  # Defaults to [].
