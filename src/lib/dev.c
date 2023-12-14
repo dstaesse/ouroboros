@@ -1096,7 +1096,7 @@ int fccntl(int fd,
                         goto einval;
                 if (!flow->rcv_timesout)
                         goto eperm;
-                *timeo = flow->snd_timeo;
+                *timeo = flow->rcv_timeo;
                 break;
         case FLOWGQOSSPEC:
                 qs = va_arg(l, qosspec_t *);
