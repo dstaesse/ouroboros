@@ -1507,6 +1507,8 @@ static int flow_accept(pid_t             pid,
         if (f_out->qs.cypher_s > 0) {
                 data->data = s;
                 data->len  = SYMMKEYSZ;
+        } else {
+                free(s);
         }
 
         log_info("Flow on flow_id %d allocated.", f->flow_id);
@@ -1626,7 +1628,7 @@ static int flow_alloc(pid_t              pid,
         uint8_t *         hash;
         ssize_t           key_len;
         void *            pkp; /* my public key pair */
-        buffer_t          tmp; /* buffer for public key */
+        buffer_t          tmp = {NULL, 0}; /* buffer for public key */
         uint8_t           buf[MSGBUFSZ];
         uint8_t *         s = NULL;
         int               err;
@@ -1741,10 +1743,12 @@ static int flow_alloc(pid_t              pid,
         pthread_rwlock_unlock(&irmd.reg_lock);
 
         free(hash);
-        crypt_dh_pkp_destroy(pkp);
 
-        data->data = s;
-        data->len  = SYMMKEYSZ;
+        if (qs.cypher_s > 0) {
+                crypt_dh_pkp_destroy(pkp);
+                data->data = s;
+                data->len  = SYMMKEYSZ;
+        }
 
         log_info("Flow on flow_id %d allocated.", flow_id);
 

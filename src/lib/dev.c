@@ -475,7 +475,7 @@ static int flow_init(int       flow_id,
 
         flow->crypt.flags = qs.cypher_s; /* TODO: remove cypher_s from qos */
 
-        if (flow->crypt.flags > 0)
+        if (flow->crypt.flags > 0 && s != NULL) /* static analyzer s != NULL */
                 memcpy(flow->crypt.key, s ,SYMMKEYSZ);
         else
                 memset(flow->crypt.key, 0, SYMMKEYSZ);
