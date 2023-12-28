@@ -579,9 +579,9 @@ static int args_to_argv(const char * args,
 
         str = (char *) args;
 
-        tok = strtok(str, " ");
-        while (tok != NULL) {
-                tok = strtok(NULL, " ");
+        tok = str;
+        while (*(tok += strspn(tok, " ")) != '\0') {
+                tok  += strcspn(tok, " ");
                 argc++;
         }
 
@@ -590,14 +590,16 @@ static int args_to_argv(const char * args,
                 goto fail_malloc;
 
         argc = 0;
-        tok = strtok(str, " ");
-        while (tok != NULL) {
-                (*argv)[argc] = malloc((strlen(tok)  + 1) * sizeof(***argv));
-                if (*argv[argc] == NULL)
+        tok = str;
+        while (*(tok += strspn(tok, " ")) != '\0') {
+                size_t toklen = strcspn(tok, " ");
+                (*argv)[argc] = malloc((toklen + 1) * sizeof(***argv));
+                if ((*argv)[argc] == NULL)
                         goto fail_malloc2;
 
-                strcpy((*argv)[argc++], tok);
-                tok = strtok(NULL, " ");
+                strncpy((*argv)[argc], tok, toklen);
+                (*argv)[argc++][toklen] = '\0';
+                tok += toklen;
         }
 
         (*argv)[argc] = NULL;
