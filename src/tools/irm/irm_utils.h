@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2023
+ * Ouroboros - Copyright (C) 2016 - 2024
  *
  * Handy helper functions for the IRM tool
  *

@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2023
+ * Ouroboros - Copyright (C) 2016 - 2024
  *
  * A tool to instruct the IRM daemon
  *

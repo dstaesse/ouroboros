@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2023
+ * Ouroboros - Copyright (C) 2016 - 2024
  *
  * 32-bit Cyclic Redundancy Check
  *

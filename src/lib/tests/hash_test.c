@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2023
+ * Ouroboros - Copyright (C) 2016 - 2024
  *
  * Test of the hashing functions
  *
@@ -167,7 +167,7 @@ static int test_sha3(void)
 int hash_test(int     argc,
               char ** argv)
 {
-        int     ret = 0;
+        int ret = 0;
 
         (void) argc;
         (void) argv;

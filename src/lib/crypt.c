@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2023
+ * Ouroboros - Copyright (C) 2016 - 2024
  *
  * Elliptic curve Diffie-Hellman key exchange and
  * AES encryption for flows using OpenSSL
