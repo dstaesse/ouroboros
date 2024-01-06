@@ -90,7 +90,7 @@ struct reg_prog * reg_prog_create(const char * prog,
         if (p->prog == NULL)
                 goto fail_prog;
 
-        if (argc > 0 && flags & BIND_AUTO) {
+        if (flags & BIND_AUTO) {
                 p->argv = create_argv(prog, argc, argv);
                 if (p->argv == NULL)
                         goto fail_argv;
