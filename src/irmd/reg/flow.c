@@ -66,13 +66,15 @@ struct reg_flow * reg_flow_create(pid_t     n_pid,
 
         f->n_rb = shm_rbuff_create(n_pid, flow_id);
         if (f->n_rb == NULL) {
-                log_err("Could not create ringbuffer for process %d.", n_pid);
+                log_err("Could not create N ringbuffer flow %d, pid %d.",
+                        flow_id, n_pid);
                 goto fail_n_rbuff;
         }
 
         f->n_1_rb = shm_rbuff_create(n_1_pid, flow_id);
         if (f->n_1_rb == NULL) {
-                log_err("Could not create ringbuffer for process %d.", n_1_pid);
+                log_err("Could not create N - 1 ringbuffer flow %d, pid %d.",
+                        flow_id, n_1_pid);
                 goto fail_n_1_rbuff;
         }
 

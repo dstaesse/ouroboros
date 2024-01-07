@@ -1757,7 +1757,7 @@ static int flow_alloc(pid_t              pid,
  fail_alloc:
         free(hash);
  fail_flow:
-        bmp_release(irmd.flow_ids, flow_id);
+       /* Sanitize cleans bmp_release(irmd.flow_ids, flow_id); */
  fail_ipcp:
         if (qs.cypher_s > 0)
                 crypt_dh_pkp_destroy(pkp);
@@ -2107,7 +2107,6 @@ void * irm_sanitize(void * o)
                             && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
                                 log_dbg("Pending flow_id %d timed out.",
                                          f->flow_id);
-                                f->n_pid = -1;
                                 reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
                                 continue;
                         }
