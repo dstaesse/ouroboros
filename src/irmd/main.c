@@ -2763,7 +2763,7 @@ static int irm_init(void)
 static void usage(void)
 {
         printf("Usage: irmd \n"
-#ifdef OUROBOROS_CONFIG_INI
+#ifdef HAVE_TOML
                "         [--config <path> (Path to configuration file)]\n"
 #endif
                "         [--stdout  (Log to stdout instead of system log)]\n"

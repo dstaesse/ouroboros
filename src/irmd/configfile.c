@@ -820,8 +820,8 @@ int irm_configure(const char * path)
 
         rp = realpath(path, NULL);
         if (rp == NULL) {
-                log_warn("Failed to resolve path for %s", path);
-                return 0;
+                log_err("Failed to resolve path for %s", path);
+                goto fail_resolve;
         }
 
         log_info("Reading configuration from file %s", rp);
@@ -846,6 +846,7 @@ int irm_configure(const char * path)
         fclose(fp);
  fail_fopen:
         free(rp);
+ fail_resolve:
         return -1;
 }
 
