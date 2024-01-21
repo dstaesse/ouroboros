@@ -62,7 +62,7 @@ void list_add_tail(struct list_head * n,
 void list_del(struct list_head * e)
 {
         del_list(e->prv, e->nxt);
-        e->nxt = e->prv = NULL;
+        e->nxt = e->prv = e;
 }
 
 bool list_is_empty(struct list_head * h)
