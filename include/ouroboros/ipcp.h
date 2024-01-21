@@ -26,17 +26,21 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <sys/types.h>
 
 #define IPCP_NAME_SIZE  255
 #define LAYER_NAME_SIZE 255
 #define DEV_NAME_SIZE   255
 
-/* Unicast IPCP components. */
-#define DT_COMP   "Data Transfer"
-#define MGMT_COMP "Management"
+enum ipcp_state {
+        IPCP_INIT = 0,
+        IPCP_BOOT,
+        IPCP_OPERATIONAL,
+        IPCP_SHUTDOWN,
+        IPCP_NULL
+};
 
-/* NOTE: The IRMd uses this order to select an IPCP for flow allocation. */
-enum ipcp_type {
+enum ipcp_type { /* IRMd uses order to select an IPCP for flow allocation. */
         IPCP_LOCAL = 0,
         IPCP_UNICAST,
         IPCP_BROADCAST,
@@ -45,6 +49,17 @@ enum ipcp_type {
         IPCP_UDP,
         IPCP_INVALID
 };
+
+struct ipcp_info {
+        enum ipcp_type  type;
+        pid_t           pid;
+        char            name[IPCP_NAME_SIZE + 1];
+        enum ipcp_state state;
+};
+
+/* Unicast IPCP components. */
+#define DT_COMP   "Data Transfer"
+#define MGMT_COMP "Management"
 
 /* Unicast IPCP policies */
 enum pol_addr_auth {
@@ -63,14 +78,6 @@ enum pol_cong_avoid {
         CA_NONE = 0,
         CA_MB_ECN,
         CA_INVALID
-};
-
-enum pol_dir_hash {
-        DIR_HASH_SHA3_224,
-        DIR_HASH_SHA3_256,
-        DIR_HASH_SHA3_384,
-        DIR_HASH_SHA3_512,
-        DIR_HASH_INVALID
 };
 
 struct dt_config {
@@ -98,16 +105,18 @@ struct udp_config {
         uint16_t port;
 };
 
-/* Info about the IPCP */
-struct ipcp_info {
-        enum ipcp_type type;
-        char name[IPCP_NAME_SIZE + 1];
+/* Layers */
+enum pol_dir_hash {
+        DIR_HASH_SHA3_224,
+        DIR_HASH_SHA3_256,
+        DIR_HASH_SHA3_384,
+        DIR_HASH_SHA3_512,
+        DIR_HASH_INVALID
 };
 
-/* Info reported back to the IRMd about the layer on enrollment */
 struct layer_info {
-        char name[LAYER_NAME_SIZE + 1];
-        int  dir_hash_algo;
+        char              name[LAYER_NAME_SIZE + 1];
+        enum pol_dir_hash dir_hash_algo;
 };
 
 /* Structure to configure the first IPCP */

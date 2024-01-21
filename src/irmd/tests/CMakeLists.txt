@@ -2,11 +2,11 @@ get_filename_component(tmp ".." ABSOLUTE)
 get_filename_component(src_folder "${tmp}" NAME)
 
 create_test_sourcelist(${src_folder}_tests test_suite.c
-                       # Add new tests here
+  # Add new tests here
 )
 
 add_executable(${src_folder}_test EXCLUDE_FROM_ALL ${${src_folder}_tests})
-target_link_libraries(${src_folder}_test ouroboros)
+target_link_libraries(${src_folder}_test ouroboros-common)
 
 add_dependencies(check ${src_folder}_test)
 

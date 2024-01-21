@@ -134,7 +134,7 @@ int reg_ipcp_wait_boot(struct reg_ipcp * ipcp)
                 pthread_cond_signal(&ipcp->cond);
         }
 
-        if (ipcp->state != IPCP_LIVE) {
+        if (ipcp->state != IPCP_OPERATIONAL) {
                 pthread_mutex_unlock(&ipcp->mtx);
                 return -1;
         }

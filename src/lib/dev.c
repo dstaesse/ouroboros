@@ -33,6 +33,8 @@
 #include <ouroboros/crypt.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/flow.h>
+#include <ouroboros/ipcp.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/list.h>
 #include <ouroboros/local-dev.h>
@@ -73,14 +75,6 @@
 #define CRCLEN    (sizeof(uint32_t))
 #define SECMEMSZ  16384
 #define MSGBUFSZ  2048
-
-enum flow_state {
-        FLOW_NULL = 0,
-        FLOW_INIT,
-        FLOW_ID_PENDING,
-        FLOW_ID_ASSIGNED,
-        FLOW_DESTROY
-};
 
 /* map flow_ids to flow descriptors; track state of the flow */
 struct fmap {
@@ -157,7 +151,7 @@ static void flow_destroy(struct fmap * p)
                 return;
         }
 
-        if (p->state == FLOW_ID_PENDING)
+        if (p->state == FLOW_ALLOC_PENDING)
                 p->state = FLOW_DESTROY;
         else
                 p->state = FLOW_NULL;
@@ -200,17 +194,17 @@ static enum flow_state flow_wait_assign(int flow_id)
 
         pthread_mutex_lock(&ai.mtx);
 
-        if (p->state == FLOW_ID_ASSIGNED) {
+        if (p->state == FLOW_ALLOCATED) {
                 pthread_mutex_unlock(&ai.mtx);
-                return FLOW_ID_ASSIGNED;
+                return FLOW_ALLOCATED;
         }
 
         if (p->state == FLOW_INIT)
-                p->state = FLOW_ID_PENDING;
+                p->state = FLOW_ALLOC_PENDING;
 
         pthread_cleanup_push(__cleanup_mutex_unlock, &ai.mtx);
 
-        while (p->state == FLOW_ID_PENDING)
+        while (p->state == FLOW_ALLOC_PENDING)
                 pthread_cond_wait(&ai.cond, &ai.mtx);
 
         if (p->state == FLOW_DESTROY) {
@@ -503,7 +497,7 @@ static int flow_init(int       flow_id,
 
         ai.id_to_fd[flow_id].fd = fd;
 
-        flow_set_state(&ai.id_to_fd[flow_id], FLOW_ID_ASSIGNED);
+        flow_set_state(&ai.id_to_fd[flow_id], FLOW_ALLOCATED);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1795,7 +1789,7 @@ int np1_flow_resp(int flow_id)
 {
         int fd;
 
-        if (flow_wait_assign(flow_id) != FLOW_ID_ASSIGNED)
+        if (flow_wait_assign(flow_id) != FLOW_ALLOCATED)
                 return -1;
 
         pthread_rwlock_rdlock(&ai.lock);

@@ -1247,7 +1247,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
+        ipcpi.dir_hash_algo = (enum hash_algo) conf->layer_info.dir_hash_algo;
         strcpy(ipcpi.layer_name, conf->layer_info.name);
 
         if (strlen(conf->eth.dev) >= IFNAMSIZ) {

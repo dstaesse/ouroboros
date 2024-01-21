@@ -30,23 +30,23 @@
 
 #define OUROBOROS_PREFIX "irmd"
 
+#include <ouroboros/bitmap.h>
 #include <ouroboros/crypt.h>
-#include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
-#include <ouroboros/sockets.h>
-#include <ouroboros/list.h>
-#include <ouroboros/utils.h>
+#include <ouroboros/flow.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/irm.h>
+#include <ouroboros/list.h>
 #include <ouroboros/lockfile.h>
+#include <ouroboros/logs.h>
+#include <ouroboros/pthread.h>
 #include <ouroboros/shm_rbuff.h>
 #include <ouroboros/shm_rdrbuff.h>
-#include <ouroboros/bitmap.h>
-#include <ouroboros/qos.h>
+#include <ouroboros/sockets.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/tpm.h>
-#include <ouroboros/logs.h>
+#include <ouroboros/utils.h>
 #include <ouroboros/version.h>
-#include <ouroboros/pthread.h>
 
 #include "irmd.h"
 #include "ipcp.h"
@@ -586,7 +586,9 @@ static int create_ipcp_r(pid_t pid,
         list_for_each(p, &irmd.ipcps) {
                 struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
                 if (e->pid == pid) {
-                        reg_ipcp_set_state(e, result ? IPCP_NULL : IPCP_LIVE);
+                        enum ipcp_state state;
+                        state =  result ? IPCP_NULL : IPCP_OPERATIONAL;
+                        reg_ipcp_set_state(e, state);
                         break;
                 }
         }
@@ -660,7 +662,7 @@ int bootstrap_ipcp(pid_t                pid,
                 return -ENOMEM;
         }
 
-        ipcp->dir_hash_algo = info.dir_hash_algo;
+        ipcp->dir_hash_algo = (enum hash_algo) info.dir_hash_algo;
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 
@@ -714,7 +716,7 @@ int enroll_ipcp(pid_t        pid,
                 return -ENOMEM;
         }
 
-        ipcp->dir_hash_algo = info.dir_hash_algo;
+        ipcp->dir_hash_algo = (enum hash_algo) info.dir_hash_algo;
 
         pthread_rwlock_unlock(&irmd.reg_lock);
 

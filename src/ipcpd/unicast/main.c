@@ -60,7 +60,7 @@ struct ipcp ipcpi;
 static int initialize_components(const struct ipcp_config * conf)
 {
         strcpy(ipcpi.layer_name, conf->layer_info.name);
-        ipcpi.dir_hash_algo = conf->layer_info.dir_hash_algo;
+        ipcpi.dir_hash_algo = (enum hash_algo) conf->layer_info.dir_hash_algo;
 
         assert(ipcp_dir_hash_len() != 0);
 
@@ -227,7 +227,7 @@ static int unicast_ipcp_enroll(const char *        dst,
 
         log_info_id(id, "Enrolled with %s.", dst);
 
-        info->dir_hash_algo = ipcpi.dir_hash_algo;
+        info->dir_hash_algo = (enum pol_dir_hash) ipcpi.dir_hash_algo;
         strcpy(info->name, ipcpi.layer_name);
 
         return 0;

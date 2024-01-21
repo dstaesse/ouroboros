@@ -27,6 +27,7 @@
 #define OUROBOROS_PREFIX "reg-flow"
 
 #include <ouroboros/errno.h>
+#include <ouroboros/flow.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/time_utils.h>
 #include <ouroboros/pthread.h>

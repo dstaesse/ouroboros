@@ -25,12 +25,6 @@
 
 #include <ouroboros/list.h>
 
-enum ipcp_state {
-        IPCP_NULL = 0,
-        IPCP_BOOT,
-        IPCP_LIVE
-};
-
 struct reg_ipcp {
         struct list_head next;
 

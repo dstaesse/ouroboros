@@ -31,27 +31,24 @@
 
 /* Name binding options. */
 #define BIND_AUTO   0x01
+#define NAME_SIZE 255
 
-#define NAME_SIZE 256
-#define LAYER_SIZE LAYER_NAME_SIZE
-
-/* Load balancing policy for incoming flows. */
 enum pol_balance {
         LB_RR = 0,
         LB_SPILL,
         LB_INVALID
 };
 
+struct name_info {
+        char             name[NAME_SIZE + 1];
+        enum pol_balance pol_lb;
+};
+
 struct ipcp_list_info {
         pid_t          pid;
         enum ipcp_type type;
         char           name[NAME_SIZE];
-        char           layer[LAYER_SIZE];
-};
-
-struct name_info {
-        char             name[NAME_SIZE];
-        enum pol_balance pol_lb;
+        char           layer[LAYER_NAME_SIZE];
 };
 
 __BEGIN_DECLS

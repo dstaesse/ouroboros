@@ -34,14 +34,6 @@
 #include <pthread.h>
 #include <time.h>
 
-enum ipcp_state {
-        IPCP_NULL = 0,
-        IPCP_INIT,
-        /* Layer name must be set for states below. */
-        IPCP_OPERATIONAL,
-        IPCP_SHUTDOWN
-};
-
 struct ipcp_ops {
         int   (* ipcp_bootstrap)(const struct ipcp_config * conf);
 
