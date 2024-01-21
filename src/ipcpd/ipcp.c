@@ -183,8 +183,8 @@ static int ipcp_rib_readdir(char *** buf)
 
         return i;
  fail_dup:
-        while (--i > 0)
-                free((*buf)[i]);
+        while (i > 0)
+                free((*buf)[--i]);
  fail:
         free(*buf);
 
