@@ -38,8 +38,8 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 
-pid_t irm_create_ipcp(const char *   name,
-                      enum ipcp_type type)
+int irm_create_ipcp(const char *   name,
+                    enum ipcp_type type)
 {
         irm_msg_t        msg      = IRM_MSG__INIT;
         irm_msg_t *      recv_msg;
@@ -48,6 +48,8 @@ pid_t irm_create_ipcp(const char *   name,
 
         if (name == NULL || strlen(name) > IPCP_NAME_SIZE)
                 return -EINVAL;
+
+        memset(&info, 0, sizeof(info));
 
         info.type = type;
         strcpy(info.name, name);
@@ -366,50 +368,69 @@ int irm_bind_program(const char * prog,
                      int          argc,
                      char **      argv)
 {
-        irm_msg_t   msg      = IRM_MSG__INIT;
-        irm_msg_t * recv_msg = NULL;
-        int         ret      = -1;
-        char *      full_name;
+        irm_msg_t   msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg;
+        char **     exec;
+        int         ret;
+        int         i;
 
         if (prog == NULL || name == NULL)
                 return -EINVAL;
 
-        full_name = strdup(prog);
-        if (full_name == NULL)
-                return -ENOMEM;
-
-        if ((ret = check_prog_path(&full_name)) < 0) {
-                free(full_name);
-                return ret;
+        exec = malloc((argc + 2) * sizeof(*exec));
+        if (exec== NULL) {
+                ret = -ENOMEM;
+                goto fail_exec;
         }
+
+        exec[0] = strdup(prog);
+        if (exec[0] == NULL) {
+                ret = -ENOMEM;
+                goto fail_exec0;
+        }
+
+        ret = check_prog_path(&exec[0]);
+        if (ret < 0)
+                goto fail;
+
+        for (i = 0; i < argc; i++)
+                exec[i + 1] = argv[i];
+
+        exec[argc + 1] = "";
 
         msg.code = IRM_MSG_CODE__IRM_BIND_PROGRAM;
         msg.name = (char *) name;
-        msg.prog = full_name;
 
-        if (argv != NULL) {
-                msg.n_args = argc;
-                msg.args = (char **) argv;
-        }
+        msg.n_exec = argc + 2;
+        msg.exec = exec;
 
         msg.has_opts = true;
         msg.opts = opts;
 
         recv_msg = send_recv_irm_msg(&msg);
-
-        free(full_name);
-
-        if (recv_msg == NULL)
-                return -EIRMD;
+        if (recv_msg == NULL) {
+                ret = -EIRMD;
+                goto fail;
+        }
 
         if (!recv_msg->has_result) {
                 irm_msg__free_unpacked(recv_msg, NULL);
-                return -1;
+                ret = -EPERM;
+                goto fail;
         }
 
         ret = recv_msg->result;
         irm_msg__free_unpacked(recv_msg, NULL);
 
+        free(exec[0]);
+        free(exec);
+
+        return ret;
+ fail:
+        free(exec[0]);
+ fail_exec0:
+        free(exec);
+ fail_exec:
         return ret;
 }
 

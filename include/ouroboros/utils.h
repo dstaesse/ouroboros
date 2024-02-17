@@ -47,6 +47,13 @@ int n_digits(unsigned i);
 /* gets the application name */
 char * path_strip(const char * src);
 
+/* functions for copying and destroying arguments list */
+size_t  argvlen(const char ** argv);
+
+char ** argvdup(char ** argv);
+
+void    argvfree(char ** argv);
+
 /* destroy a ** */
 #define freepp(type, ptr, len)                          \
         do {                                            \

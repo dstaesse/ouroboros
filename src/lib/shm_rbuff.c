@@ -26,22 +26,22 @@
 
 #include <ouroboros/shm_rbuff.h>
 #include <ouroboros/lockfile.h>
-#include <ouroboros/time_utils.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/fccntl.h>
 #include <ouroboros/pthread.h>
+#include <ouroboros/time.h>
 
-#include <sys/mman.h>
+#include <assert.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <unistd.h>
-#include <signal.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
-#include <assert.h>
-#include <stdbool.h>
 
 #define FN_MAX_CHARS 255
 
@@ -172,7 +172,7 @@ struct shm_rbuff * shm_rbuff_create(pid_t pid,
         *rb->head = 0;
         *rb->tail = 0;
 
-        rb->pid = pid;
+        rb->pid     = pid;
         rb->flow_id = flow_id;
 
         pthread_mutexattr_destroy(&mattr);

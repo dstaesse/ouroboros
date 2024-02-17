@@ -40,7 +40,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/random.h>
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 #include <ouroboros/tpm.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/pthread.h>
@@ -472,11 +472,13 @@ static void kad_req_destroy(struct kad_req * req)
 static int kad_req_wait(struct kad_req * req,
                         time_t           t)
 {
-        struct timespec timeo = {t, 0};
+        struct timespec timeo = TIMESPEC_INIT_S(0);
         struct timespec abs;
         int ret = 0;
 
         assert(req);
+
+        timeo.tv_sec = t;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abs);
 
@@ -995,7 +997,7 @@ static void cancel_lookup_wait(void * o)
 
 static enum lookup_state lookup_wait(struct lookup * lu)
 {
-        struct timespec   timeo = {KAD_T_RESP, 0};
+        struct timespec   timeo = TIMESPEC_INIT_S(KAD_T_RESP);
         struct timespec   abs;
         enum lookup_state state;
         int               ret = 0;
@@ -2764,7 +2766,7 @@ static void handle_event(void *       self,
                 pthread_t          thr;
                 struct join_info * inf;
                 struct conn *      c     = (struct conn *) o;
-                struct timespec    slack = {0, DHT_ENROLL_SLACK * MILLION};
+                struct timespec    slack = TIMESPEC_INIT_MS(DHT_ENROLL_SLACK);
 
                 /* Give the pff some time to update for the new link. */
                 nanosleep(&slack, NULL);

@@ -40,23 +40,18 @@
 #include <ouroboros/lockfile.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/pthread.h>
-#include <ouroboros/shm_rbuff.h>
+#include <ouroboros/rib.h>
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/sockets.h>
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 #include <ouroboros/tpm.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/version.h>
 
 #include "irmd.h"
 #include "ipcp.h"
-#include "reg/flow.h"
-#include "reg/ipcp.h"
-#include "reg/name.h"
-#include "reg/proc.h"
-#include "reg/prog.h"
+#include "reg/reg.h"
 #include "configfile.h"
-#include "utils.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -79,12 +74,10 @@
 #define DEALLOC_TIME       300  /*  s */
 #define MSGBUFSZ           2048
 
-#define registry_has_name(name) \
-        (registry_get_name(name) != NULL)
-
 enum irm_state {
         IRMD_NULL = 0,
-        IRMD_RUNNING
+        IRMD_RUNNING,
+        IRMD_SHUTDOWN
 };
 
 struct cmd {
@@ -97,22 +90,6 @@ struct cmd {
 
 struct {
         bool                 log_stdout;   /* log to stdout              */
-
-        struct list_head     names;        /* registered names known     */
-        size_t               n_names;      /* number of names            */
-
-        struct list_head     ipcps;        /* list of ipcps in system    */
-        size_t               n_ipcps;      /* number of ipcps            */
-
-        struct list_head     procs;        /* processes                  */
-        struct list_head     progs;        /* programs known             */
-        struct list_head     spawned_pids; /* child processes            */
-
-        struct bmp *         flow_ids;     /* flow_ids for flows         */
-        struct list_head     flows;        /* flow information           */
-
-        pthread_rwlock_t     reg_lock;     /* lock for registration info */
-
 #ifdef HAVE_TOML
         char *               cfg_file;     /* configuration file path    */
 #endif
@@ -156,574 +133,235 @@ static void irmd_set_state(enum irm_state state)
         pthread_rwlock_unlock(&irmd.state_lock);
 }
 
-static void clear_reg_flow(struct reg_flow * f) {
-        ssize_t idx;
+static pid_t spawn_program(char ** argv)
+{
+        pid_t       pid;
+        struct stat s;
 
-        assert(f);
-
-        if (f->data.len != 0) {
-                free(f->data.data);
-                f->data.len = 0;
+        if (stat(argv[0], &s) != 0) {
+                log_warn("Program %s does not exist.", argv[0]);
+                return -1;
         }
 
-        while ((idx = shm_rbuff_read(f->n_rb)) >= 0)
-                shm_rdrbuff_remove(irmd.rdrb, idx);
+        if (!(s.st_mode & S_IXUSR)) {
+                log_warn("Program %s is not executable.", argv[0]);
+                return -1;
+        }
 
-        while ((idx = shm_rbuff_read(f->n_1_rb)) >= 0)
-                shm_rdrbuff_remove(irmd.rdrb, idx);
+        if (posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL)) {
+                log_err("Failed to spawn new process for %s.", argv[0]);
+                return -1;
+        }
+
+        log_info("Instantiated %s as process %d.", argv[0], pid);
+
+        return pid;
 }
 
-static struct reg_flow * registry_get_flow(int flow_id)
+static pid_t spawn_ipcp(struct ipcp_info * info)
 {
-        struct list_head * p;
+        char * exec_name = NULL;
+        char   irmd_pid[10];
+        char   full_name[256];
+        char * argv[5];
+        pid_t  pid;
 
-        list_for_each(p, &irmd.flows) {
-                struct reg_flow * f = list_entry(p, struct reg_flow, next);
-                if (f->flow_id == flow_id)
-                        return f;
+        switch(info->type) {
+        case IPCP_UNICAST:
+                exec_name = IPCP_UNICAST_EXEC;
+                break;
+        case IPCP_BROADCAST:
+                exec_name = IPCP_BROADCAST_EXEC;
+                break;
+        case IPCP_UDP:
+                exec_name = IPCP_UDP_EXEC;
+                break;
+        case IPCP_ETH_LLC:
+                exec_name = IPCP_ETH_LLC_EXEC;
+                break;
+        case IPCP_ETH_DIX:
+                exec_name = IPCP_ETH_DIX_EXEC;
+                break;
+        case IPCP_LOCAL:
+                exec_name = IPCP_LOCAL_EXEC;
+                break;
+        default:
+                assert(false);
         }
 
-        return NULL;
-}
-
-static struct reg_flow * registry_get_pending_flow_for_pid(pid_t n_pid)
-{
-        struct list_head * p;
-
-        list_for_each(p, &irmd.flows) {
-                struct reg_flow * e = list_entry(p, struct reg_flow, next);
-                enum flow_state state = reg_flow_get_state(e);
-                if (e->n_pid == n_pid && state == FLOW_ALLOC_REQ_PENDING)
-                        return e;
+        if (exec_name == NULL) {
+                log_err("IPCP type not installed.");
+                return -1;
         }
 
-        return NULL;
-}
+        sprintf(irmd_pid, "%u", getpid());
 
-static int registry_add_ipcp(struct reg_ipcp * ipcp)
-{
-        struct list_head * p;
+        strcpy(full_name, INSTALL_PREFIX"/"INSTALL_SBINDIR"/");
+        strcat(full_name, exec_name);
 
-        assert(ipcp);
+        /* log_file to be placed at the end */
+        argv[0] = full_name;
+        argv[1] = irmd_pid;
+        argv[2] = (char *) info->name;
+        if (log_syslog)
+                argv[3] = "1";
+        else
+                argv[3] = NULL;
 
-        list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * i;
-                i = list_entry(p, struct reg_ipcp, next);
-                if (i->info.type > ipcp->info.type)
-                        break;
+        argv[4] = NULL;
+
+        pid = spawn_program(argv);
+        if (pid < 0) {
+                log_err("Failed to spawn IPCP %s.", info->name);
+                return -1;
         }
 
-        list_add_tail(&ipcp->next, p);
-        ++irmd.n_ipcps;
+        info->pid   = pid;
+        info->state = IPCP_BOOT;
 
         return 0;
 }
 
-static struct reg_ipcp * registry_get_ipcp_by_pid(pid_t pid)
+static int kill_ipcp(pid_t pid)
 {
-        struct list_head * p;
+        int  status;
 
-        list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * ipcp;
-                ipcp = list_entry(p, struct reg_ipcp, next);
-                if (ipcp->pid == pid)
-                        return ipcp;
+        if (kill(pid, SIGTERM) < 0) {
+                log_err("Failed to destroy IPCP: %s.", strerror(errno));
+                return -1;
         }
 
-        return NULL;
-}
-
-static void registry_del_ipcp(pid_t pid)
-{
-        struct reg_ipcp * ipcp;
-
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL)
-                return;
-
-        list_del(&ipcp->next);
-        reg_ipcp_destroy(ipcp);
-        --irmd.n_ipcps;
-}
-
-static struct reg_ipcp * registry_get_ipcp_by_name(const char * name)
-{
-        struct list_head * p;
-
-        list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * ipcp;
-                ipcp = list_entry(p, struct reg_ipcp, next);
-                if (strcmp(name, ipcp->info.name) == 0)
-                        return ipcp;
-        }
-
-        return NULL;
-}
-
-static struct reg_ipcp * registry_get_ipcp_by_layer(const char * layer)
-{
-        struct list_head * p;
-
-        list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * ipcp;
-                ipcp = list_entry(p, struct reg_ipcp, next);
-                if (strcmp(layer, ipcp->layer) == 0)
-                        return ipcp;
-        }
-
-        return NULL;
-}
-
-static struct reg_ipcp * registry_get_ipcp_by_dst_name(const char * name,
-                                                       pid_t        src)
-{
-        struct list_head * p;
-        struct list_head * h;
-        uint8_t *          hash;
-        pid_t              pid;
-        size_t             len;
-
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
-        list_for_each_safe(p, h, &irmd.ipcps) {
-                struct reg_ipcp * ipcp;
-                ipcp = list_entry(p, struct reg_ipcp, next);
-                if (ipcp->layer == NULL)
-                        continue;
-
-                if (ipcp->pid == src)
-                        continue;
-
-                if (ipcp->info.type == IPCP_BROADCAST)
-                        continue;
-
-                len = IPCP_HASH_LEN(ipcp);
-
-                hash = malloc(len);
-                if (hash == NULL) {
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        return NULL;
-                }
-
-                str_hash(ipcp->dir_hash_algo, hash, name);
-
-                pid = ipcp->pid;
-
-                pthread_rwlock_unlock(&irmd.reg_lock);
-
-                if (ipcp_query(pid, hash, len) == 0) {
-                        free(hash);
-                        return ipcp;
-                }
-
-                free(hash);
-
-                pthread_rwlock_rdlock(&irmd.reg_lock);
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        return NULL;
-}
-
-int get_layer_for_ipcp(pid_t  pid,
-                       char * buf)
-{
-        struct reg_ipcp * ipcp;
-
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL || ipcp->layer == NULL)
-                goto fail;
-
-        strcpy(buf, ipcp->layer);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        return 0;
-
- fail:
-        pthread_rwlock_unlock(&irmd.reg_lock);
-        return -1;
-}
-
-static struct reg_name * registry_get_name(const char * name)
-{
-        struct list_head * p;
-
-        list_for_each(p, &irmd.names) {
-                struct reg_name * e = list_entry(p, struct reg_name, next);
-                if (!strcmp(name, e->name))
-                        return e;
-        }
-
-        return NULL;
-}
-
-static struct reg_name * registry_get_name_by_hash(enum hash_algo     algo,
-                                                   const uint8_t *    hash,
-                                                   size_t             len)
-{
-        struct list_head * p;
-        uint8_t * thash;
-
-        thash = malloc(len);
-        if (thash == NULL)
-                return NULL;
-
-        list_for_each(p, &irmd.names) {
-                struct reg_name * n = list_entry(p, struct reg_name, next);
-                str_hash(algo, thash, n->name);
-                if (memcmp(thash, hash, len) == 0) {
-                        free(thash);
-                        return n;
-                }
-        }
-
-        free(thash);
-
-        return NULL;
-}
-
-static int registry_add_name(struct reg_name * n)
-{
-
-        assert(n);
-
-        list_add(&n->next, &irmd.names);
-
-        ++irmd.n_names;
+        waitpid(pid, &status, 0);
 
         return 0;
 }
 
-static void registry_del_name(const char * name)
+int create_ipcp(struct ipcp_info * info)
 {
-        struct reg_name * n;
+        struct timespec abstime;
+        struct timespec timeo = TIMESPEC_INIT_MS(SOCKET_TIMEOUT);
+        int             status;
 
-        n = registry_get_name(name);
-        if (n == NULL)
-                return;
+        assert(info->pid == 0);
 
-        list_del(&n->next);
-        reg_name_destroy(n);
-        --irmd.n_names;
-}
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeo, &abstime);
 
-static void registry_names_del_proc(pid_t pid)
-{
-        struct list_head * p;
-
-        assert(pid > 0);
-
-        list_for_each(p, &irmd.names) {
-                struct reg_name * n = list_entry(p, struct reg_name, next);
-                reg_name_del_pid(n, pid);
-        }
-
-        return;
-}
-
-static void registry_destroy_names(void)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        list_for_each_safe(p, h, &irmd.names) {
-                struct reg_name * n = list_entry(p, struct reg_name, next);
-                list_del(&n->next);
-                reg_name_set_state(n, NAME_NULL);
-                reg_name_destroy(n);
-        }
-}
-
-static int registry_add_prog(struct reg_prog * p)
-{
-        assert(p);
-
-        list_add(&p->next, &irmd.progs);
-
-        return 0;
-}
-
-static void registry_del_prog(const char * prog)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        assert(prog);
-
-        list_for_each_safe(p, h, &irmd.progs) {
-                struct reg_prog * e = list_entry(p, struct reg_prog, next);
-                if (!strcmp(prog, e->prog)) {
-                        list_del(&e->next);
-                        reg_prog_destroy(e);
-                }
-        }
-}
-
-static struct reg_prog * registry_get_prog(const char * prog)
-{
-        struct list_head * p;
-
-        assert(prog);
-
-        list_for_each(p, &irmd.progs) {
-                struct reg_prog * e = list_entry(p, struct reg_prog, next);
-                if (!strcmp(e->prog, prog))
-                        return e;
-        }
-
-        return NULL;
-}
-
-static int registry_add_proc(struct reg_proc * p)
-{
-        assert(p);
-
-        list_add(&p->next, &irmd.procs);
-
-        return 0;
-}
-
-static void registry_del_proc(pid_t pid)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        list_for_each_safe(p, h, &irmd.procs) {
-                struct reg_proc * e = list_entry(p, struct reg_proc, next);
-                if (pid == e->pid) {
-                        list_del(&e->next);
-                        reg_proc_destroy(e);
-                }
-        }
-}
-
-static struct reg_proc * registry_get_proc(pid_t pid)
-{
-        struct list_head * p;
-
-        list_for_each(p, &irmd.procs) {
-                struct reg_proc * e = list_entry(p, struct reg_proc, next);
-                if (pid == e->pid)
-                        return e;
-        }
-
-        return NULL;
-}
-
-pid_t create_ipcp(const struct ipcp_info * info)
-{
-        struct pid_el *    ppid;
-        struct reg_ipcp *  ipcp;
-        pid_t              pid;
-
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
-        ipcp = registry_get_ipcp_by_name(info->name);
-        if (ipcp != NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("IPCP by that name already exists.");
-                return -EPERM;
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        ppid = malloc(sizeof(*ppid));
-        if (ppid == NULL)
-                goto fail_ppid;
-
-        ipcp = reg_ipcp_create(info);
-        if (ipcp == NULL) {
-                log_err("Failed to create IPCP entry.");
-                goto fail_reg_ipcp;
-        }
-
-        pid = ipcp_create(info);
-        if (pid == -1) {
+        if (spawn_ipcp(info) < 0) {
                 log_err("Failed to create IPCP.");
                 goto fail_ipcp;
         }
 
-        ipcp->pid = pid;
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        registry_add_ipcp(ipcp);
-
-        ppid->pid = ipcp->pid;
-        list_add(&ppid->next, &irmd.spawned_pids);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        /* IRMd maintenance will clean up if booting fails. */
-        if (reg_ipcp_wait_boot(ipcp)) {
-                log_err("IPCP %d failed to boot.", pid);
-                return -1;
+        if (reg_create_ipcp(info) < 0) {
+                log_err("Failed to create IPCP entry.");
+                goto fail_reg_ipcp;
         }
 
-        log_info("Created IPCP %d.", pid);
+        if (reg_wait_ipcp_boot(info, &abstime)) {
+                log_err("IPCP %d failed to boot.", info->pid);
+                goto fail_boot;
+        }
 
-        return pid;
+        log_info("Created IPCP %d.", info->pid);
 
- fail_ipcp:
-        reg_ipcp_destroy(ipcp);
+        return 0;
+
+ fail_boot:
+        waitpid(info->pid, &status, 0);
+        reg_destroy_ipcp(info->pid);
+        return -1;
+
  fail_reg_ipcp:
-        free(ppid);
- fail_ppid:
+        kill_ipcp(info->pid);
+ fail_ipcp:
         return -1;
 }
 
-static int create_ipcp_r(pid_t pid,
-                         int   result)
+static int create_ipcp_r(struct ipcp_info * info)
 {
-        struct list_head * p;
-
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
-        list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
-                if (e->pid == pid) {
-                        enum ipcp_state state;
-                        state =  result ? IPCP_NULL : IPCP_OPERATIONAL;
-                        reg_ipcp_set_state(e, state);
-                        break;
-                }
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        return 0;
-}
-
-static void clear_spawned_process(pid_t pid)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        list_for_each_safe(p, h, &(irmd.spawned_pids)) {
-                struct pid_el * a = list_entry(p, struct pid_el, next);
-                if (a->pid == pid) {
-                        list_del(&a->next);
-                        free(a);
-                }
-        }
+        return reg_respond_ipcp(info);
 }
 
 static int destroy_ipcp(pid_t pid)
 {
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        registry_del_ipcp(pid);
-
-        clear_spawned_process(pid);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        if (ipcp_destroy(pid))
+        if (kill_ipcp(pid)) {
                 log_err("Could not destroy IPCP.");
+                goto fail;
+        }
+
+        if (reg_destroy_ipcp(pid)) {
+                log_err("Failed to remove IPCP from registry.");
+                goto fail;
+        }
 
         return 0;
+ fail:
+        return -1;
 }
 
 int bootstrap_ipcp(pid_t                pid,
                    struct ipcp_config * conf)
 {
-        struct reg_ipcp * ipcp;
-        struct layer_info info;
+        struct ipcp_info  info;
+        struct layer_info layer;
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        info.pid = pid;
 
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("No such IPCP: %d.", pid);
-                return -1;
+        if (reg_get_ipcp(&info, NULL) < 0) {
+                log_err("Could not find IPCP %d.", pid);
+                goto fail;
         }
 
-        if (ipcp->info.type != conf->type) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Configuration does not match IPCP type.");
-                return -1;
-        }
+        if (conf->type == IPCP_UDP)
+                conf->layer_info.dir_hash_algo = (enum pol_dir_hash) HASH_MD5;
 
-        if (ipcp_bootstrap(ipcp->pid, conf, &info)) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
+        if (ipcp_bootstrap(pid, conf, &layer)) {
                 log_err("Could not bootstrap IPCP.");
-                return -1;
+                goto fail;
         }
 
-        ipcp->layer = strdup(info.name);
-        if (ipcp->layer == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_warn("Failed to set name of layer.");
-                return -ENOMEM;
+        info.state = IPCP_BOOTSTRAPPED;
+
+        if (reg_set_layer_for_ipcp(&info, &layer) < 0) {
+                log_err("Failed to set layer info for IPCP.");
+                goto fail;
         }
 
-        ipcp->dir_hash_algo = (enum hash_algo) info.dir_hash_algo;
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        log_info("Bootstrapped IPCP %d in layer %s.",
-                 pid, conf->layer_info.name);
+        log_info("Bootstrapped IPCP %d.", pid);
 
         return 0;
+ fail:
+        return -1;
 }
 
 int enroll_ipcp(pid_t        pid,
                 const char * dst)
 {
-        struct reg_ipcp * ipcp;
-        struct layer_info info;
+        struct layer_info layer;
+        struct ipcp_info  info;
 
-        pthread_rwlock_rdlock(&irmd.reg_lock);
+        info.pid = pid;
 
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("No such IPCP.");
-                return -1;
+        if (reg_get_ipcp(&info, NULL) < 0) {
+                log_err("Could not find IPCP.");
+                goto fail;
         }
 
-        if (ipcp->layer != NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("IPCP in wrong state");
-                return -1;
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        if (ipcp_enroll(pid, dst, &info) < 0) {
+        if (ipcp_enroll(pid, dst, &layer) < 0) {
                 log_err("Could not enroll IPCP %d.", pid);
-                return -1;
+                goto fail;
         }
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("No such IPCP.");
-                return -1;
+        if (reg_set_layer_for_ipcp(&info, &layer) < 0) {
+                log_err("Failed to set layer info for IPCP.");
+                goto fail;
         }
 
-        ipcp->layer = strdup(info.name);
-        if (ipcp->layer == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Failed to strdup layer_name.");
-                return -ENOMEM;
-        }
-
-        ipcp->dir_hash_algo = (enum hash_algo) info.dir_hash_algo;
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        log_info("Enrolled IPCP %d in layer %s.",
-                 pid, info.name);
+        log_info("Enrolled IPCP %d in layer %s.", pid, layer.name);
 
         return 0;
+ fail:
+        return -1;
 }
 
 int connect_ipcp(pid_t        pid,
@@ -731,27 +369,19 @@ int connect_ipcp(pid_t        pid,
                  const char * component,
                  qosspec_t    qs)
 {
-        struct reg_ipcp *  ipcp;
-        struct ipcp_info * info;
+        struct ipcp_info info;
 
-        pthread_rwlock_rdlock(&irmd.reg_lock);
+        info.pid = pid;
 
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
+        if (reg_get_ipcp(&info, NULL) < 0) {
                 log_err("No such IPCP.");
                 return -EIPCP;
         }
 
-        info = &ipcp->info;
-
-        if (info->type != IPCP_UNICAST && info->type != IPCP_BROADCAST) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
+        if (info.type != IPCP_UNICAST && info.type != IPCP_BROADCAST) {
                 log_err("Cannot establish connections for this IPCP type.");
                 return -EIPCP;
         }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_dbg("Connecting %s to %s.", component, dst);
 
@@ -770,27 +400,19 @@ static int disconnect_ipcp(pid_t        pid,
                            const char * dst,
                            const char * component)
 {
-        struct reg_ipcp *  ipcp;
-        struct ipcp_info * info;
+        struct ipcp_info info;
 
-        pthread_rwlock_rdlock(&irmd.reg_lock);
+        info.pid = pid;
 
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
+        if (reg_get_ipcp(&info, NULL) < 0) {
                 log_err("No such IPCP.");
                 return -EIPCP;
         }
 
-        info = &ipcp->info;
-
-        if (info->type != IPCP_UNICAST && info->type != IPCP_BROADCAST) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
+        if (info.type != IPCP_UNICAST && info.type != IPCP_BROADCAST) {
                 log_err("Cannot tear down connections for this IPCP type.");
                 return -EIPCP;
         }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
 
         if (ipcp_disconnect(pid, dst, component)) {
                 log_err("Could not disconnect IPCP.");
@@ -803,95 +425,99 @@ static int disconnect_ipcp(pid_t        pid,
         return 0;
 }
 
-int bind_program(const char *  prog,
-                 const char *  name,
-                 uint16_t      flags,
-                 int           argc,
-                 char **       argv)
+int bind_program(char **      exec,
+                 const char * name,
+                 uint8_t      flags)
 {
-        struct reg_prog * p;
-        struct reg_name * n;
+        struct prog_info prog;
+        struct name_info ni;
 
-        if (prog == NULL || name == NULL)
+        if (name == NULL || exec == NULL || exec[0] == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        memset(&prog, 0, sizeof(prog));
+        memset(&ni, 0, sizeof(ni));
 
-        p = registry_get_prog(path_strip(prog));
-        if (p == NULL) {
-                p = reg_prog_create(prog, flags, argc, argv);
-                if (p == NULL) {
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        return -ENOMEM;
+        if (!reg_has_prog(exec[0])) {
+                strcpy(prog.name, path_strip(exec[0]));
+                strcpy(prog.path, exec[0]);
+                if (reg_create_prog(&prog) < 0)
+                        goto fail_prog;
+        }
+
+        if (!reg_has_name(name)) {
+                ni.pol_lb = LB_SPILL;
+                strcpy(ni.name, name);
+                if (reg_create_name(&ni) < 0) {
+                        log_err("Failed to create name %s.", name);
+                        goto fail_name;
                 }
-
-                registry_add_prog(p);
         }
 
-        if (reg_prog_add_name(p, name)) {
-                log_err("Failed adding name.");
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return -ENOMEM;
+        if (reg_bind_prog(name, exec, flags) < 0) {
+                log_err("Failed to bind program %s to name %s", exec[0], name);
+                goto fail_bind;
         }
 
-        n = registry_get_name(name);
-        if (n != NULL && reg_name_add_prog(n, p) < 0)
-                log_err("Failed adding program %s for name %s.", prog, name);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        log_info("Bound program %s to name %s.", prog, name);
+        log_info("Bound program %s to name %s.", exec[0], name);
 
         return 0;
+
+ fail_bind:
+        if (strlen(ni.name) > 0)
+                reg_destroy_name(name);
+ fail_name:
+        if (strlen(prog.name) > 0)
+                reg_destroy_prog(exec[0]);
+ fail_prog:
+        return -1;
 }
 
 int bind_process(pid_t        pid,
                  const char * name)
 {
-        struct reg_proc * pc = NULL;
-        struct reg_name * rn;
-        struct timespec   now;
-        struct timespec   dl = {0, 10 * MILLION};
+        struct timespec  abstime;
+        struct timespec  timeo = TIMESPEC_INIT_MS(10);
+        struct name_info ni;
 
         if (name == NULL)
                 return -EINVAL;
 
-        clock_gettime(PTHREAD_COND_CLOCK, &now);
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeo, &abstime);
 
-        ts_add(&dl, &now, &dl);
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        while (!kill(pid, 0)) {
-                pc = registry_get_proc(pid);
-                if (pc != NULL || ts_diff_ms(&now, &dl) > 0)
-                        break;
-                clock_gettime(PTHREAD_COND_CLOCK, &now);
-                sched_yield();
-        }
-
-        if (pc == NULL) {
+        if (reg_wait_proc(pid, &abstime) < 0) {
                 log_err("Process %d does not %s.", pid,
                         kill(pid, 0) ? "exist" : "respond");
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return -1;
+                goto fail;
         }
 
-        if (reg_proc_add_name(pc, name)) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
+        memset(&ni, 0, sizeof(ni));
+
+        if (!reg_has_name(name)) {
+                ni.pol_lb = LB_SPILL;
+                strcpy(ni.name, name);
+                if (reg_create_name(&ni) < 0) {
+                        log_err("Failed to create name %s.", name);
+                        goto fail;
+                }
+        }
+
+        if (reg_bind_proc(name, pid) < 0) {
                 log_err("Failed to add name %s to process %d.", name, pid);
-                return -1;
+                goto fail_bind;
         }
-
-        rn = registry_get_name(name);
-        if (rn != NULL && reg_name_add_pid(rn, pid) < 0)
-                log_err("Failed adding process %d for name %s.", pid, name);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Bound process %d to name %s.", pid, name);
 
         return 0;
+
+ fail_bind:
+        if (strlen(ni.name) > 0)
+                reg_destroy_name(name);
+ fail:
+        return -1;
+
 }
 
 static int unbind_program(const char * prog,
@@ -900,33 +526,19 @@ static int unbind_program(const char * prog,
         if (prog == NULL)
                 return -EINVAL;
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        if (name == NULL)
-                registry_del_prog(prog);
-        else {
-                struct reg_name * rn;
-                struct reg_prog * pg;
-
-                pg = registry_get_prog(prog);
-                if (pg == NULL) {
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        return -EINVAL;
+        if (name == NULL) {
+                if (reg_destroy_prog(prog) < 0) {
+                        log_err("Failed to unbind %s.", prog);
+                        return -1;
                 }
-
-                reg_prog_del_name(pg, name);
-
-                rn = registry_get_name(name);
-                if (rn != NULL)
-                        reg_name_del_prog(rn, prog);
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        if (name == NULL)
                 log_info("Program %s unbound.", prog);
-        else
-                log_info("All names matching %s unbound for %s.", name, prog);
+        } else {
+                if (reg_unbind_prog(name, prog) < 0) {
+                        log_err("Failed to unbind %s from %s", prog, name);
+                        return -1;
+                }
+                log_info("Name %s unbound for %s.", name, prog);
+        }
 
         return 0;
 }
@@ -934,473 +546,249 @@ static int unbind_program(const char * prog,
 static int unbind_process(pid_t        pid,
                           const char * name)
 {
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        if (name == NULL)
-                registry_del_proc(pid);
-        else {
-                struct reg_name * n;
-                struct reg_proc * p;
-
-                p = registry_get_proc(pid);
-                if (p != NULL)
-                        reg_proc_del_name(p, name);
-
-                n = registry_get_name(name);
-                if (n != NULL)
-                        reg_name_del_pid(n, pid);
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        if (name == NULL)
+        if (name == NULL) {
+                if (reg_destroy_proc(pid) < 0) {
+                        log_err("Failed to unbind %d.", pid);
+                        return -1;
+                }
                 log_info("Process %d unbound.", pid);
-        else
-                log_info("All names matching %s unbound for %d.", name, pid);
+        } else {
+                if (reg_unbind_proc(name, pid) < 0) {
+                        log_err("Failed to unbind %d from %s", pid, name);
+                        return -1;
+                }
+                log_info("Name %s unbound for process %d.", name, pid);
+        }
 
         return 0;
 }
 
-static int get_ipcp_info(ipcp_list_msg_t ** msg,
-                         struct reg_ipcp *  ipcp)
+static int list_ipcps(ipcp_list_msg_t *** ipcps,
+                      size_t *            n_ipcps)
 {
-        *msg = malloc(sizeof(**msg));
-        if (*msg == NULL)
+        int n;
+
+        n = reg_list_ipcps(ipcps);
+        if (n < 0)
                 goto fail;
 
-        ipcp_list_msg__init(*msg);
-
-        (*msg)->name = strdup(ipcp->info.name);
-        if ((*msg)->name == NULL)
-                goto fail_name;
-
-        (*msg)->layer = strdup(
-                ipcp->layer != NULL ? ipcp->layer : "Not enrolled");
-        if ((*msg)->layer == NULL)
-                goto fail_layer;
-
-        (*msg)->pid  = ipcp->pid;
-        (*msg)->type = ipcp->info.type;
+        *n_ipcps = (size_t) n;
 
         return 0;
-
- fail_layer:
-        free((*msg)->name);
- fail_name:
-        free(*msg);
-        *msg = NULL;
  fail:
+        *ipcps = NULL;
+        *n_ipcps = 0;
         return -1;
 }
 
-static ssize_t list_ipcps(ipcp_list_msg_t *** ipcps,
-                          size_t *            n_ipcps)
+int name_create(const struct name_info * info)
 {
-        struct list_head * p;
-        int                i = 0;
+        int ret;
 
-        pthread_rwlock_rdlock(&irmd.reg_lock);
+        assert(info != NULL);
 
-        *n_ipcps = irmd.n_ipcps;
-        if (*n_ipcps == 0) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
+        ret = reg_create_name(info);
+        if (ret == -EEXIST) {
+                log_info("Name %s already exists.", info->name);
                 return 0;
         }
 
-        *ipcps = malloc(irmd.n_ipcps * sizeof(**ipcps));
-        if (*ipcps == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                *n_ipcps = 0;
-                return -ENOMEM;
+        if (ret < 0) {
+                log_err("Failed to create name %s.", info->name);
+                return -1;
         }
 
-        list_for_each(p, &irmd.ipcps) {
-                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
-                if (get_ipcp_info(&((*ipcps)[i]), e) < 0)
-                        goto fail;
-                ++i;
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        return 0;
-
- fail:
-        pthread_rwlock_unlock(&irmd.reg_lock);
-        while (i > 0)
-                ipcp_list_msg__free_unpacked((*ipcps)[--i], NULL);
-
-        free(*ipcps);
-        *n_ipcps = 0;
-        return -ENOMEM;
-}
-
-int name_create(const char *     name,
-                enum pol_balance lb)
-{
-        struct reg_name *  n;
-        struct list_head * p;
-
-        assert(name);
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        if (registry_has_name(name)) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_warn("Name %s already exists.", name);
-                return 0;
-        }
-
-        n = reg_name_create(name, lb);
-        if (n == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_dbg("Could not create name.");
-                return -ENOMEM;
-        }
-
-        if (registry_add_name(n) < 0) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Failed to add name %s.", name);
-                return -ENOMEM;
-        }
-
-        /* check the tables for existing bindings */
-        list_for_each(p, &irmd.procs) {
-                struct list_head * q;
-                struct reg_proc * e;
-                e = list_entry(p, struct reg_proc, next);
-                list_for_each(q, &e->names) {
-                        struct str_el * s;
-                        s = list_entry(q, struct str_el, next);
-                        if (!strcmp(s->str, name))
-                                reg_name_add_pid(n, e->pid);
-                }
-        }
-
-        list_for_each(p, &irmd.progs) {
-                struct list_head * q;
-                struct reg_prog * e;
-                e = list_entry(p, struct reg_prog, next);
-                list_for_each(q, &e->names) {
-                        struct str_el * s;
-                        s = list_entry(q, struct str_el, next);
-                        if (!strcmp(s->str, name))
-                                reg_name_add_prog(n, e);
-                }
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        log_info("Created new name: %s.", name);
+        log_info("Created new name: %s.", info->name);
 
         return 0;
 }
 
 static int name_destroy(const char * name)
 {
-        assert(name);
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        assert(name != NULL);
 
-        if (!registry_has_name(name)) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_warn("Registry entry for %s does not exist.", name);
-                return -ENAME;
+        if (reg_destroy_name(name) < 0) {
+                log_err("Failed to destroy name %s.", name);
+                return -1;
         }
-
-        registry_del_name(name);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
 
         log_info("Destroyed name: %s.", name);
 
         return 0;
 }
 
-static int get_name_info(name_info_msg_t ** msg,
-                         struct reg_name *  n)
+static int list_names(name_info_msg_t *** names,
+                      size_t *            n_names)
 {
-        *msg = malloc(sizeof(**msg));
-        if (*msg == NULL)
+        int n;
+
+        n = reg_list_names(names);
+        if (n < 0)
                 goto fail;
 
-        name_info_msg__init(*msg);
-
-        (*msg)->name = strdup(n->name);
-        if ((*msg)->name == NULL)
-                goto fail_name;
-
-        (*msg)->pol_lb = n->pol_lb;
+        *n_names = (size_t) n;
 
         return 0;
-
- fail_name:
-        free(*msg);
-        *msg = NULL;
  fail:
-        return -1;
-}
-
-static ssize_t list_names(name_info_msg_t *** names,
-                          size_t *            n_names)
-{
-        struct list_head * p;
-        int                i = 0;
-
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
-        *n_names = irmd.n_names;
-        if (*n_names == 0) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return 0;
-        }
-
-        *names = malloc(irmd.n_names * sizeof(**names));
-        if (*names == NULL) {
-                *n_names = 0;
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return -ENOMEM;
-        }
-
-        list_for_each(p, &irmd.names) {
-                struct reg_name * n = list_entry(p, struct reg_name, next);
-                if (get_name_info(&((*names)[i]), n) < 0)
-                        goto fail;
-                ++i;
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        return 0;
-
- fail:
-        pthread_rwlock_unlock(&irmd.reg_lock);
-        while (i > 0)
-                name_info_msg__free_unpacked((*names)[--i], NULL);
-
-        free(*names);
+        *names = NULL;
         *n_names = 0;
-        return -ENOMEM;
+        return -1;
 }
 
 int name_reg(const char * name,
              pid_t        pid)
 {
-        size_t            len;
-        struct reg_ipcp * ipcp;
-        uint8_t *         hash;
-        int               err;
+        struct ipcp_info  info;
+        struct layer_info layer;
+        buffer_t          hash;
 
         assert(name);
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        info.pid = pid;
 
-        if (!registry_has_name(name)) {
-                err = -ENAME;
-                goto fail;
+        if (!reg_has_name(name)) {
+                log_err("Failed to get name %s.", name);
+                return -ENAME;
         }
 
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL) {
-                err = -EIPCP;
-                goto fail;
+        if (reg_get_ipcp(&info, &layer) < 0) {
+                log_err("Failed to get IPCP %d.", pid);
+                return -EIPCP;
         }
 
-        if (ipcp->layer == NULL) {
-                err = -EPERM;
-                goto fail;
+        hash.len = hash_len((enum hash_algo) layer.dir_hash_algo);
+        hash.data = malloc(hash.len);
+        if (hash.data == NULL) {
+                log_err("Failed to malloc hash.");
+                return -ENOMEM;
         }
 
-        len = IPCP_HASH_LEN(ipcp);
+        str_hash((enum hash_algo) layer.dir_hash_algo, hash.data, name);
 
-        hash = malloc(len);
-        if (hash == NULL) {
-                err = -ENOMEM;
-                goto fail;
-        }
-
-        str_hash(ipcp->dir_hash_algo, hash, name);
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        if (ipcp_reg(pid, hash, len)) {
+        if (ipcp_reg(pid, hash)) {
                 log_err("Could not register " HASH_FMT32 " with IPCP %d.",
-                        HASH_VAL32(hash), pid);
-                free(hash);
+                        HASH_VAL32(hash.data), pid);
+                freebuf(hash);
                 return -1;
         }
 
         log_info("Registered %s with IPCP %d as " HASH_FMT32 ".",
-                 name, pid, HASH_VAL32(hash));
+                 name, pid, HASH_VAL32(hash.data));
 
-        free(hash);
+        freebuf(hash);
 
         return 0;
-
-fail:
-        pthread_rwlock_unlock(&irmd.reg_lock);
-        return err;
 }
 
 static int name_unreg(const char * name,
                       pid_t        pid)
 {
-        struct reg_ipcp * ipcp;
-        int               err;
-        uint8_t *         hash;
-        size_t            len;
+        struct ipcp_info  info;
+        struct layer_info layer;
+        buffer_t          hash;
 
         assert(name);
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        info.pid = pid;
 
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL) {
-                err = -EIPCP;
-                goto fail;
+        if (!reg_has_name(name)) {
+                log_err("Failed to get name %s.", name);
+                return -ENAME;
         }
 
-        if (ipcp->layer == NULL) {
-                err = -EPERM;
-                goto fail;
+        if (reg_get_ipcp(&info, &layer) < 0) {
+                log_err("Failed to get IPCP %d.", pid);
+                return -EIPCP;
         }
 
-        len = IPCP_HASH_LEN(ipcp);
-
-        hash = malloc(len);
-        if  (hash == NULL) {
-                err = -ENOMEM;
-                goto fail;
+        hash.len  = hash_len((enum hash_algo) layer.dir_hash_algo);
+        hash.data = malloc(hash.len);
+        if (hash.data == NULL) {
+                log_err("Failed to malloc hash.");
+                return -ENOMEM;
         }
 
-        str_hash(ipcp->dir_hash_algo, hash, name);
+        str_hash((enum hash_algo) layer.dir_hash_algo, hash.data, name);
 
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        if (ipcp_unreg(pid, hash, len)) {
+        if (ipcp_unreg(pid, hash)) {
                 log_err("Could not unregister %s with IPCP %d.", name, pid);
-                free(hash);
+                freebuf(hash);
                 return -1;
         }
 
         log_info("Unregistered %s from %d.", name, pid);
 
-        free(hash);
+        freebuf(hash);
 
         return 0;
-
- fail:
-        pthread_rwlock_unlock(&irmd.reg_lock);
-        return err;
 }
 
-static int proc_announce(pid_t        pid,
-                         const char * prog)
+static int proc_announce(const struct proc_info * info)
 {
-        struct reg_proc * rpc;
-        struct reg_prog * rpg;
-
-        assert(prog);
-
-        rpc = reg_proc_create(pid, prog);
-        if (rpc == NULL)
-                return -ENOMEM;
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        registry_add_proc(rpc);
-
-        /* Copy listen names from program if it exists. */
-        rpg = registry_get_prog(rpc->prog);
-        if (rpg != NULL) {
-                struct list_head * p;
-                list_for_each(p, &rpg->names) {
-                        struct str_el * s = list_entry(p, struct str_el, next);
-                        struct str_el * n = malloc(sizeof(*n));
-                        if (n == NULL) {
-                                pthread_rwlock_unlock(&irmd.reg_lock);
-                                return -ENOMEM;
-                        }
-
-                        n->str = strdup(s->str);
-                        if (n->str == NULL) {
-                                pthread_rwlock_unlock(&irmd.reg_lock);
-                                free(n);
-                                return -ENOMEM;
-                        }
-
-                        list_add(&n->next, &rpc->names);
-                        log_dbg("Process %d inherits name %s from program %s.",
-                                pid, n->str, rpc->prog);
-                }
+        if (reg_create_proc(info) < 0) {
+                log_err("Failed to add process %d.", info->pid);
+                goto fail_proc;
         }
 
-        pthread_rwlock_unlock(&irmd.reg_lock);
+        log_info("Process added: %d (%s).", info->pid, info->prog);
+
+        return 0;
+
+ fail_proc:
+        return -1;
+}
+
+static int proc_exit(pid_t pid)
+{
+        if (reg_has_ipcp(pid) && reg_destroy_ipcp(pid) < 0)
+                log_warn("Failed to remove IPCP %d.", pid);
+
+        if (reg_destroy_proc(pid) < 0)
+                log_err("Failed to remove process %d.", pid);
+
+        log_info("Process removed: %d.", pid);
 
         return 0;
 }
 
-static int flow_accept(pid_t             pid,
-                       struct timespec * dl,
-                       struct reg_flow * f_out,
-                       buffer_t *        data)
+static void __cleanup_pkp(void * pkp)
 {
-        struct reg_flow *  f;
-        struct reg_proc *  rp;
-        struct reg_name *  n;
-        struct list_head * p;
-        pid_t              pid_n;
-        pid_t              pid_n_1;
-        int                flow_id;
-        int                ret;
-        buffer_t           tmp = {NULL, 0};
-        void *             pkp; /* my public key pair */
-        ssize_t            key_len;
-        uint8_t            buf[MSGBUFSZ];
-        uint8_t *          s = NULL;
-        int                err;
+        if (pkp != NULL)
+                crypt_dh_pkp_destroy(pkp);
+}
+
+static void __cleanup_flow(void * flow)
+{
+        reg_destroy_flow(((struct flow_info *) flow)->id);
+}
+
+static int flow_accept(struct flow_info * flow,
+                       buffer_t *         data,
+                       struct timespec *  abstime)
+{
+        uint8_t   buf[MSGBUFSZ];
+        buffer_t  lpk; /* local public key           */
+        buffer_t  rpk; /* remote public key          */
+        void *    pkp; /* my public/private key pair */
+        ssize_t   key_len;
+        uint8_t * s;
+        int       err;
 
         /* piggyback of user data not yet implemented */
         assert(data != NULL && data->len == 0 && data->data == NULL);
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        rp = registry_get_proc(pid);
-        if (rp == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Unknown process %d calling accept.", pid);
-                return -EINVAL;
-        }
-
-        log_dbg("New instance (%d) of %s added.", pid, rp->prog);
-        log_dbg("This process accepts flows for:");
-
-        list_for_each(p, &rp->names) {
-                struct str_el * s = list_entry(p, struct str_el, next);
-                log_dbg("        %s", s->str);
-                n = registry_get_name(s->str);
-                if (n != NULL)
-                        reg_name_add_pid(n, pid);
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        ret = reg_proc_sleep(rp, dl);
-        if (ret == -ETIMEDOUT)
-                return -ETIMEDOUT;
-
-        if (ret == -1)
-                return -EPIPE;
-
-        if (irmd_get_state() != IRMD_RUNNING) {
-                log_dbg("Terminating accept: IRMd shutting down.");
-                return -EIRMD;
+        if (!reg_has_proc(flow->n_pid)) {
+                log_err("Unknown process %d calling accept.", flow->n_pid);
+                err = -EINVAL;
+                goto fail;
         }
 
         s = malloc(SYMMKEYSZ);
         if (s == NULL) {
-                log_err("Failed to malloc symmetric key.");
+                log_err("Failed to malloc symmkey.");
                 err = -ENOMEM;
-                goto fail_malloc_s;
+                goto fail;
         }
 
         key_len = crypt_dh_pkp_create(&pkp, buf);
@@ -1410,242 +798,245 @@ static int flow_accept(pid_t             pid,
                 goto fail_pkp;
         }
 
-        log_dbg("Generated ephemeral keys for %d.", pid);
+        lpk.data = buf;
+        lpk.len  = (size_t) key_len;
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        log_dbg("Generated ephemeral keys for %d.", flow->n_pid);
 
-        f = registry_get_pending_flow_for_pid(pid);
-        if (f == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_warn("Port_id was not created yet.");
-                err = -EPERM;
-                goto fail_rp;
+        if (reg_create_flow(flow) < 0) {
+                log_err("Failed to create flow.");
+                err = -EBADF;
+                goto fail_flow;
         }
 
-        pid_n   = f->n_pid;
-        pid_n_1 = f->n_1_pid;
-        flow_id = f->flow_id;
-
-        rp = registry_get_proc(pid);
-        if (rp == NULL) {
-                list_del(&f->next);
-                bmp_release(irmd.flow_ids, f->flow_id);
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, -1, tmp);
-                clear_reg_flow(f);
-                reg_flow_set_state(f, FLOW_NULL);
-                reg_flow_destroy(f);
-                log_dbg("Process gone while accepting flow.");
-                err = -EPERM;
-                goto fail_rp;
+        if (reg_prepare_flow_accept(flow, &lpk) < 0) {
+                log_err("Failed to prepare accept.");
+                err = -EBADF;
+                goto fail_wait;
         }
 
-        pthread_mutex_lock(&rp->lock);
+        pthread_cleanup_push(__cleanup_flow, flow);
+        pthread_cleanup_push(__cleanup_pkp, pkp);
+        pthread_cleanup_push(free, s);
 
-        n = rp->name;
+        err = reg_wait_flow_accepted(flow, &rpk, abstime);
 
-        pthread_mutex_unlock(&rp->lock);
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
 
-        if (reg_name_get_state(n) != NAME_FLOW_ARRIVED) {
-                list_del(&f->next);
-                bmp_release(irmd.flow_ids, f->flow_id);
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, -1, tmp);
-                clear_reg_flow(f);
-                reg_flow_set_state(f, FLOW_NULL);
-                reg_flow_destroy(f);
-                log_err("Entry in wrong state.");
-                err = -EPERM;
-                goto fail_rp;
+        if (err == -ETIMEDOUT) {
+                log_err("Flow accept timed out.");
+                goto fail_wait;
         }
 
-        registry_names_del_proc(pid);
+        if (err == -1) {
+                log_dbg("Flow accept terminated.");
+                err = -EPIPE;
+                goto fail_wait;
+        }
 
-        f_out->flow_id = f->flow_id;
-        f_out->n_pid   = f->n_pid;
-        f_out->n_1_pid = f->n_1_pid;
-        f_out->qs      = f->qs;
-        f_out->mpl     = f->mpl;
+        assert(err == 0);
 
-        if (f->qs.cypher_s != 0) { /* crypto requested */
-                tmp.len = key_len; /* send this pubkey */
-                tmp.data = (uint8_t *) buf;
-
-                if (crypt_dh_derive(pkp, f->data.data, f->data.len, s) < 0) {
-                        list_del(&f->next);
-                        bmp_release(irmd.flow_ids, f->flow_id);
-                        freebuf(f->data);
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        clear_reg_flow(f);
-                        reg_flow_set_state(f, FLOW_NULL);
-                        reg_flow_destroy(f);
-                        log_err("Failed to derive common secret for %d.",
-                                flow_id);
+        if (flow->qs.cypher_s != 0) { /* crypto requested */
+                if (crypt_dh_derive(pkp, rpk, s) < 0) {
+                        log_err("Failed to derive secret for %d.", flow->id);
                         err = -ECRYPT;
-                        goto fail_rp;
+                        goto fail_derive;
                 }
-        }
-
-        freebuf(f->data);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        if (ipcp_flow_alloc_resp(pid_n_1, flow_id, pid_n, 0, tmp)) {
-                pthread_rwlock_wrlock(&irmd.reg_lock);
-                list_del(&f->next);
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_dbg("Failed to respond to alloc. Port_id invalidated.");
-                clear_reg_flow(f);
-                reg_flow_set_state(f, FLOW_NULL);
-                reg_flow_destroy(f);
-                err = -EPERM;
-                goto fail_rp;
-        }
-
-        reg_flow_set_state(f, FLOW_ALLOCATED);
-
-        crypt_dh_pkp_destroy(pkp);
-
-        if (f_out->qs.cypher_s > 0) {
+                freebuf(rpk);
                 data->data = s;
                 data->len  = SYMMKEYSZ;
+                s= NULL;
         } else {
-                free(s);
+                clrbuf(lpk);
         }
 
-        log_info("Flow on flow_id %d allocated.", f->flow_id);
+        if (ipcp_flow_alloc_resp(flow, 0, lpk) < 0) {
+                log_err("Failed to respond to flow allocation.");
+                err = -EIPCP;
+                goto fail_alloc_resp;
+        }
+
+        crypt_dh_pkp_destroy(pkp);
+        free(s);
 
         return 0;
 
- fail_rp:
+ fail_derive:
+        freebuf(rpk);
+        clrbuf(lpk);
+        ipcp_flow_alloc_resp(flow, err, lpk);
+ fail_alloc_resp:
+        flow->state = FLOW_NULL;
+ fail_wait:
+        reg_destroy_flow(flow->id);
+ fail_flow:
         crypt_dh_pkp_destroy(pkp);
  fail_pkp:
         free(s);
- fail_malloc_s:
+ fail:
         return err;
 }
 
-static int flow_join(pid_t              pid,
+static int flow_join(struct flow_info * flow,
                      const char *       dst,
-                     qosspec_t          qs,
-                     struct timespec *  dl,
-                     struct reg_flow *  f_out)
+                     struct timespec *  abstime)
 {
-        struct reg_flow * f;
-        struct reg_ipcp * ipcp;
-        int               flow_id;
-        int               state;
-        uint8_t *         hash;
-
-        log_info("Allocating flow for %d to %s.", pid, dst);
-
-        ipcp = registry_get_ipcp_by_layer(dst);
-        if (ipcp == NULL) {
-                log_info("Layer %s unreachable.", dst);
-                return -1;
-        }
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        flow_id = bmp_allocate(irmd.flow_ids);
-        if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Could not allocate flow_id.");
-                return -EBADF;
-        }
-
-        f = reg_flow_create(pid, ipcp->pid, flow_id, qs);
-        if (f == NULL) {
-                bmp_release(irmd.flow_ids, flow_id);
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Could not allocate flow_id.");
-                return -ENOMEM;
-        }
-
-        list_add(&f->next, &irmd.flows);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        assert(reg_flow_get_state(f) == FLOW_ALLOC_PENDING);
-
-        hash = malloc(IPCP_HASH_LEN(ipcp));
-        if  (hash == NULL)
-                /* sanitizer cleans this */
-                return -ENOMEM;
-
-        str_hash(ipcp->dir_hash_algo, hash, dst);
-
-        if (ipcp_flow_join(ipcp->pid, flow_id, pid, hash,
-                                IPCP_HASH_LEN(ipcp), qs)) {
-                reg_flow_set_state(f, FLOW_NULL);
-                /* sanitizer cleans this */
-                log_info("Flow_join failed.");
-                free(hash);
-                return -EAGAIN;
-        }
-
-        free(hash);
-
-        state = reg_flow_wait_state(f, FLOW_ALLOCATED, dl);
-        if (state != FLOW_ALLOCATED) {
-                if (state == -ETIMEDOUT) {
-                        log_dbg("Flow allocation timed out");
-                        return -ETIMEDOUT;
-                }
-
-                log_info("Pending flow to %s torn down.", dst);
-                return -EPIPE;
-        }
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        assert(reg_flow_get_state(f) == FLOW_ALLOCATED);
-
-        f_out->flow_id = f->flow_id;
-        f_out->n_pid   = f->n_pid;
-        f_out->n_1_pid = f->n_1_pid;
-        f_out->mpl     = f->mpl;
-
-        assert(f->data.data == NULL);
-        assert(f->data.len  == 0);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        log_info("Flow on flow_id %d allocated.", flow_id);
-
-        return 0;
-}
-
-static int flow_alloc(pid_t              pid,
-                      const char *       dst,
-                      qosspec_t          qs,
-                      struct timespec *  dl,
-                      struct reg_flow *  f_out,
-                      buffer_t *         data)
-{
-        struct reg_flow * f;
-        struct reg_ipcp * ipcp;
-        int               flow_id;
-        int               state;
-        uint8_t *         hash;
-        ssize_t           key_len;
-        void *            pkp; /* my public key pair */
-        buffer_t          tmp = {NULL, 0}; /* buffer for public key */
-        uint8_t           buf[MSGBUFSZ];
-        uint8_t *         s = NULL;
+        struct ipcp_info  ipcp;
+        struct layer_info layer;
+        buffer_t          hash;
+        buffer_t          pbuf = {NULL, 0}; /* nothing to piggyback */
         int               err;
 
-        log_info("Allocating flow for %d to %s.", pid, dst);
+        log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
+
+        if (reg_create_flow(flow) < 0) {
+                log_err("Failed to create flow.");
+                err = -EBADF;
+                goto fail_flow;
+        }
+
+        strcpy(layer.name, dst);
+        if (reg_get_ipcp_by_layer(&ipcp, &layer) < 0) {
+                log_err("Failed to get IPCP for layer %s.", dst);
+                err = -EIPCP;
+                goto fail_ipcp;
+        }
+
+        hash.len = hash_len((enum hash_algo) layer.dir_hash_algo);
+        hash.data = malloc(hash.len);
+        if (hash.data == NULL) {
+                log_err("Failed to malloc hash buffer.");
+                err = -ENOMEM;
+                goto fail_ipcp;
+        }
+
+        reg_prepare_flow_alloc(flow);
+
+        if (ipcp_flow_join(flow, hash)) {
+                log_err("Flow join with layer %s failed.", dst);
+                err = -ENOTALLOC;
+                goto fail_alloc;
+        }
+
+        pthread_cleanup_push(__cleanup_flow, flow);
+        pthread_cleanup_push(free, hash.data);
+
+        err = reg_wait_flow_allocated(flow, &pbuf, abstime);
+
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+
+        if (err == -ETIMEDOUT) {
+                log_err("Flow join timed out.");
+                goto fail_alloc;
+        }
+
+        if (err == -1) {
+                log_dbg("Flow join terminated.");
+                err = -EPIPE;
+                goto fail_alloc;
+        }
+
+        assert(err == 0);
+
+        freebuf(hash);
+
+        return 0;
+
+ fail_alloc:
+        freebuf(hash);
+ fail_ipcp:
+        reg_destroy_flow(flow->id);
+ fail_flow:
+        return err;
+}
+
+static int get_ipcp_by_dst(const char *     dst,
+                           pid_t *          pid,
+                           buffer_t *       hash)
+{
+        ipcp_list_msg_t ** ipcps;
+        int                n;
+        int                i;
+        int                err = -EIPCP;
+
+        n = reg_list_ipcps(&ipcps);
+
+        /* Clean up the ipcp_msgs in this loop */
+        for (i = 0; i < n; ++i) {
+                enum hash_algo algo;
+                enum ipcp_type type;
+                pid_t          tmp;
+                bool           enrolled;
+
+                type = ipcps[i]->type;
+                algo = ipcps[i]->hash_algo;
+                hash->len  = hash_len(algo);
+
+                tmp = ipcps[i]->pid;
+
+                enrolled = strcmp(ipcps[i]->layer, "Not enrolled.") != 0;
+
+                ipcp_list_msg__free_unpacked(ipcps[i], NULL);
+
+                if (type == IPCP_BROADCAST)
+                        continue;
+
+                if (err == 0 /* solution found */ || !enrolled)
+                        continue;
+
+                hash->data = malloc(hash->len);
+                if (hash->data == NULL) {
+                        log_warn("Failed to malloc hash for query.");
+                        err = -ENOMEM;
+                        continue;
+                }
+
+                str_hash(algo, hash->data, dst);
+
+                if (ipcp_query(tmp, *hash) < 0) {
+                        freebuf(*hash);
+                        continue;
+                }
+
+                *pid = tmp;
+
+                err = 0;
+        }
+
+        free(ipcps);
+
+        return err;
+}
+
+static int flow_alloc(struct flow_info * flow,
+                      const char *       dst,
+                      buffer_t *         data,
+                      struct timespec *  abstime)
+{
+        uint8_t   buf[MSGBUFSZ];
+        buffer_t  lpk ={NULL, 0}; /* local public key           */
+        buffer_t  rpk;            /* remote public key          */
+        void *    pkp = NULL;     /* my public/private key pair */
+        uint8_t * s = NULL;
+        buffer_t  hash;
+        int       err;
 
         /* piggyback of user data not yet implemented */
         assert(data != NULL && data->len == 0 && data->data == NULL);
 
-        if (qs.cypher_s > 0) {
+        log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
+
+        if (flow->qs.cypher_s > 0) {
+                ssize_t key_len;
+
                 s = malloc(SYMMKEYSZ);
                 if (s == NULL) {
-                        log_err("Failed to malloc symmetric key.");
+                        log_err("Failed to malloc symmetric key");
                         err = -ENOMEM;
-                        goto fail_malloc_s;
+                        goto fail_malloc;
                 }
 
                 key_len = crypt_dh_pkp_create(&pkp, buf);
@@ -1655,502 +1046,230 @@ static int flow_alloc(pid_t              pid,
                         goto fail_pkp;
                 }
 
-                log_dbg("Generated ephemeral keys for %d.", pid);
+                lpk.data = buf;
+                lpk.len = (size_t) key_len;
 
-                tmp.data = (uint8_t *) buf;
-                tmp.len  = (size_t)    key_len;
+                log_dbg("Generated ephemeral keys for %d.", flow->n_pid);
         }
 
-        ipcp = registry_get_ipcp_by_dst_name(dst, pid);
-        if (ipcp == NULL) {
-                log_info("Destination %s unreachable.", dst);
-                err = -ENOTALLOC;
-                goto fail_ipcp;
-        }
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        flow_id = bmp_allocate(irmd.flow_ids);
-        if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Could not allocate flow_id.");
+        if (reg_create_flow(flow) < 0) {
+                log_err("Failed to create flow.");
                 err = -EBADF;
+                goto fail_flow;
+        }
+
+        if (get_ipcp_by_dst(dst, &flow->n_1_pid, &hash) < 0) {
+                log_err("Failed to find IPCP for %s.", dst);
+                err = -EIPCP;
                 goto fail_ipcp;
         }
 
-        f = reg_flow_create(pid, ipcp->pid, flow_id, qs);
-        if (f == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Could not allocate flow_id.");
-                err = -ENOMEM;
-                goto fail_flow;
-        }
+        reg_prepare_flow_alloc(flow);
 
-        list_add(&f->next, &irmd.flows);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        assert(reg_flow_get_state(f) == FLOW_ALLOC_PENDING);
-
-        hash = malloc(IPCP_HASH_LEN(ipcp));
-        if  (hash == NULL) {
-                /* sanitizer cleans regflow */
-                err = -ENOMEM;
-                goto fail_flow;
-        }
-
-        str_hash(ipcp->dir_hash_algo, hash, dst);
-
-        if (ipcp_flow_alloc(ipcp->pid, flow_id, pid, hash,
-                            IPCP_HASH_LEN(ipcp), qs, tmp)) {
-                reg_flow_set_state(f, FLOW_NULL);
-                /* sanitizer cleans this */
-                log_warn("Flow_allocation %d failed.", flow_id);
+        if (ipcp_flow_alloc(flow, hash, lpk)) {
+                log_err("Flow allocation %d failed.", flow->id);
                 err = -ENOTALLOC;
                 goto fail_alloc;
         }
 
-        state = reg_flow_wait_state(f, FLOW_ALLOCATED, dl);
-        if (state != FLOW_ALLOCATED) {
-                if (state == -ETIMEDOUT) {
-                        log_err("Flow allocation timed out");
-                        err = -ETIMEDOUT;
-                        goto fail_alloc;
-                }
+        pthread_cleanup_push(__cleanup_flow, flow);
+        pthread_cleanup_push(__cleanup_pkp, pkp);
+        pthread_cleanup_push(free, hash.data);
+        pthread_cleanup_push(free, s);
 
-                log_warn("Pending flow to %s torn down.", dst);
+        err = reg_wait_flow_allocated(flow, &rpk, abstime);
+
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+
+        if (err == -ETIMEDOUT) {
+                log_err("Flow allocation timed out.");
+                goto fail_alloc;
+        }
+
+        if (err == -1) {
+                log_dbg("Flow allocation terminated.");
                 err = -EPIPE;
                 goto fail_alloc;
         }
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+        assert(err == 0);
 
-        assert(reg_flow_get_state(f) == FLOW_ALLOCATED);
-
-        f_out->flow_id = f->flow_id;
-        f_out->n_pid   = f->n_pid;
-        f_out->n_1_pid = f->n_1_pid;
-        f_out->mpl     = f->mpl;
-        if (qs.cypher_s > 0 &&
-            crypt_dh_derive(pkp, f->data.data, f->data.len, s) < 0) {
-                freebuf(f->data);
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Failed to derive common secret for %d.", flow_id);
-                err = -ECRYPT;
-                goto fail_alloc;
-        }
-
-        freebuf(f->data);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        free(hash);
-
-        if (qs.cypher_s > 0) {
+        if (flow->qs.cypher_s != 0) { /* crypto requested */
+                if (crypt_dh_derive(pkp, rpk, s) < 0) {
+                        log_err("Failed to derive secret for %d.", flow->id);
+                        err = -ECRYPT;
+                        goto fail_derive;
+                }
                 crypt_dh_pkp_destroy(pkp);
+                freebuf(rpk);
                 data->data = s;
                 data->len  = SYMMKEYSZ;
+                s = NULL;
         }
 
-        log_info("Flow on flow_id %d allocated.", flow_id);
+        freebuf(hash);
+        free(s);
 
         return 0;
 
+ fail_derive:
+        freebuf(rpk);
+        flow->state = FLOW_DEALLOCATED;
  fail_alloc:
-        free(hash);
- fail_flow:
-       /* Sanitize cleans bmp_release(irmd.flow_ids, flow_id); */
+        freebuf(hash);
  fail_ipcp:
-        if (qs.cypher_s > 0)
-                crypt_dh_pkp_destroy(pkp);
+        reg_destroy_flow(flow->id);
+ fail_flow:
+        if (flow->qs.cypher_s > 0)
+               crypt_dh_pkp_destroy(pkp);
  fail_pkp:
         free(s);
- fail_malloc_s:
+ fail_malloc:
         return err;
-
 }
 
-static int flow_dealloc(pid_t  pid,
-                        int    flow_id,
-                        time_t timeo)
+static int wait_for_accept(enum hash_algo    algo,
+                           const uint8_t *   hash)
 {
-        pid_t n_1_pid = -1;
-        int   ret = 0;
+        struct timespec   timeo = TIMESPEC_INIT_MS(IRMD_REQ_ARR_TIMEOUT);
+        struct timespec   abstime;
+        char **           exec;
+        int               ret;
 
-        struct reg_flow * f = NULL;
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeo, &abstime);
 
-        log_dbg("Deallocating flow %d for process %d.",
-                flow_id, pid);
+        ret = reg_wait_flow_accepting(algo, hash, &abstime);
+        if (ret == -ETIMEDOUT) {
+                if (reg_get_exec(algo, hash, &exec) < 0) {
+                        log_dbg("No program bound to " HASH_FMT32 ".",
+                                HASH_VAL32(hash));
+                        goto fail;
+                }
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
+                log_info("Autostarting %s.", exec[0]);
 
-        f = registry_get_flow(flow_id);
-        if (f == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_dbg("Deallocate unknown port %d by %d.", flow_id, pid);
-                return 0;
+                if (spawn_program(exec) < 0) {
+                        log_dbg("Failed to autostart " HASH_FMT32 ".",
+                                HASH_VAL32(hash));
+                        goto fail_spawn;
+                }
+
+                ts_add(&abstime, &timeo, &abstime);
+
+                ret = reg_wait_flow_accepting(algo, hash, &abstime);
+                if (ret == -ETIMEDOUT)
+                        goto fail_spawn;
+
+                argvfree(exec);
         }
 
-        if (pid == f->n_pid) {
-                f->n_pid = -1;
-                n_1_pid = f->n_1_pid;
-        } else if (pid == f->n_1_pid) {
-                f->n_1_pid = -1;
-        } else {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_dbg("Dealloc called by wrong process.");
-                return -EPERM;
+        return ret;
+
+ fail_spawn:
+        argvfree(exec);
+ fail:
+        return -1;
+}
+
+static int flow_req_arr(struct flow_info * flow,
+                        const uint8_t *    hash,
+                        buffer_t *         data)
+{
+        struct ipcp_info  info;
+        struct layer_info layer;
+        enum hash_algo    algo;
+        int               ret;
+
+        info.pid = flow->n_1_pid;
+
+        log_info("Flow req arrived from IPCP %d for " HASH_FMT32 ".",
+                 info.pid, HASH_VAL32(hash));
+
+        if (reg_get_ipcp(&info, &layer) < 0) {
+                log_err("No IPCP with pid %d.", info.pid);
+                ret = -EIPCP;
+                goto fail;
         }
 
-        if (reg_flow_get_state(f) == FLOW_DEALLOC_PENDING) {
-                list_del(&f->next);
-                if ((kill(f->n_pid, 0) < 0 && f->n_1_pid == -1) ||
-                    (kill(f->n_1_pid, 0) < 0 && f->n_pid == -1))
-                        reg_flow_set_state(f, FLOW_NULL);
-                clear_reg_flow(f);
-                reg_flow_destroy(f);
-                bmp_release(irmd.flow_ids, flow_id);
-                log_info("Completed deallocation of flow_id %d by process %d.",
-                         flow_id, pid);
-        } else {
-                reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                log_dbg("Partial deallocation of flow_id %d by process %d.",
-                        flow_id, pid);
+        algo = (enum hash_algo) layer.dir_hash_algo;
+
+        ret = wait_for_accept(algo, hash);
+        if (ret < 0) {
+                log_err("No activeprocess for " HASH_FMT32 ".",
+                       HASH_VAL32(hash));
+                goto fail;
         }
 
-        pthread_rwlock_unlock(&irmd.reg_lock);
+        flow->id    = ret;
+        flow->state = FLOW_ALLOCATED;
 
-        if (n_1_pid != -1)
-                ret = ipcp_flow_dealloc(n_1_pid, flow_id, timeo);
+        ret = reg_respond_accept(flow, data);
+        if (ret < 0) {
+                log_err("Failed to respond to flow %d.", flow->id);
+                goto fail;
+        }
 
+        return 0;
+ fail:
         return ret;
 }
 
-static pid_t auto_execute(char ** argv)
+static int flow_alloc_reply(struct flow_info * flow,
+                            int                response,
+                            buffer_t *         data)
 {
-        pid_t       pid;
-        struct stat s;
+        flow->state = response ? FLOW_DEALLOCATED : FLOW_ALLOCATED;
 
-        if (stat(argv[0], &s) != 0) {
-                log_warn("Program %s does not exist.", argv[0]);
-                return -1;
+        if (reg_respond_alloc(flow, data) < 0) {
+                log_err("Failed to reply to flow %d.", flow->id);
+                flow->state = FLOW_DEALLOCATED;
+                return -EBADF;
         }
 
-        if (!(s.st_mode & S_IXUSR)) {
-                log_warn("Program %s is not executable.", argv[0]);
-                return -1;
-        }
-
-        if (posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL)) {
-                log_err("Failed to spawn new process");
-                return -1;
-        }
-
-        log_info("Instantiated %s as process %d.", argv[0], pid);
-
-        return pid;
+        return 0;
 }
 
-static int flow_req_arr(pid_t             pid,
-                        struct reg_flow * f_out,
-                        const uint8_t *   hash,
-                        time_t            mpl,
-                        qosspec_t         qs,
-                        buffer_t          data)
+static int flow_dealloc(struct flow_info * flow,
+                        time_t             timeo)
 {
-        struct reg_name * n;
-        struct reg_prog * rpg;
-        struct reg_proc * rpc;
-        struct reg_flow * f;
-        struct reg_ipcp * ipcp;
+        log_info("Deallocating flow %d for process %d.",
+                 flow->id, flow->n_pid);
 
-        struct pid_el *   c_pid;
-        pid_t             h_pid;
-        int               flow_id;
+        reg_dealloc_flow(flow);
 
-        struct timespec   wt = {IRMD_REQ_ARR_TIMEOUT / 1000,
-                                (IRMD_REQ_ARR_TIMEOUT % 1000) * MILLION};
-
-        log_dbg("Flow req arrived from IPCP %d for " HASH_FMT32 ".",
-                pid, HASH_VAL32(hash));
-
-        pthread_rwlock_rdlock(&irmd.reg_lock);
-
-        ipcp = registry_get_ipcp_by_pid(pid);
-        if (ipcp == NULL) {
-                log_err("IPCP died.");
+         if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, timeo) < 0) {
+                log_err("Failed to request dealloc from %d.", flow->n_1_pid);
                 return -EIPCP;
-        }
+         }
 
-        n = registry_get_name_by_hash(ipcp->dir_hash_algo,
-                                      hash, IPCP_HASH_LEN(ipcp));
-        if (n == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Unknown hash: " HASH_FMT32 ".", HASH_VAL32(hash));
-                return -1;
-        }
+         return 0;
+}
 
-        log_info("Flow request arrived for %s.", n->name);
+static int flow_dealloc_resp(struct flow_info * flow)
+{
+        reg_dealloc_flow_resp(flow);
 
-        pthread_rwlock_unlock(&irmd.reg_lock);
+        assert(flow->state == FLOW_DEALLOCATED);
 
-        /* Give the process a bit of slop time to call accept */
-        if (reg_name_leave_state(n, NAME_IDLE, &wt) == -1) {
-                log_err("No processes for " HASH_FMT32 ".", HASH_VAL32(hash));
-                return -1;
-        }
+        reg_destroy_flow(flow->id);
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        switch (reg_name_get_state(n)) {
-        case NAME_IDLE:
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("No processes for " HASH_FMT32 ".", HASH_VAL32(hash));
-                return -1;
-        case NAME_AUTO_ACCEPT:
-                c_pid = malloc(sizeof(*c_pid));
-                if (c_pid == NULL) {
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        return -1;
-                }
-
-                reg_name_set_state(n, NAME_AUTO_EXEC);
-                rpg = registry_get_prog(reg_name_get_prog(n));
-                if (rpg == NULL
-                    || (c_pid->pid = auto_execute(rpg->argv)) < 0) {
-                        reg_name_set_state(n, NAME_AUTO_ACCEPT);
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        log_err("Could not start program for reg_entry %s.",
-                                n->name);
-                        free(c_pid);
-                        return -1;
-                }
-
-                list_add(&c_pid->next, &irmd.spawned_pids);
-
-                pthread_rwlock_unlock(&irmd.reg_lock);
-
-                if (reg_name_leave_state(n, NAME_AUTO_EXEC, NULL))
-                        return -1;
-
-                pthread_rwlock_wrlock(&irmd.reg_lock);
-                /* FALLTHRU */
-        case NAME_FLOW_ACCEPT:
-                h_pid = reg_name_get_pid(n);
-                if (h_pid == -1) {
-                        pthread_rwlock_unlock(&irmd.reg_lock);
-                        log_err("Invalid process id returned.");
-                        return -1;
-                }
-
-                break;
-        default:
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("IRMd in wrong state.");
-                return -1;
-        }
-
-        flow_id = bmp_allocate(irmd.flow_ids);
-        if (!bmp_is_id_valid(irmd.flow_ids, flow_id)) {
-                log_err("Out of flow ids.");
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return -1;
-        }
-
-        f = reg_flow_create(h_pid, pid, flow_id, qs);
-        if (f == NULL) {
-                bmp_release(irmd.flow_ids, flow_id);
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Could not allocate flow_id.");
-                return -1;
-        }
-
-        f->state = FLOW_ALLOC_REQ_PENDING;
-        f->mpl   = mpl;
-        f->data  = data;
-
-        list_add(&f->next, &irmd.flows);
-
-        reg_name_set_state(n, NAME_FLOW_ARRIVED);
-
-        rpc = registry_get_proc(h_pid);
-        if (rpc == NULL) {
-                clear_reg_flow(f);
-                bmp_release(irmd.flow_ids, f->flow_id);
-                list_del(&f->next);
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                log_err("Could not get process table entry for %d.", h_pid);
-                freebuf(f->data);
-                reg_flow_destroy(f);
-                return -1;
-        }
-
-        reg_proc_wake(rpc, n);
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        reg_name_leave_state(n, NAME_FLOW_ARRIVED, NULL);
-
-        f_out->flow_id = flow_id;
-        f_out->n_pid   = h_pid;
+        log_info("Completed deallocation of flow_id %d by process %d.",
+                 flow->id, flow->n_1_pid);
 
         return 0;
 }
 
-static int flow_alloc_reply(int      flow_id,
-                            int      response,
-                            time_t   mpl,
-                            buffer_t data)
-{
-        struct reg_flow * f;
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        f = registry_get_flow(flow_id);
-        if (f == NULL) {
-                pthread_rwlock_unlock(&irmd.reg_lock);
-                return -1;
-        }
-
-        f->mpl = mpl;
-
-        if (!response)
-                reg_flow_set_state(f, FLOW_ALLOCATED);
-        else
-                reg_flow_set_state(f, FLOW_NULL);
-
-        f->data = data;
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
-        return 0;
-}
-
-void * irm_sanitize(void * o)
-{
-        struct timespec now;
-        struct list_head * p = NULL;
-        struct list_head * h = NULL;
-
-        struct timespec timeout = {IRMD_CLEANUP_TIMER / BILLION,
-                                   IRMD_CLEANUP_TIMER % BILLION};
-        int s;
-
-        (void) o;
-
-        while (true) {
-                if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
-                        log_warn("Failed to get time.");
-
-                if (irmd_get_state() != IRMD_RUNNING)
-                        return (void *) 0;
-
-                pthread_rwlock_wrlock(&irmd.reg_lock);
-                pthread_cleanup_push(__cleanup_rwlock_unlock, &irmd.reg_lock);
-
-                list_for_each_safe(p, h, &irmd.spawned_pids) {
-                        struct pid_el * e = list_entry(p, struct pid_el, next);
-                        waitpid(e->pid, &s, WNOHANG);
-                        if (kill(e->pid, 0) >= 0)
-                                continue;
-                        log_dbg("Child process %d died, error %d.", e->pid, s);
-                        list_del(&e->next);
-                        free(e);
-                }
-
-                list_for_each_safe(p, h, &irmd.procs) {
-                        struct reg_proc * e =
-                                list_entry(p, struct reg_proc, next);
-                        if (kill(e->pid, 0) >= 0)
-                                continue;
-                        log_dbg("Dead process removed: %d.", e->pid);
-                        list_del(&e->next);
-                        reg_proc_destroy(e);
-                }
-
-                list_for_each_safe(p, h, &irmd.ipcps) {
-                        struct reg_ipcp * e =
-                                list_entry(p, struct reg_ipcp, next);
-                        if (kill(e->pid, 0) >= 0)
-                                continue;
-                        log_dbg("Dead IPCP removed: %d.", e->pid);
-                        list_del(&e->next);
-                        reg_ipcp_destroy(e);
-                }
-
-                list_for_each_safe(p, h, &irmd.names) {
-                        struct list_head * p2;
-                        struct list_head * h2;
-                        struct reg_name * e =
-                                list_entry(p, struct reg_name, next);
-                        list_for_each_safe(p2, h2, &e->reg_pids) {
-                                struct pid_el * a =
-                                        list_entry(p2, struct pid_el, next);
-                                if (kill(a->pid, 0) >= 0)
-                                        continue;
-                                log_dbg("Dead process removed from: %d %s.",
-                                        a->pid, e->name);
-                                reg_name_del_pid_el(e, a);
-                        }
-                }
-
-                pthread_cleanup_pop(true);
-
-                pthread_rwlock_wrlock(&irmd.reg_lock);
-                pthread_cleanup_push(__cleanup_rwlock_unlock, &irmd.reg_lock);
-
-                list_for_each_safe(p, h, &irmd.flows) {
-                        int ipcpi;
-                        int flow_id;
-                        struct reg_flow * f =
-                                list_entry(p, struct reg_flow, next);
-
-                        if (reg_flow_get_state(f) == FLOW_ALLOC_PENDING
-                            && ts_diff_ms(&f->t0, &now) > IRMD_FLOW_TIMEOUT) {
-                                log_dbg("Pending flow_id %d timed out.",
-                                         f->flow_id);
-                                reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                                continue;
-                        }
-
-                        if (kill(f->n_pid, 0) < 0) {
-                                log_dbg("Process %d gone, deallocating "
-                                        "flow %d.",
-                                         f->n_pid, f->flow_id);
-                                f->n_pid = -1;
-                                reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                                ipcpi   = f->n_1_pid;
-                                flow_id = f->flow_id;
-                                ipcp_flow_dealloc(ipcpi, flow_id, DEALLOC_TIME);
-                                continue;
-                        }
-
-                        if (kill(f->n_1_pid, 0) < 0) {
-                                struct shm_flow_set * set;
-                                log_err("IPCP %d gone, flow %d removed.",
-                                        f->n_1_pid, f->flow_id);
-                                set = shm_flow_set_open(f->n_pid);
-                                if (set != NULL)
-                                        shm_flow_set_destroy(set);
-                                f->n_1_pid = -1;
-                                reg_flow_set_state(f, FLOW_DEALLOC_PENDING);
-                        }
-                }
-
-                pthread_cleanup_pop(true);
-
-                nanosleep(&timeout, NULL);
-        }
-}
-
-__attribute__((no_sanitize_address))
 static void * acceptloop(void * o)
 {
         int            csockfd;
 
         (void) o;
 
-        while (irmd_get_state() == IRMD_RUNNING) {
+        while (true) {
                 struct cmd * cmd;
 
                 csockfd = accept(irmd.sockfd, 0, 0);
@@ -2201,16 +1320,17 @@ static void free_msg(void * o)
 static irm_msg_t * do_command_msg(irm_msg_t * msg)
 {
         struct ipcp_config conf;
-        struct ipcp_info   info;
+        struct ipcp_info   ipcp;
+        struct flow_info   flow;
+        struct proc_info   proc;
+        struct name_info   name;
+        struct timespec *  abstime  = NULL;
+        struct timespec    ts;
+        int                res;
         irm_msg_t *        ret_msg;
         buffer_t           data;
-        struct reg_flow    f;
-        struct qos_spec    qs;
-        struct timespec *  dl  = NULL;
-        struct timespec    ts  = {0, 0};
-        int                res;
 
-        memset(&f, 0, sizeof(f));
+        memset(&flow, 0, sizeof(flow));
 
         ret_msg = malloc(sizeof(*ret_msg));
         if (ret_msg == NULL) {
@@ -2224,6 +1344,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
 
         if (msg->has_timeo_sec) {
                 struct timespec now;
+
                 clock_gettime(PTHREAD_COND_CLOCK, &now);
                 assert(msg->has_timeo_nsec);
 
@@ -2232,18 +1353,19 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
 
                 ts_add(&ts, &now, &ts);
 
-                dl = &ts;
+                abstime = &ts;
         }
 
         pthread_cleanup_push(free_msg, ret_msg);
 
         switch (msg->code) {
         case IRM_MSG_CODE__IRM_CREATE_IPCP:
-                info = ipcp_info_msg_to_s(msg->ipcp_info);
-                res = create_ipcp(&info);
+                ipcp = ipcp_info_msg_to_s(msg->ipcp_info);
+                res = create_ipcp(&ipcp);
                 break;
         case IRM_MSG_CODE__IPCP_CREATE_R:
-                res = create_ipcp_r(msg->pid, msg->result);
+                ipcp = ipcp_info_msg_to_s(msg->ipcp_info);
+                res = create_ipcp_r(&ipcp);
                 break;
         case IRM_MSG_CODE__IRM_DESTROY_IPCP:
                 res = destroy_ipcp(msg->pid);
@@ -2256,21 +1378,28 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 res = enroll_ipcp(msg->pid, msg->dst);
                 break;
         case IRM_MSG_CODE__IRM_CONNECT_IPCP:
-                qs = qos_spec_msg_to_s(msg->qosspec);
-                res = connect_ipcp(msg->pid, msg->dst, msg->comp, qs);
+                flow.qs = qos_spec_msg_to_s(msg->qosspec);
+                res = connect_ipcp(msg->pid, msg->dst, msg->comp, flow.qs);
                 break;
         case IRM_MSG_CODE__IRM_DISCONNECT_IPCP:
                 res = disconnect_ipcp(msg->pid, msg->dst, msg->comp);
                 break;
         case IRM_MSG_CODE__IRM_BIND_PROGRAM:
-                res = bind_program(msg->prog, msg->name, msg->opts,
-                                   msg->n_args, msg->args);
+                /* Make exec NULL terminated instead of empty string terminated */
+                free(msg->exec[msg->n_exec - 1]);
+                msg->exec[msg->n_exec - 1] = NULL;
+                res = bind_program(msg->exec, msg->name, msg->opts);
                 break;
         case IRM_MSG_CODE__IRM_UNBIND_PROGRAM:
                 res = unbind_program(msg->prog, msg->name);
                 break;
         case IRM_MSG_CODE__IRM_PROC_ANNOUNCE:
-                res = proc_announce(msg->pid, msg->prog);
+                proc.pid  = msg->pid;
+                strcpy(proc.prog, msg->prog);
+                res = proc_announce(&proc);
+                break;
+        case IRM_MSG_CODE__IRM_PROC_EXIT:
+                res = proc_exit(msg->pid);
                 break;
         case IRM_MSG_CODE__IRM_BIND_PROCESS:
                 res = bind_process(msg->pid, msg->name);
@@ -2282,8 +1411,9 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 res = list_ipcps(&ret_msg->ipcps, &ret_msg->n_ipcps);
                 break;
         case IRM_MSG_CODE__IRM_CREATE_NAME:
-                res = name_create(msg->names[0]->name,
-                                  msg->names[0]->pol_lb);
+                strcpy(name.name, msg->names[0]->name);
+                name.pol_lb = msg->names[0]->pol_lb;
+                res = name_create(&name);
                 break;
         case IRM_MSG_CODE__IRM_DESTROY_NAME:
                 res = name_destroy(msg->name);
@@ -2301,17 +1431,19 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 data.len  = msg->pk.len;
                 data.data = msg->pk.data;
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
-                res = flow_accept(msg->pid, dl, &f, &data);
+                flow.n_pid = msg->pid;
+                flow.qs  = qos_raw;
+                res = flow_accept(&flow, &data, abstime);
                 if (res == 0) {
                         qosspec_msg_t * qs_msg;
-                        qs_msg = qos_spec_s_to_msg(&f.qs);
+                        qs_msg = qos_spec_s_to_msg(&flow.qs);
                         ret_msg->has_flow_id  = true;
-                        ret_msg->flow_id      = f.flow_id;
+                        ret_msg->flow_id      = flow.id;
                         ret_msg->has_pid      = true;
-                        ret_msg->pid          = f.n_1_pid;
-                        ret_msg->qosspec      = qs_msg;
+                        ret_msg->pid          = flow.n_1_pid;
                         ret_msg->has_mpl      = true;
-                        ret_msg->mpl          = f.mpl;
+                        ret_msg->qosspec      = qs_msg;
+                        ret_msg->mpl          = flow.mpl;
                         ret_msg->has_symmkey  = data.len != 0;
                         ret_msg->symmkey.data = data.data;
                         ret_msg->symmkey.len  = data.len;
@@ -2321,16 +1453,17 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 data.len  = msg->pk.len;
                 data.data = msg->pk.data;
                 msg->has_pk = false;
-                qs = qos_spec_msg_to_s(msg->qosspec);
+                flow.n_pid = msg->pid;
+                flow.qs = qos_spec_msg_to_s(msg->qosspec);
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
-                res = flow_alloc(msg->pid, msg->dst, qs, dl, &f, &data);
+                res = flow_alloc(&flow, msg->dst, &data, abstime);
                 if (res == 0) {
                         ret_msg->has_flow_id  = true;
-                        ret_msg->flow_id      = f.flow_id;
+                        ret_msg->flow_id      = flow.id;
                         ret_msg->has_pid      = true;
-                        ret_msg->pid          = f.n_1_pid;
+                        ret_msg->pid          = flow.n_1_pid;
                         ret_msg->has_mpl      = true;
-                        ret_msg->mpl          = f.mpl;
+                        ret_msg->mpl          = flow.mpl;
                         ret_msg->has_symmkey  = data.len != 0;
                         ret_msg->symmkey.data = data.data;
                         ret_msg->symmkey.len  = data.len;
@@ -2338,19 +1471,18 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 break;
         case IRM_MSG_CODE__IRM_FLOW_JOIN:
                 assert(msg->pk.len == 0 && msg->pk.data == NULL);
-                qs = qos_spec_msg_to_s(msg->qosspec);
-                res = flow_join(msg->pid, msg->dst, qs, dl, &f);
-                if (res == 0) {
-                        ret_msg->has_flow_id = true;
-                        ret_msg->flow_id     = f.flow_id;
-                        ret_msg->has_pid     = true;
-                        ret_msg->pid         = f.n_1_pid;
-                        ret_msg->has_mpl     = true;
-                        ret_msg->mpl         = f.mpl;
-                }
+                flow.qs = qos_spec_msg_to_s(msg->qosspec);
+                res = flow_join(&flow, msg->dst, abstime);
                 break;
         case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
-                res = flow_dealloc(msg->pid, msg->flow_id, msg->timeo_sec);
+                flow.n_pid = msg->pid;
+                flow.id    = msg->flow_id;
+                res = flow_dealloc(&flow, msg->timeo_sec);
+                break;
+        case IRM_MSG_CODE__IPCP_FLOW_DEALLOC:
+                flow.n_1_pid = msg->pid;
+                flow.id      = msg->flow_id;
+                res = flow_dealloc_resp(&flow);
                 break;
         case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                 data.len  = msg->pk.len;
@@ -2359,14 +1491,15 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 msg->pk.data = NULL;
                 msg->pk.len  = 0;
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
-                qs = qos_spec_msg_to_s(msg->qosspec);
-                res = flow_req_arr(msg->pid, &f, msg->hash.data,
-                                   msg->mpl, qs, data);
+                flow.n_1_pid = msg->pid;
+                flow.mpl = msg->mpl;
+                flow.qs = qos_spec_msg_to_s(msg->qosspec);
+                res = flow_req_arr(&flow, msg->hash.data, &data);
                 if (res == 0) {
                         ret_msg->has_flow_id = true;
-                        ret_msg->flow_id     = f.flow_id;
+                        ret_msg->flow_id     = flow.id;
                         ret_msg->has_pid     = true;
-                        ret_msg->pid         = f.n_pid;
+                        ret_msg->pid         = flow.n_pid;
                 }
                 break;
         case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
@@ -2376,8 +1509,9 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 msg->pk.data = NULL;
                 msg->pk.len  = 0;
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
-                res = flow_alloc_reply(msg->flow_id, msg->response,
-                                       msg->mpl, data);
+                flow.id      = msg->flow_id;
+                flow.mpl     = msg->mpl;
+                res = flow_alloc_reply(&flow, msg->response, &data);
                 break;
         default:
                 log_err("Don't know that message code.");
@@ -2493,74 +1627,19 @@ static void * mainloop(void * o)
 
 static void irm_fini(void)
 {
-        struct list_head * p;
-        struct list_head * h;
-
+#ifdef HAVE_FUSE
+        struct timespec wait = TIMESPEC_INIT_MS(1);
+        int    retries = 5;
+#endif
         if (irmd_get_state() != IRMD_NULL)
                 log_warn("Unsafe destroy.");
 
         tpm_destroy(irmd.tpm);
 
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        /* Clear the lists. */
-        list_for_each_safe(p, h, &irmd.ipcps) {
-                struct reg_ipcp * e = list_entry(p, struct reg_ipcp, next);
-                list_del(&e->next);
-                reg_ipcp_destroy(e);
-        }
-
-        list_for_each(p, &irmd.spawned_pids) {
-                struct pid_el * e = list_entry(p, struct pid_el, next);
-                if (kill(e->pid, SIGTERM))
-                        log_dbg("Could not send kill signal to %d.", e->pid);
-        }
-
-        list_for_each_safe(p, h, &irmd.spawned_pids) {
-                struct pid_el * e = list_entry(p, struct pid_el, next);
-                int status;
-                if (waitpid(e->pid, &status, 0) < 0)
-                        log_dbg("Error waiting for %d to exit.", e->pid);
-                list_del(&e->next);
-                registry_names_del_proc(e->pid);
-                free(e);
-        }
-
-        list_for_each_safe(p, h, &irmd.progs) {
-                struct reg_prog * e = list_entry(p, struct reg_prog, next);
-                list_del(&e->next);
-                reg_prog_destroy(e);
-        }
-
-        list_for_each_safe(p, h, &irmd.procs) {
-                struct reg_proc * e = list_entry(p, struct reg_proc, next);
-                list_del(&e->next);
-                e->state = PROC_INIT; /* sanitizer already joined */
-                reg_proc_destroy(e);
-        }
-
-        registry_destroy_names();
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
         close(irmd.sockfd);
 
         if (unlink(IRM_SOCK_PATH))
                 log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
-
-        pthread_rwlock_wrlock(&irmd.reg_lock);
-
-        if (irmd.flow_ids != NULL)
-                bmp_destroy(irmd.flow_ids);
-
-        list_for_each_safe(p, h, &irmd.flows) {
-                struct reg_flow * f = list_entry(p, struct reg_flow, next);
-                list_del(&f->next);
-                reg_flow_destroy(f);
-        }
-
-        pthread_rwlock_unlock(&irmd.reg_lock);
-
 
         if (irmd.rdrb != NULL)
                 shm_rdrbuff_destroy(irmd.rdrb);
@@ -2570,15 +1649,43 @@ static void irm_fini(void)
 
         pthread_mutex_destroy(&irmd.cmd_lock);
         pthread_cond_destroy(&irmd.cmd_cond);
-        pthread_rwlock_destroy(&irmd.reg_lock);
         pthread_rwlock_destroy(&irmd.state_lock);
 
 #ifdef HAVE_FUSE
-        sleep(1);
-        if (rmdir(FUSE_PREFIX))
-                log_warn("Failed to remove " FUSE_PREFIX);
+        while (rmdir(FUSE_PREFIX) < 0 && retries-- > 0)
+                nanosleep(&wait, NULL);
+        if (retries < 0)
+                log_err("Failed to remove " FUSE_PREFIX);
 #endif
 }
+
+#ifdef HAVE_FUSE
+static void destroy_mount(char * mnt)
+{
+        struct stat st;
+
+        log_dbg("Destroying mountpoint %s.", mnt);
+
+        if (stat(mnt, &st) == -1){
+                switch(errno) {
+                case ENOENT:
+                        log_dbg("Fuse mountpoint %s not found: %s",
+                                mnt, strerror(errno));
+                        break;
+                case ENOTCONN:
+                        /* FALLTHRU */
+                case ECONNABORTED:
+                        log_dbg("Cleaning up fuse mountpoint %s.",
+                                mnt);
+                        rib_cleanup(mnt);
+                        break;
+                default:
+                        log_err("Unhandled fuse error on mnt %s: %s.",
+                                mnt, strerror(errno));
+                }
+        }
+}
+#endif
 
 static int ouroboros_reset(void)
 {
@@ -2587,6 +1694,48 @@ static int ouroboros_reset(void)
 
         return 0;
 }
+
+static void cleanup_pid(pid_t pid)
+{
+#ifdef HAVE_FUSE
+        char mnt[RIB_PATH_LEN + 1];
+
+        if (reg_has_ipcp(pid)) {
+                struct ipcp_info info;
+                info.pid = pid;
+                reg_get_ipcp(&info, NULL);
+                sprintf(mnt, FUSE_PREFIX "/%s", info.name);
+        } else {
+                sprintf(mnt, FUSE_PREFIX "/proc.%d", pid);
+        }
+
+        destroy_mount(mnt);
+
+#else
+        (void) pid;
+#endif
+}
+
+void * irm_sanitize(void * o)
+{
+        pid_t           pid;
+        struct timespec ts = TIMESPEC_INIT_MS(IRMD_FLOW_TIMEOUT / 20);
+
+        (void) o;
+
+        while (true) {
+                while((pid = reg_get_dead_proc()) != -1) {
+                        log_info("Process %d died.", pid);
+                        cleanup_pid(pid);
+                        reg_destroy_proc(pid);
+                }
+
+                nanosleep(&ts, NULL);
+        }
+
+        return (void *) 0;
+}
+
 
 static int irm_init(void)
 {
@@ -2635,11 +1784,6 @@ static int irm_init(void)
                 goto fail_state_lock;
         }
 
-        if (pthread_rwlock_init(&irmd.reg_lock, NULL)) {
-                log_err("Failed to initialize rwlock.");
-                goto fail_reg_lock;
-        }
-
         if (pthread_mutex_init(&irmd.cmd_lock, NULL)) {
                 log_err("Failed to initialize mutex.");
                 goto fail_cmd_lock;
@@ -2661,19 +1805,7 @@ static int irm_init(void)
 
         pthread_condattr_destroy(&cattr);
 
-        list_head_init(&irmd.ipcps);
-        list_head_init(&irmd.procs);
-        list_head_init(&irmd.progs);
-        list_head_init(&irmd.spawned_pids);
-        list_head_init(&irmd.names);
-        list_head_init(&irmd.flows);
         list_head_init(&irmd.cmds);
-
-        irmd.flow_ids = bmp_create(SYS_MAX_FLOWS, 0);
-        if (irmd.flow_ids == NULL) {
-                log_err("Failed to create flow_ids bitmap.");
-                goto fail_flow_ids;
-        }
 
         if (stat(SOCK_PATH, &st) == -1) {
                 if (mkdir(SOCK_PATH, 0777)) {
@@ -2745,14 +1877,10 @@ static int irm_init(void)
  fail_sock_path:
         unlink(IRM_SOCK_PATH);
  fail_stat:
-        bmp_destroy(irmd.flow_ids);
- fail_flow_ids:
         pthread_cond_destroy(&irmd.cmd_cond);
  fail_cmd_cond:
         pthread_mutex_destroy(&irmd.cmd_lock);
  fail_cmd_lock:
-        pthread_rwlock_destroy(&irmd.reg_lock);
- fail_reg_lock:
         pthread_rwlock_destroy(&irmd.state_lock);
  fail_state_lock:
         lockfile_destroy(irmd.lf);
@@ -2797,14 +1925,13 @@ static int irm_start(void)
         tpm_stop(irmd.tpm);
  fail_tpm_start:
         return -1;
-
 }
 
 static void irm_sigwait(sigset_t sigset)
 {
         int sig;
 
-        while (irmd_get_state() != IRMD_NULL) {
+        while (irmd_get_state() != IRMD_SHUTDOWN) {
                 if (sigwait(&sigset, &sig) != 0) {
                         log_warn("Bad signal.");
                         continue;
@@ -2816,7 +1943,7 @@ static void irm_sigwait(sigset_t sigset)
                 case SIGTERM:
                 case SIGHUP:
                         log_info("IRMd shutting down...");
-                        irmd_set_state(IRMD_NULL);
+                        irmd_set_state(IRMD_SHUTDOWN);
                         break;
                 case SIGPIPE:
                         log_dbg("Ignored SIGPIPE.");
@@ -2830,11 +1957,14 @@ static void irm_sigwait(sigset_t sigset)
 static void irm_stop(void)
 {
         pthread_cancel(irmd.acceptor);
+        pthread_cancel(irmd.irm_sanitize);
 
         pthread_join(irmd.acceptor, NULL);
         pthread_join(irmd.irm_sanitize, NULL);
 
         tpm_stop(irmd.tpm);
+
+        irmd_set_state(IRMD_NULL);
 }
 
 static void irm_argparse(int     argc,
@@ -2869,6 +1999,62 @@ static void irm_argparse(int     argc,
         }
 }
 
+static void * kill_dash_nine(void * o)
+{
+        time_t slept = 0;
+#ifdef IRMD_KILL_ALL_PROCESSES
+        struct timespec ts = TIMESPEC_INIT_MS(IRMD_FLOW_TIMEOUT / 19);
+#endif
+        (void) o;
+
+        while (slept < IRMD_PKILL_TIMEOUT) {
+                time_t intv = 1;
+                if (reg_first_spawned() == -1)
+                        goto finish;
+                sleep(intv);
+                slept += intv;
+        }
+
+        log_dbg("I am become Death, destroyer of hung processes.");
+
+#ifdef IRMD_KILL_ALL_PROCESSES
+        reg_kill_all_proc(SIGKILL);
+        nanosleep(&ts, NULL);
+#else
+        reg_kill_all_spawned(SIGKILL);
+#endif
+ finish:
+        return (void *) 0;
+}
+
+static void kill_all_spawned(void)
+{
+        pid_t     pid;
+        pthread_t grimreaper;
+
+#ifdef IRMD_KILL_ALL_PROCESSES
+        reg_kill_all_proc(SIGTERM);
+#else
+        reg_kill_all_spawned(SIGTERM);
+#endif
+        pthread_create(&grimreaper, NULL, kill_dash_nine, NULL);
+
+        pid = reg_first_spawned();
+        while (pid != -1) {
+                int s;
+                if (kill(pid, 0) == 0)
+                        waitpid(pid, &s, 0);
+                else {
+                        log_warn("Child process %d died.", pid);
+                        reg_destroy_spawned(pid);
+                        cleanup_pid(pid);
+                }
+                pid = reg_first_spawned();
+        }
+
+        pthread_join(grimreaper, NULL);
+}
+
 int main(int     argc,
          char ** argv)
 {
@@ -2895,6 +2081,11 @@ int main(int     argc,
         if (irm_init() < 0)
                 goto fail_irm_init;
 
+        if (reg_init() < 0) {
+                log_err("Failed to initialize registry.");
+                goto fail_reg;
+        }
+
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         if (irm_start() < 0)
@@ -2908,19 +2099,27 @@ int main(int     argc,
 #endif
         irm_sigwait(sigset);
 
+        kill_all_spawned();
+
         irm_stop();
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
+        reg_clear();
+
+        reg_fini();
+
         irm_fini();
 
-        log_info("Bye.");
+        log_info("Ouroboros IPC Resource Manager daemon exited. Bye.");
 
         log_fini();
 
         exit(ret);
 
  fail_irm_start:
+        reg_fini();
+ fail_reg:
         irm_fini();
  fail_irm_init:
         exit(EXIT_FAILURE);

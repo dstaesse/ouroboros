@@ -31,14 +31,14 @@
 #define OUROBOROS_PREFIX "broadcast-ipcp"
 #define THIS_TYPE IPCP_BROADCAST
 
-#include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/random.h>
 #include <ouroboros/rib.h>
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 
 #include "common/connmgr.h"
 #include "common/enroll.h"
@@ -241,7 +241,7 @@ int broadcast_ipcp_dealloc(int fd)
 
         notifier_event(NOTIFY_DT_CONN_DEL, &conn);
 
-        flow_dealloc(fd);
+        ipcp_flow_dealloc(fd);
 
         return 0;
 }

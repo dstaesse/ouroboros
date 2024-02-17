@@ -24,21 +24,21 @@
 
 #include "config.h"
 
-#include <ouroboros/lockfile.h>
-#include <ouroboros/time_utils.h>
-#include <ouroboros/shm_flow_set.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/lockfile.h>
 #include <ouroboros/pthread.h>
+#include <ouroboros/shm_flow_set.h>
+#include <ouroboros/time.h>
 
-#include <sys/mman.h>
+#include <assert.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/stat.h>
 #include <string.h>
-#include <assert.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 
 /*
  * pthread_cond_timedwait has a WONTFIX bug as of glibc 2.25 where it
@@ -196,7 +196,7 @@ struct shm_flow_set * shm_flow_set_open(pid_t pid)
 
 void shm_flow_set_destroy(struct shm_flow_set * set)
 {
-        char fn[25];
+        char fn[FN_MAX_CHARS];
 
         assert(set);
 

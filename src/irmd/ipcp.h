@@ -24,14 +24,8 @@
 #include <ouroboros/protobuf.h>
 #include <ouroboros/sockets.h>
 
-#include <sys/types.h>
-
 #ifndef OUROBOROS_IRMD_IPCP_H
 #define OUROBOROS_IRMD_IPCP_H
-
-pid_t ipcp_create(const struct ipcp_info * info);
-
-int   ipcp_destroy(pid_t pid);
 
 int   ipcp_enroll(pid_t               pid,
                   const char *        dst,
@@ -50,38 +44,25 @@ int   ipcp_disconnect(pid_t        pid,
                       const char * dst,
                       const char * component);
 
-int   ipcp_reg(pid_t           pid,
-               const uint8_t * hash,
-               size_t          len);
+int   ipcp_reg(pid_t          pid,
+               const buffer_t hash);
 
-int   ipcp_unreg(pid_t           pid,
-                 const uint8_t * hash,
-                 size_t          len);
+int   ipcp_unreg(pid_t          pid,
+                 const buffer_t hash);
 
-int   ipcp_query(pid_t           pid,
-                 const uint8_t * hash,
-                 size_t          len);
+int   ipcp_query(pid_t          pid,
+                 const buffer_t dst);
 
-int   ipcp_flow_alloc(pid_t           pid,
-                      int             flow_id,
-                      pid_t           n_pid,
-                      const uint8_t * dst,
-                      size_t          len,
-                      qosspec_t       qs,
-                      const buffer_t  data);
+int   ipcp_flow_alloc(const struct flow_info * flow,
+                      const buffer_t           hash,
+                      const buffer_t           data);
 
-int   ipcp_flow_join(pid_t           pid,
-                     int             flow_id,
-                     pid_t           n_pid,
-                     const uint8_t * dst,
-                     size_t          len,
-                     qosspec_t       qs);
+int   ipcp_flow_join(const struct flow_info * flow,
+                     const buffer_t           dst);
 
-int   ipcp_flow_alloc_resp(pid_t          pid,
-                           int            flow_id,
-                           pid_t          n_pid,
-                           int            response,
-                           const buffer_t data);
+int   ipcp_flow_alloc_resp(const struct flow_info * flow,
+                           int                      response,
+                           const buffer_t           data);
 
 int   ipcp_flow_dealloc(pid_t  pid,
                         int    flow_id,

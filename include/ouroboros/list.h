@@ -61,6 +61,6 @@ void list_del(struct list_head * e);
 void list_move(struct list_head * dst,
                struct list_head * src);
 
-bool list_is_empty(struct list_head * h);
+bool list_is_empty(const struct list_head * h);
 
 #endif /* OUROBOROS_LIB_LIST_H */

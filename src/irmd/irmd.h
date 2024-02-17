@@ -26,7 +26,7 @@
 #include <ouroboros/ipcp.h>
 #include <ouroboros/irm.h>
 
-int create_ipcp(const struct ipcp_info * info);
+int create_ipcp(struct ipcp_info * info);
 
 int bootstrap_ipcp(pid_t                pid,
                    struct ipcp_config * conf);
@@ -39,11 +39,7 @@ int connect_ipcp(pid_t        pid,
                  const char * component,
                  qosspec_t    qs);
 
-int get_layer_for_ipcp(pid_t  pid,
-                       char * buf);
-
-int name_create(const char *     name,
-                enum pol_balance pol);
+int name_create(const struct name_info * info);
 
 int name_reg(const char * name,
              pid_t        pid);
@@ -51,10 +47,8 @@ int name_reg(const char * name,
 int bind_process(pid_t        pid,
                  const char * name);
 
-int bind_program(const char *  prog,
-                 const char *  name,
-                 uint16_t      flags,
-                 int           argc,
-                 char **       argv);
+int bind_program(char **      exec,
+                 const char * name,
+                 uint8_t      flags);
 
 #endif /* OUROBOROS_IRMD_H*/

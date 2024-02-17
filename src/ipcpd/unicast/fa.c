@@ -878,7 +878,7 @@ int fa_dealloc(int fd)
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        flow_dealloc(fd);
+        ipcp_flow_dealloc(fd);
 
         return 0;
 }

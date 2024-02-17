@@ -47,7 +47,7 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 #include <ouroboros/fccntl.h>
 #include <ouroboros/pthread.h>
 
@@ -786,8 +786,7 @@ static void * eth_ipcp_mgmt_handler(void * o)
 
         while (true) {
                 int                 ret = 0;
-                struct timespec     timeout = {(MGMT_TIMEO / 1000),
-                                               (MGMT_TIMEO % 1000) * MILLION};
+                struct timespec     timeout = TIMESPEC_INIT_MS(MGMT_TIMEO);
                 struct timespec     abstime;
                 struct mgmt_frame * frame = NULL;
 
@@ -1415,7 +1414,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 
         if (eth_data.s_fd < 0) {
                 log_err("Failed to create socket.");
-                return -1;
+                goto fail_socket;
         }
 
         flags = fcntl(eth_data.s_fd, F_GETFL, 0);
@@ -1437,38 +1436,30 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
     #endif
 
         if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
-                 sizeof(eth_data.device))) {
+                 sizeof(eth_data.device)) < 0) {
                 log_err("Failed to bind socket to interface.");
                 goto fail_device;
         }
-
 #endif /* HAVE_NETMAP */
-
 #if defined(__linux__)
-        if (pthread_create(&eth_data.if_monitor,
-                           NULL,
-                           eth_ipcp_if_monitor,
-                           NULL)) {
+        if (pthread_create(&eth_data.if_monitor, NULL,
+                           eth_ipcp_if_monitor, NULL)) {
                 log_err("Failed to create monitor thread: %s.",
                         strerror(errno));
                 goto fail_device;
         }
 #endif
 
-        if (pthread_create(&eth_data.mgmt_handler,
-                           NULL,
-                           eth_ipcp_mgmt_handler,
-                           NULL)) {
+        if (pthread_create(&eth_data.mgmt_handler, NULL,
+                           eth_ipcp_mgmt_handler, NULL)) {
                 log_err("Failed to create mgmt handler thread: %s.",
                         strerror(errno));
                 goto fail_mgmt_handler;
         }
 
         for (idx = 0; idx < IPCP_ETH_RD_THR; ++idx) {
-                if (pthread_create(&eth_data.packet_reader[idx],
-                                   NULL,
-                                   eth_ipcp_packet_reader,
-                                   NULL)) {
+                if (pthread_create(&eth_data.packet_reader[idx], NULL,
+                                   eth_ipcp_packet_reader, NULL)) {
                         log_err("Failed to create packet reader thread: %s",
                                 strerror(errno));
                         goto fail_packet_reader;
@@ -1476,10 +1467,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         for (idx = 0; idx < IPCP_ETH_WR_THR; ++idx) {
-                if (pthread_create(&eth_data.packet_writer[idx],
-                                   NULL,
-                                   eth_ipcp_packet_writer,
-                                   NULL)) {
+                if (pthread_create(&eth_data.packet_writer[idx], NULL,
+                                   eth_ipcp_packet_writer, NULL)) {
                         log_err("Failed to create packet writer thread: %s",
                                 strerror(errno));
                         goto fail_packet_writer;
@@ -1493,7 +1482,6 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         log_dbg("Bootstrapped IPCP over Ethernet with LLC with pid %d.",
                 getpid());
 #endif
-
         return 0;
 
  fail_packet_writer:
@@ -1524,6 +1512,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 #elif defined(HAVE_RAW_SOCKETS)
         close(eth_data.s_fd);
 #endif
+ fail_socket:
         return -1;
 }
 
@@ -1548,8 +1537,7 @@ static int eth_ipcp_unreg(const uint8_t * hash)
 static int eth_ipcp_query(const uint8_t * hash)
 {
         uint8_t            r_addr[MAC_SIZE];
-        struct timespec    timeout = {(NAME_QUERY_TIMEO / 1000),
-                                      (NAME_QUERY_TIMEO % 1000) * MILLION};
+        struct timespec    timeout = TIMESPEC_INIT_MS(NAME_QUERY_TIMEO);
         struct dir_query * query;
         int                ret;
         uint8_t *          buf;
@@ -1752,7 +1740,7 @@ static int eth_ipcp_flow_dealloc(int fd)
 
         pthread_rwlock_unlock(&eth_data.flows_lock);
 
-        flow_dealloc(fd);
+        ipcp_flow_dealloc(fd);
 
         return 0;
 }

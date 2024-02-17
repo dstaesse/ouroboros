@@ -35,21 +35,21 @@
 
 #define OUROBOROS_PREFIX  "ipcpd/ipcp"
 #define IPCP_INFO         "info"
-#define ALLOC_TIMEOUT     10 * MILLION /* 10 ms */
+#define ALLOC_TIMEOUT     50 /* ms */
 
-#include <ouroboros/hash.h>
-#include <ouroboros/logs.h>
-#include <ouroboros/time_utils.h>
-#include <ouroboros/utils.h>
-#include <ouroboros/sockets.h>
-#include <ouroboros/errno.h>
-#include <ouroboros/dev.h>
-#include <ouroboros/ipcp-dev.h>
 #include <ouroboros/bitmap.h>
+#include <ouroboros/dev.h>
+#include <ouroboros/errno.h>
+#include <ouroboros/hash.h>
+#include <ouroboros/ipcp-dev.h>
+#include <ouroboros/logs.h>
 #include <ouroboros/np1_flow.h>
-#include <ouroboros/rib.h>
 #include <ouroboros/protobuf.h>
 #include <ouroboros/pthread.h>
+#include <ouroboros/rib.h>
+#include <ouroboros/sockets.h>
+#include <ouroboros/time.h>
+#include <ouroboros/utils.h>
 
 #include "ipcp.h"
 
@@ -267,7 +267,7 @@ int ipcp_wait_flow_req_arr(const uint8_t * dst,
                            const void *    data,
                            size_t          len)
 {
-        struct timespec ts  = {0, ALLOC_TIMEOUT};
+        struct timespec ts = TIMESPEC_INIT_MS(ALLOC_TIMEOUT);
         struct timespec abstime;
         int             fd;
 
@@ -294,7 +294,7 @@ int ipcp_wait_flow_req_arr(const uint8_t * dst,
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Failed to get fd for flow.");
-                return -ENOTALLOC;
+                return fd;
         }
 
         ipcpi.alloc_id = fd;
@@ -308,7 +308,7 @@ int ipcp_wait_flow_req_arr(const uint8_t * dst,
 
 int ipcp_wait_flow_resp(const int fd)
 {
-        struct timespec      ts = {0, ALLOC_TIMEOUT};
+        struct timespec      ts = TIMESPEC_INIT_MS(ALLOC_TIMEOUT);
         struct timespec      abstime;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
@@ -502,8 +502,8 @@ static void do_flow_alloc(pid_t        pid,
 {
         int fd;
 
-        log_info("Allocating flow %d to " HASH_FMT32 ".",
-                 flow_id, HASH_VAL32(dst));
+        log_info("Allocating flow %d for %d to " HASH_FMT32 ".",
+                 flow_id, pid, HASH_VAL32(dst));
 
         if (ipcpi.ops->ipcp_flow_alloc == NULL) {
                 log_err("Flow allocation unsupported.");
@@ -519,7 +519,8 @@ static void do_flow_alloc(pid_t        pid,
 
         fd = np1_flow_alloc(pid, flow_id);
         if (fd < 0) {
-                log_err("Failed allocating n + 1 fd on flow_id %d.", flow_id);
+                log_err("Failed allocating n + 1 fd on flow_id %d: %d",
+                        flow_id, fd);
                 ret_msg->result = -EFLOWDOWN;
                 goto finish;
         }
@@ -634,7 +635,6 @@ static void do_flow_dealloc(int          flow_id,
         log_info("Finished deallocating flow %d: %d.",
                  flow_id, ret_msg->result);
 }
-
 
 static void * mainloop(void * o)
 {
@@ -929,7 +929,9 @@ int ipcp_init(int               argc,
 
 int ipcp_start(void)
 {
-        sigset_t  sigset;
+        sigset_t         sigset;
+        struct ipcp_info info;
+
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGINT);
         sigaddset(&sigset, SIGQUIT);
@@ -937,6 +939,11 @@ int ipcp_start(void)
         sigaddset(&sigset, SIGPIPE);
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
+        info.pid  = getpid();
+        info.type = ipcpi.type;
+        strcpy(info.name, ipcpi.name);
+        info.state = IPCP_OPERATIONAL;
 
         if (tpm_start(ipcpi.tpm))
                 goto fail_tpm_start;
@@ -946,7 +953,9 @@ int ipcp_start(void)
                 goto fail_acceptor;
         }
 
-        if (ipcp_create_r(0)) {
+        info.state = IPCP_OPERATIONAL;
+
+        if (ipcp_create_r(&info)) {
                 log_err("Failed to notify IRMd we are initialized.");
                 goto fail_create_r;
         }
@@ -957,11 +966,12 @@ int ipcp_start(void)
         pthread_cancel(ipcpi.acceptor);
         pthread_join(ipcpi.acceptor, NULL);
  fail_acceptor:
-        ipcp_set_state(IPCP_NULL);
         tpm_stop(ipcpi.tpm);
  fail_tpm_start:
         tpm_destroy(ipcpi.tpm);
-        ipcp_create_r(-1);
+        ipcp_set_state(IPCP_NULL);
+        info.state = IPCP_NULL;
+        ipcp_create_r(&info);
         return -1;
 }
 

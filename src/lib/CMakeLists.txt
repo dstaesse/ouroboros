@@ -172,7 +172,7 @@ else ()
   set(PTHREAD_COND_CLOCK "CLOCK_REALTIME" CACHE INTERNAL
     "Clock to use for condition variable timing")
 endif ()
-set(SOCKET_TIMEOUT 1000 CACHE STRING
+set(SOCKET_TIMEOUT 500 CACHE STRING
   "Default timeout for responses from IPCPs (ms)")
 set(SHM_PREFIX "ouroboros" CACHE STRING
   "String to prepend to POSIX shared memory filenames")

@@ -30,18 +30,18 @@
 
 #define OUROBOROS_PREFIX "shim-data"
 
-#include <ouroboros/hash.h>
-#include <ouroboros/logs.h>
-#include <ouroboros/list.h>
-#include <ouroboros/time_utils.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/hash.h>
+#include <ouroboros/list.h>
+#include <ouroboros/logs.h>
+#include <ouroboros/time.h>
 
 #include "shim-data.h"
 #include "ipcp.h"
 
-#include <string.h>
-#include <stdlib.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 struct reg_entry {
         struct list_head list;

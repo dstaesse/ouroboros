@@ -49,9 +49,10 @@
 #define IRMD_MIN_THREADS        @IRMD_MIN_THREADS@
 #define IRMD_ADD_THREADS        @IRMD_ADD_THREADS@
 
+
 #cmakedefine HAVE_FUSE
 #ifdef HAVE_FUSE
-#define FUSE_PREFIX "@FUSE_PREFIX@"
+#define FUSE_PREFIX             "@FUSE_PREFIX@"
 #endif
 
 #cmakedefine HAVE_TOML
@@ -60,6 +61,9 @@
 #define OUROBOROS_CONFIG_FILE  "@OUROBOROS_CONFIG_FILE@"
 #endif
 
+#define IRMD_PKILL_TIMEOUT      @IRMD_PKILL_TIMEOUT@
+
+#cmakedefine IRMD_KILL_ALL_PROCESSES
 #cmakedefine HAVE_LIBGCRYPT
 
 #define O7S_ASCII_ART                                                          \

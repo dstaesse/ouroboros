@@ -10,7 +10,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   md5_test.c
   sha3_test.c
   shm_rbuff_test.c
-  time_utils_test.c
+  time_test.c
   )
 
 add_executable(${PARENT_DIR}_test EXCLUDE_FROM_ALL ${${PARENT_DIR}_tests})

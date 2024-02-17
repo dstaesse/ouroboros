@@ -391,6 +391,16 @@ void rib_fini(void)
 #endif
 }
 
+void rib_cleanup(const char * mnt)
+{
+#ifdef HAVE_FUSE
+        fuse_unmount(mnt, NULL);
+        rmdir(mnt);
+#else
+        (void) mnt;
+#endif
+}
+
 int rib_reg(const char *     path,
             struct rib_ops * ops)
 {

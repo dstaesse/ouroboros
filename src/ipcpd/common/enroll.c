@@ -28,12 +28,11 @@
 
 #define OUROBOROS_PREFIX "enrollment"
 
-#include <ouroboros/errno.h>
-#include <ouroboros/time_utils.h>
 #include <ouroboros/dev.h>
-#include <ouroboros/logs.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/logs.h>
 #include <ouroboros/serdes-oep.h>
+#include <ouroboros/time.h>
 
 #include "common/connmgr.h"
 #include "common/enroll.h"

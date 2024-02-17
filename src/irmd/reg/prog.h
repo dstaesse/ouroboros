@@ -24,22 +24,20 @@
 #define OUROBOROS_IRMD_REG_PROG_H
 
 #include <ouroboros/list.h>
+#include <ouroboros/proc.h>
 
-#include <unistd.h>
 #include <stdint.h>
 
 struct reg_prog {
         struct list_head next;
-        char *           prog;    /* name of binary */
-        uint32_t         flags;
-        char **          argv;
-        struct list_head names; /* names that all instances will listen for */
-};
 
-struct reg_prog * reg_prog_create(const char *  prog,
-                                  uint32_t      flags,
-                                  int           argc,
-                                  char **       argv);
+        struct prog_info info;
+
+        struct list_head names;   /* names to listen for       */
+        size_t           n_names; /* number of names in list   */
+ };
+
+struct reg_prog * reg_prog_create(const struct prog_info * info);
 
 void              reg_prog_destroy(struct reg_prog * prog);
 
@@ -48,5 +46,8 @@ int               reg_prog_add_name(struct reg_prog * prog,
 
 void              reg_prog_del_name(struct reg_prog * prog,
                                     const char *      name);
+
+bool              reg_prog_has_name(const struct reg_prog * prog,
+                                    const char *            name);
 
 #endif /* OUROBOROS_IRMD_REG_PROG_H */

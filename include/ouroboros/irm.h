@@ -25,24 +25,14 @@
 
 #include <ouroboros/cdefs.h>
 #include <ouroboros/ipcp.h>
+#include <ouroboros/name.h>
 #include <ouroboros/qos.h>
 
 #include <sys/types.h>
 
 /* Name binding options. */
-#define BIND_AUTO   0x01
+#define BIND_AUTO 0x01
 #define NAME_SIZE 255
-
-enum pol_balance {
-        LB_RR = 0,
-        LB_SPILL,
-        LB_INVALID
-};
-
-struct name_info {
-        char             name[NAME_SIZE + 1];
-        enum pol_balance pol_lb;
-};
 
 struct ipcp_list_info {
         pid_t          pid;

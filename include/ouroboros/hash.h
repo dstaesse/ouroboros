@@ -72,13 +72,13 @@ enum hash_algo {
 
 uint16_t hash_len(enum hash_algo algo);
 
-void mem_hash(enum hash_algo  algo,
-              void *          dst,
-              const uint8_t * buf,
-              size_t          len);
+void     mem_hash(enum hash_algo  algo,
+                  void *          dst,
+                  const uint8_t * buf,
+                  size_t          len);
 
-void str_hash(enum hash_algo algo,
-              void *         dst,
-              const char *   str);
+void     str_hash(enum hash_algo algo,
+                  void *         dst,
+                  const char *   str);
 
 #endif /* OUROBOROS_LIB_HASH_H */

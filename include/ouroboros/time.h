@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LIB_TIME_UTILS_H
-#define OUROBOROS_LIB_TIME_UTILS_H
+#ifndef OUROBOROS_LIB_TIME_H
+#define OUROBOROS_LIB_TIME_H
 
 #ifdef MILLION
 #undef MILLION
@@ -36,6 +36,15 @@
 
 #include <time.h>
 #include <sys/time.h>
+
+#define TIMESPEC_INIT_S(s)   {(s), 0}
+#define TIMESPEC_INIT_MS(ms) {(ms) / 1000, ((ms) % 1000) * MILLION}
+#define TIMESPEC_INIT_US(us) {(us) / MILLION, ((us) % MILLION) * 1000}
+#define TIMESPEC_INIT_NS(ns) {(ns) / BILLION, ((ns) % BILLION)}
+
+#define TIMEVAL_INIT_S(s)   {(s), 0}
+#define TIMEVAL_INIT_MS(ms) {(ms) / 1000, ((ms) % 1000) * 1000}
+#define TIMEVAL_INIT_US(us) {(us) / MILLION, ((us) % MILLION)}
 
 /* functions for timespecs */
 #define ts_diff_ns(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * BILLION     \
@@ -118,4 +127,4 @@
                 (tv)->tv_usec = (ts)->tv_nsec / 1000L;  \
         } while (0);
 
-#endif /* OUROBOROS_LIB_TIME_UTILS_H */
+#endif /* OUROBOROS_LIB_TIME_H */

@@ -83,7 +83,9 @@ ipcp_info_msg_t * ipcp_info_s_to_msg(const struct ipcp_info * s)
         if (msg->name == NULL)
                 goto fail_msg;
 
-        msg->type = s->type;
+        msg->type  = s->type;
+        msg->pid   = s->pid;
+        msg->state = s->state;
 
         return msg;
  fail_msg:
@@ -100,8 +102,10 @@ struct ipcp_info ipcp_info_msg_to_s(const ipcp_info_msg_t * msg)
         assert(msg->name != NULL);
         assert(strlen(msg->name) <= NAME_SIZE);
 
-        s.type = msg->type;
         strcpy(s.name, msg->name);
+        s.type  = msg->type;
+        s.pid   = msg->pid;
+        s.state = msg->state;
 
         return s;
 }

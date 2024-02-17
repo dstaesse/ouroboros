@@ -31,7 +31,6 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdbool.h>
-#include <sys/time.h>
 
 /* Apple doesn't support SEQPACKET. */
 #ifdef __APPLE__
@@ -57,8 +56,7 @@ int client_socket_open(char * file_name)
         serv_addr.sun_family = AF_UNIX;
         sprintf(serv_addr.sun_path, "%s", file_name);
 
-        if (connect(sockfd,
-                    (struct sockaddr *) &serv_addr,
+        if (connect(sockfd, (struct sockaddr *) &serv_addr,
                     sizeof(serv_addr))) {
                 close(sockfd);
                 return -1;
@@ -100,13 +98,11 @@ int server_socket_open(char * file_name)
         return sockfd;
 }
 
-__attribute__((no_sanitize_address))
 irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 {
-        int         sockfd;
-        uint8_t     buf[SOCK_BUF_SIZE];
-        ssize_t     len;
-        irm_msg_t * recv_msg = NULL;
+        int            sockfd;
+        uint8_t        buf[SOCK_BUF_SIZE];
+        ssize_t        len;
 
         sockfd = client_socket_open(IRM_SOCK_PATH);
         if (sockfd < 0)
@@ -127,10 +123,12 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 
         pthread_cleanup_pop(true);
 
-        if (len > 0)
-                recv_msg = irm_msg__unpack(NULL, len, buf);
+        if (len < 0)
+                goto fail;
 
-        return recv_msg;
+        return irm_msg__unpack(NULL, len, buf);
+ fail:
+        return NULL;
 }
 
 char * ipcp_sock_path(pid_t pid)

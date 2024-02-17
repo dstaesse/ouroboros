@@ -20,155 +20,155 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#if defined(__linux__) || defined(__CYGWIN__)
-#define _DEFAULT_SOURCE
-#else
 #define _POSIX_C_SOURCE 200809L
-#endif
 
-#include <ouroboros/errno.h>
-#include <ouroboros/irm.h>
+#define OUROBOROS_PREFIX "reg/prog"
+
+#include <ouroboros/logs.h>
 #include <ouroboros/utils.h>
 
 #include "prog.h"
-#include "utils.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
+struct name_entry {
+        struct list_head next;
+        char *           name;
+};
 
-static char ** create_argv(const char *  prog,
-                           size_t        argc,
-                           char **       argv)
+static void __free_name_entry(struct name_entry * entry)
 {
-        char ** argv2;
-        size_t  i;
+        assert(entry != NULL);
+        assert(entry->name != NULL);
 
-        argv2 = malloc((argc + 2) * sizeof(*argv2)); /* prog + args + NULL */
-        if (argv2 == 0)
-                goto fail_malloc;
-
-        argv2[0] = strdup(prog);
-        if (argv2[0] == NULL)
-                goto fail_prog;
-
-        for (i = 1; i <= argc; ++i) {
-                argv2[i] = strdup(argv[i - 1]);
-                if (argv2[i] == NULL)
-                        goto fail_arg;
-        }
-
-        argv2[argc + 1] = NULL;
-
-        return argv2;
-
- fail_arg:
-        argvfree(argv2);
- fail_prog:
-        free(argv2);
- fail_malloc:
-        return NULL;
+        free(entry->name);
+        free(entry);
 }
 
-struct reg_prog * reg_prog_create(const char * prog,
-                                  uint32_t     flags,
-                                  int          argc,
-                                  char **      argv)
+static void __reg_prog_clear_names(struct reg_prog * prog)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        assert(prog != NULL);
+
+        list_for_each_safe(p, h, &prog->names) {
+                struct name_entry * entry;
+                entry = list_entry(p, struct name_entry, next);
+                list_del(&entry->next);
+                __free_name_entry(entry);
+                prog->n_names--;
+        }
+}
+
+struct reg_prog * reg_prog_create(const struct prog_info * info)
 {
         struct reg_prog * p;
 
-        assert(prog);
+        assert(info != NULL);
 
         p = malloc(sizeof(*p));
-        if (p == NULL)
+        if (p == NULL) {
+                log_err("Failed to malloc prog.");
                 goto fail_malloc;
-
-        memset(p, 0, sizeof(*p));
-
-        p->prog  = strdup(path_strip(prog));
-        if (p->prog == NULL)
-                goto fail_prog;
-
-        if (flags & BIND_AUTO) {
-                p->argv = create_argv(prog, argc, argv);
-                if (p->argv == NULL)
-                        goto fail_argv;
         }
 
         list_head_init(&p->next);
         list_head_init(&p->names);
 
-        p->flags = flags;
+        p->info    = *info;
+        p->n_names = 0;
 
         return p;
 
- fail_argv:
-        free(p->prog);
- fail_prog:
-        free(p);
  fail_malloc:
         return NULL;
 }
 
 void reg_prog_destroy(struct reg_prog * prog)
 {
+        assert(prog != NULL);
+
+        __reg_prog_clear_names(prog);
+
+        assert(list_is_empty(&prog->next));
+
+        assert(prog->n_names == 0);
+
+        assert(list_is_empty(&prog->names));
+
+        free(prog);
+}
+
+static struct name_entry * __reg_prog_get_name(const struct reg_prog * prog,
+                                               const char *            name)
+{
         struct list_head * p;
-        struct list_head * h;
 
-        if (prog == NULL)
-                return;
-
-        list_for_each_safe(p, h, &prog->names) {
-                struct str_el * s = list_entry(p, struct str_el, next);
-                list_del(&s->next);
-                free(s->str);
-                free(s);
+        list_for_each(p, &prog->names) {
+                struct name_entry * entry;
+                entry = list_entry(p, struct name_entry, next);
+                if (strcmp(entry->name, name) == 0)
+                        return entry;
         }
 
-        argvfree(prog->argv);
-        free(prog->prog);
-        free(prog);
+        return NULL;
 }
 
 int reg_prog_add_name(struct reg_prog * prog,
                       const char *      name)
 {
-        struct str_el * s;
+        struct name_entry * entry;
 
-        if (prog == NULL || name == NULL)
-                return -EINVAL;
+        assert(__reg_prog_get_name(prog, name) == NULL);
 
-        s = malloc(sizeof(*s));
-        if (s == NULL)
+        entry = malloc(sizeof(*entry));
+        if (entry == NULL) {
+                log_err("Failed to malloc name.");
                 goto fail_malloc;
+        }
 
-        s->str = strdup(name);
-        if(s->str == NULL)
+        entry->name = strdup(name);
+        if (entry == NULL) {
+                log_err("Failed to strdup name.");
                 goto fail_name;
+        }
 
-        list_add(&s->next, &prog->names);
+        list_add(&entry->next, &prog->names);
+
+        prog->n_names++;
 
         return 0;
 
  fail_name:
-        free(s);
+        free(entry);
  fail_malloc:
-        return -ENOMEM;
+        return -1;
 }
 
 void reg_prog_del_name(struct reg_prog * prog,
                        const char *      name)
 {
-        struct list_head * p;
-        struct list_head * h;
+        struct name_entry * entry;
 
-        list_for_each_safe(p, h, &prog->names) {
-                struct str_el * s = list_entry(p, struct str_el, next);
-                if (!strcmp(name, s->str)) {
-                        list_del(&s->next);
-                        free(s->str);
-                        free(s);
-                }
-        }
+        entry = __reg_prog_get_name(prog, name);
+        if (entry == NULL)
+                return;
+
+        list_del(&entry->next);
+
+        __free_name_entry(entry);
+
+        prog->n_names--;
+
+        assert(__reg_prog_get_name(prog, name) == NULL);
+}
+
+bool reg_prog_has_name(const struct reg_prog * prog,
+                       const char *            name)
+{
+        return __reg_prog_get_name(prog, name) != NULL;
 }

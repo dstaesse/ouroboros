@@ -23,53 +23,34 @@
 #ifndef OUROBOROS_IRMD_REG_PROC_H
 #define OUROBOROS_IRMD_REG_PROC_H
 
+#include <ouroboros/list.h>
+#include <ouroboros/proc.h>
 #include <ouroboros/shm_flow_set.h>
-
-#include "utils.h"
-
-#include <unistd.h>
-#include <ouroboros/pthread.h>
-
-enum proc_state {
-        PROC_NULL = 0,
-        PROC_INIT,
-        PROC_SLEEP,
-        PROC_WAKE,
-        PROC_DESTROY
-};
 
 struct reg_proc {
         struct list_head      next;
-        pid_t                 pid;
-        char *                prog;  /* program instantiated */
-        struct list_head      names; /* names for which process accepts flows */
+
+        struct proc_info      info;
+
+        struct list_head      names;   /* names for which process accepts flows */
+        size_t                n_names; /* number of names                       */
+
         struct shm_flow_set * set;
-
-        struct reg_name *     name;  /* name for which a flow arrived */
-
-        /* The process will block on this */
-        enum proc_state       state;
-        pthread_cond_t        cond;
-        pthread_mutex_t       lock;
 };
 
-struct reg_proc * reg_proc_create(pid_t        proc,
-                                  const char * prog);
+struct reg_proc * reg_proc_create(const struct proc_info * info);
 
 void              reg_proc_destroy(struct reg_proc * proc);
 
-int               reg_proc_sleep(struct reg_proc * proc,
-                                 struct timespec * timeo);
-
-void              reg_proc_wake(struct reg_proc * proc,
-                                struct reg_name * name);
-
-void              reg_proc_cancel(struct reg_proc * proc);
+void              reg_proc_clear(struct reg_proc * proc);
 
 int               reg_proc_add_name(struct reg_proc * proc,
                                     const char *      name);
 
 void              reg_proc_del_name(struct reg_proc * proc,
                                     const char *      name);
+
+bool              reg_proc_has_name(const struct reg_proc * proc,
+                                    const char *            name);
 
 #endif /* OUROBOROS_IRMD_REG_PROC_H */

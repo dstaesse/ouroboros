@@ -24,28 +24,24 @@
 #define OUROBOROS_IRMD_REG_IPCP_H
 
 #include <ouroboros/list.h>
+#include <ouroboros/ipcp.h>
 
 struct reg_ipcp {
         struct list_head next;
 
         struct ipcp_info info;
 
-        pid_t            pid;
-        enum hash_algo   dir_hash_algo;
-        char *           layer;
-
-        enum ipcp_state  state;
-        pthread_cond_t   cond;
-        pthread_mutex_t  mtx;
+        struct layer_info layer;
 };
 
 struct reg_ipcp * reg_ipcp_create(const struct ipcp_info * info);
 
-void              reg_ipcp_destroy(struct reg_ipcp * i);
+void              reg_ipcp_destroy(struct reg_ipcp * ipcp);
 
-void              reg_ipcp_set_state(struct reg_ipcp * i,
-                                     enum ipcp_state   state);
+void              reg_ipcp_update(struct reg_ipcp *        ipcp,
+                                  const struct ipcp_info * info);
 
-int               reg_ipcp_wait_boot(struct reg_ipcp * i);
+void              reg_ipcp_set_layer(struct reg_ipcp *         ipcp,
+                                     const struct layer_info * info);
 
 #endif /* OUROBOROS_IRMD_REG_IPCP_H */

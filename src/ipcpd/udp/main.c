@@ -592,10 +592,8 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
 
         assert(conf);
         assert(conf->type == THIS_TYPE);
-        ((struct ipcp_config *) conf)->layer_info.dir_hash_algo =
-                (enum pol_dir_hash) HASH_MD5;
 
-        ipcpi.dir_hash_algo = (enum hash_algo) conf->layer_info.dir_hash_algo;
+        ipcpi.dir_hash_algo = HASH_MD5;
         strcpy(ipcpi.layer_name, conf->layer_info.name);
 
         if (inet4_ntop(&conf->udp.ip_addr, ipstr) == NULL) {
@@ -1080,7 +1078,7 @@ static int udp_ipcp_flow_dealloc(int fd)
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        flow_dealloc(fd);
+        ipcp_flow_dealloc(fd);
 
         return 0;
 }

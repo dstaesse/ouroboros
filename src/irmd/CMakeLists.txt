@@ -38,7 +38,7 @@ else ()
   unset(HAVE_TOML)
 endif ()
 
-set(IRMD_REQ_ARR_TIMEOUT 500 CACHE STRING
+set(IRMD_REQ_ARR_TIMEOUT 1000 CACHE STRING
   "Timeout for an application to respond to a new flow (ms)")
 set(IRMD_FLOW_TIMEOUT 5000 CACHE STRING
   "Timeout for a flow allocation response (ms)")
@@ -53,9 +53,13 @@ set(QUERY_TIMEOUT 3000 CACHE STRING
 set(CONNECT_TIMEOUT 60000 CACHE STRING
   "Timeout to connect an IPCP to another IPCP (ms)")
 set(IRMD_MIN_THREADS 8 CACHE STRING
-  "Minimum number of worker threads in the IRMd.")
+  "Minimum number of worker threads in the IRMd")
 set(IRMD_ADD_THREADS 8 CACHE STRING
   "Number of extra threads to start when the IRMD faces thread starvation")
+set(IRMD_PKILL_TIMEOUT 30 CACHE STRING
+  "Number of seconds to wait before sending SIGKILL to subprocesses on exit")
+set(IRMD_KILL_ALL_PROCESSES TRUE CACHE BOOL
+  "Kill all processes on exit")
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)
@@ -65,12 +69,12 @@ set(SOURCE_FILES
   ipcp.c
   configfile.c
   main.c
-  utils.c
   reg/flow.c
   reg/ipcp.c
   reg/proc.c
   reg/prog.c
   reg/name.c
+  reg/reg.c
   )
 
 add_executable (irmd ${SOURCE_FILES})
@@ -86,4 +90,5 @@ endif ()
 install(TARGETS irmd RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 # Enable once irmd has tests
-# add_subdirectory(tests)
+#add_subdirectory(tests)
+add_subdirectory(reg)

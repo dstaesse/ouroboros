@@ -25,26 +25,28 @@
 
 #if defined (HAVE_TOML)
 
-#define _XOPEN_SOURCE 500
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE   500
 
 #define OUROBOROS_PREFIX "irmd/configuration"
 
-#include <toml.h>
+#include <ouroboros/errno.h>
+#include <ouroboros/ipcp.h>
+#include <ouroboros/logs.h>
+#include <ouroboros/utils.h>
+
+#include "irmd.h"
+#include "configfile.h"
+
+#include "reg/reg.h"
 
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include <toml.h>
 #include <arpa/inet.h>
-
-#include <ouroboros/errno.h>
-#include <ouroboros/ipcp.h>
-#include <ouroboros/logs.h>
-
-#include "irmd.h"
-#include "configfile.h"
-#include "utils.h"
 
 #define ERRBUFSZ 200
 
@@ -361,9 +363,12 @@ static int toml_autobind(toml_table_t * table,
 static int toml_register(toml_table_t * table,
                          pid_t          pid)
 {
-        toml_array_t * reg;
-        int            i;
-        int            ret = 0;
+        toml_array_t *   reg;
+        int              i;
+        int              ret = 0;
+        struct name_info info = {
+                .pol_lb = LB_SPILL
+        };
 
         reg = toml_array_in(table, "reg");
         if (reg == NULL)
@@ -378,7 +383,9 @@ static int toml_register(toml_table_t * table,
 
                 log_dbg("Registering %s in %d", name.u.s, pid);
 
-                ret = name_create(name.u.s, LB_SPILL);
+                strcpy(info.name, name.u.s);
+
+                ret = name_create(&info);
                 if (ret < 0 && ret != -ENAME) {
                         free(name.u.s);
                         break;
@@ -422,19 +429,17 @@ static int toml_connect(toml_table_t * table,
         return ret;
 }
 
-static int toml_ipcp(toml_table_t *           table,
-                     const struct ipcp_info * info,
-                     struct ipcp_config *     conf)
+static int toml_ipcp(toml_table_t *       table,
+                     struct ipcp_info *   info,
+                     struct ipcp_config * conf)
 {
         toml_datum_t bootstrap;
         toml_datum_t enrol;
-        pid_t        pid;
         int          ret;
 
         log_dbg("Found IPCP %s in configuration file.", info->name);
 
-        pid = create_ipcp(info);
-        if (pid < 0) {
+        if (create_ipcp(info) < 0) {
                 log_err("Failed to create IPCP %s.", info->name);
                 return -1;
         }
@@ -454,26 +459,26 @@ static int toml_ipcp(toml_table_t *           table,
         }
 
         if (enrol.ok) {
-                char layer[LAYER_NAME_SIZE + 1];
-                ret = enroll_ipcp(pid, enrol.u.s);
+                struct layer_info layer;
+                ret = enroll_ipcp(info->pid, enrol.u.s);
                 free(enrol.u.s);
                 if (ret < 0) {
                         log_err("Failed to enrol %s.", info->name);
                         return -1;
                 }
 
-                if (get_layer_for_ipcp(pid, layer) < 0)
+                if (reg_get_ipcp(info, &layer) < 0)
                         return -1;
 
-                if (toml_autobind(table, pid, info->name, layer))
+                if (toml_autobind(table, info->pid, info->name, layer.name))
                         return -1;
 
-                if (toml_register(table, pid) < 0) {
+                if (toml_register(table, info->pid) < 0) {
                         log_err("Failed to register names.");
                         return -1;
                 }
 
-                if (toml_connect(table, pid) < 0) {
+                if (toml_connect(table, info->pid) < 0) {
                         log_err("Failed to register names.");
                         return -1;
                 }
@@ -519,13 +524,14 @@ static int toml_ipcp(toml_table_t *           table,
         strcpy(conf->layer_info.name, bootstrap.u.s);
         free(bootstrap.u.s);
 
-        if (bootstrap_ipcp(pid, conf) < 0)
+        if (bootstrap_ipcp(info->pid, conf) < 0)
                 return -1;
 
-        if (toml_autobind(table, pid, info->name, conf->layer_info.name) < 0)
+        if (toml_autobind(table, info->pid, info->name,
+                          conf->layer_info.name) < 0)
                 return -1;
 
-        if (toml_register(table, pid) < 0) {
+        if (toml_register(table, info->pid) < 0) {
                 log_err("Failed to register names.");
                 return -1;
         }
@@ -544,6 +550,9 @@ static int toml_ipcp_list(toml_table_t * table,
                 struct ipcp_info   info;
                 struct ipcp_config conf;
 
+                memset(&conf, 0, sizeof(conf));
+                memset(&info, 0, sizeof(info));
+
                 key = toml_key_in(table, i);
                 if (key == NULL)
                         break;
@@ -552,8 +561,6 @@ static int toml_ipcp_list(toml_table_t * table,
                         log_err("IPCP name too long: %s,", key);
                         return -1;
                 }
-
-                memset(&conf, 0, sizeof(conf));
 
                 info.type = type;
                 strcpy(info.name,key);
@@ -565,31 +572,37 @@ static int toml_ipcp_list(toml_table_t * table,
         return ret;
 }
 
-static int args_to_argv(const char * args,
+static int args_to_argv(const char * prog,
+                        const char * args,
                         char ***     argv)
 {
         char * tok;
         char * str;
         int    argc = 0;
 
-        if (args == NULL) {
-                *argv = NULL;
-                return 0;
-        }
-
         str = (char *) args;
 
-        tok = str;
-        while (*(tok += strspn(tok, " ")) != '\0') {
-                tok  += strcspn(tok, " ");
-                argc++;
+        if (str != NULL) {
+                tok = str;
+                while (*(tok += strspn(tok, " ")) != '\0') {
+                        tok  += strcspn(tok, " ");
+                        argc++;
+                }
         }
 
-        *argv = malloc((argc + 1) * sizeof(**argv));
+        *argv = malloc((argc + 2) * sizeof(**argv));
         if (*argv == NULL)
                 goto fail_malloc;
 
-        argc = 0;
+        (*argv)[0] = strdup(prog);
+        if ((*argv)[0] == NULL)
+                goto fail_malloc2;
+
+        argc++;
+
+        if (str == NULL)
+                goto finish;
+
         tok = str;
         while (*(tok += strspn(tok, " ")) != '\0') {
                 size_t toklen = strcspn(tok, " ");
@@ -602,6 +615,7 @@ static int args_to_argv(const char * args,
                 tok += toklen;
         }
 
+ finish:
         (*argv)[argc] = NULL;
 
         return argc;
@@ -613,30 +627,30 @@ static int args_to_argv(const char * args,
 
 }
 
-static int toml_prog(char *       prog,
+static int toml_prog(const char * prog,
                      const char * args,
                      const char * name)
 {
         uint16_t flags = 0;
         int      argc;
-        char **  argv;
+        char **  exec;
         int      ret;
 
         if (args != NULL)
                 flags |= BIND_AUTO;
 
-        argc = args_to_argv(args, &argv);
+        argc = args_to_argv(prog, args, &exec);
         if (argc < 0) {
                 log_err("Failed to parse arguments: %s", args);
                 return -1;
         }
 
-        ret = bind_program(prog, name, flags, argc, argv);
+        ret = bind_program(exec, name, flags);
         if (ret < 0)
                 log_err("Failed to bind program %s %s for name %s.",
                         prog, args, name);
 
-        argvfree(argv);
+        argvfree(exec);
 
         return ret;
 }
@@ -683,27 +697,31 @@ static int toml_name(toml_table_t * table,
         toml_array_t *   progs;
         toml_array_t *   args;
         toml_datum_t     lb;
-        enum pol_balance lb_pol = LB_SPILL;
+        struct name_info info = {
+                .pol_lb = LB_SPILL
+        };
 
         log_dbg("Found service name %s in configuration file.", name);
 
         lb = toml_string_in(table, "lb");
         if (lb.ok) {
                 if (strcmp(lb.u.s, "spill") == 0)
-                        lb_pol = LB_SPILL;
+                        info.pol_lb = LB_SPILL;
                 else if (strcmp(lb.u.s, "round-robin") == 0)
-                        lb_pol = LB_RR;
+                        info.pol_lb = LB_RR;
                 else
-                        lb_pol = LB_INVALID;
+                        info.pol_lb = LB_INVALID;
                 free(lb.u.s);
         }
 
-        if (lb_pol == LB_INVALID) {
+        if (info.pol_lb == LB_INVALID) {
                 log_err("Invalid load-balancing policy for %s.", name);
                 return -1;
         }
 
-        if (name_create(name, lb_pol) < 0) {
+        strcpy(info.name, name);
+
+        if (name_create(&info) < 0) {
                 log_err("Failed to create name %s.", name);
                 return -1;
         }

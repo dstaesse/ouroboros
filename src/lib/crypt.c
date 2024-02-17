@@ -182,15 +182,14 @@ static void openssl_ecdh_pkp_destroy(void * pkp)
 }
 
 static int openssl_ecdh_derive(void *    pkp,
-                               uint8_t * pk,
-                               size_t    len,
+                               buffer_t  pk,
                                uint8_t * s)
 {
         uint8_t *  pos;
         EVP_PKEY * pub;
 
-        pos = pk; /* d2i_PUBKEY increments the pointer, don't use key ptr! */
-        pub = d2i_PUBKEY(NULL, (const uint8_t **) &pos, (long) len);
+        pos = pk.data; /* d2i_PUBKEY increments the pointer, don't use key ptr! */
+        pub = d2i_PUBKEY(NULL, (const uint8_t **) &pos, (long) pk.len);
         if (pub == NULL)
                 return -ECRYPT;
 
@@ -390,16 +389,14 @@ void crypt_dh_pkp_destroy(void * pkp)
 }
 
 int crypt_dh_derive(void *    pkp,
-                    uint8_t * pk,
-                    size_t    len,
+                    buffer_t  pk,
                     uint8_t * s)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_ecdh_derive(pkp, pk, len, s);
+        return openssl_ecdh_derive(pkp, pk, s);
 #else
         (void) pkp;
         (void) pk;
-        (void) len;
 
         memset(s, 0, SYMMKEYSZ);
 

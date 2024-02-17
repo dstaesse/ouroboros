@@ -22,7 +22,7 @@
 
 #define _POSIX_C_SOURCE 200809L
 
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 
 #include <stdio.h>
 
@@ -66,8 +66,8 @@ static int tv_check(struct timeval * v,
         return v->tv_sec == sec && v->tv_usec == usec;
 }
 
-int time_utils_test(int     argc,
-                    char ** argv)
+int time_test(int     argc,
+              char ** argv)
 {
         struct timespec s0;
         struct timespec s1;

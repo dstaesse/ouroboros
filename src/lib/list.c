@@ -65,7 +65,7 @@ void list_del(struct list_head * e)
         e->nxt = e->prv = e;
 }
 
-bool list_is_empty(struct list_head * h)
+bool list_is_empty(const struct list_head * h)
 {
         return h->nxt == h;
 }

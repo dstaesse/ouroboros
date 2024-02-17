@@ -24,6 +24,7 @@
 #define OUROBOROS_LIB_CRYPT_H
 
 #include <ouroboros/shm_du_buff.h>
+#include <ouroboros/utils.h>
 
 #define SYMMKEYSZ 32
 
@@ -39,8 +40,7 @@ int  crypt_dh_pkp_create(void **   pkp,
 void crypt_dh_pkp_destroy(void * pkp);
 
 int  crypt_dh_derive(void *    pkp,
-                     uint8_t * pk,
-                     size_t    len,
+                     buffer_t  pk,
                      uint8_t * s);
 
 int  crypt_encrypt(struct crypt_info *  info,

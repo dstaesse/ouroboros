@@ -24,7 +24,7 @@ void shm_rbuff_destroy(struct shm_rbuff * rb)
 {
         char fn[FN_MAX_CHARS];
 
-        assert(rb);
+        assert(rb != NULL);
 
 #ifdef CONFIG_OUROBOROS_DEBUG
         pthread_mutex_lock(rb->lock);
@@ -48,7 +48,7 @@ int shm_rbuff_write(struct shm_rbuff * rb,
 {
         int ret = 0;
 
-        assert(rb);
+        assert(rb != NULL);
         assert(idx < SHM_BUFFER_SIZE);
 
 #ifndef HAVE_ROBUST_MUTEX
@@ -91,7 +91,7 @@ int shm_rbuff_write_b(struct shm_rbuff *      rb,
 {
         int ret = 0;
 
-        assert(rb);
+        assert(rb != NULL);
         assert(idx < SHM_BUFFER_SIZE);
 
 #ifndef HAVE_ROBUST_MUTEX
@@ -138,6 +138,8 @@ int shm_rbuff_write_b(struct shm_rbuff *      rb,
 
 static int check_rb_acl(struct shm_rbuff * rb)
 {
+        assert(rb != NULL);
+
         if (*rb->acl & ACL_FLOWDOWN)
                 return -EFLOWDOWN;
 
@@ -151,7 +153,7 @@ ssize_t shm_rbuff_read(struct shm_rbuff * rb)
 {
         ssize_t ret = 0;
 
-        assert(rb);
+        assert(rb != NULL);
 
 #ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
@@ -180,7 +182,7 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
 {
         ssize_t idx = -1;
 
-        assert(rb);
+        assert(rb != NULL);
 
 #ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
@@ -224,7 +226,7 @@ ssize_t shm_rbuff_read_b(struct shm_rbuff *      rb,
 void shm_rbuff_set_acl(struct shm_rbuff * rb,
                        uint32_t           flags)
 {
-        assert(rb);
+        assert(rb != NULL);
 
 #ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
@@ -244,7 +246,7 @@ uint32_t shm_rbuff_get_acl(struct shm_rbuff * rb)
 {
         uint32_t flags;
 
-        assert(rb);
+        assert(rb != NULL);
 
 #ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
@@ -261,7 +263,7 @@ uint32_t shm_rbuff_get_acl(struct shm_rbuff * rb)
 
 void shm_rbuff_fini(struct shm_rbuff * rb)
 {
-        assert(rb);
+        assert(rb != NULL);
 
 #ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);
@@ -285,7 +287,7 @@ size_t shm_rbuff_queued(struct shm_rbuff * rb)
 {
         size_t ret;
 
-        assert(rb);
+        assert(rb != NULL);
 
 #ifndef HAVE_ROBUST_MUTEX
         pthread_mutex_lock(rb->lock);

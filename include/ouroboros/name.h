@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
- * RIB export using FUSE
+ * Names
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,39 +20,21 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LIB_RIB_H
-#define OUROBOROS_LIB_RIB_H
+#ifndef OUROBOROS_NAME_H
+#define OUROBOROS_NAME_H
 
-#define RIB_PATH_LEN  300
-#define RIB_SEPARATOR "/"
+#define NAME_SIZE 255
+#define BIND_AUTO 0x01
 
-#include <sys/types.h>
-
-struct rib;
-
-struct rib_attr {
-        size_t size;  /* Size of RIB document  */
-        time_t mtime; /* Last modified time    */
+enum pol_balance {
+        LB_RR = 0,
+        LB_SPILL,
+        LB_INVALID
 };
 
-struct rib_ops {
-        int (* read)(const char * path,
-                     char *       buf,
-                     size_t       len);
-        int (* readdir)(char *** entries);
-        int (* getattr)(const char *      path,
-                        struct rib_attr * attr);
+struct name_info {
+        char             name[NAME_SIZE + 1];
+        enum pol_balance pol_lb;
 };
 
-int  rib_init(const char * prefix);
-
-void rib_fini(void);
-
-int  rib_reg(const char *     path,
-             struct rib_ops * ops);
-
-void rib_unreg(const char * path);
-
-void rib_cleanup(const char * mnt);
-
-#endif /* OUROBOROS_LIB_RIB_H */
+#endif /* OUROBOROS_NAME_H */

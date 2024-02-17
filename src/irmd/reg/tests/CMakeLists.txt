@@ -3,10 +3,20 @@ get_filename_component(src_folder "${tmp}" NAME)
 
 create_test_sourcelist(${src_folder}_tests test_suite.c
   # Add new tests here
+  flow_test.c
+  ipcp_test.c
+  name_test.c
+  proc_test.c
+  prog_test.c
+  reg_test.c
 )
 
 add_executable(${src_folder}_test EXCLUDE_FROM_ALL ${${src_folder}_tests})
 target_link_libraries(${src_folder}_test ouroboros-common)
+
+if (CMAKE_BUILD_TYPE MATCHES "Debug*")
+  add_compile_flags(${src_folder}_test -DCONFIG_OUROBOROS_DEBUG)
+endif ()
 
 add_dependencies(check ${src_folder}_test)
 
@@ -15,5 +25,5 @@ remove(tests_to_run test_suite.c)
 
 foreach(test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
-  add_test(irmd/${test_name} ${C_TEST_PATH}/${src_folder}_test ${test_name})
+  add_test(irmd/reg/${test_name} ${C_TEST_PATH}/${src_folder}_test ${test_name})
 endforeach(test)

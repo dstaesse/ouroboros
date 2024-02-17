@@ -29,7 +29,7 @@
 #include "config.h"
 
 #include <ouroboros/ipcp-dev.h>
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 
 #include "mb-ecn.h"
 
@@ -187,7 +187,7 @@ ca_wnd_t mb_ecn_ctx_update_snd(void * _ctx,
 void mb_ecn_wnd_wait(ca_wnd_t wnd)
 {
         if (wnd.wait > 0) {
-                struct timespec s = {0, 0};
+                struct timespec s = TIMESPEC_INIT_S(0);
                 if (wnd.wait > BILLION) /* Don't care throttling < 1s */
                         s.tv_sec = 1;
                 else

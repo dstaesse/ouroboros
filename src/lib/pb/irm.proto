@@ -37,32 +37,37 @@ enum irm_msg_code {
         IRM_BIND_PROGRAM      =  9;
         IRM_UNBIND_PROGRAM    = 10;
         IRM_PROC_ANNOUNCE     = 11;
-        IRM_BIND_PROCESS      = 12;
-        IRM_UNBIND_PROCESS    = 13;
-        IRM_CREATE_NAME       = 14;
-        IRM_DESTROY_NAME      = 15;
-        IRM_LIST_NAMES        = 16;
-        IRM_REG_NAME          = 17;
-        IRM_UNREG_NAME        = 18;
-        IRM_FLOW_ALLOC        = 19;
-        IRM_FLOW_ACCEPT       = 20;
-        IRM_FLOW_JOIN         = 21;
-        IRM_FLOW_DEALLOC      = 22;
-        IPCP_FLOW_REQ_ARR     = 23;
-        IPCP_FLOW_ALLOC_REPLY = 24;
-        IRM_REPLY             = 25;
+        IRM_PROC_EXIT         = 12;
+        IRM_BIND_PROCESS      = 13;
+        IRM_UNBIND_PROCESS    = 14;
+        IRM_CREATE_NAME       = 15;
+        IRM_DESTROY_NAME      = 16;
+        IRM_LIST_NAMES        = 17;
+        IRM_REG_NAME          = 18;
+        IRM_UNREG_NAME        = 19;
+        IRM_FLOW_ALLOC        = 20;
+        IRM_FLOW_ACCEPT       = 21;
+        IRM_FLOW_JOIN         = 22;
+        IRM_FLOW_DEALLOC      = 23;
+        IPCP_FLOW_DEALLOC     = 24;
+        IPCP_FLOW_REQ_ARR     = 25;
+        IPCP_FLOW_ALLOC_REPLY = 26;
+        IRM_REPLY             = 27;
 }
 
 message ipcp_info_msg {
-        required uint32 type = 1;
-        required string name = 2;
+        required uint32 type  = 1;
+        required string name  = 2;
+        required uint32 pid   = 3;
+        required uint32 state = 4;
 }
 
 message ipcp_list_msg {
-        required uint32 pid   = 1;
-        required uint32 type  = 2;
-        required string name  = 3;
-        required string layer = 4;
+        required uint32 pid       = 1;
+        required uint32 type      = 2;
+        required string name      = 3;
+        required string layer     = 4;
+        required uint32 hash_algo = 5;
 }
 
 message name_info_msg {
@@ -77,7 +82,7 @@ message irm_msg {
         optional string name             =  4;
         optional ipcp_info_msg ipcp_info =  5;
         optional string layer            =  6;
-        repeated string args             =  7;
+        repeated string exec             =  7;
         optional sint32 response         =  8;
         optional string dst              =  9;
         optional bytes  hash             = 10;

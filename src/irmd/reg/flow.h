@@ -24,51 +24,40 @@
 #define OUROBOROS_IRMD_REG_FLOW_H
 
 #include <ouroboros/list.h>
+#include <ouroboros/flow.h>
+#include <ouroboros/pthread.h>
 #include <ouroboros/qos.h>
 #include <ouroboros/shm_rbuff.h>
 #include <ouroboros/utils.h>
 
 #include <sys/types.h>
-#include <pthread.h>
 #include <time.h>
 
 struct reg_flow {
-        struct list_head   next;
+        struct list_head next;
 
-        int                flow_id;
+        struct flow_info info;
 
-        pid_t              n_pid;
-        pid_t              n_1_pid;
-
-        qosspec_t          qs;
-        time_t             mpl;
-        buffer_t           data;
+        buffer_t         data;
+        struct timespec  t0;
 
         struct shm_rbuff * n_rb;
         struct shm_rbuff * n_1_rb;
-
-        struct timespec    t0;
-
-        enum flow_state    state;
-        pthread_cond_t     cond;
-        pthread_mutex_t    mtx;
 };
 
-struct reg_flow * reg_flow_create(pid_t     n_pid,
-                                  pid_t     n_1_pid,
-                                  int       flow_id,
-                                  qosspec_t qs);
+struct reg_flow * reg_flow_create(const struct flow_info * info);
 
-void              reg_flow_destroy(struct reg_flow * f);
+void              reg_flow_destroy(struct reg_flow * flow);
 
-enum flow_state   reg_flow_get_state(struct reg_flow * f);
+int               reg_flow_update(struct reg_flow *  flow,
+                                  struct flow_info * info);
 
+void              reg_flow_set_data(struct reg_flow * flow,
+                                    const buffer_t *  buf);
 
-void              reg_flow_set_state(struct reg_flow * f,
-                                     enum flow_state   state);
+void              reg_flow_get_data(struct reg_flow * flow,
+                                    buffer_t *        buf);
 
-int               reg_flow_wait_state(struct reg_flow * f,
-                                      enum flow_state   state,
-                                      struct timespec * timeo);
+void              reg_flow_free_data(struct reg_flow * flow);
 
 #endif /* OUROBOROS_IRMD_REG_FLOW_H */

@@ -24,10 +24,10 @@
 #define OUROBOROS_LIB_SHM_RDRBUFF_H
 
 #include <ouroboros/shm_du_buff.h>
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 
-#include <stdint.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 struct shm_rdrbuff;

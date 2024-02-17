@@ -107,7 +107,7 @@ int do_create_ipcp(int     argc,
         }
 
         pid = irm_create_ipcp(ipcp_name, type);
-        if (pid <= 0)
+        if (pid < 0)
                 return -1;
 
         return 0;

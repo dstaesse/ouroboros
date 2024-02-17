@@ -37,7 +37,7 @@
 #include <ouroboros/notifier.h>
 #include <ouroboros/random.h>
 #include <ouroboros/rib.h>
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 
 #include "common/connmgr.h"
 #include "common/enroll.h"

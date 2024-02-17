@@ -1,3 +1,4 @@
+
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
@@ -20,428 +21,355 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#if defined(__linux__) || defined(__CYGWIN__)
-#define _DEFAULT_SOURCE
-#else
 #define _POSIX_C_SOURCE 200809L
-#endif
 
-#include "config.h"
+#define OUROBOROS_PREFIX "reg/name"
 
-#define OUROBOROS_PREFIX "reg_name"
-
-#include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
-#include <ouroboros/time_utils.h>
-#include <ouroboros/pthread.h>
+#include <ouroboros/utils.h>
 
 #include "name.h"
-#include "utils.h"
 
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <signal.h>
-#include <unistd.h>
-#include <limits.h>
 #include <assert.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 
-struct reg_name * reg_name_create(const char *     name,
-                                  enum pol_balance lb)
+struct prog_entry {
+        struct list_head next;
+        char **          exec;
+};
+
+struct proc_entry {
+        struct list_head next;
+        pid_t            pid;
+};
+
+static void __free_prog_entry(struct prog_entry * entry)
 {
-        pthread_condattr_t cattr;
-        struct reg_name *  n;
+        assert(entry != NULL);
+        assert(entry->exec != NULL);
 
-        assert(name != NULL);
+        argvfree(entry->exec);
+        free(entry);
+}
 
-        n = malloc(sizeof(*n));
-        if (n == NULL)
+struct reg_name * reg_name_create(const struct name_info * info)
+{
+        struct reg_name * name;
+
+        assert(info != NULL);
+
+        name = malloc(sizeof(*name));
+        if (name == NULL) {
+                log_err("Failed to malloc name.");
                 goto fail_malloc;
+        }
 
-        if (pthread_condattr_init(&cattr))
-                goto fail_cattr;
+        list_head_init(&name->next);
+        list_head_init(&name->progs);
+        list_head_init(&name->procs);
+        list_head_init(&name->active);
 
-#ifndef __APPLE__
-        pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
-#endif
-        if (pthread_cond_init(&n->cond, &cattr))
-                goto fail_cond;
+        name->info     = *info;
+        name->n_progs  = 0;
+        name->n_procs  = 0;
+        name->n_active = 0;
 
-        if (pthread_mutex_init(&n->mtx, NULL))
-                goto fail_mutex;
+        return name;
 
-        n->name = strdup(name);
-        if (n->name == NULL)
-                goto fail_name;
-
-        pthread_condattr_destroy(&cattr);
-
-        list_head_init(&n->next);
-        list_head_init(&n->reg_progs);
-        list_head_init(&n->reg_pids);
-
-        n->pol_lb = lb;
-        n->state = NAME_IDLE;
-
-        return n;
-
- fail_name:
-        pthread_mutex_destroy(&n->mtx);
- fail_mutex:
-        pthread_cond_destroy(&n->cond);
- fail_cond:
-        pthread_condattr_destroy(&cattr);
- fail_cattr:
-        free(n);
  fail_malloc:
         return NULL;
 }
 
-static void cancel_reg_name_destroy(void * o)
+void reg_name_destroy(struct reg_name * name)
 {
-        struct reg_name * name;
-        struct list_head * p;
-        struct list_head * h;
+        assert(name != NULL);
 
-        name = (struct reg_name *) o;
+        assert(list_is_empty(&name->next));
 
-        pthread_mutex_unlock(&name->mtx);
+        assert(name->n_progs == 0);
+        assert(name->n_procs == 0);
+        assert(name->n_active == 0);
 
-        pthread_cond_destroy(&name->cond);
-        pthread_mutex_destroy(&name->mtx);
-
-        if (name->name != NULL)
-                free(name->name);
-
-        list_for_each_safe(p, h, &name->reg_pids) {
-                struct pid_el * pe = list_entry(p, struct pid_el, next);
-                list_del(&pe->next);
-                free(pe);
-        }
-
-        list_for_each_safe(p, h, &name->reg_progs) {
-                struct str_el * se = list_entry(p, struct str_el, next);
-                list_del(&se->next);
-                free(se->str);
-                free(se);
-        }
+        assert(list_is_empty(&name->progs));
+        assert(list_is_empty(&name->procs));
+        assert(list_is_empty(&name->active));
 
         free(name);
 }
 
-void reg_name_destroy(struct reg_name * name)
-{
-        if (name == NULL)
-                return;
-
-        pthread_mutex_lock(&name->mtx);
-
-        if (name->state == NAME_DESTROY) {
-                pthread_mutex_unlock(&name->mtx);
-                return;
-        }
-
-        if (name->state != NAME_FLOW_ACCEPT)
-                name->state = NAME_NULL;
-        else
-                name->state = NAME_DESTROY;
-
-        pthread_cond_broadcast(&name->cond);
-
-        pthread_cleanup_push(cancel_reg_name_destroy, name);
-
-        while (name->state != NAME_NULL)
-                pthread_cond_wait(&name->cond, &name->mtx);
-
-        pthread_cleanup_pop(true);
-}
-
-static bool reg_name_has_prog(struct reg_name * name,
-                              const char *      prog)
+static struct proc_entry * __reg_name_get_active(const struct reg_name * name,
+                                                 pid_t                   pid)
 {
         struct list_head * p;
 
-        list_for_each(p, &name->reg_progs) {
-                struct str_el * name = list_entry(p, struct str_el, next);
-                if (!strcmp(name->str, prog))
-                        return true;
+        assert(name != NULL);
+        assert(pid > 0);
+
+        list_for_each(p, &name->active) {
+                struct proc_entry * entry;
+                entry = list_entry(p, struct proc_entry, next);
+                if (entry->pid == pid)
+                        return entry;
         }
 
-        return false;
+        return NULL;
 }
 
-int reg_name_add_prog(struct reg_name * name,
-                      struct reg_prog * a)
+static void __reg_name_del_all_active(struct reg_name * name,
+                                      pid_t             pid)
 {
-        struct str_el * n;
+        struct list_head * p;
+        struct list_head * h;
 
-        if (reg_name_has_prog(name, a->prog)) {
-                log_warn("Program %s already accepting flows for %s.",
-                         a->prog, name->name);
-                return 0;
+        list_for_each_safe(p, h, &name->active) {
+                struct proc_entry * entry;
+                entry = list_entry(p, struct proc_entry, next);
+                if (entry->pid == pid) {
+                        list_del(&entry->next);
+                        free(entry);
+                        name->n_active--;
+                }
+        }
+}
+
+static struct proc_entry * __reg_name_get_proc(const struct reg_name * name,
+                                               pid_t                   pid)
+{
+        struct list_head * p;
+
+        assert(name != NULL);
+        assert(pid > 0);
+
+        list_for_each(p, &name->procs) {
+                struct proc_entry * entry;
+                entry = list_entry(p, struct proc_entry, next);
+                if (entry->pid == pid)
+                        return entry;
         }
 
-        if (!(a->flags & BIND_AUTO)) {
-                log_dbg("Program %s cannot be auto-instantiated.", a->prog);
-                return 0;
+        return NULL;
+}
+
+static struct prog_entry * __reg_name_get_prog(const struct reg_name * name,
+                                               const char *            prog)
+{
+        struct list_head * p;
+
+        assert(name != NULL);
+        assert(prog != NULL);
+
+        list_for_each(p, &name->progs) {
+                struct prog_entry * entry;
+                entry = list_entry(p, struct prog_entry, next);
+                if (strcmp(entry->exec[0], prog) == 0)
+                        return entry;
         }
 
-        n = malloc(sizeof(*n));
-        if (n == NULL)
-                return -ENOMEM;
+        return NULL;
+}
 
-        n->str = strdup(a->prog);
-        if (n->str == NULL) {
-                free(n);
-                return -ENOMEM;
+int reg_name_add_active(struct reg_name * name,
+                        pid_t             pid)
+{
+        struct proc_entry * entry;
+
+        assert(name != NULL);
+        assert(pid > 0);
+
+        assert(__reg_name_get_proc(name, pid) != NULL);
+
+        log_dbg("Process %d accepting flows for %s.", pid, name->info.name);
+
+        if (__reg_name_get_active(name, pid) != NULL)
+                log_dbg("Process calling accept from multiple threads.");
+
+        entry = malloc(sizeof(*entry));
+        if (entry == NULL) {
+                log_err("Failed to malloc active.");
+                goto fail_malloc;
         }
 
-        list_add(&n->next, &name->reg_progs);
+        entry->pid = pid;
 
-        pthread_mutex_lock(&name->mtx);
+        switch (name->info.pol_lb) {
+        case LB_RR:    /* Round robin policy. */
+                list_add_tail(&entry->next, &name->active);
+                break;
+        case LB_SPILL: /* Keep accepting flows on the current process */
+                list_add(&entry->next, &name->active);
+                break;
+        default:
+                goto fail_unreachable;
+        }
 
-        if (name->state == NAME_IDLE)
-                name->state = NAME_AUTO_ACCEPT;
-
-        pthread_mutex_unlock(&name->mtx);
+        name->n_active++;
 
         return 0;
+
+ fail_unreachable:
+        free(entry);
+        assert(false);
+ fail_malloc:
+        return -1;
+}
+
+void reg_name_del_active(struct reg_name * name,
+                         pid_t             pid)
+{
+        struct proc_entry * entry;
+
+        entry = __reg_name_get_active(name, pid);
+        if (entry == NULL)
+                return;
+
+        list_del(&entry->next);
+
+        name->n_active--;
+
+        free(entry);
+}
+
+pid_t reg_name_get_active(struct reg_name * name)
+{
+        assert(name != NULL);
+
+        if (list_is_empty(&name->active))
+                return -1;
+
+        return list_first_entry(&name->active, struct proc_entry, next)->pid;
+}
+
+int reg_name_add_proc(struct reg_name * name,
+                      pid_t             pid)
+{
+        struct proc_entry * entry;
+
+        assert(name != NULL);
+        assert(pid > 0);
+
+        assert(__reg_name_get_proc(name, pid) == NULL);
+
+        entry = malloc(sizeof(*entry));
+        if (entry == NULL) {
+                log_err("Failed to malloc proc.");
+                goto fail_malloc;
+        }
+
+        entry->pid = pid;
+
+        list_add(&entry->next, &name->procs);
+
+        name->n_procs++;
+
+        return 0;
+
+ fail_malloc:
+        return -1;
+}
+
+void reg_name_del_proc(struct reg_name * name,
+                       pid_t             pid)
+{
+        struct proc_entry * entry;
+
+        assert(name != NULL);
+        assert(pid > 0);
+
+        entry = __reg_name_get_proc(name, pid);
+        if (entry == NULL)
+                return;
+
+        __reg_name_del_all_active(name, pid);
+
+        list_del(&entry->next);
+
+        free(entry);
+
+        name->n_procs--;
+
+        assert(__reg_name_get_proc(name, pid) == NULL);
+}
+
+bool reg_name_has_proc(const struct reg_name * name,
+                       pid_t                   pid)
+{
+        return __reg_name_get_proc(name, pid) != NULL;
+}                char ** exec;
+
+
+int reg_name_add_prog(struct reg_name * name,
+                      char **           exec)
+{
+        struct prog_entry * entry;
+
+        assert(name != NULL);
+        assert(exec != NULL);
+        assert(exec[0] != NULL);
+
+        assert(__reg_name_get_prog(name, exec[0]) == NULL);
+
+        entry = malloc(sizeof(*entry));
+        if (entry == NULL) {
+                log_err("Failed to malloc prog.");
+                goto fail_malloc;
+        }
+
+        entry->exec = argvdup(exec);
+        if (entry->exec == NULL) {
+                log_err("Failed to argvdup prog.");
+                goto fail_exec;
+        }
+
+        list_add(&entry->next, &name->progs);
+
+        log_dbg("Add prog %s to name %s.", exec[0], name->info.name);
+
+        name->n_progs++;
+
+        return 0;
+
+ fail_exec:
+        free(entry);
+ fail_malloc:
+        return -1;
 }
 
 void reg_name_del_prog(struct reg_name * name,
                        const char *      prog)
 {
-        struct list_head * p;
-        struct list_head * h;
+        struct prog_entry * entry;
 
-        list_for_each_safe(p, h, &name->reg_progs) {
-                struct str_el * se = list_entry(p, struct str_el, next);
-                if (strcmp(prog, se->str) == 0) {
-                        list_del(&se->next);
-                        free(se->str);
-                        free(se);
-                }
-        }
+        assert(name != NULL);
+        assert(prog != NULL);
 
-        pthread_mutex_lock(&name->mtx);
+        entry = __reg_name_get_prog(name, prog);
+        if (entry == NULL)
+                return;
 
-        if (name->state == NAME_AUTO_ACCEPT && list_is_empty(&name->reg_progs)) {
-                name->state = NAME_IDLE;
-                pthread_cond_broadcast(&name->cond);
-        }
+        list_del(&entry->next);
 
-        pthread_mutex_unlock(&name->mtx);
+        __free_prog_entry(entry);
+
+        name->n_progs--;
+
+        assert(__reg_name_get_prog(name, prog) == NULL);
 }
 
-char * reg_name_get_prog(struct reg_name * name)
+bool reg_name_has_prog(const struct reg_name * name,
+                       const char *            prog)
 {
-        if (!list_is_empty(&name->reg_pids) || list_is_empty(&name->reg_progs))
+        assert(name != NULL);
+        assert(prog != NULL);
+
+        return __reg_name_get_prog(name, prog) != NULL;
+}
+
+char ** reg_name_get_exec(const struct reg_name * name)
+{
+        if (list_is_empty(&name->progs))
                 return NULL;
 
-        return list_first_entry(&name->reg_progs, struct str_el, next)->str;
-}
-
-static bool reg_name_has_pid(struct reg_name * name,
-                             pid_t             pid)
-{
-        struct list_head * p;
-
-        list_for_each(p, &name->reg_progs) {
-                struct pid_el * name = list_entry(p, struct pid_el, next);
-                if (name->pid == pid)
-                        return true;
-        }
-
-        return false;
-}
-
-int reg_name_add_pid(struct reg_name * name,
-                     pid_t             pid)
-{
-        struct pid_el * i;
-
-        assert(name);
-
-        if (reg_name_has_pid(name, pid)) {
-                log_dbg("Process already registered with this name.");
-                return -EPERM;
-        }
-
-        pthread_mutex_lock(&name->mtx);
-
-        if (name->state == NAME_NULL) {
-                pthread_mutex_unlock(&name->mtx);
-                log_dbg("Tried to add instance in NULL state.");
-                return -EPERM;
-        }
-
-        i = malloc(sizeof(*i));
-        if (i == NULL) {
-                pthread_mutex_unlock(&name->mtx);
-                return -ENOMEM;
-        }
-
-        i->pid = pid;
-
-        /* load balancing policy assigns queue order for this process. */
-        switch(name->pol_lb) {
-        case LB_RR:    /* Round robin policy. */
-                list_add_tail(&i->next, &name->reg_pids);
-                break;
-        case LB_SPILL: /* Keep accepting flows on the current process */
-                list_add(&i->next, &name->reg_pids);
-                break;
-        default:
-                free(i);
-                assert(false);
-        };
-
-        if (name->state == NAME_IDLE ||
-            name->state == NAME_AUTO_ACCEPT ||
-            name->state == NAME_AUTO_EXEC) {
-                name->state = NAME_FLOW_ACCEPT;
-                pthread_cond_broadcast(&name->cond);
-        }
-
-        pthread_mutex_unlock(&name->mtx);
-
-        return 0;
-}
-
-void reg_name_set_policy(struct reg_name * name,
-                         enum pol_balance  lb)
-{
-        name->pol_lb = lb;
-}
-
-static void reg_name_check_state(struct reg_name * name)
-{
-        assert(name);
-
-        if (name->state == NAME_DESTROY) {
-                name->state = NAME_NULL;
-                pthread_cond_broadcast(&name->cond);
-                return;
-        }
-
-        if (list_is_empty(&name->reg_pids)) {
-                if (!list_is_empty(&name->reg_progs))
-                        name->state = NAME_AUTO_ACCEPT;
-                else
-                        name->state = NAME_IDLE;
-        } else {
-                name->state = NAME_FLOW_ACCEPT;
-        }
-
-        pthread_cond_broadcast(&name->cond);
-}
-
-void reg_name_del_pid_el(struct reg_name * name,
-                         struct pid_el *   p)
-{
-        assert(name);
-        assert(p);
-
-        list_del(&p->next);
-        free(p);
-
-        reg_name_check_state(name);
-}
-
-void reg_name_del_pid(struct reg_name * name,
-                      pid_t             pid)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        assert(name);
-
-        if (name == NULL)
-                return;
-
-        list_for_each_safe(p, h, &name->reg_pids) {
-                struct pid_el * a = list_entry(p, struct pid_el, next);
-                if (a->pid == pid) {
-                        list_del(&a->next);
-                        free(a);
-                }
-        }
-
-        reg_name_check_state(name);
-}
-
-pid_t reg_name_get_pid(struct reg_name * name)
-{
-        if (name == NULL)
-                return -1;
-
-        if (list_is_empty(&name->reg_pids))
-                return -1;
-
-        return list_first_entry(&name->reg_pids, struct pid_el, next)->pid;
-}
-
-enum name_state reg_name_get_state(struct reg_name * name)
-{
-        enum name_state state;
-
-        assert(name);
-
-        pthread_mutex_lock(&name->mtx);
-
-        state = name->state;
-
-        pthread_mutex_unlock(&name->mtx);
-
-        return state;
-}
-
-int reg_name_set_state(struct reg_name * name,
-                       enum name_state   state)
-{
-        assert(state != NAME_DESTROY);
-
-        pthread_mutex_lock(&name->mtx);
-
-        name->state = state;
-        pthread_cond_broadcast(&name->cond);
-
-        pthread_mutex_unlock(&name->mtx);
-
-        return 0;
-}
-
-int reg_name_leave_state(struct reg_name * name,
-                         enum name_state   state,
-                         struct timespec * timeout)
-{
-        struct timespec   ts;
-        struct timespec * abstime = NULL;
-        int               ret     = 0;
-
-        assert(name);
-        assert(state != NAME_DESTROY);
-
-        if (timeout != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &ts);
-                ts_add(&ts, timeout, &ts);
-                abstime = &ts;
-        }
-
-        pthread_mutex_lock(&name->mtx);
-
-        pthread_cleanup_push(__cleanup_mutex_unlock, &name->mtx);
-
-        while (name->state == state && ret != -ETIMEDOUT)
-                ret = -__timedwait(&name->cond,&name->mtx, abstime);
-
-        if (name->state == NAME_DESTROY) {
-                ret = -1;
-                name->state = NAME_NULL;
-                pthread_cond_broadcast(&name->cond);
-        }
-
-        pthread_cleanup_pop(true);
-
-        return ret;
+        return list_first_entry(&name->progs, struct prog_entry, next)->exec;
 }

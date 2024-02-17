@@ -233,9 +233,8 @@ static int proc_announce(char * prog)
         msg.prog    = prog;
 
         recv_msg = send_recv_irm_msg(&msg);
-        if (recv_msg == NULL) {
+        if (recv_msg == NULL)
                 return -EIRMD;
-        }
 
         if (!recv_msg->has_result || (ret = recv_msg->result)) {
                 irm_msg__free_unpacked(recv_msg, NULL);
@@ -247,11 +246,35 @@ static int proc_announce(char * prog)
         return ret;
 }
 
+static void proc_exit(void)
+{
+        irm_msg_t   msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg;
+        int         ret = -1;
+
+        msg.code    = IRM_MSG_CODE__IRM_PROC_EXIT;
+        msg.has_pid = true;
+        msg.pid     = getpid();
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return;
+
+        if (!recv_msg->has_result || (ret = recv_msg->result)) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return;
+        }
+
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return;
+}
+
 #include "frct.c"
 
 void * flow_tx(void * o)
 {
-        struct timespec tic = {0, TICTIME};
+        struct timespec tic = TIMESPEC_INIT_NS(TICTIME);
 
         (void) o;
 
@@ -347,7 +370,7 @@ static void __cleanup_fqueue_destroy(void * fq)
 
 void * flow_rx(void * o)
 {
-        struct timespec tic = {0, TICTIME};
+        struct timespec tic = TIMESPEC_INIT_NS(TICTIME);
         int             ret;
         struct fqueue * fq;
 
@@ -549,7 +572,7 @@ static void init(int     argc,
 
         prog = path_strip(prog);
         if (prog == NULL) {
-                fprintf(stderr, "FATAL: Could not find program name.\n");
+                fprintf(stderr, "FATAL: Could not determine program name.\n");
                 goto fail_prog;
         }
 
@@ -588,7 +611,7 @@ static void init(int     argc,
 
         ai.flows = malloc(sizeof(*ai.flows) * PROG_MAX_FLOWS);
         if (ai.flows == NULL) {
-                fprintf(stderr, "FATAL: Could not allocate flows.\n");
+                fprintf(stderr, "FATAL: Could not malloc flows.\n");
                 goto fail_flows;
         }
 
@@ -597,7 +620,7 @@ static void init(int     argc,
 
         ai.id_to_fd = malloc(sizeof(*ai.id_to_fd) * SYS_MAX_FLOWS);
         if (ai.id_to_fd == NULL) {
-                fprintf(stderr, "FATAL: Could not allocate id_to_fd.\n");
+                fprintf(stderr, "FATAL: Could not malloc id_to_fd.\n");
                 goto fail_id_to_fd;
         }
 
@@ -716,7 +739,6 @@ static void fini(void)
 #ifdef PROC_FLOW_STATS
         rib_fini();
 #endif
-
         timerwheel_fini();
 
         fset_destroy(ai.frct_set);
@@ -732,6 +754,8 @@ static void fini(void)
 
         bmp_destroy(ai.fds);
         bmp_destroy(ai.fqueues);
+
+        proc_exit();
 
         memset(&ai, 0, sizeof(ai));
 }
@@ -946,7 +970,7 @@ int flow_dealloc(int fd)
         irm_msg_t       msg = IRM_MSG__INIT;
         irm_msg_t *     recv_msg;
         uint8_t         buf[128];
-        struct timespec tic = {0, TICTIME};
+        struct timespec tic = TIMESPEC_INIT_NS(TICTIME);
         struct flow *   f;
         time_t          timeo;
 
@@ -1006,6 +1030,53 @@ int flow_dealloc(int fd)
         shm_rbuff_fini(ai.flows[fd].tx_rb);
 
         pthread_cleanup_pop(true);
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        if (!recv_msg->has_result) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -EIRMD;
+        }
+
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        pthread_rwlock_wrlock(&ai.lock);
+
+        flow_fini(fd);
+
+        pthread_rwlock_unlock(&ai.lock);
+
+        return 0;
+}
+
+int ipcp_flow_dealloc(int fd)
+{
+        irm_msg_t     msg = IRM_MSG__INIT;
+        irm_msg_t *   recv_msg;
+        struct flow * f;
+
+        if (fd < 0 || fd >= SYS_MAX_FLOWS )
+                return -EINVAL;
+
+        msg.code        = IRM_MSG_CODE__IPCP_FLOW_DEALLOC;
+        msg.has_pid     = true;
+        msg.pid         = getpid();
+        msg.has_flow_id = true;
+
+        f = &ai.flows[fd];
+
+        pthread_rwlock_rdlock(&ai.lock);
+
+        if (f->flow_id < 0) {
+                pthread_rwlock_unlock(&ai.lock);
+                return -ENOTALLOC;
+        }
+
+        msg.flow_id = f->flow_id;
+
+        pthread_rwlock_unlock(&ai.lock);
 
         recv_msg = send_recv_irm_msg(&msg);
         if (recv_msg == NULL)
@@ -1801,19 +1872,19 @@ int np1_flow_resp(int flow_id)
         return fd;
 }
 
-int ipcp_create_r(int result)
+int ipcp_create_r(const struct ipcp_info * info)
 {
         irm_msg_t   msg = IRM_MSG__INIT;
         irm_msg_t * recv_msg;
         int         ret;
 
         msg.code       = IRM_MSG_CODE__IPCP_CREATE_R;
-        msg.has_pid    = true;
-        msg.pid        = getpid();
-        msg.has_result = true;
-        msg.result     = result;
+        msg.ipcp_info  = ipcp_info_s_to_msg(info);
 
         recv_msg = send_recv_irm_msg(&msg);
+
+        ipcp_info_msg__free_unpacked(msg.ipcp_info, NULL);
+
         if (recv_msg == NULL)
                 return -EIRMD;
 

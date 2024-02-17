@@ -16,6 +16,7 @@ set(HEADER_FILES
   fqueue.h
   ipcp.h
   irm.h
+  name.h
   proto.h
   qos.h
   ${CMAKE_CURRENT_BINARY_DIR}/version.h

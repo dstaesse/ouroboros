@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
- * RIB export using FUSE
+ * Processes and Programs
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,39 +20,25 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LIB_RIB_H
-#define OUROBOROS_LIB_RIB_H
-
-#define RIB_PATH_LEN  300
-#define RIB_SEPARATOR "/"
+#ifndef OUROBOROS_LIB_PROC_H
+#define OUROBOROS_LIB_PROC_H
 
 #include <sys/types.h>
 
-struct rib;
+#define PROG_NAME_SIZE 255
+#define PROG_PATH_SIZE 255
 
-struct rib_attr {
-        size_t size;  /* Size of RIB document  */
-        time_t mtime; /* Last modified time    */
+/* Processes */
+struct proc_info {
+        pid_t pid;
+        char  prog[PROG_NAME_SIZE + 1];  /* program instantiated */
+
 };
 
-struct rib_ops {
-        int (* read)(const char * path,
-                     char *       buf,
-                     size_t       len);
-        int (* readdir)(char *** entries);
-        int (* getattr)(const char *      path,
-                        struct rib_attr * attr);
+/* Programs */
+struct prog_info {
+        char name[PROG_NAME_SIZE + 1];
+        char path[PROG_PATH_SIZE + 1];
 };
 
-int  rib_init(const char * prefix);
-
-void rib_fini(void);
-
-int  rib_reg(const char *     path,
-             struct rib_ops * ops);
-
-void rib_unreg(const char * path);
-
-void rib_cleanup(const char * mnt);
-
-#endif /* OUROBOROS_LIB_RIB_H */
+#endif /* OUROBOROS_LIB_PROC_H */

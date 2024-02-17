@@ -25,21 +25,19 @@
 #include "config.h"
 
 #include <ouroboros/errno.h>
-#include <ouroboros/shm_rdrbuff.h>
-#include <ouroboros/shm_du_buff.h>
-#include <ouroboros/time_utils.h>
 #include <ouroboros/pthread.h>
+#include <ouroboros/shm_rdrbuff.h>
 
-#include <sys/mman.h>
+#include <assert.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <signal.h>
+#include <unistd.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
-#include <stdbool.h>
-#include <assert.h>
 
 #define SHM_BLOCKS_SIZE ((SHM_BUFFER_SIZE) * SHM_RDRB_BLOCK_SIZE)
 #define SHM_FILE_SIZE (SHM_BLOCKS_SIZE + 2 * sizeof(size_t)                    \

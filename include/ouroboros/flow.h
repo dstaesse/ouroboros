@@ -30,11 +30,11 @@
  enum flow_state { /* DO NOT CHANGE ORDER! */
         FLOW_INIT = 0,
         FLOW_ALLOC_PENDING,
-        FLOW_ALLOC_REQ_PENDING,
+        FLOW_ACCEPT_PENDING,
         FLOW_ALLOCATED,
         FLOW_DEALLOC_PENDING,
         FLOW_DEALLOCATED,
-        FLOW_DESTROY,
+        FLOW_DESTROY,            /* TODO: REMOVE! */
         FLOW_NULL
 };
 

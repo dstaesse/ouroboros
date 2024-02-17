@@ -22,11 +22,12 @@
 
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/qoscube.h>
+#include <ouroboros/ipcp.h>
 
 #ifndef OUROBOROS_LIB_IPCP_DEV_H
 #define OUROBOROS_LIB_IPCP_DEV_H
 
-int   ipcp_create_r(int result);
+int   ipcp_create_r(const struct ipcp_info * info);
 
 int   ipcp_flow_req_arr(const uint8_t * dst,
                         size_t           len,
@@ -52,6 +53,8 @@ int    np1_flow_read(int                   fd,
 
 int    np1_flow_write(int                  fd,
                       struct shm_du_buff * sdb);
+
+int    ipcp_flow_dealloc(int fd);
 
 int    ipcp_flow_fini(int fd);
 

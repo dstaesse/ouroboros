@@ -26,12 +26,12 @@
 
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
-#include <ouroboros/time_utils.h>
+#include <ouroboros/time.h>
 #include <ouroboros/tpm.h>
 
+#include <assert.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include <assert.h>
 
 #define TPM_TIMEOUT 1000
 
@@ -117,8 +117,7 @@ static void tpm_kill(struct tpm * tpm)
 static void * tpmgr(void * o)
 {
         struct timespec dl;
-        struct timespec to = {(TPM_TIMEOUT / 1000),
-                              (TPM_TIMEOUT % 1000) * MILLION};
+        struct timespec to = TIMESPEC_INIT_MS(TPM_TIMEOUT);
         struct tpm * tpm = (struct tpm *) o;
 
         while (true) {
@@ -239,12 +238,12 @@ void tpm_stop(struct tpm * tpm)
         tpm->state = TPM_NULL;
 
         pthread_mutex_unlock(&tpm->lock);
+
+        pthread_join(tpm->mgr, NULL);
 }
 
 void tpm_destroy(struct tpm * tpm)
 {
-        pthread_join(tpm->mgr, NULL);
-
         pthread_mutex_destroy(&tpm->lock);
         pthread_cond_destroy(&tpm->cond);
 
