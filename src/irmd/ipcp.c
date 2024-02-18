@@ -58,6 +58,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
         struct timeval  tv;
         struct timespec tic;
         struct timespec toc;
+        bool            dealloc = false;
 
         if (kill(pid, 0) < 0)
                 return NULL;
@@ -101,6 +102,15 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                 tv.tv_sec  = CONNECT_TIMEOUT / 1000;
                 tv.tv_usec = (CONNECT_TIMEOUT % 1000) * 1000;
                 break;
+        case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
+                tv.tv_sec  = FLOW_ALLOC_TIMEOUT / 1000;
+                tv.tv_usec = (FLOW_ALLOC_TIMEOUT % 1000) * 1000;
+                break;
+        case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
+                dealloc = true;
+                tv.tv_sec  = 0; /* FIX DEALLOC: don't wait for dealloc */
+                tv.tv_usec = 500;
+                break;
         default:
                 tv.tv_sec  = SOCKET_TIMEOUT / 1000;
                 tv.tv_usec = (SOCKET_TIMEOUT % 1000) * 1000;
@@ -127,7 +137,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
         if (len > 0)
                 recv_msg = ipcp_msg__unpack(NULL, len, buf);
         else {
-                if (errno == EAGAIN) {
+                if (errno == EAGAIN && !dealloc) {
                         int diff = ts_diff_ms(&tic, &toc);
                         log_warn("IPCP command timed out after %d ms.", diff);
                 }

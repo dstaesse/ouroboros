@@ -25,7 +25,6 @@
 #include <ouroboros/protobuf.h>
 #include <ouroboros/serdes-oep.h>
 
-
 ssize_t enroll_req_ser(const struct enroll_req * req,
                        buffer_t                  buf)
 {

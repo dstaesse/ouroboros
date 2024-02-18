@@ -1234,14 +1234,14 @@ static int flow_alloc_reply(struct flow_info * flow,
 }
 
 static int flow_dealloc(struct flow_info * flow,
-                        time_t             timeo)
+                        struct timespec *  ts)
 {
         log_info("Deallocating flow %d for process %d.",
                  flow->id, flow->n_pid);
 
         reg_dealloc_flow(flow);
 
-         if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, timeo) < 0) {
+         if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, ts->tv_sec) < 0) {
                 log_err("Failed to request dealloc from %d.", flow->n_1_pid);
                 return -EIPCP;
          }
@@ -1324,13 +1324,26 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
         struct flow_info   flow;
         struct proc_info   proc;
         struct name_info   name;
-        struct timespec *  abstime  = NULL;
-        struct timespec    ts;
+        struct timespec *  abstime;
+        struct timespec    max = TIMESPEC_INIT_MS(FLOW_ALLOC_TIMEOUT);
+        struct timespec    now;
+        struct timespec    ts = TIMESPEC_INIT_S(0); /* static analysis */
         int                res;
         irm_msg_t *        ret_msg;
         buffer_t           data;
 
         memset(&flow, 0, sizeof(flow));
+
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+
+        if (msg->timeo != NULL) {
+                ts = timespec_msg_to_s(msg->timeo);
+                ts_add(&ts, &now, &ts);
+                abstime = &ts;
+        } else {
+                ts_add(&max, &now, &max);
+                abstime = NULL;
+        }
 
         ret_msg = malloc(sizeof(*ret_msg));
         if (ret_msg == NULL) {
@@ -1341,20 +1354,6 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
         irm_msg__init(ret_msg);
 
         ret_msg->code = IRM_MSG_CODE__IRM_REPLY;
-
-        if (msg->has_timeo_sec) {
-                struct timespec now;
-
-                clock_gettime(PTHREAD_COND_CLOCK, &now);
-                assert(msg->has_timeo_nsec);
-
-                ts.tv_sec  = msg->timeo_sec;
-                ts.tv_nsec = msg->timeo_nsec;
-
-                ts_add(&ts, &now, &ts);
-
-                abstime = &ts;
-        }
 
         pthread_cleanup_push(free_msg, ret_msg);
 
@@ -1430,20 +1429,12 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
         case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
                 data.len  = msg->pk.len;
                 data.data = msg->pk.data;
+                msg->has_pk = false;
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
-                flow.n_pid = msg->pid;
-                flow.qs  = qos_raw;
+                flow = flow_info_msg_to_s(msg->flow_info);
                 res = flow_accept(&flow, &data, abstime);
                 if (res == 0) {
-                        qosspec_msg_t * qs_msg;
-                        qs_msg = qos_spec_s_to_msg(&flow.qs);
-                        ret_msg->has_flow_id  = true;
-                        ret_msg->flow_id      = flow.id;
-                        ret_msg->has_pid      = true;
-                        ret_msg->pid          = flow.n_1_pid;
-                        ret_msg->has_mpl      = true;
-                        ret_msg->qosspec      = qs_msg;
-                        ret_msg->mpl          = flow.mpl;
+                        ret_msg->flow_info    = flow_info_s_to_msg(&flow);
                         ret_msg->has_symmkey  = data.len != 0;
                         ret_msg->symmkey.data = data.data;
                         ret_msg->symmkey.len  = data.len;
@@ -1453,17 +1444,12 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 data.len  = msg->pk.len;
                 data.data = msg->pk.data;
                 msg->has_pk = false;
-                flow.n_pid = msg->pid;
-                flow.qs = qos_spec_msg_to_s(msg->qosspec);
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
+                flow = flow_info_msg_to_s(msg->flow_info);
+                abstime = abstime == NULL ? &max : abstime;
                 res = flow_alloc(&flow, msg->dst, &data, abstime);
                 if (res == 0) {
-                        ret_msg->has_flow_id  = true;
-                        ret_msg->flow_id      = flow.id;
-                        ret_msg->has_pid      = true;
-                        ret_msg->pid          = flow.n_1_pid;
-                        ret_msg->has_mpl      = true;
-                        ret_msg->mpl          = flow.mpl;
+                        ret_msg->flow_info    = flow_info_s_to_msg(&flow);
                         ret_msg->has_symmkey  = data.len != 0;
                         ret_msg->symmkey.data = data.data;
                         ret_msg->symmkey.len  = data.len;
@@ -1471,46 +1457,38 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 break;
         case IRM_MSG_CODE__IRM_FLOW_JOIN:
                 assert(msg->pk.len == 0 && msg->pk.data == NULL);
-                flow.qs = qos_spec_msg_to_s(msg->qosspec);
+                flow = flow_info_msg_to_s(msg->flow_info);
+                abstime = abstime == NULL ? &max : abstime;
                 res = flow_join(&flow, msg->dst, abstime);
+                if (res == 0)
+                        ret_msg->flow_info    = flow_info_s_to_msg(&flow);
                 break;
         case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
-                flow.n_pid = msg->pid;
-                flow.id    = msg->flow_id;
-                res = flow_dealloc(&flow, msg->timeo_sec);
+                flow = flow_info_msg_to_s(msg->flow_info);
+                res = flow_dealloc(&flow, &ts);
                 break;
         case IRM_MSG_CODE__IPCP_FLOW_DEALLOC:
-                flow.n_1_pid = msg->pid;
-                flow.id      = msg->flow_id;
+                flow = flow_info_msg_to_s(msg->flow_info);
                 res = flow_dealloc_resp(&flow);
                 break;
         case IRM_MSG_CODE__IPCP_FLOW_REQ_ARR:
                 data.len  = msg->pk.len;
                 data.data = msg->pk.data;
-                msg->has_pk  = false; /* pass data */
-                msg->pk.data = NULL;
+                msg->pk.data = NULL; /* pass data */
                 msg->pk.len  = 0;
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
-                flow.n_1_pid = msg->pid;
-                flow.mpl = msg->mpl;
-                flow.qs = qos_spec_msg_to_s(msg->qosspec);
+                flow = flow_info_msg_to_s(msg->flow_info);
                 res = flow_req_arr(&flow, msg->hash.data, &data);
-                if (res == 0) {
-                        ret_msg->has_flow_id = true;
-                        ret_msg->flow_id     = flow.id;
-                        ret_msg->has_pid     = true;
-                        ret_msg->pid         = flow.n_pid;
-                }
+                if (res == 0)
+                        ret_msg->flow_info = flow_info_s_to_msg(&flow);
                 break;
         case IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY:
                 data.len  = msg->pk.len;
                 data.data = msg->pk.data;
-                msg->has_pk  = false; /* pass data */
-                msg->pk.data = NULL;
+                msg->pk.data = NULL; /* pass data */
                 msg->pk.len  = 0;
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
-                flow.id      = msg->flow_id;
-                flow.mpl     = msg->mpl;
+                flow = flow_info_msg_to_s(msg->flow_info);
                 res = flow_alloc_reply(&flow, msg->response, &data);
                 break;
         default:
@@ -1522,7 +1500,10 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
         pthread_cleanup_pop(false);
 
         ret_msg->has_result = true;
-        ret_msg->result     = res;
+        if (abstime == &max && res == -ETIMEDOUT)
+                ret_msg->result = -EPERM; /* No timeout requested */
+        else
+                ret_msg->result = res;
 
         return ret_msg;
 }
@@ -1664,8 +1645,6 @@ static void destroy_mount(char * mnt)
 {
         struct stat st;
 
-        log_dbg("Destroying mountpoint %s.", mnt);
-
         if (stat(mnt, &st) == -1){
                 switch(errno) {
                 case ENOENT:
@@ -1719,7 +1698,7 @@ static void cleanup_pid(pid_t pid)
 void * irm_sanitize(void * o)
 {
         pid_t           pid;
-        struct timespec ts = TIMESPEC_INIT_MS(IRMD_FLOW_TIMEOUT / 20);
+        struct timespec ts = TIMESPEC_INIT_MS(FLOW_ALLOC_TIMEOUT / 20);
 
         (void) o;
 
@@ -2003,7 +1982,7 @@ static void * kill_dash_nine(void * o)
 {
         time_t slept = 0;
 #ifdef IRMD_KILL_ALL_PROCESSES
-        struct timespec ts = TIMESPEC_INIT_MS(IRMD_FLOW_TIMEOUT / 19);
+        struct timespec ts = TIMESPEC_INIT_MS(FLOW_ALLOC_TIMEOUT / 19);
 #endif
         (void) o;
 

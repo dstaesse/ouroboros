@@ -23,7 +23,8 @@
 syntax = "proto2";
 
 import "ipcp_config.proto";
-import "qos.proto";
+import "model.proto";
+
 
 enum ipcp_msg_code {
         IPCP_BOOTSTRAP       =  1;

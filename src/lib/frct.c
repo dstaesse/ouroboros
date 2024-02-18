@@ -271,7 +271,7 @@ static void __send_frct_pkt(int      fd,
 #endif
                 goto fail;
 
-        shm_flow_set_notify(f->set, f->flow_id, FLOW_PKT);
+        shm_flow_set_notify(f->set, f->info.id, FLOW_PKT);
 
         return;
 
@@ -398,7 +398,7 @@ static struct frcti * frcti_create(int    fd,
         frcti->n_out = 0;
         frcti->n_rqo = 0;
 #endif
-        if (ai.flows[fd].qs.loss == 0) {
+        if (ai.flows[fd].info.qs.loss == 0) {
                 frcti->snd_cr.cflags |= FRCTFRTX | FRCTFLINGER;
                 frcti->rcv_cr.cflags |= FRCTFRTX;
         }

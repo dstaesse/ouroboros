@@ -261,15 +261,18 @@ static void * acceptloop(void * o)
         return (void *) 0;
 }
 
-int ipcp_wait_flow_req_arr(const uint8_t * dst,
-                           qosspec_t       qs,
-                           time_t          mpl,
-                           const void *    data,
-                           size_t          len)
+int ipcp_wait_flow_req_arr(const uint8_t *  dst,
+                           qosspec_t        qs,
+                           time_t           mpl,
+                           const buffer_t * data)
 {
         struct timespec ts = TIMESPEC_INIT_MS(ALLOC_TIMEOUT);
         struct timespec abstime;
         int             fd;
+        buffer_t        hash;
+
+        hash.data = (uint8_t *) dst;
+        hash.len  = ipcp_dir_hash_len();
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -290,7 +293,7 @@ int ipcp_wait_flow_req_arr(const uint8_t * dst,
 
         assert(ipcpi.alloc_id == -1);
 
-        fd = ipcp_flow_req_arr(dst, ipcp_dir_hash_len(), qs, mpl, data, len);
+        fd = ipcp_flow_req_arr(&hash, qs, mpl, data);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpi.alloc_lock);
                 log_err("Failed to get fd for flow.");
@@ -492,13 +495,12 @@ static void do_query(const uint8_t * hash,
         ret_msg->result = ipcpi.ops->ipcp_query(hash);
 }
 
-static void do_flow_alloc(pid_t        pid,
-                          int          flow_id,
-                          uint8_t *    dst,
-                          qosspec_t    qs,
-                          void *       data,
-                          size_t       len,
-                          ipcp_msg_t * ret_msg)
+static void do_flow_alloc(pid_t            pid,
+                          int              flow_id,
+                          uint8_t *        dst,
+                          qosspec_t        qs,
+                          const buffer_t * data,
+                          ipcp_msg_t *     ret_msg)
 {
         int fd;
 
@@ -525,7 +527,7 @@ static void do_flow_alloc(pid_t        pid,
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_flow_alloc(fd, dst, qs, data, len);
+        ret_msg->result = ipcpi.ops->ipcp_flow_alloc(fd, dst, qs, data);
  finish:
         log_info("Finished allocating flow %d to " HASH_FMT32 ": %d.",
                  flow_id, HASH_VAL32(dst), ret_msg->result);
@@ -566,11 +568,10 @@ static void do_flow_join(pid_t           pid,
         log_info("Finished joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
 }
 
-static void do_flow_alloc_resp(int          resp,
-                               int          flow_id,
-                               const void * data,
-                               size_t       len,
-                               ipcp_msg_t * ret_msg)
+static void do_flow_alloc_resp(int              resp,
+                               int              flow_id,
+                               const buffer_t * data,
+                               ipcp_msg_t *     ret_msg)
 {
         int fd = -1;
 
@@ -597,7 +598,7 @@ static void do_flow_alloc_resp(int          resp,
                 }
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_flow_alloc_resp(fd, resp, data, len);
+        ret_msg->result = ipcpi.ops->ipcp_flow_alloc_resp(fd, resp, data);
  finish:
         log_info("Finished responding to allocation request: %d",
                  ret_msg->result);
@@ -648,6 +649,7 @@ static void * mainloop(void * o)
                 ipcp_msg_t       ret_msg        = IPCP_MSG__INIT;
                 qosspec_t        qs;
                 struct cmd *     cmd;
+                buffer_t         data;
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
 
@@ -710,11 +712,12 @@ static void * mainloop(void * o)
                         assert(msg->hash.len == ipcp_dir_hash_len());
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                                : msg->pk.data == NULL);
+                        data.len = msg->pk.len;
+                        data.data = msg->pk.data;
                         qs = qos_spec_msg_to_s(msg->qosspec);
                         do_flow_alloc(msg->pid, msg->flow_id,
                                       msg->hash.data, qs,
-                                      msg->pk.data, msg->pk.len,
-                                      &ret_msg);
+                                      &data, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_JOIN:
                         assert(msg->hash.len == ipcp_dir_hash_len());
@@ -725,10 +728,10 @@ static void * mainloop(void * o)
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                                : msg->pk.data == NULL);
-
+                        data.len = msg->pk.len;
+                        data.data = msg->pk.data;
                         do_flow_alloc_resp(msg->response, msg->flow_id,
-                                           msg->pk.data, msg->pk.len,
-                                           &ret_msg);
+                                           &data, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                         do_flow_dealloc(msg->flow_id, msg->timeo_sec, &ret_msg);

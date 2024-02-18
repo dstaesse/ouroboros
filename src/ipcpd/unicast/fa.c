@@ -478,8 +478,7 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         qosspec_t        qs;
         struct fa_flow * flow;
         uint8_t *        dst;
-        uint8_t *        data;  /* Piggbacked data on flow alloc request. */
-        size_t           dlen;  /* Length of piggybacked data.            */
+        buffer_t         data;  /* Piggbacked data on flow alloc request. */
 
         msg_len = sizeof(*msg) + ipcp_dir_hash_len();
         if (len < msg_len) {
@@ -487,9 +486,9 @@ static int fa_handle_flow_req(struct fa_msg * msg,
                 return -EPERM;
         }
 
-        dst  = (uint8_t *)(msg + 1);
-        data = (uint8_t *) msg + msg_len;
-        dlen = len - msg_len;
+        dst       = (uint8_t *)(msg + 1);
+        data.data = (uint8_t *) msg + msg_len;
+        data.len  = len - msg_len;
 
         qs.delay        = ntoh32(msg->delay);
         qs.bandwidth    = ntoh64(msg->bandwidth);
@@ -501,7 +500,7 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         qs.cypher_s     = ntoh16(msg->cypher_s);
         qs.timeout      = ntoh32(msg->timeout);
 
-        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UNICAST_MPL, data, dlen);
+        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UNICAST_MPL, &data);
         if (fd < 0)
                 return fd;
 
@@ -525,14 +524,13 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
 {
         int              fd;
         struct fa_flow * flow;
-        uint8_t *        data;  /* Piggbacked data on flow alloc request. */
-        size_t           dlen;  /* Length of piggybacked data.            */
+        buffer_t         data;  /* Piggbacked data on flow alloc request. */
         time_t           mpl = IPCP_UNICAST_MPL;
 
         assert(len >= sizeof(*msg));
 
-        data = (uint8_t *) msg + sizeof(*msg);
-        dlen = len - sizeof(*msg);
+        data.data = (uint8_t *) msg + sizeof(*msg);
+        data.len  = len - sizeof(*msg);
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
@@ -555,7 +553,7 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (ipcp_flow_alloc_reply(fd, msg->response, mpl, data, dlen) < 0) {
+        if (ipcp_flow_alloc_reply(fd, msg->response, mpl, &data) < 0) {
                 log_err("Failed to reply for flow allocation on fd %d.", fd);
                 return -EIRMD;
         }
@@ -738,11 +736,10 @@ void fa_stop(void)
         psched_destroy(fa.psched);
 }
 
-int fa_alloc(int             fd,
-             const uint8_t * dst,
-             qosspec_t       qs,
-             const void *    data,
-             size_t          dlen)
+int fa_alloc(int              fd,
+             const uint8_t *  dst,
+             qosspec_t        qs,
+             const buffer_t * data)
 {
         struct fa_msg *      msg;
         struct shm_du_buff * sdb;
@@ -758,7 +755,7 @@ int fa_alloc(int             fd,
 
         len = sizeof(*msg) + ipcp_dir_hash_len();
 
-        if (ipcp_sdb_reserve(&sdb, len + dlen))
+        if (ipcp_sdb_reserve(&sdb, len + data->len))
                 return -1;
 
         msg = (struct fa_msg *) shm_du_buff_head(sdb);
@@ -780,8 +777,8 @@ int fa_alloc(int             fd,
         msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
-        if (dlen > 0)
-                memcpy(shm_du_buff_head(sdb) + len, data, dlen);
+        if (data->len > 0)
+                memcpy(shm_du_buff_head(sdb) + len, data->data, data->len);
 
         if (dt_write_packet(addr, qc, fa.eid, sdb)) {
                 log_err("Failed to send flow allocation request packet.");
@@ -802,10 +799,9 @@ int fa_alloc(int             fd,
         return 0;
 }
 
-int fa_alloc_resp(int          fd,
-                  int          response,
-                  const void * data,
-                  size_t       len)
+int fa_alloc_resp(int              fd,
+                  int              response,
+                  const buffer_t * data)
 {
         struct fa_msg *      msg;
         struct shm_du_buff * sdb;
@@ -819,9 +815,9 @@ int fa_alloc_resp(int          fd,
                 goto fail_alloc_resp;
         }
 
-        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + len)) {
+        if (ipcp_sdb_reserve(&sdb, sizeof(*msg) + data->len)) {
                 log_err("Failed to reserve sdb (%zu  bytes).",
-                        sizeof(*msg) + len);
+                        sizeof(*msg) + data->len);
                 goto fail_reserve;
         }
 
@@ -830,8 +826,8 @@ int fa_alloc_resp(int          fd,
 
         msg->code     = FLOW_REPLY;
         msg->response = response;
-        if (len > 0)
-                memcpy(msg + 1, data, len);
+        if (data->len > 0)
+                memcpy(msg + 1, data->data, data->len);
 
         pthread_rwlock_rdlock(&fa.flows_lock);
 

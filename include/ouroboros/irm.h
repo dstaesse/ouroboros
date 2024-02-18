@@ -30,10 +30,6 @@
 
 #include <sys/types.h>
 
-/* Name binding options. */
-#define BIND_AUTO 0x01
-#define NAME_SIZE 255
-
 struct ipcp_list_info {
         pid_t          pid;
         enum ipcp_type type;

@@ -28,6 +28,84 @@
 #include <string.h>
 #include <time.h>
 
+timespec_msg_t * timespec_s_to_msg(const struct timespec * s)
+{
+        timespec_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        timespec_msg__init(msg);
+
+        msg->tv_sec  = s->tv_sec;
+        msg->tv_nsec = s->tv_nsec;
+
+        return msg;
+
+ fail_malloc:
+        return NULL;
+}
+
+struct timespec timespec_msg_to_s(timespec_msg_t * msg)
+{
+        struct timespec s;
+
+        assert(msg != NULL);
+
+        s.tv_sec  = msg->tv_sec;
+        s.tv_nsec = msg->tv_nsec;
+
+        return s;
+}
+
+flow_info_msg_t * flow_info_s_to_msg(const struct flow_info * s)
+{
+        flow_info_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        flow_info_msg__init(msg);
+
+        msg->id      = s->id;
+        msg->n_pid   = s->n_pid;
+        msg->n_1_pid = s->n_1_pid;
+        msg->mpl     = s->mpl;
+        msg->state   = s->state;
+        msg->qos     = qos_spec_s_to_msg(&s->qs);
+        if (msg->qos == NULL)
+                goto fail_msg;
+
+        return msg;
+
+ fail_msg:
+        flow_info_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return NULL;
+}
+
+struct flow_info flow_info_msg_to_s(const flow_info_msg_t * msg)
+{
+        struct flow_info s;
+
+        assert(msg != NULL);
+
+        s.id      = msg->id;
+        s.n_pid   = msg->n_pid;
+        s.n_1_pid = msg->n_1_pid;
+        s.mpl     = msg->mpl;
+        s.state   = msg->state;
+        s.qs      = qos_spec_msg_to_s(msg->qos);
+
+        return s;
+}
+
 layer_info_msg_t * layer_info_s_to_msg(const struct layer_info * s)
 {
         layer_info_msg_t * msg;

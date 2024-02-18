@@ -186,11 +186,10 @@ static int local_ipcp_query(const uint8_t * hash)
         return ret;
 }
 
-static int local_ipcp_flow_alloc(int             fd,
-                                 const uint8_t * dst,
-                                 qosspec_t       qs,
-                                 const void *    data,
-                                 size_t          len)
+static int local_ipcp_flow_alloc(int              fd,
+                                 const uint8_t *  dst,
+                                 qosspec_t        qs,
+                                 const buffer_t * data)
 {
         int out_fd = -1;
 
@@ -198,7 +197,7 @@ static int local_ipcp_flow_alloc(int             fd,
                 HASH_VAL32(dst), fd);
         assert(dst);
 
-        out_fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_LOCAL_MPL, data, len);
+        out_fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_LOCAL_MPL, data);
         if (out_fd < 0) {
                 log_dbg("Flow allocation failed: %d", out_fd);
                 return -1;
@@ -218,10 +217,9 @@ static int local_ipcp_flow_alloc(int             fd,
         return 0;
 }
 
-static int local_ipcp_flow_alloc_resp(int          fd,
-                                      int          response,
-                                      const void * data,
-                                      size_t       len)
+static int local_ipcp_flow_alloc_resp(int              fd,
+                                      int              response,
+                                      const buffer_t * data)
 {
         int    out_fd;
         time_t mpl = IPCP_LOCAL_MPL;
@@ -249,7 +247,7 @@ static int local_ipcp_flow_alloc_resp(int          fd,
 
         fset_add(local_data.flows, fd);
 
-        if (ipcp_flow_alloc_reply(out_fd, response, mpl, data, len) < 0)
+        if (ipcp_flow_alloc_reply(out_fd, response, mpl, data) < 0)
                 return -1;
 
         log_info("Flow allocation completed, fds (%d, %d).", out_fd, fd);

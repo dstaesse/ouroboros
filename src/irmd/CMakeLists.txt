@@ -40,18 +40,19 @@ endif ()
 
 set(IRMD_REQ_ARR_TIMEOUT 1000 CACHE STRING
   "Timeout for an application to respond to a new flow (ms)")
-set(IRMD_FLOW_TIMEOUT 5000 CACHE STRING
-  "Timeout for a flow allocation response (ms)")
+
 set(BOOTSTRAP_TIMEOUT 5000 CACHE STRING
   "Timeout for an IPCP to bootstrap (ms)")
 set(ENROLL_TIMEOUT 60000 CACHE STRING
   "Timeout for an IPCP to enroll (ms)")
-set(REG_TIMEOUT 10000 CACHE STRING
+set(REG_TIMEOUT 60000 CACHE STRING
   "Timeout for registering a name (ms)")
-set(QUERY_TIMEOUT 3000 CACHE STRING
+set(QUERY_TIMEOUT 60000 CACHE STRING
   "Timeout to query a name with an IPCP (ms)")
 set(CONNECT_TIMEOUT 60000 CACHE STRING
   "Timeout to connect an IPCP to another IPCP (ms)")
+set(FLOW_ALLOC_TIMEOUT 5000 CACHE STRING
+  "Timeout for a flow allocation response (ms)")
 set(IRMD_MIN_THREADS 8 CACHE STRING
   "Minimum number of worker threads in the IRMd")
 set(IRMD_ADD_THREADS 8 CACHE STRING

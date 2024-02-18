@@ -20,27 +20,25 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/shm_rdrbuff.h>
-#include <ouroboros/qoscube.h>
-#include <ouroboros/ipcp.h>
-
 #ifndef OUROBOROS_LIB_IPCP_DEV_H
 #define OUROBOROS_LIB_IPCP_DEV_H
 
+#include <ouroboros/ipcp.h>
+#include <ouroboros/qoscube.h>
+#include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/utils.h>
+
 int   ipcp_create_r(const struct ipcp_info * info);
 
-int   ipcp_flow_req_arr(const uint8_t * dst,
-                        size_t           len,
+int   ipcp_flow_req_arr(const buffer_t * dst,
                         qosspec_t        qs,
                         time_t           mpl,
-                        const void *     data,
-                        size_t           dlen);
+                        const buffer_t * data);
 
-int    ipcp_flow_alloc_reply(int          fd,
-                             int          response,
-                             time_t       mpl,
-                             const void * data,
-                             size_t       len);
+int    ipcp_flow_alloc_reply(int              fd,
+                             int              response,
+                             time_t           mpl,
+                             const buffer_t * data);
 
 int    ipcp_flow_read(int                   fd,
                       struct shm_du_buff ** sdb);

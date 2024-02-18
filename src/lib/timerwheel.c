@@ -178,7 +178,7 @@ static void timerwheel_move(void)
                                 shm_du_buff_ack(r->sdb);
 #endif
                                 if (f->frcti == NULL
-                                    || f->flow_id != r->flow_id)
+                                    || f->info.id != r->flow_id)
                                         goto cleanup;
 
                                 pthread_rwlock_rdlock(&r->frcti->lock);
@@ -249,7 +249,7 @@ static void timerwheel_move(void)
                                 if (shm_rbuff_write(f->tx_rb, idx) < 0)
 #endif
                                         goto flow_down;
-                                shm_flow_set_notify(f->set, f->flow_id,
+                                shm_flow_set_notify(f->set, f->info.id,
                                                     FLOW_PKT);
                          reschedule:
                                 list_add(&r->next, &rw.rxms[lvl][rslot]);
@@ -292,7 +292,7 @@ static void timerwheel_move(void)
 
                         rw.map[j & (ACKQ_SLOTS - 1)][a->fd] = false;
 
-                        if (f->flow_id == a->flow_id && f->frcti != NULL)
+                        if (f->info.id == a->flow_id && f->frcti != NULL)
                                 send_frct_pkt(a->frcti);
 
                         free(a);
@@ -341,7 +341,7 @@ static int timerwheel_rxm(struct frcti *       frcti,
         slot     = r->t0 >> RXMQ_RES;
 
         r->fd      = frcti->fd;
-        r->flow_id = ai.flows[r->fd].flow_id;
+        r->flow_id = ai.flows[r->fd].info.id;
 
         pthread_rwlock_unlock(&r->frcti->lock);
 
@@ -394,7 +394,7 @@ static int timerwheel_delayed_ack(int            fd,
 
         a->fd    = fd;
         a->frcti = frcti;
-        a->flow_id = ai.flows[fd].flow_id;
+        a->flow_id = ai.flows[fd].info.id;
 
         pthread_mutex_lock(&rw.lock);
 

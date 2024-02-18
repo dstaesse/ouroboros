@@ -23,18 +23,17 @@
 #ifndef OUROBOROS_LIB_SOCKETS_H
 #define OUROBOROS_LIB_SOCKETS_H
 
+#include <ouroboros/protobuf.h>
+
 #include <sys/types.h>
 
-#include "irm.pb-c.h"
-typedef IrmMsg irm_msg_t;
+#define SOCK_PATH             "/var/run/ouroboros/"
+#define SOCK_PATH_SUFFIX      ".sock"
 
-#define SOCK_PATH "/var/run/ouroboros/"
-#define SOCK_PATH_SUFFIX ".sock"
-
-#define IRM_SOCK_PATH SOCK_PATH "irm" SOCK_PATH_SUFFIX
+#define IRM_SOCK_PATH         SOCK_PATH "irm" SOCK_PATH_SUFFIX
 #define IPCP_SOCK_PATH_PREFIX SOCK_PATH "ipcp"
 
-#define SOCK_BUF_SIZE @SOCK_BUF_SIZE@
+#define SOCK_BUF_SIZE         @SOCK_BUF_SIZE@
 
 /* Returns the full socket path of an IPCP */
 char *      ipcp_sock_path(pid_t pid);
@@ -43,8 +42,9 @@ int         server_socket_open(char * file_name);
 
 int         client_socket_open(char * file_name);
 
-irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
+int         send_recv_msg(buffer_t * buf);
 
+irm_msg_t * send_recv_irm_msg(irm_msg_t * msg);
 
 /* cleanup socket when cancelling thread */
 void __cleanup_close_ptr(void * o);
