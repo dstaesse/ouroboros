@@ -911,8 +911,10 @@ int reg_list_ipcps(ipcp_list_msg_t *** ipcps)
 
         pthread_mutex_lock(&reg.mtx);
 
-        if (reg.n_ipcps == 0)
+        if (reg.n_ipcps == 0) {
+                *ipcps = NULL;
                 goto finish;
+        }
 
         *ipcps = malloc(reg.n_ipcps * sizeof(**ipcps));
         if (*ipcps == NULL) {
@@ -2158,4 +2160,3 @@ int reg_respond_ipcp(const struct ipcp_info * info)
         pthread_mutex_unlock(&reg.mtx);
         return -EIPCP;
 }
-
