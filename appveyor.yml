@@ -25,10 +25,10 @@ install:
 before_build:
   - mkdir -p build
   - cd build
-  - cmake -DCMAKE_BUILD_TYPE=%CONFIGURATION% ..
+  - cmake -DCMAKE_BUILD_TYPE=$CONFIGURATION ..
 
 build_script:
   - make
 
 test_script:
-  - make check
+  - env CTEST_OUTPUT_ON_FAILURE=1 make check
