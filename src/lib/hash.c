@@ -29,6 +29,7 @@
 
 #include "config.h"
 
+#include <ouroboros/endian.h>
 #include <ouroboros/hash.h>
 
 #ifdef HAVE_LIBGCRYPT
@@ -90,6 +91,7 @@ void mem_hash(enum hash_algo  algo,
         case HASH_CRC32:
                 memset(dst, 0, CRC32_HASH_LEN);
                 crc32((uint32_t *) dst, buf, len);
+                *(uint32_t *) dst = htobe32(*(uint32_t *) dst);
                 break;
         case HASH_MD5:
                 rhash_md5_init(&md5_ctx);
