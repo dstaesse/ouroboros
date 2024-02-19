@@ -21,6 +21,7 @@
  */
 
 #include <ouroboros/hash.h>
+#include <ouroboros/test.h>
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -40,6 +41,8 @@ struct vec_entry {
 
 static int test_crc32(void)
 {
+        int ret = 0;
+
         struct vec_entry vec [] = {
                 { "0",         "f4dbdf21" },
                 { "123456789", "cbf43926" },
@@ -49,6 +52,8 @@ static int test_crc32(void)
 
         struct vec_entry * cur = vec;
 
+        TEST_START();
+
         while (cur->in != NULL) {
                 uint8_t crc[4];
                 char    res[9];
@@ -57,18 +62,22 @@ static int test_crc32(void)
 
                 sprintf(res, HASH_FMT32, HASH_VAL32(crc));
                 if (strcmp(res, cur->out) != 0) {
-                        printf("Hash failed %s != %s", res, cur->out);
-                        return -1;
+                        printf("Hash failed %s != %s.\n", res, cur->out);
+                        ret |= -1;
                 }
 
                 ++cur;
         }
 
-        return 0;
+        TEST_END(ret);
+
+        return ret;
 }
 
 static int test_md5(void)
 {
+        int ret = 0;
+
         struct vec_entry vec [] = {{
                 "abc",
                 "900150983cd24fb0d6963f7d28e17f72"
@@ -85,6 +94,9 @@ static int test_md5(void)
 
         struct vec_entry * cur = vec;
 
+        TEST_START();
+
+
         while (cur->in != NULL) {
                 uint8_t md5[16];
                 char    res[33];
@@ -93,18 +105,22 @@ static int test_md5(void)
 
                 sprintf(res, HASH_FMT128, HASH_VAL128(md5));
                 if (strcmp(res, cur->out) != 0) {
-                        printf("Hash failed %s != %s", res, cur->out);
-                        return -1;
+                        printf("Hash failed %s != %s.\n", res, cur->out);
+                        ret |= -1;
                 }
 
                 ++cur;
         }
 
-        return 0;
+        TEST_END(ret);
+
+        return ret;
 }
 
 static int test_sha3(void)
 {
+        int ret = 0;
+
         uint8_t sha3[64];
         char    res[129];
 
@@ -114,12 +130,14 @@ static int test_sha3(void)
                 "e642824c3f8cf24ad09234ee7d3c766f"
                 "c9a3a5168d0c94ad73b46fdf";
 
+        TEST_START();
+
         str_hash(HASH_SHA3_224, sha3, in);
 
         sprintf(res, HASH_FMT224, HASH_VAL224(sha3));
         if (strcmp(res, out) != 0) {
                 printf("SHA3-224 failed %s != %s", res, out);
-                return -1;
+                ret |= -1;
         }
 
         out =
@@ -130,8 +148,8 @@ static int test_sha3(void)
 
         sprintf(res, HASH_FMT256, HASH_VAL256(sha3));
         if (strcmp(res, out) != 0) {
-                printf("SHA3-256 failed %s != %s", res, out);
-                return -1;
+                printf("SHA3-256 failed %s != %s.\n", res, out);
+                ret |= -1;
         }
 
         out =
@@ -143,8 +161,8 @@ static int test_sha3(void)
 
         sprintf(res, HASH_FMT384, HASH_VAL384(sha3));
         if (strcmp(res, out) != 0) {
-                printf("SHA3-384failed %s != %s", res, out);
-                return -1;
+                printf("SHA3-384failed %s != %s.'n", res, out);
+                ret |= -1;
         }
 
         out =
@@ -157,11 +175,13 @@ static int test_sha3(void)
 
         sprintf(res, HASH_FMT512, HASH_VAL512(sha3));
         if (strcmp(res, out) != 0) {
-                printf("SHA3-512 failed %s != %s", res, out);
-                return -1;
+                printf("SHA3-512 failed %s != %s.\n", res, out);
+                ret |= -1;
         }
 
-        return 0;
+        TEST_END(ret);
+
+        return ret;
 }
 
 int hash_test(int     argc,

@@ -29,22 +29,25 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-#define TEST_START()                                           \
-        do {                                                   \
-                printf("%s started.\n", __func__);             \
-                fflush(stdout);                                \
-        } while(0)
-#define TEST_SUCCESS()                                         \
-        do {                                                   \
-                printf("%s succeeded.\n", __func__);           \
-                fflush(stdout);                                \
-        } while(0)
+#define TEST_START()                                                          \
+        do {                                                                  \
+                printf("%s started.\n", __func__);                            \
+                fflush(stdout);                                               \
+        } while (0)
+#define TEST_SUCCESS()                                                        \
+        do {                                                                  \
+                printf("%s succeeded.\n", __func__);                          \
+                fflush(stdout);                                               \
+        } while (0)
 
-#define TEST_FAIL()                                            \
-        do {                                                   \
-                printf("%s failed.\n", __func__);              \
-                fflush(stdout);                                \
-        } while(0)
+#define TEST_FAIL()                                                           \
+        do {                                                                  \
+                printf("%s failed.\n", __func__);                             \
+                fflush(stdout);                                               \
+        } while (0)
+
+#define TEST_END(result)                                                      \
+        do { if (result == 0) TEST_SUCCESS(); else TEST_FAIL(); } while (0)
 
 static int __attribute__((unused)) test_assert_fail(int(* testfunc)(void))
 {
