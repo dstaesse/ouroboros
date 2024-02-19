@@ -62,7 +62,7 @@ static int __attribute__((unused)) test_assert_fail(int(* testfunc)(void))
 
         waitpid(pid, &wstatus, 0);
 #ifdef CONFIG_OUROBOROS_DEBUG
-        if (WIFSIGNALED(wstatus) && wstatus == 134)
+        if (WIFSIGNALED(wstatus) && (wstatus == 134 || wstatus == 6))
                 return 0;
 
         printf("Process did not abort, status: %d.\n", wstatus);
