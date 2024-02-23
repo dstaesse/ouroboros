@@ -224,12 +224,14 @@ static int local_ipcp_flow_alloc_resp(int              fd,
         int    out_fd;
         time_t mpl = IPCP_LOCAL_MPL;
 
-        if (ipcp_wait_flow_resp(fd) < 0)
+        if (ipcp_wait_flow_resp(fd) < 0) {
+                log_err("Failed waiting for IRMd response.");
                 return -1;
+        }
 
         pthread_rwlock_wrlock(&local_data.lock);
 
-        if (response) {
+        if (response < 0) {
                 if (local_data.in_out[fd] != -1)
                         local_data.in_out[local_data.in_out[fd]] = fd;
                 local_data.in_out[fd] = -1;
@@ -240,6 +242,7 @@ static int local_ipcp_flow_alloc_resp(int              fd,
         out_fd = local_data.in_out[fd];
         if (out_fd == -1) {
                 pthread_rwlock_unlock(&local_data.lock);
+                log_err("Invalid out_fd.");
                 return -1;
         }
 
@@ -247,8 +250,11 @@ static int local_ipcp_flow_alloc_resp(int              fd,
 
         fset_add(local_data.flows, fd);
 
-        if (ipcp_flow_alloc_reply(out_fd, response, mpl, data) < 0)
+        if (ipcp_flow_alloc_reply(out_fd, response, mpl, data) < 0) {
+                log_err("Failed to reply to allocation");
+                fset_del(local_data.flows, fd);
                 return -1;
+        }
 
         log_info("Flow allocation completed, fds (%d, %d).", out_fd, fd);
 

@@ -1233,17 +1233,17 @@ static int flow_alloc_reply(struct flow_info * flow,
 static int flow_dealloc(struct flow_info * flow,
                         struct timespec *  ts)
 {
-        log_info("Deallocating flow %d for process %d.",
-                 flow->id, flow->n_pid);
+        log_info("Deallocating flow %d for process %d (timeout: %zd s).",
+                 flow->id, flow->n_pid, ts->tv_sec);
 
         reg_dealloc_flow(flow);
 
-         if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, ts->tv_sec) < 0) {
+        if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, ts->tv_sec) < 0) {
                 log_err("Failed to request dealloc from %d.", flow->n_1_pid);
                 return -EIPCP;
-         }
+        }
 
-         return 0;
+        return 0;
 }
 
 static int flow_dealloc_resp(struct flow_info * flow)
@@ -1462,6 +1462,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 break;
         case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
                 flow = flow_info_msg_to_s(msg->flow_info);
+                ts = timespec_msg_to_s(msg->timeo);
                 res = flow_dealloc(&flow, &ts);
                 break;
         case IRM_MSG_CODE__IPCP_FLOW_DEALLOC:
