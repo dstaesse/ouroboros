@@ -332,6 +332,7 @@ int connmgr_ipcp_connect(const char * dst,
 {
         struct conn_el * ce;
         int              id;
+        int              ret;
 
         assert(dst);
         assert(component);
@@ -348,7 +349,13 @@ int connmgr_ipcp_connect(const char * dst,
                 goto fail_id;
         }
 
-        if (connmgr_alloc(id, dst, &qs, &ce->conn)) {
+        pthread_cleanup_push(free, ce);
+
+        ret = connmgr_alloc(id, dst, &qs, &ce->conn);
+
+        pthread_cleanup_pop(false);
+
+        if (ret < 0) {
                 log_err("Failed to allocate flow.");
                 goto fail_id;
         }
