@@ -1,3 +1,5 @@
+set(IPCP_DEBUG_LOCAL FALSE CACHE BOOL
+  "Use PID as address for local debugging")
 set(IPCP_QOS_CUBE_BE_PRIO 50 CACHE STRING
   "Priority for best effort QoS cube (0-99)")
 set(IPCP_QOS_CUBE_VIDEO_PRIO 90 CACHE STRING

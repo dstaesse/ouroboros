@@ -69,8 +69,11 @@ uint64_t flat_address(void)
 {
         uint32_t addr = INVALID_ADDRESS;
 
+#if defined (CONFIG_OUROBOROS_DEBUG) && defined (IPCP_DEBUG_LOCAL)
+        addr = getpid();
+#else
         while (addr == INVALID_ADDRESS)
                 random_buffer(&addr,sizeof(addr));
-
+#endif
         return addr;
 }

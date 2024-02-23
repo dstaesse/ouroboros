@@ -41,6 +41,8 @@
 
 #define IPCP_LINUX_SLACK_NS @IPCP_LINUX_TIMERSLACK_NS@
 
+#cmakedefine IPCP_DEBUG_LOCAL
+
 /* unicast IPCP */
 #define QOS_PRIO_BE         @IPCP_QOS_CUBE_BE_PRIO@
 #define QOS_PRIO_VIDEO      @IPCP_QOS_CUBE_VIDEO_PRIO@
