@@ -1788,7 +1788,12 @@ int reg_respond_alloc(struct flow_info * info,
 
         flow = __reg_get_flow(info->id);
         if (flow == NULL) {
-                log_err("Flow not found for allocation: %d", info->id);
+                log_warn("Flow %d already destroyed.", info->id);
+                goto fail_flow;
+        }
+
+        if (flow->info.state == FLOW_DEALLOCATED) {
+                log_warn("Flow %d already deallocated.", info->id);
                 goto fail_flow;
         }
 
@@ -2090,7 +2095,6 @@ int reg_wait_ipcp_boot(struct ipcp_info *      info,
 
         ipcp = __reg_get_ipcp(info->pid);
 
-        /* Potential race with the reg_respond_flow. */
         if (ipcp->info.state == IPCP_INIT)
                 reg_ipcp_update(ipcp, info);
 
