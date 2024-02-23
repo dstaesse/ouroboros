@@ -538,7 +538,7 @@ static int test_reg_create_ipcp(void)
                 goto fail;
         }
 
-        if (reg_destroy_ipcp(info.pid) < 0) {
+        if (reg_destroy_proc(info.pid) < 0) {
                 printf("Failed to destroy ipcp.\n");
                 goto fail;
         }
@@ -605,7 +605,7 @@ static int test_set_layer(void)
                 goto fail;
         }
 
-        if (reg_destroy_ipcp(info.pid) < 0) {
+        if (reg_destroy_proc(info.pid) < 0) {
                 printf("Failed to destroy ipcp.\n");
                 goto fail;
         }
@@ -771,7 +771,7 @@ static int test_reg_spawned(void)
                 goto fail;
         }
 
-        if (reg_destroy_spawned(TEST_PID) < 0) {
+        if (reg_destroy_proc(TEST_PID) < 0) {
                 printf("Failed to destroy spawned.\n");
                 goto fail;
         }
@@ -1291,7 +1291,7 @@ static int test_wait_ipcp_boot_timeout(void)
                 goto fail;
         }
 
-        if (reg_destroy_ipcp(info.pid) < 0) {
+        if (reg_destroy_proc(info.pid) < 0) {
                 printf("Failed to destroy ipcp.\n");
                 goto fail;
         }
@@ -1357,7 +1357,7 @@ static int test_wait_ipcp_boot_fail(void)
 
         pthread_join(thr, NULL);
 
-        if (reg_destroy_ipcp(info.pid) < 0) {
+        if (reg_destroy_proc(info.pid) < 0) {
                 printf("Failed to destroy ipcp.\n");
                 goto fail;
         }
@@ -1424,7 +1424,7 @@ static int test_wait_ipcp_boot_success(void)
                 goto fail;
         }
 
-        if (reg_destroy_ipcp(info.pid) < 0) {
+        if (reg_destroy_proc(info.pid) < 0) {
                 printf("Failed to destroy ipcp.\n");
                 goto fail;
         }

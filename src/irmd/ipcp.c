@@ -47,6 +47,37 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 
+static char * str_ipcp_cmd(int code)
+{
+        switch (code) {
+        case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
+                return "bootstrap";
+        case IPCP_MSG_CODE__IPCP_ENROLL:
+                return "enroll";
+        case IPCP_MSG_CODE__IPCP_CONNECT:
+                return "connect";
+        case IPCP_MSG_CODE__IPCP_DISCONNECT:
+                return "disconnect";
+        case IPCP_MSG_CODE__IPCP_REG:
+                return "reg";
+        case IPCP_MSG_CODE__IPCP_UNREG:
+                return "unreg";
+        case IPCP_MSG_CODE__IPCP_QUERY:
+                return "query";
+        case IPCP_MSG_CODE__IPCP_FLOW_JOIN:
+                return "join";
+        case IPCP_MSG_CODE__IPCP_FLOW_ALLOC:
+                return "alloc";
+        case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
+                return "alloc_resp";
+        case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
+                return "dealloc";
+        default:
+                assert(false);
+                return "unknown";
+        }
+}
+
 ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                                 ipcp_msg_t * msg)
 {
@@ -139,7 +170,8 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
         else {
                 if (errno == EAGAIN && !dealloc) {
                         int diff = ts_diff_ms(&tic, &toc);
-                        log_warn("IPCP command timed out after %d ms.", diff);
+                        log_warn("IPCP %s timed out after %d ms.",
+                                 str_ipcp_cmd(msg->code), diff);
                 }
                 return NULL;
         }

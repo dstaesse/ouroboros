@@ -43,9 +43,32 @@ int   reg_destroy_flow(int flow_id);
 
 bool  reg_has_flow(int flow_id);
 
-int   reg_create_ipcp(const struct ipcp_info * info);
+int   reg_create_proc(const struct proc_info * info);
 
-int   reg_destroy_ipcp(pid_t pid);
+/* Use this for all processes, including ipcps */
+int   reg_destroy_proc(pid_t pid);
+
+bool  reg_has_proc(pid_t pid);
+
+void  reg_kill_all_proc(int signal);
+
+pid_t reg_get_dead_proc(void);
+
+int   reg_create_spawned(pid_t pid);
+
+bool  reg_has_spawned(pid_t pid);
+
+void  reg_kill_all_spawned(int signal);
+
+int   reg_first_spawned(void);
+
+int   reg_bind_proc(const char * name,
+                    pid_t        proc);
+
+int   reg_unbind_proc(const char * name,
+                      pid_t        proc);
+
+int   reg_create_ipcp(const struct ipcp_info * info);
 
 bool  reg_has_ipcp(pid_t pid);
 
@@ -69,32 +92,6 @@ bool  reg_has_name(const char * name);
 
 /* TODO don't rely on protobuf here */
 int   reg_list_names(name_info_msg_t *** names);
-
-int   reg_create_proc(const struct proc_info * info);
-
-int   reg_destroy_proc(pid_t pid);
-
-bool  reg_has_proc(pid_t pid);
-
-void  reg_kill_all_proc(int signal);
-
-pid_t reg_get_dead_proc(void);
-
-int   reg_create_spawned(pid_t pid);
-
-int   reg_destroy_spawned(pid_t pid);
-
-bool  reg_has_spawned(pid_t pid);
-
-void  reg_kill_all_spawned(int signal);
-
-int   reg_first_spawned(void);
-
-int   reg_bind_proc(const char * name,
-                    pid_t        proc);
-
-int   reg_unbind_proc(const char * name,
-                      pid_t        proc);
 
 int   reg_create_prog(const struct prog_info * info);
 

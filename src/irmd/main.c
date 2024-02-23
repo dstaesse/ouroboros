@@ -268,7 +268,7 @@ int create_ipcp(struct ipcp_info * info)
 
  fail_boot:
         waitpid(info->pid, &status, 0);
-        reg_destroy_ipcp(info->pid);
+        reg_destroy_proc(info->pid);
         return -1;
 
  fail_reg_ipcp:
@@ -289,7 +289,7 @@ static int destroy_ipcp(pid_t pid)
                 goto fail;
         }
 
-        if (reg_destroy_ipcp(pid)) {
+        if (reg_destroy_proc(pid)) {
                 log_err("Failed to remove IPCP from registry.");
                 goto fail;
         }
@@ -741,9 +741,6 @@ static int proc_announce(const struct proc_info * info)
 
 static int proc_exit(pid_t pid)
 {
-        if (reg_has_ipcp(pid) && reg_destroy_ipcp(pid) < 0)
-                log_warn("Failed to remove IPCP %d.", pid);
-
         if (reg_destroy_proc(pid) < 0)
                 log_err("Failed to remove process %d.", pid);
 
@@ -1023,11 +1020,11 @@ static int flow_alloc(struct flow_info * flow,
         uint8_t * s = NULL;
         buffer_t  hash;
         int       err;
-
         /* piggyback of user data not yet implemented */
         assert(data != NULL && data->len == 0 && data->data == NULL);
 
         log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
+
 
         if (flow->qs.cypher_s > 0) {
                 ssize_t key_len;
@@ -2025,8 +2022,8 @@ static void kill_all_spawned(void)
                         waitpid(pid, &s, 0);
                 else {
                         log_warn("Child process %d died.", pid);
-                        reg_destroy_spawned(pid);
                         cleanup_pid(pid);
+                        reg_destroy_proc(pid);
                 }
                 pid = reg_first_spawned();
         }

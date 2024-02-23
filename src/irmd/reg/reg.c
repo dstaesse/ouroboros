@@ -798,41 +798,6 @@ int reg_create_ipcp(const struct ipcp_info * info)
 
 }
 
-int reg_destroy_ipcp(pid_t pid)
-{
-        struct reg_ipcp *  ipcp;
-        struct pid_entry * entry;
-
-        pthread_mutex_lock(&reg.mtx);
-
-        ipcp = __reg_get_ipcp(pid);
-        if (ipcp == NULL) {
-                log_err("IPCP %d does not exist.", pid);
-                goto no_ipcp;
-        }
-
-        list_del(&ipcp->next);
-
-        reg.n_ipcps--;
-
-        entry = __reg_get_spawned(pid);
-        assert(entry != NULL);
-
-        list_del(&entry->next);
-        free(entry);
-        reg.n_spawned--;
-
-        pthread_mutex_unlock(&reg.mtx);
-
-        reg_ipcp_destroy(ipcp);
-
-        return 0;
-
- no_ipcp:
-        pthread_mutex_unlock(&reg.mtx);
-        return -1;
-}
-
 int reg_update_ipcp(struct ipcp_info * info)
 {
         struct reg_ipcp * ipcp;
@@ -1134,33 +1099,38 @@ int reg_create_proc(const struct proc_info * info)
 
 int reg_destroy_proc(pid_t pid)
 {
-        struct reg_proc * proc;
+        struct reg_proc *  proc;
+        struct pid_entry * spawn;
+        struct reg_ipcp *  ipcp;
 
         pthread_mutex_lock(&reg.mtx);
 
         proc = __reg_get_proc(pid);
-        if (proc == NULL) {
-                log_err("Process %d does not exist.", pid);
-                goto no_proc;
+        if (proc != NULL) {
+                list_del(&proc->next);
+                reg.n_procs--;
+                reg_proc_destroy(proc);
+                __reg_del_proc_from_names(pid);
+                __reg_cancel_flows_for_proc(pid);
         }
 
-        __reg_del_proc_from_names(pid);
+        spawn = __reg_get_spawned(pid);
+        if (spawn != NULL) {
+                list_del(&spawn->next);
+                reg.n_spawned--;
+                free(spawn);
+        }
 
-        list_del(&proc->next);
-
-        reg.n_procs--;
-
-        __reg_cancel_flows_for_proc(pid);
+        ipcp = __reg_get_ipcp(pid);
+        if (ipcp != NULL) {
+                list_del(&ipcp->next);
+                reg.n_ipcps--;
+                reg_ipcp_destroy(ipcp);
+        }
 
         pthread_mutex_unlock(&reg.mtx);
-
-        reg_proc_destroy(proc);
 
         return 0;
-
- no_proc:
-        pthread_mutex_unlock(&reg.mtx);
-        return -1;
 }
 
 bool reg_has_proc(pid_t pid)
@@ -1225,33 +1195,6 @@ int reg_create_spawned(pid_t pid)
 
         return 0;
  fail_proc:
-        pthread_mutex_unlock(&reg.mtx);
-        return -1;
-}
-
-int  reg_destroy_spawned(pid_t pid)
-{
-        struct pid_entry * entry;
-
-        pthread_mutex_lock(&reg.mtx);
-
-        entry = __reg_get_spawned(pid);
-        if (entry == NULL) {
-                log_err("Spawned process %d does not exist.", pid);
-                goto no_proc;
-        }
-
-        list_del(&entry->next);
-
-        reg.n_spawned--;
-
-        pthread_mutex_unlock(&reg.mtx);
-
-        free(entry);
-
-        return 0;
-
- no_proc:
         pthread_mutex_unlock(&reg.mtx);
         return -1;
 }
