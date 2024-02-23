@@ -1490,7 +1490,7 @@ int reg_get_exec(enum hash_algo  algo,
 
         exec = __reg_get_exec(algo, hash);
         if (exec == NULL) {
-                ret = 0;
+                ret = -EPERM;
                 goto finish;
         }
 

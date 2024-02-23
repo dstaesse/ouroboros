@@ -53,20 +53,18 @@ struct ipcp_ops {
 
         int   (* ipcp_query)(const uint8_t * hash);
 
-        int   (* ipcp_flow_alloc)(int             fd,
-                                  const uint8_t * dst,
-                                  qosspec_t       qs,
-                                  const void *    data,
-                                  size_t          len);
+        int   (* ipcp_flow_alloc)(int              fd,
+                                  const uint8_t *  dst,
+                                  qosspec_t        qs,
+                                  const buffer_t * data);
 
         int   (* ipcp_flow_join)(int             fd,
                                  const uint8_t * dst,
                                  qosspec_t       qs);
 
-        int   (* ipcp_flow_alloc_resp)(int          fd,
-                                       int          response,
-                                       const void * data,
-                                       size_t       len);
+        int   (* ipcp_flow_alloc_resp)(int              fd,
+                                       int              response,
+                                       const buffer_t * data);
 
         int   (* ipcp_flow_dealloc)(int fd);
 };
@@ -129,11 +127,10 @@ int             ipcp_parse_arg(int    argc,
                                char * argv[]);
 
 /* Helper functions to handle races during flow allocation */
-int             ipcp_wait_flow_req_arr(const uint8_t * dst,
-                                       qosspec_t       qs,
-                                       time_t          mpl,
-                                       const void *    data,
-                                       size_t          len);
+int             ipcp_wait_flow_req_arr(const uint8_t *  dst,
+                                       qosspec_t        qs,
+                                       time_t           mpl,
+                                       const buffer_t * data);
 
 int             ipcp_wait_flow_resp(const int fd);
 

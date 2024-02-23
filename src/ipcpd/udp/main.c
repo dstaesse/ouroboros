@@ -203,18 +203,17 @@ static int udp_ipcp_port_alloc(const struct sockaddr_in * r_saddr,
                                uint32_t                   s_eid,
                                const uint8_t *            dst,
                                qosspec_t                  qs,
-                               const void *               data,
-                               size_t                     dlen)
+                               const buffer_t *           data)
 {
         uint8_t *         buf;
         struct mgmt_msg * msg;
         size_t            len;
 
-        assert(dlen > 0 ? data != NULL : data == NULL);
+        assert(data->len > 0 ? data->data != NULL : data->data == NULL);
 
         len = sizeof(*msg) + ipcp_dir_hash_len();
 
-        buf = malloc(len + dlen);
+        buf = malloc(len + data->len);
         if (buf == NULL)
                 return -1;
 
@@ -233,10 +232,10 @@ static int udp_ipcp_port_alloc(const struct sockaddr_in * r_saddr,
         msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
-        if (dlen > 0)
-                memcpy(buf + len, data, dlen);
+        if (data->len > 0)
+                memcpy(buf + len, data->data, data->len);
 
-        if (sendto(udp_data.s_fd, msg, len + dlen,
+        if (sendto(udp_data.s_fd, msg, len + data->len,
                    SENDTO_FLAGS,
                    (const struct sockaddr *) r_saddr, sizeof(*r_saddr)) < 0) {
                 free(buf);
@@ -252,12 +251,11 @@ static int udp_ipcp_port_alloc_resp(const struct sockaddr_in * r_saddr,
                                     uint32_t                   s_eid,
                                     uint32_t                   d_eid,
                                     int8_t                     response,
-                                    const void *               data,
-                                    size_t                     len)
+                                    const buffer_t *           data)
 {
         struct mgmt_msg * msg;
 
-        msg = malloc(sizeof(*msg) + len);
+        msg = malloc(sizeof(*msg) + data->len);
         if (msg == NULL)
                 return -1;
 
@@ -267,10 +265,10 @@ static int udp_ipcp_port_alloc_resp(const struct sockaddr_in * r_saddr,
         msg->d_eid    = hton32(d_eid);
         msg->response = response;
 
-        if (len > 0)
-                memcpy(msg + 1, data, len);
+        if (data->len > 0)
+                memcpy(msg + 1, data->data, data->len);
 
-        if (sendto(udp_data.s_fd, msg, sizeof(*msg) + len,
+        if (sendto(udp_data.s_fd, msg, sizeof(*msg) + data->len,
                    SENDTO_FLAGS,
                    (const struct sockaddr *) r_saddr, sizeof(*r_saddr)) < 0 ) {
                 free(msg);
@@ -286,12 +284,11 @@ static int udp_ipcp_port_req(struct sockaddr_in * c_saddr,
                              int                  d_eid,
                              const uint8_t *      dst,
                              qosspec_t            qs,
-                             const void *         data,
-                             size_t               len)
+                             const buffer_t *     data)
 {
         int fd;
 
-        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UDP_MPL, data, len);
+        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UDP_MPL, data);
         if (fd < 0) {
                 log_err("Could not get new flow from IRMd.");
                 return -1;
@@ -314,8 +311,7 @@ static int udp_ipcp_port_alloc_reply(const struct sockaddr_in * saddr,
                                      uint32_t                   s_eid,
                                      uint32_t                   d_eid,
                                      int8_t                     response,
-                                     const void *               data,
-                                     size_t                     len)
+                                     const buffer_t *           data)
 {
         time_t mpl = IPCP_UDP_MPL;
 
@@ -333,7 +329,7 @@ static int udp_ipcp_port_alloc_reply(const struct sockaddr_in * saddr,
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        if (ipcp_flow_alloc_reply(s_eid, response, mpl, data, len) < 0) {
+        if (ipcp_flow_alloc_reply(s_eid, response, mpl, data) < 0) {
                 log_err("Failed to reply to flow allocation.");
                 return -1;
         }
@@ -351,6 +347,7 @@ static int udp_ipcp_mgmt_frame(const uint8_t *    buf,
         struct mgmt_msg * msg;
         size_t            msg_len;
         qosspec_t         qs;
+        buffer_t          data;
 
         msg = (struct mgmt_msg *) buf;
 
@@ -359,6 +356,10 @@ static int udp_ipcp_mgmt_frame(const uint8_t *    buf,
                 msg_len = sizeof(*msg) + ipcp_dir_hash_len();
 
                 assert(len >= msg_len);
+
+                data.len  = len - msg_len;
+                data.data = (uint8_t *) buf + msg_len;
+
 
                 qs.delay        = ntoh32(msg->delay);
                 qs.bandwidth    = ntoh64(msg->bandwidth);
@@ -372,17 +373,18 @@ static int udp_ipcp_mgmt_frame(const uint8_t *    buf,
 
                 return udp_ipcp_port_req(&c_saddr, ntoh32(msg->s_eid),
                                          (uint8_t *) (msg + 1), qs,
-                                         buf + msg_len,
-                                         len - msg_len);
+                                          &data);
         case FLOW_REPLY:
                 assert(len >= sizeof(*msg));
+
+                data.len  = len - sizeof(*msg);
+                data.data = (uint8_t *) buf + sizeof(*msg);
 
                 return udp_ipcp_port_alloc_reply(&c_saddr,
                                                  ntoh32(msg->s_eid),
                                                  ntoh32(msg->d_eid),
                                                  msg->response,
-                                                 buf + sizeof(*msg),
-                                                 len - sizeof(*msg));
+                                                 &data);
         default:
                 log_err("Unknown message received %d.", msg->code);
                 return -1;
@@ -983,11 +985,10 @@ static int udp_ipcp_query(const uint8_t * hash)
         return 0;
 }
 
-static int udp_ipcp_flow_alloc(int             fd,
-                               const uint8_t * dst,
-                               qosspec_t       qs,
-                               const void *    data,
-                               size_t          len)
+static int udp_ipcp_flow_alloc(int              fd,
+                               const uint8_t *  dst,
+                               qosspec_t        qs,
+                               const buffer_t * data)
 {
         struct sockaddr_in r_saddr; /* Server address */
         uint32_t           ip_addr = 0;
@@ -1017,7 +1018,7 @@ static int udp_ipcp_flow_alloc(int             fd,
         r_saddr.sin_addr.s_addr = ip_addr;
         r_saddr.sin_port        = udp_data.s_saddr.sin_port;
 
-        if (udp_ipcp_port_alloc(&r_saddr, fd, dst, qs, data, len) < 0) {
+        if (udp_ipcp_port_alloc(&r_saddr, fd, dst, qs, data) < 0) {
                 log_err("Could not allocate port.");
                 return -1;
         }
@@ -1034,10 +1035,9 @@ static int udp_ipcp_flow_alloc(int             fd,
         return 0;
 }
 
-static int udp_ipcp_flow_alloc_resp(int          fd,
-                                    int          resp,
-                                    const void * data,
-                                    size_t       len)
+static int udp_ipcp_flow_alloc_resp(int              fd,
+                                    int              resp,
+                                    const buffer_t * data)
 {
         struct sockaddr_in saddr;
         int                d_eid;
@@ -1054,7 +1054,7 @@ static int udp_ipcp_flow_alloc_resp(int          fd,
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        if (udp_ipcp_port_alloc_resp(&saddr, d_eid, fd, resp, data, len) < 0) {
+        if (udp_ipcp_port_alloc_resp(&saddr, d_eid, fd, resp, data) < 0) {
                 fset_del(udp_data.np1_flows, fd);
                 log_err("Failed to respond to flow request.");
                 return -1;

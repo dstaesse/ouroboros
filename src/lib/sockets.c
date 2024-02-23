@@ -21,6 +21,7 @@
  */
 
 #include <ouroboros/errno.h>
+#include <ouroboros/pthread.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/utils.h>
 
@@ -29,7 +30,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <stdbool.h>
 
 /* Apple doesn't support SEQPACKET. */
@@ -118,7 +118,8 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
 
         pthread_cleanup_push(__cleanup_close_ptr, &sockfd);
 
-        if (write(sockfd, buf, len) != -1)
+        len = write(sockfd, buf, len);
+        if (len >= 0)
                 len = read(sockfd, buf, SOCK_BUF_SIZE);
 
         pthread_cleanup_pop(true);
@@ -129,6 +130,28 @@ irm_msg_t * send_recv_irm_msg(irm_msg_t * msg)
         return irm_msg__unpack(NULL, len, buf);
  fail:
         return NULL;
+}
+
+int send_recv_msg(buffer_t * msg)
+{
+        int     sockfd;
+        ssize_t len = 0;
+
+        sockfd = client_socket_open(IRM_SOCK_PATH);
+        if (sockfd < 0)
+                return -1;
+
+        pthread_cleanup_push(__cleanup_close_ptr, &sockfd);
+
+        len = write(sockfd, msg->data, msg->len);
+        if (len >= 0)
+                len = read(sockfd, msg->data, SOCK_BUF_SIZE);
+
+        pthread_cleanup_pop(true);
+
+        msg->len = (size_t) len;
+
+        return len < 0 ? -1 : 0;
 }
 
 char * ipcp_sock_path(pid_t pid)

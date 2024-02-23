@@ -23,44 +23,56 @@
 #ifndef OUROBOROS_LIB_PROTOBUF_H
 #define OUROBOROS_LIB_PROTOBUF_H
 
+#include <ouroboros/flow.h>
 #include <ouroboros/qos.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/irm.h>
+#include <ouroboros/serdes-irm.h>
 #include <ouroboros/serdes-oep.h>
 
 #include "ipcp_config.pb-c.h"
 typedef IpcpConfigMsg ipcp_config_msg_t;
-typedef LayerInfoMsg layer_info_msg_t;
-typedef DtConfigMsg dt_config_msg_t;
-typedef EthConfigMsg eth_config_msg_t;
-typedef UdpConfigMsg udp_config_msg_t;
-typedef UniConfigMsg uni_config_msg_t;
+typedef DtConfigMsg   dt_config_msg_t;
+typedef EthConfigMsg  eth_config_msg_t;
+typedef UdpConfigMsg  udp_config_msg_t;
+typedef UniConfigMsg  uni_config_msg_t;
 
 #include "ipcp.pb-c.h"
-typedef IpcpMsg ipcp_msg_t;
+typedef IpcpMsg       ipcp_msg_t;
 
 #include "irm.pb-c.h"
-typedef IpcpInfoMsg ipcp_info_msg_t;
-typedef IpcpListMsg ipcp_list_msg_t;
-typedef NameInfoMsg name_info_msg_t;
+typedef IrmMsg        irm_msg_t;
+typedef TimespecMsg   timespec_msg_t;
+typedef IpcpInfoMsg   ipcp_info_msg_t;
+typedef IpcpListMsg   ipcp_list_msg_t;
 
-#include "qos.pb-c.h"
-typedef QosspecMsg qosspec_msg_t;
+#include "model.pb-c.h"
+typedef FlowInfoMsg    flow_info_msg_t;
+typedef LayerInfoMsg   layer_info_msg_t;
+typedef NameInfoMsg    name_info_msg_t;
+typedef QosspecMsg     qosspec_msg_t;
 
 #include "enroll.pb-c.h"
-typedef EnrollReqMsg enroll_req_msg_t;
-typedef EnrollRespMsg enroll_resp_msg_t;
-typedef EnrollAckMsg enroll_ack_msg_t;
+typedef EnrollReqMsg   enroll_req_msg_t;
+typedef EnrollRespMsg  enroll_resp_msg_t;
+typedef EnrollAckMsg   enroll_ack_msg_t;
 
 /* IPCP configuration */
+timespec_msg_t *    timespec_s_to_msg(const struct timespec * s);
+
+struct timespec     timespec_msg_to_s(timespec_msg_t * msg);
+
+flow_info_msg_t *   flow_info_s_to_msg(const struct flow_info * s);
+
+struct flow_info    flow_info_msg_to_s(const flow_info_msg_t * msg);
 
 layer_info_msg_t *  layer_info_s_to_msg(const struct layer_info * s);
 
 struct layer_info   layer_info_msg_to_s(const layer_info_msg_t * msg);
 
-ipcp_info_msg_t *  ipcp_info_s_to_msg(const struct ipcp_info * s);
+ipcp_info_msg_t *   ipcp_info_s_to_msg(const struct ipcp_info * s);
 
-struct ipcp_info   ipcp_info_msg_to_s(const ipcp_info_msg_t * msg);
+struct ipcp_info    ipcp_info_msg_to_s(const ipcp_info_msg_t * msg);
 
 dt_config_msg_t *   dt_config_s_to_msg(const struct dt_config * s);
 

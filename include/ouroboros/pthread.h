@@ -35,11 +35,13 @@ static int __attribute__((unused)) __timedwait(pthread_cond_t *        cond,
         return pthread_cond_timedwait(cond, mtx, abstime);
 }
 
+#if defined (_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200112L
 /* various cleanup functions for pthread_cleanup_push */
 static void __attribute__((unused)) __cleanup_rwlock_unlock(void * rwlock)
 {
         pthread_rwlock_unlock((pthread_rwlock_t *) rwlock);
 }
+#endif
 
 static void __attribute__((unused)) __cleanup_mutex_unlock(void * mutex)
 {

@@ -22,10 +22,7 @@
 
 syntax = "proto2";
 
-message layer_info_msg {
-        required string name          = 1;
-        required uint32 dir_hash_algo = 2;
-}
+import "model.proto";
 
 message dt_config_msg {
         required uint32 addr_size    = 1;

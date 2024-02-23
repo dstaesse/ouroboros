@@ -4,8 +4,8 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-protobuf_generate_c(QOSSPEC_PROTO_SRCS QOSSPEC_PROTO_HDRS
-  pb/qos.proto)
+protobuf_generate_c(MODEL_PROTO_SRCS MODEL_PROTO_HDRS
+  pb/model.proto)
 protobuf_generate_c(IPCP_CONFIG_PROTO_SRCS IPCP_CONFIG_PROTO_HDRS
   pb/ipcp_config.proto)
 protobuf_generate_c(ENROLL_PROTO_SRCS ENROLL_PROTO_HDRS
@@ -264,6 +264,7 @@ set(SOURCE_FILES_COMMON
   qoscube.c
   random.c
   rib.c
+  serdes-irm.c
   serdes-oep.c
   sha3.c
   shm_flow_set.c
@@ -278,7 +279,7 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)
 
 add_library(ouroboros-common SHARED ${SOURCE_FILES_COMMON} ${IRM_PROTO_SRCS}
-  ${IPCP_PROTO_SRCS} ${IPCP_CONFIG_PROTO_SRCS} ${QOSSPEC_PROTO_SRCS}
+  ${IPCP_PROTO_SRCS} ${IPCP_CONFIG_PROTO_SRCS} ${MODEL_PROTO_SRCS}
   ${ENROLL_PROTO_SRCS})
 
 add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CACEP_PROTO_SRCS})

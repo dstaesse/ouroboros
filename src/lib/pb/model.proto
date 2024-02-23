@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
- * QoS specification message
+ * Model description messages
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -32,4 +32,30 @@ message qosspec_msg {
         required uint32 max_gap      = 7; /* In ms.                   */
         required uint32 cypher_s     = 8; /* Crypto strength in bits. */
         required uint32 timeout      = 9; /* Timeout in ms.           */
+}
+
+message flow_info_msg {
+        required uint32      id      = 1;
+        required uint32      n_pid   = 2;
+        required uint32      n_1_pid = 3;
+        required uint32      mpl     = 4;
+        required uint32      state   = 5;
+        required qosspec_msg qos     = 6;
+}
+
+message name_info_msg {
+        required string name   = 1;
+        required uint32 pol_lb = 2;
+}
+
+message layer_info_msg {
+        required string name          = 1;
+        required uint32 dir_hash_algo = 2;
+}
+
+message ipcp_info_msg {
+        required uint32 type  = 1;
+        required string name  = 2;
+        required uint32 pid   = 3;
+        required uint32 state = 4;
 }
