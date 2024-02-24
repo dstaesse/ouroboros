@@ -1536,6 +1536,7 @@ static void * mainloop(void * o)
                 free(cmd);
 
                 if (msg == NULL) {
+                        log_err("Failed to unpack command message.");
                         close(sfd);
                         continue;
                 }
@@ -1582,12 +1583,18 @@ static void * mainloop(void * o)
                 irm_msg__free_unpacked(ret_msg, NULL);
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
+                pthread_cleanup_push(free, buffer.data);
 
-                if (write(sfd, buffer.data, buffer.len) == -1)
-                        log_warn("Failed to send reply message.");
+                if (write(sfd, buffer.data, buffer.len) == -1) {
+                        if (errno != EPIPE)
+                                log_warn("Failed to send reply message: %s.",
+                                         strerror(errno));
+                        else
+                                log_dbg("Failed to send reply message: %s.",
+                                        strerror(errno));
+                }
 
-                free(buffer.data);
-
+                pthread_cleanup_pop(true);
                 pthread_cleanup_pop(true);
 
                 tpm_inc(irmd.tpm);
