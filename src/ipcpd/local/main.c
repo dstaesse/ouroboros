@@ -221,17 +221,17 @@ static int local_ipcp_flow_alloc_resp(int              fd,
                                       int              response,
                                       const buffer_t * data)
 {
-        int    out_fd;
-        time_t mpl = IPCP_LOCAL_MPL;
+        struct timespec wait = TIMESPEC_INIT_MS(1);
+        time_t          mpl  = IPCP_LOCAL_MPL;
+        int             out_fd;
 
         if (ipcp_wait_flow_resp(fd) < 0) {
                 log_err("Failed waiting for IRMd response.");
                 return -1;
         }
 
-        pthread_rwlock_wrlock(&local_data.lock);
-
         if (response < 0) {
+                pthread_rwlock_wrlock(&local_data.lock);
                 if (local_data.in_out[fd] != -1)
                         local_data.in_out[local_data.in_out[fd]] = fd;
                 local_data.in_out[fd] = -1;
@@ -239,14 +239,23 @@ static int local_ipcp_flow_alloc_resp(int              fd,
                 return 0;
         }
 
+        pthread_rwlock_rdlock(&local_data.lock);
+
         out_fd = local_data.in_out[fd];
         if (out_fd == -1) {
                 pthread_rwlock_unlock(&local_data.lock);
-                log_err("Invalid out_fd.");
-                return -1;
+                log_dbg("Potential race detected");
+                nanosleep(&wait, NULL);
+                pthread_rwlock_rdlock(&local_data.lock);
+                out_fd = local_data.in_out[fd];
         }
 
         pthread_rwlock_unlock(&local_data.lock);
+
+        if (out_fd == -1) {
+                log_err("Invalid out_fd.");
+                return -1;
+        }
 
         fset_add(local_data.flows, fd);
 
