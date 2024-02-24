@@ -1697,19 +1697,24 @@ int reg_wait_flow_allocated(struct flow_info *      info,
                         assert(false);
                 }
 
+                flow = __reg_get_flow(flow->info.id);
+                if (flow == NULL) {
+                        info->state = FLOW_DEALLOCATED;
+                        ret = -1;
+                        break;
+                }
+
                 if (ret == -ETIMEDOUT) {
                         info->state = FLOW_DEALLOCATED;
                         reg_flow_update(flow, info);
                         break;
                 }
-
-                flow = __reg_get_flow(flow->info.id);
-                assert(flow != NULL);
         }
 
-        reg_flow_get_data(flow, pbuf);
-
-        *info = flow->info;
+        if (flow != NULL) {
+                reg_flow_get_data(flow, pbuf);
+                *info = flow->info;
+        }
 
         pthread_cleanup_pop(true); /* __cleanup_mutex_unlock */
 
@@ -1849,20 +1854,26 @@ int reg_wait_flow_accepted(struct flow_info *      info,
                         assert(false);
                 }
 
+                flow = __reg_get_flow(flow->info.id);
+                if (flow == NULL) {
+                        info->state = FLOW_DEALLOCATED;
+                        ret = -1;
+                        break;
+                }
+
                 if (ret == -ETIMEDOUT) {
                         info->state = FLOW_DEALLOCATED;
                         reg_flow_update(flow, info);
                         break;
                 }
-
-                flow = __reg_get_flow(flow->info.id);
         }
 
         pthread_cleanup_pop(true); /* __cleanup_wait_accept */
 
-        reg_flow_get_data(flow, pbuf);
-
-        *info = flow->info;
+        if (flow != NULL) {
+                reg_flow_get_data(flow, pbuf);
+                *info = flow->info;
+        }
 
         pthread_cleanup_pop(true); /* __cleanup_mutex_unlock */
 
@@ -2064,11 +2075,11 @@ int reg_wait_ipcp_boot(struct ipcp_info *      info,
                         continue; /* Shut up static analyzer. */
                 }
 
+                ipcp = __reg_get_ipcp(info->pid);
+
                 if (ret == -ETIMEDOUT)
                         break;
-
-                ipcp = __reg_get_ipcp(info->pid);
-       }
+        }
 
         if (ipcp != NULL)
                *info = ipcp->info;
