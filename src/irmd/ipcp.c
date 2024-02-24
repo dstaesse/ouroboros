@@ -107,7 +107,8 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
         free(sock_path);
 
         len = ipcp_msg__get_packed_size(msg);
-        if (len == 0) {
+        if (len == 0 || len >= SOCK_BUF_SIZE) {
+                log_warn("IPCP message has invalid size: %zd.", len);
                 close(sockfd);
                 return NULL;
         }

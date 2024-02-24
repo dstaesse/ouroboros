@@ -970,9 +970,7 @@ static int get_ipcp_by_dst(const char *     dst,
 
                 type = ipcps[i]->type;
                 algo = ipcps[i]->hash_algo;
-                hash->len  = hash_len(algo);
-
-                tmp = ipcps[i]->pid;
+                tmp  = ipcps[i]->pid;
 
                 enrolled = strcmp(ipcps[i]->layer, "Not enrolled.") != 0;
 
@@ -984,6 +982,7 @@ static int get_ipcp_by_dst(const char *     dst,
                 if (err == 0 /* solution found */ || !enrolled)
                         continue;
 
+                hash->len  = hash_len(algo);
                 hash->data = malloc(hash->len);
                 if (hash->data == NULL) {
                         log_warn("Failed to malloc hash for query.");
