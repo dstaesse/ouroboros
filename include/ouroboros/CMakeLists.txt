@@ -8,7 +8,7 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/sockets.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/sockets.h" @ONLY)
 
 set(HEADER_FILES
-  cacep.h
+  cep.h
   cdefs.h
   dev.h
   errno.h

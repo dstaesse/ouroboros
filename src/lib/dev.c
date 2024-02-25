@@ -28,19 +28,19 @@
 
 #include "config.h"
 
-#include <ouroboros/hash.h>
-#include <ouroboros/cacep.h>
+#include <ouroboros/bitmap.h>
+#include <ouroboros/cep.h>
 #include <ouroboros/crypt.h>
-#include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/errno.h>
+#include <ouroboros/fccntl.h>
 #include <ouroboros/flow.h>
+#include <ouroboros/fqueue.h>
+#include <ouroboros/hash.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/list.h>
 #include <ouroboros/local-dev.h>
-#include <ouroboros/sockets.h>
-#include <ouroboros/fccntl.h>
-#include <ouroboros/bitmap.h>
 #include <ouroboros/np1_flow.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
@@ -48,8 +48,8 @@
 #include <ouroboros/shm_flow_set.h>
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/shm_rbuff.h>
+#include <ouroboros/sockets.h>
 #include <ouroboros/utils.h>
-#include <ouroboros/fqueue.h>
 #ifdef PROC_FLOW_STATS
 #include <ouroboros/rib.h>
 #endif

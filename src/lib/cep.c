@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
- * The Common Application Connection Establishment Protocol
+ * The Ouroboros Connection Establishment Protocol
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -22,35 +22,35 @@
 
 #define _POSIX_C_SOURCE 199309L
 
-#include <ouroboros/cacep.h>
+#include <ouroboros/cep.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "cacep.pb-c.h"
-typedef CacepMsg cacep_msg_t;
+#include "cep.pb-c.h"
+typedef CepMsg cep_msg_t;
 
 #define BUF_SIZE 128
 
 static int read_msg(int                fd,
                     struct conn_info * info)
 {
-        uint8_t                      buf[BUF_SIZE];
-        cacep_msg_t *                msg;
-        ssize_t                      len;
+        uint8_t     buf[BUF_SIZE];
+        cep_msg_t * msg;
+        ssize_t     len;
 
         len = flow_read(fd, buf, BUF_SIZE);
         if (len < 0)
-                return -1;
+                return (int) len;
 
-        msg = cacep_msg__unpack(NULL, len, buf);
+        msg = cep_msg__unpack(NULL, len, buf);
         if (msg == NULL)
                 return -1;
 
-        if (strlen(msg->comp_name) > CACEP_BUF_STRLEN) {
-                cacep_msg__free_unpacked(msg, NULL);
+        if (strlen(msg->comp_name) > OCEP_BUF_STRLEN) {
+                cep_msg__free_unpacked(msg, NULL);
                 return -1;
         }
 
@@ -61,7 +61,7 @@ static int read_msg(int                fd,
         info->pref_syntax  = msg->pref_syntax;
         info->addr         = msg->address;
 
-        cacep_msg__free_unpacked(msg, NULL);
+        cep_msg__free_unpacked(msg, NULL);
 
         return 0;
 }
@@ -69,9 +69,9 @@ static int read_msg(int                fd,
 static int send_msg(int                      fd,
                     const struct conn_info * info)
 {
-        cacep_msg_t msg = CACEP_MSG__INIT;
-        uint8_t *   data = NULL;
-        size_t      len  = 0;
+        cep_msg_t msg = CEP_MSG__INIT;
+        uint8_t * data = NULL;
+        size_t    len  = 0;
 
         msg.comp_name    = (char *) info->comp_name;
         msg.protocol     = (char *) info->protocol;
@@ -81,7 +81,7 @@ static int send_msg(int                      fd,
         if (msg.pref_syntax < 0)
                 return -1;
 
-        len = cacep_msg__get_packed_size(&msg);
+        len = cep_msg__get_packed_size(&msg);
         if (len == 0)
                 return -1;
 
@@ -89,7 +89,7 @@ static int send_msg(int                      fd,
         if (data == NULL)
                 return -ENOMEM;
 
-        cacep_msg__pack(&msg, data);
+        cep_msg__pack(&msg, data);
 
         if (flow_write(fd, data, len) < 0) {
                 free(data);
@@ -101,26 +101,20 @@ static int send_msg(int                      fd,
         return 0;
 }
 
-int cacep_snd(int                      fd,
-              const struct conn_info * in)
+int cep_snd(int                      fd,
+            const struct conn_info * in)
 {
         if (in == NULL)
                 return -EINVAL;
 
-        if (send_msg(fd, in))
-                return -1;
-
-        return 0;
+        return send_msg(fd, in);
 }
 
-int cacep_rcv(int                fd,
-              struct conn_info * out)
+int cep_rcv(int                fd,
+            struct conn_info * out)
 {
         if (out == NULL)
                 return -EINVAL;
 
-        if (read_msg(fd, out))
-                return -1;
-
-        return 0;
+        return read_msg(fd, out);
 }

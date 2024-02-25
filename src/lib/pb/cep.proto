@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
- * Message for Connection Information in CACEP
+ * Message for Connection Information in OCEP
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -27,7 +27,7 @@ message fixed_conc_syntax_msg {
         repeated uint32 lens = 2;
 }
 
-message cacep_msg {
+message cep_msg {
         required string comp_name                  = 1;
         required string protocol                   = 2;
         required int32 pref_version                = 3;

@@ -10,8 +10,8 @@ protobuf_generate_c(IPCP_CONFIG_PROTO_SRCS IPCP_CONFIG_PROTO_HDRS
   pb/ipcp_config.proto)
 protobuf_generate_c(ENROLL_PROTO_SRCS ENROLL_PROTO_HDRS
   pb/enroll.proto)
-protobuf_generate_c(CACEP_PROTO_SRCS CACEP_PROTO_HDRS
-  pb/cacep.proto)
+protobuf_generate_c(CEP_PROTO_SRCS CEP_PROTO_HDRS
+  pb/cep.proto)
 protobuf_generate_c(IRM_PROTO_SRCS IRM_PROTO_HDRS
   pb/irm.proto)
 protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS
@@ -241,7 +241,7 @@ endif ()
 
 set(SOURCE_FILES_DEV
   # Add source files here
-  cacep.c
+  cep.c
   dev.c
   )
 
@@ -282,7 +282,7 @@ add_library(ouroboros-common SHARED ${SOURCE_FILES_COMMON} ${IRM_PROTO_SRCS}
   ${IPCP_PROTO_SRCS} ${IPCP_CONFIG_PROTO_SRCS} ${MODEL_PROTO_SRCS}
   ${ENROLL_PROTO_SRCS})
 
-add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CACEP_PROTO_SRCS})
+add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CEP_PROTO_SRCS})
 
 add_library(ouroboros-irm SHARED ${SOURCE_FILES_IRM})
 

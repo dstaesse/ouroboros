@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
- * The Common Application Connection Establishment Protocol
+ * The Ouroboros Connection Establishment Protocol
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,20 +20,19 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_CACEP_H
-#define OUROBOROS_CACEP_H
+#ifndef OUROBOROS_CEP_H
+#define OUROBOROS_CEP_H
 
 #include <ouroboros/cdefs.h>
 #include <ouroboros/proto.h>
 
 #include <stdint.h>
-#include <sys/types.h>
 
-#define CACEP_BUF_STRLEN 64
+#define OCEP_BUF_STRLEN 128
 
 struct conn_info {
-        char                       comp_name[CACEP_BUF_STRLEN + 1];
-        char                       protocol[CACEP_BUF_STRLEN + 1];
+        char                       comp_name[OCEP_BUF_STRLEN + 1];
+        char                       protocol[OCEP_BUF_STRLEN + 1];
         uint32_t                   pref_version;
         enum proto_concrete_syntax pref_syntax;
         struct proto_field         fixed_conc_syntax[PROTO_MAX_FIELDS];
@@ -43,12 +42,12 @@ struct conn_info {
 
 __BEGIN_DECLS
 
-int cacep_snd(int                      fd,
-              const struct conn_info * in);
+int cep_snd(int                      fd,
+            const struct conn_info * in);
 
-int cacep_rcv(int                fd,
-              struct conn_info * out);
+int cep_rcv(int                fd,
+            struct conn_info * out);
 
 __END_DECLS
 
-#endif /* OUROBOROS_CACEP_H */
+#endif /* OUROBOROS_CEP_H */

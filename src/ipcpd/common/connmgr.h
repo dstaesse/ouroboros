@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_COMMON_CONNMGR_H
 #define OUROBOROS_IPCPD_COMMON_CONNMGR_H
 
-#include <ouroboros/cacep.h>
+#include <ouroboros/cep.h>
 #include <ouroboros/qos.h>
 
 #include "comp.h"

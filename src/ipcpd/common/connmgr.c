@@ -22,9 +22,10 @@
 
 #define OUROBOROS_PREFIX "connection-manager"
 
+#include <ouroboros/cep.h>
 #include <ouroboros/dev.h>
-#include <ouroboros/cacep.h>
 #include <ouroboros/errno.h>
+#include <ouroboros/fccntl.h>
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
@@ -33,9 +34,9 @@
 #include "connmgr.h"
 #include "ipcp.h"
 
-#include <string.h>
-#include <stdlib.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 enum connmgr_state {
         CONNMGR_NULL = 0,
@@ -128,10 +129,12 @@ static int add_comp_conn(enum comp_id       id,
 
 static void * flow_acceptor(void * o)
 {
-        int               fd;
-        qosspec_t         qs;
-        struct conn_info  rcv_info;
-        struct conn_info  fail_info;
+        int              fd;
+        qosspec_t        qs;
+        struct conn_info rcv_info;
+        struct conn_info fail_info;
+        struct timespec  timeo = TIMESPEC_INIT_MS(CONNMGR_RCV_TIMEOUT);
+        int              err;
 
         (void) o;
 
@@ -147,10 +150,13 @@ static void * flow_acceptor(void * o)
                         continue;
                 }
 
-                log_info("Handling incoming flow %d",fd);
+                log_info("Handling incoming flow %d.",fd);
 
-                if (cacep_rcv(fd, &rcv_info)) {
-                        log_err("Error receiving CACEP info.");
+                fccntl(fd, FLOWSRCVTIMEO, &timeo);
+
+                err = cep_rcv(fd, &rcv_info);
+                if (err < 0) {
+                        log_err("Error receiving OCEP info: %d.", err);
                         flow_dealloc(fd);
                         continue;
                 }
@@ -161,24 +167,26 @@ static void * flow_acceptor(void * o)
                 if (id < 0) {
                         log_err("Connection request for unknown component %s.",
                                 rcv_info.comp_name);
-                        cacep_snd(fd, &fail_info);
+                        cep_snd(fd, &fail_info);
                         flow_dealloc(fd);
                         continue;
                 }
 
-                if (cacep_snd(fd, &connmgr.comps[id].info)) {
-                        log_err("Failed to respond to CACEP request.");
+                err = cep_snd(fd, &connmgr.comps[id].info);
+                if (err < 0) {
+                        log_err("Failed responding to OCEP request: %d.", err);
                         flow_dealloc(fd);
                         continue;
                 }
 
-                if (add_comp_conn(id, fd, qs, &rcv_info)) {
-                        log_err("Failed to add new connection.");
+                err = add_comp_conn(id, fd, qs, &rcv_info);
+                if (err < 0) {
+                        log_err("Failed to add new connection: %d.", err);
                         flow_dealloc(fd);
                         continue;
                 }
 
-                log_info("Finished handling incoming flow %d for %s: 0.",
+                log_info("Finished handling incoming flow %d for %s.",
                          fd, rcv_info.comp_name);
         }
 
@@ -422,8 +430,9 @@ int connmgr_alloc(enum comp_id  id,
                   qosspec_t *   qs,
                   struct conn * conn)
 {
-        struct comp * comp;
-        int           fd;
+        struct comp *   comp;
+        int             fd;
+        struct timespec timeo = TIMESPEC_INIT_MS(CONNMGR_RCV_TIMEOUT);
 
         assert(id >= 0 && id < COMPID_MAX);
         assert(dst);
@@ -443,34 +452,36 @@ int connmgr_alloc(enum comp_id  id,
         else
                 memset(&conn->flow_info.qs, 0, sizeof(conn->flow_info.qs));
 
-        log_dbg("Sending cacep info for protocol %s to fd %d.",
+        log_dbg("Sending OCEP info for protocol %s to fd %d.",
                 comp->info.protocol, conn->flow_info.fd);
 
-        if (cacep_snd(fd, &comp->info)) {
-                log_err("Failed to send CACEP info.");
-                goto fail_cacep;
+        fccntl(fd, FLOWSRCVTIMEO, &timeo);
+
+        if (cep_snd(fd, &comp->info)) {
+                log_err("Failed to send OCEP info.");
+                goto fail_cep;
         }
 
-        if (cacep_rcv(fd, &conn->conn_info)) {
-                log_err("Failed to receive CACEP info.");
-                goto fail_cacep;
+        if (cep_rcv(fd, &conn->conn_info)) {
+                log_err("Failed to receive OCEP info.");
+                goto fail_cep;
         }
 
         if (strcmp(comp->info.protocol, conn->conn_info.protocol)) {
                 log_err("Unknown protocol (requested %s, got %s).",
                         comp->info.protocol, conn->conn_info.protocol);
-                goto fail_cacep;
+                goto fail_cep;
         }
 
         if (comp->info.pref_version != conn->conn_info.pref_version) {
                 log_err("Unknown protocol version %d.",
                         conn->conn_info.pref_version);
-                goto fail_cacep;
+                goto fail_cep;
         }
 
         if (comp->info.pref_syntax != conn->conn_info.pref_syntax) {
                 log_err("Unknown protocol syntax.");
-                goto fail_cacep;
+                goto fail_cep;
         }
 
         switch (id) {
@@ -489,7 +500,7 @@ int connmgr_alloc(enum comp_id  id,
 
         return 0;
 
- fail_cacep:
+ fail_cep:
         flow_dealloc(conn->flow_info.fd);
  fail_alloc:
         return -1;

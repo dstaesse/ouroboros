@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_IPCPD_COMMON_COMP_H
 #define OUROBOROS_IPCPD_COMMON_COMP_H
 
-#include <ouroboros/cacep.h>
+#include <ouroboros/cep.h>
 
 #define DST_MAX_STRLEN 64
 

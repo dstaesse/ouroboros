@@ -1,3 +1,5 @@
+set(CONNMGR_RCV_TIMEOUT 1000 CACHE STRING
+  "Timeout for the connection manager to wait for OCEP info (ms).")
 set(IPCP_DEBUG_LOCAL FALSE CACHE BOOL
   "Use PID as address for local debugging")
 set(IPCP_QOS_CUBE_BE_PRIO 50 CACHE STRING
