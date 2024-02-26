@@ -598,7 +598,7 @@ static int args_to_argv(const char * prog,
         if ((*argv)[0] == NULL)
                 goto fail_malloc2;
 
-        argc++;
+        argc = 1;
 
         if (str == NULL)
                 goto finish;
