@@ -11,7 +11,11 @@ target_link_libraries(${src_folder}_test ouroboros-common)
 add_dependencies(check ${src_folder}_test)
 
 set(tests_to_run ${${src_folder}_tests})
-remove(tests_to_run test_suite.c)
+if(CMAKE_VERSION VERSION_LESS "3.29.0")
+  remove(tests_to_run test_suite.c)
+else ()
+  list(POP_FRONT tests_to_run)
+endif()
 
 foreach(test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
