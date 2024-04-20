@@ -2076,7 +2076,7 @@ int main(int     argc,
 
 #ifdef HAVE_TOML
         if (irm_configure(irmd.cfg_file) < 0) {
-                irmd_set_state(IRMD_NULL);
+                irmd_set_state(IRMD_SHUTDOWN);
                 ret = EXIT_FAILURE;
         }
 #endif
