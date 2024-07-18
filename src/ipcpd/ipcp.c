@@ -64,6 +64,10 @@
 #endif
 #endif
 
+#ifndef CLOCK_REALTIME_COARSE
+#define CLOCK_REALTIME_COARSE CLOCK_REALTIME
+#endif
+
 char * info[LAYER_NAME_SIZE + 1] = {
         "_state",
         "_type",

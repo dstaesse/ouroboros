@@ -1512,8 +1512,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         close(eth_data.bpf);
 #elif defined(HAVE_RAW_SOCKETS)
         close(eth_data.s_fd);
-#endif
  fail_socket:
+#endif
         return -1;
 }
 
