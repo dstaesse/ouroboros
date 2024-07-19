@@ -1232,7 +1232,7 @@ static int flow_alloc_reply(struct flow_info * flow,
 static int flow_dealloc(struct flow_info * flow,
                         struct timespec *  ts)
 {
-        log_info("Deallocating flow %d for process %d (timeout: %zd s).",
+        log_info("Deallocating flow %d for process %d (timeout: %ld s).",
                  flow->id, flow->n_pid, ts->tv_sec);
 
         reg_dealloc_flow(flow);
