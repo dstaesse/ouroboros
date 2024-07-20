@@ -47,6 +47,9 @@
 #include <string.h>
 #include <toml.h>
 #include <arpa/inet.h>
+#ifdef __FreeBSD__
+#include <sys/socket.h>
+#endif
 
 #define ERRBUFSZ 200
 
