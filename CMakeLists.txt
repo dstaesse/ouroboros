@@ -35,6 +35,7 @@ endif ()
 
 if (APPLE)
   set(CMAKE_MACOSX_RPATH 1)
+  include_directories("/usr/local/include/")
 endif()
 
 if (CMAKE_INSTALL_PREFIX STREQUAL "/usr")
