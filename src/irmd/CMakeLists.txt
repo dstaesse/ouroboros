@@ -24,6 +24,7 @@ if (LIBTOML_LIBRARIES)
       DESTINATION "${OUROBOROS_CONFIG_DIR}")
     unset(INSTALL_DIR)
     mark_as_advanced(LIBTOML_LIBRARIES)
+    find_path(LIBTOML_INCLUDE toml.h)
   else ()
     message(STATUS "Configuration file support disabled by user")
     unset(OUROBOROS_CONFIG_FILE CACHE)
@@ -82,6 +83,10 @@ add_executable (irmd ${SOURCE_FILES})
 
 target_link_libraries (irmd LINK_PUBLIC ouroboros-common
   ${LIBTOML_LIBRARIES})
+
+if (HAVE_TOML)
+  target_include_directories(irmd PUBLIC ${LIBTOML_INCLUDE})
+endif ()
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")
