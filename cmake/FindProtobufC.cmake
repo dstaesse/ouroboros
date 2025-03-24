@@ -62,7 +62,7 @@ mark_as_advanced(PROTOBUF_C_INCLUDE_DIR)
 
 # Find the protoc-c Executable
 find_program(PROTOBUF_PROTOC_C_EXECUTABLE
-  NAMES protoc-c
+  NAMES protoc protoc-c
   DOC "The Google Protocol Buffers C Compiler"
   )
 mark_as_advanced(PROTOBUF_PROTOC_C_EXECUTABLE)
