@@ -51,10 +51,10 @@ static int test_reg_init(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_create_flow(void)
@@ -105,10 +105,10 @@ static int test_reg_create_flow(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_allocate_flow_timeout(void)
@@ -179,10 +179,10 @@ static int test_reg_allocate_flow_timeout(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static void * test_flow_respond_alloc(void * o)
@@ -321,10 +321,10 @@ static int test_reg_accept_flow_success(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_accept_flow_success_no_crypt(void)
@@ -416,10 +416,10 @@ static int test_reg_accept_flow_success_no_crypt(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 
@@ -486,23 +486,19 @@ static int test_reg_allocate_flow_fail(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_flow(void) {
         int ret = 0;
 
         ret |= test_reg_create_flow();
-
         ret |= test_reg_allocate_flow_timeout();
-
         ret |= test_reg_accept_flow_success();
-
         ret |= test_reg_accept_flow_success_no_crypt();
-
         ret |= test_reg_allocate_flow_fail();
 
         return ret;
@@ -552,10 +548,10 @@ static int test_reg_create_ipcp(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_set_layer(void)
@@ -614,10 +610,10 @@ static int test_set_layer(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_ipcp(void)
@@ -625,7 +621,6 @@ static int test_reg_ipcp(void)
         int ret = 0;
 
         ret |= test_reg_create_ipcp();
-
         ret |= test_set_layer();
 
         return ret;
@@ -674,10 +669,10 @@ static int test_reg_create_name(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_name(void)
@@ -732,10 +727,10 @@ static int test_reg_create_proc(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_proc(void)
@@ -785,10 +780,10 @@ static int test_reg_spawned(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_create_prog(void)
@@ -833,10 +828,10 @@ static int test_reg_create_prog(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_prog(void)
@@ -900,10 +895,10 @@ static int test_bind_proc(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
 fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_bind_prog(void)
@@ -989,10 +984,10 @@ static int test_bind_prog(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
 fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_inherit_prog(void)
@@ -1060,10 +1055,10 @@ static int test_inherit_prog(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
 fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_wait_accepting_timeout(void)
@@ -1106,10 +1101,10 @@ static int test_wait_accepting_timeout(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_wait_accepting_fail_name(void)
@@ -1140,10 +1135,10 @@ static int test_wait_accepting_fail_name(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static void * test_call_flow_accept(void * o)
@@ -1242,10 +1237,10 @@ static int test_wait_accepting_success(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_wait_accepting(void)
@@ -1253,9 +1248,7 @@ static int test_wait_accepting(void)
         int ret = 0;
 
         ret |= test_wait_accepting_timeout();
-
         ret |= test_wait_accepting_fail_name();
-
         ret |= test_wait_accepting_success();
 
         return ret;
@@ -1300,10 +1293,10 @@ static int test_wait_ipcp_boot_timeout(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static void * test_ipcp_respond(void * o)
@@ -1371,10 +1364,10 @@ static int test_wait_ipcp_boot_fail(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_wait_ipcp_boot_success(void)
@@ -1433,10 +1426,10 @@ static int test_wait_ipcp_boot_success(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_wait_ipcp_boot(void)
@@ -1444,9 +1437,7 @@ static int test_wait_ipcp_boot(void)
         int ret = 0;
 
         ret |= test_wait_ipcp_boot_timeout();
-
         ret |= test_wait_ipcp_boot_fail();
-
         ret |= test_wait_ipcp_boot_success();
 
         return ret;
@@ -1477,10 +1468,10 @@ static int test_wait_proc_timeout(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static void * test_proc(void * o)
@@ -1527,10 +1518,10 @@ static int test_wait_proc_success(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         REG_TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_wait_proc(void)
@@ -1538,7 +1529,6 @@ static int test_wait_proc(void)
         int ret = 0;
 
         ret |= test_wait_proc_timeout();
-
         ret |= test_wait_proc_success();
 
         return ret;
@@ -1554,29 +1544,17 @@ int reg_test(int     argc,
         (void) argv;
 
         ret |= test_reg_init();
-
         ret |= test_reg_flow();
-
         ret |= test_reg_ipcp();
-
         ret |= test_reg_name();
-
         ret |= test_reg_proc();
-
         ret |= test_reg_prog();
-
         ret |= test_reg_spawned();
-
         ret |= test_bind_proc();
-
         ret |= test_bind_prog();
-
         ret |= test_inherit_prog();
-
         ret |= test_wait_accepting();
-
         ret |= test_wait_ipcp_boot();
-
         ret |= test_wait_proc();
 
         return ret;

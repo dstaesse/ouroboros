@@ -32,8 +32,8 @@ struct reg_proc {
 
         struct proc_info      info;
 
-        struct list_head      names;   /* names for which process accepts flows */
-        size_t                n_names; /* number of names                       */
+        struct list_head      names;   /* process accepts flows for names */
+        size_t                n_names; /* number of names                 */
 
         struct shm_flow_set * set;
 };

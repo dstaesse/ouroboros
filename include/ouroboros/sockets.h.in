@@ -27,16 +27,20 @@
 
 #include <sys/types.h>
 
-#define SOCK_PATH             "/var/run/ouroboros/"
+#ifndef OUROBOROS_TEST
+ #define SOCK_PATH             "/var/run/ouroboros/"
+#else
+ #define SOCK_PATH             "/tmp/"
+#endif
 #define SOCK_PATH_SUFFIX      ".sock"
 
 #define IRM_SOCK_PATH         SOCK_PATH "irm" SOCK_PATH_SUFFIX
-#define IPCP_SOCK_PATH_PREFIX SOCK_PATH "ipcp"
+#define IPCP_SOCK_PATH_PREFIX SOCK_PATH "ipcp."
 
 #define SOCK_BUF_SIZE         @SOCK_BUF_SIZE@
 
-/* Returns the full socket path of an IPCP */
-char *      ipcp_sock_path(pid_t pid);
+char *      sock_path(pid_t        pid,
+                      const char * path);
 
 int         server_socket_open(char * file_name);
 

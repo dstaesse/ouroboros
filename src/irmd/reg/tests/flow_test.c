@@ -28,7 +28,7 @@
 
 #define TEST_DATA "testpiggybackdata"
 
-static int test_reg_flow_create(void)
+static int test_reg_flow_create_destroy(void)
 {
         struct reg_flow * f;
 
@@ -51,10 +51,10 @@ static int test_reg_flow_create(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_flow_create_no_id(void) {
@@ -67,7 +67,7 @@ static int test_reg_flow_create_no_id(void) {
 
         reg_flow_create(&info); /* assert fail */
 
-        return 0;
+        return TEST_RC_SUCCESS;
 }
 
 static int test_reg_flow_create_no_pid(void) {
@@ -80,7 +80,7 @@ static int test_reg_flow_create_no_pid(void) {
 
         reg_flow_create(&info); /* assert fail */
 
-        return 0;
+        return TEST_RC_SUCCESS;
 }
 
 static int test_reg_flow_create_has_n_1_pid(void) {
@@ -94,7 +94,7 @@ static int test_reg_flow_create_has_n_1_pid(void) {
 
         reg_flow_create(&info); /* assert fail */
 
-        return 0;
+        return TEST_RC_SUCCESS;
 }
 
 static int test_reg_flow_create_wrong_state(void) {
@@ -108,7 +108,7 @@ static int test_reg_flow_create_wrong_state(void) {
 
         reg_flow_create(&info); /* assert fail */
 
-        return 0;
+        return TEST_RC_SUCCESS;
 }
 
 static int test_reg_flow_create_has_mpl(void) {
@@ -123,7 +123,7 @@ static int test_reg_flow_create_has_mpl(void) {
 
         reg_flow_create(&info); /* assert fail */
 
-        return 0;
+        return TEST_RC_SUCCESS;
 }
 
 static int test_reg_flow_update(void)
@@ -163,10 +163,10 @@ static int test_reg_flow_update(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_flow_update_wrong_id(void)
@@ -199,10 +199,10 @@ static int test_reg_flow_update_wrong_id(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_flow_assert_fails(void)
@@ -210,15 +210,10 @@ static int test_reg_flow_assert_fails(void)
         int ret = 0;
 
         ret |= test_assert_fail(test_reg_flow_create_no_id);
-
         ret |= test_assert_fail(test_reg_flow_create_no_pid);
-
         ret |= test_assert_fail(test_reg_flow_create_has_n_1_pid);
-
         ret |= test_assert_fail(test_reg_flow_create_wrong_state);
-
         ret |= test_assert_fail(test_reg_flow_create_has_mpl);
-
         ret |= test_assert_fail(test_reg_flow_update_wrong_id);
 
         return ret;
@@ -267,11 +262,11 @@ static int test_flow_data(void)
 
         TEST_SUCCESS();
 
-        return 0;
+        return TEST_RC_SUCCESS;
  fail:
         free(data);
         TEST_FAIL();
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 int flow_test(int     argc,
@@ -282,12 +277,9 @@ int flow_test(int     argc,
         (void) argc;
         (void) argv;
 
-        ret |= test_reg_flow_create();
-
+        ret |= test_reg_flow_create_destroy();
         ret |= test_reg_flow_update();
-
         ret |= test_reg_flow_assert_fails();
-
         ret |= test_flow_data();
 
         return ret;

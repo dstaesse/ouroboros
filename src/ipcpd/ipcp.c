@@ -643,17 +643,17 @@ static void do_flow_dealloc(int          flow_id,
 
 static void * mainloop(void * o)
 {
-        int                 sfd;
-        buffer_t            buffer;
-        ipcp_msg_t *        msg;
+        int          sfd;
+        buffer_t     buffer;
+        ipcp_msg_t * msg;
 
         (void) o;
 
         while (true) {
-                ipcp_msg_t       ret_msg        = IPCP_MSG__INIT;
-                qosspec_t        qs;
-                struct cmd *     cmd;
-                buffer_t         data;
+                ipcp_msg_t   ret_msg = IPCP_MSG__INIT;
+                qosspec_t    qs;
+                struct cmd * cmd;
+                buffer_t     data;
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
 
@@ -679,7 +679,7 @@ static void * mainloop(void * o)
                         continue;
                 }
 
-                tpm_dec(ipcpi.tpm);
+                tpm_begin_work(ipcpi.tpm);
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
                 pthread_cleanup_push(free_msg, msg);
@@ -753,7 +753,7 @@ static void * mainloop(void * o)
                 if (buffer.len == 0) {
                         log_err("Failed to pack reply message");
                         close(sfd);
-                        tpm_inc(ipcpi.tpm);
+                        tpm_end_work(ipcpi.tpm);
                         continue;
                 }
 
@@ -761,7 +761,7 @@ static void * mainloop(void * o)
                 if (buffer.data == NULL) {
                         log_err("Failed to create reply buffer.");
                         close(sfd);
-                        tpm_inc(ipcpi.tpm);
+                        tpm_end_work(ipcpi.tpm);
                         continue;
                 }
 
@@ -770,16 +770,16 @@ static void * mainloop(void * o)
                 if (ret_msg.layer_info != NULL)
                         layer_info_msg__free_unpacked(ret_msg.layer_info, NULL);
 
-                pthread_cleanup_push(__cleanup_close_ptr, &sfd);
                 pthread_cleanup_push(free, buffer.data)
+                pthread_cleanup_push(__cleanup_close_ptr, &sfd);
 
                 if (write(sfd, buffer.data, buffer.len) == -1)
                         log_warn("Failed to send reply message");
 
-                pthread_cleanup_pop(true);
-                pthread_cleanup_pop(true);
+                pthread_cleanup_pop(true); /* close sfd */
+                pthread_cleanup_pop(true); /* free buffer.data */
 
-                tpm_inc(ipcpi.tpm);
+                tpm_end_work(ipcpi.tpm);
         }
 
         return (void *) 0;
@@ -817,39 +817,38 @@ int ipcp_init(int               argc,
 {
         bool               log;
         pthread_condattr_t cattr;
-        int                ret = -1;
 
         if (parse_args(argc, argv, &log))
                 return -1;
 
         log_init(log);
 
-        ipcpi.irmd_fd   = -1;
         ipcpi.state     = IPCP_NULL;
         ipcpi.type      = type;
 
 #if defined (__linux__)
         prctl(PR_SET_TIMERSLACK, IPCP_LINUX_SLACK_NS, 0, 0, 0);
 #endif
-        ipcpi.sock_path = ipcp_sock_path(getpid());
+        ipcpi.sock_path = sock_path(getpid(), IPCP_SOCK_PATH_PREFIX);
         if (ipcpi.sock_path == NULL)
                 goto fail_sock_path;
 
         ipcpi.sockfd = server_socket_open(ipcpi.sock_path);
         if (ipcpi.sockfd < 0) {
-                log_err("Could not open server socket.");
+                log_err("Failed to open server socket at %s.",
+                        ipcpi.sock_path);
                 goto fail_serv_sock;
         }
 
         ipcpi.ops = ops;
 
         if (pthread_mutex_init(&ipcpi.state_mtx, NULL)) {
-                log_err("Could not create mutex.");
+                log_err("Failed to create mutex.");
                 goto fail_state_mtx;
         }
 
         if (pthread_condattr_init(&cattr)) {
-                log_err("Could not create condattr.");
+                log_err("Failed to create condattr.");
                 goto fail_cond_attr;
         }
 
@@ -857,7 +856,7 @@ int ipcp_init(int               argc,
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
         if (pthread_cond_init(&ipcpi.state_cond, &cattr)) {
-                log_err("Could not init condvar.");
+                log_err("Failed to init condvar.");
                 goto fail_state_cond;
         }
 
@@ -891,14 +890,14 @@ int ipcp_init(int               argc,
                 goto fail_rib_reg;
         }
 
+        list_head_init(&ipcpi.cmds);
+
         ipcpi.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
                                mainloop, NULL);
         if (ipcpi.tpm == NULL) {
                 log_err("Failed to create threadpool manager.");
                 goto fail_tpm_create;
         }
-
-        list_head_init(&ipcpi.cmds);
 
         ipcpi.alloc_id = -1;
 
@@ -931,7 +930,7 @@ int ipcp_init(int               argc,
  fail_serv_sock:
         free(ipcpi.sock_path);
  fail_sock_path:
-        return ret;
+        return -1;
 }
 
 int ipcp_start(void)
@@ -952,8 +951,10 @@ int ipcp_start(void)
         strcpy(info.name, ipcpi.name);
         info.state = IPCP_OPERATIONAL;
 
-        if (tpm_start(ipcpi.tpm))
+        if (tpm_start(ipcpi.tpm)) {
+                log_err("Failed to start threadpool manager.");
                 goto fail_tpm_start;
+        }
 
         if (pthread_create(&ipcpi.acceptor, NULL, acceptloop, NULL)) {
                 log_err("Failed to create acceptor thread.");

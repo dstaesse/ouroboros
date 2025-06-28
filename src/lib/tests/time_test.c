@@ -28,12 +28,14 @@
 
 static void ts_print(struct timespec * s)
 {
-        printf("timespec is %zd:%ld.\n", (ssize_t) s->tv_sec, s->tv_nsec);
+        printf("timespec is %zd:%ld.\n",
+               (ssize_t) s->tv_sec, s->tv_nsec);
 }
 
 static void tv_print(struct timeval * v)
 {
-        printf("timeval is %zd:%zu.\n", (ssize_t) v->tv_sec, (size_t) v->tv_usec);
+        printf("timeval is %zd:%zu.\n",
+               (ssize_t) v->tv_sec, (size_t) v->tv_usec);
 }
 
 static void ts_init(struct timespec * s,

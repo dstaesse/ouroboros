@@ -23,6 +23,7 @@
 #cmakedefine HAVE_SYS_RANDOM
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL
+#cmakedefine OPENSS_VERSION_MAJOR @OPENSSL_VERSION_MAJOR@
 
 #ifdef HAVE_OPENSSL
 #define HAVE_ENCRYPTION

@@ -123,9 +123,6 @@ void            ipcp_set_state(enum ipcp_state state);
 
 enum ipcp_state ipcp_get_state(void);
 
-int             ipcp_parse_arg(int    argc,
-                               char * argv[]);
-
 /* Helper functions to handle races during flow allocation */
 int             ipcp_wait_flow_req_arr(const uint8_t *  dst,
                                        qosspec_t        qs,

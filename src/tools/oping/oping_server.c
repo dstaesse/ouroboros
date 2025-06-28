@@ -36,6 +36,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+ #include <ouroboros/hash.h>
+
 void shutdown_server(int signo, siginfo_t * info, void * c)
 {
         (void) info;
@@ -100,13 +102,14 @@ void * server_thread(void *o)
                         if (msg_len < 0)
                                 continue;
 
+                        if (!server.quiet)
+                                printf("Received %d bytes on fd %d.\n",
+                                       msg_len, fd);
+
                         if (ntohl(msg->type) != ECHO_REQUEST) {
                                 printf("Invalid message on fd %d.\n", fd);
                                 continue;
                         }
-
-                        if (!server.quiet)
-                                printf("Received %d bytes on fd %d.\n", msg_len, fd);
 
                         clock_gettime(CLOCK_REALTIME, &now);
 

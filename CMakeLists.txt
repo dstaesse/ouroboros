@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12.2...3.30.0)
+cmake_minimum_required(VERSION 2.8.12.2...4.0.3.0)
 cmake_policy(VERSION ${CMAKE_VERSION})
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")

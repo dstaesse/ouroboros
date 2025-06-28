@@ -23,11 +23,19 @@
 #ifndef OUROBOROS_LIB_TEST_H
 #define OUROBOROS_LIB_TEST_H
 
+#define OUROBOROS_TEST
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+
+
+#define TEST_RC_SUCCESS  0
+#define TEST_RC_SKIP     1
+#define TEST_RC_FAIL    -1
 
 #define TEST_START()                                                          \
         do {                                                                  \
@@ -37,6 +45,12 @@
 #define TEST_SUCCESS()                                                        \
         do {                                                                  \
                 printf("%s succeeded.\n", __func__);                          \
+                fflush(stdout);                                               \
+        } while (0)
+
+#define TEST_SKIPPED()                                                        \
+        do {                                                                  \
+                printf("%s skipped.\n", __func__);                            \
                 fflush(stdout);                                               \
         } while (0)
 
@@ -57,7 +71,7 @@ static int __attribute__((unused)) test_assert_fail(int(* testfunc)(void))
         pid = fork();
         if (pid == -1) {
                 printf("Failed to fork: %s.\n", strerror(errno));
-                return -1;
+                return TEST_RC_FAIL;
         }
 
         if (pid == 0)
@@ -66,17 +80,17 @@ static int __attribute__((unused)) test_assert_fail(int(* testfunc)(void))
         waitpid(pid, &wstatus, 0);
 #ifdef CONFIG_OUROBOROS_DEBUG
         if (WIFSIGNALED(wstatus) && (wstatus == 134 || wstatus == 6))
-                return 0;
+                return TEST_RC_SUCCESS;
 
         printf("Process did not abort, status: %d.\n", wstatus);
 #else
         if (WIFEXITED(wstatus) && wstatus == 0)
-                return 0;
+                return TEST_RC_SUCCESS;
 
         printf("Process did not exit, status: %d.\n", wstatus);
 #endif
 
-        return -1;
+        return TEST_RC_FAIL;
 }
 
 #endif /* OUROBOROS_LIB_TEST_H */

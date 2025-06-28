@@ -22,16 +22,20 @@
 
 #include "../proc.c"
 
+#include <ouroboros/test.h>
+
 #define TEST_PID  65534
 #define TEST_PROG "usr/bin/testprog"
 
-static int test_reg_proc_create(void)
+static int test_reg_proc_create_destroy(void)
 {
         struct reg_proc * proc;
         struct proc_info  info = {
                 .pid =  TEST_PID,
                 .prog = TEST_PROG
         };
+
+        TEST_START();
 
         proc = reg_proc_create(&info);
         if (proc == NULL) {
@@ -41,9 +45,12 @@ static int test_reg_proc_create(void)
 
         reg_proc_destroy(proc);
 
-        return 0;
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
  fail:
-        return -1;
+        TEST_FAIL();
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_proc_add_name(void)
@@ -55,6 +62,8 @@ static int test_reg_proc_add_name(void)
         };
 
         char * name = "testname";
+
+        TEST_START();
 
         proc = reg_proc_create(&info);
         if (proc == NULL) {
@@ -86,9 +95,12 @@ static int test_reg_proc_add_name(void)
 
         reg_proc_destroy(proc);
 
-        return 0;
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
  fail:
-        return -1;
+        TEST_FAIL();
+        return TEST_RC_FAIL;
 }
 
 int proc_test(int     argc,
@@ -99,8 +111,7 @@ int proc_test(int     argc,
         (void) argc;
         (void) argv;
 
-        res |= test_reg_proc_create();
-
+        res |= test_reg_proc_create_destroy();
         res |= test_reg_proc_add_name();
 
         return res;

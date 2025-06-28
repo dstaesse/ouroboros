@@ -72,7 +72,6 @@
 #define IPCP_HASH_LEN(p)   hash_len((p)->dir_hash_algo)
 #define BIND_TIMEOUT       10   /* ms */
 #define DEALLOC_TIME       300  /*  s */
-#define MSGBUFSZ           2048
 
 enum irm_state {
         IRMD_NULL = 0,
@@ -1024,7 +1023,6 @@ static int flow_alloc(struct flow_info * flow,
 
         log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
 
-
         if (flow->qs.cypher_s > 0) {
                 ssize_t key_len;
 
@@ -1380,7 +1378,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 res = disconnect_ipcp(msg->pid, msg->dst, msg->comp);
                 break;
         case IRM_MSG_CODE__IRM_BIND_PROGRAM:
-                /* Make exec NULL terminated instead of empty string terminated */
+                /* Terminate with NULL instead of "" */
                 free(msg->exec[msg->n_exec - 1]);
                 msg->exec[msg->n_exec - 1] = NULL;
                 res = bind_program(msg->exec, msg->name, msg->opts);
@@ -1540,7 +1538,7 @@ static void * mainloop(void * o)
                         continue;
                 }
 
-                tpm_dec(irmd.tpm);
+                tpm_begin_work(irmd.tpm);
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
                 pthread_cleanup_push(free_msg, msg);
@@ -1556,12 +1554,12 @@ static void * mainloop(void * o)
                 }
 
                 if (ret_msg->result == -EPIPE) {
-                        log_dbg("Terminated command: application closed socket.");
+                        log_dbg("Terminated command: remote closed socket.");
                         goto fail;
                 }
 
                 if (ret_msg->result == -EIRMD) {
-                        log_dbg("Terminated command: IRMd not in running state.");
+                        log_dbg("Terminated command: IRMd not running.");
                         goto fail;
                 }
 
@@ -1596,14 +1594,14 @@ static void * mainloop(void * o)
                 pthread_cleanup_pop(true);
                 pthread_cleanup_pop(true);
 
-                tpm_inc(irmd.tpm);
+                tpm_end_work(irmd.tpm);
 
                 continue;
  fail:
                 irm_msg__free_unpacked(ret_msg, NULL);
  fail_msg:
                 close(sfd);
-                tpm_inc(irmd.tpm);
+                tpm_end_work(irmd.tpm);
                 continue;
         }
 

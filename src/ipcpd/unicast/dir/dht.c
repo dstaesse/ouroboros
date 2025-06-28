@@ -884,12 +884,12 @@ static void lookup_update(struct dht *    dht,
                         contact_destroy(c);
                 } else {
                         struct contact * d;
-                        list_add_tail(&c->next, p);
                         d = list_last_entry(&lu->contacts,
                                             struct contact, next);
                         list_del(&d->next);
                         assert(lu->contacts.prv != &d->next);
                         contact_destroy(d);
+                        list_add_tail(&c->next, p);
                         mod = true;
                 }
         }
@@ -2503,7 +2503,7 @@ static void * dht_handle_packet(void * o)
                         continue;
                 }
 
-                tpm_dec(dht->tpm);
+                tpm_begin_work(dht->tpm);
 
                 addr = msg->s_addr;
 
@@ -2604,7 +2604,7 @@ static void * dht_handle_packet(void * o)
                         free(resp_msg.addrs);
 
                 if (resp_msg.n_contacts == 0) {
-                        tpm_inc(dht->tpm);
+                        tpm_end_work(dht->tpm);
                         continue;
                 }
 
@@ -2613,7 +2613,7 @@ static void * dht_handle_packet(void * o)
                                                        NULL);
                 free(resp_msg.contacts);
 
-                tpm_inc(dht->tpm);
+                tpm_end_work(dht->tpm);
         }
 
         return (void *) 0;

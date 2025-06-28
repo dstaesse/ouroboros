@@ -38,8 +38,8 @@ int          tpm_start(struct tpm * tpm);
 
 void         tpm_stop(struct tpm * tpm);
 
-void         tpm_dec(struct tpm * tpm);
+void         tpm_begin_work(struct tpm * tpm);
 
-void         tpm_inc(struct tpm * tpm);
+void         tpm_end_work(struct tpm * tpm);
 
 #endif /* OUROBOROS_LIB_TPM_H */

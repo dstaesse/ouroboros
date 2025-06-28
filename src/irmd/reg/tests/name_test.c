@@ -20,7 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+
 #include "../name.c"
+
+#include <ouroboros/test.h>
 
 #define TEST_PID  65534
 #define TEST_PROG "/usr/bin/testprog"
@@ -34,6 +37,8 @@ static int test_reg_name_create(void)
                 .pol_lb = LB_RR,
         };
 
+        TEST_START();
+
         n = reg_name_create(&info);
         if (n == NULL) {
                 printf("Failed to create name %s.\n", info.name);
@@ -42,9 +47,12 @@ static int test_reg_name_create(void)
 
         reg_name_destroy(n);
 
-        return 0;
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
  fail:
-        return -1;
+        TEST_FAIL();
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_name_add_proc(void)
@@ -54,6 +62,8 @@ static int test_reg_name_add_proc(void)
                 .name   = TEST_NAME,
                 .pol_lb = LB_RR,
         };
+
+        TEST_START();
 
         n = reg_name_create(&info);
         if (n == NULL) {
@@ -85,9 +95,12 @@ static int test_reg_name_add_proc(void)
 
         reg_name_destroy(n);
 
-        return 0;
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
  fail:
-        return -1;
+        TEST_FAIL();
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_name_add_prog(void)
@@ -99,6 +112,8 @@ static int test_reg_name_add_prog(void)
         };
 
         char * exec[] = { TEST_PROG, "--argswitch", "argvalue", NULL};
+
+        TEST_START();
 
         n = reg_name_create(&info);
         if (n == NULL) {
@@ -130,9 +145,12 @@ static int test_reg_name_add_prog(void)
 
         reg_name_destroy(n);
 
-        return 0;
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
  fail:
-        return -1;
+        TEST_FAIL();
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_name_add_active(enum pol_balance lb)
@@ -143,6 +161,8 @@ static int test_reg_name_add_active(enum pol_balance lb)
                 .name   = TEST_NAME,
                 .pol_lb = lb,
         };
+
+        TEST_START();
 
         n = reg_name_create(&info);
         if (n == NULL) {
@@ -255,9 +275,12 @@ static int test_reg_name_add_active(enum pol_balance lb)
 
         reg_name_destroy(n);
 
-        return 0;
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
  fail:
-        return -1;
+        TEST_FAIL();
+        return TEST_RC_FAIL;
 }
 
 
@@ -270,13 +293,9 @@ int name_test(int     argc,
         (void) argv;
 
         res |= test_reg_name_create();
-
         res |= test_reg_name_add_proc();
-
         res |= test_reg_name_add_prog();
-
         res |= test_reg_name_add_active(LB_RR);
-
         res |= test_reg_name_add_active(LB_SPILL);
 
         return res;

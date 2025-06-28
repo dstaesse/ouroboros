@@ -63,7 +63,7 @@ struct tpm {
 
         enum tpm_state   state;
         pthread_cond_t   cond;
-        pthread_mutex_t  lock;
+        pthread_mutex_t  mtx;
 
         pthread_t        mgr;
 };
@@ -90,11 +90,11 @@ static void tpm_join(struct tpm * tpm)
                         pthread_t thr = e->thr;
                         list_del(&e->next);
                         free(e);
-                        pthread_mutex_unlock(&tpm->lock);
+                        pthread_mutex_unlock(&tpm->mtx);
 
                         pthread_join(thr, NULL);
 
-                        pthread_mutex_lock(&tpm->lock);
+                        pthread_mutex_lock(&tpm->mtx);
                 }
         }
 }
@@ -114,55 +114,58 @@ static void tpm_kill(struct tpm * tpm)
         }
 }
 
-static void * tpmgr(void * o)
+static int __tpm(struct tpm * tpm)
 {
         struct timespec dl;
         struct timespec to = TIMESPEC_INIT_MS(TPM_TIMEOUT);
-        struct tpm * tpm = (struct tpm *) o;
 
-        while (true) {
-                clock_gettime(PTHREAD_COND_CLOCK, &dl);
-                ts_add(&dl, &to, &dl);
+        clock_gettime(PTHREAD_COND_CLOCK, &dl);
+        ts_add(&dl, &to, &dl);
 
-                pthread_mutex_lock(&tpm->lock);
+        pthread_mutex_lock(&tpm->mtx);
 
-                if (tpm->state != TPM_RUNNING) {
-                        tpm_join(tpm);
-                        pthread_mutex_unlock(&tpm->lock);
-                        break;
-                }
-
+        if (tpm->state != TPM_RUNNING) {
                 tpm_join(tpm);
+                pthread_mutex_unlock(&tpm->mtx);
+                return -1;
+        }
 
-                if (tpm->cur - tpm->wrk < tpm->min) {
-                        size_t i;
-                        for (i = 0; i < tpm->inc; ++i) {
-                                struct pthr_el * e = malloc(sizeof(*e));
-                                if (e == NULL)
-                                        break;
+        tpm_join(tpm);
 
-                                e->kill = false;
-                                e->busy = false;
+        if (tpm->cur - tpm->wrk < tpm->min) {
+                size_t i;
+                for (i = 0; i < tpm->inc; ++i) {
+                        struct pthr_el * e = malloc(sizeof(*e));
+                        if (e == NULL)
+                                break;
 
-                                if (pthread_create(&e->thr, NULL,
-                                                   tpm->func, tpm->o)) {
-                                        free(e);
-                                        break;
-                                }
+                        e->kill = false;
+                        e->busy = false;
 
-                                list_add(&e->next, &tpm->pool);
+                        if (pthread_create(&e->thr, NULL,
+                                                tpm->func, tpm->o)) {
+                                free(e);
+                                break;
                         }
 
-                        tpm->cur += i;
+                        list_add(&e->next, &tpm->pool);
                 }
 
-                if (pthread_cond_timedwait(&tpm->cond, &tpm->lock, &dl)
-                    == ETIMEDOUT)
-                        if (tpm->cur - tpm->wrk > tpm->min)
-                                tpm_kill(tpm);
-
-                pthread_mutex_unlock(&tpm->lock);
+                tpm->cur += i;
         }
+
+        if (pthread_cond_timedwait(&tpm->cond, &tpm->mtx, &dl) == ETIMEDOUT)
+                if (tpm->cur - tpm->wrk > tpm->min)
+                        tpm_kill(tpm);
+
+        pthread_mutex_unlock(&tpm->mtx);
+
+        return 0;
+}
+
+static void * tpmgr(void * o)
+{
+        while (__tpm((struct tpm *) o) == 0);
 
         return (void *) 0;
 }
@@ -175,11 +178,14 @@ struct tpm * tpm_create(size_t min,
         struct tpm *       tpm;
         pthread_condattr_t cattr;
 
+        assert(func != NULL);
+        assert(inc > 0);
+
         tpm = malloc(sizeof(*tpm));
         if (tpm == NULL)
                 goto fail_malloc;
 
-        if (pthread_mutex_init(&tpm->lock, NULL))
+        if (pthread_mutex_init(&tpm->mtx, NULL))
                 goto fail_lock;
 
         if (pthread_condattr_init(&cattr))
@@ -208,7 +214,7 @@ struct tpm * tpm_create(size_t min,
  fail_cond:
         pthread_condattr_destroy(&cattr);
  fail_cattr:
-        pthread_mutex_destroy(&tpm->lock);
+        pthread_mutex_destroy(&tpm->mtx);
  fail_lock:
         free(tpm);
  fail_malloc:
@@ -217,34 +223,39 @@ struct tpm * tpm_create(size_t min,
 
 int tpm_start(struct tpm * tpm)
 {
-        pthread_mutex_lock(&tpm->lock);
+        pthread_mutex_lock(&tpm->mtx);
 
         if (pthread_create(&tpm->mgr, NULL, tpmgr, tpm)) {
-                pthread_mutex_unlock(&tpm->lock);
+                pthread_mutex_unlock(&tpm->mtx);
                 return -1;
         }
 
         tpm->state = TPM_RUNNING;
 
-        pthread_mutex_unlock(&tpm->lock);
+        pthread_mutex_unlock(&tpm->mtx);
 
         return 0;
 }
 
 void tpm_stop(struct tpm * tpm)
 {
-        pthread_mutex_lock(&tpm->lock);
+        pthread_mutex_lock(&tpm->mtx);
+
+        if (tpm->state != TPM_RUNNING) {
+                pthread_mutex_unlock(&tpm->mtx);
+                return;
+        }
 
         tpm->state = TPM_NULL;
 
-        pthread_mutex_unlock(&tpm->lock);
+        pthread_mutex_unlock(&tpm->mtx);
 
         pthread_join(tpm->mgr, NULL);
 }
 
 void tpm_destroy(struct tpm * tpm)
 {
-        pthread_mutex_destroy(&tpm->lock);
+        pthread_mutex_destroy(&tpm->mtx);
         pthread_cond_destroy(&tpm->cond);
 
         free(tpm);
@@ -260,32 +271,16 @@ static struct pthr_el * tpm_pthr_el(struct tpm * tpm,
                 e = list_entry(p, struct pthr_el, next);
                 if (e->thr == thr)
                         return e;
-
         }
 
         return NULL;
 }
 
-void tpm_inc(struct tpm * tpm)
+void tpm_begin_work(struct tpm * tpm)
 {
         struct pthr_el * e;
 
-        pthread_mutex_lock(&tpm->lock);
-
-        e = tpm_pthr_el(tpm, pthread_self());
-        if (e != NULL) {
-                e->busy = false;
-                --tpm->wrk;
-        }
-
-        pthread_mutex_unlock(&tpm->lock);
-}
-
-void tpm_dec(struct tpm * tpm)
-{
-        struct pthr_el * e;
-
-        pthread_mutex_lock(&tpm->lock);
+        pthread_mutex_lock(&tpm->mtx);
 
         e = tpm_pthr_el(tpm, pthread_self());
         if (e != NULL) {
@@ -295,5 +290,20 @@ void tpm_dec(struct tpm * tpm)
 
         pthread_cond_signal(&tpm->cond);
 
-        pthread_mutex_unlock(&tpm->lock);
+        pthread_mutex_unlock(&tpm->mtx);
+}
+
+void tpm_end_work(struct tpm * tpm)
+{
+        struct pthr_el * e;
+
+        pthread_mutex_lock(&tpm->mtx);
+
+        e = tpm_pthr_el(tpm, pthread_self());
+        if (e != NULL) {
+                e->busy = false;
+                --tpm->wrk;
+        }
+
+        pthread_mutex_unlock(&tpm->mtx);
 }

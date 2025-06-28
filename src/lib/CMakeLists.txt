@@ -121,6 +121,7 @@ if (OPENSSL_FOUND)
       unset(HAVE_OPENSSL)
     endif()
   endif ()
+  set(OPENSSL_SOURCES crypt/openssl.c)
 else()
   message(STATUS "Install openSSL version >= \"1.1.0\" to enable OpenSSL support")
   unset(HAVE_OPENSSL_RNG)
@@ -128,6 +129,7 @@ else()
   set(OPENSSL_INCLUDE_DIR "")
   set(OPENSSL_LIBRARIES "")
   set(OPENSSL_CRYPTO_LIBRARY "")
+  set(OPENSSL_SOURCES "")
 endif ()
 
 if (APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
@@ -284,7 +286,7 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
 
 add_library(ouroboros-common SHARED ${SOURCE_FILES_COMMON} ${IRM_PROTO_SRCS}
   ${IPCP_PROTO_SRCS} ${IPCP_CONFIG_PROTO_SRCS} ${MODEL_PROTO_SRCS}
-  ${ENROLL_PROTO_SRCS})
+  ${ENROLL_PROTO_SRCS} ${OPENSSL_SOURCES})
 
 add_library(ouroboros-dev SHARED ${SOURCE_FILES_DEV} ${CEP_PROTO_SRCS})
 

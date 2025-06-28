@@ -154,12 +154,13 @@ int send_recv_msg(buffer_t * msg)
         return len < 0 ? -1 : 0;
 }
 
-char * ipcp_sock_path(pid_t pid)
+static char * __sock_path(pid_t        pid,
+                          const char * prefix,
+                          const char * suffix)
 {
         char * full_name = NULL;
         char * pid_string = NULL;
         size_t len = 0;
-        char * delim = "_";
 
         len = n_digits(pid);
         pid_string = malloc(len + 1);
@@ -168,9 +169,9 @@ char * ipcp_sock_path(pid_t pid)
 
         sprintf(pid_string, "%d", pid);
 
-        len += strlen(IPCP_SOCK_PATH_PREFIX);
-        len += strlen(delim);
-        len += strlen(SOCK_PATH_SUFFIX);
+        len += strlen(prefix);
+        len += strlen(pid_string);
+        len += strlen(suffix);
 
         full_name = malloc(len + 1);
         if (full_name == NULL) {
@@ -178,12 +179,17 @@ char * ipcp_sock_path(pid_t pid)
                 return NULL;
         }
 
-        strcpy(full_name, IPCP_SOCK_PATH_PREFIX);
-        strcat(full_name, delim);
+        strcpy(full_name, prefix);
         strcat(full_name, pid_string);
-        strcat(full_name, SOCK_PATH_SUFFIX);
+        strcat(full_name, suffix);
 
         free(pid_string);
 
         return full_name;
+}
+
+char * sock_path(pid_t        pid,
+                 const char * prefix)
+{
+        return __sock_path(pid, prefix, SOCK_PATH_SUFFIX);
 }

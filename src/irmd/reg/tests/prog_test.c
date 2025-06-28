@@ -22,8 +22,9 @@
 
 #include "../prog.c"
 
-#define TEST_PROG "usr/bin/testprog"
+#include <ouroboros/test.h>
 
+#define TEST_PROG "usr/bin/testprog"
 
 static int test_reg_prog_create(void)
 {
@@ -31,6 +32,8 @@ static int test_reg_prog_create(void)
         struct prog_info  info = {
                 .name = TEST_PROG
         };
+
+        TEST_START();
 
         prog = reg_prog_create(&info);
         if (prog == NULL) {
@@ -40,9 +43,12 @@ static int test_reg_prog_create(void)
 
         reg_prog_destroy(prog);
 
-        return 0;
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
  fail:
-        return -1;
+        TEST_FAIL();
+        return TEST_RC_FAIL;
 }
 
 static int test_reg_prog_add_name(void)
@@ -53,6 +59,8 @@ static int test_reg_prog_add_name(void)
         };
 
         char * name = "testname";
+
+        TEST_START();
 
         prog = reg_prog_create(&info);
         if (prog == NULL) {
@@ -84,9 +92,12 @@ static int test_reg_prog_add_name(void)
 
         reg_prog_destroy(prog);
 
-        return 0;
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
  fail:
-        return -1;
+        TEST_FAIL();
+        return TEST_RC_FAIL;
 }
 
 int prog_test(int     argc,
@@ -98,7 +109,6 @@ int prog_test(int     argc,
         (void) argv;
 
         ret |= test_reg_prog_create();
-
         ret |= test_reg_prog_add_name();
 
         return ret;

@@ -99,7 +99,7 @@ struct flow {
         uint16_t              oflags;
         ssize_t               part_idx;
 
-        struct crypt_info     crypt;
+        struct crypt_ctx *    crypt;
 
         struct timespec       snd_act;
         struct timespec       rcv_act;
@@ -250,6 +250,69 @@ static void proc_exit(void)
                 return;
 
         send_recv_msg(&msg);
+}
+
+static int sdb_encrypt(struct flow *        flow,
+                       struct shm_du_buff * sdb)
+{
+        buffer_t  in;
+        buffer_t  out;
+        uint8_t * head;
+        uint8_t * tail;
+
+        if (flow->crypt == NULL)
+                return 0; /* No encryption */
+
+        in.data = shm_du_buff_head(sdb);
+        in.len  = shm_du_buff_len(sdb);
+
+        if (crypt_encrypt(flow->crypt, in, &out) < 0)
+                goto fail_encrypt;
+
+        head = shm_du_buff_head_alloc(sdb, IVSZ);
+        if (head == NULL)
+                goto fail_alloc;
+
+        tail = shm_du_buff_tail_alloc(sdb, (out.len - in.len) - IVSZ);
+        if (tail == NULL)
+                goto fail_alloc;
+
+        memcpy(head, out.data, out.len);
+
+        freebuf(out);
+
+        return 0;
+ fail_alloc:
+        freebuf(out);
+ fail_encrypt:
+        return -ECRYPT;
+}
+
+static int sdb_decrypt(struct flow *        flow,
+                       struct shm_du_buff * sdb)
+{
+        buffer_t  in;
+        buffer_t  out;
+        uint8_t * head;
+
+        if (flow->crypt == NULL)
+                return 0; /* No decryption */
+
+        in.data = shm_du_buff_head(sdb);
+        in.len  = shm_du_buff_len(sdb);
+
+        if (crypt_decrypt(flow->crypt, in, &out) < 0)
+                return -ENOMEM;
+
+
+        head = shm_du_buff_head_release(sdb, IVSZ) + IVSZ;
+        shm_du_buff_tail_release(sdb, (in.len - out.len) - IVSZ);
+
+        memcpy(head, out.data, out.len);
+
+        freebuf(out);
+
+        return 0;
 }
 
 #include "frct.c"
@@ -423,7 +486,7 @@ static void __flow_fini(int fd)
                 shm_flow_set_close(ai.flows[fd].set);
         }
 
-        crypt_fini(&ai.flows[fd].crypt);
+        crypt_destroy_ctx(ai.flows[fd].crypt);
 
         list_del(&ai.flows[fd].next);
 
@@ -477,16 +540,15 @@ static int flow_init(struct flow_info * info,
         flow->part_idx = NO_PART;
         flow->snd_act  = now;
         flow->rcv_act  = now;
+        flow->crypt    = NULL;
 
-        flow->crypt.flags = info->qs.cypher_s; /* TODO: move cypher_s */
-
-        memset(flow->crypt.key, 0, SYMMKEYSZ);
-
-        if (flow->crypt.flags > 0 && sk!= NULL && sk->data != NULL)
-                memcpy(flow->crypt.key, sk->data , sk->len);
-
-        if (crypt_init(&flow->crypt) < 0)
-                goto fail_crypt;
+        if (sk!= NULL && sk->data != NULL) {
+                assert(sk->len == SYMMKEYSZ);
+                /* TODO: remove cypher_s from QoS */
+                flow->crypt = crypt_create_ctx(info->qs.cypher_s, sk->data);
+                if (flow->crypt == NULL)
+                        goto fail_crypt;
+        }
 
         assert(flow->frcti == NULL);
 
@@ -519,7 +581,7 @@ static int flow_init(struct flow_info * info,
  fail_flow_set_add:
         frcti_destroy(flow->frcti);
  fail_frcti:
-        crypt_fini(&flow->crypt);
+        crypt_destroy_ctx(flow->crypt);
  fail_crypt:
         shm_flow_set_close(flow->set);
  fail_set:
@@ -1200,7 +1262,7 @@ static int flow_tx_sdb(struct flow *        flow,
                 if (frcti_snd(flow->frcti, sdb) < 0)
                         goto enomem;
 
-                if (crypt_encrypt(&flow->crypt, sdb) < 0)
+                if (sdb_encrypt(flow, sdb) < 0)
                         goto enomem;
 
                 if (flow->info.qs.ber == 0 && add_crc(sdb) != 0)
@@ -1302,7 +1364,7 @@ static bool invalid_pkt(struct flow *        flow,
         if (flow->info.qs.ber == 0 && chk_crc(sdb) != 0)
                 return true;
 
-        if (crypt_decrypt(&flow->crypt, sdb) < 0)
+        if (sdb_decrypt(flow, sdb) < 0)
                 return true;
 
         return false;
@@ -1330,6 +1392,7 @@ static ssize_t flow_rx_sdb(struct flow *         flow,
         pthread_rwlock_unlock(&ai.lock);
 
         *sdb = shm_rdrbuff_get(ai.rdrb, idx);
+
         if (invalid_pkt(flow, *sdb)) {
                 shm_rdrbuff_remove(ai.rdrb, idx);
                 return -EAGAIN;

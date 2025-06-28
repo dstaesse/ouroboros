@@ -261,7 +261,7 @@ static void __send_frct_pkt(int      fd,
 
         f = &ai.flows[fd];
 
-        if (crypt_encrypt(&f->crypt, sdb) < 0)
+        if (sdb_encrypt(f, sdb) < 0)
                 goto fail;
 
 #ifdef RXM_BLOCKING

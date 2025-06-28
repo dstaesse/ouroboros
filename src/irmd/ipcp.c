@@ -83,7 +83,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
 {
         int             sockfd;
         uint8_t         buf[SOCK_BUF_SIZE];
-        char *          sock_path;
+        char *          spath;
         ssize_t         len;
         ipcp_msg_t *    recv_msg;
         struct timeval  tv;
@@ -94,17 +94,17 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
         if (kill(pid, 0) < 0)
                 return NULL;
 
-        sock_path = ipcp_sock_path(pid);
-        if (sock_path == NULL)
+        spath = sock_path(pid, IPCP_SOCK_PATH_PREFIX);
+        if (spath == NULL)
                 return NULL;
 
-        sockfd = client_socket_open(sock_path);
+        sockfd = client_socket_open(spath);
         if (sockfd < 0) {
-                free(sock_path);
+                free(spath);
                 return NULL;
         }
 
-        free(sock_path);
+        free(spath);
 
         len = ipcp_msg__get_packed_size(msg);
         if (len == 0 || len >= SOCK_BUF_SIZE) {
