@@ -73,6 +73,7 @@
 #define SHM_SAN_HOLDOFF    1000 /* ms */
 #define IPCP_HASH_LEN(p)   hash_len((p)->dir_hash_algo)
 #define BIND_TIMEOUT       10   /* ms */
+#define TIMESYNC_SLACK     100  /* ms */
 #define DEALLOC_TIME       300  /*  s */
 
 enum irm_state {
@@ -770,6 +771,7 @@ static int flow_accept(struct flow_info * flow,
         struct oap_hdr  r_oap_hdr;      /* outgoing response          */
         uint8_t         buf[MSGBUFSZ];  /* buffer for local ephkey    */
         buffer_t        lpk = BUF_INIT; /* local ephemeral pubkey     */
+        ssize_t         delta;          /* allocation time difference */
         int             err;
         struct timespec now;
 
@@ -824,9 +826,12 @@ static int flow_accept(struct flow_info * flow,
 
         clock_gettime(CLOCK_REALTIME, &now);
 
-        if (now.tv_sec - (time_t) (oap_hdr.timestamp / MILLION) > flow->mpl)
-                log_warn("Flow alloc time exceeds MPL by %zu ms.",
-                        now.tv_sec - oap_hdr.timestamp / MILLION);
+        delta = (ssize_t)(TS_TO_UINT64(now) - oap_hdr.timestamp);
+        if (delta > flow->mpl)
+                log_warn("Flow alloc time exceeds MPL (%zd ms).", delta);
+
+        if (delta < -TIMESYNC_SLACK)
+                log_warn("Flow alloc sent from the future (%zd ms).", -delta);
 
         if (flow->qs.cypher_s != 0) {     /* crypto requested           */
                 uint8_t * s;              /* symmetric encryption key   */
