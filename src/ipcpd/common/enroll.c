@@ -227,11 +227,13 @@ int enroll_boot(struct conn *   conn,
                 return -1;
         }
 
-        if (resp.conf.type != ipcpi.type) {
+        if (resp.conf.type != ipcp_get_type()) {
                 log_err_id(id, "Wrong type in enrollment response %d (%d).",
-                           resp.conf.type, ipcpi.type);
+                           resp.conf.type, ipcp_get_type());
                 return -1;
         }
+
+        enroll.conf = resp.conf;
 
         clock_gettime(CLOCK_REALTIME, &rtt);
 
@@ -242,8 +244,6 @@ int enroll_boot(struct conn *   conn,
 
         if (labs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
                 log_warn_id(id, "Clock offset above threshold.");
-
-        enroll.conf = resp.conf;
 
         return 0;
 }

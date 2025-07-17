@@ -50,8 +50,6 @@
 
 #define THIS_TYPE IPCP_LOCAL
 
-struct ipcp ipcpi;
-
 struct {
         struct shim_data * shim_data;
 
@@ -141,11 +139,11 @@ static void * local_ipcp_packet_loop(void * o)
 
 static int local_ipcp_bootstrap(const struct ipcp_config * conf)
 {
+
         assert(conf);
         assert(conf->type == THIS_TYPE);
 
-        ipcpi.dir_hash_algo = (enum hash_algo) conf->layer_info.dir_hash_algo;
-        strcpy(ipcpi.layer_name,conf->layer_info.name);
+        (void) conf;
 
         if (pthread_create(&local_data.packet_loop, NULL,
                            local_ipcp_packet_loop, NULL)) {

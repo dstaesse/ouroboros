@@ -55,13 +55,8 @@
 #include <assert.h>
 #include <inttypes.h>
 
-struct ipcp ipcpi;
-
 static int initialize_components(const struct ipcp_config * conf)
 {
-        strcpy(ipcpi.layer_name, conf->layer_info.name);
-        ipcpi.dir_hash_algo = (enum hash_algo) conf->layer_info.dir_hash_algo;
-
         assert(ipcp_dir_hash_len() != 0);
 
         if (addr_auth_init(conf->unicast.addr_auth_type,
@@ -70,13 +65,7 @@ static int initialize_components(const struct ipcp_config * conf)
                 goto fail_addr_auth;
         }
 
-        ipcpi.dt_addr = addr_auth_address();
-        if (ipcpi.dt_addr == 0) {
-                log_err("Failed to get a valid address.");
-                goto fail_addr_auth;
-        }
-
-        log_info("IPCP got address %" PRIu64 ".", ipcpi.dt_addr);
+        log_info("IPCP got address %" PRIu64 ".", addr_auth_address());
 
         if (ca_init(conf->unicast.cong_avoid)) {
                 log_err("Failed to initialize congestion avoidance.");
@@ -188,8 +177,9 @@ static int bootstrap_components(void)
 static int unicast_ipcp_enroll(const char *        dst,
                                struct layer_info * info)
 {
-        struct conn conn;
-        uint8_t     id[ENROLL_ID_LEN];
+        struct ipcp_config * conf;
+        struct conn          conn;
+        uint8_t              id[ENROLL_ID_LEN];
 
         if (random_buffer(id, ENROLL_ID_LEN) < 0) {
                 log_err("Failed to generate enrollment ID.");
@@ -209,7 +199,11 @@ static int unicast_ipcp_enroll(const char *        dst,
                 goto fail_enroll_boot;
         }
 
-        if (initialize_components(enroll_get_conf()) < 0) {
+        conf = enroll_get_conf();
+
+        *info = conf->layer_info;
+
+        if (initialize_components(conf) < 0) {
                 log_err_id(id, "Failed to initialize components.");
                 goto fail_enroll_boot;
         }
@@ -226,9 +220,6 @@ static int unicast_ipcp_enroll(const char *        dst,
                 log_warn_id(id, "Failed to dealloc enrollment flow.");
 
         log_info_id(id, "Enrolled with %s.", dst);
-
-        info->dir_hash_algo = (enum pol_dir_hash) ipcpi.dir_hash_algo;
-        strcpy(info->name, ipcpi.layer_name);
 
         return 0;
 

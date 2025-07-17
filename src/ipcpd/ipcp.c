@@ -68,6 +68,40 @@
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
+struct {
+        pid_t              irmd_pid;
+        char *             name;
+
+        enum ipcp_type     type;
+        char               layer_name[LAYER_NAME_SIZE + 1];
+
+        uint64_t           dt_addr;
+
+        enum hash_algo     dir_hash_algo;
+
+        struct ipcp_ops *  ops;
+        int                irmd_fd;
+
+        enum ipcp_state    state;
+        pthread_cond_t     state_cond;
+        pthread_mutex_t    state_mtx;
+
+        int                sockfd;
+        char *             sock_path;
+
+        struct list_head   cmds;
+        pthread_cond_t     cmd_cond;
+        pthread_mutex_t    cmd_lock;
+
+        int                alloc_id;
+        pthread_cond_t     alloc_cond;
+        pthread_mutex_t    alloc_lock;
+
+        struct tpm *       tpm;
+
+        pthread_t          acceptor;
+} ipcpd;
+
 char * info[LAYER_NAME_SIZE + 1] = {
         "_state",
         "_type",
@@ -83,9 +117,24 @@ struct cmd {
         int              fd;
 };
 
+enum ipcp_type ipcp_get_type(void)
+{
+        return ipcpd.type;
+}
+
+const char * ipcp_get_name(void)
+{
+        return ipcpd.name;
+}
+
+size_t ipcp_dir_hash_len(void)
+{
+        return hash_len(ipcpd.dir_hash_algo);
+}
+
 uint8_t * ipcp_hash_dup(const uint8_t * hash)
 {
-        uint8_t * dup = malloc(hash_len(ipcpi.dir_hash_algo));
+        uint8_t * dup = malloc(hash_len(ipcpd.dir_hash_algo));
         if (dup == NULL)
                 return NULL;
 
@@ -136,17 +185,17 @@ static int ipcp_rib_read(const char * path,
         }
 
         if (strcmp(entry, info[1]) == 0) { /* _type */
-                if (ipcpi.type == IPCP_LOCAL)
+                if (ipcpd.type == IPCP_LOCAL)
                         strcpy(buf, "local\n");
-                else if (ipcpi.type == IPCP_UNICAST)
+                else if (ipcpd.type == IPCP_UNICAST)
                         strcpy(buf, "unicast\n");
-                else if (ipcpi.type == IPCP_BROADCAST)
+                else if (ipcpd.type == IPCP_BROADCAST)
                         strcpy(buf, "broadcast\n");
-                else if (ipcpi.type == IPCP_ETH_LLC)
+                else if (ipcpd.type == IPCP_ETH_LLC)
                         strcpy(buf, "eth-llc\n");
-                else if (ipcpi.type == IPCP_ETH_DIX)
+                else if (ipcpd.type == IPCP_ETH_DIX)
                         strcpy(buf, "eth-dix\n");
-                else if (ipcpi.type == IPCP_UDP)
+                else if (ipcpd.type == IPCP_UDP)
                         strcpy(buf, "udp\n");
                 else
                         strcpy(buf, "bug\n");
@@ -157,7 +206,7 @@ static int ipcp_rib_read(const char * path,
                 if (ipcp_get_state() < IPCP_OPERATIONAL)
                         strcpy(buf, "(null)");
                 else
-                        strcpy(buf, ipcpi.layer_name);
+                        strcpy(buf, ipcpd.layer_name);
 
                 buf[strlen(buf)] = '\n';
         }
@@ -225,7 +274,7 @@ static void * acceptloop(void * o)
                ipcp_get_state() != IPCP_NULL) {
                 struct cmd * cmd;
 
-                csockfd = accept(ipcpi.sockfd, 0, 0);
+                csockfd = accept(ipcpd.sockfd, 0, 0);
                 if (csockfd < 0)
                         continue;
 
@@ -253,13 +302,13 @@ static void * acceptloop(void * o)
 
                 cmd->fd = csockfd;
 
-                pthread_mutex_lock(&ipcpi.cmd_lock);
+                pthread_mutex_lock(&ipcpd.cmd_lock);
 
-                list_add(&cmd->next, &ipcpi.cmds);
+                list_add(&cmd->next, &ipcpd.cmds);
 
-                pthread_cond_signal(&ipcpi.cmd_cond);
+                pthread_cond_signal(&ipcpd.cmd_cond);
 
-                pthread_mutex_unlock(&ipcpi.cmd_lock);
+                pthread_mutex_unlock(&ipcpd.cmd_lock);
         }
 
         return (void *) 0;
@@ -280,34 +329,34 @@ int ipcp_wait_flow_req_arr(const uint8_t *  dst,
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
-        pthread_mutex_lock(&ipcpi.alloc_lock);
+        pthread_mutex_lock(&ipcpd.alloc_lock);
 
-        while (ipcpi.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL) {
+        while (ipcpd.alloc_id != -1 && ipcp_get_state() == IPCP_OPERATIONAL) {
                 ts_add(&abstime, &ts, &abstime);
-                pthread_cond_timedwait(&ipcpi.alloc_cond,
-                                       &ipcpi.alloc_lock,
+                pthread_cond_timedwait(&ipcpd.alloc_cond,
+                                       &ipcpd.alloc_lock,
                                        &abstime);
         }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                pthread_mutex_unlock(&ipcpd.alloc_lock);
                 log_err("Won't allocate over non-operational IPCP.");
                 return -EIPCPSTATE;
         }
 
-        assert(ipcpi.alloc_id == -1);
+        assert(ipcpd.alloc_id == -1);
 
         fd = ipcp_flow_req_arr(&hash, qs, mpl, data);
         if (fd < 0) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                pthread_mutex_unlock(&ipcpd.alloc_lock);
                 log_err("Failed to get fd for flow.");
                 return fd;
         }
 
-        ipcpi.alloc_id = fd;
-        pthread_cond_broadcast(&ipcpi.alloc_cond);
+        ipcpd.alloc_id = fd;
+        pthread_cond_broadcast(&ipcpd.alloc_cond);
 
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
+        pthread_mutex_unlock(&ipcpd.alloc_lock);
 
         return fd;
 
@@ -320,26 +369,26 @@ int ipcp_wait_flow_resp(const int fd)
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
-        pthread_mutex_lock(&ipcpi.alloc_lock);
+        pthread_mutex_lock(&ipcpd.alloc_lock);
 
-        while (ipcpi.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
+        while (ipcpd.alloc_id != fd && ipcp_get_state() == IPCP_OPERATIONAL) {
                 ts_add(&abstime, &ts, &abstime);
-                pthread_cond_timedwait(&ipcpi.alloc_cond,
-                                       &ipcpi.alloc_lock,
+                pthread_cond_timedwait(&ipcpd.alloc_cond,
+                                       &ipcpd.alloc_lock,
                                        &abstime);
         }
 
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                pthread_mutex_unlock(&ipcpi.alloc_lock);
+                pthread_mutex_unlock(&ipcpd.alloc_lock);
                 return -1;
         }
 
-        assert(ipcpi.alloc_id == fd);
+        assert(ipcpd.alloc_id == fd);
 
-        ipcpi.alloc_id = -1;
-        pthread_cond_broadcast(&ipcpi.alloc_cond);
+        ipcpd.alloc_id = -1;
+        pthread_cond_broadcast(&ipcpd.alloc_cond);
 
-        pthread_mutex_unlock(&ipcpi.alloc_lock);
+        pthread_mutex_unlock(&ipcpd.alloc_lock);
 
         return 0;
 }
@@ -357,7 +406,7 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
 
         log_info("Bootstrapping...");
 
-        if (ipcpi.ops->ipcp_bootstrap == NULL) {
+        if (ipcpd.ops->ipcp_bootstrap == NULL) {
                 log_err("Bootstrap unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
@@ -370,8 +419,22 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
         }
 
         conf = ipcp_config_msg_to_s(conf_msg);
-        ret_msg->result = ipcpi.ops->ipcp_bootstrap(&conf);
+        switch(conf.type) { /* FIXED algorithms */
+        case IPCP_UDP:
+                conf.layer_info.dir_hash_algo = (enum pol_dir_hash) HASH_MD5;
+                break;
+        case IPCP_BROADCAST:
+                conf.layer_info.dir_hash_algo = DIR_HASH_SHA3_256;
+                break;
+        default:
+                break;
+        }
+
+        ret_msg->result = ipcpd.ops->ipcp_bootstrap(&conf);
         if (ret_msg->result == 0) {
+                enum pol_dir_hash algo = conf.layer_info.dir_hash_algo;
+                strcpy(ipcpd.layer_name, conf.layer_info.name);
+                ipcpd.dir_hash_algo = (enum hash_algo) algo;
                 ret_msg->layer_info = layer_info_s_to_msg(&conf.layer_info);
                 ipcp_set_state(IPCP_OPERATIONAL);
         }
@@ -386,7 +449,7 @@ static void do_enroll(const char * dst,
 
         log_info("Enrolling with %s...", dst);
 
-        if (ipcpi.ops->ipcp_enroll == NULL) {
+        if (ipcpd.ops->ipcp_enroll == NULL) {
                 log_err("Enroll unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
@@ -398,8 +461,10 @@ static void do_enroll(const char * dst,
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_enroll(dst, &info);
+        ret_msg->result = ipcpd.ops->ipcp_enroll(dst, &info);
         if (ret_msg->result == 0) {
+                strcpy(ipcpd.layer_name, info.name);
+                ipcpd.dir_hash_algo = (enum hash_algo) info.dir_hash_algo;
                 ret_msg->layer_info = layer_info_s_to_msg(&info);
                 ipcp_set_state(IPCP_OPERATIONAL);
         }
@@ -414,13 +479,13 @@ static void do_connect(const char * dst,
 {
         log_info("Connecting %s to %s...", comp, dst);
 
-        if (ipcpi.ops->ipcp_connect == NULL) {
+        if (ipcpd.ops->ipcp_connect == NULL) {
                 log_err("Connect unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_connect(dst, comp, qs);
+        ret_msg->result = ipcpd.ops->ipcp_connect(dst, comp, qs);
  finish:
         log_info("Finished connecting: %d.", ret_msg->result);
 }
@@ -431,13 +496,13 @@ static void do_disconnect(const char * dst,
 {
         log_info("Disconnecting %s from %s...", comp, dst);
 
-        if (ipcpi.ops->ipcp_disconnect == NULL) {
+        if (ipcpd.ops->ipcp_disconnect == NULL) {
                 log_err("Disconnect unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_disconnect(dst, comp);
+        ret_msg->result = ipcpd.ops->ipcp_disconnect(dst, comp);
 
  finish:
         log_info("Finished disconnecting %s from %s: %d.",
@@ -450,13 +515,13 @@ static void do_reg(const uint8_t * hash,
 
         log_info("Registering " HASH_FMT32 "...", HASH_VAL32(hash));
 
-        if (ipcpi.ops->ipcp_reg == NULL) {
+        if (ipcpd.ops->ipcp_reg == NULL) {
                 log_err("Registration unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_reg(hash);
+        ret_msg->result = ipcpd.ops->ipcp_reg(hash);
  finish:
         log_info("Finished registering " HASH_FMT32 " : %d.",
                  HASH_VAL32(hash), ret_msg->result);
@@ -467,13 +532,13 @@ static void do_unreg(const uint8_t * hash,
 {
         log_info("Unregistering " HASH_FMT32 "...", HASH_VAL32(hash));
 
-        if (ipcpi.ops->ipcp_unreg == NULL) {
+        if (ipcpd.ops->ipcp_unreg == NULL) {
                 log_err("Unregistration unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_unreg(hash);
+        ret_msg->result = ipcpd.ops->ipcp_unreg(hash);
  finish:
         log_info("Finished unregistering " HASH_FMT32 ": %d.",
                  HASH_VAL32(hash), ret_msg->result);
@@ -484,7 +549,7 @@ static void do_query(const uint8_t * hash,
 {
         /*  TODO: Log this operation when IRMd has internal caches. */
 
-        if (ipcpi.ops->ipcp_query == NULL) {
+        if (ipcpd.ops->ipcp_query == NULL) {
                 log_err("Directory query unsupported.");
                 ret_msg->result = -ENOTSUP;
                 return;
@@ -496,7 +561,7 @@ static void do_query(const uint8_t * hash,
                 return;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_query(hash);
+        ret_msg->result = ipcpd.ops->ipcp_query(hash);
 }
 
 static void do_flow_alloc(pid_t            pid,
@@ -511,7 +576,7 @@ static void do_flow_alloc(pid_t            pid,
         log_info("Allocating flow %d for %d to " HASH_FMT32 ".",
                  flow_id, pid, HASH_VAL32(dst));
 
-        if (ipcpi.ops->ipcp_flow_alloc == NULL) {
+        if (ipcpd.ops->ipcp_flow_alloc == NULL) {
                 log_err("Flow allocation unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
@@ -531,7 +596,7 @@ static void do_flow_alloc(pid_t            pid,
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_flow_alloc(fd, dst, qs, data);
+        ret_msg->result = ipcpd.ops->ipcp_flow_alloc(fd, dst, qs, data);
  finish:
         log_info("Finished allocating flow %d to " HASH_FMT32 ": %d.",
                  flow_id, HASH_VAL32(dst), ret_msg->result);
@@ -548,7 +613,7 @@ static void do_flow_join(pid_t           pid,
 
         log_info("Joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
 
-        if (ipcpi.ops->ipcp_flow_join == NULL) {
+        if (ipcpd.ops->ipcp_flow_join == NULL) {
                 log_err("Broadcast unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
@@ -567,7 +632,7 @@ static void do_flow_join(pid_t           pid,
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_flow_join(fd, dst, qs);
+        ret_msg->result = ipcpd.ops->ipcp_flow_join(fd, dst, qs);
  finish:
         log_info("Finished joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
 }
@@ -581,7 +646,7 @@ static void do_flow_alloc_resp(int              resp,
 
         log_info("Responding %d to alloc on flow_id %d.", resp, flow_id);
 
-        if (ipcpi.ops->ipcp_flow_alloc_resp == NULL) {
+        if (ipcpd.ops->ipcp_flow_alloc_resp == NULL) {
                 log_err("Flow_alloc_resp unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
@@ -602,7 +667,7 @@ static void do_flow_alloc_resp(int              resp,
                 }
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_flow_alloc_resp(fd, resp, data);
+        ret_msg->result = ipcpd.ops->ipcp_flow_alloc_resp(fd, resp, data);
  finish:
         log_info("Finished responding to allocation request: %d",
                  ret_msg->result);
@@ -616,7 +681,7 @@ static void do_flow_dealloc(int          flow_id,
 
         log_info("Deallocating flow %d.", flow_id);
 
-        if (ipcpi.ops->ipcp_flow_dealloc == NULL) {
+        if (ipcpd.ops->ipcp_flow_dealloc == NULL) {
                 log_err("Flow deallocation unsupported.");
                 ret_msg->result = -ENOTSUP;
                 goto finish;
@@ -635,7 +700,7 @@ static void do_flow_dealloc(int          flow_id,
                 goto finish;
         }
 
-        ret_msg->result = ipcpi.ops->ipcp_flow_dealloc(fd);
+        ret_msg->result = ipcpd.ops->ipcp_flow_dealloc(fd);
  finish:
         log_info("Finished deallocating flow %d: %d.",
                  flow_id, ret_msg->result);
@@ -657,14 +722,14 @@ static void * mainloop(void * o)
 
                 ret_msg.code = IPCP_MSG_CODE__IPCP_REPLY;
 
-                pthread_mutex_lock(&ipcpi.cmd_lock);
+                pthread_mutex_lock(&ipcpd.cmd_lock);
 
-                pthread_cleanup_push(__cleanup_mutex_unlock, &ipcpi.cmd_lock);
+                pthread_cleanup_push(__cleanup_mutex_unlock, &ipcpd.cmd_lock);
 
-                while (list_is_empty(&ipcpi.cmds))
-                        pthread_cond_wait(&ipcpi.cmd_cond, &ipcpi.cmd_lock);
+                while (list_is_empty(&ipcpd.cmds))
+                        pthread_cond_wait(&ipcpd.cmd_cond, &ipcpd.cmd_lock);
 
-                cmd = list_last_entry(&ipcpi.cmds, struct cmd, next);
+                cmd = list_last_entry(&ipcpd.cmds, struct cmd, next);
                 list_del(&cmd->next);
 
                 pthread_cleanup_pop(true);
@@ -679,7 +744,7 @@ static void * mainloop(void * o)
                         continue;
                 }
 
-                tpm_begin_work(ipcpi.tpm);
+                tpm_begin_work(ipcpd.tpm);
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
                 pthread_cleanup_push(free_msg, msg);
@@ -753,7 +818,7 @@ static void * mainloop(void * o)
                 if (buffer.len == 0) {
                         log_err("Failed to pack reply message");
                         close(sfd);
-                        tpm_end_work(ipcpi.tpm);
+                        tpm_end_work(ipcpd.tpm);
                         continue;
                 }
 
@@ -761,7 +826,7 @@ static void * mainloop(void * o)
                 if (buffer.data == NULL) {
                         log_err("Failed to create reply buffer.");
                         close(sfd);
-                        tpm_end_work(ipcpi.tpm);
+                        tpm_end_work(ipcpd.tpm);
                         continue;
                 }
 
@@ -779,7 +844,7 @@ static void * mainloop(void * o)
                 pthread_cleanup_pop(true); /* close sfd */
                 pthread_cleanup_pop(true); /* free buffer.data */
 
-                tpm_end_work(ipcpi.tpm);
+                tpm_end_work(ipcpd.tpm);
         }
 
         return (void *) 0;
@@ -798,10 +863,10 @@ static int parse_args(int    argc,
         if (atoi(argv[1]) == 0)
                 return -1;
 
-        ipcpi.irmd_pid = atoi(argv[1]);
+        ipcpd.irmd_pid = atoi(argv[1]);
 
         /* argument 2: IPCP name */
-        ipcpi.name = argv[2];
+        ipcpd.name = argv[2];
 
         /* argument 3: syslog */
         if (argv[3] != NULL)
@@ -823,26 +888,26 @@ int ipcp_init(int               argc,
 
         log_init(log);
 
-        ipcpi.state     = IPCP_NULL;
-        ipcpi.type      = type;
+        ipcpd.state     = IPCP_NULL;
+        ipcpd.type      = type;
 
 #if defined (__linux__)
         prctl(PR_SET_TIMERSLACK, IPCP_LINUX_SLACK_NS, 0, 0, 0);
 #endif
-        ipcpi.sock_path = sock_path(getpid(), IPCP_SOCK_PATH_PREFIX);
-        if (ipcpi.sock_path == NULL)
+        ipcpd.sock_path = sock_path(getpid(), IPCP_SOCK_PATH_PREFIX);
+        if (ipcpd.sock_path == NULL)
                 goto fail_sock_path;
 
-        ipcpi.sockfd = server_socket_open(ipcpi.sock_path);
-        if (ipcpi.sockfd < 0) {
+        ipcpd.sockfd = server_socket_open(ipcpd.sock_path);
+        if (ipcpd.sockfd < 0) {
                 log_err("Failed to open server socket at %s.",
-                        ipcpi.sock_path);
+                        ipcpd.sock_path);
                 goto fail_serv_sock;
         }
 
-        ipcpi.ops = ops;
+        ipcpd.ops = ops;
 
-        if (pthread_mutex_init(&ipcpi.state_mtx, NULL)) {
+        if (pthread_mutex_init(&ipcpd.state_mtx, NULL)) {
                 log_err("Failed to create mutex.");
                 goto fail_state_mtx;
         }
@@ -855,32 +920,32 @@ int ipcp_init(int               argc,
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        if (pthread_cond_init(&ipcpi.state_cond, &cattr)) {
+        if (pthread_cond_init(&ipcpd.state_cond, &cattr)) {
                 log_err("Failed to init condvar.");
                 goto fail_state_cond;
         }
 
-        if (pthread_mutex_init(&ipcpi.alloc_lock, NULL)) {
+        if (pthread_mutex_init(&ipcpd.alloc_lock, NULL)) {
                 log_err("Failed to init mutex.");
                 goto fail_alloc_lock;
         }
 
-        if (pthread_cond_init(&ipcpi.alloc_cond, &cattr)) {
+        if (pthread_cond_init(&ipcpd.alloc_cond, &cattr)) {
                 log_err("Failed to init convar.");
                 goto fail_alloc_cond;
         }
 
-        if (pthread_mutex_init(&ipcpi.cmd_lock, NULL)) {
+        if (pthread_mutex_init(&ipcpd.cmd_lock, NULL)) {
                 log_err("Failed to init mutex.");
                 goto fail_cmd_lock;
         }
 
-        if (pthread_cond_init(&ipcpi.cmd_cond, &cattr)) {
+        if (pthread_cond_init(&ipcpd.cmd_cond, &cattr)) {
                 log_err("Failed to init convar.");
                 goto fail_cmd_cond;
         }
 
-        if (rib_init(ipcpi.name)) {
+        if (rib_init(ipcpd.name)) {
                 log_err("Failed to initialize RIB.");
                 goto fail_rib_init;
         }
@@ -890,16 +955,16 @@ int ipcp_init(int               argc,
                 goto fail_rib_reg;
         }
 
-        list_head_init(&ipcpi.cmds);
+        list_head_init(&ipcpd.cmds);
 
-        ipcpi.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
+        ipcpd.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
                                mainloop, NULL);
-        if (ipcpi.tpm == NULL) {
+        if (ipcpd.tpm == NULL) {
                 log_err("Failed to create threadpool manager.");
                 goto fail_tpm_create;
         }
 
-        ipcpi.alloc_id = -1;
+        ipcpd.alloc_id = -1;
 
         pthread_condattr_destroy(&cattr);
 
@@ -912,23 +977,23 @@ int ipcp_init(int               argc,
  fail_rib_reg:
         rib_fini();
  fail_rib_init:
-        pthread_cond_destroy(&ipcpi.cmd_cond);
+        pthread_cond_destroy(&ipcpd.cmd_cond);
  fail_cmd_cond:
-        pthread_mutex_destroy(&ipcpi.cmd_lock);
+        pthread_mutex_destroy(&ipcpd.cmd_lock);
  fail_cmd_lock:
-        pthread_cond_destroy(&ipcpi.alloc_cond);
+        pthread_cond_destroy(&ipcpd.alloc_cond);
  fail_alloc_cond:
-        pthread_mutex_destroy(&ipcpi.alloc_lock);
+        pthread_mutex_destroy(&ipcpd.alloc_lock);
  fail_alloc_lock:
-        pthread_cond_destroy(&ipcpi.state_cond);
+        pthread_cond_destroy(&ipcpd.state_cond);
  fail_state_cond:
         pthread_condattr_destroy(&cattr);
  fail_cond_attr:
-        pthread_mutex_destroy(&ipcpi.state_mtx);
+        pthread_mutex_destroy(&ipcpd.state_mtx);
  fail_state_mtx:
-        close(ipcpi.sockfd);
+        close(ipcpd.sockfd);
  fail_serv_sock:
-        free(ipcpi.sock_path);
+        free(ipcpd.sock_path);
  fail_sock_path:
         return -1;
 }
@@ -947,16 +1012,16 @@ int ipcp_start(void)
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
         info.pid  = getpid();
-        info.type = ipcpi.type;
-        strcpy(info.name, ipcpi.name);
+        info.type = ipcpd.type;
+        strcpy(info.name, ipcpd.name);
         info.state = IPCP_OPERATIONAL;
 
-        if (tpm_start(ipcpi.tpm)) {
+        if (tpm_start(ipcpd.tpm)) {
                 log_err("Failed to start threadpool manager.");
                 goto fail_tpm_start;
         }
 
-        if (pthread_create(&ipcpi.acceptor, NULL, acceptloop, NULL)) {
+        if (pthread_create(&ipcpd.acceptor, NULL, acceptloop, NULL)) {
                 log_err("Failed to create acceptor thread.");
                 goto fail_acceptor;
         }
@@ -971,12 +1036,12 @@ int ipcp_start(void)
         return 0;
 
  fail_create_r:
-        pthread_cancel(ipcpi.acceptor);
-        pthread_join(ipcpi.acceptor, NULL);
+        pthread_cancel(ipcpd.acceptor);
+        pthread_join(ipcpd.acceptor, NULL);
  fail_acceptor:
-        tpm_stop(ipcpi.tpm);
+        tpm_stop(ipcpd.tpm);
  fail_tpm_start:
-        tpm_destroy(ipcpi.tpm);
+        tpm_destroy(ipcpd.tpm);
         ipcp_set_state(IPCP_NULL);
         info.state = IPCP_NULL;
         ipcp_create_r(&info);
@@ -1012,7 +1077,7 @@ void ipcp_sigwait(void)
 #ifdef __APPLE__
                 memset(&info, 0, sizeof(info));
                 info.si_signo = sig;
-                info.si_pid   = ipcpi.irmd_pid;
+                info.si_pid   = ipcpd.irmd_pid;
 #endif
                 switch(info.si_signo) {
                 case SIGINT:
@@ -1022,7 +1087,7 @@ void ipcp_sigwait(void)
                 case SIGHUP:
                         /* FALLTHRU */
                 case SIGQUIT:
-                        if (info.si_pid == ipcpi.irmd_pid) {
+                        if (info.si_pid == ipcpd.irmd_pid) {
                                 if (ipcp_get_state() == IPCP_INIT)
                                         ipcp_set_state(IPCP_NULL);
 
@@ -1043,33 +1108,33 @@ void ipcp_stop(void)
 {
         log_info("IPCP %d shutting down.", getpid());
 
-        pthread_cancel(ipcpi.acceptor);
-        pthread_join(ipcpi.acceptor, NULL);
+        pthread_cancel(ipcpd.acceptor);
+        pthread_join(ipcpd.acceptor, NULL);
 
-        tpm_stop(ipcpi.tpm);
+        tpm_stop(ipcpd.tpm);
 }
 
 void ipcp_fini(void)
 {
 
-        tpm_destroy(ipcpi.tpm);
+        tpm_destroy(ipcpd.tpm);
 
         rib_unreg(IPCP_INFO);
 
         rib_fini();
 
-        close(ipcpi.sockfd);
-        if (unlink(ipcpi.sock_path))
-                log_warn("Could not unlink %s.", ipcpi.sock_path);
+        close(ipcpd.sockfd);
+        if (unlink(ipcpd.sock_path))
+                log_warn("Could not unlink %s.", ipcpd.sock_path);
 
-        free(ipcpi.sock_path);
+        free(ipcpd.sock_path);
 
-        pthread_cond_destroy(&ipcpi.state_cond);
-        pthread_mutex_destroy(&ipcpi.state_mtx);
-        pthread_cond_destroy(&ipcpi.alloc_cond);
-        pthread_mutex_destroy(&ipcpi.alloc_lock);
-        pthread_cond_destroy(&ipcpi.cmd_cond);
-        pthread_mutex_destroy(&ipcpi.cmd_lock);
+        pthread_cond_destroy(&ipcpd.state_cond);
+        pthread_mutex_destroy(&ipcpd.state_mtx);
+        pthread_cond_destroy(&ipcpd.alloc_cond);
+        pthread_mutex_destroy(&ipcpd.alloc_lock);
+        pthread_cond_destroy(&ipcpd.cmd_cond);
+        pthread_mutex_destroy(&ipcpd.cmd_lock);
 
         log_info("IPCP %d out.", getpid());
 
@@ -1078,23 +1143,23 @@ void ipcp_fini(void)
 
 void ipcp_set_state(enum ipcp_state state)
 {
-        pthread_mutex_lock(&ipcpi.state_mtx);
+        pthread_mutex_lock(&ipcpd.state_mtx);
 
-        ipcpi.state = state;
+        ipcpd.state = state;
 
-        pthread_cond_broadcast(&ipcpi.state_cond);
-        pthread_mutex_unlock(&ipcpi.state_mtx);
+        pthread_cond_broadcast(&ipcpd.state_cond);
+        pthread_mutex_unlock(&ipcpd.state_mtx);
 }
 
 enum ipcp_state ipcp_get_state(void)
 {
         enum ipcp_state state;
 
-        pthread_mutex_lock(&ipcpi.state_mtx);
+        pthread_mutex_lock(&ipcpd.state_mtx);
 
-        state = ipcpi.state;
+        state = ipcpd.state;
 
-        pthread_mutex_unlock(&ipcpi.state_mtx);
+        pthread_mutex_unlock(&ipcpd.state_mtx);
 
         return state;
 }

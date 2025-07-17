@@ -41,6 +41,7 @@
 #include <ouroboros/random.h>
 #include <ouroboros/pthread.h>
 
+#include "addr-auth.h"
 #include "dir.h"
 #include "fa.h"
 #include "psched.h"
@@ -765,7 +766,7 @@ int fa_alloc(int              fd,
 
         msg->code         = FLOW_REQ;
         msg->s_eid        = hton64(eid);
-        msg->s_addr       = hton64(ipcpi.dt_addr);
+        msg->s_addr       = hton64(addr_auth_address());
         msg->delay        = hton32(qs.delay);
         msg->bandwidth    = hton64(qs.bandwidth);
         msg->availability = qs.availability;

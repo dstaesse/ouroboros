@@ -35,12 +35,12 @@
 #include "flat.h"
 
 #define NAME_LEN 8
+#define INVALID_ADDRESS 0
 
 struct {
-        uint8_t addr_size;
+        uint8_t  addr_size;
+        uint32_t addr;
 } flat;
-
-#define INVALID_ADDRESS 0
 
 struct addr_auth_ops flat_ops = {
         .init    = flat_init,
@@ -57,6 +57,12 @@ int flat_init(const void * info)
                 return -1;
         }
 
+#if defined (CONFIG_OUROBOROS_DEBUG) && defined (IPCP_DEBUG_LOCAL)
+        flat.addr = getpid();
+#else
+        while (flat.addr == INVALID_ADDRESS)
+                random_buffer(&flat.addr,sizeof(flat.addr));
+#endif
         return 0;
 }
 
@@ -67,13 +73,5 @@ int flat_fini(void)
 
 uint64_t flat_address(void)
 {
-        uint32_t addr = INVALID_ADDRESS;
-
-#if defined (CONFIG_OUROBOROS_DEBUG) && defined (IPCP_DEBUG_LOCAL)
-        addr = getpid();
-#else
-        while (addr == INVALID_ADDRESS)
-                random_buffer(&addr,sizeof(addr));
-#endif
-        return addr;
+        return (uint64_t) flat.addr;
 }

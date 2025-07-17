@@ -52,13 +52,8 @@
 #include <assert.h>
 #include <inttypes.h>
 
-struct ipcp ipcpi;
-
-static int initialize_components(const struct ipcp_config * conf)
+static int initialize_components(void)
 {
-        strcpy(ipcpi.layer_name, conf->layer_info.name);
-        ipcpi.dir_hash_algo = (enum hash_algo) conf->layer_info.dir_hash_algo;
-
         assert(ipcp_dir_hash_len() != 0);
 
         if (dt_init() < 0) {
@@ -107,6 +102,7 @@ static void stop_components(void)
 static int broadcast_ipcp_enroll(const char *        dst,
                                  struct layer_info * info)
 {
+        struct ipcp_config * conf;
         struct conn conn;
         uint8_t     id[ENROLL_ID_LEN];
 
@@ -128,7 +124,10 @@ static int broadcast_ipcp_enroll(const char *        dst,
                 goto fail_enroll_boot;
         }
 
-        if (initialize_components(enroll_get_conf()) < 0) {
+        conf = enroll_get_conf();
+        *info = conf->layer_info;
+
+        if (initialize_components() < 0) {
                 log_err_id(id, "Failed to initialize components.");
                 goto fail_enroll_boot;
         }
@@ -146,9 +145,6 @@ static int broadcast_ipcp_enroll(const char *        dst,
 
         log_info_id(id, "Enrolled with %s.", dst);
 
-        info->dir_hash_algo = (enum pol_dir_hash) ipcpi.dir_hash_algo;
-        strcpy(info->name, ipcpi.layer_name);
-
         return 0;
 
  fail_start_comp:
@@ -163,12 +159,11 @@ static int broadcast_ipcp_bootstrap(const struct ipcp_config * conf)
 {
         assert(conf);
         assert(conf->type == THIS_TYPE);
-        ((struct ipcp_config *) conf)->layer_info.dir_hash_algo =
-                DIR_HASH_SHA3_256;
+        assert(conf->layer_info.dir_hash_algo == DIR_HASH_SHA3_256);
 
         enroll_bootstrap(conf);
 
-        if (initialize_components(conf)) {
+        if (initialize_components()) {
                 log_err("Failed to init IPCP components.");
                 goto fail_init;
         }
@@ -192,12 +187,12 @@ static int name_check(const uint8_t * dst)
         size_t    len;
         int       ret;
 
-        len = hash_len(ipcpi.dir_hash_algo);
+        len = ipcp_dir_hash_len();
         buf =  malloc(len);
         if (buf == NULL)
                 return -ENOMEM;
 
-        str_hash(ipcpi.dir_hash_algo, buf, ipcpi.layer_name);
+        str_hash(HASH_SHA3_256, buf, ipcp_get_name());
 
         ret = memcmp(buf, dst, len);
 

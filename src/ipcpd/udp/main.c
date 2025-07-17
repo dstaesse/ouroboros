@@ -81,8 +81,6 @@
 #define SENDTO_FLAGS 0
 #endif
 
-struct ipcp ipcpi;
-
 /* Keep order for alignment. */
 struct mgmt_msg {
         uint32_t eid;
@@ -592,11 +590,9 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
         char dnsstr[INET_ADDRSTRLEN];
         int  i = 1;
 
-        assert(conf);
+        assert(conf != NULL);
         assert(conf->type == THIS_TYPE);
-
-        ipcpi.dir_hash_algo = HASH_MD5;
-        strcpy(ipcpi.layer_name, conf->layer_info.name);
+        assert(conf->layer_info.dir_hash_algo == (enum pol_dir_hash) HASH_MD5);
 
         if (inet4_ntop(&conf->udp.ip_addr, ipstr) == NULL) {
                 log_err("Failed to convert IP address.");

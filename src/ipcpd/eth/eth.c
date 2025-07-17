@@ -145,8 +145,6 @@
 #define NAME_QUERY_REQ       2
 #define NAME_QUERY_REPLY     3
 
-struct ipcp ipcpi;
-
 struct mgmt_msg {
 #if defined(BUILD_ETH_DIX)
         uint16_t seid;
@@ -1246,9 +1244,6 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 #endif
         assert(conf);
         assert(conf->type == THIS_TYPE);
-
-        ipcpi.dir_hash_algo = (enum hash_algo) conf->layer_info.dir_hash_algo;
-        strcpy(ipcpi.layer_name, conf->layer_info.name);
 
         if (strlen(conf->eth.dev) >= IFNAMSIZ) {
                 log_err("Invalid device name: %s.", conf->eth.dev);

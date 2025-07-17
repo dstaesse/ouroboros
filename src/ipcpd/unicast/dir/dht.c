@@ -45,6 +45,7 @@
 #include <ouroboros/utils.h>
 #include <ouroboros/pthread.h>
 
+#include "addr-auth.h"
 #include "common/connmgr.h"
 #include "dht.h"
 #include "dt.h"
@@ -2258,7 +2259,7 @@ int dht_bootstrap(void * dir)
         pthread_rwlock_wrlock(&dht->lock);
 
 #ifndef __DHT_TEST__
-        dht->b        = hash_len(ipcpi.dir_hash_algo);
+        dht->b        = ipcp_dir_hash_len();
 #else
         dht->b        = DHT_TEST_KEY_LEN;
 #endif
@@ -2845,7 +2846,10 @@ void * dht_create(void)
         dht->b    = 0;
         dht->id   = NULL;
 #ifndef __DHT_TEST__
-        dht->addr = ipcpi.dt_addr;
+        dht->addr = addr_auth_address();
+        if (dht->addr == INVALID_ADDR)
+                goto fail_bmp;
+
         dht->tpm = tpm_create(2, 1, dht_handle_packet, dht);
         if (dht->tpm == NULL)
                 goto fail_tpm_create;

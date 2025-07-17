@@ -34,6 +34,8 @@
 #include <pthread.h>
 #include <time.h>
 
+#define ipcp_dir_hash_strlen() (ipcp_dir_hash_len() * 2)
+
 struct ipcp_ops {
         int   (* ipcp_bootstrap)(const struct ipcp_config * conf);
 
@@ -69,43 +71,6 @@ struct ipcp_ops {
         int   (* ipcp_flow_dealloc)(int fd);
 };
 
-#define ipcp_dir_hash_strlen() (hash_len(ipcpi.dir_hash_algo) * 2)
-#define ipcp_dir_hash_len() (hash_len(ipcpi.dir_hash_algo))
-
-extern struct ipcp {
-        pid_t              irmd_pid;
-        char *             name;
-
-        enum ipcp_type     type;
-        char               layer_name[LAYER_NAME_SIZE + 1];
-
-        uint64_t           dt_addr;
-
-        enum hash_algo     dir_hash_algo;
-
-        struct ipcp_ops *  ops;
-        int                irmd_fd;
-
-        enum ipcp_state    state;
-        pthread_cond_t     state_cond;
-        pthread_mutex_t    state_mtx;
-
-        int                sockfd;
-        char *             sock_path;
-
-        struct list_head   cmds;
-        pthread_cond_t     cmd_cond;
-        pthread_mutex_t    cmd_lock;
-
-        int                alloc_id;
-        pthread_cond_t     alloc_cond;
-        pthread_mutex_t    alloc_lock;
-
-        struct tpm *       tpm;
-
-        pthread_t          acceptor;
-} ipcpi;
-
 int             ipcp_init(int               argc,
                           char **           argv,
                           struct ipcp_ops * ops,
@@ -119,9 +84,15 @@ void            ipcp_stop(void);
 
 void            ipcp_fini(void);
 
+enum ipcp_type  ipcp_get_type(void);
+
+const char *    ipcp_get_name(void);
+
 void            ipcp_set_state(enum ipcp_state state);
 
 enum ipcp_state ipcp_get_state(void);
+
+int             ipcp_set_layer_info(const struct layer_info * info);
 
 /* Helper functions to handle races during flow allocation */
 int             ipcp_wait_flow_req_arr(const uint8_t *  dst,
@@ -131,7 +102,10 @@ int             ipcp_wait_flow_req_arr(const uint8_t *  dst,
 
 int             ipcp_wait_flow_resp(const int fd);
 
+
 /* Helper functions for directory entries, could be moved */
+size_t          ipcp_dir_hash_len(void);
+
 uint8_t *       ipcp_hash_dup(const uint8_t * hash);
 
 void            ipcp_hash_str(char            buf[],

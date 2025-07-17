@@ -41,6 +41,7 @@
 #include <ouroboros/fccntl.h>
 #endif
 
+#include "addr-auth.h"
 #include "common/comp.h"
 #include "common/connmgr.h"
 #include "ca.h"
@@ -144,6 +145,8 @@ static void dt_pci_shrink(struct shm_du_buff * sdb)
 struct {
         struct psched *    psched;
 
+        uint64_t           addr;
+
         struct pff *       pff[QOS_CUBE_MAX];
         struct routing_i * routing[QOS_CUBE_MAX];
 #ifdef IPCP_FLOW_STATS
@@ -209,7 +212,7 @@ static int dt_rib_read(const char * path,
                 return 0;
         }
 
-        if (dt.stat[fd].addr == ipcpi.dt_addr)
+        if (dt.stat[fd].addr == dt.addr)
                 sprintf(addrstr, "%s", dt.comps[fd].name);
         else
                 sprintf(addrstr, "%" PRIu64, dt.stat[fd].addr);
@@ -454,7 +457,7 @@ static void packet_handler(int                  fd,
         head = shm_du_buff_head(sdb);
 
         dt_pci_des(head, &dt_pci);
-        if (dt_pci.dst_addr != ipcpi.dt_addr) {
+        if (dt_pci.dst_addr != dt.addr) {
                 if (dt_pci.ttl == 0) {
                         log_dbg("TTL was zero.");
                         ipcp_sdb_release(sdb);
@@ -575,11 +578,17 @@ int dt_init(struct dt_config cfg)
 
         memset(&info, 0, sizeof(info));
 
+        dt.addr = addr_auth_address();
+        if (dt.addr == INVALID_ADDR) {
+                log_err("Failed to get address");
+                return -1;
+        }
+
         strcpy(info.comp_name, DT_COMP);
         strcpy(info.protocol, DT_PROTO);
         info.pref_version = 1;
         info.pref_syntax  = PROTO_FIXED;
-        info.addr         = ipcpi.dt_addr;
+        info.addr         = dt.addr;
 
         if (cfg.eid_size != 8) { /* only support 64 bits from now */
                 log_warn("Invalid EID size. Only 64 bit is supported.");
@@ -647,7 +656,7 @@ int dt_init(struct dt_config cfg)
 
         dt.n_flows = 0;
 #endif
-        sprintf(dtstr, "%s.%" PRIu64, DT, ipcpi.dt_addr);
+        sprintf(dtstr, "%s.%" PRIu64, DT, dt.addr);
         if (rib_reg(dtstr, &r_ops)) {
                 log_err("Failed to register RIB.");
                 goto fail_rib_reg;
@@ -683,7 +692,7 @@ void dt_fini(void)
         char dtstr[RIB_NAME_STRLEN + 1];
         int i;
 
-        sprintf(dtstr, "%s.%" PRIu64, DT, ipcpi.dt_addr);
+        sprintf(dtstr, "%s.%" PRIu64, DT, dt.addr);
         rib_unreg(dtstr);
 #ifdef IPCP_FLOW_STATS
         for (i = 0; i < PROG_MAX_FLOWS; ++i)
@@ -769,7 +778,7 @@ int dt_reg_comp(void * comp,
 
         pthread_rwlock_unlock(&dt.lock);
 #ifdef IPCP_FLOW_STATS
-        stat_used(eid, ipcpi.dt_addr);
+        stat_used(eid, dt.addr);
 #endif
         return eid;
 }
@@ -786,7 +795,7 @@ int dt_write_packet(uint64_t             dst_addr,
         size_t        len;
 
         assert(sdb);
-        assert(dst_addr != ipcpi.dt_addr);
+        assert(dst_addr != dt.addr);
 
         len = shm_du_buff_len(sdb);
 

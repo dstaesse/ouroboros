@@ -42,6 +42,7 @@
 #include <ouroboros/rib.h>
 #include <ouroboros/utils.h>
 
+#include "addr-auth.h"
 #include "common/comp.h"
 #include "common/connmgr.h"
 #include "graph.h"
@@ -106,6 +107,8 @@ struct nb {
 };
 
 struct {
+        uint64_t          addr;
+
         struct list_head  nbs;
         size_t            nbs_len;
         fset_t *          mgmt_set;
@@ -418,7 +421,7 @@ static void calculate_pff(struct routing_i * instance)
         assert(instance);
 
         if (graph_routing_table(ls.graph, ls.routing_algo,
-                                ipcpi.dt_addr, &table))
+                                ls.addr, &table))
                 return;
 
         pff_lock(instance->pff);
@@ -667,7 +670,7 @@ static void * lsupdate(void * o)
                                 continue;
                         }
 
-                        if (adj->src == ipcpi.dt_addr) {
+                        if (adj->src == ls.addr) {
                                 adj->seqno++;
                                 send_lsm(adj->src, adj->dst, adj->seqno);
                                 adj->stamp = now.tv_sec;
@@ -820,13 +823,13 @@ static void handle_event(void *       self,
 
                 pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.db_lock);
 
-                send_lsm(ipcpi.dt_addr, c->conn_info.addr, 0);
+                send_lsm(ls.addr, c->conn_info.addr, 0);
                 pthread_cleanup_pop(true);
 
                 if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_DT))
                         log_dbg("Failed to add neighbor to LSDB.");
 
-                if (lsdb_add_link(ipcpi.dt_addr, c->conn_info.addr, 0, &qs))
+                if (lsdb_add_link(ls.addr, c->conn_info.addr, 0, &qs))
                         log_dbg("Failed to add new adjacency to LSDB.");
                 break;
         case NOTIFY_DT_CONN_DEL:
@@ -835,7 +838,7 @@ static void handle_event(void *       self,
                 if (lsdb_del_nb(c->conn_info.addr, c->flow_info.fd))
                         log_dbg("Failed to delete neighbor from LSDB.");
 
-                if (lsdb_del_link(ipcpi.dt_addr, c->conn_info.addr))
+                if (lsdb_del_link(ls.addr, c->conn_info.addr))
                         log_dbg("Local link was not in LSDB.");
                 break;
         case NOTIFY_DT_CONN_QOS:
@@ -927,11 +930,13 @@ int link_state_init(enum pol_routing pr)
 
         memset(&info, 0, sizeof(info));
 
+        ls.addr    = addr_auth_address();
+
         strcpy(info.comp_name, LS_COMP);
         strcpy(info.protocol, LS_PROTO);
         info.pref_version = 1;
         info.pref_syntax  = PROTO_GPB;
-        info.addr         = ipcpi.dt_addr;
+        info.addr         = ls.addr;
 
         switch (pr) {
         case ROUTING_LINK_STATE:
