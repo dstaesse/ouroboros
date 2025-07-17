@@ -170,7 +170,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                 recv_msg = ipcp_msg__unpack(NULL, len, buf);
         else {
                 if (errno == EAGAIN && !dealloc) {
-                        int diff = ts_diff_ms(&tic, &toc);
+                        int diff = ts_diff_ms(&toc, &tic);
                         log_warn("IPCP %s timed out after %d ms.",
                                  str_ipcp_cmd(msg->code), diff);
                 }

@@ -60,10 +60,13 @@ int crypt_dh_pkp_create(void **   pkp,
 
 void crypt_dh_pkp_destroy(void * pkp)
 {
+        if (pkp == NULL)
+                return;
 #ifdef HAVE_OPENSSL
         openssl_ecdh_pkp_destroy(pkp);
 #else
         (void) pkp;
+
         return;
 #endif
 }
@@ -179,7 +182,7 @@ int crypt_load_privkey_file(const char * path,
 }
 
 int crypt_load_privkey_str(const char * str,
-                       void **      key)
+                           void **      key)
 {
         *key = NULL;
 
@@ -232,6 +235,8 @@ void crypt_free_key(void * key)
 int crypt_load_crt_file(const char * path,
                         void **      crt)
 {
+        assert(crt != NULL);
+
         *crt = NULL;
 
 #ifdef HAVE_OPENSSL
@@ -246,12 +251,29 @@ int crypt_load_crt_file(const char * path,
 int crypt_load_crt_str(const char * str,
                        void **      crt)
 {
+        assert(crt != NULL);
+
         *crt = NULL;
 
 #ifdef HAVE_OPENSSL
         return openssl_load_crt_str(str, crt);
 #else
         (void) str;
+
+        return 0;
+#endif
+}
+
+int crypt_load_crt_der(const buffer_t buf,
+                       void **        crt)
+{
+        assert(crt != NULL);
+#ifdef HAVE_OPENSSL
+        return openssl_load_crt_der(buf, crt);
+#else
+        *crt = NULL;
+
+        (void) buf;
 
         return 0;
 #endif
@@ -283,14 +305,31 @@ void crypt_free_crt(void * crt)
 #endif
 }
 
-int crypt_crt_str(void * crt,
-                  char * buf)
+int crypt_crt_str(const void * crt,
+                  char *       buf)
 {
 #ifdef HAVE_OPENSSL
         return openssl_crt_str(crt, buf);
 #else
         (void) crt;
         (void) buf;
+
+        return 0;
+#endif
+}
+
+int crypt_crt_der(const void * crt,
+                  buffer_t *   buf)
+{
+        assert(crt != NULL);
+        assert(buf != NULL);
+
+#ifdef HAVE_OPENSSL
+        return openssl_crt_der(crt, buf);
+#else
+        (void) crt;
+
+        clrbuf(*buf);
 
         return 0;
 #endif

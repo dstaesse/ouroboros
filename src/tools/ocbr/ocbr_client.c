@@ -129,7 +129,7 @@ int client_main(char * server,
 
                         ++seqnr;
 
-                        if (ts_diff_us(&start, &end) / MILLION >= duration)
+                        if (ts_diff_us(&end, &start) / MILLION >= duration)
                                 stop = true;
                 }
         } else { /* flood */
@@ -142,7 +142,7 @@ int client_main(char * server,
 
                         ++seqnr;
 
-                        if (ts_diff_us(&start, &end) / MILLION
+                        if (ts_diff_us(&end, &start) / MILLION
                             >= (long) duration)
                                 stop = true;
                 }
@@ -151,7 +151,7 @@ int client_main(char * server,
 
         clock_gettime(CLOCK_REALTIME, &end);
 
-        ms = ts_diff_ms(&start, &end);
+        ms = ts_diff_ms(&end, &start);
 
         printf("sent statistics: "
                "%9ld packets, %12ld bytes in %9d ms, %4.4f Mb/s\n",

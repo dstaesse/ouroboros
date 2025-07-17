@@ -31,16 +31,23 @@
 
 #include <assert.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-#define TPM_TIMEOUT 1000
+#define TPM_TIMEOUT      1000
 
 struct pthr_el {
         struct list_head next;
 
         bool             kill;
         bool             busy;
-
+        bool             wait;
+#ifdef CONFIG_OUROBOROS_DEBUG
+        struct timespec  start;
+        struct timespec  last;
+#endif
         pthread_t        thr;
 };
 
@@ -72,6 +79,10 @@ static void tpm_join(struct tpm * tpm)
 {
         struct list_head * p;
         struct list_head * h;
+#ifdef CONFIG_OUROBOROS_DEBUG
+        struct timespec now;
+        clock_gettime(CLOCK_REALTIME, &now);
+#endif
 
         list_for_each_safe(p, h, &tpm->pool) {
                 struct pthr_el * e = list_entry(p, struct pthr_el, next);
@@ -86,6 +97,21 @@ static void tpm_join(struct tpm * tpm)
 
         list_for_each_safe(p, h, &tpm->pool) {
                 struct pthr_el * e = list_entry(p, struct pthr_el, next);
+#ifdef CONFIG_OUROBOROS_DEBUG
+                time_t diff = ts_diff_ms(&now, &e->start) / 1000;
+                bool hung;
+                if (TPM_DEBUG_REPORT_INTERVAL > 0) {
+                        time_t ldiff = ts_diff_ms(&now, &e->last) / 1000;
+                        if(e->busy && ldiff > TPM_DEBUG_REPORT_INTERVAL) {
+                                e->last = now;
+                                printf("Thread %d:%lx running for %ld s.\n",
+                                       getpid(),e->thr, diff);
+                        }
+                }
+                hung = e->busy && !e->wait && diff > TPM_DEBUG_ABORT_TIMEOUT;
+                if (TPM_DEBUG_ABORT_TIMEOUT > 0 && hung)
+                        assert(false); /* coredump */
+#endif
                 if (e->kill) {
                         pthread_t thr = e->thr;
                         list_del(&e->next);
@@ -139,11 +165,9 @@ static int __tpm(struct tpm * tpm)
                         if (e == NULL)
                                 break;
 
-                        e->kill = false;
-                        e->busy = false;
+                        memset(e, 0, sizeof(*e));
 
-                        if (pthread_create(&e->thr, NULL,
-                                                tpm->func, tpm->o)) {
+                        if (pthread_create(&e->thr, NULL, tpm->func, tpm->o)) {
                                 free(e);
                                 break;
                         }
@@ -280,15 +304,37 @@ void tpm_begin_work(struct tpm * tpm)
 {
         struct pthr_el * e;
 
+#ifdef CONFIG_OUROBOROS_DEBUG
+        struct timespec now;
+        clock_gettime(CLOCK_REALTIME, &now);
+#endif
+
         pthread_mutex_lock(&tpm->mtx);
 
         e = tpm_pthr_el(tpm, pthread_self());
         if (e != NULL) {
                 e->busy = true;
                 ++tpm->wrk;
+#ifdef CONFIG_OUROBOROS_DEBUG
+                e->start = now;
+                e->last  = now;
+#endif
         }
 
         pthread_cond_signal(&tpm->cond);
+
+        pthread_mutex_unlock(&tpm->mtx);
+}
+
+void tpm_wait_work(struct tpm * tpm)
+{
+        struct pthr_el * e;
+
+        pthread_mutex_lock(&tpm->mtx);
+
+        e = tpm_pthr_el(tpm, pthread_self());
+        if (e != NULL)
+                e->wait = true;
 
         pthread_mutex_unlock(&tpm->mtx);
 }

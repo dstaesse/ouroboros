@@ -52,6 +52,10 @@ enum hash_algo {
 #define HASH_VAL128(hash128)                              \
         HASH_VAL64(hash128), HASH_VAL64(hash128 + 8)
 
+#define HASH_FMT192 HASH_FMT128 HASH_FMT64
+#define HASH_VAL192(hash192)                              \
+        HASH_VAL128(hash192), HASH_VAL64(hash192 + 16)
+
 #define HASH_FMT224 HASH_FMT128 HASH_FMT64 HASH_FMT32
 #define HASH_VAL224(hash224)                              \
         HASH_VAL128(hash224), HASH_VAL64(hash224 + 16),   \

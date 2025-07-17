@@ -66,7 +66,7 @@ void * cleaner_thread(void * o)
                 pthread_mutex_lock(&server.lock);
                 for (i = 0; i < OPERF_MAX_FLOWS; ++i)
                         if (fset_has(server.flows, i) &&
-                            ts_diff_ms(&server.times[i], &now)
+                            ts_diff_ms(&now, &server.times[i])
                             > server.timeout) {
                                 printf("Flow %d timed out.\n", i);
                                 fset_del(server.flows, i);

@@ -1771,8 +1771,7 @@ int reg_respond_alloc(struct flow_info * info,
         return -1;
 }
 
-int reg_prepare_flow_accept(struct flow_info * info,
-                            buffer_t *         pbuf)
+int reg_prepare_flow_accept(struct flow_info * info)
 {
         struct reg_flow * flow;
         int               ret;
@@ -1789,8 +1788,6 @@ int reg_prepare_flow_accept(struct flow_info * info,
         info->state = FLOW_ACCEPT_PENDING;
 
         ret = reg_flow_update(flow, info);
-
-        reg_flow_set_data(flow, pbuf);
 
         pthread_mutex_unlock(&reg.mtx);
 
@@ -1915,7 +1912,6 @@ int reg_respond_accept(struct flow_info * info,
                        buffer_t *         pbuf)
 {
         struct reg_flow * flow;
-        buffer_t          temp;
 
         assert(info != NULL);
         assert(info->state == FLOW_ALLOCATED);
@@ -1933,11 +1929,8 @@ int reg_respond_accept(struct flow_info * info,
 
         info->n_pid = flow->info.n_pid;
 
-        if (info->qs.cypher_s > 0) {
-                reg_flow_get_data(flow, &temp);
-                reg_flow_set_data(flow, pbuf);
-                *pbuf = temp;
-        }
+        reg_flow_set_data(flow, pbuf);
+        clrbuf(pbuf);
 
         if (reg_flow_update(flow, info) < 0) {
                 log_err("Failed to create flow structs.");

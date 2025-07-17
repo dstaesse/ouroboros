@@ -159,11 +159,11 @@ static int frct_rib_read(const char * path,
                 frcti->rto,
                 frcti->snd_cr.lwe,
                 frcti->snd_cr.rwe,
-                ts_diff_ns(&frcti->snd_cr.act, &now),
+                ts_diff_ns(&now, &frcti->snd_cr.act),
                 frcti->snd_cr.seqno,
                 frcti->rcv_cr.lwe,
                 frcti->rcv_cr.rwe,
-                ts_diff_ns(&frcti->rcv_cr.act, &now),
+                ts_diff_ns(&now, &frcti->rcv_cr.act),
                 frcti->rcv_cr.seqno,
                 frcti->n_rtx,
                 frcti->n_prb,
@@ -303,13 +303,13 @@ static void send_frct_pkt(struct frcti * frcti)
         ackno = frcti->rcv_cr.lwe;
         rwe   = frcti->rcv_cr.rwe;
 
-        diff = ts_diff_ns(&frcti->rcv_cr.act, &now);
+        diff = ts_diff_ns(&now, &frcti->rcv_cr.act);
         if (diff > frcti->a) {
                 pthread_rwlock_unlock(&frcti->lock);
                 return;
         }
 
-        diff = ts_diff_ns(&frcti->snd_cr.act, &now);
+        diff = ts_diff_ns(&now, &frcti->snd_cr.act);
         if (diff < TICTIME) {
                 pthread_rwlock_unlock(&frcti->lock);
                 return;
@@ -339,7 +339,7 @@ static struct frcti * frcti_create(int    fd,
 #ifdef PROC_FLOW_STATS
         char                frctstr[FRCT_NAME_STRLEN + 1];
 #endif
-        mpl *= BILLION;
+        mpl *= MILLION;
         a   *= BILLION;
         r   *= BILLION;
 
@@ -517,14 +517,14 @@ static bool __frcti_is_window_open(struct frcti * frcti)
                         frcti->t_rdvs = now;
                 } else {
                         time_t diff;
-                        diff = ts_diff_ns(&frcti->t_wnd, &now);
+                        diff = ts_diff_ns(&now, &frcti->t_wnd);
                         if (diff > MAX_RDV) {
                                 pthread_mutex_unlock(&frcti->mtx);
                                 pthread_rwlock_unlock(&frcti->lock);
                                 return false;
                         }
 
-                        diff = ts_diff_ns(&frcti->t_rdvs, &now);
+                        diff = ts_diff_ns(&now, &frcti->t_rdvs);
                         if  (diff > frcti->rdv) {
                                 frcti->t_rdvs = now;
                                 __send_rdv(frcti->fd);
@@ -580,13 +580,13 @@ static int __frcti_window_wait(struct frcti *    frcti,
 
                         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-                        diff = ts_diff_ns(&frcti->t_wnd, &now);
+                        diff = ts_diff_ns(&now, &frcti->t_wnd);
                         if (diff > MAX_RDV) {
                                 pthread_mutex_unlock(&frcti->mtx);
                                 return -ECONNRESET; /* write fails! */
                         }
 
-                        diff = ts_diff_ns(&frcti->t_rdvs, &now);
+                        diff = ts_diff_ns(&now, &frcti->t_rdvs);
                         if  (diff > frcti->rdv) {
                                 frcti->t_rdvs = now;
                                 __send_rdv(frcti->fd);
@@ -855,7 +855,7 @@ static void __frcti_rcv(struct frcti *       frcti,
                         if (!(pci->flags & FRCT_DATA))
                                 frcti->n_dak++;
 #endif
-                        rtt_estimator(frcti, ts_diff_ns(&frcti->t_probe, &now));
+                        rtt_estimator(frcti, ts_diff_ns(&now, &frcti->t_probe));
                         frcti->probe = false;
                 }
         }

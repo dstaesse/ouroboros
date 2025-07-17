@@ -40,6 +40,8 @@ void         tpm_stop(struct tpm * tpm);
 
 void         tpm_begin_work(struct tpm * tpm);
 
+void         tpm_wait_work(struct tpm * tpm);
+
 void         tpm_end_work(struct tpm * tpm);
 
 #endif /* OUROBOROS_LIB_TPM_H */

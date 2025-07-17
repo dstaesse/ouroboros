@@ -377,13 +377,13 @@ static void _flow_keepalive(struct flow * flow)
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        if (ts_diff_ns(&r_act, &now) > (int64_t) timeo * MILLION) {
+        if (ts_diff_ns(&now, &r_act) > (int64_t) timeo * MILLION) {
                 shm_rbuff_set_acl(flow->rx_rb, ACL_FLOWPEER);
                 shm_flow_set_notify(ai.fqset, flow_id, FLOW_PEER);
                 return;
         }
 
-        if (ts_diff_ns(&s_act, &now) > (int64_t) timeo * (MILLION >> 2)) {
+        if (ts_diff_ns(&now, &s_act) > (int64_t) timeo * (MILLION >> 2)) {
                 pthread_rwlock_unlock(&ai.lock);
 
                 flow_send_keepalive(flow, now);

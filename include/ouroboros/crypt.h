@@ -61,6 +61,9 @@ int                crypt_load_crt_file(const char * path,
 int                crypt_load_crt_str(const char * str,
                                       void **      crt);
 
+int                crypt_load_crt_der(buffer_t buf,
+                                      void **  crt);
+
 int                crypt_get_pubkey_crt(void *  crt,
                                         void ** pk);
 
@@ -80,8 +83,11 @@ int                crypt_cmp_key(const void * key1,
 
 void               crypt_free_key(void * key);
 
-int                crypt_crt_str(void * crt,
-                                 char * buf);
+int                crypt_crt_str(const void * crt,
+                                 char *       buf);
+
+int                crypt_crt_der(const void * crt,
+                                 buffer_t *   buf);
 
 int                crypt_check_crt_name(void *       crt,
                                         const char * name);

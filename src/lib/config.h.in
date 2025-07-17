@@ -29,21 +29,24 @@
 #define HAVE_ENCRYPTION
 #endif
 
-#define SYS_MAX_FLOWS       @SYS_MAX_FLOWS@
+#define SYS_MAX_FLOWS            @SYS_MAX_FLOWS@
 
-#cmakedefine                SHM_RBUFF_LOCKLESS
-#cmakedefine                SHM_RDRB_MULTI_BLOCK
-#cmakedefine                QOS_DISABLE_CRC
-#cmakedefine                HAVE_OPENSSL_RNG
+#cmakedefine                     SHM_RBUFF_LOCKLESS
+#cmakedefine                     SHM_RDRB_MULTI_BLOCK
+#cmakedefine                     QOS_DISABLE_CRC
+#cmakedefine                     HAVE_OPENSSL_RNG
 
-#define SHM_RBUFF_PREFIX    "@SHM_RBUFF_PREFIX@"
-#define SHM_LOCKFILE_NAME   "@SHM_LOCKFILE_NAME@"
-#define SHM_FLOW_SET_PREFIX "@SHM_FLOW_SET_PREFIX@"
-#define SHM_RDRB_NAME       "@SHM_RDRB_NAME@"
-#define SHM_RDRB_BLOCK_SIZE @SHM_RDRB_BLOCK_SIZE@
-#define SHM_BUFFER_SIZE     @SHM_BUFFER_SIZE@
-#define SHM_RBUFF_SIZE      @SHM_RBUFF_SIZE@
-#define FLOW_ALLOC_TIMEOUT  @FLOW_ALLOC_TIMEOUT@
+#define SHM_RBUFF_PREFIX         "@SHM_RBUFF_PREFIX@"
+#define SHM_LOCKFILE_NAME        "@SHM_LOCKFILE_NAME@"
+#define SHM_FLOW_SET_PREFIX      "@SHM_FLOW_SET_PREFIX@"
+#define SHM_RDRB_NAME            "@SHM_RDRB_NAME@"
+#define SHM_RDRB_BLOCK_SIZE       @SHM_RDRB_BLOCK_SIZE@
+#define SHM_BUFFER_SIZE           @SHM_BUFFER_SIZE@
+#define SHM_RBUFF_SIZE            @SHM_RBUFF_SIZE@
+#define FLOW_ALLOC_TIMEOUT        @FLOW_ALLOC_TIMEOUT@
+
+#define TPM_DEBUG_REPORT_INTERVAL @TPM_DEBUG_REPORT_INTERVAL@
+#define TPM_DEBUG_ABORT_TIMEOUT   @TPM_DEBUG_ABORT_TIMEOUT@
 
 #if defined(__linux__) || (defined(__MACH__) && !defined(__APPLE__))
 /* Avoid a bug in robust mutex implementation of glibc 2.25 */

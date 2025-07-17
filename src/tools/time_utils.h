@@ -53,17 +53,17 @@
 #include <sys/time.h>
 
 /* functions for timespecs */
-#define ts_diff_ns(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * BILLION     \
+#define ts_diff_ns(tx, t0) (((tx)->tv_sec - (t0)->tv_sec) * BILLION     \
                             + ((tx)->tv_nsec - (t0)->tv_nsec))
-#define ts_diff_us(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * MILLION     \
+#define ts_diff_us(tx, t0) (((tx)->tv_sec - (t0)->tv_sec) * MILLION     \
                             + ((tx)->tv_nsec - (t0)->tv_nsec) / 1000L)
-#define ts_diff_ms(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * 1000L       \
+#define ts_diff_ms(tx, t0) (((tx)->tv_sec - (t0)->tv_sec) * 1000L       \
                             + ((tx)->tv_nsec - (t0)->tv_nsec) / MILLION)
 
 /* functions for timevals are the same */
-#define tv_diff_us(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * MILLION     \
+#define tv_diff_us(tx, t0) (((tx)->tv_sec - (t0)->tv_sec) * MILLION     \
                             + ((tx)->tv_usec - (t0)->tv_usec) / 1000L)
-#define tv_diff_ms(t0, tx) (((tx)->tv_sec - (t0)->tv_sec) * 1000L       \
+#define tv_diff_ms(tx, t0) (((tx)->tv_sec - (t0)->tv_sec) * 1000L       \
                             + ((tx)->tv_usec - (t0)->tv_usec) / MILLION)
 
 /* functions for timespecs */

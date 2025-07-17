@@ -115,7 +115,6 @@ static int test_reg_allocate_flow_timeout(void)
 {
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_MS(1);
-        buffer_t        pbuf;
         buffer_t        rbuf = {NULL, 0};
 
         struct flow_info info = {
@@ -124,14 +123,6 @@ static int test_reg_allocate_flow_timeout(void)
         };
 
         TEST_START();
-
-        pbuf.data = (uint8_t *) strdup(TEST_DATA);;
-        if (pbuf.data == NULL) {
-                printf("Failed to strdup data.\n");
-                goto fail;
-        }
-
-        pbuf.len  = strlen((char *) pbuf.data) + 1;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -147,7 +138,7 @@ static int test_reg_allocate_flow_timeout(void)
                 goto fail;
         }
 
-        if (reg_prepare_flow_accept(&info, &pbuf) < 0) {
+        if (reg_prepare_flow_accept(&info) < 0) {
                 printf("Failed to prepare flow for accept.\n");
                 goto fail;
         }
@@ -162,12 +153,6 @@ static int test_reg_allocate_flow_timeout(void)
                 goto fail;
         }
 
-        if (pbuf.data == NULL) {
-                printf("Flow data was updated on timeout.");
-                goto fail;
-        }
-
-        freebuf(pbuf);
         reg_destroy_flow(info.id);
 
         if (reg.n_flows != 0) {
@@ -220,13 +205,6 @@ static void * test_flow_respond_accept(void * o)
 
         reg_respond_accept(info, &pbuf);
 
-        if (info->qs.cypher_s == 0) {
-                freebuf(pbuf);
-        } else if (strcmp((char *) pbuf.data, TEST_DATA) != 0) {
-                printf("Data was not passed correctly.\n");
-                goto fail;
-        }
-
         return (void *) 0;
  fail:
         return (void *) -1;
@@ -237,7 +215,6 @@ static int test_reg_accept_flow_success(void)
         pthread_t       thr;
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_S(1);
-        buffer_t        pbuf = {(uint8_t *) TEST_DATA, strlen(TEST_DATA)};
         buffer_t        rbuf  = {NULL, 0};
 
         struct flow_info info = {
@@ -267,7 +244,7 @@ static int test_reg_accept_flow_success(void)
                 goto fail;
         }
 
-        if (reg_prepare_flow_accept(&info, &pbuf) < 0) {
+        if (reg_prepare_flow_accept(&info) < 0) {
                 printf("Failed to prepare flow for accept.\n");
                 goto fail;
         }
@@ -332,7 +309,6 @@ static int test_reg_accept_flow_success_no_crypt(void)
         pthread_t       thr;
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_S(1);
-        buffer_t        pbuf = {(uint8_t *) TEST_DATA, strlen(TEST_DATA)};
         buffer_t        rbuf  = {NULL, 0};
 
         struct flow_info info = {
@@ -362,7 +338,7 @@ static int test_reg_accept_flow_success_no_crypt(void)
                 goto fail;
         }
 
-        if (reg_prepare_flow_accept(&info, &pbuf) < 0) {
+        if (reg_prepare_flow_accept(&info) < 0) {
                 printf("Failed to prepare flow for accept.\n");
                 goto fail;
         }
@@ -389,10 +365,7 @@ static int test_reg_accept_flow_success_no_crypt(void)
                 goto fail;
         }
 
-        if (strcmp((char *) rbuf.data, TEST_DATA) != 0) {
-                printf("Data was updated.\n");
-                goto fail;
-        }
+        freebuf(rbuf);
 
         n_1_info.state = FLOW_DEALLOCATED;
 
@@ -1177,7 +1150,7 @@ static void * test_call_flow_accept(void * o)
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
 
-        reg_prepare_flow_accept(&info, &pbuf);
+        reg_prepare_flow_accept(&info);
 
         if (reg_wait_flow_accepted(&info, &pbuf, &abstime) != -ETIMEDOUT) {
                 printf("Wait allocated did not timeout.\n");

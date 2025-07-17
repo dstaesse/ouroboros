@@ -36,7 +36,7 @@
 *   https://community.f5.com/kb/technicalarticles/
 */
 
-/* Root certificate for CA ca.unittest.o7s */
+/* Root certificate for CA ca2.unittest.o7s */
 static const char * root_ca_crt = \
 "-----BEGIN CERTIFICATE-----\n"
 "MIICiTCCAi+gAwIBAgIUe4iFIymeUTgutBrdvcxFihOVHnowCgYIKoZIzj0EAwIw\n"
@@ -55,7 +55,7 @@ static const char * root_ca_crt = \
 "JSTSWB29kFFiM9ZdMV7M/tiZH9nSz1M8XhsTIGk=\n"
 "-----END CERTIFICATE-----\n";
 
-/* Certificate for intermediary im.unittest.o7s used for signing */
+/* Certificate for intermediary im2.unittest.o7s used for signing */
 static const char * intermediate_ca_crt = \
 "-----BEGIN CERTIFICATE-----\n"
 "MIIChTCCAiqgAwIBAgICEAIwCgYIKoZIzj0EAwIwgZExCzAJBgNVBAYTAkJFMQww\n"
@@ -74,7 +74,7 @@ static const char * intermediate_ca_crt = \
 "NnkLn+73oMj8w4pXGLNKAkX0z7yPJ4QhwA==\n"
 "-----END CERTIFICATE-----\n";
 
-/* Server server-1.unittest.o7s private-public key pair */
+/* Server server-2.unittest.o7s private-public key pair */
 static const char * server_ec_pkp = \
 "-----BEGIN EC PRIVATE KEY-----\n"
 "MHcCAQEEIC13y+5jdKe80HBJD7WITpQamcn3rrkTX1r0v+JwSk4NoAoGCCqGSM49\n"
@@ -89,7 +89,7 @@ static const char * server_ec_pk = \
 "uhDhqqrEcBO5+eob2xyqEaNknIV/86724zPptGRahWz0rzW2PvNppJdNBg==\n"
 "-----END PUBLIC KEY-----\n";
 
-/* Valid signed server certificate for server-1.unittest.o7s, SHA2 */
+/* Valid signed server certificate for server-2.unittest.o7s */
 static const char * signed_server_crt = \
 "-----BEGIN CERTIFICATE-----\n"
 "MIIDgjCCAyigAwIBAgICEAIwCgYIKoZIzj0EAwIwWzELMAkGA1UEBhMCQkUxDDAK\n"

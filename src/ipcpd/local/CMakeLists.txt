@@ -13,8 +13,8 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(IPCP_LOCAL_TARGET ipcpd-local CACHE INTERNAL "")
-set(IPCP_LOCAL_MPL 2 CACHE STRING
-    "Default maximum packet lifetime for the Ethernet IPCPs, in seconds")
+set(IPCP_LOCAL_MPL 100 CACHE STRING
+    "Default maximum packet lifetime for the Ethernet IPCPs, in ms")
 
 set(LOCAL_SOURCES
   # Add source files here

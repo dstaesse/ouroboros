@@ -13,8 +13,8 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(IPCP_UNICAST_TARGET ipcpd-unicast CACHE INTERNAL "")
-set(IPCP_UNICAST_MPL 60 CACHE STRING
-    "Default maximum packet lifetime for the unicast IPCP, in seconds")
+set(IPCP_UNICAST_MPL 10000 CACHE STRING
+    "Default maximum packet lifetime for the unicast IPCP, in ms")
 
 protobuf_generate_c(DHT_PROTO_SRCS DHT_PROTO_HDRS dir/dht.proto)
 

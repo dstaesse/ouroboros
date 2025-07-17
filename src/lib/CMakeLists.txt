@@ -115,7 +115,7 @@ if (OPENSSL_FOUND)
     set(DISABLE_OPENSSL FALSE CACHE BOOL "Disable OpenSSL support")
     if (NOT DISABLE_OPENSSL)
       message(STATUS "OpenSSL support enabled")
-      set(HAVE_OPENSSL TRUE)
+      set(HAVE_OPENSSL TRUE CACHE INTERNAL "")
     else()
       message(STATUS "OpenSSL support disabled")
       unset(HAVE_OPENSSL)
@@ -234,6 +234,10 @@ set(ACK_WHEEL_SLOTS 256 CACHE STRING
   "Number of slots in the acknowledgment wheel, must be a power of 2")
 set(ACK_WHEEL_RESOLUTION 18 CACHE STRING
   "Minimum acknowledgment delay (ns), as a power to 2")
+set(TPM_DEBUG_REPORT_INTERVAL 0 CACHE STRING
+  "Interval at wich the TPM will report long running threads (s), 0 disables")
+set(TPM_DEBUG_ABORT_TIMEOUT 0 CACHE STRING
+  "TPM abort process after a thread reaches this timeout (s), 0 disables")
 
 if (HAVE_FUSE)
   set(PROC_FLOW_STATS TRUE CACHE BOOL

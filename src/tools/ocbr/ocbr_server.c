@@ -114,14 +114,14 @@ static void handle_flow(int fd)
                         bytes_read += count;
                 }
 
-                if (ts_diff_us(&alive, &now)
+                if (ts_diff_us(&now, &alive)
                     > server_settings.timeout * MILLION) {
                         printf("Test on flow %d timed out\n", fd);
                         stop = true;
                 }
 
-                if (stop || ts_diff_ms(&now, &iv_end) < 0) {
-                        long us = ts_diff_us(&iv_start, &now);
+                if (stop || ts_diff_ms(&now, &iv_end) > 0) {
+                        long us = ts_diff_us(&now, &iv_start);
                         printf("Flow %4d: %9ld packets (%12ld bytes) in %9ld ms"
                                " => %9.4f pps, %9.4f Mbps\n",
                                fd,

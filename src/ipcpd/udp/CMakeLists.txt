@@ -58,8 +58,8 @@ set(IPCP_UDP_RD_THR 3 CACHE STRING
   "Number of reader threads in UDP IPCP")
 set(IPCP_UDP_WR_THR 3 CACHE STRING
   "Number of writer threads in UDP IPCP")
-set(IPCP_UDP_MPL 60 CACHE STRING
-    "Default maximum packet lifetime for the UDP IPCP, in seconds")
+set(IPCP_UDP_MPL 5000 CACHE STRING
+    "Default maximum packet lifetime for the UDP IPCP, in ms")
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")

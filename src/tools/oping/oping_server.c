@@ -69,7 +69,7 @@ void * cleaner_thread(void * o)
                                 time_t diff;
 
                                 pthread_mutex_lock(&server.lock);
-                                diff = ts_diff_ms(&server.times[i], &now);
+                                diff = ts_diff_ms(&now, &server.times[i]);
                                 pthread_mutex_unlock(&server.lock);
 
                                 if (diff > deadline_ms) {

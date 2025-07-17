@@ -40,6 +40,7 @@
 #include <ouroboros/lockfile.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/pthread.h>
+#include <ouroboros/random.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/sockets.h>
@@ -50,6 +51,7 @@
 
 #include "irmd.h"
 #include "ipcp.h"
+#include "oap.h"
 #include "reg/reg.h"
 #include "configfile.h"
 
@@ -760,44 +762,26 @@ static void __cleanup_flow(void * flow)
 }
 
 static int flow_accept(struct flow_info * flow,
+                       buffer_t *         symmkey,
                        buffer_t *         data,
                        struct timespec *  abstime)
 {
-        uint8_t   buf[MSGBUFSZ];
-        buffer_t  lpk; /* local public key           */
-        buffer_t  rpk; /* remote public key          */
-        void *    pkp; /* my public/private key pair */
-        ssize_t   key_len;
-        uint8_t * s;
-        int       err;
+        struct oap_hdr  oap_hdr;        /* incoming request           */
+        struct oap_hdr  r_oap_hdr;      /* outgoing response          */
+        uint8_t         buf[MSGBUFSZ];  /* buffer for local ephkey    */
+        buffer_t        lpk = BUF_INIT; /* local ephemeral pubkey     */
+        int             err;
+        struct timespec now;
 
         /* piggyback of user data not yet implemented */
         assert(data != NULL && data->len == 0 && data->data == NULL);
+        assert(symmkey != NULL && symmkey->len == 0 && symmkey->data == NULL);
 
         if (!reg_has_proc(flow->n_pid)) {
                 log_err("Unknown process %d calling accept.", flow->n_pid);
                 err = -EINVAL;
-                goto fail;
+                goto fail_flow;
         }
-
-        s = malloc(SYMMKEYSZ);
-        if (s == NULL) {
-                log_err("Failed to malloc symmkey.");
-                err = -ENOMEM;
-                goto fail;
-        }
-
-        key_len = crypt_dh_pkp_create(&pkp, buf);
-        if (key_len < 0) {
-                log_err("Failed to generate key pair.");
-                err = -ECRYPT;
-                goto fail_pkp;
-        }
-
-        lpk.data = buf;
-        lpk.len  = (size_t) key_len;
-
-        log_dbg("Generated ephemeral keys for %d.", flow->n_pid);
 
         if (reg_create_flow(flow) < 0) {
                 log_err("Failed to create flow.");
@@ -805,20 +789,18 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_flow;
         }
 
-        if (reg_prepare_flow_accept(flow, &lpk) < 0) {
+        if (reg_prepare_flow_accept(flow) < 0) {
                 log_err("Failed to prepare accept.");
                 err = -EBADF;
                 goto fail_wait;
         }
 
+        log_dbg("Waiting for flow accept %d.", flow->id);
+
         pthread_cleanup_push(__cleanup_flow, flow);
-        pthread_cleanup_push(__cleanup_pkp, pkp);
-        pthread_cleanup_push(free, s);
 
-        err = reg_wait_flow_accepted(flow, &rpk, abstime);
+        err = reg_wait_flow_accepted(flow, &oap_hdr.hdr, abstime);
 
-        pthread_cleanup_pop(false);
-        pthread_cleanup_pop(false);
         pthread_cleanup_pop(false);
 
         if (err == -ETIMEDOUT) {
@@ -834,45 +816,96 @@ static int flow_accept(struct flow_info * flow,
 
         assert(err == 0);
 
-        if (flow->qs.cypher_s != 0) { /* crypto requested */
-                if (crypt_dh_derive(pkp, rpk, s) < 0) {
+        if (oap_hdr_decode(oap_hdr.hdr, &oap_hdr) < 0) {
+                log_err("Failed to decode OAP header.");
+                err = -EIPCP;
+                goto fail_oap_hdr;
+        }
+
+        clock_gettime(CLOCK_REALTIME, &now);
+
+        if (now.tv_sec - (time_t) (oap_hdr.timestamp / MILLION) > flow->mpl)
+                log_warn("Flow alloc time exceeds MPL by %zu ms.",
+                        now.tv_sec - oap_hdr.timestamp / MILLION);
+
+        if (flow->qs.cypher_s != 0) {     /* crypto requested           */
+                uint8_t * s;              /* symmetric encryption key   */
+                ssize_t   key_len;        /* length of local pubkey     */
+                void *    pkp = NULL;     /* ephemeral private key pair */
+
+                s = malloc(SYMMKEYSZ);
+                if (s == NULL) {
+                        log_err("Failed to malloc symmkey.");
+                        err = -ENOMEM;
+                        goto fail_keys;
+                }
+
+                key_len = crypt_dh_pkp_create(&pkp, buf);
+                if (key_len < 0) {
+                        free(s);
+                        log_err("Failed to generate key pair.");
+                        err = -ECRYPT;
+                        goto fail_keys;
+                }
+
+                lpk.data = buf;
+                lpk.len  = (size_t) key_len;
+
+                log_dbg("Generated ephemeral keys for %d.", flow->n_pid);
+
+                if (crypt_dh_derive(pkp, oap_hdr.eph, s) < 0) {
                         log_err("Failed to derive secret for %d.", flow->id);
+                        crypt_dh_pkp_destroy(pkp);
+                        free(s);
                         err = -ECRYPT;
                         goto fail_derive;
                 }
-                freebuf(rpk);
-                data->data = s;
-                data->len  = SYMMKEYSZ;
-                s= NULL;
-        } else {
-                clrbuf(lpk);
+
+                symmkey->data = s;
+                symmkey->len  = SYMMKEYSZ;
+
+                crypt_dh_pkp_destroy(pkp);
         }
 
-        if (ipcp_flow_alloc_resp(flow, 0, lpk) < 0) {
+        if (oap_hdr_init(oap_hdr.id, NULL, NULL, lpk, *data, &r_oap_hdr) < 0) {
+                log_err("Failed to create OAP header.");
+                err = -ENOMEM;
+                goto fail_r_oap_hdr;
+        }
+
+        if (ipcp_flow_alloc_resp(flow, 0, r_oap_hdr.hdr) < 0) {
                 log_err("Failed to respond to flow allocation.");
-                err = -EIPCP;
-                goto fail_alloc_resp;
+                goto fail_resp;
         }
 
-        crypt_dh_pkp_destroy(pkp);
-        free(s);
+        oap_hdr_fini(&oap_hdr);
+        oap_hdr_fini(&r_oap_hdr);
 
         return 0;
 
+ fail_r_oap_hdr:
+        freebuf(*symmkey);
  fail_derive:
-        freebuf(rpk);
         clrbuf(lpk);
+ fail_keys:
+        oap_hdr_fini(&oap_hdr);
+ fail_oap_hdr:
+        assert(lpk.data == NULL && lpk.len == 0);
         ipcp_flow_alloc_resp(flow, err, lpk);
- fail_alloc_resp:
-        flow->state = FLOW_NULL;
  fail_wait:
         reg_destroy_flow(flow->id);
  fail_flow:
-        crypt_dh_pkp_destroy(pkp);
- fail_pkp:
-        free(s);
- fail:
         return err;
+
+ fail_resp:
+        flow->state = FLOW_NULL;
+        oap_hdr_fini(&r_oap_hdr);
+        freebuf(*symmkey);
+        clrbuf(lpk);
+        oap_hdr_fini(&oap_hdr);
+        assert(lpk.data == NULL && lpk.len == 0);
+        reg_destroy_flow(flow->id);
+        return -EIPCP;
 }
 
 static int flow_join(struct flow_info * flow,
@@ -910,6 +943,7 @@ static int flow_join(struct flow_info * flow,
 
         reg_prepare_flow_alloc(flow);
 
+
         if (ipcp_flow_join(flow, hash)) {
                 log_err("Flow join with layer %s failed.", dst);
                 err = -ENOTALLOC;
@@ -935,6 +969,7 @@ static int flow_join(struct flow_info * flow,
                 goto fail_alloc;
         }
 
+        assert(pbuf.data == NULL && pbuf.len == 0);
         assert(err == 0);
 
         freebuf(hash);
@@ -1008,20 +1043,33 @@ static int get_ipcp_by_dst(const char *     dst,
 
 static int flow_alloc(struct flow_info * flow,
                       const char *       dst,
+                      buffer_t *         symmkey,
                       buffer_t *         data,
                       struct timespec *  abstime)
 {
-        uint8_t   buf[MSGBUFSZ];
-        buffer_t  lpk ={NULL, 0}; /* local public key           */
-        buffer_t  rpk;            /* remote public key          */
-        void *    pkp = NULL;     /* my public/private key pair */
-        uint8_t * s = NULL;
-        buffer_t  hash;
-        int       err;
+        struct oap_hdr oap_hdr;        /* outgoing request           */
+        struct oap_hdr r_oap_hdr;      /* incoming response          */
+        uint8_t        buf[MSGBUFSZ];  /* buffer for local ephkey    */
+        buffer_t       lpk = BUF_INIT; /* local ephemeral pubkey     */
+        void *         pkp = NULL;     /* ephemeral private key pair */
+        uint8_t *      s = NULL;       /* symmetric key              */
+        buffer_t       hash;
+        uint8_t        idbuf[OAP_ID_SIZE];
+        buffer_t       id;
+        int            err;
+
         /* piggyback of user data not yet implemented */
         assert(data != NULL && data->len == 0 && data->data == NULL);
+        assert(symmkey != NULL && symmkey->len == 0 && symmkey->data == NULL);
 
-        log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
+        if (random_buffer(idbuf, OAP_ID_SIZE) < 0) {
+                log_err("Failed to generate ID.");
+                err = -EIRMD;
+                goto fail_id;
+        }
+
+        id.data = idbuf;
+        id.len  = OAP_ID_SIZE;
 
         if (flow->qs.cypher_s > 0) {
                 ssize_t key_len;
@@ -1046,6 +1094,14 @@ static int flow_alloc(struct flow_info * flow,
                 log_dbg("Generated ephemeral keys for %d.", flow->n_pid);
         }
 
+        if (oap_hdr_init(id, NULL, NULL, lpk, *data, &oap_hdr) < 0) {
+                log_err("Failed to create OAP header.");
+                err = -ENOMEM;
+                goto fail_oap_hdr;
+        }
+
+        log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
+
         if (reg_create_flow(flow) < 0) {
                 log_err("Failed to create flow.");
                 err = -EBADF;
@@ -1060,7 +1116,7 @@ static int flow_alloc(struct flow_info * flow,
 
         reg_prepare_flow_alloc(flow);
 
-        if (ipcp_flow_alloc(flow, hash, lpk)) {
+        if (ipcp_flow_alloc(flow, hash, oap_hdr.hdr)) {
                 log_err("Flow allocation %d failed.", flow->id);
                 err = -ENOTALLOC;
                 goto fail_alloc;
@@ -1071,7 +1127,7 @@ static int flow_alloc(struct flow_info * flow,
         pthread_cleanup_push(free, hash.data);
         pthread_cleanup_push(free, s);
 
-        err = reg_wait_flow_allocated(flow, &rpk, abstime);
+        err = reg_wait_flow_allocated(flow, &r_oap_hdr.hdr, abstime);
 
         pthread_cleanup_pop(false);
         pthread_cleanup_pop(false);
@@ -1091,37 +1147,57 @@ static int flow_alloc(struct flow_info * flow,
 
         assert(err == 0);
 
+        if (oap_hdr_decode(r_oap_hdr.hdr, &r_oap_hdr) < 0) {
+                log_err("Failed to decode OAP header.");
+                err = -EIPCP;
+                goto fail_r_oap_hdr;
+        }
+
+        if (memcmp(r_oap_hdr.id.data, oap_hdr.id.data, r_oap_hdr.id.len) != 0) {
+                log_err("OAP ID mismatch in flow allocation.");
+                err = -EIPCP;
+                goto fail_r_oap_hdr;
+        }
+
         if (flow->qs.cypher_s != 0) { /* crypto requested */
-                if (crypt_dh_derive(pkp, rpk, s) < 0) {
+                if (crypt_dh_derive(pkp, r_oap_hdr.eph, s) < 0) {
                         log_err("Failed to derive secret for %d.", flow->id);
                         err = -ECRYPT;
-                        goto fail_derive;
+                        goto fail_r_oap_hdr;
                 }
                 crypt_dh_pkp_destroy(pkp);
-                freebuf(rpk);
-                data->data = s;
-                data->len  = SYMMKEYSZ;
+
+                symmkey->data = s;
+                symmkey->len  = SYMMKEYSZ;
                 s = NULL;
         }
+
+        oap_hdr_fini(&r_oap_hdr);
+        oap_hdr_fini(&oap_hdr);
+
+        /* TODO: piggyback user data if needed */
 
         freebuf(hash);
         free(s);
 
         return 0;
 
- fail_derive:
-        freebuf(rpk);
+ fail_r_oap_hdr:
         flow->state = FLOW_DEALLOCATED;
+        oap_hdr_fini(&r_oap_hdr);
  fail_alloc:
         freebuf(hash);
  fail_ipcp:
         reg_destroy_flow(flow->id);
  fail_flow:
-        if (flow->qs.cypher_s > 0)
-               crypt_dh_pkp_destroy(pkp);
+        oap_hdr_fini(&oap_hdr);
+ fail_oap_hdr:
+        crypt_dh_pkp_destroy(pkp);
  fail_pkp:
         free(s);
  fail_malloc:
+        clrbuf(id);
+ fail_id:
         return err;
 }
 
@@ -1325,6 +1401,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
         int                res;
         irm_msg_t *        ret_msg;
         buffer_t           data;
+        buffer_t           symmkey = BUF_INIT;;
 
         memset(&flow, 0, sizeof(flow));
 
@@ -1421,17 +1498,21 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 res = name_unreg(msg->name, msg->pid);
                 break;
         case IRM_MSG_CODE__IRM_FLOW_ACCEPT:
+                tpm_wait_work(irmd.tpm);
                 data.len  = msg->pk.len;
                 data.data = msg->pk.data;
                 msg->has_pk = false;
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
                 flow = flow_info_msg_to_s(msg->flow_info);
-                res = flow_accept(&flow, &data, abstime);
+                res = flow_accept(&flow, &symmkey, &data, abstime);
                 if (res == 0) {
                         ret_msg->flow_info    = flow_info_s_to_msg(&flow);
-                        ret_msg->has_symmkey  = data.len != 0;
-                        ret_msg->symmkey.data = data.data;
-                        ret_msg->symmkey.len  = data.len;
+                        ret_msg->has_symmkey  = symmkey.len != 0;
+                        ret_msg->symmkey.data = symmkey.data;
+                        ret_msg->symmkey.len  = symmkey.len;
+                        ret_msg->has_pk       = data.len != 0;
+                        ret_msg->pk.data      = data.data;
+                        ret_msg->pk.len       = data.len;
                 }
                 break;
         case IRM_MSG_CODE__IRM_FLOW_ALLOC:
@@ -1441,12 +1522,15 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
                 flow = flow_info_msg_to_s(msg->flow_info);
                 abstime = abstime == NULL ? &max : abstime;
-                res = flow_alloc(&flow, msg->dst, &data, abstime);
+                res = flow_alloc(&flow, msg->dst, &symmkey, &data, abstime);
                 if (res == 0) {
                         ret_msg->flow_info    = flow_info_s_to_msg(&flow);
-                        ret_msg->has_symmkey  = data.len != 0;
-                        ret_msg->symmkey.data = data.data;
-                        ret_msg->symmkey.len  = data.len;
+                        ret_msg->has_symmkey  = symmkey.len != 0;
+                        ret_msg->symmkey.data = symmkey.data;
+                        ret_msg->symmkey.len  = symmkey.len;
+                        ret_msg->has_pk       = data.len != 0;
+                        ret_msg->pk.data      = data.data;
+                        ret_msg->pk.len       = data.len;
                 }
                 break;
         case IRM_MSG_CODE__IRM_FLOW_JOIN:

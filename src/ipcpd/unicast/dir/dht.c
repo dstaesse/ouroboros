@@ -439,6 +439,12 @@ static void cancel_req_destroy(void * o)
 
 static void kad_req_destroy(struct kad_req * req)
 {
+        struct timespec t;
+        struct timespec intv = TIMESPEC_INIT_S(20);
+
+        clock_gettime(PTHREAD_COND_CLOCK, &t);
+        ts_add(&t, &intv, &t);
+
         assert(req);
 
         pthread_mutex_lock(&req->lock);
@@ -464,7 +470,7 @@ static void kad_req_destroy(struct kad_req * req)
         pthread_cleanup_push(cancel_req_destroy, req);
 
         while (req->state != REQ_NULL && req->state != REQ_DONE)
-                pthread_cond_wait(&req->cond, &req->lock);
+                pthread_cond_timedwait(&req->cond, &req->lock, &t);
 
         pthread_cleanup_pop(true);
 }
@@ -497,7 +503,7 @@ static int kad_req_wait(struct kad_req * req,
         case REQ_DESTROY:
                 ret = -1;
                 req->state = REQ_NULL;
-                pthread_cond_signal(&req->cond);
+                pthread_cond_broadcast(&req->cond);
                 break;
         case REQ_PENDING: /* ETIMEDOUT */
         case REQ_RESPONSE:
@@ -518,7 +524,7 @@ static void kad_req_respond(struct kad_req * req)
         pthread_mutex_lock(&req->lock);
 
         req->state = REQ_RESPONSE;
-        pthread_cond_signal(&req->cond);
+        pthread_cond_broadcast(&req->cond);
 
         pthread_mutex_unlock(&req->lock);
 }
@@ -886,10 +892,9 @@ static void lookup_update(struct dht *    dht,
                         struct contact * d;
                         d = list_last_entry(&lu->contacts,
                                             struct contact, next);
-                        list_del(&d->next);
-                        assert(lu->contacts.prv != &d->next);
-                        contact_destroy(d);
                         list_add_tail(&c->next, p);
+                        list_del(&d->next);
+                        contact_destroy(d);
                         mod = true;
                 }
         }

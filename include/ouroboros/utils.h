@@ -33,6 +33,7 @@
 #define ABS(a)   ((a) > 0 ? (a) : -(a))
 #define clrbuf(buf) do { memset(&(buf), 0, sizeof(buf)); } while (0);
 #define freebuf(buf) do { free((buf).data); clrbuf(buf); } while (0);
+#define BUF_INIT { NULL, 0 }
 
 typedef struct {
         uint8_t * data;

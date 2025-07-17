@@ -133,7 +133,7 @@ void * writer(void * o)
         clock_gettime(CLOCK_REALTIME, &start);
         clock_gettime(CLOCK_REALTIME, &now);
 
-        while (!stop && ts_diff_ms(&start, &now) < client.duration) {
+        while (!stop && ts_diff_ms(&now, &start) > client.duration) {
                 if (!client.flood) {
                         clock_gettime(CLOCK_REALTIME, &now);
                         ts_add(&now, &intv, &end);
@@ -230,10 +230,10 @@ int client_main(void)
                 printf("%ld received, ", client.rcvd);
                 printf("%ld%% packet loss, ", client.sent == 0 ? 0 :
                        100 - ((100 * client.rcvd) / client.sent));
-                printf("time: %.3f ms, ", ts_diff_us(&tic, &toc) / 1000.0);
+                printf("time: %.3f ms, ", ts_diff_us(&toc, &tic) / 1000.0);
                 printf("bandwidth: %.3lf Mb/s.\n",
                        (client.rcvd * client.size * 8)
-                       / (double) ts_diff_us(&tic, &toc));
+                       / (double) ts_diff_us(&toc, &tic));
         }
 
         flow_dealloc(fd);

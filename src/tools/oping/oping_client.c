@@ -100,7 +100,7 @@ void * reader(void * o)
                 sent.tv_sec = msg->tv_sec;
                 sent.tv_nsec = msg->tv_nsec;
 
-                ms = ts_diff_us(&sent, &now) / 1000.0;
+                ms = ts_diff_us(&now, &sent) / 1000.0;
 
                 if (id < exp_id)
                         ++client.ooo;
@@ -256,7 +256,7 @@ static int client_main(void)
         printf("%zd out-of-order, ", client.ooo);
         printf("%.0lf%% packet loss, ", client.sent == 0 ? 0 :
                ceil(100 - (100 * (client.rcvd / (float) client.sent))));
-        printf("time: %.3f ms\n", ts_diff_us(&tic, &toc) / 1000.0);
+        printf("time: %.3f ms\n", ts_diff_us(&toc, &tic) / 1000.0);
 
         if (client.rcvd > 0) {
                 printf("rtt min/avg/max/mdev = %.3f/%.3f/%.3f/",

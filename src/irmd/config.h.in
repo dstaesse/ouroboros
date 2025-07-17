@@ -66,6 +66,7 @@
 
 #cmakedefine IRMD_KILL_ALL_PROCESSES
 #cmakedefine HAVE_LIBGCRYPT
+#cmakedefine HAVE_OPENSSL
 
 #define O7S_ASCII_ART                                                          \
 "[0m\n"                                                                       \

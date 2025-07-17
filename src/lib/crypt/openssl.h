@@ -57,6 +57,9 @@ int     openssl_load_crt_file(const char * path,
 int     openssl_load_crt_str(const char * str,
                              void **      crt);
 
+int     openssl_load_crt_der(buffer_t buf,
+                             void **  crt);
+
 int     openssl_get_pubkey_crt(void *  crt,
                                void ** pk);
 
@@ -82,8 +85,11 @@ void    openssl_free_key(void * key);
 int     openssl_check_crt_name(void *       crt,
                                const char * name);
 
-int     openssl_crt_str(void * crt,
-                        char * str);
+int     openssl_crt_str(const void * crt,
+                        char *       str);
+
+int     openssl_crt_der(const void * crt,
+                        buffer_t *   buf);
 
 void *  openssl_auth_create_store(void);
 

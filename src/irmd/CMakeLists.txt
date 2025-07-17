@@ -71,6 +71,7 @@ set(SOURCE_FILES
   ipcp.c
   configfile.c
   main.c
+  oap.c
   reg/flow.c
   reg/ipcp.c
   reg/proc.c
@@ -95,6 +96,5 @@ endif ()
 
 install(TARGETS irmd RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
-# Enable once irmd has tests
-#add_subdirectory(tests)
 add_subdirectory(reg)
+add_subdirectory(tests)

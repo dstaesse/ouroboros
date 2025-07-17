@@ -159,7 +159,7 @@ ssize_t openssl_ecdh_pkp_create(void **   pkp,
         if (__openssl_ecdh_gen_key(pkp) < 0)
                 goto fail_key;
 
-        pos = pk; /* i2d_PUBKEY increments the pointer, don't use buf! */
+        pos = pk; /* i2d_PUBKEY increments the pointer, don't use pk! */
         len = i2d_PUBKEY(*pkp, &pos);
         if (len < 0)
                 goto fail_pubkey;
@@ -388,6 +388,28 @@ int openssl_load_crt_str(const char * str,
         return -1;
 }
 
+int openssl_load_crt_der(buffer_t buf,
+                         void **  crt)
+{
+        const uint8_t * p;
+        X509 *          xcrt;
+
+        assert(crt != NULL);
+
+        p = buf.data;
+
+        xcrt = d2i_X509(NULL, &p, buf.len);
+        if (xcrt == NULL)
+                goto fail_crt;
+
+        *crt = (void *) xcrt;
+
+        return 0;
+ fail_crt:
+        *crt = NULL;
+        return -1;
+}
+
 int openssl_get_pubkey_crt(void *  crt,
                            void ** key)
 {
@@ -578,8 +600,8 @@ int openssl_check_crt_name(void *       crt,
         return -1;
 }
 
-int openssl_crt_str(void * crt,
-                    char * str)
+int openssl_crt_str(const void * crt,
+                    char *       str)
 {
         BIO *  bio;
         X509 * xcrt;
@@ -607,6 +629,28 @@ int openssl_crt_str(void * crt,
  fail_bio:
         return -1;
 }
+
+int openssl_crt_der(const void * crt,
+                    buffer_t *   buf)
+{
+        int len;
+
+        assert(crt != NULL);
+        assert(buf != NULL);
+
+        len = i2d_X509((X509 *) crt, &buf->data);
+        if (len < 0)
+                goto fail_der;
+
+        buf->len = (size_t) len;
+
+        return 0;
+
+ fail_der:
+        clrbuf(*buf);
+        return -1;
+}
+
 
 void * openssl_auth_create_store(void)
 {

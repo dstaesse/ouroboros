@@ -3,6 +3,8 @@ get_filename_component(src_folder "${tmp}" NAME)
 
 create_test_sourcelist(${src_folder}_tests test_suite.c
   # Add new tests here
+  irm_test.c
+  oap_test.c
 )
 
 add_executable(${src_folder}_test EXCLUDE_FROM_ALL ${${src_folder}_tests})
@@ -21,3 +23,5 @@ foreach(test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
   add_test(irmd/${test_name} ${C_TEST_PATH}/${src_folder}_test ${test_name})
 endforeach(test)
+
+set_property(TEST irmd/oap_test PROPERTY SKIP_RETURN_CODE 1)
