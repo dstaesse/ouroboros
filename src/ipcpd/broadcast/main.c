@@ -207,7 +207,7 @@ static int broadcast_ipcp_join(int             fd,
 {
         struct conn conn;
         time_t      mpl = IPCP_BROADCAST_MPL;
-        buffer_t    data = {NULL, 0};
+        buffer_t    data = {0, NULL};
 
         (void) qs;
 

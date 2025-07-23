@@ -920,7 +920,7 @@ static int flow_join(struct flow_info * flow,
         struct ipcp_info  ipcp;
         struct layer_info layer;
         buffer_t          hash;
-        buffer_t          pbuf = {NULL, 0}; /* nothing to piggyback */
+        buffer_t          pbuf = {0, NULL}; /* nothing to piggyback */
         int               err;
 
         log_info("Allocating flow for %d to %s.", flow->n_pid, dst);

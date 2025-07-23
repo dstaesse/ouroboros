@@ -232,7 +232,7 @@ static int test_flow_data(void)
 
         char * data;
         buffer_t buf;
-        buffer_t rcv = {NULL, 0};
+        buffer_t rcv = {0, NULL};
 
         TEST_START();
 

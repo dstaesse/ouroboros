@@ -115,7 +115,7 @@ static int test_reg_allocate_flow_timeout(void)
 {
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_MS(1);
-        buffer_t        rbuf = {NULL, 0};
+        buffer_t        rbuf = {0, NULL};
 
         struct flow_info info = {
                 .n_pid = TEST_PID,
@@ -173,7 +173,7 @@ static int test_reg_allocate_flow_timeout(void)
 static void * test_flow_respond_alloc(void * o)
 {
         struct flow_info * info = (struct flow_info *) o;
-        buffer_t           pbuf = {NULL, 0};
+        buffer_t           pbuf = {0, NULL};
 
         if (info->state == FLOW_ALLOCATED) {
                 pbuf.data = (uint8_t *) strdup(TEST_DATA2);
@@ -215,7 +215,7 @@ static int test_reg_accept_flow_success(void)
         pthread_t       thr;
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_S(1);
-        buffer_t        rbuf  = {NULL, 0};
+        buffer_t        rbuf  = {0, NULL};
 
         struct flow_info info = {
                 .n_pid = TEST_PID,
@@ -309,7 +309,7 @@ static int test_reg_accept_flow_success_no_crypt(void)
         pthread_t       thr;
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_S(1);
-        buffer_t        rbuf  = {NULL, 0};
+        buffer_t        rbuf  = {0, NULL};
 
         struct flow_info info = {
                 .n_pid = TEST_PID,
@@ -398,7 +398,7 @@ static int test_reg_accept_flow_success_no_crypt(void)
 
 static int test_reg_allocate_flow_fail(void)
 {
-        buffer_t        buf   = {NULL, 0};
+        buffer_t        buf   = {0, NULL};
         pthread_t       thr;
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_S(1);
@@ -1118,7 +1118,7 @@ static void * test_call_flow_accept(void * o)
 {
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_MS(1);
-        buffer_t        pbuf = {NULL, 0};
+        buffer_t        pbuf = {0, NULL};
 
         struct proc_info pinfo = {
                 .pid =  TEST_PID,

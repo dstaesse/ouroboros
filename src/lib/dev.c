@@ -227,7 +227,7 @@ static enum flow_state flow_wait_assign(int flow_id)
 static int proc_announce(const char * prog)
 {
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         int              err;
 
         if (proc_announce__irm_req_ser(&msg, prog) < 0)
@@ -244,7 +244,7 @@ static int proc_announce(const char * prog)
 static void proc_exit(void)
 {
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
 
         if (proc_exit__irm_req_ser(&msg) < 0)
                 return;
@@ -826,7 +826,7 @@ int flow_accept(qosspec_t *             qs,
 {
         struct flow_info flow;
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         buffer_t         sk;
         int              fd;
         int              err;
@@ -867,7 +867,7 @@ int flow_alloc(const char *            dst,
 {
         struct flow_info flow;
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         buffer_t         sk; /* symmetric key */
         int              fd;
         int              err;
@@ -909,7 +909,7 @@ int flow_join(const char *            dst,
 {
         struct flow_info flow;
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         int              fd;
         int              err;
 
@@ -950,7 +950,7 @@ int flow_dealloc(int fd)
         struct flow_info info;
         uint8_t          pkt[PKT_BUF_LEN];
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         struct timespec  tic   = TIMESPEC_INIT_NS(TICTIME);
         struct timespec  timeo = TIMESPEC_INIT_S(0);
         struct flow *    flow;
@@ -1024,7 +1024,7 @@ int ipcp_flow_dealloc(int fd)
 {
         struct flow_info info;
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         struct flow *    flow;
         int              err;
 
@@ -1849,7 +1849,7 @@ int np1_flow_resp(int flow_id)
 int ipcp_create_r(const struct ipcp_info * info)
 {
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         int              err;
 
         if (ipcp_create_r__irm_req_ser(&msg,info) < 0)
@@ -1869,7 +1869,7 @@ int ipcp_flow_req_arr(const buffer_t * dst,
 {
         struct flow_info flow;
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         int              err;
 
         memset(&flow, 0, sizeof(flow));
@@ -1906,7 +1906,7 @@ int ipcp_flow_alloc_reply(int              fd,
 {
         struct flow_info flow;
         uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {buf, SOCK_BUF_SIZE};
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
         int              err;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
