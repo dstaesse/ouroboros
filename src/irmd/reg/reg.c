@@ -848,11 +848,11 @@ static int __get_ipcp_info(ipcp_list_msg_t ** msg,
 
         (*msg)->name = strdup(ipcp->info.name);
         if ((*msg)->name == NULL)
-                goto fail_name;
+                goto fail_msg;
 
         (*msg)->layer = strdup(ipcp->layer.name);
         if ((*msg)->layer == NULL)
-                goto fail_layer;
+                goto fail_msg;
 
         (*msg)->pid       = ipcp->info.pid;
         (*msg)->type      = ipcp->info.type;
@@ -860,10 +860,8 @@ static int __get_ipcp_info(ipcp_list_msg_t ** msg,
 
         return 0;
 
- fail_layer:
-        free((*msg)->name);
- fail_name:
-        free(*msg);
+ fail_msg:
+        ipcp_list_msg__free_unpacked(*msg, NULL);
         *msg = NULL;
  fail:
         return -1;
@@ -876,10 +874,8 @@ int reg_list_ipcps(ipcp_list_msg_t *** ipcps)
 
         pthread_mutex_lock(&reg.mtx);
 
-        if (reg.n_ipcps == 0) {
-                *ipcps = NULL;
+        if (reg.n_ipcps == 0)
                 goto finish;
-        }
 
         *ipcps = malloc(reg.n_ipcps * sizeof(**ipcps));
         if (*ipcps == NULL) {
@@ -889,25 +885,23 @@ int reg_list_ipcps(ipcp_list_msg_t *** ipcps)
 
         list_for_each(p, &reg.ipcps) {
                 struct reg_ipcp * entry;
+                log_dbg("Creating ipcp list info %d.", i);
                 entry = list_entry(p, struct reg_ipcp, next);
-                if (__get_ipcp_info(&((*ipcps)[i]), entry) < 0) {
+                if (__get_ipcp_info(&(*ipcps)[i], entry) < 0) {
                         log_err("Failed to create ipcp list info.");
                         goto fail;
                 }
 
-                ++i;
+                i++;
         }
-
-        assert(i == (int) reg.n_ipcps);
  finish:
         pthread_mutex_unlock(&reg.mtx);
 
         return i;
 
  fail:
-        while (i > 0)
-                ipcp_list_msg__free_unpacked((*ipcps)[--i], NULL);
-
+        while (i-- > 0)
+                ipcp_list_msg__free_unpacked((*ipcps)[i], NULL);
         free(*ipcps);
  fail_malloc:
         pthread_mutex_unlock(&reg.mtx);
@@ -1004,14 +998,14 @@ static int __get_name_info(name_info_msg_t ** msg,
 
         (*msg)->name = strdup(n->info.name);
         if ((*msg)->name == NULL)
-                goto fail_name;
+                goto fail_msg;
 
         (*msg)->pol_lb = n->info.pol_lb;
 
         return 0;
 
- fail_name:
-        free(*msg);
+ fail_msg:
+        name_info_msg__free_unpacked(*msg, NULL);
         *msg = NULL;
  fail:
         return -1;
@@ -1036,24 +1030,21 @@ int reg_list_names(name_info_msg_t *** names)
         list_for_each(p, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
-                if (__get_name_info(&((*names)[i]), entry) < 0) {
+                if (__get_name_info(&(*names)[i], entry) < 0) {
                         log_err("Failed to create name list info.");
                         goto fail;
                 }
 
-                ++i;
+                i++;
         }
-
-        assert(i == (int) reg.n_names);
  finish:
         pthread_mutex_unlock(&reg.mtx);
 
         return i;
 
  fail:
-        while (i > 0)
-                name_info_msg__free_unpacked((*names)[--i], NULL);
-
+        while (i-- > 0)
+                name_info_msg__free_unpacked((*names)[i], NULL);
         free(*names);
  fail_malloc:
         pthread_mutex_unlock(&reg.mtx);

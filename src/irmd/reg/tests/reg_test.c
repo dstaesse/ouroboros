@@ -115,7 +115,7 @@ static int test_reg_allocate_flow_timeout(void)
 {
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_MS(1);
-        buffer_t        rbuf = {0, NULL};
+        buffer_t        rbuf = BUF_INIT;
 
         struct flow_info info = {
                 .n_pid = TEST_PID,
@@ -173,7 +173,7 @@ static int test_reg_allocate_flow_timeout(void)
 static void * test_flow_respond_alloc(void * o)
 {
         struct flow_info * info = (struct flow_info *) o;
-        buffer_t           pbuf = {0, NULL};
+        buffer_t           pbuf = BUF_INIT;
 
         if (info->state == FLOW_ALLOCATED) {
                 pbuf.data = (uint8_t *) strdup(TEST_DATA2);
@@ -215,7 +215,7 @@ static int test_reg_accept_flow_success(void)
         pthread_t       thr;
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_S(1);
-        buffer_t        rbuf  = {0, NULL};
+        buffer_t        rbuf  = BUF_INIT;
 
         struct flow_info info = {
                 .n_pid = TEST_PID,
@@ -309,7 +309,7 @@ static int test_reg_accept_flow_success_no_crypt(void)
         pthread_t       thr;
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_S(1);
-        buffer_t        rbuf  = {0, NULL};
+        buffer_t        rbuf  = BUF_INIT;
 
         struct flow_info info = {
                 .n_pid = TEST_PID,
@@ -398,7 +398,7 @@ static int test_reg_accept_flow_success_no_crypt(void)
 
 static int test_reg_allocate_flow_fail(void)
 {
-        buffer_t        buf   = {0, NULL};
+        buffer_t        buf   = BUF_INIT;
         pthread_t       thr;
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_S(1);
@@ -466,15 +466,15 @@ static int test_reg_allocate_flow_fail(void)
 }
 
 static int test_reg_flow(void) {
-        int ret = 0;
+        int rc = 0;
 
-        ret |= test_reg_create_flow();
-        ret |= test_reg_allocate_flow_timeout();
-        ret |= test_reg_accept_flow_success();
-        ret |= test_reg_accept_flow_success_no_crypt();
-        ret |= test_reg_allocate_flow_fail();
+        rc |= test_reg_create_flow();
+        rc |= test_reg_allocate_flow_timeout();
+        rc |= test_reg_accept_flow_success();
+        rc |= test_reg_accept_flow_success_no_crypt();
+        rc |= test_reg_allocate_flow_fail();
 
-        return ret;
+        return rc;
 }
 
 static int test_reg_create_ipcp(void)
@@ -522,6 +522,60 @@ static int test_reg_create_ipcp(void)
         TEST_SUCCESS();
 
         return TEST_RC_SUCCESS;
+ fail:
+        REG_TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_rest_reg_list_ipcps(void)
+{
+        ipcp_list_msg_t ** ipcps;
+        int                i;
+        ssize_t            len;
+
+        TEST_START();
+
+        if (reg_init() < 0) {
+                printf("Failed to init registry.\n");
+                goto fail;
+        }
+
+        for (i = 0; i < 10; i++) {
+                struct ipcp_info info = {
+                        .pid   = TEST_PID + i,
+                        .state = IPCP_BOOT /* set by spawn_ipcp */
+                };
+
+                sprintf(info.name, "%s%d", TEST_IPCP, i);
+
+                if (reg_create_ipcp(&info) < 0) {
+                        printf("Failed to create ipcp %d.\n", i);
+                        goto fail;
+                }
+        }
+
+        len = reg_list_ipcps(&ipcps);
+        if (len < 0) {
+                printf("Failed to list ipcps.\n");
+                goto fail;
+        }
+
+        if (len != 10) {
+                printf("Failed to list all ipcps.\n");
+                goto fail;
+        }
+
+        while (len-- > 0)
+                ipcp_list_msg__free_unpacked(ipcps[len], NULL);
+        free(ipcps);
+
+        for (i = 0; i < 10; i++)
+                reg_destroy_proc(TEST_PID + i);
+
+        reg_fini();
+
+        return TEST_RC_SUCCESS;
+
  fail:
         REG_TEST_FAIL();
         return TEST_RC_FAIL;
@@ -591,12 +645,13 @@ static int test_set_layer(void)
 
 static int test_reg_ipcp(void)
 {
-        int ret = 0;
+        int rc = 0;
 
-        ret |= test_reg_create_ipcp();
-        ret |= test_set_layer();
+        rc |= test_reg_create_ipcp();
+        rc |= test_rest_reg_list_ipcps();
+        rc |= test_set_layer();
 
-        return ret;
+        return rc;
 }
 
 static int test_reg_create_name(void)
@@ -648,13 +703,71 @@ static int test_reg_create_name(void)
         return TEST_RC_FAIL;
 }
 
+static int test_reg_list_names(void)
+{
+        name_info_msg_t ** names;
+        int                i;
+        ssize_t            len;
+
+        TEST_START();
+
+        if (reg_init() < 0) {
+                printf("Failed to init registry.\n");
+                goto fail;
+        }
+
+        for (i = 0; i < 10; i++) {
+                struct name_info info = {
+                        .pol_lb = LB_RR
+                };
+
+                sprintf(info.name, "%s%d", TEST_NAME, i);
+
+                if (reg_create_name(&info) < 0) {
+                        printf("Failed to create name %d.\n", i);
+                        goto fail;
+                }
+        }
+
+        len = reg_list_names(&names);
+        if (len < 0) {
+                printf("Failed to list names.\n");
+                goto fail;
+        }
+
+        if (len != 10) {
+                printf("Failed to list all names.\n");
+                goto fail;
+        }
+
+        for (i = 0; i < len; i++)
+                name_info_msg__free_unpacked(names[i], NULL);
+        free(names);
+
+        for (i = 0; i < 10; i++) {
+                char name[NAME_MAX];
+                sprintf(name, "%s%d", TEST_NAME, i);
+                reg_destroy_name(name);
+        }
+
+        reg_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        REG_TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_reg_name(void)
 {
-        int ret = 0;
+        int rc = 0;
 
-        ret |= test_reg_create_name();
+        rc |= test_reg_create_name();
+        rc |= test_reg_list_names();
 
-        return ret;
+        return rc;
 }
 
 static int test_reg_create_proc(void)
@@ -708,11 +821,11 @@ static int test_reg_create_proc(void)
 
 static int test_reg_proc(void)
 {
-        int ret = 0;
+        int rc = 0;
 
-        ret |= test_reg_create_proc();
+        rc |= test_reg_create_proc();
 
-        return ret;
+        return rc;
 }
 
 static int test_reg_spawned(void)
@@ -809,11 +922,11 @@ static int test_reg_create_prog(void)
 
 static int test_reg_prog(void)
 {
-        int ret = 0;
+        int rc = 0;
 
-        ret |= test_reg_create_prog();
+        rc |= test_reg_create_prog();
 
-        return ret;
+        return rc;
 }
 
 static int test_bind_proc(void)
@@ -1118,7 +1231,7 @@ static void * test_call_flow_accept(void * o)
 {
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_MS(1);
-        buffer_t        pbuf = {0, NULL};
+        buffer_t        pbuf = BUF_INIT;
 
         struct proc_info pinfo = {
                 .pid =  TEST_PID,
@@ -1218,13 +1331,13 @@ static int test_wait_accepting_success(void)
 
 static int test_wait_accepting(void)
 {
-        int ret = 0;
+        int rc = 0;
 
-        ret |= test_wait_accepting_timeout();
-        ret |= test_wait_accepting_fail_name();
-        ret |= test_wait_accepting_success();
+        rc |= test_wait_accepting_timeout();
+        rc |= test_wait_accepting_fail_name();
+        rc |= test_wait_accepting_success();
 
-        return ret;
+        return rc;
 }
 
 static int test_wait_ipcp_boot_timeout(void)
@@ -1407,13 +1520,13 @@ static int test_wait_ipcp_boot_success(void)
 
 static int test_wait_ipcp_boot(void)
 {
-        int ret = 0;
+        int rc = 0;
 
-        ret |= test_wait_ipcp_boot_timeout();
-        ret |= test_wait_ipcp_boot_fail();
-        ret |= test_wait_ipcp_boot_success();
+        rc |= test_wait_ipcp_boot_timeout();
+        rc |= test_wait_ipcp_boot_fail();
+        rc |= test_wait_ipcp_boot_success();
 
-        return ret;
+        return rc;
 }
 
 static int test_wait_proc_timeout(void)
@@ -1499,36 +1612,35 @@ static int test_wait_proc_success(void)
 
 static int test_wait_proc(void)
 {
-        int ret = 0;
+        int rc = 0;
 
-        ret |= test_wait_proc_timeout();
-        ret |= test_wait_proc_success();
+        rc |= test_wait_proc_timeout();
+        rc |= test_wait_proc_success();
 
-        return ret;
+        return rc;
 }
-
 
 int reg_test(int     argc,
              char ** argv)
 {
-        int ret = 0;
+        int rc = 0;
 
         (void) argc;
         (void) argv;
 
-        ret |= test_reg_init();
-        ret |= test_reg_flow();
-        ret |= test_reg_ipcp();
-        ret |= test_reg_name();
-        ret |= test_reg_proc();
-        ret |= test_reg_prog();
-        ret |= test_reg_spawned();
-        ret |= test_bind_proc();
-        ret |= test_bind_prog();
-        ret |= test_inherit_prog();
-        ret |= test_wait_accepting();
-        ret |= test_wait_ipcp_boot();
-        ret |= test_wait_proc();
+        rc |= test_reg_init();
+        rc |= test_reg_flow();
+        rc |= test_reg_ipcp();
+        rc |= test_reg_name();
+        rc |= test_reg_proc();
+        rc |= test_reg_prog();
+        rc |= test_reg_spawned();
+        rc |= test_bind_proc();
+        rc |= test_bind_prog();
+        rc |= test_inherit_prog();
+        rc |= test_wait_accepting();
+        rc |= test_wait_ipcp_boot();
+        rc |= test_wait_proc();
 
-        return ret;
+        return rc;
 }
