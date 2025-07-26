@@ -88,29 +88,30 @@
 #include <sys/mman.h>
 
 #if defined(HAVE_NETMAP)
-#define NETMAP_WITH_LIBS
-#include <net/netmap_user.h>
+  #define NETMAP_WITH_LIBS
+  #include <net/netmap_user.h>
 #elif defined(HAVE_BPF)
-#define BPF_DEV_MAX          256
-#define BPF_BLEN             sysconf(_SC_PAGESIZE)
-#include <net/bpf.h>
+  #define BPF_DEV_MAX        256
+  #define BPF_BLEN           sysconf(_SC_PAGESIZE)
+  #include <net/bpf.h>
 #endif
 
-#ifdef __linux__
+#define MAC_FMT "%02x:%02x:%02x:%02x:%02x:%02x"
+#define MAC_VAL(a)                                         \
+        (uint8_t)(a)[0], (uint8_t)(a)[1], (uint8_t)(a)[2], \
+        (uint8_t)(a)[3], (uint8_t)(a)[4], (uint8_t)(a)[5]
+
+
 #ifndef ETH_MAX_MTU          /* In if_ether.h as of Linux 4.10. */
-#define ETH_MAX_MTU          0xFFFFU
+  #define ETH_MAX_MTU          0xFFFFU
 #endif /* ETH_MAX_MTU */
 #ifdef BUILD_ETH_DIX
-#define ETH_MTU              eth_data.mtu
-#define ETH_MTU_MAX          ETH_MAX_MTU
+  #define ETH_MTU              eth_data.mtu
+  #define ETH_MTU_MAX          ETH_MAX_MTU
 #else
-#define ETH_MTU              eth_data.mtu
-#define ETH_MTU_MAX          1500
+  #define ETH_MTU              eth_data.mtu
+  #define ETH_MTU_MAX          1500
 #endif /* BUILD_ETH_DIX */
-#else /* __linux__ */
-#define ETH_MTU              1500
-#define ETH_MTU_MAX          ETH_MTU
-#endif /* __linux__ */
 
 #define MAC_SIZE             6
 #define ETH_TYPE_LENGTH_SIZE sizeof(uint16_t)
@@ -207,8 +208,9 @@ struct mgmt_frame {
 
 struct {
         struct shim_data * shim_data;
-#ifdef __linux__
+
         int                mtu;
+#ifdef __linux__
         int                if_idx;
 #endif
 #if defined(HAVE_NETMAP)
@@ -1215,103 +1217,123 @@ static int open_bpf_device(void)
 }
 #endif
 
-static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
-{
-        int              idx;
-        struct ifreq     ifr;
-#if defined(HAVE_NETMAP)
-        char             ifn[IFNAMSIZ];
-#elif defined(HAVE_BPF)
-        int              enable  = 1;
-        int              disable = 0;
-        int              blen;
-#endif /* HAVE_NETMAP */
-
 #if defined(__FreeBSD__) || defined(__APPLE__)
+static int ifr_hwaddr_from_ifaddrs(struct ifreq * ifr)
+{
         struct ifaddrs * ifaddr;
         struct ifaddrs * ifa;
-#elif defined(__linux__)
-        int              skfd;
-#endif
-#ifndef SHM_RDRB_MULTI_BLOCK
-        size_t           maxsz;
-#endif
-#if defined(HAVE_RAW_SOCKETS)
-    #if defined(IPCP_ETH_QDISC_BYPASS)
-        int              qdisc_bypass = 1;
-    #endif /* ENABLE_QDISC_BYPASS */
-        int              flags;
-#endif
-        assert(conf);
-        assert(conf->type == THIS_TYPE);
+        int              idx;
 
-        if (strlen(conf->eth.dev) >= IFNAMSIZ) {
-                log_err("Invalid device name: %s.", conf->eth.dev);
-                return -1;
-        }
-
-        memset(&ifr, 0, sizeof(ifr));
-        strcpy(ifr.ifr_name, conf->eth.dev);
-
-#ifdef BUILD_ETH_DIX
-        if (conf->eth.ethertype < 0x0600 || conf->eth.ethertype == 0xFFFF) {
-                log_err("Invalid Ethertype: %d.", conf->eth.ethertype);
-                return -1;
-        }
-        eth_data.ethertype = htons(conf->eth.ethertype);
-#endif
-
-#if defined(__FreeBSD__) || defined(__APPLE__)
         if (getifaddrs(&ifaddr) < 0)  {
                 log_err("Could not get interfaces.");
-                return -1;
+                goto fail_ifaddrs;
         }
 
         for (ifa = ifaddr, idx = 0; ifa != NULL; ifa = ifa->ifa_next, ++idx) {
-                if (strcmp(ifa->ifa_name, conf->eth.dev))
-                        continue;
-                log_dbg("Interface %s found.", conf->eth.dev);
-
-    #if defined(HAVE_NETMAP) || defined(HAVE_BPF)
-                memcpy(eth_data.hw_addr,
-                       LLADDR((struct sockaddr_dl *) (ifa)->ifa_addr),
-                       MAC_SIZE);
-    #elif defined (HAVE_RAW_SOCKETS)
-                memcpy(&ifr.ifr_addr, ifa->ifa_addr, sizeof(*ifa->ifa_addr));
-    #endif
-                break;
+                if (strcmp(ifa->ifa_name, ifr->ifr_name) == 0)
+                        break;
         }
-
-        freeifaddrs(ifaddr);
 
         if (ifa == NULL) {
                 log_err("Interface not found.");
-                return -1;
+                goto fail_ifa;
         }
 
+        memcpy(&ifr->ifr_addr, ifa->ifa_addr, sizeof(*ifa->ifa_addr));
+
+        log_dbg("Interface %s hwaddr " MAC_FMT ".", ifr->ifr_name,
+                MAC_VAL(ifr->ifr_addr.sa_data));
+
+        freeifaddrs(ifaddr);
+
+        return 0;
+ fail_ifa:
+         freeifaddrs(ifaddr);
+ fail_ifaddrs:
+        return -1;
+
+}
 #elif defined(__linux__)
+static int ifr_hwaddr_from_socket(struct ifreq * ifr)
+{
+        int skfd;
+
         skfd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (skfd < 0) {
                 log_err("Failed to open socket.");
-                return -1;
+                goto fail_socket;
         }
 
-        if (ioctl(skfd, SIOCGIFMTU, &ifr)) {
+        if (ioctl(skfd, SIOCGIFHWADDR, ifr)) {
+                log_err("Failed to get hwaddr.");
+                goto fail_ifr;
+        }
+
+        log_dbg("Interface %s hwaddr " MAC_FMT ".", ifr->ifr_name,
+                MAC_VAL(ifr->ifr_hwaddr.sa_data));
+
+        close(skfd);
+
+        return 0;
+
+ fail_ifr:
+        close(skfd);
+ fail_socket:
+        return -1;
+}
+#endif
+
+static int eth_ifr_hwaddr(struct ifreq * ifr)
+{
+#if defined(__FreeBSD__) || defined(__APPLE__)
+        return ifr_hwaddr_from_ifaddrs(ifr);
+#elif defined(__linux__)
+        return ifr_hwaddr_from_socket(ifr);
+#else
+        return -1;
+#endif
+}
+
+static int eth_ifr_mtu(struct ifreq * ifr)
+{
+        int skfd;
+
+        skfd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (skfd < 0) {
+                log_err("Failed to open socket.");
+                goto fail_socket;
+        }
+
+        if (ioctl(skfd, SIOCGIFMTU, ifr) < 0) {
                 log_err("Failed to get MTU.");
-                close(skfd);
+                goto fail_mtu;
+        }
+        close(skfd);
+
+        return 0;
+
+ fail_mtu:
+        close(skfd);
+ fail_socket:
+        return -1;
+}
+
+static int eth_set_mtu(struct ifreq * ifr)
+{
+        if (eth_ifr_mtu(ifr) < 0) {
+                log_err("Failed to get interface MTU.");
                 return -1;
         }
 
-        log_dbg("Device MTU is %d.", ifr.ifr_mtu);
+        log_dbg("Device MTU is %d.", ifr->ifr_mtu);
 
-        eth_data.mtu = MIN((int) ETH_MTU_MAX, ifr.ifr_mtu);
-        if (memcmp(conf->eth.dev, "lo", 2) == 0 &&
+        eth_data.mtu = MIN((int) ETH_MTU_MAX, ifr->ifr_mtu);
+        if (memcmp(ifr->ifr_name, "lo", 2) == 0 &&
                    eth_data.mtu > IPCP_ETH_LO_MTU) {
                 log_dbg("Using loopback interface. MTU restricted to %d.",
                          IPCP_ETH_LO_MTU);
                 eth_data.mtu = IPCP_ETH_LO_MTU;
         }
-
 #ifndef SHM_RDRB_MULTI_BLOCK
         maxsz = SHM_RDRB_BLOCK_SIZE - 5 * sizeof(size_t) -
                 (DU_BUFF_HEADSPACE + DU_BUFF_TAILSPACE);
@@ -1322,30 +1344,18 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
 #endif
         log_dbg("Layer MTU is %d.", eth_data.mtu);
 
-        if (ioctl(skfd, SIOCGIFHWADDR, &ifr)) {
-                log_err("Failed to get hwaddr.");
-                close(skfd);
-                return -1;
-        }
-
-        close(skfd);
-
-        idx = if_nametoindex(conf->eth.dev);
-        if (idx == 0) {
-                log_err("Failed to retrieve interface index.");
-                return -1;
-        }
-        eth_data.if_idx = idx;
-#endif /* __FreeBSD__ */
-
+        return 0;
+}
 #if defined(HAVE_NETMAP)
+static int eth_init_nmd(struct ifreq * ifr)
+{
         strcpy(ifn, "netmap:");
-        strcat(ifn, conf->eth.dev);
+        strcat(ifn, ifr->ifr_name);
 
         eth_data.nmd = nm_open(ifn, NULL, 0, NULL);
         if (eth_data.nmd == NULL) {
                 log_err("Failed to open netmap device.");
-                return -1;
+                goto fail_nmd;
         }
 
         memset(&eth_data.poll_in, 0, sizeof(eth_data.poll_in));
@@ -1357,11 +1367,22 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         eth_data.poll_out.events = POLLOUT;
 
         log_info("Using netmap device.");
-#elif defined(HAVE_BPF) /* !HAVE_NETMAP */
+
+        return 0;
+ fail_nmd:
+        return -1;
+}
+#elif defined (HAVE_BPF)
+static int eth_init_bpf(struct ifreq * ifr)
+{
+        int enable  = 1;
+        int disable = 0;
+        int blen;
+
         eth_data.bpf = open_bpf_device();
         if (eth_data.bpf < 0) {
                 log_err("Failed to open bpf device.");
-                return -1;
+                goto fail_bpf;
         }
 
         ioctl(eth_data.bpf, BIOCGBLEN, &blen);
@@ -1371,7 +1392,7 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_device;
         }
 
-        if (ioctl(eth_data.bpf, BIOCSETIF, &ifr) < 0) {
+        if (ioctl(eth_data.bpf, BIOCSETIF, ifr) < 0) {
                 log_err("Failed to set interface.");
                 goto fail_device;
         }
@@ -1392,22 +1413,39 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         }
 
         log_info("Using Berkeley Packet Filter.");
+
+        return 0;
+
+ fail_device:
+        close(eth_data.bpf);
+ fail_bpf:
+        return -1;
+}
 #elif defined(HAVE_RAW_SOCKETS)
+static int eth_init_raw_socket(struct ifreq * ifr)
+{
+        int idx;
+        int flags;
+#if defined(IPCP_ETH_QDISC_BYPASS)
+        int              qdisc_bypass = 1;
+#endif /* ENABLE_QDISC_BYPASS */
+
+        idx = if_nametoindex(ifr->ifr_name);
+        if (idx == 0) {
+                log_err("Failed to retrieve interface index.");
+                return -1;
+        }
         memset(&(eth_data.device), 0, sizeof(eth_data.device));
         eth_data.device.sll_ifindex  = idx;
         eth_data.device.sll_family   = AF_PACKET;
-        memcpy(eth_data.device.sll_addr, ifr.ifr_hwaddr.sa_data, MAC_SIZE);
+        memcpy(eth_data.device.sll_addr, ifr->ifr_hwaddr.sa_data, MAC_SIZE);
         eth_data.device.sll_halen    = MAC_SIZE;
         eth_data.device.sll_protocol = htons(ETH_P_ALL);
-
-    #if defined (BUILD_ETH_DIX)
+#if defined (BUILD_ETH_DIX)
         eth_data.s_fd = socket(AF_PACKET, SOCK_RAW, eth_data.ethertype);
-    #elif defined (BUILD_ETH_LLC)
+#elif defined (BUILD_ETH_LLC)
         eth_data.s_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_802_2));
-    #endif
-
-        log_info("Using raw socket device.");
-
+#endif
         if (eth_data.s_fd < 0) {
                 log_err("Failed to create socket.");
                 goto fail_socket;
@@ -1424,17 +1462,86 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_device;
         }
 
-    #if defined(IPCP_ETH_QDISC_BYPASS)
+#if defined(IPCP_ETH_QDISC_BYPASS)
         if (setsockopt(eth_data.s_fd, SOL_PACKET, PACKET_QDISC_BYPASS,
                        &qdisc_bypass, sizeof(qdisc_bypass))) {
                 log_info("Qdisc bypass not supported.");
         }
-    #endif
+#endif
 
         if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
                  sizeof(eth_data.device)) < 0) {
                 log_err("Failed to bind socket to interface.");
                 goto fail_device;
+        }
+#ifdef __linux__
+        eth_data.if_idx = idx;
+#endif
+        log_info("Using raw socket device.");
+
+        return 0;
+ fail_device:
+        close(eth_data.s_fd);
+ fail_socket:
+        return -1;
+}
+#endif
+
+static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
+{
+        struct ifreq     ifr;
+        int              i;
+#if defined(HAVE_NETMAP)
+        char             ifn[IFNAMSIZ];
+#endif /* HAVE_NETMAP */
+
+#ifndef SHM_RDRB_MULTI_BLOCK
+        size_t           maxsz;
+#endif
+        assert(conf);
+        assert(conf->type == THIS_TYPE);
+
+        memset(&ifr, 0, sizeof(ifr));
+        strcpy(ifr.ifr_name, conf->eth.dev);
+
+        if (strlen(conf->eth.dev) >= IFNAMSIZ) {
+                log_err("Invalid device name: %s.", conf->eth.dev);
+                return -1;
+        }
+#ifdef BUILD_ETH_DIX
+        if (conf->eth.ethertype < 0x0600 || conf->eth.ethertype == 0xFFFF) {
+                log_err("Invalid Ethertype: %d.", conf->eth.ethertype);
+                return -1;
+        }
+        eth_data.ethertype = htons(conf->eth.ethertype);
+#endif
+        if (eth_set_mtu(&ifr) < 0) {
+                log_err("Failed to set MTU.");
+                return -1;
+        }
+
+        if (eth_ifr_hwaddr(&ifr) < 0) {
+                log_err("Failed to get hardware addr.");
+                return -1;
+        }
+#if defined(HAVE_NETMAP) || defined(HAVE_BPF)
+        memcpy(eth_data.hw_addr, LLADDR((struct sockaddr_dl *) &ifr.ifr_addr),
+               MAC_SIZE);
+#endif
+#if defined(HAVE_NETMAP)
+        if (eth_init_nmd(&ifr) < 0) {
+                log_err("Failed to initialize netmap device.");
+                return -1;
+        }
+#elif defined(HAVE_BPF) /* !HAVE_NETMAP */
+        if (eth_init_bpf(&ifr) < 0) {
+                log_err("Failed to initialize BPF device.");
+                return -1;
+        }
+#elif defined(HAVE_RAW_SOCKETS)
+        if (eth_init_raw_socket(&ifr) < 0) {
+                log_err("Failed to initialize raw socket device.");
+                return -1;
         }
 #endif /* HAVE_NETMAP */
 #if defined(__linux__)
@@ -1442,10 +1549,9 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                            eth_ipcp_if_monitor, NULL)) {
                 log_err("Failed to create monitor thread: %s.",
                         strerror(errno));
-                goto fail_device;
+                goto fail_monitor;
         }
 #endif
-
         if (pthread_create(&eth_data.mgmt_handler, NULL,
                            eth_ipcp_mgmt_handler, NULL)) {
                 log_err("Failed to create mgmt handler thread: %s.",
@@ -1453,8 +1559,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 goto fail_mgmt_handler;
         }
 
-        for (idx = 0; idx < IPCP_ETH_RD_THR; ++idx) {
-                if (pthread_create(&eth_data.packet_reader[idx], NULL,
+        for (i = 0; i < IPCP_ETH_RD_THR; i++) {
+                if (pthread_create(&eth_data.packet_reader[i], NULL,
                                    eth_ipcp_packet_reader, NULL)) {
                         log_err("Failed to create packet reader thread: %s",
                                 strerror(errno));
@@ -1462,8 +1568,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
                 }
         }
 
-        for (idx = 0; idx < IPCP_ETH_WR_THR; ++idx) {
-                if (pthread_create(&eth_data.packet_writer[idx], NULL,
+        for (i = 0; i < IPCP_ETH_WR_THR; i++) {
+                if (pthread_create(&eth_data.packet_writer[i], NULL,
                                    eth_ipcp_packet_writer, NULL)) {
                         log_err("Failed to create packet writer thread: %s",
                                 strerror(errno));
@@ -1481,15 +1587,15 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         return 0;
 
  fail_packet_writer:
-        while (idx > 0) {
-                pthread_cancel(eth_data.packet_writer[--idx]);
-                pthread_join(eth_data.packet_writer[idx], NULL);
+        while (i-- > 0) {
+                pthread_cancel(eth_data.packet_writer[i]);
+                pthread_join(eth_data.packet_writer[i], NULL);
         }
-        idx = IPCP_ETH_RD_THR;
+        i = IPCP_ETH_RD_THR;
  fail_packet_reader:
-        while (idx > 0) {
-                pthread_cancel(eth_data.packet_reader[--idx]);
-                pthread_join(eth_data.packet_reader[idx], NULL);
+        while (i-- > 0) {
+                pthread_cancel(eth_data.packet_reader[i]);
+                pthread_join(eth_data.packet_reader[i], NULL);
         }
         pthread_cancel(eth_data.mgmt_handler);
         pthread_join(eth_data.mgmt_handler, NULL);
@@ -1498,8 +1604,8 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         pthread_cancel(eth_data.if_monitor);
         pthread_join(eth_data.if_monitor, NULL);
 #endif
-#if defined(__linux__) || !defined(HAVE_NETMAP)
- fail_device:
+#if defined(__linux__)
+ fail_monitor:
 #endif
 #if defined(HAVE_NETMAP)
         nm_close(eth_data.nmd);
@@ -1507,7 +1613,6 @@ static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
         close(eth_data.bpf);
 #elif defined(HAVE_RAW_SOCKETS)
         close(eth_data.s_fd);
- fail_socket:
 #endif
         return -1;
 }

@@ -105,7 +105,7 @@ static void tpm_join(struct tpm * tpm)
                         if(e->busy && ldiff > TPM_DEBUG_REPORT_INTERVAL) {
                                 e->last = now;
                                 printf("Thread %d:%lx running for %ld s.\n",
-                                       getpid(),e->thr, diff);
+                                       getpid(), (long) e->thr, diff);
                         }
                 }
                 hung = e->busy && !e->wait && diff > TPM_DEBUG_ABORT_TIMEOUT;
