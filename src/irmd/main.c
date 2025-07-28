@@ -797,8 +797,6 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_wait;
         }
 
-        log_dbg("Waiting for flow accept %d.", flow->id);
-
         pthread_cleanup_push(__cleanup_flow, flow);
 
         err = reg_wait_flow_accepted(flow, &oap_hdr.hdr, abstime);
@@ -826,7 +824,7 @@ static int flow_accept(struct flow_info * flow,
 
         clock_gettime(CLOCK_REALTIME, &now);
 
-        delta = (ssize_t)(TS_TO_UINT64(now) - oap_hdr.timestamp);
+        delta = (ssize_t)(TS_TO_UINT64(now) - oap_hdr.timestamp) / MILLION;
         if (delta > flow->mpl)
                 log_warn("Flow alloc time exceeds MPL (%zd ms).", delta);
 
@@ -908,7 +906,6 @@ static int flow_accept(struct flow_info * flow,
         freebuf(*symmkey);
         clrbuf(lpk);
         oap_hdr_fini(&oap_hdr);
-        assert(lpk.data == NULL && lpk.len == 0);
         reg_destroy_flow(flow->id);
         return -EIPCP;
 }
@@ -920,7 +917,7 @@ static int flow_join(struct flow_info * flow,
         struct ipcp_info  ipcp;
         struct layer_info layer;
         buffer_t          hash;
-        buffer_t          pbuf = {0, NULL}; /* nothing to piggyback */
+        buffer_t          pbuf = BUF_INIT; /* nothing to piggyback */
         int               err;
 
         log_info("Allocating flow for %d to %s.", flow->n_pid, dst);

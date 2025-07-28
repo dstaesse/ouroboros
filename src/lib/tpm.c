@@ -26,12 +26,16 @@
 
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
+#include <ouroboros/pthread.h>
 #include <ouroboros/time.h>
 #include <ouroboros/tpm.h>
 
+#ifdef CONFIG_OUROBOROS_DEBUG
+#define OUROBOROS_PREFIX "tpm"
+#include <ouroboros/logs.h>
+#endif
+
 #include <assert.h>
-#include <pthread.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -75,15 +79,37 @@ struct tpm {
         pthread_t        mgr;
 };
 
+#ifdef CONFIG_OUROBOROS_DEBUG
+#define BETWEEN(a, x, y) ((a) > (x) && (a) <= (y))
+static void tpm_debug_thread(struct pthr_el * e)
+{
+        struct timespec now;
+        time_t diff;
+        time_t intv;
+
+        if (e->wait || !e->busy)
+                return;
+
+        clock_gettime(CLOCK_REALTIME, &now);
+
+        diff = ts_diff_ms(&now, &e->start) / 1000;
+        intv = ts_diff_ms(&now, &e->last) / 1000;
+
+        if (BETWEEN(TPM_DEBUG_REPORT_INTERVAL, 0, intv)) {
+                log_dbg("Thread %d:%lx running for %ld s.\n",
+                        getpid(),e->thr, diff);
+                e->last = now;
+        }
+
+        if (BETWEEN(TPM_DEBUG_ABORT_TIMEOUT, 0, diff))
+                assert(false); /* TODO: Grab a coffee and fire up GDB */
+}
+#endif
+
 static void tpm_join(struct tpm * tpm)
 {
         struct list_head * p;
         struct list_head * h;
-#ifdef CONFIG_OUROBOROS_DEBUG
-        struct timespec now;
-        clock_gettime(CLOCK_REALTIME, &now);
-#endif
-
         list_for_each_safe(p, h, &tpm->pool) {
                 struct pthr_el * e = list_entry(p, struct pthr_el, next);
                 if (tpm->state != TPM_RUNNING) {
@@ -98,19 +124,7 @@ static void tpm_join(struct tpm * tpm)
         list_for_each_safe(p, h, &tpm->pool) {
                 struct pthr_el * e = list_entry(p, struct pthr_el, next);
 #ifdef CONFIG_OUROBOROS_DEBUG
-                time_t diff = ts_diff_ms(&now, &e->start) / 1000;
-                bool hung;
-                if (TPM_DEBUG_REPORT_INTERVAL > 0) {
-                        time_t ldiff = ts_diff_ms(&now, &e->last) / 1000;
-                        if(e->busy && ldiff > TPM_DEBUG_REPORT_INTERVAL) {
-                                e->last = now;
-                                printf("Thread %d:%lx running for %ld s.\n",
-                                       getpid(), (long) e->thr, diff);
-                        }
-                }
-                hung = e->busy && !e->wait && diff > TPM_DEBUG_ABORT_TIMEOUT;
-                if (TPM_DEBUG_ABORT_TIMEOUT > 0 && hung)
-                        assert(false); /* coredump */
+                tpm_debug_thread(e);
 #endif
                 if (e->kill) {
                         pthread_t thr = e->thr;
@@ -178,11 +192,13 @@ static int __tpm(struct tpm * tpm)
                 tpm->cur += i;
         }
 
+        pthread_cleanup_push(__cleanup_mutex_unlock, &tpm->mtx);
+
         if (pthread_cond_timedwait(&tpm->cond, &tpm->mtx, &dl) == ETIMEDOUT)
                 if (tpm->cur - tpm->wrk > tpm->min)
                         tpm_kill(tpm);
 
-        pthread_mutex_unlock(&tpm->mtx);
+        pthread_cleanup_pop(true);
 
         return 0;
 }
