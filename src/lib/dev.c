@@ -372,7 +372,7 @@ static void _flow_keepalive(struct flow * flow)
         timeo   = flow->info.qs.timeout;
 
         acl = shm_rbuff_get_acl(flow->rx_rb);
-        if (timeo == 0 ||  acl & (ACL_FLOWPEER | ACL_FLOWDOWN))
+        if (timeo == 0 || acl & (ACL_FLOWPEER | ACL_FLOWDOWN))
                 return;
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
@@ -1895,6 +1895,7 @@ int ipcp_flow_req_arr(const buffer_t * dst,
         flow.n_1_pid = flow.n_pid;
         flow.n_pid   = getpid();
         flow.mpl     = 0;
+        flow.qs      = qos_np1;
 
         return flow_init(&flow, NULL);
 }
@@ -2006,7 +2007,7 @@ int np1_flow_read(int                   fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        idx = shm_rbuff_read(flow->rx_rb);;
+        idx = shm_rbuff_read(flow->rx_rb);
         if (idx < 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 return idx;

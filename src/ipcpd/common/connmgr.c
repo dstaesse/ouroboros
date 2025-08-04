@@ -179,6 +179,8 @@ static void * flow_acceptor(void * o)
                         continue;
                 }
 
+                fccntl(fd, FLOWSRCVTIMEO, NULL);
+
                 err = add_comp_conn(id, fd, qs, &rcv_info);
                 if (err < 0) {
                         log_err("Failed to add new connection: %d.", err);
