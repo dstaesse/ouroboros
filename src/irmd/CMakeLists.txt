@@ -62,6 +62,8 @@ set(IRMD_PKILL_TIMEOUT 30 CACHE STRING
   "Number of seconds to wait before sending SIGKILL to subprocesses on exit")
 set(IRMD_KILL_ALL_PROCESSES TRUE CACHE BOOL
   "Kill all processes on exit")
+set(DEBUG_PROTO_OAP FALSE CACHE BOOL
+  "Add Flow allocation protocol message output to IRMd debug logging")
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)

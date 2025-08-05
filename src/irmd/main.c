@@ -830,7 +830,9 @@ static int flow_accept(struct flow_info * flow,
 
         if (delta < -TIMESYNC_SLACK)
                 log_warn("Flow alloc sent from the future (%zd ms).", -delta);
-
+#ifdef DEBUG_PROTO_OAP
+        debug_oap_hdr_rcv(&oap_hdr);
+#endif
         if (flow->qs.cypher_s != 0) {     /* crypto requested           */
                 uint8_t * s;              /* symmetric encryption key   */
                 ssize_t   key_len;        /* length of local pubkey     */
@@ -875,7 +877,9 @@ static int flow_accept(struct flow_info * flow,
                 err = -ENOMEM;
                 goto fail_r_oap_hdr;
         }
-
+#ifdef DEBUG_PROTO_OAP
+        debug_oap_hdr_snd(&oap_hdr);
+#endif
         if (ipcp_flow_alloc_resp(flow, 0, r_oap_hdr.hdr) < 0) {
                 log_err("Failed to respond to flow allocation.");
                 goto fail_resp;
@@ -1101,6 +1105,9 @@ static int flow_alloc(struct flow_info * flow,
                 err = -ENOMEM;
                 goto fail_oap_hdr;
         }
+#ifdef DEBUG_PROTO_OAP
+        debug_oap_hdr_snd(&oap_hdr);
+#endif
 
         log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
 
@@ -1154,7 +1161,9 @@ static int flow_alloc(struct flow_info * flow,
                 err = -EIPCP;
                 goto fail_r_oap_hdr;
         }
-
+#ifdef DEBUG_PROTO_OAP
+        debug_oap_hdr_rcv(&r_oap_hdr);
+#endif
         if (memcmp(r_oap_hdr.id.data, oap_hdr.id.data, r_oap_hdr.id.len) != 0) {
                 log_err("OAP ID mismatch in flow allocation.");
                 err = -EIPCP;

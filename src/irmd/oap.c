@@ -26,9 +26,15 @@
  #define _POSIX_C_SOURCE 200809L
 #endif
 
+#define OUROBOROS_PREFIX "irmd/oap"
+
 #include <ouroboros/crypt.h>
 #include <ouroboros/endian.h>
+#include <ouroboros/logs.h>
+#include <ouroboros/rib.h>
 #include <ouroboros/time.h>
+
+#include "config.h"
 
 #include "oap.h"
 
@@ -217,4 +223,66 @@ int oap_hdr_decode(buffer_t             hdr,
         return -1;
 }
 
+#ifdef DEBUG_PROTO_OAP
+static void debug_oap_hdr(const struct oap_hdr * hdr)
+{
+        assert(hdr);
+
+        if (hdr->crt.len > 0)
+                log_proto("  Certificate: [%zu bytes]", hdr->crt.len);
+        else
+                log_proto("  Certificate: <none>");
+
+        if (hdr->eph.len > 0)
+                log_proto("  Ephemeral Public Key: [%zu bytes]", hdr->eph.len);
+        else
+                log_proto("  Ephemeral Public Key: <none>");
+        if (hdr->data.len > 0)
+                log_proto("  Data: [%zu bytes]", hdr->data.len);
+        else
+                log_proto("  Data: <none>");
+        if (hdr->sig.len > 0)
+                log_proto("  Signature: [%zu bytes]", hdr->sig.len);
+        else
+                log_proto("  Signature: <none>");
+}
+
+void debug_oap_hdr_rcv(const struct oap_hdr *   hdr)
+{
+        struct tm *     tm;
+        char            tmstr[RIB_TM_STRLEN];
+        time_t          stamp;
+
+        assert(hdr);
+
+        stamp = (time_t) hdr->timestamp / BILLION;
+
+        tm = gmtime(&stamp);
+        strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
+
+        log_proto("OAP_HDR [" HASH_FMT64 " @ %s ] <--",
+                  HASH_VAL64(hdr->id.data), tmstr);
+
+        debug_oap_hdr(hdr);
+}
+
+void debug_oap_hdr_snd(const struct oap_hdr * hdr)
+{
+        struct tm *     tm;
+        char            tmstr[RIB_TM_STRLEN];
+        time_t          stamp;
+
+        assert(hdr);
+
+        stamp = (time_t) hdr->timestamp / BILLION;
+
+        tm = gmtime(&stamp);
+        strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
+
+        log_proto("OAP_HDR [" HASH_FMT64 " @ %s ] -->",
+                  HASH_VAL64(hdr->id.data), tmstr);
+
+        debug_oap_hdr(hdr);
+}
+#endif
 

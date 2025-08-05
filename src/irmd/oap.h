@@ -85,4 +85,10 @@ void oap_hdr_fini(struct oap_hdr * oap_hdr);
 int  oap_hdr_decode(buffer_t         hdr,
                     struct oap_hdr * oap_hdr);
 
+#ifdef DEBUG_PROTO_OAP
+void debug_oap_hdr_snd(const struct oap_hdr * hdr);
+
+void debug_oap_hdr_rcv(const struct oap_hdr * hdr);
+#endif /* DEBUG_PROTO_OAP */
+
 #endif /* OUROBOROS_IRMD_OAP_H */
