@@ -313,7 +313,6 @@ static int dt_rib_readdir(char *** buf)
                 strcpy((*buf)[idx++], entry);
 
         }
-        assert((size_t) idx == dt.n_flows);
  no_flows:
         pthread_rwlock_unlock(&dt.lock);
 
@@ -323,10 +322,9 @@ static int dt_rib_readdir(char *** buf)
         while (idx-- > 0)
                 free((*buf)[idx]);
         free(*buf);
-fail_entries:
+ fail_entries:
         pthread_rwlock_unlock(&dt.lock);
         return -ENOMEM;
-
 #else
         (void) buf;
         return 0;

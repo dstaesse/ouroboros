@@ -65,6 +65,12 @@
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
+#define LINK_FMT ADDR_FMT32 " -- " ADDR_FMT32
+#define LINK_VAL(src, dst) ADDR_VAL32(&src), ADDR_VAL32(&dst)
+
+#define LSU_FMT "LSU ["ADDR_FMT32 " -- " ADDR_FMT32 " seq: %09" PRIu64 "]"
+#define LSU_VAL(src, dst, seqno) ADDR_VAL32(&src), ADDR_VAL32(&dst), seqno
+
 struct lsa {
         uint64_t d_addr;
         uint64_t s_addr;
@@ -155,8 +161,8 @@ static int str_adj(struct adjacency * adj,
         tm = gmtime(&adj->stamp);
         strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
 
-        sprintf(srcbuf, "%" PRIu64, adj->src);
-        sprintf(dstbuf, "%" PRIu64, adj->dst);
+        sprintf(srcbuf, ADDR_FMT32, ADDR_VAL32(&adj->src));
+        sprintf(dstbuf, ADDR_FMT32, ADDR_VAL32(&adj->dst));
         sprintf(seqnobuf, "%" PRIu64, adj->seqno);
 
         sprintf(buf, "src: %20s\ndst: %20s\nseqno: %18s\n"
@@ -267,8 +273,8 @@ static int lsdb_rib_readdir(char *** buf)
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
-                char * str = (nb->type == NB_DT ? "dt." : "mgmt.");
-                sprintf(entry, "%s%" PRIu64, str, nb->addr);
+                char * str = (nb->type == NB_DT ? ".dt " : ".mgmt ");
+                sprintf(entry, "%s" ADDR_FMT32 , str, ADDR_VAL32(&nb->addr));
                 (*buf)[idx] = malloc(strlen(entry) + 1);
                 if ((*buf)[idx] == NULL)
                         goto fail_entry;
@@ -278,7 +284,7 @@ static int lsdb_rib_readdir(char *** buf)
 
         list_for_each(p, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
-                sprintf(entry, "%" PRIu64 ".%" PRIu64, a->src, a->dst);
+                sprintf(entry,  LINK_FMT, LINK_VAL(a->src, a->dst));
                 (*buf)[idx] = malloc(strlen(entry) + 1);
                 if ((*buf)[idx] == NULL)
                         goto fail_entry;
@@ -316,19 +322,19 @@ static int lsdb_add_nb(uint64_t     addr,
 
         list_for_each(p, &ls.nbs) {
                 struct nb * el = list_entry(p, struct nb, next);
-                if (el->addr == addr && el->type == type) {
-                        log_dbg("Already know %s neighbor %" PRIu64 ".",
-                                type == NB_DT ? "dt" : "mgmt", addr);
-                        if (el->fd != fd) {
-                                log_warn("Existing neighbor assigned new fd.");
-                                el->fd = fd;
-                        }
-                        pthread_rwlock_unlock(&ls.db_lock);
-                        return -EPERM;
-                }
-
                 if (addr > el->addr)
                         break;
+                if (el->addr != addr || el->type != type)
+                        continue;
+
+                log_dbg("Already know %s neighbor " ADDR_FMT32 ".",
+                        type == NB_DT ? "dt" : "mgmt", ADDR_VAL32(&addr));
+                if (el->fd != fd) {
+                        log_warn("Existing neighbor assigned new fd.");
+                        el->fd = fd;
+                }
+                pthread_rwlock_unlock(&ls.db_lock);
+                return -EPERM;
         }
 
         nb = malloc(sizeof(*nb));
@@ -345,8 +351,8 @@ static int lsdb_add_nb(uint64_t     addr,
 
         ++ls.nbs_len;
 
-        log_dbg("Type %s neighbor %" PRIu64 " added.",
-                nb->type == NB_DT ? "dt" : "mgmt", addr);
+        log_dbg("Type %s neighbor " ADDR_FMT32 " added.",
+                nb->type == NB_DT ? "dt" : "mgmt", ADDR_VAL32(&addr));
 
         pthread_rwlock_unlock(&ls.db_lock);
 
@@ -363,15 +369,16 @@ static int lsdb_del_nb(uint64_t addr,
 
         list_for_each_safe(p, h, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
-                if (nb->addr == addr && nb->fd == fd) {
-                        list_del(&nb->next);
-                        --ls.nbs_len;
-                        pthread_rwlock_unlock(&ls.db_lock);
-                        log_dbg("Type %s neighbor %" PRIu64 " deleted.",
-                                nb->type == NB_DT ? "dt" : "mgmt", addr);
-                        free(nb);
-                        return 0;
-                }
+                if (nb->addr != addr || nb->fd != fd)
+                        continue;
+
+                list_del(&nb->next);
+                --ls.nbs_len;
+                pthread_rwlock_unlock(&ls.db_lock);
+                log_dbg("Type %s neighbor " ADDR_FMT32 " deleted.",
+                        nb->type == NB_DT ? "dt" : "mgmt", ADDR_VAL32(&addr));
+                free(nb);
+                return 0;
         }
 
         pthread_rwlock_unlock(&ls.db_lock);
@@ -582,8 +589,18 @@ static void send_lsm(uint64_t src,
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
-                if (nb->type == NB_MGMT)
-                        flow_write(nb->fd, &lsm, sizeof(lsm));
+                if (nb->type != NB_MGMT)
+                        continue;
+
+                if (flow_write(nb->fd, &lsm, sizeof(lsm)) < 0)
+                        log_err("Failed to send LSM to " ADDR_FMT32,
+                                ADDR_VAL32(&nb->addr));
+#ifdef DEBUG_PROTO_LS
+                else
+                        log_proto(LSU_FMT " --> " ADDR_FMT32,
+                                LSU_VAL(src, dst, seqno),
+                                ADDR_VAL32(&nb->addr));
+#endif
         }
 }
 
@@ -649,10 +666,10 @@ static void * lsupdate(void * o)
                 list_for_each_safe(p, h, &ls.db) {
                         struct adjacency * adj;
                         adj = list_entry(p, struct adjacency, next);
-                        if (now.tv_sec - adj->stamp > LS_TIMEO) {
+                        if (now.tv_sec > adj->stamp + LS_TIMEO) {
                                 list_del(&adj->next);
-                                log_dbg("%" PRIu64 " - %" PRIu64" timed out.",
-                                        adj->src, adj->dst);
+                                log_dbg(LINK_FMT " timed out.",
+                                        LINK_VAL(adj->src, adj->dst));
                                 if (graph_del_edge(ls.graph, adj->src,
                                                    adj->dst))
                                         log_err("Failed to del edge.");
@@ -701,15 +718,36 @@ static void forward_lsm(uint8_t * buf,
                         int       in_fd)
 {
         struct list_head * p;
+#ifdef DEBUG_PROTO_LS
+        struct lsa lsm;
 
+        assert(buf);
+        assert(len >= sizeof(struct lsa));
+
+        memcpy(&lsm, buf, sizeof(lsm));
+
+        lsm.s_addr = ntoh64(lsm.s_addr);
+        lsm.d_addr = ntoh64(lsm.d_addr);
+        lsm.seqno  = ntoh64(lsm.seqno);
+#endif
         pthread_rwlock_rdlock(&ls.db_lock);
 
         pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.db_lock);
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
-                if (nb->type == NB_MGMT && nb->fd != in_fd)
-                        flow_write(nb->fd, buf, len);
+                if (nb->type != NB_MGMT || nb->fd == in_fd)
+                        continue;
+
+                if (flow_write(nb->fd, buf, len) < 0)
+                        log_err("Failed to forward LSM to " ADDR_FMT32,
+                                ADDR_VAL32(&nb->addr));
+#ifdef DEBUG_PROTO_LS
+                else
+                        log_proto(LSU_FMT " --> " ADDR_FMT32 " [forwarded]",
+                                LSU_VAL(lsm.s_addr, lsm.d_addr, lsm.seqno),
+                                ADDR_VAL32(&nb->addr));
+#endif
         }
 
         pthread_cleanup_pop(true);
@@ -722,13 +760,13 @@ static void cleanup_fqueue(void * fq)
 
 static void * lsreader(void * o)
 {
-        fqueue_t *   fq;
-        int          ret;
-        uint8_t      buf[sizeof(struct lsa)];
-        int          fd;
-        qosspec_t    qs;
-        struct lsa * msg;
-        size_t       len;
+        fqueue_t * fq;
+        int        ret;
+        uint8_t    buf[sizeof(struct lsa)];
+        int        fd;
+        qosspec_t  qs;
+        struct lsa msg;
+        size_t     len;
 
         (void) o;
 
@@ -751,15 +789,22 @@ static void * lsreader(void * o)
                         if (fqueue_type(fq) != FLOW_PKT)
                                 continue;
 
-                        len = flow_read(fd, buf, sizeof(*msg));
-                        if (len <= 0 || len != sizeof(*msg))
+                        len = flow_read(fd, buf, sizeof(msg));
+                        if (len <= 0 || len != sizeof(msg))
                                 continue;
 
-                        msg = (struct lsa *) buf;
-
-                        if (lsdb_add_link(ntoh64(msg->s_addr),
-                                          ntoh64(msg->d_addr),
-                                          ntoh64(msg->seqno),
+                        memcpy(&msg, buf, sizeof(msg));
+                        msg.s_addr = ntoh64(msg.s_addr);
+                        msg.d_addr = ntoh64(msg.d_addr);
+                        msg.seqno  = ntoh64(msg.seqno);
+#ifdef DEBUG_PROTO_LS
+                        log_proto(LSU_FMT " <-- " ADDR_FMT32,
+                                  LSU_VAL(msg.s_addr, msg.d_addr, msg.seqno),
+                                  ADDR_VAL32(&ls.addr));
+#endif
+                        if (lsdb_add_link(msg.s_addr,
+                                          msg.d_addr,
+                                          msg.seqno,
                                           &qs))
                                 continue;
 

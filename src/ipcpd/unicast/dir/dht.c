@@ -2863,7 +2863,7 @@ static void do_dht_kv_store(const dht_store_msg_t * store)
 
         tm = gmtime(&exp);
         strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
-        log_info(KV_FMT " Stored value until %s.", KV_VAL(key, val), tmstr);
+        log_dbg(KV_FMT " Stored value until %s.", KV_VAL(key, val), tmstr);
 }
 
 static dht_msg_t * do_dht_kv_find_node_req(const dht_find_req_msg_t * req)

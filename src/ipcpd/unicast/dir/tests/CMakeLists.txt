@@ -15,9 +15,6 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 get_filename_component(PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 
-set(DEBUG_PROTO_DHT FALSE CACHE BOOL
-  "Add DHT protocol message output to debug logging")
-
 create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   # Add new tests here
   dht_test.c

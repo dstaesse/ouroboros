@@ -57,8 +57,11 @@ struct edge {
 };
 
 struct graph {
-        size_t           nr_vertices;
-        struct list_head vertices;
+        struct {
+                struct list_head list;
+                size_t len;
+        } vertices;
+
         pthread_mutex_t  lock;
 };
 
@@ -67,7 +70,7 @@ static struct edge * find_edge_by_addr(struct vertex * vertex,
 {
         struct list_head * p;
 
-        assert(vertex);
+        assert(vertex != NULL);
 
         list_for_each(p, &vertex->edges) {
                 struct edge * e = list_entry(p, struct edge, next);
@@ -85,7 +88,7 @@ static struct vertex * find_vertex_by_addr(struct graph * graph,
 
         assert(graph);
 
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 struct vertex * e = list_entry(p, struct vertex, next);
                 if (e->addr == addr)
                         return e;
@@ -99,8 +102,8 @@ static struct edge * add_edge(struct vertex * vertex,
 {
         struct edge * edge;
 
-        assert(vertex);
-        assert(nb);
+        assert(vertex != NULL);
+        assert(nb != NULL);
 
         edge = malloc(sizeof(*edge));
         if (edge == NULL)
@@ -139,7 +142,7 @@ static struct vertex * add_vertex(struct graph * graph,
         vertex->addr = addr;
 
         /* Keep them ordered on address. */
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > addr)
                         break;
@@ -151,13 +154,13 @@ static struct vertex * add_vertex(struct graph * graph,
         list_add_tail(&vertex->next, p);
 
         /* Increase the index of the vertices to the right. */
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &vertex->next) {
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > addr)
                         v->index++;
         }
 
-        graph->nr_vertices++;
+        ++graph->vertices.len;
 
         return vertex;
 }
@@ -168,13 +171,13 @@ static void del_vertex(struct graph *  graph,
         struct list_head * p;
         struct list_head * h;
 
-        assert(graph);
-        assert(vertex);
+        assert(graph != NULL);
+        assert(vertex != NULL);
 
         list_del(&vertex->next);
 
         /* Decrease the index of the vertices to the right. */
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > vertex->addr)
                         v->index--;
@@ -187,7 +190,7 @@ static void del_vertex(struct graph *  graph,
 
         free(vertex);
 
-        graph->nr_vertices--;
+        --graph->vertices.len;
 }
 
 struct graph * graph_create(void)
@@ -203,8 +206,8 @@ struct graph * graph_create(void)
                 return NULL;
         }
 
-        graph->nr_vertices = 0;
-        list_head_init(&graph->vertices);
+        graph->vertices.len = 0;
+        list_head_init(&graph->vertices.list);
 
         return graph;
 }
@@ -218,7 +221,7 @@ void graph_destroy(struct graph * graph)
 
         pthread_mutex_lock(&graph->lock);
 
-        list_for_each_safe(p, n, &graph->vertices) {
+        list_for_each_safe(p, n, &graph->vertices.list) {
                 struct vertex * e = list_entry(p, struct vertex, next);
                 del_vertex(graph, e);
         }
@@ -226,6 +229,8 @@ void graph_destroy(struct graph * graph)
         pthread_mutex_unlock(&graph->lock);
 
         pthread_mutex_destroy(&graph->lock);
+
+        assert(graph->vertices.len == 0);
 
         free(graph);
 }
@@ -240,63 +245,35 @@ int graph_update_edge(struct graph * graph,
         struct vertex * nb;
         struct edge *   nb_e;
 
-        assert(graph);
+        assert(graph != NULL);
 
         pthread_mutex_lock(&graph->lock);
 
         v = find_vertex_by_addr(graph, s_addr);
-        if (v == NULL) {
-                v = add_vertex(graph, s_addr);
-                if (v == NULL) {
-                        pthread_mutex_unlock(&graph->lock);
-                        log_err("Failed to add vertex.");
-                        return -ENOMEM;
-                }
+        if (v == NULL && ((v = add_vertex(graph, s_addr)) == NULL)) {;
+                log_err("Failed to add src vertex.");
+                goto fail_add_s;
         }
 
         nb = find_vertex_by_addr(graph, d_addr);
-        if (nb == NULL) {
-                nb = add_vertex(graph, d_addr);
-                if (nb == NULL) {
-                        if (list_is_empty(&v->edges))
-                                del_vertex(graph, v);
-                        pthread_mutex_unlock(&graph->lock);
-                        log_err("Failed to add vertex.");
-                        return -ENOMEM;
-                }
+        if (nb == NULL && ((nb = add_vertex(graph, d_addr)) == NULL)) {
+               log_err("Failed to add dst vertex.");
+                goto fail_add_d;
         }
 
         e = find_edge_by_addr(v, d_addr);
-        if (e == NULL) {
-                e = add_edge(v, nb);
-                if (e == NULL) {
-                        if (list_is_empty(&v->edges))
-                                del_vertex(graph, v);
-                        if (list_is_empty(&nb->edges))
-                                del_vertex(graph, nb);
-                        pthread_mutex_unlock(&graph->lock);
-                        log_err("Failed to add edge.");
-                        return -ENOMEM;
-                }
+        if (e == NULL && ((e = add_edge(v, nb)) == NULL)) {
+                log_err("Failed to add edge to dst.");
+                goto fail_add_edge_d;
         }
 
         e->announced++;
         e->qs = qs;
 
         nb_e = find_edge_by_addr(nb, s_addr);
-        if (nb_e == NULL) {
-                nb_e = add_edge(nb, v);
-                if (nb_e == NULL) {
-                        if (--e->announced == 0)
-                                del_edge(e);
-                        if (list_is_empty(&v->edges))
-                                del_vertex(graph, v);
-                        if (list_is_empty(&nb->edges))
-                                del_vertex(graph, nb);
-                        pthread_mutex_unlock(&graph->lock);
-                        log_err("Failed to add edge.");
-                        return -ENOMEM;
-                }
+        if (nb_e == NULL && ((nb_e = add_edge(nb, v)) == NULL)) {;
+                log_err("Failed to add edge to src.");
+                goto fail_add_edge_s;
         }
 
         nb_e->announced++;
@@ -305,6 +282,19 @@ int graph_update_edge(struct graph * graph,
         pthread_mutex_unlock(&graph->lock);
 
         return 0;
+ fail_add_edge_s:
+        if (--e->announced == 0)
+                del_edge(e);
+ fail_add_edge_d:
+        if (list_is_empty(&nb->edges))
+                del_vertex(graph, nb);
+ fail_add_d:
+        if (list_is_empty(&v->edges))
+                del_vertex(graph, v);
+ fail_add_s:
+        pthread_mutex_unlock(&graph->lock);
+        return -ENOMEM;
+
 }
 
 int graph_del_edge(struct graph * graph,
@@ -322,30 +312,26 @@ int graph_del_edge(struct graph * graph,
 
         v = find_vertex_by_addr(graph, s_addr);
         if (v == NULL) {
-                pthread_mutex_unlock(&graph->lock);
-                log_err("No such source vertex.");
-                return -1;
+                log_err("Failed to find src vertex.");
+                goto fail;
         }
 
         nb = find_vertex_by_addr(graph, d_addr);
         if (nb == NULL) {
-                pthread_mutex_unlock(&graph->lock);
                 log_err("No such destination vertex.");
-                return -1;
+                goto fail;
         }
 
         e = find_edge_by_addr(v, d_addr);
         if (e == NULL) {
-                pthread_mutex_unlock(&graph->lock);
                 log_err("No such source edge.");
-                return -1;
+                goto fail;
         }
 
         nb_e = find_edge_by_addr(nb, s_addr);
         if (nb_e == NULL) {
-                pthread_mutex_unlock(&graph->lock);
                 log_err("No such destination edge.");
-                return -1;
+                goto fail;
         }
 
         if (--e->announced == 0)
@@ -362,6 +348,10 @@ int graph_del_edge(struct graph * graph,
         pthread_mutex_unlock(&graph->lock);
 
         return 0;
+
+ fail:
+        pthread_mutex_unlock(&graph->lock);
+        return -1;
 }
 
 static int get_min_vertex(struct graph *   graph,
@@ -381,7 +371,7 @@ static int get_min_vertex(struct graph *   graph,
 
         *v = NULL;
 
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 if (!used[i] && dist[i] < min) {
                         min = dist[i];
                         index = i;
@@ -413,24 +403,24 @@ static int dijkstra(struct graph *    graph,
         assert(nhops);
         assert(dist);
 
-        *nhops = malloc(sizeof(**nhops) * graph->nr_vertices);
+        *nhops = malloc(sizeof(**nhops) * graph->vertices.len);
         if (*nhops == NULL)
                 goto fail_pnhops;
 
-        *dist = malloc(sizeof(**dist) * graph->nr_vertices);
+        *dist = malloc(sizeof(**dist) * graph->vertices.len);
         if (*dist == NULL)
                 goto fail_pdist;
 
-        used = malloc(sizeof(*used) * graph->nr_vertices);
+        used = malloc(sizeof(*used) * graph->vertices.len);
         if (used == NULL)
                 goto fail_used;
 
         /* Init the data structures */
-        memset(used, 0, sizeof(*used) * graph->nr_vertices);
-        memset(*nhops, 0, sizeof(**nhops) * graph->nr_vertices);
-        memset(*dist, 0, sizeof(**dist) * graph->nr_vertices);
+        memset(used, 0, sizeof(*used) * graph->vertices.len);
+        memset(*nhops, 0, sizeof(**nhops) * graph->vertices.len);
+        memset(*dist, 0, sizeof(**dist) * graph->vertices.len);
 
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 v = list_entry(p, struct vertex, next);
                 (*dist)[i++]  = (v->addr == src) ? 0 : INT_MAX;
         }
@@ -527,7 +517,7 @@ static int graph_routing_table_simple(struct graph *     graph,
         assert(dist);
 
         /* We need at least 2 vertices for a table */
-        if (graph->nr_vertices < 2)
+        if (graph->vertices.len < 2)
                 goto fail_vertices;
 
         if (dijkstra(graph, s_addr, &nhops, dist))
@@ -536,7 +526,7 @@ static int graph_routing_table_simple(struct graph *     graph,
         list_head_init(table);
 
         /* Now construct the routing table from the nhops. */
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 v = list_entry(p, struct vertex, next);
 
                 /* This is the src */
@@ -634,7 +624,7 @@ static int graph_routing_table_lfa(struct graph *     graph,
                 addrs[j] = -1;
         }
 
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 v = list_entry(p, struct vertex, next);
 
                 if (v->addr != s_addr)
@@ -660,7 +650,7 @@ static int graph_routing_table_lfa(struct graph *     graph,
         }
 
         /* Loop though all nodes to see if we have a LFA for them. */
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 v = list_entry(p, struct vertex, next);
 
                 if (v->addr == s_addr)
@@ -717,14 +707,14 @@ static int graph_routing_table_ecmp(struct graph *     graph,
         assert(graph);
         assert(dist);
 
-        if (graph-> nr_vertices < 2)
+        if (graph->vertices.len < 2)
                 goto fail_vertices;
 
-        forwarding = malloc(sizeof(*forwarding) * graph->nr_vertices);
+        forwarding = malloc(sizeof(*forwarding) * graph->vertices.len);
         if (forwarding == NULL)
                 goto fail_vertices;
 
-        for (i = 0; i < graph->nr_vertices; ++i)
+        for (i = 0; i < graph->vertices.len; ++i)
                 list_head_init(&forwarding[i]);
 
         if (dijkstra(graph, s_addr, &nhops, dist))
@@ -745,7 +735,7 @@ static int graph_routing_table_ecmp(struct graph *     graph,
 
                 free(nhops);
 
-                list_for_each(h, &graph->vertices) {
+                list_for_each(h, &graph->vertices.list) {
                         v = list_entry(h, struct vertex, next);
                         if (tmp_dist[v->index] + 1 == (*dist)[v->index]) {
                                 n = malloc(sizeof(*n));
@@ -763,7 +753,7 @@ static int graph_routing_table_ecmp(struct graph *     graph,
 
         list_head_init(table);
         i = 0;
-        list_for_each(p, &graph->vertices) {
+        list_for_each(p, &graph->vertices.list) {
                 v = list_entry(p, struct vertex, next);
                 if (v->addr == s_addr) {
                         ++i;

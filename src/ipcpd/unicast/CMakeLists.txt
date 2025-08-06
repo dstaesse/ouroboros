@@ -15,6 +15,10 @@ include_directories(${CMAKE_BINARY_DIR}/include)
 set(IPCP_UNICAST_TARGET ipcpd-unicast CACHE INTERNAL "")
 set(IPCP_UNICAST_MPL 10000 CACHE STRING
     "Default maximum packet lifetime for the unicast IPCP, in ms")
+set(DEBUG_PROTO_DHT FALSE CACHE BOOL
+  "Add DHT protocol message output to debug logging")
+set(DEBUG_PROTO_LS FALSE CACHE BOOL
+  "Add link state protocol message output to debug logging")
 
 protobuf_generate_c(DHT_PROTO_SRCS DHT_PROTO_HDRS dir/dht.proto)
 
