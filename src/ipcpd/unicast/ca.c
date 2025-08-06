@@ -49,7 +49,6 @@ int ca_init(enum pol_cong_avoid pol)
         return 0;
 }
 
-
 void ca_fini(void)
 {
         ca.ops = NULL;

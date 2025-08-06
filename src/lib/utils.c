@@ -27,16 +27,26 @@
 #include <stdlib.h>
 #include <string.h>
 
+int bufcmp(const buffer_t * a,
+           const buffer_t * b)
+{
+        if (a->len != b->len)
+                return a->len < b->len ? -1 : 1;
+
+        return memcmp(a->data, b->data, a->len);
+}
+
+
 int n_digits(unsigned i)
 {
-    int n = 1;
+        int n = 1;
 
-    while (i > 9) {
-        ++n;
-        i /= 10;
-    }
+        while (i > 9) {
+                ++n;
+                i /= 10;
+        }
 
-    return n;
+        return n;
 }
 
 char * path_strip(const char * src)

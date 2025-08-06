@@ -41,8 +41,6 @@
 
 #define IPCP_LINUX_SLACK_NS @IPCP_LINUX_TIMERSLACK_NS@
 
-#cmakedefine IPCP_DEBUG_LOCAL
-
 /* unicast IPCP */
 #define QOS_PRIO_BE         @IPCP_QOS_CUBE_BE_PRIO@
 #define QOS_PRIO_VIDEO      @IPCP_QOS_CUBE_VIDEO_PRIO@
@@ -56,6 +54,12 @@
 #cmakedefine IPCP_CONN_WAIT_DIR
 #cmakedefine DISABLE_CORE_LOCK
 #cmakedefine IPCP_FLOW_STATS
+#cmakedefine IPCP_DEBUG_LOCAL
+#ifdef CONFIG_OUROBOROS_DEBUG
+#cmakedefine DEBUG_PROTO_DHT
+#cmakedefine DEBUG_PROTO_OEP
+#cmakedefine DEBUG_PROTO_LS
+#endif
 
 /* udp */
 #cmakedefine HAVE_DDNS

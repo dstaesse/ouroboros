@@ -31,31 +31,33 @@
 #include <ouroboros/serdes-oep.h>
 
 #include "ipcp_config.pb-c.h"
-typedef IpcpConfigMsg ipcp_config_msg_t;
-typedef DtConfigMsg   dt_config_msg_t;
-typedef EthConfigMsg  eth_config_msg_t;
-typedef UdpConfigMsg  udp_config_msg_t;
-typedef UniConfigMsg  uni_config_msg_t;
+typedef IpcpConfigMsg   ipcp_config_msg_t;
+typedef DtConfigMsg     dt_config_msg_t;
+typedef DirConfigMsg    dir_config_msg_t;
+typedef DirDhtConfigMsg dir_dht_config_msg_t;
+typedef EthConfigMsg    eth_config_msg_t;
+typedef UdpConfigMsg    udp_config_msg_t;
+typedef UniConfigMsg    uni_config_msg_t;
 
 #include "ipcp.pb-c.h"
-typedef IpcpMsg       ipcp_msg_t;
+typedef IpcpMsg         ipcp_msg_t;
 
 #include "irm.pb-c.h"
-typedef IrmMsg        irm_msg_t;
-typedef TimespecMsg   timespec_msg_t;
-typedef IpcpInfoMsg   ipcp_info_msg_t;
-typedef IpcpListMsg   ipcp_list_msg_t;
+typedef IrmMsg          irm_msg_t;
+typedef TimespecMsg     timespec_msg_t;
+typedef IpcpInfoMsg     ipcp_info_msg_t;
+typedef IpcpListMsg     ipcp_list_msg_t;
 
 #include "model.pb-c.h"
-typedef FlowInfoMsg    flow_info_msg_t;
-typedef LayerInfoMsg   layer_info_msg_t;
-typedef NameInfoMsg    name_info_msg_t;
-typedef QosspecMsg     qosspec_msg_t;
+typedef FlowInfoMsg      flow_info_msg_t;
+typedef LayerInfoMsg     layer_info_msg_t;
+typedef NameInfoMsg      name_info_msg_t;
+typedef QosspecMsg       qosspec_msg_t;
 
 #include "enroll.pb-c.h"
-typedef EnrollReqMsg   enroll_req_msg_t;
-typedef EnrollRespMsg  enroll_resp_msg_t;
-typedef EnrollAckMsg   enroll_ack_msg_t;
+typedef EnrollReqMsg     enroll_req_msg_t;
+typedef EnrollRespMsg    enroll_resp_msg_t;
+typedef EnrollAckMsg     enroll_ack_msg_t;
 
 /* IPCP configuration */
 timespec_msg_t *    timespec_s_to_msg(const struct timespec * s);

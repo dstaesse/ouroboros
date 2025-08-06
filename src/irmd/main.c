@@ -1393,7 +1393,7 @@ static void * acceptloop(void * o)
         return (void *) 0;
 }
 
-static void free_msg(void * o)
+static void __cleanup_irm_msg(void * o)
 {
         irm_msg__free_unpacked((irm_msg_t *) o, NULL);
 }
@@ -1437,7 +1437,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
 
         ret_msg->code = IRM_MSG_CODE__IRM_REPLY;
 
-        pthread_cleanup_push(free_msg, ret_msg);
+        pthread_cleanup_push(__cleanup_irm_msg, ret_msg);
 
         switch (msg->code) {
         case IRM_MSG_CODE__IRM_CREATE_IPCP:
@@ -1636,7 +1636,7 @@ static void * mainloop(void * o)
                 tpm_begin_work(irmd.tpm);
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
-                pthread_cleanup_push(free_msg, msg);
+                pthread_cleanup_push(__cleanup_irm_msg, msg);
 
                 ret_msg = do_command_msg(msg);
 

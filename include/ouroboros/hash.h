@@ -42,7 +42,8 @@ enum hash_algo {
 
 #define HASH_FMT32 "%02x%02x%02x%02x"
 #define HASH_VAL32(hash)                                  \
-        (hash)[0], (hash)[1], (hash)[2], (hash)[3]
+        ((uint8_t *) hash)[0], ((uint8_t *) hash)[1],     \
+        ((uint8_t *) hash)[2], ((uint8_t *) hash)[3]
 
 #define HASH_FMT64 HASH_FMT32 HASH_FMT32
 #define HASH_VAL64(hash64)                                \

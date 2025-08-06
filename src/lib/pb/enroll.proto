@@ -24,7 +24,6 @@ syntax = "proto2";
 import "ipcp_config.proto";
 
 message enroll_req_msg {
-        /* TODO authentication */
         required bytes id = 1;
 }
 

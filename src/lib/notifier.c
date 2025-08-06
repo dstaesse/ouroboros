@@ -95,18 +95,14 @@ int notifier_reg(notifier_fn_t callback,
         pthread_rwlock_wrlock(&notifier.lock);
 
         list_for_each(p, &notifier.listeners) {
-                struct listener * l = list_entry(p, struct listener, next);
-                if (l->callback == callback) {
-                        pthread_rwlock_unlock(&notifier.lock);
-                        return -EPERM;
-                }
+                l = list_entry(p, struct listener, next);
+                if (l->callback == callback)
+                        goto fail;
         }
 
         l = malloc(sizeof(*l));
-        if (l == NULL) {
-                pthread_rwlock_unlock(&notifier.lock);
-                return -ENOMEM;
-        }
+        if (l == NULL)
+                goto fail;
 
         l->callback = callback;
         l->obj      = obj;
@@ -116,6 +112,10 @@ int notifier_reg(notifier_fn_t callback,
         pthread_rwlock_unlock(&notifier.lock);
 
         return 0;
+ fail:
+        pthread_rwlock_unlock(&notifier.lock);
+        return -1;
+
 }
 
 void notifier_unreg(notifier_fn_t callback)

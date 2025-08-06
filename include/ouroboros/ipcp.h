@@ -32,14 +32,15 @@
 #define LAYER_NAME_SIZE 255
 #define DEV_NAME_SIZE   255
 
+/* TODO: Move state to ipcpd/ipcp.h, requires small change to reg/ipcp.c */
 enum ipcp_state {
-        IPCP_INIT = 0,
+        IPCP_NULL = 0,
+        IPCP_INIT,
         IPCP_BOOT,
-        IPCP_OPERATIONAL,
         IPCP_BOOTSTRAPPED,
         IPCP_ENROLLED,
-        IPCP_SHUTDOWN,
-        IPCP_NULL
+        IPCP_OPERATIONAL,
+        IPCP_SHUTDOWN
 };
 
 enum ipcp_type { /* IRMd uses order to select an IPCP for flow allocation. */
@@ -56,7 +57,7 @@ struct ipcp_info {
         enum ipcp_type  type;
         pid_t           pid;
         char            name[IPCP_NAME_SIZE + 1];
-        enum ipcp_state state;
+        enum ipcp_state state; /* TODO: remove. */
 };
 
 /* Unicast IPCP components. */
@@ -89,11 +90,111 @@ struct dt_config {
         enum pol_routing routing_type;
 };
 
+static const struct dt_config default_dt_config = {
+        .addr_size    = 4,
+        .eid_size     = 8,
+        .max_ttl      = 60,
+        .routing_type = ROUTING_LINK_STATE
+};
+
+enum pol_dir {
+        DIR_DHT = 0,
+        DIR_INVALID
+};
+
+enum pol_dir_hash {
+        DIR_HASH_SHA3_224,
+        DIR_HASH_SHA3_256,
+        DIR_HASH_SHA3_384,
+        DIR_HASH_SHA3_512,
+        DIR_HASH_INVALID
+};
+
+enum dir_dht_config_limits {
+        DHT_ALPHA_MIN       = 1,
+        DHT_K_MIN           = 1,
+        DHT_T_EXPIRE_MIN    = 10,
+        DHT_T_REFRESH_MIN   = 3,
+        DHT_T_REPLICATE_MIN = 3,
+
+        DHT_ALPHA_MAX       = 10,
+        DHT_K_MAX           = 20,
+        DHT_T_EXPIRE_MAX    = 86400,
+        DHT_T_REFRESH_MAX   = 3600,
+        DHT_T_REPLICATE_MAX = 3600,
+};
+
+struct dir_dht_config {
+        struct {
+                uint32_t alpha;       /* Parallel search factor */
+                uint32_t k;           /* Replication factor     */
+                uint32_t t_expire;    /* Expire time (s)        */
+                uint32_t t_refresh;   /* Refresh time (s)       */
+                uint32_t t_replicate; /* Replication time (s)   */
+        } params;
+        uint64_t peer;                /* Initial peer address   */
+};
+
+static const struct dir_dht_config default_dht_config = {
+        .params = {
+                .alpha       = 3,     /* Proven optimal value   */
+                .k           = 8,     /* MDHT value             */
+                .t_expire    = 86400, /* Expire after 1 day     */
+                .t_refresh   = 900,   /* MDHT value.            */
+                .t_replicate = 900    /* MDHT value.            */
+        }
+};
+
+/* TODO: Move hash algorithm in directory config */
+struct dir_config {
+        enum pol_dir pol;
+        union {
+                struct dir_dht_config dht;
+        };
+};
+
+static const struct dir_config default_dir_config = {
+        .pol = DIR_DHT,
+        .dht = {
+                .params = {
+                        .alpha       = 3,
+                        .k           = 8,
+                        .t_expire    = 86400,
+                        .t_refresh   = 900,
+                        .t_replicate = 900
+                }
+        }
+};
+
 /* IPCP configuration */
 struct uni_config {
         struct dt_config    dt;
+        struct dir_config   dir;
         enum pol_addr_auth  addr_auth_type;
         enum pol_cong_avoid cong_avoid;
+};
+
+static const struct uni_config default_uni_config = {
+        .dt = {
+                .addr_size    = 4,
+                .eid_size     = 8,
+                .max_ttl      = 60,
+                .routing_type = ROUTING_LINK_STATE
+        },
+        .dir = {
+                .pol = DIR_DHT,
+                .dht = {
+                        .params = {
+                                .alpha       = 3,
+                                .k           = 8,
+                                .t_expire    = 86400,
+                                .t_refresh   = 900,
+                                .t_replicate = 900
+                        }
+                }
+        },
+        .addr_auth_type = ADDR_AUTH_FLAT_RANDOM,
+        .cong_avoid     = CA_MB_ECN
 };
 
 struct eth_config {
@@ -108,16 +209,9 @@ struct udp_config {
 };
 
 /* Layers */
-enum pol_dir_hash {
-        DIR_HASH_SHA3_224,
-        DIR_HASH_SHA3_256,
-        DIR_HASH_SHA3_384,
-        DIR_HASH_SHA3_512,
-        DIR_HASH_INVALID
-};
-
 struct layer_info {
         char              name[LAYER_NAME_SIZE + 1];
+        /* TODO: Move this to directory info ? */
         enum pol_dir_hash dir_hash_algo;
 };
 
@@ -176,6 +270,18 @@ static const struct ipcp_config uni_default_conf = {
                         .eid_size     = 8,
                         .max_ttl      = 60,
                         .routing_type = ROUTING_LINK_STATE
+                },
+                .dir = {
+                        .pol = DIR_DHT,
+                        .dht = {
+                                .params = {
+                                        .alpha       = 3,
+                                        .k           = 8,
+                                        .t_expire    = 86400,
+                                        .t_refresh   = 900,
+                                        .t_replicate = 900
+                                }
+                        }
                 },
                 .addr_auth_type = ADDR_AUTH_FLAT_RANDOM,
                 .cong_avoid     = CA_MB_ECN

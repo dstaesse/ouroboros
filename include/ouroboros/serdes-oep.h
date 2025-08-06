@@ -33,7 +33,6 @@
 #define ENROLL_ID_LEN 8
 
 struct enroll_req {
-        /* TODO: Authentication */
         uint8_t id[ENROLL_ID_LEN];
 };
 
@@ -66,5 +65,13 @@ ssize_t enroll_ack_ser(const struct enroll_ack * ack,
 
 int     enroll_ack_des(struct enroll_ack * ack,
                        const buffer_t      buf);
+
+#ifdef DEBUG_PROTO_OEP
+void    debug_enroll_req(const struct enroll_req * req);
+
+void    debug_enroll_resp(const struct enroll_resp * resp);
+
+void    debug_enroll_ack(const struct enroll_ack * ack);
+#endif /* DEBUG_PROTO_OEP */
 
 #endif /* OUROBOROS_LIB_SERDES_OEP_H*/

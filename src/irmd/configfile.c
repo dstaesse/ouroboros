@@ -52,6 +52,7 @@
 #endif
 
 #define ERRBUFSZ 200
+#define DATUMSZ  256
 
 static int toml_hash(toml_table_t *      table,
                      struct layer_info * info)
@@ -217,6 +218,99 @@ static int toml_broadcast(toml_table_t *       table,
         return 0;
 }
 
+#define BETWEEN(a, b, c) ((a) >= (b) && (a) <= (c))
+#define DHT(conf, x) (conf)->dht.params.x
+static int toml_dir(toml_table_t *      table,
+                     struct dir_config * conf)
+{
+        toml_datum_t dir;
+        toml_datum_t alpha;
+        toml_datum_t t_expire;
+        toml_datum_t t_refresh;
+        toml_datum_t t_replicate;
+        toml_datum_t k;
+
+        dir = toml_string_in(table, "directory");
+        if (dir.ok) {
+                log_dbg("Found directory type: %s", dir.u.s);
+                if (strlen(dir.u.s) > DATUMSZ) {
+                        log_err("Directory name too long: %s", dir.u.s);
+                        free(dir.u.s);
+                        return -1;
+                }
+                if (strcmp(dir.u.s, "DHT") == 0)
+                        conf->pol = DIR_DHT;
+                else if (strcmp(dir.u.s, "dht") == 0)
+                        conf->pol = DIR_DHT;
+                else {
+                        log_err("Unknown directory type: %s", dir.u.s);
+                        free(dir.u.s);
+                        return -EINVAL;
+                }
+                free(dir.u.s);
+        }
+
+        switch(conf->pol) {
+        case DIR_DHT:
+                log_info("Using DHT directory policy.");
+                alpha = toml_int_in(table, "dht_alpha");
+                if (alpha.ok) {
+                        if (!BETWEEN(alpha.u.i,
+                                DHT_ALPHA_MIN, DHT_ALPHA_MAX)) {
+                                log_err("Invalid alpha value: %ld",
+                                        alpha.u.i);
+                                return -EINVAL;
+                        }
+                        DHT(conf, alpha) = alpha.u.i;
+                }
+                t_expire = toml_int_in(table, "dht_t_expire");
+                if (t_expire.ok) {
+                        if (!BETWEEN(t_expire.u.i,
+                                DHT_T_EXPIRE_MIN, DHT_T_EXPIRE_MAX)) {
+                                log_err("Invalid expire time: %ld",
+                                        t_expire.u.i);
+                                return -EINVAL;
+                        }
+                        DHT(conf, t_expire) = t_expire.u.i;
+                }
+                t_refresh = toml_int_in(table, "dht_t_refresh");
+                if (t_refresh.ok) {
+                        if (!BETWEEN(t_refresh.u.i,
+                                DHT_T_REFRESH_MIN, DHT_T_REFRESH_MAX)) {
+                                log_err("Invalid refresh time: %ld",
+                                        t_refresh.u.i);
+                                return -EINVAL;
+                        }
+                        DHT(conf, t_refresh) = t_refresh.u.i;
+                }
+                t_replicate = toml_int_in(table, "dht_t_replicate");
+                if (t_replicate.ok) {
+                        if (!BETWEEN(t_replicate.u.i,
+                                DHT_T_REPLICATE_MIN, DHT_T_REPLICATE_MAX)) {
+                                log_err("Invalid replication time: %ld",
+                                        t_replicate.u.i);
+                                return -EINVAL;
+                        }
+                        DHT(conf, t_replicate) = t_replicate.u.i;
+                }
+                k = toml_int_in(table, "dht_k");
+                if (k.ok) {
+                        if (!BETWEEN(k.u.i, DHT_K_MIN, DHT_K_MAX)) {
+                                log_err("Invalid replication factor: %ld",
+                                        k.u.i);
+                                return -EINVAL;
+                        }
+                        DHT(conf, k) = k.u.i;
+                }
+                break;
+        default:
+                assert(false);
+                break;
+        }
+
+        return 0;
+}
+
 static int toml_routing(toml_table_t *     table,
                         struct dt_config * conf)
 {
@@ -314,12 +408,12 @@ static int toml_dt(toml_table_t *     table,
 static int toml_unicast(toml_table_t *       table,
                         struct ipcp_config * conf)
 {
-
-
         *conf = uni_default_conf;
 
-        if (toml_hash(table, &conf->layer_info) < 0)
+        if (toml_dir(table, &conf->unicast.dir) < 0) {
+                log_err("Invalid directory configuration.");
                 return -1;
+        }
 
         if (toml_dt(table, &conf->unicast.dt) < 0) {
                 log_err("Invalid DT configuration.");
@@ -335,6 +429,7 @@ static int toml_unicast(toml_table_t *       table,
                 log_err("Invalid congestion avoidance algorithm.");
                 return -1;
         }
+
 
         return 0;
 }
@@ -566,7 +661,7 @@ static int toml_ipcp_list(toml_table_t * table,
                 }
 
                 info.type = type;
-                strcpy(info.name,key);
+                strcpy(info.name, key);
                 conf.type = type;
 
                 ret = toml_ipcp(toml_table_in(table, key), &info, &conf);
@@ -765,8 +860,9 @@ static int toml_toplevel(toml_table_t * table,
         toml_table_t * subtable;
 
         subtable = toml_table_in(table, key);
-
-        if (strcmp(key, "local") == 0)
+        if (strcmp(key, "name") == 0)
+                return toml_name_list(subtable);
+        else if (strcmp(key, "local") == 0)
                 return toml_ipcp_list(subtable, IPCP_LOCAL);
         else if (strcmp(key, "eth-dix") == 0)
                 return toml_ipcp_list(subtable, IPCP_ETH_DIX);
@@ -778,10 +874,8 @@ static int toml_toplevel(toml_table_t * table,
                 return toml_ipcp_list(subtable, IPCP_BROADCAST);
         else if (strcmp(key, "unicast") == 0)
                 return toml_ipcp_list(subtable, IPCP_UNICAST);
-        else if (strcmp(key, "name") == 0)
-                return toml_name_list(subtable);
-
-        log_err("Unkown toplevel key: %s.", key);
+        else
+                log_err("Unkown toplevel key: %s.", key);
         return -1;
 }
 

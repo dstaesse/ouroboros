@@ -155,7 +155,7 @@ static int broadcast_ipcp_enroll(const char *        dst,
         return -1;
 }
 
-static int broadcast_ipcp_bootstrap(const struct ipcp_config * conf)
+static int broadcast_ipcp_bootstrap(struct ipcp_config * conf)
 {
         assert(conf);
         assert(conf->type == THIS_TYPE);
@@ -207,7 +207,7 @@ static int broadcast_ipcp_join(int             fd,
 {
         struct conn conn;
         time_t      mpl = IPCP_BROADCAST_MPL;
-        buffer_t    data = {0, NULL};
+        buffer_t    data = BUF_INIT;
 
         (void) qs;
 

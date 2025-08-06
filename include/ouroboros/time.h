@@ -31,8 +31,8 @@
 #undef BILLION
 #endif
 
-#define MILLION  1000000L
-#define BILLION  1000000000L
+#define MILLION  1000000LL
+#define BILLION  1000000000LL
 
 #include <time.h>
 #include <sys/time.h>

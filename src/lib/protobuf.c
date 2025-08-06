@@ -222,6 +222,97 @@ struct dt_config dt_config_msg_to_s(const dt_config_msg_t * msg)
         return s;
 }
 
+struct dir_dht_config dir_dht_config_msg_to_s(const dir_dht_config_msg_t * msg)
+{
+        struct dir_dht_config s;
+
+        assert(msg != NULL);
+
+        s.params.alpha       = msg->alpha;
+        s.params.k           = msg->k;
+        s.params.t_expire    = msg->t_expire;
+        s.params.t_refresh   = msg->t_refresh;
+        s.params.t_replicate = msg->t_replicate;
+        s.peer               = msg->peer;
+
+        return s;
+}
+
+dir_dht_config_msg_t * dir_dht_config_s_to_msg(const struct dir_dht_config * s)
+{
+        dir_dht_config_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                return NULL;
+
+        dir_dht_config_msg__init(msg);
+
+        msg->alpha       = s->params.alpha;
+        msg->k           = s->params.k;
+        msg->t_expire    = s->params.t_expire;
+        msg->t_refresh   = s->params.t_refresh;
+        msg->t_replicate = s->params.t_replicate;
+        msg->peer        = s->peer;
+
+        return msg;
+}
+
+struct dir_config dir_config_msg_to_s(const dir_config_msg_t * msg)
+{
+        struct dir_config s;
+
+        assert(msg != NULL);
+
+        switch (msg->pol) {
+        case DIR_DHT:
+                s.dht = dir_dht_config_msg_to_s(msg->dht);
+                break;
+        default:
+                /* No checks here */
+                break;
+        }
+
+        s.pol = msg->pol;
+
+        return s;
+}
+
+dir_config_msg_t * dir_config_s_to_msg(const struct dir_config * s)
+{
+        dir_config_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                return NULL;
+
+        dir_config_msg__init(msg);
+
+        switch (s->pol) {
+        case DIR_DHT:
+                msg->dht = dir_dht_config_s_to_msg(&s->dht);
+                if (msg->dht == NULL)
+                        goto fail_msg;
+                break;
+        default:
+                /* No checks here */
+                break;
+        }
+
+        msg->pol = s->pol;
+
+        return msg;
+
+ fail_msg:
+        dir_config_msg__free_unpacked(msg, NULL);
+        return NULL;
+}
+
+
 uni_config_msg_t * uni_config_s_to_msg(const struct uni_config * s)
 {
         uni_config_msg_t * msg;
@@ -237,6 +328,11 @@ uni_config_msg_t * uni_config_s_to_msg(const struct uni_config * s)
         msg->dt = dt_config_s_to_msg(&s->dt);
         if (msg->dt == NULL)
                 goto fail_msg;
+
+        msg->dir = dir_config_s_to_msg(&s->dir);
+        if (msg->dir == NULL)
+                goto fail_msg;
+
 
         msg->addr_auth_type = s->addr_auth_type;
         msg->cong_avoid     = s->cong_avoid;
@@ -254,6 +350,7 @@ struct uni_config uni_config_msg_to_s(const uni_config_msg_t * msg)
         struct uni_config s;
 
         s.dt = dt_config_msg_to_s(msg->dt);
+        s.dir = dir_config_msg_to_s(msg->dir);
 
         s.addr_auth_type  = msg->addr_auth_type;
         s.cong_avoid      = msg->cong_avoid;

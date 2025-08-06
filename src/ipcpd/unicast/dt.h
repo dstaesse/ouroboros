@@ -39,9 +39,11 @@ int  dt_start(void);
 
 void dt_stop(void);
 
-int  dt_reg_comp(void * comp,
+int  dt_reg_comp(void *  comp,
                  void (* func)(void * comp, struct shm_du_buff * sdb),
-                 char * name);
+                 char *  name);
+
+void dt_unreg_comp(int eid);
 
 int  dt_write_packet(uint64_t             dst_addr,
                      qoscube_t            qc,

@@ -37,12 +37,14 @@
 #define CLR_RED     "\x1b[31m"
 #define CLR_GREEN   "\x1b[32m"
 #define CLR_YELLOW  "\x1b[33m"
+#define CLR_BLUE    "\x1b[34m"
 #define CLR_RESET   "\x1b[0m"
 
 #define DEBUG_CODE "DB"
 #define ERROR_CODE "EE"
 #define WARN_CODE  "WW"
 #define INFO_CODE  "II"
+#define PROTO_CODE "PP"
 
 extern bool log_syslog;
 
@@ -98,9 +100,15 @@ void log_fini(void);
 #define log_dbg(...)  __olog("", DEBUG_CODE, LOG_DEBUG, __VA_ARGS__)
 #define log_dbg_id(id, fmt, ...)                                              \
         __olog_id("", DEBUG_CODE, LOG_DEBUG, id, fmt, ## __VA_ARGS__)
+#define log_proto(...) __olog(CLR_BLUE, PROTO_CODE, LOG_DEBUG, __VA_ARGS__)
+#define log_proto_id(id, fmt, ...)                                             \
+        __olog_id(CLR_BLUE, INFO_CODE, LOG_INFO, id, fmt, ## __VA_ARGS__)
+
 #else
 #define log_dbg(...)  do { } while (0)
 #define log_dbg_id(...)  do { } while (0)
+#define log_proto(...) do { } while (0)
+#define log_proto_id(...) do { } while (0)
 #endif
 
 #endif /* OUROBOROS_LIB_LOGS_H */

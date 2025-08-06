@@ -885,12 +885,9 @@ int reg_list_ipcps(ipcp_list_msg_t *** ipcps)
 
         list_for_each(p, &reg.ipcps) {
                 struct reg_ipcp * entry;
-                log_dbg("Creating ipcp list info %d.", i);
                 entry = list_entry(p, struct reg_ipcp, next);
-                if (__get_ipcp_info(&(*ipcps)[i], entry) < 0) {
-                        log_err("Failed to create ipcp list info.");
+                if (__get_ipcp_info(&(*ipcps)[i], entry) < 0)
                         goto fail;
-                }
 
                 i++;
         }

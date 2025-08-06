@@ -31,7 +31,7 @@ if (HAVE_FUSE)
     endif ()
 endif ()
 
-set(SOURCE_FILES
+set(IPCP_UNICAST_SOURCE_FILES
   # Add source files here
   addr-auth.c
   ca.c
@@ -56,7 +56,7 @@ set(SOURCE_FILES
   routing/graph.c
   )
 
-add_executable(ipcpd-unicast ${SOURCE_FILES} ${IPCP_SOURCES} ${COMMON_SOURCES}
+add_executable(ipcpd-unicast ${IPCP_UNICAST_SOURCE_FILES} ${IPCP_SOURCES} ${COMMON_SOURCES}
   ${DHT_PROTO_SRCS} ${LAYER_CONFIG_PROTO_SRCS})
 target_link_libraries(ipcpd-unicast LINK_PUBLIC ouroboros-dev)
 

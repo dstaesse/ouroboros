@@ -30,22 +30,19 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-void *   dht_create(void);
+int      dht_init(struct dir_dht_config * conf);
 
-void     dht_destroy(void * dir);
+void     dht_fini(void);
 
-int      dht_bootstrap(void * dir);
+int      dht_start(void);
 
-int      dht_reg(void *          dir,
-                 const uint8_t * key);
+void     dht_stop(void);
 
-int      dht_unreg(void *          dir,
-                   const uint8_t * key);
+int      dht_reg(const uint8_t * key);
 
-uint64_t dht_query(void *          dir,
-                   const uint8_t * key);
+int      dht_unreg(const uint8_t * key);
 
-int      dht_wait_running(void * dir);
+uint64_t dht_query(const uint8_t * key);
 
 extern struct dir_ops dht_dir_ops;
 

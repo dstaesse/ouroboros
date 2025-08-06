@@ -86,7 +86,7 @@ ip="127.0.0.1"
 
 [broadcast.bc1]
 bootstrap="broadcast"   # Defaults to not set.
-autobind=true           # Defaults to false.
+# autobind=true           # Defaults to false.
 
 [broadcast.bc2]
 enrol="bc1"
@@ -96,13 +96,19 @@ enrol="bc1"
 bootstrap="LAN"         # Defaults to not set.
 autobind=true           # Defaults to false.
    # BOOTSTRAP CONFIGURATION
-# hash="SHA3_224"       # Defaults to SHA3_256.
 # addr_size=4           # Defaults to 4 (32-bit addresses).
 # eid_size=8            # Defaults to 8 (64-bit endpoint IDs, only accepted option).
 # max_ttl=60            # Defaults to 60 (max 255).
 # addr-auth="flat"      # Defaults to flat (currently only option).
 # routing="lfa"         # Defaults to link-state (options: link-state, lfa, ecmp).
 # congestion="none"     # Defaults to mb-ecn (options: none, mb-ecn).
+# directory=DHT         # Defaults to DHT (options: DHT)
+# hash="SHA3_224"       # Defaults to SHA3_256.
+# dht_alpha=3           # DHT parallel search factor (Default 3, optimal)
+# dht_k=8               # DHT replication factor (Default: 8, same as Mainline DHT)
+# dht_t_expiry=3600     # DHT entry expiry time (s) (Default: 86400 s)
+# dht_t_refresh         # DHT contact refresh interval (s) (Default: 900 s)
+# dht_t_replicate       # DHT replication interval (s) (Default: 900 s)
    # NAMES KNOWN
 reg=["oping"]           # Defaults to [].
 

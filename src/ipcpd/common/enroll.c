@@ -43,6 +43,10 @@
 #include <string.h>
 #include <pthread.h>
 
+#ifdef __APPLE__
+#define llabs labs
+#endif
+
 #define ENROLL_COMP             "Enrollment"
 #define ENROLL_PROTO            "OEP" /* Ouroboros enrollment protocol */
 #define ENROLL_WARN_TIME_OFFSET 20
@@ -59,6 +63,13 @@ struct {
         enum enroll_state  state;
         pthread_t          listener;
 } enroll;
+
+#ifdef DEBUG_PROTO_OEP
+
+
+#endif
+
+
 
 static void * enroll_handle(void * o)
 {
@@ -106,8 +117,6 @@ static void * enroll_handle(void * o)
                 }
 
                 log_info_id(req.id, "Handling incoming enrollment.");
-
-                /* TODO: authentication, timezone handling (UTC). */
 
                 ack.result = -100;
 
@@ -242,7 +251,7 @@ int enroll_boot(struct conn *   conn,
         rtt.tv_sec  = resp.t.tv_sec;
         rtt.tv_nsec = resp.t.tv_nsec;
 
-        if (labs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
+        if (llabs(ts_diff_ms(&t0, &rtt)) - delta_t > ENROLL_WARN_TIME_OFFSET)
                 log_warn_id(id, "Clock offset above threshold.");
 
         return 0;

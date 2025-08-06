@@ -31,10 +31,11 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/random.h>
 
+#include "addr-auth.h"
 #include "ipcp.h"
 #include "flat.h"
 
-#define NAME_LEN 8
+#define NAME_LEN        8
 #define INVALID_ADDRESS 0
 
 struct {
@@ -63,6 +64,9 @@ int flat_init(const void * info)
         while (flat.addr == INVALID_ADDRESS)
                 random_buffer(&flat.addr,sizeof(flat.addr));
 #endif
+        log_dbg("Flat address initialized to " ADDR_FMT32 ".",
+                ADDR_VAL32((uint8_t *) &flat.addr));
+
         return 0;
 }
 

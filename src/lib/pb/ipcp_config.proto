@@ -31,10 +31,25 @@ message dt_config_msg {
         required uint32 routing_type = 4;
 }
 
+message dir_dht_config_msg {
+        required uint32 alpha       = 1;
+        required uint32 k           = 2;
+        required uint32 t_expire    = 3;
+        required uint32 t_refresh   = 4;
+        required uint32 t_replicate = 5;
+        required uint64 peer        = 6;
+}
+
+message dir_config_msg {
+        required uint32 pol             = 1;
+        optional dir_dht_config_msg dht = 2;
+}
+
 message uni_config_msg {
         required dt_config_msg dt      = 1;
-        required uint32 addr_auth_type = 2;
-        required uint32 cong_avoid     = 3;
+        required dir_config_msg  dir   = 2;
+        required uint32 addr_auth_type = 3;
+        required uint32 cong_avoid     = 4;
 }
 
 message eth_config_msg {

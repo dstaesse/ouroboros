@@ -584,7 +584,7 @@ static const char * inet4_ntop(const void * addr,
         return inet_ntop(AF_INET, addr, buf, INET_ADDRSTRLEN);
 }
 
-static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
+static int udp_ipcp_bootstrap(struct ipcp_config * conf)
 {
         char ipstr[INET_ADDRSTRLEN];
         char dnsstr[INET_ADDRSTRLEN];
@@ -664,14 +664,14 @@ static int udp_ipcp_bootstrap(const struct ipcp_config * conf)
         return 0;
 
  fail_packet_writer:
-        while (i > 0) {
-                pthread_cancel(udp_data.packet_writer[--i]);
+        while (i-- > 0) {
+                pthread_cancel(udp_data.packet_writer[i]);
                 pthread_join(udp_data.packet_writer[i], NULL);
         }
         i = IPCP_UDP_RD_THR;
  fail_packet_reader:
-        while (i > 0) {
-                pthread_cancel(udp_data.packet_reader[--i]);
+        while (i-- > 0) {
+                pthread_cancel(udp_data.packet_reader[i]);
                 pthread_join(udp_data.packet_reader[i], NULL);
         }
         pthread_cancel(udp_data.mgmt_handler);

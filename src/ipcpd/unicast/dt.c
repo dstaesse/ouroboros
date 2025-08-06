@@ -60,7 +60,7 @@
 #include <assert.h>
 
 #define QOS_BLOCK_LEN   672
-#define RIB_FILE_STRLEN (189 + QOS_BLOCK_LEN * QOS_CUBE_MAX)
+#define RIB_FILE_STRLEN (169 + RIB_TM_STRLEN + QOS_BLOCK_LEN * QOS_CUBE_MAX)
 #define RIB_NAME_STRLEN 256
 
 #ifndef CLOCK_REALTIME_COARSE
@@ -189,7 +189,7 @@ static int dt_rib_read(const char * path,
         char        str[QOS_BLOCK_LEN + 1];
         char        addrstr[20];
         char *      entry;
-        char        tmstr[20];
+        char        tmstr[RIB_TM_STRLEN];
         size_t      rxqlen = 0;
         size_t      txqlen = 0;
         struct tm * tm;
@@ -217,8 +217,8 @@ static int dt_rib_read(const char * path,
         else
                 sprintf(addrstr, "%" PRIu64, dt.stat[fd].addr);
 
-        tm = localtime(&dt.stat[fd].stamp);
-        strftime(tmstr, sizeof(tmstr), "%F %T", tm);
+        tm = gmtime(&dt.stat[fd].stamp);
+        strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
 
         if (fd >= PROG_RES_FDS) {
                 fccntl(fd, FLOWGRXQLEN, &rxqlen);
@@ -226,11 +226,11 @@ static int dt_rib_read(const char * path,
         }
 
         sprintf(buf,
-                "Flow established at:      %20s\n"
+                "Flow established at:      %.*s\n"
                 "Endpoint address:         %20s\n"
                 "Queued packets (rx):      %20zu\n"
                 "Queued packets (tx):      %20zu\n\n",
-                tmstr, addrstr, rxqlen, txqlen);
+                RIB_TM_STRLEN - 1, tmstr, addrstr, rxqlen, txqlen);
         for (i = 0; i < QOS_CUBE_MAX; ++i) {
                 sprintf(str,
                         "Qos cube %3d:\n"
@@ -287,49 +287,46 @@ static int dt_rib_readdir(char *** buf)
 
         pthread_rwlock_rdlock(&dt.lock);
 
-        if (dt.n_flows < 1) {
-                pthread_rwlock_unlock(&dt.lock);
-                return 0;
-        }
+        if (dt.n_flows < 1)
+                goto no_flows;
 
         *buf = malloc(sizeof(**buf) * dt.n_flows);
-        if (*buf == NULL) {
-                pthread_rwlock_unlock(&dt.lock);
-                return -ENOMEM;
-        }
+        if (*buf == NULL)
+                goto fail_entries;
 
         for (i = 0; i < PROG_MAX_FLOWS; ++i) {
                 pthread_mutex_lock(&dt.stat[i].lock);
 
                 if (dt.stat[i].stamp == 0) {
                         pthread_mutex_unlock(&dt.stat[i].lock);
-                        /* Optimization: skip unused res_fds. */
-                        if (i < PROG_RES_FDS)
-                                i = PROG_RES_FDS;
-                        continue;
+                        break;
                 }
+
+                pthread_mutex_unlock(&dt.stat[i].lock);
 
                 sprintf(entry, "%zu", i);
 
                 (*buf)[idx] = malloc(strlen(entry) + 1);
-                if ((*buf)[idx] == NULL) {
-                        while (idx-- > 0)
-                                free((*buf)[idx]);
-                        free(*buf);
-                        pthread_mutex_unlock(&dt.stat[i].lock);
-                        pthread_rwlock_unlock(&dt.lock);
-                        return -ENOMEM;
-                }
+                if ((*buf)[idx] == NULL)
+                        goto fail_entry;
 
                 strcpy((*buf)[idx++], entry);
 
-                pthread_mutex_unlock(&dt.stat[i].lock);
         }
         assert((size_t) idx == dt.n_flows);
-
+ no_flows:
         pthread_rwlock_unlock(&dt.lock);
 
         return idx;
+
+ fail_entry:
+        while (idx-- > 0)
+                free((*buf)[idx]);
+        free(*buf);
+fail_entries:
+        pthread_rwlock_unlock(&dt.lock);
+        return -ENOMEM;
+
 #else
         (void) buf;
         return 0;
@@ -728,17 +725,17 @@ int dt_start(void)
 
         if (pthread_create(&dt.listener, NULL, dt_conn_handle, NULL)) {
                 log_err("Failed to create listener thread.");
-                psched_destroy(dt.psched);
-                return -1;
+                goto fail_listener;
         }
 
         return 0;
 
+ fail_listener:
+        notifier_unreg(&handle_event);
  fail_notifier_reg:
         psched_destroy(dt.psched);
  fail_psched:
         return -1;
-
 }
 
 void dt_stop(void)
@@ -757,7 +754,7 @@ int dt_reg_comp(void * comp,
 {
         int eid;
 
-        assert(func);
+        assert(func != NULL);
 
         pthread_rwlock_wrlock(&dt.lock);
 
@@ -781,6 +778,23 @@ int dt_reg_comp(void * comp,
         stat_used(eid, dt.addr);
 #endif
         return eid;
+}
+
+void dt_unreg_comp(int eid)
+{
+        assert(eid >= 0 && eid < PROG_RES_FDS);
+
+        pthread_rwlock_wrlock(&dt.lock);
+
+        assert(dt.comps[eid].post_packet != NULL);
+
+        dt.comps[eid].post_packet = NULL;
+        dt.comps[eid].comp        = NULL;
+        dt.comps[eid].name        = NULL;
+
+        pthread_rwlock_unlock(&dt.lock);
+
+        return;
 }
 
 int dt_write_packet(uint64_t             dst_addr,
@@ -811,7 +825,8 @@ int dt_write_packet(uint64_t             dst_addr,
 #endif
         fd = pff_nhop(dt.pff[qc], dst_addr);
         if (fd < 0) {
-                log_dbg("Could not get nhop for addr %" PRIu64 ".", dst_addr);
+                log_dbg("Could not get nhop for " ADDR_FMT32 ".",
+                        ADDR_VAL32(&dst_addr));
 #ifdef IPCP_FLOW_STATS
                 if (eid < PROG_RES_FDS) {
                         pthread_mutex_lock(&dt.stat[eid].lock);

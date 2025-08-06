@@ -137,7 +137,7 @@ static void * local_ipcp_packet_loop(void * o)
         return (void *) 0;
 }
 
-static int local_ipcp_bootstrap(const struct ipcp_config * conf)
+static int local_ipcp_bootstrap(struct ipcp_config * conf)
 {
 
         assert(conf);

@@ -25,18 +25,19 @@
 
 #include <inttypes.h>
 
-int      dir_init(void);
+/* may update the config! */
+int      dir_init(struct dir_config * conf);
 
 void     dir_fini(void);
 
-int      dir_bootstrap(void);
+int      dir_start(void);
+
+void     dir_stop(void);
 
 int      dir_reg(const uint8_t * hash);
 
 int      dir_unreg(const uint8_t * hash);
 
 uint64_t dir_query(const uint8_t * hash);
-
-int      dir_wait_running(void);
 
 #endif /* OUROBOROS_IPCPD_UNICAST_DIR_H */

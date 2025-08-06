@@ -37,7 +37,7 @@
 #define ipcp_dir_hash_strlen() (ipcp_dir_hash_len() * 2)
 
 struct ipcp_ops {
-        int   (* ipcp_bootstrap)(const struct ipcp_config * conf);
+        int   (* ipcp_bootstrap)(struct ipcp_config * conf);
 
         int   (* ipcp_enroll)(const char *        dst,
                               struct layer_info * info);
@@ -87,6 +87,9 @@ void            ipcp_fini(void);
 enum ipcp_type  ipcp_get_type(void);
 
 const char *    ipcp_get_name(void);
+
+/* TODO: Only specify hash algorithm in directory policy */
+void            ipcp_set_dir_hash_algo(enum hash_algo algo);
 
 void            ipcp_set_state(enum ipcp_state state);
 

@@ -40,6 +40,9 @@ typedef struct {
         uint8_t * data;
 } buffer_t;
 
+int bufcmp(const buffer_t * a,
+           const buffer_t * b);
+
 /*
  * Returns the number of characters a uint would
  * need when represented as a string
@@ -59,11 +62,17 @@ void    argvfree(char ** argv);
 /* destroy a ** */
 #define freepp(type, ptr, len)                          \
         do {                                            \
-                if (len == 0)                           \
-                        break;                          \
-                while (len > 0)                         \
-                        free(((type **) ptr)[--len]);   \
+                while (len-- > 0)                       \
+                        free(((type **) ptr)[len]);     \
                 free(ptr);                              \
-        } while (0);
+        } while (0)
+
+/* destroys an array of buffers */
+#define freebufs(ptr, len)                              \
+        do {                                            \
+                while ((len)-- > 0)                     \
+                        freebuf((ptr)[len]);            \
+                free(ptr);                              \
+        } while (0)
 
 #endif /* OUROBOROS_LIB_UTILS_H */

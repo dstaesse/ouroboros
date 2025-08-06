@@ -4,7 +4,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-set(SOURCE_FILES
+set(TOOLS_IRM_SOURCE_FILES
   # Add source files here
   irm.c
   irm_bind_program.c
@@ -32,8 +32,11 @@ set(SOURCE_FILES
   irm_utils.c
   )
 
-add_executable(irm ${SOURCE_FILES})
+add_executable(irm ${TOOLS_IRM_SOURCE_FILES})
 
 target_link_libraries(irm LINK_PUBLIC ouroboros-irm)
 
 install(TARGETS irm RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
+
+# enable when we have tests
+# add_subdirectory(tests)

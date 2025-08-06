@@ -25,6 +25,8 @@
 
 #define RIB_PATH_LEN  300
 #define RIB_SEPARATOR "/"
+#define RIB_TM_STRLEN 26
+#define RIB_TM_FORMAT "%F %T (UTC)"
 
 #include <sys/types.h>
 

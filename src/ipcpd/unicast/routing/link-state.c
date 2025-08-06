@@ -141,7 +141,7 @@ static int str_adj(struct adjacency * adj,
                    char *             buf,
                    size_t             len)
 {
-        char        tmbuf[64];
+        char        tmstr[RIB_TM_STRLEN];
         char        srcbuf[64];
         char        dstbuf[64];
         char        seqnobuf[64];
@@ -152,15 +152,16 @@ static int str_adj(struct adjacency * adj,
         if (len < LS_ENTRY_SIZE)
                 return -1;
 
-        tm = localtime(&adj->stamp);
-        strftime(tmbuf, sizeof(tmbuf), "%F %T", tm); /* 19 chars */
+        tm = gmtime(&adj->stamp);
+        strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
 
         sprintf(srcbuf, "%" PRIu64, adj->src);
         sprintf(dstbuf, "%" PRIu64, adj->dst);
         sprintf(seqnobuf, "%" PRIu64, adj->seqno);
 
-        sprintf(buf, "src: %20s\ndst: %20s\nseqno: %18s\nupd: %20s\n",
-                srcbuf, dstbuf, seqnobuf, tmbuf);
+        sprintf(buf, "src: %20s\ndst: %20s\nseqno: %18s\n"
+                "upd: %s\n",
+                srcbuf, dstbuf, seqnobuf, tmstr);
 
         return LS_ENTRY_SIZE;
 }
@@ -257,56 +258,45 @@ static int lsdb_rib_readdir(char *** buf)
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
-        if (ls.db_len + ls.nbs_len == 0) {
-                pthread_rwlock_unlock(&ls.db_lock);
-                return 0;
-        }
+        if (ls.db_len + ls.nbs_len == 0)
+                goto no_entries;
 
         *buf = malloc(sizeof(**buf) * (ls.db_len + ls.nbs_len));
-        if (*buf == NULL) {
-                pthread_rwlock_unlock(&ls.db_lock);
-                return -ENOMEM;
-        }
+        if (*buf == NULL)
+                goto fail_entries;
 
         list_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 char * str = (nb->type == NB_DT ? "dt." : "mgmt.");
                 sprintf(entry, "%s%" PRIu64, str, nb->addr);
                 (*buf)[idx] = malloc(strlen(entry) + 1);
-                if ((*buf)[idx] == NULL) {
-                        while (idx-- > 0)
-                                free((*buf)[idx]);
-                        free(*buf);
-                        pthread_rwlock_unlock(&ls.db_lock);
-                        return -ENOMEM;
-                }
+                if ((*buf)[idx] == NULL)
+                        goto fail_entry;
 
-                strcpy((*buf)[idx], entry);
-
-                idx++;
+                strcpy((*buf)[idx++], entry);
         }
 
         list_for_each(p, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 sprintf(entry, "%" PRIu64 ".%" PRIu64, a->src, a->dst);
                 (*buf)[idx] = malloc(strlen(entry) + 1);
-                if ((*buf)[idx] == NULL) {
-                        ssize_t j;
-                        for (j = 0; j < idx; ++j)
-                                free(*buf[j]);
-                        free(buf);
-                        pthread_rwlock_unlock(&ls.db_lock);
-                        return -ENOMEM;
-                }
+                if ((*buf)[idx] == NULL)
+                        goto fail_entry;
 
-                strcpy((*buf)[idx], entry);
-
-                idx++;
+                strcpy((*buf)[idx++], entry);
         }
-
+ no_entries:
         pthread_rwlock_unlock(&ls.db_lock);
 
         return idx;
+
+ fail_entry:
+        while (idx-- > 0)
+                free((*buf)[idx]);
+        free(*buf);
+ fail_entries:
+        pthread_rwlock_unlock(&ls.db_lock);
+        return -ENOMEM;
 }
 
 static struct rib_ops r_ops = {

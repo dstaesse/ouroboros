@@ -1487,7 +1487,7 @@ static int eth_init_raw_socket(struct ifreq * ifr)
 }
 #endif
 
-static int eth_ipcp_bootstrap(const struct ipcp_config * conf)
+static int eth_ipcp_bootstrap(struct ipcp_config * conf)
 {
         struct ifreq     ifr;
         int              i;

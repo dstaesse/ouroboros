@@ -55,7 +55,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
-static int initialize_components(const struct ipcp_config * conf)
+static int initialize_components(struct ipcp_config * conf)
 {
         assert(ipcp_dir_hash_len() != 0);
 
@@ -77,23 +77,25 @@ static int initialize_components(const struct ipcp_config * conf)
                 goto fail_dt;
         }
 
+        ipcp_set_dir_hash_algo((enum hash_algo) conf->layer_info.dir_hash_algo);
+
+        if (dir_init(&conf->unicast.dir)) {
+                log_err("Failed to initialize directory.");
+                goto fail_dir;
+        }
+
         if (fa_init()) {
                 log_err("Failed to initialize flow allocator component.");
                 goto fail_fa;
-        }
-
-        if (dir_init()) {
-                log_err("Failed to initialize directory.");
-                goto fail_dir;
         }
 
         ipcp_set_state(IPCP_INIT);
 
         return 0;
 
- fail_dir:
-        fa_fini();
  fail_fa:
+        dir_fini();
+ fail_dir:
         dt_fini();
  fail_dt:
         ca_fini();
@@ -105,9 +107,9 @@ static int initialize_components(const struct ipcp_config * conf)
 
 static void finalize_components(void)
 {
-        dir_fini();
-
         fa_fini();
+
+        dir_fini();
 
         dt_fini();
 
@@ -138,8 +140,15 @@ static int start_components(void)
                 goto fail_connmgr_start;
         }
 
+        if (dir_start() < 0) {
+                log_err("Failed to start directory.");
+                goto fail_dir_start;
+        }
+
         return 0;
 
+ fail_dir_start:
+        connmgr_stop();
  fail_connmgr_start:
         enroll_stop();
  fail_enroll_start:
@@ -153,6 +162,8 @@ static int start_components(void)
 
 static void stop_components(void)
 {
+        dir_stop();
+
         connmgr_stop();
 
         enroll_stop();
@@ -162,16 +173,6 @@ static void stop_components(void)
         dt_stop();
 
         ipcp_set_state(IPCP_INIT);
-}
-
-static int bootstrap_components(void)
-{
-        if (dir_bootstrap()) {
-                log_err("Failed to bootstrap directory.");
-                return -1;
-        }
-
-        return 0;
 }
 
 static int unicast_ipcp_enroll(const char *        dst,
@@ -231,32 +232,25 @@ static int unicast_ipcp_enroll(const char *        dst,
         return -1;
 }
 
-static int unicast_ipcp_bootstrap(const struct ipcp_config * conf)
+static int unicast_ipcp_bootstrap(struct ipcp_config * conf)
 {
         assert(conf);
         assert(conf->type == THIS_TYPE);
-
-        enroll_bootstrap(conf);
 
         if (initialize_components(conf) < 0) {
                 log_err("Failed to init IPCP components.");
                 goto fail_init;
         }
 
+        enroll_bootstrap(conf);
+
         if (start_components() < 0) {
                 log_err("Failed to init IPCP components.");
                 goto fail_start;
         }
 
-        if (bootstrap_components() < 0) {
-                log_err("Failed to bootstrap IPCP components.");
-                goto fail_bootstrap;
-        }
-
         return 0;
 
- fail_bootstrap:
-        stop_components();
  fail_start:
         finalize_components();
  fail_init:

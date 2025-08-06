@@ -23,24 +23,20 @@
 #ifndef OUROBOROS_IPCPD_UNICAST_DIR_OPS_H
 #define OUROBOROS_IPCPD_UNICAST_DIR_OPS_H
 
-
 struct dir_ops {
-        void *   (* create)(void);
+        int      (* init)(void * config);
 
-        void     (* destroy)(void * dir);
+        void     (* fini)(void);
 
-        int      (* bootstrap)(void * dir);
+        int      (* start)(void);
 
-        int      (* reg)(void * dir,
-                         const uint8_t * hash);
+        void     (* stop)(void);
 
-        int      (* unreg)(void * dir,
-                           const uint8_t * hash);
+        int      (* reg)(const uint8_t * hash);
 
-        uint64_t (* query)(void * dir,
-                           const uint8_t * hash);
+        int      (* unreg)(const uint8_t * hash);
 
-        int      (* wait_running)(void * dir);
+        uint64_t (* query)(const uint8_t * hash);
 };
 
 #endif /* OUROBOROS_IPCPD_UNICAST_DIR_OPS_H */

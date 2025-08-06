@@ -136,7 +136,7 @@ static int fa_rib_read(const char * path,
         char             r_addrstr[21];
         char             s_eidstr[21];
         char             r_eidstr[21];
-        char             tmstr[20];
+        char             tmstr[RIB_TM_STRLEN];
         char             castr[1024];
         char *           entry;
         struct tm *      tm;
@@ -167,8 +167,8 @@ static int fa_rib_read(const char * path,
         sprintf(s_eidstr, "%" PRIu64, flow->s_eid);
         sprintf(r_eidstr, "%" PRIu64, flow->r_eid);
 
-        tm = localtime(&flow->stamp);
-        strftime(tmstr, sizeof(tmstr), "%F %T", tm);
+        tm = gmtime(&flow->stamp);
+        strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
 
         ca_print_stats(flow->ctx, castr, 1024);
 
@@ -217,16 +217,12 @@ static int fa_rib_readdir(char *** buf)
 
         pthread_rwlock_rdlock(&fa.flows_lock);
 
-        if (fa.n_flows < 1) {
-                pthread_rwlock_unlock(&fa.flows_lock);
-                return 0;
-        }
+        if (fa.n_flows < 1)
+                goto no_flows;
 
         *buf = malloc(sizeof(**buf) * fa.n_flows);
-        if (*buf == NULL) {
-                pthread_rwlock_unlock(&fa.flows_lock);
-                return -ENOMEM;
-        }
+        if (*buf == NULL)
+                goto fail_entries;
 
         for (i = 0; i < PROG_MAX_FLOWS; ++i) {
                 struct fa_flow * flow;
@@ -238,22 +234,25 @@ static int fa_rib_readdir(char *** buf)
                 sprintf(entry, "%zu", i);
 
                 (*buf)[idx] = malloc(strlen(entry) + 1);
-                if ((*buf)[idx] == NULL) {
-                        while (idx-- > 0)
-                                free((*buf)[idx]);
-                        free(*buf);
-                        pthread_rwlock_unlock(&fa.flows_lock);
-                        return -ENOMEM;
-                }
+                if ((*buf)[idx] == NULL)
+                        goto fail_entry;
 
                 strcpy((*buf)[idx++], entry);
         }
 
         assert((size_t) idx == fa.n_flows);
-
+ no_flows:
         pthread_rwlock_unlock(&fa.flows_lock);
 
         return idx;
+
+ fail_entry:
+        while (idx-- > 0)
+                free((*buf)[idx]);
+        free(*buf);
+ fail_entries:
+        pthread_rwlock_unlock(&fa.flows_lock);
+        return -ENOMEM;
 #else
         (void) buf;
         return 0;
@@ -648,19 +647,21 @@ int fa_init(void)
         if (pthread_cond_init(&fa.cond, &cattr))
                 goto fail_cond;
 
-        pthread_condattr_destroy(&cattr);
-
-        list_head_init(&fa.cmds);
-
         if (rib_reg(FA, &r_ops))
                 goto fail_rib_reg;
 
         fa.eid = dt_reg_comp(&fa, &fa_post_packet, FA);
         if ((int) fa.eid < 0)
-                goto fail_rib_reg;
+                goto fail_dt_reg;
+
+        list_head_init(&fa.cmds);
+
+        pthread_condattr_destroy(&cattr);
 
         return 0;
 
+ fail_dt_reg:
+        rib_unreg(FA);
  fail_rib_reg:
         pthread_cond_destroy(&fa.cond);
  fail_cond:

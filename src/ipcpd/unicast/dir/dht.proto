@@ -27,19 +27,32 @@ message dht_contact_msg {
         required uint64 addr = 2;
 }
 
+message dht_find_req_msg {
+        required uint64 cookie = 1;
+        required bytes key     = 2;
+}
+
+message dht_find_node_rsp_msg {
+        required uint64          cookie   = 1;
+        required bytes           key      = 2;
+        repeated dht_contact_msg contacts = 3;
+}
+
+message dht_find_value_rsp_msg {
+        repeated bytes values = 1;
+}
+
+message dht_store_msg {
+        required bytes  key = 1;
+        required bytes  val = 2;
+        required uint32 exp = 3;
+}
+
 message dht_msg {
-        required uint32 code              =  1;
-        required uint32 cookie            =  2;
-        required uint64 s_addr            =  3;
-        optional bytes  s_id              =  4;
-        optional bytes  key               =  5;
-        repeated uint64 addrs             =  6;
-        repeated dht_contact_msg contacts =  7;
-        // enrolment parameters
-        optional uint32 alpha             =  8;
-        optional uint32 b                 =  9;
-        optional uint32 k                 = 10;
-        optional uint32 t_expire          = 11;
-        optional uint32 t_refresh         = 12;
-        optional uint32 t_replicate       = 13;
+        required uint32                 code  = 1;
+        required dht_contact_msg        src   = 2;
+        optional dht_store_msg          store = 3;
+        optional dht_find_req_msg       find  = 4;
+        optional dht_find_node_rsp_msg  node  = 5;
+        optional dht_find_value_rsp_msg val   = 6;
 }

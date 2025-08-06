@@ -23,15 +23,12 @@
 #ifndef OUROBOROS_LIB_TEST_H
 #define OUROBOROS_LIB_TEST_H
 
-#define OUROBOROS_TEST
-
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-
 
 #define TEST_RC_SUCCESS  0
 #define TEST_RC_SKIP     1
@@ -44,19 +41,19 @@
         } while (0)
 #define TEST_SUCCESS()                                                        \
         do {                                                                  \
-                printf("%s succeeded.\n", __func__);                          \
+                printf("\x1b[32m%s succeeded.\x1b[0m\n", __func__);            \
                 fflush(stdout);                                               \
         } while (0)
 
 #define TEST_SKIPPED()                                                        \
         do {                                                                  \
-                printf("%s skipped.\n", __func__);                            \
+                printf("\x1b[33m%s skipped.\x1b[0m\n", __func__);             \
                 fflush(stdout);                                               \
         } while (0)
 
 #define TEST_FAIL()                                                           \
         do {                                                                  \
-                printf("%s failed.\n", __func__);                             \
+                printf("\x1b[31m%s failed.\x1b[0m\n", __func__);              \
                 fflush(stdout);                                               \
         } while (0)
 

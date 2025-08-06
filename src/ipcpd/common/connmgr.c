@@ -489,9 +489,6 @@ int connmgr_alloc(enum comp_id  id,
         switch (id) {
         case COMPID_DT:
                 notifier_event(NOTIFY_DT_CONN_ADD, conn);
-#if defined(BUILD_IPCP_UNICAST) && defined(IPCP_CONN_WAIT_DIR)
-                dir_wait_running();
-#endif
                 break;
         case COMPID_MGMT:
                 notifier_event(NOTIFY_MGMT_CONN_ADD, conn);

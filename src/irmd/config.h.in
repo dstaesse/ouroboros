@@ -67,7 +67,9 @@
 #cmakedefine IRMD_KILL_ALL_PROCESSES
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL
+#ifdef CONFIG_OUROBOROS_DEBUG
 #cmakedefine DEBUG_PROTO_OAP
+#endif
 
 #define O7S_ASCII_ART                                                          \
 "[0m\n"                                                                       \

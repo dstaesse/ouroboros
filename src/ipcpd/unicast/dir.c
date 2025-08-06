@@ -44,50 +44,57 @@
 
 struct {
         struct dir_ops * ops;
-        void *           dir;
-} dirmgr;
+} dir;
 
-int dir_init(void)
+int dir_init(struct dir_config * conf)
 {
-        dirmgr.ops = &dht_dir_ops;
+        void * cfg;
 
-        dirmgr.dir = dirmgr.ops->create();
-        if (dirmgr.dir == NULL) {
-                dirmgr.ops = NULL;
-                return -ENOMEM;
+        assert(conf != NULL);
+
+        switch (conf->pol) {
+        case DIR_DHT:
+                log_info("Using DHT policy.");
+                dir.ops = &dht_dir_ops;
+                cfg = &conf->dht;
+                break;
+        default: /* DIR_INVALID */
+                log_err("Invalid directory policy %d.", conf->pol);
+                return -EINVAL;
         }
 
-        return 0;
+        assert(dir.ops->init != NULL);
+
+        return dir.ops->init(cfg);
 }
 
 void dir_fini(void)
 {
-        dirmgr.ops->destroy(dirmgr.dir);
-        dirmgr.ops = NULL;
-        dirmgr.dir = NULL;
+        dir.ops->fini();
+        dir.ops = NULL;
 }
 
-int dir_bootstrap(void)
+int dir_start(void)
 {
-        return dirmgr.ops->bootstrap(dirmgr.dir);
+        return dir.ops->start();
+}
+
+void dir_stop(void)
+{
+        dir.ops->stop();
 }
 
 int dir_reg(const uint8_t * hash)
 {
-        return dirmgr.ops->reg(dirmgr.dir, hash);
+        return dir.ops->reg(hash);
 }
 
 int dir_unreg(const uint8_t * hash)
 {
-        return dirmgr.ops->unreg(dirmgr.dir, hash);
+        return dir.ops->unreg(hash);
 }
 
 uint64_t dir_query(const uint8_t * hash)
 {
-        return dirmgr.ops->query(dirmgr.dir, hash);
-}
-
-int dir_wait_running(void)
-{
-        return dirmgr.ops->wait_running(dirmgr.dir);
+        return dir.ops->query(hash);
 }
