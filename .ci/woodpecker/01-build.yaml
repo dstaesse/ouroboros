@@ -1,0 +1,111 @@
+matrix:
+  IMAGE:
+    - dstaesse/debian:o7s
+    - dstaesse/ubuntu:o7s
+  FLAGS:
+    - ''
+    - -m32
+  COMPILER:
+    - clang
+    - gcc
+  BUILD_TYPE:
+    - Debug
+    - Release
+  DISABLE_FUSE:
+    - TRUE
+    - FALSE
+  DISABLE_OPENSSL:
+    - TRUE
+    - FALSE
+  DISABLE_LIBGCRYPT:
+    - TRUE
+    - FALSE
+  SANITIZER:
+    - DebugASan
+    - DebugUSan
+    - DebugLSan
+
+steps:
+  - name: build
+    image: ${IMAGE}
+    pull: true
+    when:
+      branch: [testing, be]
+      event: [push, pull_request]
+    commands:
+      - apt-get update -y
+      - apt-get install bash clang -y
+      - apt-get install git protobuf-c-compiler cmake -y
+      - apt-get install libgcrypt20-dev libssl-dev libfuse-dev dnsutils cmake-curses-gui -y
+      - apt-get install libprotobuf-c-dev -y || true
+      - mkdir build
+      - cd build
+      - CC=${COMPILER} cmake .. -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DDISABLE_FUSE=${DISABLE_FUSE} \
+          -DDISABLE_OPENSSL=${DISABLE_OPENSSL} -DDISABLE_LIBGCRYPT=${DISABLE_LIBGCRYPT}
+      - make CFLAGS="${FLAGS}" -s -j2
+      - env CTEST_OUTPUT_ON_FAILURE=1 make CFLAGS="${FLAGS}" -s check
+      - cd ..
+      - rm -rf build
+
+  - name: sanitizers
+    image: ${IMAGE}
+    pull: true
+    when:
+      branch: [testing, be]
+      event: [push, pull_request]
+    commands:
+      - apt-get update -y
+      - apt-get install bash clang -y
+      - apt-get install git protobuf-c-compiler cmake -y
+      - apt-get install libgcrypt20-dev libssl-dev libfuse-dev dnsutils cmake-curses-gui -y
+      - apt-get install libprotobuf-c-dev -y || true
+      - mkdir build
+      - cd build
+      - CC=${COMPILER} cmake .. -DCMAKE_BUILD_TYPE=${SANITIZER} -DDISABLE_FUSE=${DISABLE_FUSE} \
+          -DDISABLE_OPENSSL=${DISABLE_OPENSSL} -DDISABLE_LIBGCRYPT=${DISABLE_LIBGCRYPT} \
+      - make -s -j2
+      - env CTEST_OUTPUT_ON_FAILURE=1 make -s check
+      - cd ..
+      - rm -rf build
+
+  - name: build (manual)
+    image: ${IMAGE}
+    pull: true
+    when:
+      event: manual
+    commands:
+      - apt-get update -y
+      - apt-get install bash clang -y
+      - apt-get install git protobuf-c-compiler cmake -y
+      - apt-get install libgcrypt20-dev libssl-dev libfuse-dev dnsutils cmake-curses-gui -y
+      - apt-get install libprotobuf-c-dev -y || true
+      - mkdir build
+      - cd build
+      - CC=${COMPILER} cmake .. -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DDISABLE_FUSE=${DISABLE_FUSE} \
+          -DDISABLE_OPENSSL=${DISABLE_OPENSSL} -DDISABLE_LIBGCRYPT=${DISABLE_LIBGCRYPT}
+      - make CFLAGS="${FLAGS}" -s -j2
+      - env CTEST_OUTPUT_ON_FAILURE=1 make CFLAGS="${FLAGS}" -s check
+      - cd ..
+      - rm -rf build
+
+  - name: sanitizers (manual)
+    image: ${IMAGE}
+    pull: true
+    when:
+      event: manual
+    commands:
+      - apt-get update -y
+      - apt-get install bash clang -y
+      - apt-get install git protobuf-c-compiler cmake -y
+      - apt-get install libgcrypt20-dev libssl-dev libfuse-dev dnsutils cmake-curses-gui -y
+      - apt-get install libprotobuf-c-dev -y || true
+      - mkdir build
+      - cd build
+      - CC=${COMPILER} cmake .. -DCMAKE_BUILD_TYPE=${SANITIZER} -DDISABLE_FUSE=${DISABLE_FUSE} \
+          -DDISABLE_OPENSSL=${DISABLE_OPENSSL} -DDISABLE_LIBGCRYPT=${DISABLE_LIBGCRYPT} \
+      - make -s -j2
+      - env CTEST_OUTPUT_ON_FAILURE=1 make -s check
+      - cd ..
+      - rm -rf build
+
+
