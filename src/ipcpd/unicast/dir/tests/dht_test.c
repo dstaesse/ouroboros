@@ -164,8 +164,6 @@ static const buffer_t test_val2 = {
         .len = 12
 };
 
-static struct dir_dht_config test_dht_config = default_dht_config;
-
 static int random_value_len(buffer_t * b)
 {
         assert(b != NULL);
@@ -318,6 +316,15 @@ static void clear_contacts(dht_contact_msg_t ** contacts,
 }
 
 /* Start of actual tests */
+static struct dir_dht_config test_dht_config = {
+        .params = {
+                .alpha       = 3,
+                .k           = 8,
+                .t_expire    = 86400,
+                .t_refresh   = 900,
+                .t_replicate = 900
+        }
+};
 
 static int test_dht_init_fini(void)
 {
@@ -1758,7 +1765,7 @@ static int test_dht_query(void)
 
         sink_init();
 
-        cfg = default_dht_config;
+        cfg = test_dht_config;
         cfg.peer = generate_cookie();
 
         if (dht_init(&cfg)) {
@@ -1814,7 +1821,7 @@ static int test_dht_query_contacts(void)
 
         sink_init();
 
-        cfg = default_dht_config;
+        cfg = test_dht_config;
         cfg.peer = generate_cookie();
 
         if (dht_init(&cfg)) {
