@@ -151,16 +151,23 @@ static struct reg_ipcp * __reg_get_ipcp_by_layer(const char * layer)
         return NULL;
 }
 
-static struct list_head * __reg_after_ipcp(pid_t pid)
+
+static struct list_head * __reg_after_ipcp(const struct ipcp_info * info)
 {
         struct list_head * p;
 
-        assert(pid > 0);
+        assert(info != NULL);
 
         list_for_each(p, &reg.ipcps) {
                 struct reg_ipcp * entry;
                 entry = list_entry(p, struct reg_ipcp, next);
-                if (entry->info.pid >  pid)
+                if (entry->info.type < info->type)
+                        continue;
+
+                if (entry->info.type > info->type)
+                        break;
+
+                if (entry->info.pid > info->pid)
                         break;
         }
 
@@ -780,7 +787,7 @@ int reg_create_ipcp(const struct ipcp_info * info)
 
         entry->pid = info->pid;
 
-        list_add(&ipcp->next, __reg_after_ipcp(info->pid));
+        list_add_tail(&ipcp->next, __reg_after_ipcp(info));
         list_add(&entry->next, __reg_after_spawned(info->pid));
 
         reg.n_ipcps++;

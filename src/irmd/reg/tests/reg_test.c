@@ -527,7 +527,7 @@ static int test_reg_create_ipcp(void)
         return TEST_RC_FAIL;
 }
 
-static int test_rest_reg_list_ipcps(void)
+static int test_reg_list_ipcps(void)
 {
         ipcp_list_msg_t ** ipcps;
         int                i;
@@ -574,9 +574,75 @@ static int test_rest_reg_list_ipcps(void)
 
         reg_fini();
 
+        TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail:
+        REG_TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_insert_ipcps(void)
+{
+        ipcp_list_msg_t ** ipcps;
+        struct ipcp_info   info;
+        size_t             i;
+        size_t             len;
+
+        TEST_START();
+
+        if (reg_init() < 0) {
+                printf("Failed to init registry.\n");
+                goto fail;
+        }
+
+        for (i = 0; i < 100; i++) {
+                sprintf(info.name, "%s-%ld", TEST_IPCP, i);
+                info.pid   = TEST_PID + rand() % 10000;
+                info.type  = rand() % IPCP_INVALID;
+                info.state = IPCP_BOOT; /* set by spawn_ipcp */
+
+                if (reg_create_ipcp(&info) < 0) {
+                        printf("Failed to create ipcp %s.\n", info.name);
+                        goto fail;
+                }
+        }
+
+        len = reg_list_ipcps(&ipcps);
+        if (len != 100) {
+                printf("Failed to list all ipcps.\n");
+                goto fail;
+        }
+
+        for (i = 1; i < len; i++) {
+                if (ipcps[i]->type < ipcps[i - 1]->type) {
+                        printf("IPCPS not sorted by type.\n");
+                        goto fail;
+                }
+
+                if (ipcps[i]->type != ipcps[i - 1]->type)
+                        continue;
+
+                /* allow occasional duplicate PID in test */
+                if (ipcps[i]->pid < ipcps[i - 1]->pid) {
+                        printf("IPCPS not sorted by pid.\n");
+                        goto fail;
+                }
+        }
+
+        while (len-- > 0)
+                ipcp_list_msg__free_unpacked(ipcps[len], NULL);
+        free(ipcps);
+
+        reg_clear();
+
+        reg_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+fail:
         REG_TEST_FAIL();
         return TEST_RC_FAIL;
 }
@@ -648,7 +714,8 @@ static int test_reg_ipcp(void)
         int rc = 0;
 
         rc |= test_reg_create_ipcp();
-        rc |= test_rest_reg_list_ipcps();
+        rc |= test_reg_list_ipcps();
+        rc |= test_insert_ipcps();
         rc |= test_set_layer();
 
         return rc;

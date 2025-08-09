@@ -48,7 +48,7 @@ set(ENROLL_TIMEOUT 20000 CACHE STRING
   "Timeout for an IPCP to enroll (ms)")
 set(REG_TIMEOUT 20000 CACHE STRING
   "Timeout for registering a name (ms)")
-set(QUERY_TIMEOUT 20000 CACHE STRING
+set(QUERY_TIMEOUT 200 CACHE STRING
   "Timeout to query a name with an IPCP (ms)")
 set(CONNECT_TIMEOUT 20000 CACHE STRING
   "Timeout to connect an IPCP to another IPCP (ms)")
