@@ -85,11 +85,10 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
         uint8_t         buf[SOCK_BUF_SIZE];
         char *          spath;
         ssize_t         len;
-        ipcp_msg_t *    recv_msg;
         struct timeval  tv;
         struct timespec tic;
         struct timespec toc;
-        bool            dealloc = false;
+        bool            may_fail = false;
 
         if (kill(pid, 0) < 0)
                 return NULL;
@@ -127,6 +126,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                 tv.tv_usec = (REG_TIMEOUT % 1000) * 1000;
                 break;
         case IPCP_MSG_CODE__IPCP_QUERY:
+                may_fail = true; /* name not always in Layer */
                 tv.tv_sec  = QUERY_TIMEOUT / 1000;
                 tv.tv_usec = (QUERY_TIMEOUT % 1000) * 1000;
                 break;
@@ -139,7 +139,7 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                 tv.tv_usec = (FLOW_ALLOC_TIMEOUT % 1000) * 1000;
                 break;
         case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
-                dealloc = true;
+                may_fail = true;
                 tv.tv_sec  = 0; /* FIX DEALLOC: don't wait for dealloc */
                 tv.tv_usec = 500;
                 break;
@@ -167,17 +167,15 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
         pthread_cleanup_pop(true); /* close socket */
 
         if (len > 0)
-                recv_msg = ipcp_msg__unpack(NULL, len, buf);
-        else {
-                if (errno == EAGAIN && !dealloc) {
-                        int diff = ts_diff_ms(&toc, &tic);
-                        log_warn("IPCP %s timed out after %d ms.",
-                                 str_ipcp_cmd(msg->code), diff);
-                }
-                return NULL;
+                return ipcp_msg__unpack(NULL, len, buf);
+
+        if (errno == EAGAIN && !may_fail) {
+                int diff = ts_diff_ms(&toc, &tic);
+                log_warn("IPCP %s timed out after %d ms.",
+                         str_ipcp_cmd(msg->code), diff);
         }
 
-        return recv_msg;
+        return NULL;
 }
 
 int ipcp_bootstrap(pid_t                pid,

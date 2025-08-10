@@ -512,7 +512,7 @@ int connmgr_dealloc(enum comp_id  id,
         case COMPID_DT:
                 notifier_event(NOTIFY_DT_CONN_DEL, conn);
                 break;
-#if defined(BUILD_IPCP_UNICAST) && defined(IPCP_CONN_WAIT_DIR)
+#if defined(BUILD_IPCP_UNICAST)
         case COMPID_MGMT:
                 notifier_event(NOTIFY_MGMT_CONN_DEL, conn);
                 break;

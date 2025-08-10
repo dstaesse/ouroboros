@@ -16,8 +16,6 @@ set(IPCP_SCHED_THR_MUL 2 CACHE STRING
   "Number of scheduler threads per QoS cube")
 set(DISABLE_CORE_LOCK TRUE CACHE BOOL
   "Disable locking performance threads to a core")
-set(IPCP_CONN_WAIT_DIR TRUE CACHE BOOL
-  "Check the running state of the directory when adding a dt connection")
 set(DHT_ENROLL_SLACK 50 CACHE STRING
   "DHT enrollment waiting time (0-999, ms)")
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")

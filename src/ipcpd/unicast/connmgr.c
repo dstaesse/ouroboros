@@ -32,8 +32,4 @@
 
 #define BUILD_IPCP_UNICAST
 
-#ifdef IPCP_CONN_WAIT_DIR
- #include "dir.h"
-#endif
-
 #include "common/connmgr.c"

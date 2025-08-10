@@ -3693,6 +3693,8 @@ static void dht_kv_replicate(void)
         list_head_init(&repl);
         list_head_init(&rebl);
 
+        pthread_cleanup_push(free, key);
+
         while (dht_kv_next_values(key, &repl, &rebl) == 0) {
                 dht_kv_replicate_values(key, &repl, &rebl);
                 if (!list_is_empty(&repl)) {
@@ -3708,7 +3710,7 @@ static void dht_kv_replicate(void)
                 }
         }
 
-        free(key);
+        pthread_cleanup_pop(true);
 }
 
 static void dht_kv_refresh_contacts(void)
