@@ -32,6 +32,10 @@ int                link_state_init(enum pol_routing pr);
 
 void               link_state_fini(void);
 
+int                link_state_start(void);
+
+void               link_state_stop(void);
+
 struct routing_i * link_state_routing_i_create(struct pff * pff);
 
 void               link_state_routing_i_destroy(struct routing_i * instance);

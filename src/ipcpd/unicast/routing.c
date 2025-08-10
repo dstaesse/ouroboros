@@ -57,6 +57,11 @@ int routing_init(enum pol_routing pr)
         return pff_type;
 }
 
+int routing_start(void)
+{
+        return r_ops->start();
+}
+
 struct routing_i * routing_i_create(struct pff * pff)
 {
         return r_ops->routing_i_create(pff);
@@ -65,6 +70,11 @@ struct routing_i * routing_i_create(struct pff * pff)
 void routing_i_destroy(struct routing_i * instance)
 {
         return r_ops->routing_i_destroy(instance);
+}
+
+void routing_stop(void)
+{
+        r_ops->stop();
 }
 
 void routing_fini(void)

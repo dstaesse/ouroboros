@@ -30,6 +30,10 @@ struct routing_ops {
 
         void               (* fini)(void);
 
+        int                (* start)(void);
+
+        void               (* stop)(void);
+
         struct routing_i * (* routing_i_create)(struct pff * pff);
 
         void               (* routing_i_destroy)(struct routing_i * instance);

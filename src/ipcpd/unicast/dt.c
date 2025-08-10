@@ -726,8 +726,16 @@ int dt_start(void)
                 goto fail_listener;
         }
 
+        if (routing_start() < 0) {
+                log_err("Failed to start routing.");
+                goto fail_routing;
+        }
+
         return 0;
 
+ fail_routing:
+        pthread_cancel(dt.listener);
+        pthread_join(dt.listener, NULL);
  fail_listener:
         notifier_unreg(&handle_event);
  fail_notifier_reg:
@@ -738,6 +746,8 @@ int dt_start(void)
 
 void dt_stop(void)
 {
+        routing_stop();
+
         pthread_cancel(dt.listener);
         pthread_join(dt.listener, NULL);
 

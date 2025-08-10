@@ -139,6 +139,8 @@ struct {
 struct routing_ops link_state_ops = {
         .init              = link_state_init,
         .fini              = link_state_fini,
+        .start             = link_state_start,
+        .stop              = link_state_stop,
         .routing_i_create  = link_state_routing_i_create,
         .routing_i_destroy = link_state_routing_i_destroy
 };
@@ -959,13 +961,63 @@ void link_state_routing_i_destroy(struct routing_i * instance)
         free(instance);
 }
 
+int link_state_start(void)
+{
+        if (notifier_reg(handle_event, NULL)) {
+                log_err("Failed to register link-state with notifier.");
+                goto fail_notifier_reg;
+        }
+
+        if (pthread_create(&ls.lsupdate, NULL, lsupdate, NULL)) {
+                log_err("Failed to create lsupdate thread.");
+                goto fail_pthread_create_lsupdate;
+        }
+
+        if (pthread_create(&ls.lsreader, NULL, lsreader, NULL)) {
+                log_err("Failed to create lsreader thread.");
+                goto fail_pthread_create_lsreader;
+        }
+
+        if (pthread_create(&ls.listener, NULL, ls_conn_handle, NULL)) {
+                log_err("Failed to create listener thread.");
+                goto fail_pthread_create_listener;
+        }
+
+        return 0;
+
+ fail_pthread_create_listener:
+        pthread_cancel(ls.lsreader);
+        pthread_join(ls.lsreader, NULL);
+ fail_pthread_create_lsreader:
+        pthread_cancel(ls.lsupdate);
+        pthread_join(ls.lsupdate, NULL);
+ fail_pthread_create_lsupdate:
+        notifier_unreg(handle_event);
+ fail_notifier_reg:
+        return -1;
+}
+
+void link_state_stop(void)
+{
+        pthread_cancel(ls.listener);
+        pthread_cancel(ls.lsreader);
+        pthread_cancel(ls.lsupdate);
+
+        pthread_join(ls.listener, NULL);
+        pthread_join(ls.lsreader, NULL);
+        pthread_join(ls.lsupdate, NULL);
+
+        notifier_unreg(handle_event);
+}
+
+
 int link_state_init(enum pol_routing pr)
 {
         struct conn_info info;
 
         memset(&info, 0, sizeof(info));
 
-        ls.addr    = addr_auth_address();
+        ls.addr = addr_auth_address();
 
         strcpy(info.comp_name, LS_COMP);
         strcpy(info.protocol, LS_PROTO);
@@ -994,9 +1046,6 @@ int link_state_init(enum pol_routing pr)
         if (ls.graph == NULL)
                 goto fail_graph;
 
-        if (notifier_reg(handle_event, NULL))
-                goto fail_notifier_reg;
-
         if (pthread_rwlock_init(&ls.db_lock, NULL))
                 goto fail_db_lock_init;
 
@@ -1014,15 +1063,6 @@ int link_state_init(enum pol_routing pr)
         list_head_init(&ls.nbs);
         list_head_init(&ls.routing_instances);
 
-        if (pthread_create(&ls.lsupdate, NULL, lsupdate, NULL))
-                goto fail_pthread_create_lsupdate;
-
-        if (pthread_create(&ls.lsreader, NULL, lsreader, NULL))
-                goto fail_pthread_create_lsreader;
-
-        if (pthread_create(&ls.listener, NULL, ls_conn_handle, NULL))
-                goto fail_pthread_create_listener;
-
         if (rib_reg(LSDB, &r_ops))
                 goto fail_rib_reg;
 
@@ -1032,15 +1072,6 @@ int link_state_init(enum pol_routing pr)
         return 0;
 
  fail_rib_reg:
-        pthread_cancel(ls.listener);
-        pthread_join(ls.listener, NULL);
- fail_pthread_create_listener:
-        pthread_cancel(ls.lsreader);
-        pthread_join(ls.lsreader, NULL);
- fail_pthread_create_lsreader:
-        pthread_cancel(ls.lsupdate);
-        pthread_join(ls.lsupdate, NULL);
- fail_pthread_create_lsupdate:
         fset_destroy(ls.mgmt_set);
  fail_fset_create:
         connmgr_comp_fini(COMPID_MGMT);
@@ -1049,8 +1080,6 @@ int link_state_init(enum pol_routing pr)
  fail_routing_i_lock_init:
         pthread_rwlock_destroy(&ls.db_lock);
  fail_db_lock_init:
-        notifier_unreg(handle_event);
- fail_notifier_reg:
         graph_destroy(ls.graph);
  fail_graph:
         return -1;
@@ -1062,16 +1091,6 @@ void link_state_fini(void)
         struct list_head * h;
 
         rib_unreg(LSDB);
-
-        notifier_unreg(handle_event);
-
-        pthread_cancel(ls.listener);
-        pthread_cancel(ls.lsreader);
-        pthread_cancel(ls.lsupdate);
-
-        pthread_join(ls.listener, NULL);
-        pthread_join(ls.lsreader, NULL);
-        pthread_join(ls.lsupdate, NULL);
 
         fset_destroy(ls.mgmt_set);
 
