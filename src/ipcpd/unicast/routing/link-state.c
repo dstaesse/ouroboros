@@ -55,9 +55,6 @@
 #include <inttypes.h>
 #include <string.h>
 
-#define RECALC_TIME    4
-#define LS_UPDATE_TIME 15
-#define LS_TIMEO       60
 #define LS_ENTRY_SIZE  104
 #define LSDB           "lsdb"
 
@@ -115,29 +112,40 @@ struct nb {
 struct {
         uint64_t          addr;
 
-        struct list_head  nbs;
-        size_t            nbs_len;
+        enum routing_algo routing_algo;
+
+        struct ls_config  conf;
+
         fset_t *          mgmt_set;
 
-        struct list_head  db;
-        size_t            db_len;
+        struct graph * graph;
 
-        pthread_rwlock_t  db_lock;
+        struct {
+                struct {
+                        struct list_head list;
+                        size_t           len;
+                } nbs;
 
-        struct graph *    graph;
+                struct {
+                        struct list_head list;
+                        size_t           len;
+                } db;
+
+                pthread_rwlock_t lock;
+        };
+
+        struct {
+                struct list_head list;
+                pthread_mutex_t  mtx;
+        } instances;
 
         pthread_t         lsupdate;
         pthread_t         lsreader;
         pthread_t         listener;
-
-        struct list_head  routing_instances;
-        pthread_mutex_t   routing_i_lock;
-
-        enum routing_algo routing_algo;
 } ls;
 
 struct routing_ops link_state_ops = {
-        .init              = link_state_init,
+        .init              = (int (*)(void *, enum pol_pff *)) link_state_init,
         .fini              = link_state_fini,
         .start             = link_state_start,
         .stop              = link_state_stop,
@@ -181,7 +189,7 @@ static struct adjacency * get_adj(const char * path)
 
         assert(path);
 
-        list_for_each(p, &ls.db) {
+        list_for_each(p, &ls.db.list) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 sprintf(entry, "%" PRIu64 ".%" PRIu64, a->src, a->dst);
                 if (strcmp(entry, path) == 0)
@@ -206,7 +214,7 @@ static int lsdb_rib_getattr(const char *      path,
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
-        pthread_rwlock_rdlock(&ls.db_lock);
+        pthread_rwlock_rdlock(&ls.lock);
 
         adj = get_adj(entry);
         if (adj != NULL) {
@@ -217,7 +225,7 @@ static int lsdb_rib_getattr(const char *      path,
                 attr->size  = 0;
         }
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
         return 0;
 }
@@ -235,9 +243,9 @@ static int lsdb_rib_read(const char * path,
         entry = strstr(path, RIB_SEPARATOR) + 1;
         assert(entry);
 
-        pthread_rwlock_rdlock(&ls.db_lock);
+        pthread_rwlock_rdlock(&ls.lock);
 
-        if (ls.db_len + ls.nbs_len == 0)
+        if (ls.db.len + ls.nbs.len == 0)
                 goto fail;
 
         a = get_adj(entry);
@@ -248,11 +256,11 @@ static int lsdb_rib_read(const char * path,
         if (size < 0)
                 goto fail;
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
         return size;
 
  fail:
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
         return -1;
 }
 
@@ -264,19 +272,19 @@ static int lsdb_rib_readdir(char *** buf)
 
         assert(buf != NULL);
 
-        pthread_rwlock_rdlock(&ls.db_lock);
+        pthread_rwlock_rdlock(&ls.lock);
 
-        if (ls.db_len + ls.nbs_len == 0) {
+        if (ls.db.len + ls.nbs.len == 0) {
                 *buf = NULL;
                 goto no_entries;
         }
 
 
-        *buf = malloc(sizeof(**buf) * (ls.db_len + ls.nbs_len));
+        *buf = malloc(sizeof(**buf) * (ls.db.len + ls.nbs.len));
         if (*buf == NULL)
                 goto fail_entries;
 
-        list_for_each(p, &ls.nbs) {
+        list_for_each(p, &ls.nbs.list) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 char * str = (nb->type == NB_DT ? ".dt " : ".mgmt ");
                 sprintf(entry, "%s" ADDR_FMT32 , str, ADDR_VAL32(&nb->addr));
@@ -287,7 +295,7 @@ static int lsdb_rib_readdir(char *** buf)
                 strcpy((*buf)[idx++], entry);
         }
 
-        list_for_each(p, &ls.db) {
+        list_for_each(p, &ls.db.list) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 sprintf(entry,  LINK_FMT, LINK_VAL(a->src, a->dst));
                 (*buf)[idx] = malloc(strlen(entry) + 1);
@@ -297,7 +305,7 @@ static int lsdb_rib_readdir(char *** buf)
                 strcpy((*buf)[idx++], entry);
         }
  no_entries:
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
         return idx;
 
@@ -306,7 +314,7 @@ static int lsdb_rib_readdir(char *** buf)
                 free((*buf)[idx]);
         free(*buf);
  fail_entries:
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
         return -ENOMEM;
 }
 
@@ -323,9 +331,9 @@ static int lsdb_add_nb(uint64_t     addr,
         struct list_head * p;
         struct nb *        nb;
 
-        pthread_rwlock_wrlock(&ls.db_lock);
+        pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each(p, &ls.nbs) {
+        list_for_each(p, &ls.nbs.list) {
                 struct nb * el = list_entry(p, struct nb, next);
                 if (addr > el->addr)
                         break;
@@ -338,13 +346,13 @@ static int lsdb_add_nb(uint64_t     addr,
                         log_warn("Existing neighbor assigned new fd.");
                         el->fd = fd;
                 }
-                pthread_rwlock_unlock(&ls.db_lock);
+                pthread_rwlock_unlock(&ls.lock);
                 return -EPERM;
         }
 
         nb = malloc(sizeof(*nb));
         if (nb == NULL) {
-                pthread_rwlock_unlock(&ls.db_lock);
+                pthread_rwlock_unlock(&ls.lock);
                 return -ENOMEM;
         }
 
@@ -354,12 +362,12 @@ static int lsdb_add_nb(uint64_t     addr,
 
         list_add_tail(&nb->next, p);
 
-        ++ls.nbs_len;
+        ++ls.nbs.len;
 
         log_dbg("Type %s neighbor " ADDR_FMT32 " added.",
                 nb->type == NB_DT ? "dt" : "mgmt", ADDR_VAL32(&addr));
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
         return 0;
 }
@@ -370,23 +378,23 @@ static int lsdb_del_nb(uint64_t addr,
         struct list_head * p;
         struct list_head * h;
 
-        pthread_rwlock_wrlock(&ls.db_lock);
+        pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each_safe(p, h, &ls.nbs) {
+        list_for_each_safe(p, h, &ls.nbs.list) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->addr != addr || nb->fd != fd)
                         continue;
 
                 list_del(&nb->next);
-                --ls.nbs_len;
-                pthread_rwlock_unlock(&ls.db_lock);
+                --ls.nbs.len;
+                pthread_rwlock_unlock(&ls.lock);
                 log_dbg("Type %s neighbor " ADDR_FMT32 " deleted.",
                         nb->type == NB_DT ? "dt" : "mgmt", ADDR_VAL32(&addr));
                 free(nb);
                 return 0;
         }
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
         return -EPERM;
 }
@@ -396,18 +404,18 @@ static int nbr_to_fd(uint64_t addr)
         struct list_head * p;
         int                fd;
 
-        pthread_rwlock_rdlock(&ls.db_lock);
+        pthread_rwlock_rdlock(&ls.lock);
 
-        list_for_each(p, &ls.nbs) {
+        list_for_each(p, &ls.nbs.list) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->addr == addr && nb->type == NB_DT) {
                         fd = nb->fd;
-                        pthread_rwlock_unlock(&ls.db_lock);
+                        pthread_rwlock_unlock(&ls.lock);
                         return fd;
                 }
         }
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
         return -1;
 }
@@ -422,8 +430,7 @@ static void calculate_pff(struct routing_i * instance)
 
         assert(instance);
 
-        if (graph_routing_table(ls.graph, ls.routing_algo,
-                                ls.addr, &table))
+        if (graph_routing_table(ls.graph, ls.routing_algo, ls.addr, &table))
                 return;
 
         pff_lock(instance->pff);
@@ -458,8 +465,8 @@ static void set_pff_modified(bool calc)
 {
         struct list_head * p;
 
-        pthread_mutex_lock(&ls.routing_i_lock);
-        list_for_each(p, &ls.routing_instances) {
+        pthread_mutex_lock(&ls.instances.mtx);
+        list_for_each(p, &ls.instances.list) {
                 struct routing_i * inst =
                         list_entry(p, struct routing_i, next);
                 pthread_mutex_lock(&inst->lock);
@@ -468,7 +475,7 @@ static void set_pff_modified(bool calc)
                 if (calc)
                         calculate_pff(inst);
         }
-        pthread_mutex_unlock(&ls.routing_i_lock);
+        pthread_mutex_unlock(&ls.instances.mtx);
 }
 
 static int lsdb_add_link(uint64_t    src,
@@ -485,9 +492,9 @@ static int lsdb_add_link(uint64_t    src,
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
-        pthread_rwlock_wrlock(&ls.db_lock);
+        pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each(p, &ls.db) {
+        list_for_each(p, &ls.db.list) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 if (a->dst == dst && a->src == src) {
                         if (a->seqno < seqno) {
@@ -495,7 +502,7 @@ static int lsdb_add_link(uint64_t    src,
                                 a->seqno = seqno;
                                 ret = 0;
                         }
-                        pthread_rwlock_unlock(&ls.db_lock);
+                        pthread_rwlock_unlock(&ls.lock);
                         return ret;
                 }
 
@@ -505,7 +512,7 @@ static int lsdb_add_link(uint64_t    src,
 
         adj = malloc(sizeof(*adj));
         if (adj == NULL) {
-                pthread_rwlock_unlock(&ls.db_lock);
+                pthread_rwlock_unlock(&ls.lock);
                 return -ENOMEM;
         }
 
@@ -516,12 +523,12 @@ static int lsdb_add_link(uint64_t    src,
 
         list_add_tail(&adj->next, p);
 
-        ls.db_len++;
+        ls.db.len++;
 
         if (graph_update_edge(ls.graph, src, dst, *qs))
                 log_warn("Failed to add edge to graph.");
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
         set_pff_modified(true);
 
@@ -534,25 +541,25 @@ static int lsdb_del_link(uint64_t src,
         struct list_head * p;
         struct list_head * h;
 
-        pthread_rwlock_wrlock(&ls.db_lock);
+        pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each_safe(p, h, &ls.db) {
+        list_for_each_safe(p, h, &ls.db.list) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 if (a->dst == dst && a->src == src) {
                         list_del(&a->next);
                         if (graph_del_edge(ls.graph, src, dst))
                                 log_warn("Failed to delete edge from graph.");
 
-                        ls.db_len--;
+                        ls.db.len--;
 
-                        pthread_rwlock_unlock(&ls.db_lock);
+                        pthread_rwlock_unlock(&ls.lock);
                         set_pff_modified(false);
                         free(a);
                         return 0;
                 }
         }
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
         return -EPERM;
 }
@@ -575,7 +582,7 @@ static void * periodic_recalc_pff(void * o)
                 if (modified)
                         calculate_pff(inst);
 
-                sleep(RECALC_TIME);
+                sleep(ls.conf.t_recalc);
         }
 
         return (void *) 0;
@@ -592,7 +599,7 @@ static void send_lsm(uint64_t src,
         lsm.s_addr = hton64(src);
         lsm.seqno  = hton64(seqno);
 
-        list_for_each(p, &ls.nbs) {
+        list_for_each(p, &ls.nbs.list) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->type != NB_MGMT)
                         continue;
@@ -619,9 +626,9 @@ static void lsdb_replicate(int fd)
         list_head_init(&copy);
 
         /* Lock the lsdb, copy the lsms and send outside of lock. */
-        pthread_rwlock_rdlock(&ls.db_lock);
+        pthread_rwlock_rdlock(&ls.lock);
 
-        list_for_each(p, &ls.db) {
+        list_for_each(p, &ls.db.list) {
                 struct adjacency * adj;
                 struct adjacency * cpy;
                 adj = list_entry(p, struct adjacency, next);
@@ -638,7 +645,7 @@ static void lsdb_replicate(int fd)
                 list_add_tail(&cpy->next, &copy);
         }
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
         list_for_each_safe(p, h, &copy) {
                 struct lsa         lsm;
@@ -664,14 +671,14 @@ static void * lsupdate(void * o)
         while (true) {
                 clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
-                pthread_rwlock_wrlock(&ls.db_lock);
+                pthread_rwlock_wrlock(&ls.lock);
 
-                pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.db_lock);
+                pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.lock);
 
-                list_for_each_safe(p, h, &ls.db) {
+                list_for_each_safe(p, h, &ls.db.list) {
                         struct adjacency * adj;
                         adj = list_entry(p, struct adjacency, next);
-                        if (now.tv_sec > adj->stamp + LS_TIMEO) {
+                        if (now.tv_sec > adj->stamp + ls.conf.t_timeo) {
                                 list_del(&adj->next);
                                 log_dbg(LINK_FMT " timed out.",
                                         LINK_VAL(adj->src, adj->dst));
@@ -691,7 +698,7 @@ static void * lsupdate(void * o)
 
                 pthread_cleanup_pop(true);
 
-                sleep(LS_UPDATE_TIME);
+                sleep(ls.conf.t_update);
         }
 
         return (void *) 0;
@@ -735,11 +742,11 @@ static void forward_lsm(uint8_t * buf,
         lsm.d_addr = ntoh64(lsm.d_addr);
         lsm.seqno  = ntoh64(lsm.seqno);
 #endif
-        pthread_rwlock_rdlock(&ls.db_lock);
+        pthread_rwlock_rdlock(&ls.lock);
 
-        pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.db_lock);
+        pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.lock);
 
-        list_for_each(p, &ls.nbs) {
+        list_for_each(p, &ls.nbs.list) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->type != NB_MGMT || nb->fd == in_fd)
                         continue;
@@ -830,14 +837,14 @@ static void flow_event(int  fd,
 
         log_dbg("Notifying routing instances of flow event.");
 
-        pthread_mutex_lock(&ls.routing_i_lock);
+        pthread_mutex_lock(&ls.instances.mtx);
 
-        list_for_each(p, &ls.routing_instances) {
+        list_for_each(p, &ls.instances.list) {
                 struct routing_i * ri = list_entry(p, struct routing_i, next);
                 pff_flow_state_change(ri->pff, fd, up);
         }
 
-        pthread_mutex_unlock(&ls.routing_i_lock);
+        pthread_mutex_unlock(&ls.instances.mtx);
 }
 
 static void handle_event(void *       self,
@@ -859,9 +866,9 @@ static void handle_event(void *       self,
 
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
-                pthread_rwlock_rdlock(&ls.db_lock);
+                pthread_rwlock_rdlock(&ls.lock);
 
-                pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.db_lock);
+                pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.lock);
 
                 send_lsm(ls.addr, c->conn_info.addr, 0);
                 pthread_cleanup_pop(true);
@@ -929,11 +936,11 @@ struct routing_i * link_state_routing_i_create(struct pff * pff)
                            periodic_recalc_pff, tmp))
                 goto fail_pthread_create_lsupdate;
 
-        pthread_mutex_lock(&ls.routing_i_lock);
+        pthread_mutex_lock(&ls.instances.mtx);
 
-        list_add(&tmp->next, &ls.routing_instances);
+        list_add(&tmp->next, &ls.instances.list);
 
-        pthread_mutex_unlock(&ls.routing_i_lock);
+        pthread_mutex_unlock(&ls.instances.mtx);
 
         return tmp;
 
@@ -949,11 +956,11 @@ void link_state_routing_i_destroy(struct routing_i * instance)
 {
         assert(instance);
 
-        pthread_mutex_lock(&ls.routing_i_lock);
+        pthread_mutex_lock(&ls.instances.mtx);
 
         list_del(&instance->next);
 
-        pthread_mutex_unlock(&ls.routing_i_lock);
+        pthread_mutex_unlock(&ls.instances.mtx);
 
         pthread_cancel(instance->calculator);
 
@@ -1014,9 +1021,13 @@ void link_state_stop(void)
 }
 
 
-int link_state_init(enum pol_routing pr)
+int link_state_init(struct ls_config * conf,
+                    enum pol_pff *     pff_type)
 {
         struct conn_info info;
+
+        assert(conf != NULL);
+        assert(pff_type != NULL);
 
         memset(&info, 0, sizeof(info));
 
@@ -1028,49 +1039,66 @@ int link_state_init(enum pol_routing pr)
         info.pref_syntax  = PROTO_GPB;
         info.addr         = ls.addr;
 
-        switch (pr) {
-        case ROUTING_LINK_STATE:
-                log_dbg("Using link state routing policy.");
+        ls.conf = *conf;
+
+        switch (conf->pol) {
+        case LS_SIMPLE:
+                *pff_type = PFF_SIMPLE;
                 ls.routing_algo = ROUTING_SIMPLE;
+                log_dbg("Using Link State Routing policy.");
                 break;
-        case ROUTING_LINK_STATE_LFA:
-                log_dbg("Using Loop-Free Alternates policy.");
+        case LS_LFA:
                 ls.routing_algo = ROUTING_LFA;
+                *pff_type = PFF_ALTERNATE;
+                log_dbg("Using Loop-Free Alternates policy.");
                 break;
-        case ROUTING_LINK_STATE_ECMP:
-                log_dbg("Using Equal-Cost Multipath policy.");
+        case LS_ECMP:
                 ls.routing_algo = ROUTING_ECMP;
+                *pff_type = PFF_MULTIPATH;
+                log_dbg("Using Equal-Cost Multipath policy.");
                 break;
         default:
                 goto fail_graph;
         }
 
+        log_dbg("LS update interval: %ld seconds.", ls.conf.t_update);
+        log_dbg("LS link timeout   : %ld seconds.", ls.conf.t_timeo);
+        log_dbg("LS recalc interval: %ld seconds.", ls.conf.t_recalc);
+
         ls.graph = graph_create();
         if (ls.graph == NULL)
                 goto fail_graph;
 
-        if (pthread_rwlock_init(&ls.db_lock, NULL))
-                goto fail_db_lock_init;
+        if (pthread_rwlock_init(&ls.lock, NULL)) {
+                log_err("Failed to init lock.");
+                goto fail_lock_init;
+        }
 
-        if (pthread_mutex_init(&ls.routing_i_lock, NULL))
+        if (pthread_mutex_init(&ls.instances.mtx, NULL)) {
+                log_err("Failed to init instances mutex.");
                 goto fail_routing_i_lock_init;
+        }
 
-        if (connmgr_comp_init(COMPID_MGMT, &info))
+        if (connmgr_comp_init(COMPID_MGMT, &info)) {
+                log_err("Failed to init connmgr.");
                 goto fail_connmgr_comp_init;
+        }
 
         ls.mgmt_set = fset_create();
-        if (ls.mgmt_set == NULL)
+        if (ls.mgmt_set == NULL) {
+                log_err("Failed to create fset.");
                 goto fail_fset_create;
+        }
 
-        list_head_init(&ls.db);
-        list_head_init(&ls.nbs);
-        list_head_init(&ls.routing_instances);
+        list_head_init(&ls.db.list);
+        list_head_init(&ls.nbs.list);
+        list_head_init(&ls.instances.list);
 
         if (rib_reg(LSDB, &r_ops))
                 goto fail_rib_reg;
 
-        ls.db_len  = 0;
-        ls.nbs_len = 0;
+        ls.db.len  = 0;
+        ls.nbs.len = 0;
 
         return 0;
 
@@ -1079,10 +1107,10 @@ int link_state_init(enum pol_routing pr)
  fail_fset_create:
         connmgr_comp_fini(COMPID_MGMT);
  fail_connmgr_comp_init:
-        pthread_mutex_destroy(&ls.routing_i_lock);
+        pthread_mutex_destroy(&ls.instances.mtx);
  fail_routing_i_lock_init:
-        pthread_rwlock_destroy(&ls.db_lock);
- fail_db_lock_init:
+        pthread_rwlock_destroy(&ls.lock);
+ fail_lock_init:
         graph_destroy(ls.graph);
  fail_graph:
         return -1;
@@ -1101,17 +1129,17 @@ void link_state_fini(void)
 
         graph_destroy(ls.graph);
 
-        pthread_rwlock_wrlock(&ls.db_lock);
+        pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each_safe(p, h, &ls.db) {
+        list_for_each_safe(p, h, &ls.db.list) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 list_del(&a->next);
                 free(a);
         }
 
-        pthread_rwlock_unlock(&ls.db_lock);
+        pthread_rwlock_unlock(&ls.lock);
 
-        pthread_rwlock_destroy(&ls.db_lock);
+        pthread_rwlock_destroy(&ls.lock);
 
-        pthread_mutex_destroy(&ls.routing_i_lock);
+        pthread_mutex_destroy(&ls.instances.mtx);
 }

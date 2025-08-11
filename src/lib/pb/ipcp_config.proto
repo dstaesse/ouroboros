@@ -24,11 +24,24 @@ syntax = "proto2";
 
 import "model.proto";
 
+
+message ls_config_msg {
+        required uint32 pol      = 1;
+        required uint32 t_recalc = 2;
+        required uint32 t_update = 3;
+        required uint32 t_timeo  = 4;
+}
+
+message routing_config_msg {
+        required uint32 pol       = 1;
+        optional ls_config_msg ls = 2;
+}
+
 message dt_config_msg {
-        required uint32 addr_size    = 1;
-        required uint32 eid_size     = 2;
-        required uint32 max_ttl      = 3;
-        required uint32 routing_type = 4;
+        required uint32 addr_size           = 1;
+        required uint32 eid_size            = 2;
+        required uint32 max_ttl             = 3;
+        required routing_config_msg routing = 4;
 }
 
 message dir_dht_config_msg {

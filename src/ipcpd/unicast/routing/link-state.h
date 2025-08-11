@@ -28,7 +28,8 @@
 
 #include "ops.h"
 
-int                link_state_init(enum pol_routing pr);
+int                link_state_init(struct ls_config * ls,
+                                   enum pol_pff *     pff_type);
 
 void               link_state_fini(void);
 

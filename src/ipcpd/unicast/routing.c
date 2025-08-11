@@ -30,31 +30,21 @@
 
 struct routing_ops * r_ops;
 
-int routing_init(enum pol_routing pr)
+int routing_init(struct routing_config * conf,
+                 enum pol_pff *          pff_type)
 {
-        enum pol_pff pff_type;
+        void * cfg;
 
-        switch (pr) {
+        switch (conf->pol) {
         case ROUTING_LINK_STATE:
-                pff_type = PFF_SIMPLE;
                 r_ops = &link_state_ops;
-                break;
-        case ROUTING_LINK_STATE_LFA:
-                pff_type = PFF_ALTERNATE;
-                r_ops = &link_state_ops;
-                break;
-        case ROUTING_LINK_STATE_ECMP:
-                pff_type=PFF_MULTIPATH;
-                r_ops = &link_state_ops;
+                cfg = &conf->ls;
                 break;
         default:
                 return -ENOTSUP;
         }
 
-        if (r_ops->init(pr))
-                return -1;
-
-        return pff_type;
+        return r_ops->init(cfg, pff_type);
 }
 
 int routing_start(void)

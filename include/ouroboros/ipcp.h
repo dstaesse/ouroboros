@@ -70,11 +70,48 @@ enum pol_addr_auth {
         ADDR_AUTH_INVALID
 };
 
+enum pol_link_state {
+        LS_SIMPLE = 0,
+        LS_LFA,
+        LS_ECMP,
+        LS_INVALID
+};
+
+struct ls_config {
+        enum pol_link_state pol;      /* Link state policy           */
+        time_t              t_recalc; /* Time to recalculate PFF (s) */
+        time_t              t_update; /* Time between updates (s)    */
+        time_t              t_timeo;  /* Link timeout (s)            */
+};
+
+static const struct ls_config default_ls_config = {
+        .pol      = LS_SIMPLE,
+        .t_recalc = 4,
+        .t_update = 15,
+        .t_timeo  = 60
+};
+
 enum pol_routing {
         ROUTING_LINK_STATE = 0,
-        ROUTING_LINK_STATE_LFA,
-        ROUTING_LINK_STATE_ECMP,
         ROUTING_INVALID
+};
+
+struct routing_config {
+        enum pol_routing pol;             /* Routing policy     */
+        union {
+                struct ls_config ls;      /* Link state config  */
+                /* struct pv_config pv */ /* Path vector config */
+        };
+};
+
+static const struct routing_config default_routing_config = {
+        .pol = ROUTING_LINK_STATE,
+        .ls = {
+                .pol      = LS_SIMPLE,
+                .t_recalc = 4,
+                .t_update = 15,
+                .t_timeo  = 60
+        }
 };
 
 enum pol_cong_avoid {
@@ -84,17 +121,27 @@ enum pol_cong_avoid {
 };
 
 struct dt_config {
-        uint8_t          addr_size;
-        uint8_t          eid_size;
-        uint8_t          max_ttl;
-        enum pol_routing routing_type;
+        struct {
+                uint8_t addr_size;
+                uint8_t eid_size;
+                uint8_t max_ttl;
+        };
+        struct routing_config routing; /* Routing policy */
 };
 
 static const struct dt_config default_dt_config = {
-        .addr_size    = 4,
-        .eid_size     = 8,
-        .max_ttl      = 60,
-        .routing_type = ROUTING_LINK_STATE
+        .addr_size = 4,
+        .eid_size  = 8,
+        .max_ttl   = 60,
+        .routing = {
+                .pol = ROUTING_LINK_STATE,
+                .ls = {
+                        .pol = LS_SIMPLE,
+                        .t_recalc = 4,
+                        .t_update = 15,
+                        .t_timeo  = 60
+                }
+        }
 };
 
 enum pol_dir {
@@ -179,7 +226,15 @@ static const struct uni_config default_uni_config = {
                 .addr_size    = 4,
                 .eid_size     = 8,
                 .max_ttl      = 60,
-                .routing_type = ROUTING_LINK_STATE
+                .routing = {
+                        .pol = ROUTING_LINK_STATE,
+                        .ls = {
+                                .pol = LS_SIMPLE,
+                                .t_recalc = 4,
+                                .t_update = 15,
+                                .t_timeo  = 60
+                        }
+                }
         },
         .dir = {
                 .pol = DIR_DHT,
@@ -266,10 +321,18 @@ static const struct ipcp_config uni_default_conf = {
         },
         .unicast = {
                 .dt = {
-                        .addr_size    = 4,
-                        .eid_size     = 8,
-                        .max_ttl      = 60,
-                        .routing_type = ROUTING_LINK_STATE
+                        .addr_size = 4,
+                        .eid_size  = 8,
+                        .max_ttl   = 60,
+                        .routing = {
+                                .pol = ROUTING_LINK_STATE,
+                                .ls = {
+                                        .pol      = LS_SIMPLE,
+                                        .t_recalc = 4,
+                                        .t_update = 15,
+                                        .t_timeo  = 60
+                                }
+                        }
                 },
                 .dir = {
                         .pol = DIR_DHT,

@@ -30,7 +30,8 @@
 
 #include <stdint.h>
 
-int                routing_init(enum pol_routing pr);
+int                routing_init(struct routing_config * conf,
+                                enum pol_pff *          pff_type);
 
 void               routing_fini(void);
 

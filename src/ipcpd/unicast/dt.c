@@ -570,7 +570,7 @@ int dt_init(struct dt_config cfg)
         int              i;
         int              j;
         char             dtstr[RIB_NAME_STRLEN + 1];
-        int              pp;
+        enum pol_pff     pp;
         struct conn_info info;
 
         memset(&info, 0, sizeof(info));
@@ -607,8 +607,7 @@ int dt_init(struct dt_config cfg)
                 goto fail_connmgr_comp_init;
         }
 
-        pp = routing_init(cfg.routing_type);
-        if (pp < 0) {
+        if (routing_init(&cfg.routing, &pp) < 0) {
                 log_err("Failed to init routing.");
                 goto fail_routing;
         }

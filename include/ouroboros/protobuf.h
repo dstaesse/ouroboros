@@ -31,13 +31,15 @@
 #include <ouroboros/serdes-oep.h>
 
 #include "ipcp_config.pb-c.h"
-typedef IpcpConfigMsg   ipcp_config_msg_t;
-typedef DtConfigMsg     dt_config_msg_t;
-typedef DirConfigMsg    dir_config_msg_t;
-typedef DirDhtConfigMsg dir_dht_config_msg_t;
-typedef EthConfigMsg    eth_config_msg_t;
-typedef UdpConfigMsg    udp_config_msg_t;
-typedef UniConfigMsg    uni_config_msg_t;
+typedef IpcpConfigMsg    ipcp_config_msg_t;
+typedef LsConfigMsg      ls_config_msg_t;
+typedef RoutingConfigMsg routing_config_msg_t;
+typedef DtConfigMsg      dt_config_msg_t;
+typedef DirConfigMsg     dir_config_msg_t;
+typedef DirDhtConfigMsg  dir_dht_config_msg_t;
+typedef EthConfigMsg     eth_config_msg_t;
+typedef UdpConfigMsg     udp_config_msg_t;
+typedef UniConfigMsg     uni_config_msg_t;
 
 #include "ipcp.pb-c.h"
 typedef IpcpMsg         ipcp_msg_t;

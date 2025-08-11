@@ -315,22 +315,63 @@ static int toml_routing(toml_table_t *     table,
                         struct dt_config * conf)
 {
         toml_datum_t routing;
+        toml_datum_t t_recalc;
+        toml_datum_t t_update;
+        toml_datum_t t_timeo;
 
         routing = toml_string_in(table, "routing");
         if (routing.ok) {
-                if (strcmp(routing.u.s, "link-state") == 0)
-                        conf->routing_type = ROUTING_LINK_STATE;
-                else if (strcmp(routing.u.s, "lfa") == 0)
-                        conf->routing_type = ROUTING_LINK_STATE_LFA;
-                else if (strcmp(routing.u.s, "ecmp") == 0)
-                        conf->routing_type = ROUTING_LINK_STATE_ECMP;
-                else
-                        conf->routing_type = ROUTING_INVALID;
+                if (strcmp(routing.u.s, "link-state") == 0) {
+                        conf->routing.pol = ROUTING_LINK_STATE;
+                        conf->routing.ls.pol = LS_SIMPLE;
+                } else if (strcmp(routing.u.s, "lfa") == 0) {
+                        conf->routing.pol = ROUTING_LINK_STATE;
+                        conf->routing.ls.pol = LS_LFA;
+                } else if (strcmp(routing.u.s, "ecmp") == 0) {
+                        conf->routing.pol = ROUTING_LINK_STATE;
+                        conf->routing.ls.pol = LS_ECMP;
+                } else {
+                        conf->routing.pol = ROUTING_INVALID;
+                        return -EINVAL;
+                }
                 free(routing.u.s);
         }
 
-        if (conf->routing_type == ROUTING_INVALID)
-                return -1;
+        switch (conf->routing.pol) {
+        case ROUTING_LINK_STATE:
+                log_info("Using Link State routing policy.");
+                t_recalc = toml_int_in(table, "ls_t_recalc");
+                if (t_recalc.ok) {
+                        if (t_recalc.u.i < 1) {
+                                log_err("Invalid ls_t_recalc value: %ld",
+                                        t_recalc.u.i);
+                                return -EINVAL;
+                        }
+                        conf->routing.ls.t_recalc = t_recalc.u.i;
+                }
+                t_update = toml_int_in(table, "ls_t_update");
+                if (t_update.ok) {
+                        if (t_update.u.i < 1) {
+                                log_err("Invalid ls_t_update value: %ld",
+                                        t_update.u.i);
+                                return -EINVAL;
+                        }
+                        conf->routing.ls.t_update = t_update.u.i;
+                }
+                t_timeo = toml_int_in(table, "ls_t_timeo");
+                if (t_timeo.ok) {
+                        if (t_timeo.u.i < 1) {
+                                log_err("Invalid ls_t_timeo value: %ld",
+                                        t_timeo.u.i);
+                                return -EINVAL;
+                        }
+                        conf->routing.ls.t_timeo = t_timeo.u.i;
+                }
+                break;
+        default:
+                log_err("Invalid routing policy: %d", conf->routing.pol);
+                return -EINVAL;
+        }
 
         return 0;
 }

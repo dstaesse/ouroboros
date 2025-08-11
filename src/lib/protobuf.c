@@ -188,6 +188,95 @@ struct ipcp_info ipcp_info_msg_to_s(const ipcp_info_msg_t * msg)
         return s;
 }
 
+ls_config_msg_t * ls_config_s_to_msg(const struct ls_config * s)
+{
+        ls_config_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        ls_config_msg__init(msg);
+
+        msg->pol      = s->pol;
+        msg->t_recalc = s->t_recalc;
+        msg->t_update = s->t_update;
+        msg->t_timeo  = s->t_timeo;
+
+        return msg;
+
+ fail_malloc:
+        return NULL;
+}
+
+struct ls_config ls_config_msg_to_s(const ls_config_msg_t * msg)
+{
+        struct ls_config s;
+
+        assert(msg != NULL);
+
+        s.pol      = msg->pol;
+        s.t_recalc = msg->t_recalc;
+        s.t_update = msg->t_update;
+        s.t_timeo  = msg->t_timeo;
+
+        return s;
+}
+
+routing_config_msg_t * routing_config_s_to_msg(const struct routing_config * s)
+{
+        routing_config_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                return NULL;
+
+        routing_config_msg__init(msg);
+
+        switch (s->pol) {
+        case ROUTING_LINK_STATE:
+                msg->ls = ls_config_s_to_msg(&s->ls);
+                if (msg->ls == NULL)
+                        goto fail_ls;
+                break;
+        default:
+                /* No checks here */
+                break;
+        }
+
+        msg->pol = s->pol;
+
+        return msg;
+
+ fail_ls:
+        routing_config_msg__free_unpacked(msg, NULL);
+        return NULL;
+}
+
+struct routing_config routing_config_msg_to_s(const routing_config_msg_t * msg)
+{
+        struct routing_config s;
+
+        assert(msg != NULL);
+
+        switch (msg->pol) {
+        case ROUTING_LINK_STATE:
+                s.ls = ls_config_msg_to_s(msg->ls);
+                break;
+        default:
+                /* No checks here */
+                break;
+        }
+
+        s.pol = msg->pol;
+
+        return s;
+}
+
 dt_config_msg_t * dt_config_s_to_msg(const struct dt_config * s)
 {
         dt_config_msg_t * msg;
@@ -203,9 +292,14 @@ dt_config_msg_t * dt_config_s_to_msg(const struct dt_config * s)
         msg->addr_size    = s->addr_size;
         msg->eid_size     = s->eid_size;
         msg->max_ttl      = s->max_ttl;
-        msg->routing_type = s->routing_type;
+        msg->routing      = routing_config_s_to_msg(&s->routing);
+        if (msg->routing == NULL)
+                goto fail_routing;
 
         return msg;
+ fail_routing:
+        dt_config_msg__free_unpacked(msg, NULL);
+        return NULL;
 }
 
 struct dt_config dt_config_msg_to_s(const dt_config_msg_t * msg)
@@ -217,7 +311,7 @@ struct dt_config dt_config_msg_to_s(const dt_config_msg_t * msg)
         s.addr_size    = msg->addr_size;
         s.eid_size     = msg->eid_size;
         s.max_ttl      = msg->max_ttl;
-        s.routing_type = msg->routing_type;
+        s.routing      = routing_config_msg_to_s(msg->routing);
 
         return s;
 }

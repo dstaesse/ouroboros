@@ -91,24 +91,28 @@ static char * usage_str = \
         "        [hash [ALGORITHM] (default: %s)]\n"
         "        [routing <ROUTING_POLICY> (default: %s)]\n"
         "        [congestion <CONG_POLICY> (default: %s)]\n"
-        "        [autobind]\n"
+        "        [autobind]\n\n"
         "where ADDRESS_POLICY in {" FLAT_RANDOM "}\n"
         "    DIRECTORY_POLICY in {" DHT_DIR "}\n"
         "    ALGORITHM in {" SHA3_224 " " SHA3_256 " "
-        SHA3_384 " " SHA3_512 "}\n\n"
+        SHA3_384 " " SHA3_512 "}\n"
         "    ROUTING_POLICY in {" LINK_STATE " "
         LINK_STATE_LFA " " LINK_STATE_ECM "}\n"
         "    CONG_POLICY in {" NONE_CA " " MB_ECN_CA "}\n"
         "    [Data Transfer Constants]\n"
         "        [addr <address size> (default: %d)]\n"
         "        [eid <eid size> (default: %d)]\n"
-        "        [ttl <max time-to-live>, default: %d)]\n"
+        "        [ttl <max time-to-live>, default: %d)]\n\n"
         "if DIRECTORY_POLICY == " DHT_DIR "\n"
         "        [dht_alpha <search factor> (default: %u)]\n"
         "        [dht_k <replication factor> (default: %u)]\n"
         "        [dht_t_expire <expiration (s)> (default: %u)]\n"
         "        [dht_t_refresh <contact refresh (s)> (default: %u)]\n"
-        "        [dht_t_replicate <replication (s)> (default: %u)]\n"
+        "        [dht_t_replicate <replication (s)> (default: %u)]\n\n"
+        "if ROUTING_POLICY == " LINK_STATE "\n"
+        "        [ls_t_recalc <pff recalc interval (s)> (default: %ld)]\n"
+        "        [ls_t_update <LSA update interval (s)> (default: %ld)]\n"
+        "        [ls_t_timeo  <link timeout (s)> (default: %ld)]\n\n"
         "if TYPE == " IP_UDP "\n"
         "        ip <IP address in dotted notation>\n"
         "        [port <UDP port> (default: %d)]\n"
@@ -143,6 +147,9 @@ static void usage(void)
                /* dht */
                DHT(alpha), DHT(k), DHT(t_expire),
                DHT(t_refresh), DHT(t_replicate),
+               /* ls */
+               default_ls_config.t_recalc, default_ls_config.t_update,
+               default_ls_config.t_timeo,
                /* udp */
                UDP(port),
                /* eth_llc */
@@ -166,7 +173,7 @@ int do_bootstrap_ipcp(int     argc,
         uint8_t                 addr_size      = DT(addr_size);
         uint8_t                 eid_size       = DT(eid_size);
         uint8_t                 max_ttl        = DT(max_ttl);
-        enum pol_routing        routing_type   = DT(routing_type);
+        struct routing_config   routing        = default_routing_config;
         enum pol_addr_auth      addr_auth_type = UNI(addr_auth_type);
         enum pol_cong_avoid     cong_avoid     = UNI(cong_avoid);
         enum pol_dir_hash       hash_algo      = DIR_HASH_SHA3_256;
@@ -255,16 +262,24 @@ int do_bootstrap_ipcp(int     argc,
                 } else if (matches(*argv, "dht_t_replicate") == 0) {
                         dir_config.dht.params.t_replicate = atoi(*(argv + 1));
                 } else if (matches(*argv, "routing") == 0) {
-                        if (strcmp(LINK_STATE, *(argv + 1)) == 0)
-                                routing_type = ROUTING_LINK_STATE;
-                        else if (strcmp(LINK_STATE_LFA,
-                                        *(argv + 1)) == 0)
-                                routing_type = ROUTING_LINK_STATE_LFA;
-                        else if (strcmp(LINK_STATE_ECM,
-                                        *(argv + 1)) == 0)
-                                routing_type = ROUTING_LINK_STATE_ECMP;
-                        else
+                        if (strcmp(LINK_STATE, *(argv + 1)) == 0) {
+                                routing.pol = ROUTING_LINK_STATE;
+                                routing.ls.pol = LS_SIMPLE;
+                        } else if (strcmp(LINK_STATE_LFA, *(argv + 1)) == 0) {
+                                routing.pol = ROUTING_LINK_STATE;
+                                routing.ls.pol = LS_LFA;
+                        } else if (strcmp(LINK_STATE_ECM, *(argv + 1)) == 0) {
+                                routing.pol = ROUTING_LINK_STATE;
+                                routing.ls.pol = LS_ECMP;
+                        } else {
                                 goto unknown_param;
+                        }
+                } else if (matches(*argv, "ls_t_timeo") == 0) {
+                        routing.ls.t_timeo = atoi(*(argv + 1));
+                } else if (matches(*argv, "ls_t_update") == 0) {
+                        routing.ls.t_update = atoi(*(argv + 1));
+                } else if (matches(*argv, "ls_t_recalc") == 0) {
+                        routing.ls.t_recalc = atoi(*(argv + 1));
                 } else if (matches(*argv, "congestion") == 0) {
                         if (strcmp(NONE_CA, *(argv + 1)) == 0)
                                 cong_avoid = CA_NONE;
@@ -354,7 +369,7 @@ int do_bootstrap_ipcp(int     argc,
                                 conf.unicast.dt.addr_size    = addr_size;
                                 conf.unicast.dt.eid_size     = eid_size;
                                 conf.unicast.dt.max_ttl      = max_ttl;
-                                conf.unicast.dt.routing_type = routing_type;
+                                conf.unicast.dt.routing      = routing;
                                 conf.unicast.addr_auth_type  = addr_auth_type;
                                 conf.unicast.cong_avoid      = cong_avoid;
                                 conf.unicast.dir             = dir_config;

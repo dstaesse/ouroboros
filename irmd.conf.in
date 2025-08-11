@@ -101,14 +101,17 @@ autobind=true           # Defaults to false.
 # max_ttl=60            # Defaults to 60 (max 255).
 # addr-auth="flat"      # Defaults to flat (currently only option).
 # routing="lfa"         # Defaults to link-state (options: link-state, lfa, ecmp).
+# ls_t_recalc=4         # Forwarding Function update interval (s) (Default 4).
+# ls_t_update=15        # Link State Advertisement update interval (s) (Default 15).
+# ls_t_timeo=60         # Link Timeout (s) (Default 60).
 # congestion="none"     # Defaults to mb-ecn (options: none, mb-ecn).
 # directory=DHT         # Defaults to DHT (options: DHT)
 # hash="SHA3_224"       # Defaults to SHA3_256.
 # dht_alpha=3           # DHT parallel search factor (Default 3, optimal)
 # dht_k=8               # DHT replication factor (Default: 8, same as Mainline DHT)
 # dht_t_expiry=3600     # DHT entry expiry time (s) (Default: 86400 s)
-# dht_t_refresh         # DHT contact refresh interval (s) (Default: 900 s)
-# dht_t_replicate       # DHT replication interval (s) (Default: 900 s)
+# dht_t_refresh=900     # DHT contact refresh interval (s) (Default: 900 s)
+# dht_t_replicate=900   # DHT replication interval (s) (Default: 900 s)
    # NAMES KNOWN
 reg=["oping"]           # Defaults to [].
 
