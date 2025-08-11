@@ -262,12 +262,15 @@ static int lsdb_rib_readdir(char *** buf)
         char               entry[RIB_PATH_LEN + 1];
         ssize_t            idx = 0;
 
-        assert(buf);
+        assert(buf != NULL);
 
         pthread_rwlock_rdlock(&ls.db_lock);
 
-        if (ls.db_len + ls.nbs_len == 0)
+        if (ls.db_len + ls.nbs_len == 0) {
+                *buf = NULL;
                 goto no_entries;
+        }
+
 
         *buf = malloc(sizeof(**buf) * (ls.db_len + ls.nbs_len));
         if (*buf == NULL)

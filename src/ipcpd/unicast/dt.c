@@ -287,8 +287,10 @@ static int dt_rib_readdir(char *** buf)
 
         pthread_rwlock_rdlock(&dt.lock);
 
-        if (dt.n_flows < 1)
+        if (dt.n_flows < 1) {
+                *buf = NULL;
                 goto no_flows;
+        }
 
         *buf = malloc(sizeof(**buf) * dt.n_flows);
         if (*buf == NULL)

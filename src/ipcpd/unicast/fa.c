@@ -217,8 +217,10 @@ static int fa_rib_readdir(char *** buf)
 
         pthread_rwlock_rdlock(&fa.flows_lock);
 
-        if (fa.n_flows < 1)
+        if (fa.n_flows < 1) {
+                *buf = NULL;
                 goto no_flows;
+        }
 
         *buf = malloc(sizeof(**buf) * fa.n_flows);
         if (*buf == NULL)

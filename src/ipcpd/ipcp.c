@@ -251,8 +251,7 @@ static int ipcp_rib_readdir(char *** buf)
 {
         int  i = 0;
 
-        while (info[i] != NULL)
-                i++;
+        while (info[i++] != NULL);
 
         *buf = malloc(sizeof(**buf) * i);
         if (*buf == NULL)
@@ -271,9 +270,8 @@ static int ipcp_rib_readdir(char *** buf)
  fail_dup:
         while (i-- > 0)
                 free((*buf)[i]);
- fail_entries:
         free(*buf);
-
+ fail_entries:
         return -ENOMEM;
 }
 

@@ -535,7 +535,7 @@ static uint8_t * generate_id(void)
                 log_err("DHT ID length is too short (%zu < %zu).",
                         dht.id.len, sizeof(uint64_t));
                 return NULL;
-        };
+        }
 
         id = malloc(dht.id.len);
         if (id == NULL) {
