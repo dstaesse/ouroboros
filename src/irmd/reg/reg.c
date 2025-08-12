@@ -1808,8 +1808,6 @@ int reg_wait_flow_accepted(struct flow_info *      info,
         assert(flow != NULL);
         assert(info->id == flow->info.id);
         assert(info->n_pid == flow->info.n_pid);
-        assert(info->state == flow->info.state);
-        assert(flow->info.state == FLOW_ACCEPT_PENDING);
 
         if (__reg_add_active_proc(info->n_pid) < 0) {
                 log_err("Failed to mark pid %d active.", info->n_pid);
