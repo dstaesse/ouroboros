@@ -1212,8 +1212,7 @@ static int flow_alloc(struct flow_info * flow,
         return err;
 }
 
-static int wait_for_accept(enum hash_algo    algo,
-                           const uint8_t *   hash)
+static int wait_for_accept(const char * name)
 {
         struct timespec   timeo = TIMESPEC_INIT_MS(IRMD_REQ_ARR_TIMEOUT);
         struct timespec   abstime;
@@ -1223,25 +1222,23 @@ static int wait_for_accept(enum hash_algo    algo,
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
 
-        ret = reg_wait_flow_accepting(algo, hash, &abstime);
+        ret = reg_wait_flow_accepting(name, &abstime);
         if (ret == -ETIMEDOUT) {
-                if (reg_get_exec(algo, hash, &exec) < 0) {
-                        log_dbg("No program bound to " HASH_FMT32 ".",
-                                HASH_VAL32(hash));
+                if (reg_get_exec(name, &exec) < 0) {
+                        log_dbg("No program bound for %s.", name);
                         goto fail;
                 }
 
-                log_info("Autostarting %s.", exec[0]);
-
                 if (spawn_program(exec) < 0) {
-                        log_dbg("Failed to autostart " HASH_FMT32 ".",
-                                HASH_VAL32(hash));
+                        log_err("Failed to start %s for %s.", exec[0], name);
                         goto fail_spawn;
                 }
 
+                log_info("Starting %s for %s.", exec[0], name);
+
                 ts_add(&abstime, &timeo, &abstime);
 
-                ret = reg_wait_flow_accepting(algo, hash, &abstime);
+                ret = reg_wait_flow_accepting(name, &abstime);
                 if (ret == -ETIMEDOUT)
                         goto fail_spawn;
 
@@ -1264,10 +1261,11 @@ static int flow_req_arr(struct flow_info * flow,
         struct layer_info layer;
         enum hash_algo    algo;
         int               ret;
+        char              name[NAME_SIZE + 1];
 
         info.pid = flow->n_1_pid;
 
-        log_info("Flow req arrived from IPCP %d for " HASH_FMT32 ".",
+        log_dbg("Flow req arrived from IPCP %d for " HASH_FMT32 ".",
                  info.pid, HASH_VAL32(hash));
 
         if (reg_get_ipcp(&info, &layer) < 0) {
@@ -1278,10 +1276,17 @@ static int flow_req_arr(struct flow_info * flow,
 
         algo = (enum hash_algo) layer.dir_hash_algo;
 
-        ret = wait_for_accept(algo, hash);
+        if (reg_get_name_for_hash(name, algo, hash) < 0) {
+                log_warn("No name for " HASH_FMT32 ".", HASH_VAL32(hash));
+                ret = -ENAME;
+                goto fail;
+        }
+
+        log_info("Flow request arrived for %s.", name);
+
+        ret = wait_for_accept(name);
         if (ret < 0) {
-                log_err("No activeprocess for " HASH_FMT32 ".",
-                       HASH_VAL32(hash));
+                log_err("No active process for %s.", name);
                 goto fail;
         }
 

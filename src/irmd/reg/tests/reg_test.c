@@ -1219,7 +1219,6 @@ static int test_wait_accepting_timeout(void)
         struct timespec  abstime;
         struct timespec  timeo = TIMESPEC_INIT_MS(1);
         int              flow_id;
-        uint8_t          hash[64];
         struct name_info ninfo = {
                 .name   = TEST_NAME,
                 .pol_lb = LB_RR
@@ -1237,12 +1236,10 @@ static int test_wait_accepting_timeout(void)
                 goto fail;
         }
 
-        str_hash(HASH_SHA3_256, hash, ninfo.name);
-
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
 
-        flow_id = reg_wait_flow_accepting(HASH_SHA3_256, hash, &abstime);
+        flow_id = reg_wait_flow_accepting(ninfo.name, &abstime);
         if (flow_id != -ETIMEDOUT) {
                 printf("Wait accept did not time out: %d.\n", flow_id);
                 goto fail;
@@ -1265,7 +1262,6 @@ static int test_wait_accepting_fail_name(void)
         struct timespec  abstime;
         struct timespec  timeo = TIMESPEC_INIT_S(1);
         int              flow_id;
-        uint8_t          hash[64];
 
         TEST_START();
 
@@ -1276,11 +1272,10 @@ static int test_wait_accepting_fail_name(void)
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
-        str_hash(HASH_SHA3_256, hash, "C0FF33");
 
-        flow_id = reg_wait_flow_accepting(HASH_SHA3_256, hash, &abstime);
+        flow_id = reg_wait_flow_accepting(TEST_NAME, &abstime);
         if (flow_id != -ENAME) {
-                printf("Wait accept did not fail on name: %d.\n", flow_id);
+                printf("Wait accept did not fail: %d.\n", flow_id);
                 goto fail;
         }
 
@@ -1351,7 +1346,6 @@ static int test_wait_accepting_success(void)
         struct timespec  timeo = TIMESPEC_INIT_S(1);
         int              flow_id;
         pthread_t        thr;
-        uint8_t          hash[64];
         struct name_info ninfo = {
                 .name   = TEST_NAME,
                 .pol_lb = LB_RR
@@ -1374,9 +1368,7 @@ static int test_wait_accepting_success(void)
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
 
-        str_hash(HASH_SHA3_256, hash, ninfo.name);
-
-        flow_id = reg_wait_flow_accepting(HASH_SHA3_256, hash, &abstime);
+        flow_id = reg_wait_flow_accepting(ninfo.name, &abstime);
         if (flow_id < 0) {
                 printf("Wait accept did not return a flow id: %d.", flow_id);
                 goto fail;

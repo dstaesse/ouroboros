@@ -90,6 +90,10 @@ int   reg_destroy_name(const char * name);
 
 bool  reg_has_name(const char * name);
 
+int   reg_get_name_for_hash(char *          buf,
+                            enum hash_algo  algo,
+                            const uint8_t * hash);
+
 /* TODO don't rely on protobuf here */
 int   reg_list_names(name_info_msg_t *** names);
 
@@ -99,9 +103,8 @@ int   reg_destroy_prog(const char * name);
 
 bool  reg_has_prog(const char * name);
 
-int   reg_get_exec(enum hash_algo  algo,
-                   const uint8_t * hash,
-                   char ***        exec);
+int   reg_get_exec(const char * name,
+                   char ***     exec);
 
 int   reg_bind_prog(const char * name,
                     char **      exec,
@@ -125,8 +128,7 @@ int   reg_wait_flow_accepted(struct flow_info *      info,
                              buffer_t *              pbuf,
                              const struct timespec * abstime);
 
-int   reg_wait_flow_accepting(enum hash_algo          algo,
-                              const uint8_t *         hash,
+int   reg_wait_flow_accepting(const char *            name,
                               const struct timespec * abstime);
 
 int   reg_respond_accept(struct flow_info * info,

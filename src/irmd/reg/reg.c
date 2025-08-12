@@ -190,41 +190,13 @@ static struct reg_name * __reg_get_name(const char * name)
         return NULL;
 }
 
-static struct reg_name * __reg_get_name_by_hash(enum hash_algo  algo,
-                                                const uint8_t * hash)
-{
-        struct list_head * p;
-        uint8_t *          thash;
-        size_t             len;
-
-        len = hash_len(algo);
-
-        thash = malloc(len);
-        if (thash == NULL)
-                return NULL;
-
-        list_for_each(p, &reg.names) {
-                struct reg_name * n = list_entry(p, struct reg_name, next);
-                str_hash(algo, thash, n->info.name);
-                if (memcmp(thash, hash, len) == 0) {
-                        free(thash);
-                        return n;
-                }
-        }
-
-        free(thash);
-
-        return NULL;
-}
-
-static int __reg_get_pending_flow_id_for_hash(enum hash_algo  algo,
-                                              const uint8_t * hash)
+static int __reg_get_pending_flow_id(const char * name)
 {
         struct reg_name * entry;
         struct reg_flow * flow;
         pid_t             pid;
 
-        entry =__reg_get_name_by_hash(algo, hash);
+        entry =__reg_get_name(name);
         if (entry == NULL)
                 return -ENAME;
 
@@ -395,29 +367,16 @@ static struct reg_prog * __reg_get_prog(const char * name)
         return NULL;
 }
 
-static char ** __reg_get_exec(enum hash_algo  algo,
-                              const uint8_t * hash)
+static char ** __reg_get_exec(const char * name)
 {
         struct list_head * p;
-        uint8_t *          buf;
-
-        buf = malloc(hash_len(algo));
-        if (buf == NULL) {
-                log_err("Failed to malloc hash buffer.");
-                return NULL;
-        }
 
         list_for_each(p, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
-                str_hash(algo, buf, entry->info.name);
-                if (memcmp(buf, hash, hash_len(algo)) == 0) {
-                        free(buf);
+                if (strcmp(entry->info.name, name) == 0)
                         return reg_name_get_exec(entry);
-                }
         }
-
-        free(buf);
 
         return NULL;
 }
@@ -991,6 +950,43 @@ bool reg_has_name(const char * name)
         return ret;
 }
 
+int reg_get_name_for_hash(char *          buf,
+                          enum hash_algo  algo,
+                          const uint8_t * hash)
+{
+        struct list_head * p;
+        uint8_t *          thash;
+        size_t             len;
+        char *             name = NULL;
+
+        len = hash_len(algo);
+
+        thash = malloc(len);
+        if (thash == NULL)
+                return -ENOMEM;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        list_for_each(p, &reg.names) {
+                struct reg_name * n = list_entry(p, struct reg_name, next);
+                str_hash(algo, thash, n->info.name);
+                if (memcmp(thash, hash, len) == 0) {
+                        name = n->info.name;
+                        break;
+                }
+        }
+
+        if (name != NULL)
+                strcpy(buf, name);
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        free(thash);
+
+        return name == NULL ? -ENOENT : 0;
+}
+
+
 static int __get_name_info(name_info_msg_t ** msg,
                            struct reg_name *  n)
 {
@@ -1414,19 +1410,18 @@ bool reg_has_prog(const char * name)
         return ret;
 }
 
-int reg_get_exec(enum hash_algo  algo,
-                 const uint8_t * hash,
-                 char ***        prog)
+int reg_get_exec(const char * name,
+                 char ***     prog)
 {
         char ** exec;
         int     ret = 0;
 
-        assert(hash != NULL);
+        assert(name != NULL);
         assert(prog != NULL);
 
         pthread_mutex_lock(&reg.mtx);
 
-        exec = __reg_get_exec(algo, hash);
+        exec = __reg_get_exec(name);
         if (exec == NULL) {
                 ret = -EPERM;
                 goto finish;
@@ -1439,12 +1434,9 @@ int reg_get_exec(enum hash_algo  algo,
                 goto finish;
         }
 
-        pthread_mutex_unlock(&reg.mtx);
-
-        return 0;
-
  finish:
         pthread_mutex_unlock(&reg.mtx);
+
         return ret;
 }
 
@@ -1875,13 +1867,12 @@ int reg_wait_flow_accepted(struct flow_info *      info,
         return -1;
 }
 
-int reg_wait_flow_accepting(enum hash_algo          algo,
-                            const uint8_t *         hash,
+int reg_wait_flow_accepting(const char *            name,
                             const struct timespec * abstime)
 {
         int ret;
 
-        assert(hash != NULL);
+        assert(name != NULL);
         assert(abstime != NULL);
 
         pthread_mutex_lock(&reg.mtx);
@@ -1889,7 +1880,7 @@ int reg_wait_flow_accepting(enum hash_algo          algo,
         pthread_cleanup_push(__cleanup_mutex_unlock, &reg.mtx);
 
         while (true) {
-                ret = __reg_get_pending_flow_id_for_hash(algo, hash);
+                ret = __reg_get_pending_flow_id(name);
                 if (ret != -EAGAIN)
                         break;
 

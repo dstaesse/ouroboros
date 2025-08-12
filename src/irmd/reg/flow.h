@@ -34,12 +34,12 @@
 #include <time.h>
 
 struct reg_flow {
-        struct list_head next;
+        struct list_head   next;
 
-        struct flow_info info;
+        struct flow_info   info;
 
-        buffer_t         data;
-        struct timespec  t0;
+        buffer_t           data;
+        struct timespec    t0;
 
         struct shm_rbuff * n_rb;
         struct shm_rbuff * n_1_rb;
