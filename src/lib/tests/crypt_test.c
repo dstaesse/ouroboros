@@ -216,6 +216,8 @@ int test_crypt_encrypt_decrypt(void)
         }
 
         crypt_destroy_ctx(ctx);
+        freebuf(out2);
+        freebuf(out);
 
         TEST_SUCCESS();
 

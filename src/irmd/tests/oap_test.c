@@ -160,6 +160,7 @@ static int test_oap_hdr_init_fini_data(void)
                 goto fail_req_hdr_sz;
         }
 
+        freebuf(data);
         oap_hdr_fini(&oap_hdr);
 
         TEST_SUCCESS();
@@ -232,6 +233,7 @@ static int test_oap_hdr_init_fini_signed(void)
         crypt_free_crt(pubcrt2);
         crypt_free_crt(pubcrt);
         crypt_free_key(pk);
+        crypt_free_key(pkp);
 
         TEST_SUCCESS();
 

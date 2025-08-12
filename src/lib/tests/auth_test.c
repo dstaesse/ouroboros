@@ -511,6 +511,7 @@ int test_auth_bad_signature(void)
                 goto fail_verify;
         }
 
+        freebuf(fake_sig);
         freebuf(sig);
 
         crypt_free_key(pk);
