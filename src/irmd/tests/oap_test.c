@@ -210,6 +210,16 @@ static int test_oap_hdr_init_fini_signed(void)
                 goto fail_req_hdr;
         }
 
+        if (oap_hdr.crt.len == 0) {
+                printf("OAP request header has no public certificate.\n");
+                goto fail_req_hdr;
+        }
+
+        if (oap_hdr.sig.len == 0) {
+                printf("OAP request header no signature.\n");
+                goto fail_req_hdr;
+        }
+
         if (crypt_load_crt_der(oap_hdr.crt, &pubcrt2) < 0) {
                 printf("Failed to load public certificate from DER.\n");
                 goto fail_crt_der;

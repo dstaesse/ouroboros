@@ -28,6 +28,7 @@ The IPC Resource Manager - Registry
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/protobuf.h>
 #include <ouroboros/pthread.h>
 
 #include "reg.h"
@@ -46,6 +47,7 @@ The IPC Resource Manager - Registry
 
 struct {
         struct bmp *         flow_ids;  /* flow_ids for flows         */
+
         struct list_head     flows;     /* flow information           */
         size_t               n_flows;   /* number of flows            */
 
@@ -196,6 +198,10 @@ static int __reg_get_pending_flow_id(const char * name)
         struct reg_flow * flow;
         pid_t             pid;
 
+        assert(name != NULL);
+        assert(strlen(name) > 0);
+        assert(strlen(name) < NAME_SIZE + 1);
+
         entry =__reg_get_name(name);
         if (entry == NULL)
                 return -ENAME;
@@ -205,7 +211,10 @@ static int __reg_get_pending_flow_id(const char * name)
                 return -EAGAIN;
 
         flow = __reg_get_accept_flow(pid);
-        assert(flow != NULL);
+        if (flow == NULL) /* compiler barks, this can't be NULL */
+                return -EAGAIN;
+
+        strcpy(flow->name, name);
 
         return flow->info.id;
 }
@@ -580,6 +589,14 @@ void reg_clear(void)
                 reg.n_procs--;
         }
 
+        list_for_each_safe(p, h, &reg.flows) {
+                struct reg_flow * entry;
+                entry = list_entry(p, struct reg_flow, next);
+                list_del(&entry->next);
+                reg_flow_destroy(entry);
+                reg.n_flows--;
+        }
+
         list_for_each_safe(p, h, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
@@ -594,14 +611,6 @@ void reg_clear(void)
                 list_del(&entry->next);
                 reg_ipcp_destroy(entry);
                 reg.n_ipcps--;
-        }
-
-        list_for_each_safe(p, h, &reg.flows) {
-                struct reg_flow * entry;
-                entry = list_entry(p, struct reg_flow, next);
-                list_del(&entry->next);
-                reg_flow_destroy(entry);
-                reg.n_flows--;
         }
 
         pthread_mutex_unlock(&reg.mtx);
@@ -950,6 +959,34 @@ bool reg_has_name(const char * name)
         return ret;
 }
 
+int reg_get_name_info(const char *       name,
+                      struct name_info * info)
+{
+        struct reg_name * n;
+
+        assert(name != NULL);
+        assert(info != NULL);
+
+        pthread_mutex_lock(&reg.mtx);
+
+        n = __reg_get_name(name);
+        if (n == NULL) {
+                log_err("Name %s does not exist.", name);
+                goto no_name;
+        }
+
+        *info = n->info;
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return 0;
+
+ no_name:
+        pthread_mutex_unlock(&reg.mtx);
+        return -ENOENT;
+
+}
+
 int reg_get_name_for_hash(char *          buf,
                           enum hash_algo  algo,
                           const uint8_t * hash)
@@ -986,29 +1023,20 @@ int reg_get_name_for_hash(char *          buf,
         return name == NULL ? -ENOENT : 0;
 }
 
-
-static int __get_name_info(name_info_msg_t ** msg,
-                           struct reg_name *  n)
+int reg_get_name_for_flow_id(char * buf,
+                             int    flow_id)
 {
-        *msg = malloc(sizeof(**msg));
-        if (*msg == NULL)
-                goto fail;
+        struct reg_flow * f;
 
-        name_info_msg__init(*msg);
+        pthread_mutex_lock(&reg.mtx);
 
-        (*msg)->name = strdup(n->info.name);
-        if ((*msg)->name == NULL)
-                goto fail_msg;
+        f = __reg_get_flow(flow_id);
+        if (f != NULL)
+                strcpy(buf, f->name);
 
-        (*msg)->pol_lb = n->info.pol_lb;
+        pthread_mutex_unlock(&reg.mtx);
 
-        return 0;
-
- fail_msg:
-        name_info_msg__free_unpacked(*msg, NULL);
-        *msg = NULL;
- fail:
-        return -1;
+        return f == NULL ? -ENOENT : 0;
 }
 
 int reg_list_names(name_info_msg_t *** names)
@@ -1030,10 +1058,20 @@ int reg_list_names(name_info_msg_t *** names)
         list_for_each(p, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
-                if (__get_name_info(&(*names)[i], entry) < 0) {
+                (*names)[i] = name_info_s_to_msg(&entry->info);
+                if ((*names)[i] == NULL) {
                         log_err("Failed to create name list info.");
                         goto fail;
                 }
+                /* wipe security info to avoid huge messages */
+                free((*names)[i]->scrt);
+                (*names)[i]->scrt = NULL;
+                free((*names)[i]->skey);
+                (*names)[i]->skey = NULL;
+                free((*names)[i]->ccrt);
+                (*names)[i]->ccrt = NULL;
+                free((*names)[i]->ckey);
+                (*names)[i]->ckey = NULL;
 
                 i++;
         }
@@ -1947,11 +1985,13 @@ void reg_dealloc_flow(struct flow_info * info)
         assert(flow != NULL);
         assert(flow->data.data == NULL);
         assert(flow->data.len == 0);
-
         assert(flow->info.state == FLOW_ALLOCATED);
+
         flow->info.state = FLOW_DEALLOC_PENDING;
         info->state = FLOW_DEALLOC_PENDING;
         info->n_1_pid = flow->info.n_1_pid;
+
+        memset(flow->name, 0, sizeof(flow->name));
 
         reg_flow_update(flow, info);
 

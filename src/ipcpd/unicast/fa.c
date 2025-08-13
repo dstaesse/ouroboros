@@ -673,7 +673,6 @@ int fa_init(void)
  fail_mtx:
         pthread_rwlock_destroy(&fa.flows_lock);
  fail_rwlock:
-
         return -1;
 }
 

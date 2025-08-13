@@ -24,6 +24,7 @@
 #define OUROBOROS_NAME_H
 
 #define NAME_SIZE 255
+#define NAME_PATH_SIZE (NAME_SIZE + 256)
 #define BIND_AUTO 0x01
 
 enum pol_balance {
@@ -32,9 +33,17 @@ enum pol_balance {
         LB_INVALID
 };
 
+struct name_sec_paths {
+        char key[NAME_PATH_SIZE + 1]; /* path to key for this name */
+        char crt[NAME_PATH_SIZE + 1]; /* path to crt for this name */
+};
+
 struct name_info {
         char             name[NAME_SIZE + 1];
         enum pol_balance pol_lb;
+
+        struct name_sec_paths s; /* server */
+        struct name_sec_paths c; /* client */
 };
 
 #endif /* OUROBOROS_NAME_H */

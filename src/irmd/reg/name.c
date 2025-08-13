@@ -66,15 +66,14 @@ struct reg_name * reg_name_create(const struct name_info * info)
                 goto fail_malloc;
         }
 
-        list_head_init(&name->next);
-        list_head_init(&name->progs);
-        list_head_init(&name->procs);
-        list_head_init(&name->active);
+        memset(name, 0, sizeof(*name));
 
-        name->info     = *info;
-        name->n_progs  = 0;
-        name->n_procs  = 0;
-        name->n_active = 0;
+        list_head_init(&name->next);
+        list_head_init(&name->progs.list);
+        list_head_init(&name->procs.list);
+        list_head_init(&name->active.list);
+
+        name->info = *info;
 
         return name;
 
@@ -88,13 +87,13 @@ void reg_name_destroy(struct reg_name * name)
 
         assert(list_is_empty(&name->next));
 
-        assert(name->n_progs == 0);
-        assert(name->n_procs == 0);
-        assert(name->n_active == 0);
+        assert(name->progs.len == 0);
+        assert(name->procs.len == 0);
+        assert(name->active.len == 0);
 
-        assert(list_is_empty(&name->progs));
-        assert(list_is_empty(&name->procs));
-        assert(list_is_empty(&name->active));
+        assert(list_is_empty(&name->progs.list));
+        assert(list_is_empty(&name->procs.list));
+        assert(list_is_empty(&name->active.list));
 
         free(name);
 }
@@ -107,7 +106,7 @@ static struct proc_entry * __reg_name_get_active(const struct reg_name * name,
         assert(name != NULL);
         assert(pid > 0);
 
-        list_for_each(p, &name->active) {
+        list_for_each(p, &name->active.list) {
                 struct proc_entry * entry;
                 entry = list_entry(p, struct proc_entry, next);
                 if (entry->pid == pid)
@@ -123,13 +122,13 @@ static void __reg_name_del_all_active(struct reg_name * name,
         struct list_head * p;
         struct list_head * h;
 
-        list_for_each_safe(p, h, &name->active) {
+        list_for_each_safe(p, h, &name->active.list) {
                 struct proc_entry * entry;
                 entry = list_entry(p, struct proc_entry, next);
                 if (entry->pid == pid) {
                         list_del(&entry->next);
                         free(entry);
-                        name->n_active--;
+                        --name->active.len;
                 }
         }
 }
@@ -142,7 +141,7 @@ static struct proc_entry * __reg_name_get_proc(const struct reg_name * name,
         assert(name != NULL);
         assert(pid > 0);
 
-        list_for_each(p, &name->procs) {
+        list_for_each(p, &name->procs.list) {
                 struct proc_entry * entry;
                 entry = list_entry(p, struct proc_entry, next);
                 if (entry->pid == pid)
@@ -160,7 +159,7 @@ static struct prog_entry * __reg_name_get_prog(const struct reg_name * name,
         assert(name != NULL);
         assert(prog != NULL);
 
-        list_for_each(p, &name->progs) {
+        list_for_each(p, &name->progs.list) {
                 struct prog_entry * entry;
                 entry = list_entry(p, struct prog_entry, next);
                 if (strcmp(entry->exec[0], prog) == 0)
@@ -195,16 +194,16 @@ int reg_name_add_active(struct reg_name * name,
 
         switch (name->info.pol_lb) {
         case LB_RR:    /* Round robin policy. */
-                list_add_tail(&entry->next, &name->active);
+                list_add_tail(&entry->next, &name->active.list);
                 break;
         case LB_SPILL: /* Keep accepting flows on the current process */
-                list_add(&entry->next, &name->active);
+                list_add(&entry->next, &name->active.list);
                 break;
         default:
                 goto fail_unreachable;
         }
 
-        name->n_active++;
+        ++name->active.len;
 
         return 0;
 
@@ -226,19 +225,23 @@ void reg_name_del_active(struct reg_name * name,
 
         list_del(&entry->next);
 
-        name->n_active--;
+        --name->active.len;
 
         free(entry);
 }
 
 pid_t reg_name_get_active(struct reg_name * name)
 {
+        struct proc_entry * e;
+
         assert(name != NULL);
 
-        if (list_is_empty(&name->active))
+        if (list_is_empty(&name->active.list))
                 return -1;
 
-        return list_first_entry(&name->active, struct proc_entry, next)->pid;
+        e = list_first_entry(&name->active.list, struct proc_entry, next);
+
+        return e->pid;
 }
 
 int reg_name_add_proc(struct reg_name * name,
@@ -259,9 +262,9 @@ int reg_name_add_proc(struct reg_name * name,
 
         entry->pid = pid;
 
-        list_add(&entry->next, &name->procs);
+        list_add(&entry->next, &name->procs.list);
 
-        name->n_procs++;
+        ++name->procs.len;
 
         return 0;
 
@@ -287,7 +290,7 @@ void reg_name_del_proc(struct reg_name * name,
 
         free(entry);
 
-        name->n_procs--;
+        --name->procs.len;
 
         assert(__reg_name_get_proc(name, pid) == NULL);
 }
@@ -296,8 +299,7 @@ bool reg_name_has_proc(const struct reg_name * name,
                        pid_t                   pid)
 {
         return __reg_name_get_proc(name, pid) != NULL;
-}                char ** exec;
-
+}
 
 int reg_name_add_prog(struct reg_name * name,
                       char **           exec)
@@ -322,11 +324,11 @@ int reg_name_add_prog(struct reg_name * name,
                 goto fail_exec;
         }
 
-        list_add(&entry->next, &name->progs);
+        list_add(&entry->next, &name->progs.list);
 
         log_dbg("Add prog %s to name %s.", exec[0], name->info.name);
 
-        name->n_progs++;
+        ++name->progs.len;
 
         return 0;
 
@@ -352,7 +354,7 @@ void reg_name_del_prog(struct reg_name * name,
 
         __free_prog_entry(entry);
 
-        name->n_progs--;
+        --name->progs.len;
 
         assert(__reg_name_get_prog(name, prog) == NULL);
 }
@@ -368,8 +370,12 @@ bool reg_name_has_prog(const struct reg_name * name,
 
 char ** reg_name_get_exec(const struct reg_name * name)
 {
-        if (list_is_empty(&name->progs))
+        struct prog_entry * e;
+
+        if (list_is_empty(&name->progs.list))
                 return NULL;
 
-        return list_first_entry(&name->progs, struct prog_entry, next)->exec;
+        e = list_first_entry(&name->progs.list, struct prog_entry, next);
+
+        return e->exec;
 }

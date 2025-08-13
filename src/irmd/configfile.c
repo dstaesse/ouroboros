@@ -258,7 +258,7 @@ static int toml_dir(toml_table_t *      table,
                         if (!BETWEEN(alpha.u.i,
                                 DHT_ALPHA_MIN, DHT_ALPHA_MAX)) {
                                 log_err("Invalid alpha value: %ld",
-                                        alpha.u.i);
+                                        (long) alpha.u.i);
                                 return -EINVAL;
                         }
                         DHT(conf, alpha) = alpha.u.i;
@@ -268,7 +268,7 @@ static int toml_dir(toml_table_t *      table,
                         if (!BETWEEN(t_expire.u.i,
                                 DHT_T_EXPIRE_MIN, DHT_T_EXPIRE_MAX)) {
                                 log_err("Invalid expire time: %ld",
-                                        t_expire.u.i);
+                                        (long) t_expire.u.i);
                                 return -EINVAL;
                         }
                         DHT(conf, t_expire) = t_expire.u.i;
@@ -278,7 +278,7 @@ static int toml_dir(toml_table_t *      table,
                         if (!BETWEEN(t_refresh.u.i,
                                 DHT_T_REFRESH_MIN, DHT_T_REFRESH_MAX)) {
                                 log_err("Invalid refresh time: %ld",
-                                        t_refresh.u.i);
+                                        (long) t_refresh.u.i);
                                 return -EINVAL;
                         }
                         DHT(conf, t_refresh) = t_refresh.u.i;
@@ -288,7 +288,7 @@ static int toml_dir(toml_table_t *      table,
                         if (!BETWEEN(t_replicate.u.i,
                                 DHT_T_REPLICATE_MIN, DHT_T_REPLICATE_MAX)) {
                                 log_err("Invalid replication time: %ld",
-                                        t_replicate.u.i);
+                                        (long) t_replicate.u.i);
                                 return -EINVAL;
                         }
                         DHT(conf, t_replicate) = t_replicate.u.i;
@@ -297,7 +297,7 @@ static int toml_dir(toml_table_t *      table,
                 if (k.ok) {
                         if (!BETWEEN(k.u.i, DHT_K_MIN, DHT_K_MAX)) {
                                 log_err("Invalid replication factor: %ld",
-                                        k.u.i);
+                                        (long) k.u.i);
                                 return -EINVAL;
                         }
                         DHT(conf, k) = k.u.i;
@@ -344,7 +344,7 @@ static int toml_routing(toml_table_t *     table,
                 if (t_recalc.ok) {
                         if (t_recalc.u.i < 1) {
                                 log_err("Invalid ls_t_recalc value: %ld",
-                                        t_recalc.u.i);
+                                        (long) t_recalc.u.i);
                                 return -EINVAL;
                         }
                         conf->routing.ls.t_recalc = t_recalc.u.i;
@@ -353,7 +353,7 @@ static int toml_routing(toml_table_t *     table,
                 if (t_update.ok) {
                         if (t_update.u.i < 1) {
                                 log_err("Invalid ls_t_update value: %ld",
-                                        t_update.u.i);
+                                        (long) t_update.u.i);
                                 return -EINVAL;
                         }
                         conf->routing.ls.t_update = t_update.u.i;
@@ -362,7 +362,7 @@ static int toml_routing(toml_table_t *     table,
                 if (t_timeo.ok) {
                         if (t_timeo.u.i < 1) {
                                 log_err("Invalid ls_t_timeo value: %ld",
-                                        t_timeo.u.i);
+                                        (long) t_timeo.u.i);
                                 return -EINVAL;
                         }
                         conf->routing.ls.t_timeo = t_timeo.u.i;
@@ -833,14 +833,26 @@ static int toml_prog_list(toml_array_t * progs,
 static int toml_name(toml_table_t * table,
                      const char *   name)
 {
-        toml_array_t *   progs;
-        toml_array_t *   args;
-        toml_datum_t     lb;
+        toml_array_t * progs;
+        toml_array_t * args;
+        toml_datum_t   lb;
+        toml_datum_t   scrt;
+        toml_datum_t   skey;
+        toml_datum_t   ccrt;
+        toml_datum_t   ckey;
+
         struct name_info info = {
                 .pol_lb = LB_SPILL
         };
 
         log_dbg("Found service name %s in configuration file.", name);
+
+        if (strlen(name) > NAME_SIZE) {
+                log_err("Name too long: %s", name);
+                return -1;
+        }
+
+        strcpy(info.name, name);
 
         lb = toml_string_in(table, "lb");
         if (lb.ok) {
@@ -858,7 +870,83 @@ static int toml_name(toml_table_t * table,
                 return -1;
         }
 
-        strcpy(info.name, name);
+        scrt = toml_string_in(table, "server_crt_file");
+        if (scrt.ok) {
+                char * scrt_path = realpath(scrt.u.s, NULL);
+                if (scrt_path == NULL) {
+                        log_err("Failed to check path for %s: %s.",
+                                scrt.u.s, strerror(errno));
+                        free(scrt.u.s);
+                        return -1;
+                }
+                if (strlen(scrt.u.s) > NAME_PATH_SIZE) {
+                        log_err("Server certificate file path too long: %s",
+                                scrt_path);
+                        free(scrt.u.s);
+                        return -1;
+                }
+                strcpy(info.s.crt, scrt_path);
+                free(scrt_path);
+                free(scrt.u.s);
+        }
+
+        skey = toml_string_in(table, "server_key_file");
+        if (skey.ok) {
+                char * skey_path = realpath(skey.u.s, NULL);
+                if (skey_path == NULL) {
+                        log_err("Failed to check path for %s: %s.",
+                                skey.u.s, strerror(errno));
+                        free(skey.u.s);
+                        return -1;
+                }
+                if (strlen(skey.u.s) > NAME_PATH_SIZE) {
+                        log_err("Server key file path too long: %s", skey_path);
+                        free(skey.u.s);
+                        return -1;
+                }
+                strcpy(info.s.key, skey_path);
+                free(skey_path);
+                free(skey.u.s);
+        }
+
+        ccrt = toml_string_in(table, "client_crt_file");
+        if (ccrt.ok) {
+                char * ccrt_path = realpath(ccrt.u.s, NULL);
+                if (ccrt_path == NULL) {
+                        log_err("Failed to check path for %s: %s.",
+                                ccrt.u.s, strerror(errno));
+                        free(ccrt.u.s);
+                        return -1;
+                }
+                if (strlen(ccrt.u.s) > NAME_PATH_SIZE) {
+                        log_err("Client certificate file path too long: %s",
+                                ccrt_path);
+                        free(ccrt.u.s);
+                        return -1;
+                }
+                strcpy(info.c.crt, ccrt_path);
+                free(ccrt_path);
+                free(ccrt.u.s);
+        }
+
+        ckey = toml_string_in(table, "client_key_file");
+        if (ckey.ok) {
+                char * ckey_path = realpath(ckey.u.s, NULL);
+                if (ckey_path == NULL) {
+                        log_err("Failed to check path for %s: %s.",
+                                ckey.u.s, strerror(errno));
+                        free(ckey.u.s);
+                        return -1;
+                }
+                if (strlen(ckey.u.s) > NAME_PATH_SIZE) {
+                        log_err("Client key file path too long: %s", ckey_path);
+                        free(ckey.u.s);
+                        return -1;
+                }
+                strcpy(info.c.key, ckey_path);
+                free(ckey_path);
+                free(ckey.u.s);
+        }
 
         if (name_create(&info) < 0) {
                 log_err("Failed to create name %s.", name);
@@ -976,7 +1064,8 @@ int irm_configure(const char * path)
 
         rp = realpath(path, NULL);
         if (rp == NULL) {
-                log_err("Failed to resolve path for %s", path);
+                log_err("Failed to check path for %s: %s.",
+                        path, strerror(errno));
                 goto fail_resolve;
         }
 

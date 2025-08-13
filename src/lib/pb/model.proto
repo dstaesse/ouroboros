@@ -44,8 +44,12 @@ message flow_info_msg {
 }
 
 message name_info_msg {
-        required string name   = 1;
-        required uint32 pol_lb = 2;
+        required string name    = 1;
+        required uint32 pol_lb  = 2;
+        required string skey    = 3;
+        required string scrt    = 4;
+        required string ckey    = 5;
+        required string ccrt    = 6;
 }
 
 message layer_info_msg {

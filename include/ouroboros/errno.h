@@ -32,7 +32,10 @@
 #define EIPCPSTATE   1004 /* Target in wrong state           */
 #define EFLOWDOWN    1005 /* Flow is down                    */
 #define EFLOWPEER    1006 /* Flow is down (peer timed out)   */
-#define ECRYPT       1007 /* Encryption error                */
-#define ENAME        1008 /* Naming error                    */
+#define ENAME        1007 /* Naming error                    */
+#define ECRYPT       1008 /* Encryption error                */
+#ifndef EAUTH /* Exists on BSD */
+#define EAUTH        1009 /* Authentication error            */
+#endif
 
 #endif /* OUROBOROS_ERRNO_H */

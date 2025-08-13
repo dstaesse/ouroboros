@@ -323,6 +323,45 @@ static int test_crypt_check_pubkey_crt(void)
         return TEST_RC_FAIL;
 }
 
+static int test_store_add(void)
+{
+        struct auth_ctx * ctx;
+        void *            _root_ca_crt;
+
+        TEST_START();
+
+        ctx = auth_create_ctx();
+        if (ctx == NULL) {
+                printf("Failed to create auth context.\n");
+                goto fail_create;
+        }
+
+        if (crypt_load_crt_str(root_ca_crt, &_root_ca_crt) < 0) {
+                printf("Failed to load root crt from string.\n");
+                goto fail_load;
+        }
+
+        if (auth_add_crt_to_store(ctx, _root_ca_crt) < 0) {
+                printf("Failed to add root crt to auth store.\n");
+                goto fail_add;
+        }
+
+        crypt_free_crt(_root_ca_crt);
+        auth_destroy_ctx(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_add:
+        crypt_free_crt(_root_ca_crt);
+ fail_load:
+        crypt_free_crt(_root_ca_crt);
+ fail_create:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_verify_crt(void)
 {
         struct auth_ctx * auth;
@@ -532,6 +571,38 @@ int test_auth_bad_signature(void)
         return TEST_RC_FAIL;
 }
 
+int test_crt_str(void)
+{
+        char str[2295];
+        void * crt;
+
+        TEST_START();
+
+        if (crypt_load_crt_str(signed_server_crt, &crt) < 0) {
+                printf("Failed to load certificate from string.\n");
+                goto fail_load;
+        }
+
+        if (crypt_crt_str(crt, str) < 0) {
+                printf("Failed to convert certificate to string.\n");
+                goto fail_to_str;
+        }
+
+        printf("Certificate string:\n%s\n", str);
+
+        crypt_free_crt(crt);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_to_str:
+        crypt_free_crt(crt);
+ fail_load:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int auth_test(int     argc,
               char ** argv)
 {
@@ -548,9 +619,11 @@ int auth_test(int     argc,
         ret |= test_load_free_privkey();
         ret |= test_load_free_pubkey();
         ret |= test_crypt_check_pubkey_crt();
+        ret |= test_store_add();
         ret |= test_verify_crt();
         ret |= test_auth_sign();
         ret |= test_auth_bad_signature();
+        ret |= test_crt_str();
 #else
         (void) test_load_free_crt;
         (void) test_check_crt_name;
@@ -558,9 +631,11 @@ int auth_test(int     argc,
         (void) test_load_free_privkey;
         (void) test_load_free_pubkey;
         (void) test_crypt_check_pubkey_crt;
+        (void) test_store_add;
         (void) test_verify_crt;
         (void) test_auth_sign;
         (void) test_auth_bad_signature;
+        (void) test_crt_str;
 
         ret = TEST_RC_SKIP;
 #endif

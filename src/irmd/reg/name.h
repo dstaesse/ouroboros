@@ -33,14 +33,25 @@ struct reg_name {
 
         struct name_info info;
 
-        struct list_head progs;    /* autostart programs for this name  */
-        size_t           n_progs;  /* number of programs                */
+        struct {
+                void * key;
+                void * crt;
+        } cache;
 
-        struct list_head procs;    /* processes bound to this name      */
-        size_t           n_procs;  /* number of processes               */
+        struct {
+                struct list_head list;
+                size_t           len;
+        } progs;  /* autostart programs for this name  */
 
-        struct list_head active;   /* processes actively calling accept */
-        size_t           n_active; /* number of processes accepting     */
+        struct {
+                struct list_head list;
+                size_t           len;
+        } procs;  /* processes bound to this name      */
+
+        struct {
+                struct list_head list;
+                size_t           len;
+        } active; /* processes actively calling accept */
 };
 
 struct reg_name * reg_name_create(const struct name_info * info);
@@ -74,5 +85,4 @@ pid_t             reg_name_get_active(struct reg_name * name);
 
 void              reg_name_del_active(struct reg_name * name,
                                       pid_t             proc);
-
 #endif /* OUROBOROS_IRMD_REG_NAME_H */

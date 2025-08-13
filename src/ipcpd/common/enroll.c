@@ -64,13 +64,6 @@ struct {
         pthread_t          listener;
 } enroll;
 
-#ifdef DEBUG_PROTO_OEP
-
-
-#endif
-
-
-
 static void * enroll_handle(void * o)
 {
         struct enroll_req  req;

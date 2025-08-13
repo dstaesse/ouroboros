@@ -52,8 +52,8 @@ typedef IpcpListMsg     ipcp_list_msg_t;
 
 #include "model.pb-c.h"
 typedef FlowInfoMsg      flow_info_msg_t;
-typedef LayerInfoMsg     layer_info_msg_t;
 typedef NameInfoMsg      name_info_msg_t;
+typedef LayerInfoMsg     layer_info_msg_t;
 typedef QosspecMsg       qosspec_msg_t;
 
 #include "enroll.pb-c.h"
@@ -69,6 +69,10 @@ struct timespec     timespec_msg_to_s(timespec_msg_t * msg);
 flow_info_msg_t *   flow_info_s_to_msg(const struct flow_info * s);
 
 struct flow_info    flow_info_msg_to_s(const flow_info_msg_t * msg);
+
+name_info_msg_t *   name_info_s_to_msg(const struct name_info * s);
+
+struct name_info    name_info_msg_to_s(const name_info_msg_t * msg);
 
 layer_info_msg_t *  layer_info_s_to_msg(const struct layer_info * s);
 

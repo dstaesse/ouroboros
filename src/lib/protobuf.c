@@ -106,6 +106,66 @@ struct flow_info flow_info_msg_to_s(const flow_info_msg_t * msg)
         return s;
 }
 
+name_info_msg_t * name_info_s_to_msg(const struct name_info * info)
+{
+        name_info_msg_t * msg;
+
+        assert(info != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        name_info_msg__init(msg);
+
+        msg->name = strdup(info->name);
+        if (msg->name == NULL)
+                goto fail_msg;
+
+        msg->skey = strdup(info->s.key);
+        if (msg->skey == NULL)
+                goto fail_msg;
+
+        msg->scrt = strdup(info->s.crt);
+        if (msg->scrt == NULL)
+                goto fail_msg;
+
+        msg->ckey = strdup(info->c.key);
+        if (msg->skey == NULL)
+                goto fail_msg;
+
+        msg->ccrt = strdup(info->c.crt);
+        if (msg->ccrt == NULL)
+                goto fail_msg;
+
+        msg->pol_lb  = info->pol_lb;
+
+        return msg;
+
+ fail_msg:
+        name_info_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return NULL;
+}
+
+struct name_info name_info_msg_to_s(const name_info_msg_t * msg)
+{
+        struct name_info s;
+
+        assert(msg != NULL);
+        assert(strlen(msg->name) <= NAME_SIZE);
+
+        strcpy(s.name, msg->name);
+        strcpy(s.s.key, msg->skey);
+        strcpy(s.s.crt, msg->scrt);
+        strcpy(s.c.key, msg->ckey);
+        strcpy(s.c.crt, msg->ccrt);
+
+        s.pol_lb = msg->pol_lb;
+
+        return s;
+}
+
 layer_info_msg_t * layer_info_s_to_msg(const struct layer_info * s)
 {
         layer_info_msg_t * msg;

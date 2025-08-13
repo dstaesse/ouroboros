@@ -107,14 +107,23 @@ int do_reg_name(int     argc,
                 return -1;
         }
 
+        if (strlen(name) > NAME_SIZE) {
+                printf("Name too long.\n");
+                usage();
+                return -1;
+        }
+
         ipcps_len = irm_list_ipcps(&ipcps);
-        if (ipcps_len < 0)
-                return ipcps_len;
+        if (ipcps_len <= 0) {
+                printf("Failed to list IPCPs.\n");
+                return -1;
+        }
 
         names_len = irm_list_names(&names);
         if (names_len < 0) {
+                printf("Failed to list names.\n");
                 free(ipcps);
-                return names_len;
+                return -1;
         }
 
         for (i = 0; i < names_len; ++i) {
@@ -124,11 +133,19 @@ int do_reg_name(int     argc,
                 }
         }
 
-        if (name_create && irm_create_name(name, LB_SPILL)) {
-                printf("Error creating name.");
-                free(ipcps);
-                free(name);
-                return -1;
+        if (name_create) {
+                struct name_info info = {
+                        .pol_lb = LB_SPILL
+                };
+
+                strcpy(info.name, name);
+
+                if (irm_create_name(&info) < 0) {
+                        printf("Error creating name.");
+                        free(ipcps);
+                        free(names);
+                        return -1;
+                }
         }
 
         for (i = 0; i < ipcps_len; ++i) {
@@ -136,6 +153,8 @@ int do_reg_name(int     argc,
                 for (j = 0; j < layers_len; j++) {
                         if (wildcard_match(layers[j], ipcps[i].layer) == 0) {
                                 if (irm_reg_name(name, ipcps[i].pid)) {
+                                        printf("Failed to register with %s",
+                                               ipcps[i].layer);
                                         free(ipcps);
                                         free(names);
                                         return -1;
@@ -145,6 +164,8 @@ int do_reg_name(int     argc,
                 for (j = 0; j < ipcp_len; j++) {
                         if (wildcard_match(ipcp[j], ipcps[i].name) == 0) {
                                 if (irm_reg_name(name, ipcps[i].pid)) {
+                                        printf("Failed to register with %s",
+                                               ipcps[i].name);
                                         free(ipcps);
                                         free(names);
                                         return -1;

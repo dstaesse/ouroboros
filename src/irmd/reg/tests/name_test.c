@@ -76,8 +76,8 @@ static int test_reg_name_add_proc(void)
                 goto fail;
         }
 
-        if (n->n_procs != 1) {
-                printf("n_procs not updated.\n");
+        if (n->procs.len != 1) {
+                printf("Proc not added to list.\n");
                 goto fail;
         }
 
@@ -88,8 +88,8 @@ static int test_reg_name_add_proc(void)
 
         reg_name_del_proc(n, TEST_PID);
 
-        if (n->n_procs != 0) {
-                printf("n_procs not updated.\n");
+        if (n->procs.len != 0) {
+                printf("Proc not removed from list.\n");
                 goto fail;
         }
 
@@ -126,8 +126,8 @@ static int test_reg_name_add_prog(void)
                 goto fail;
         }
 
-        if (n->n_progs != 1) {
-                printf("n_progs not updated.\n");
+        if (n->progs.len != 1) {
+                printf("Prog not added to list.\n");
                 goto fail;
         }
 
@@ -138,8 +138,8 @@ static int test_reg_name_add_prog(void)
 
         reg_name_del_prog(n, TEST_PROG);
 
-        if (n->n_progs != 0) {
-                printf("n_progs not updated.\n");
+        if (n->progs.len != 0) {
+                printf("Prog not removed from list.\n");
                 goto fail;
         }
 
@@ -195,8 +195,8 @@ static int test_reg_name_add_active(enum pol_balance lb)
                 goto fail;
         }
 
-        if (n->n_active != 1) {
-                printf("n_active not updated.\n");
+        if (n->active.len != 1) {
+                printf("Active list not updated.\n");
                 goto fail;
         }
 
@@ -226,13 +226,13 @@ static int test_reg_name_add_active(enum pol_balance lb)
                 goto fail;
         }
 
-        if (n->n_procs != 3) {
-                printf("n_procs not updated.\n");
+        if (n->procs.len != 3) {
+                printf("Procs list not updated.\n");
                 goto fail;
         }
 
-        if (n->n_active != 4) {
-                printf("n_active not updated.\n");
+        if (n->active.len != 4) {
+                printf("Active list not updated.\n");
                 goto fail;
         }
 
@@ -263,13 +263,13 @@ static int test_reg_name_add_active(enum pol_balance lb)
 
         reg_name_del_proc(n, TEST_PID);
 
-        if (n->n_procs != 0) {
-                printf("n_procs not updated.\n");
+        if (n->procs.len != 0) {
+                printf("Procs list not cleared.\n");
                 goto fail;
         }
 
-        if (n->n_active != 0) {
-                printf("n_active not updated.\n");
+        if (n->active.len != 0) {
+                printf("Active list not cleared.\n");
                 goto fail;
         }
 
@@ -283,20 +283,19 @@ static int test_reg_name_add_active(enum pol_balance lb)
         return TEST_RC_FAIL;
 }
 
-
 int name_test(int     argc,
               char ** argv)
 {
-        int res = 0;
+        int rc = 0;
 
         (void) argc;
         (void) argv;
 
-        res |= test_reg_name_create();
-        res |= test_reg_name_add_proc();
-        res |= test_reg_name_add_prog();
-        res |= test_reg_name_add_active(LB_RR);
-        res |= test_reg_name_add_active(LB_SPILL);
+        rc |= test_reg_name_create();
+        rc |= test_reg_name_add_proc();
+        rc |= test_reg_name_add_prog();
+        rc |= test_reg_name_add_active(LB_RR);
+        rc |= test_reg_name_add_active(LB_SPILL);
 
-        return res;
+        return rc;
 }

@@ -393,7 +393,7 @@ int auth_add_crt_to_store(struct auth_ctx * ctx,
         (void) ctx;
         (void) crt;
 
-        return -1;
+        return 0;
 #endif
 }
 

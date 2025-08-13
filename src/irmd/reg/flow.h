@@ -25,6 +25,7 @@
 
 #include <ouroboros/list.h>
 #include <ouroboros/flow.h>
+#include <ouroboros/name.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/qos.h>
 #include <ouroboros/shm_rbuff.h>
@@ -40,6 +41,8 @@ struct reg_flow {
 
         buffer_t           data;
         struct timespec    t0;
+
+        char               name[NAME_SIZE + 1];
 
         struct shm_rbuff * n_rb;
         struct shm_rbuff * n_1_rb;

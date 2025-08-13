@@ -4,13 +4,14 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
+set(OUROBOROS_CONFIG_DIR /etc/ouroboros CACHE STRING
+  "Configuration directory")
+
 find_library(LIBTOML_LIBRARIES toml QUIET)
 if (LIBTOML_LIBRARIES)
   set(DISABLE_CONFIGFILE FALSE CACHE BOOL
     "Disable configuration file support")
   if (NOT DISABLE_CONFIGFILE)
-    set(OUROBOROS_CONFIG_DIR /etc/ouroboros/ CACHE STRING
-      "Configuration directory")
     set(OUROBOROS_CONFIG_FILE irmd.conf CACHE STRING
       "Name of the IRMd configuration file")
     set(HAVE_TOML TRUE)
@@ -28,7 +29,6 @@ if (LIBTOML_LIBRARIES)
   else ()
     message(STATUS "Configuration file support disabled by user")
     unset(OUROBOROS_CONFIG_FILE CACHE)
-    unset(OUROBOROS_CONFIG_DIR CACHE)
     set(HAVE_TOML FALSE)
   endif ()
 else ()
@@ -39,9 +39,19 @@ else ()
   unset(HAVE_TOML)
 endif ()
 
+set(OUROBOROS_SECURITY_DIR "${OUROBOROS_CONFIG_DIR}/security" CACHE STRING
+  "Security directory holding authentication information")
+set(OUROBOROS_CA_CRT_DIR "${OUROBOROS_SECURITY_DIR}/cacert" CACHE STRING
+  "Directory holding trusted CA certificates")
+set(OUROBOROS_SRV_CRT_DIR "${OUROBOROS_SECURITY_DIR}/server" CACHE STRING
+  "Directory holding trusted CA certificates")
+set(OUROBOROS_CLI_CRT_DIR "${OUROBOROS_SECURITY_DIR}/client" CACHE STRING
+  "Directory holding trusted CA certificates")
+set(OUROBOROS_UNTRUSTED_DIR "${OUROBOROS_SECURITY_DIR}/untrusted" CACHE STRING
+  "Directory holding untrusted intermediate certificates")
+
 set(IRMD_REQ_ARR_TIMEOUT 1000 CACHE STRING
   "Timeout for an application to respond to a new flow (ms)")
-
 set(BOOTSTRAP_TIMEOUT 5000 CACHE STRING
   "Timeout for an IPCP to bootstrap (ms)")
 set(ENROLL_TIMEOUT 20000 CACHE STRING

@@ -523,32 +523,23 @@ int irm_unbind_process(pid_t        pid,
         return ret;
 }
 
-int irm_create_name(const char *     name,
-                    enum pol_balance pol)
+int irm_create_name(struct name_info * info)
 {
         irm_msg_t       msg      = IRM_MSG__INIT;
-        name_info_msg_t ni_msg   = NAME_INFO_MSG__INIT;
         irm_msg_t *     recv_msg;
         int             ret;
 
-        if (name == NULL)
+        if (info == NULL)
                 return -EINVAL;
 
-        msg.code      = IRM_MSG_CODE__IRM_CREATE_NAME;
-        ni_msg.name   = (char *) name;
-        ni_msg.pol_lb = pol;
-        msg.n_names   = 1;
-
-        msg.names = malloc(sizeof(*msg.names));
-        if (msg.names == NULL) {
-                return -ENOMEM;
-        }
-
-        msg.names[0]  = &ni_msg;
+        msg.code = IRM_MSG_CODE__IRM_CREATE_NAME;
+        msg.name_info = name_info_s_to_msg(info);
+        if (msg.name_info == NULL)
+                goto fail_info_msg;
 
         recv_msg = send_recv_irm_msg(&msg);
 
-        free(msg.names);
+        name_info_msg__free_unpacked(msg.name_info, NULL);
 
         if (recv_msg == NULL)
                 return -EIRMD;
@@ -562,6 +553,9 @@ int irm_create_name(const char *     name,
         irm_msg__free_unpacked(recv_msg, NULL);
 
         return ret;
+
+ fail_info_msg:
+        return -ENOMEM;
 }
 
 int irm_destroy_name(const char * name)

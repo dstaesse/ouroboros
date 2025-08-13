@@ -29,8 +29,6 @@
 #include <ouroboros/random.h>
 #include <ouroboros/utils.h>
 
-#include <assert.h>
-
 #include <openssl/evp.h>
 #include <openssl/bio.h>
 #include <openssl/ec.h>
@@ -38,6 +36,8 @@
 #include <openssl/sha.h>
 #include <openssl/x509v3.h>
 #include <openssl/x509_vfy.h>
+
+#include <assert.h>
 
 /*
  * Derive the common secret from

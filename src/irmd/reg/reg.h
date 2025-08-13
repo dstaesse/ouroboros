@@ -90,9 +90,15 @@ int   reg_destroy_name(const char * name);
 
 bool  reg_has_name(const char * name);
 
+int   reg_get_name_info(const char *       name,
+                        struct name_info * info);
+
 int   reg_get_name_for_hash(char *          buf,
                             enum hash_algo  algo,
                             const uint8_t * hash);
+
+int   reg_get_name_for_flow_id(char * buf,
+                               int    flow_id);
 
 /* TODO don't rely on protobuf here */
 int   reg_list_names(name_info_msg_t *** names);

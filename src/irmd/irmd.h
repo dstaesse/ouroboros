@@ -39,7 +39,7 @@ int connect_ipcp(pid_t        pid,
                  const char * component,
                  qosspec_t    qs);
 
-int name_create(const struct name_info * info);
+int name_create(struct name_info * info);
 
 int name_reg(const char * name,
              pid_t        pid);

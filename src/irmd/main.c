@@ -55,6 +55,7 @@
 #include "reg/reg.h"
 #include "configfile.h"
 
+#include <dirent.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <signal.h>
@@ -74,12 +75,20 @@
 #define IPCP_HASH_LEN(p)   hash_len((p)->dir_hash_algo)
 #define BIND_TIMEOUT       10   /* ms */
 #define TIMESYNC_SLACK     100  /* ms */
+#define OAP_SEEN_TIMER     20   /*  s */
 #define DEALLOC_TIME       300  /*  s */
 
 enum irm_state {
         IRMD_NULL = 0,
         IRMD_RUNNING,
         IRMD_SHUTDOWN
+};
+
+struct oaph {
+        struct list_head next;
+
+        uint64_t stamp;
+        uint8_t  id[OAP_ID_SIZE];
 };
 
 struct cmd {
@@ -95,6 +104,12 @@ struct {
 #ifdef HAVE_TOML
         char *               cfg_file;     /* configuration file path    */
 #endif
+        struct {
+                struct auth_ctx * ctx;     /* default authentication ctx */
+                struct list_head  list;    /* OAP headers seen before    */
+                pthread_mutex_t   mtx;     /* mutex for OAP headers      */
+        } auth;
+
         struct lockfile *    lf;           /* single irmd per system     */
         struct shm_rdrbuff * rdrb;         /* rdrbuff for packets        */
 
@@ -427,6 +442,65 @@ static int disconnect_ipcp(pid_t        pid,
         return 0;
 }
 
+static void name_update_sec_paths(struct name_info * info)
+{
+        char * srv_dir = OUROBOROS_SRV_CRT_DIR;
+        char * cli_dir = OUROBOROS_CLI_CRT_DIR;
+
+        assert(info != NULL);
+
+        if (strlen(info->s.crt) == 0)
+                sprintf(info->s.crt, "%s/%s/crt.pem", srv_dir, info->name);
+
+        if (strlen(info->s.key) == 0)
+                sprintf(info->s.key, "%s/%s/key.pem", srv_dir, info->name);
+
+        if (strlen(info->c.crt) == 0)
+                sprintf(info->c.crt, "%s/%s/crt.pem", cli_dir, info->name);
+
+        if (strlen(info->c.key) == 0)
+                sprintf(info->c.key, "%s/%s/key.pem", cli_dir, info->name);
+}
+
+int name_create(struct name_info * info)
+{
+        int ret;
+
+        assert(info != NULL);
+
+        name_update_sec_paths(info);
+
+        ret = reg_create_name(info);
+        if (ret == -EEXIST) {
+                log_info("Name %s already exists.", info->name);
+                return 0;
+        }
+
+        if (ret < 0) {
+                log_err("Failed to create name %s.", info->name);
+                return -1;
+        }
+
+        log_info("Created new name: %s.", info->name);
+
+        return 0;
+}
+
+static int name_destroy(const char * name)
+{
+
+        assert(name != NULL);
+
+        if (reg_destroy_name(name) < 0) {
+                log_err("Failed to destroy name %s.", name);
+                return -1;
+        }
+
+        log_info("Destroyed name: %s.", name);
+
+        return 0;
+}
+
 int bind_program(char **      exec,
                  const char * name,
                  uint8_t      flags)
@@ -450,10 +524,8 @@ int bind_program(char **      exec,
         if (!reg_has_name(name)) {
                 ni.pol_lb = LB_SPILL;
                 strcpy(ni.name, name);
-                if (reg_create_name(&ni) < 0) {
-                        log_err("Failed to create name %s.", name);
+                if (name_create(&ni) < 0)
                         goto fail_name;
-                }
         }
 
         if (reg_bind_prog(name, exec, flags) < 0) {
@@ -499,10 +571,8 @@ int bind_process(pid_t        pid,
         if (!reg_has_name(name)) {
                 ni.pol_lb = LB_SPILL;
                 strcpy(ni.name, name);
-                if (reg_create_name(&ni) < 0) {
-                        log_err("Failed to create name %s.", name);
+                if (name_create(&ni) < 0)
                         goto fail;
-                }
         }
 
         if (reg_bind_proc(name, pid) < 0) {
@@ -581,43 +651,6 @@ static int list_ipcps(ipcp_list_msg_t *** ipcps,
         *ipcps = NULL;
         *n_ipcps = 0;
         return -1;
-}
-
-int name_create(const struct name_info * info)
-{
-        int ret;
-
-        assert(info != NULL);
-
-        ret = reg_create_name(info);
-        if (ret == -EEXIST) {
-                log_info("Name %s already exists.", info->name);
-                return 0;
-        }
-
-        if (ret < 0) {
-                log_err("Failed to create name %s.", info->name);
-                return -1;
-        }
-
-        log_info("Created new name: %s.", info->name);
-
-        return 0;
-}
-
-static int name_destroy(const char * name)
-{
-
-        assert(name != NULL);
-
-        if (reg_destroy_name(name) < 0) {
-                log_err("Failed to destroy name %s.", name);
-                return -1;
-        }
-
-        log_info("Destroyed name: %s.", name);
-
-        return 0;
 }
 
 static int list_names(name_info_msg_t *** names,
@@ -762,22 +795,244 @@ static void __cleanup_flow(void * flow)
         reg_destroy_flow(((struct flow_info *) flow)->id);
 }
 
+static bool file_exists(const char * path)
+{
+        struct stat s;
+
+        if (stat(path, &s) < 0 && errno == ENOENT) {
+                log_dbg("File %s does not exist.", path);
+                return false;
+        }
+
+        return true;
+}
+
+static int load_credentials(const char *                  name,
+                            const struct name_sec_paths * paths,
+                            void **                       pkp,
+                            void **                       crt)
+{
+        assert(paths != NULL);
+        assert(pkp != NULL);
+        assert(crt != NULL);
+
+        *pkp = NULL;
+        *crt = NULL;
+
+        if (!file_exists(paths->crt) || !file_exists(paths->key)) {
+                log_info("No security info for %s.", name);
+                return 0;
+        }
+
+        if (crypt_load_crt_file(paths->crt, crt) < 0) {
+                log_err("Failed to load %s for %s.", paths->crt, name);
+                goto fail_crt;
+        }
+
+        if (crypt_load_privkey_file(paths->key, pkp) < 0) {
+                log_err("Failed to load %s for %s.", paths->key, name);
+                goto fail_key;
+        }
+
+        log_info("Loaded security keys for %s.", name);
+
+        return 0;
+
+ fail_key:
+        crypt_free_crt(*crt);
+        *crt = NULL;
+ fail_crt:
+        return -EAUTH;
+}
+
+static int load_srv_credentials(const char * name,
+                                void **      pkp,
+                                void **      crt)
+{
+        struct name_info info;
+
+        assert(name != NULL);
+        assert(pkp != NULL);
+        assert(crt != NULL);
+
+        if (reg_get_name_info(name, &info) < 0) {
+                log_err("Failed to get name info for %s.", name);
+                return -ENAME;
+        }
+
+        return load_credentials(name, &info.s, pkp, crt);
+}
+
+static int load_cli_credentials(const char * name,
+                                void **      pkp,
+                                void **      crt)
+{
+        struct name_info info;
+
+        assert(name != NULL);
+        assert(pkp != NULL);
+        assert(crt != NULL);
+
+        if (reg_get_name_info(name, &info) < 0) {
+                log_err("Failed to get name info for %s.", name);
+                return -ENAME;
+        }
+
+        return load_credentials(name, &info.c, pkp, crt);
+}
+
+#define ID_IS_EQUAL(id1, id2) (memcmp(id1, id2, OAP_ID_SIZE) == 0)
+static int irm_check_oap_hdr(const struct oap_hdr * oap_hdr,
+                             time_t                 mpl)
+{
+        struct list_head * p;
+        struct list_head * h;
+        struct timespec    now;
+        struct oaph *      new;
+        uint64_t           stamp;
+        uint64_t           cur;
+        uint8_t *          id;
+        ssize_t            delta;
+
+        assert(oap_hdr != NULL);
+
+        stamp = oap_hdr->timestamp;
+        id    = oap_hdr->id.data;
+
+        clock_gettime(CLOCK_REALTIME, &now);
+
+        cur = TS_TO_UINT64(now);
+
+        delta = (ssize_t)(cur - stamp) / MILLION;
+        if (delta > mpl)
+                log_warn("Transit time exceeds MPL by %zd ms.", delta);
+        if (delta < -TIMESYNC_SLACK)
+                log_warn("OAP header sent %zd ms from the future.", -delta);
+
+        new = malloc(sizeof(*new));
+        if (new == NULL) {
+                log_err("Failed to allocate memory for OAP element.");
+                return -ENOMEM;
+        }
+
+        pthread_mutex_lock(&irmd.auth.mtx);
+
+        list_for_each_safe(p, h, &irmd.auth.list) {
+                struct oaph * oaph = list_entry(p, struct oaph, next);
+                if (cur > oaph->stamp + OAP_SEEN_TIMER * BILLION) {
+                        list_del(&oaph->next);
+                        free(oaph);
+                        continue;
+                }
+
+                if (oaph->stamp == stamp && ID_IS_EQUAL(oaph->id, id)) {
+                        log_warn("OAP header already known: " HASH_FMT64 ".",
+                                HASH_VAL64(id));
+                        goto fail_replay;
+                }
+        }
+
+        memcpy(new->id, id, OAP_ID_SIZE);
+        new->stamp = stamp;
+
+        list_add_tail(&new->next, &irmd.auth.list);
+
+        pthread_mutex_unlock(&irmd.auth.mtx);
+
+        return 0;
+
+ fail_replay:
+        pthread_mutex_unlock(&irmd.auth.mtx);
+        free(new);
+        return -EAUTH;
+}
+
+static int irm_auth_peer(const char *           name,
+                         const struct oap_hdr * oap_hdr,
+                         const struct oap_hdr * r_oap_hdr)
+{
+        void *        crt;
+        void *        pk;
+        buffer_t      sign;
+
+        if (memcmp(r_oap_hdr->id.data, oap_hdr->id.data, OAP_ID_SIZE) != 0) {
+                log_err("OAP ID mismatch in flow allocation.");
+                goto fail_check;
+        }
+
+        if (r_oap_hdr->crt.len == 0) {
+                log_info("No certificate provided by peer %s.", name);
+                return 0;
+        }
+
+        if (crypt_load_crt_der(r_oap_hdr->crt, &crt) < 0) {
+                log_err("Failed to load certificate from peer %s.", name);
+                goto fail_check;
+        }
+
+        log_dbg("Loaded peer certificate for %s.", name);
+
+        if (crypt_check_crt_name(crt, name) < 0) {
+                log_err("Certificate does not match name %s.", name);
+                goto fail_crt;
+        }
+
+        log_dbg("Certificate matches name %s.", name);
+
+        if (crypt_get_pubkey_crt(crt, &pk) < 0) {
+                log_err("Failed to get pubkey from certificate for %s.", name);
+                goto fail_crt;
+        }
+
+        log_dbg("Got public key from certificate for %s.", name);
+
+        if (auth_verify_crt(irmd.auth.ctx, crt) < 0) {
+                log_err("Failed to verify peer %s with CA store.", name);
+                goto fail_crt;
+        }
+
+        log_info("Successfully verified peer certificate for %s.", name);
+
+        sign = r_oap_hdr->hdr;
+        sign.len -= (r_oap_hdr->sig.len + sizeof(uint16_t));
+
+        if (auth_verify_sig(pk, sign, r_oap_hdr->sig) < 0) {
+                log_err("Failed to verify signature for peer %s.", name);
+                goto fail_check_sig;
+        }
+
+        crypt_free_key(pk);
+        crypt_free_crt(crt);
+
+        log_info("Successfully authenticated %s.", name);
+
+        return 0;
+
+ fail_check_sig:
+        crypt_free_key(pk);
+ fail_crt:
+        crypt_free_crt(crt);
+ fail_check:
+        return -1;
+}
+
 static int flow_accept(struct flow_info * flow,
                        buffer_t *         symmkey,
                        buffer_t *         data,
                        struct timespec *  abstime)
 {
-        struct oap_hdr  oap_hdr;        /* incoming request           */
-        struct oap_hdr  r_oap_hdr;      /* outgoing response          */
-        uint8_t         buf[MSGBUFSZ];  /* buffer for local ephkey    */
-        buffer_t        lpk = BUF_INIT; /* local ephemeral pubkey     */
-        ssize_t         delta;          /* allocation time difference */
-        int             err;
-        struct timespec now;
+        struct oap_hdr   oap_hdr;             /* incoming request           */
+        struct oap_hdr   r_oap_hdr;           /* outgoing response          */
+        uint8_t          buf[MSGBUFSZ];       /* buffer for local ephkey    */
+        buffer_t         lpk = BUF_INIT;      /* local ephemeral pubkey     */
+        char             name[NAME_SIZE + 1]; /* name for flow              */
+        void *           pkp = NULL;          /* signing private key        */
+        void *           crt = NULL;          /* signing certificate        */
+        int              err;
 
         /* piggyback of user data not yet implemented */
-        assert(data != NULL && data->len == 0 && data->data == NULL);
-        assert(symmkey != NULL && symmkey->len == 0 && symmkey->data == NULL);
+        assert(data != NULL && BUF_IS_EMPTY(data));
+        assert(symmkey != NULL && BUF_IS_EMPTY(symmkey));
 
         if (!reg_has_proc(flow->n_pid)) {
                 log_err("Unknown process %d calling accept.", flow->n_pid);
@@ -816,23 +1071,28 @@ static int flow_accept(struct flow_info * flow,
 
         assert(err == 0);
 
-        if (oap_hdr_decode(oap_hdr.hdr, &oap_hdr) < 0) {
-                log_err("Failed to decode OAP header.");
+        if (reg_get_name_for_flow_id(name, flow->id) < 0) {
+                log_err("Failed to get name for flow %d.", flow->id);
                 err = -EIPCP;
                 goto fail_oap_hdr;
         }
 
-        clock_gettime(CLOCK_REALTIME, &now);
+        log_dbg("IPCP %d accepting flow %d for %s.",
+                 flow->n_pid, flow->id, name);
 
-        delta = (ssize_t)(TS_TO_UINT64(now) - oap_hdr.timestamp) / MILLION;
-        if (delta > flow->mpl)
-                log_warn("Flow alloc time exceeds MPL (%zd ms).", delta);
-
-        if (delta < -TIMESYNC_SLACK)
-                log_warn("Flow alloc sent from the future (%zd ms).", -delta);
+        if (oap_hdr_decode(oap_hdr.hdr, &oap_hdr) < 0) {
+                log_err("Failed to decode OAP header from %s.", name);
+                err = -EIPCP;
+                goto fail_oap_hdr;
+        }
 #ifdef DEBUG_PROTO_OAP
         debug_oap_hdr_rcv(&oap_hdr);
 #endif
+        if (irm_check_oap_hdr(&oap_hdr, flow->mpl) < 0) {
+                log_err("OAP header failed replay check.");
+                goto fail_oap_hdr;
+        }
+
         if (flow->qs.cypher_s != 0) {     /* crypto requested           */
                 uint8_t * s;              /* symmetric encryption key   */
                 ssize_t   key_len;        /* length of local pubkey     */
@@ -872,18 +1132,37 @@ static int flow_accept(struct flow_info * flow,
                 crypt_dh_pkp_destroy(pkp);
         }
 
-        if (oap_hdr_init(oap_hdr.id, NULL, NULL, lpk, *data, &r_oap_hdr) < 0) {
+        if (load_srv_credentials(name, &pkp, &crt) < 0) {
+                log_err("Failed to load security keys for %s.", name);
+                err = -EAUTH;
+                goto fail_cred;
+        }
+
+        if (oap_hdr_init(oap_hdr.id, pkp, crt, lpk, *data, &r_oap_hdr) < 0) {
                 log_err("Failed to create OAP header.");
                 err = -ENOMEM;
                 goto fail_r_oap_hdr;
         }
+
+        if (irm_auth_peer(name, &oap_hdr, &r_oap_hdr) < 0) {
+                log_err("Failed to authenticate %s flow %d.", name, flow->id);
+                err = -EAUTH;
+                goto fail_r_oap_hdr;
+        }
+
+        crypt_free_crt(crt);
+        crypt_free_key(pkp);
+
 #ifdef DEBUG_PROTO_OAP
-        debug_oap_hdr_snd(&oap_hdr);
+        debug_oap_hdr_snd(&r_oap_hdr);
 #endif
         if (ipcp_flow_alloc_resp(flow, 0, r_oap_hdr.hdr) < 0) {
                 log_err("Failed to respond to flow allocation.");
                 goto fail_resp;
         }
+
+        log_info("Flow %d accepted by %d for %s.",
+                 flow->id, flow->n_pid, name);
 
         oap_hdr_fini(&oap_hdr);
         oap_hdr_fini(&r_oap_hdr);
@@ -891,6 +1170,9 @@ static int flow_accept(struct flow_info * flow,
         return 0;
 
  fail_r_oap_hdr:
+        crypt_free_crt(crt);
+        crypt_free_key(pkp);
+ fail_cred:
         freebuf(*symmkey);
  fail_derive:
         clrbuf(lpk);
@@ -948,7 +1230,6 @@ static int flow_join(struct flow_info * flow,
         }
 
         reg_prepare_flow_alloc(flow);
-
 
         if (ipcp_flow_join(flow, hash)) {
                 log_err("Flow join with layer %s failed.", dst);
@@ -1059,14 +1340,16 @@ static int flow_alloc(struct flow_info * flow,
         buffer_t       lpk = BUF_INIT; /* local ephemeral pubkey     */
         void *         pkp = NULL;     /* ephemeral private key pair */
         uint8_t *      s = NULL;       /* symmetric key              */
+        void *         cpkp = NULL;    /* signing private key        */
+        void *         ccrt = NULL;    /* signing certificate        */
         buffer_t       hash;
         uint8_t        idbuf[OAP_ID_SIZE];
         buffer_t       id;
         int            err;
 
         /* piggyback of user data not yet implemented */
-        assert(data != NULL && data->len == 0 && data->data == NULL);
-        assert(symmkey != NULL && symmkey->len == 0 && symmkey->data == NULL);
+        assert(data != NULL && BUF_IS_EMPTY(data));
+        assert(symmkey != NULL && BUF_IS_EMPTY(symmkey));
 
         if (random_buffer(idbuf, OAP_ID_SIZE) < 0) {
                 log_err("Failed to generate ID.");
@@ -1100,7 +1383,13 @@ static int flow_alloc(struct flow_info * flow,
                 log_dbg("Generated ephemeral keys for %d.", flow->n_pid);
         }
 
-        if (oap_hdr_init(id, NULL, NULL, lpk, *data, &oap_hdr) < 0) {
+        if (load_cli_credentials(dst, &cpkp, &ccrt) < 0) {
+                log_err("Failed to load security keys for %s.", dst);
+                err = -EAUTH;
+                goto fail_cred;
+        }
+
+        if (oap_hdr_init(id, cpkp, ccrt, lpk, *data, &oap_hdr) < 0) {
                 log_err("Failed to create OAP header.");
                 err = -ENOMEM;
                 goto fail_oap_hdr;
@@ -1164,9 +1453,14 @@ static int flow_alloc(struct flow_info * flow,
 #ifdef DEBUG_PROTO_OAP
         debug_oap_hdr_rcv(&r_oap_hdr);
 #endif
-        if (memcmp(r_oap_hdr.id.data, oap_hdr.id.data, r_oap_hdr.id.len) != 0) {
-                log_err("OAP ID mismatch in flow allocation.");
-                err = -EIPCP;
+        if (irm_check_oap_hdr(&r_oap_hdr, flow->mpl) < 0) {
+                log_err("OAP header failed replay check.");
+                goto fail_r_oap_hdr;
+        }
+
+        if (irm_auth_peer(dst, &oap_hdr, &r_oap_hdr) < 0) {
+                log_err("Failed to authenticate %s (flow %d).", dst, flow->id);
+                err = -EAUTH;
                 goto fail_r_oap_hdr;
         }
 
@@ -1186,6 +1480,9 @@ static int flow_alloc(struct flow_info * flow,
         oap_hdr_fini(&r_oap_hdr);
         oap_hdr_fini(&oap_hdr);
 
+        crypt_free_crt(ccrt);
+        crypt_free_key(cpkp);
+
         /* TODO: piggyback user data if needed */
 
         freebuf(hash);
@@ -1203,6 +1500,9 @@ static int flow_alloc(struct flow_info * flow,
  fail_flow:
         oap_hdr_fini(&oap_hdr);
  fail_oap_hdr:
+        crypt_free_crt(ccrt);
+        crypt_free_key(cpkp);
+ fail_cred:
         crypt_dh_pkp_destroy(pkp);
  fail_pkp:
         free(s);
@@ -1497,8 +1797,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 res = list_ipcps(&ret_msg->ipcps, &ret_msg->n_ipcps);
                 break;
         case IRM_MSG_CODE__IRM_CREATE_NAME:
-                strcpy(name.name, msg->names[0]->name);
-                name.pol_lb = msg->names[0]->pol_lb;
+                name = name_info_msg_to_s(msg->name_info);
                 res = name_create(&name);
                 break;
         case IRM_MSG_CODE__IRM_DESTROY_NAME:
@@ -1708,40 +2007,6 @@ static void * mainloop(void * o)
         return (void *) 0;
 }
 
-static void irm_fini(void)
-{
-#ifdef HAVE_FUSE
-        struct timespec wait = TIMESPEC_INIT_MS(1);
-        int    retries = 5;
-#endif
-        if (irmd_get_state() != IRMD_NULL)
-                log_warn("Unsafe destroy.");
-
-        tpm_destroy(irmd.tpm);
-
-        close(irmd.sockfd);
-
-        if (unlink(IRM_SOCK_PATH))
-                log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
-
-        if (irmd.rdrb != NULL)
-                shm_rdrbuff_destroy(irmd.rdrb);
-
-        if (irmd.lf != NULL)
-                lockfile_destroy(irmd.lf);
-
-        pthread_mutex_destroy(&irmd.cmd_lock);
-        pthread_cond_destroy(&irmd.cmd_cond);
-        pthread_rwlock_destroy(&irmd.state_lock);
-
-#ifdef HAVE_FUSE
-        while (rmdir(FUSE_PREFIX) < 0 && retries-- > 0)
-                nanosleep(&wait, NULL);
-        if (retries < 0)
-                log_err("Failed to remove " FUSE_PREFIX);
-#endif
-}
-
 #ifdef HAVE_FUSE
 static void destroy_mount(char * mnt)
 {
@@ -1817,6 +2082,79 @@ void * irm_sanitize(void * o)
         return (void *) 0;
 }
 
+static int irm_load_store(char * dpath)
+{
+        struct stat     st;
+        struct dirent * dent;
+        DIR *           dir;
+        void *          crt;
+
+        if (stat(dpath, &st) == -1) {
+                log_dbg("Store directory %s not found.", dpath);
+                return 0;
+        }
+
+        if (!S_ISDIR(st.st_mode)) {
+                log_err("%s is not a directory.", dpath);
+                goto fail_dir;
+        }
+
+        /* loop through files in directory and load certificates */
+        dir = opendir(dpath);
+        if (dir == NULL) {
+                log_err("Failed to open %s.", dpath);
+                goto fail_dir;
+        }
+
+        while ((dent = readdir(dir)) != NULL) {
+                char   path[NAME_PATH_SIZE + 1];
+
+                if (strcmp(dent->d_name, ".") == 0 ||
+                    strcmp(dent->d_name, "..") == 0)
+                        continue;
+
+                snprintf(path, sizeof(path), "%s/%s", dpath,
+                         dent->d_name);
+
+                if (stat(path, &st) == -1) {
+                        log_dbg("Failed to stat %s.", path);
+                        continue;
+                }
+
+                if (!S_ISREG(st.st_mode)) {
+                        log_dbg("%s is not a regular file.", path);
+                        goto fail_file;
+                }
+
+                if (crypt_load_crt_file(path, &crt) < 0) {
+                        log_err("Failed to load certificate from %s.", path);
+                        goto fail_file;
+                }
+
+                if (auth_add_crt_to_store(irmd.auth.ctx, crt) < 0) {
+                        log_err("Failed to add certificate from %s to store.",
+                                path);
+                        goto fail_crt_add;
+                }
+
+                log_dbg("Loaded certificate: %s.", path);
+
+                crypt_free_crt(crt);
+        }
+
+        closedir(dir);
+
+        log_info("Loaded certificates from %s.", dpath);
+
+        return 0;
+
+ fail_crt_add:
+        crypt_free_crt(crt);
+ fail_file:
+        closedir(dir);
+ fail_dir:
+        return -1;
+}
 
 static int irm_init(void)
 {
@@ -1917,6 +2255,30 @@ static int irm_init(void)
                 log_err("Failed to greate thread pool.");
                 goto fail_tpm_create;
         }
+
+        if (pthread_mutex_init(&irmd.auth.mtx, NULL) < 0) {
+                log_err("Failed to initialize auth mutex.");
+                goto fail_auth_mtx;
+        }
+
+        irmd.auth.ctx = auth_create_ctx();
+        if (irmd.auth.ctx == NULL) {
+                log_err("Failed to create auth store context.");
+                goto fail_auth_ctx;
+        }
+
+        list_head_init(&irmd.auth.list);
+
+        if (irm_load_store(OUROBOROS_CA_CRT_DIR) < 0) {
+                log_err("Failed to load CA certificates.");
+                goto fail_auth_ctx;
+        }
+
+        if (irm_load_store(OUROBOROS_CHAIN_DIR) < 0) {
+                log_err("Failed to load intermediate certificates.");
+                goto fail_auth_ctx;
+        }
+
 #ifdef HAVE_FUSE
         mask = umask(0);
 
@@ -1941,7 +2303,6 @@ static int irm_init(void)
 
         gcry_control(GCRYCTL_INITIALIZATION_FINISHED);
 #endif
-
         return 0;
 
 #ifdef HAVE_LIBGCRYPT
@@ -1949,8 +2310,12 @@ static int irm_init(void)
  #ifdef HAVE_FUSE
         rmdir(FUSE_PREFIX);
  #endif
-        tpm_destroy(irmd.tpm);
+        auth_destroy_ctx(irmd.auth.ctx);
 #endif
+ fail_auth_ctx:
+        pthread_mutex_destroy(&irmd.auth.mtx);
+ fail_auth_mtx:
+        tpm_destroy(irmd.tpm);
  fail_tpm_create:
         shm_rdrbuff_destroy(irmd.rdrb);
  fail_rdrbuff:
@@ -1968,6 +2333,67 @@ static int irm_init(void)
  fail_lockfile:
         log_fini();
         return -1;
+}
+
+static void irm_fini(void)
+{
+        struct list_head * p;
+        struct list_head * h;
+#ifdef HAVE_FUSE
+        struct timespec wait = TIMESPEC_INIT_MS(1);
+        int    retries = 5;
+#endif
+        if (irmd_get_state() != IRMD_NULL)
+                log_warn("Unsafe destroy.");
+
+        pthread_mutex_lock(&irmd.auth.mtx);
+
+        list_for_each_safe(p, h, &irmd.auth.list) {
+                struct oaph * oaph = list_entry(p, struct oaph, next);
+                list_del(&oaph->next);
+                free(oaph);
+        }
+
+        pthread_mutex_unlock(&irmd.auth.mtx);
+        pthread_mutex_destroy(&irmd.auth.mtx);
+
+        auth_destroy_ctx(irmd.auth.ctx);
+
+        tpm_destroy(irmd.tpm);
+
+        close(irmd.sockfd);
+
+        if (unlink(IRM_SOCK_PATH))
+                log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
+
+        if (irmd.rdrb != NULL)
+                shm_rdrbuff_destroy(irmd.rdrb);
+
+        if (irmd.lf != NULL)
+                lockfile_destroy(irmd.lf);
+
+        pthread_mutex_lock(&irmd.cmd_lock);
+
+        list_for_each_safe(p, h, &irmd.cmds) {
+                struct cmd * cmd = list_entry(p, struct cmd, next);
+                list_del(&cmd->next);
+                close(cmd->fd);
+                free(cmd);
+        }
+
+        pthread_mutex_unlock(&irmd.cmd_lock);
+
+        pthread_mutex_destroy(&irmd.cmd_lock);
+        pthread_cond_destroy(&irmd.cmd_cond);
+        pthread_rwlock_destroy(&irmd.state_lock);
+
+#ifdef HAVE_FUSE
+        while (rmdir(FUSE_PREFIX) < 0 && retries-- > 0)
+                nanosleep(&wait, NULL);
+        if (retries < 0)
+                log_err("Failed to remove " FUSE_PREFIX);
+#endif
+        assert(list_is_empty(&irmd.cmds));
 }
 
 static void usage(void)
@@ -2096,8 +2522,8 @@ static void * kill_dash_nine(void * o)
                 slept += intv;
         }
 
-        log_dbg("I am become Death, destroyer of hung processes.");
-
+        log_dbg("I guess I’ll have to shut you down for good this time,");
+        log_dbg("already tried a SIGQUIT, so now it’s KILL DASH 9.");
 #ifdef IRMD_KILL_ALL_PROCESSES
         reg_kill_all_proc(SIGKILL);
         nanosleep(&ts, NULL);
@@ -2156,7 +2582,7 @@ int main(int     argc,
 
         if (geteuid() != 0) {
                 printf("IPC Resource Manager must be run as root.\n");
-                exit(EXIT_FAILURE);
+                goto fail_irm_init;
         }
 
         if (irm_init() < 0)

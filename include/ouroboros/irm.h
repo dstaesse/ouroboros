@@ -76,8 +76,7 @@ int     irm_bind_process(pid_t        pid,
 int     irm_unbind_process(pid_t        pid,
                            const char * name);
 
-int     irm_create_name(const char *     name,
-                        enum pol_balance pol);
+int     irm_create_name(struct name_info * info);
 
 int     irm_destroy_name(const char * name);
 

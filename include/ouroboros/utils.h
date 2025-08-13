@@ -34,6 +34,7 @@
 #define clrbuf(buf) do { memset(&(buf), 0, sizeof(buf)); } while (0);
 #define freebuf(buf) do { free((buf).data); clrbuf(buf); } while (0);
 #define BUF_INIT { 0, NULL }
+#define BUF_IS_EMPTY(buf) ((buf)->data == NULL && (buf)->len == 0)
 
 typedef struct {
         size_t    len;

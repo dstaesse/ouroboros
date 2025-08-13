@@ -36,7 +36,7 @@
 #define TEST_DATA2    "testpbufdata2"
 #define TEST_LAYER    "testlayer"
 #define REG_TEST_FAIL() \
-        do { TEST_FAIL(); memset(&reg, 0, sizeof(reg)); } while(0)
+        do { TEST_FAIL(); memset(&reg, 0, sizeof(reg)); abort();} while(0)
 
 static int test_reg_init(void)
 {
@@ -254,7 +254,7 @@ static int test_reg_accept_flow_success(void)
 
         pthread_create(&thr, NULL, test_flow_respond_accept, &n_1_info);
 
-        if (reg_wait_flow_accepted(&info, &rbuf, &abstime) < 0 ) {
+        if (reg_wait_flow_accepted(&info, &rbuf, &abstime) < 0) {
                 printf("Flow allocation failed.\n");
                 goto fail;
         }
@@ -1344,12 +1344,13 @@ static int test_wait_accepting_success(void)
 {
         struct timespec  abstime;
         struct timespec  timeo = TIMESPEC_INIT_S(1);
-        int              flow_id;
         pthread_t        thr;
+        int              flow_id;
         struct name_info ninfo = {
                 .name   = TEST_NAME,
                 .pol_lb = LB_RR
         };
+
 
         TEST_START();
 
