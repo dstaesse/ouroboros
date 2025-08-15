@@ -215,7 +215,7 @@ static int dt_rib_read(const char * path,
         if (dt.stat[fd].addr == dt.addr)
                 sprintf(addrstr, "%s", dt.comps[fd].name);
         else
-                sprintf(addrstr, "%" PRIu64, dt.stat[fd].addr);
+                sprintf(addrstr, ADDR_FMT32, ADDR_VAL32(&dt.stat[fd].addr));
 
         tm = gmtime(&dt.stat[fd].stamp);
         strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
@@ -652,7 +652,7 @@ int dt_init(struct dt_config cfg)
 
         dt.n_flows = 0;
 #endif
-        sprintf(dtstr, "%s.%" PRIu64, DT, dt.addr);
+        sprintf(dtstr, "%s." ADDR_FMT32, DT, ADDR_VAL32(&dt.addr));
         if (rib_reg(dtstr, &r_ops)) {
                 log_err("Failed to register RIB.");
                 goto fail_rib_reg;

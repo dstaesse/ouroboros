@@ -27,12 +27,12 @@
 
 #include <stdint.h>
 
-#define ADDR_FMT32 "%02x:%02x:%02x:%02x"
+#define ADDR_FMT32 "%02x.%02x.%02x.%02x"
 #define ADDR_VAL32(a) \
         ((uint8_t *) a)[0], ((uint8_t *) a)[1], \
         ((uint8_t *) a)[2], ((uint8_t *) a)[3]
 
-#define ADDR_FMT64 ADDR_FMT32 ":" ADDR_FMT32
+#define ADDR_FMT64 ADDR_FMT32 "." ADDR_FMT32
 #define ADDR_VAL64(a) ADDR_VAL32(a), ADDR_VAL32(a + 4)
 
 int      addr_auth_init(enum pol_addr_auth type,

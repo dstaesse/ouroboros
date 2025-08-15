@@ -62,7 +62,7 @@
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
-#define LINK_FMT ADDR_FMT32 " -- " ADDR_FMT32
+#define LINK_FMT ADDR_FMT32 "--" ADDR_FMT32
 #define LINK_VAL(src, dst) ADDR_VAL32(&src), ADDR_VAL32(&dst)
 
 #define LSU_FMT "LSU ["ADDR_FMT32 " -- " ADDR_FMT32 " seq: %09" PRIu64 "]"
@@ -191,7 +191,7 @@ static struct adjacency * get_adj(const char * path)
 
         list_for_each(p, &ls.db.list) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
-                sprintf(entry, "%" PRIu64 ".%" PRIu64, a->src, a->dst);
+                sprintf(entry, LINK_FMT, LINK_VAL(a->src, a->dst));
                 if (strcmp(entry, path) == 0)
                         return a;
         }
