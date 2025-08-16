@@ -172,7 +172,7 @@ static void stop_components(void)
 
         dt_stop();
 
-        ipcp_set_state(IPCP_INIT);
+        ipcp_set_state(IPCP_BOOT);
 }
 
 static int unicast_ipcp_enroll(const char *        dst,
@@ -308,10 +308,11 @@ int main(int    argc,
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
                 stop_components();
+                ipcp_stop();
                 finalize_components();
+        } else {
+                ipcp_stop();
         }
-
-        ipcp_stop();
 
         enroll_fini();
 

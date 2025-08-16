@@ -302,7 +302,7 @@ static void * acceptloop(void * o)
         (void) o;
 
         while (ipcp_get_state() != IPCP_SHUTDOWN &&
-               ipcp_get_state() != IPCP_NULL) {
+               ipcp_get_state() != IPCP_INIT) {
                 struct cmd * cmd;
 
                 csockfd = accept(ipcpd.sockfd, 0, 0);
@@ -444,11 +444,11 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
                 return;
         }
 
-        if (ipcp_get_state() != IPCP_INIT) {
+        if (ipcp_get_state() != IPCP_BOOT) {
 
                 log_err("Failed to bootstrap: IPCP in state <%s>, need <%s>.",
                         ipcp_state_str[ipcp_get_state()],
-                        ipcp_state_str[IPCP_INIT]);
+                        ipcp_state_str[IPCP_BOOT]);
                 ret_msg->result = -EIPCPSTATE;
                 return;
         }
@@ -476,14 +476,13 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
         strcpy(ipcpd.layer_name, info->name);
         ipcpd.dir_hash_algo = (enum hash_algo) info->dir_hash_algo;
         ret_msg->layer_info = layer_info_s_to_msg(info);
+        ipcp_set_state(IPCP_OPERATIONAL);
 
         log_info("Finished bootstrapping in %s.", info->name);
         log_info("  type: %s", ipcp_type_str[ipcpd.type]);
         log_info("  hash: %s [%zd bytes]",
                 dir_hash_str[ipcpd.dir_hash_algo],
                 ipcp_dir_hash_len());
-
-        ipcp_set_state(IPCP_OPERATIONAL);
 }
 
 static void do_enroll(const char * dst,
@@ -499,10 +498,10 @@ static void do_enroll(const char * dst,
                 return;
         }
 
-        if (ipcp_get_state() != IPCP_INIT) {
+        if (ipcp_get_state() != IPCP_BOOT) {
                 log_err("Failed to enroll: IPCP in state <%s>, need <%s>.",
                         ipcp_state_str[ipcp_get_state()],
-                        ipcp_state_str[IPCP_INIT]);
+                        ipcp_state_str[IPCP_BOOT]);
                 ret_msg->result = -EIPCPSTATE;
                 return;
         }
@@ -949,7 +948,6 @@ int ipcp_init(int               argc,
 
         log_init(log);
 
-        ipcpd.state = IPCP_NULL;
         ipcpd.type  = type;
 
 #if defined (__linux__)
@@ -1031,6 +1029,9 @@ int ipcp_init(int               argc,
 
         ipcp_set_state(IPCP_INIT);
 
+        log_info("IPCP %s %d initialized.", ipcp_type_str[ipcpd.type],
+                 getpid());
+
         return 0;
 
  fail_tpm_create:
@@ -1075,7 +1076,9 @@ int ipcp_start(void)
         info.pid  = getpid();
         info.type = ipcpd.type;
         strcpy(info.name, ipcpd.name);
-        info.state = IPCP_OPERATIONAL;
+        info.state = IPCP_BOOT;
+
+        ipcp_set_state(IPCP_BOOT);
 
         if (tpm_start(ipcpd.tpm)) {
                 log_err("Failed to start threadpool manager.");
@@ -1086,8 +1089,6 @@ int ipcp_start(void)
                 log_err("Failed to create acceptor thread.");
                 goto fail_acceptor;
         }
-
-        info.state = IPCP_OPERATIONAL;
 
         if (ipcp_create_r(&info)) {
                 log_err("Failed to notify IRMd we are initialized.");
@@ -1103,8 +1104,7 @@ int ipcp_start(void)
         tpm_stop(ipcpd.tpm);
  fail_tpm_start:
         tpm_destroy(ipcpd.tpm);
-        ipcp_set_state(IPCP_NULL);
-        info.state = IPCP_NULL;
+        ipcp_set_state(IPCP_INIT);
         ipcp_create_r(&info);
         return -1;
 }
@@ -1124,7 +1124,7 @@ void ipcp_sigwait(void)
         sigaddset(&sigset, SIGTERM);
         sigaddset(&sigset, SIGPIPE);
 
-        while(ipcp_get_state() != IPCP_NULL &&
+        while(ipcp_get_state() != IPCP_INIT &&
               ipcp_get_state() != IPCP_SHUTDOWN) {
 #ifdef __APPLE__
                 if (sigwait(&sigset, &sig) < 0) {
@@ -1149,8 +1149,8 @@ void ipcp_sigwait(void)
                         /* FALLTHRU */
                 case SIGQUIT:
                         if (info.si_pid == ipcpd.irmd_pid) {
-                                if (ipcp_get_state() == IPCP_INIT)
-                                        ipcp_set_state(IPCP_NULL);
+                                if (ipcp_get_state() == IPCP_BOOT)
+                                        ipcp_set_state(IPCP_INIT);
 
                                 if (ipcp_get_state() == IPCP_OPERATIONAL)
                                         ipcp_set_state(IPCP_SHUTDOWN);
@@ -1173,6 +1173,8 @@ void ipcp_stop(void)
         pthread_join(ipcpd.acceptor, NULL);
 
         tpm_stop(ipcpd.tpm);
+
+        ipcp_set_state(IPCP_INIT);
 }
 
 void ipcp_fini(void)
@@ -1200,6 +1202,8 @@ void ipcp_fini(void)
         log_info("IPCP %d out.", getpid());
 
         log_fini();
+
+        ipcpd.state = IPCP_NULL;
 }
 
 void ipcp_set_state(enum ipcp_state state)

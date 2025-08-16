@@ -80,6 +80,7 @@
 
 enum irm_state {
         IRMD_NULL = 0,
+        IRMD_INIT,
         IRMD_RUNNING,
         IRMD_SHUTDOWN
 };
@@ -234,7 +235,7 @@ static pid_t spawn_ipcp(struct ipcp_info * info)
         }
 
         info->pid   = pid;
-        info->state = IPCP_BOOT;
+        info->state = IPCP_INIT;
 
         return 0;
 }
@@ -337,7 +338,7 @@ int bootstrap_ipcp(pid_t                pid,
                 goto fail;
         }
 
-        info.state = IPCP_BOOTSTRAPPED;
+        info.state = IPCP_BOOT;
 
         if (reg_set_layer_for_ipcp(&info, &layer) < 0) {
                 log_err("Failed to set layer info for IPCP.");
@@ -368,6 +369,8 @@ int enroll_ipcp(pid_t        pid,
                 log_err("Could not enroll IPCP %d.", pid);
                 goto fail;
         }
+
+        info.state = IPCP_BOOT;
 
         if (reg_set_layer_for_ipcp(&info, &layer) < 0) {
                 log_err("Failed to set layer info for IPCP.");
@@ -2303,6 +2306,9 @@ static int irm_init(void)
 
         gcry_control(GCRYCTL_INITIALIZATION_FINISHED);
 #endif
+
+        irmd_set_state(IRMD_INIT);
+
         return 0;
 
 #ifdef HAVE_LIBGCRYPT
@@ -2343,7 +2349,7 @@ static void irm_fini(void)
         struct timespec wait = TIMESPEC_INIT_MS(1);
         int    retries = 5;
 #endif
-        if (irmd_get_state() != IRMD_NULL)
+        if (irmd_get_state() != IRMD_INIT)
                 log_warn("Unsafe destroy.");
 
         pthread_mutex_lock(&irmd.auth.mtx);
@@ -2394,6 +2400,8 @@ static void irm_fini(void)
                 log_err("Failed to remove " FUSE_PREFIX);
 #endif
         assert(list_is_empty(&irmd.cmds));
+
+        irmd.state = IRMD_NULL;
 }
 
 static void usage(void)
@@ -2409,10 +2417,10 @@ static void usage(void)
 
 static int irm_start(void)
 {
+        irmd_set_state(IRMD_RUNNING);
+
         if (tpm_start(irmd.tpm))
                 goto fail_tpm_start;
-
-        irmd_set_state(IRMD_RUNNING);
 
         if (pthread_create(&irmd.irm_sanitize, NULL, irm_sanitize, NULL))
                 goto fail_irm_sanitize;
@@ -2428,9 +2436,9 @@ static int irm_start(void)
         pthread_cancel(irmd.irm_sanitize);
         pthread_join(irmd.irm_sanitize, NULL);
  fail_irm_sanitize:
-        irmd_set_state(IRMD_NULL);
         tpm_stop(irmd.tpm);
  fail_tpm_start:
+        irmd_set_state(IRMD_INIT);
         return -1;
 }
 
@@ -2471,7 +2479,7 @@ static void irm_stop(void)
 
         tpm_stop(irmd.tpm);
 
-        irmd_set_state(IRMD_NULL);
+        irmd_set_state(IRMD_INIT);
 }
 
 static void irm_argparse(int     argc,

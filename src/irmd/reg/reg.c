@@ -732,7 +732,7 @@ int reg_create_ipcp(const struct ipcp_info * info)
 
         assert(info != NULL);
         assert(info->pid != 0);
-        assert(info->state == IPCP_BOOT);
+        assert(info->state == IPCP_INIT);
 
         pthread_mutex_lock(&reg.mtx);
 
@@ -1582,8 +1582,7 @@ int reg_set_layer_for_ipcp(struct ipcp_info *        info,
         struct reg_ipcp * ipcp;
 
         assert(info != NULL);
-        assert(info->state > IPCP_BOOT);
-        assert(info->state < IPCP_SHUTDOWN);
+        assert(info->state == IPCP_BOOT);
 
         pthread_mutex_lock(&reg.mtx);
 
@@ -2060,7 +2059,7 @@ int reg_wait_ipcp_boot(struct ipcp_info *      info,
         int               ret;
         bool              stop = false;
 
-        assert(info->state == IPCP_BOOT);
+        assert(info->state == IPCP_INIT);
 
         pthread_mutex_lock(&reg.mtx);
 
@@ -2080,16 +2079,18 @@ int reg_wait_ipcp_boot(struct ipcp_info *      info,
                         ret = -1;
                         stop = true;
                         break;
+                case IPCP_BOOT:
+                        /* FALLTHRU*/
                 case IPCP_OPERATIONAL:
                         ret  = 0;
                         stop = true;
                         break;
-                case IPCP_BOOT:
+                case IPCP_INIT:
                         ret = -__timedwait(&reg.cond, &reg.mtx, abstime);
                         break;
                 default:
                         assert(false);
-                        continue; /* Shut up static analyzer. */
+                        break; /* Shut up static analyzer. */
                 }
 
                 ipcp = __reg_get_ipcp(info->pid);

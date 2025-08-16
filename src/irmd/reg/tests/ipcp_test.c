@@ -31,7 +31,7 @@ static int test_reg_ipcp_create(void)
         struct reg_ipcp *  ipcp;
         struct ipcp_info   info = {
                 .pid   = TEST_PID,
-                .state = IPCP_BOOT
+                .state = IPCP_INIT
         };
         struct layer_info layer = {
                 .name = "testlayer",
@@ -51,17 +51,12 @@ static int test_reg_ipcp_create(void)
                 goto fail;
         }
 
-        ipcp->info.state = IPCP_OPERATIONAL;
+        ipcp->info.state = IPCP_BOOT;
 
         reg_ipcp_set_layer(ipcp, &layer);
 
         if (strcmp(ipcp->layer.name, layer.name) != 0) {
                 printf("Layer name was not set.\n");
-                goto fail;
-        }
-
-        if (ipcp->info.state != IPCP_OPERATIONAL) {
-                printf("IPCP state was not set.\n");
                 goto fail;
         }
 

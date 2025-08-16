@@ -94,11 +94,14 @@ ipcp_msg_t * send_recv_ipcp_msg(pid_t        pid,
                 return NULL;
 
         spath = sock_path(pid, IPCP_SOCK_PATH_PREFIX);
-        if (spath == NULL)
+        if (spath == NULL) {
+                log_err("Failed to get IPCP socket path for pid %d.", pid);
                 return NULL;
+        }
 
         sockfd = client_socket_open(spath);
         if (sockfd < 0) {
+                log_err("Failed to open client socket at %s.", spath);
                 free(spath);
                 return NULL;
         }

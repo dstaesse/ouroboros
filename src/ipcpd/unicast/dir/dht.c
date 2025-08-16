@@ -39,7 +39,6 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/list.h>
-#include <ouroboros/notifier.h>
 #include <ouroboros/random.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/time.h>

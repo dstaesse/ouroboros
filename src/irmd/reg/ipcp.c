@@ -40,7 +40,7 @@ struct reg_ipcp * reg_ipcp_create(const struct ipcp_info * info)
         struct reg_ipcp * ipcp;
 
         assert(info != NULL);
-        assert(info->state == IPCP_BOOT);
+        assert(info->state == IPCP_INIT);
 
         ipcp = malloc(sizeof(*ipcp));
         if (ipcp == NULL) {
@@ -54,7 +54,7 @@ struct reg_ipcp * reg_ipcp_create(const struct ipcp_info * info)
         list_head_init(&ipcp->next);
 
         ipcp->info = *info;
-        ipcp->info.state = IPCP_BOOT;
+        ipcp->info.state = IPCP_INIT;
 
         strcpy(ipcp->layer.name, "Not enrolled.");
 
@@ -77,7 +77,7 @@ void reg_ipcp_update(struct reg_ipcp *        ipcp,
                      const struct ipcp_info * info)
 {
         assert(ipcp != NULL);
-        assert(info->state != IPCP_INIT);
+        assert(info->state != IPCP_NULL);
 
         ipcp->info = *info;
 }
@@ -86,7 +86,7 @@ void reg_ipcp_set_layer(struct reg_ipcp *         ipcp,
                         const struct layer_info * info)
 {
         assert(ipcp != NULL);
-        assert(ipcp->info.state == IPCP_OPERATIONAL);
+        assert(ipcp->info.state == IPCP_BOOT);
 
         ipcp->layer = *info;
 }

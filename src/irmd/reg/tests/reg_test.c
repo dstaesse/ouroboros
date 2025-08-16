@@ -482,7 +482,7 @@ static int test_reg_create_ipcp(void)
         struct ipcp_info info = {
                 .name  = TEST_IPCP,
                 .pid   = TEST_PID,
-                .state = IPCP_BOOT /* set by spawn_ipcp */
+                .state = IPCP_INIT /* set by spawn_ipcp */
         };
 
         TEST_START();
@@ -543,7 +543,7 @@ static int test_reg_list_ipcps(void)
         for (i = 0; i < 10; i++) {
                 struct ipcp_info info = {
                         .pid   = TEST_PID + i,
-                        .state = IPCP_BOOT /* set by spawn_ipcp */
+                        .state = IPCP_INIT /* set by spawn_ipcp */
                 };
 
                 sprintf(info.name, "%s%d", TEST_IPCP, i);
@@ -601,7 +601,7 @@ static int test_insert_ipcps(void)
                 sprintf(info.name, "%s-%ld", TEST_IPCP, i);
                 info.pid   = TEST_PID + rand() % 10000;
                 info.type  = rand() % IPCP_INVALID;
-                info.state = IPCP_BOOT; /* set by spawn_ipcp */
+                info.state = IPCP_INIT; /* set by spawn_ipcp */
 
                 if (reg_create_ipcp(&info) < 0) {
                         printf("Failed to create ipcp %s.\n", info.name);
@@ -653,7 +653,7 @@ static int test_set_layer(void)
         struct ipcp_info info = {
                 .name  = TEST_IPCP,
                 .pid   = TEST_PID,
-                .state = IPCP_BOOT /* set by spawn_ipcp */
+                .state = IPCP_INIT /* set by spawn_ipcp */
         };
         struct layer_info layer = {
                 .name = TEST_LAYER,
@@ -677,8 +677,9 @@ static int test_set_layer(void)
         }
 
         ipcp = __reg_get_ipcp(info.pid);
-        ipcp->info.state = IPCP_OPERATIONAL;
-        info.state = IPCP_ENROLLED;
+
+        ipcp->info.state = IPCP_BOOT;
+        info.state = IPCP_BOOT;
 
         reg_set_layer_for_ipcp(&info, &layer);
 
@@ -1407,7 +1408,7 @@ static int test_wait_ipcp_boot_timeout(void)
         struct ipcp_info info = {
                 .name  = TEST_IPCP,
                 .pid   = TEST_PID,
-                .state = IPCP_BOOT  /* set by spawn_ipcp */
+                .state = IPCP_INIT  /* set by spawn_ipcp */
         };
 
         TEST_START();
@@ -1462,12 +1463,12 @@ static int test_wait_ipcp_boot_fail(void)
         struct ipcp_info info = {
                 .name  = TEST_IPCP,
                 .pid   = TEST_PID,
-                .state = IPCP_BOOT /* set by spawn_ipcp */
+                .state = IPCP_INIT /* set by spawn_ipcp */
         };
         struct ipcp_info resp_info = {
                 .name  = TEST_IPCP,
                 .pid   = TEST_PID,
-                .state = IPCP_NULL
+                .state = IPCP_INIT
         };
 
         TEST_START();
@@ -1487,7 +1488,7 @@ static int test_wait_ipcp_boot_fail(void)
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
 
-        info.state = IPCP_BOOT;
+        info.state = IPCP_INIT;
 
         if (reg_wait_ipcp_boot(&info, &abstime) == 0) {
                 printf("IPCP boot reported success.\n");
@@ -1524,7 +1525,7 @@ static int test_wait_ipcp_boot_success(void)
         struct ipcp_info info = {
                 .name  = TEST_IPCP,
                 .pid   = TEST_PID,
-                .state = IPCP_BOOT /* set by spawn_ipcp */
+                .state = IPCP_INIT /* set by spawn_ipcp */
         };
         struct ipcp_info resp_info = {
                 .name  = TEST_IPCP,
@@ -1549,7 +1550,7 @@ static int test_wait_ipcp_boot_success(void)
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
 
-        info.state = IPCP_BOOT;
+        info.state = IPCP_INIT;
 
         if (reg_wait_ipcp_boot(&info, &abstime) < 0) {
                 printf("IPCP boot failed.\n");
