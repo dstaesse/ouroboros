@@ -52,15 +52,10 @@
 #define ENROLL_WARN_TIME_OFFSET 20
 #define ENROLL_BUF_LEN          1024
 
-enum enroll_state {
-        ENROLL_NULL = 0,
-        ENROLL_INIT,
-        ENROLL_RUNNING
-};
 
 struct {
         struct ipcp_config conf;
-        enum enroll_state  state;
+
         pthread_t          listener;
 } enroll;
 
@@ -309,16 +304,11 @@ int enroll_init(void)
                 return -1;
         }
 
-        enroll.state = ENROLL_INIT;
-
         return 0;
 }
 
 void enroll_fini(void)
 {
-        if (enroll.state == ENROLL_RUNNING)
-                pthread_join(enroll.listener, NULL);
-
         connmgr_comp_fini(COMPID_ENROLL);
 }
 
@@ -327,13 +317,11 @@ int enroll_start(void)
         if (pthread_create(&enroll.listener, NULL, enroll_handle, NULL))
                 return -1;
 
-        enroll.state = ENROLL_RUNNING;
-
         return 0;
 }
 
 void enroll_stop(void)
 {
-        if (enroll.state == ENROLL_RUNNING)
-                pthread_cancel(enroll.listener);
+        pthread_cancel(enroll.listener);
+        pthread_join(enroll.listener, NULL);
 }

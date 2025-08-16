@@ -38,12 +38,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum connmgr_state {
-        CONNMGR_NULL = 0,
-        CONNMGR_INIT,
-        CONNMGR_RUNNING
-};
-
 struct conn_el {
         struct list_head next;
         struct conn      conn;
@@ -61,7 +55,6 @@ struct comp {
 
 struct {
         struct comp        comps[COMPID_MAX];
-        enum connmgr_state state;
 
         pthread_t          acceptor;
 } connmgr;
@@ -228,8 +221,6 @@ static void handle_event(void *       self,
 
 int connmgr_init(void)
 {
-        connmgr.state = CONNMGR_INIT;
-
         if (notifier_reg(handle_event, NULL)) {
                 log_err("Failed to register notifier.");
                 return -1;
@@ -242,13 +233,10 @@ void connmgr_fini(void)
 {
         int i;
 
-        notifier_unreg(handle_event);
-
-        if (connmgr.state == CONNMGR_RUNNING)
-                pthread_join(connmgr.acceptor, NULL);
-
         for (i = 0; i < COMPID_MAX; ++i)
                 connmgr_comp_fini(i);
+
+        notifier_unreg(handle_event);
 }
 
 int connmgr_start(void)
@@ -258,15 +246,13 @@ int connmgr_start(void)
                 return -1;
         }
 
-        connmgr.state = CONNMGR_RUNNING;
-
         return 0;
 }
 
 void connmgr_stop(void)
 {
-        if (connmgr.state == CONNMGR_RUNNING)
-                pthread_cancel(connmgr.acceptor);
+        pthread_cancel(connmgr.acceptor);
+        pthread_join(connmgr.acceptor, NULL);
 }
 
 int connmgr_comp_init(enum comp_id             id,
