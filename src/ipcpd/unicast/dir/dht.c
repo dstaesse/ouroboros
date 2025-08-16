@@ -3646,6 +3646,11 @@ static void dht_kv_update_replication_times(const uint8_t *         key,
         pthread_rwlock_unlock(&dht.db.lock);
 }
 
+static void __cleanup_value_list(void * o)
+{
+        return value_list_destroy((struct list_head *) o);
+}
+
 static void dht_kv_replicate_values(const uint8_t *    key,
                                     struct list_head * repl,
                                     struct list_head * rebl)
@@ -3655,6 +3660,9 @@ static void dht_kv_replicate_values(const uint8_t *    key,
         struct list_head * h;
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
+
+        pthread_cleanup_push(__cleanup_value_list, repl);
+        pthread_cleanup_push(__cleanup_value_list, rebl);
 
         list_for_each_safe(p, h, repl) {
                 struct val_entry * v;
@@ -3667,6 +3675,9 @@ static void dht_kv_replicate_values(const uint8_t *    key,
                 v = list_entry(p, struct val_entry, next);
                 dht_kv_republish_value(key, v, &now);
         }
+
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
 
         /* removes non-replicated items from the list */
         dht_kv_update_replication_times(key, repl, rebl, &now);
