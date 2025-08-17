@@ -46,13 +46,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #ifdef __FreeBSD__
 #include <sys/socket.h>
 #endif
 
 #define UNICAST        "unicast"
 #define BROADCAST      "broadcast"
-#define IP_UDP         "udp"
+#define IP_UDP4        "udp4"
+#define IP_UDP6        "udp6"
 #define ETH_LLC        "eth-llc"
 #define ETH_DIX        "eth-dix"
 #define LOCAL          "local"
@@ -76,7 +78,8 @@
 #define UNI(x) default_uni_config.x
 #define DIX(x) eth_dix_default_conf.eth.x
 #define LLC(x) eth_llc_default_conf.eth.x
-#define UDP(x) udp_default_conf.udp.x
+#define UD4(x) udp4_default_conf.udp4.x
+#define UD6(x) udp6_default_conf.udp6.x
 
 static char * usage_str = \
         "Usage: irm ipcp bootstrap\n"
@@ -84,7 +87,7 @@ static char * usage_str = \
         "           layer <layer name>\n"
         "           [type [TYPE]]\n"
         "where TYPE in {" UNICAST " " BROADCAST " " LOCAL " "
-        IP_UDP " " ETH_LLC " " ETH_DIX "},\n\n"
+        IP_UDP4 " " IP_UDP6 " " ETH_LLC " " ETH_DIX "},\n\n"
         "if TYPE == " UNICAST "\n"
         "        [addr_auth <ADDRESS_POLICY> (default: %s)]\n"
         "        [directory <DIRECTORY_POLICY> (default: %s)]\n"
@@ -113,11 +116,17 @@ static char * usage_str = \
         "        [ls_t_recalc <pff recalc interval (s)> (default: %ld)]\n"
         "        [ls_t_update <LSA update interval (s)> (default: %ld)]\n"
         "        [ls_t_timeo  <link timeout (s)> (default: %ld)]\n\n"
-        "if TYPE == " IP_UDP "\n"
+        "if TYPE == " IP_UDP4 "\n"
         "        ip <IP address in dotted notation>\n"
         "        [port <UDP port> (default: %d)]\n"
-        "        [dns <DDNS IP address in dotted notation>"
+        "        [dns <DDNS IPv4 address in dotted notation>"
         " (default: none)]\n\n"
+        "if TYPE == " IP_UDP6 "\n"
+        "        ip <IPv6 address>\n"
+        "        [port <UDP port> (default: %d)]\n"
+        "        [dns <DDNS IPv6 address>"
+        " (default: none)]\n\n"
+
         "if TYPE == " ETH_LLC "\n"
         "        dev <interface name>\n"
         "        [hash [ALGORITHM] (default: %s)]\n"
@@ -150,8 +159,10 @@ static void usage(void)
                /* ls */
                default_ls_config.t_recalc, default_ls_config.t_update,
                default_ls_config.t_timeo,
-               /* udp */
-               UDP(port),
+               /* udp4 */
+               UD4(port),
+               /* udp6 */
+               UD6(port),
                /* eth_llc */
                SHA3_256,
                /* eth_dix */
@@ -177,9 +188,14 @@ int do_bootstrap_ipcp(int     argc,
         enum pol_addr_auth      addr_auth_type = UNI(addr_auth_type);
         enum pol_cong_avoid     cong_avoid     = UNI(cong_avoid);
         enum pol_dir_hash       hash_algo      = DIR_HASH_SHA3_256;
-        uint32_t                ip_addr        = 0;
-        uint32_t                dns_addr       = UDP(dns_addr);
-        int                     port           = UDP(port);
+        char *                  ipstr          = NULL;
+        char *                  dnsstr         = NULL;
+        struct in_addr          ip4_addr       = {.s_addr = INADDR_ANY};
+        struct in_addr          dns4_addr      = UD4(dns_addr);
+        int                     port4          = UD4(port);
+        struct in6_addr         ip6_addr       = IN6ADDR_ANY_INIT;
+        struct in6_addr         dns6_addr      = UD6(dns_addr);
+        int                     port6          = UD6(port);
         char *                  ipcp_type      = NULL;
         enum ipcp_type          type           = IPCP_INVALID;
         char *                  layer          = NULL;
@@ -211,11 +227,9 @@ int do_bootstrap_ipcp(int     argc,
                         else
                                 goto unknown_param;
                 } else if (matches(*argv, "ip") == 0) {
-                        if (inet_pton (AF_INET, *(argv + 1), &ip_addr) != 1)
-                                goto unknown_param;
+                        ipstr = *(argv + 1);
                 } else if (matches(*argv, "dns") == 0) {
-                        if (inet_pton(AF_INET, *(argv + 1), &dns_addr) != 1)
-                                goto unknown_param;
+                        dnsstr = *(argv + 1);
                 } else if (matches(*argv, "device") == 0) {
                         dev = *(argv + 1);
                 } else if (matches(*argv, "ethertype") == 0) {
@@ -237,7 +251,8 @@ int do_bootstrap_ipcp(int     argc,
                 } else if (matches(*argv, "ttl") == 0) {
                         max_ttl = atoi(*(argv + 1));
                 } else if (matches(*argv, "port") == 0) {
-                        port = atoi(*(argv + 1));
+                        port4 = atoi(*(argv + 1));
+                        port6 = port4;
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
@@ -311,19 +326,57 @@ int do_bootstrap_ipcp(int     argc,
         }
 
         if (ipcp_type != NULL) {
-                if (strcmp(ipcp_type, UNICAST) == 0)
+                if (matches(ipcp_type, UNICAST) == 0)
                         type = IPCP_UNICAST;
-                else if (strcmp(ipcp_type, BROADCAST) == 0)
+                else if (matches(ipcp_type, BROADCAST) == 0)
                         type = IPCP_BROADCAST;
-                else if (strcmp(ipcp_type, IP_UDP) == 0)
-                        type = IPCP_UDP;
-                else if (strcmp(ipcp_type, ETH_LLC) == 0)
-                        type = IPCP_ETH_LLC;
-                else if (strcmp(ipcp_type, ETH_DIX) == 0)
+                else if (matches(ipcp_type, IP_UDP4) == 0)
+                        type = IPCP_UDP4;
+                else if (matches(ipcp_type, IP_UDP6) == 0)
+                        type = IPCP_UDP6;
+                else if (matches(ipcp_type, ETH_DIX) == 0)
                         type = IPCP_ETH_DIX;
-                else if (strcmp(ipcp_type, LOCAL) == 0)
+                else if (matches(ipcp_type, ETH_LLC) == 0)
+                        type = IPCP_ETH_LLC;
+                else if (matches(ipcp_type, LOCAL) == 0)
                         type = IPCP_LOCAL;
                 else goto fail_usage;
+        }
+
+        if (type == IPCP_UDP4) {
+                if (inet_pton (AF_INET, ipstr, &ip4_addr) != 1) {
+                        printf("Invalid IPv4 address: \"%s\".\n", ipstr);
+                        goto fail_usage;
+                }
+
+                if (ip4_addr.s_addr == INADDR_ANY) {
+                        printf("Cannot use IPv4 address: \"%s\".\n", ipstr);
+                        goto fail_usage;
+                }
+
+                if (dnsstr != NULL &&
+                    inet_pton(AF_INET, dnsstr, &dns4_addr) != 1) {
+                        printf("Invalid DNS IPv4 address: \"%s\".\n", dnsstr);
+                        goto fail_usage;
+                }
+        }
+
+        if (type == IPCP_UDP6) {
+                if (inet_pton(AF_INET6, ipstr, &ip6_addr) != 1) {
+                        printf("Invalid IPv6 address: \"%s\".\n", ipstr);
+                        goto fail_usage;
+                }
+
+                if (IN6_IS_ADDR_UNSPECIFIED(&ip6_addr)) {
+                        printf("Cannot use IPv6 address: \"%s\".\n", ipstr);
+                        goto fail_usage;
+                }
+
+                if (dnsstr != NULL &&
+                    inet_pton(AF_INET6, dnsstr, &dns6_addr) != 1) {
+                        printf("Invalid DNS IPv6 address: \"%s\".\n", dnsstr);
+                        goto fail_usage;
+                }
         }
 
         if (pid == -1) {
@@ -374,12 +427,15 @@ int do_bootstrap_ipcp(int     argc,
                                 conf.unicast.cong_avoid      = cong_avoid;
                                 conf.unicast.dir             = dir_config;
                                 break;
-                        case IPCP_UDP:
-                                if (ip_addr == 0)
-                                        goto fail_usage;
-                                conf.udp.ip_addr  = ip_addr;
-                                conf.udp.dns_addr = dns_addr;
-                                conf.udp.port     = port;
+                        case IPCP_UDP4:
+                                conf.udp4.ip_addr  = ip4_addr;
+                                conf.udp4.dns_addr = dns4_addr;
+                                conf.udp4.port     = port4;
+                                break;
+                        case IPCP_UDP6:
+                                conf.udp6.ip_addr  = ip6_addr;
+                                conf.udp6.dns_addr = dns6_addr;
+                                conf.udp6.port     = port6;
                                 break;
                         case IPCP_ETH_DIX:
                                 conf.eth.ethertype = ethertype;

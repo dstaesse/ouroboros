@@ -127,7 +127,9 @@ creates an IPCP process of type \fItype\fR in the system with name
 .PP
 \fBeth-dix\fR   - create an IPCP that attaches to Ethernet using DIX frames.
 .PP
-\fBudp\fR       - create an IPCP that attaches to a UDP socket.
+\fBudp4\fR       - create an IPCP that attaches to a UDP/IPv4 socket.
+.PP
+\fBudp6\fR       - create an IPCP that attaches to a UDP/IPv6 socket.
 .PP
 \fBunicast\fR   - create a unicast IPCP that uses lower level layers.
 .PP
@@ -190,19 +192,35 @@ default: SHA3_256.
 .RE
 
 .PP
-\fBudp\fR
+\fBudp4\fR
 .RS 4
 .PP
-ip \fIip\fR specifies the local IP address to bind to
+ip \fIip\fR specifies the local IPv4 address to bind to
 .PP
 [dns \fIdns\fR] specifies an optional DDNS server that will be used for
 the directory.
 .PP
 [port \fIport\fR] specifies a UDP port that is used for sending and
-receiving ouroboros traffic. This must be the same for the entire UDP
-layer. Parallel UDP layers should use different ports. This UDP port
+receiving ouroboros traffic. This must be the same for the entire UDP4
+layer. Parallel UDP4 layers should use different ports. This UDP port
 needs to be forwarded if the server is behind a NAT and wants to
 receive incoming requests.
+.br
+default: 3435
+.RE
+
+.PP
+\fBudp6\fR
+.RS 4
+.PP
+ip \fIip\fR specifies the local IPv6 address to bind to
+.PP
+[dns \fIdns\fR] specifies an optional DDNS server that will be used for
+the directory.
+.PP
+[port \fIport\fR] specifies a UDP port that is used for sending and
+receiving ouroboros traffic. This must be the same for the entire UDP6
+layer. Parallel UDP6 layers should use different ports.
 .br
 default: 3435
 .RE

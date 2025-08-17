@@ -20,15 +20,7 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#if defined(__linux__) || defined(__CYGWIN__)
-#define _DEFAULT_SOURCE
-#else
-#define _POSIX_C_SOURCE 200112L
-#endif
-
 #include "config.h"
-
-#define OUROBOROS_PREFIX "ipcpd/udp"
 
 #include <ouroboros/bitmap.h>
 #include <ouroboros/endian.h>
@@ -36,7 +28,6 @@
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/dev.h>
-#include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
@@ -59,12 +50,11 @@
 #define FLOW_REQ                 1
 #define FLOW_REPLY               2
 
-#define THIS_TYPE                IPCP_UDP
-#define IPCP_UDP_MAX_PACKET_SIZE 8980
 #define OUR_HEADER_LEN           sizeof(uint32_t) /* adds eid */
 
-#define IPCP_UDP_BUF_SIZE        8980
-#define IPCP_UDP_MSG_SIZE        8980
+#define IPCP_UDP_BUF_SIZE        IPCP_UDP_MAX_PACKET_SIZE
+#define IPCP_UDP_MSG_SIZE        IPCP_UDP_MAX_PACKET_SIZE
+
 #define DNS_TTL                  86400
 
 #define SADDR                    ((struct sockaddr *) &udp_data.s_saddr)
@@ -102,24 +92,23 @@ struct mgmt_msg {
 } __attribute__((packed));
 
 struct mgmt_frame {
-        struct list_head   next;
-        struct sockaddr_in r_saddr;
-        uint8_t            buf[MGMT_FRAME_BUF_SIZE];
-        size_t             len;
+        struct list_head  next;
+        struct __SOCKADDR r_saddr;
+        uint8_t           buf[MGMT_FRAME_BUF_SIZE];
+        size_t            len;
 };
 
 /* UDP flow */
 struct uf {
-        int                d_eid;
-        struct sockaddr_in r_saddr;
+        int               d_eid;
+        struct __SOCKADDR r_saddr;
 };
 
 struct {
         struct shim_data * shim_data;
 
-        uint32_t           dns_addr;
-
-        struct sockaddr_in s_saddr;
+        struct __ADDR      dns_addr;
+        struct __SOCKADDR  s_saddr;
         int                s_fd;
 
         fset_t *           np1_flows;
@@ -135,6 +124,12 @@ struct {
         pthread_cond_t     mgmt_cond;
         struct list_head   mgmt_frames;
 } udp_data;
+
+static const char * __inet_ntop(const struct __ADDR * addr,
+                                char *                buf)
+{
+        return inet_ntop(__AF, addr, buf, __ADDRSTRLEN);
+}
 
 static int udp_data_init(void)
 {
@@ -197,11 +192,11 @@ static void udp_data_fini(void)
         pthread_mutex_destroy(&udp_data.mgmt_lock);
 }
 
-static int udp_ipcp_port_alloc(const struct sockaddr_in * r_saddr,
-                               uint32_t                   s_eid,
-                               const uint8_t *            dst,
-                               qosspec_t                  qs,
-                               const buffer_t *           data)
+static int udp_ipcp_port_alloc(const struct __SOCKADDR * r_saddr,
+                               uint32_t                  s_eid,
+                               const uint8_t *           dst,
+                               qosspec_t                 qs,
+                               const buffer_t *          data)
 {
         uint8_t *         buf;
         struct mgmt_msg * msg;
@@ -236,6 +231,8 @@ static int udp_ipcp_port_alloc(const struct sockaddr_in * r_saddr,
         if (sendto(udp_data.s_fd, msg, len + data->len,
                    SENDTO_FLAGS,
                    (const struct sockaddr *) r_saddr, sizeof(*r_saddr)) < 0) {
+                log_err("Failed to send flow allocation request: %s.",
+                        strerror(errno));
                 free(buf);
                 return -1;
         }
@@ -245,11 +242,11 @@ static int udp_ipcp_port_alloc(const struct sockaddr_in * r_saddr,
         return 0;
 }
 
-static int udp_ipcp_port_alloc_resp(const struct sockaddr_in * r_saddr,
-                                    uint32_t                   s_eid,
-                                    uint32_t                   d_eid,
-                                    int8_t                     response,
-                                    const buffer_t *           data)
+static int udp_ipcp_port_alloc_resp(const struct __SOCKADDR * r_saddr,
+                                    uint32_t                  s_eid,
+                                    uint32_t                  d_eid,
+                                    int8_t                    response,
+                                    const buffer_t *          data)
 {
         struct mgmt_msg * msg;
 
@@ -278,11 +275,11 @@ static int udp_ipcp_port_alloc_resp(const struct sockaddr_in * r_saddr,
         return 0;
 }
 
-static int udp_ipcp_port_req(struct sockaddr_in * c_saddr,
-                             int                  d_eid,
-                             const uint8_t *      dst,
-                             qosspec_t            qs,
-                             const buffer_t *     data)
+static int udp_ipcp_port_req(struct __SOCKADDR * c_saddr,
+                             int                 d_eid,
+                             const uint8_t *     dst,
+                             qosspec_t           qs,
+                             const buffer_t *    data)
 {
         int fd;
 
@@ -305,20 +302,26 @@ static int udp_ipcp_port_req(struct sockaddr_in * c_saddr,
         return 0;
 }
 
-static int udp_ipcp_port_alloc_reply(const struct sockaddr_in * saddr,
-                                     uint32_t                   s_eid,
-                                     uint32_t                   d_eid,
-                                     int8_t                     response,
-                                     const buffer_t *           data)
+static int udp_ipcp_port_alloc_reply(const struct __SOCKADDR * saddr,
+                                     uint32_t                  s_eid,
+                                     uint32_t                  d_eid,
+                                     int8_t                    response,
+                                     const buffer_t *          data)
 {
         time_t mpl = IPCP_UDP_MPL;
 
         pthread_rwlock_wrlock(&udp_data.flows_lock);
 
         if (memcmp(&udp_data.fd_to_uf[s_eid].r_saddr, saddr, sizeof(*saddr))) {
+                char ipstr[__ADDRSTRLEN];
                 pthread_rwlock_unlock(&udp_data.flows_lock);
-                log_err("Flow allocation reply for %u from wrong source.",
-                        s_eid);
+                #ifdef BUILD_IPCP_UDP4
+                __inet_ntop(&saddr->sin_addr, ipstr);
+                #else
+                __inet_ntop(&saddr->sin6_addr, ipstr);
+                #endif
+                log_err("Flow allocation reply for %u from wrong source %s.",
+                        s_eid, ipstr);
                 return -1;
         }
 
@@ -338,9 +341,9 @@ static int udp_ipcp_port_alloc_reply(const struct sockaddr_in * saddr,
         return 0;
 }
 
-static int udp_ipcp_mgmt_frame(const uint8_t *    buf,
-                               size_t             len,
-                               struct sockaddr_in c_saddr)
+static int udp_ipcp_mgmt_frame(struct __SOCKADDR c_saddr,
+                               const uint8_t *   buf,
+                               size_t            len)
 {
         struct mgmt_msg * msg;
         size_t            msg_len;
@@ -411,7 +414,7 @@ static void * udp_ipcp_mgmt_handler(void * o)
 
                 pthread_mutex_unlock(&udp_data.mgmt_lock);
 
-                udp_ipcp_mgmt_frame(frame->buf, frame->len, frame->r_saddr);
+                udp_ipcp_mgmt_frame(frame->r_saddr, frame->buf, frame->len);
 
                 free(frame);
         }
@@ -438,7 +441,7 @@ static void * udp_ipcp_packet_reader(void * o)
 
         while (true) {
                 struct mgmt_frame *  frame;
-                struct sockaddr_in   r_saddr;
+                struct __SOCKADDR    r_saddr;
                 socklen_t            len;
                 struct shm_du_buff * sdb;
                 uint8_t *            head;
@@ -521,9 +524,9 @@ static void * udp_ipcp_packet_writer(void * o)
         pthread_cleanup_push(cleanup_fqueue, fq);
 
         while (true) {
-                struct sockaddr_in saddr;
-                int                eid;
-                int                fd;
+                struct __SOCKADDR saddr;
+                int               eid;
+                int               fd;
                 fevent(udp_data.np1_flows, fq, NULL);
                 while ((fd = fqueue_next(fq)) >= 0) {
                         struct shm_du_buff * sdb;
@@ -578,29 +581,39 @@ static void * udp_ipcp_packet_writer(void * o)
         return (void *) 1;
 }
 
-static const char * inet4_ntop(const void * addr,
-                               char *       buf)
+static bool is_addr_specified(const struct __ADDR * addr)
 {
-        return inet_ntop(AF_INET, addr, buf, INET_ADDRSTRLEN);
+#ifdef BUILD_IPCP_UDP4
+        return addr->s_addr != 0;
+#else
+        return !IN6_IS_ADDR_UNSPECIFIED(addr);
+#endif
 }
 
 static int udp_ipcp_bootstrap(struct ipcp_config * conf)
 {
-        char ipstr[INET_ADDRSTRLEN];
-        char dnsstr[INET_ADDRSTRLEN];
+        char ipstr[__ADDRSTRLEN];
+        char dnsstr[__ADDRSTRLEN];
         int  i = 1;
+#ifdef BUILD_IPCP_UDP4
+        struct udp4_config * udp;
+        udp = &conf->udp4;
+#else
+        struct udp6_config * udp;
+        udp = &conf->udp6;
+#endif
 
         assert(conf != NULL);
         assert(conf->type == THIS_TYPE);
         assert(conf->layer_info.dir_hash_algo == (enum pol_dir_hash) HASH_MD5);
 
-        if (inet4_ntop(&conf->udp.ip_addr, ipstr) == NULL) {
+        if (__inet_ntop(&udp->ip_addr, ipstr) == NULL) {
                 log_err("Failed to convert IP address.");
                 return -1;
         }
 
-        if (conf->udp.dns_addr != 0) {
-                if (inet4_ntop(&conf->udp.dns_addr, dnsstr) == NULL) {
+        if (is_addr_specified(&udp->dns_addr)) {
+                if (__inet_ntop(&udp->dns_addr, dnsstr) == NULL) {
                         log_err("Failed to convert DNS address.");
                         return -1;
                 }
@@ -612,24 +625,29 @@ static int udp_ipcp_bootstrap(struct ipcp_config * conf)
         }
 
         /* UDP listen server */
-        udp_data.s_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        udp_data.s_fd = socket(__AF, SOCK_DGRAM, IPPROTO_UDP);
         if (udp_data.s_fd < 0) {
                 log_err("Can't create socket: %s", strerror(errno));
                 goto fail_socket;
         }
 
         memset((char *) &udp_data.s_saddr, 0, sizeof(udp_data.s_saddr));
-        udp_data.s_saddr.sin_family      = AF_INET;
-        udp_data.s_saddr.sin_addr.s_addr = conf->udp.ip_addr;
-        udp_data.s_saddr.sin_port        = htons(conf->udp.port);
-
+#ifdef BUILD_IPCP_UDP4
+        udp_data.s_saddr.sin_family  = AF_INET;
+        udp_data.s_saddr.sin_addr   = udp->ip_addr;
+        udp_data.s_saddr.sin_port   = htons(udp->port);
+#else
+        udp_data.s_saddr.sin6_family = AF_INET6;
+        udp_data.s_saddr.sin6_addr   = udp->ip_addr;
+        udp_data.s_saddr.sin6_port   = htons(udp->port);
+#endif
         if (bind(udp_data.s_fd, SADDR, SADDR_SIZE) < 0) {
                 log_err("Couldn't bind to %s:%d. %s.",
-                        ipstr, conf->udp.port, strerror(errno));
+                        ipstr, udp->port, strerror(errno));
                 goto fail_bind;
         }
 
-        udp_data.dns_addr = conf->udp.dns_addr;
+        udp_data.dns_addr = udp->dns_addr;
 
         if (pthread_create(&udp_data.mgmt_handler, NULL,
                            udp_ipcp_mgmt_handler, NULL)) {
@@ -653,10 +671,10 @@ static int udp_ipcp_bootstrap(struct ipcp_config * conf)
                 }
         }
 
-        log_dbg("Bootstrapped IPCP over UDP with pid %d.", getpid());
+        log_dbg("Bootstrapped " TYPE_STR " with pid %d.", getpid());
         log_dbg("Bound to IP address %s.", ipstr);
-        log_dbg("Using port %u.", conf->udp.port);
-        if (conf->udp.dns_addr != 0)
+        log_dbg("Using port %u.", udp->port);
+        if (is_addr_specified(&udp_data.dns_addr))
                 log_dbg("DNS server address is %s.", dnsstr);
         else
                 log_dbg("DNS server not in use.");
@@ -734,26 +752,26 @@ static int ddns_send(char * cmd)
         return 0;
 }
 
-static uint32_t ddns_resolve(char *   name,
-                             uint32_t dns_addr)
+static struct __ADDR ddns_resolve(char *        name,
+                                  struct __ADDR dns_addr)
 {
-        pid_t    pid      = -1;
-        int      wstatus;
-        int      pipe_fd[2];
-        char     dnsstr[INET_ADDRSTRLEN];
-        char     buf[IPCP_UDP_BUF_SIZE];
-        ssize_t  count    = 0;
-        char *   substr   = NULL;
-        char *   substr2  = NULL;
-        char *   addr_str = "Address:";
-        uint32_t ip_addr  = 0;
+        pid_t          pid      = -1;
+        int            wstatus;
+        int            pipe_fd[2];
+        char           dnsstr[__ADDRSTRLEN];
+        char           buf[IPCP_UDP_BUF_SIZE];
+        ssize_t        count    = 0;
+        char *         substr   = NULL;
+        char *         substr2  = NULL;
+        char *         addr_str = "Address:";
+        struct __ADDR  ip_addr  = __ADDR_ANY_INIT;
 
-        if (inet4_ntop(&dns_addr, dnsstr) == NULL)
-                return 0;
+        if (__inet_ntop(&dns_addr, dnsstr) == NULL)
+                return ip_addr;
 
         if (pipe(pipe_fd)) {
                 log_err("Failed to create pipe: %s.", strerror(errno));
-                return 0;
+                return ip_addr;
         }
 
         pid = fork();
@@ -761,7 +779,7 @@ static uint32_t ddns_resolve(char *   name,
                 log_err("Failed to fork: %s.", strerror(errno));
                 close(pipe_fd[0]);
                 close(pipe_fd[1]);
-                return -1;
+                return ip_addr;
         }
 
         if (pid == 0) {
@@ -781,7 +799,7 @@ static uint32_t ddns_resolve(char *   name,
         if (count <= 0) {
                 log_err("Failed to communicate with nslookup.");
                 close(pipe_fd[0]);
-                return 0;
+                return ip_addr;
         }
 
         close(pipe_fd[0]);
@@ -802,12 +820,13 @@ static uint32_t ddns_resolve(char *   name,
 
         if (substr2 == NULL || strstr(substr2, addr_str) == NULL) {
                 log_err("Failed to resolve DNS address.");
-                return 0;
+                return ip_addr;
         }
 
-        if (inet_pton(AF_INET, substr2 + strlen(addr_str) + 1, &ip_addr) != 1) {
+        if (inet_pton(__AF, substr2 + strlen(addr_str) + 1, &ip_addr) != 1) {
                 log_err("Failed to resolve DNS address.");
-                return 0;
+                assert(!is_addr_specified(&ip_addr));
+                return ip_addr;
         }
 
         return ip_addr;
@@ -817,11 +836,11 @@ static uint32_t ddns_resolve(char *   name,
 static int udp_ipcp_reg(const uint8_t * hash)
 {
 #ifdef HAVE_DDNS
-        char     ipstr[INET_ADDRSTRLEN];
-        char     dnsstr[INET_ADDRSTRLEN];
-        char     cmd[1000];
-        uint32_t dns_addr;
-        uint32_t ip_addr;
+        char          ipstr[__ADDRSTRLEN];
+        char          dnsstr[__ADDRSTRLEN];
+        char          cmd[1000];
+        struct __ADDR dns_addr;
+        struct __ADDR ip_addr;
 #endif
         char *   hashstr;
 
@@ -847,16 +866,19 @@ static int udp_ipcp_reg(const uint8_t * hash)
 
         dns_addr = udp_data.dns_addr;
 
-        if (dns_addr != 0) {
-                ip_addr = udp_data.s_saddr.sin_addr.s_addr;
-
-                if (inet4_ntop(&ip_addr, ipstr) == NULL) {
+        if (is_addr_specified(&dns_addr)) {
+#ifdef BUILD_IPCP_UDP4
+                ip_addr = udp_data.s_saddr.sin_addr;
+#else
+                ip_addr = udp_data.s_saddr.sin6_addr;
+#endif
+                if (__inet_ntop(&ip_addr, ipstr) == NULL) {
                         log_err("Failed to convert IP address to string.");
                         free(hashstr);
                         return -1;
                 }
 
-                if (inet4_ntop(&dns_addr, dnsstr) == NULL) {
+                if (__inet_ntop(&dns_addr, dnsstr) == NULL) {
                         log_err("Failed to convert DNS address to string.");
                         free(hashstr);
                         return -1;
@@ -881,12 +903,12 @@ static int udp_ipcp_reg(const uint8_t * hash)
 static int udp_ipcp_unreg(const uint8_t * hash)
 {
 #ifdef HAVE_DDNS
-        char     dnsstr[INET_ADDRSTRLEN];
+        char          dnsstr[__ADDRSTRLEN];
         /* max DNS name length + max IP length + max command length */
-        char     cmd[100];
-        uint32_t dns_addr;
+        char          cmd[100];
+        struct __ADDR dns_addr;
 #endif
-        char *   hashstr;
+        char * hashstr;
 
         assert(hash);
 
@@ -903,8 +925,8 @@ static int udp_ipcp_unreg(const uint8_t * hash)
 
         dns_addr = udp_data.dns_addr;
 
-        if (dns_addr != 0) {
-                if (inet4_ntop(&dns_addr, dnsstr) == NULL) {
+        if (is_addr_specified(&dns_addr)) {
+                if (__inet_ntop(&dns_addr, dnsstr) == NULL) {
                         log_err("Failed to convert DNS address to string.");
                         free(hashstr);
                         return -1;
@@ -925,11 +947,13 @@ static int udp_ipcp_unreg(const uint8_t * hash)
 
 static int udp_ipcp_query(const uint8_t * hash)
 {
-        uint32_t         ip_addr  = 0;
-        char *           hashstr;
-        struct hostent * h;
+        struct addr        addr = {};
+        char *             hashstr;
+        struct addrinfo    hints;
+        struct addrinfo  * ai;
 #ifdef HAVE_DDNS
-        uint32_t         dns_addr = 0;
+        struct __ADDR      dns_addr = __ADDR_ANY_INIT;
+        struct __ADDR      ip_addr = __ADDR_ANY_INIT;
 #endif
         assert(hash);
 
@@ -949,28 +973,42 @@ static int udp_ipcp_query(const uint8_t * hash)
 #ifdef HAVE_DDNS
         dns_addr = udp_data.dns_addr;
 
-        if (dns_addr != 0) {
+        if (is_addr_specified(&dns_addr)) {
                 ip_addr = ddns_resolve(hashstr, dns_addr);
-                if (ip_addr == 0) {
+                if (!is_addr_specified(&ip_addr)) {
                         log_err("Could not resolve %s.", hashstr);
                         free(hashstr);
                         return -1;
                 }
         } else {
 #endif
-                h = gethostbyname(hashstr);
-                if (h == NULL) {
-                        log_err("Could not resolve %s.", hashstr);
+                memset(&hints, 0, sizeof(hints));
+
+                hints.ai_family   = __AF;
+                if (getaddrinfo(hashstr, NULL, &hints, &ai) != 0) {
+                        log_err("Could not resolve %s: %s.", hashstr,
+                                gai_strerror(errno));
                         free(hashstr);
                         return -1;
                 }
 
-                ip_addr = *((uint32_t *) (h->h_addr_list[0]));
+                if (ai->ai_family != __AF) {
+                        log_err("Wrong addres family for %s.", hashstr);
+                        freeaddrinfo(ai);
+                        free(hashstr);
+                        return -1;
+                }
+
+        #ifdef BUILD_IPCP_UDP4
+                addr.ip4 = ((struct sockaddr_in *) (ai->ai_addr))->sin_addr;
+        #else
+                addr.ip6 = ((struct sockaddr_in6 *) (ai->ai_addr))->sin6_addr;
+        #endif
+                freeaddrinfo(ai);
 #ifdef HAVE_DDNS
         }
 #endif
-
-        if (shim_data_dir_add_entry(udp_data.shim_data, hash, ip_addr)) {
+        if (shim_data_dir_add_entry(udp_data.shim_data, hash, addr)) {
                 log_err("Failed to add directory entry.");
                 free(hashstr);
                 return -1;
@@ -986,9 +1024,10 @@ static int udp_ipcp_flow_alloc(int              fd,
                                qosspec_t        qs,
                                const buffer_t * data)
 {
-        struct sockaddr_in r_saddr; /* Server address */
-        uint32_t           ip_addr = 0;
-        char               ipstr[INET_ADDRSTRLEN];
+        struct __SOCKADDR r_saddr; /* Server address */
+        struct __ADDR     ip_addr;
+        struct addr       addr;
+        char              ipstr[__ADDRSTRLEN];
 
         (void) qs;
 
@@ -999,9 +1038,13 @@ static int udp_ipcp_flow_alloc(int              fd,
                 return -1;
         }
 
-        ip_addr = (uint32_t) shim_data_dir_get_addr(udp_data.shim_data, dst);
-
-        if (inet4_ntop(&ip_addr, ipstr) == NULL) {
+        addr = shim_data_dir_get_addr(udp_data.shim_data, dst);
+#ifdef BUILD_IPCP_UDP4
+        ip_addr = addr.ip4;
+#else
+        ip_addr = addr.ip6;
+#endif
+        if (__inet_ntop(&ip_addr, ipstr) == NULL) {
                 log_err("Could not convert IP address.");
                 return -1;
         }
@@ -1010,9 +1053,15 @@ static int udp_ipcp_flow_alloc(int              fd,
                 HASH_VAL32(dst), ipstr);
 
         memset((char *) &r_saddr, 0, sizeof(r_saddr));
-        r_saddr.sin_family      = AF_INET;
-        r_saddr.sin_addr.s_addr = ip_addr;
-        r_saddr.sin_port        = udp_data.s_saddr.sin_port;
+#ifdef BUILD_IPCP_UDP4
+        r_saddr.sin_family = AF_INET;
+        r_saddr.sin_addr   = addr.ip4;
+        r_saddr.sin_port   = udp_data.s_saddr.sin_port;
+#else
+        r_saddr.sin6_family = AF_INET6;
+        r_saddr.sin6_addr   = addr.ip6;
+        r_saddr.sin6_port   = udp_data.s_saddr.sin6_port;
+#endif
 
         if (udp_ipcp_port_alloc(&r_saddr, fd, dst, qs, data) < 0) {
                 log_err("Could not allocate port.");
@@ -1035,8 +1084,8 @@ static int udp_ipcp_flow_alloc_resp(int              fd,
                                     int              resp,
                                     const buffer_t * data)
 {
-        struct sockaddr_in saddr;
-        int                d_eid;
+        struct __SOCKADDR saddr;
+        int               d_eid;
 
         if (ipcp_wait_flow_resp(fd) < 0) {
                 log_err("Failed to wait for flow response.");

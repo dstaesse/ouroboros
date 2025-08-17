@@ -25,9 +25,12 @@
 
 #include <ouroboros/list.h>
 
-#include <sys/types.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <netinet/in.h>
+#include <sys/types.h>
+
+#define MAC_SIZE 6
 
 enum dir_query_state {
         QUERY_INIT = 0,
@@ -44,6 +47,14 @@ struct dir_query {
 
         pthread_mutex_t      lock;
         pthread_cond_t       cond;
+};
+
+struct addr {
+        union {
+                uint8_t         mac[MAC_SIZE];
+                struct in_addr  ip4;
+                struct in6_addr ip6;
+        };
 };
 
 struct shim_data {
@@ -72,16 +83,16 @@ bool               shim_data_reg_has(struct shim_data * data,
 
 int                shim_data_dir_add_entry(struct shim_data * data,
                                            const uint8_t *    hash,
-                                           uint64_t           addr);
+                                           struct addr        addr);
 
 int                shim_data_dir_del_entry(struct shim_data * data,
                                            const uint8_t *    hash,
-                                           uint64_t           addr);
+                                           struct addr        addr);
 
 bool               shim_data_dir_has(struct shim_data * data,
                                      const uint8_t *    hash);
 
-uint64_t           shim_data_dir_get_addr(struct shim_data * data,
+struct addr        shim_data_dir_get_addr(struct shim_data * data,
                                           const uint8_t *    hash);
 
 struct dir_query * shim_data_dir_query_create(struct shim_data * data,

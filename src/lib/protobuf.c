@@ -512,9 +512,9 @@ struct uni_config uni_config_msg_to_s(const uni_config_msg_t * msg)
         return s;
 }
 
-udp_config_msg_t * udp_config_s_to_msg(const struct udp_config * s)
+udp4_config_msg_t * udp4_config_s_to_msg(const struct udp4_config * s)
 {
-        udp_config_msg_t * msg;
+        udp4_config_msg_t * msg;
 
         assert(s != NULL);
 
@@ -522,24 +522,77 @@ udp_config_msg_t * udp_config_s_to_msg(const struct udp_config * s)
         if (msg == NULL)
                 return NULL;
 
-        udp_config_msg__init(msg);
+        udp4_config_msg__init(msg);
 
-        msg->ip_addr  = s->ip_addr;
-        msg->dns_addr = s->dns_addr;
+        msg->ip_addr  = s->ip_addr.s_addr;
+        msg->dns_addr = s->dns_addr.s_addr;
         msg->port     = s->port;
 
         return msg;
 }
 
-struct udp_config udp_config_msg_to_s(const udp_config_msg_t * msg)
+struct udp4_config udp4_config_msg_to_s(const udp4_config_msg_t * msg)
 {
-        struct udp_config s;
+        struct udp4_config s;
 
         assert(msg != NULL);
 
-        s.ip_addr  = msg->ip_addr;
-        s.dns_addr = msg->dns_addr;
-        s.port     = msg->port;
+        s.ip_addr.s_addr  = msg->ip_addr;
+        s.dns_addr.s_addr = msg->dns_addr;
+        s.port            = msg->port;
+
+        return s;
+}
+
+#define IN6_LEN sizeof(struct in6_addr)
+udp6_config_msg_t * udp6_config_s_to_msg(const struct udp6_config * s)
+{
+        udp6_config_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        udp6_config_msg__init(msg);
+
+        msg->ip_addr.data = malloc(IN6_LEN);
+        if (msg->ip_addr.data == NULL)
+                goto fail_msg;
+
+        msg->ip_addr.len = IN6_LEN;
+        memcpy(msg->ip_addr.data, &s->ip_addr.s6_addr, IN6_LEN);
+
+        msg->dns_addr.data = malloc(IN6_LEN);
+        if (msg->dns_addr.data == NULL)
+                goto fail_msg;
+
+        msg->dns_addr.len = IN6_LEN;
+        memcpy(msg->dns_addr.data, &s->dns_addr.s6_addr, IN6_LEN);
+
+        msg->port = s->port;
+
+        return msg;
+
+ fail_msg:
+        udp6_config_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return NULL;
+}
+
+struct udp6_config udp6_config_msg_to_s(const udp6_config_msg_t * msg)
+{
+        struct udp6_config s;
+
+        assert(msg != NULL);
+
+        assert(msg->ip_addr.len == IN6_LEN);
+        assert(msg->dns_addr.len == IN6_LEN);
+
+        memcpy(&s.ip_addr.s6_addr, msg->ip_addr.data, IN6_LEN);
+        memcpy(&s.dns_addr.s6_addr, msg->dns_addr.data, IN6_LEN);
+        s.port = msg->port;
 
         return s;
 }
@@ -613,9 +666,14 @@ ipcp_config_msg_t * ipcp_config_s_to_msg(const struct ipcp_config * s)
                 if (msg->eth == NULL)
                         goto fail_msg;
                 break;
-        case IPCP_UDP:
-                msg->udp = udp_config_s_to_msg(&s->udp);
-                if (msg->udp == NULL)
+        case IPCP_UDP4:
+                msg->udp4 = udp4_config_s_to_msg(&s->udp4);
+                if (msg->udp4 == NULL)
+                        goto fail_msg;
+                break;
+        case IPCP_UDP6:
+                msg->udp6 = udp6_config_s_to_msg(&s->udp6);
+                if (msg->udp6 == NULL)
                         goto fail_msg;
                 break;
         default:
@@ -658,8 +716,11 @@ struct ipcp_config ipcp_config_msg_to_s(const ipcp_config_msg_t * msg)
         case IPCP_ETH_DIX:
                 s.eth = eth_config_msg_to_s(msg->eth);
                 break;
-        case IPCP_UDP:
-                s.udp = udp_config_msg_to_s(msg->udp);
+        case IPCP_UDP4:
+                s.udp4 = udp4_config_msg_to_s(msg->udp4);
+                break;
+        case IPCP_UDP6:
+                s.udp6 = udp6_config_msg_to_s(msg->udp6);
                 break;
         case IPCP_BROADCAST:
                 break;

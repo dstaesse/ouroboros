@@ -38,7 +38,8 @@ typedef DtConfigMsg      dt_config_msg_t;
 typedef DirConfigMsg     dir_config_msg_t;
 typedef DirDhtConfigMsg  dir_dht_config_msg_t;
 typedef EthConfigMsg     eth_config_msg_t;
-typedef UdpConfigMsg     udp_config_msg_t;
+typedef Udp4ConfigMsg    udp4_config_msg_t;
+typedef Udp6ConfigMsg    udp6_config_msg_t;
 typedef UniConfigMsg     uni_config_msg_t;
 
 #include "ipcp.pb-c.h"
@@ -94,9 +95,13 @@ eth_config_msg_t *  eth_config_s_to_msg(const struct eth_config * s);
 
 struct eth_config   eth_config_msg_to_s(const eth_config_msg_t * msg);
 
-udp_config_msg_t *  udp_config_s_to_msg(const struct udp_config * s);
+udp4_config_msg_t * udp4_config_s_to_msg(const struct udp4_config * s);
 
-struct udp_config   udp_config_msg_to_s(const udp_config_msg_t * msg);
+struct udp4_config  udp4_config_msg_to_s(const udp4_config_msg_t * msg);
+
+udp6_config_msg_t * udp6_config_s_to_msg(const struct udp6_config * s);
+
+struct udp6_config  udp6_config_msg_to_s(const udp6_config_msg_t * msg);
 
 ipcp_config_msg_t * ipcp_config_s_to_msg(const struct ipcp_config * s);
 

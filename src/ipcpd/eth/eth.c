@@ -113,7 +113,6 @@
   #define ETH_MTU_MAX          1500
 #endif /* BUILD_ETH_DIX */
 
-#define MAC_SIZE             6
 #define ETH_TYPE_LENGTH_SIZE sizeof(uint16_t)
 #define ETH_HEADER_SIZE      (2 * MAC_SIZE + ETH_TYPE_LENGTH_SIZE)
 
@@ -694,11 +693,11 @@ static int eth_ipcp_name_query_req(const uint8_t * hash,
 static int eth_ipcp_name_query_reply(const uint8_t * hash,
                                      uint8_t *       r_addr)
 {
-        uint64_t address = 0;
+        struct addr addr;
 
-        memcpy(&address, r_addr, MAC_SIZE);
+        memcpy(&addr.mac, r_addr, MAC_SIZE);
 
-        shim_data_dir_add_entry(eth_data.shim_data, hash, address);
+        shim_data_dir_add_entry(eth_data.shim_data, hash, addr);
 
         shim_data_dir_query_respond(eth_data.shim_data, hash);
 
@@ -1699,7 +1698,7 @@ static int eth_ipcp_flow_alloc(int              fd,
         uint8_t  ssap = 0;
 #endif
         uint8_t  r_addr[MAC_SIZE];
-        uint64_t addr = 0;
+        struct addr addr;
 
         assert(hash);
 
@@ -1708,10 +1707,12 @@ static int eth_ipcp_flow_alloc(int              fd,
                         HASH_VAL32(hash));
                 return -1;
         }
-        addr = shim_data_dir_get_addr(eth_data.shim_data, hash);
 
-        pthread_rwlock_wrlock(&eth_data.flows_lock);
+        addr = shim_data_dir_get_addr(eth_data.shim_data, hash);
+        memcpy(r_addr, &addr.mac, MAC_SIZE);
+
 #ifdef BUILD_ETH_LLC
+        pthread_rwlock_wrlock(&eth_data.flows_lock);
         ssap = bmp_allocate(eth_data.saps);
         if (!bmp_is_id_valid(eth_data.saps, ssap)) {
                 pthread_rwlock_unlock(&eth_data.flows_lock);
@@ -1721,10 +1722,8 @@ static int eth_ipcp_flow_alloc(int              fd,
 
         eth_data.fd_to_ef[fd].sap = ssap;
         eth_data.ef_to_fd[ssap]   = fd;
-#endif
         pthread_rwlock_unlock(&eth_data.flows_lock);
-
-        memcpy(r_addr, &addr, MAC_SIZE);
+#endif
 
         if (eth_ipcp_alloc(r_addr,
 #if defined(BUILD_ETH_DIX)

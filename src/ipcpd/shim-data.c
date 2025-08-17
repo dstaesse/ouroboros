@@ -51,7 +51,7 @@ struct reg_entry {
 struct dir_entry {
         struct list_head list;
         uint8_t *        hash;
-        uint64_t         addr;
+        struct addr      addr;
 };
 
 static void destroy_dir_query(struct dir_query * query)
@@ -108,14 +108,12 @@ static void reg_entry_destroy(struct reg_entry * entry)
 {
         assert(entry);
 
-        if (entry->hash != NULL)
-                free(entry->hash);
-
+        free(entry->hash);
         free(entry);
 }
 
-static struct dir_entry * dir_entry_create(uint8_t * hash,
-                                           uint64_t  addr)
+static struct dir_entry * dir_entry_create(uint8_t *   hash,
+                                           struct addr addr)
 {
         struct dir_entry * entry = malloc(sizeof(*entry));
         if (entry == NULL)
@@ -133,9 +131,7 @@ static void dir_entry_destroy(struct dir_entry * entry)
 {
         assert(entry);
 
-        if (entry->hash != NULL)
-                free(entry->hash);
-
+        free(entry->hash);
         free(entry);
 }
 
@@ -258,13 +254,15 @@ static struct reg_entry * find_reg_entry_by_hash(struct shim_data * data,
 
 static struct dir_entry * find_dir_entry(struct shim_data * data,
                                          const uint8_t *    hash,
-                                         uint64_t           addr)
+                                         struct addr        addr)
 {
         struct list_head * h;
         list_for_each(h, &data->directory) {
                 struct dir_entry * e = list_entry(h, struct dir_entry, list);
-                if (e->addr == addr &&
-                    !memcmp(e->hash, hash, ipcp_dir_hash_len()))
+                if (memcmp(&e->addr, &addr, sizeof(addr)) != 0)
+                        continue;
+
+                if (memcmp(e->hash, hash, ipcp_dir_hash_len()) == 0)
                         return e;
         }
 
@@ -364,7 +362,7 @@ bool shim_data_reg_has(struct shim_data * data,
 
 int shim_data_dir_add_entry(struct shim_data * data,
                             const uint8_t *    hash,
-                            uint64_t           addr)
+                            struct addr        addr)
 {
         struct dir_entry * entry;
         uint8_t * entry_hash;
@@ -400,7 +398,7 @@ int shim_data_dir_add_entry(struct shim_data * data,
 
 int shim_data_dir_del_entry(struct shim_data * data,
                             const uint8_t *    hash,
-                            uint64_t           addr)
+                            struct addr        addr)
 {
         struct dir_entry * e;
         if (data == NULL)
@@ -437,11 +435,11 @@ bool shim_data_dir_has(struct shim_data * data,
         return ret;
 }
 
-uint64_t shim_data_dir_get_addr(struct shim_data * data,
-                                const uint8_t *    hash)
+struct addr shim_data_dir_get_addr(struct shim_data * data,
+                                   const uint8_t *    hash)
 {
         struct dir_entry * entry;
-        uint64_t           addr;
+        struct addr        addr = {0};
 
         pthread_rwlock_rdlock(&data->dir_lock);
 
@@ -449,7 +447,7 @@ uint64_t shim_data_dir_get_addr(struct shim_data * data,
         if (entry == NULL) {
                 pthread_rwlock_unlock(&data->dir_lock);
                 log_warn("No address for " HASH_FMT32 ".", HASH_VAL32(hash));
-                return 0; /* undefined behaviour, 0 may be a valid address */
+                return addr; /* undefined behaviour, 0 may be a valid address */
         }
 
         addr = entry->addr;

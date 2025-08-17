@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <netinet/in.h>
 #include <sys/types.h>
 
 #define IPCP_NAME_SIZE  255
@@ -49,7 +50,8 @@ enum ipcp_type { /* IRMd uses order to select an IPCP for flow allocation. */
         IPCP_BROADCAST,
         IPCP_ETH_LLC,
         IPCP_ETH_DIX,
-        IPCP_UDP,
+        IPCP_UDP4,
+        IPCP_UDP6,
         IPCP_INVALID
 };
 
@@ -257,10 +259,16 @@ struct eth_config {
         uint16_t ethertype; /* DIX only*/
 };
 
-struct udp_config {
-        uint32_t ip_addr;
-        uint32_t dns_addr;
-        uint16_t port;
+struct udp4_config {
+        struct in_addr ip_addr;
+        struct in_addr dns_addr;
+        uint16_t       port;
+};
+
+struct udp6_config {
+        struct in6_addr ip_addr;
+        struct in6_addr dns_addr;
+        uint16_t        port;
 };
 
 /* Layers */
@@ -276,9 +284,10 @@ struct ipcp_config {
         enum ipcp_type    type;
 
         union {
-                struct uni_config unicast;
-                struct udp_config udp;
-                struct eth_config eth;
+                struct uni_config  unicast;
+                struct udp4_config udp4;
+                struct udp6_config udp6;
+                struct eth_config  eth;
         };
 };
 
@@ -307,9 +316,16 @@ static const struct ipcp_config eth_llc_default_conf = {
         }
 };
 
-static const struct ipcp_config udp_default_conf = {
-        .type = IPCP_UDP,
-        .udp = {
+static const struct ipcp_config udp4_default_conf = {
+        .type = IPCP_UDP4,
+        .udp4 = {
+                .port = 3435
+        }
+};
+
+static const struct ipcp_config udp6_default_conf = {
+        .type = IPCP_UDP6,
+        .udp6 = {
                 .port = 3435
         }
 };

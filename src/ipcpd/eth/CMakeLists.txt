@@ -90,13 +90,13 @@ if (HAVE_ETH)
 
   set(ETH_LLC_SOURCES
     # Add source files here
-    ${CMAKE_CURRENT_SOURCE_DIR}/llc.c
-    )
+    llc.c
+  )
 
   set(ETH_DIX_SOURCES
     # Add source files here
-    ${CMAKE_CURRENT_SOURCE_DIR}/dix.c
-    )
+    dix.c
+  )
 
   set(IPCP_ETH_LLC_TARGET ipcpd-eth-llc CACHE INTERNAL "")
   set(IPCP_ETH_DIX_TARGET ipcpd-eth-dix CACHE INTERNAL "")

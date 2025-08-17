@@ -191,8 +191,11 @@ static pid_t spawn_ipcp(struct ipcp_info * info)
         case IPCP_BROADCAST:
                 exec_name = IPCP_BROADCAST_EXEC;
                 break;
-        case IPCP_UDP:
-                exec_name = IPCP_UDP_EXEC;
+        case IPCP_UDP4:
+                exec_name = IPCP_UDP4_EXEC;
+                break;
+        case IPCP_UDP6:
+                exec_name = IPCP_UDP6_EXEC;
                 break;
         case IPCP_ETH_LLC:
                 exec_name = IPCP_ETH_LLC_EXEC;
@@ -330,7 +333,7 @@ int bootstrap_ipcp(pid_t                pid,
                 goto fail;
         }
 
-        if (conf->type == IPCP_UDP)
+        if (conf->type == IPCP_UDP4 || conf->type == IPCP_UDP6)
                 conf->layer_info.dir_hash_algo = (enum pol_dir_hash) HASH_MD5;
 
         if (ipcp_bootstrap(pid, conf, &layer)) {

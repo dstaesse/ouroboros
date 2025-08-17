@@ -161,14 +161,16 @@ static int toml_eth_dix(toml_table_t *       table,
         return 0;
 }
 
-static int toml_udp(toml_table_t *       table,
-                    struct ipcp_config * conf)
+static int toml_udp4(toml_table_t *       table,
+                     struct ipcp_config * conf)
 {
+        struct udp4_config * udp4;
         toml_datum_t ip;
         toml_datum_t port;
         toml_datum_t dns;
 
-        *conf = udp_default_conf;
+        *conf = udp4_default_conf;
+        udp4 = &conf->udp4;
 
         ip = toml_string_in(table, "ip");
         if (!ip.ok) {
@@ -176,18 +178,68 @@ static int toml_udp(toml_table_t *       table,
                 goto fail_ip;
         }
 
-        if (inet_pton (AF_INET, ip.u.s, &conf->udp.ip_addr) != 1) {
+        if (inet_pton (AF_INET, ip.u.s, &udp4->ip_addr.s_addr) != 1) {
                 log_err("Failed to parse IPv4 address %s.", ip.u.s);
                 goto fail_addr;
         }
 
         port = toml_int_in(table, "port");
         if (port.ok)
-                conf->udp.port = port.u.i;
+                udp4->port = port.u.i;
 
         dns = toml_string_in(table, "dns");
         if (dns.ok) {
-                if (inet_pton(AF_INET, dns.u.s, &conf->udp.dns_addr) < 0) {
+                if (inet_pton(AF_INET, dns.u.s, &udp4->dns_addr.s_addr) < 0) {
+                        log_err("Failed to parse DNS address %s.", ip.u.s);
+                        goto fail_dns;
+                }
+
+                free(dns.u.s);
+        }
+
+        free(ip.u.s);
+
+        return 0;
+
+ fail_dns:
+        free(dns.u.s);
+ fail_addr:
+        free(ip.u.s);
+ fail_ip:
+        return -1;
+}
+
+static int toml_udp6(toml_table_t *       table,
+                     struct ipcp_config * conf)
+{
+        struct in6_addr ip6;
+        struct in6_addr dns6;
+        toml_datum_t ip;
+        toml_datum_t port;
+        toml_datum_t dns;
+
+        *conf = udp6_default_conf;
+        ip6  = conf->udp6.ip_addr;
+        dns6 = conf->udp6.dns_addr;
+
+        ip = toml_string_in(table, "ip");
+        if (!ip.ok) {
+                log_err("No IP address specified!");
+                goto fail_ip;
+        }
+
+        if (inet_pton (AF_INET6, ip.u.s, &ip6.s6_addr) != 1) {
+                log_err("Failed to parse IPv4 address %s.", ip.u.s);
+                goto fail_addr;
+        }
+
+        port = toml_int_in(table, "port");
+        if (port.ok)
+                conf->udp6.port = port.u.i;
+
+        dns = toml_string_in(table, "dns");
+        if (dns.ok) {
+                if (inet_pton(AF_INET6, dns.u.s, &dns6.s6_addr) < 0) {
                         log_err("Failed to parse DNS address %s.", ip.u.s);
                         goto fail_dns;
                 }
@@ -643,8 +695,11 @@ static int toml_ipcp(toml_table_t *       table,
         case IPCP_ETH_LLC:
                 ret = toml_eth_llc(table, conf);
                 break;
-        case IPCP_UDP:
-                ret = toml_udp(table, conf);
+        case IPCP_UDP4:
+                ret = toml_udp4(table, conf);
+                break;
+        case IPCP_UDP6:
+                ret = toml_udp6(table, conf);
                 break;
         case IPCP_BROADCAST:
                 ret = toml_broadcast(table, conf);
@@ -966,8 +1021,10 @@ static int toml_toplevel(toml_table_t * table,
                 return toml_ipcp_list(subtable, IPCP_ETH_DIX);
         else if (strcmp(key, "eth-llc") == 0)
                 return toml_ipcp_list(subtable, IPCP_ETH_LLC);
-        else if (strcmp(key, "udp") == 0)
-                return toml_ipcp_list(subtable, IPCP_UDP);
+        else if (strcmp(key, "udp4") == 0)
+                return toml_ipcp_list(subtable, IPCP_UDP4);
+        else if (strcmp(key, "udp6") == 0)
+                return toml_ipcp_list(subtable, IPCP_UDP6);
         else if (strcmp(key, "broadcast") == 0)
                 return toml_ipcp_list(subtable, IPCP_BROADCAST);
         else if (strcmp(key, "unicast") == 0)

@@ -70,16 +70,24 @@ message eth_config_msg {
         required uint32 ethertype = 2;
 }
 
-message udp_config_msg {
+message udp4_config_msg {
         required uint32 ip_addr  = 1;
         required uint32 port     = 2;
         required uint32 dns_addr = 3; /* set to 0 if unused */
 }
 
+message udp6_config_msg {
+        required bytes  ip_addr  = 1;
+        required uint32 port     = 2;
+        required bytes  dns_addr = 3; /* set to NULL if unused */
+}
+
+
 message ipcp_config_msg {
         required layer_info_msg layer_info =  1;
         required uint32 ipcp_type          =  2;
         optional uni_config_msg unicast    =  3;
-        optional udp_config_msg udp        =  4;
-        optional eth_config_msg eth        =  5;
+        optional udp4_config_msg udp4      =  4;
+        optional udp6_config_msg udp6      =  5;
+        optional eth_config_msg eth        =  6;
 }

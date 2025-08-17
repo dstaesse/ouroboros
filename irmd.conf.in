@@ -86,12 +86,19 @@ dev="lo"
 # hash="SHA3_224"       # Defaults to SHA3_256.
 reg=["lan1"]
 
-[udp.udp1]
+[udp4.udp1]
 bootstrap="udp"         # Defaults to not set.
    # BOOTSTRAP CONFIGURATION
 ip="127.0.0.1"
 # port=9000             # Defaults to 3435.
 # dns="127.0.0.1"       # Requires a DDNS server. Disables DDNS support if not set.
+
+[udp6.udp2]
+bootstrap="udp2"         # Defaults to not set.
+   # BOOTSTRAP CONFIGURATION
+ip="::1"
+# port=9000             # Defaults to 3435.
+# dns="::1"             # Requires a DDNS server. Disables DDNS support if not set.
 
 [broadcast.bc1]
 bootstrap="broadcast"   # Defaults to not set.

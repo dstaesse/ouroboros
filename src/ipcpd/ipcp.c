@@ -74,7 +74,8 @@ static char * ipcp_type_str[] = {
         "broadcast",
         "eth-llc",
         "eth-dix",
-        "udp"
+        "udp4",
+        "udp6"
 };
 
 static char * dir_hash_str[] = {
@@ -228,8 +229,10 @@ static int ipcp_rib_read(const char * path,
                         strcpy(buf, "eth-llc\n");
                 else if (ipcpd.type == IPCP_ETH_DIX)
                         strcpy(buf, "eth-dix\n");
-                else if (ipcpd.type == IPCP_UDP)
-                        strcpy(buf, "udp\n");
+                else if (ipcpd.type == IPCP_UDP4)
+                        strcpy(buf, "udp4\n");
+                else if (ipcpd.type == IPCP_UDP6)
+                        strcpy(buf, "udp6\n");
                 else
                         strcpy(buf, "bug\n");
         }
@@ -455,7 +458,9 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
 
         conf = ipcp_config_msg_to_s(conf_msg);
         switch(conf.type) { /* FIXED algorithms */
-        case IPCP_UDP:
+        case IPCP_UDP4:
+                /* FALLTHRU */
+        case IPCP_UDP6:
                 conf.layer_info.dir_hash_algo = (enum pol_dir_hash) HASH_MD5;
                 break;
         case IPCP_BROADCAST:

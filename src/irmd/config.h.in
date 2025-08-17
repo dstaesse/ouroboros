@@ -21,7 +21,8 @@
  */
 
 
-#define IPCP_UDP_EXEC          "@IPCP_UDP_TARGET@"
+#define IPCP_UDP4_EXEC         "@IPCP_UDP4_TARGET@"
+#define IPCP_UDP6_EXEC         "@IPCP_UDP6_TARGET@"
 #define IPCP_ETH_LLC_EXEC      "@IPCP_ETH_LLC_TARGET@"
 #define IPCP_ETH_DIX_EXEC      "@IPCP_ETH_DIX_TARGET@"
 #define IPCP_UNICAST_EXEC      "@IPCP_UNICAST_TARGET@"

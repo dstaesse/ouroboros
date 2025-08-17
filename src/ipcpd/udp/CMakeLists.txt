@@ -12,16 +12,25 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-set(IPCP_UDP_TARGET ipcpd-udp CACHE INTERNAL "")
+set(IPCP_UDP4_TARGET ipcpd-udp4 CACHE INTERNAL "")
+set(IPCP_UDP6_TARGET ipcpd-udp6 CACHE INTERNAL "")
 
-set(UDP_SOURCES
+set(UDP4_SOURCES
   # Add source files here
-  ${CMAKE_CURRENT_SOURCE_DIR}/main.c
-  )
+  udp4.c
+)
 
-add_executable(ipcpd-udp ${UDP_SOURCES} ${IPCP_SOURCES})
+set(UDP6_SOURCES
+  # Add source files here
+  udp6.c
+)
 
-target_link_libraries(ipcpd-udp LINK_PUBLIC ouroboros-dev)
+add_executable(ipcpd-udp4 ${UDP4_SOURCES} ${IPCP_SOURCES})
+target_link_libraries(ipcpd-udp4 LINK_PUBLIC ouroboros-dev)
+
+add_executable(ipcpd-udp6 ${UDP6_SOURCES} ${IPCP_SOURCES})
+target_link_libraries(ipcpd-udp6 LINK_PUBLIC ouroboros-dev)
+
 
 # Find the nsupdate executable
 find_program(NSUPDATE_EXECUTABLE
@@ -55,15 +64,18 @@ else ()
 endif ()
 
 set(IPCP_UDP_RD_THR 3 CACHE STRING
-  "Number of reader threads in UDP IPCP")
+  "Number of reader threads in UDP IPCPs")
 set(IPCP_UDP_WR_THR 3 CACHE STRING
-  "Number of writer threads in UDP IPCP")
+  "Number of writer threads in UDP IPCPs")
 set(IPCP_UDP_MPL 5000 CACHE STRING
-    "Default maximum packet lifetime for the UDP IPCP, in ms")
+    "Default maximum packet lifetime for the UDP IPCPs, in ms")
 
 include(AddCompileFlags)
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")
-  add_compile_flags(ipcpd-udp -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ipcpd-udp4 -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(ipcpd-udp6 -DCONFIG_OUROBOROS_DEBUG)
 endif ()
 
-install(TARGETS ipcpd-udp RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
+install(TARGETS ipcpd-udp4 RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
+install(TARGETS ipcpd-udp6 RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
+

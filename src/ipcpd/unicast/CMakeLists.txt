@@ -73,7 +73,4 @@ install(TARGETS ipcpd-unicast RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 add_subdirectory(pff/tests)
 add_subdirectory(routing/tests)
-
-if (NOT GNU)
-  add_subdirectory(dir/tests)
-endif ()
+add_subdirectory(dir/tests)
