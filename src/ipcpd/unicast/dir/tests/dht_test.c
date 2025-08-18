@@ -1336,7 +1336,7 @@ static int test_dht_kv_find_value_rsp_msg_values(void)
         }
 
         if (upk->val->n_values != 8) {
-                printf("Not enough values in find_value_rsp (%zu != %zu).\n",
+                printf("Not enough values in find_value_rsp (%zu != %lu).\n",
                        upk->val->n_values, 8UL);
                 goto fail_unpack;
         }

@@ -598,7 +598,7 @@ static int test_insert_ipcps(void)
         }
 
         for (i = 0; i < 100; i++) {
-                sprintf(info.name, "%s-%ld", TEST_IPCP, i);
+                sprintf(info.name, "%s-%zd", TEST_IPCP, i);
                 info.pid   = TEST_PID + rand() % 10000;
                 info.type  = rand() % IPCP_INVALID;
                 info.state = IPCP_INIT; /* set by spawn_ipcp */
