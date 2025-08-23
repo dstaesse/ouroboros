@@ -830,6 +830,37 @@ static int toml_prog_list(toml_array_t * progs,
         return ret;
 }
 
+static int cp_chk_path(char * buf,
+                       char * path)
+{
+        char * rp;
+
+        assert(path != NULL);
+
+        rp = realpath(path, NULL);
+        if (rp == NULL) {
+                log_err("Failed to check path %s: %s.", path, strerror(errno));
+                goto fail_rp;
+        }
+
+        if (strlen(rp) > NAME_PATH_SIZE) {
+                log_err("File path too long: %s.", rp);
+                goto fail_len;
+        }
+
+        strcpy(buf, rp);
+        free(rp);
+        free(path);
+
+        return 0;
+
+ fail_len:
+        free(rp);
+ fail_rp:
+        free(path);
+        return -1;
+}
+
 static int toml_name(toml_table_t * table,
                      const char *   name)
 {
@@ -871,82 +902,20 @@ static int toml_name(toml_table_t * table,
         }
 
         scrt = toml_string_in(table, "server_crt_file");
-        if (scrt.ok) {
-                char * scrt_path = realpath(scrt.u.s, NULL);
-                if (scrt_path == NULL) {
-                        log_err("Failed to check path for %s: %s.",
-                                scrt.u.s, strerror(errno));
-                        free(scrt.u.s);
-                        return -1;
-                }
-                if (strlen(scrt.u.s) > NAME_PATH_SIZE) {
-                        log_err("Server certificate file path too long: %s",
-                                scrt_path);
-                        free(scrt.u.s);
-                        return -1;
-                }
-                strcpy(info.s.crt, scrt_path);
-                free(scrt_path);
-                free(scrt.u.s);
-        }
+        if (scrt.ok && cp_chk_path(info.s.crt, scrt.u.s) < 0)
+                return -1;
 
         skey = toml_string_in(table, "server_key_file");
-        if (skey.ok) {
-                char * skey_path = realpath(skey.u.s, NULL);
-                if (skey_path == NULL) {
-                        log_err("Failed to check path for %s: %s.",
-                                skey.u.s, strerror(errno));
-                        free(skey.u.s);
-                        return -1;
-                }
-                if (strlen(skey.u.s) > NAME_PATH_SIZE) {
-                        log_err("Server key file path too long: %s", skey_path);
-                        free(skey.u.s);
-                        return -1;
-                }
-                strcpy(info.s.key, skey_path);
-                free(skey_path);
-                free(skey.u.s);
-        }
+        if (skey.ok && cp_chk_path(info.s.key, skey.u.s) < 0)
+                return -1;
 
         ccrt = toml_string_in(table, "client_crt_file");
-        if (ccrt.ok) {
-                char * ccrt_path = realpath(ccrt.u.s, NULL);
-                if (ccrt_path == NULL) {
-                        log_err("Failed to check path for %s: %s.",
-                                ccrt.u.s, strerror(errno));
-                        free(ccrt.u.s);
-                        return -1;
-                }
-                if (strlen(ccrt.u.s) > NAME_PATH_SIZE) {
-                        log_err("Client certificate file path too long: %s",
-                                ccrt_path);
-                        free(ccrt.u.s);
-                        return -1;
-                }
-                strcpy(info.c.crt, ccrt_path);
-                free(ccrt_path);
-                free(ccrt.u.s);
-        }
+        if (ccrt.ok && cp_chk_path(info.c.crt, ccrt.u.s) < 0)
+                return -1;
 
         ckey = toml_string_in(table, "client_key_file");
-        if (ckey.ok) {
-                char * ckey_path = realpath(ckey.u.s, NULL);
-                if (ckey_path == NULL) {
-                        log_err("Failed to check path for %s: %s.",
-                                ckey.u.s, strerror(errno));
-                        free(ckey.u.s);
-                        return -1;
-                }
-                if (strlen(ckey.u.s) > NAME_PATH_SIZE) {
-                        log_err("Client key file path too long: %s", ckey_path);
-                        free(ckey.u.s);
-                        return -1;
-                }
-                strcpy(info.c.key, ckey_path);
-                free(ckey_path);
-                free(ckey.u.s);
-        }
+        if (ckey.ok && cp_chk_path(info.c.key, ckey.u.s) < 0)
+                return -1;
 
         if (name_create(&info) < 0) {
                 log_err("Failed to create name %s.", name);

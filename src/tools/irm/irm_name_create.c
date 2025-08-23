@@ -70,6 +70,32 @@ static void usage(void)
                 NAME_SIZE, RR);
 }
 
+static int cp_chk_path(char *       buf,
+                       const char * path)
+{
+        char * rp = realpath(path, NULL);
+        if (rp == NULL) {
+                printf("Failed to check path %s: %s\n.",
+                       path, strerror(errno));
+                goto fail_rp;
+        }
+
+        if (strlen(rp) > NAME_PATH_SIZE) {
+                printf("File path too long: %s.\n", rp);
+                goto fail_len;
+        }
+
+        strcpy(buf, rp);
+        free(rp);
+
+        return 0;
+
+ fail_len:
+        free(rp);
+ fail_rp:
+        return -1;
+}
+
 int do_create_name(int     argc,
                    char ** argv)
 {
@@ -115,70 +141,17 @@ int do_create_name(int     argc,
 
         strcpy(info.name, name);
 
-        if (scrtpath != NULL) {
-                scrtpath = realpath(scrtpath, NULL);
-                if (scrtpath == NULL) {
-                        printf("Failed to resolve server crt path: %s.\n",
-                                strerror(errno));
-                        goto fail;
-                }
-                if (strlen(scrtpath) > NAME_PATH_SIZE) {
-                        printf("Server crt path > %d chars.", NAME_PATH_SIZE);
-                        free(scrtpath);
-                        goto fail;
-                }
-                strcpy(info.s.crt, scrtpath);
-                free(scrtpath);
-        }
+        if (scrtpath != NULL && cp_chk_path(info.s.crt, scrtpath) < 0)
+                goto fail;
 
-        if (skeypath != NULL) {
-                skeypath = realpath(skeypath, NULL);
-                if (skeypath == NULL) {
-                        printf("Failed to resolve server key path: %s.\n",
-                                strerror(errno));
-                        goto fail;
-                }
-                if (strlen(skeypath) > NAME_PATH_SIZE) {
-                        printf("Server key path > %d chars.", NAME_PATH_SIZE);
-                        free(skeypath);
-                        goto fail;
-                }
-                strcpy(info.s.key, skeypath);
-                free(skeypath);
-        }
+        if (skeypath != NULL && cp_chk_path(info.s.key, skeypath) < 0)
+                goto fail;
 
-        if (ccrtpath != NULL) {
-                ccrtpath = realpath(ccrtpath, NULL);
-                if (ccrtpath == NULL) {
-                        printf("Failed to resolve client crt path: %s.\n",
-                                strerror(errno));
-                        goto fail;
-                }
-                if (strlen(ccrtpath) > NAME_PATH_SIZE) {
-                        printf("Client crt path > %d chars.", NAME_PATH_SIZE);
-                        free(ccrtpath);
-                        goto fail;
-                }
-                strcpy(info.c.crt, ccrtpath);
-                free(ccrtpath);
-        }
+        if (ccrtpath != NULL && cp_chk_path(info.c.crt, ccrtpath) < 0)
+                goto fail;
 
-        if (ckeypath != NULL) {
-                ckeypath = realpath(ckeypath, NULL);
-                if (ckeypath == NULL) {
-                        printf("Failed to resolve client key path: %s.\n",
-                                strerror(errno));
-                        goto fail;
-                }
-
-                if (strlen(ckeypath) > NAME_PATH_SIZE) {
-                        printf("Client key path > %d chars.", NAME_PATH_SIZE);
-                        free(ckeypath);
-                        goto fail;
-                }
-                strcpy(info.c.key, ckeypath);
-                free(ckeypath);
-        }
+        if (ckeypath != NULL && cp_chk_path(info.c.key, ckeypath) < 0)
+                goto fail;
 
         if (strcmp(lb_pol, RR) == 0)
                 info.pol_lb = LB_RR;
