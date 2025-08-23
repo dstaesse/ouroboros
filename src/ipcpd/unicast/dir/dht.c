@@ -1450,6 +1450,7 @@ static ssize_t dht_kv_wait_req(const uint8_t * key,
         return i;
  no_vals:
         pthread_mutex_unlock(&dht.reqs.mtx);
+        *vals = NULL;
         return 0;
  fail_val_data:
         freebufs(*vals, i);
@@ -3285,6 +3286,8 @@ uint64_t dht_query(const uint8_t * key)
         }
 
         if (n == 0) {
+                assert(vals == NULL);
+
                 log_dbg(KEY_FMT " No local values.", KEY_VAL(key));
                 n = dht_kv_query_remote(key, &vals, NULL);
                 if (n < 0) {

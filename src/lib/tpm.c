@@ -95,6 +95,9 @@ static void tpm_debug_thread(struct pthr_el * e)
         diff = ts_diff_ms(&now, &e->start) / 1000;
         intv = ts_diff_ms(&now, &e->last) / 1000;
 
+        (void) diff; /* Never read if both build options off (0) */
+        (void) intv; /* Never read if report option off (0)      */
+
         if (BETWEEN(TPM_DEBUG_REPORT_INTERVAL, 0, intv)) {
                 log_dbg("Thread %d:%lx running for %ld s.\n",
                         getpid(),e->thr, diff);
