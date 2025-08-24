@@ -120,6 +120,11 @@ static void finalize_components(void)
 
 static int start_components(void)
 {
+        if (connmgr_start() < 0) {
+                log_err("Failed to start AP connection manager.");
+                goto fail_connmgr_start;
+        }
+
         if (dt_start() < 0) {
                 log_err("Failed to start data transfer.");
                 goto fail_dt_start;
@@ -135,11 +140,6 @@ static int start_components(void)
                 goto fail_enroll_start;
         }
 
-        if (connmgr_start() < 0) {
-                log_err("Failed to start AP connection manager.");
-                goto fail_connmgr_start;
-        }
-
         if (dir_start() < 0) {
                 log_err("Failed to start directory.");
                 goto fail_dir_start;
@@ -148,14 +148,14 @@ static int start_components(void)
         return 0;
 
  fail_dir_start:
-        connmgr_stop();
- fail_connmgr_start:
         enroll_stop();
  fail_enroll_start:
         fa_stop();
  fail_fa_start:
         dt_stop();
  fail_dt_start:
+        connmgr_stop();
+ fail_connmgr_start:
         ipcp_set_state(IPCP_INIT);
         return -1;
 }
@@ -164,13 +164,13 @@ static void stop_components(void)
 {
         dir_stop();
 
-        connmgr_stop();
-
         enroll_stop();
 
         fa_stop();
 
         dt_stop();
+
+        connmgr_stop();
 
         ipcp_set_state(IPCP_BOOT);
 }
