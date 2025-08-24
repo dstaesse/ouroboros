@@ -1353,7 +1353,7 @@ static int dht_kv_respond_req(uint8_t *       key,
 
         req = __dht_kv_req_get_req(key);
         if (req == NULL) {
-                log_warn(KEY_FMT " Failed to find req.", KEY_VAL(key));
+                log_dbg(KEY_FMT " Failed to find req.", KEY_VAL(key));
                 goto fail_req;
         }
 
@@ -1375,6 +1375,8 @@ static int dht_kv_respond_req(uint8_t *       key,
         pthread_cond_broadcast(&dht.reqs.cond);
 
         pthread_mutex_unlock(&dht.reqs.mtx);
+
+        return 0;
  fail_req:
         pthread_mutex_unlock(&dht.reqs.mtx);
         return -1;
@@ -3058,7 +3060,9 @@ static void do_dht_kv_find_value_rsp(const dht_find_node_rsp_msg_t  * node,
         if (val->n_values > 0) {
                 log_dbg(KEY_FMT " %zd new values received.",
                         KEY_VAL(key), val->n_values);
-                dht_kv_respond_req(key, val->values, val->n_values);
+                if (dht_kv_respond_req(key, val->values, val->n_values) < 0)
+                        log_warn(KEY_FMT " Failed to respond to request.",
+                                 KEY_VAL(key));
                 peer_list_destroy(&pl);
                 return; /* done! */
         }
