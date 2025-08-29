@@ -954,9 +954,10 @@ static int irm_auth_peer(const char *           name,
                          const struct oap_hdr * oap_hdr,
                          const struct oap_hdr * r_oap_hdr)
 {
-        void *        crt;
-        void *        pk;
-        buffer_t      sign;
+        void *       crt;
+        void *       pk;
+        buffer_t     sign;
+        const char * n = name == NULL ? "<client>" : name;
 
         if (memcmp(r_oap_hdr->id.data, oap_hdr->id.data, OAP_ID_SIZE) != 0) {
                 log_err("OAP ID mismatch in flow allocation.");
@@ -964,50 +965,51 @@ static int irm_auth_peer(const char *           name,
         }
 
         if (r_oap_hdr->crt.len == 0) {
-                log_info("No certificate provided by peer %s.", name);
+                log_info("No certificate provided by %s.", n);
                 return 0;
         }
 
         if (crypt_load_crt_der(r_oap_hdr->crt, &crt) < 0) {
-                log_err("Failed to load certificate from peer %s.", name);
+                log_err("Failed to load certificate from %s.", n);
                 goto fail_check;
         }
 
-        log_dbg("Loaded peer certificate for %s.", name);
+        log_dbg("Loaded peer certificate for %s.", n);
 
-        if (crypt_check_crt_name(crt, name) < 0) {
-                log_err("Certificate does not match name %s.", name);
-                goto fail_crt;
+        if (name != NULL) {
+                if (crypt_check_crt_name(crt, n) < 0) {
+                        log_err("Certificate does not match %s.", n);
+                        goto fail_crt;
+                }
+                log_dbg("Certificate matches name %s.", n);
         }
-
-        log_dbg("Certificate matches name %s.", name);
 
         if (crypt_get_pubkey_crt(crt, &pk) < 0) {
-                log_err("Failed to get pubkey from certificate for %s.", name);
+                log_err("Failed to get pubkey from certificate for %s.", n);
                 goto fail_crt;
         }
 
-        log_dbg("Got public key from certificate for %s.", name);
+        log_dbg("Got public key from certificate for %s.", n);
 
         if (auth_verify_crt(irmd.auth.ctx, crt) < 0) {
-                log_err("Failed to verify peer %s with CA store.", name);
+                log_err("Failed to verify peer %s with CA store.", n);
                 goto fail_crt;
         }
 
-        log_info("Successfully verified peer certificate for %s.", name);
+        log_info("Successfully verified peer certificate for %s.", n);
 
         sign = r_oap_hdr->hdr;
         sign.len -= (r_oap_hdr->sig.len + sizeof(uint16_t));
 
         if (auth_verify_sig(pk, sign, r_oap_hdr->sig) < 0) {
-                log_err("Failed to verify signature for peer %s.", name);
+                log_err("Failed to verify signature for peer %s.", n);
                 goto fail_check_sig;
         }
 
         crypt_free_key(pk);
         crypt_free_crt(crt);
 
-        log_info("Successfully authenticated %s.", name);
+        log_info("Successfully authenticated %s.", n);
 
         return 0;
 
@@ -1147,8 +1149,8 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_r_oap_hdr;
         }
 
-        if (irm_auth_peer(name, &oap_hdr, &r_oap_hdr) < 0) {
-                log_err("Failed to authenticate %s flow %d.", name, flow->id);
+        if (irm_auth_peer(NULL, &r_oap_hdr, &oap_hdr) < 0) {
+                log_err("Failed to auth %s client, flow %d.", name, flow->id);
                 err = -EAUTH;
                 goto fail_r_oap_hdr;
         }
