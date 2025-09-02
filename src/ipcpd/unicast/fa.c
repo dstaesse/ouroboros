@@ -70,17 +70,15 @@ struct fa_msg {
         uint64_t s_addr;
         uint64_t r_eid;
         uint64_t s_eid;
-        uint8_t  code;
-        int8_t   response;
-        uint16_t ece;
-        /* QoS parameters from spec, aligned */
-        uint32_t delay;
         uint64_t bandwidth;
+        int32_t  response;
+        uint32_t delay;
         uint32_t loss;
         uint32_t ber;
         uint32_t max_gap;
         uint32_t timeout;
-        uint16_t cypher_s;
+        uint16_t ece;
+        uint8_t  code;
         uint8_t  availability;
         uint8_t  in_order;
 } __attribute__((packed));
@@ -499,7 +497,6 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         qs.ber          = ntoh32(msg->ber);
         qs.in_order     = msg->in_order;
         qs.max_gap      = ntoh32(msg->max_gap);
-        qs.cypher_s     = ntoh16(msg->cypher_s);
         qs.timeout      = ntoh32(msg->timeout);
 
         fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UNICAST_MPL, &data);
@@ -528,6 +525,7 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
         struct fa_flow * flow;
         buffer_t         data;  /* Piggbacked data on flow alloc request. */
         time_t           mpl = IPCP_UNICAST_MPL;
+        int              response;
 
         assert(len >= sizeof(*msg));
 
@@ -547,15 +545,19 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
         flow = &fa.flows[fd];
 
         flow->r_eid = ntoh64(msg->s_eid);
+        response = ntoh32(msg->response);
 
-        if (msg->response < 0)
+        log_dbg("IPCP received msg response %d for flow on fd %d.",
+                response, fd);
+
+        if (response < 0)
                 fa_flow_fini(flow);
         else
                 psched_add(fa.psched, fd);
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (ipcp_flow_alloc_reply(fd, msg->response, mpl, &data) < 0) {
+        if (ipcp_flow_alloc_reply(fd, response, mpl, &data) < 0) {
                 log_err("Failed to reply for flow allocation on fd %d.", fd);
                 return -EIRMD;
         }
@@ -776,7 +778,6 @@ int fa_alloc(int              fd,
         msg->ber          = hton32(qs.ber);
         msg->in_order     = qs.in_order;
         msg->max_gap      = hton32(qs.max_gap);
-        msg->cypher_s     = hton16(qs.cypher_s);
         msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
@@ -828,7 +829,7 @@ int fa_alloc_resp(int              fd,
         memset(msg, 0, sizeof(*msg));
 
         msg->code     = FLOW_REPLY;
-        msg->response = response;
+        msg->response = hton32(response);
         if (data->len > 0)
                 memcpy(msg + 1, data->data, data->len);
 
@@ -845,7 +846,7 @@ int fa_alloc_resp(int              fd,
         }
 
         if (response < 0) {
-                pthread_rwlock_rdlock(&fa.flows_lock);
+                pthread_rwlock_wrlock(&fa.flows_lock);
                 fa_flow_fini(flow);
                 pthread_rwlock_unlock(&fa.flows_lock);
         } else {

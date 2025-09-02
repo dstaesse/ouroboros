@@ -1714,7 +1714,7 @@ int reg_wait_flow_allocated(struct flow_info *      info,
                         stop = true;
                         break;
                 case FLOW_DEALLOCATED:
-                        ret  = -1;
+                        ret  = flow->response;
                         stop = true;
                         break;
                 default:
@@ -1746,7 +1746,8 @@ int reg_wait_flow_allocated(struct flow_info *      info,
 }
 
 int reg_respond_alloc(struct flow_info * info,
-                      buffer_t *         pbuf)
+                      buffer_t *         pbuf,
+                      int                response)
 {
         struct reg_flow * flow;
 
@@ -1779,7 +1780,9 @@ int reg_respond_alloc(struct flow_info * info,
         if (reg_flow_update(flow, info) < 0) {
                 log_err("Failed to create flow structs.");
                 goto fail_flow;
-        };
+        }
+
+        flow->response = response;
 
         if (info->state == FLOW_ALLOCATED)
                 reg_flow_set_data(flow, pbuf);

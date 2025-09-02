@@ -544,8 +544,7 @@ static int flow_init(struct flow_info * info,
 
         if (sk!= NULL && sk->data != NULL) {
                 assert(sk->len == SYMMKEYSZ);
-                /* TODO: remove cypher_s from QoS */
-                flow->crypt = crypt_create_ctx(info->qs.cypher_s, sk->data);
+                flow->crypt = crypt_create_ctx(sk->data);
                 if (flow->crypt == NULL)
                         goto fail_crypt;
         }
@@ -886,8 +885,10 @@ int flow_alloc(const char *            dst,
                 return -ENOMEM;
 
         err = send_recv_msg(&msg);
-        if (err < 0)
+        if (err < 0) {
+                printf("send_recv_msg error %d\n", err);
                 return err;
+        }
 
         err = flow__irm_result_des(&msg, &flow, &sk);
         if (err < 0)
@@ -917,9 +918,6 @@ int flow_join(const char *            dst,
         if (qs != NULL)
                 qs->ber = 1;
 #endif
-        if (qs != NULL && qs->cypher_s > 0)
-                return -ENOTSUP; /* TODO: Encrypted broadcast */
-
         memset(&flow, 0, sizeof(flow));
 
         flow.n_pid = getpid();
@@ -1830,11 +1828,12 @@ int np1_flow_dealloc(int    flow_id,
         return fd;
 }
 
-int np1_flow_resp(int flow_id)
+int np1_flow_resp(int flow_id,
+                  int resp)
 {
         int fd;
 
-        if (flow_wait_assign(flow_id) != FLOW_ALLOCATED)
+        if (resp == 0 && flow_wait_assign(flow_id) != FLOW_ALLOCATED)
                 return -1;
 
         pthread_rwlock_rdlock(&ai.lock);

@@ -174,6 +174,9 @@ static void * test_flow_respond_alloc(void * o)
 {
         struct flow_info * info = (struct flow_info *) o;
         buffer_t           pbuf = BUF_INIT;
+        int                response;
+
+        response = (info->state == FLOW_ALLOCATED) ? 0 : -1;
 
         if (info->state == FLOW_ALLOCATED) {
                 pbuf.data = (uint8_t *) strdup(TEST_DATA2);
@@ -184,7 +187,7 @@ static void * test_flow_respond_alloc(void * o)
                 pbuf.len  = strlen((char *) pbuf.data) + 1;
         }
 
-        reg_respond_alloc(info, &pbuf);
+        reg_respond_alloc(info, &pbuf, response);
 
         return (void *) 0;
  fail:
@@ -224,7 +227,7 @@ static int test_reg_accept_flow_success(void)
 
         struct flow_info n_1_info = {
                 .n_1_pid = TEST_N_1_PID,
-                .qs      = qos_data_crypt,
+                .qs      = qos_data,
                 .state   = FLOW_ALLOCATED /* RESPONSE SUCCESS */
         };
 

@@ -68,7 +68,6 @@ static void usage(void)
                "server to connect to\n"
                "  -i, --ip                  IP address to give to TUN device\n"
                "  -m, --mask                Subnet mask to give to TUN device\n"
-               "  -C, --crypt               AES encryption (default: off)\n"
                "\n"
                "      --help                Display this help text and exit\n");
 }
@@ -194,7 +193,6 @@ int main(int     argc,
                 {{"ip",    required_argument, NULL, 'i'},
                  {"mask",  required_argument, NULL, 'm'},
                  {"name",  required_argument, NULL, 'n'},
-                 {"crypt", no_argument,       NULL, 'C'},
                  {"help",  no_argument,       NULL, 'h'},
                  {NULL,    0,                 NULL, 0}
                 };
@@ -230,9 +228,6 @@ int main(int     argc,
                         break;
                 case 'n':
                         name = optarg;
-                        break;
-                case 'C':
-                        qs = qos_raw_crypt;
                         break;
                 case 'h':
                         usage();

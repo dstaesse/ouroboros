@@ -60,8 +60,10 @@ prog=["@INSTALL_DIR@/ovpn"]  # Defaults to [].
 prog=["@INSTALL_DIR@/oping"] # Defaults to [].
 args=["--listen"]       # Defaults to disabled. Autostart server with these args.
 lb="round-robin"        # Defaults to spill (load-balancing options: spill, round-robin).
+# server_enc_file=/path/to/enc.cfg Default: @OUROBOROS_SRV_CRT_DIR@/<name>/enc.cfg
 # server_crt_file=/path/to/crt.pem Default: @OUROBOROS_SRV_CRT_DIR@/<name>/crt.pem
 # server_key_file=/path/to/key.pem Default: @OUROBOROS_SRV_CRT_DIR@/<name>/key.pem
+# client_enc_file=/path/to/enc.cfg Default: @OUROBOROS_CLI_CRT_DIR@/<name>/enc.cfg
 # client_crt_file=/path/to/crt.pem Default: @OUROBOROS_CLI_CRT_DIR@/<name>/crt.pem
 # client_key_file=/path/to/key.pem Default: @OUROBOROS_CLI_CRT_DIR@/<name>/key.pem
 

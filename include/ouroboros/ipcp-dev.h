@@ -28,12 +28,12 @@
 #include <ouroboros/shm_rdrbuff.h>
 #include <ouroboros/utils.h>
 
-int   ipcp_create_r(const struct ipcp_info * info);
+int    ipcp_create_r(const struct ipcp_info * info);
 
-int   ipcp_flow_req_arr(const buffer_t * dst,
-                        qosspec_t        qs,
-                        time_t           mpl,
-                        const buffer_t * data);
+int    ipcp_flow_req_arr(const buffer_t * dst,
+                         qosspec_t        qs,
+                         time_t           mpl,
+                         const buffer_t * data);
 
 int    ipcp_flow_alloc_reply(int              fd,
                              int              response,

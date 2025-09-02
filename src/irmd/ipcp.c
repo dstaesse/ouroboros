@@ -497,7 +497,7 @@ int ipcp_flow_alloc_resp(const struct flow_info * flow,
         msg.pid          = flow->n_pid;
         msg.has_response = true;
         msg.response     = response;
-        msg.has_pk       = true;
+        msg.has_pk       = response == 0;
         msg.pk.data      = data.data;
         msg.pk.len       = data.len;
 

@@ -76,19 +76,17 @@ struct mgmt_msg {
         uint32_t eid;
         uint32_t s_eid;
         uint32_t d_eid;
-        uint8_t  code;
-        int8_t   response;
-        /* QoS parameters from spec */
-        uint8_t  availability;
-        uint8_t  in_order;
+        int32_t  response;
         uint64_t bandwidth;
         uint32_t delay;
         uint32_t loss;
         uint32_t ber;
         uint32_t max_gap;
         uint32_t timeout;
-        uint16_t cypher_s;
-
+        uint8_t  code;
+        /* QoS parameters from spec */
+        uint8_t  availability;
+        uint8_t  in_order;
 } __attribute__((packed));
 
 struct mgmt_frame {
@@ -221,7 +219,6 @@ static int udp_ipcp_port_alloc(const struct __SOCKADDR * r_saddr,
         msg->ber          = hton32(qs.ber);
         msg->in_order     = qs.in_order;
         msg->max_gap      = hton32(qs.max_gap);
-        msg->cypher_s     = hton16(qs.cypher_s);
         msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
@@ -245,7 +242,7 @@ static int udp_ipcp_port_alloc(const struct __SOCKADDR * r_saddr,
 static int udp_ipcp_port_alloc_resp(const struct __SOCKADDR * r_saddr,
                                     uint32_t                  s_eid,
                                     uint32_t                  d_eid,
-                                    int8_t                    response,
+                                    int32_t                   response,
                                     const buffer_t *          data)
 {
         struct mgmt_msg * msg;
@@ -258,7 +255,7 @@ static int udp_ipcp_port_alloc_resp(const struct __SOCKADDR * r_saddr,
         msg->code     = FLOW_REPLY;
         msg->s_eid    = hton32(s_eid);
         msg->d_eid    = hton32(d_eid);
-        msg->response = response;
+        msg->response = hton32(response);
 
         if (data->len > 0)
                 memcpy(msg + 1, data->data, data->len);
@@ -305,7 +302,7 @@ static int udp_ipcp_port_req(struct __SOCKADDR * c_saddr,
 static int udp_ipcp_port_alloc_reply(const struct __SOCKADDR * saddr,
                                      uint32_t                  s_eid,
                                      uint32_t                  d_eid,
-                                     int8_t                    response,
+                                     int32_t                   response,
                                      const buffer_t *          data)
 {
         time_t mpl = IPCP_UDP_MPL;
@@ -369,7 +366,6 @@ static int udp_ipcp_mgmt_frame(struct __SOCKADDR c_saddr,
                 qs.ber          = ntoh32(msg->ber);
                 qs.in_order     = msg->in_order;
                 qs.max_gap      = ntoh32(msg->max_gap);
-                qs.cypher_s     = ntoh16(msg->cypher_s);
                 qs.timeout      = ntoh32(msg->timeout);
 
                 return udp_ipcp_port_req(&c_saddr, ntoh32(msg->s_eid),
@@ -384,7 +380,7 @@ static int udp_ipcp_mgmt_frame(struct __SOCKADDR c_saddr,
                 return udp_ipcp_port_alloc_reply(&c_saddr,
                                                  ntoh32(msg->s_eid),
                                                  ntoh32(msg->d_eid),
-                                                 msg->response,
+                                                 ntoh32(msg->response),
                                                  &data);
         default:
                 log_err("Unknown message received %d.", msg->code);

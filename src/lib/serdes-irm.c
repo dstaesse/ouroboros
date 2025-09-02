@@ -166,12 +166,7 @@ int flow__irm_result_des(buffer_t *         buf,
 
         *flow = flow_info_msg_to_s(msg->flow_info);
 
-        if (flow->qs.cypher_s > 0 && sk != NULL) {
-                if (msg->symmkey.data == NULL || msg->symmkey.len == 0) {
-                        err = -ECRYPT;
-                        goto fail;
-                }
-
+        if (sk != NULL) {
                 sk->len  = msg->symmkey.len;
                 sk->data = msg->symmkey.data;
 

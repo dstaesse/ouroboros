@@ -30,7 +30,8 @@
 int  np1_flow_alloc(pid_t n_pid,
                     int   flow_id);
 
-int  np1_flow_resp(int flow_id);
+int  np1_flow_resp(int flow_id,
+                   int resp);
 
 int  np1_flow_dealloc(int    flow_id,
                       time_t timeo);
@@ -43,7 +44,6 @@ static const qosspec_t qos_np1 = {
         .ber          = UINT32_MAX,
         .in_order     = 0,
         .max_gap      = UINT32_MAX,
-        .cypher_s     = 0,
         .timeout      = 0
 };
 

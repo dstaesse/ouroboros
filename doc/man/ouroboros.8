@@ -389,13 +389,19 @@ not accept future flow allocation requests for \fIname\fR.
 .SH IRM NAME COMMANDS
 .PP
 \fBirm name create \fIname\fR lb \fIpolicy\fR
-[scrtpath \fI/path/to/server/crt.pem\fR] [skeypath \fI/path/to/server/key.pem\fR]
-[ccrtpath \fI/path/to/client/crt.pem\fR] [ckeypath \fI/path/to/client/key.pem\fR]
+[sencpath \fI/path/to/server/enc.cfg\fR]
+[scrtpath \fI/path/to/server/crt.pem\fR]
+[skeypath \fI/path/to/server/key.pem\fR]
+
+[cencpath \fI/path/to/client/enc.cfg\fR]
+[ccrtpath \fI/path/to/client/crt.pem\fR]
+[ckeypath \fI/path/to/client/key.pem\fR]
 .RS 4
 Create a name \fIname\fR with a load-balancing policy and security credentials
 .br
 \fIpolicy\fR: round-robin, spillover
 .br
+\fI/path/to/enc.cfg\fR: The path to the server and client encryption configuration.
 \fI/path/to/pem\fR: The path to the server and client certificates and
 private keys, in pem format.
 .br

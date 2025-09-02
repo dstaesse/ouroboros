@@ -455,11 +455,17 @@ static void name_update_sec_paths(struct name_info * info)
 
         assert(info != NULL);
 
+        if (strlen(info->s.enc) == 0)
+                sprintf(info->s.enc, "%s/%s/enc.cfg", srv_dir, info->name);
+
         if (strlen(info->s.crt) == 0)
                 sprintf(info->s.crt, "%s/%s/crt.pem", srv_dir, info->name);
 
         if (strlen(info->s.key) == 0)
                 sprintf(info->s.key, "%s/%s/key.pem", srv_dir, info->name);
+
+        if (strlen(info->c.enc) == 0)
+                sprintf(info->c.enc, "%s/%s/enc.cfg", cli_dir, info->name);
 
         if (strlen(info->c.crt) == 0)
                 sprintf(info->c.crt, "%s/%s/crt.pem", cli_dir, info->name);
@@ -816,7 +822,8 @@ static bool file_exists(const char * path)
 static int load_credentials(const char *                  name,
                             const struct name_sec_paths * paths,
                             void **                       pkp,
-                            void **                       crt)
+                            void **                       crt,
+                            bool *                        crypt)
 {
         assert(paths != NULL);
         assert(pkp != NULL);
@@ -824,6 +831,11 @@ static int load_credentials(const char *                  name,
 
         *pkp = NULL;
         *crt = NULL;
+
+        /* TODO: Allow configuration. For now, encrypt if path exists */
+        *crypt = file_exists(paths->enc);
+        if (*crypt)
+                log_info("Encryption enabled for %s.", name);
 
         if (!file_exists(paths->crt) || !file_exists(paths->key)) {
                 log_info("No security info for %s.", name);
@@ -853,7 +865,8 @@ static int load_credentials(const char *                  name,
 
 static int load_srv_credentials(const char * name,
                                 void **      pkp,
-                                void **      crt)
+                                void **      crt,
+                                bool *       crypt)
 {
         struct name_info info;
 
@@ -866,12 +879,13 @@ static int load_srv_credentials(const char * name,
                 return -ENAME;
         }
 
-        return load_credentials(name, &info.s, pkp, crt);
+        return load_credentials(name, &info.s, pkp, crt, crypt);
 }
 
 static int load_cli_credentials(const char * name,
                                 void **      pkp,
-                                void **      crt)
+                                void **      crt,
+                                bool *       crypt)
 {
         struct name_info info;
 
@@ -884,7 +898,7 @@ static int load_cli_credentials(const char * name,
                 return -ENAME;
         }
 
-        return load_credentials(name, &info.c, pkp, crt);
+        return load_credentials(name, &info.c, pkp, crt, crypt);
 }
 
 #define ID_IS_EQUAL(id1, id2) (memcmp(id1, id2, OAP_ID_SIZE) == 0)
@@ -1029,14 +1043,15 @@ static int flow_accept(struct flow_info * flow,
                        buffer_t *         data,
                        struct timespec *  abstime)
 {
-        struct oap_hdr   oap_hdr;             /* incoming request           */
-        struct oap_hdr   r_oap_hdr;           /* outgoing response          */
-        uint8_t          buf[MSGBUFSZ];       /* buffer for local ephkey    */
-        buffer_t         lpk = BUF_INIT;      /* local ephemeral pubkey     */
-        char             name[NAME_SIZE + 1]; /* name for flow              */
-        void *           pkp = NULL;          /* signing private key        */
-        void *           crt = NULL;          /* signing certificate        */
-        int              err;
+        struct oap_hdr oap_hdr;             /* incoming request           */
+        struct oap_hdr r_oap_hdr;           /* outgoing response          */
+        uint8_t        buf[MSGBUFSZ];       /* buffer for local ephkey    */
+        buffer_t       lpk = BUF_INIT;      /* local ephemeral pubkey     */
+        char           name[NAME_SIZE + 1]; /* name for flow              */
+        void *         pkp = NULL;          /* signing private key        */
+        void *         crt = NULL;          /* signing certificate        */
+        int            err;
+        bool           crypt;
 
         /* piggyback of user data not yet implemented */
         assert(data != NULL && BUF_IS_EMPTY(data));
@@ -1082,11 +1097,17 @@ static int flow_accept(struct flow_info * flow,
         if (reg_get_name_for_flow_id(name, flow->id) < 0) {
                 log_err("Failed to get name for flow %d.", flow->id);
                 err = -EIPCP;
-                goto fail_oap_hdr;
+                goto fail_cred;
         }
 
         log_dbg("IPCP %d accepting flow %d for %s.",
                  flow->n_pid, flow->id, name);
+
+        if (load_srv_credentials(name, &pkp, &crt, &crypt) < 0) {
+                log_err("Failed to load security keys for %s.", name);
+                err = -EAUTH;
+                goto fail_cred;
+        }
 
         if (oap_hdr_decode(oap_hdr.hdr, &oap_hdr) < 0) {
                 log_err("Failed to decode OAP header from %s.", name);
@@ -1101,10 +1122,16 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_oap_hdr;
         }
 
-        if (flow->qs.cypher_s != 0) {     /* crypto requested           */
-                uint8_t * s;              /* symmetric encryption key   */
-                ssize_t   key_len;        /* length of local pubkey     */
-                void *    pkp = NULL;     /* ephemeral private key pair */
+        if (crypt && oap_hdr.eph.len == 0) {
+                log_warn("Encryption required but no key provided.");
+                err = -ECRYPT;
+                goto fail_oap_hdr;
+        }
+
+        if (oap_hdr.eph.len > 0) {    /* crypto requested           */
+                uint8_t * s;          /* symmetric encryption key   */
+                ssize_t   key_len;    /* length of local pubkey     */
+                void *    pkp = NULL; /* ephemeral private key pair */
 
                 s = malloc(SYMMKEYSZ);
                 if (s == NULL) {
@@ -1140,12 +1167,6 @@ static int flow_accept(struct flow_info * flow,
                 crypt_dh_pkp_destroy(pkp);
         }
 
-        if (load_srv_credentials(name, &pkp, &crt) < 0) {
-                log_err("Failed to load security keys for %s.", name);
-                err = -EAUTH;
-                goto fail_cred;
-        }
-
         if (oap_hdr_init(oap_hdr.id, pkp, crt, lpk, *data, &r_oap_hdr) < 0) {
                 log_err("Failed to create OAP header.");
                 err = -ENOMEM;
@@ -1178,15 +1199,15 @@ static int flow_accept(struct flow_info * flow,
         return 0;
 
  fail_r_oap_hdr:
-        crypt_free_crt(crt);
-        crypt_free_key(pkp);
- fail_cred:
         freebuf(*symmkey);
  fail_derive:
         clrbuf(lpk);
  fail_keys:
         oap_hdr_fini(&oap_hdr);
  fail_oap_hdr:
+        crypt_free_crt(crt);
+        crypt_free_key(pkp);
+ fail_cred:
         assert(lpk.data == NULL && lpk.len == 0);
         ipcp_flow_alloc_resp(flow, err, lpk);
  fail_wait:
@@ -1354,10 +1375,13 @@ static int flow_alloc(struct flow_info * flow,
         uint8_t        idbuf[OAP_ID_SIZE];
         buffer_t       id;
         int            err;
+        bool           crypt;
 
         /* piggyback of user data not yet implemented */
         assert(data != NULL && BUF_IS_EMPTY(data));
         assert(symmkey != NULL && BUF_IS_EMPTY(symmkey));
+
+        log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
 
         if (random_buffer(idbuf, OAP_ID_SIZE) < 0) {
                 log_err("Failed to generate ID.");
@@ -1368,7 +1392,13 @@ static int flow_alloc(struct flow_info * flow,
         id.data = idbuf;
         id.len  = OAP_ID_SIZE;
 
-        if (flow->qs.cypher_s > 0) {
+        if (load_cli_credentials(dst, &cpkp, &ccrt, &crypt) < 0) {
+                log_err("Failed to load security keys for %s.", dst);
+                err = -EAUTH;
+                goto fail_cred;
+        }
+
+        if (crypt > 0) {
                 ssize_t key_len;
 
                 s = malloc(SYMMKEYSZ);
@@ -1391,12 +1421,6 @@ static int flow_alloc(struct flow_info * flow,
                 log_dbg("Generated ephemeral keys for %d.", flow->n_pid);
         }
 
-        if (load_cli_credentials(dst, &cpkp, &ccrt) < 0) {
-                log_err("Failed to load security keys for %s.", dst);
-                err = -EAUTH;
-                goto fail_cred;
-        }
-
         if (oap_hdr_init(id, cpkp, ccrt, lpk, *data, &oap_hdr) < 0) {
                 log_err("Failed to create OAP header.");
                 err = -ENOMEM;
@@ -1405,9 +1429,6 @@ static int flow_alloc(struct flow_info * flow,
 #ifdef DEBUG_PROTO_OAP
         debug_oap_hdr_snd(&oap_hdr);
 #endif
-
-        log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
-
         if (reg_create_flow(flow) < 0) {
                 log_err("Failed to create flow.");
                 err = -EBADF;
@@ -1447,11 +1468,16 @@ static int flow_alloc(struct flow_info * flow,
 
         if (err == -1) {
                 log_dbg("Flow allocation terminated.");
-                err = -EPIPE;
+                err = -EIPCP;
                 goto fail_alloc;
         }
 
-        assert(err == 0);
+        log_dbg("Response received for flow %d to %s.", flow->id, dst);
+
+        if (err < 0) {
+                log_warn("Flow allocation rejected for %s: %d.", dst, err);
+                goto fail_alloc;
+        }
 
         if (oap_hdr_decode(r_oap_hdr.hdr, &r_oap_hdr) < 0) {
                 log_err("Failed to decode OAP header.");
@@ -1463,6 +1489,7 @@ static int flow_alloc(struct flow_info * flow,
 #endif
         if (irm_check_oap_hdr(&r_oap_hdr, flow->mpl) < 0) {
                 log_err("OAP header failed replay check.");
+                err = -EAUTH;
                 goto fail_r_oap_hdr;
         }
 
@@ -1472,7 +1499,7 @@ static int flow_alloc(struct flow_info * flow,
                 goto fail_r_oap_hdr;
         }
 
-        if (flow->qs.cypher_s != 0) { /* crypto requested */
+        if (lpk.len > 0) { /* crypto requested */
                 if (crypt_dh_derive(pkp, r_oap_hdr.eph, s) < 0) {
                         log_err("Failed to derive secret for %d.", flow->id);
                         err = -ECRYPT;
@@ -1508,13 +1535,13 @@ static int flow_alloc(struct flow_info * flow,
  fail_flow:
         oap_hdr_fini(&oap_hdr);
  fail_oap_hdr:
-        crypt_free_crt(ccrt);
-        crypt_free_key(cpkp);
- fail_cred:
         crypt_dh_pkp_destroy(pkp);
  fail_pkp:
         free(s);
  fail_malloc:
+        crypt_free_crt(ccrt);
+        crypt_free_key(cpkp);
+ fail_cred:
         clrbuf(id);
  fail_id:
         return err;
@@ -1616,9 +1643,9 @@ static int flow_alloc_reply(struct flow_info * flow,
                             int                response,
                             buffer_t *         data)
 {
-        flow->state = response ? FLOW_DEALLOCATED : FLOW_ALLOCATED;
+        flow->state = response != 0 ? FLOW_DEALLOCATED : FLOW_ALLOCATED;
 
-        if (reg_respond_alloc(flow, data) < 0) {
+        if (reg_respond_alloc(flow, data, response) < 0) {
                 log_err("Failed to reply to flow %d.", flow->id);
                 flow->state = FLOW_DEALLOCATED;
                 return -EBADF;

@@ -32,7 +32,6 @@
 #include <string.h>
 
 struct crypt_ctx {
-    uint16_t flags;
     void *   ctx;
     uint8_t  key[SYMMKEYSZ];
 };
@@ -91,14 +90,13 @@ int crypt_encrypt(struct crypt_ctx * ctx,
                   buffer_t           in,
                   buffer_t *         out)
 {
-        if (ctx->flags == 0) {
-                clrbuf(*out);
-                return 0;
-        }
+        assert(ctx != NULL);
+        assert(ctx->ctx != NULL);
 
 #ifdef HAVE_OPENSSL
         return openssl_encrypt(ctx->ctx, ctx->key, in, out);
 #else
+        (void) ctx;
         (void) in;
         (void) out;
 
@@ -110,14 +108,13 @@ int crypt_decrypt(struct crypt_ctx * ctx,
                   buffer_t           in,
                   buffer_t *         out)
 {
-        if (ctx->flags == 0) {
-                clrbuf(*out);
-                return 0;
-        }
+        assert(ctx != NULL);
+        assert(ctx->ctx != NULL);
 
 #ifdef HAVE_OPENSSL
         return openssl_decrypt(ctx->ctx, ctx->key, in, out);
 #else
+        (void) ctx;
         (void) in;
         (void) out;
 
@@ -125,8 +122,7 @@ int crypt_decrypt(struct crypt_ctx * ctx,
 #endif
 }
 
-struct crypt_ctx * crypt_create_ctx(uint16_t        flags,
-                                    const uint8_t * key)
+struct crypt_ctx * crypt_create_ctx(const uint8_t * key)
 {
         struct crypt_ctx * crypt;
 
@@ -136,7 +132,6 @@ struct crypt_ctx * crypt_create_ctx(uint16_t        flags,
 
         memset(crypt, 0, sizeof(*crypt));
 
-        crypt->flags = flags;
         if (key != NULL)
                 memcpy(crypt->key, key, SYMMKEYSZ);
 #ifdef HAVE_OPENSSL

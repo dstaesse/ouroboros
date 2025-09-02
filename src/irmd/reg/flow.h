@@ -38,6 +38,7 @@ struct reg_flow {
         struct list_head   next;
 
         struct flow_info   info;
+        int                response;
 
         buffer_t           data;
         struct timespec    t0;

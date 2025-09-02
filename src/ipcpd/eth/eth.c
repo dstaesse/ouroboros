@@ -163,13 +163,12 @@ struct mgmt_msg {
         uint32_t max_gap;
         uint32_t delay;
         uint32_t timeout;
-        uint16_t cypher_s;
+        int32_t  response;
         uint8_t  in_order;
 #if defined (BUILD_ETH_DIX)
         uint8_t  code;
         uint8_t  availability;
 #endif
-        int8_t   response;
 } __attribute__((packed));
 
 struct eth_frame {
@@ -490,7 +489,6 @@ static int eth_ipcp_alloc(const uint8_t *  dst_addr,
         msg->ber          = hton32(qs.ber);
         msg->in_order     = qs.in_order;
         msg->max_gap      = hton32(qs.max_gap);
-        msg->cypher_s     = hton16(qs.cypher_s);
         msg->timeout      = hton32(qs.timeout);
 
         memcpy(msg + 1, hash, ipcp_dir_hash_len());
@@ -538,7 +536,7 @@ static int eth_ipcp_alloc_resp(uint8_t *        dst_addr,
         msg->ssap     = ssap;
         msg->dsap     = dsap;
 #endif
-        msg->response = response;
+        msg->response = hton32(response);
 
         if (data->len > 0)
                 memcpy(msg + 1, data->data, data->len);
@@ -728,7 +726,6 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                 qs.ber = ntoh32(msg->ber);
                 qs.in_order = msg->in_order;
                 qs.max_gap = ntoh32(msg->max_gap);
-                qs.cypher_s = ntoh16(msg->cypher_s);
                 qs.timeout = ntoh32(msg->timeout);
 
                 data.data = (uint8_t *) buf + msg_len;
@@ -761,7 +758,7 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                                      msg->ssap,
                                      msg->dsap,
 #endif
-                                     msg->response,
+                                     ntoh32(msg->response),
                                      &data);
                 break;
         case NAME_QUERY_REQ:

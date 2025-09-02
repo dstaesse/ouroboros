@@ -33,8 +33,7 @@
 struct auth_ctx;
 struct crypt_ctx;
 
-struct crypt_ctx * crypt_create_ctx(uint16_t        flags,
-                                    const uint8_t * key);
+struct crypt_ctx * crypt_create_ctx(const uint8_t * key);
 
 void               crypt_destroy_ctx(struct crypt_ctx * ctx);
 

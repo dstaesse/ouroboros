@@ -140,8 +140,8 @@ void * accept_thread(void * o)
         while (true) {
                 fd = flow_accept(&qs, NULL);
                 if (fd < 0) {
-                        printf("Failed to accept flow.\n");
-                        break;
+                        printf("Failed to accept flow: %d \n", fd);
+                        continue;
                 }
 
                 printf("New flow %d.\n", fd);

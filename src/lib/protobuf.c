@@ -751,7 +751,6 @@ qosspec_msg_t * qos_spec_s_to_msg(const struct qos_spec * s)
         msg->ber          = s->ber;
         msg->in_order     = s->in_order;
         msg->max_gap      = s->max_gap;
-        msg->cypher_s     = s->cypher_s;
         msg->timeout      = s->timeout;
 
         return msg;
@@ -770,7 +769,6 @@ struct qos_spec qos_spec_msg_to_s(const qosspec_msg_t * msg)
         s.ber          = msg->ber;
         s.in_order     = msg->in_order;
         s.max_gap      = msg->max_gap;
-        s.cypher_s     = msg->cypher_s;
         s.timeout      = msg->timeout;
 
         return s;

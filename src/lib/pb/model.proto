@@ -30,8 +30,7 @@ message qosspec_msg {
         required uint32 ber          = 5; /* Bit error rate, ppb.     */
         required uint32 in_order     = 6; /* In-order delivery.       */
         required uint32 max_gap      = 7; /* In ms.                   */
-        required uint32 cypher_s     = 8; /* Crypto strength in bits. */
-        required uint32 timeout      = 9; /* Timeout in ms.           */
+        required uint32 timeout      = 8; /* Timeout in ms.           */
 }
 
 message flow_info_msg {

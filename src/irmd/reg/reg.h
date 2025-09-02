@@ -126,7 +126,8 @@ int   reg_wait_flow_allocated(struct flow_info *      info,
                               const struct timespec * abstime);
 
 int   reg_respond_alloc(struct flow_info * info,
-                        buffer_t *         pbuf);
+                        buffer_t *         pbuf,
+                        int                response);
 
 int   reg_prepare_flow_accept(struct flow_info * info);
 

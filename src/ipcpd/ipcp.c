@@ -398,8 +398,8 @@ int ipcp_wait_flow_req_arr(const uint8_t *  dst,
 
 int ipcp_wait_flow_resp(const int fd)
 {
-        struct timespec      ts = TIMESPEC_INIT_MS(ALLOC_TIMEOUT);
-        struct timespec      abstime;
+        struct timespec ts = TIMESPEC_INIT_MS(ALLOC_TIMEOUT);
+        struct timespec abstime;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
 
@@ -722,13 +722,11 @@ static void do_flow_alloc_resp(int              resp,
                 return;
         }
 
-        if (resp == 0) {
-                fd = np1_flow_resp(flow_id);
-                if (fd < 0) {
-                        log_warn("Flow_id %d is not known.", flow_id);
-                        ret_msg->result = -1;
-                        return;
-                }
+        fd = np1_flow_resp(flow_id, resp);
+        if (fd < 0) {
+                log_warn("Flow_id %d is not known.", flow_id);
+                ret_msg->result = -1;
+                return;
         }
 
         ret_msg->result = ipcpd.ops->ipcp_flow_alloc_resp(fd, resp, data);

@@ -35,7 +35,7 @@ static int test_crypt_create_destroy(void)
 
         TEST_START();
 
-        ctx = crypt_create_ctx(0, NULL);
+        ctx = crypt_create_ctx(NULL);
         if (ctx == NULL) {
                 printf("Failed to initialize cryptography.\n");
                 goto fail;
@@ -60,7 +60,7 @@ static int test_crypt_create_destroy_with_key(void)
 
         memset(key, 0, sizeof(key));
 
-        ctx = crypt_create_ctx(1, key);
+        ctx = crypt_create_ctx(key);
         if (ctx == NULL) {
                 printf("Failed to initialize cryptography.\n");
                 goto fail;
@@ -181,7 +181,7 @@ int test_crypt_encrypt_decrypt(void)
                 goto fail_init;
         }
 
-        ctx = crypt_create_ctx(1, key);
+        ctx = crypt_create_ctx(key);
         if (ctx == NULL) {
                 printf("Failed to initialize cryptography.\n");
                 goto fail_init;
