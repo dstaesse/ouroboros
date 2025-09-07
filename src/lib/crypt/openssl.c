@@ -447,7 +447,7 @@ int openssl_load_privkey_file(const char * path,
         if (fp == NULL)
                 goto fail_file;
 
-        pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL);
+        pkey = PEM_read_PrivateKey(fp, NULL, NULL, "");
         if (pkey == NULL)
                 goto fail_key;
 
