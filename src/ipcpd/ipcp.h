@@ -61,8 +61,7 @@ struct ipcp_ops {
                                   const buffer_t * data);
 
         int   (* ipcp_flow_join)(int             fd,
-                                 const uint8_t * dst,
-                                 qosspec_t       qs);
+                                 const uint8_t * dst);
 
         int   (* ipcp_flow_alloc_resp)(int              fd,
                                        int              response,
@@ -95,8 +94,6 @@ void            ipcp_set_state(enum ipcp_state state);
 
 enum ipcp_state ipcp_get_state(void);
 
-int             ipcp_set_layer_info(const struct layer_info * info);
-
 /* Helper functions to handle races during flow allocation */
 int             ipcp_wait_flow_req_arr(const uint8_t *  dst,
                                        qosspec_t        qs,
@@ -108,6 +105,8 @@ int             ipcp_wait_flow_resp(const int fd);
 
 /* Helper functions for directory entries, could be moved */
 size_t          ipcp_dir_hash_len(void);
+
+int             ipcp_get_layer_name(char * layer);
 
 uint8_t *       ipcp_hash_dup(const uint8_t * hash);
 

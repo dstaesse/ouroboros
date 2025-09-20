@@ -63,7 +63,7 @@ static int reader_main(const char * dst)
 
         printf("Starting a reader.\n");
 
-        fd = flow_join(dst, NULL, NULL);
+        fd = flow_join(dst, NULL);
         if (fd < 0) {
                 printf("Failed to join broadcast.\n");
                 return -1;
@@ -91,7 +91,7 @@ static int writer_main(const char * dst,
         int     fd  = 0;
         size_t  len = strlen(message) + 1;
 
-        fd = flow_join(dst, NULL, NULL);
+        fd = flow_join(dst, NULL);
         if (fd < 0) {
                 printf("Failed to join broadcast.\n");
                 return -1;

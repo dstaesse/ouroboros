@@ -1250,6 +1250,8 @@ static int flow_join(struct flow_info * flow,
                 goto fail_ipcp;
         }
 
+        flow->n_1_pid = ipcp.pid;
+
         hash.len = hash_len((enum hash_algo) layer.dir_hash_algo);
         hash.data = malloc(hash.len);
         if (hash.data == NULL) {
@@ -1257,6 +1259,8 @@ static int flow_join(struct flow_info * flow,
                 err = -ENOMEM;
                 goto fail_ipcp;
         }
+
+        str_hash((enum hash_algo) layer.dir_hash_algo, hash.data, dst);
 
         reg_prepare_flow_alloc(flow);
 
@@ -1889,7 +1893,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
                 abstime = abstime == NULL ? &max : abstime;
                 res = flow_join(&flow, msg->dst, abstime);
                 if (res == 0)
-                        ret_msg->flow_info    = flow_info_s_to_msg(&flow);
+                        ret_msg->flow_info = flow_info_s_to_msg(&flow);
                 break;
         case IRM_MSG_CODE__IRM_FLOW_DEALLOC:
                 flow = flow_info_msg_to_s(msg->flow_info);

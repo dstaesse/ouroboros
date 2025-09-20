@@ -159,6 +159,15 @@ size_t ipcp_dir_hash_len(void)
         return hash_len(ipcpd.dir_hash_algo);
 }
 
+int ipcp_get_layer_name(char * layer)
+{
+        if (ipcp_get_state() < IPCP_OPERATIONAL)
+                return -EIPCPSTATE;
+
+        strcpy(layer, ipcpd.layer_name);
+        return 0;
+}
+
 uint8_t * ipcp_hash_dup(const uint8_t * hash)
 {
         uint8_t * dup = malloc(hash_len(ipcpd.dir_hash_algo));
@@ -663,7 +672,6 @@ static void do_flow_alloc(pid_t            pid,
 static void do_flow_join(pid_t           pid,
                          int             flow_id,
                          const uint8_t * dst,
-                         qosspec_t       qs,
                          ipcp_msg_t *    ret_msg)
 {
         int fd;
@@ -691,7 +699,7 @@ static void do_flow_join(pid_t           pid,
                 return;
         }
 
-        ret_msg->result = ipcpd.ops->ipcp_flow_join(fd, dst, qs);
+        ret_msg->result = ipcpd.ops->ipcp_flow_join(fd, dst);
 
         log_info("Finished joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
 }
@@ -853,9 +861,8 @@ static void * mainloop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_JOIN:
                         assert(msg->hash.len == ipcp_dir_hash_len());
-                        qs = qos_spec_msg_to_s(msg->qosspec);
                         do_flow_join(msg->pid, msg->flow_id,
-                                     msg->hash.data, qs, &ret_msg);
+                                     msg->hash.data, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL

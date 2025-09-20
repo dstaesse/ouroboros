@@ -36,6 +36,7 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
+#include <ouroboros/np1_flow.h>
 #include <ouroboros/random.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/time.h>
@@ -185,39 +186,58 @@ static int name_check(const uint8_t * dst)
 {
         uint8_t * buf;
         size_t    len;
-        int       ret;
+        int       err;
+        char      layer[LAYER_NAME_SIZE + 1];
 
         len = ipcp_dir_hash_len();
         buf =  malloc(len);
-        if (buf == NULL)
-                return -ENOMEM;
+        if (buf == NULL) {
+                log_err("Failed to malloc buffer.");
+                err = -ENOMEM;
+                goto fail_buf;
+        }
 
-        str_hash(HASH_SHA3_256, buf, ipcp_get_name());
+        err = ipcp_get_layer_name(layer);
+        if (err < 0) {
+                log_err("Failed to get layer name.");
+                goto fail_layer;
+        }
 
-        ret = memcmp(buf, dst, len);
+        str_hash(HASH_SHA3_256, buf, layer);
+
+        if (memcmp(buf, dst, len) < 0) {
+                log_err("Hash mismatch for layer %s.", layer);
+                err = -ENAME;
+                goto fail_layer;
+        }
 
         free(buf);
 
-        return ret;
+        return 0;
+
+ fail_layer:
+        free(buf);
+ fail_buf:
+        return err;
 }
 
 static int broadcast_ipcp_join(int             fd,
-                               const uint8_t * dst,
-                               qosspec_t       qs)
+                               const uint8_t * dst)
 {
+        int         err;
         struct conn conn;
         time_t      mpl = IPCP_BROADCAST_MPL;
         buffer_t    data = BUF_INIT;
 
-        (void) qs;
-
         memset(&conn, 0, sizeof(conn));
 
         conn.flow_info.fd = fd;
+        conn.flow_info.qs = qos_np1;
 
-        if (name_check(dst) != 0) {
+        err = name_check(dst);
+        if (err < 0) {
                 log_err("Failed to check name.");
-                return -1;
+                return err;
         }
 
         notifier_event(NOTIFY_DT_CONN_ADD, &conn);

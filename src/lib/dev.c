@@ -905,7 +905,6 @@ int flow_alloc(const char *            dst,
 }
 
 int flow_join(const char *            dst,
-              qosspec_t *             qs,
               const struct timespec * timeo)
 {
         struct flow_info flow;
@@ -914,16 +913,12 @@ int flow_join(const char *            dst,
         int              fd;
         int              err;
 
-#ifdef QOS_DISABLE_CRC
-        if (qs != NULL)
-                qs->ber = 1;
-#endif
         memset(&flow, 0, sizeof(flow));
 
         flow.n_pid = getpid();
-        flow.qs    = qs == NULL ? qos_raw : *qs;
+        flow.qs    = qos_np1;
 
-        if (flow_alloc__irm_req_ser(&msg, &flow, dst, timeo))
+        if (flow_join__irm_req_ser(&msg, &flow, dst, timeo))
                 return -ENOMEM;
 
         err = send_recv_msg(&msg);
@@ -935,9 +930,6 @@ int flow_join(const char *            dst,
                 return err;
 
         fd = flow_init(&flow, NULL);
-
-        if (qs != NULL)
-                *qs = flow.qs;
 
         return fd;
 }
