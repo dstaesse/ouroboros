@@ -186,7 +186,9 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
 else ()
   set(BUILD_TESTS OFF)
 endif()
+add_custom_target(build_tests)
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+add_dependencies(check build_tests)
 
 find_package(ProtobufC QUIET)
 if (NOT (PROTOBUF_C_INCLUDE_DIRS AND PROTOBUF_C_LIBRARY

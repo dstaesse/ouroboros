@@ -18,7 +18,7 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug*")
   add_compile_flags(${src_folder}_test -DCONFIG_OUROBOROS_DEBUG)
 endif ()
 
-add_dependencies(check ${src_folder}_test)
+add_dependencies(build_tests ${src_folder}_test)
 
 set(tests_to_run ${${src_folder}_tests})
 if(CMAKE_VERSION VERSION_LESS "3.29.0")

@@ -23,7 +23,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
 add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests})
 target_link_libraries(${PARENT_DIR}_test ouroboros-common)
 
-add_dependencies(check ${PARENT_DIR}_test)
+add_dependencies(build_tests ${PARENT_DIR}_test)
 
 set(tests_to_run ${${PARENT_DIR}_tests})
 if(CMAKE_VERSION VERSION_LESS "3.29.0")
