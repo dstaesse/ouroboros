@@ -39,4 +39,6 @@ target_link_libraries(irm LINK_PUBLIC ouroboros-irm)
 install(TARGETS irm RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 # enable when we have tests
-# add_subdirectory(tests)
+# if(BUILD_TESTS)
+#   add_subdirectory(tests)
+# endif ()

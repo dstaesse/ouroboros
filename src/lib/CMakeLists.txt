@@ -333,4 +333,6 @@ target_include_directories(ouroboros-dev PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
 target_include_directories(ouroboros-irm PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
   ${SYS_RND_HDR} ${LIBGCRYPT_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
 
-add_subdirectory(tests)
+if(BUILD_TESTS)
+  add_subdirectory(tests)
+endif ()

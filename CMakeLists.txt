@@ -179,7 +179,10 @@ else ()
   message(STATUS "Systemd service installation disabled by user")
 endif()
 
-enable_testing()
+include(CTest) # Sets BUILD_TESTING by default to on.
+# BUILD_TESTS: control if tests are included by CMAKE.
+# Can depend on more than only BUILD_TESTING in the future.
+set(BUILD_TESTS ${BUILD_TESTING})
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 find_package(ProtobufC QUIET)

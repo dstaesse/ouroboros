@@ -109,4 +109,6 @@ endif ()
 install(TARGETS irmd RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 add_subdirectory(reg)
-add_subdirectory(tests)
+if(BUILD_TESTS)
+  add_subdirectory(tests)
+endif ()

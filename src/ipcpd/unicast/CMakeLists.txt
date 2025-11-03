@@ -71,6 +71,8 @@ endif ()
 
 install(TARGETS ipcpd-unicast RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
-add_subdirectory(pff/tests)
-add_subdirectory(routing/tests)
-add_subdirectory(dir/tests)
+if(BUILD_TESTS)
+  add_subdirectory(pff/tests)
+  add_subdirectory(routing/tests)
+  add_subdirectory(dir/tests)
+endif ()

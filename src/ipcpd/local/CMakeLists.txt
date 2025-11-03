@@ -31,4 +31,6 @@ endif ()
 install(TARGETS ipcpd-local RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 # Enable once ipcp-local has tests
-# add_subdirectory(tests)
+# if(BUILD_TESTS)
+#   add_subdirectory(tests)
+# endif ()
