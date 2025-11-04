@@ -7,7 +7,7 @@ create_test_sourcelist(${src_folder}_tests test_suite.c
   oap_test.c
 )
 
-add_executable(${src_folder}_test EXCLUDE_FROM_ALL ${${src_folder}_tests})
+add_executable(${src_folder}_test ${${src_folder}_tests})
 target_link_libraries(${src_folder}_test ouroboros-common)
 
 add_dependencies(check ${src_folder}_test)

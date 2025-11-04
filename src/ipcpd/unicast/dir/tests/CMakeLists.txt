@@ -21,7 +21,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   )
 
 protobuf_generate_c(DHT_PROTO_SRCS KAD_PROTO_HDRS ../dht.proto)
-add_executable(${PARENT_DIR}_test EXCLUDE_FROM_ALL ${${PARENT_DIR}_tests}
+add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests}
   ${DHT_PROTO_SRCS})
 target_link_libraries(${PARENT_DIR}_test ouroboros-common)
 
