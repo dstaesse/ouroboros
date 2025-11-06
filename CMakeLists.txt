@@ -180,9 +180,12 @@ else ()
 endif()
 
 include(CTest) # Sets BUILD_TESTING by default to on.
-# BUILD_TESTS: control if tests are included by CMAKE.
-# Can depend on more than only BUILD_TESTING in the future.
-set(BUILD_TESTS ${BUILD_TESTING})
+# BUILD_TESTS: control if tests are included by CMAKE for this project.
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
+  set(BUILD_TESTS ON)
+else ()
+  set(BUILD_TESTS OFF)
+endif()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 find_package(ProtobufC QUIET)
