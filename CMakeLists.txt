@@ -8,8 +8,8 @@ project(ouroboros C)
 include(GNUInstallDirs)
 
 set(PACKAGE_VERSION_MAJOR  0)
-set(PACKAGE_VERSION_MINOR 21)
-set(PACKAGE_VERSION_PATCH  4)
+set(PACKAGE_VERSION_MINOR 22)
+set(PACKAGE_VERSION_PATCH  0)
 
 set(PACKAGE_NAME        "${CMAKE_PROJECT_NAME}")
 set(PACKAGE_DESCRIPTION "The Ouroboros prototype")
