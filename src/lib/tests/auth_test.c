@@ -90,6 +90,7 @@ static const char * server_ec_pk = \
 "-----END PUBLIC KEY-----\n";
 
 /* Valid signed server certificate for test-1.unittest.o7s */
+#define SSC_TEXT_SIZE 2295 /* size of cleartext certificate */
 static const char * signed_server_crt = \
 "-----BEGIN CERTIFICATE-----\n"
 "MIIDiTCCAy+gAwIBAgICEAUwCgYIKoZIzj0EAwIwWjELMAkGA1UEBhMCQkUxDDAK\n"
@@ -573,7 +574,7 @@ int test_auth_bad_signature(void)
 
 int test_crt_str(void)
 {
-        char str[2295];
+        char str[SSC_TEXT_SIZE + 1];
         void * crt;
 
         TEST_START();

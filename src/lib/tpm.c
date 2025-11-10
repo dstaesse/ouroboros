@@ -100,7 +100,7 @@ static void tpm_debug_thread(struct pthr_el * e)
 
         if (BETWEEN(TPM_DEBUG_REPORT_INTERVAL, 0, intv)) {
                 log_dbg("Thread %d:%lx running for %ld s.\n",
-                        getpid(),e->thr, diff);
+                        getpid(), (unsigned long) e->thr, diff);
                 e->last = now;
         }
 
