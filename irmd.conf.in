@@ -1,9 +1,10 @@
 ### Example Ouroboros configuration file
 #
-# This file contains a summary of current machine configuration
-# options for the O7s prototype. The IRMd will attempt to load its
-# configuration file during startup from the file
-# @OUROBOROS_CONFIG_DIR@@OUROBOROS_CONFIG_FILE@.
+# This file contains a summary of current machine configuration options
+# for the O7s prototype. The IRMd systemd service will by default
+# attempt to load its configuration file during startup from the file
+# @OUROBOROS_CONFIG_DIR@/@OUROBOROS_CONFIG_FILE@.
+# If not found, it will error out.
 #
 # At the top level, it accepts configuration of
 # services via the "name" directive, and configuration of the network

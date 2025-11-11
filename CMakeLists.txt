@@ -130,6 +130,31 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc"
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-irm.pc"
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
+include(CTest) # Sets BUILD_TESTING by default to on.
+# BUILD_TESTS: control if tests are included by CMAKE for this project.
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
+  set(BUILD_TESTS ON)
+else ()
+  set(BUILD_TESTS OFF)
+endif()
+add_custom_target(build_tests)
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+add_dependencies(check build_tests)
+
+find_package(ProtobufC QUIET)
+if (NOT (PROTOBUF_C_INCLUDE_DIRS AND PROTOBUF_C_LIBRARY
+         AND PROTOBUF_PROTOC_C_EXECUTABLE))
+  message(FATAL_ERROR "Protobuf C compiler required but not found. "
+                      "Please install Google Protocol Buffers.")
+else ()
+  message(STATUS "Found protobuf C compiler in ${PROTOBUF_PROTOC_C_EXECUTABLE}")
+endif ()
+include_directories(${PROTOBUF_C_INCLUDE_DIRS})
+
+add_subdirectory(include)
+add_subdirectory(src)
+add_subdirectory(doc)
+
 # modified from https://github.com/ximion/limba
 set(SYSTEMD_INSTALL_FILES "DETECT" CACHE STRING
   "Install systemd .service files (NO (never), DETECT (use pkg-config - default),\
@@ -166,7 +191,7 @@ if (SYSTEMD_INSTALL_FILES STREQUAL "DETECT" OR SYSTEMD_INSTALL_FILES STREQUAL "F
   if (NOT ${SYSTEMD_UNITDIR_INTERNAL} STREQUAL "")
     message(STATUS "Systemd service installation enabled to: ${SYSTEMD_UNITDIR_INTERNAL}")
     if (LIBTOML_LIBRARIES AND NOT DISABLE_CONFIGFILE)
-      set (CONFIGURE_STRING "--config ${OUROBOROS_CONFIG_DIR}${OUROBOROS_CONFIG_FILE}")
+      set (CONFIGURE_STRING "--config ${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}")
     else ()
       set (CONFIGURE_STRING "")
     endif ()
@@ -178,31 +203,6 @@ if (SYSTEMD_INSTALL_FILES STREQUAL "DETECT" OR SYSTEMD_INSTALL_FILES STREQUAL "F
 else ()
   message(STATUS "Systemd service installation disabled by user")
 endif()
-
-include(CTest) # Sets BUILD_TESTING by default to on.
-# BUILD_TESTS: control if tests are included by CMAKE for this project.
-if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
-  set(BUILD_TESTS ON)
-else ()
-  set(BUILD_TESTS OFF)
-endif()
-add_custom_target(build_tests)
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
-add_dependencies(check build_tests)
-
-find_package(ProtobufC QUIET)
-if (NOT (PROTOBUF_C_INCLUDE_DIRS AND PROTOBUF_C_LIBRARY
-         AND PROTOBUF_PROTOC_C_EXECUTABLE))
-  message(FATAL_ERROR "Protobuf C compiler required but not found. "
-                      "Please install Google Protocol Buffers.")
-else ()
-  message(STATUS "Found protobuf C compiler in ${PROTOBUF_PROTOC_C_EXECUTABLE}")
-endif ()
-include_directories(${PROTOBUF_C_INCLUDE_DIRS})
-
-add_subdirectory(include)
-add_subdirectory(src)
-add_subdirectory(doc)
 
 # Uninstall target
 configure_file("${CMAKE_SOURCE_DIR}/cmake/CmakeUninstall.cmake.in"
