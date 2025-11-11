@@ -5,7 +5,7 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
 set(OUROBOROS_CONFIG_DIR /etc/ouroboros CACHE STRING
-  "Configuration directory")
+  "Configuration directory (should be absolute)")
 
 find_library(LIBTOML_LIBRARIES toml QUIET)
 if (LIBTOML_LIBRARIES)
