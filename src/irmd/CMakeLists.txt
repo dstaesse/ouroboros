@@ -20,9 +20,14 @@ if (LIBTOML_LIBRARIES)
     message(STATUS "Configuration directory: ${OUROBOROS_CONFIG_DIR}")
     set(INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}")
     configure_file("${CMAKE_SOURCE_DIR}/irmd.conf.in"
-      "${CMAKE_BINARY_DIR}/irmd.conf.example" @ONLY)
-    install(FILES "${CMAKE_BINARY_DIR}/irmd.conf.example"
+      "${CMAKE_BINARY_DIR}/${OUROBOROS_CONFIG_FILE}.example" @ONLY)
+    install(FILES "${CMAKE_BINARY_DIR}/${OUROBOROS_CONFIG_FILE}.example"
       DESTINATION "${OUROBOROS_CONFIG_DIR}")
+    install(CODE "
+      if (NOT EXISTS \"${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}\")
+        file(WRITE \"${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}\" \"\")
+      endif()
+    ")
     unset(INSTALL_DIR)
     find_path(LIBTOML_INCLUDE toml.h)
     mark_as_advanced(LIBTOML_LIBRARIES LIBTOML_INCLUDE)

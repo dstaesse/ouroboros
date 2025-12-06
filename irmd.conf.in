@@ -1,21 +1,16 @@
 ### Example Ouroboros configuration file
 #
 # This file contains a summary of current machine configuration options
-# for the O7s prototype. The IRMd systemd service will by default
-# attempt to load its configuration file during startup from the file
-# @OUROBOROS_CONFIG_DIR@/@OUROBOROS_CONFIG_FILE@.
-# If not found, it will error out.
+# for the O7s prototype.
 #
-# At the top level, it accepts configuration of
-# services via the "name" directive, and configuration of the network
-# specifying different IPCPs in the system. So, the list of accepted
-# top level stanza is:
+# The list of accepted top level stanza is:
 #
 # [name.<name of service>] add a new name to the system.
 # [local.<name for IPCP>] add a new local IPCP to the system.
 # [eth-llc.<name for IPCP>] add a new IPCP over Ethernet (LLC) to the system.
 # [eth-dix.<name for IPCP>] add a new IPCP over Ethernet (DIX) to the system.
-# [eth-udp.<name for IPCP>] add a new IPCP over UDP/IPv4 to the system.
+# [udp4.<name for IPCP>] add a new IPCP over UDP/IPv4 to the system.
+# [udp6.<name for IPCP>] add a new IPCP over UDP/IPv6 to the system.
 # [broadcast.<name of IPCP>] add a new broadcast IPCP to the system.
 # [unicast.<name of IPCP>] add a new unicast IPCP to the system.
 #
