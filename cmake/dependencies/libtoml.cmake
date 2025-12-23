@@ -1,0 +1,5 @@
+find_library(LIBTOML_LIBRARIES toml QUIET)
+if (LIBTOML_LIBRARIES)
+  find_path(LIBTOML_INCLUDE toml.h)
+  mark_as_advanced(LIBTOML_LIBRARIES LIBTOML_INCLUDE)
+endif ()

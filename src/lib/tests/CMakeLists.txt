@@ -32,7 +32,7 @@ endif()
 
 foreach (test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
-  add_test(${test_name} ${C_TEST_PATH}/${PARENT_DIR}_test ${test_name})
+  add_test(${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${PARENT_DIR}_test ${test_name})
 endforeach (test)
 
 set_property(TEST auth_test PROPERTY SKIP_RETURN_CODE 1)

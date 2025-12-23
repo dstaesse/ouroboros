@@ -7,21 +7,10 @@ project(ouroboros C)
 
 include(GNUInstallDirs)
 
-set(PACKAGE_VERSION_MAJOR  0)
-set(PACKAGE_VERSION_MINOR 22)
-set(PACKAGE_VERSION_PATCH  0)
+include(version)
+include(package)
 
-set(PACKAGE_NAME        "${CMAKE_PROJECT_NAME}")
-set(PACKAGE_DESCRIPTION "The Ouroboros prototype")
-set(PACKAGE_URL         "http://ouroboros.rocks")
-set(PACKAGE_BUGREPORT   "http://ouroboros.rocks/bugzilla/")
-set(PACKAGE_VERSION
-  "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}.${PACKAGE_VERSION_PATCH}")
-
-if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "Release" CACHE STRING
-      "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan, DebugUSan, DebugAnalyzer)" FORCE)
-endif()
+include(compiler)
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   if (APPLE)
@@ -54,174 +43,14 @@ IF ("${isSystemDir}" STREQUAL "-1")
   set(CMAKE_INSTALL_RPATH "${RPATH_PREFIX}/lib")
 ENDIF ("${isSystemDir}" STREQUAL "-1")
 
-message(STATUS "Package name is:            ${PACKAGE_NAME}")
-message(STATUS "Package description is:     ${PACKAGE_DESCRIPTION}")
-message(STATUS "Package version is:         ${PACKAGE_VERSION}")
-message(STATUS "Package URL is:             ${PACKAGE_URL}")
-message(STATUS "Package bug-report address: ${PACKAGE_BUGREPORT}")
-message(STATUS "Package install prefix:     ${CMAKE_INSTALL_PREFIX}")
+include(dependencies)
 
-include(FindPkgConfig)
+include(include)
+include(lib)
+include(ipcp)
+include(irmd)
+include(tools)
+include(tests)
+include(doc)
 
-include(CompilerUtils)
-test_and_set_c_compiler_flag_global(-std=c89)
-test_and_set_c_compiler_flag_global(-Wall)
-# -Wextra may fail on clobbered warning due to pthread_cleanup
-test_and_set_c_compiler_flag_global(-Wno-clobbered)
-test_and_set_c_compiler_flag_global(-Wextra)
-# explicitly add other flags in -Wextra
-test_and_set_c_compiler_flag_global(-Wempty-body)
-test_and_set_c_compiler_flag_global(-Wignored-qualifiers)
-test_and_set_c_compiler_flag_global(-Wimplicit-fallthrough=4)
-test_and_set_c_compiler_flag_global(-Wmissing-field-initializers)
-test_and_set_c_compiler_flag_global(-Wmissing-parameter-type)
-test_and_set_c_compiler_flag_global(-Wold-style-declaration)
-test_and_set_c_compiler_flag_global(-Woverride-init)
-test_and_set_c_compiler_flag_global(-Wsign-compare)
-test_and_set_c_compiler_flag_global(-Wtype-limits)
-test_and_set_c_compiler_flag_global(-Wuninitialized)
-test_and_set_c_compiler_flag_global(-Wshift-negative-value)
-test_and_set_c_compiler_flag_global(-Wunused-parameter)
-test_and_set_c_compiler_flag_global(-Wunused-but-set-parameter)
-test_and_set_c_compiler_flag_global(-Werror)
-test_and_set_c_compiler_flag_global(-Wundef)
-test_and_set_c_compiler_flag_global(-Wpointer-arith)
-test_and_set_c_compiler_flag_global(-Wstrict-prototypes)
-test_and_set_c_compiler_flag_global(-Wvla)
-test_and_set_c_compiler_flag_global(-Wswitch-default)
-test_and_set_c_compiler_flag_global(-Wreturn-type)
-test_and_set_c_compiler_flag_global(-Wunreachable-code)
-test_and_set_c_compiler_flag_global(-Wdeclaration-after-statement)
-test_and_set_c_compiler_flag_global(-Winfinite-recursion)
-test_and_set_c_compiler_flag_global(-fmax-errors=5)
-
-if (CMAKE_BUILD_TYPE STREQUAL "Release")
-  test_and_set_c_compiler_flag_global(-O3)
-elseif (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  test_and_set_c_compiler_flag_global(-g)
-elseif (CMAKE_BUILD_TYPE STREQUAL "DebugASan")
-  test_and_set_c_compiler_flag_global(-g)
-  test_and_set_c_compiler_flag_global(-fsanitize=address)
-elseif (CMAKE_BUILD_TYPE STREQUAL "DebugTSan")
-  test_and_set_c_compiler_flag_global(-g)
-  test_and_set_c_compiler_flag_global(-fsanitize=thread)
-elseif (CMAKE_BUILD_TYPE STREQUAL "DebugLSan")
-  test_and_set_c_compiler_flag_global(-g)
-  test_and_set_c_compiler_flag_global(-fsanitize=leak)
-elseif (CMAKE_BUILD_TYPE STREQUAL "DebugUSan")
-  test_and_set_c_compiler_flag_global(-g)
-  test_and_set_c_compiler_flag_global(-fsanitize=undefined)
-elseif (CMAKE_BUILD_TYPE STREQUAL "DebugAnalyzer")
-  test_and_set_c_compiler_flag_global(-g)
-  test_and_set_c_compiler_flag_global(-fanalyzer)
-else ()
-  message(FATAL_ERROR "Unkown build type ${CMAKE_BUILD_TYPE}")
-endif ()
-
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros-dev.pc.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc" @ONLY)
-
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros-irm.pc.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-irm.pc" @ONLY)
-
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-dev.pc"
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros-irm.pc"
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-
-include(CTest) # Sets BUILD_TESTING by default to on.
-# BUILD_TESTS: control if tests are included by CMAKE for this project.
-if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
-  set(BUILD_TESTS ON)
-else ()
-  set(BUILD_TESTS OFF)
-endif()
-add_custom_target(build_tests)
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
-add_dependencies(check build_tests)
-
-find_package(ProtobufC QUIET)
-if (NOT (PROTOBUF_C_INCLUDE_DIRS AND PROTOBUF_C_LIBRARY
-         AND PROTOBUF_PROTOC_C_EXECUTABLE))
-  message(FATAL_ERROR "Protobuf C compiler required but not found. "
-                      "Please install Google Protocol Buffers.")
-else ()
-  message(STATUS "Found protobuf C compiler in ${PROTOBUF_PROTOC_C_EXECUTABLE}")
-endif ()
-include_directories(${PROTOBUF_C_INCLUDE_DIRS})
-
-add_subdirectory(include)
-add_subdirectory(src)
-add_subdirectory(doc)
-
-# modified from https://github.com/ximion/limba
-set(SYSTEMD_INSTALL_FILES "DETECT" CACHE STRING
-  "Install systemd .service files (NO (never), DETECT (use pkg-config - default),\
-  FORCE (always - see SYSTEMD_UNITDIR_OVERRIDE))")
-set(SYSTEMD_UNITDIR_OVERRIDE "" CACHE PATH
-  "Path to install systemd files. When SYSTEMD_INSTALL_FILES == DETECT, this\
-  can be empty to automatically determine the path. Cannot be empty when FORCE.")
-
-if (SYSTEMD_INSTALL_FILES STREQUAL "DETECT" OR SYSTEMD_INSTALL_FILES STREQUAL "FORCE")
-  if (SYSTEMD_INSTALL_FILES STREQUAL "DETECT")
-    pkg_check_modules(SYSTEMD "systemd")
-    if (SYSTEMD_FOUND)
-      if ("${SYSTEMD_UNITDIR_OVERRIDE}" STREQUAL "")
-        execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE}
-          --variable=systemdsystemunitdir systemd
-          OUTPUT_VARIABLE SYSTEMD_UNITDIR_INTERNAL)
-          string(REGEX REPLACE "[ \t\n]+" "" SYSTEMD_UNITDIR_INTERNAL
-          "${SYSTEMD_UNITDIR_INTERNAL}"
-        )
-      else ()
-        set(SYSTEMD_UNITDIR_INTERNAL "${SYSTEMD_UNITDIR_OVERRIDE}")
-      endif ()
-    else ()
-      set(SYSTEMD_UNITDIR_INTERNAL "")
-    endif ()
-  elseif (SYSTEMD_INSTALL_FILES STREQUAL "FORCE")
-    if ("${SYSTEMD_UNITDIR_OVERRIDE}" STREQUAL "")
-      message(FATAL_ERROR "Systemd installation required by user, but no path\
-             provided with SYSTEMD_UNITDIR_OVERRIDE.")
-    else ()
-      set(SYSTEMD_UNITDIR_INTERNAL "${SYSTEMD_UNITDIR_OVERRIDE}")
-    endif ()
-  endif()
-  if (NOT ${SYSTEMD_UNITDIR_INTERNAL} STREQUAL "")
-    message(STATUS "Systemd service installation enabled to: ${SYSTEMD_UNITDIR_INTERNAL}")
-    if (LIBTOML_LIBRARIES AND NOT DISABLE_CONFIGFILE)
-      set (CONFIGURE_STRING "--config ${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}")
-    else ()
-      set (CONFIGURE_STRING "")
-    endif ()
-    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ouroboros.service.in"
-      "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.service" @ONLY)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ouroboros.service"
-      DESTINATION "${SYSTEMD_UNITDIR_INTERNAL}")
-  endif ()
-else ()
-  message(STATUS "Systemd service installation disabled by user")
-endif()
-
-# Uninstall target
-configure_file("${CMAKE_SOURCE_DIR}/cmake/CmakeUninstall.cmake.in"
-  "${CMAKE_BINARY_DIR}/cmake/CmakeUninstall.cmake" IMMEDIATE @ONLY)
-
-add_custom_target(uninstall
-  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/cmake/CmakeUninstall.cmake)
-
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PACKAGE_DESCRIPTION}")
-set(CPACK_PACKAGE_DESCRIPTION_FILE    "${CMAKE_CURRENT_SOURCE_DIR}/README")
-set(CPACK_PACKAGE_VERSION_MAJOR       "${PACKAGE_VERSION_MAJOR}")
-set(CPACK_PACKAGE_VERSION_MINOR       "${PACKAGE_VERSION_MINOR}")
-set(CPACK_PACKAGE_VERSION_PATCH       "${PACKAGE_VERSION_PATCH}")
-set(CPACK_PACKAGE_INSTALL_DIRECTORY
-  "CMake ${CMake_VERSION_MAJOR}.${CMake_VERSION_MINOR}")
-set(CPACK_GENERATOR                   "TGZ")
-set(CPACK_SOURCE_GENERATOR            "TGZ")
-
-include(CPack)
-
-#include(FeatureSummary)
-#print_enabled_features()
+include(install)

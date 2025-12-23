@@ -1,0 +1,8 @@
+set(TOOLS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/tools")
+set(TOOLS_BINARY_DIR "${CMAKE_BINARY_DIR}/src/tools")
+
+set(TOOLS_INCLUDE_DIRS
+  ${TOOLS_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/include
+  ${CMAKE_BINARY_DIR}/include
+)

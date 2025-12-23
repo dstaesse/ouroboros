@@ -1,0 +1,8 @@
+include(tools/tools)
+include(tools/irm)
+include(tools/ocbr)
+include(tools/oecho)
+include(tools/obc)
+include(tools/oping)
+include(tools/operf)
+include(tools/ovpn)

@@ -12,6 +12,10 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
+# Add includes for ipcp module files
+include_directories(${CMAKE_SOURCE_DIR}/src/ipcpd)
+include_directories(${CMAKE_BINARY_DIR}/src/ipcpd)
+
 get_filename_component(PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 
@@ -34,5 +38,5 @@ endif()
 
 foreach (test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
-  add_test(${test_name} ${C_TEST_PATH}/${PARENT_DIR}_test ${test_name})
+  add_test(${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${PARENT_DIR}_test ${test_name})
 endforeach (test)

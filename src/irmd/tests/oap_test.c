@@ -19,8 +19,6 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include "config.h"
-
 #include "oap.c"
 
 #include <ouroboros/random.h>

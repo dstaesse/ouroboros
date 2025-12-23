@@ -12,6 +12,12 @@ include_directories(${CURRENT_BINARY_PARENT_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
+# Add includes for ipcp and unicast module files
+include_directories(${CMAKE_SOURCE_DIR}/src/ipcpd)
+include_directories(${CMAKE_BINARY_DIR}/src/ipcpd)
+include_directories(${CMAKE_SOURCE_DIR}/src/ipcpd/unicast)
+include_directories(${CMAKE_BINARY_DIR}/src/ipcpd/unicast)
+
 get_filename_component(PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 

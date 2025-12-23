@@ -8,7 +8,8 @@ create_test_sourcelist(${src_folder}_tests test_suite.c
 )
 
 add_executable(${src_folder}_test ${${src_folder}_tests})
-target_link_libraries(${src_folder}_test ouroboros-common)
+target_link_libraries(${src_folder}_test ouroboros-irm)
+target_include_directories(${src_folder}_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 add_dependencies(build_tests ${src_folder}_test)
 
@@ -21,7 +22,7 @@ endif()
 
 foreach(test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
-  add_test(irmd/${test_name} ${C_TEST_PATH}/${src_folder}_test ${test_name})
+  add_test(irmd/${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${src_folder}_test ${test_name})
 endforeach(test)
 
 set_property(TEST irmd/oap_test PROPERTY SKIP_RETURN_CODE 1)

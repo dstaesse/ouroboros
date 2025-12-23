@@ -54,7 +54,6 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
-#include <math.h>
 #include <errno.h>
 #include <float.h>
 
