@@ -38,12 +38,12 @@ struct shm_rbuff;
 struct shm_rbuff * shm_rbuff_create(pid_t pid,
                                     int   flow_id);
 
+void               shm_rbuff_destroy(struct shm_rbuff * rb);
+
 struct shm_rbuff * shm_rbuff_open(pid_t pid,
                                   int   flow_id);
 
 void               shm_rbuff_close(struct shm_rbuff * rb);
-
-void               shm_rbuff_destroy(struct shm_rbuff * rb);
 
 void               shm_rbuff_set_acl(struct shm_rbuff * rb,
                                      uint32_t           flags);
