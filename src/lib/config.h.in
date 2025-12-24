@@ -30,7 +30,6 @@
 
 #define SYS_MAX_FLOWS            @SYS_MAX_FLOWS@
 
-#cmakedefine                     SHM_RBUFF_LOCKLESS
 #cmakedefine                     SHM_RDRB_MULTI_BLOCK
 #cmakedefine                     QOS_DISABLE_CRC
 #cmakedefine                     HAVE_OPENSSL_RNG

@@ -43,8 +43,6 @@ set(SHM_RDRB_BLOCK_SIZE "sysconf(_SC_PAGESIZE)" CACHE STRING
   "Packet buffer block size, multiple of pagesize for performance")
 set(SHM_RDRB_MULTI_BLOCK TRUE CACHE BOOL
   "Packet buffer multiblock packet support")
-set(SHM_RBUFF_LOCKLESS FALSE CACHE BOOL
-  "Enable shared memory lockless rbuff support")
 set(QOS_DISABLE_CRC TRUE CACHE BOOL
   "Ignores ber setting on all QoS cubes")
 set(DELTA_T_MPL 60 CACHE STRING
