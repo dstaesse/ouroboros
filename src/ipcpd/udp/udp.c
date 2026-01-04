@@ -208,6 +208,8 @@ static int udp_ipcp_port_alloc(const struct __SOCKADDR * r_saddr,
         if (buf == NULL)
                 return -1;
 
+        memset(buf, 0, len + data->len);
+
         msg               = (struct mgmt_msg *) buf;
         msg->eid          = hton32(MGMT_EID);
         msg->code         = FLOW_REQ;
@@ -250,6 +252,8 @@ static int udp_ipcp_port_alloc_resp(const struct __SOCKADDR * r_saddr,
         msg = malloc(sizeof(*msg) + data->len);
         if (msg == NULL)
                 return -1;
+
+        memset(msg, 0, sizeof(*msg) + data->len);
 
         msg->eid      = hton32(MGMT_EID);
         msg->code     = FLOW_REPLY;

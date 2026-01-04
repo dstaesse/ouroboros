@@ -474,6 +474,8 @@ static int eth_ipcp_alloc(const uint8_t *  dst_addr,
         if (buf == NULL)
                 return -1;
 
+        memset(buf, 0, len + ETH_HEADER_TOT_SIZE + data->len);
+
         msg          = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
         msg->code    = FLOW_REQ;
 #if defined(BUILD_ETH_DIX)
@@ -525,6 +527,8 @@ static int eth_ipcp_alloc_resp(uint8_t *        dst_addr,
         buf = malloc(sizeof(*msg) + ETH_HEADER_TOT_SIZE + data->len);
         if (buf == NULL)
                 return -1;
+
+        memset(buf, 0, sizeof(*msg) + ETH_HEADER_TOT_SIZE + data->len);
 
         msg = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
 
@@ -663,6 +667,8 @@ static int eth_ipcp_name_query_req(const uint8_t * hash,
                 buf = malloc(len + ETH_HEADER_TOT_SIZE);
                 if (buf == NULL)
                         return -1;
+
+                memset(buf, 0, len + ETH_HEADER_TOT_SIZE);
 
                 msg       = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
                 msg->code = NAME_QUERY_REPLY;
@@ -1649,6 +1655,8 @@ static int eth_ipcp_query(const uint8_t * hash)
         buf = malloc(len + ETH_HEADER_TOT_SIZE);
         if (buf == NULL)
                 return -1;
+
+        memset(buf, 0, len + ETH_HEADER_TOT_SIZE);
 
         msg       = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
         msg->code = NAME_QUERY_REQ;
