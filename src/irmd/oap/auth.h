@@ -1,7 +1,8 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
- * Unit tests of IRMd functions
+ * OAP - Authentication functions
+ *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
  *
@@ -19,15 +20,16 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#ifndef OUROBOROS_IRMD_OAP_AUTH_H
+#define OUROBOROS_IRMD_OAP_AUTH_H
 
+#include "hdr.h"
 
-int irm_test(int argc,
-             char **argv)
-{
-        int ret = 0;
+int  oap_check_hdr(const struct oap_hdr * hdr);
 
-        (void) argc;
-        (void) argv;
+/* name is updated with the peer's certificate name if available */
+int  oap_auth_peer(char *                 name,
+                   const struct oap_hdr * local_hdr,
+                   const struct oap_hdr * peer_hdr);
 
-        return ret;
-}
+#endif /* OUROBOROS_IRMD_OAP_AUTH_H */

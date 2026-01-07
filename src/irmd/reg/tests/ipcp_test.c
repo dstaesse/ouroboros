@@ -20,7 +20,7 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#include <ouroboros/test.h>
+#include <test/test.h>
 
 #include "../ipcp.c"
 

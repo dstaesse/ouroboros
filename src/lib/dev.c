@@ -502,8 +502,10 @@ static void flow_fini(int fd)
         pthread_rwlock_unlock(&ai.lock);
 }
 
+#define IS_ENCRYPTED(crypt) ((crypt)->nid != NID_undef)
+#define IS_ORDERED(flow) (flow.qs.in_order != 0)
 static int flow_init(struct flow_info * info,
-                     buffer_t *         sk)
+                     struct crypt_sk *  sk)
 {
         struct timespec now;
         struct flow *   flow;
@@ -542,16 +544,15 @@ static int flow_init(struct flow_info * info,
         flow->rcv_act  = now;
         flow->crypt    = NULL;
 
-        if (sk!= NULL && sk->data != NULL) {
-                assert(sk->len == SYMMKEYSZ);
-                flow->crypt = crypt_create_ctx(sk->data);
+        if (IS_ENCRYPTED(sk)) {
+                flow->crypt = crypt_create_ctx(sk);
                 if (flow->crypt == NULL)
                         goto fail_crypt;
         }
 
         assert(flow->frcti == NULL);
 
-        if (info->qs.in_order != 0) {
+        if (IS_ORDERED(flow->info)) {
                 flow->frcti = frcti_create(fd, DELT_A, DELT_R, info->mpl);
                 if (flow->frcti == NULL)
                         goto fail_frcti;
@@ -708,6 +709,11 @@ static void init(int     argc,
                 goto fail_timerwheel;
         }
 
+        if (crypt_secure_malloc_init(PROC_SECMEM_MAX) < 0) {
+                fprintf(stderr, "FATAL: Could not init secure malloc.\n");
+                goto fail_timerwheel;
+        }
+
 #if defined PROC_FLOW_STATS
         if (strstr(argv[0], "ipcpd") == NULL) {
                 sprintf(procstr, "proc.%d", getpid());
@@ -823,12 +829,13 @@ __attribute__((section(FINI_SECTION))) __typeof__(fini) * __fini = fini;
 int flow_accept(qosspec_t *             qs,
                 const struct timespec * timeo)
 {
-        struct flow_info flow;
-        uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {SOCK_BUF_SIZE, buf};
-        buffer_t         sk;
-        int              fd;
-        int              err;
+        struct flow_info  flow;
+        struct crypt_sk crypt;
+        uint8_t           buf[SOCK_BUF_SIZE];
+        buffer_t          msg = {SOCK_BUF_SIZE, buf};
+        uint8_t           key[SYMMKEYSZ];
+        int               fd;
+        int               err;
 
 #ifdef QOS_DISABLE_CRC
         if (qs != NULL)
@@ -846,13 +853,15 @@ int flow_accept(qosspec_t *             qs,
         if (err < 0)
                 return err;
 
-        err = flow__irm_result_des(&msg, &flow, &sk);
+        crypt.key = key;
+
+        err = flow__irm_result_des(&msg, &flow, &crypt);
         if (err < 0)
                 return err;
 
-        fd = flow_init(&flow, &sk);
+        fd = flow_init(&flow, &crypt);
 
-        freebuf(sk);
+        explicit_bzero(key, SYMMKEYSZ);
 
         if (qs != NULL)
                 *qs = flow.qs;
@@ -864,12 +873,13 @@ int flow_alloc(const char *            dst,
                qosspec_t *             qs,
                const struct timespec * timeo)
 {
-        struct flow_info flow;
-        uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {SOCK_BUF_SIZE, buf};
-        buffer_t         sk; /* symmetric key */
-        int              fd;
-        int              err;
+        struct flow_info  flow;
+        struct crypt_sk crypt;
+        uint8_t           buf[SOCK_BUF_SIZE];
+        buffer_t          msg = {SOCK_BUF_SIZE, buf};
+        uint8_t           key[SYMMKEYSZ];
+        int               fd;
+        int               err;
 
 #ifdef QOS_DISABLE_CRC
         if (qs != NULL)
@@ -890,13 +900,15 @@ int flow_alloc(const char *            dst,
                 return err;
         }
 
-        err = flow__irm_result_des(&msg, &flow, &sk);
+        crypt.key = key;
+
+        err = flow__irm_result_des(&msg, &flow, &crypt);
         if (err < 0)
                 return err;
 
-        fd = flow_init(&flow, &sk);
+        fd = flow_init(&flow, &crypt);
 
-        freebuf(sk);
+        explicit_bzero(key, SYMMKEYSZ);
 
         if (qs != NULL)
                 *qs = flow.qs;
@@ -907,11 +919,13 @@ int flow_alloc(const char *            dst,
 int flow_join(const char *            dst,
               const struct timespec * timeo)
 {
-        struct flow_info flow;
-        uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {SOCK_BUF_SIZE, buf};
-        int              fd;
-        int              err;
+        struct flow_info  flow;
+        struct crypt_sk crypt;
+        uint8_t           buf[SOCK_BUF_SIZE];
+        buffer_t          msg = {SOCK_BUF_SIZE, buf};
+        uint8_t           key[SYMMKEYSZ];
+        int               fd;
+        int               err;
 
         memset(&flow, 0, sizeof(flow));
 
@@ -925,11 +939,15 @@ int flow_join(const char *            dst,
         if (err < 0)
                 return err;
 
-        err = flow__irm_result_des(&msg, &flow, NULL);
+        crypt.key = key;
+
+        err = flow__irm_result_des(&msg, &flow, &crypt);
         if (err < 0)
                 return err;
 
-        fd = flow_init(&flow, NULL);
+        fd = flow_init(&flow, &crypt);
+
+        explicit_bzero(key, SYMMKEYSZ);
 
         return fd;
 }
@@ -1785,7 +1803,8 @@ ssize_t fevent(struct flow_set *       set,
 int np1_flow_alloc(pid_t n_pid,
                    int   flow_id)
 {
-        struct flow_info flow;
+        struct flow_info  flow;
+        struct crypt_sk crypt = { .nid = NID_undef, .key = NULL };
 
         memset(&flow, 0, sizeof(flow));
 
@@ -1795,7 +1814,7 @@ int np1_flow_alloc(pid_t n_pid,
         flow.mpl     = 0;
         flow.n_1_pid = n_pid; /* This "flow" is upside-down! */
 
-        return flow_init(&flow, NULL);
+        return flow_init(&flow, &crypt);
 }
 
 int np1_flow_dealloc(int    flow_id,
@@ -1859,9 +1878,11 @@ int ipcp_flow_req_arr(const buffer_t * dst,
                       const buffer_t * data)
 {
         struct flow_info flow;
-        uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {SOCK_BUF_SIZE, buf};
-        int              err;
+        uint8_t           buf[SOCK_BUF_SIZE];
+        buffer_t          msg = {SOCK_BUF_SIZE, buf};
+        struct crypt_sk crypt;
+        uint8_t           key[SYMMKEYSZ];
+        int               err;
 
         memset(&flow, 0, sizeof(flow));
 
@@ -1878,9 +1899,13 @@ int ipcp_flow_req_arr(const buffer_t * dst,
         if (err < 0)
                 return err;
 
-        err = flow__irm_result_des(&msg, &flow, NULL);
+        crypt.key = key;
+
+        err = flow__irm_result_des(&msg, &flow, &crypt);
         if (err < 0)
                 return err;
+
+        assert(crypt.nid == NID_undef); /* np1 flows are not encrypted */
 
         /* inverted for np1_flow */
         flow.n_1_pid = flow.n_pid;
@@ -1888,7 +1913,9 @@ int ipcp_flow_req_arr(const buffer_t * dst,
         flow.mpl     = 0;
         flow.qs      = qos_np1;
 
-        return flow_init(&flow, NULL);
+        crypt.nid = NID_undef;
+
+        return flow_init(&flow, &crypt);
 }
 
 int ipcp_flow_alloc_reply(int              fd,

@@ -24,6 +24,7 @@
 
 #include "config.h"
 
+#include <ouroboros/crypt.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/serdes-irm.h>
 #include <ouroboros/protobuf.h>
@@ -133,15 +134,12 @@ int flow_join__irm_req_ser(buffer_t *               buf,
                                 IRM_MSG_CODE__IRM_FLOW_JOIN);
 }
 
-int flow__irm_result_des(buffer_t *         buf,
-                         struct flow_info * flow,
-                         buffer_t  *        sk)
+int flow__irm_result_des(buffer_t *          buf,
+                         struct flow_info *  flow,
+                         struct crypt_sk * sk)
 {
         irm_msg_t * msg;
         int         err;
-
-        if (sk != NULL)
-                sk->data = NULL;
 
         msg = irm_msg__unpack(NULL, buf->len, buf->data);
         if (msg == NULL) {
@@ -166,13 +164,15 @@ int flow__irm_result_des(buffer_t *         buf,
 
         *flow = flow_info_msg_to_s(msg->flow_info);
 
-        if (sk != NULL) {
-                sk->len  = msg->symmkey.len;
-                sk->data = msg->symmkey.data;
+        if (msg->has_cipher_nid)
+                sk->nid = msg->cipher_nid;
+        else
+                sk->nid = NID_undef;
 
-                msg->symmkey.data = NULL;
-                msg->symmkey.len  = 0;
-        }
+        if (msg->sym_key.len == SYMMKEYSZ)
+                memcpy(sk->key, msg->sym_key.data, SYMMKEYSZ);
+        else
+                memset(sk->key, 0, SYMMKEYSZ);
 
         irm_msg__free_unpacked(msg, NULL);
 

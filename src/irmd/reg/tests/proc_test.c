@@ -22,7 +22,7 @@
 
 #include "../proc.c"
 
-#include <ouroboros/test.h>
+#include <test/test.h>
 
 #define TEST_PID  65534
 #define TEST_PROG "usr/bin/testprog"

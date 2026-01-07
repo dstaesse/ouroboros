@@ -31,6 +31,8 @@ set(CONNECT_TIMEOUT 20000 CACHE STRING
   "Timeout to connect an IPCP to another IPCP (ms)")
 set(FLOW_ALLOC_TIMEOUT 20000 CACHE STRING
   "Timeout for a flow allocation response (ms)")
+set(OAP_REPLAY_TIMER 20 CACHE STRING
+  "OAP replay protection window (s)")
 set(IRMD_MIN_THREADS 8 CACHE STRING
   "Minimum number of worker threads in the IRMd")
 set(IRMD_ADD_THREADS 8 CACHE STRING
@@ -55,7 +57,11 @@ if (LIBTOML_LIBRARIES)
     set(INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}")
     configure_file("${CMAKE_SOURCE_DIR}/irmd.conf.in"
       "${CMAKE_BINARY_DIR}/${OUROBOROS_CONFIG_FILE}.example" @ONLY)
+    configure_file("${CMAKE_SOURCE_DIR}/enc.conf.in"
+      "${CMAKE_BINARY_DIR}/enc.conf.example" @ONLY)
     install(FILES "${CMAKE_BINARY_DIR}/${OUROBOROS_CONFIG_FILE}.example"
+      DESTINATION "${OUROBOROS_CONFIG_DIR}")
+    install(FILES "${CMAKE_BINARY_DIR}/enc.conf.example"
       DESTINATION "${OUROBOROS_CONFIG_DIR}")
     install(CODE "
       if (NOT EXISTS \"${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}\")
@@ -81,7 +87,11 @@ set(IRMD_SOURCES
   "${IRMD_SOURCE_DIR}/ipcp.c"
   "${IRMD_SOURCE_DIR}/configfile.c"
   "${IRMD_SOURCE_DIR}/main.c"
-  "${IRMD_SOURCE_DIR}/oap.c"
+  "${IRMD_SOURCE_DIR}/oap/io.c"
+  "${IRMD_SOURCE_DIR}/oap/hdr.c"
+  "${IRMD_SOURCE_DIR}/oap/auth.c"
+  "${IRMD_SOURCE_DIR}/oap/srv.c"
+  "${IRMD_SOURCE_DIR}/oap/cli.c"
   "${IRMD_SOURCE_DIR}/reg/flow.c"
   "${IRMD_SOURCE_DIR}/reg/ipcp.c"
   "${IRMD_SOURCE_DIR}/reg/proc.c"

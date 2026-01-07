@@ -22,7 +22,7 @@
 
 #define _POSIX_C_SOURCE 200809L
 
-#include <ouroboros/test.h>
+#include <test/test.h>
 #include <ouroboros/time.h>
 
 #include <stdio.h>

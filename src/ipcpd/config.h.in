@@ -72,10 +72,11 @@
 #cmakedefine HAVE_BPF
 #cmakedefine HAVE_RAW_SOCKETS
 #cmakedefine IPCP_ETH_QDISC_BYPASS
-#define IPCP_ETH_RD_THR     @IPCP_ETH_RD_THR@
-#define IPCP_ETH_WR_THR     @IPCP_ETH_WR_THR@
-#define IPCP_ETH_LO_MTU     @IPCP_ETH_LO_MTU@
-#define IPCP_ETH_MPL        @IPCP_ETH_MPL@
+#define IPCP_ETH_RD_THR          @IPCP_ETH_RD_THR@
+#define IPCP_ETH_WR_THR          @IPCP_ETH_WR_THR@
+#define IPCP_ETH_LO_MTU          @IPCP_ETH_LO_MTU@
+#define IPCP_ETH_MGMT_FRAME_SIZE @IPCP_ETH_MGMT_FRAME_SIZE@
+#define IPCP_ETH_MPL             @IPCP_ETH_MPL@
 
 /* local */
 #define IPCP_LOCAL_MPL      @IPCP_LOCAL_MPL@

@@ -1,0 +1,150 @@
+### Example Ouroboros encryption configuration file
+#
+# This file specifies the key exchange (KEX) algorithm and cipher to use
+# for encrypted flows.
+#
+# File Locations:
+# ---------------
+#
+# This file should be placed at one of:
+#   @OUROBOROS_CONFIG_DIR@/security/server/<name>/enc.conf  (server-side config)
+#   @OUROBOROS_CONFIG_DIR@/security/client/<name>/enc.conf  (client-side config)
+#
+# Where <name> is the service name registered with 'irm name create'.
+#
+# You can override the default paths using:
+#   irm name create <name> sencpath <server-enc-path> cencpath <client-enc-path>
+#
+# Configuration Options:
+# ----------------------
+#
+# kex=<algorithm>      Key exchange/encapsulation algorithm
+# cipher=<cipher>      Symmetric cipher algorithm
+# kdf=<hash>           Key derivation function hash algorithm
+# kem_mode=<mode>      KEM encapsulation mode (server or client)
+# none                 Explicitly disable encryption
+#
+# Supported KEX algorithms (kex=):
+# --------------------------------
+#
+# ECDH Curves:
+#   prime256v1     NIST P-256 (default)
+#   secp384r1      NIST P-384
+#   secp521r1      NIST P-521
+#   X25519         Curve25519
+#   X448           Curve448
+#
+# Finite Field Diffie-Hellman (RFC 7919):
+#   ffdhe2048      2048-bit MODP Group
+#   ffdhe3072      3072-bit MODP Group
+#   ffdhe4096      4096-bit MODP Group
+#
+# ML-KEM (FIPS 203):
+#   ML-KEM-512     CRYSTALS-Kyber-512
+#   ML-KEM-768     CRYSTALS-Kyber-768
+#   ML-KEM-1024    CRYSTALS-Kyber-1024
+#
+# Hybrid KEMs:
+#   X25519MLKEM768  X25519 + ML-KEM-768
+#   X448MLKEM1024   X448 + ML-KEM-1024
+#
+# Supported cipher algorithms (cipher=):
+# --------------------------------------
+#
+# Authenticated encryption:
+#   aes-128-gcm         AES-128 in GCM mode
+#   aes-192-gcm         AES-192 in GCM mode
+#   aes-256-gcm         AES-256 in GCM mode (default)
+#   chacha20-poly1305   ChaCha20-Poly1305
+#
+# Stream ciphers (not recommended):
+#   aes-128-ctr         AES-128 in CTR mode
+#   aes-192-ctr         AES-192 in CTR mode
+#   aes-256-ctr         AES-256 in CTR mode
+#
+# Key Derivation Functions (kdf=):
+# ---------------------------------
+#
+# Hash algorithms for key derivation in KEX operations:
+#
+#   sha256              SHA-256 (default)
+#   sha384              SHA-384
+#   sha512              SHA-512
+#   sha3-256            SHA3-256
+#   sha3-384            SHA3-384
+#   sha3-512            SHA3-512
+#   blake2b512          BLAKE2b-512 (requires OpenSSL 1.1.0+)
+#   blake2s256          BLAKE2s-256 (requires OpenSSL 1.1.0+)
+#
+# KEM Mode (kem_mode=):
+# ---------------------
+#
+# For KEM algorithms (ML-KEM-* and hybrid KEMs), specify which side
+# performs the encapsulation operation:
+#
+#   server    Server encapsulates to client's ephemeral public key (default, matches TLS 1.3)
+#             - Client generates ephemeral keypair, sends public key in request
+#             - Server encapsulates and sends ciphertext in response
+#             - Client decapsulates with ephemeral private key
+#             - Standard approach, no pre-shared keys needed
+#
+#   client    Client encapsulates to server's static public key (alternative)
+#             - Requires cached server public key at:
+#               @OUROBOROS_CONFIG_DIR@/security/client/<service>/kex.srv.pub.[pem|raw]
+#             - Client encapsulates and sends ciphertext in initial request
+#             - Server decapsulates with its static private key from:
+#               @OUROBOROS_CONFIG_DIR@/security/server/kex.key.pem
+#             - More efficient (0 round-trip) but requires key distribution
+#               and forfeits forward secrecy
+#
+# Note: Both sides must use the same kem_mode setting.
+# This option is ignored for ECDH/DH key exchange algorithms.
+#
+# Key Management for Client Mode:
+# --------------------------------
+#
+# For client encapsulation mode, you must:
+# 1. Generate server KEM keypair:
+#      openssl genpkey -algorithm ML-KEM-768 \
+#        -out @OUROBOROS_CONFIG_DIR@/security/server/kex.key.pem
+# 2. Extract and distribute server public key:
+#      openssl pkey -in kex.key.pem -pubout -out kex.srv.pub.pem
+# 3. Cache on clients at:
+#      @OUROBOROS_CONFIG_DIR@/security/client/<service-name>/kex.srv.pub.pem
+#
+# File formats:
+# - Pure ML-KEM: PEM format (.pem extension)
+# - Hybrid KEMs: Raw bytes (.raw extension)
+#
+# Examples:
+# ---------
+#
+# Default configuration (NIST P-256 ECDH + AES-256-GCM):
+kex=prime256v1
+cipher=aes-256-gcm
+kdf=sha256
+#
+# Post-quantum KEX with server encapsulation (default, like TLS 1.3):
+# kex=ML-KEM-768
+# cipher=chacha20-poly1305
+# kdf=sha256
+# kem_mode=server
+#
+# Post-quantum KEX with client encapsulation (requires key distribution):
+# kex=ML-KEM-768
+# cipher=chacha20-poly1305
+# kdf=sha256
+# kem_mode=client
+#
+# Hybrid KEX (quantum-resistant):
+# kex=X25519MLKEM768
+# cipher=aes-256-gcm
+# kdf=sha256
+#
+# High security configuration:
+# kex=secp521r1
+# cipher=aes-256-gcm
+# kdf=sha512
+#
+# Disable encryption:
+# none

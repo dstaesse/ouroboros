@@ -19,6 +19,8 @@ include_directories(${CMAKE_BINARY_DIR}/src/ipcpd)
 get_filename_component(PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 
+compute_test_prefix()
+
 create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   # Add new tests here
   pft_test.c
@@ -39,5 +41,5 @@ endif()
 
 foreach (test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
-  add_test(${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${PARENT_DIR}_test ${test_name})
+  add_test(${TEST_PREFIX}/${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${PARENT_DIR}_test ${test_name})
 endforeach (test)

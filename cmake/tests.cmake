@@ -1,4 +1,5 @@
 include(CTest) # Sets BUILD_TESTING by default to on.
+include(utils/TestUtils)
 
 include(utils/DisableTestLogging)
 
@@ -16,7 +17,7 @@ if (BUILD_TESTS)
 
   # Add test subdirectories
   add_subdirectory(src/lib/tests)
-  add_subdirectory(src/irmd/tests)
+  add_subdirectory(src/irmd/oap/tests)
   add_subdirectory(src/ipcpd/unicast/pff/tests)
   add_subdirectory(src/ipcpd/unicast/routing/tests)
   add_subdirectory(src/ipcpd/unicast/dir/tests)

@@ -138,7 +138,7 @@
 
 #define NAME_QUERY_TIMEO     2000  /* ms */
 #define MGMT_TIMEO           100   /* ms */
-#define MGMT_FRAME_SIZE      2048
+#define MGMT_FRAME_SIZE      IPCP_ETH_MGMT_FRAME_SIZE
 
 #define FLOW_REQ             0
 #define FLOW_REPLY           1
@@ -936,6 +936,12 @@ static void * eth_ipcp_packet_reader(void * o)
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
 #endif
                         ipcp_sdb_release(sdb); /* No need for the N+1 buffer. */
+
+                        if (length > MGMT_FRAME_SIZE) {
+                                log_warn("Management frame size %u exceeds %u.",
+                                         length, MGMT_FRAME_SIZE);
+                                goto fail_frame;
+                        }
 
                         frame = malloc(sizeof(*frame));
                         if (frame == NULL) {

@@ -21,7 +21,7 @@
  */
 
 #include <ouroboros/hash.h>
-#include <ouroboros/test.h>
+#include <test/test.h>
 
 #include <stdlib.h>
 #include <stdint.h>

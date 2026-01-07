@@ -27,7 +27,7 @@
 #define _POSIX_C_SOURCE 200112L
 #endif
 
-#include <ouroboros/test.h>
+#include <test/test.h>
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 

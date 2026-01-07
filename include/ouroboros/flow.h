@@ -27,7 +27,9 @@
 
 #include <sys/types.h>
 
- enum flow_state {    /* DO NOT CHANGE ORDER! */
+#define SYMMKEYSZ 32
+
+enum flow_state {    /* DO NOT CHANGE ORDER! */
         FLOW_INIT = 0,
         FLOW_ALLOC_PENDING,
         FLOW_ACCEPT_PENDING,

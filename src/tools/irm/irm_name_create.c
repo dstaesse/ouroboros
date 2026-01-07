@@ -51,10 +51,10 @@
 
 #define RR    "round-robin"
 #define SPILL "spillover"
-#define SENC  "<security_dir>/server/<name>/enc.cfg"
+#define SENC  "<security_dir>/server/<name>/enc.conf"
 #define SCRT  "<security_dir>/server/<name>/crt.pem"
 #define SKEY  "<security_dir>/server/<name>/key.pem"
-#define CENC  "<security_dir>/client/<name>/enc.cfg"
+#define CENC  "<security_dir>/client/<name>/enc.conf"
 #define CCRT  "<security_dir>/client/<name>/crt.pem"
 #define CKEY  "<security_dir>/client/<name>/key.pem"
 

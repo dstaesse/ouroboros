@@ -23,6 +23,7 @@
 #define _DEFAULT_SOURCE
 
 #include <ouroboros/protobuf.h>
+#include <ouroboros/crypt.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -95,6 +96,8 @@ struct flow_info flow_info_msg_to_s(const flow_info_msg_t * msg)
         struct flow_info s;
 
         assert(msg != NULL);
+
+        memset(&s, 0, sizeof(s));
 
         s.id      = msg->id;
         s.n_pid   = msg->n_pid;

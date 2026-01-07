@@ -91,8 +91,9 @@ message irm_msg {
         optional sint32 mpl              = 20;
         optional string comp             = 21;
         optional bytes pk                = 22; /* piggyback */
-        optional bytes symmkey           = 23;
-        optional uint32 timeo_sec        = 24;
-        optional uint32 timeo_nsec       = 25;
-        optional sint32 result           = 26;
+        optional uint32 timeo_sec        = 23;
+        optional uint32 timeo_nsec       = 24;
+        optional sint32 result           = 25;
+        optional bytes  sym_key          = 26; /* symmetric encryption key */
+        optional sint32 cipher_nid       = 27; /* cipher NID */
 }

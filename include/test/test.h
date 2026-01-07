@@ -34,14 +34,21 @@
 #define TEST_RC_SKIP     1
 #define TEST_RC_FAIL    -1
 
-#define TEST_START()                                                          \
+#define TEST_START(...)                                                       \
         do {                                                                  \
-                printf("%s started.\n", __func__);                            \
+                printf("%s", __func__);                                       \
+                if (sizeof(#__VA_ARGS__) > 1)                                 \
+                        printf(" " __VA_ARGS__);                              \
+                printf(" started.\n");                                        \
                 fflush(stdout);                                               \
         } while (0)
-#define TEST_SUCCESS()                                                        \
+
+#define TEST_SUCCESS(...)                                                     \
         do {                                                                  \
-                printf("\x1b[32m%s succeeded.\x1b[0m\n", __func__);            \
+                printf("\x1b[32m%s", __func__);                               \
+                if (sizeof(#__VA_ARGS__) > 1)                                 \
+                        printf(" " __VA_ARGS__);                              \
+                printf(" succeeded.\x1b[0m\n");                               \
                 fflush(stdout);                                               \
         } while (0)
 
@@ -51,9 +58,12 @@
                 fflush(stdout);                                               \
         } while (0)
 
-#define TEST_FAIL()                                                           \
+#define TEST_FAIL(...)                                                        \
         do {                                                                  \
-                printf("\x1b[31m%s failed.\x1b[0m\n", __func__);              \
+                printf("\x1b[31m%s", __func__);                               \
+                if (sizeof(#__VA_ARGS__) > 1)                                 \
+                        printf(" " __VA_ARGS__);                              \
+                printf(" failed.\x1b[0m\n");                                  \
                 fflush(stdout);                                               \
         } while (0)
 

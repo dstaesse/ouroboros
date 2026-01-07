@@ -1,6 +1,8 @@
 get_filename_component(tmp ".." ABSOLUTE)
 get_filename_component(src_folder "${tmp}" NAME)
 
+compute_test_prefix()
+
 # Set include directories for tests
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -39,5 +41,5 @@ endif()
 
 foreach(test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
-  add_test(irmd/reg/${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${src_folder}_test ${test_name})
+  add_test(${TEST_PREFIX}/${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${src_folder}_test ${test_name})
 endforeach(test)

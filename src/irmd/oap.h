@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2024
  *
- * Ouroboros flow allocation protocol header
+ * Ouroboros Allocation Protocol (OAP) Component
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -23,72 +23,45 @@
 #ifndef OUROBOROS_IRMD_OAP_H
 #define OUROBOROS_IRMD_OAP_H
 
+#include <ouroboros/crypt.h>
+#include <ouroboros/flow.h>
+#include <ouroboros/name.h>
 #include <ouroboros/utils.h>
 
-#define OAP_ID_SIZE      (16)
-#define OAP_HDR_MIN_SIZE (OAP_ID_SIZE + sizeof(uint64_t) + 4 * sizeof(uint16_t))
+/* OAP authentication state (in oap/auth.c) */
+int  oap_auth_init(void);
 
+void oap_auth_fini(void);
+
+int  oap_auth_add_ca_crt(void * crt);
 
 /*
- *  0                   1                   2                   3
- *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
- * +---------------------------------------------------------------+
- * |                                                               |
- * |                        id (128 bits)                          |
- * |                                                               |
- * |                                                               |
- * +---------------------------------------------------------------+
- * |                      timestamp (64 bits)                      |
- * |                                                               |
- * +---------------------------------------------------------------+
- * |      crt_len  (16 bits)     |                                 |
- * +-----------+-----------------+                                 |
- * |                        certificate                            |
- * |                                                               |
- * +---------------------------------------------------------------+
- * |      eph_len  (16 bits)     |                                 |
- * +-----------+-----------------+                                 |
- * |                   public key for ECDHE                        |
- * |                                                               |
- * +---------------------------------------------------------------+
- * |     data_len (16 bits)      |                                 |
- * +-----------+-----------------+                                 |
- * |               piggy backed application data                   |
- * |                                                               |
- * +---------------------------------------------------------------+
- * |     sig_len  (16 bits)      |                                 |
- * +-----------+-----------------+                                 |
- * |                         signature                             |
- * |                                                               |
- * +---------------------------------------------------------------+
+* Prepare OAP request header for server, returns context
+* Passes client data for srv, returns srv data for client
+*/
+int  oap_cli_prepare(void **                  ctx,
+                     const struct name_info * info,
+                     buffer_t *               req_buf,
+                     buffer_t                 data);
+
+/*
+ * Server processes header, creates response header, returns secret key.
+ * data is in/out: input=srv data to send, output=cli data received.
  */
+int  oap_srv_process(const struct name_info * info,
+                     buffer_t                 req_buf,
+                     buffer_t *               rsp_buf,
+                     buffer_t *               data,
+                     struct crypt_sk *        sk);
 
-struct oap_hdr {
-        uint64_t timestamp;
-        buffer_t id;
-        buffer_t crt;
-        buffer_t eph;
-        buffer_t data;
-        buffer_t sig;
-        buffer_t hdr;
-};
+/* Complete OAP, returns secret key and server data, frees ctx */
+int  oap_cli_complete(void *                   ctx,
+                      const struct name_info * info,
+                      buffer_t                 rsp_buf,
+                      buffer_t *               data,
+                      struct crypt_sk *        sk);
 
-int  oap_hdr_init(buffer_t         id,
-                  void *           pkp,
-                  void *           pubcrt,
-                  buffer_t         ephkey,
-                  buffer_t         data,
-                  struct oap_hdr * oap_hdr);
-
-void oap_hdr_fini(struct oap_hdr * oap_hdr);
-
-int  oap_hdr_decode(buffer_t         hdr,
-                    struct oap_hdr * oap_hdr);
-
-#ifdef DEBUG_PROTO_OAP
-void debug_oap_hdr_snd(const struct oap_hdr * hdr);
-
-void debug_oap_hdr_rcv(const struct oap_hdr * hdr);
-#endif /* DEBUG_PROTO_OAP */
+/* Free OAP state (on failure before complete) */
+void oap_ctx_free(void * ctx);
 
 #endif /* OUROBOROS_IRMD_OAP_H */

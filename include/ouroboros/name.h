@@ -35,8 +35,8 @@ enum pol_balance {
 
 struct name_sec_paths {
         char enc[NAME_PATH_SIZE + 1]; /* path to crypt for this name */
-        char key[NAME_PATH_SIZE + 1]; /* path to key for this name */
-        char crt[NAME_PATH_SIZE + 1]; /* path to crt for this name */
+        char key[NAME_PATH_SIZE + 1]; /* path to key for this name   */
+        char crt[NAME_PATH_SIZE + 1]; /* path to crt for this name   */
 };
 
 struct name_info {

@@ -23,7 +23,7 @@
 
 #include "../reg.c"
 
-#include <ouroboros/test.h>
+#include <test/test.h>
 
 #define TEST_PID      3666
 #define TEST_N_1_PID  3999
@@ -1471,7 +1471,7 @@ static int test_wait_ipcp_boot_fail(void)
         struct ipcp_info resp_info = {
                 .name  = TEST_IPCP,
                 .pid   = TEST_PID,
-                .state = IPCP_INIT
+                .state = IPCP_NULL
         };
 
         TEST_START();

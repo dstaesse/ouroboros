@@ -31,8 +31,8 @@
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define ABS(a)   ((a) > 0 ? (a) : -(a))
-#define clrbuf(buf) do { memset(&(buf), 0, sizeof(buf)); } while (0);
-#define freebuf(buf) do { free((buf).data); clrbuf(buf); } while (0);
+#define clrbuf(buf) do { memset(&(buf), 0, sizeof(buf)); } while (0)
+#define freebuf(buf) do { free((buf).data); clrbuf(buf); } while (0)
 #define BUF_INIT { 0, NULL }
 #define BUF_IS_EMPTY(buf) ((buf)->data == NULL && (buf)->len == 0)
 
@@ -50,8 +50,9 @@ int bufcmp(const buffer_t * a,
  */
 int n_digits(unsigned i);
 
-/* gets the application name */
 char * path_strip(const char * src);
+
+char * trim_whitespace(char * str);
 
 /* functions for copying and destroying arguments list */
 size_t  argvlen(const char ** argv);

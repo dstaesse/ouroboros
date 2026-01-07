@@ -23,7 +23,7 @@
 
 #include "tpm.c"
 
-#include <ouroboros/test.h>
+#include <test/test.h>
 
 static void * test_func(void * o)
 {

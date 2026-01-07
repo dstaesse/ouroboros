@@ -22,7 +22,7 @@
 
 #include "../flow.c"
 
-#include <ouroboros/test.h>
+#include <test/test.h>
 
 #include <string.h>
 

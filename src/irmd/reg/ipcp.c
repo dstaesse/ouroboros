@@ -77,7 +77,6 @@ void reg_ipcp_update(struct reg_ipcp *        ipcp,
                      const struct ipcp_info * info)
 {
         assert(ipcp != NULL);
-        assert(info->state != IPCP_NULL);
 
         ipcp->info = *info;
 }

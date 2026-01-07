@@ -23,9 +23,11 @@
 #cmakedefine HAVE_SYS_RANDOM
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL
-
 #ifdef HAVE_OPENSSL
+#cmakedefine HAVE_OPENSSL_PQC
 #define HAVE_ENCRYPTION
+#define PROC_SECMEM_MAX          @PROC_SECMEM_MAX@
+#define SECMEM_GUARD             @SECMEM_GUARD@
 #endif
 
 #define SYS_MAX_FLOWS            @SYS_MAX_FLOWS@
