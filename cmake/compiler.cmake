@@ -31,6 +31,18 @@ test_and_set_c_compiler_flag_global(-Wdeclaration-after-statement)
 test_and_set_c_compiler_flag_global(-Winfinite-recursion)
 test_and_set_c_compiler_flag_global(-fmax-errors=5)
 
+set(DISABLE_COVERAGE ON CACHE BOOL "Disable code coverage analysis")
+
+if (NOT DISABLE_COVERAGE)
+  test_and_set_c_compiler_flag_global(-g)
+  test_and_set_c_compiler_flag_global(--coverage)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --coverage")
+  set(ENABLE_COVERAGE ON)
+else()
+  set(ENABLE_COVERAGE OFF)
+endif()
+
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING
       "Build type (Release, Debug, DebugASan, DebugTSan, DebugLSan, DebugUSan, DebugAnalyzer)" FORCE)

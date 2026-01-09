@@ -12,5 +12,7 @@ include(dependencies/libtoml)
 include(dependencies/rawsockets)
 include(dependencies/bpf)
 include(dependencies/netmap)
+include(dependencies/gcov)
+include(dependencies/lcov)
 
 
