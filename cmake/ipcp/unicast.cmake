@@ -7,6 +7,10 @@ set(IPCP_UNICAST_MPL 100 CACHE STRING
   "Default maximum packet lifetime for the Unicast IPCP, in ms")
 set(PFT_SIZE 256 CACHE STRING
   "Prefix forwarding table size for the Unicast IPCP")
+set(DEBUG_PROTO_DHT FALSE CACHE BOOL
+  "Add DHT protocol debug logging")
+set(DEBUG_PROTO_LS FALSE CACHE BOOL
+  "Add link state protocol debug logging")
 
 # Generate DHT protobuf files
 protobuf_generate_c(DHT_PROTO_SRCS DHT_PROTO_HDRS "${UNICAST_SOURCE_DIR}/dir/dht.proto")
