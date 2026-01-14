@@ -2851,6 +2851,8 @@ static void do_dht_kv_store(const dht_store_msg_t * store)
         uint8_t *   key;
         time_t      exp;
 
+        (void) key; /* Only in logs, not used with DISABLE_TEST_LOGGING */
+
         assert(store != NULL);
 
         val.data = store->val.data;

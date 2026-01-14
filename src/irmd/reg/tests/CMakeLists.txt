@@ -20,6 +20,8 @@ create_test_sourcelist(${src_folder}_tests test_suite.c
 )
 
 add_executable(${src_folder}_test ${${src_folder}_tests})
+
+disable_test_logging_for_target(${src_folder}_test)
 target_link_libraries(${src_folder}_test ouroboros-common)
 
 if (CMAKE_BUILD_TYPE MATCHES "Debug*")

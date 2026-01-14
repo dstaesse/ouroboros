@@ -1,5 +1,7 @@
 include(CTest) # Sets BUILD_TESTING by default to on.
 
+include(utils/DisableTestLogging)
+
 if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
   set(BUILD_TESTS ON)
 else ()

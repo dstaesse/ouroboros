@@ -1,0 +1,12 @@
+set(DISABLE_TESTS_LOGGING TRUE CACHE BOOL "Disable Ouroboros log output in tests")
+if (DISABLE_TESTS_LOGGING)
+  message(STATUS "Ouroboros logging in test output disabled")
+else ()
+  message(STATUS "Ouroboros logging in test output enabled")
+endif ()
+
+macro(disable_test_logging_for_target target)
+  if (DISABLE_TESTS_LOGGING)
+    target_compile_definitions(${target} PRIVATE OUROBOROS_DISABLE_LOGGING)
+  endif ()
+endmacro()

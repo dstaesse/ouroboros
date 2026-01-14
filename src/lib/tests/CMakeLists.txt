@@ -19,6 +19,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
 
 add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests})
 
+disable_test_logging_for_target(${PARENT_DIR}_test)
 target_link_libraries(${PARENT_DIR}_test ouroboros-common)
 
 add_dependencies(build_tests ${PARENT_DIR}_test)

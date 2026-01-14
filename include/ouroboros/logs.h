@@ -81,6 +81,7 @@ void log_fini(void);
                 }                                                             \
         } while (0)
 
+#ifndef OUROBOROS_DISABLE_LOGGING
 #define log_err(...)                                                          \
          __olog(CLR_RED, ERROR_CODE, LOG_ERR, __VA_ARGS__)
 #define log_warn(...)                                                         \
@@ -95,20 +96,29 @@ void log_fini(void);
         __olog_id(CLR_YELLOW, WARN_CODE, LOG_WARNING, id, fmt, ## __VA_ARGS__)
 #define log_info_id(id, fmt, ...)                                             \
         __olog_id(CLR_GREEN, INFO_CODE, LOG_INFO, id, fmt, ## __VA_ARGS__)
+#else /* OUROBOROS_DISABLE_LOGGING: all logging disabled */
+#define log_err(...)  do { } while (0)
+#define log_warn(...)  do { } while (0)
+#define log_info(...)  do { } while (0)
 
-#ifdef CONFIG_OUROBOROS_DEBUG
+#define log_err_id(id, fmt, ...)  do { (void)(id); } while (0)
+#define log_warn_id(id, fmt, ...)  do { (void)(id); } while (0)
+#define log_info_id(id, fmt, ...)  do { (void)(id); } while (0)
+
+#endif /* OUROBOROS_DISABLE_LOGGING */
+
+#if defined(OUROBOROS_DISABLE_LOGGING) || !defined(CONFIG_OUROBOROS_DEBUG)
+#define log_dbg(...)  do { } while (0)
+#define log_dbg_id(id, ...)  do { (void)(id); } while (0)
+#define log_proto(...) do { } while (0)
+#define log_proto_id(id, ...) do { (void)(id); } while (0)
+#else
 #define log_dbg(...)  __olog("", DEBUG_CODE, LOG_DEBUG, __VA_ARGS__)
 #define log_dbg_id(id, fmt, ...)                                              \
         __olog_id("", DEBUG_CODE, LOG_DEBUG, id, fmt, ## __VA_ARGS__)
 #define log_proto(...) __olog(CLR_BLUE, PROTO_CODE, LOG_DEBUG, __VA_ARGS__)
-#define log_proto_id(id, fmt, ...)                                             \
+#define log_proto_id(id, fmt, ...)                                            \
         __olog_id(CLR_BLUE, INFO_CODE, LOG_INFO, id, fmt, ## __VA_ARGS__)
-
-#else
-#define log_dbg(...)  do { } while (0)
-#define log_dbg_id(...)  do { } while (0)
-#define log_proto(...) do { } while (0)
-#define log_proto_id(...) do { } while (0)
 #endif
 
 #endif /* OUROBOROS_LIB_LOGS_H */
