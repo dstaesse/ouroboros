@@ -455,3 +455,10 @@ size_t shm_rbuff_queued(struct shm_rbuff * rb)
 
         return ret;
 }
+
+int shm_rbuff_mlock(struct shm_rbuff * rb)
+{
+        assert(rb != NULL);
+
+        return mlock(rb->shm_base, SHM_RBUFF_FILESIZE);
+}

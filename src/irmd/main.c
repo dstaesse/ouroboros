@@ -1905,6 +1905,9 @@ static int irm_init(void)
                 goto fail_rdrbuff;
         }
 
+        if (shm_rdrbuff_mlock(irmd.rdrb) < 0)
+                log_warn("Failed to mlock rdrbuff.");
+
         irmd.tpm = tpm_create(IRMD_MIN_THREADS, IRMD_ADD_THREADS,
                               mainloop, NULL);
         if (irmd.tpm == NULL) {

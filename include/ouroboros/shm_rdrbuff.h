@@ -42,6 +42,8 @@ void                 shm_rdrbuff_destroy(struct shm_rdrbuff * rdrb);
 
 void                 shm_rdrbuff_purge(void);
 
+int                  shm_rdrbuff_mlock(struct shm_rdrbuff * rdrb);
+
 /* Returns block index, a ptr and du_buff.  */
 ssize_t              shm_rdrbuff_alloc(struct shm_rdrbuff *  rdrb,
                                        size_t                count,

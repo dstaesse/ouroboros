@@ -52,6 +52,8 @@ uint32_t           shm_rbuff_get_acl(struct shm_rbuff * rb);
 
 void               shm_rbuff_fini(struct shm_rbuff * rb);
 
+int                shm_rbuff_mlock(struct shm_rbuff * rb);
+
 int                shm_rbuff_write(struct shm_rbuff * rb,
                                    size_t             idx);
 

@@ -278,6 +278,13 @@ void shm_rdrbuff_purge(void)
         free(shm_rdrb_fn);
 }
 
+int shm_rdrbuff_mlock(struct shm_rdrbuff * rdrb)
+{
+        assert(rdrb != NULL);
+
+        return mlock(rdrb->shm_base, SHM_FILE_SIZE);
+}
+
 ssize_t shm_rdrbuff_alloc(struct shm_rdrbuff *  rdrb,
                           size_t                len,
                           uint8_t **            ptr,
