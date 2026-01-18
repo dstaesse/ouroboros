@@ -1450,9 +1450,10 @@ int openssl_get_crt_name(void * crt,
 int openssl_crt_str(const void * crt,
                     char *       str)
 {
-        BIO *  bio;
-        X509 * xcrt;
-        char * p;
+        BIO *   bio;
+        X509 *  xcrt;
+        char *  p;
+        ssize_t len;
 
         xcrt = (X509 *) crt;
 
@@ -1462,11 +1463,12 @@ int openssl_crt_str(const void * crt,
 
         X509_print(bio, xcrt);
 
-        BIO_get_mem_data(bio, &p);
-        if (p == NULL)
+        len = (ssize_t) BIO_get_mem_data(bio, &p);
+        if (len <= 0 || p == NULL)
                 goto fail_p;
 
-        sprintf(str, "%s", p);
+        memcpy(str, p, len);
+        str[len] = '\0';
 
         BIO_free(bio);
 
