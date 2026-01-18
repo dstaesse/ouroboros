@@ -41,11 +41,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef BUILD_CONTAINER
 static int qos_prio [] = {
         QOS_PRIO_BE,
         QOS_PRIO_VIDEO,
         QOS_PRIO_VOICE,
 };
+#endif
 
 struct psched {
         fset_t *         set[QOS_CUBE_MAX];
@@ -168,6 +170,7 @@ struct psched * psched_create(next_packet_fn_t callback,
                 }
         }
 
+#ifndef BUILD_CONTAINER
         for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
                 struct sched_param  par;
                 int                 pol = SCHED_RR;
@@ -185,14 +188,17 @@ struct psched * psched_create(next_packet_fn_t callback,
                 if (pthread_setschedparam(psched->readers[i], pol, &par))
                         goto fail_sched;
         }
+#endif
 
         return psched;
 
+#ifndef BUILD_CONTAINER
  fail_sched:
         for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                 pthread_cancel(psched->readers[j]);
         for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                 pthread_join(psched->readers[j], NULL);
+#endif
  fail_infos:
         for (j = 0; j < QOS_CUBE_MAX; ++j)
                 fset_destroy(psched->set[j]);

@@ -689,9 +689,11 @@ void fa_fini(void)
 
 int fa_start(void)
 {
+#ifndef BUILD_CONTAINER
         struct sched_param  par;
         int                 pol;
         int                 max;
+#endif
 
         fa.psched = psched_create(packet_handler, np1_flow_read);
         if (fa.psched == NULL) {
@@ -704,6 +706,7 @@ int fa_start(void)
                 goto fail_thread;
         }
 
+#ifndef BUILD_CONTAINER
         if (pthread_getschedparam(fa.worker, &pol, &par)) {
                 log_err("Failed to get worker thread scheduling parameters.");
                 goto fail_sched;
@@ -721,12 +724,15 @@ int fa_start(void)
                 log_err("Failed to set scheduler priority to maximum.");
                 goto fail_sched;
         }
+#endif
 
         return 0;
 
+#ifndef BUILD_CONTAINER
  fail_sched:
         pthread_cancel(fa.worker);
         pthread_join(fa.worker, NULL);
+#endif
  fail_thread:
         psched_destroy(fa.psched);
  fail_psched:

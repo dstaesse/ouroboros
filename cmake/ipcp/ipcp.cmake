@@ -19,6 +19,8 @@ set(IPCP_SCHED_THR_MUL 2 CACHE STRING
   "Number of scheduler threads per QoS cube")
 set(DISABLE_CORE_LOCK TRUE CACHE BOOL
   "Disable locking performance threads to a core")
+set(BUILD_CONTAINER FALSE CACHE BOOL
+  "Disable thread priority setting for container compatibility")
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
    set(IPCP_LINUX_TIMERSLACK_NS 1000 CACHE STRING
