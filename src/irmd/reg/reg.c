@@ -1816,6 +1816,8 @@ int reg_prepare_flow_accept(struct flow_info * info)
 
         ret = reg_flow_update(flow, info);
 
+        pthread_cond_broadcast(&reg.cond);
+
         pthread_mutex_unlock(&reg.mtx);
 
         return ret;

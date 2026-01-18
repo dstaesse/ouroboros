@@ -36,7 +36,7 @@
 #define TEST_DATA2    "testpbufdata2"
 #define TEST_LAYER    "testlayer"
 #define REG_TEST_FAIL() \
-        do { TEST_FAIL(); memset(&reg, 0, sizeof(reg)); abort();} while(0)
+        do { TEST_FAIL(); reg_clear(); return TEST_RC_FAIL;} while(0)
 
 static int test_reg_init(void)
 {
@@ -1336,6 +1336,11 @@ static void * test_call_flow_accept(void * o)
                 goto fail;
         }
 
+        if (reg_unbind_proc((char *) o, pinfo.pid) < 0) {
+                printf("Failed to unbind proc.\n");
+                goto fail;
+        }
+
         reg_destroy_flow(info.id);
         reg_destroy_proc(pinfo.pid);
 
@@ -1347,7 +1352,7 @@ static void * test_call_flow_accept(void * o)
 static int test_wait_accepting_success(void)
 {
         struct timespec  abstime;
-        struct timespec  timeo = TIMESPEC_INIT_S(1);
+        struct timespec  timeo = TIMESPEC_INIT_S(10);
         pthread_t        thr;
         int              flow_id;
         struct name_info ninfo = {
@@ -1375,7 +1380,7 @@ static int test_wait_accepting_success(void)
 
         flow_id = reg_wait_flow_accepting(ninfo.name, &abstime);
         if (flow_id < 0) {
-                printf("Wait accept did not return a flow id: %d.", flow_id);
+                printf("Wait accept did not return a flow id: %d.\n", flow_id);
                 goto fail;
         }
 
