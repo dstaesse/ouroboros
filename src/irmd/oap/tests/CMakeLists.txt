@@ -28,6 +28,8 @@ add_executable(${src_folder}_test ${${src_folder}_tests} ${OAP_TEST_SOURCES})
 set_source_files_properties(${OAP_TEST_SOURCES}
   PROPERTIES COMPILE_DEFINITIONS "OAP_TEST_MODE"
 )
+
+disable_test_logging_for_target(${src_folder}_test)
 target_link_libraries(${src_folder}_test ouroboros-irm)
 target_include_directories(${src_folder}_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../..
@@ -40,6 +42,8 @@ set_source_files_properties(${OAP_TEST_SOURCES}
   TARGET_DIRECTORY ${src_folder}_pqc_test
   PROPERTIES COMPILE_DEFINITIONS "OAP_TEST_MODE"
 )
+
+disable_test_logging_for_target(${src_folder}_pqc_test)
 target_link_libraries(${src_folder}_pqc_test ouroboros-irm)
 target_include_directories(${src_folder}_pqc_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../..
