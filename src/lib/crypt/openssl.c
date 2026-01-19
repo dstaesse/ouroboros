@@ -1213,21 +1213,19 @@ int openssl_load_pubkey_file_to_der(const char * path,
         if (pkey == NULL)
                 goto fail_key;
 
-        fclose(fp);
-
         /* Extract public key bytes in DER format */
         ret = get_pk_bytes_from_key(pkey, buf);
+        if (ret < 0)
+                goto fail_extract;
 
         EVP_PKEY_free(pkey);
 
-        if (ret < 0)
-                goto fail_extract;
+        fclose(fp);
 
         return 0;
 
  fail_extract:
-        clrbuf(*buf);
-        return -1;
+        EVP_PKEY_free(pkey);
  fail_key:
         fclose(fp);
  fail_file:
@@ -1295,6 +1293,7 @@ int openssl_load_pubkey_raw_file(const char * path,
         memcpy(buf->data, tmp_buf, bytes_read);
         buf->len = bytes_read;
 
+        fclose(fp);
         return 0;
 
  fail_malloc:
@@ -1337,8 +1336,6 @@ int openssl_load_privkey_raw_file(const char * path,
                 goto fail_file;
 
         bytes_read = fread(tmp_buf, 1, sizeof(tmp_buf), fp);
-        fclose(fp);
-
         if (bytes_read == 0)
                 goto fail_read;
 
@@ -1355,11 +1352,14 @@ int openssl_load_privkey_raw_file(const char * path,
         if (pkey == NULL)
                 goto fail_read;
 
+        fclose(fp);
+
         *key = (void *) pkey;
 
         return 0;
 
  fail_read:
+        fclose(fp);
  fail_file:
         *key = NULL;
         return -1;

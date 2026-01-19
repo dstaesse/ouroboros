@@ -245,14 +245,13 @@ static int test_oap_piggyback_data(void)
 
         /* Set server's response data (ctx.data will take cli data) */
         srv_data.len  = strlen(srv_data_str);
-        srv_data.data = malloc(srv_data.len);
-        if (srv_data.data == NULL)
-                goto fail_cleanup;
-        memcpy(srv_data.data, srv_data_str, srv_data.len);
+        srv_data.data = (uint8_t *) srv_data_str;
 
         freebuf(ctx.data);
-        ctx.data = srv_data;
-        clrbuf(srv_data);
+        ctx.data.data = srv_data.data;
+        ctx.data.len  = srv_data.len;
+        srv_data.data = NULL;
+        srv_data.len  = 0;
 
         if (oap_srv_process_ctx(&ctx) < 0)
                 goto fail_cleanup;
@@ -275,6 +274,11 @@ static int test_oap_piggyback_data(void)
                 printf("Client did not receive correct server data.\n");
                 goto fail_cleanup;
         }
+
+        /* Free the copied data */
+        free(ctx.data.data);
+        ctx.data.data = NULL;
+        ctx.data.len = 0;
 
         if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
                 printf("Client and server keys do not match!\n");
