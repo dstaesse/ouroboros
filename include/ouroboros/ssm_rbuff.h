@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LIB_SHM_RBUFF_H
-#define OUROBOROS_LIB_SHM_RBUFF_H
+#ifndef OUROBOROS_LIB_SSM_RBUFF_H
+#define OUROBOROS_LIB_SSM_RBUFF_H
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -33,39 +33,39 @@
 #define ACL_FLOWDOWN 0002
 #define ACL_FLOWPEER 0004
 
-struct shm_rbuff;
+struct ssm_rbuff;
 
-struct shm_rbuff * shm_rbuff_create(pid_t pid,
+struct ssm_rbuff * ssm_rbuff_create(pid_t pid,
                                     int   flow_id);
 
-void               shm_rbuff_destroy(struct shm_rbuff * rb);
+void               ssm_rbuff_destroy(struct ssm_rbuff * rb);
 
-struct shm_rbuff * shm_rbuff_open(pid_t pid,
+struct ssm_rbuff * ssm_rbuff_open(pid_t pid,
                                   int   flow_id);
 
-void               shm_rbuff_close(struct shm_rbuff * rb);
+void               ssm_rbuff_close(struct ssm_rbuff * rb);
 
-void               shm_rbuff_set_acl(struct shm_rbuff * rb,
+void               ssm_rbuff_set_acl(struct ssm_rbuff * rb,
                                      uint32_t           flags);
 
-uint32_t           shm_rbuff_get_acl(struct shm_rbuff * rb);
+uint32_t           ssm_rbuff_get_acl(struct ssm_rbuff * rb);
 
-void               shm_rbuff_fini(struct shm_rbuff * rb);
+void               ssm_rbuff_fini(struct ssm_rbuff * rb);
 
-int                shm_rbuff_mlock(struct shm_rbuff * rb);
+int                ssm_rbuff_mlock(struct ssm_rbuff * rb);
 
-int                shm_rbuff_write(struct shm_rbuff * rb,
+int                ssm_rbuff_write(struct ssm_rbuff * rb,
                                    size_t             idx);
 
-int                shm_rbuff_write_b(struct shm_rbuff *      rb,
+int                ssm_rbuff_write_b(struct ssm_rbuff *      rb,
                                      size_t                  idx,
                                      const struct timespec * abstime);
 
-ssize_t            shm_rbuff_read(struct shm_rbuff * rb);
+ssize_t            ssm_rbuff_read(struct ssm_rbuff * rb);
 
-ssize_t            shm_rbuff_read_b(struct shm_rbuff *      rb,
+ssize_t            ssm_rbuff_read_b(struct ssm_rbuff *      rb,
                                     const struct timespec * abstime);
 
-size_t             shm_rbuff_queued(struct shm_rbuff * rb);
+size_t             ssm_rbuff_queued(struct ssm_rbuff * rb);
 
-#endif /* OUROBOROS_LIB_SHM_RBUFF_H */
+#endif /* OUROBOROS_LIB_SSM_RBUFF_H */

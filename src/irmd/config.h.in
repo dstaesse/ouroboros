@@ -76,9 +76,9 @@
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL
 #ifdef HAVE_OPENSSL
-#define IRMD_SECMEM_MAX        @IRMD_SECMEM_MAX@
 #cmakedefine HAVE_OPENSSL_PQC
 #endif
+#define IRMD_SECMEM_MAX        @IRMD_SECMEM_MAX@
 #ifdef CONFIG_OUROBOROS_DEBUG
 #cmakedefine DEBUG_PROTO_OAP
 #endif

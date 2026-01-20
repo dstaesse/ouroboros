@@ -5,20 +5,10 @@ compute_test_prefix()
 
 create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   # Add new tests here
-  auth_test.c
-  auth_test_pqc.c
-  bitmap_test.c
-  btree_test.c
-  crc32_test.c
-  crypt_test.c
-  hash_test.c
-  kex_test.c
-  kex_test_pqc.c
-  md5_test.c
-  sha3_test.c
-  sockets_test.c
-  time_test.c
-  tpm_test.c
+  pool_test.c
+  pool_sharding_test.c
+  rbuff_test.c
+  flow_set_test.c
   )
 
 add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests})
@@ -37,11 +27,7 @@ endif()
 
 foreach (test ${tests_to_run})
   get_filename_component(test_name ${test} NAME_WE)
-  add_test(${TEST_PREFIX}/${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${PARENT_DIR}_test ${test_name})
+  add_test(${TEST_PREFIX}/${test_name} ${C_TEST_PATH}/${PARENT_DIR}_test ${test_name})
+  set_property(TEST ${TEST_PREFIX}/${test_name}
+               PROPERTY ENVIRONMENT "OUROBOROS_TEST_POOL_SUFFIX=.test")
 endforeach (test)
-
-set_property(TEST ${TEST_PREFIX}/auth_test PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/auth_test_pqc PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/crypt_test PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/kex_test PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/kex_test_pqc PROPERTY SKIP_RETURN_CODE 1)

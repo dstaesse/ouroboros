@@ -28,7 +28,7 @@
 #include <ouroboros/name.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/qos.h>
-#include <ouroboros/shm_rbuff.h>
+#include <ouroboros/ssm_rbuff.h>
 #include <ouroboros/utils.h>
 
 #include <sys/types.h>
@@ -45,8 +45,8 @@ struct reg_flow {
 
         char               name[NAME_SIZE + 1];
 
-        struct shm_rbuff * n_rb;
-        struct shm_rbuff * n_1_rb;
+        struct ssm_rbuff * n_rb;
+        struct ssm_rbuff * n_1_rb;
 };
 
 struct reg_flow * reg_flow_create(const struct flow_info * info);

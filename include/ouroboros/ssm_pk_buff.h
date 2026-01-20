@@ -20,39 +20,39 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LIB_SHM_DU_BUFF_H
-#define OUROBOROS_LIB_SHM_DU_BUFF_H
+#ifndef OUROBOROS_LIB_SSM_PK_BUFF_H
+#define OUROBOROS_LIB_SSM_PK_BUFF_H
 
 #include <sys/types.h>
 #include <stdint.h>
 
-struct shm_du_buff;
+struct ssm_pk_buff;
 
-size_t    shm_du_buff_get_idx(struct shm_du_buff * sdb);
+size_t    ssm_pk_buff_get_idx(struct ssm_pk_buff * spb);
 
-uint8_t * shm_du_buff_head(struct shm_du_buff * sdb);
+uint8_t * ssm_pk_buff_head(struct ssm_pk_buff * spb);
 
-uint8_t * shm_du_buff_tail(struct shm_du_buff * sdb);
+uint8_t * ssm_pk_buff_tail(struct ssm_pk_buff * spb);
 
-size_t    shm_du_buff_len(struct shm_du_buff * sdb);
+size_t    ssm_pk_buff_len(struct ssm_pk_buff * spb);
 
-uint8_t * shm_du_buff_head_alloc(struct shm_du_buff * sdb,
+uint8_t * ssm_pk_buff_head_alloc(struct ssm_pk_buff * spb,
                                  size_t               size);
 
-uint8_t * shm_du_buff_tail_alloc(struct shm_du_buff * sdb,
+uint8_t * ssm_pk_buff_tail_alloc(struct ssm_pk_buff * spb,
                                  size_t               size);
 
-uint8_t * shm_du_buff_head_release(struct shm_du_buff * sdb,
+uint8_t * ssm_pk_buff_head_release(struct ssm_pk_buff * spb,
                                    size_t               size);
 
-uint8_t * shm_du_buff_tail_release(struct shm_du_buff * sdb,
+uint8_t * ssm_pk_buff_tail_release(struct ssm_pk_buff * spb,
                                    size_t               size);
 
-void      shm_du_buff_truncate(struct shm_du_buff * sdb,
+void      ssm_pk_buff_truncate(struct ssm_pk_buff * spb,
                                size_t               len);
 
-int       shm_du_buff_wait_ack(struct shm_du_buff * sdb);
+int       ssm_pk_buff_wait_ack(struct ssm_pk_buff * spb);
 
-int       shm_du_buff_ack(struct shm_du_buff * sdb);
+int       ssm_pk_buff_ack(struct ssm_pk_buff * spb);
 
-#endif /* OUROBOROS_LIB_SHM_DU_BUFF_H */
+#endif /* OUROBOROS_LIB_SSM_PK_BUFF_H */

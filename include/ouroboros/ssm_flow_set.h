@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef OUROBOROS_LIB_SHM_FLOW_SET_H
-#define OUROBOROS_LIB_SHM_FLOW_SET_H
+#ifndef OUROBOROS_LIB_SSM_FLOW_SET_H
+#define OUROBOROS_LIB_SSM_FLOW_SET_H
 
 #include <ouroboros/fqueue.h>
 
@@ -32,38 +32,38 @@ struct flowevent {
         int event;
 };
 
-struct shm_flow_set;
+struct ssm_flow_set;
 
-struct shm_flow_set * shm_flow_set_create(pid_t pid);
+struct ssm_flow_set * ssm_flow_set_create(pid_t pid);
 
-void                  shm_flow_set_destroy(struct shm_flow_set * set);
+void                  ssm_flow_set_destroy(struct ssm_flow_set * set);
 
-struct shm_flow_set * shm_flow_set_open(pid_t pid);
+struct ssm_flow_set * ssm_flow_set_open(pid_t pid);
 
-void                  shm_flow_set_close(struct shm_flow_set * set);
+void                  ssm_flow_set_close(struct ssm_flow_set * set);
 
-void                  shm_flow_set_zero(struct shm_flow_set * shm_set,
+void                  ssm_flow_set_zero(struct ssm_flow_set * set,
                                         size_t                idx);
 
-int                   shm_flow_set_add(struct shm_flow_set * shm_set,
+int                   ssm_flow_set_add(struct ssm_flow_set * set,
                                        size_t                idx,
                                        int                   flow_id);
 
-int                   shm_flow_set_has(struct shm_flow_set * shm_set,
+int                   ssm_flow_set_has(struct ssm_flow_set * set,
                                        size_t                idx,
                                        int                   flow_id);
 
-void                  shm_flow_set_del(struct shm_flow_set * shm_set,
+void                  ssm_flow_set_del(struct ssm_flow_set * set,
                                        size_t                idx,
                                        int                   flow_id);
 
-void                  shm_flow_set_notify(struct shm_flow_set * set,
+void                  ssm_flow_set_notify(struct ssm_flow_set * set,
                                           int                   flow_id,
                                           int                   event);
 
-ssize_t               shm_flow_set_wait(const struct shm_flow_set * shm_set,
+ssize_t               ssm_flow_set_wait(const struct ssm_flow_set * set,
                                         size_t                      idx,
                                         struct flowevent *          fqueue,
                                         const struct timespec *     abstime);
 
-#endif /* OUROBOROS_LIB_SHM_FLOW_SET_H */
+#endif /* OUROBOROS_LIB_SSM_FLOW_SET_H */

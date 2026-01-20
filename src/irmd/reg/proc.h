@@ -25,7 +25,7 @@
 
 #include <ouroboros/list.h>
 #include <ouroboros/proc.h>
-#include <ouroboros/shm_flow_set.h>
+#include <ouroboros/ssm_flow_set.h>
 
 struct reg_proc {
         struct list_head      next;
@@ -35,7 +35,7 @@ struct reg_proc {
         struct list_head      names;   /* process accepts flows for names */
         size_t                n_names; /* number of names                 */
 
-        struct shm_flow_set * set;
+        struct ssm_flow_set * set;
 };
 
 struct reg_proc * reg_proc_create(const struct proc_info * info);

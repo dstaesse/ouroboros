@@ -237,21 +237,21 @@ static void __send_frct_pkt(int      fd,
                             uint32_t ackno,
                             uint32_t rwe)
 {
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
         struct frct_pci *    pci;
         ssize_t              idx;
         struct flow *        f;
 
         /* Raw calls needed to bypass frcti. */
 #ifdef RXM_BLOCKING
-        idx = shm_rdrbuff_alloc_b(ai.rdrb, sizeof(*pci), NULL, &sdb, NULL);
+        idx = ssm_pool_alloc_b(ai.gspp, sizeof(*pci), NULL, &spb, NULL);
 #else
-        idx = shm_rdrbuff_alloc(ai.rdrb, sizeof(*pci), NULL, &sdb);
+        idx = ssm_pool_alloc(ai.gspp, sizeof(*pci), NULL, &spb);
 #endif
         if (idx < 0)
                 return;
 
-        pci = (struct frct_pci *) shm_du_buff_head(sdb);
+        pci = (struct frct_pci *) ssm_pk_buff_head(spb);
         memset(pci, 0, sizeof(*pci));
 
         *((uint32_t *) pci) = hton32(rwe);
@@ -261,22 +261,22 @@ static void __send_frct_pkt(int      fd,
 
         f = &ai.flows[fd];
 
-        if (sdb_encrypt(f, sdb) < 0)
+        if (spb_encrypt(f, spb) < 0)
                 goto fail;
 
 #ifdef RXM_BLOCKING
-        if (shm_rbuff_write_b(f->tx_rb, idx, NULL))
+        if (ssm_rbuff_write_b(f->tx_rb, idx, NULL))
 #else
-        if (shm_rbuff_write(f->tx_rb, idx))
+        if (ssm_rbuff_write(f->tx_rb, idx))
 #endif
                 goto fail;
 
-        shm_flow_set_notify(f->set, f->info.id, FLOW_PKT);
+        ssm_flow_set_notify(f->set, f->info.id, FLOW_PKT);
 
         return;
 
  fail:
-        ipcp_sdb_release(sdb);
+        ipcp_spb_release(spb);
         return;
 }
 
@@ -479,11 +479,11 @@ static void frcti_setflags(struct frcti * frcti,
 #define frcti_queued_pdu(frcti)                         \
         (frcti == NULL ? idx : __frcti_queued_pdu(frcti))
 
-#define frcti_snd(frcti, sdb)                           \
-        (frcti == NULL ? 0 : __frcti_snd(frcti, sdb))
+#define frcti_snd(frcti, spb)                           \
+        (frcti == NULL ? 0 : __frcti_snd(frcti, spb))
 
-#define frcti_rcv(frcti, sdb)                           \
-        (frcti == NULL ? 0 : __frcti_rcv(frcti, sdb))
+#define frcti_rcv(frcti, spb)                           \
+        (frcti == NULL ? 0 : __frcti_rcv(frcti, spb))
 
 #define frcti_dealloc(frcti)                            \
         (frcti == NULL ? 0 : __frcti_dealloc(frcti))
@@ -683,7 +683,7 @@ static time_t __frcti_dealloc(struct frcti * frcti)
 }
 
 static int __frcti_snd(struct frcti *       frcti,
-                       struct shm_du_buff * sdb)
+                       struct ssm_pk_buff * spb)
 {
         struct frct_pci * pci;
         struct timespec   now;
@@ -693,14 +693,14 @@ static int __frcti_snd(struct frcti *       frcti,
         bool              rtx;
 
         assert(frcti);
-        assert(shm_du_buff_len(sdb) != 0);
+        assert(ssm_pk_buff_len(spb) != 0);
 
         snd_cr = &frcti->snd_cr;
         rcv_cr = &frcti->rcv_cr;
 
         timerwheel_move();
 
-        pci = (struct frct_pci *) shm_du_buff_head_alloc(sdb, FRCT_PCILEN);
+        pci = (struct frct_pci *) ssm_pk_buff_head_alloc(spb, FRCT_PCILEN);
         if (pci == NULL)
                 return -ENOMEM;
 
@@ -759,7 +759,7 @@ static int __frcti_snd(struct frcti *       frcti,
         pthread_rwlock_unlock(&frcti->lock);
 
         if (rtx)
-                timerwheel_rxm(frcti, seqno, sdb);
+                timerwheel_rxm(frcti, seqno, spb);
 
         return 0;
 }
@@ -793,7 +793,7 @@ static void rtt_estimator(struct frcti * frcti,
 
 /* Always queues the next application packet on the RQ. */
 static void __frcti_rcv(struct frcti *       frcti,
-                        struct shm_du_buff * sdb)
+                        struct ssm_pk_buff * spb)
 {
         ssize_t           idx;
         size_t            pos;
@@ -813,9 +813,9 @@ static void __frcti_rcv(struct frcti *       frcti,
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        pci = (struct frct_pci *) shm_du_buff_head_release(sdb, FRCT_PCILEN);
+        pci = (struct frct_pci *) ssm_pk_buff_head_release(spb, FRCT_PCILEN);
 
-        idx = shm_du_buff_get_idx(sdb);
+        idx = ssm_pk_buff_get_idx(spb);
         seqno = ntoh32(pci->seqno);
         pos = seqno & (RQ_SIZE - 1);
 
@@ -841,7 +841,7 @@ static void __frcti_rcv(struct frcti *       frcti,
 
                 __send_frct_pkt(fd, FRCT_FC, 0, rwe);
 
-                shm_rdrbuff_remove(ai.rdrb, idx);
+                ssm_pool_remove(ai.gspp, idx);
                 return;
         }
 
@@ -928,7 +928,7 @@ static void __frcti_rcv(struct frcti *       frcti,
 
  drop_packet:
         pthread_rwlock_unlock(&frcti->lock);
-        shm_rdrbuff_remove(ai.rdrb, idx);
+        ssm_pool_remove(ai.gspp, idx);
         send_frct_pkt(frcti);
         return;
 }

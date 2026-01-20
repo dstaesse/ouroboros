@@ -47,6 +47,6 @@ int  fa_dealloc(int fd);
 
 void fa_np1_rcv(uint64_t             eid,
                 uint8_t              ecn,
-                struct shm_du_buff * sdb);
+                struct ssm_pk_buff * spb);
 
 #endif /* OUROBOROS_IPCPD_UNICAST_FA_H */

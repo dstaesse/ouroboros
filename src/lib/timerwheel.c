@@ -31,7 +31,7 @@ struct rxm {
         struct list_head     next;
         uint32_t             seqno;
 #ifndef RXM_BUFFER_ON_HEAP
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
 #endif
         struct frct_pci *    pkt;
         size_t               len;
@@ -81,8 +81,8 @@ static void timerwheel_fini(void)
 #ifdef RXM_BUFFER_ON_HEAP
                                 free(rxm->pkt);
 #else
-                                shm_du_buff_ack(rxm->sdb);
-                                ipcp_sdb_release(rxm->sdb);
+                                ssm_pk_buff_ack(rxm->spb);
+                                ipcp_spb_release(rxm->spb);
 #endif
                                 free(rxm);
                         }
@@ -160,7 +160,7 @@ static void timerwheel_move(void)
                                 size_t               slot;
                                 size_t               rslot;
                                 ssize_t              idx;
-                                struct shm_du_buff * sdb;
+                                struct ssm_pk_buff * spb;
                                 struct frct_pci *    pci;
                                 struct flow *        f;
                                 uint32_t             snd_lwe;
@@ -175,7 +175,7 @@ static void timerwheel_move(void)
                                 rcv_cr = &r->frcti->rcv_cr;
                                 f      = &ai.flows[r->fd];
 #ifndef RXM_BUFFER_ON_HEAP
-                                shm_du_buff_ack(r->sdb);
+                                ssm_pk_buff_ack(r->spb);
 #endif
                                 if (f->frcti == NULL
                                     || f->info.id != r->flow_id)
@@ -224,45 +224,45 @@ static void timerwheel_move(void)
 
                                 rslot = (rslot + slot + 1) & (RXMQ_SLOTS - 1);
 #ifdef RXM_BLOCKING
-                                if (ipcp_sdb_reserve(&sdb, r->len) < 0)
+                                if (ipcp_spb_reserve(&spb, r->len) < 0)
 #else
-                                if (shm_rdrbuff_alloc(ai.rdrb, r->len, NULL,
-                                                      &sdb) < 0)
+                                if (ssm_pool_alloc(ai.gspp, r->len, NULL,
+                                                      &spb) < 0)
 #endif
                                         goto reschedule; /* rdrbuff full */
 
-                                pci = (struct frct_pci *) shm_du_buff_head(sdb);
+                                pci = (struct frct_pci *) ssm_pk_buff_head(spb);
                                 memcpy(pci, r->pkt, r->len);
 #ifndef RXM_BUFFER_ON_HEAP
-                                ipcp_sdb_release(r->sdb);
-                                r->sdb = sdb;
+                                ipcp_spb_release(r->spb);
+                                r->spb = spb;
                                 r->pkt = pci;
-                                shm_du_buff_wait_ack(sdb);
+                                ssm_pk_buff_wait_ack(spb);
 #endif
-                                idx = shm_du_buff_get_idx(sdb);
+                                idx = ssm_pk_buff_get_idx(spb);
 
                                 /* Retransmit the copy. */
                                 pci->ackno = hton32(rcv_lwe);
 #ifdef RXM_BLOCKING
-                                if (shm_rbuff_write_b(f->tx_rb, idx, NULL) < 0)
+                                if (ssm_rbuff_write_b(f->tx_rb, idx, NULL) < 0)
 #else
-                                if (shm_rbuff_write(f->tx_rb, idx) < 0)
+                                if (ssm_rbuff_write(f->tx_rb, idx) < 0)
 #endif
                                         goto flow_down;
-                                shm_flow_set_notify(f->set, f->info.id,
+                                ssm_flow_set_notify(f->set, f->info.id,
                                                     FLOW_PKT);
                          reschedule:
                                 list_add(&r->next, &rw.rxms[lvl][rslot]);
                                 continue;
 
                          flow_down:
-                                shm_rbuff_set_acl(f->tx_rb, ACL_FLOWDOWN);
-                                shm_rbuff_set_acl(f->rx_rb, ACL_FLOWDOWN);
+                                ssm_rbuff_set_acl(f->tx_rb, ACL_FLOWDOWN);
+                                ssm_rbuff_set_acl(f->rx_rb, ACL_FLOWDOWN);
                          cleanup:
 #ifdef RXM_BUFFER_ON_HEAP
                                 free(r->pkt);
 #else
-                                ipcp_sdb_release(r->sdb);
+                                ipcp_spb_release(r->spb);
 #endif
                                 free(r);
                         }
@@ -306,7 +306,7 @@ static void timerwheel_move(void)
 
 static int timerwheel_rxm(struct frcti *       frcti,
                           uint32_t             seqno,
-                          struct shm_du_buff * sdb)
+                          struct ssm_pk_buff * spb)
 {
         struct timespec now;
         struct rxm *    r;
@@ -323,17 +323,17 @@ static int timerwheel_rxm(struct frcti *       frcti,
         r->t0    = ts_to_ns(now);
         r->seqno = seqno;
         r->frcti = frcti;
-        r->len  = shm_du_buff_len(sdb);
+        r->len  = ssm_pk_buff_len(spb);
 #ifdef RXM_BUFFER_ON_HEAP
         r->pkt = malloc(r->len);
         if (r->pkt == NULL) {
                 free(r);
                 return -ENOMEM;
         }
-        memcpy(r->pkt, shm_du_buff_head(sdb), r->len);
+        memcpy(r->pkt, ssm_pk_buff_head(spb), r->len);
 #else
-        r->sdb = sdb;
-        r->pkt = (struct frct_pci *) shm_du_buff_head(sdb);
+        r->spb = spb;
+        r->pkt = (struct frct_pci *) ssm_pk_buff_head(spb);
 #endif
         pthread_rwlock_rdlock(&r->frcti->lock);
 
@@ -365,7 +365,7 @@ static int timerwheel_rxm(struct frcti *       frcti,
 
         list_add_tail(&r->next, &rw.rxms[lvl][slot]);
 #ifndef RXM_BUFFER_ON_HEAP
-        shm_du_buff_wait_ack(sdb);
+        ssm_pk_buff_wait_ack(spb);
 #endif
         pthread_mutex_unlock(&rw.lock);
 

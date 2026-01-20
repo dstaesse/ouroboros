@@ -25,7 +25,7 @@
 
 #include <ouroboros/ipcp.h>
 #include <ouroboros/qoscube.h>
-#include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/ssm_pool.h>
 
 #define DT_COMP      "Data Transfer"
 #define DT_PROTO     "dtp"
@@ -40,7 +40,7 @@ int  dt_start(void);
 void dt_stop(void);
 
 int  dt_reg_comp(void *  comp,
-                 void (* func)(void * comp, struct shm_du_buff * sdb),
+                 void (* func)(void * comp, struct ssm_pk_buff * spb),
                  char *  name);
 
 void dt_unreg_comp(int eid);
@@ -48,6 +48,6 @@ void dt_unreg_comp(int eid);
 int  dt_write_packet(uint64_t             dst_addr,
                      qoscube_t            qc,
                      uint64_t             eid,
-                     struct shm_du_buff * sdb);
+                     struct ssm_pk_buff * spb);
 
 #endif /* OUROBOROS_IPCPD_UNICAST_DT_H */

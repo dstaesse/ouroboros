@@ -839,7 +839,7 @@ static void * eth_ipcp_packet_reader(void * o)
 #if defined(HAVE_NETMAP)
         struct nm_pkthdr     hdr;
 #else
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
         fd_set               fds;
         int                  frame_len;
 #endif
@@ -871,21 +871,21 @@ static void * eth_ipcp_packet_reader(void * o)
                 if (select(eth_data.bpf + 1, &fds, NULL, NULL, NULL))
                         continue;
                 assert(FD_ISSET(eth_data.bpf, &fds));
-                if (ipcp_sdb_reserve(&sdb, BPF_LEN))
+                if (ipcp_spb_reserve(&spb, BPF_LEN))
                         continue;
-                buf = shm_du_buff_head(sdb);
+                buf = ssm_pk_buff_head(spb);
                 frame_len = read(eth_data.bpf, buf, BPF_BLEN);
     #elif defined(HAVE_RAW_SOCKETS)
                 FD_SET(eth_data.s_fd, &fds);
                 if (select(eth_data.s_fd + 1, &fds, NULL, NULL, NULL) < 0)
                         continue;
                 assert(FD_ISSET(eth_data.s_fd, &fds));
-                if (ipcp_sdb_reserve(&sdb, ETH_MTU))
+                if (ipcp_spb_reserve(&spb, ETH_MTU))
                         continue;
-                buf = shm_du_buff_head_alloc(sdb, ETH_HEADER_TOT_SIZE);
+                buf = ssm_pk_buff_head_alloc(spb, ETH_HEADER_TOT_SIZE);
                 if (buf == NULL) {
                         log_dbg("Failed to allocate header.");
-                        ipcp_sdb_release(sdb);
+                        ipcp_spb_release(spb);
                         continue;
                 }
                 frame_len = recv(eth_data.s_fd, buf,
@@ -893,7 +893,7 @@ static void * eth_ipcp_packet_reader(void * o)
     #endif
                 if (frame_len <= 0) {
                         log_dbg("Failed to receive frame.");
-                        ipcp_sdb_release(sdb);
+                        ipcp_spb_release(spb);
                         continue;
                 }
 #endif
@@ -935,7 +935,7 @@ static void * eth_ipcp_packet_reader(void * o)
 
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
 #endif
-                        ipcp_sdb_release(sdb); /* No need for the N+1 buffer. */
+                        ipcp_spb_release(spb); /* No need for the N+1 buffer. */
 
                         if (length > MGMT_FRAME_SIZE) {
                                 log_warn("Management frame size %u exceeds %u.",
@@ -981,22 +981,22 @@ static void * eth_ipcp_packet_reader(void * o)
                         pthread_rwlock_unlock(&eth_data.flows_lock);
 
 #ifndef HAVE_NETMAP
-                        shm_du_buff_head_release(sdb, ETH_HEADER_TOT_SIZE);
-                        shm_du_buff_truncate(sdb, length);
+                        ssm_pk_buff_head_release(spb, ETH_HEADER_TOT_SIZE);
+                        ssm_pk_buff_truncate(spb, length);
 #else
-                        if (ipcp_sdb_reserve(&sdb, length))
+                        if (ipcp_spb_reserve(&spb, length))
                                 continue;
 
-                        buf = shm_du_buff_head(sdb);
+                        buf = ssm_pk_buff_head(spb);
                         memcpy(buf, &e_frame->payload, length);
 #endif
-                        if (np1_flow_write(fd, sdb) < 0)
-                                ipcp_sdb_release(sdb);
+                        if (np1_flow_write(fd, spb) < 0)
+                                ipcp_spb_release(spb);
 
                         continue;
  fail_frame:
 #ifndef HAVE_NETMAP
-                        ipcp_sdb_release(sdb);
+                        ipcp_spb_release(spb);
 #endif
                 }
         }
@@ -1012,7 +1012,7 @@ static void cleanup_writer(void * o)
 static void * eth_ipcp_packet_writer(void * o)
 {
         int                  fd;
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
         size_t               len;
 #if defined(BUILD_ETH_DIX)
         uint16_t             deid;
@@ -1040,17 +1040,17 @@ static void * eth_ipcp_packet_writer(void * o)
                         if (fqueue_type(fq) != FLOW_PKT)
                                 continue;
 
-                        if (np1_flow_read(fd, &sdb)) {
+                        if (np1_flow_read(fd, &spb)) {
                                 log_dbg("Bad read from fd %d.", fd);
                                 continue;
                         }
 
-                        len = shm_du_buff_len(sdb);
+                        len = ssm_pk_buff_len(spb);
 
-                        if (shm_du_buff_head_alloc(sdb, ETH_HEADER_TOT_SIZE)
+                        if (ssm_pk_buff_head_alloc(spb, ETH_HEADER_TOT_SIZE)
                             == NULL) {
                                 log_dbg("Failed to allocate header.");
-                                ipcp_sdb_release(sdb);
+                                ipcp_spb_release(spb);
                                 continue;
                         }
 
@@ -1073,10 +1073,10 @@ static void * eth_ipcp_packet_writer(void * o)
 #elif defined(BUILD_ETH_LLC)
                                             dsap, ssap,
 #endif
-                                            shm_du_buff_head(sdb),
+                                            ssm_pk_buff_head(spb),
                                             len))
                                 log_dbg("Failed to send frame.");
-                        ipcp_sdb_release(sdb);
+                        ipcp_spb_release(spb);
                 }
         }
 
@@ -1342,14 +1342,7 @@ static int eth_set_mtu(struct ifreq * ifr)
                          IPCP_ETH_LO_MTU);
                 eth_data.mtu = IPCP_ETH_LO_MTU;
         }
-#ifndef SHM_RDRB_MULTI_BLOCK
-        maxsz = SHM_RDRB_BLOCK_SIZE - 5 * sizeof(size_t) -
-                (DU_BUFF_HEADSPACE + DU_BUFF_TAILSPACE);
-        if ((size_t) eth_data.mtu > maxsz ) {
-                log_dbg("Layer MTU truncated to shm block size.");
-                eth_data.mtu = maxsz;
-        }
-#endif
+
         log_dbg("Layer MTU is %d.", eth_data.mtu);
 
         return 0;
@@ -1503,9 +1496,6 @@ static int eth_ipcp_bootstrap(struct ipcp_config * conf)
         char             ifn[IFNAMSIZ];
 #endif /* HAVE_NETMAP */
 
-#ifndef SHM_RDRB_MULTI_BLOCK
-        size_t           maxsz;
-#endif
         assert(conf);
         assert(conf->type == THIS_TYPE);
 

@@ -69,7 +69,7 @@ static void cleanup_reader(void * o)
 static void * packet_reader(void * o)
 {
         struct psched *       sched;
-        struct shm_du_buff *  sdb;
+        struct ssm_pk_buff *  spb;
         int                   fd;
         fqueue_t *            fq;
         qoscube_t             qc;
@@ -104,10 +104,10 @@ static void * packet_reader(void * o)
                                 notifier_event(NOTIFY_DT_FLOW_UP, &fd);
                                 break;
                         case FLOW_PKT:
-                                if (sched->read(fd, &sdb) < 0)
+                                if (sched->read(fd, &spb) < 0)
                                         continue;
 
-                                sched->callback(fd, qc, sdb);
+                                sched->callback(fd, qc, spb);
                                 break;
                         default:
                                 break;

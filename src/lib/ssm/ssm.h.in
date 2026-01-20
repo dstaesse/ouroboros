@@ -1,0 +1,146 @@
+/*
+ * Ouroboros - Copyright (C) 2016 - 2026
+ *
+ * Secure Shared Memory configuration
+ *
+ *    Dimitri Staessens <dimitri@ouroboros.rocks>
+ *    Sander Vrijders   <sander@ouroboros.rocks>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public License
+ * version 2.1 as published by the Free Software Foundation.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., http://www.fsf.org/about/contact/.
+ */
+
+#ifndef OUROBOROS_LIB_SSM_H
+#define OUROBOROS_LIB_SSM_H
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdatomic.h>
+#include <sys/types.h>
+
+/* Pool naming configuration */
+#define SSM_PREFIX               "@SSM_PREFIX@"
+#define SSM_GSMP_SUFFIX          "@SSM_GSMP_SUFFIX@"
+#define SSM_PPP_SUFFIX           "@SSM_PPP_SUFFIX@"
+
+/* Legacy SSM constants */
+#define SSM_RBUFF_PREFIX         "@SSM_RBUFF_PREFIX@"
+#define SSM_FLOW_SET_PREFIX      "@SSM_FLOW_SET_PREFIX@"
+#define SSM_POOL_NAME            "@SSM_POOL_NAME@"
+#define SSM_POOL_BLOCKS           @SSM_POOL_BLOCKS@
+#define SSM_RBUFF_SIZE            @SSM_RBUFF_SIZE@
+
+/* Packet buffer space reservation */
+#define SSM_PK_BUFF_HEADSPACE     @SSM_PK_BUFF_HEADSPACE@
+#define SSM_PK_BUFF_TAILSPACE     @SSM_PK_BUFF_TAILSPACE@
+
+/* Pool blocks per size class */
+#define SSM_POOL_256_BLOCKS      @SSM_POOL_256_BLOCKS@
+#define SSM_POOL_512_BLOCKS      @SSM_POOL_512_BLOCKS@
+#define SSM_POOL_1K_BLOCKS       @SSM_POOL_1K_BLOCKS@
+#define SSM_POOL_2K_BLOCKS       @SSM_POOL_2K_BLOCKS@
+#define SSM_POOL_4K_BLOCKS       @SSM_POOL_4K_BLOCKS@
+#define SSM_POOL_16K_BLOCKS      @SSM_POOL_16K_BLOCKS@
+#define SSM_POOL_64K_BLOCKS      @SSM_POOL_64K_BLOCKS@
+#define SSM_POOL_256K_BLOCKS     @SSM_POOL_256K_BLOCKS@
+#define SSM_POOL_1M_BLOCKS       @SSM_POOL_1M_BLOCKS@
+#define SSM_POOL_TOTAL_SIZE      @SSM_POOL_TOTAL_SIZE@
+
+/* Size class configuration */
+#define SSM_POOL_MAX_CLASSES     9
+#define SSM_POOL_SHARDS          @SSM_POOL_SHARDS@
+
+/* Internal structures - exposed for testing */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <errno.h>
+#include <pthread.h>
+
+#include <ouroboros/pthread.h>
+
+static __inline__ void robust_mutex_lock(pthread_mutex_t * mtx)
+{
+#ifndef HAVE_ROBUST_MUTEX
+        pthread_mutex_lock(mtx);
+#else
+        if (pthread_mutex_lock(mtx) == EOWNERDEAD)
+                pthread_mutex_consistent(mtx);
+#endif
+}
+
+static __inline__ int robust_wait(pthread_cond_t *        cond,
+                                  pthread_mutex_t *       mtx,
+                                  const struct timespec * abstime)
+{
+        int ret = __timedwait(cond, mtx, abstime);
+#ifdef HAVE_ROBUST_MUTEX
+        if (ret == EOWNERDEAD)
+                pthread_mutex_consistent(mtx);
+#endif
+        return ret;
+}
+
+/* Packet buffer structure used by pool, rbuff, and tests */
+struct ssm_pk_buff {
+        uint32_t next_offset;   /* List linkage (pool < 4GB)   */
+        uint16_t refcount;      /* Reference count (app + rtx) */
+        pid_t    allocator_pid; /* For orphan detection        */
+        uint32_t size;          /* Block size (max 1MB)        */
+        uint32_t pk_head;       /* Head offset into data       */
+        uint32_t pk_tail;       /* Tail offset into data       */
+        uint32_t off;           /* Block offset in pool        */
+        uint8_t  data[];        /* Packet data                 */
+};
+
+/* Size class configuration table */
+struct ssm_size_class_cfg {
+        size_t size;
+        size_t blocks;
+};
+
+struct _ssm_list_head {
+        uint32_t head_offset;
+        uint32_t count;
+};
+
+struct _ssm_shard {
+        pthread_mutex_t        mtx;
+        pthread_cond_t         cond;
+        struct _ssm_list_head  free_list;
+        size_t                 free_count;
+};
+
+struct _ssm_size_class {
+        struct _ssm_shard shards[SSM_POOL_SHARDS];
+        size_t            object_size;
+        size_t            pool_start;
+        size_t            pool_size;
+        size_t            object_count;
+};
+
+struct _ssm_pool_hdr {
+        pthread_mutex_t         mtx;
+        pthread_cond_t          healthy;
+        pid_t                   pid;
+        uint32_t                initialized;
+        void *                  mapped_addr;
+        struct _ssm_size_class  size_classes[SSM_POOL_MAX_CLASSES];
+};
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* OUROBOROS_LIB_SSM_H */

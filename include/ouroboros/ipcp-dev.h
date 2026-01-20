@@ -25,7 +25,7 @@
 
 #include <ouroboros/ipcp.h>
 #include <ouroboros/qoscube.h>
-#include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/ssm_pool.h>
 #include <ouroboros/utils.h>
 
 int    ipcp_create_r(const struct ipcp_info * info);
@@ -41,16 +41,16 @@ int    ipcp_flow_alloc_reply(int              fd,
                              const buffer_t * data);
 
 int    ipcp_flow_read(int                   fd,
-                      struct shm_du_buff ** sdb);
+                      struct ssm_pk_buff ** spb);
 
 int    ipcp_flow_write(int                  fd,
-                       struct shm_du_buff * sdb);
+                       struct ssm_pk_buff * spb);
 
 int    np1_flow_read(int                   fd,
-                     struct shm_du_buff ** sdb);
+                     struct ssm_pk_buff ** spb);
 
 int    np1_flow_write(int                  fd,
-                      struct shm_du_buff * sdb);
+                      struct ssm_pk_buff * spb);
 
 int    ipcp_flow_dealloc(int fd);
 
@@ -61,9 +61,9 @@ int    ipcp_flow_get_qoscube(int         fd,
 
 size_t ipcp_flow_queued(int fd);
 
-int    ipcp_sdb_reserve(struct shm_du_buff ** sdb,
+int    ipcp_spb_reserve(struct ssm_pk_buff ** spb,
                         size_t                len);
 
-void   ipcp_sdb_release(struct shm_du_buff * sdb);
+void   ipcp_spb_release(struct ssm_pk_buff * spb);
 
 #endif /* OUROBOROS_LIB_IPCP_DEV_H */

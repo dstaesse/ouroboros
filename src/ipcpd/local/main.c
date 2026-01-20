@@ -121,8 +121,6 @@ static void * local_ipcp_packet_loop(void * o)
                         if (idx < 0)
                                 continue;
 
-                        assert(idx < (SHM_BUFFER_SIZE));
-
                         pthread_rwlock_rdlock(&local_data.lock);
 
                         fd = local_data.in_out[fd];

@@ -66,11 +66,11 @@ struct reg_flow * reg_flow_create(const struct flow_info * info)
 static void destroy_rbuffs(struct reg_flow * flow)
 {
         if (flow->n_rb != NULL)
-                shm_rbuff_destroy(flow->n_rb);
+                ssm_rbuff_destroy(flow->n_rb);
         flow->n_rb = NULL;
 
         if (flow->n_1_rb != NULL)
-                shm_rbuff_destroy(flow->n_1_rb);
+                ssm_rbuff_destroy(flow->n_1_rb);
         flow->n_1_rb = NULL;
 }
 
@@ -103,28 +103,28 @@ static int create_rbuffs(struct reg_flow *  flow,
         assert(flow != NULL);
         assert(info != NULL);
 
-        flow->n_rb = shm_rbuff_create(info->n_pid, info->id);
+        flow->n_rb = ssm_rbuff_create(info->n_pid, info->id);
         if (flow->n_rb == NULL)
                 goto fail_n_rb;
 
-        if (shm_rbuff_mlock(flow->n_rb) < 0)
+        if (ssm_rbuff_mlock(flow->n_rb) < 0)
                 log_warn("Failed to mlock n_rb for flow %d.", info->id);
 
         assert(flow->info.n_1_pid == 0);
         assert(flow->n_1_rb == NULL);
 
         flow->info.n_1_pid = info->n_1_pid;
-        flow->n_1_rb = shm_rbuff_create(info->n_1_pid, info->id);
+        flow->n_1_rb = ssm_rbuff_create(info->n_1_pid, info->id);
         if (flow->n_1_rb == NULL)
                 goto fail_n_1_rb;
 
-        if (shm_rbuff_mlock(flow->n_1_rb) < 0)
+        if (ssm_rbuff_mlock(flow->n_1_rb) < 0)
                 log_warn("Failed to mlock n_1_rb for flow %d.", info->id);
 
         return 0;
 
  fail_n_1_rb:
-        shm_rbuff_destroy(flow->n_rb);
+        ssm_rbuff_destroy(flow->n_rb);
  fail_n_rb:
         return -ENOMEM;
 }

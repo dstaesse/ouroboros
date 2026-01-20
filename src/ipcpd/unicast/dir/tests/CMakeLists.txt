@@ -28,7 +28,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   dht_test.c
   )
 
-protobuf_generate_c(DHT_PROTO_SRCS KAD_PROTO_HDRS ../dht.proto)
+protobuf_generate_c(DHT_PROTO_SRCS KAD_PROTO_HDRS ${CURRENT_SOURCE_PARENT_DIR}/dht.proto)
 add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests}
   ${DHT_PROTO_SRCS})
 

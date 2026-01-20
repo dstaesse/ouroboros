@@ -47,9 +47,9 @@ set(SOURCE_FILES_COMMON
   serdes-irm.c
   serdes-oep.c
   sha3.c
-  shm_flow_set.c
-  shm_rbuff.c
-  shm_rdrbuff.c
+  ssm/flow_set.c
+  ssm/rbuff.c
+  ssm/pool.c
   sockets.c
   tpm.c
   utils.c

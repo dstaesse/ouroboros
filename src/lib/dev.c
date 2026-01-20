@@ -27,6 +27,7 @@
 #endif
 
 #include "config.h"
+#include "ssm.h"
 
 #include <ouroboros/bitmap.h>
 #include <ouroboros/cep.h>
@@ -45,9 +46,9 @@
 #include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
 #include <ouroboros/serdes-irm.h>
-#include <ouroboros/shm_flow_set.h>
-#include <ouroboros/shm_rdrbuff.h>
-#include <ouroboros/shm_rbuff.h>
+#include <ouroboros/ssm_flow_set.h>
+#include <ouroboros/ssm_pool.h>
+#include <ouroboros/ssm_rbuff.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/utils.h>
 #ifdef PROC_FLOW_STATS
@@ -92,9 +93,9 @@ struct flow {
 
         struct flow_info      info;
 
-        struct shm_rbuff *    rx_rb;
-        struct shm_rbuff *    tx_rb;
-        struct shm_flow_set * set;
+        struct ssm_rbuff *    rx_rb;
+        struct ssm_rbuff *    tx_rb;
+        struct ssm_flow_set * set;
 
         uint16_t              oflags;
         ssize_t               part_idx;
@@ -120,14 +121,14 @@ struct flow_set {
 };
 
 struct fqueue {
-        struct flowevent fqueue[SHM_BUFFER_SIZE]; /* Safe copy from shm. */
+        struct flowevent fqueue[SSM_RBUFF_SIZE]; /* Safe copy from shm. */
         size_t           fqsize;
         size_t           next;
 };
 
 struct {
-        struct shm_rdrbuff *  rdrb;
-        struct shm_flow_set * fqset;
+        struct ssm_pool *  gspp;
+        struct ssm_flow_set * fqset;
 
         struct bmp *          fds;
         struct bmp *          fqueues;
@@ -254,8 +255,8 @@ static void proc_exit(void)
         send_recv_msg(&msg);
 }
 
-static int sdb_encrypt(struct flow *        flow,
-                       struct shm_du_buff * sdb)
+static int spb_encrypt(struct flow *        flow,
+                       struct ssm_pk_buff * spb)
 {
         buffer_t  in;
         buffer_t  out;
@@ -265,17 +266,17 @@ static int sdb_encrypt(struct flow *        flow,
         if (flow->crypt == NULL)
                 return 0; /* No encryption */
 
-        in.data = shm_du_buff_head(sdb);
-        in.len  = shm_du_buff_len(sdb);
+        in.data = ssm_pk_buff_head(spb);
+        in.len  = ssm_pk_buff_len(spb);
 
         if (crypt_encrypt(flow->crypt, in, &out) < 0)
                 goto fail_encrypt;
 
-        head = shm_du_buff_head_alloc(sdb, flow->headsz);
+        head = ssm_pk_buff_head_alloc(spb, flow->headsz);
         if (head == NULL)
                 goto fail_alloc;
 
-        tail = shm_du_buff_tail_alloc(sdb, flow->tailsz);
+        tail = ssm_pk_buff_tail_alloc(spb, flow->tailsz);
         if (tail == NULL)
                 goto fail_alloc;
 
@@ -290,8 +291,8 @@ static int sdb_encrypt(struct flow *        flow,
         return -ECRYPT;
 }
 
-static int sdb_decrypt(struct flow *        flow,
-                       struct shm_du_buff * sdb)
+static int spb_decrypt(struct flow *        flow,
+                       struct ssm_pk_buff * spb)
 {
         buffer_t  in;
         buffer_t  out;
@@ -300,15 +301,15 @@ static int sdb_decrypt(struct flow *        flow,
         if (flow->crypt == NULL)
                 return 0; /* No decryption */
 
-        in.data = shm_du_buff_head(sdb);
-        in.len  = shm_du_buff_len(sdb);
+        in.data = ssm_pk_buff_head(spb);
+        in.len  = ssm_pk_buff_len(spb);
 
         if (crypt_decrypt(flow->crypt, in, &out) < 0)
                 return -ENOMEM;
 
 
-        head = shm_du_buff_head_release(sdb, flow->headsz) + flow->headsz;
-        shm_du_buff_tail_release(sdb, flow->tailsz);
+        head = ssm_pk_buff_head_release(spb, flow->headsz) + flow->headsz;
+        ssm_pk_buff_tail_release(spb, flow->tailsz);
 
         memcpy(head, out.data, out.len);
 
@@ -337,11 +338,11 @@ void * flow_tx(void * o)
 static void flow_send_keepalive(struct flow * flow,
                                 struct timespec now)
 {
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
         ssize_t              idx;
         uint8_t *            ptr;
 
-        idx = shm_rdrbuff_alloc(ai.rdrb, 0, &ptr, &sdb);
+        idx = ssm_pool_alloc(ai.gspp, 0, &ptr, &spb);
         if (idx < 0)
                 return;
 
@@ -349,10 +350,10 @@ static void flow_send_keepalive(struct flow * flow,
 
         flow->snd_act = now;
 
-        if (shm_rbuff_write(flow->tx_rb, idx))
-                shm_rdrbuff_remove(ai.rdrb, idx);
+        if (ssm_rbuff_write(flow->tx_rb, idx))
+                ssm_pool_remove(ai.gspp, idx);
         else
-                shm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
+                ssm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
 
         pthread_rwlock_unlock(&ai.lock);
 }
@@ -373,15 +374,15 @@ static void _flow_keepalive(struct flow * flow)
         flow_id = flow->info.id;
         timeo   = flow->info.qs.timeout;
 
-        acl = shm_rbuff_get_acl(flow->rx_rb);
+        acl = ssm_rbuff_get_acl(flow->rx_rb);
         if (timeo == 0 || acl & (ACL_FLOWPEER | ACL_FLOWDOWN))
                 return;
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
         if (ts_diff_ns(&now, &r_act) > (int64_t) timeo * MILLION) {
-                shm_rbuff_set_acl(flow->rx_rb, ACL_FLOWPEER);
-                shm_flow_set_notify(ai.fqset, flow_id, FLOW_PEER);
+                ssm_rbuff_set_acl(flow->rx_rb, ACL_FLOWPEER);
+                ssm_flow_set_notify(ai.fqset, flow_id, FLOW_PEER);
                 return;
         }
 
@@ -461,7 +462,7 @@ static void __flow_fini(int fd)
                         pthread_join(ai.tx, NULL);
                 }
 
-                shm_flow_set_del(ai.fqset, 0, ai.flows[fd].info.id);
+                ssm_flow_set_del(ai.fqset, 0, ai.flows[fd].info.id);
 
                 frcti_destroy(ai.flows[fd].frcti);
         }
@@ -472,20 +473,20 @@ static void __flow_fini(int fd)
         }
 
         if (ai.flows[fd].rx_rb != NULL) {
-                shm_rbuff_set_acl(ai.flows[fd].rx_rb, ACL_FLOWDOWN);
-                shm_rbuff_close(ai.flows[fd].rx_rb);
+                ssm_rbuff_set_acl(ai.flows[fd].rx_rb, ACL_FLOWDOWN);
+                ssm_rbuff_close(ai.flows[fd].rx_rb);
         }
 
         if (ai.flows[fd].tx_rb != NULL) {
-                shm_rbuff_set_acl(ai.flows[fd].tx_rb, ACL_FLOWDOWN);
-                shm_rbuff_close(ai.flows[fd].tx_rb);
+                ssm_rbuff_set_acl(ai.flows[fd].tx_rb, ACL_FLOWDOWN);
+                ssm_rbuff_close(ai.flows[fd].tx_rb);
         }
 
         if (ai.flows[fd].set != NULL) {
-                shm_flow_set_notify(ai.flows[fd].set,
+                ssm_flow_set_notify(ai.flows[fd].set,
                                     ai.flows[fd].info.id,
                                     FLOW_DEALLOC);
-                shm_flow_set_close(ai.flows[fd].set);
+                ssm_flow_set_close(ai.flows[fd].set);
         }
 
         crypt_destroy_ctx(ai.flows[fd].crypt);
@@ -528,15 +529,15 @@ static int flow_init(struct flow_info * info,
 
         flow->info = *info;
 
-        flow->rx_rb = shm_rbuff_open(info->n_pid, info->id);
+        flow->rx_rb = ssm_rbuff_open(info->n_pid, info->id);
         if (flow->rx_rb == NULL)
                 goto fail_rx_rb;
 
-        flow->tx_rb = shm_rbuff_open(info->n_1_pid, info->id);
+        flow->tx_rb = ssm_rbuff_open(info->n_1_pid, info->id);
         if (flow->tx_rb == NULL)
                 goto fail_tx_rb;
 
-        flow->set = shm_flow_set_open(info->n_1_pid);
+        flow->set = ssm_flow_set_open(info->n_1_pid);
         if (flow->set == NULL)
                 goto fail_set;
 
@@ -565,7 +566,7 @@ static int flow_init(struct flow_info * info,
                 if (flow->frcti == NULL)
                         goto fail_frcti;
 
-                if (shm_flow_set_add(ai.fqset, 0, info->id))
+                if (ssm_flow_set_add(ai.fqset, 0, info->id))
                         goto fail_flow_set_add;
 
                 ++ai.n_frcti;
@@ -585,17 +586,17 @@ static int flow_init(struct flow_info * info,
         return fd;
 
  fail_tx_thread:
-        shm_flow_set_del(ai.fqset, 0, info->id);
+        ssm_flow_set_del(ai.fqset, 0, info->id);
  fail_flow_set_add:
         frcti_destroy(flow->frcti);
  fail_frcti:
         crypt_destroy_ctx(flow->crypt);
  fail_crypt:
-        shm_flow_set_close(flow->set);
+        ssm_flow_set_close(flow->set);
  fail_set:
-        shm_rbuff_close(flow->tx_rb);
+        ssm_rbuff_close(flow->tx_rb);
  fail_tx_rb:
-        shm_rbuff_close(flow->rx_rb);
+        ssm_rbuff_close(flow->rx_rb);
  fail_rx_rb:
         bmp_release(ai.fds, fd);
  fail_fds:
@@ -661,8 +662,8 @@ static void init(int     argc,
                 goto fail_fqueues;
         }
 
-        ai.rdrb = shm_rdrbuff_open();
-        if (ai.rdrb == NULL) {
+        ai.gspp = ssm_pool_open();
+        if (ai.gspp == NULL) {
                 fprintf(stderr, "FATAL: Could not open packet buffer.\n");
                 goto fail_rdrb;
         }
@@ -700,7 +701,7 @@ static void init(int     argc,
                 goto fail_flow_lock;
         }
 
-        ai.fqset = shm_flow_set_open(getpid());
+        ai.fqset = ssm_flow_set_open(getpid());
         if (ai.fqset == NULL) {
                 fprintf(stderr, "FATAL: Could not open flow set.\n");
                 goto fail_fqset;
@@ -749,7 +750,7 @@ static void init(int     argc,
  fail_timerwheel:
         fset_destroy(ai.frct_set);
  fail_frct_set:
-        shm_flow_set_close(ai.fqset);
+        ssm_flow_set_close(ai.fqset);
  fail_fqset:
         pthread_rwlock_destroy(&ai.lock);
  fail_flow_lock:
@@ -761,7 +762,7 @@ static void init(int     argc,
  fail_id_to_fd:
         free(ai.flows);
  fail_flows:
-        shm_rdrbuff_close(ai.rdrb);
+        ssm_pool_close(ai.gspp);
  fail_rdrb:
         bmp_destroy(ai.fqueues);
  fail_fqueues:
@@ -787,9 +788,9 @@ static void fini(void)
         for (i = 0; i < PROG_MAX_FLOWS; ++i) {
                 if (ai.flows[i].info.id != -1) {
                         ssize_t idx;
-                        shm_rbuff_set_acl(ai.flows[i].rx_rb, ACL_FLOWDOWN);
-                        while ((idx = shm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
-                                shm_rdrbuff_remove(ai.rdrb, idx);
+                        ssm_rbuff_set_acl(ai.flows[i].rx_rb, ACL_FLOWDOWN);
+                        while ((idx = ssm_rbuff_read(ai.flows[i].rx_rb)) >= 0)
+                                ssm_pool_remove(ai.gspp, idx);
                         __flow_fini(i);
                 }
         }
@@ -806,14 +807,14 @@ static void fini(void)
 
         fset_destroy(ai.frct_set);
 
-        shm_flow_set_close(ai.fqset);
+        ssm_flow_set_close(ai.fqset);
 
         pthread_rwlock_destroy(&ai.lock);
 
         free(ai.flows);
         free(ai.id_to_fd);
 
-        shm_rdrbuff_close(ai.rdrb);
+        ssm_pool_close(ai.gspp);
 
         bmp_destroy(ai.fds);
         bmp_destroy(ai.fqueues);
@@ -1015,7 +1016,7 @@ int flow_dealloc(int fd)
 
         pthread_cleanup_push(__cleanup_rwlock_unlock, &ai.lock);
 
-        shm_rbuff_fini(flow->tx_rb);
+        ssm_rbuff_fini(flow->tx_rb);
 
         pthread_cleanup_pop(true);
 
@@ -1150,16 +1151,16 @@ int fccntl(int fd,
                 break;
         case FLOWGRXQLEN:
                 qlen  = va_arg(l, size_t *);
-                *qlen = shm_rbuff_queued(flow->rx_rb);
+                *qlen = ssm_rbuff_queued(flow->rx_rb);
                 break;
         case FLOWGTXQLEN:
                 qlen  = va_arg(l, size_t *);
-                *qlen = shm_rbuff_queued(flow->tx_rb);
+                *qlen = ssm_rbuff_queued(flow->tx_rb);
                 break;
         case FLOWSFLAGS:
                 flow->oflags = va_arg(l, uint32_t);
-                rx_acl = shm_rbuff_get_acl(flow->rx_rb);
-                tx_acl = shm_rbuff_get_acl(flow->rx_rb);
+                rx_acl = ssm_rbuff_get_acl(flow->rx_rb);
+                tx_acl = ssm_rbuff_get_acl(flow->rx_rb);
                 /*
                  * Making our own flow write only means making the
                  * the other side of the flow read only.
@@ -1172,19 +1173,19 @@ int fccntl(int fd,
                 if (flow->oflags & FLOWFDOWN) {
                         rx_acl |= ACL_FLOWDOWN;
                         tx_acl |= ACL_FLOWDOWN;
-                        shm_flow_set_notify(flow->set,
+                        ssm_flow_set_notify(flow->set,
                                             flow->info.id,
                                             FLOW_DOWN);
                 } else {
                         rx_acl &= ~ACL_FLOWDOWN;
                         tx_acl &= ~ACL_FLOWDOWN;
-                        shm_flow_set_notify(flow->set,
+                        ssm_flow_set_notify(flow->set,
                                             flow->info.id,
                                             FLOW_UP);
                 }
 
-                shm_rbuff_set_acl(flow->rx_rb, rx_acl);
-                shm_rbuff_set_acl(flow->tx_rb, tx_acl);
+                ssm_rbuff_set_acl(flow->rx_rb, rx_acl);
+                ssm_rbuff_set_acl(flow->tx_rb, tx_acl);
 
                 break;
         case FLOWGFLAGS:
@@ -1230,35 +1231,34 @@ int fccntl(int fd,
         return -EPERM;
 }
 
-static int chk_crc(struct shm_du_buff * sdb)
+static int chk_crc(struct ssm_pk_buff * spb)
 {
         uint32_t crc;
-        uint8_t * head = shm_du_buff_head(sdb);
-        uint8_t * tail = shm_du_buff_tail_release(sdb, CRCLEN);
+        uint8_t * head = ssm_pk_buff_head(spb);
+        uint8_t * tail = ssm_pk_buff_tail_release(spb, CRCLEN);
 
         mem_hash(HASH_CRC32, &crc, head, tail - head);
 
         return !(crc == *((uint32_t *) tail));
 }
 
-static int add_crc(struct shm_du_buff * sdb)
+static int add_crc(struct ssm_pk_buff * spb)
 {
         uint8_t * head;
         uint8_t * tail;
 
-        tail = shm_du_buff_tail_alloc(sdb, CRCLEN);
+        tail = ssm_pk_buff_tail_alloc(spb, CRCLEN);
         if (tail == NULL)
                 return -ENOMEM;
 
-        head = shm_du_buff_head(sdb);
-
+        head = ssm_pk_buff_head(spb);
         mem_hash(HASH_CRC32, tail, head, tail - head);
 
         return 0;
 }
 
-static int flow_tx_sdb(struct flow *        flow,
-                       struct shm_du_buff * sdb,
+static int flow_tx_spb(struct flow *        flow,
+                       struct ssm_pk_buff * spb,
                        bool                 block,
                        struct timespec *    abstime)
 {
@@ -1274,32 +1274,32 @@ static int flow_tx_sdb(struct flow *        flow,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        idx = shm_du_buff_get_idx(sdb);
+        idx = ssm_pk_buff_get_idx(spb);
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        if (shm_du_buff_len(sdb) > 0) {
-                if (frcti_snd(flow->frcti, sdb) < 0)
+        if (ssm_pk_buff_len(spb) > 0) {
+                if (frcti_snd(flow->frcti, spb) < 0)
                         goto enomem;
 
-                if (sdb_encrypt(flow, sdb) < 0)
+                if (spb_encrypt(flow, spb) < 0)
                         goto enomem;
 
-                if (flow->info.qs.ber == 0 && add_crc(sdb) != 0)
+                if (flow->info.qs.ber == 0 && add_crc(spb) != 0)
                         goto enomem;
         }
 
         pthread_cleanup_push(__cleanup_rwlock_unlock, &ai.lock);
 
         if (!block)
-                ret = shm_rbuff_write(flow->tx_rb, idx);
+                ret = ssm_rbuff_write(flow->tx_rb, idx);
         else
-                ret = shm_rbuff_write_b(flow->tx_rb, idx, abstime);
+                ret = ssm_rbuff_write_b(flow->tx_rb, idx, abstime);
 
         if (ret < 0)
-                shm_rdrbuff_remove(ai.rdrb, idx);
+                ssm_pool_remove(ai.gspp, idx);
         else
-                shm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
+                ssm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
 
         pthread_cleanup_pop(true);
 
@@ -1307,7 +1307,7 @@ static int flow_tx_sdb(struct flow *        flow,
 
 enomem:
         pthread_rwlock_unlock(&ai.lock);
-        shm_rdrbuff_remove(ai.rdrb, idx);
+        ssm_pool_remove(ai.gspp, idx);
         return -ENOMEM;
 }
 
@@ -1321,7 +1321,7 @@ ssize_t flow_write(int          fd,
         int                  flags;
         struct timespec      abs;
         struct timespec *    abstime = NULL;
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
         uint8_t *            ptr;
 
         if (buf == NULL && count != 0)
@@ -1356,12 +1356,12 @@ ssize_t flow_write(int          fd,
         if (flags & FLOWFWNOBLOCK) {
                 if (!frcti_is_window_open(flow->frcti))
                         return -EAGAIN;
-                idx = shm_rdrbuff_alloc(ai.rdrb, count, &ptr, &sdb);
+                idx = ssm_pool_alloc(ai.gspp, count, &ptr, &spb);
         } else {
                 ret = frcti_window_wait(flow->frcti, abstime);
                 if (ret < 0)
                         return ret;
-                idx = shm_rdrbuff_alloc_b(ai.rdrb, count, &ptr, &sdb, abstime);
+                idx = ssm_pool_alloc_b(ai.gspp, count, &ptr, &spb, abstime);
         }
 
         if (idx < 0)
@@ -1370,36 +1370,36 @@ ssize_t flow_write(int          fd,
         if (count > 0)
                 memcpy(ptr, buf, count);
 
-        ret = flow_tx_sdb(flow, sdb, !(flags & FLOWFWNOBLOCK), abstime);
+        ret = flow_tx_spb(flow, spb, !(flags & FLOWFWNOBLOCK), abstime);
 
         return ret < 0 ? (ssize_t) ret : (ssize_t) count;
 }
 
 static bool invalid_pkt(struct flow *        flow,
-                        struct shm_du_buff * sdb)
+                        struct ssm_pk_buff * spb)
 {
-        if (shm_du_buff_len(sdb) == 0)
+        if (spb == NULL || ssm_pk_buff_len(spb) == 0)
                 return true;
 
-        if (flow->info.qs.ber == 0 && chk_crc(sdb) != 0)
+        if (flow->info.qs.ber == 0 && chk_crc(spb) != 0)
                 return true;
 
-        if (sdb_decrypt(flow, sdb) < 0)
+        if (spb_decrypt(flow, spb) < 0)
                 return true;
 
         return false;
 }
 
-static ssize_t flow_rx_sdb(struct flow *         flow,
-                           struct shm_du_buff ** sdb,
+static ssize_t flow_rx_spb(struct flow *         flow,
+                           struct ssm_pk_buff ** spb,
                            bool                  block,
                            struct timespec *     abstime)
 {
         ssize_t         idx;
         struct timespec now;
 
-        idx = block ? shm_rbuff_read_b(flow->rx_rb, abstime) :
-                shm_rbuff_read(flow->rx_rb);
+        idx = block ? ssm_rbuff_read_b(flow->rx_rb, abstime) :
+                ssm_rbuff_read(flow->rx_rb);
         if (idx < 0)
                 return idx;
 
@@ -1411,10 +1411,10 @@ static ssize_t flow_rx_sdb(struct flow *         flow,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
+        *spb = ssm_pool_get(ai.gspp, idx);
 
-        if (invalid_pkt(flow, *sdb)) {
-                shm_rdrbuff_remove(ai.rdrb, idx);
+        if (invalid_pkt(flow, *spb)) {
+                ssm_pool_remove(ai.gspp, idx);
                 return -EAGAIN;
         }
 
@@ -1428,7 +1428,7 @@ ssize_t flow_read(int    fd,
         ssize_t              idx;
         ssize_t              n;
         uint8_t *            packet;
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
         struct timespec      abs;
         struct timespec      now;
         struct timespec *    abstime = NULL;
@@ -1469,7 +1469,7 @@ ssize_t flow_read(int    fd,
                 while ((idx = frcti_queued_pdu(flow->frcti)) < 0) {
                         pthread_rwlock_unlock(&ai.lock);
 
-                        idx = flow_rx_sdb(flow, &sdb, block, abstime);
+                        idx = flow_rx_spb(flow, &spb, block, abstime);
                         if (idx < 0) {
                                 if (block && idx != -EAGAIN)
                                         return idx;
@@ -1482,23 +1482,23 @@ ssize_t flow_read(int    fd,
 
                         pthread_rwlock_rdlock(&ai.lock);
 
-                        frcti_rcv(flow->frcti, sdb);
+                        frcti_rcv(flow->frcti, spb);
                 }
         }
 
-        sdb = shm_rdrbuff_get(ai.rdrb, idx);
+        spb = ssm_pool_get(ai.gspp, idx);
 
         pthread_rwlock_unlock(&ai.lock);
 
-        packet = shm_du_buff_head(sdb);
+        packet = ssm_pk_buff_head(spb);
 
-        n = shm_du_buff_len(sdb);
+        n = ssm_pk_buff_len(spb);
 
         assert(n >= 0);
 
         if (n <= (ssize_t) count) {
                 memcpy(buf, packet, n);
-                ipcp_sdb_release(sdb);
+                ipcp_spb_release(spb);
 
                 pthread_rwlock_wrlock(&ai.lock);
 
@@ -1512,7 +1512,7 @@ ssize_t flow_read(int    fd,
         } else {
                 if (partrd) {
                         memcpy(buf, packet, count);
-                        shm_du_buff_head_release(sdb, n);
+                        ssm_pk_buff_head_release(spb, n);
                         pthread_rwlock_wrlock(&ai.lock);
                         flow->part_idx = idx;
 
@@ -1521,7 +1521,7 @@ ssize_t flow_read(int    fd,
                         pthread_rwlock_unlock(&ai.lock);
                         return count;
                 } else {
-                        ipcp_sdb_release(sdb);
+                        ipcp_spb_release(spb);
                         return -EMSGSIZE;
                 }
         }
@@ -1578,7 +1578,7 @@ struct fqueue * fqueue_create(void)
         if (fq == NULL)
                 return NULL;
 
-        memset(fq->fqueue, -1, SHM_BUFFER_SIZE * sizeof(*fq->fqueue));
+        memset(fq->fqueue, -1, SSM_RBUFF_SIZE * sizeof(*fq->fqueue));
         fq->fqsize = 0;
         fq->next   = 0;
 
@@ -1595,7 +1595,7 @@ void fset_zero(struct flow_set * set)
         if (set == NULL)
                 return;
 
-        shm_flow_set_zero(ai.fqset, set->idx);
+        ssm_flow_set_zero(ai.fqset, set->idx);
 }
 
 int fset_add(struct flow_set * set,
@@ -1617,14 +1617,14 @@ int fset_add(struct flow_set * set,
         }
 
         if (flow->frcti != NULL)
-                shm_flow_set_del(ai.fqset, 0, ai.flows[fd].info.id);
+                ssm_flow_set_del(ai.fqset, 0, ai.flows[fd].info.id);
 
-        ret = shm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].info.id);
+        ret = ssm_flow_set_add(ai.fqset, set->idx, ai.flows[fd].info.id);
         if (ret < 0)
                 goto fail;
 
-        if (shm_rbuff_queued(ai.flows[fd].rx_rb))
-                shm_flow_set_notify(ai.fqset, ai.flows[fd].info.id, FLOW_PKT);
+        if (ssm_rbuff_queued(ai.flows[fd].rx_rb))
+                ssm_flow_set_notify(ai.fqset, ai.flows[fd].info.id, FLOW_PKT);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1648,10 +1648,10 @@ void fset_del(struct flow_set * set,
         pthread_rwlock_rdlock(&ai.lock);
 
         if (flow->info.id >= 0)
-                shm_flow_set_del(ai.fqset, set->idx, flow->info.id);
+                ssm_flow_set_del(ai.fqset, set->idx, flow->info.id);
 
         if (flow->frcti != NULL)
-                shm_flow_set_add(ai.fqset, 0, ai.flows[fd].info.id);
+                ssm_flow_set_add(ai.fqset, 0, ai.flows[fd].info.id);
 
         pthread_rwlock_unlock(&ai.lock);
 }
@@ -1671,7 +1671,7 @@ bool fset_has(const struct flow_set * set,
                 return false;
         }
 
-        ret = (shm_flow_set_has(ai.fqset, set->idx, ai.flows[fd].info.id) == 1);
+        ret = (ssm_flow_set_has(ai.fqset, set->idx, ai.flows[fd].info.id) == 1);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -1681,7 +1681,7 @@ bool fset_has(const struct flow_set * set,
 /* Filter fqueue events for non-data packets */
 static int fqueue_filter(struct fqueue * fq)
 {
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
         int                  fd;
         ssize_t              idx;
         struct frcti *       frcti;
@@ -1712,15 +1712,15 @@ static int fqueue_filter(struct fqueue * fq)
 
                 pthread_rwlock_unlock(&ai.lock);
 
-                idx = flow_rx_sdb(&ai.flows[fd], &sdb, false, NULL);
+                idx = flow_rx_spb(&ai.flows[fd], &spb, false, NULL);
                 if (idx < 0)
                         return 0;
 
                 pthread_rwlock_rdlock(&ai.lock);
 
-                sdb = shm_rdrbuff_get(ai.rdrb, idx);
+                spb = ssm_pool_get(ai.gspp, idx);
 
-                __frcti_rcv(frcti, sdb);
+                __frcti_rcv(frcti, spb);
 
                 if (__frcti_pdu_ready(frcti) >= 0) {
                         pthread_rwlock_unlock(&ai.lock);
@@ -1795,7 +1795,7 @@ ssize_t fevent(struct flow_set *       set,
         }
 
         while (ret == 0) {
-                ret = shm_flow_set_wait(ai.fqset, set->idx, fq->fqueue, t);
+                ret = ssm_flow_set_wait(ai.fqset, set->idx, fq->fqueue, t);
                 if (ret == -ETIMEDOUT)
                         return -ETIMEDOUT;
 
@@ -1961,13 +1961,13 @@ int ipcp_flow_alloc_reply(int              fd,
 }
 
 int ipcp_flow_read(int                   fd,
-                   struct shm_du_buff ** sdb)
+                   struct ssm_pk_buff ** spb)
 {
         struct flow * flow;
         ssize_t       idx = -1;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
-        assert(sdb);
+        assert(spb);
 
         flow = &ai.flows[fd];
 
@@ -1978,13 +1978,13 @@ int ipcp_flow_read(int                   fd,
         while (frcti_queued_pdu(flow->frcti) < 0) {
                 pthread_rwlock_unlock(&ai.lock);
 
-                idx = flow_rx_sdb(flow, sdb, false, NULL);
+                idx = flow_rx_spb(flow, spb, false, NULL);
                 if (idx < 0)
                         return idx;
 
                 pthread_rwlock_rdlock(&ai.lock);
 
-                frcti_rcv(flow->frcti, *sdb);
+                frcti_rcv(flow->frcti, *spb);
         }
 
         pthread_rwlock_unlock(&ai.lock);
@@ -1993,13 +1993,13 @@ int ipcp_flow_read(int                   fd,
 }
 
 int ipcp_flow_write(int                  fd,
-                    struct shm_du_buff * sdb)
+                    struct ssm_pk_buff * spb)
 {
         struct flow *   flow;
         int             ret;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
-        assert(sdb);
+        assert(spb);
 
         flow = &ai.flows[fd];
 
@@ -2017,19 +2017,19 @@ int ipcp_flow_write(int                  fd,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        ret = flow_tx_sdb(flow, sdb, true, NULL);
+        ret = flow_tx_spb(flow, spb, true, NULL);
 
         return ret;
 }
 
 int np1_flow_read(int                   fd,
-                  struct shm_du_buff ** sdb)
+                  struct ssm_pk_buff ** spb)
 {
         struct flow *    flow;
         ssize_t          idx = -1;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
-        assert(sdb);
+        assert(spb);
 
         flow = &ai.flows[fd];
 
@@ -2037,7 +2037,7 @@ int np1_flow_read(int                   fd,
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        idx = shm_rbuff_read(flow->rx_rb);
+        idx = ssm_rbuff_read(flow->rx_rb);
         if (idx < 0) {
                 pthread_rwlock_unlock(&ai.lock);
                 return idx;
@@ -2045,20 +2045,20 @@ int np1_flow_read(int                   fd,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        *sdb = shm_rdrbuff_get(ai.rdrb, idx);
+        *spb = ssm_pool_get(ai.gspp, idx);
 
         return 0;
 }
 
 int np1_flow_write(int                  fd,
-                   struct shm_du_buff * sdb)
+                   struct ssm_pk_buff * spb)
 {
         struct flow * flow;
         int           ret;
         ssize_t       idx;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
-        assert(sdb);
+        assert(spb);
 
         flow = &ai.flows[fd];
 
@@ -2076,31 +2076,31 @@ int np1_flow_write(int                  fd,
 
         pthread_rwlock_unlock(&ai.lock);
 
-        idx = shm_du_buff_get_idx(sdb);
+        idx = ssm_pk_buff_get_idx(spb);
 
-        ret = shm_rbuff_write_b(flow->tx_rb, idx, NULL);
+        ret = ssm_rbuff_write_b(flow->tx_rb, idx, NULL);
         if (ret < 0)
-                shm_rdrbuff_remove(ai.rdrb, idx);
+                ssm_pool_remove(ai.gspp, idx);
         else
-                shm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
+                ssm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
 
         return ret;
 }
 
-int ipcp_sdb_reserve(struct shm_du_buff ** sdb,
+int ipcp_spb_reserve(struct ssm_pk_buff ** spb,
                      size_t                len)
 {
-        return shm_rdrbuff_alloc_b(ai.rdrb, len, NULL, sdb, NULL) < 0 ? -1 : 0;
+        return ssm_pool_alloc_b(ai.gspp, len, NULL, spb, NULL) < 0 ? -1 : 0;
 }
 
-void ipcp_sdb_release(struct shm_du_buff * sdb)
+void ipcp_spb_release(struct ssm_pk_buff * spb)
 {
-        shm_rdrbuff_remove(ai.rdrb, shm_du_buff_get_idx(sdb));
+        ssm_pool_remove(ai.gspp, ssm_pk_buff_get_idx(spb));
 }
 
 int ipcp_flow_fini(int fd)
 {
-        struct shm_rbuff * rx_rb;
+        struct ssm_rbuff * rx_rb;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
 
@@ -2111,10 +2111,10 @@ int ipcp_flow_fini(int fd)
                 return -1;
         }
 
-        shm_rbuff_set_acl(ai.flows[fd].rx_rb, ACL_FLOWDOWN);
-        shm_rbuff_set_acl(ai.flows[fd].tx_rb, ACL_FLOWDOWN);
+        ssm_rbuff_set_acl(ai.flows[fd].rx_rb, ACL_FLOWDOWN);
+        ssm_rbuff_set_acl(ai.flows[fd].tx_rb, ACL_FLOWDOWN);
 
-        shm_flow_set_notify(ai.flows[fd].set,
+        ssm_flow_set_notify(ai.flows[fd].set,
                             ai.flows[fd].info.id,
                             FLOW_DEALLOC);
 
@@ -2123,7 +2123,7 @@ int ipcp_flow_fini(int fd)
         pthread_rwlock_unlock(&ai.lock);
 
         if (rx_rb != NULL)
-                shm_rbuff_fini(rx_rb);
+                ssm_rbuff_fini(rx_rb);
 
         return 0;
 }
@@ -2153,7 +2153,7 @@ size_t ipcp_flow_queued(int fd)
 
         assert(ai.flows[fd].info.id >= 0);
 
-        q = shm_rbuff_queued(ai.flows[fd].tx_rb);
+        q = ssm_rbuff_queued(ai.flows[fd].tx_rb);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -2168,7 +2168,7 @@ ssize_t local_flow_read(int fd)
 
         pthread_rwlock_rdlock(&ai.lock);
 
-        ret = shm_rbuff_read(ai.flows[fd].rx_rb);
+        ret = ssm_rbuff_read(ai.flows[fd].rx_rb);
 
         pthread_rwlock_unlock(&ai.lock);
 
@@ -2192,11 +2192,11 @@ int local_flow_write(int    fd,
                 return -ENOTALLOC;
         }
 
-        ret = shm_rbuff_write_b(flow->tx_rb, idx, NULL);
+        ret = ssm_rbuff_write_b(flow->tx_rb, idx, NULL);
         if (ret == 0)
-                shm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
+                ssm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
         else
-                shm_rdrbuff_remove(ai.rdrb, idx);
+                ssm_pool_remove(ai.gspp, idx);
 
         pthread_rwlock_unlock(&ai.lock);
 

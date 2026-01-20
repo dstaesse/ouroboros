@@ -17,6 +17,7 @@ if (BUILD_TESTS)
 
   # Add test subdirectories
   add_subdirectory(src/lib/tests)
+  add_subdirectory(src/lib/ssm/tests)
   add_subdirectory(src/irmd/oap/tests)
   add_subdirectory(src/ipcpd/unicast/pff/tests)
   add_subdirectory(src/ipcpd/unicast/routing/tests)

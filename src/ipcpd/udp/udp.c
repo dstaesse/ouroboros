@@ -443,7 +443,7 @@ static void * udp_ipcp_packet_reader(void * o)
                 struct mgmt_frame *  frame;
                 struct __SOCKADDR    r_saddr;
                 socklen_t            len;
-                struct shm_du_buff * sdb;
+                struct ssm_pk_buff * spb;
                 uint8_t *            head;
 
                 len = sizeof(r_saddr);
@@ -487,13 +487,13 @@ static void * udp_ipcp_packet_reader(void * o)
 
                 n-= sizeof(eid);
 
-                if (ipcp_sdb_reserve(&sdb, n))
+                if (ipcp_spb_reserve(&spb, n))
                         continue;
 
-                head = shm_du_buff_head(sdb);
+                head = ssm_pk_buff_head(spb);
                 memcpy(head, data, n);
-                if (np1_flow_write(eid, sdb) < 0)
-                        ipcp_sdb_release(sdb);
+                if (np1_flow_write(eid, spb) < 0)
+                        ipcp_spb_release(spb);
         }
 
         return (void *) 0;
@@ -504,9 +504,9 @@ static void cleanup_fqueue(void * fq)
         fqueue_destroy((fqueue_t *) fq);
 }
 
-static void cleanup_sdb(void * sdb)
+static void cleanup_spb(void * spb)
 {
-        ipcp_sdb_release((struct shm_du_buff *) sdb);
+        ipcp_spb_release((struct ssm_pk_buff *) spb);
 }
 
 static void * udp_ipcp_packet_writer(void * o)
@@ -529,29 +529,29 @@ static void * udp_ipcp_packet_writer(void * o)
                 int               fd;
                 fevent(udp_data.np1_flows, fq, NULL);
                 while ((fd = fqueue_next(fq)) >= 0) {
-                        struct shm_du_buff * sdb;
+                        struct ssm_pk_buff * spb;
                         uint8_t *            buf;
                         uint16_t             len;
 
                         if (fqueue_type(fq) != FLOW_PKT)
                                 continue;
 
-                        if (np1_flow_read(fd, &sdb)) {
+                        if (np1_flow_read(fd, &spb)) {
                                 log_dbg("Bad read from fd %d.", fd);
                                 continue;
                         }
 
-                        len = shm_du_buff_len(sdb);
+                        len = ssm_pk_buff_len(spb);
                         if (len > IPCP_UDP_MAX_PACKET_SIZE) {
                                 log_dbg("Packet length exceeds MTU.");
-                                ipcp_sdb_release(sdb);
+                                ipcp_spb_release(spb);
                                 continue;
                         }
 
-                        buf = shm_du_buff_head_alloc(sdb, OUR_HEADER_LEN);
+                        buf = ssm_pk_buff_head_alloc(spb, OUR_HEADER_LEN);
                         if (buf == NULL) {
                                 log_dbg("Failed to allocate header.");
-                                ipcp_sdb_release(sdb);
+                                ipcp_spb_release(spb);
                                 continue;
                         }
 
@@ -564,7 +564,7 @@ static void * udp_ipcp_packet_writer(void * o)
 
                         memcpy(buf, &eid, sizeof(eid));
 
-                        pthread_cleanup_push(cleanup_sdb, sdb);
+                        pthread_cleanup_push(cleanup_spb, spb);
 
                         if (sendto(udp_data.s_fd, buf, len + OUR_HEADER_LEN,
                                    SENDTO_FLAGS,

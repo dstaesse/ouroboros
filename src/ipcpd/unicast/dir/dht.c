@@ -2266,7 +2266,7 @@ static int dht_send_msg(dht_msg_t * msg,
                         uint64_t    addr)
 {
         size_t               len;
-        struct shm_du_buff * sdb;
+        struct ssm_pk_buff * spb;
 
         if (msg == NULL)
                 return 0;
@@ -2279,21 +2279,21 @@ static int dht_send_msg(dht_msg_t * msg,
                 goto fail_msg;
         }
 
-        if (ipcp_sdb_reserve(&sdb, len)) {
-                log_warn("%s failed to get sdb.", DHT_CODE(msg));
+        if (ipcp_spb_reserve(&spb, len)) {
+                log_warn("%s failed to get spb.", DHT_CODE(msg));
                 goto fail_msg;
         }
 
-        dht_msg__pack(msg, shm_du_buff_head(sdb));
+        dht_msg__pack(msg, ssm_pk_buff_head(spb));
 
-        if (dt_write_packet(addr, QOS_CUBE_BE, dht.eid, sdb) < 0) {
+        if (dt_write_packet(addr, QOS_CUBE_BE, dht.eid, spb) < 0) {
                 log_warn("%s write failed", DHT_CODE(msg));
                 goto fail_send;
         }
 
         return 0;
  fail_send:
-        ipcp_sdb_release(sdb);
+        ipcp_spb_release(spb);
  fail_msg:
         return -1;
 }
@@ -3191,7 +3191,7 @@ static void * dht_handle_packet(void * o)
 }
 #ifndef __DHT_TEST__
 static void dht_post_packet(void *               comp,
-                            struct shm_du_buff * sdb)
+                            struct ssm_pk_buff * spb)
 {
         struct cmd * cmd;
 
@@ -3203,17 +3203,17 @@ static void dht_post_packet(void *               comp,
                 goto fail_cmd;
         }
 
-        cmd->cbuf.data = malloc(shm_du_buff_len(sdb));
+        cmd->cbuf.data = malloc(ssm_pk_buff_len(spb));
         if (cmd->cbuf.data == NULL) {
                 log_err("Command buffer malloc failed.");
                 goto fail_buf;
         }
 
-        cmd->cbuf.len = shm_du_buff_len(sdb);
+        cmd->cbuf.len = ssm_pk_buff_len(spb);
 
-        memcpy(cmd->cbuf.data, shm_du_buff_head(sdb), cmd->cbuf.len);
+        memcpy(cmd->cbuf.data, ssm_pk_buff_head(spb), cmd->cbuf.len);
 
-        ipcp_sdb_release(sdb);
+        ipcp_spb_release(spb);
 
         pthread_mutex_lock(&dht.cmds.mtx);
 
@@ -3228,7 +3228,7 @@ static void dht_post_packet(void *               comp,
  fail_buf:
         free(cmd);
  fail_cmd:
-        ipcp_sdb_release(sdb);
+        ipcp_spb_release(spb);
         return;
 }
 #endif

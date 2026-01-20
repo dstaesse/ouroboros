@@ -1,6 +1,11 @@
 get_filename_component(tmp ".." ABSOLUTE)
 get_filename_component(src_folder "${tmp}" NAME)
 
+get_filename_component(OAP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
+get_filename_component(OAP_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}" DIRECTORY)
+get_filename_component(IRMD_SOURCE_DIR "${OAP_SOURCE_DIR}" DIRECTORY)
+get_filename_component(IRMD_BINARY_DIR "${OAP_BINARY_DIR}" DIRECTORY)
+
 compute_test_prefix()
 
 create_test_sourcelist(${src_folder}_tests test_suite.c
@@ -15,11 +20,11 @@ create_test_sourcelist(${src_folder}_pqc_tests test_suite_pqc.c
 
 # OAP test needs io.c compiled with OAP_TEST_MODE
 set(OAP_TEST_SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/../io.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/../hdr.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/../auth.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/../srv.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/../cli.c
+  ${OAP_SOURCE_DIR}/io.c
+  ${OAP_SOURCE_DIR}/hdr.c
+  ${OAP_SOURCE_DIR}/auth.c
+  ${OAP_SOURCE_DIR}/srv.c
+  ${OAP_SOURCE_DIR}/cli.c
   ${CMAKE_CURRENT_SOURCE_DIR}/common.c
 )
 
@@ -32,8 +37,8 @@ set_source_files_properties(${OAP_TEST_SOURCES}
 disable_test_logging_for_target(${src_folder}_test)
 target_link_libraries(${src_folder}_test ouroboros-irm)
 target_include_directories(${src_folder}_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../..
-  ${CMAKE_CURRENT_BINARY_DIR}/../..
+  ${IRMD_SOURCE_DIR}
+  ${IRMD_BINARY_DIR}
 )
 
 # PQC test executable (ML-DSA)
@@ -46,8 +51,8 @@ set_source_files_properties(${OAP_TEST_SOURCES}
 disable_test_logging_for_target(${src_folder}_pqc_test)
 target_link_libraries(${src_folder}_pqc_test ouroboros-irm)
 target_include_directories(${src_folder}_pqc_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../..
-  ${CMAKE_CURRENT_BINARY_DIR}/../..
+  ${IRMD_SOURCE_DIR}
+  ${IRMD_BINARY_DIR}
 )
 
 add_dependencies(build_tests ${src_folder}_test ${src_folder}_pqc_test)

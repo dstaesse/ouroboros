@@ -23,11 +23,12 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "config.h"
+#include "ssm.h"
 
 #include <ouroboros/errno.h>
 #include <ouroboros/lockfile.h>
 #include <ouroboros/pthread.h>
-#include <ouroboros/shm_flow_set.h>
+#include <ouroboros/ssm_flow_set.h>
 #include <ouroboros/time.h>
 
 #include <assert.h>
@@ -54,17 +55,17 @@
 #define FN_MAX_CHARS 255
 #define FS_PROT      (PROT_READ | PROT_WRITE)
 
-#define QUEUESIZE ((SHM_BUFFER_SIZE) * sizeof(struct flowevent))
+#define QUEUESIZE ((SSM_RBUFF_SIZE) * sizeof(struct flowevent))
 
-#define SHM_FSET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)             \
+#define SSM_FSET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)             \
                             + PROG_MAX_FQUEUES * sizeof(size_t)         \
                             + PROG_MAX_FQUEUES * sizeof(pthread_cond_t) \
                             + PROG_MAX_FQUEUES * QUEUESIZE              \
                             + sizeof(pthread_mutex_t))
 
-#define fqueue_ptr(fs, idx) (fs->fqueues + (SHM_BUFFER_SIZE) * idx)
+#define fqueue_ptr(fs, idx) (fs->fqueues + (SSM_RBUFF_SIZE) * idx)
 
-struct shm_flow_set {
+struct ssm_flow_set {
         ssize_t *          mtable;
         size_t *           heads;
         pthread_cond_t *   conds;
@@ -74,15 +75,15 @@ struct shm_flow_set {
         pid_t pid;
 };
 
-static struct shm_flow_set * flow_set_create(pid_t pid,
+static struct ssm_flow_set * flow_set_create(pid_t pid,
                                              int   oflags)
 {
-        struct shm_flow_set * set;
+        struct ssm_flow_set * set;
         ssize_t *             shm_base;
         char                  fn[FN_MAX_CHARS];
         int                   fd;
 
-        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", pid);
+        sprintf(fn, SSM_FLOW_SET_PREFIX "%d", pid);
 
         set = malloc(sizeof(*set));
         if (set == NULL)
@@ -92,10 +93,10 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
         if (fd == -1)
                 goto fail_shm_open;
 
-        if ((oflags & O_CREAT) && ftruncate(fd, SHM_FSET_FILE_SIZE) < 0)
+        if ((oflags & O_CREAT) && ftruncate(fd, SSM_FSET_FILE_SIZE) < 0)
                 goto fail_truncate;
 
-        shm_base = mmap(NULL, SHM_FSET_FILE_SIZE, FS_PROT, MAP_SHARED, fd, 0);
+        shm_base = mmap(NULL, SSM_FSET_FILE_SIZE, FS_PROT, MAP_SHARED, fd, 0);
         if (shm_base == MAP_FAILED)
                 goto fail_mmap;
 
@@ -106,7 +107,7 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
         set->conds   = (pthread_cond_t *)(set->heads + PROG_MAX_FQUEUES);
         set->fqueues = (struct flowevent *) (set->conds + PROG_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
-                (set->fqueues + PROG_MAX_FQUEUES * (SHM_BUFFER_SIZE));
+                (set->fqueues + PROG_MAX_FQUEUES * (SSM_RBUFF_SIZE));
 
         return set;
 
@@ -121,9 +122,9 @@ static struct shm_flow_set * flow_set_create(pid_t pid,
         return NULL;
 }
 
-struct shm_flow_set * shm_flow_set_create(pid_t pid)
+struct ssm_flow_set * ssm_flow_set_create(pid_t pid)
 {
-        struct shm_flow_set * set;
+        struct ssm_flow_set * set;
         pthread_mutexattr_t   mattr;
         pthread_condattr_t    cattr;
         mode_t                mask;
@@ -184,38 +185,38 @@ struct shm_flow_set * shm_flow_set_create(pid_t pid)
  fail_mattr_set:
         pthread_mutexattr_destroy(&mattr);
  fail_mutexattr_init:
-        shm_flow_set_destroy(set);
+        ssm_flow_set_destroy(set);
  fail_set:
         return NULL;
 }
 
-struct shm_flow_set * shm_flow_set_open(pid_t pid)
+struct ssm_flow_set * ssm_flow_set_open(pid_t pid)
 {
         return flow_set_create(pid, O_RDWR);
 }
 
-void shm_flow_set_destroy(struct shm_flow_set * set)
+void ssm_flow_set_destroy(struct ssm_flow_set * set)
 {
         char fn[FN_MAX_CHARS];
 
         assert(set);
 
-        sprintf(fn, SHM_FLOW_SET_PREFIX "%d", set->pid);
+        sprintf(fn, SSM_FLOW_SET_PREFIX "%d", set->pid);
 
-        shm_flow_set_close(set);
+        ssm_flow_set_close(set);
 
         shm_unlink(fn);
 }
 
-void shm_flow_set_close(struct shm_flow_set * set)
+void ssm_flow_set_close(struct ssm_flow_set * set)
 {
         assert(set);
 
-        munmap(set->mtable, SHM_FSET_FILE_SIZE);
+        munmap(set->mtable, SSM_FSET_FILE_SIZE);
         free(set);
 }
 
-void shm_flow_set_zero(struct shm_flow_set * set,
+void ssm_flow_set_zero(struct ssm_flow_set * set,
                        size_t                idx)
 {
         ssize_t i = 0;
@@ -235,7 +236,7 @@ void shm_flow_set_zero(struct shm_flow_set * set,
 }
 
 
-int shm_flow_set_add(struct shm_flow_set * set,
+int ssm_flow_set_add(struct ssm_flow_set * set,
                      size_t                idx,
                      int                   flow_id)
 {
@@ -257,7 +258,7 @@ int shm_flow_set_add(struct shm_flow_set * set,
         return 0;
 }
 
-void shm_flow_set_del(struct shm_flow_set * set,
+void ssm_flow_set_del(struct ssm_flow_set * set,
                       size_t                idx,
                       int                   flow_id)
 {
@@ -273,7 +274,7 @@ void shm_flow_set_del(struct shm_flow_set * set,
         pthread_mutex_unlock(set->lock);
 }
 
-int shm_flow_set_has(struct shm_flow_set * set,
+int ssm_flow_set_has(struct ssm_flow_set * set,
                      size_t                idx,
                      int                   flow_id)
 {
@@ -293,7 +294,7 @@ int shm_flow_set_has(struct shm_flow_set * set,
         return ret;
 }
 
-void shm_flow_set_notify(struct shm_flow_set * set,
+void ssm_flow_set_notify(struct ssm_flow_set * set,
                          int                   flow_id,
                          int                   event)
 {
@@ -323,7 +324,7 @@ void shm_flow_set_notify(struct shm_flow_set * set,
 }
 
 
-ssize_t shm_flow_set_wait(const struct shm_flow_set * set,
+ssize_t ssm_flow_set_wait(const struct ssm_flow_set * set,
                           size_t                      idx,
                           struct flowevent *          fqueue,
                           const struct timespec *     abstime)

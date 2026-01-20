@@ -23,7 +23,7 @@
 #ifndef OUROBOROS_LIB_CRYPT_H
 #define OUROBOROS_LIB_CRYPT_H
 
-#include <ouroboros/shm_du_buff.h>
+#include <ouroboros/ssm_pk_buff.h>
 #include <ouroboros/utils.h>
 
 #include <assert.h>

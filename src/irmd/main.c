@@ -42,7 +42,7 @@
 #include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
 #include <ouroboros/rib.h>
-#include <ouroboros/shm_rdrbuff.h>
+#include <ouroboros/ssm_pool.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/time.h>
 #include <ouroboros/tpm.h>
@@ -99,7 +99,7 @@ struct {
         char *               cfg_file;     /* configuration file path    */
 #endif
         struct lockfile *    lf;           /* single irmd per system     */
-        struct shm_rdrbuff * rdrb;         /* rdrbuff for packets        */
+        struct ssm_pool * gspp;         /* pool for packets        */
 
         int                  sockfd;       /* UNIX socket                */
 
@@ -1691,7 +1691,7 @@ static void destroy_mount(char * mnt)
 
 static int ouroboros_reset(void)
 {
-        shm_rdrbuff_purge();
+        ssm_pool_purge();
         lockfile_destroy(irmd.lf);
 
         return 0;
@@ -1712,10 +1712,8 @@ static void cleanup_pid(pid_t pid)
         }
 
         destroy_mount(mnt);
-
-#else
-        (void) pid;
 #endif
+        ssm_pool_reclaim_orphans(irmd.gspp, pid);
 }
 
 void * irm_sanitize(void * o)
@@ -1900,13 +1898,13 @@ static int irm_init(void)
                 goto fail_sock_path;
         }
 
-        if ((irmd.rdrb = shm_rdrbuff_create()) == NULL) {
-                log_err("Failed to create rdrbuff.");
-                goto fail_rdrbuff;
+        if ((irmd.gspp = ssm_pool_create()) == NULL) {
+                log_err("Failed to create pool.");
+                goto fail_pool;
         }
 
-        if (shm_rdrbuff_mlock(irmd.rdrb) < 0)
-                log_warn("Failed to mlock rdrbuff.");
+        if (ssm_pool_mlock(irmd.gspp) < 0)
+                log_warn("Failed to mlock pool.");
 
         irmd.tpm = tpm_create(IRMD_MIN_THREADS, IRMD_ADD_THREADS,
                               mainloop, NULL);
@@ -1970,8 +1968,8 @@ static int irm_init(void)
  fail_oap:
         tpm_destroy(irmd.tpm);
  fail_tpm_create:
-        shm_rdrbuff_destroy(irmd.rdrb);
- fail_rdrbuff:
+        ssm_pool_destroy(irmd.gspp);
+ fail_pool:
         close(irmd.sockfd);
  fail_sock_path:
         unlink(IRM_SOCK_PATH);
@@ -2008,8 +2006,8 @@ static void irm_fini(void)
         if (unlink(IRM_SOCK_PATH))
                 log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
 
-        if (irmd.rdrb != NULL)
-                shm_rdrbuff_destroy(irmd.rdrb);
+        if (irmd.gspp != NULL)
+                ssm_pool_destroy(irmd.gspp);
 
         if (irmd.lf != NULL)
                 lockfile_destroy(irmd.lf);

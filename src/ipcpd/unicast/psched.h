@@ -28,10 +28,10 @@
 
 typedef void (* next_packet_fn_t)(int                  fd,
                                   qoscube_t            qc,
-                                  struct shm_du_buff * sdb);
+                                  struct ssm_pk_buff * spb);
 
 typedef int (* read_fn_t)(int                   fd,
-                          struct shm_du_buff ** sdb);
+                          struct ssm_pk_buff ** spb);
 
 struct psched * psched_create(next_packet_fn_t callback,
                               read_fn_t        read);

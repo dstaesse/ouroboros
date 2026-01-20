@@ -75,7 +75,7 @@ struct reg_proc * reg_proc_create(const struct proc_info * info)
                 goto fail_malloc;
         }
 
-        proc->set = shm_flow_set_create(info->pid);
+        proc->set = ssm_flow_set_create(info->pid);
         if (proc->set == NULL) {
                 log_err("Failed to create flow set for %d.", info->pid);
                 goto fail_set;
@@ -99,7 +99,7 @@ void reg_proc_destroy(struct reg_proc * proc)
 {
         assert(proc != NULL);
 
-        shm_flow_set_destroy(proc->set);
+        ssm_flow_set_destroy(proc->set);
 
         __reg_proc_clear_names(proc);
 

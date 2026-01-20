@@ -1030,6 +1030,7 @@ int crypt_secure_malloc_init(size_t max)
 #ifdef HAVE_OPENSSL
         return openssl_secure_malloc_init(max, SECMEM_GUARD);
 #else
+        (void) max;
         return 0;
 #endif
 }
