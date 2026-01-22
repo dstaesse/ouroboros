@@ -97,3 +97,5 @@
 
 #define ACKQ_SLOTS          (@ACK_WHEEL_SLOTS@)
 #define ACKQ_RES            (@ACK_WHEEL_RESOLUTION@)         /* 2^N ns */
+
+#define KEY_ROTATION_BIT    (@KEY_ROTATION_BIT@)             /* Bit for key rotation */

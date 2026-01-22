@@ -85,6 +85,8 @@ set(TPM_DEBUG_REPORT_INTERVAL 0 CACHE STRING
   "Interval at wich the TPM will report long running threads (s), 0 disables")
 set(TPM_DEBUG_ABORT_TIMEOUT 0 CACHE STRING
   "TPM abort process after a thread reaches this timeout (s), 0 disables")
+set(KEY_ROTATION_BIT 20 CACHE STRING
+  "Bit position in packet counter that triggers key rotation (default 20 = every 2^20 packets)")
 
 if (HAVE_FUSE)
   set(PROC_FLOW_STATS TRUE CACHE BOOL

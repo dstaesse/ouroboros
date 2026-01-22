@@ -254,6 +254,182 @@ static int test_md_nid_values(void)
 }
 #endif
 
+static int test_key_rotation(void)
+{
+        uint8_t             pkt[TEST_PACKET_SIZE];
+        struct crypt_ctx *  tx_ctx;
+        struct crypt_ctx *  rx_ctx;
+        uint8_t             key[SYMMKEYSZ];
+        struct crypt_sk     sk = {
+                .nid = NID_aes_256_gcm,
+                .key = key
+        };
+        buffer_t            in;
+        buffer_t            enc;
+        buffer_t            dec;
+        uint32_t            i;
+        uint32_t            threshold;
+
+        TEST_START();
+
+        if (random_buffer(key, sizeof(key)) < 0) {
+                printf("Failed to generate random key.\n");
+                goto fail;
+        }
+
+        if (random_buffer(pkt, sizeof(pkt)) < 0) {
+                printf("Failed to generate random data.\n");
+                goto fail;
+        }
+
+        tx_ctx = crypt_create_ctx(&sk);
+        if (tx_ctx == NULL) {
+                printf("Failed to create TX context.\n");
+                goto fail;
+        }
+
+        rx_ctx = crypt_create_ctx(&sk);
+        if (rx_ctx == NULL) {
+                printf("Failed to create RX context.\n");
+                goto fail_tx;
+        }
+
+        in.len  = sizeof(pkt);
+        in.data = pkt;
+
+        threshold = (1U << TEST_KEY_ROTATION_BIT);
+
+        /* Encrypt and decrypt across multiple rotations */
+        for (i = 0; i < threshold * 3; i++) {
+                if (crypt_encrypt(tx_ctx, in, &enc) < 0) {
+                        printf("Encryption failed at packet %u.\n", i);
+                        goto fail_rx;
+                }
+
+                if (crypt_decrypt(rx_ctx, enc, &dec) < 0) {
+                        printf("Decryption failed at packet %u.\n", i);
+                        freebuf(enc);
+                        goto fail_rx;
+                }
+
+                if (dec.len != in.len ||
+                    memcmp(in.data, dec.data, in.len) != 0) {
+                        printf("Data mismatch at packet %u.\n", i);
+                        freebuf(dec);
+                        freebuf(enc);
+                        goto fail_rx;
+                }
+
+                freebuf(dec);
+                freebuf(enc);
+        }
+
+        crypt_destroy_ctx(rx_ctx);
+        crypt_destroy_ctx(tx_ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_rx:
+        crypt_destroy_ctx(rx_ctx);
+ fail_tx:
+        crypt_destroy_ctx(tx_ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_key_phase_bit(void)
+{
+        uint8_t            pkt[TEST_PACKET_SIZE];
+        struct crypt_ctx * ctx;
+        uint8_t            key[SYMMKEYSZ];
+        struct crypt_sk    sk = {
+                .nid = NID_aes_256_gcm,
+                .key = key
+        };
+        buffer_t           in;
+        buffer_t           out;
+        uint32_t           count;
+        uint32_t           threshold;
+        uint8_t            phase_before;
+        uint8_t            phase_after;
+        int                ivsz;
+
+        TEST_START();
+
+        if (random_buffer(key, sizeof(key)) < 0) {
+                printf("Failed to generate random key.\n");
+                goto fail;
+        }
+
+        if (random_buffer(pkt, sizeof(pkt)) < 0) {
+                printf("Failed to generate random data.\n");
+                goto fail;
+        }
+
+        ctx = crypt_create_ctx(&sk);
+        if (ctx == NULL) {
+                printf("Failed to initialize cryptography.\n");
+                goto fail;
+        }
+
+        ivsz = crypt_get_ivsz(ctx);
+        if (ivsz <= 0) {
+                printf("Invalid IV size.\n");
+                goto fail_ctx;
+        }
+
+        in.len  = sizeof(pkt);
+        in.data = pkt;
+
+        /* Encrypt packets up to just before rotation threshold */
+        threshold = (1U << KEY_ROTATION_BIT);
+
+        /* Encrypt threshold - 1 packets (indices 0 to threshold-2) */
+        for (count = 0; count < threshold - 1; count++) {
+                if (crypt_encrypt(ctx, in, &out) < 0) {
+                        printf("Encryption failed at count %u.\n", count);
+                        goto fail_ctx;
+                }
+                freebuf(out);
+        }
+
+        /* Packet at index threshold-1: phase should still be initial */
+        if (crypt_encrypt(ctx, in, &out) < 0) {
+                printf("Encryption failed before rotation.\n");
+                goto fail_ctx;
+        }
+        phase_before = (out.data[0] & 0x80) ? 1 : 0;
+        freebuf(out);
+
+        /* Packet at index threshold: phase should have toggled */
+        if (crypt_encrypt(ctx, in, &out) < 0) {
+                printf("Encryption failed at rotation threshold.\n");
+                goto fail_ctx;
+        }
+        phase_after = (out.data[0] & 0x80) ? 1 : 0;
+        freebuf(out);
+
+        /* Phase bit should have toggled */
+        if (phase_before == phase_after) {
+                printf("Phase bit did not toggle: before=%u, after=%u.\n",
+                       phase_before, phase_after);
+                goto fail_ctx;
+        }
+
+        crypt_destroy_ctx(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        crypt_destroy_ctx(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int crypt_test(int     argc,
                char ** argv)
 {
@@ -264,6 +440,8 @@ int crypt_test(int     argc,
 
         ret |= test_crypt_create_destroy();
         ret |= test_encrypt_decrypt_all();
+        ret |= test_key_rotation();
+        ret |= test_key_phase_bit();
 #ifdef HAVE_OPENSSL
         ret |= test_cipher_nid_values();
         ret |= test_md_nid_values();
