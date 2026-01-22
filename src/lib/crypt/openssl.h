@@ -73,6 +73,10 @@ struct ossl_crypt_ctx * openssl_crypt_create_ctx(struct crypt_sk * sk);
 
 void                    openssl_crypt_destroy_ctx(struct ossl_crypt_ctx * ctx);
 
+int                     openssl_crypt_get_ivsz(struct ossl_crypt_ctx * ctx);
+
+int                     openssl_crypt_get_tagsz(struct ossl_crypt_ctx * ctx);
+
 /* AUTHENTICATION */
 
 int     openssl_load_crt_file(const char * path,

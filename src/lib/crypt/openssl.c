@@ -996,6 +996,20 @@ void openssl_crypt_destroy_ctx(struct ossl_crypt_ctx * ctx)
         free(ctx);
 }
 
+int openssl_crypt_get_ivsz(struct ossl_crypt_ctx * ctx)
+{
+        assert(ctx != NULL);
+
+        return ctx->ivsz;
+}
+
+int openssl_crypt_get_tagsz(struct ossl_crypt_ctx * ctx)
+{
+        assert(ctx != NULL);
+
+        return ctx->tagsz;
+}
+
 /* AUTHENTICATION */
 
 int openssl_load_crt_file(const char * path,

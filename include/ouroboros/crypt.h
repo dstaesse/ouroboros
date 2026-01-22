@@ -284,6 +284,10 @@ int                crypt_decrypt(struct crypt_ctx * ctx,
                                  buffer_t           in,
                                  buffer_t *         out);
 
+int                crypt_get_ivsz(struct crypt_ctx * ctx);
+
+int                crypt_get_tagsz(struct crypt_ctx * ctx);
+
 int                crypt_load_crt_file(const char * path,
                                        void **      crt);
 

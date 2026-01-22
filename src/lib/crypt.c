@@ -619,6 +619,34 @@ void crypt_destroy_ctx(struct crypt_ctx * crypt)
         free(crypt);
 }
 
+int crypt_get_ivsz(struct crypt_ctx * ctx)
+{
+        if (ctx == NULL)
+                return -EINVAL;
+
+#ifdef HAVE_OPENSSL
+        assert(ctx->ctx != NULL);
+        return openssl_crypt_get_ivsz(ctx->ctx);
+#else
+        assert(ctx->ctx == NULL);
+        return -ENOTSUP;
+#endif
+}
+
+int crypt_get_tagsz(struct crypt_ctx * ctx)
+{
+        if (ctx == NULL)
+                return -EINVAL;
+
+#ifdef HAVE_OPENSSL
+        assert(ctx->ctx != NULL);
+        return openssl_crypt_get_tagsz(ctx->ctx);
+#else
+        assert(ctx->ctx == NULL);
+        return -ENOTSUP;
+#endif
+}
+
 int crypt_load_privkey_file(const char * path,
                             void **      key)
 {

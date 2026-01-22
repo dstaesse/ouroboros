@@ -100,6 +100,8 @@ struct flow {
         ssize_t               part_idx;
 
         struct crypt_ctx *    crypt;
+        int                   headsz;  /* IV */
+        int                   tailsz;  /* Tag + CRC */
 
         struct timespec       snd_act;
         struct timespec       rcv_act;
@@ -269,11 +271,11 @@ static int sdb_encrypt(struct flow *        flow,
         if (crypt_encrypt(flow->crypt, in, &out) < 0)
                 goto fail_encrypt;
 
-        head = shm_du_buff_head_alloc(sdb, IVSZ);
+        head = shm_du_buff_head_alloc(sdb, flow->headsz);
         if (head == NULL)
                 goto fail_alloc;
 
-        tail = shm_du_buff_tail_alloc(sdb, (out.len - in.len) - IVSZ);
+        tail = shm_du_buff_tail_alloc(sdb, flow->tailsz);
         if (tail == NULL)
                 goto fail_alloc;
 
@@ -305,8 +307,8 @@ static int sdb_decrypt(struct flow *        flow,
                 return -ENOMEM;
 
 
-        head = shm_du_buff_head_release(sdb, IVSZ) + IVSZ;
-        shm_du_buff_tail_release(sdb, (in.len - out.len) - IVSZ);
+        head = shm_du_buff_head_release(sdb, flow->headsz) + flow->headsz;
+        shm_du_buff_tail_release(sdb, flow->tailsz);
 
         memcpy(head, out.data, out.len);
 
@@ -543,11 +545,15 @@ static int flow_init(struct flow_info * info,
         flow->snd_act  = now;
         flow->rcv_act  = now;
         flow->crypt    = NULL;
+        flow->headsz   = 0;
+        flow->tailsz   = 0;
 
         if (IS_ENCRYPTED(sk)) {
                 flow->crypt = crypt_create_ctx(sk);
                 if (flow->crypt == NULL)
                         goto fail_crypt;
+                flow->headsz = crypt_get_ivsz(flow->crypt);
+                flow->tailsz = crypt_get_tagsz(flow->crypt);
         }
 
         assert(flow->frcti == NULL);
@@ -1235,10 +1241,14 @@ static int chk_crc(struct shm_du_buff * sdb)
 
 static int add_crc(struct shm_du_buff * sdb)
 {
-        uint8_t * head = shm_du_buff_head(sdb);
-        uint8_t * tail = shm_du_buff_tail_alloc(sdb, CRCLEN);
+        uint8_t * head;
+        uint8_t * tail;
+
+        tail = shm_du_buff_tail_alloc(sdb, CRCLEN);
         if (tail == NULL)
-                return -1;
+                return -ENOMEM;
+
+        head = shm_du_buff_head(sdb);
 
         mem_hash(HASH_CRC32, tail, head, tail - head);
 
