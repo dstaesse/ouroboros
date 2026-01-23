@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 
 #define TEST_RC_SUCCESS  0
 #define TEST_RC_SKIP     1
@@ -81,8 +82,13 @@ static int __attribute__((unused)) test_assert_fail(int(* testfunc)(void))
                 return TEST_RC_FAIL;
         }
 
-        if (pid == 0)
+        if (pid == 0) {
+#ifdef DISABLE_TESTS_CORE_DUMPS
+                struct rlimit rl = { .rlim_cur = 0, .rlim_max = 0 };
+                setrlimit(RLIMIT_CORE, &rl);
+#endif
                 return testfunc(); /* should abort */
+        }
 
         waitpid(pid, &wstatus, 0);
 #ifdef CONFIG_OUROBOROS_DEBUG
