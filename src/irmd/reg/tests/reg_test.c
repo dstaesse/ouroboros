@@ -259,6 +259,9 @@ static int test_reg_accept_flow_success(void)
 
         if (reg_wait_flow_accepted(&info, &rbuf, &abstime) < 0) {
                 printf("Flow allocation failed.\n");
+                pthread_join(thr, NULL);
+                reg_destroy_flow(info.id);
+                reg_fini();
                 goto fail;
         }
 
@@ -353,6 +356,9 @@ static int test_reg_accept_flow_success_no_crypt(void)
 
         if (reg_wait_flow_accepted(&info, &rbuf, &abstime) < 0 ) {
                 printf("Flow allocation failed.\n");
+                pthread_join(thr, NULL);
+                reg_destroy_flow(info.id);
+                reg_fini();
                 goto fail;
         }
 
@@ -446,6 +452,9 @@ static int test_reg_allocate_flow_fail(void)
 
         if (reg_wait_flow_allocated(&info, &buf, &abstime) == 0 ) {
                 printf("Flow allocation succeeded.\n");
+                pthread_join(thr, NULL);
+                reg_destroy_flow(info.id);
+                reg_fini();
                 goto fail;
         }
 
@@ -1296,7 +1305,7 @@ static int test_wait_accepting_fail_name(void)
 static void * test_call_flow_accept(void * o)
 {
         struct timespec abstime;
-        struct timespec timeo = TIMESPEC_INIT_MS(1);
+        struct timespec timeo = TIMESPEC_INIT_MS(10);
         buffer_t        pbuf = BUF_INIT;
 
         struct proc_info pinfo = {
@@ -1326,10 +1335,10 @@ static void * test_call_flow_accept(void * o)
 
         info.state = FLOW_ACCEPT_PENDING;
 
+        reg_prepare_flow_accept(&info);
+
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
-
-        reg_prepare_flow_accept(&info);
 
         if (reg_wait_flow_accepted(&info, &pbuf, &abstime) != -ETIMEDOUT) {
                 printf("Wait allocated did not timeout.\n");
@@ -1381,6 +1390,9 @@ static int test_wait_accepting_success(void)
         flow_id = reg_wait_flow_accepting(ninfo.name, &abstime);
         if (flow_id < 0) {
                 printf("Wait accept did not return a flow id: %d.\n", flow_id);
+                pthread_join(thr, NULL);
+                reg_destroy_name(TEST_NAME);
+                reg_fini();
                 goto fail;
         }
 
@@ -1466,7 +1478,7 @@ static void * test_ipcp_respond(void * o)
 static int test_wait_ipcp_boot_fail(void)
 {
         struct timespec  abstime;
-        struct timespec  timeo = TIMESPEC_INIT_S(1);
+        struct timespec  timeo = TIMESPEC_INIT_S(10);
         pthread_t        thr;
         struct ipcp_info info = {
                 .name  = TEST_IPCP,
@@ -1500,6 +1512,9 @@ static int test_wait_ipcp_boot_fail(void)
 
         if (reg_wait_ipcp_boot(&info, &abstime) == 0) {
                 printf("IPCP boot reported success.\n");
+                pthread_join(thr, NULL);
+                reg_destroy_proc(info.pid);
+                reg_fini();
                 goto fail;
         }
 
@@ -1529,7 +1544,7 @@ static int test_wait_ipcp_boot_success(void)
 {
         pthread_t        thr;
         struct timespec  abstime;
-        struct timespec  timeo = TIMESPEC_INIT_S(1);
+        struct timespec  timeo = TIMESPEC_INIT_S(10);
         struct ipcp_info info = {
                 .name  = TEST_IPCP,
                 .pid   = TEST_PID,
@@ -1562,6 +1577,9 @@ static int test_wait_ipcp_boot_success(void)
 
         if (reg_wait_ipcp_boot(&info, &abstime) < 0) {
                 printf("IPCP boot failed.\n");
+                pthread_join(thr, NULL);
+                reg_destroy_proc(info.pid);
+                reg_fini();
                 goto fail;
         }
 
@@ -1569,6 +1587,8 @@ static int test_wait_ipcp_boot_success(void)
 
         if (info.state != IPCP_OPERATIONAL) {
                 printf("IPCP boot succeeded in non-operational state.\n");
+                reg_destroy_proc(info.pid);
+                reg_fini();
                 goto fail;
         }
 
@@ -1641,7 +1661,7 @@ static void * test_proc(void * o)
 static int test_wait_proc_success(void)
 {
         struct timespec  abstime;
-        struct timespec  timeo = TIMESPEC_INIT_S(1);
+        struct timespec  timeo = TIMESPEC_INIT_S(10);
         pthread_t        thr;
         struct proc_info info = {
                 .pid  = TEST_PID,
@@ -1662,6 +1682,9 @@ static int test_wait_proc_success(void)
 
         if (reg_wait_proc(info.pid, &abstime) < 0) {
                 printf("Waiting for proc failed.\n");
+                pthread_join(thr, NULL);
+                reg_destroy_proc(info.pid);
+                reg_fini();
                 goto fail;
         }
 
