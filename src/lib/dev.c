@@ -549,6 +549,8 @@ static int flow_init(struct flow_info * info,
         flow->tailsz   = 0;
 
         if (IS_ENCRYPTED(sk)) {
+                /* Set to lower value in tests, should we make configurable? */
+                sk->rot_bit = KEY_ROTATION_BIT;
                 flow->crypt = crypt_create_ctx(sk);
                 if (flow->crypt == NULL)
                         goto fail_crypt;

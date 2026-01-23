@@ -1093,6 +1093,7 @@ struct ossl_crypt_ctx * openssl_crypt_create_ctx(struct crypt_sk * sk)
 
         assert(sk != NULL);
         assert(sk->key != NULL);
+        assert(sk->rot_bit > 0 && sk->rot_bit < 32);
 
         ctx = malloc(sizeof(*ctx));
         if (ctx == NULL)
@@ -1124,11 +1125,7 @@ struct ossl_crypt_ctx * openssl_crypt_create_ctx(struct crypt_sk * sk)
                 ctx->tagsz = 16;  /* Standard AEAD tag length (128 bits) */
 
         ctx->rot.cntr  = 0;
-#ifdef TEST_KEY_ROTATION_BIT
-        ctx->rot.mask  = (1U << TEST_KEY_ROTATION_BIT);
-#else
-        ctx->rot.mask  = (1U << KEY_ROTATION_BIT);
-#endif
+        ctx->rot.mask  = (1U << sk->rot_bit);
         ctx->rot.age   = 0;
         ctx->rot.phase = 0;
 

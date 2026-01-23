@@ -134,9 +134,9 @@ int flow_join__irm_req_ser(buffer_t *               buf,
                                 IRM_MSG_CODE__IRM_FLOW_JOIN);
 }
 
-int flow__irm_result_des(buffer_t *          buf,
-                         struct flow_info *  flow,
-                         struct crypt_sk * sk)
+int flow__irm_result_des(buffer_t *         buf,
+                         struct flow_info * flow,
+                         struct crypt_sk *  sk)
 {
         irm_msg_t * msg;
         int         err;

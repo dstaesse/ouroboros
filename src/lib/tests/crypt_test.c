@@ -39,8 +39,9 @@ static int test_crypt_create_destroy(void)
         struct crypt_ctx * ctx;
         uint8_t            key[SYMMKEYSZ];
         struct crypt_sk    sk = {
-                .nid = NID_aes_256_gcm,
-                .key = key
+                .nid     = NID_aes_256_gcm,
+                .key     = key,
+                .rot_bit = KEY_ROTATION_BIT
         };
 
         TEST_START();
@@ -69,8 +70,9 @@ static int test_crypt_encrypt_decrypt(int nid)
         struct crypt_ctx * ctx;
         uint8_t            key[SYMMKEYSZ];
         struct crypt_sk    sk = {
-                .nid = NID_aes_256_gcm,
-                .key = key
+                .nid     = NID_aes_256_gcm,
+                .key     = key,
+                .rot_bit = KEY_ROTATION_BIT
         };
         buffer_t           in;
         buffer_t           out;
@@ -261,8 +263,9 @@ static int test_key_rotation(void)
         struct crypt_ctx *  rx_ctx;
         uint8_t             key[SYMMKEYSZ];
         struct crypt_sk     sk = {
-                .nid = NID_aes_256_gcm,
-                .key = key
+                .nid     = NID_aes_256_gcm,
+                .key     = key,
+                .rot_bit = 7
         };
         buffer_t            in;
         buffer_t            enc;
@@ -297,7 +300,7 @@ static int test_key_rotation(void)
         in.len  = sizeof(pkt);
         in.data = pkt;
 
-        threshold = (1U << TEST_KEY_ROTATION_BIT);
+        threshold = (1U << sk.rot_bit);
 
         /* Encrypt and decrypt across multiple rotations */
         for (i = 0; i < threshold * 3; i++) {
@@ -345,8 +348,9 @@ static int test_key_phase_bit(void)
         struct crypt_ctx * ctx;
         uint8_t            key[SYMMKEYSZ];
         struct crypt_sk    sk = {
-                .nid = NID_aes_256_gcm,
-                .key = key
+                .nid     = NID_aes_256_gcm,
+                .key     = key,
+                .rot_bit = 7
         };
         buffer_t           in;
         buffer_t           out;
@@ -384,7 +388,7 @@ static int test_key_phase_bit(void)
         in.data = pkt;
 
         /* Encrypt packets up to just before rotation threshold */
-        threshold = (1U << KEY_ROTATION_BIT);
+        threshold = (1U << sk.rot_bit);
 
         /* Encrypt threshold - 1 packets (indices 0 to threshold-2) */
         for (count = 0; count < threshold - 1; count++) {

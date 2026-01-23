@@ -93,6 +93,7 @@
 struct crypt_sk {
         int       nid;
         uint8_t * key;
+        uint8_t   rot_bit; /* Rotation bit to control epoch */
 };
 
 struct sec_config {
