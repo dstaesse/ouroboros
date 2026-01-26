@@ -444,11 +444,16 @@ int crypt_test(int     argc,
 
         ret |= test_crypt_create_destroy();
         ret |= test_encrypt_decrypt_all();
-        ret |= test_key_rotation();
-        ret |= test_key_phase_bit();
 #ifdef HAVE_OPENSSL
         ret |= test_cipher_nid_values();
         ret |= test_md_nid_values();
+        ret |= test_key_rotation();
+        ret |= test_key_phase_bit();
+#else
+        (void) test_key_rotation;
+        (void) test_key_phase_bit;
+
+        return TEST_RC_SKIP;
 #endif
         return ret;
 }
