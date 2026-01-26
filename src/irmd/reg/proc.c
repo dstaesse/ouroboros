@@ -25,6 +25,7 @@
 #define OUROBOROS_PREFIX "reg/proc"
 
 #include <ouroboros/logs.h>
+#include <ouroboros/utils.h>
 
 #include "proc.h"
 
@@ -74,6 +75,8 @@ struct reg_proc * reg_proc_create(const struct proc_info * info)
                 log_err("Failed to malloc proc.");
                 goto fail_malloc;
         }
+
+        memset(proc, 0, sizeof(*proc));
 
         proc->set = ssm_flow_set_create(info->pid);
         if (proc->set == NULL) {
@@ -180,4 +183,11 @@ bool reg_proc_has_name(const struct reg_proc * proc,
                        const char *            name)
 {
         return __reg_proc_get_name(proc, name) != NULL;
+}
+
+bool reg_proc_is_privileged(const struct reg_proc * proc)
+{
+        assert(proc != NULL);
+
+        return is_ouroboros_member_uid(proc->info.uid);
 }

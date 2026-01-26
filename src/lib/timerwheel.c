@@ -173,7 +173,7 @@ static void timerwheel_move(void)
 
                                 snd_cr = &r->frcti->snd_cr;
                                 rcv_cr = &r->frcti->rcv_cr;
-                                f      = &ai.flows[r->fd];
+                                f      = &proc.flows[r->fd];
 #ifndef RXM_BUFFER_ON_HEAP
                                 ssm_pk_buff_ack(r->spb);
 #endif
@@ -226,7 +226,7 @@ static void timerwheel_move(void)
 #ifdef RXM_BLOCKING
                                 if (ipcp_spb_reserve(&spb, r->len) < 0)
 #else
-                                if (ssm_pool_alloc(ai.gspp, r->len, NULL,
+                                if (ssm_pool_alloc(proc.pool, r->len, NULL,
                                                       &spb) < 0)
 #endif
                                         goto reschedule; /* rdrbuff full */
@@ -288,7 +288,7 @@ static void timerwheel_move(void)
 
                         list_del(&a->next);
 
-                        f = &ai.flows[a->fd];
+                        f = &proc.flows[a->fd];
 
                         rw.map[j & (ACKQ_SLOTS - 1)][a->fd] = false;
 
@@ -341,7 +341,7 @@ static int timerwheel_rxm(struct frcti *       frcti,
         slot     = r->t0 >> RXMQ_RES;
 
         r->fd      = frcti->fd;
-        r->flow_id = ai.flows[r->fd].info.id;
+        r->flow_id = proc.flows[r->fd].info.id;
 
         pthread_rwlock_unlock(&r->frcti->lock);
 
@@ -394,7 +394,7 @@ static int timerwheel_delayed_ack(int            fd,
 
         a->fd    = fd;
         a->frcti = frcti;
-        a->flow_id = ai.flows[fd].info.id;
+        a->flow_id = proc.flows[fd].info.id;
 
         pthread_mutex_lock(&rw.lock);
 

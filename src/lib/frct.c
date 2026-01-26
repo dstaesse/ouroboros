@@ -118,11 +118,11 @@ static int frct_rib_read(const char * path,
 
         fd = atoi(path);
 
-        flow = &ai.flows[fd];
+        flow = &proc.flows[fd];
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        pthread_rwlock_rdlock(&ai.lock);
+        pthread_rwlock_rdlock(&proc.lock);
 
         frcti = flow->frcti;
 
@@ -176,7 +176,7 @@ static int frct_rib_read(const char * path,
 
         pthread_rwlock_unlock(&flow->frcti->lock);
 
-        pthread_rwlock_unlock(&ai.lock);
+        pthread_rwlock_unlock(&proc.lock);
 
         return strlen(buf);
 }
@@ -244,9 +244,9 @@ static void __send_frct_pkt(int      fd,
 
         /* Raw calls needed to bypass frcti. */
 #ifdef RXM_BLOCKING
-        idx = ssm_pool_alloc_b(ai.gspp, sizeof(*pci), NULL, &spb, NULL);
+        idx = ssm_pool_alloc_b(proc.pool, sizeof(*pci), NULL, &spb, NULL);
 #else
-        idx = ssm_pool_alloc(ai.gspp, sizeof(*pci), NULL, &spb);
+        idx = ssm_pool_alloc(proc.pool, sizeof(*pci), NULL, &spb);
 #endif
         if (idx < 0)
                 return;
@@ -259,7 +259,7 @@ static void __send_frct_pkt(int      fd,
         pci->flags = flags;
         pci->ackno = hton32(ackno);
 
-        f = &ai.flows[fd];
+        f = &proc.flows[fd];
 
         if (spb_encrypt(f, spb) < 0)
                 goto fail;
@@ -398,7 +398,7 @@ static struct frcti * frcti_create(int    fd,
         frcti->n_out = 0;
         frcti->n_rqo = 0;
 #endif
-        if (ai.flows[fd].info.qs.loss == 0) {
+        if (proc.flows[fd].info.qs.loss == 0) {
                 frcti->snd_cr.cflags |= FRCTFRTX | FRCTFLINGER;
                 frcti->rcv_cr.cflags |= FRCTFRTX;
         }
@@ -841,7 +841,7 @@ static void __frcti_rcv(struct frcti *       frcti,
 
                 __send_frct_pkt(fd, FRCT_FC, 0, rwe);
 
-                ssm_pool_remove(ai.gspp, idx);
+                ssm_pool_remove(proc.pool, idx);
                 return;
         }
 
@@ -928,7 +928,7 @@ static void __frcti_rcv(struct frcti *       frcti,
 
  drop_packet:
         pthread_rwlock_unlock(&frcti->lock);
-        ssm_pool_remove(ai.gspp, idx);
+        ssm_pool_remove(proc.pool, idx);
         send_frct_pkt(frcti);
         return;
 }

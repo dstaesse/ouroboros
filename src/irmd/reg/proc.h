@@ -53,4 +53,6 @@ void              reg_proc_del_name(struct reg_proc * proc,
 bool              reg_proc_has_name(const struct reg_proc * proc,
                                     const char *            name);
 
+bool              reg_proc_is_privileged(const struct reg_proc * proc);
+
 #endif /* OUROBOROS_IRMD_REG_PROC_H */

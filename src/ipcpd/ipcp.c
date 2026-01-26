@@ -52,6 +52,7 @@
 #include <ouroboros/utils.h>
 
 #include "ipcp.h"
+#include "np1.h"
 
 #include <signal.h>
 #include <string.h>
@@ -130,6 +131,8 @@ struct {
 
         pthread_t          acceptor;
 } ipcpd;
+
+struct np1_state np1;
 
 struct cmd {
         struct list_head next;
@@ -633,9 +636,11 @@ static void do_flow_alloc(pid_t            pid,
                           uint8_t *        dst,
                           qosspec_t        qs,
                           const buffer_t * data,
+                          uid_t            uid,
                           ipcp_msg_t *     ret_msg)
 {
-        int fd;
+        int               fd;
+        struct ssm_pool * pool = NULL;
 
         log_info("Allocating flow %d for %d to " HASH_FMT32 ".",
                  flow_id, pid, HASH_VAL32(dst));
@@ -662,6 +667,17 @@ static void do_flow_alloc(pid_t            pid,
                 return;
         }
 
+        if (uid != 0) {
+                pool = ssm_pool_open(uid);
+                if (pool == NULL) {
+                        log_err("Failed to open PUP for uid %d.", uid);
+                        ret_msg->result = -ENOMEM;
+                        return;
+                }
+        }
+
+        NP1_SET_POOL(fd, pool);
+
         ret_msg->result = ipcpd.ops->ipcp_flow_alloc(fd, dst, qs, data);
 
         log_info("Finished allocating flow %d to " HASH_FMT32 ".",
@@ -672,9 +688,11 @@ static void do_flow_alloc(pid_t            pid,
 static void do_flow_join(pid_t           pid,
                          int             flow_id,
                          const uint8_t * dst,
+                         uid_t           uid,
                          ipcp_msg_t *    ret_msg)
 {
-        int fd;
+        int               fd;
+        struct ssm_pool * pool = NULL;
 
         log_info("Joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
 
@@ -699,6 +717,17 @@ static void do_flow_join(pid_t           pid,
                 return;
         }
 
+        if (uid != 0) {
+                pool = ssm_pool_open(uid);
+                if (pool == NULL) {
+                        log_err("Failed to open PUP for uid %d.", uid);
+                        ret_msg->result = -ENOMEM;
+                        return;
+                }
+        }
+
+        NP1_SET_POOL(fd, pool);
+
         ret_msg->result = ipcpd.ops->ipcp_flow_join(fd, dst);
 
         log_info("Finished joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
@@ -706,10 +735,12 @@ static void do_flow_join(pid_t           pid,
 
 static void do_flow_alloc_resp(int              resp,
                                int              flow_id,
+                               uid_t            uid,
                                const buffer_t * data,
                                ipcp_msg_t *     ret_msg)
 {
-        int fd = -1;
+        int               fd = -1;
+        struct ssm_pool * pool = NULL;
 
         log_info("Responding %d to alloc on flow_id %d.", resp, flow_id);
 
@@ -736,6 +767,17 @@ static void do_flow_alloc_resp(int              resp,
                 ret_msg->result = -1;
                 return;
         }
+
+        if (uid != 0) {
+                pool = ssm_pool_open(uid);
+                if (pool == NULL) {
+                        log_err("Failed to open PUP for uid %d.", uid);
+                        ret_msg->result = -ENOMEM;
+                        return;
+                }
+        }
+
+        NP1_SET_POOL(fd, pool);
 
         ret_msg->result = ipcpd.ops->ipcp_flow_alloc_resp(fd, resp, data);
 
@@ -857,12 +899,12 @@ static void * mainloop(void * o)
                         qs = qos_spec_msg_to_s(msg->qosspec);
                         do_flow_alloc(msg->pid, msg->flow_id,
                                       msg->hash.data, qs,
-                                      &data, &ret_msg);
+                                      &data, msg->uid, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_JOIN:
                         assert(msg->hash.len == ipcp_dir_hash_len());
                         do_flow_join(msg->pid, msg->flow_id,
-                                     msg->hash.data, &ret_msg);
+                                     msg->hash.data, msg->uid, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_ALLOC_RESP:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
@@ -870,7 +912,7 @@ static void * mainloop(void * o)
                         data.len = msg->pk.len;
                         data.data = msg->pk.data;
                         do_flow_alloc_resp(msg->response, msg->flow_id,
-                                           &data, &ret_msg);
+                                           msg->uid, &data, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                         do_flow_dealloc(msg->flow_id, msg->timeo_sec, &ret_msg);
@@ -1034,6 +1076,8 @@ int ipcp_init(int               argc,
         }
 
         ipcpd.alloc_id = -1;
+
+        memset(&np1, 0, sizeof(np1));
 
         pthread_condattr_destroy(&cattr);
 

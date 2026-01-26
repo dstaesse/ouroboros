@@ -47,4 +47,10 @@ add_executable(${IPCP_UNICAST_TARGET}
 target_include_directories(${IPCP_UNICAST_TARGET} PRIVATE ${IPCP_INCLUDE_DIRS})
 target_include_directories(${IPCP_UNICAST_TARGET} PRIVATE "${UNICAST_SOURCE_DIR}")
 target_link_libraries(${IPCP_UNICAST_TARGET} PUBLIC ouroboros-dev)
+
+include(utils/AddCompileFlags)
+if (CMAKE_BUILD_TYPE MATCHES "Debug*")
+  add_compile_flags(${IPCP_UNICAST_TARGET} -DCONFIG_OUROBOROS_DEBUG)
+endif ()
+
 install(TARGETS ${IPCP_UNICAST_TARGET} RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})

@@ -31,6 +31,8 @@
 #include <ouroboros/time.h>
 #include <ouroboros/utils.h>
 
+#include "pool.h"
+
 int   reg_init(void);
 
 void  reg_clear(void);
@@ -49,6 +51,13 @@ int   reg_create_proc(const struct proc_info * info);
 int   reg_destroy_proc(pid_t pid);
 
 bool  reg_has_proc(pid_t pid);
+
+bool  reg_is_proc_privileged(pid_t pid);
+
+int   reg_prepare_pool(uid_t uid,
+                       gid_t gid);
+
+uid_t reg_get_proc_uid(pid_t pid);
 
 void  reg_kill_all_proc(int signal);
 

@@ -20,11 +20,15 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+
+#include "config.h"
 
 #include <ouroboros/utils.h>
 
 #include <ctype.h>
+#include <grp.h>
+#include <pwd.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -138,5 +142,63 @@ char ** argvdup(char ** argv)
         }
 
         argv_dup[argc] = NULL;
+
         return argv_dup;
+}
+
+bool is_ouroboros_member_uid(uid_t uid)
+{
+        struct group *  grp;
+        struct passwd * pw;
+        gid_t           gid;
+        gid_t *         groups = NULL;
+        int             ngroups;
+        int             i;
+
+        /* Root is always privileged */
+        if (uid == 0)
+                return true;
+
+        grp = getgrnam("ouroboros");
+        if (grp == NULL)
+                return false;
+
+        gid = grp->gr_gid;
+
+        pw = getpwuid(uid);
+        if (pw == NULL)
+                return false;
+
+        if (pw->pw_gid == gid)
+                return true;
+
+        ngroups = 0;
+        getgrouplist(pw->pw_name, pw->pw_gid, NULL, &ngroups);
+        if (ngroups <= 0)
+                return false;
+
+        groups = malloc(ngroups * sizeof(*groups));
+        if (groups == NULL)
+                return false;
+
+        if (getgrouplist(pw->pw_name, pw->pw_gid, groups, &ngroups) < 0) {
+                free(groups);
+                return false;
+        }
+
+        for (i = 0; i < ngroups; i++) {
+                if (groups[i] == gid) {
+                        free(groups);
+                        return true;
+                }
+        }
+
+        free(groups);
+
+        return false;
+}
+
+bool is_ouroboros_member(void)
+{
+        return is_ouroboros_member_uid(getuid());
 }

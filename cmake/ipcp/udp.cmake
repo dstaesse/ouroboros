@@ -48,4 +48,10 @@ foreach(target ${IPCP_UDP4_TARGET} ${IPCP_UDP6_TARGET})
   target_link_libraries(${target} PUBLIC ouroboros-dev)
 endforeach()
 
+include(utils/AddCompileFlags)
+if (CMAKE_BUILD_TYPE MATCHES "Debug*")
+  add_compile_flags(${IPCP_UDP4_TARGET} -DCONFIG_OUROBOROS_DEBUG)
+  add_compile_flags(${IPCP_UDP6_TARGET} -DCONFIG_OUROBOROS_DEBUG)
+endif ()
+
 install(TARGETS ${IPCP_UDP4_TARGET} ${IPCP_UDP6_TARGET} RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})

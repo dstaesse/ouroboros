@@ -47,10 +47,12 @@ int    ipcp_flow_write(int                  fd,
                        struct ssm_pk_buff * spb);
 
 int    np1_flow_read(int                   fd,
-                     struct ssm_pk_buff ** spb);
+                     struct ssm_pk_buff ** spb,
+                     struct ssm_pool *     pool);
 
 int    np1_flow_write(int                  fd,
-                      struct ssm_pk_buff * spb);
+                      struct ssm_pk_buff * spb,
+                      struct ssm_pool *    pool);
 
 int    ipcp_flow_dealloc(int fd);
 

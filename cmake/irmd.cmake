@@ -94,6 +94,7 @@ set(IRMD_SOURCES
   "${IRMD_SOURCE_DIR}/oap/cli.c"
   "${IRMD_SOURCE_DIR}/reg/flow.c"
   "${IRMD_SOURCE_DIR}/reg/ipcp.c"
+  "${IRMD_SOURCE_DIR}/reg/pool.c"
   "${IRMD_SOURCE_DIR}/reg/proc.c"
   "${IRMD_SOURCE_DIR}/reg/prog.c"
   "${IRMD_SOURCE_DIR}/reg/name.c"

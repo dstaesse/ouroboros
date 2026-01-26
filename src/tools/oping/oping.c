@@ -75,12 +75,14 @@
 "\n"                                                                         \
 "  -c, --count             Number of packets\n"                              \
 "  -d, --duration          Duration of the test (default 1s)\n"              \
+"  -f, --flood             Send back-to-back without waiting\n"              \
 "  -i, --interval          Interval (default 1000ms)\n"                      \
 "  -n, --server-name       Name of the oping server\n"                       \
 "  -q, --qos               QoS (raw, best, video, voice, data)\n" \
 "  -s, --size              Payload size (B, default 64)\n"                   \
 "  -Q, --quiet             Only print final statistics\n"                    \
 "  -D, --timeofday         Print time of day before each line\n"             \
+"      --poll              Server uses polling (lower latency)\n"            \
 "\n"                                                                         \
 "      --help              Display this help text and exit\n"                \
 
@@ -90,6 +92,7 @@ struct {
         uint32_t  count;
         int       size;
         bool      timestamp;
+        bool      flood;
         qosspec_t qs;
 
         /* stats */
@@ -114,6 +117,7 @@ struct {
         pthread_mutex_t lock;
 
         bool quiet;
+        bool poll;
 
         pthread_t cleaner_pt;
         pthread_t accept_pt;
@@ -172,9 +176,11 @@ int main(int     argc,
         client.size      = 64;
         client.count     = INT_MAX;
         client.timestamp = false;
+        client.flood     = false;
         client.qs        = qos_raw;
         client.quiet     = false;
         server.quiet     = false;
+        server.poll      = false;
 
         while (argc > 0) {
                 if ((strcmp(*argv, "-i") == 0 ||
@@ -212,6 +218,9 @@ int main(int     argc,
                 } else if (strcmp(*argv, "-l") == 0 ||
                            strcmp(*argv, "--listen") == 0) {
                         serv = true;
+                } else if (strcmp(*argv, "-f") == 0 ||
+                           strcmp(*argv, "--flood") == 0) {
+                        client.flood = true;
                 } else if (strcmp(*argv, "-D") == 0 ||
                            strcmp(*argv, "--timeofday") == 0) {
                         client.timestamp = true;
@@ -219,6 +228,8 @@ int main(int     argc,
                            strcmp(*argv, "--quiet") == 0) {
                         client.quiet = true;
                         server.quiet = true;
+                } else if (strcmp(*argv, "--poll") == 0) {
+                        server.poll = true;
                 } else {
                         goto fail;
                 }

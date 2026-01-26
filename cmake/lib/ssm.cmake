@@ -3,87 +3,135 @@
 # secure shared memory pool allocator
 
 # Shared memory pool naming configuration
-set(SSM_PREFIX "o7s.ssm" CACHE STRING
+set(SSM_PREFIX "ouroboros" CACHE STRING
     "Prefix for secure shared memory pools")
-set(SSM_GSMP_SUFFIX ".gsmp" CACHE STRING
-    "Suffix for Group Shared Memory Pool")
-set(SSM_PPP_SUFFIX ".ppp" CACHE STRING
-    "Suffix for Process Private Pool")
 
+# Pool naming
+set(SSM_GSPP_NAME "/${SSM_PREFIX}.gspp" CACHE INTERNAL
+    "Name for the Global Shared Packet Pool")
+set(SSM_PUP_NAME_FMT "/${SSM_PREFIX}.pup.%d" CACHE INTERNAL
+    "Format string for Per-User Pool names (uid as argument)")
+
+# Legacy naming (for compatibility)
 set(SSM_POOL_NAME "/${SHM_PREFIX}.pool" CACHE INTERNAL
-  "Name for the main POSIX shared memory pool")
+    "Name for the main POSIX shared memory pool")
 set(SSM_POOL_BLOCKS 16384 CACHE STRING
     "Number of blocks in SSM packet pool, must be a power of 2")
 set(SSM_PK_BUFF_HEADSPACE 256 CACHE STRING
-  "Bytes of headspace to reserve for future headers")
+    "Bytes of headspace to reserve for future headers")
 set(SSM_PK_BUFF_TAILSPACE 32 CACHE STRING
-  "Bytes of tailspace to reserve for future tails")
+    "Bytes of tailspace to reserve for future tails")
 set(SSM_RBUFF_SIZE 1024 CACHE STRING
     "Number of blocks in rbuff buffer, must be a power of 2")
 set(SSM_RBUFF_PREFIX "/${SHM_PREFIX}.rbuff." CACHE INTERNAL
-  "Prefix for rbuff POSIX shared memory filenames")
+    "Prefix for rbuff POSIX shared memory filenames")
 set(SSM_FLOW_SET_PREFIX "/${SHM_PREFIX}.set." CACHE INTERNAL
-  "Prefix for the POSIX shared memory flow set")
-
-# Pool blocks per size class
-# This determines how many blocks of each size are preallocated in the pool
-# Higher values reduce allocation failures but increase memory usage
-set(SSM_POOL_256_BLOCKS 1024 CACHE STRING
-    "Number of 256B blocks in pool")
-set(SSM_POOL_512_BLOCKS 768 CACHE STRING
-    "Number of 512B blocks in pool")
-set(SSM_POOL_1K_BLOCKS 512 CACHE STRING
-    "Number of 1KB blocks in pool")
-set(SSM_POOL_2K_BLOCKS 384 CACHE STRING
-    "Number of 2KB blocks in pool")
-set(SSM_POOL_4K_BLOCKS 256 CACHE STRING
-    "Number of 4KB blocks in pool")
-set(SSM_POOL_16K_BLOCKS 128 CACHE STRING
-    "Number of 16KB blocks in pool")
-set(SSM_POOL_64K_BLOCKS 64 CACHE STRING
-    "Number of 64KB blocks in pool")
-set(SSM_POOL_256K_BLOCKS 32 CACHE STRING
-    "Number of 256KB blocks in pool")
-set(SSM_POOL_1M_BLOCKS 16 CACHE STRING
-    "Number of 1MB blocks in pool")
+    "Prefix for the POSIX shared memory flow set")
 
 # Number of shards per size class for reducing contention
 set(SSM_POOL_SHARDS 4 CACHE STRING
     "Number of allocator shards per size class")
 
+# Global Shared Packet Pool (GSPP) - for privileged processes
+# Shared by all processes in 'ouroboros' group (~60 MB total)
+set(SSM_GSPP_256_BLOCKS 1024 CACHE STRING
+    "GSPP: Number of 256B blocks")
+set(SSM_GSPP_512_BLOCKS 768 CACHE STRING
+    "GSPP: Number of 512B blocks")
+set(SSM_GSPP_1K_BLOCKS 512 CACHE STRING
+    "GSPP: Number of 1KB blocks")
+set(SSM_GSPP_2K_BLOCKS 384 CACHE STRING
+    "GSPP: Number of 2KB blocks")
+set(SSM_GSPP_4K_BLOCKS 256 CACHE STRING
+    "GSPP: Number of 4KB blocks")
+set(SSM_GSPP_16K_BLOCKS 128 CACHE STRING
+    "GSPP: Number of 16KB blocks")
+set(SSM_GSPP_64K_BLOCKS 64 CACHE STRING
+    "GSPP: Number of 64KB blocks")
+set(SSM_GSPP_256K_BLOCKS 32 CACHE STRING
+    "GSPP: Number of 256KB blocks")
+set(SSM_GSPP_1M_BLOCKS 16 CACHE STRING
+    "GSPP: Number of 1MB blocks")
+
+# Per-User Pool (PUP) - for unprivileged applications
+# Each unprivileged app gets its own smaller pool (~7.5 MB total)
+set(SSM_PUP_256_BLOCKS 128 CACHE STRING
+    "PUP: Number of 256B blocks")
+set(SSM_PUP_512_BLOCKS 96 CACHE STRING
+    "PUP: Number of 512B blocks")
+set(SSM_PUP_1K_BLOCKS 64 CACHE STRING
+    "PUP: Number of 1KB blocks")
+set(SSM_PUP_2K_BLOCKS 48 CACHE STRING
+    "PUP: Number of 2KB blocks")
+set(SSM_PUP_4K_BLOCKS 32 CACHE STRING
+    "PUP: Number of 4KB blocks")
+set(SSM_PUP_16K_BLOCKS 16 CACHE STRING
+    "PUP: Number of 16KB blocks")
+set(SSM_PUP_64K_BLOCKS 8 CACHE STRING
+    "PUP: Number of 64KB blocks")
+set(SSM_PUP_256K_BLOCKS 2 CACHE STRING
+    "PUP: Number of 256KB blocks")
+set(SSM_PUP_1M_BLOCKS 0 CACHE STRING
+    "PUP: Number of 1MB blocks")
+
 # SSM packet buffer overhead - computed at compile time via sizeof()
 # Defined in config.h.in as sizeof(_ssm_memory_block) + sizeof(_ssm_pk_buff)
-# This makes it portable across platforms with different pid_t sizes and padding
+# This makes it portable across platforms with different pid_t sizes
 
-# Total shared memory pool size calculation
-math(EXPR SSM_POOL_TOTAL_SIZE
-    "(1 << 8) * ${SSM_POOL_256_BLOCKS} + \
-     (1 << 9) * ${SSM_POOL_512_BLOCKS} + \
-     (1 << 10) * ${SSM_POOL_1K_BLOCKS} + \
-     (1 << 11) * ${SSM_POOL_2K_BLOCKS} + \
-     (1 << 12) * ${SSM_POOL_4K_BLOCKS} + \
-     (1 << 14) * ${SSM_POOL_16K_BLOCKS} + \
-     (1 << 16) * ${SSM_POOL_64K_BLOCKS} + \
-     (1 << 18) * ${SSM_POOL_256K_BLOCKS} + \
-     (1 << 20) * ${SSM_POOL_1M_BLOCKS}")
+# GSPP total size calculation
+math(EXPR SSM_GSPP_TOTAL_SIZE
+    "(1 << 8) * ${SSM_GSPP_256_BLOCKS} + \
+     (1 << 9) * ${SSM_GSPP_512_BLOCKS} + \
+     (1 << 10) * ${SSM_GSPP_1K_BLOCKS} + \
+     (1 << 11) * ${SSM_GSPP_2K_BLOCKS} + \
+     (1 << 12) * ${SSM_GSPP_4K_BLOCKS} + \
+     (1 << 14) * ${SSM_GSPP_16K_BLOCKS} + \
+     (1 << 16) * ${SSM_GSPP_64K_BLOCKS} + \
+     (1 << 18) * ${SSM_GSPP_256K_BLOCKS} + \
+     (1 << 20) * ${SSM_GSPP_1M_BLOCKS}")
 
-set(SSM_POOL_TOTAL_SIZE ${SSM_POOL_TOTAL_SIZE} CACHE INTERNAL
+set(SSM_GSPP_TOTAL_SIZE ${SSM_GSPP_TOTAL_SIZE} CACHE INTERNAL
+    "GSPP total size in bytes")
+
+# PUP total size calculation
+math(EXPR SSM_PUP_TOTAL_SIZE
+    "(1 << 8) * ${SSM_PUP_256_BLOCKS} + \
+     (1 << 9) * ${SSM_PUP_512_BLOCKS} + \
+     (1 << 10) * ${SSM_PUP_1K_BLOCKS} + \
+     (1 << 11) * ${SSM_PUP_2K_BLOCKS} + \
+     (1 << 12) * ${SSM_PUP_4K_BLOCKS} + \
+     (1 << 14) * ${SSM_PUP_16K_BLOCKS} + \
+     (1 << 16) * ${SSM_PUP_64K_BLOCKS} + \
+     (1 << 18) * ${SSM_PUP_256K_BLOCKS} + \
+     (1 << 20) * ${SSM_PUP_1M_BLOCKS}")
+
+set(SSM_PUP_TOTAL_SIZE ${SSM_PUP_TOTAL_SIZE} CACHE INTERNAL
+    "PUP total size in bytes")
+
+# Legacy total size (same as GSPP)
+set(SSM_POOL_TOTAL_SIZE ${SSM_GSPP_TOTAL_SIZE} CACHE INTERNAL
     "Total shared memory pool size in bytes")
 
 include(utils/HumanReadable)
-format_bytes_human_readable(${SSM_POOL_TOTAL_SIZE} SSM_POOL_SIZE_DISPLAY)
+format_bytes_human_readable(${SSM_GSPP_TOTAL_SIZE} SSM_GSPP_SIZE_DISPLAY)
+format_bytes_human_readable(${SSM_PUP_TOTAL_SIZE} SSM_PUP_SIZE_DISPLAY)
 
 # Display configuration summary
 message(STATUS "Secure Shared Memory Pool Configuration:")
 message(STATUS "  Pool prefix: ${SSM_PREFIX}")
 message(STATUS "  Size classes: "
-  "256B, 512B, 1KiB, 2KiB, 4KiB, 16KiB, 64KiB, 256KiB, 1MiB")
+    "256B, 512B, 1KiB, 2KiB, 4KiB, 16KiB, 64KiB, 256KiB, 1MiB")
 message(STATUS "  Max allocation: 1 MB")
-message(STATUS "  Total pool size: ${SSM_POOL_SIZE_DISPLAY} "
-               "(${SSM_POOL_TOTAL_SIZE} bytes)")
 message(STATUS "  Shards per class: ${SSM_POOL_SHARDS}")
-message(STATUS "  Blocks per class: ${SSM_POOL_256_BLOCKS}, "
-               "${SSM_POOL_512_BLOCKS}, ${SSM_POOL_1K_BLOCKS}, "
-               "${SSM_POOL_2K_BLOCKS}, ${SSM_POOL_4K_BLOCKS}, "
-               "${SSM_POOL_16K_BLOCKS}, ${SSM_POOL_64K_BLOCKS}, "
-               "${SSM_POOL_256K_BLOCKS}, ${SSM_POOL_1M_BLOCKS}")
+message(STATUS "  GSPP (privileged): ${SSM_GSPP_SIZE_DISPLAY} "
+    "(${SSM_GSPP_TOTAL_SIZE} bytes)")
+message(STATUS "    Blocks: ${SSM_GSPP_256_BLOCKS}, ${SSM_GSPP_512_BLOCKS}, "
+    "${SSM_GSPP_1K_BLOCKS}, ${SSM_GSPP_2K_BLOCKS}, ${SSM_GSPP_4K_BLOCKS}, "
+    "${SSM_GSPP_16K_BLOCKS}, ${SSM_GSPP_64K_BLOCKS}, ${SSM_GSPP_256K_BLOCKS}, "
+    "${SSM_GSPP_1M_BLOCKS}")
+message(STATUS "  PUP (unprivileged): ${SSM_PUP_SIZE_DISPLAY} "
+    "(${SSM_PUP_TOTAL_SIZE} bytes)")
+message(STATUS "    Blocks: ${SSM_PUP_256_BLOCKS}, ${SSM_PUP_512_BLOCKS}, "
+    "${SSM_PUP_1K_BLOCKS}, ${SSM_PUP_2K_BLOCKS}, ${SSM_PUP_4K_BLOCKS}, "
+    "${SSM_PUP_16K_BLOCKS}, ${SSM_PUP_64K_BLOCKS}, ${SSM_PUP_256K_BLOCKS}, "
+    "${SSM_PUP_1M_BLOCKS}")

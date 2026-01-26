@@ -48,6 +48,7 @@
 #include "ipcp.h"
 #include "dt.h"
 #include "ca.h"
+#include "np1.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -687,6 +688,12 @@ void fa_fini(void)
         pthread_rwlock_destroy(&fa.flows_lock);
 }
 
+static int np1_flow_read_fa(int                   fd,
+                            struct ssm_pk_buff ** spb)
+{
+        return np1_flow_read(fd, spb, NP1_GET_POOL(fd));
+}
+
 int fa_start(void)
 {
 #ifndef BUILD_CONTAINER
@@ -695,7 +702,7 @@ int fa_start(void)
         int                 max;
 #endif
 
-        fa.psched = psched_create(packet_handler, np1_flow_read);
+        fa.psched = psched_create(packet_handler, np1_flow_read_fa);
         if (fa.psched == NULL) {
                 log_err("Failed to start packet scheduler.");
                 goto fail_psched;
@@ -963,7 +970,7 @@ void  fa_np1_rcv(uint64_t             eid,
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (ipcp_flow_write(fd, spb) < 0) {
+        if (np1_flow_write(fd, spb, NP1_GET_POOL(fd)) < 0) {
                 log_dbg("Failed to write to flow %d.", fd);
                 ipcp_spb_release(spb);
 #ifdef IPCP_FLOW_STATS

@@ -31,8 +31,9 @@
 /* Processes */
 struct proc_info {
         pid_t pid;
-        char  prog[PROG_NAME_SIZE + 1];  /* program instantiated */
-
+        char  prog[PROG_NAME_SIZE + 1];
+        uid_t uid;
+        gid_t gid;
 };
 
 /* Programs */

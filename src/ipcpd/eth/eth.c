@@ -52,6 +52,7 @@
 #include <ouroboros/pthread.h>
 
 #include "ipcp.h"
+#include "np1.h"
 #include "shim-data.h"
 
 #include <signal.h>
@@ -990,7 +991,7 @@ static void * eth_ipcp_packet_reader(void * o)
                         buf = ssm_pk_buff_head(spb);
                         memcpy(buf, &e_frame->payload, length);
 #endif
-                        if (np1_flow_write(fd, spb) < 0)
+                        if (np1_flow_write(fd, spb, NP1_GET_POOL(fd)) < 0)
                                 ipcp_spb_release(spb);
 
                         continue;
@@ -1040,7 +1041,7 @@ static void * eth_ipcp_packet_writer(void * o)
                         if (fqueue_type(fq) != FLOW_PKT)
                                 continue;
 
-                        if (np1_flow_read(fd, &spb)) {
+                        if (np1_flow_read(fd, &spb, NP1_GET_POOL(fd))) {
                                 log_dbg("Bad read from fd %d.", fd);
                                 continue;
                         }

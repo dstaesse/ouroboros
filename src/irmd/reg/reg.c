@@ -35,6 +35,7 @@ The IPC Resource Manager - Registry
 #include "flow.h"
 #include "ipcp.h"
 #include "name.h"
+#include "pool.h"
 #include "proc.h"
 #include "prog.h"
 
@@ -56,6 +57,9 @@ struct {
 
         struct list_head     names;     /* registered names known     */
         size_t               n_names;   /* number of names            */
+
+        struct list_head     pools;     /* per-user pools             */
+        size_t               n_pools;   /* number of pools            */
 
         struct list_head     procs;     /* processes                  */
         size_t               n_procs;   /* number of processes        */
@@ -233,6 +237,20 @@ static struct list_head * __reg_after_name(const char * name)
         }
 
         return p;
+}
+
+static struct reg_pool * __reg_get_pool(uid_t uid)
+{
+        struct list_head * p;
+
+        list_for_each(p, &reg.pools) {
+                struct reg_pool * entry;
+                entry = list_entry(p, struct reg_pool, next);
+                if (entry->uid == uid)
+                        return entry;
+        }
+
+        return NULL;
 }
 
 static struct reg_proc * __reg_get_proc(pid_t pid)
@@ -540,6 +558,7 @@ int reg_init(void)
         list_head_init(&reg.flows);
         list_head_init(&reg.ipcps);
         list_head_init(&reg.names);
+        list_head_init(&reg.pools);
         list_head_init(&reg.procs);
         list_head_init(&reg.progs);
         list_head_init(&reg.spawned);
@@ -589,6 +608,15 @@ void reg_clear(void)
                 reg.n_procs--;
         }
 
+        list_for_each_safe(p, h, &reg.pools) {
+                struct reg_pool * entry;
+                entry = list_entry(p, struct reg_pool, next);
+                list_del(&entry->next);
+                entry->refcount = 0; /* Force destroy during cleanup */
+                reg_pool_destroy(entry);
+                reg.n_pools--;
+        }
+
         list_for_each_safe(p, h, &reg.flows) {
                 struct reg_flow * entry;
                 entry = list_entry(p, struct reg_flow, next);
@@ -621,6 +649,7 @@ void reg_fini(void)
         assert(list_is_empty(&reg.spawned));
         assert(list_is_empty(&reg.progs));
         assert(list_is_empty(&reg.procs));
+        assert(list_is_empty(&reg.pools));
         assert(list_is_empty(&reg.names));
         assert(list_is_empty(&reg.ipcps));
         assert(list_is_empty(&reg.flows));
@@ -628,6 +657,7 @@ void reg_fini(void)
         assert(reg.n_spawned == 0);
         assert(reg.n_progs == 0);
         assert(reg.n_procs == 0);
+        assert(reg.n_pools == 0);
         assert(reg.n_names == 0);
         assert(reg.n_ipcps == 0);
         assert(reg.n_flows == 0);
@@ -1090,6 +1120,35 @@ int reg_list_names(name_info_msg_t *** names)
         return -ENOMEM;
 }
 
+int reg_prepare_pool(uid_t uid,
+                     gid_t gid)
+{
+        struct reg_pool * pool;
+
+        if (is_ouroboros_member_uid(uid))
+                return 0;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        pool = __reg_get_pool(uid);
+        if (pool == NULL) {
+                pool = reg_pool_create(uid, gid);
+                if (pool == NULL) {
+                        log_err("Failed to create pool for uid %d.", uid);
+                        pthread_mutex_unlock(&reg.mtx);
+                        return -1;
+                }
+                list_add(&pool->next, &reg.pools);
+                reg.n_pools++;
+        }
+
+        reg_pool_ref(pool);
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return 0;
+}
+
 int reg_create_proc(const struct proc_info * info)
 {
         struct reg_proc * proc;
@@ -1100,13 +1159,13 @@ int reg_create_proc(const struct proc_info * info)
 
         if (__reg_get_proc(info->pid) != NULL) {
                 log_err("Process %d already exists.", info->pid);
-                goto fail_proc;
+                goto fail;
         }
 
         proc = reg_proc_create(info);
         if (proc == NULL) {
                 log_err("Failed to create process %d.", info->pid);
-                goto fail_proc;
+                goto fail;
         }
 
         __reg_proc_update_names(proc);
@@ -1121,7 +1180,7 @@ int reg_create_proc(const struct proc_info * info)
 
         return 0;
 
- fail_proc:
+ fail:
         pthread_mutex_unlock(&reg.mtx);
         return -1;
 }
@@ -1129,6 +1188,7 @@ int reg_create_proc(const struct proc_info * info)
 int reg_destroy_proc(pid_t pid)
 {
         struct reg_proc *  proc;
+        struct reg_pool *  pool = NULL;
         struct pid_entry * spawn;
         struct reg_ipcp *  ipcp;
 
@@ -1136,11 +1196,18 @@ int reg_destroy_proc(pid_t pid)
 
         proc = __reg_get_proc(pid);
         if (proc != NULL) {
+                if (!is_ouroboros_member_uid(proc->info.uid))
+                        pool = __reg_get_pool(proc->info.uid);
                 list_del(&proc->next);
                 reg.n_procs--;
                 reg_proc_destroy(proc);
                 __reg_del_proc_from_names(pid);
                 __reg_cancel_flows_for_proc(pid);
+                if (pool != NULL && reg_pool_unref(pool) == 0) {
+                        list_del(&pool->next);
+                        reg.n_pools--;
+                        reg_pool_destroy(pool);
+                }
         }
 
         spawn = __reg_get_spawned(pid);
@@ -1169,6 +1236,38 @@ bool reg_has_proc(pid_t pid)
         pthread_mutex_lock(&reg.mtx);
 
         ret = __reg_get_proc(pid) != NULL;
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+bool reg_is_proc_privileged(pid_t pid)
+{
+        struct reg_proc * proc;
+        bool              ret = false;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        proc = __reg_get_proc(pid);
+        if (proc != NULL)
+                ret = reg_proc_is_privileged(proc);
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+uid_t reg_get_proc_uid(pid_t pid)
+{
+        struct reg_proc * proc;
+        uid_t             ret = 0;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        proc = __reg_get_proc(pid);
+        if (proc != NULL && !is_ouroboros_member_uid(proc->info.uid))
+                ret = proc->info.uid;
 
         pthread_mutex_unlock(&reg.mtx);
 

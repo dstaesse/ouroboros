@@ -23,7 +23,7 @@ set(BUILD_CONTAINER FALSE CACHE BOOL
   "Disable thread priority setting for container compatibility")
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-   set(IPCP_LINUX_TIMERSLACK_NS 1000 CACHE STRING
+   set(IPCP_LINUX_TIMERSLACK_NS 100 CACHE STRING
        "Slack value for high resolution timers on Linux systems.")
 endif ()
 

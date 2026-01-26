@@ -89,12 +89,15 @@ void * server_thread(void *o)
         struct oping_msg * msg = (struct oping_msg *) buf;
         struct timespec now = {0, 0};
         struct timespec timeout = {0, 100 * MILLION};
+        struct timespec poll_timeout = {0, 0};
         int fd;
 
         (void) o;
 
         while (true) {
-                if (fevent(server.flows, server.fq, &timeout) == -ETIMEDOUT)
+                if (fevent(server.flows, server.fq,
+                           server.poll ? &poll_timeout : &timeout)
+                    == -ETIMEDOUT)
                         continue;
 
                 while ((fd = fqueue_next(server.fq)) >= 0) {

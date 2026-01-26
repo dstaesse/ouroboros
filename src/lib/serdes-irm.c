@@ -289,8 +289,8 @@ int ipcp_create_r__irm_req_ser(buffer_t *               buf,
         return -ENOMEM;
 }
 
-int proc_announce__irm_req_ser(buffer_t *   buf,
-                               const char * prog)
+int proc_announce__irm_req_ser(buffer_t *               buf,
+                               const struct proc_info * proc)
 {
         irm_msg_t * msg;
         size_t      len;
@@ -303,8 +303,8 @@ int proc_announce__irm_req_ser(buffer_t *   buf,
 
         msg->code    = IRM_MSG_CODE__IRM_PROC_ANNOUNCE;
         msg->has_pid = true;
-        msg->pid     = getpid();
-        msg->prog    = strdup(prog);
+        msg->pid     = proc->pid;
+        msg->prog    = strdup(proc->prog);
         if (msg->prog == NULL)
                 goto fail_msg;
 

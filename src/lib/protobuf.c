@@ -24,6 +24,7 @@
 
 #include <ouroboros/protobuf.h>
 #include <ouroboros/crypt.h>
+#include <ouroboros/proc.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -74,12 +75,13 @@ flow_info_msg_t * flow_info_s_to_msg(const struct flow_info * s)
 
         flow_info_msg__init(msg);
 
-        msg->id      = s->id;
-        msg->n_pid   = s->n_pid;
-        msg->n_1_pid = s->n_1_pid;
-        msg->mpl     = s->mpl;
-        msg->state   = s->state;
-        msg->qos     = qos_spec_s_to_msg(&s->qs);
+        msg->id       = s->id;
+        msg->n_pid    = s->n_pid;
+        msg->n_1_pid  = s->n_1_pid;
+        msg->mpl      = s->mpl;
+        msg->state    = s->state;
+        msg->uid      = s->uid;
+        msg->qos      = qos_spec_s_to_msg(&s->qs);
         if (msg->qos == NULL)
                 goto fail_msg;
 
@@ -104,6 +106,7 @@ struct flow_info flow_info_msg_to_s(const flow_info_msg_t * msg)
         s.n_1_pid = msg->n_1_pid;
         s.mpl     = msg->mpl;
         s.state   = msg->state;
+        s.uid     = msg->uid;
         s.qs      = qos_spec_msg_to_s(msg->qos);
 
         return s;

@@ -40,6 +40,7 @@
 #include <ouroboros/local-dev.h>
 
 #include "ipcp.h"
+#include "np1.h"
 #include "shim-data.h"
 
 #include <string.h>
@@ -103,32 +104,41 @@ static void local_data_fini(void){
 
 static void * local_ipcp_packet_loop(void * o)
 {
+        int             src_fd;
+        int             dst_fd;
+        struct timespec * timeout;
+#ifdef CONFIG_IPCP_LOCAL_POLLING
+        struct timespec ts_poll = {0, 0};
+#endif
         (void) o;
 
         ipcp_lock_to_core();
 
+#ifdef CONFIG_IPCP_LOCAL_POLLING
+        timeout = &ts_poll; /* Spin poll with zero timeout */
+#else
+        timeout = NULL;     /* Block until event */
+#endif
+
         while (true) {
-                int     fd;
-                ssize_t idx;
+                fevent(local_data.flows, local_data.fq, timeout);
 
-                fevent(local_data.flows, local_data.fq, NULL);
-
-                while ((fd = fqueue_next(local_data.fq)) >= 0) {
+                while ((src_fd = fqueue_next(local_data.fq)) >= 0) {
                         if (fqueue_type(local_data.fq) != FLOW_PKT)
-                                continue;
-
-                        idx = local_flow_read(fd);
-                        if (idx < 0)
                                 continue;
 
                         pthread_rwlock_rdlock(&local_data.lock);
 
-                        fd = local_data.in_out[fd];
+                        dst_fd = local_data.in_out[src_fd];
 
                         pthread_rwlock_unlock(&local_data.lock);
 
-                        if (fd != -1)
-                                local_flow_write(fd, idx);
+                        if (dst_fd == -1)
+                                continue;
+
+                        local_flow_transfer(src_fd, dst_fd,
+                                            NP1_GET_POOL(src_fd),
+                                            NP1_GET_POOL(dst_fd));
                 }
         }
 

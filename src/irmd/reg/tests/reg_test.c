@@ -21,6 +21,8 @@
  */
 
 
+#include "../pool.c"
+#undef OUROBOROS_PREFIX
 #include "../reg.c"
 
 #include <test/test.h>
@@ -35,6 +37,12 @@
 #define TEST_DATA     "testpbufdata"
 #define TEST_DATA2    "testpbufdata2"
 #define TEST_LAYER    "testlayer"
+#define TEST_PROC_INFO {      \
+        .pid = TEST_PID,      \
+        .prog = TEST_PROG,    \
+        .uid = 0,             \
+        .gid = 0              \
+}
 #define REG_TEST_FAIL() \
         do { TEST_FAIL(); reg_clear(); return TEST_RC_FAIL;} while(0)
 
@@ -852,10 +860,7 @@ static int test_reg_name(void)
 
 static int test_reg_create_proc(void)
 {
-        struct proc_info info = {
-                .pid =  TEST_PID,
-                .prog = TEST_PROG
-        };
+        struct proc_info info = TEST_PROC_INFO;
 
         TEST_START();
 
@@ -1011,10 +1016,7 @@ static int test_reg_prog(void)
 
 static int test_bind_proc(void)
 {
-        struct proc_info pinfo = {
-                .pid =  TEST_PID,
-                .prog = TEST_PROG
-        };
+        struct proc_info pinfo = TEST_PROC_INFO;
 
         struct name_info ninfo = {
                 .name   = TEST_NAME,
@@ -1167,10 +1169,7 @@ static int test_inherit_prog(void)
                 .name = TEST_PROG
         };
 
-        struct proc_info procinfo = {
-                .pid  = TEST_PID,
-                .prog = TEST_PROG
-        };
+        struct proc_info procinfo = TEST_PROC_INFO;
 
         char * exec[] = { TEST_PROG, NULL};
 
@@ -1308,10 +1307,7 @@ static void * test_call_flow_accept(void * o)
         struct timespec timeo = TIMESPEC_INIT_MS(10);
         buffer_t        pbuf = BUF_INIT;
 
-        struct proc_info pinfo = {
-                .pid =  TEST_PID,
-                .prog = TEST_PROG
-        };
+        struct proc_info pinfo = TEST_PROC_INFO;
 
         struct flow_info info = {
                 .n_pid = pinfo.pid,
@@ -1663,10 +1659,7 @@ static int test_wait_proc_success(void)
         struct timespec  abstime;
         struct timespec  timeo = TIMESPEC_INIT_S(10);
         pthread_t        thr;
-        struct proc_info info = {
-                .pid  = TEST_PID,
-                .prog = TEST_PROG
-        };
+        struct proc_info info = TEST_PROC_INFO;
 
         TEST_START();
 

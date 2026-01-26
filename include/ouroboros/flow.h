@@ -46,6 +46,8 @@ struct flow_info {
         pid_t           n_pid;
         pid_t           n_1_pid;
 
+        uid_t           uid;   /* 0 = privileged (GSPP), > 0 = PUP uid */
+
         time_t          mpl;
 
         struct qos_spec qs;

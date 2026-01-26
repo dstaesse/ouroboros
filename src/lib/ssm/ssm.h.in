@@ -30,8 +30,9 @@
 
 /* Pool naming configuration */
 #define SSM_PREFIX               "@SSM_PREFIX@"
-#define SSM_GSMP_SUFFIX          "@SSM_GSMP_SUFFIX@"
-#define SSM_PPP_SUFFIX           "@SSM_PPP_SUFFIX@"
+#define SSM_GSPP_NAME            "@SSM_GSPP_NAME@"
+#define SSM_PUP_NAME_FMT         "@SSM_PUP_NAME_FMT@"
+#define SSM_GSPP_UID             0
 
 /* Legacy SSM constants */
 #define SSM_RBUFF_PREFIX         "@SSM_RBUFF_PREFIX@"
@@ -44,7 +45,31 @@
 #define SSM_PK_BUFF_HEADSPACE     @SSM_PK_BUFF_HEADSPACE@
 #define SSM_PK_BUFF_TAILSPACE     @SSM_PK_BUFF_TAILSPACE@
 
-/* Pool blocks per size class */
+/* Global Shared Packet Pool (GSPP) - for privileged processes */
+#define SSM_GSPP_256_BLOCKS       @SSM_GSPP_256_BLOCKS@
+#define SSM_GSPP_512_BLOCKS       @SSM_GSPP_512_BLOCKS@
+#define SSM_GSPP_1K_BLOCKS        @SSM_GSPP_1K_BLOCKS@
+#define SSM_GSPP_2K_BLOCKS        @SSM_GSPP_2K_BLOCKS@
+#define SSM_GSPP_4K_BLOCKS        @SSM_GSPP_4K_BLOCKS@
+#define SSM_GSPP_16K_BLOCKS       @SSM_GSPP_16K_BLOCKS@
+#define SSM_GSPP_64K_BLOCKS       @SSM_GSPP_64K_BLOCKS@
+#define SSM_GSPP_256K_BLOCKS      @SSM_GSPP_256K_BLOCKS@
+#define SSM_GSPP_1M_BLOCKS        @SSM_GSPP_1M_BLOCKS@
+#define SSM_GSPP_TOTAL_SIZE       @SSM_GSPP_TOTAL_SIZE@
+
+/* Per-User Pool (PUP) - for unprivileged applications */
+#define SSM_PUP_256_BLOCKS        @SSM_PUP_256_BLOCKS@
+#define SSM_PUP_512_BLOCKS        @SSM_PUP_512_BLOCKS@
+#define SSM_PUP_1K_BLOCKS         @SSM_PUP_1K_BLOCKS@
+#define SSM_PUP_2K_BLOCKS         @SSM_PUP_2K_BLOCKS@
+#define SSM_PUP_4K_BLOCKS         @SSM_PUP_4K_BLOCKS@
+#define SSM_PUP_16K_BLOCKS        @SSM_PUP_16K_BLOCKS@
+#define SSM_PUP_64K_BLOCKS        @SSM_PUP_64K_BLOCKS@
+#define SSM_PUP_256K_BLOCKS       @SSM_PUP_256K_BLOCKS@
+#define SSM_PUP_1M_BLOCKS         @SSM_PUP_1M_BLOCKS@
+#define SSM_PUP_TOTAL_SIZE        @SSM_PUP_TOTAL_SIZE@
+
+/* Legacy pool blocks (same as GSPP for compatibility) */
 #define SSM_POOL_256_BLOCKS      @SSM_POOL_256_BLOCKS@
 #define SSM_POOL_512_BLOCKS      @SSM_POOL_512_BLOCKS@
 #define SSM_POOL_1K_BLOCKS       @SSM_POOL_1K_BLOCKS@

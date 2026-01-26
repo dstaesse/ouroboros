@@ -23,9 +23,11 @@
 #ifndef OUROBOROS_LIB_UTILS_H
 #define OUROBOROS_LIB_UTILS_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
@@ -53,6 +55,10 @@ int n_digits(unsigned i);
 char * path_strip(const char * src);
 
 char * trim_whitespace(char * str);
+
+bool   is_ouroboros_member_uid(uid_t uid);
+
+bool   is_ouroboros_member(void);
 
 /* functions for copying and destroying arguments list */
 size_t  argvlen(const char ** argv);

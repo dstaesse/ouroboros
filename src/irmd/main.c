@@ -22,6 +22,7 @@
 
 #if defined(__linux__) || defined(__CYGWIN__)
 #define _DEFAULT_SOURCE
+#define _GNU_SOURCE
 #else
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -39,6 +40,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/lockfile.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/protobuf.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
 #include <ouroboros/rib.h>
@@ -56,6 +58,8 @@
 #include "configfile.h"
 
 #include <dirent.h>
+#include <grp.h>
+#include <pwd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <signal.h>
@@ -770,18 +774,47 @@ static int name_unreg(const char * name,
         return -1;
 }
 
+static int get_peer_ids(int     fd,
+                        uid_t * uid,
+                        gid_t * gid)
+{
+#if defined(__linux__)
+        struct ucred ucred;
+        socklen_t    len;
+
+        len = sizeof(ucred);
+
+        if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0)
+                goto fail;
+
+        *uid = ucred.uid;
+        *gid = ucred.gid;
+#else
+        if (getpeereid(fd, uid, gid) < 0)
+                goto fail;
+#endif
+        return 0;
+ fail:
+        return -1;
+}
+
 static int proc_announce(const struct proc_info * info)
 {
+        if (reg_prepare_pool(info->uid, info->gid) < 0) {
+                log_err("Failed to prepare pool for uid %d.", info->uid);
+                goto fail;
+        }
+
         if (reg_create_proc(info) < 0) {
                 log_err("Failed to add process %d.", info->pid);
-                goto fail_proc;
+                goto fail;
         }
 
         log_info("Process added: %d (%s).", info->pid, info->prog);
 
         return 0;
 
- fail_proc:
+ fail:
         return -1;
 }
 
@@ -868,6 +901,8 @@ static int flow_accept(struct flow_info * flow,
         log_dbg("IPCP %d accepting flow %d for %s.",
                  flow->n_pid, flow->id, name);
 
+        flow->uid = reg_get_proc_uid(flow->n_pid);
+
         err = oap_srv_process(&info, req_hdr, &resp_hdr, data, sk);
         if (err < 0) {
                 log_err("OAP processing failed for %s.", name);
@@ -879,7 +914,8 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_resp;
         }
 
-        log_info("Flow %d accepted by %d for %s.", flow->id, flow->n_pid, name);
+        log_info("Flow %d accepted by %d for %s (uid %d).",
+                 flow->id, flow->n_pid, name, flow->uid);
 
         freebuf(req_hdr);
         freebuf(resp_hdr);
@@ -911,13 +947,16 @@ static int flow_join(struct flow_info * flow,
         buffer_t          pbuf = BUF_INIT; /* nothing to piggyback */
         int               err;
 
-        log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
-
         if (reg_create_flow(flow) < 0) {
                 log_err("Failed to create flow.");
                 err = -EBADF;
                 goto fail_flow;
         }
+
+        flow->uid = reg_get_proc_uid(flow->n_pid);
+
+        log_info("Allocating flow for %d to %s (uid %d).",
+                 flow->n_pid, dst, flow->uid);
 
         strcpy(layer.name, dst);
         if (reg_get_ipcp_by_layer(&ipcp, &layer) < 0) {
@@ -1053,8 +1092,6 @@ static int flow_alloc(const char *       dst,
         /* piggyback of user data not yet implemented */
         assert(data != NULL && BUF_IS_EMPTY(data));
 
-        log_info("Allocating flow for %d to %s.", flow->n_pid, dst);
-
         /* Look up name_info for dst */
         if (reg_get_name_info(dst, &info) < 0) {
                 log_err("Failed to get name info for %s.", dst);
@@ -1067,6 +1104,11 @@ static int flow_alloc(const char *       dst,
                 err = -EBADF;
                 goto fail_flow;
         }
+
+        flow->uid = reg_get_proc_uid(flow->n_pid);
+
+        log_info("Allocating flow for %d to %s (uid %d).",
+                 flow->n_pid, dst, flow->uid);
 
         if (get_ipcp_by_dst(dst, &flow->n_1_pid, &hash) < 0) {
                 log_err("Failed to find IPCP for %s.", dst);
@@ -1332,7 +1374,8 @@ static void __cleanup_irm_msg(void * o)
         irm_msg__free_unpacked((irm_msg_t *) o, NULL);
 }
 
-static irm_msg_t * do_command_msg(irm_msg_t * msg)
+static irm_msg_t * do_command_msg(irm_msg_t * msg,
+                                   int         fd)
 {
         struct ipcp_config  conf;
         struct ipcp_info    ipcp;
@@ -1413,7 +1456,11 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
         case IRM_MSG_CODE__IRM_PROC_ANNOUNCE:
                 proc.pid  = msg->pid;
                 strcpy(proc.prog, msg->prog);
-                res = proc_announce(&proc);
+                res = get_peer_ids(fd, &proc.uid, &proc.gid);
+                if (res < 0)
+                        log_err("Failed to get UID/GID for pid %d.", msg->pid);
+                else
+                        res = proc_announce(&proc);
                 break;
         case IRM_MSG_CODE__IRM_PROC_EXIT:
                 res = proc_exit(msg->pid);
@@ -1598,7 +1645,7 @@ static void * mainloop(void * o)
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
                 pthread_cleanup_push(__cleanup_irm_msg, msg);
 
-                ret_msg = do_command_msg(msg);
+                ret_msg = do_command_msg(msg, sfd);
 
                 pthread_cleanup_pop(true);
                 pthread_cleanup_pop(false);
@@ -1691,7 +1738,7 @@ static void destroy_mount(char * mnt)
 
 static int ouroboros_reset(void)
 {
-        ssm_pool_purge();
+        ssm_pool_gspp_purge();
         lockfile_destroy(irmd.lf);
 
         return 0;
@@ -1813,6 +1860,8 @@ static int irm_load_store(char * dpath)
 static int irm_init(void)
 {
         struct stat        st;
+        struct group *     grp;
+        gid_t              gid;
         pthread_condattr_t cattr;
 #ifdef HAVE_FUSE
         mode_t             mask;
@@ -1898,8 +1947,17 @@ static int irm_init(void)
                 goto fail_sock_path;
         }
 
-        if ((irmd.gspp = ssm_pool_create()) == NULL) {
-                log_err("Failed to create pool.");
+        grp = getgrnam("ouroboros");
+        if (grp == NULL) {
+                log_warn("ouroboros group not found, using gid %d.", getgid());
+                gid = getgid();
+        } else {
+                gid = grp->gr_gid;
+        }
+
+        irmd.gspp = ssm_pool_create(getuid(), gid);
+        if (irmd.gspp == NULL) {
+                log_err("Failed to create GSPP.");
                 goto fail_pool;
         }
 
@@ -2006,8 +2064,7 @@ static void irm_fini(void)
         if (unlink(IRM_SOCK_PATH))
                 log_dbg("Failed to unlink %s.", IRM_SOCK_PATH);
 
-        if (irmd.gspp != NULL)
-                ssm_pool_destroy(irmd.gspp);
+        ssm_pool_destroy(irmd.gspp);
 
         if (irmd.lf != NULL)
                 lockfile_destroy(irmd.lf);

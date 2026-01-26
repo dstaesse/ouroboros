@@ -32,17 +32,19 @@
 
 struct ssm_pool;
 
-struct ssm_pool *    ssm_pool_create(void);
+/* Pool API: uid = 0 for GSPP (privileged), uid > 0 for PUP (per-user) */
+struct ssm_pool *    ssm_pool_create(uid_t uid,
+                                     gid_t gid);
 
-struct ssm_pool *    ssm_pool_open(void);
+struct ssm_pool *    ssm_pool_open(uid_t uid);
 
 void                 ssm_pool_close(struct ssm_pool * pool);
 
 void                 ssm_pool_destroy(struct ssm_pool * pool);
 
-void                 ssm_pool_purge(void);
-
 int                  ssm_pool_mlock(struct ssm_pool * pool);
+
+void                 ssm_pool_gspp_purge(void);
 
 /* Alloc count bytes, returns block index, a ptr and pk_buff.  */
 ssize_t              ssm_pool_alloc(struct ssm_pool *    pool,

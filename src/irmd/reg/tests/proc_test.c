@@ -27,13 +27,17 @@
 #define TEST_PID  65534
 #define TEST_PROG "usr/bin/testprog"
 
+#define TEST_PROC {           \
+        .pid = TEST_PID,      \
+        .prog = TEST_PROG,    \
+        .uid = getuid(),      \
+        .gid = getgid()       \
+}
+
 static int test_reg_proc_create_destroy(void)
 {
         struct reg_proc * proc;
-        struct proc_info  info = {
-                .pid =  TEST_PID,
-                .prog = TEST_PROG
-        };
+        struct proc_info  info = TEST_PROC;
 
         TEST_START();
 
@@ -56,10 +60,7 @@ static int test_reg_proc_create_destroy(void)
 static int test_reg_proc_add_name(void)
 {
         struct reg_proc * proc;
-        struct proc_info  info = {
-                .pid  = TEST_PID,
-                .prog = TEST_PROG
-        };
+        struct proc_info  info = TEST_PROC;
 
         char * name = "testname";
 

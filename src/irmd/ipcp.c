@@ -421,6 +421,8 @@ int ipcp_flow_join(const struct flow_info * flow,
         msg.flow_id      = flow->id;
         msg.has_pid      = true;
         msg.pid          = flow->n_pid;
+        msg.has_uid      = true;
+        msg.uid          = flow->uid;
         msg.has_hash     = true;
         msg.hash.data    = (uint8_t *) dst.data;
         msg.hash.len     = dst.len;
@@ -455,6 +457,8 @@ int ipcp_flow_alloc(const struct flow_info * flow,
         msg.flow_id      = flow->id;
         msg.has_pid      = true;
         msg.pid          = flow->n_pid;
+        msg.has_uid      = true;
+        msg.uid          = flow->uid;
         msg.qosspec      = qos_spec_s_to_msg(&flow->qs);
         msg.has_hash     = true;
         msg.hash.data    = (uint8_t *) dst.data;
@@ -495,6 +499,8 @@ int ipcp_flow_alloc_resp(const struct flow_info * flow,
         msg.flow_id      = flow->id;
         msg.has_pid      = true;
         msg.pid          = flow->n_pid;
+        msg.has_uid      = true;
+        msg.uid          = flow->uid;
         msg.has_response = true;
         msg.response     = response;
         msg.has_pk       = response == 0;

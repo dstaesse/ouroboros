@@ -23,9 +23,11 @@
 #ifndef OUROBOROS_LIB_LOCAL_DEV_H
 #define OUROBOROS_LIB_LOCAL_DEV_H
 
-ssize_t local_flow_read(int fd);
+#include <ouroboros/ssm_pool.h>
 
-int     local_flow_write(int    fd,
-                         size_t idx);
+int     local_flow_transfer(int               src_fd,
+                            int               dst_fd,
+                            struct ssm_pool * src_pool,
+                            struct ssm_pool * dst_pool);
 
 #endif /* OUROBOROS_LIB_LOCAL_DEV_H */

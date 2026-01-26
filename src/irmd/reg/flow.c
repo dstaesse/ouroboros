@@ -178,6 +178,7 @@ int reg_flow_update(struct reg_flow *  flow,
         }
 
         flow->info.state = info->state;
+        flow->info.uid   = info->uid;
 
         *info = flow->info;
 

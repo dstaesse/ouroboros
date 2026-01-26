@@ -19,4 +19,10 @@ add_executable(${IPCP_BROADCAST_TARGET}
 
 target_include_directories(${IPCP_BROADCAST_TARGET} PRIVATE ${IPCP_INCLUDE_DIRS})
 target_link_libraries(${IPCP_BROADCAST_TARGET} PUBLIC ouroboros-dev)
+
+include(utils/AddCompileFlags)
+if (CMAKE_BUILD_TYPE MATCHES "Debug*")
+  add_compile_flags(${IPCP_BROADCAST_TARGET} -DCONFIG_OUROBOROS_DEBUG)
+endif ()
+
 install(TARGETS ${IPCP_BROADCAST_TARGET} RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})

@@ -38,5 +38,11 @@ if (HAVE_ETH)
     target_link_libraries(${target} PUBLIC ouroboros-dev)
   endforeach()
 
+  include(utils/AddCompileFlags)
+  if (CMAKE_BUILD_TYPE MATCHES "Debug*")
+    add_compile_flags(${IPCP_ETH_LLC_TARGET} -DCONFIG_OUROBOROS_DEBUG)
+    add_compile_flags(${IPCP_ETH_DIX_TARGET} -DCONFIG_OUROBOROS_DEBUG)
+  endif ()
+
   install(TARGETS ${IPCP_ETH_LLC_TARGET} ${IPCP_ETH_DIX_TARGET} RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 endif ()

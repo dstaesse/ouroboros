@@ -41,17 +41,30 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-/* Size class configuration from CMake */
-static const struct ssm_size_class_cfg ssm_sc_cfg[SSM_POOL_MAX_CLASSES] = {
-        { (1 << 8), SSM_POOL_256_BLOCKS  },
-        { (1 << 9), SSM_POOL_512_BLOCKS  },
-        { (1 << 10), SSM_POOL_1K_BLOCKS   },
-        { (1 << 11), SSM_POOL_2K_BLOCKS   },
-        { (1 << 12), SSM_POOL_4K_BLOCKS   },
-        { (1 << 14), SSM_POOL_16K_BLOCKS  },
-        { (1 << 16), SSM_POOL_64K_BLOCKS  },
-        { (1 << 18), SSM_POOL_256K_BLOCKS },
-        { (1 << 20), SSM_POOL_1M_BLOCKS   },
+/* Global Shared Packet Pool (GSPP) configuration */
+static const struct ssm_size_class_cfg ssm_gspp_cfg[SSM_POOL_MAX_CLASSES] = {
+        { (1 << 8),  SSM_GSPP_256_BLOCKS  },
+        { (1 << 9),  SSM_GSPP_512_BLOCKS  },
+        { (1 << 10), SSM_GSPP_1K_BLOCKS   },
+        { (1 << 11), SSM_GSPP_2K_BLOCKS   },
+        { (1 << 12), SSM_GSPP_4K_BLOCKS   },
+        { (1 << 14), SSM_GSPP_16K_BLOCKS  },
+        { (1 << 16), SSM_GSPP_64K_BLOCKS  },
+        { (1 << 18), SSM_GSPP_256K_BLOCKS },
+        { (1 << 20), SSM_GSPP_1M_BLOCKS   },
+};
+
+/* Per-User Pool (PUP) configuration */
+static const struct ssm_size_class_cfg ssm_pup_cfg[SSM_POOL_MAX_CLASSES] = {
+        { (1 << 8),  SSM_PUP_256_BLOCKS  },
+        { (1 << 9),  SSM_PUP_512_BLOCKS  },
+        { (1 << 10), SSM_PUP_1K_BLOCKS   },
+        { (1 << 11), SSM_PUP_2K_BLOCKS   },
+        { (1 << 12), SSM_PUP_4K_BLOCKS   },
+        { (1 << 14), SSM_PUP_16K_BLOCKS  },
+        { (1 << 16), SSM_PUP_64K_BLOCKS  },
+        { (1 << 18), SSM_PUP_256K_BLOCKS },
+        { (1 << 20), SSM_PUP_1M_BLOCKS   },
 };
 
 #define PTR_TO_OFFSET(pool_base, ptr)                                          \
@@ -83,16 +96,23 @@ static const struct ssm_size_class_cfg ssm_sc_cfg[SSM_POOL_MAX_CLASSES] = {
 #define FETCH_SUB(ptr, val)                                                    \
         (__atomic_fetch_sub(ptr, val, __ATOMIC_SEQ_CST))
 
-#define CAS(ptr, expected, desired)                                            \
-        (__atomic_compare_exchange_n(ptr, expected, desired, false,            \
-                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
-
 #define SSM_FILE_SIZE (SSM_POOL_TOTAL_SIZE + sizeof(struct _ssm_pool_hdr))
+#define SSM_GSPP_FILE_SIZE (SSM_GSPP_TOTAL_SIZE + sizeof(struct _ssm_pool_hdr))
+#define SSM_PUP_FILE_SIZE (SSM_PUP_TOTAL_SIZE + sizeof(struct _ssm_pool_hdr))
+
+#define IS_GSPP(uid)             ((uid) == SSM_GSPP_UID)
+#define GET_POOL_TOTAL_SIZE(uid) (IS_GSPP(uid) ? SSM_GSPP_TOTAL_SIZE          \
+                                               : SSM_PUP_TOTAL_SIZE)
+#define GET_POOL_FILE_SIZE(uid)  (IS_GSPP(uid) ? SSM_GSPP_FILE_SIZE           \
+                                               : SSM_PUP_FILE_SIZE)
+#define GET_POOL_CFG(uid)        (IS_GSPP(uid) ? ssm_gspp_cfg : ssm_pup_cfg)
 
 struct ssm_pool {
-        uint8_t *               shm_base;   /* start of blocks */
-        struct _ssm_pool_hdr *  hdr;        /* shared memory header */
-        void *                  pool_base;  /* base of the memory pool */
+        uint8_t *               shm_base;   /* start of blocks           */
+        struct _ssm_pool_hdr *  hdr;        /* shared memory header      */
+        void *                  pool_base;  /* base of the memory pool   */
+        uid_t                   uid;        /* user owner (0 = GSPP)     */
+        size_t                  total_size; /* total data size           */
 };
 
 static __inline__
@@ -143,17 +163,23 @@ static __inline__ void list_add_head(struct _ssm_list_head * head,
         STORE(&head->count, LOAD(&head->count) + 1);
 }
 
-static __inline__ int select_size_class(size_t len)
+static __inline__ int select_size_class(struct ssm_pool * pool,
+                                        size_t            len)
 {
         size_t sz;
         int    i;
+
+        assert(pool != NULL);
 
         /* Total space needed: header + headspace + data + tailspace */
         sz = sizeof(struct ssm_pk_buff) + SSM_PK_BUFF_HEADSPACE + len
              + SSM_PK_BUFF_TAILSPACE;
 
         for (i = 0; i < SSM_POOL_MAX_CLASSES; i++) {
-                if (ssm_sc_cfg[i].blocks > 0 && sz <= ssm_sc_cfg[i].size)
+                struct _ssm_size_class * sc;
+
+                sc = &pool->hdr->size_classes[i];
+                if (sc->object_size > 0 && sz <= sc->object_size)
                         return i;
         }
 
@@ -183,21 +209,24 @@ static __inline__ int find_size_class_for_offset(struct ssm_pool * pool,
 
 static void init_size_classes(struct ssm_pool * pool)
 {
-        struct _ssm_size_class * sc;
-        struct _ssm_shard *      shard;
-        pthread_mutexattr_t    mattr;
-        pthread_condattr_t     cattr;
-        uint8_t *              region;
-        size_t                 offset;
-        int                    c;
-        int                    s;
-        size_t                 i;
+        const struct ssm_size_class_cfg * cfg;
+        struct _ssm_size_class *          sc;
+        struct _ssm_shard *               shard;
+        pthread_mutexattr_t               mattr;
+        pthread_condattr_t                cattr;
+        uint8_t *                         region;
+        size_t                            offset;
+        int                               c; /* class iterator */
+        int                               s; /* shard iterator */
+        size_t                            i;
 
         assert(pool != NULL);
 
         /* Check if already initialized */
         if (LOAD(&pool->hdr->initialized) != 0)
                 return;
+
+        cfg = GET_POOL_CFG(pool->uid);
 
         pthread_mutexattr_init(&mattr);
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
@@ -214,15 +243,15 @@ static void init_size_classes(struct ssm_pool * pool)
         offset = 0;
 
         for (c = 0; c < SSM_POOL_MAX_CLASSES; c++) {
-                if (ssm_sc_cfg[c].blocks == 0)
+                if (cfg[c].blocks == 0)
                         continue;
 
                 sc = &pool->hdr->size_classes[c];
 
-                sc->object_size  = ssm_sc_cfg[c].size;
+                sc->object_size  = cfg[c].size;
                 sc->pool_start   = offset;
-                sc->pool_size    = ssm_sc_cfg[c].size * ssm_sc_cfg[c].blocks;
-                sc->object_count = ssm_sc_cfg[c].blocks;
+                sc->pool_size    = cfg[c].size * cfg[c].blocks;
+                sc->object_count = cfg[c].blocks;
 
                 /* Initialize all shards */
                 for (s = 0; s < SSM_POOL_SHARDS; s++) {
@@ -444,23 +473,26 @@ static ssize_t alloc_from_sc_b(struct ssm_pool *       pool,
         return init_block(pool, sc, shard, blk, len, ptr, spb);
 }
 
-/* Global Shared Packet Pool */
-static char * gspp_filename(void)
+/* Generate pool filename: uid=0 for GSPP, uid>0 for PUP */
+static char * pool_filename(uid_t uid)
 {
         char * str;
         char * test_suffix;
+        char   base[64];
+
+        if (IS_GSPP(uid))
+                snprintf(base, sizeof(base), "%s", SSM_GSPP_NAME);
+        else
+                snprintf(base, sizeof(base), SSM_PUP_NAME_FMT, (int) uid);
 
         test_suffix = getenv("OUROBOROS_TEST_POOL_SUFFIX");
         if (test_suffix != NULL) {
-                str = malloc(strlen(SSM_POOL_NAME) + strlen(test_suffix) + 1);
+                str = malloc(strlen(base) + strlen(test_suffix) + 1);
                 if (str == NULL)
                         return NULL;
-                sprintf(str, "%s%s", SSM_POOL_NAME, test_suffix);
+                sprintf(str, "%s%s", base, test_suffix);
         } else {
-                str = malloc(strlen(SSM_POOL_NAME) + 1);
-                if (str == NULL)
-                        return NULL;
-                sprintf(str, "%s", SSM_POOL_NAME);
+                str = strdup(base);
         }
 
         return str;
@@ -468,9 +500,13 @@ static char * gspp_filename(void)
 
 void ssm_pool_close(struct ssm_pool * pool)
 {
+        size_t file_size;
+
         assert(pool != NULL);
 
-        munmap(pool->shm_base, SSM_FILE_SIZE);
+        file_size = GET_POOL_FILE_SIZE(pool->uid);
+
+        munmap(pool->shm_base, file_size);
         free(pool);
 }
 
@@ -481,15 +517,19 @@ void ssm_pool_destroy(struct ssm_pool * pool)
         assert(pool != NULL);
 
         if (getpid() != pool->hdr->pid && kill(pool->hdr->pid, 0) == 0) {
+                ssm_pool_close(pool);
+                free(pool);
+                return;
+        }
+
+        fn = pool_filename(pool->uid);
+        if (fn == NULL) {
+                ssm_pool_close(pool);
                 free(pool);
                 return;
         }
 
         ssm_pool_close(pool);
-
-        fn = gspp_filename();
-        if (fn == NULL)
-                return;
 
         shm_unlink(fn);
         free(fn);
@@ -497,72 +537,89 @@ void ssm_pool_destroy(struct ssm_pool * pool)
 
 #define MM_FLAGS (PROT_READ | PROT_WRITE)
 
-static struct ssm_pool * pool_create(int flags)
+static struct ssm_pool * __pool_create(const char * name,
+                                       int          flags,
+                                       uid_t        uid,
+                                       mode_t       mode)
 {
         struct ssm_pool * pool;
         int               fd;
         uint8_t *         shm_base;
-        char *            fn;
+        size_t            file_size;
+        size_t            total_size;
 
-        fn = gspp_filename();
-        if (fn == NULL)
-                goto fail_fn;
+        file_size  = GET_POOL_FILE_SIZE(uid);
+        total_size = GET_POOL_TOTAL_SIZE(uid);
 
-        pool = malloc(sizeof *pool);
+        pool = malloc(sizeof(*pool));
         if (pool == NULL)
-                goto fail_rdrb;
+                goto fail_pool;
 
-        fd = shm_open(fn, flags, 0666);
+        fd = shm_open(name, flags, mode);
         if (fd == -1)
                 goto fail_open;
 
-        if ((flags & O_CREAT) && ftruncate(fd, SSM_FILE_SIZE) < 0)
+        if ((flags & O_CREAT) && ftruncate(fd, (off_t) file_size) < 0)
                 goto fail_truncate;
 
-        shm_base = mmap(NULL, SSM_FILE_SIZE, MM_FLAGS, MAP_SHARED, fd, 0);
+        shm_base = mmap(NULL, file_size, MM_FLAGS, MAP_SHARED, fd, 0);
         if (shm_base == MAP_FAILED)
                 goto fail_truncate;
 
-        pool->shm_base = shm_base;
-        pool->pool_base = shm_base;
-        pool->hdr = (struct _ssm_pool_hdr *) (shm_base + SSM_POOL_TOTAL_SIZE);
+        pool->shm_base   = shm_base;
+        pool->pool_base  = shm_base;
+        pool->hdr        = (struct _ssm_pool_hdr *) (shm_base + total_size);
+        pool->uid        = uid;
+        pool->total_size = total_size;
 
         if (flags & O_CREAT)
                 pool->hdr->mapped_addr = shm_base;
 
         close(fd);
 
-        free(fn);
-
         return pool;
 
  fail_truncate:
         close(fd);
         if (flags & O_CREAT)
-                shm_unlink(fn);
+                shm_unlink(name);
  fail_open:
         free(pool);
- fail_rdrb:
-        free(fn);
- fail_fn:
+ fail_pool:
         return NULL;
 }
 
-struct ssm_pool * ssm_pool_create(void)
+struct ssm_pool * ssm_pool_create(uid_t uid,
+                                  gid_t gid)
 {
         struct ssm_pool *   pool;
+        char *              fn;
         mode_t              mask;
+        mode_t              mode;
         pthread_mutexattr_t mattr;
         pthread_condattr_t  cattr;
+        int                 fd;
 
+        fn = pool_filename(uid);
+        if (fn == NULL)
+                goto fail_fn;
+
+        mode = IS_GSPP(uid) ? 0660 : 0600;
         mask = umask(0);
 
-        pool = pool_create(O_CREAT | O_EXCL | O_RDWR);
+        pool = __pool_create(fn, O_CREAT | O_EXCL | O_RDWR, uid, mode);
 
         umask(mask);
 
         if (pool == NULL)
-                goto fail_rdrb;
+                goto fail_pool;
+
+        fd = shm_open(fn, O_RDWR, 0);
+        if (fd >= 0) {
+                fchown(fd, uid, gid);
+                fchmod(fd, mode);
+                close(fd);
+        }
 
         if (pthread_mutexattr_init(&mattr))
                 goto fail_mattr;
@@ -585,13 +642,13 @@ struct ssm_pool * ssm_pool_create(void)
                 goto fail_healthy;
 
         pool->hdr->pid = getpid();
-        /* Will be set by init_size_classes */
         STORE(&pool->hdr->initialized, 0);
 
         init_size_classes(pool);
 
         pthread_mutexattr_destroy(&mattr);
         pthread_condattr_destroy(&cattr);
+        free(fn);
 
         return pool;
 
@@ -602,27 +659,37 @@ struct ssm_pool * ssm_pool_create(void)
  fail_mutex:
         pthread_mutexattr_destroy(&mattr);
  fail_mattr:
-        ssm_pool_destroy(pool);
- fail_rdrb:
+        ssm_pool_close(pool);
+        shm_unlink(fn);
+ fail_pool:
+        free(fn);
+ fail_fn:
         return NULL;
 }
 
-struct ssm_pool * ssm_pool_open(void)
+struct ssm_pool * ssm_pool_open(uid_t uid)
 {
         struct ssm_pool * pool;
+        char *            fn;
 
-        pool = pool_create(O_RDWR);
+        fn = pool_filename(uid);
+        if (fn == NULL)
+                return NULL;
+
+        pool = __pool_create(fn, O_RDWR, uid, 0);
         if (pool != NULL)
                 init_size_classes(pool);
+
+        free(fn);
 
         return pool;
 }
 
-void ssm_pool_purge(void)
+void ssm_pool_gspp_purge(void)
 {
         char * fn;
 
-        fn = gspp_filename();
+        fn = pool_filename(SSM_GSPP_UID);
         if (fn == NULL)
                 return;
 
@@ -632,9 +699,13 @@ void ssm_pool_purge(void)
 
 int ssm_pool_mlock(struct ssm_pool * pool)
 {
+        size_t file_size;
+
         assert(pool != NULL);
 
-        return mlock(pool->shm_base, SSM_FILE_SIZE);
+        file_size = GET_POOL_FILE_SIZE(pool->uid);
+
+        return mlock(pool->shm_base, file_size);
 }
 
 ssize_t ssm_pool_alloc(struct ssm_pool *     pool,
@@ -647,7 +718,7 @@ ssize_t ssm_pool_alloc(struct ssm_pool *     pool,
         assert(pool != NULL);
         assert(spb != NULL);
 
-        idx = select_size_class(count);
+        idx = select_size_class(pool, count);
         if (idx >= 0)
                 return alloc_from_sc(pool, idx, count, ptr, spb);
 
@@ -665,7 +736,7 @@ ssize_t ssm_pool_alloc_b(struct ssm_pool *       pool,
         assert(pool != NULL);
         assert(spb != NULL);
 
-        idx = select_size_class(count);
+        idx = select_size_class(pool, count);
         if (idx >= 0)
                 return alloc_from_sc_b(pool, idx, count, ptr, spb, abstime);
 
@@ -697,7 +768,7 @@ struct ssm_pk_buff * ssm_pool_get(struct ssm_pool * pool,
 
         assert(pool != NULL);
 
-        if (off == 0 || off >= (size_t) SSM_POOL_TOTAL_SIZE)
+        if (off == 0 || off >= pool->total_size)
                 return NULL;
 
         blk = OFFSET_TO_PTR(pool->pool_base, off);
@@ -722,7 +793,7 @@ int ssm_pool_remove(struct ssm_pool * pool,
 
         assert(pool != NULL);
 
-        if (off == 0 || off >= SSM_POOL_TOTAL_SIZE)
+        if (off == 0 || off >= pool->total_size)
                 return -EINVAL;
 
         blk = OFFSET_TO_PTR(pool->pool_base, off);

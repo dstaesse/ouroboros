@@ -54,6 +54,7 @@ static struct _ssm_pool_hdr * get_pool_hdr(struct ssm_pool * pool)
          */
         struct _ssm_pool_hdr ** hdr_ptr =
                 (struct _ssm_pool_hdr **)((uint8_t *)pool + sizeof(void *));
+
         return *hdr_ptr;
 }
 
@@ -67,9 +68,7 @@ static int test_lazy_distribution(void)
 
         TEST_START();
 
-        ssm_pool_purge();
-
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;
@@ -142,9 +141,7 @@ static int test_shard_migration(void)
 
         TEST_START();
 
-        ssm_pool_purge();
-
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;
@@ -216,9 +213,7 @@ static int test_fallback_stealing(void)
 
         TEST_START();
 
-        ssm_pool_purge();
-
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;
@@ -331,9 +326,7 @@ static int test_multiprocess_sharding(void)
 
         TEST_START();
 
-        ssm_pool_purge();
-
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;
@@ -355,7 +348,7 @@ static int test_multiprocess_sharding(void)
                         ssize_t              off;
                         int                  my_shard;
 
-                        child_pool = ssm_pool_open();
+                        child_pool = ssm_pool_open(0);
                         if (child_pool == NULL)
                                 exit(EXIT_FAILURE);
 
@@ -449,9 +442,7 @@ static int test_exhaustion_with_fallback(void)
 
         TEST_START();
 
-        ssm_pool_purge();
-
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;

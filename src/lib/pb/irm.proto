@@ -94,6 +94,6 @@ message irm_msg {
         optional uint32 timeo_sec        = 23;
         optional uint32 timeo_nsec       = 24;
         optional sint32 result           = 25;
-        optional bytes  sym_key          = 26; /* symmetric encryption key */
-        optional sint32 cipher_nid       = 27; /* cipher NID */
+        optional bytes  sym_key    = 26; /* symmetric encryption key */
+        optional sint32 cipher_nid = 27; /* cipher NID */
 }

@@ -61,7 +61,7 @@ static int test_ssm_pool_basic_allocation(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -119,7 +119,7 @@ static int test_ssm_pool_multiple_allocations(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -212,7 +212,7 @@ static int test_ssm_pool_no_fallback_for_large(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -248,7 +248,7 @@ static int test_ssm_pool_blocking_vs_nonblocking(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -295,7 +295,7 @@ static int test_ssm_pool_stress_test(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -392,7 +392,7 @@ static int test_ssm_pool_open_initializes_ssm(void)
 
         TEST_START();
 
-        creator = ssm_pool_create();
+        creator = ssm_pool_create(0, getgid());
         if (creator == NULL)
                 goto fail_create;
 
@@ -403,7 +403,7 @@ static int test_ssm_pool_open_initializes_ssm(void)
         }
         ssm_pool_remove(creator, ret);
 
-        opener = ssm_pool_open();
+        opener = ssm_pool_open(0);
         if (opener == NULL) {
                 printf("Open failed.\n");
                 goto fail_creator;
@@ -439,7 +439,7 @@ static int test_ssm_pool_bounds_checking(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -502,7 +502,7 @@ static int test_ssm_pool_inter_process_communication(void)
 
         len = strlen(msg) + 1;
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -606,7 +606,7 @@ static int test_ssm_pool_read_operation(void)
 
         len = strlen(data) + 1;
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -656,7 +656,7 @@ static int test_ssm_pool_mlock_operation(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -690,7 +690,7 @@ static int test_ssm_pk_buff_operations(void)
 
         dlen = strlen(data);
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -798,7 +798,7 @@ static int test_ssm_pool_size_class_boundaries(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -859,7 +859,7 @@ static int test_ssm_pool_exhaustion(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -937,7 +937,7 @@ static int test_ssm_pool_reclaim_orphans(void)
 
         TEST_START();
 
-        pool = ssm_pool_create();
+        pool = ssm_pool_create(0, getgid());
         if (pool == NULL)
                 goto fail_create;
 
@@ -1016,8 +1016,6 @@ int pool_test(int     argc,
 
         (void) argc;
         (void) argv;
-
-        ssm_pool_purge();
 
         ret |= test_ssm_pool_basic_allocation();
         ret |= test_ssm_pool_multiple_allocations();

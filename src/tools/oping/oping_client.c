@@ -53,6 +53,20 @@ void shutdown_client(int signo, siginfo_t * info, void * c)
         }
 }
 
+static void update_rtt_stats(double ms)
+{
+        double d;
+
+        if (ms < client.rtt_min)
+                client.rtt_min = ms;
+        if (ms > client.rtt_max)
+                client.rtt_max = ms;
+
+        d = (ms - client.rtt_avg);
+        client.rtt_avg += d / client.rcvd;
+        client.rtt_m2 += d * (ms - client.rtt_avg);
+}
+
 void * reader(void * o)
 {
         struct timespec timeout = {client.interval / 1000 + 2, 0};
@@ -64,7 +78,6 @@ void * reader(void * o)
         int                fd      = *((int *) o);
         int                msg_len = 0;
         double             ms      = 0;
-        double             d       = 0;
         uint32_t           exp_id  = 0;
 
         fccntl(fd, FLOWSRCVTIMEO, &timeout);
@@ -122,14 +135,7 @@ void * reader(void * o)
                                id < exp_id ? " [out-of-order]" : "");
                 }
 
-                if (ms < client.rtt_min)
-                        client.rtt_min = ms;
-                if (ms > client.rtt_max)
-                        client.rtt_max = ms;
-
-                d = (ms - client.rtt_avg);
-                client.rtt_avg += d / client.rcvd;
-                client.rtt_m2 += d * (ms - client.rtt_avg);
+                update_rtt_stats(ms);
 
                 if (id >= exp_id)
                         exp_id = id + 1;
@@ -204,13 +210,103 @@ static void client_fini(void)
         return;
 }
 
+static void print_stats(struct timespec * tic,
+                        struct timespec * toc)
+{
+        printf("\n");
+        printf("--- %s ping statistics ---\n", client.s_apn);
+        printf("%d packets transmitted, ", client.sent);
+        printf("%d received, ", client.rcvd);
+        printf("%zd out-of-order, ", client.ooo);
+        printf("%.0lf%% packet loss, ", client.sent == 0 ? 0 :
+               ceil(100 - (100 * (client.rcvd / (float) client.sent))));
+        printf("time: %.3f ms\n", ts_diff_us(toc, tic) / 1000.0);
+
+        if (client.rcvd > 0) {
+                printf("rtt min/avg/max/mdev = %.3f/%.3f/%.3f/",
+                       client.rtt_min,
+                       client.rtt_avg,
+                       client.rtt_max);
+                if (client.rcvd > 1)
+                        printf("%.3f ms\n",
+                               sqrt(client.rtt_m2 / (client.rcvd - 1)));
+                else
+                        printf("NaN ms\n");
+        }
+}
+
+static int flood_ping(int fd)
+{
+        char buf[OPING_BUF_SIZE];
+        struct oping_msg * msg = (struct oping_msg *) buf;
+        struct timespec sent;
+        struct timespec rcvd;
+        double ms;
+
+        memset(buf, 0, client.size);
+
+        if (!client.quiet)
+                printf("Pinging %s with %d bytes of data (%u packets):\n\n",
+                       client.s_apn, client.size, client.count);
+
+        while (!stop && client.sent < client.count) {
+                clock_gettime(CLOCK_MONOTONIC, &sent);
+
+                msg->type = htonl(ECHO_REQUEST);
+                msg->id = htonl(client.sent);
+                msg->tv_sec = sent.tv_sec;
+                msg->tv_nsec = sent.tv_nsec;
+
+                if (flow_write(fd, buf, client.size) < 0) {
+                        printf("Failed to send packet.\n");
+                        break;
+                }
+
+                ++client.sent;
+
+                if (flow_read(fd, buf, OPING_BUF_SIZE) < 0) {
+                        printf("Failed to read packet.\n");
+                        break;
+                }
+
+                clock_gettime(CLOCK_MONOTONIC, &rcvd);
+
+                if (ntohl(msg->type) != ECHO_REPLY)
+                        continue;
+
+                ++client.rcvd;
+
+                sent.tv_sec = msg->tv_sec;
+                sent.tv_nsec = msg->tv_nsec;
+                ms = ts_diff_us(&rcvd, &sent) / 1000.0;
+
+                update_rtt_stats(ms);
+
+                if (!client.quiet)
+                        printf("%d bytes from %s: seq=%d time=%.3f ms\n",
+                               client.size, client.s_apn,
+                               ntohl(msg->id), ms);
+        }
+
+        return 0;
+}
+
+static int threaded_ping(int fd)
+{
+        pthread_create(&client.reader_pt, NULL, reader, &fd);
+        pthread_create(&client.writer_pt, NULL, writer, &fd);
+
+        pthread_join(client.writer_pt, NULL);
+        pthread_join(client.reader_pt, NULL);
+
+        return 0;
+}
+
 static int client_main(void)
 {
         struct sigaction sig_act;
-
         struct timespec tic;
         struct timespec toc;
-
         int fd;
 
         memset(&sig_act, 0, sizeof sig_act);
@@ -241,37 +337,16 @@ static int client_main(void)
 
         clock_gettime(CLOCK_REALTIME, &tic);
 
-        pthread_create(&client.reader_pt, NULL, reader, &fd);
-        pthread_create(&client.writer_pt, NULL, writer, &fd);
-
-        pthread_join(client.writer_pt, NULL);
-        pthread_join(client.reader_pt, NULL);
+        if (client.flood)
+                flood_ping(fd);
+        else
+                threaded_ping(fd);
 
         clock_gettime(CLOCK_REALTIME, &toc);
 
-        printf("\n");
-        printf("--- %s ping statistics ---\n", client.s_apn);
-        printf("%d packets transmitted, ", client.sent);
-        printf("%d received, ", client.rcvd);
-        printf("%zd out-of-order, ", client.ooo);
-        printf("%.0lf%% packet loss, ", client.sent == 0 ? 0 :
-               ceil(100 - (100 * (client.rcvd / (float) client.sent))));
-        printf("time: %.3f ms\n", ts_diff_us(&toc, &tic) / 1000.0);
-
-        if (client.rcvd > 0) {
-                printf("rtt min/avg/max/mdev = %.3f/%.3f/%.3f/",
-                       client.rtt_min,
-                       client.rtt_avg,
-                       client.rtt_max);
-                if (client.rcvd > 1)
-                        printf("%.3f ms\n",
-                               sqrt(client.rtt_m2 / (client.rcvd - 1)));
-                else
-                        printf("NaN ms\n");
-        }
+        print_stats(&tic, &toc);
 
         flow_dealloc(fd);
-
         client_fini();
 
         return 0;

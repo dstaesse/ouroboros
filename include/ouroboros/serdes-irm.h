@@ -26,6 +26,7 @@
 #include <ouroboros/crypt.h>
 #include <ouroboros/flow.h>
 #include <ouroboros/ipcp.h>
+#include <ouroboros/proc.h>
 #include <ouroboros/time.h>
 #include <ouroboros/utils.h>
 
@@ -69,8 +70,8 @@ int ipcp_flow_dealloc__irm_req_ser(buffer_t *               buf,
 int ipcp_create_r__irm_req_ser(buffer_t *               buf,
                                const struct ipcp_info * ipcp);
 
-int proc_announce__irm_req_ser(buffer_t *   buf,
-                               const char * prog);
+int proc_announce__irm_req_ser(buffer_t *               buf,
+                               const struct proc_info * proc);
 
 int proc_exit__irm_req_ser(buffer_t *   buf);
 

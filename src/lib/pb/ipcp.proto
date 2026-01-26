@@ -56,4 +56,5 @@ message ipcp_msg {
         optional uint32 timeo_sec          = 12;
         optional sint32 mpl                = 13;
         optional int32 result              = 14;
+        optional uint32 uid                = 15; /* 0 = GSPP, >0 = PUP uid */
 }
