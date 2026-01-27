@@ -1872,3 +1872,9 @@ void openssl_secure_free(void * ptr)
 {
         OPENSSL_secure_free(ptr);
 }
+
+void openssl_secure_clear(void * ptr,
+                          size_t size)
+{
+        OPENSSL_cleanse(ptr, size);
+}

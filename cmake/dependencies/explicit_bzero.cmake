@@ -1,0 +1,1 @@
+check_symbol_exists(explicit_bzero "string.h" HAVE_EXPLICIT_BZERO)

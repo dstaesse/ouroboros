@@ -2,6 +2,7 @@ include(FindPkgConfig)
 include(CheckSymbolExists)
 
 include(dependencies/protobufc)
+include(dependencies/explicit_bzero)
 include(dependencies/systemlibraries)
 include(dependencies/robustmutex)
 include(dependencies/fuse)

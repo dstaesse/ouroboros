@@ -21,6 +21,7 @@
  */
 
 #cmakedefine HAVE_SYS_RANDOM
+#cmakedefine HAVE_EXPLICIT_BZERO
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL
 #ifdef HAVE_OPENSSL

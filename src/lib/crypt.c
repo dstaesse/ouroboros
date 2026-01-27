@@ -1064,3 +1064,24 @@ void crypt_secure_free(void * ptr,
         free(ptr);
 #endif
 }
+
+void crypt_secure_clear(void * ptr,
+                        size_t size)
+{
+        volatile uint8_t * p;
+
+        if (ptr == NULL)
+                return;
+
+#ifdef HAVE_OPENSSL
+        (void) p;
+        openssl_secure_clear(ptr, size);
+#elif defined(HAVE_EXPLICIT_BZERO)
+        (void) p;
+        explicit_bzero(ptr, size);
+#else /* best effort to avoid optimizing out */
+        p = ptr;
+        while (size-- > 0)
+                *p++ = 0;
+#endif
+}

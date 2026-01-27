@@ -1553,7 +1553,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg)
         else
                 ret_msg->result = res;
 
-        explicit_bzero(kbuf, SYMMKEYSZ);
+        crypt_secure_clear(kbuf, SYMMKEYSZ);
 
         return ret_msg;
 }

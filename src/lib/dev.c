@@ -870,7 +870,7 @@ int flow_accept(qosspec_t *             qs,
 
         fd = flow_init(&flow, &crypt);
 
-        explicit_bzero(key, SYMMKEYSZ);
+        crypt_secure_clear(key, SYMMKEYSZ);
 
         if (qs != NULL)
                 *qs = flow.qs;
@@ -917,7 +917,7 @@ int flow_alloc(const char *            dst,
 
         fd = flow_init(&flow, &crypt);
 
-        explicit_bzero(key, SYMMKEYSZ);
+        crypt_secure_clear(key, SYMMKEYSZ);
 
         if (qs != NULL)
                 *qs = flow.qs;
@@ -956,7 +956,7 @@ int flow_join(const char *            dst,
 
         fd = flow_init(&flow, &crypt);
 
-        explicit_bzero(key, SYMMKEYSZ);
+        crypt_secure_clear(key, SYMMKEYSZ);
 
         return fd;
 }

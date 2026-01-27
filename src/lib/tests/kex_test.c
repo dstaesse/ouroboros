@@ -574,7 +574,7 @@ static int test_kex_parse_config_empty(void)
 
         memset(&kex, 0, sizeof(kex));
 
-        fp = FMEMOPEN_STR("");
+        fp = FMEMOPEN_STR("\n");
         if (fp == NULL) {
                 printf("Failed to open memory stream.\n");
                 goto fail;

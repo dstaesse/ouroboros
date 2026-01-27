@@ -191,7 +191,7 @@ static int do_client_kex_prepare_kem_encap(const char *         server_name,
                 return -ENOMEM;
         }
         memcpy(s->key, key_buf, SYMMKEYSZ);
-        explicit_bzero(key_buf, SYMMKEYSZ);
+        crypt_secure_clear(key_buf, SYMMKEYSZ);
 
         return 0;
 }
@@ -395,7 +395,7 @@ static int do_client_kex_complete_kem(struct oap_cli_ctx *   s,
 
         memcpy(sk->key, key_buf, SYMMKEYSZ);
         sk->nid = kcfg->c.nid;
-        explicit_bzero(key_buf, SYMMKEYSZ);
+        crypt_secure_clear(key_buf, SYMMKEYSZ);
 
         log_info_id(id, "Negotiated %s + %s.", kcfg->x.str, kcfg->c.str);
 
@@ -425,7 +425,7 @@ static int do_client_kex_complete_dhe(struct oap_cli_ctx *   s,
 
         memcpy(sk->key, key_buf, SYMMKEYSZ);
         sk->nid = kcfg->c.nid;
-        explicit_bzero(key_buf, SYMMKEYSZ);
+        crypt_secure_clear(key_buf, SYMMKEYSZ);
 
         log_info_id(id, "Negotiated %s + %s.", kcfg->x.str, kcfg->c.str);
 

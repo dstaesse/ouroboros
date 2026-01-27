@@ -166,4 +166,7 @@ void *  openssl_secure_malloc(size_t size);
 void    openssl_secure_free(void * ptr,
                             size_t size);
 
+void    openssl_secure_clear(void * ptr,
+                             size_t size);
+
 #endif /* OUROBOROS_LIB_CRYPT_OPENSSL_H */

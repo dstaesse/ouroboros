@@ -35,8 +35,14 @@
 #define KEX_CIPHER_BUFSZ 32
 #define MSGBUFSZ         2048
 
+/*
+ * On OSX the OpenSSL NIDs are automatically loaded with evp.h.
+ * Some have a different spelling. This header avoids the double definitions.
+ */
+
+ #define NID_undef              0
+
 /* Cipher NIDs (match OpenSSL values) */
-#define NID_undef              0
 #define NID_aes_128_gcm        895
 #define NID_aes_192_gcm        898
 #define NID_aes_256_gcm        901
@@ -45,17 +51,7 @@
 #define NID_aes_256_ctr        906
 #define NID_chacha20_poly1305  1018
 
-/* KDF NIDs (match OpenSSL values) */
-#define NID_hkdf               1036
-#define NID_sha256             672
-#define NID_sha384             673
-#define NID_sha512             674
-#define NID_sha3_256           1096
-#define NID_sha3_384           1097
-#define NID_sha3_512           1098
-#define NID_blake2b512         1056
-#define NID_blake2s256         1057
-
+ #if !defined (__APPLE__) || !defined ( HAVE_OPENSSL )
 /* KEX algorithm NIDs (match OpenSSL values) */
 #define NID_X9_62_prime256v1   415
 #define NID_secp384r1          715
@@ -65,11 +61,26 @@
 #define NID_ffdhe2048          1126
 #define NID_ffdhe3072          1127
 #define NID_ffdhe4096          1128
+#endif /* __APPLE__ */
 #define NID_MLKEM512           1454
 #define NID_MLKEM768           1455
 #define NID_MLKEM1024          1456
 #define NID_X25519MLKEM768     2053 /* !! not in OpenSSL   */
 #define NID_X448MLKEM1024      2054 /* !! not in OpenSSL   */
+
+/* KDF NIDs (match OpenSSL values) */
+#define NID_hkdf               1036
+#define NID_sha256             672
+#define NID_sha384             673
+#define NID_sha512             674
+#if !defined (__APPLE__) || !defined ( HAVE_OPENSSL )
+#define NID_sha3_256           1096
+#define NID_sha3_384           1097
+#define NID_sha3_512           1098
+#endif /* __APPLE__ */
+#define NID_blake2b512         1056
+#define NID_blake2s256         1057
+
 
 #define IS_KEM_ALGORITHM(algo) \
         (strstr(algo, "ML-KEM") != NULL || strstr(algo, "MLKEM") != NULL)
@@ -350,5 +361,8 @@ void *             crypt_secure_malloc(size_t size);
 
 void               crypt_secure_free(void *  ptr,
                                      size_t  size);
+
+void               crypt_secure_clear(void * ptr,
+                                      size_t size);
 
 #endif /* OUROBOROS_LIB_CRYPT_H */
