@@ -1,0 +1,17 @@
+find_program(LCOV_PATH lcov)
+find_program(GENHTML_PATH genhtml)
+
+if(LCOV_PATH AND GENHTML_PATH)
+  set(HAVE_LCOV TRUE CACHE INTERNAL "lcov HTML coverage reports available")
+  message(STATUS "lcov and genhtml found - HTML coverage reports available")
+else()
+  set(HAVE_LCOV FALSE CACHE INTERNAL "lcov HTML coverage reports available")
+  if(NOT LCOV_PATH)
+    message(STATUS "lcov not found - HTML coverage reports not available")
+  endif()
+  if(NOT GENHTML_PATH)
+    message(STATUS "genhtml not found - HTML coverage reports not available")
+  endif()
+endif()
+
+mark_as_advanced(LCOV_PATH GENHTML_PATH)

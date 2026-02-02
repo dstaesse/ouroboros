@@ -28,20 +28,12 @@ set(MAN_NAMES
   irm.8
   )
 
-macro(INSTALL_MAN __mans)
-  foreach (_man ${ARGV})
-    string(REGEX REPLACE "^.+[.]([1-9]).gz" "\\1" _mansect ${_man})
-    install(FILES ${_man} DESTINATION "${CMAKE_INSTALL_MANDIR}/man${_mansect}")
-  endforeach (_man)
-endmacro(INSTALL_MAN __mans)
-
 find_program(GZIP_EXECUTABLE
   NAMES gzip
   DOC "Will gzip the man pages")
-
 mark_as_advanced(GZIP_EXECUTABLE)
 
-if (GZIP_EXECUTABLE)
+if(GZIP_EXECUTABLE)
   # Create the doc output directory
   file(MAKE_DIRECTORY ${DOC_BINARY_DIR})
 
@@ -59,6 +51,4 @@ if (GZIP_EXECUTABLE)
   endforeach ()
 
   add_custom_target(man ALL DEPENDS ${MAN_FILES})
-
-  INSTALL_MAN(${MAN_FILES})
-endif ()
+endif()

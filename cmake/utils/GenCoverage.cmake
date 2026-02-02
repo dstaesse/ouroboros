@@ -57,8 +57,8 @@ function(create_informational_target)
   )
 endfunction()
 
-macro(create_coverage_target)
-  if(HAVE_GCOV AND ENABLE_COVERAGE)
+function(create_coverage_target)
+  if(HAVE_GCOV AND NOT DISABLE_COVERAGE)
     get_html_coverage_commands(HTML_COVERAGE_COMMANDS)
 
     add_custom_target(coverage
@@ -91,4 +91,4 @@ macro(create_coverage_target)
       "Coverage not available"
     )
   endif()
-endmacro()
+endfunction()

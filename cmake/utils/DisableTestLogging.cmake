@@ -1,22 +1,11 @@
-set(DISABLE_TESTS_LOGGING TRUE CACHE BOOL "Disable Ouroboros log output in tests")
-if (DISABLE_TESTS_LOGGING)
-  message(STATUS "Ouroboros logging in test output disabled")
-else ()
-  message(STATUS "Ouroboros logging in test output enabled")
-endif ()
-
-set(DISABLE_TESTS_CORE_DUMPS TRUE CACHE BOOL "Enable core dumps for tests (useful for debugging)")
-if (DISABLE_TESTS_CORE_DUMPS)
-  message(STATUS "Core dumps in tests enabled")
-else ()
-  message(STATUS "Core dumps in tests disabled")
-endif ()
+# Macro to apply test logging settings to a target
+# Configuration options are in cmake/config/tests.cmake
 
 macro(disable_test_logging_for_target target)
-  if (DISABLE_TESTS_LOGGING)
+  if(DISABLE_TESTS_LOGGING)
     target_compile_definitions(${target} PRIVATE OUROBOROS_DISABLE_LOGGING)
-  endif ()
-  if (DISABLE_TESTS_CORE_DUMPS)
+  endif()
+  if(DISABLE_TESTS_CORE_DUMPS)
     target_compile_definitions(${target} PRIVATE DISABLE_TESTS_CORE_DUMPS)
-  endif ()
+  endif()
 endmacro()

@@ -1,6 +1,0 @@
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  add_executable(ovpn "${TOOLS_SOURCE_DIR}/ovpn/ovpn.c")
-  target_include_directories(ovpn PRIVATE ${TOOLS_INCLUDE_DIRS})
-  target_link_libraries(ovpn PUBLIC ouroboros-dev)
-  install(TARGETS ovpn RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif ()

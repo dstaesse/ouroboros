@@ -1,7 +1,6 @@
 set(HEADERS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/include/ouroboros")
 
-set(SOCK_BUF_SIZE 10240 CACHE STRING
-    "Size of the buffer used by the UNIX sockets for local IPC")
+# SOCK_BUF_SIZE is in cmake/config/global.cmake
 
 configure_file("${CMAKE_SOURCE_DIR}/include/ouroboros/version.h.in"
   "${CMAKE_BINARY_DIR}/include/ouroboros/version.h" @ONLY)
@@ -22,7 +21,4 @@ set(PUBLIC_HEADER_FILES
   ${HEADERS_SOURCE_DIR}/proto.h
   ${HEADERS_SOURCE_DIR}/qos.h
   ${CMAKE_BINARY_DIR}/include/ouroboros/version.h
-  )
-
-install(FILES ${PUBLIC_HEADER_FILES}
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ouroboros)
+)

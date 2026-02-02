@@ -1,0 +1,23 @@
+# Ouroboros CMake Package Configuration
+#
+# This file allows other CMake projects to find and use Ouroboros libraries
+# via find_package(Ouroboros).
+#
+# Exported targets:
+#   Ouroboros::dev - Development library (libouroboros-dev)
+#   Ouroboros::irm - IRM management library (libouroboros-irm)
+#
+# Example usage:
+#   find_package(Ouroboros REQUIRED)
+#   target_link_libraries(myapp Ouroboros::dev)
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Required dependencies for Ouroboros libraries
+find_dependency(Threads)
+
+include("${CMAKE_CURRENT_LIST_DIR}/OuroborosTargets.cmake")
+
+check_required_components(Ouroboros)

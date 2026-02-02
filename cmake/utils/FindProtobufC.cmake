@@ -1,22 +1,22 @@
-function(PROTOBUF_GENERATE_C SRCS HDRS)
-  if (NOT ARGN)
-    message(SEND_ERROR "Error: PROTOBUF_GENERATE_C() called without any proto files")
+function(protobuf_generate_c SRCS HDRS)
+  if(NOT ARGN)
+    message(SEND_ERROR "Error: protobuf_generate_c() called without any proto files")
     return()
-  endif ()
+  endif()
 
-  if (PROTOBUF_GENERATE_C_APPEND_PATH)
+  if(PROTOBUF_GENERATE_C_APPEND_PATH)
     # Create an include path for each file specified
     foreach (FIL ${ARGN})
       get_filename_component(ABS_FIL ${FIL} ABSOLUTE)
       get_filename_component(ABS_PATH ${ABS_FIL} PATH)
       list(FIND _protobuf_include_path ${ABS_PATH} _contains_already)
-      if (${_contains_already} EQUAL -1)
+      if(${_contains_already} EQUAL -1)
         list(APPEND _protobuf_include_path -I ${ABS_PATH})
-      endif ()
+      endif()
     endforeach ()
-  else ()
+  else()
     set(_protobuf_include_path -I ${CMAKE_CURRENT_SOURCE_DIR})
-  endif ()
+  endif()
 
   set(${SRCS})
   set(${HDRS})
@@ -42,33 +42,37 @@ function(PROTOBUF_GENERATE_C SRCS HDRS)
   set(${HDRS} ${${HDRS}} PARENT_SCOPE)
 endfunction()
 
-# By default have PROTOBUF_GENERATE_C macro pass -I to protoc
+# By default have protobuf_generate_c function pass -I to protoc
 # for each directory where a proto file is referenced.
-if (NOT DEFINED PROTOBUF_GENERATE_C_APPEND_PATH)
+if(NOT DEFINED PROTOBUF_GENERATE_C_APPEND_PATH)
   set(PROTOBUF_GENERATE_C_APPEND_PATH TRUE)
-endif ()
+endif()
 
-# Find library
 find_library(PROTOBUF_C_LIBRARY
   NAMES libprotobuf-c.so libprotobuf-c libprotobuf-c.dylib
   )
 mark_as_advanced(PROTOBUF_C_LIBRARY)
 
-# Find the include directory
 find_path(PROTOBUF_C_INCLUDE_DIR
   google/protobuf-c/protobuf-c.h
   )
 mark_as_advanced(PROTOBUF_C_INCLUDE_DIR)
 
-# Find the protoc-c Executable
 find_program(PROTOBUF_PROTOC_C_EXECUTABLE
   NAMES protoc protoc-c
   DOC "The Google Protocol Buffers C Compiler"
   )
 mark_as_advanced(PROTOBUF_PROTOC_C_EXECUTABLE)
 
-find_package(PackageHandleStandardArgs)
+include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(ProtobufC DEFAULT_MSG
   PROTOBUF_C_LIBRARY PROTOBUF_C_INCLUDE_DIR PROTOBUF_PROTOC_C_EXECUTABLE)
 
 set(PROTOBUF_C_INCLUDE_DIRS ${PROTOBUF_C_INCLUDE_DIR})
+
+if(ProtobufC_FOUND AND NOT TARGET ProtobufC::ProtobufC)
+  add_library(ProtobufC::ProtobufC UNKNOWN IMPORTED)
+  set_target_properties(ProtobufC::ProtobufC PROPERTIES
+    IMPORTED_LOCATION "${PROTOBUF_C_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${PROTOBUF_C_INCLUDE_DIR}")
+endif()

@@ -28,20 +28,4 @@ target_link_libraries(${PARENT_DIR}_test ouroboros-common)
 
 add_dependencies(build_tests ${PARENT_DIR}_test)
 
-set(tests_to_run ${${PARENT_DIR}_tests})
-if(CMAKE_VERSION VERSION_LESS "3.29.0")
-  remove(tests_to_run test_suite.c)
-else ()
-  list(POP_FRONT tests_to_run)
-endif()
-
-foreach (test ${tests_to_run})
-  get_filename_component(test_name ${test} NAME_WE)
-  add_test(${TEST_PREFIX}/${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${PARENT_DIR}_test ${test_name})
-endforeach (test)
-
-set_property(TEST ${TEST_PREFIX}/auth_test PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/auth_test_pqc PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/crypt_test PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/kex_test PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/kex_test_pqc PROPERTY SKIP_RETURN_CODE 1)
+ouroboros_register_tests(TARGET ${PARENT_DIR}_test TESTS ${${PARENT_DIR}_tests})

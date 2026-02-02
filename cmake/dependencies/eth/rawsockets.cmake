@@ -1,0 +1,12 @@
+# Raw sockets support (Linux only)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(DISABLE_RAW_SOCKETS FALSE CACHE BOOL
+    "Disable raw socket support for Ethernet IPCPs")
+  if(NOT DISABLE_RAW_SOCKETS)
+    message(STATUS "Raw socket support for Ethernet IPCPs enabled")
+    set(HAVE_RAW_SOCKETS TRUE)
+  else()
+    message(STATUS "Raw socket support for Ethernet IPCPs disabled by user")
+    unset(HAVE_RAW_SOCKETS)
+  endif()
+endif()

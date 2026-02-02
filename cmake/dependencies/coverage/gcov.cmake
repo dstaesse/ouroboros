@@ -1,0 +1,21 @@
+include(utils/CompilerUtils)
+
+find_program(GCOV_PATH gcov)
+
+if(GCOV_PATH)
+  set(HAVE_GCOV TRUE CACHE INTERNAL "gcov coverage tool available")
+  set(DISABLE_COVERAGE ON CACHE BOOL "Disable code coverage analysis")
+  if(DISABLE_COVERAGE)
+    message(STATUS "gcov found - coverage analysis available (disabled by user)")
+  else()
+    message(STATUS "Code coverage analysis enabled")
+    test_and_set_c_compiler_flag_global(-g)
+    test_and_set_c_compiler_flag_global(--coverage)
+    add_link_options(--coverage)
+  endif()
+else()
+  set(HAVE_GCOV FALSE CACHE INTERNAL "gcov coverage tool available")
+  message(STATUS "gcov not found - coverage analysis not available")
+endif()
+
+mark_as_advanced(GCOV_PATH)

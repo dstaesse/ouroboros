@@ -1,0 +1,55 @@
+# Try pkg-config first, fall back to find_library
+if(PkgConfig_FOUND)
+  pkg_check_modules(LIBGCRYPT QUIET IMPORTED_TARGET libgcrypt>=1.7.0)
+  if(LIBGCRYPT_FOUND AND NOT TARGET Gcrypt::Gcrypt)
+    add_library(Gcrypt::Gcrypt ALIAS PkgConfig::LIBGCRYPT)
+  endif()
+endif()
+
+if(NOT LIBGCRYPT_FOUND)
+  find_library(LIBGCRYPT_LIBRARIES gcrypt QUIET)
+  if(LIBGCRYPT_LIBRARIES)
+    find_path(LIBGCRYPT_INCLUDE_DIR gcrypt.h
+              HINTS /usr/include /usr/local/include)
+    if(LIBGCRYPT_INCLUDE_DIR)
+      file(STRINGS ${LIBGCRYPT_INCLUDE_DIR}/gcrypt.h GCSTR
+        REGEX "^#define GCRYPT_VERSION ")
+      string(REGEX REPLACE "^#define GCRYPT_VERSION \"(.*)\".*$" "\\1"
+        LIBGCRYPT_VERSION "${GCSTR}")
+      if(NOT LIBGCRYPT_VERSION VERSION_LESS "1.7.0")
+        set(LIBGCRYPT_FOUND TRUE)
+        if(NOT TARGET Gcrypt::Gcrypt)
+          add_library(Gcrypt::Gcrypt UNKNOWN IMPORTED)
+          set_target_properties(Gcrypt::Gcrypt PROPERTIES
+            IMPORTED_LOCATION "${LIBGCRYPT_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBGCRYPT_INCLUDE_DIR}")
+        endif()
+      endif()
+    endif()
+  endif()
+endif()
+
+if(LIBGCRYPT_FOUND)
+  set(DISABLE_LIBGCRYPT FALSE CACHE BOOL "Disable libgcrypt support")
+  if(NOT DISABLE_LIBGCRYPT)
+    if(LIBGCRYPT_VERSION)
+      message(STATUS "libgcrypt support enabled (version ${LIBGCRYPT_VERSION})")
+    else()
+      message(STATUS "libgcrypt support enabled")
+    endif()
+    set(HAVE_LIBGCRYPT TRUE CACHE INTERNAL "libgcrypt cryptography support available")
+  else()
+    message(STATUS "libgcrypt support disabled by user")
+    unset(HAVE_LIBGCRYPT CACHE)
+  endif()
+else()
+  message(STATUS "Install libgcrypt >= 1.7.0 to enable libgcrypt support")
+  unset(HAVE_LIBGCRYPT CACHE)
+endif()
+
+if(NOT HAVE_LIBGCRYPT)
+  set(LIBGCRYPT_LIBRARIES "")
+  set(LIBGCRYPT_INCLUDE_DIR "")
+endif()
+
+mark_as_advanced(LIBGCRYPT_LIBRARIES LIBGCRYPT_INCLUDE_DIR)

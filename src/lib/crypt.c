@@ -20,6 +20,10 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
+#if defined(__linux__) || defined(__CYGWIN__)
+#define _DEFAULT_SOURCE
+#endif
+
 #include <config.h>
 
 #include <ouroboros/errno.h>

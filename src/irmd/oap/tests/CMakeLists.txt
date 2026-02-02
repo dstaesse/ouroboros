@@ -1,5 +1,5 @@
-get_filename_component(tmp ".." ABSOLUTE)
-get_filename_component(src_folder "${tmp}" NAME)
+get_filename_component(PARENT_PATH ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
+get_filename_component(PARENT_DIR ${PARENT_PATH} NAME)
 
 get_filename_component(OAP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 get_filename_component(OAP_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}" DIRECTORY)
@@ -8,12 +8,12 @@ get_filename_component(IRMD_BINARY_DIR "${OAP_BINARY_DIR}" DIRECTORY)
 
 compute_test_prefix()
 
-create_test_sourcelist(${src_folder}_tests test_suite.c
+create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   # Add new tests here
   oap_test.c
 )
 
-create_test_sourcelist(${src_folder}_pqc_tests test_suite_pqc.c
+create_test_sourcelist(${PARENT_DIR}_pqc_tests test_suite_pqc.c
   # PQC-specific tests
   oap_test_pqc.c
 )
@@ -29,59 +29,36 @@ set(OAP_TEST_SOURCES
 )
 
 # Regular test executable (ECDSA)
-add_executable(${src_folder}_test ${${src_folder}_tests} ${OAP_TEST_SOURCES})
+add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests} ${OAP_TEST_SOURCES})
 set_source_files_properties(${OAP_TEST_SOURCES}
   PROPERTIES COMPILE_DEFINITIONS "OAP_TEST_MODE"
 )
 
-disable_test_logging_for_target(${src_folder}_test)
-target_link_libraries(${src_folder}_test ouroboros-irm)
-target_include_directories(${src_folder}_test PRIVATE
+disable_test_logging_for_target(${PARENT_DIR}_test)
+target_link_libraries(${PARENT_DIR}_test ouroboros-irm)
+target_include_directories(${PARENT_DIR}_test PRIVATE
   ${IRMD_SOURCE_DIR}
   ${IRMD_BINARY_DIR}
 )
 
 # PQC test executable (ML-DSA)
-add_executable(${src_folder}_pqc_test ${${src_folder}_pqc_tests} ${OAP_TEST_SOURCES})
+add_executable(${PARENT_DIR}_pqc_test ${${PARENT_DIR}_pqc_tests} ${OAP_TEST_SOURCES})
 set_source_files_properties(${OAP_TEST_SOURCES}
-  TARGET_DIRECTORY ${src_folder}_pqc_test
+  TARGET_DIRECTORY ${PARENT_DIR}_pqc_test
   PROPERTIES COMPILE_DEFINITIONS "OAP_TEST_MODE"
 )
 
-disable_test_logging_for_target(${src_folder}_pqc_test)
-target_link_libraries(${src_folder}_pqc_test ouroboros-irm)
-target_include_directories(${src_folder}_pqc_test PRIVATE
+disable_test_logging_for_target(${PARENT_DIR}_pqc_test)
+target_link_libraries(${PARENT_DIR}_pqc_test ouroboros-irm)
+target_include_directories(${PARENT_DIR}_pqc_test PRIVATE
   ${IRMD_SOURCE_DIR}
   ${IRMD_BINARY_DIR}
 )
 
-add_dependencies(build_tests ${src_folder}_test ${src_folder}_pqc_test)
+add_dependencies(build_tests ${PARENT_DIR}_test ${PARENT_DIR}_pqc_test)
 
 # Regular tests
-set(tests_to_run ${${src_folder}_tests})
-if(CMAKE_VERSION VERSION_LESS "3.29.0")
-  remove(tests_to_run test_suite.c)
-else ()
-  list(POP_FRONT tests_to_run)
-endif()
-
-foreach(test ${tests_to_run})
-  get_filename_component(test_name ${test} NAME_WE)
-  add_test(${TEST_PREFIX}/${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${src_folder}_test ${test_name})
-endforeach(test)
+ouroboros_register_tests(TARGET ${PARENT_DIR}_test TESTS ${${PARENT_DIR}_tests})
 
 # PQC tests
-set(pqc_tests_to_run ${${src_folder}_pqc_tests})
-if(CMAKE_VERSION VERSION_LESS "3.29.0")
-  remove(pqc_tests_to_run test_suite_pqc.c)
-else ()
-  list(POP_FRONT pqc_tests_to_run)
-endif()
-
-foreach(test ${pqc_tests_to_run})
-  get_filename_component(test_name ${test} NAME_WE)
-  add_test(${TEST_PREFIX}/${test_name} ${CMAKE_CURRENT_BINARY_DIR}/${src_folder}_pqc_test ${test_name})
-endforeach(test)
-
-set_property(TEST ${TEST_PREFIX}/oap_test PROPERTY SKIP_RETURN_CODE 1)
-set_property(TEST ${TEST_PREFIX}/oap_test_pqc PROPERTY SKIP_RETURN_CODE 1)
+ouroboros_register_tests(TARGET ${PARENT_DIR}_pqc_test TESTS ${${PARENT_DIR}_pqc_tests})

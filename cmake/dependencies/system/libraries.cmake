@@ -1,0 +1,17 @@
+if(NOT APPLE)
+  find_library(LIBRT_LIBRARIES rt)
+  mark_as_advanced(LIBRT_LIBRARIES)
+  if(NOT LIBRT_LIBRARIES)
+    message(FATAL_ERROR "Could not find librt")
+  endif()
+else()
+  set(LIBRT_LIBRARIES "")
+endif()
+
+find_package(Threads REQUIRED)
+
+find_library(LIBM_LIBRARIES m)
+mark_as_advanced(LIBM_LIBRARIES)
+if(NOT LIBM_LIBRARIES)
+  message(FATAL_ERROR "Could not find libm")
+endif()
