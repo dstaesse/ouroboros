@@ -9,9 +9,9 @@ else()
 endif()
 
 set(DISABLE_TESTS_CORE_DUMPS TRUE CACHE BOOL
-  "Enable core dumps for tests (useful for debugging)")
+  "Disable core dumps for tests")
 if(DISABLE_TESTS_CORE_DUMPS)
-  message(STATUS "Core dumps in tests enabled")
-else()
   message(STATUS "Core dumps in tests disabled")
+else()
+  message(STATUS "Core dumps in tests enabled")
 endif()
