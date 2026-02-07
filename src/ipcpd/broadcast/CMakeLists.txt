@@ -1,7 +1,5 @@
 # Broadcast IPCP build configuration
 
-set(IPCP_BROADCAST_TARGET ipcpd-broadcast)
-
 set(BROADCAST_SOURCES
   connmgr.c
   dt.c

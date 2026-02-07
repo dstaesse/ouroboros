@@ -1,5 +1,7 @@
 # Unicast IPCP configuration options for Ouroboros
 
+set(IPCP_UNICAST_TARGET ipcpd-unicast)
+
 set(IPCP_UNICAST_MPL 100 CACHE STRING
   "Default maximum packet lifetime for the Unicast IPCP, in ms")
 set(PFT_SIZE 256 CACHE STRING

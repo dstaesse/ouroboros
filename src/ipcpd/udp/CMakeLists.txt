@@ -1,9 +1,6 @@
 # UDP IPCPs build configuration (UDP4 and UDP6)
 # DDNS detection is in cmake/dependencies/udp/ddns.cmake
 
-set(IPCP_UDP4_TARGET ipcpd-udp4)
-set(IPCP_UDP6_TARGET ipcpd-udp6)
-
 add_executable(${IPCP_UDP4_TARGET} udp4.c ${IPCP_SOURCES})
 add_executable(${IPCP_UDP6_TARGET} udp6.c ${IPCP_SOURCES})
 

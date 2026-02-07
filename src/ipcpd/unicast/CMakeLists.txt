@@ -1,7 +1,5 @@
 # Unicast IPCP build configuration
 
-set(IPCP_UNICAST_TARGET ipcpd-unicast)
-
 protobuf_generate_c(DHT_PROTO_SRCS DHT_PROTO_HDRS
   "${CMAKE_CURRENT_SOURCE_DIR}/dir/dht.proto")
 

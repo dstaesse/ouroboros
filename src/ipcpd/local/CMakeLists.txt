@@ -1,7 +1,5 @@
 # Local IPCP build configuration
 
-set(IPCP_LOCAL_TARGET ipcpd-local)
-
 add_executable(${IPCP_LOCAL_TARGET}
   main.c
   ${IPCP_SOURCES}

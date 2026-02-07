@@ -1,9 +1,6 @@
 # Ethernet IPCPs build configuration (LLC and DIX)
 # HAVE_ETH detection is in cmake/dependencies.cmake
 
-set(IPCP_ETH_LLC_TARGET ipcpd-eth-llc)
-set(IPCP_ETH_DIX_TARGET ipcpd-eth-dix)
-
 add_executable(${IPCP_ETH_LLC_TARGET} llc.c ${IPCP_SOURCES})
 add_executable(${IPCP_ETH_DIX_TARGET} dix.c ${IPCP_SOURCES})
 
