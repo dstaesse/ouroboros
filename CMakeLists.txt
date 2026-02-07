@@ -4,15 +4,6 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 project(ouroboros C)
 
-include(GNUInstallDirs)
-
-include(utils/DebugTargets)
-
-include(version)
-include(package)
-
-include(compiler)
-
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   if(APPLE)
     set(CMAKE_INSTALL_PREFIX "/usr/local" CACHE STRING
@@ -22,6 +13,15 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
       "Installation Prefix" FORCE)
   endif()
 endif()
+
+include(GNUInstallDirs)
+
+include(utils/DebugTargets)
+
+include(version)
+include(package)
+
+include(compiler)
 
 if(APPLE)
   set(CMAKE_MACOSX_RPATH 1)
@@ -46,10 +46,11 @@ if(isSystemDir STREQUAL "-1")
   set(CMAKE_INSTALL_RPATH "${RPATH_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
 endif()
 
+# Configuration options (must be loaded before dependencies)
+include(config/global)
+
 include(dependencies)
 
-# Configuration options (must be loaded before component modules)
-include(config/global)
 include(config/lib)
 include(config/ssm)
 include(config/irmd)
