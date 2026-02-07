@@ -68,7 +68,7 @@ static int test_lazy_distribution(void)
 
         TEST_START();
 
-        pool = ssm_pool_create(0, getgid());
+        pool = ssm_pool_create(getuid(), getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;
@@ -141,7 +141,7 @@ static int test_shard_migration(void)
 
         TEST_START();
 
-        pool = ssm_pool_create(0, getgid());
+        pool = ssm_pool_create(getuid(), getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;
@@ -213,7 +213,7 @@ static int test_fallback_stealing(void)
 
         TEST_START();
 
-        pool = ssm_pool_create(0, getgid());
+        pool = ssm_pool_create(getuid(), getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;
@@ -326,7 +326,7 @@ static int test_multiprocess_sharding(void)
 
         TEST_START();
 
-        pool = ssm_pool_create(0, getgid());
+        pool = ssm_pool_create(getuid(), getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;
@@ -348,7 +348,7 @@ static int test_multiprocess_sharding(void)
                         ssize_t              off;
                         int                  my_shard;
 
-                        child_pool = ssm_pool_open(0);
+                        child_pool = ssm_pool_open(getuid());
                         if (child_pool == NULL)
                                 exit(EXIT_FAILURE);
 
@@ -442,7 +442,7 @@ static int test_exhaustion_with_fallback(void)
 
         TEST_START();
 
-        pool = ssm_pool_create(0, getgid());
+        pool = ssm_pool_create(getuid(), getgid());
         if (pool == NULL) {
                 printf("Failed to create pool.\n");
                 goto fail;

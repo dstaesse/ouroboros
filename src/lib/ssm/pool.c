@@ -477,7 +477,6 @@ static ssize_t alloc_from_sc_b(struct ssm_pool *       pool,
 static char * pool_filename(uid_t uid)
 {
         char * str;
-        char * test_suffix;
         char   base[64];
 
         if (IS_GSPP(uid))
@@ -485,15 +484,7 @@ static char * pool_filename(uid_t uid)
         else
                 snprintf(base, sizeof(base), SSM_PUP_NAME_FMT, (int) uid);
 
-        test_suffix = getenv("OUROBOROS_TEST_POOL_SUFFIX");
-        if (test_suffix != NULL) {
-                str = malloc(strlen(base) + strlen(test_suffix) + 1);
-                if (str == NULL)
-                        return NULL;
-                sprintf(str, "%s%s", base, test_suffix);
-        } else {
-                str = strdup(base);
-        }
+        str = strdup(base);
 
         return str;
 }
@@ -540,6 +531,7 @@ void ssm_pool_destroy(struct ssm_pool * pool)
 static struct ssm_pool * __pool_create(const char * name,
                                        int          flags,
                                        uid_t        uid,
+                                       gid_t        gid,
                                        mode_t       mode)
 {
         struct ssm_pool * pool;
@@ -559,8 +551,14 @@ static struct ssm_pool * __pool_create(const char * name,
         if (fd == -1)
                 goto fail_open;
 
-        if ((flags & O_CREAT) && ftruncate(fd, (off_t) file_size) < 0)
-                goto fail_truncate;
+        if (flags & O_CREAT) {
+                if (ftruncate(fd, (off_t) file_size) < 0)
+                        goto fail_truncate;
+                if (uid != geteuid())
+                        (void) fchown(fd, uid, gid);
+                if (fchmod(fd, mode) < 0)
+                        goto fail_truncate;
+        }
 
         shm_base = mmap(NULL, file_size, MM_FLAGS, MAP_SHARED, fd, 0);
         if (shm_base == MAP_FAILED)
@@ -598,7 +596,6 @@ struct ssm_pool * ssm_pool_create(uid_t uid,
         mode_t              mode;
         pthread_mutexattr_t mattr;
         pthread_condattr_t  cattr;
-        int                 fd;
 
         fn = pool_filename(uid);
         if (fn == NULL)
@@ -607,19 +604,12 @@ struct ssm_pool * ssm_pool_create(uid_t uid,
         mode = IS_GSPP(uid) ? 0660 : 0600;
         mask = umask(0);
 
-        pool = __pool_create(fn, O_CREAT | O_EXCL | O_RDWR, uid, mode);
+        pool = __pool_create(fn, O_CREAT | O_EXCL | O_RDWR, uid, gid, mode);
 
         umask(mask);
 
         if (pool == NULL)
                 goto fail_pool;
-
-        fd = shm_open(fn, O_RDWR, 0);
-        if (fd >= 0) {
-                fchown(fd, uid, gid);
-                fchmod(fd, mode);
-                close(fd);
-        }
 
         if (pthread_mutexattr_init(&mattr))
                 goto fail_mattr;
@@ -676,7 +666,7 @@ struct ssm_pool * ssm_pool_open(uid_t uid)
         if (fn == NULL)
                 return NULL;
 
-        pool = __pool_create(fn, O_RDWR, uid, 0);
+        pool = __pool_create(fn, O_RDWR, uid, 0, 0);
         if (pool != NULL)
                 init_size_classes(pool);
 

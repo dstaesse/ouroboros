@@ -18,5 +18,4 @@ target_link_libraries(${PARENT_DIR}_test ouroboros-common)
 
 add_dependencies(build_tests ${PARENT_DIR}_test)
 
-ouroboros_register_tests(TARGET ${PARENT_DIR}_test TESTS ${${PARENT_DIR}_tests}
-  ENVIRONMENT "OUROBOROS_TEST_POOL_SUFFIX=.test")
+ouroboros_register_tests(TARGET ${PARENT_DIR}_test TESTS ${${PARENT_DIR}_tests})
