@@ -62,9 +62,10 @@ static int test_ssm_pool_basic_allocation(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
-
+        }
         ret = ssm_pool_alloc(pool, POOL_256, &ptr, &spb);
         if (ret < 0) {
                 printf("Alloc failed: %zd.\n", ret);
@@ -120,8 +121,10 @@ static int test_ssm_pool_multiple_allocations(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         ret1 = ssm_pool_alloc(pool, POOL_256, &ptr1, &spb1);
         ret2 = ssm_pool_alloc(pool, POOL_256, &ptr2, &spb2);
@@ -213,8 +216,10 @@ static int test_ssm_pool_no_fallback_for_large(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         ret = ssm_pool_alloc(pool, POOL_2M, &ptr, &spb);
         if (ret >= 0) {
@@ -249,8 +254,10 @@ static int test_ssm_pool_blocking_vs_nonblocking(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         ret = ssm_pool_alloc(pool, POOL_2M, &ptr, &spb);
         if (ret != -EMSGSIZE) {
@@ -296,8 +303,10 @@ static int test_ssm_pool_stress_test(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         indices = malloc(100 * sizeof(*indices));
         if (indices == NULL) {
@@ -393,8 +402,10 @@ static int test_ssm_pool_open_initializes_ssm(void)
         TEST_START();
 
         creator = ssm_pool_create(getuid(), getgid());
-        if (creator == NULL)
+        if (creator == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         ret = ssm_pool_alloc(creator, POOL_256, &ptr, &spb);
         if (ret < 0) {
@@ -440,8 +451,10 @@ static int test_ssm_pool_bounds_checking(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         ret = ssm_pool_alloc(pool, POOL_256, NULL, &spb);
         if (ret < 0) {
@@ -503,8 +516,10 @@ static int test_ssm_pool_inter_process_communication(void)
         len = strlen(msg) + 1;
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         rb = ssm_rbuff_create(getpid(), 1);
         if (rb == NULL) {
@@ -607,8 +622,10 @@ static int test_ssm_pool_read_operation(void)
         len = strlen(data) + 1;
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         idx = ssm_pool_alloc(pool, len, &wptr, &spb);
         if (idx < 0) {
@@ -657,8 +674,10 @@ static int test_ssm_pool_mlock_operation(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         ret = ssm_pool_mlock(pool);
         if (ret < 0)
@@ -691,8 +710,10 @@ static int test_ssm_pk_buff_operations(void)
         dlen = strlen(data);
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         idx = ssm_pool_alloc(pool, POOL_256, &ptr, &spb);
         if (idx < 0) {
@@ -796,8 +817,10 @@ static int test_ssm_pool_size_class_boundaries(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         for (i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
                 struct ssm_pk_buff * hdr;
@@ -857,8 +880,10 @@ static int test_ssm_pool_exhaustion(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         indices = malloc(2048 * sizeof(*indices));
         if (indices == NULL) {
@@ -935,8 +960,10 @@ static int test_ssm_pool_reclaim_orphans(void)
         TEST_START();
 
         pool = ssm_pool_create(getuid(), getgid());
-        if (pool == NULL)
+        if (pool == NULL) {
+                printf("Failed to create pool.\n");
                 goto fail_create;
+        }
 
         my_pid = getpid();
 

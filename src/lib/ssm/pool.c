@@ -476,7 +476,6 @@ static ssize_t alloc_from_sc_b(struct ssm_pool *       pool,
 /* Generate pool filename: uid=0 for GSPP, uid>0 for PUP */
 static char * pool_filename(uid_t uid)
 {
-        char * str;
         char   base[64];
 
         if (IS_GSPP(uid))
@@ -484,9 +483,7 @@ static char * pool_filename(uid_t uid)
         else
                 snprintf(base, sizeof(base), SSM_PUP_NAME_FMT, (int) uid);
 
-        str = strdup(base);
-
-        return str;
+        return strdup(base);
 }
 
 void ssm_pool_close(struct ssm_pool * pool)
@@ -527,7 +524,6 @@ void ssm_pool_destroy(struct ssm_pool * pool)
 }
 
 #define MM_FLAGS (PROT_READ | PROT_WRITE)
-
 static struct ssm_pool * __pool_create(const char * name,
                                        int          flags,
                                        uid_t        uid,
@@ -554,9 +550,7 @@ static struct ssm_pool * __pool_create(const char * name,
         if (flags & O_CREAT) {
                 if (ftruncate(fd, (off_t) file_size) < 0)
                         goto fail_truncate;
-                if (uid != geteuid())
-                        (void) fchown(fd, uid, gid);
-                if (fchmod(fd, mode) < 0)
+                if (uid != geteuid() && fchown(fd, uid, gid) < 0)
                         goto fail_truncate;
         }
 

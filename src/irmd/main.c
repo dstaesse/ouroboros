@@ -24,7 +24,8 @@
 #define _DEFAULT_SOURCE
 #define _GNU_SOURCE
 #else
-#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
 #endif
 
 #include "config.h"
@@ -60,15 +61,19 @@
 #include <dirent.h>
 #include <grp.h>
 #include <pwd.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <signal.h>
+#include <spawn.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <spawn.h>
+#include <sys/un.h>
+#ifdef __APPLE__
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 
 #ifdef HAVE_LIBGCRYPT
 #include <gcrypt.h>

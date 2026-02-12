@@ -150,8 +150,13 @@ bool is_ouroboros_member_uid(uid_t uid)
 {
         struct group *  grp;
         struct passwd * pw;
+#ifdef __APPLE__
+        unsigned int    gid;
+        int *           groups = NULL;
+#else
         gid_t           gid;
         gid_t *         groups = NULL;
+#endif
         int             ngroups;
         int             i;
 
@@ -187,7 +192,11 @@ bool is_ouroboros_member_uid(uid_t uid)
         }
 
         for (i = 0; i < ngroups; i++) {
+#ifdef __APPLE__
+                if (groups[i] == (int) gid) {
+#else
                 if (groups[i] == gid) {
+#endif
                         free(groups);
                         return true;
                 }
