@@ -283,13 +283,6 @@ int oap_cli_prepare(void **                  ctx,
                 goto fail_kex;
         }
 
-        log_dbg_id(s->id.data, "KEX config: algo=%s, mode=%s, cipher=%s.",
-                   s->kcfg.x.str != NULL ? s->kcfg.x.str : "none",
-                   s->kcfg.x.mode == KEM_MODE_CLIENT_ENCAP ? "client-encap" :
-                   s->kcfg.x.mode == KEM_MODE_SERVER_ENCAP ? "server-encap" :
-                   "none",
-                   s->kcfg.c.str != NULL ? s->kcfg.c.str : "none");
-
         oap_hdr_init(&s->local_hdr, s->id, s->kex_buf, data, s->kcfg.c.nid);
 
         if (do_client_kex_prepare(info->name, s) < 0) {

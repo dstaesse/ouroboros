@@ -84,8 +84,6 @@ void reg_pool_ref(struct reg_pool * pool)
         assert(pool->refcount > 0);
 
         pool->refcount++;
-
-        log_dbg("PUP uid %d refcount++ -> %zu.", pool->uid, pool->refcount);
 }
 
 int reg_pool_unref(struct reg_pool * pool)
@@ -94,8 +92,6 @@ int reg_pool_unref(struct reg_pool * pool)
         assert(pool->refcount > 0);
 
         pool->refcount--;
-
-        log_dbg("PUP uid %d refcount-- -> %zu.", pool->uid, pool->refcount);
 
         return pool->refcount == 0 ? 0 : 1;
 }

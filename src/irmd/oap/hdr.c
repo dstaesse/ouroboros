@@ -361,6 +361,7 @@ int oap_hdr_encode(struct oap_hdr *    hdr,
 }
 
 #ifdef DEBUG_PROTO_OAP
+#define OAP_KEX_IS_KEM(hdr) ((hdr)->kex_flags.role | (hdr)->kex_flags.fmt)
 static void debug_oap_hdr(const struct oap_hdr * hdr)
 {
         assert(hdr);
@@ -370,12 +371,20 @@ static void debug_oap_hdr(const struct oap_hdr * hdr)
         else
                 log_proto("  crt: <none>");
 
-        if (hdr->kex.len > 0)
-                log_proto("  Key Exchange Data: [%zu bytes] [%s]",
-                          hdr->kex.len, hdr->kex_flags.role ?
-                                "Client encaps" : "Server encaps");
-        else
-                log_proto("  Ephemeral Public Key: <none>");
+        if (hdr->kex.len > 0) {
+                if (OAP_KEX_IS_KEM(hdr))
+                        log_proto("  Key Exchange Data:"
+                                  " [%zu bytes] [%s]",
+                                  hdr->kex.len,
+                                  hdr->kex_flags.role ?
+                                  "Client encaps" :
+                                  "Server encaps");
+                else
+                        log_proto("  Key Exchange Data:"
+                                  " [%zu bytes]",
+                                  hdr->kex.len);
+        } else
+                log_proto("  Key Exchange Data: <none>");
 
         if (hdr->cipher_str != NULL)
                 log_proto("  Cipher: %s", hdr->cipher_str);
