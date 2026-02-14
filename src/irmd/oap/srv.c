@@ -134,43 +134,70 @@ static int get_algo_from_peer_key(const struct oap_hdr * peer_hdr,
         return 0;
 }
 
-static int negotiate_kex(const struct oap_hdr * peer_hdr,
-                         struct sec_config *    kcfg)
+static int negotiate_cipher(const struct oap_hdr * peer_hdr,
+                            struct sec_config *    kcfg)
 {
         uint8_t * id = peer_hdr->id.data;
+        int       cli_nid;
+        int       cli_rank;
+        int       srv_rank;
 
-        if (kcfg->c.nid == NID_undef) {
-                if (peer_hdr->cipher_str != NULL) {
-                        SET_KEX_CIPHER(kcfg, peer_hdr->cipher_str);
-                        if (kcfg->c.nid == NID_undef) {
-                                log_err_id(id, "Unsupported cipher '%s'.",
-                                           peer_hdr->cipher_str);
-                                return -ENOTSUP;
-                        }
-                        log_dbg_id(id, "Peer requested cipher %s.",
-                                   peer_hdr->cipher_str);
-                } else {
-                        log_err_id(id, "Encryption requested, no cipher.");
-                        return -ECRYPT;
-                }
-        } else {
-                log_dbg_id(id, "Using local cipher %s.", kcfg->c.str);
+        /* Cipher: select the strongest of client and server */
+        cli_nid = peer_hdr->cipher_str != NULL
+                ? (int) crypt_str_to_nid(peer_hdr->cipher_str)
+                : NID_undef;
+
+        if (cli_nid != NID_undef
+            && crypt_cipher_rank(cli_nid) < 0) {
+                log_err_id(id, "Unsupported cipher '%s'.",
+                           peer_hdr->cipher_str);
+                return -ENOTSUP;
         }
 
-        /* Negotiate KDF - server overrides client if configured */
-        if (kcfg->k.nid != NID_undef) {
-                log_dbg_id(id, "Using local KDF %s.",
-                           md_nid_to_str(kcfg->k.nid));
-        } else if (peer_hdr->kdf_nid != NID_undef) {
-                if (md_validate_nid(peer_hdr->kdf_nid) == 0) {
-                        kcfg->k.nid = peer_hdr->kdf_nid;
-                        log_dbg_id(id, "Using peer KDF %s.",
-                                   md_nid_to_str(peer_hdr->kdf_nid));
-                } else {
-                        log_err_id(id, "Unsupported KDF NID %d.",
-                                   peer_hdr->kdf_nid);
-                        return -ENOTSUP;
+        cli_rank = crypt_cipher_rank(cli_nid);
+        srv_rank = crypt_cipher_rank(kcfg->c.nid);
+
+        if (cli_rank > srv_rank) {
+                SET_KEX_CIPHER_NID(kcfg, cli_nid);
+                log_dbg_id(id, "Selected client cipher %s.",
+                           kcfg->c.str);
+        } else if (srv_rank > 0) {
+                log_dbg_id(id, "Selected server cipher %s.",
+                           kcfg->c.str);
+        } else {
+                log_err_id(id, "Encryption requested, no cipher.");
+                return -ECRYPT;
+        }
+
+        /* KDF: select the strongest of client and server */
+        if (peer_hdr->kdf_nid != NID_undef
+            && crypt_kdf_rank(peer_hdr->kdf_nid) < 0) {
+                log_err_id(id, "Unsupported KDF NID %d.",
+                           peer_hdr->kdf_nid);
+                return -ENOTSUP;
+        }
+
+        cli_rank = crypt_kdf_rank(peer_hdr->kdf_nid);
+        srv_rank = crypt_kdf_rank(kcfg->k.nid);
+
+        /*
+         * For client-encap KEM, the KDF is baked into
+         * the ciphertext. The server must use the client's
+         * KDF and can only verify the minimum.
+         */
+        if (OAP_KEX_ROLE(peer_hdr) == KEM_MODE_CLIENT_ENCAP) {
+                if (srv_rank > cli_rank) {
+                        log_err_id(id, "Client KDF too weak.");
+                        return -ECRYPT;
                 }
+                SET_KEX_KDF_NID(kcfg, peer_hdr->kdf_nid);
+        } else if (cli_rank > srv_rank) {
+                SET_KEX_KDF_NID(kcfg, peer_hdr->kdf_nid);
+                log_dbg_id(id, "Selected client KDF %s.",
+                           md_nid_to_str(kcfg->k.nid));
+        } else if (srv_rank > 0) {
+                log_dbg_id(id, "Selected server KDF %s.",
+                           md_nid_to_str(kcfg->k.nid));
         }
 
         if (IS_KEX_ALGO_SET(kcfg))
@@ -305,6 +332,7 @@ int do_server_kex(const struct name_info * info,
                   struct crypt_sk *        sk)
 {
         char      algo_buf[KEX_ALGO_BUFSZ];
+        int       srv_kex_nid;
         uint8_t * id;
 
         id = peer_hdr->id.data;
@@ -318,8 +346,11 @@ int do_server_kex(const struct name_info * info,
                 return 0;
         }
 
-        if (negotiate_kex(peer_hdr, kcfg) < 0)
+        if (negotiate_cipher(peer_hdr, kcfg) < 0)
                 return -ECRYPT;
+
+        /* Save server's configured KEX before overwriting */
+        srv_kex_nid = kcfg->x.nid;
 
         if (OAP_KEX_ROLE(peer_hdr) != KEM_MODE_CLIENT_ENCAP) {
                 /* Server encapsulation or DHE: extract algo from DER PK */
@@ -327,6 +358,14 @@ int do_server_kex(const struct name_info * info,
                         return -ECRYPT;
 
                 SET_KEX_ALGO(kcfg, algo_buf);
+
+                /* Reject if client KEX is weaker than server's */
+                if (crypt_kex_rank(kcfg->x.nid)
+                    < crypt_kex_rank(srv_kex_nid)) {
+                        log_err_id(id, "Client KEX %s too weak.",
+                                   kcfg->x.str);
+                        return -ECRYPT;
+                }
         }
 
         /* Dispatch based on algorithm type */
@@ -368,13 +407,11 @@ int oap_srv_process(const struct name_info * info,
 
         log_dbg("Processing OAP request for %s.", info->name);
 
-        /* Load server credentials */
         if (load_srv_credentials(info, &pkp, &crt) < 0) {
                 log_err("Failed to load security keys for %s.", info->name);
                 goto fail_cred;
         }
 
-        /* Load KEX config */
         if (load_srv_kex_config(info, &kcfg) < 0) {
                 log_err("Failed to load KEX config for %s.", info->name);
                 goto fail_kex;
@@ -392,13 +429,11 @@ int oap_srv_process(const struct name_info * info,
 
         id = peer_hdr.id.data; /* Logging */
 
-        /* Check for replay */
         if (oap_check_hdr(&peer_hdr) < 0) {
                 log_err_id(id, "OAP header failed replay check.");
                 goto fail_auth;
         }
 
-        /* Authenticate client before processing KEX data */
         oap_hdr_init(&local_hdr, peer_hdr.id, kex_buf, *data, NID_undef);
 
         if (oap_auth_peer(cli_name, &local_hdr, &peer_hdr) < 0) {
@@ -409,11 +444,15 @@ int oap_srv_process(const struct name_info * info,
         if (do_server_kex(info, &peer_hdr, &kcfg, &local_hdr.kex, sk) < 0)
                 goto fail_kex;
 
+        /* Update cipher NID after negotiation */
+        sk->nid = kcfg.c.nid;
+
         /* Build response header with hash of client request */
         local_hdr.nid = sk->nid;
 
         /* Use client's md_nid, defaulting to SHA-384 for PQC */
-        req_md_nid = peer_hdr.md_nid != NID_undef ? peer_hdr.md_nid : NID_sha384;
+        req_md_nid = peer_hdr.md_nid != NID_undef ?
+                     peer_hdr.md_nid : NID_sha384;
 
         /* Compute request hash using client's md_nid */
         hash_ret = md_digest(req_md_nid, req_buf, hash_buf);

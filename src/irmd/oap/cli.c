@@ -439,9 +439,15 @@ static int do_client_kex_complete(struct oap_cli_ctx *   s,
 {
         struct sec_config * kcfg = &s->kcfg;
         uint8_t *           id   = s->id.data;
+        int                 cipher_nid;
+        int                 kdf_nid;
 
         if (!IS_KEX_ALGO_SET(kcfg))
                 return 0;
+
+        /* Save client's configured minimums */
+        cipher_nid = kcfg->c.nid;
+        kdf_nid    = kcfg->k.nid;
 
         /* Accept server's cipher choice */
         if (peer_hdr->cipher_str == NULL) {
@@ -456,7 +462,28 @@ static int do_client_kex_complete(struct oap_cli_ctx *   s,
                 return -ENOTSUP;
         }
 
-        log_dbg_id(id, "Accepted server cipher %s.", peer_hdr->cipher_str);
+        /* Verify server cipher >= client's minimum */
+        if (crypt_cipher_rank(kcfg->c.nid) < crypt_cipher_rank(cipher_nid)) {
+                log_err_id(id, "Server cipher %s too weak.",
+                           peer_hdr->cipher_str);
+                return -ECRYPT;
+        }
+
+        log_dbg_id(id, "Accepted server cipher %s.",
+                   peer_hdr->cipher_str);
+
+        /* Accept server's KDF for non-client-encap modes */
+        if (kcfg->x.mode != KEM_MODE_CLIENT_ENCAP
+            && peer_hdr->kdf_nid != NID_undef) {
+                if (crypt_kdf_rank(peer_hdr->kdf_nid)
+                    < crypt_kdf_rank(kdf_nid)) {
+                        log_err_id(id, "Server KDF too weak.");
+                        return -ECRYPT;
+                }
+                SET_KEX_KDF_NID(kcfg, peer_hdr->kdf_nid);
+                log_dbg_id(id, "Accepted server KDF %s.",
+                           md_nid_to_str(kcfg->k.nid));
+        }
 
         /* Derive shared secret */
         if (IS_KEM_ALGORITHM(kcfg->x.str))

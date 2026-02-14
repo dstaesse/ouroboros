@@ -276,6 +276,12 @@ const char *       crypt_nid_to_str(uint16_t nid);
 
 uint16_t           crypt_str_to_nid(const char * cipher);
 
+int                crypt_cipher_rank(int nid);
+
+int                crypt_kdf_rank(int nid);
+
+int                crypt_kex_rank(int nid);
+
 int                md_validate_nid(int nid);
 
 const char *       md_nid_to_str(uint16_t nid);

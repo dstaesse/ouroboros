@@ -56,15 +56,16 @@ static const struct nid_map cipher_nid_map[] = {
         {NID_undef,             NULL}
 };
 
+/* Ordered in strength preference, lowest first */
 const uint16_t crypt_supported_nids[] = {
 #ifdef HAVE_OPENSSL
+        NID_aes_128_ctr,
+        NID_aes_192_ctr,
+        NID_aes_256_ctr,
         NID_aes_128_gcm,
         NID_aes_192_gcm,
         NID_aes_256_gcm,
         NID_chacha20_poly1305,
-        NID_aes_128_ctr,
-        NID_aes_192_ctr,
-        NID_aes_256_ctr,
 #endif
         NID_undef
 };
@@ -86,16 +87,17 @@ static const struct nid_map kex_nid_map[] = {
         {NID_undef,            NULL}
 };
 
+/* Ordered in strength preference, lowest first */
 const uint16_t kex_supported_nids[] = {
 #ifdef HAVE_OPENSSL
-        NID_X9_62_prime256v1,
-        NID_secp384r1,
-        NID_secp521r1,
-        NID_X25519,
-        NID_X448,
         NID_ffdhe2048,
+        NID_X9_62_prime256v1,
+        NID_X25519,
         NID_ffdhe3072,
+        NID_secp384r1,
         NID_ffdhe4096,
+        NID_X448,
+        NID_secp521r1,
 #ifdef HAVE_OPENSSL_PQC
         NID_MLKEM512,
         NID_MLKEM768,
@@ -119,16 +121,17 @@ static const struct nid_map md_nid_map[] = {
         {NID_undef,      NULL}
 };
 
+/* Ordered in strength preference, lowest first */
 const uint16_t md_supported_nids[] = {
 #ifdef HAVE_OPENSSL
-        NID_sha256,
-        NID_sha384,
-        NID_sha512,
-        NID_sha3_256,
-        NID_sha3_384,
-        NID_sha3_512,
-        NID_blake2b512,
         NID_blake2s256,
+        NID_sha256,
+        NID_sha3_256,
+        NID_sha384,
+        NID_sha3_384,
+        NID_blake2b512,
+        NID_sha512,
+        NID_sha3_512,
 #endif
         NID_undef
 };
@@ -542,6 +545,51 @@ int md_validate_nid(int nid)
         }
 
         return -ENOTSUP;
+}
+
+int crypt_cipher_rank(int nid)
+{
+        int i;
+
+        if (nid == NID_undef)
+                return 0;
+
+        for (i = 0; crypt_supported_nids[i] != NID_undef; i++) {
+                if ((int) crypt_supported_nids[i] == nid)
+                        return i + 1;
+        }
+
+        return -1;
+}
+
+int crypt_kdf_rank(int nid)
+{
+        int i;
+
+        if (nid == NID_undef)
+                return 0;
+
+        for (i = 0; md_supported_nids[i] != NID_undef; i++) {
+                if ((int) md_supported_nids[i] == nid)
+                        return i + 1;
+        }
+
+        return -1;
+}
+
+int crypt_kex_rank(int nid)
+{
+        int i;
+
+        if (nid == NID_undef)
+                return 0;
+
+        for (i = 0; kex_supported_nids[i] != NID_undef; i++) {
+                if ((int) kex_supported_nids[i] == nid)
+                        return i + 1;
+        }
+
+        return -1;
 }
 
 /* Hash length now returned by md_digest() */

@@ -974,7 +974,7 @@ int openssl_encrypt(struct ossl_crypt_ctx * ctx,
         if (random_buffer(iv, ctx->ivsz) < 0)
                 goto fail_encrypt;
 
-        /* Set IV bit 7 to current key phase (bit KEY_ROTATION_BIT of counter) */
+        /* Set IV bit 7 to current key phase (KEY_ROTATION_BIT of counter) */
         if (ctx->rot.cntr & ctx->rot.mask)
                 iv[0] |= 0x80;
         else

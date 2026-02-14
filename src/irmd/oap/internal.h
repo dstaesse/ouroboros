@@ -34,24 +34,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/*
- * Authentication functions (auth.c)
- */
 int  oap_check_hdr(const struct oap_hdr * hdr);
 
 int  oap_auth_peer(char *                 name,
                    const struct oap_hdr * local_hdr,
                    const struct oap_hdr * peer_hdr);
 
-/*
- * Key exchange functions (kex.c)
- */
 int  oap_negotiate_cipher(const struct oap_hdr * peer_hdr,
                           struct sec_config *    kcfg);
 
-/*
- * Credential loading (oap.c) - shared between client and server
- */
 #ifndef OAP_TEST_MODE
 int  load_credentials(const char *                  name,
                       const struct name_sec_paths * paths,
@@ -63,9 +54,6 @@ int  load_kex_config(const char *        name,
                      struct sec_config * cfg);
 #endif
 
-/*
- * Server functions (srv.c)
- */
 #ifndef OAP_TEST_MODE
 int  load_srv_credentials(const struct name_info * info,
                           void **                  pkp,
@@ -94,9 +82,6 @@ int  do_server_kex(const struct name_info * info,
                    buffer_t *               kex,
                    struct crypt_sk *        sk);
 
-/*
- * Client functions (cli.c)
- */
 #ifndef OAP_TEST_MODE
 int  load_cli_credentials(const struct name_info * info,
                           void **                  pkp,

@@ -73,8 +73,8 @@
 #   sha3-256            SHA3-256
 #   sha3-384            SHA3-384
 #   sha3-512            SHA3-512
-#   blake2b512          BLAKE2b-512 (requires OpenSSL 1.1.0+)
-#   blake2s256          BLAKE2s-256 (requires OpenSSL 1.1.0+)
+#   blake2b512          BLAKE2b-512
+#   blake2s256          BLAKE2s-256
 #
 # KEM Mode (kem_mode=):
 # ---------------------

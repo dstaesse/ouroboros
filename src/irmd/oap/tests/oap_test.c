@@ -536,7 +536,7 @@ static int test_oap_roundtrip_all(void)
         return ret;
 }
 
-/* Cipher negotiation - client should accept server's chosen cipher */
+/* Cipher negotiation - strongest cipher and KDF are selected */
 static int test_oap_cipher_mismatch(void)
 {
         struct oap_test_ctx ctx;
@@ -545,14 +545,139 @@ static int test_oap_cipher_mismatch(void)
 
         memset(&test_cfg, 0, sizeof(test_cfg));
 
-        /* Server: ChaCha20-Poly1305, SHA3-256, SHA-384 */
+        /* Server: AES-128-GCM, SHA-256 */
         test_cfg.srv.kex    = NID_X25519;
-        test_cfg.srv.cipher = NID_chacha20_poly1305;
-        test_cfg.srv.kdf    = NID_sha3_256;
-        test_cfg.srv.md     = NID_sha384;
+        test_cfg.srv.cipher = NID_aes_128_gcm;
+        test_cfg.srv.kdf    = NID_sha256;
+        test_cfg.srv.md     = NID_sha256;
         test_cfg.srv.auth   = AUTH;
 
-        /* Client: AES-256-GCM, SHA-256, SHA-256 */
+        /* Client: AES-256-GCM, SHA-512 */
+        test_cfg.cli.kex    = NID_X25519;
+        test_cfg.cli.cipher = NID_aes_256_gcm;
+        test_cfg.cli.kdf    = NID_sha512;
+        test_cfg.cli.md     = NID_sha256;
+        test_cfg.cli.auth   = NO_AUTH;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* Verify: both should have the strongest cipher */
+        if (ctx.srv.nid != NID_aes_256_gcm) {
+                printf("Server cipher mismatch: expected %s, got %s\n",
+                       crypt_nid_to_str(NID_aes_256_gcm),
+                       crypt_nid_to_str(ctx.srv.nid));
+                goto fail_cleanup;
+        }
+
+        if (ctx.cli.nid != NID_aes_256_gcm) {
+                printf("Client cipher mismatch: expected %s, got %s\n",
+                       crypt_nid_to_str(NID_aes_256_gcm),
+                       crypt_nid_to_str(ctx.cli.nid));
+                goto fail_cleanup;
+        }
+
+        /* Parse response header to check negotiated KDF */
+        if (ctx.resp_hdr.len > 26) {
+                uint16_t resp_kdf_nid;
+                /* KDF NID at offset 26: ID(16) + ts(8) + cipher(2) */
+                resp_kdf_nid = ntoh16(*(uint16_t *)(ctx.resp_hdr.data + 26));
+
+                if (resp_kdf_nid != NID_sha512) {
+                        printf("Response KDF mismatch: expected %s, got %s\n",
+                               md_nid_to_str(NID_sha512),
+                               md_nid_to_str(resp_kdf_nid));
+                        goto fail_cleanup;
+                }
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Server encryption, client none: server rejects (no KEX data) */
+static int test_oap_srv_enc_cli_none(void)
+{
+        struct oap_test_ctx ctx;
+
+        TEST_START();
+
+        memset(&test_cfg, 0, sizeof(test_cfg));
+
+        /* Server: encryption configured */
+        test_cfg.srv.kex    = NID_X25519;
+        test_cfg.srv.cipher = NID_aes_256_gcm;
+        test_cfg.srv.kdf    = NID_sha256;
+        test_cfg.srv.md     = NID_sha256;
+        test_cfg.srv.auth   = AUTH;
+
+        /* Client: no encryption */
+        test_cfg.cli.md     = NID_sha256;
+        test_cfg.cli.auth   = NO_AUTH;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* Server should reject: KEX required but client sent none */
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server should have rejected.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Client encryption, server none: use client settings */
+static int test_oap_cli_enc_srv_none(void)
+{
+        struct oap_test_ctx ctx;
+
+        TEST_START();
+
+        memset(&test_cfg, 0, sizeof(test_cfg));
+
+        /* Server: no encryption configured */
+        test_cfg.srv.md     = NID_sha256;
+        test_cfg.srv.auth   = AUTH;
+
+        /* Client: encryption configured */
         test_cfg.cli.kex    = NID_X25519;
         test_cfg.cli.cipher = NID_aes_256_gcm;
         test_cfg.cli.kdf    = NID_sha256;
@@ -577,33 +702,130 @@ static int test_oap_cipher_mismatch(void)
                 goto fail_cleanup;
         }
 
-        /* Verify: both should have the server's chosen cipher and KDF */
-        if (ctx.srv.nid != test_cfg.srv.cipher) {
-                printf("Server cipher mismatch: expected %s, got %s\n",
-                       crypt_nid_to_str(test_cfg.srv.cipher),
-                       crypt_nid_to_str(ctx.srv.nid));
+        if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
+                printf("Key mismatch.\n");
                 goto fail_cleanup;
         }
 
-        if (ctx.cli.nid != test_cfg.srv.cipher) {
-                printf("Client cipher mismatch: expected %s, got %s\n",
-                       crypt_nid_to_str(test_cfg.srv.cipher),
+        if (ctx.cli.nid != NID_aes_256_gcm) {
+                printf("Expected %s, got %s.\n",
+                       crypt_nid_to_str(NID_aes_256_gcm),
                        crypt_nid_to_str(ctx.cli.nid));
                 goto fail_cleanup;
         }
 
-        /* Parse response header to check negotiated KDF */
-        if (ctx.resp_hdr.len > 26) {
-                uint16_t resp_kdf_nid;
-                /* KDF NID at offset 26: ID(16) + ts(8) + cipher(2) */
-                resp_kdf_nid = ntoh16(*(uint16_t *)(ctx.resp_hdr.data + 26));
+        if (ctx.srv.nid != NID_aes_256_gcm) {
+                printf("Expected %s, got %s.\n",
+                       crypt_nid_to_str(NID_aes_256_gcm),
+                       crypt_nid_to_str(ctx.srv.nid));
+                goto fail_cleanup;
+        }
 
-                if (resp_kdf_nid != test_cfg.srv.kdf) {
-                        printf("Response KDF mismatch: expected %s, got %s\n",
-                               md_nid_to_str(test_cfg.srv.kdf),
-                               md_nid_to_str(resp_kdf_nid));
-                        goto fail_cleanup;
-                }
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Client rejects server response with downgraded cipher */
+static int test_oap_cli_rejects_downgrade(void)
+{
+        struct oap_test_ctx ctx;
+        uint16_t            weak;
+
+        TEST_START();
+
+        memset(&test_cfg, 0, sizeof(test_cfg));
+
+        test_cfg.srv.kex    = NID_X25519;
+        test_cfg.srv.cipher = NID_aes_256_gcm;
+        test_cfg.srv.kdf    = NID_sha256;
+        test_cfg.srv.md     = NID_sha256;
+        test_cfg.srv.auth   = AUTH;
+
+        test_cfg.cli.kex    = NID_X25519;
+        test_cfg.cli.cipher = NID_aes_256_gcm;
+        test_cfg.cli.kdf    = NID_sha256;
+        test_cfg.cli.md     = NID_sha256;
+        test_cfg.cli.auth   = NO_AUTH;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* Tamper: replace cipher NID with weaker one */
+        weak = hton16(NID_aes_128_ctr);
+        memcpy(ctx.resp_hdr.data + OAP_CIPHER_NID_OFFSET,
+               &weak, sizeof(weak));
+
+        /* Client should reject the downgraded cipher */
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client accepted downgrade.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Server rejects client with weaker KEX algorithm */
+static int test_oap_srv_rejects_weak_kex(void)
+{
+        struct oap_test_ctx ctx;
+
+        TEST_START();
+
+        memset(&test_cfg, 0, sizeof(test_cfg));
+
+        /* Server: secp521r1 (strong) */
+        test_cfg.srv.kex    = NID_secp521r1;
+        test_cfg.srv.cipher = NID_aes_256_gcm;
+        test_cfg.srv.kdf    = NID_sha256;
+        test_cfg.srv.md     = NID_sha256;
+        test_cfg.srv.auth   = AUTH;
+
+        /* Client: ffdhe2048 (weakest) */
+        test_cfg.cli.kex    = NID_ffdhe2048;
+        test_cfg.cli.cipher = NID_aes_256_gcm;
+        test_cfg.cli.kdf    = NID_sha256;
+        test_cfg.cli.md     = NID_sha256;
+        test_cfg.cli.auth   = NO_AUTH;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* Server should reject: client KEX too weak */
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server should reject weak KEX.\n");
+                goto fail_cleanup;
         }
 
         oap_test_teardown(&ctx);
@@ -682,8 +904,8 @@ static int test_oap_roundtrip_md_all(void)
         int ret = 0;
         int i;
 
-        /* Test with default (0) */
-        ret |= test_oap_roundtrip_md(0);
+        /* Test with default */
+        ret |= test_oap_roundtrip_md(NID_undef);
 
         /* Test with all supported digest NIDs */
         for (i = 0; md_supported_nids[i] != NID_undef; i++)
@@ -919,6 +1141,10 @@ int oap_test(int    argc,
         ret |= test_oap_unsupported_nid();
 
         ret |= test_oap_cipher_mismatch();
+        ret |= test_oap_srv_enc_cli_none();
+        ret |= test_oap_cli_enc_srv_none();
+        ret |= test_oap_cli_rejects_downgrade();
+        ret |= test_oap_srv_rejects_weak_kex();
 
         ret |= test_oap_outdated_packet();
         ret |= test_oap_future_packet();
@@ -940,6 +1166,10 @@ int oap_test(int    argc,
         (void) test_oap_nid_without_kex;
         (void) test_oap_unsupported_nid;
         (void) test_oap_cipher_mismatch;
+        (void) test_oap_srv_enc_cli_none;
+        (void) test_oap_cli_enc_srv_none;
+        (void) test_oap_cli_rejects_downgrade;
+        (void) test_oap_srv_rejects_weak_kex;
         (void) test_oap_outdated_packet;
         (void) test_oap_future_packet;
         (void) test_oap_replay_packet;
