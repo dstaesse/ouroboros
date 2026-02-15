@@ -89,7 +89,7 @@ static int test_reg_create_flow(void)
                 goto fail;
         }
 
-        if (reg.n_flows != 1) {
+        if (reg.flows.len != 1) {
                 printf("n_flows was not updated.\n");
                 goto fail;
         }
@@ -104,8 +104,8 @@ static int test_reg_create_flow(void)
                 goto fail;
         }
 
-        if (reg.n_flows != 0) {
-                printf("n_flows was not updated.\n");
+        if (!llist_is_empty(&reg.flows)) {
+                printf("flows.len was not updated.\n");
                 goto fail;
         }
 
@@ -163,7 +163,7 @@ static int test_reg_allocate_flow_timeout(void)
 
         reg_destroy_flow(info.id);
 
-        if (reg.n_flows != 0) {
+        if (!llist_is_empty(&reg.flows)) {
                 printf("Flow did not destroy.\n");
                 goto fail;
         }
@@ -517,7 +517,7 @@ static int test_reg_create_ipcp(void)
                 goto fail;
         }
 
-        if (reg.n_ipcps != 1) {
+        if (reg.ipcps.len != 1) {
                 printf("n_ipcps was not updated.\n");
                 goto fail;
         }
@@ -532,8 +532,8 @@ static int test_reg_create_ipcp(void)
                 goto fail;
         }
 
-        if (reg.n_ipcps != 0) {
-                printf("n_ipcps was not updated.\n");
+        if (reg.ipcps.len != 0) {
+                printf("ipcps.len was not updated.\n");
                 goto fail;
         }
 
@@ -761,7 +761,7 @@ static int test_reg_create_name(void)
                 goto fail;
         }
 
-        if (reg.n_names != 1) {
+        if (reg.names.len != 1) {
                 printf("n_names was not updated.\n");
                 goto fail;
         }
@@ -776,7 +776,7 @@ static int test_reg_create_name(void)
                 goto fail;
         }
 
-        if (reg.n_names != 0) {
+        if (!llist_is_empty(&reg.names)) {
                 printf("n_names was not updated.\n");
                 goto fail;
         }
@@ -874,7 +874,7 @@ static int test_reg_create_proc(void)
                 goto fail;
         }
 
-        if (reg.n_procs != 1) {
+        if (reg.procs.len != 1) {
                 printf("n_procs was not updated.\n");
                 goto fail;
         }
@@ -889,7 +889,7 @@ static int test_reg_create_proc(void)
                 goto fail;
         }
 
-        if (reg.n_procs != 0) {
+        if (!llist_is_empty(&reg.procs)) {
                 printf("n_procs was not updated.\n");
                 goto fail;
         }
@@ -927,7 +927,7 @@ static int test_reg_spawned(void)
                 goto fail;
         }
 
-        if (reg.n_spawned != 1) {
+        if (reg.spawned.len != 1) {
                 printf("n_spawned was not updated.\n");
                 goto fail;
         }
@@ -942,7 +942,7 @@ static int test_reg_spawned(void)
                 goto fail;
         }
 
-        if (reg.n_spawned != 0) {
+        if (!llist_is_empty(&reg.spawned)) {
                 printf("n_spawned was not updated.\n");
                 goto fail;
         }
@@ -975,7 +975,7 @@ static int test_reg_create_prog(void)
                 goto fail;
         }
 
-        if (reg.n_progs != 1) {
+        if (reg.progs.len != 1) {
                 printf("n_progs was not updated.\n");
                 goto fail;
         }
@@ -990,7 +990,7 @@ static int test_reg_create_prog(void)
                 goto fail;
         }
 
-        if (reg.n_progs != 0) {
+        if (!llist_is_empty(&reg.progs)) {
                 printf("n_progs was not updated.\n");
                 goto fail;
         }
@@ -1521,8 +1521,8 @@ static int test_wait_ipcp_boot_fail(void)
                 goto fail;
         }
 
-        if (reg.n_ipcps != 0) {
-                printf("n_ipcps was not updated.\n");
+        if (!llist_is_empty(&reg.ipcps)) {
+                printf("ipcps.len was not updated.\n");
                 goto fail;
         }
 

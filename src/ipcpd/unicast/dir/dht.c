@@ -148,15 +148,8 @@ struct dht_entry {
 
         uint8_t *        key;
 
-        struct {
-                struct list_head list;
-                size_t           len;
-        } vals;  /* We don't own these, only replicate */
-
-        struct {
-                struct list_head list;
-                size_t           len;
-        } lvals; /* We own these, must be republished  */
+        struct llist     vals;  /* We don't own these, only replicate */
+        struct llist     lvals; /* We own these, must be republished  */
 };
 
 struct contact {
@@ -183,38 +176,24 @@ struct peer_entry {
 struct dht_req {
         struct list_head next;
 
-        uint8_t *        key;
-        time_t           t_exp;
+        uint8_t *    key;
+        time_t       t_exp;
 
-        struct {
-                struct list_head list;
-                size_t           len;
-        } peers;
-
-        struct {
-                struct list_head list;
-                size_t           len;
-        } cache;
+        struct llist peers;
+        struct llist cache;
 };
 
 struct bucket {
-        struct {
-                struct list_head list;
-                size_t           len;
-        } contacts;
+        struct llist    contacts;
+        struct llist    alts;
 
-        struct {
-                struct list_head list;
-                size_t           len;
-        } alts;
+        time_t          t_refr;
 
-        time_t           t_refr;
+        size_t          depth;
+        uint8_t         mask;
 
-        size_t           depth;
-        uint8_t          mask;
-
-        struct bucket *  parent;
-        struct bucket *  children[1L << DHT_BETA];
+        struct bucket * parent;
+        struct bucket * children[1L << DHT_BETA];
 };
 
 struct cmd {
@@ -236,8 +215,8 @@ struct {
         struct { /* Kademlia parameters */
                 uint32_t alpha;     /* Number of concurrent requests   */
                 size_t   k;         /* Number of replicas to store     */
-                time_t   t_expire;  /* Expiry time for values (s)      */
-                time_t   t_refresh; /* Refresh time for contacts (s)   */
+                time_t   t_exp;     /* Expiry time for values (s)      */
+                time_t   t_refr;    /* Refresh time for contacts (s)   */
                 time_t   t_repl;    /* Replication time for values (s) */
         };
 
@@ -261,8 +240,7 @@ struct {
                 } contacts;
 
                 struct {
-                        struct list_head list;
-                        size_t           len;
+                        struct llist     ll;
                         size_t           vals;
                         size_t           lvals;
                 } kv;
@@ -271,10 +249,9 @@ struct {
         } db;
 
         struct {
-                struct list_head list;
-                size_t           len;
-                pthread_cond_t   cond;
-                pthread_mutex_t  mtx;
+                struct llist    ll;
+                pthread_cond_t  cond;
+                pthread_mutex_t mtx;
         } reqs;
 
         struct {
@@ -321,7 +298,7 @@ static int dht_rib_statfile(char * buf,
 
         pthread_rwlock_rdlock(&dht.db.lock);
 
-        keys  = dht.db.kv.len;
+        keys  = dht.db.kv.ll.len;
         lvals = dht.db.kv.lvals;
         vals  = dht.db.kv.vals;
 
@@ -335,7 +312,7 @@ static int dht_rib_statfile(char * buf,
                  tmstr,
                  ADDR_VAL32(&dht.addr),
                  dht.alpha, dht.k,
-                 dht.t_expire, dht.t_refresh, dht.t_repl,
+                 dht.t_exp, dht.t_refr, dht.t_repl,
                  keys, vals, lvals);
 
         return strlen(buf);
@@ -350,14 +327,14 @@ static size_t dht_db_file_len(void)
 
         pthread_rwlock_rdlock(&dht.db.lock);
 
-        if (dht.db.kv.len == 0) {
+        if (llist_is_empty(&dht.db.kv.ll)) {
                 pthread_rwlock_unlock(&dht.db.lock);
                 sz += 14; /* No entries */
                 return sz;
         }
 
         sz += 39 * 3 + 1; /* tally + extra newline */
-        sz += dht.db.kv.len * (25 + 19 + 23 + 1);
+        sz += dht.db.kv.ll.len * (25 + 19 + 23 + 1);
 
         vals = dht.db.kv.vals + dht.db.kv.lvals;
 
@@ -382,7 +359,7 @@ static int dht_rib_dbfile(char * buf,
 
         pthread_rwlock_rdlock(&dht.db.lock);
 
-        if (dht.db.kv.len == 0) {
+        if (llist_is_empty(&dht.db.kv.ll)) {
                 i += snprintf(buf, len, "  No entries.\n");
                 pthread_rwlock_unlock(&dht.db.lock);
                 return i;
@@ -393,9 +370,9 @@ static int dht_rib_dbfile(char * buf,
                       "Number of keys:             %10zu\n"
                       "Number of local values:     %10zu\n"
                       "Number of non-local values: %10zu\n\n",
-                      dht.db.kv.len, dht.db.kv.vals, dht.db.kv.lvals);
+                      dht.db.kv.ll.len, dht.db.kv.vals, dht.db.kv.lvals);
 
-        list_for_each(p, &dht.db.kv.list) {
+        llist_for_each(p, &dht.db.kv.ll) {
                 struct dht_entry * e = list_entry(p, struct dht_entry, next);
                 struct list_head * h;
 
@@ -403,7 +380,7 @@ static int dht_rib_dbfile(char * buf,
                               KEY_VAL(e->key));
                 i += snprintf(buf + i, len - i, "  Local entries:\n");
 
-                list_for_each(h, &e->vals.list) {
+                llist_for_each(h, &e->vals) {
                         struct val_entry * v;
 
                         v = list_entry(h, struct val_entry, next);
@@ -416,7 +393,7 @@ static int dht_rib_dbfile(char * buf,
 
                         i += snprintf(buf + i, len - i,
                                 "    " VAL_FMT
-                                ", t_replicated=%.*s, t_expire=%.*s\n",
+                                ", t_replicated=%.*s, t_exp=%.*s\n",
                                 VAL_VAL(v->val),
                                 RIB_TM_STRLEN, tmstr,
                                 RIB_TM_STRLEN, exstr);
@@ -426,7 +403,7 @@ static int dht_rib_dbfile(char * buf,
 
                 i += snprintf(buf + i, len - i, "  Non-local entries:\n");
 
-                list_for_each(h, &e->lvals.list) {
+                llist_for_each(h, &e->lvals) {
                         struct val_entry * v;
 
                         v= list_entry(h, struct val_entry, next);
@@ -439,7 +416,7 @@ static int dht_rib_dbfile(char * buf,
 
                         i += snprintf(buf + i, len - i,
                                 "    " VAL_FMT
-                                ", t_replicated=%.*s, t_expire=%.*s\n",
+                                ", t_replicated=%.*s, t_exp=%.*s\n",
                                 VAL_VAL(v->val),
                                 RIB_TM_STRLEN, tmstr,
                                 RIB_TM_STRLEN, exstr);
@@ -694,11 +671,8 @@ static struct dht_entry * dht_entry_create(const uint8_t * key)
                 goto fail_entry;
 
         list_head_init(&e->next);
-        list_head_init(&e->vals.list);
-        list_head_init(&e->lvals.list);
-
-        e->vals.len = 0;
-        e->lvals.len = 0;
+        llist_init(&e->vals);
+        llist_init(&e->lvals);
 
         e->key = dht_dup_key(key);
         if (e->key == NULL)
@@ -718,25 +692,23 @@ static void dht_entry_destroy(struct dht_entry * e)
 
         assert(e != NULL);
 
-        list_for_each_safe(p, h, &e->vals.list) {
+        llist_for_each_safe(p, h, &e->vals) {
                 struct val_entry * v = list_entry(p, struct val_entry, next);
-                list_del(&v->next);
+                llist_del(&v->next, &e->vals);
                 val_entry_destroy(v);
-                --e->vals.len;
                 --dht.db.kv.vals;
         }
 
-        list_for_each_safe(p, h, &e->lvals.list) {
+        llist_for_each_safe(p, h, &e->lvals) {
                 struct val_entry * v = list_entry(p, struct val_entry, next);
-                list_del(&v->next);
+                llist_del(&v->next, &e->lvals);
                 val_entry_destroy(v);
-                --e->lvals.len;
                 --dht.db.kv.lvals;
         }
 
         free(e->key);
 
-        assert(e->vals.len == 0 && e->lvals.len == 0);
+        assert(llist_is_empty(&e->vals) && llist_is_empty(&e->lvals));
 
         free(e);
 }
@@ -750,7 +722,7 @@ static struct val_entry * dht_entry_get_lval(const struct dht_entry * e,
         assert(val.data != NULL);
         assert(val.len > 0);
 
-        list_for_each(p, &e->lvals.list) {
+        llist_for_each(p, &e->lvals) {
                 struct val_entry * v = list_entry(p, struct val_entry, next);
                 if (bufcmp(&v->val, &val) == 0)
                         return v;
@@ -768,7 +740,7 @@ static struct val_entry * dht_entry_get_val(const struct dht_entry * e,
         assert(val.data != NULL);
         assert(val.len > 0);
 
-        list_for_each(p, &e->vals.list) {
+        llist_for_each(p, &e->vals) {
                 struct val_entry * v = list_entry(p, struct val_entry, next);
                 if (bufcmp(&v->val, &val) == 0)
                         return v;
@@ -805,8 +777,7 @@ static int dht_entry_update_val(struct dht_entry * e,
                 if (v == NULL)
                         return -ENOMEM;
 
-                list_add_tail(&v->next, &e->vals.list);
-                ++e->vals.len;
+                llist_add_tail(&v->next, &e->vals);
                 ++dht.db.kv.vals;
 
                 return 0;
@@ -833,12 +804,11 @@ static int dht_entry_update_lval(struct dht_entry * e,
         v = dht_entry_get_lval(e, val);
         if (v == NULL) {
                 log_dbg(KV_FMT " Adding lval.", KV_VAL(e->key, val));
-                v = val_entry_create(val, now.tv_sec + dht.t_expire);
+                v = val_entry_create(val, now.tv_sec + dht.t_exp);
                 if (v == NULL)
                         return -ENOMEM;
 
-                list_add_tail(&v->next, &e->lvals.list);
-                ++e->lvals.len;
+                llist_add_tail(&v->next, &e->lvals);
                 ++dht.db.kv.lvals;
 
                 return 0;
@@ -862,9 +832,8 @@ static int dht_entry_remove_lval(struct dht_entry * e,
 
         log_dbg(KV_FMT " Removing lval.", KV_VAL(e->key, val));
 
-        list_del(&v->next);
+        llist_del(&v->next, &e->lvals);
         val_entry_destroy(v);
-        --e->lvals.len;
         --dht.db.kv.lvals;
 
         return 0;
@@ -881,15 +850,14 @@ static void dht_entry_remove_expired_vals(struct dht_entry * e)
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
-        list_for_each_safe(p, h, &e->vals.list) {
+        llist_for_each_safe(p, h, &e->vals) {
                 struct val_entry * v = list_entry(p, struct val_entry, next);
                 if (!IS_EXPIRED(v, &now))
                         continue;
 
                 log_dbg(KV_FMT " Value expired." , KV_VAL(e->key, v->val));
-                list_del(&v->next);
+                llist_del(&v->next, &e->vals);
                 val_entry_destroy(v);
-                --e->vals.len;
                 --dht.db.kv.vals;
         }
 }
@@ -900,7 +868,7 @@ static struct dht_entry * __dht_kv_find_entry(const uint8_t * key)
 
         assert(key != NULL);
 
-        list_for_each(p, &dht.db.kv.list) {
+        llist_for_each(p, &dht.db.kv.ll) {
                 struct dht_entry * e = list_entry(p, struct dht_entry, next);
                 if (!memcmp(key, e->key, dht.id.len))
                         return e;
@@ -919,16 +887,15 @@ static void dht_kv_remove_expired_entries(void)
 
         pthread_rwlock_wrlock(&dht.db.lock);
 
-        list_for_each_safe(p, h, &dht.db.kv.list) {
+        llist_for_each_safe(p, h, &dht.db.kv.ll) {
                 struct dht_entry * e = list_entry(p, struct dht_entry, next);
                 dht_entry_remove_expired_vals(e);
                 if (e->lvals.len > 0 || e->vals.len > 0)
                         continue;
 
                 log_dbg(KEY_FMT " Entry removed. ", KEY_VAL(e->key));
-                list_del(&e->next);
+                llist_del(&e->next, &dht.db.kv.ll);
                 dht_entry_destroy(e);
-                --dht.db.kv.len;
         }
 
         pthread_rwlock_unlock(&dht.db.lock);
@@ -987,15 +954,13 @@ static struct dht_req * dht_req_create(const uint8_t * key)
 
         req->t_exp = now.tv_sec + DHT_T_RESP;
 
-        list_head_init(&req->peers.list);
-        req->peers.len = 0;
+        llist_init(&req->peers);
 
         req->key = dht_dup_key(key);
         if (req->key == NULL)
                 goto fail_dup_key;
 
-        list_head_init(&req->cache.list);
-        req->cache.len = 0;
+        llist_init(&req->cache);
 
         return req;
 
@@ -1013,34 +978,32 @@ static void dht_req_destroy(struct dht_req * req)
         assert(req);
         assert(req->key);
 
-        list_for_each_safe(p, h, &req->peers.list) {
+        llist_for_each_safe(p, h, &req->peers) {
                 struct peer_entry * e = list_entry(p, struct peer_entry, next);
-                list_del(&e->next);
+                llist_del(&e->next, &req->peers);
                 free(e->id);
                 free(e);
-                --req->peers.len;
         }
 
-        list_for_each_safe(p, h, &req->cache.list) {
+        llist_for_each_safe(p, h, &req->cache) {
                 struct val_entry * e = list_entry(p, struct val_entry, next);
-                list_del(&e->next);
+                llist_del(&e->next, &req->cache);
                 val_entry_destroy(e);
-                --req->cache.len;
         }
 
         free(req->key);
 
-        assert(req->peers.len == 0);
+        assert(llist_is_empty(&req->peers));
 
         free(req);
 }
 
-static struct peer_entry * dht_req_get_peer(struct dht_req *    req,
-                                            struct peer_entry * e)
+static struct peer_entry * dht_req_get_peer(struct dht_req *          req,
+                                            const struct peer_entry * e)
 {
         struct list_head * p;
 
-        list_for_each(p, &req->peers.list) {
+        llist_for_each(p, &req->peers) {
                 struct peer_entry * x = list_entry(p, struct peer_entry, next);
                 if (x->addr == e->addr)
                         return x;
@@ -1050,8 +1013,8 @@ static struct peer_entry * dht_req_get_peer(struct dht_req *    req,
 }
 
 #define IS_MAGIC(peer) ((peer)->cookie == dht.magic)
-void dht_req_add_peer(struct dht_req * req,
-                      struct peer_entry * e)
+static int dht_req_add_peer(struct dht_req *          req,
+                            const struct peer_entry * e)
 {
         struct peer_entry * x; /* existing */
         struct list_head *  p; /* iterator */
@@ -1063,16 +1026,17 @@ void dht_req_add_peer(struct dht_req * req,
 
         /*
          * Dedupe messages to the same peer, unless
-         *   1) The previous request was FIND_NODE and now it's FIND_VALUE
-         *   2) We urgently need contacts from emergency peer (magic cookie)
+         *   1) The previous was FIND_NODE and now it's FIND_VALUE
+         *   2) We urgently need contacts (magic cookie)
          */
         x = dht_req_get_peer(req, e);
         if (x != NULL && x->code >= e->code && !IS_MAGIC(e))
-                goto skip;
+                return -1;
 
         /* Find how this contact ranks in distance to the key */
-        list_for_each(p, &req->peers.list) {
-                struct peer_entry * y = list_entry(p, struct peer_entry, next);
+        llist_for_each(p, &req->peers) {
+                struct peer_entry * y;
+                y = list_entry(p, struct peer_entry, next);
                 if (IS_CLOSER(y->id, e->id)) {
                         pos++;
                         continue;
@@ -1080,36 +1044,32 @@ void dht_req_add_peer(struct dht_req * req,
                 break;
         }
 
-        /* Add a new peer to this request if we need to */
-        if (pos < dht.alpha || !IS_MAGIC(e)) {
-                x = malloc(sizeof(*x));
-                if (x == NULL) {
-                        log_err("Failed to malloc peer entry.");
-                        goto skip;
-                }
+        if (pos >= dht.alpha && IS_MAGIC(e))
+                return -1;
 
-                x->cookie = e->cookie;
-                x->addr   = e->addr;
-                x->code   = e->code;
-                x->t_sent = e->t_sent;
-                x->id     = dht_dup_key(e->id);
-                if (x->id == NULL) {
-                        log_err("Failed to dup peer ID.");
-                        free(x);
-                        goto skip;
-                }
-
-                if (IS_MAGIC(e))
-                        list_add(&x->next, p);
-                else
-                        list_add_tail(&x->next, p);
-                ++req->peers.len;
-                return;
+        x = malloc(sizeof(*x));
+        if (x == NULL) {
+                log_err("Failed to malloc peer entry.");
+                return -1;
         }
- skip:
-        list_del(&e->next);
-        free(e->id);
-        free(e);
+
+        x->cookie = e->cookie;
+        x->addr   = e->addr;
+        x->code   = e->code;
+        x->t_sent = e->t_sent;
+        x->id     = dht_dup_key(e->id);
+        if (x->id == NULL) {
+                log_err("Failed to dup peer ID.");
+                free(x);
+                return -1;
+        }
+
+        if (IS_MAGIC(e))
+                llist_add_at(&x->next, p, &req->peers);
+        else
+                llist_add_tail_at(&x->next, p, &req->peers);
+
+        return 0;
 }
 
 static size_t dht_req_add_peers(struct dht_req *   req,
@@ -1123,8 +1083,13 @@ static size_t dht_req_add_peers(struct dht_req *   req,
         assert(pl  != NULL);
 
         list_for_each_safe(p, h, pl) {
-                struct peer_entry * e = list_entry(p, struct peer_entry, next);
-                dht_req_add_peer(req, e);
+                struct peer_entry * e;
+                e = list_entry(p, struct peer_entry, next);
+                if (dht_req_add_peer(req, e) < 0) {
+                        list_del(&e->next);
+                        free(e->id);
+                        free(e);
+                }
         }
 
         return n;
@@ -1137,7 +1102,7 @@ static bool dht_req_has_peer(struct dht_req * req,
 
         assert(req != NULL);
 
-        list_for_each(p, &req->peers.list) {
+        llist_for_each(p, &req->peers) {
                 struct peer_entry * e = list_entry(p, struct peer_entry, next);
                 if (e->cookie == cookie)
                         return true;
@@ -1209,7 +1174,7 @@ static struct dht_req * __dht_kv_req_get_req(const uint8_t * key)
 {
         struct list_head * p;
 
-        list_for_each(p, &dht.reqs.list) {
+        llist_for_each(p, &dht.reqs.ll) {
                 struct dht_req * r = list_entry(p, struct dht_req, next);
                 if (memcmp(r->key, key, dht.id.len) == 0)
                         return r;
@@ -1228,7 +1193,7 @@ static struct dht_req * __dht_kv_get_req_cache(const uint8_t * key)
         if (req == NULL)
                 return NULL;
 
-        if (req->cache.len == 0)
+        if (llist_is_empty(&req->cache))
                 return NULL;
 
         return req;
@@ -1244,8 +1209,7 @@ static void __dht_kv_req_remove(const uint8_t * key)
         if (req == NULL)
                 return;
 
-        list_del(&req->next);
-        --dht.reqs.len;
+        llist_del(&req->next, &dht.reqs.ll);
 
         dht_req_destroy(req);
 }
@@ -1301,9 +1265,9 @@ static int dht_kv_update_req(const uint8_t *    key,
 
         req = __dht_kv_req_get_req(key);
         if (req == NULL) {
-                if (dht.reqs.len == DHT_MAX_REQS) {
+                if (dht.reqs.ll.len == DHT_MAX_REQS) {
                         log_err(KEY_FMT " Max reqs reached (%zu).",
-                                KEY_VAL(key), dht.reqs.len);
+                                KEY_VAL(key), dht.reqs.ll.len);
                         peer_list_destroy(pl);
                         goto fail_req;
                 }
@@ -1312,8 +1276,7 @@ static int dht_kv_update_req(const uint8_t *    key,
                         log_err(KEY_FMT "Failed to create req.", KEY_VAL(key));
                         goto fail_req;
                 }
-                list_add_tail(&req->next, &dht.reqs.list);
-                ++dht.reqs.len;
+                llist_add_tail(&req->next, &dht.reqs.ll);
         }
 
         if (req->cache.len > 0) /* Already have values */
@@ -1322,9 +1285,9 @@ static int dht_kv_update_req(const uint8_t *    key,
         dht_req_add_peers(req, pl);
         req->t_exp = now.tv_sec + DHT_T_RESP;
 
-        if (dht.reqs.len > DHT_WARN_REQS) {
+        if (dht.reqs.ll.len > DHT_WARN_REQS) {
                 log_warn("Number of outstanding requests (%zu) exceeds %u.",
-                         dht.reqs.len, DHT_WARN_REQS);
+                         dht.reqs.ll.len, DHT_WARN_REQS);
         }
 
         pthread_mutex_unlock(&dht.reqs.mtx);
@@ -1368,8 +1331,7 @@ static int dht_kv_respond_req(uint8_t *       key,
                         continue;
                 }
 
-                list_add_tail(&e->next, &req->cache.list);
-                ++req->cache.len;
+                llist_add_tail(&e->next, &req->cache);
         }
 
         pthread_cond_broadcast(&dht.reqs.cond);
@@ -1434,7 +1396,7 @@ static ssize_t dht_kv_wait_req(const uint8_t * key,
 
         memset(*vals, 0, max * sizeof(**vals));
 
-        list_for_each(p, &req->cache.list) {
+        llist_for_each(p, &req->cache) {
                 struct val_entry * v;
                 if (i == max)
                         break; /* We have enough values */
@@ -1535,10 +1497,10 @@ static ssize_t dht_kv_contact_list(const uint8_t *    key,
                 goto fail_bucket;
         }
 
-        b->t_refr = t.tv_sec + dht.t_refresh;
+        b->t_refr = t.tv_sec + dht.t_refr;
 
         if (b->contacts.len == dht.k || b->parent == NULL) {
-                list_for_each(p, &b->contacts.list) {
+                llist_for_each(p, &b->contacts) {
                         struct contact * c;
                         struct contact * d;
                         c = list_entry(p, struct contact, next);
@@ -1554,7 +1516,7 @@ static ssize_t dht_kv_contact_list(const uint8_t *    key,
         } else {
                 struct bucket * d = b->parent;
                 for (i = 0; i < (1L << DHT_BETA) && len < dht.k; ++i) {
-                        list_for_each(p, &d->children[i]->contacts.list) {
+                        llist_for_each(p, &d->children[i]->contacts) {
                                 struct contact * c;
                                 struct contact * d;
                                 c = list_entry(p, struct contact, next);
@@ -1661,11 +1623,11 @@ static void __dht_kv_bucket_refresh_list(struct bucket *    b,
                         __dht_kv_bucket_refresh_list(b->children[i], t, r);
         }
 
-        if (b->contacts.len == 0)
+        if (llist_is_empty(&b->contacts))
                 return;
 
-        c = list_first_entry(&b->contacts.list, struct contact, next);
-        if (t > c->t_seen + dht.t_refresh) {
+        c = llist_first_entry(&b->contacts, struct contact, next);
+        if (t > c->t_seen + dht.t_refr) {
                 d = contact_create(c->id, c->addr);
                 if (d != NULL)
                         list_add(&d->next, r);
@@ -1682,14 +1644,12 @@ static struct bucket * bucket_create(void)
         if (b == NULL)
                 return NULL;
 
-        list_head_init(&b->contacts.list);
-        b->contacts.len = 0;
+        llist_init(&b->contacts);
 
-        list_head_init(&b->alts.list);
-        b->alts.len = 0;
+        llist_init(&b->alts);
 
         clock_gettime(CLOCK_REALTIME_COARSE, &t);
-        b->t_refr = t.tv_sec + dht.t_refresh;
+        b->t_refr = t.tv_sec + dht.t_refr;
 
         for (i = 0; i < (1L << DHT_BETA); ++i)
                 b->children[i]  = NULL;
@@ -1713,18 +1673,16 @@ static void bucket_destroy(struct bucket * b)
                 if (b->children[i] != NULL)
                         bucket_destroy(b->children[i]);
 
-        list_for_each_safe(p, h, &b->contacts.list) {
+        llist_for_each_safe(p, h, &b->contacts) {
                 struct contact * c = list_entry(p, struct contact, next);
-                list_del(&c->next);
+                llist_del(&c->next, &b->contacts);
                 contact_destroy(c);
-                --b->contacts.len;
         }
 
-        list_for_each_safe(p, h, &b->alts.list) {
+        llist_for_each_safe(p, h, &b->alts) {
                 struct contact * c = list_entry(p, struct contact, next);
-                list_del(&c->next);
+                llist_del(&c->next, &b->alts);
                 contact_destroy(c);
-                --b->alts.len;
         }
 
         free(b);
@@ -1759,13 +1717,11 @@ static int move_contacts(struct bucket * b,
         assert(b != NULL);
         assert(c != NULL);
 
-        list_for_each_safe(p, h, &b->contacts.list) {
+        llist_for_each_safe(p, h, &b->contacts) {
                 d = list_entry(p, struct contact, next);
                 if (bucket_has_id(c, d->id)) {
-                        list_del(&d->next);
-                        --b->contacts.len;
-                        list_add_tail(&d->next, &c->contacts.list);
-                        ++c->contacts.len;
+                        llist_del(&d->next, &b->contacts);
+                        llist_add_tail(&d->next, &c->contacts);
                 }
         }
 
@@ -1779,8 +1735,8 @@ static int split_bucket(struct bucket * b)
         size_t b_len;
 
         assert(b);
-        assert(b->alts.len == 0);
-        assert(b->contacts.len != 0);
+        assert(llist_is_empty(&b->alts));
+        assert(!llist_is_empty(&b->contacts));
         assert(b->children[0] == NULL);
 
         b_len = b->contacts.len;
@@ -1836,39 +1792,33 @@ static int dht_kv_update_contacts(const uint8_t * id,
                 goto fail_update;
         }
 
-        list_for_each_safe(p, h, &b->contacts.list) {
+        llist_for_each_safe(p, h, &b->contacts) {
                 struct contact * d = list_entry(p, struct contact, next);
                 if (d->addr == addr) {
-                        list_del(&d->next);
+                        llist_del(&d->next, &b->contacts);
                         contact_destroy(d);
-                        --b->contacts.len;
                 }
         }
 
         if (b->contacts.len == dht.k) {
                 if (bucket_has_id(b, dht.id.data)) {
-                        list_add_tail(&c->next, &b->contacts.list);
-                        ++b->contacts.len;
+                        llist_add_tail(&c->next, &b->contacts);
                         if (split_bucket(b)) {
-                                list_del(&c->next);
+                                llist_del(&c->next, &b->contacts);
                                 contact_destroy(c);
-                                --b->contacts.len;
                         }
                 } else if (b->alts.len == dht.k) {
                         struct contact * d;
-                        d = list_first_entry(&b->alts.list,
+                        d = llist_first_entry(&b->alts,
                                 struct contact, next);
-                        list_del(&d->next);
+                        llist_del(&d->next, &b->alts);
                         contact_destroy(d);
-                        list_add_tail(&c->next, &b->alts.list);
-                        ++b->alts.len;
+                        llist_add_tail(&c->next, &b->alts);
                 } else {
-                        list_add_tail(&c->next, &b->alts.list);
-                        ++b->alts.len;
+                        llist_add_tail(&c->next, &b->alts);
                 }
         } else {
-                list_add_tail(&c->next, &b->contacts.list);
-                ++b->contacts.len;
+                llist_add_tail(&c->next, &b->contacts);
         }
 
         pthread_rwlock_unlock(&dht.db.lock);
@@ -2116,7 +2066,7 @@ static ssize_t dht_kv_retrieve(const uint8_t * key,
 
         i = 0;
 
-        list_for_each(p, &e->vals.list) {
+        llist_for_each(p, &e->vals) {
                 struct val_entry * v;
                 if (i == n)
                         break; /* We have enough values */
@@ -2129,7 +2079,7 @@ static ssize_t dht_kv_retrieve(const uint8_t * key,
                 memcpy((*vals)[i++].data, v->val.data, v->val.len);
         }
 
-        list_for_each(p, &e->lvals.list) {
+        llist_for_each(p, &e->lvals) {
                 struct val_entry * v;
                 if (i == n)
                         break; /* We have enough values */
@@ -2584,15 +2534,14 @@ static void __add_dht_kv_entry(struct dht_entry * e)
 
         assert(e != NULL);
 
-        list_for_each(p, &dht.db.kv.list) {
+        llist_for_each(p, &dht.db.kv.ll) {
                 struct dht_entry * d = list_entry(p, struct dht_entry, next);
                 if (IS_CLOSER(d->key, e->key))
                         continue;
                 break;
         }
 
-        list_add_tail(&e->next, p);
-        ++dht.db.kv.len;
+        llist_add_tail_at(&e->next, p, &dht.db.kv.ll);
 }
 
 /* incoming store message */
@@ -2629,9 +2578,8 @@ static int dht_kv_store(const uint8_t * key,
         return 0;
  fail_add:
         if (new) {
-                list_del(&e->next);
+                llist_del(&e->next, &dht.db.kv.ll);
                 dht_entry_destroy(e);
-                --dht.db.kv.len;
         }
  fail:
         pthread_rwlock_unlock(&dht.db.lock);
@@ -2669,14 +2617,13 @@ static int dht_kv_publish(const uint8_t * key,
 
         pthread_rwlock_unlock(&dht.db.lock);
 
-        dht_kv_store_remote(key, val, now.tv_sec + dht.t_expire);
+        dht_kv_store_remote(key, val, now.tv_sec + dht.t_exp);
 
         return 0;
  fail_add:
         if (new) {
-                list_del(&e->next);
+                llist_del(&e->next, &dht.db.kv.ll);
                 dht_entry_destroy(e);
-                --dht.db.kv.len;
         }
  fail:
         pthread_rwlock_unlock(&dht.db.lock);
@@ -3451,15 +3398,14 @@ static void dht_kv_remove_expired_reqs(void)
 
         pthread_mutex_lock(&dht.reqs.mtx);
 
-        list_for_each_safe(p, h, &dht.reqs.list) {
+        llist_for_each_safe(p, h, &dht.reqs.ll) {
                 struct dht_req * e;
                 e = list_entry(p, struct dht_req, next);
                 if (IS_EXPIRED(e, &now)) {
                         log_dbg(KEY_FMT " Removing expired request.",
                                 KEY_VAL(e->key));
-                        list_del(&e->next);
+                        llist_del(&e->next, &dht.reqs.ll);
                         dht_req_destroy(e);
-                        --dht.reqs.len;
                 }
         }
 
@@ -3491,7 +3437,7 @@ static void dht_entry_get_repl_lists(const struct dht_entry * e,
         struct list_head * p;
         struct val_entry * n;
 
-        list_for_each(p, &e->vals.list) {
+        llist_for_each(p, &e->vals) {
                 struct val_entry * v = list_entry(p, struct val_entry, next);
                 if (MUST_REPLICATE(v, now) && !IS_EXPIRED(v, now)) {
                         n = val_entry_create(v->val, v->t_exp);
@@ -3502,11 +3448,11 @@ static void dht_entry_get_repl_lists(const struct dht_entry * e,
                 }
         }
 
-        list_for_each(p, &e->lvals.list) {
+        llist_for_each(p, &e->lvals) {
                 struct val_entry * v = list_entry(p, struct val_entry, next);
                 if (MUST_REPLICATE(v, now) && MUST_REPUBLISH(v, now)) {
                         /* Add expire time here, to allow creating val_entry */
-                        n = val_entry_create(v->val, now->tv_sec + dht.t_expire);
+                        n = val_entry_create(v->val, now->tv_sec + dht.t_exp);
                         if (n == NULL)
                                 continue;
 
@@ -3535,10 +3481,10 @@ static int dht_kv_next_values(uint8_t *          key,
 
         pthread_rwlock_rdlock(&dht.db.lock);
 
-        if (dht.db.kv.len == 0)
+        if (llist_is_empty(&dht.db.kv.ll))
                 goto no_entries;
 
-        list_for_each_safe(p, h, &dht.db.kv.list) {
+        llist_for_each_safe(p, h, &dht.db.kv.ll) {
                 e = list_entry(p, struct dht_entry, next);
                 if (IS_CLOSER(e->key, key))
                         continue;  /* Already processed */
@@ -3580,7 +3526,7 @@ static void dht_kv_republish_value(const uint8_t *  key,
         assert(MUST_REPLICATE(v, now));
 
         if (MUST_REPUBLISH(v, now))
-                assert(v->t_exp >= now->tv_sec + dht.t_expire);
+                assert(v->t_exp >= now->tv_sec + dht.t_exp);
 
         if (dht_kv_store_remote(key, v->val, v->t_exp) == 0) {
                 log_dbg(KV_FMT " Republished.", KV_VAL(key, v->val));
@@ -3788,8 +3734,8 @@ static void * work(void * o)
                 nanosleep(&now, NULL);
         }
 
-        intv = gcd(dht.t_expire, (dht.t_expire - DHT_N_REPUB * dht.t_repl));
-        intv = gcd(intv, gcd(dht.t_repl, dht.t_refresh)) / 2;
+        intv = gcd(dht.t_exp, (dht.t_exp - DHT_N_REPUB * dht.t_repl));
+        intv = gcd(intv, gcd(dht.t_repl, dht.t_refr)) / 2;
         intv = MAX(1, intv / n);
 
         log_dbg("DHT worker starting %ld seconds interval.", intv * n);
@@ -3870,13 +3816,13 @@ int dht_init(struct dir_dht_config * conf)
         dht.id.len    = DHT_TEST_KEY_LEN;
         dht.addr      = DHT_TEST_ADDR;
 #endif
-        dht.t0        = now.tv_sec;
-        dht.alpha     = conf->params.alpha;
-        dht.k         = conf->params.k;
-        dht.t_expire  = conf->params.t_expire;
-        dht.t_refresh = conf->params.t_refresh;
-        dht.t_repl    = conf->params.t_replicate;
-        dht.peer      = conf->peer;
+        dht.t0     = now.tv_sec;
+        dht.alpha  = conf->params.alpha;
+        dht.k      = conf->params.k;
+        dht.t_exp  = conf->params.t_expire;
+        dht.t_refr = conf->params.t_refresh;
+        dht.t_repl = conf->params.t_replicate;
+        dht.peer   = conf->peer;
 
         dht.magic = generate_cookie();
 
@@ -3901,8 +3847,7 @@ int dht_init(struct dir_dht_config * conf)
                 goto fail_cmds_cond;
         }
 
-        list_head_init(&dht.reqs.list);
-        dht.reqs.len = 0;
+        llist_init(&dht.reqs.ll);
 
         if (pthread_mutex_init(&dht.reqs.mtx, NULL)) {
                 log_err("Failed to initialize request mutex.");
@@ -3924,8 +3869,7 @@ int dht_init(struct dir_dht_config * conf)
                 goto fail_reqs_cond;
         }
 
-        list_head_init(&dht.db.kv.list);
-        dht.db.kv.len   = 0;
+        llist_init(&dht.db.kv.ll);
         dht.db.kv.vals  = 0;
         dht.db.kv.lvals = 0;
 
@@ -3962,9 +3906,9 @@ int dht_init(struct dir_dht_config * conf)
         log_dbg("  address: " ADDR_FMT32 ".", ADDR_VAL32(&dht.addr));
         log_dbg("  peer: " ADDR_FMT32 ".", ADDR_VAL32(&dht.peer));
         log_dbg("  magic cookie: " HASH_FMT64 ".", HASH_VAL64(&dht.magic));
-        log_info("  parameters: alpha=%u, k=%zu, t_expire=%ld, "
-                "t_refresh=%ld, t_replicate=%ld.",
-                dht.alpha, dht.k, dht.t_expire, dht.t_refresh, dht.t_repl);
+        log_info("  parameters: alpha=%u, k=%zu, t_exp=%ld, "
+                "t_refr=%ld, t_replicate=%ld.",
+                dht.alpha, dht.k, dht.t_exp, dht.t_refr, dht.t_repl);
 #endif
         dht.state = DHT_INIT;
 
@@ -4017,11 +3961,10 @@ void dht_fini(void)
 
         pthread_mutex_lock(&dht.reqs.mtx);
 
-        list_for_each_safe(p, h, &dht.reqs.list) {
+        llist_for_each_safe(p, h, &dht.reqs.ll) {
                 struct dht_req * r = list_entry(p, struct dht_req, next);
-                list_del(&r->next);
+                llist_del(&r->next, &dht.reqs.ll);
                 dht_req_destroy(r);
-                dht.reqs.len--;
         }
 
         pthread_mutex_unlock(&dht.reqs.mtx);
@@ -4031,11 +3974,10 @@ void dht_fini(void)
 
         pthread_rwlock_wrlock(&dht.db.lock);
 
-        list_for_each_safe(p, h, &dht.db.kv.list) {
+        llist_for_each_safe(p, h, &dht.db.kv.ll) {
                 struct dht_entry * e = list_entry(p, struct dht_entry, next);
-                list_del(&e->next);
+                llist_del(&e->next, &dht.db.kv.ll);
                 dht_entry_destroy(e);
-                dht.db.kv.len--;
         }
 
         if (dht.db.contacts.root != NULL)
@@ -4045,10 +3987,10 @@ void dht_fini(void)
 
         pthread_rwlock_destroy(&dht.db.lock);
 
-        assert(dht.db.kv.len == 0);
+        assert(llist_is_empty(&dht.db.kv.ll));
         assert(dht.db.kv.vals == 0);
         assert(dht.db.kv.lvals == 0);
-        assert(dht.reqs.len == 0);
+        assert(llist_is_empty(&dht.reqs.ll));
 
         freebuf(dht.id);
 }

@@ -55,12 +55,11 @@ static void __reg_prog_clear_names(struct reg_prog * prog)
 
         assert(prog != NULL);
 
-        list_for_each_safe(p, h, &prog->names) {
+        llist_for_each_safe(p, h, &prog->names) {
                 struct name_entry * entry;
                 entry = list_entry(p, struct name_entry, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &prog->names);
                 __free_name_entry(entry);
-                prog->n_names--;
         }
 }
 
@@ -77,10 +76,9 @@ struct reg_prog * reg_prog_create(const struct prog_info * info)
         }
 
         list_head_init(&p->next);
-        list_head_init(&p->names);
+        llist_init(&p->names);
 
         p->info    = *info;
-        p->n_names = 0;
 
         return p;
 
@@ -96,9 +94,7 @@ void reg_prog_destroy(struct reg_prog * prog)
 
         assert(list_is_empty(&prog->next));
 
-        assert(prog->n_names == 0);
-
-        assert(list_is_empty(&prog->names));
+        assert(llist_is_empty(&prog->names));
 
         free(prog);
 }
@@ -108,7 +104,7 @@ static struct name_entry * __reg_prog_get_name(const struct reg_prog * prog,
 {
         struct list_head * p;
 
-        list_for_each(p, &prog->names) {
+        llist_for_each(p, &prog->names) {
                 struct name_entry * entry;
                 entry = list_entry(p, struct name_entry, next);
                 if (strcmp(entry->name, name) == 0)
@@ -137,9 +133,7 @@ int reg_prog_add_name(struct reg_prog * prog,
                 goto fail_name;
         }
 
-        list_add(&entry->next, &prog->names);
-
-        prog->n_names++;
+        llist_add(&entry->next, &prog->names);
 
         return 0;
 
@@ -158,11 +152,9 @@ void reg_prog_del_name(struct reg_prog * prog,
         if (entry == NULL)
                 return;
 
-        list_del(&entry->next);
+        llist_del(&entry->next, &prog->names);
 
         __free_name_entry(entry);
-
-        prog->n_names--;
 
         assert(__reg_prog_get_name(prog, name) == NULL);
 }

@@ -33,6 +33,11 @@ struct list_head {
         struct list_head * prv;
 };
 
+struct llist {
+        struct list_head list;
+        size_t           len;
+};
+
 #define list_entry(ptr, type, mbr)                              \
         ((type *)((uint8_t *)(ptr) - offsetof(type, mbr)))
 
@@ -48,19 +53,89 @@ struct list_head {
 #define list_for_each_safe(p, t, h)                             \
         for (p = (h)->nxt, t = p->nxt; p != (h); p = t, t = p->nxt)
 
-void list_head_init(struct list_head * h);
+#define list_head_init(h) do {                                  \
+        (h)->nxt = (h);                                         \
+        (h)->prv = (h);                                         \
+} while (0)
 
-void list_add(struct list_head * e,
-              struct list_head * h);
+#define __list_add(_n, _prv, _nxt) do {                         \
+        struct list_head * __nxt = (_nxt);                      \
+        struct list_head * __prv = (_prv);                      \
+        struct list_head * __n = (_n);                          \
+        __nxt->prv = __n;                                       \
+        __n->nxt = __nxt;                                       \
+        __n->prv = __prv;                                       \
+        __prv->nxt = __n;                                       \
+} while (0)
 
-void list_add_tail(struct list_head * e,
-                   struct list_head * h);
+#define __list_del(_prv, _nxt) do {                             \
+        struct list_head * __nxt = (_nxt);                      \
+        struct list_head * __prv = (_prv);                      \
+        __nxt->prv = __prv;                                     \
+        __prv->nxt = __nxt;                                     \
+} while (0)
 
-void list_del(struct list_head * e);
+#define list_add(n, h) do {                                     \
+        __list_add(n, h, (h)->nxt);                             \
+} while (0)
 
-void list_move(struct list_head * dst,
-               struct list_head * src);
+#define list_add_tail(n, h) do {                                \
+        __list_add(n, (h)->prv, h);                             \
+} while (0)
 
-bool list_is_empty(const struct list_head * h);
+#define list_del(e) do {                                        \
+        __list_del((e)->prv, (e)->nxt);                         \
+        (e)->nxt = (e)->prv = (e);                              \
+} while (0)
+
+#define list_move(n, h) do {                                    \
+        __list_del((n)->prv, (n)->nxt);                         \
+        __list_add(n, h, (h)->nxt);                             \
+} while (0)
+
+#define list_is_empty(h) ((h)->nxt == (h))
+
+#define llist_init(l) do {                                      \
+        list_head_init(&(l)->list);                             \
+        (l)->len = 0;                                           \
+} while (0)
+
+#define llist_add(e, l) do {                                    \
+        list_add(e, &(l)->list);                                \
+        (l)->len++;                                             \
+} while (0)
+
+#define llist_add_tail(e, l) do {                               \
+        list_add_tail(e, &(l)->list);                           \
+        (l)->len++;                                             \
+} while (0)
+
+#define llist_add_at(e, pos, l) do {                            \
+        list_add(e, pos);                                       \
+        (l)->len++;                                             \
+} while (0)
+
+#define llist_add_tail_at(e, pos, l) do {                       \
+        list_add_tail(e, pos);                                  \
+        (l)->len++;                                             \
+} while (0)
+
+#define llist_del(e, l) do {                                    \
+        list_del(e);                                            \
+        (l)->len--;                                             \
+} while (0)
+
+#define llist_is_empty(l) ((l)->len == 0)
+
+#define llist_first_entry(l, type, mbr)                        \
+        list_first_entry(&(l)->list, type, mbr)
+
+#define llist_last_entry(l, type, mbr)                         \
+        list_last_entry(&(l)->list, type, mbr)
+
+#define llist_for_each(p, l) list_for_each(p, &(l)->list)
+
+#define llist_for_each_safe(p, t, l)                            \
+        list_for_each_safe(p, t, &(l)->list)
 
 #endif /* OUROBOROS_LIB_LIST_H */

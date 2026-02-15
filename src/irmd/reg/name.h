@@ -38,20 +38,11 @@ struct reg_name {
                 void * crt;
         } cache;
 
-        struct {
-                struct list_head list;
-                size_t           len;
-        } progs;  /* autostart programs for this name  */
+        struct llist progs;  /* autostart programs for this name  */
 
-        struct {
-                struct list_head list;
-                size_t           len;
-        } procs;  /* processes bound to this name      */
+        struct llist procs;  /* processes bound to this name      */
 
-        struct {
-                struct list_head list;
-                size_t           len;
-        } active; /* processes actively calling accept */
+        struct llist active; /* processes actively calling accept */
 };
 
 struct reg_name * reg_name_create(const struct name_info * info);

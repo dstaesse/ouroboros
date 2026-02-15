@@ -58,14 +58,13 @@ struct nb {
 };
 
 struct {
-        struct list_head  nbs;
-        size_t            nbs_len;
-        pthread_rwlock_t  nbs_lock;
+        struct llist     nbs;
+        pthread_rwlock_t lock;
 
-        fset_t *          set;
+        fset_t *         set;
 
-        pthread_t         reader;
-        pthread_t         listener;
+        pthread_t        reader;
+        pthread_t        listener;
 } fwd;
 
 static int dt_add_nb(int fd)
@@ -73,12 +72,12 @@ static int dt_add_nb(int fd)
         struct list_head * p;
         struct nb *        nb;
 
-        pthread_rwlock_wrlock(&fwd.nbs_lock);
+        pthread_rwlock_wrlock(&fwd.lock);
 
-        list_for_each(p, &fwd.nbs) {
+        llist_for_each(p, &fwd.nbs) {
                 struct nb * el = list_entry(p, struct nb, next);
                 if (el->fd == fd) {
-                        pthread_rwlock_unlock(&fwd.nbs_lock);
+                        pthread_rwlock_unlock(&fwd.lock);
                         log_warn("Already know neighbor on fd %d.", fd);
                         return 0;
                 }
@@ -86,18 +85,16 @@ static int dt_add_nb(int fd)
 
         nb = malloc(sizeof(*nb));
         if (nb == NULL) {
-                pthread_rwlock_unlock(&fwd.nbs_lock);
+                pthread_rwlock_unlock(&fwd.lock);
                 log_err("Failed to malloc neighbor struct.");
                 return -ENOMEM;
         }
 
         nb->fd = fd;
 
-        list_add_tail(&nb->next, p);
+        llist_add_tail(&nb->next, &fwd.nbs);
 
-        ++fwd.nbs_len;
-
-        pthread_rwlock_unlock(&fwd.nbs_lock);
+        pthread_rwlock_unlock(&fwd.lock);
 
         log_dbg("Neighbor %d added.", fd);
 
@@ -109,21 +106,20 @@ static int dt_del_nb(int fd)
         struct list_head * p;
         struct list_head * h;
 
-        pthread_rwlock_wrlock(&fwd.nbs_lock);
+        pthread_rwlock_wrlock(&fwd.lock);
 
-        list_for_each_safe(p, h, &fwd.nbs) {
+        llist_for_each_safe(p, h, &fwd.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->fd == fd) {
-                        list_del(&nb->next);
-                        --fwd.nbs_len;
-                        pthread_rwlock_unlock(&fwd.nbs_lock);
+                        llist_del(&nb->next, &fwd.nbs);
+                        pthread_rwlock_unlock(&fwd.lock);
                         log_dbg("Neighbor %d deleted.", nb->fd);
                         free(nb);
                         return 0;
                 }
         }
 
-        pthread_rwlock_unlock(&fwd.nbs_lock);
+        pthread_rwlock_unlock(&fwd.lock);
 
         log_err("Neighbor not found on fd %d.", fd);
 
@@ -157,11 +153,11 @@ static void dt_packet(uint8_t * buf,
 {
         struct list_head * p;
 
-        pthread_rwlock_rdlock(&fwd.nbs_lock);
+        pthread_rwlock_rdlock(&fwd.lock);
 
-        pthread_cleanup_push(__cleanup_rwlock_unlock, &fwd.nbs_lock);
+        pthread_cleanup_push(__cleanup_rwlock_unlock, &fwd.lock);
 
-        list_for_each(p, &fwd.nbs) {
+        llist_for_each(p, &fwd.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->fd != in_fd)
                         flow_write(nb->fd, buf, len); /* FIXME: avoid copy. */
@@ -252,12 +248,12 @@ int dt_init(void)
         strcpy(info.comp_name, DT);
         strcpy(info.comp_name, DT_COMP);
 
-        list_head_init(&fwd.nbs);
+        llist_init(&fwd.nbs);
 
         if (notifier_reg(handle_event, NULL))
                 goto fail_notifier_reg;
 
-        if (pthread_rwlock_init(&fwd.nbs_lock, NULL))
+        if (pthread_rwlock_init(&fwd.lock, NULL))
                 goto fail_lock_init;
 
         fwd.set = fset_create();
@@ -273,8 +269,6 @@ int dt_init(void)
         if (connmgr_comp_init(COMPID_DT, &info))
                 goto fail_connmgr_comp_init;
 
-        fwd.nbs_len = 0;
-
         return 0;
 
  fail_connmgr_comp_init:
@@ -286,7 +280,7 @@ int dt_init(void)
  fail_pthread_create_reader:
         fset_destroy(fwd.set);
  fail_fset_create:
-        pthread_rwlock_destroy(&fwd.nbs_lock);
+        pthread_rwlock_destroy(&fwd.lock);
  fail_lock_init:
         notifier_unreg(handle_event);
  fail_notifier_reg:
@@ -308,15 +302,15 @@ void dt_fini(void)
 
         fset_destroy(fwd.set);
 
-        pthread_rwlock_wrlock(&fwd.nbs_lock);
+        pthread_rwlock_wrlock(&fwd.lock);
 
-        list_for_each_safe(p, h, &fwd.nbs) {
+        llist_for_each_safe(p, h, &fwd.nbs) {
                 struct nb * n = list_entry(p, struct nb, next);
-                list_del(&n->next);
+                llist_del(&n->next, &fwd.nbs);
                 free(n);
         }
 
-        pthread_rwlock_unlock(&fwd.nbs_lock);
+        pthread_rwlock_unlock(&fwd.lock);
 
-        pthread_rwlock_destroy(&fwd.nbs_lock);
+        pthread_rwlock_destroy(&fwd.lock);
 }

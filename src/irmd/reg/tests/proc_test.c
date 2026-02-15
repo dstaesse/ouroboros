@@ -77,7 +77,7 @@ static int test_reg_proc_add_name(void)
                 goto fail;
         }
 
-        if (proc->n_names != 1) {
+        if (proc->names.len != 1) {
                 printf("n_names not updated.\n");
                 goto fail;
         }
@@ -89,7 +89,7 @@ static int test_reg_proc_add_name(void)
 
         reg_proc_del_name(proc, name);
 
-        if (proc->n_names != 0) {
+        if (!llist_is_empty(&proc->names)) {
                 printf("n_names not updated.\n");
                 goto fail;
         }

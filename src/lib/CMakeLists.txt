@@ -20,7 +20,6 @@ set(SOURCE_FILES_COMMON
   crc32.c
   crypt.c
   hash.c
-  list.c
   lockfile.c
   logs.c
   md5.c

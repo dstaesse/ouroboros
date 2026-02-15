@@ -46,10 +46,9 @@
 /* forward declare for use in the dht code */
 /* Packet sink for DHT tests */
 struct {
-        bool   enabled;
+        bool         enabled;
 
-        struct list_head list;
-        size_t len;
+        struct llist msgs;
 } sink;
 
 struct message {
@@ -66,8 +65,6 @@ static int sink_send_msg(buffer_t * pkt,
         assert(pkt  != NULL);
         assert(addr != 0);
 
-        assert(!list_is_empty(&sink.list) || sink.len == 0);
-
         if (!sink.enabled)
                 goto finish;
 
@@ -83,9 +80,8 @@ static int sink_send_msg(buffer_t * pkt,
 
         m->dst = addr;
 
-        list_add_tail(&m->next, &sink.list);
+        llist_add_tail(&m->next, &sink.msgs);
 
-        ++sink.len;
  finish:
         freebuf(*pkt);
 
@@ -103,8 +99,7 @@ static int sink_send_msg(buffer_t * pkt,
 
 static void sink_init(void)
 {
-        list_head_init(&sink.list);
-        sink.len = 0;
+        llist_init(&sink.msgs);
         sink.enabled = true;
 }
 
@@ -113,22 +108,20 @@ static void sink_clear(void)
         struct list_head * p;
         struct list_head * h;
 
-        list_for_each_safe(p, h, &sink.list) {
+        llist_for_each_safe(p, h, &sink.msgs) {
                 struct message * m = list_entry(p, struct message, next);
-                list_del(&m->next);
+                llist_del(&m->next, &sink.msgs);
                 dht_msg__free_unpacked((dht_msg_t *) m->msg, NULL);
                 free(m);
-                --sink.len;
         }
 
-        assert(list_is_empty(&sink.list));
+        assert(llist_is_empty(&sink.msgs));
 }
 
 static void sink_fini(void)
 {
         sink_clear();
-
-        assert(list_is_empty(&sink.list) || sink.len != 0);
+        sink.enabled = false;
 }
 
 static dht_msg_t * sink_read(void)
@@ -136,16 +129,12 @@ static dht_msg_t * sink_read(void)
         struct message * m;
         dht_msg_t *      msg;
 
-        assert(!list_is_empty(&sink.list) || sink.len == 0);
-
-        if (list_is_empty(&sink.list))
+        if (llist_is_empty(&sink.msgs))
                 return NULL;
 
-        m = list_first_entry(&sink.list, struct message, next);
+        m = llist_first_entry(&sink.msgs, struct message, next);
 
-        --sink.len;
-
-        list_del(&m->next);
+        llist_del(&m->next, &sink.msgs);
 
         msg = m->msg;
 
@@ -978,7 +967,7 @@ static int test_dht_kv_find_node_rsp_msg_contacts(void)
         }
 
         if ((size_t) n < dht.k) {
-                printf("Failed to get enough contacts (%zu < %zu).\n", n, dht.k);
+                printf("Failed to get all contacts (%zu < %zu).\n", n, dht.k);
                 goto fail_fill;
         }
 
@@ -1204,7 +1193,7 @@ static int test_dht_kv_find_value_rsp_msg_contacts(void)
         }
 
         if ((size_t) n < dht.k) {
-                printf("Failed to get enough contacts (%zu < %zu).\n", n, dht.k);
+                printf("Failed to get all contacts (%zu < %zu).\n", n, dht.k);
                 goto fail_fill;
         }
 
@@ -1591,7 +1580,7 @@ static int test_dht_reg_unreg(void)
                 goto fail_reg;
         }
 
-        if (sink.len != 0) {
+        if (!llist_is_empty(&sink.msgs)) {
                 printf("Packet sent without contacts!");
                 goto fail_msg;
         }
@@ -1642,7 +1631,7 @@ static int test_dht_reg_unreg_contacts(void)
                 goto fail_reg;
         }
 
-        if (sink.len != dht.alpha) {
+        if (sink.msgs.len != dht.alpha) {
                 printf("Packet sent to too few contacts!\n");
                 goto fail_msg;
         }
@@ -1784,7 +1773,7 @@ static int test_dht_query(void)
                 goto fail_get;
         }
 
-        if (sink.len != 0) {
+        if (!llist_is_empty(&sink.msgs)) {
                 printf("Packet sent without contacts!");
                 goto fail_test;
         }

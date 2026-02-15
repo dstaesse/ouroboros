@@ -88,7 +88,7 @@ static int test_reg_name_add_proc(void)
 
         reg_name_del_proc(n, TEST_PID);
 
-        if (n->procs.len != 0) {
+        if (!llist_is_empty(&n->procs)) {
                 printf("Proc not removed from list.\n");
                 goto fail;
         }
@@ -138,7 +138,7 @@ static int test_reg_name_add_prog(void)
 
         reg_name_del_prog(n, TEST_PROG);
 
-        if (n->progs.len != 0) {
+        if (!llist_is_empty(&n->progs)) {
                 printf("Prog not removed from list.\n");
                 goto fail;
         }
@@ -263,12 +263,12 @@ static int test_reg_name_add_active(enum pol_balance lb)
 
         reg_name_del_proc(n, TEST_PID);
 
-        if (n->procs.len != 0) {
+        if (!llist_is_empty(&n->procs)) {
                 printf("Procs list not cleared.\n");
                 goto fail;
         }
 
-        if (n->active.len != 0) {
+        if (!llist_is_empty(&n->active)) {
                 printf("Active list not cleared.\n");
                 goto fail;
         }

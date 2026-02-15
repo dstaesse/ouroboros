@@ -69,9 +69,9 @@ struct reg_name * reg_name_create(const struct name_info * info)
         memset(name, 0, sizeof(*name));
 
         list_head_init(&name->next);
-        list_head_init(&name->progs.list);
-        list_head_init(&name->procs.list);
-        list_head_init(&name->active.list);
+        llist_init(&name->progs);
+        llist_init(&name->procs);
+        llist_init(&name->active);
 
         name->info = *info;
 
@@ -87,13 +87,9 @@ void reg_name_destroy(struct reg_name * name)
 
         assert(list_is_empty(&name->next));
 
-        assert(name->progs.len == 0);
-        assert(name->procs.len == 0);
-        assert(name->active.len == 0);
-
-        assert(list_is_empty(&name->progs.list));
-        assert(list_is_empty(&name->procs.list));
-        assert(list_is_empty(&name->active.list));
+        assert(llist_is_empty(&name->progs));
+        assert(llist_is_empty(&name->procs));
+        assert(llist_is_empty(&name->active));
 
         free(name);
 }
@@ -106,7 +102,7 @@ static struct proc_entry * __reg_name_get_active(const struct reg_name * name,
         assert(name != NULL);
         assert(pid > 0);
 
-        list_for_each(p, &name->active.list) {
+        llist_for_each(p, &name->active) {
                 struct proc_entry * entry;
                 entry = list_entry(p, struct proc_entry, next);
                 if (entry->pid == pid)
@@ -122,13 +118,12 @@ static void __reg_name_del_all_active(struct reg_name * name,
         struct list_head * p;
         struct list_head * h;
 
-        list_for_each_safe(p, h, &name->active.list) {
+        llist_for_each_safe(p, h, &name->active) {
                 struct proc_entry * entry;
                 entry = list_entry(p, struct proc_entry, next);
                 if (entry->pid == pid) {
-                        list_del(&entry->next);
+                        llist_del(&entry->next, &name->active);
                         free(entry);
-                        --name->active.len;
                 }
         }
 }
@@ -141,7 +136,7 @@ static struct proc_entry * __reg_name_get_proc(const struct reg_name * name,
         assert(name != NULL);
         assert(pid > 0);
 
-        list_for_each(p, &name->procs.list) {
+        llist_for_each(p, &name->procs) {
                 struct proc_entry * entry;
                 entry = list_entry(p, struct proc_entry, next);
                 if (entry->pid == pid)
@@ -159,7 +154,7 @@ static struct prog_entry * __reg_name_get_prog(const struct reg_name * name,
         assert(name != NULL);
         assert(prog != NULL);
 
-        list_for_each(p, &name->progs.list) {
+        llist_for_each(p, &name->progs) {
                 struct prog_entry * entry;
                 entry = list_entry(p, struct prog_entry, next);
                 if (strcmp(entry->exec[0], prog) == 0)
@@ -194,16 +189,14 @@ int reg_name_add_active(struct reg_name * name,
 
         switch (name->info.pol_lb) {
         case LB_RR:    /* Round robin policy. */
-                list_add_tail(&entry->next, &name->active.list);
+                llist_add_tail(&entry->next, &name->active);
                 break;
         case LB_SPILL: /* Keep accepting flows on the current process */
-                list_add(&entry->next, &name->active.list);
+                llist_add(&entry->next, &name->active);
                 break;
         default:
                 goto fail_unreachable;
         }
-
-        ++name->active.len;
 
         return 0;
 
@@ -223,9 +216,7 @@ void reg_name_del_active(struct reg_name * name,
         if (entry == NULL)
                 return;
 
-        list_del(&entry->next);
-
-        --name->active.len;
+        llist_del(&entry->next, &name->active);
 
         free(entry);
 }
@@ -236,10 +227,10 @@ pid_t reg_name_get_active(struct reg_name * name)
 
         assert(name != NULL);
 
-        if (list_is_empty(&name->active.list))
+        if (llist_is_empty(&name->active))
                 return -1;
 
-        e = list_first_entry(&name->active.list, struct proc_entry, next);
+        e = llist_first_entry(&name->active, struct proc_entry, next);
 
         return e->pid;
 }
@@ -262,9 +253,7 @@ int reg_name_add_proc(struct reg_name * name,
 
         entry->pid = pid;
 
-        list_add(&entry->next, &name->procs.list);
-
-        ++name->procs.len;
+        llist_add(&entry->next, &name->procs);
 
         return 0;
 
@@ -286,11 +275,9 @@ void reg_name_del_proc(struct reg_name * name,
 
         __reg_name_del_all_active(name, pid);
 
-        list_del(&entry->next);
+        llist_del(&entry->next, &name->procs);
 
         free(entry);
-
-        --name->procs.len;
 
         assert(__reg_name_get_proc(name, pid) == NULL);
 }
@@ -324,11 +311,9 @@ int reg_name_add_prog(struct reg_name * name,
                 goto fail_exec;
         }
 
-        list_add(&entry->next, &name->progs.list);
+        llist_add(&entry->next, &name->progs);
 
         log_dbg("Add prog %s to name %s.", exec[0], name->info.name);
-
-        ++name->progs.len;
 
         return 0;
 
@@ -350,11 +335,9 @@ void reg_name_del_prog(struct reg_name * name,
         if (entry == NULL)
                 return;
 
-        list_del(&entry->next);
+        llist_del(&entry->next, &name->progs);
 
         __free_prog_entry(entry);
-
-        --name->progs.len;
 
         assert(__reg_name_get_prog(name, prog) == NULL);
 }
@@ -372,10 +355,10 @@ char ** reg_name_get_exec(const struct reg_name * name)
 {
         struct prog_entry * e;
 
-        if (list_is_empty(&name->progs.list))
+        if (llist_is_empty(&name->progs))
                 return NULL;
 
-        e = list_first_entry(&name->progs.list, struct prog_entry, next);
+        e = llist_first_entry(&name->progs, struct prog_entry, next);
 
         return e->exec;
 }

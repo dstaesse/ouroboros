@@ -121,16 +121,8 @@ struct {
         struct graph * graph;
 
         struct {
-                struct {
-                        struct list_head list;
-                        size_t           len;
-                } nbs;
-
-                struct {
-                        struct list_head list;
-                        size_t           len;
-                } db;
-
+                struct llist     nbs;
+                struct llist     db;
                 pthread_rwlock_t lock;
         };
 
@@ -189,7 +181,7 @@ static struct adjacency * get_adj(const char * path)
 
         assert(path);
 
-        list_for_each(p, &ls.db.list) {
+        llist_for_each(p, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 sprintf(entry, LINK_FMT, LINK_VAL(a->src, a->dst));
                 if (strcmp(entry, path) == 0)
@@ -245,7 +237,7 @@ static int lspb_rib_read(const char * path,
 
         pthread_rwlock_rdlock(&ls.lock);
 
-        if (ls.db.len + ls.nbs.len == 0)
+        if (llist_is_empty(&ls.db) && llist_is_empty(&ls.nbs))
                 goto fail;
 
         a = get_adj(entry);
@@ -274,7 +266,7 @@ static int lspb_rib_readdir(char *** buf)
 
         pthread_rwlock_rdlock(&ls.lock);
 
-        if (ls.db.len + ls.nbs.len == 0) {
+        if (llist_is_empty(&ls.db) && llist_is_empty(&ls.nbs)) {
                 *buf = NULL;
                 goto no_entries;
         }
@@ -284,7 +276,7 @@ static int lspb_rib_readdir(char *** buf)
         if (*buf == NULL)
                 goto fail_entries;
 
-        list_for_each(p, &ls.nbs.list) {
+        llist_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 char * str = (nb->type == NB_DT ? ".dt " : ".mgmt ");
                 sprintf(entry, "%s" ADDR_FMT32 , str, ADDR_VAL32(&nb->addr));
@@ -295,7 +287,7 @@ static int lspb_rib_readdir(char *** buf)
                 strcpy((*buf)[idx++], entry);
         }
 
-        list_for_each(p, &ls.db.list) {
+        llist_for_each(p, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 sprintf(entry,  LINK_FMT, LINK_VAL(a->src, a->dst));
                 (*buf)[idx] = malloc(strlen(entry) + 1);
@@ -333,7 +325,7 @@ static int lspb_add_nb(uint64_t     addr,
 
         pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each(p, &ls.nbs.list) {
+        llist_for_each(p, &ls.nbs) {
                 struct nb * el = list_entry(p, struct nb, next);
                 if (addr > el->addr)
                         break;
@@ -360,9 +352,7 @@ static int lspb_add_nb(uint64_t     addr,
         nb->fd    = fd;
         nb->type  = type;
 
-        list_add_tail(&nb->next, p);
-
-        ++ls.nbs.len;
+        llist_add_tail_at(&nb->next, p, &ls.nbs);
 
         log_dbg("Type %s neighbor " ADDR_FMT32 " added.",
                 nb->type == NB_DT ? "dt" : "mgmt", ADDR_VAL32(&addr));
@@ -380,13 +370,12 @@ static int lspb_del_nb(uint64_t addr,
 
         pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each_safe(p, h, &ls.nbs.list) {
+        llist_for_each_safe(p, h, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->addr != addr || nb->fd != fd)
                         continue;
 
-                list_del(&nb->next);
-                --ls.nbs.len;
+                llist_del(&nb->next, &ls.nbs);
                 pthread_rwlock_unlock(&ls.lock);
                 log_dbg("Type %s neighbor " ADDR_FMT32 " deleted.",
                         nb->type == NB_DT ? "dt" : "mgmt", ADDR_VAL32(&addr));
@@ -406,7 +395,7 @@ static int nbr_to_fd(uint64_t addr)
 
         pthread_rwlock_rdlock(&ls.lock);
 
-        list_for_each(p, &ls.nbs.list) {
+        llist_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->addr == addr && nb->type == NB_DT) {
                         fd = nb->fd;
@@ -494,7 +483,7 @@ static int lspb_add_link(uint64_t    src,
 
         pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each(p, &ls.db.list) {
+        llist_for_each(p, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 if (a->dst == dst && a->src == src) {
                         if (a->seqno < seqno) {
@@ -521,9 +510,7 @@ static int lspb_add_link(uint64_t    src,
         adj->seqno = seqno;
         adj->stamp = now.tv_sec;
 
-        list_add_tail(&adj->next, p);
-
-        ls.db.len++;
+        llist_add_tail_at(&adj->next, p, &ls.db);
 
         if (graph_update_edge(ls.graph, src, dst, *qs))
                 log_warn("Failed to add edge to graph.");
@@ -543,14 +530,12 @@ static int lspb_del_link(uint64_t src,
 
         pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each_safe(p, h, &ls.db.list) {
+        llist_for_each_safe(p, h, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 if (a->dst == dst && a->src == src) {
-                        list_del(&a->next);
+                        llist_del(&a->next, &ls.db);
                         if (graph_del_edge(ls.graph, src, dst))
                                 log_warn("Failed to delete edge from graph.");
-
-                        ls.db.len--;
 
                         pthread_rwlock_unlock(&ls.lock);
                         set_pff_modified(false);
@@ -599,7 +584,7 @@ static void send_lsm(uint64_t src,
         lsm.s_addr = hton64(src);
         lsm.seqno  = hton64(seqno);
 
-        list_for_each(p, &ls.nbs.list) {
+        llist_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->type != NB_MGMT)
                         continue;
@@ -628,7 +613,7 @@ static void lspb_replicate(int fd)
         /* Lock the lspb, copy the lsms and send outside of lock. */
         pthread_rwlock_rdlock(&ls.lock);
 
-        list_for_each(p, &ls.db.list) {
+        llist_for_each(p, &ls.db) {
                 struct adjacency * adj;
                 struct adjacency * cpy;
                 adj = list_entry(p, struct adjacency, next);
@@ -675,11 +660,11 @@ static void * lsupdate(void * o)
 
                 pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.lock);
 
-                list_for_each_safe(p, h, &ls.db.list) {
+                llist_for_each_safe(p, h, &ls.db) {
                         struct adjacency * adj;
                         adj = list_entry(p, struct adjacency, next);
                         if (now.tv_sec > adj->stamp + ls.conf.t_timeo) {
-                                list_del(&adj->next);
+                                llist_del(&adj->next, &ls.db);
                                 log_dbg(LINK_FMT " timed out.",
                                         LINK_VAL(adj->src, adj->dst));
                                 if (graph_del_edge(ls.graph, adj->src,
@@ -746,7 +731,7 @@ static void forward_lsm(uint8_t * buf,
 
         pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.lock);
 
-        list_for_each(p, &ls.nbs.list) {
+        llist_for_each(p, &ls.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
                 if (nb->type != NB_MGMT || nb->fd == in_fd)
                         continue;
@@ -1090,15 +1075,12 @@ int link_state_init(struct ls_config * conf,
                 goto fail_fset_create;
         }
 
-        list_head_init(&ls.db.list);
-        list_head_init(&ls.nbs.list);
+        llist_init(&ls.db);
+        llist_init(&ls.nbs);
         list_head_init(&ls.instances.list);
 
         if (rib_reg(Lspb, &r_ops))
                 goto fail_rib_reg;
-
-        ls.db.len  = 0;
-        ls.nbs.len = 0;
 
         return 0;
 
@@ -1131,9 +1113,9 @@ void link_state_fini(void)
 
         pthread_rwlock_wrlock(&ls.lock);
 
-        list_for_each_safe(p, h, &ls.db.list) {
+        llist_for_each_safe(p, h, &ls.db) {
                 struct adjacency * a = list_entry(p, struct adjacency, next);
-                list_del(&a->next);
+                llist_del(&a->next, &ls.db);
                 free(a);
         }
 

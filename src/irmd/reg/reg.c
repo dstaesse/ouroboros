@@ -47,31 +47,18 @@ The IPC Resource Manager - Registry
 #define ID_OFFT 1 /* reserve some flow_ids */
 
 struct {
-        struct bmp *         flow_ids;  /* flow_ids for flows         */
+        struct bmp *    ids;       /* flow bitmap                */
 
-        struct list_head     flows;     /* flow information           */
-        size_t               n_flows;   /* number of flows            */
+        struct llist    flows;     /* list of flows              */
+        struct llist    ipcps;     /* list of ipcps in system    */
+        struct llist    names;     /* registered names known     */
+        struct llist    pools;     /* per-user pools             */
+        struct llist    procs;     /* processes known            */
+        struct llist    progs;     /* programs known             */
+        struct llist    spawned;   /* child processes            */
 
-        struct list_head     ipcps;     /* list of ipcps in system    */
-        size_t               n_ipcps;   /* number of ipcps            */
-
-        struct list_head     names;     /* registered names known     */
-        size_t               n_names;   /* number of names            */
-
-        struct list_head     pools;     /* per-user pools             */
-        size_t               n_pools;   /* number of pools            */
-
-        struct list_head     procs;     /* processes                  */
-        size_t               n_procs;   /* number of processes        */
-
-        struct list_head     progs;     /* programs known             */
-        size_t               n_progs;   /* number of programs         */
-
-        struct list_head     spawned;   /* child processes            */
-        size_t               n_spawned; /* number of child processes  */
-
-        pthread_mutex_t      mtx;       /* registry lock              */
-        pthread_cond_t       cond;      /* condvar for reg changes    */
+        pthread_mutex_t mtx;       /* registry lock              */
+        pthread_cond_t  cond;      /* condvar for reg changes    */
 } reg;
 
 struct pid_entry {
@@ -85,7 +72,7 @@ static struct reg_flow * __reg_get_flow(int flow_id)
 
         assert(flow_id >= ID_OFFT);
 
-        list_for_each(p, &reg.flows) {
+        llist_for_each(p, &reg.flows) {
                 struct reg_flow * entry;
                 entry = list_entry(p, struct reg_flow, next);
                 if (entry->info.id == flow_id)
@@ -99,7 +86,7 @@ static struct reg_flow * __reg_get_accept_flow(pid_t pid)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.flows) {
+        llist_for_each(p, &reg.flows) {
                 struct reg_flow * entry;
                 entry = list_entry(p, struct reg_flow, next);
                 if (entry->info.state != FLOW_ACCEPT_PENDING)
@@ -117,7 +104,7 @@ static struct list_head * __reg_after_flow(int flow_id)
 
         assert(flow_id >= ID_OFFT);
 
-        list_for_each(p, &reg.flows) {
+        llist_for_each(p, &reg.flows) {
                 struct reg_flow * entry;
                 entry = list_entry(p, struct reg_flow, next);
                 if (entry->info.id > flow_id)
@@ -133,7 +120,7 @@ static struct reg_ipcp * __reg_get_ipcp(pid_t pid)
 
         assert(pid > 0);
 
-        list_for_each(p, &reg.ipcps) {
+        llist_for_each(p, &reg.ipcps) {
                 struct reg_ipcp * entry;
                 entry = list_entry(p, struct reg_ipcp, next);
                 if (entry->info.pid == pid)
@@ -147,7 +134,7 @@ static struct reg_ipcp * __reg_get_ipcp_by_layer(const char * layer)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.ipcps) {
+        llist_for_each(p, &reg.ipcps) {
                 struct reg_ipcp * entry;
                 entry = list_entry(p, struct reg_ipcp, next);
                 if (strcmp(entry->layer.name, layer) == 0)
@@ -164,7 +151,7 @@ static struct list_head * __reg_after_ipcp(const struct ipcp_info * info)
 
         assert(info != NULL);
 
-        list_for_each(p, &reg.ipcps) {
+        llist_for_each(p, &reg.ipcps) {
                 struct reg_ipcp * entry;
                 entry = list_entry(p, struct reg_ipcp, next);
                 if (entry->info.type < info->type)
@@ -186,7 +173,7 @@ static struct reg_name * __reg_get_name(const char * name)
 
         assert(name != NULL);
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
                 if (strcmp(entry->info.name, name) == 0)
@@ -229,7 +216,7 @@ static struct list_head * __reg_after_name(const char * name)
 
         assert(name != NULL);
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
                 if (strcmp(entry->info.name, name) > 0)
@@ -243,7 +230,7 @@ static struct reg_pool * __reg_get_pool(uid_t uid)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.pools) {
+        llist_for_each(p, &reg.pools) {
                 struct reg_pool * entry;
                 entry = list_entry(p, struct reg_pool, next);
                 if (entry->uid == uid)
@@ -257,7 +244,7 @@ static struct reg_proc * __reg_get_proc(pid_t pid)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.procs) {
+        llist_for_each(p, &reg.procs) {
                 struct reg_proc * entry;
                 entry = list_entry(p, struct reg_proc, next);
                 if (entry->info.pid == pid)
@@ -271,7 +258,7 @@ static struct list_head * __reg_after_proc(pid_t pid)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.procs) {
+        llist_for_each(p, &reg.procs) {
                 struct reg_proc * entry;
                 entry = list_entry(p, struct reg_proc, next);
                 if (entry->info.pid > pid)
@@ -285,7 +272,7 @@ static void __reg_kill_all_proc(int signal)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.procs) {
+        llist_for_each(p, &reg.procs) {
                 struct reg_proc * entry;
                 entry = list_entry(p, struct reg_proc, next);
                 kill(entry->info.pid, signal);
@@ -296,7 +283,7 @@ static pid_t __reg_get_dead_proc(void)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.procs) {
+        llist_for_each(p, &reg.procs) {
                 struct reg_proc * entry;
                 entry = list_entry(p, struct reg_proc, next);
                 if (kill(entry->info.pid, 0) < 0)
@@ -311,7 +298,7 @@ static void __reg_cancel_flows_for_proc(pid_t pid)
         struct list_head * p;
         bool   changed = false;
 
-        list_for_each(p, &reg.flows) {
+        llist_for_each(p, &reg.flows) {
                 struct reg_flow * entry;
                 entry = list_entry(p, struct reg_flow, next);
                 if (entry->info.n_pid != pid)
@@ -337,7 +324,7 @@ static struct pid_entry * __reg_get_spawned(pid_t pid)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.spawned) {
+        llist_for_each(p, &reg.spawned) {
                 struct pid_entry * entry;
                 entry = list_entry(p, struct pid_entry, next);
                 if (entry->pid == pid)
@@ -351,7 +338,7 @@ static struct list_head * __reg_after_spawned(pid_t pid)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.spawned) {
+        llist_for_each(p, &reg.spawned) {
                 struct pid_entry * entry;
                 entry = list_entry(p, struct pid_entry, next);
                 if (entry->pid > pid)
@@ -365,7 +352,7 @@ static void __reg_kill_all_spawned(int signal)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.spawned) {
+        llist_for_each(p, &reg.spawned) {
                 struct pid_entry * entry;
                 entry = list_entry(p, struct pid_entry, next);
                 kill(entry->pid, signal);
@@ -374,17 +361,17 @@ static void __reg_kill_all_spawned(int signal)
 
 static pid_t __reg_first_spawned(void)
 {
-        if (list_is_empty(&reg.spawned))
+        if (llist_is_empty(&reg.spawned))
                 return -1;
 
-        return list_first_entry(&reg.spawned, struct pid_entry, next)->pid;
+        return llist_first_entry(&reg.spawned, struct pid_entry, next)->pid;
 }
 
 static struct reg_prog * __reg_get_prog(const char * name)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.progs) {
+        llist_for_each(p, &reg.progs) {
                 struct reg_prog * entry;
                 entry = list_entry(p, struct reg_prog, next);
                 if (strcmp(entry->info.name, name) == 0)
@@ -398,7 +385,7 @@ static char ** __reg_get_exec(const char * name)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
                 if (strcmp(entry->info.name, name) == 0)
@@ -412,7 +399,7 @@ static struct list_head * __reg_after_prog(const char * name)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.progs) {
+        llist_for_each(p, &reg.progs) {
                 struct reg_prog * entry;
                 entry = list_entry(p, struct reg_prog, next);
                 if (strcmp(entry->info.name, name) > 0)
@@ -426,7 +413,7 @@ static void __reg_del_name_from_procs(const char * name)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.procs) {
+        llist_for_each(p, &reg.procs) {
                 struct reg_proc * proc;
                 proc = list_entry(p, struct reg_proc, next);
                 reg_proc_del_name(proc, name);
@@ -437,7 +424,7 @@ static void __reg_del_name_from_progs(const char * name)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.progs) {
+        llist_for_each(p, &reg.progs) {
                 struct reg_prog * prog;
                 prog = list_entry(p, struct reg_prog, next);
                 reg_prog_del_name(prog, name);
@@ -449,13 +436,13 @@ static void __reg_proc_update_names(struct reg_proc * proc)
         struct list_head * p;
         struct reg_prog * prog;
 
-        assert(list_is_empty(&proc->names));
+        assert(llist_is_empty(&proc->names));
 
         prog = __reg_get_prog(proc->info.prog);
         if (prog == NULL)
                 return;
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * name;
                 name = list_entry(p, struct reg_name, next);
                 assert(!reg_name_has_proc(name, proc->info.pid));
@@ -470,7 +457,7 @@ static void __reg_del_proc_from_names(pid_t pid)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * name;
                 name = list_entry(p, struct reg_name, next);
                 reg_name_del_proc(name, pid);
@@ -481,7 +468,7 @@ static void __reg_del_prog_from_names(const char * prog)
 {
         struct list_head * p;
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * name;
                 name = list_entry(p, struct reg_name, next);
                 reg_name_del_prog(name, prog);
@@ -496,7 +483,7 @@ static int __reg_add_active_proc(pid_t pid)
 
         assert(pid > 0);
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * name;
                 name = list_entry(p, struct reg_name, next);
                 if (reg_name_has_proc(name, pid)) {
@@ -518,7 +505,7 @@ static void __reg_del_active_proc(pid_t pid)
 
         assert(pid > 0);
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * name;
                 name = list_entry(p, struct reg_name, next);
                 reg_name_del_active(name, pid);
@@ -547,21 +534,21 @@ int reg_init(void)
                 goto fail_cond;
         }
 
-        reg.flow_ids = bmp_create(SYS_MAX_FLOWS -ID_OFFT, ID_OFFT);
-        if (reg.flow_ids == NULL) {
+        reg.ids = bmp_create(SYS_MAX_FLOWS - ID_OFFT, ID_OFFT);
+        if (reg.ids == NULL) {
                 log_err("Failed to create flow_ids bitmap.");
                 goto fail_flow_ids;
         }
 
         pthread_condattr_destroy(&cattr);
 
-        list_head_init(&reg.flows);
-        list_head_init(&reg.ipcps);
-        list_head_init(&reg.names);
-        list_head_init(&reg.pools);
-        list_head_init(&reg.procs);
-        list_head_init(&reg.progs);
-        list_head_init(&reg.spawned);
+        llist_init(&reg.flows);
+        llist_init(&reg.ipcps);
+        llist_init(&reg.names);
+        llist_init(&reg.pools);
+        llist_init(&reg.procs);
+        llist_init(&reg.progs);
+        llist_init(&reg.spawned);
 
         return 0;
 
@@ -582,63 +569,56 @@ void reg_clear(void)
 
         pthread_mutex_lock(&reg.mtx);
 
-        list_for_each_safe(p, h, &reg.spawned) {
+        llist_for_each_safe(p, h, &reg.spawned) {
                 struct pid_entry * entry;
                 entry = list_entry(p, struct pid_entry, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &reg.spawned);
                 free(entry);
-                reg.n_spawned--;
         }
 
-        list_for_each_safe(p, h, &reg.progs) {
+        llist_for_each_safe(p, h, &reg.progs) {
                 struct reg_prog * entry;
                 entry = list_entry(p, struct reg_prog, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &reg.progs);
                 __reg_del_prog_from_names(entry->info.path);
                 reg_prog_destroy(entry);
-                reg.n_progs--;
         }
 
-        list_for_each_safe(p, h, &reg.procs) {
+        llist_for_each_safe(p, h, &reg.procs) {
                 struct reg_proc * entry;
                 entry = list_entry(p, struct reg_proc, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &reg.procs);
                 __reg_del_proc_from_names(entry->info.pid);
                 reg_proc_destroy(entry);
-                reg.n_procs--;
         }
 
-        list_for_each_safe(p, h, &reg.pools) {
+        llist_for_each_safe(p, h, &reg.pools) {
                 struct reg_pool * entry;
                 entry = list_entry(p, struct reg_pool, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &reg.pools);
                 entry->refcount = 0; /* Force destroy during cleanup */
                 reg_pool_destroy(entry);
-                reg.n_pools--;
         }
 
-        list_for_each_safe(p, h, &reg.flows) {
+        llist_for_each_safe(p, h, &reg.flows) {
                 struct reg_flow * entry;
                 entry = list_entry(p, struct reg_flow, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &reg.flows);
                 reg_flow_destroy(entry);
-                reg.n_flows--;
         }
 
-        list_for_each_safe(p, h, &reg.names) {
+        llist_for_each_safe(p, h, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &reg.names);
                 reg_name_destroy(entry);
-                reg.n_names--;
         }
 
-        list_for_each_safe(p, h, &reg.ipcps) {
+        llist_for_each_safe(p, h, &reg.ipcps) {
                 struct reg_ipcp * entry;
                 entry = list_entry(p, struct reg_ipcp, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &reg.ipcps);
                 reg_ipcp_destroy(entry);
-                reg.n_ipcps--;
         }
 
         pthread_mutex_unlock(&reg.mtx);
@@ -646,23 +626,15 @@ void reg_clear(void)
 
 void reg_fini(void)
 {
-        assert(list_is_empty(&reg.spawned));
-        assert(list_is_empty(&reg.progs));
-        assert(list_is_empty(&reg.procs));
-        assert(list_is_empty(&reg.pools));
-        assert(list_is_empty(&reg.names));
-        assert(list_is_empty(&reg.ipcps));
-        assert(list_is_empty(&reg.flows));
+        assert(llist_is_empty(&reg.spawned));
+        assert(llist_is_empty(&reg.progs));
+        assert(llist_is_empty(&reg.procs));
+        assert(llist_is_empty(&reg.pools));
+        assert(llist_is_empty(&reg.names));
+        assert(llist_is_empty(&reg.ipcps));
+        assert(llist_is_empty(&reg.flows));
 
-        assert(reg.n_spawned == 0);
-        assert(reg.n_progs == 0);
-        assert(reg.n_procs == 0);
-        assert(reg.n_pools == 0);
-        assert(reg.n_names == 0);
-        assert(reg.n_ipcps == 0);
-        assert(reg.n_flows == 0);
-
-        bmp_destroy(reg.flow_ids);
+        bmp_destroy(reg.ids);
 
         if (pthread_cond_destroy(&reg.cond) != 0)
                 log_warn("Failed to destroy condvar.");
@@ -682,8 +654,8 @@ int reg_create_flow(struct flow_info * info)
 
         pthread_mutex_lock(&reg.mtx);
 
-        info->id = bmp_allocate(reg.flow_ids);
-        if (!bmp_is_id_valid(reg.flow_ids, info->id)) {
+        info->id = bmp_allocate(reg.ids);
+        if (!bmp_is_id_valid(reg.ids, info->id)) {
                 log_err("Failed to allocate flow id.");
                 goto fail_id;
         }
@@ -694,16 +666,14 @@ int reg_create_flow(struct flow_info * info)
                 goto fail_flow;
         }
 
-        list_add(&f->next, __reg_after_flow(info->id));
-
-        reg.n_flows++;
+        llist_add_at(&f->next, __reg_after_flow(info->id), &reg.flows);
 
         pthread_mutex_unlock(&reg.mtx);
 
         return 0;
 
  fail_flow:
-        bmp_release(reg.flow_ids, info->id);
+        bmp_release(reg.ids, info->id);
         info->id = 0;
  fail_id:
         pthread_mutex_unlock(&reg.mtx);
@@ -722,11 +692,9 @@ int  reg_destroy_flow(int flow_id)
                 goto no_flow;
         }
 
-        list_del(&f->next);
+        llist_del(&f->next, &reg.flows);
 
-        reg.n_flows--;
-
-        bmp_release(reg.flow_ids, flow_id);
+        bmp_release(reg.ids, flow_id);
 
         pthread_mutex_unlock(&reg.mtx);
 
@@ -785,11 +753,10 @@ int reg_create_ipcp(const struct ipcp_info * info)
 
         entry->pid = info->pid;
 
-        list_add_tail(&ipcp->next, __reg_after_ipcp(info));
-        list_add(&entry->next, __reg_after_spawned(info->pid));
-
-        reg.n_ipcps++;
-        reg.n_spawned++;
+        llist_add_tail_at(&ipcp->next, __reg_after_ipcp(info), &reg.ipcps);
+        llist_add_at(&entry->next,
+                     __reg_after_spawned(info->pid),
+                     &reg.spawned);
 
         pthread_mutex_unlock(&reg.mtx);
 
@@ -879,16 +846,16 @@ int reg_list_ipcps(ipcp_list_msg_t *** ipcps)
 
         pthread_mutex_lock(&reg.mtx);
 
-        if (reg.n_ipcps == 0)
+        if (llist_is_empty(&reg.ipcps))
                 goto finish;
 
-        *ipcps = malloc(reg.n_ipcps * sizeof(**ipcps));
+        *ipcps = malloc(reg.ipcps.len * sizeof(**ipcps));
         if (*ipcps == NULL) {
                 log_err("Failed to malloc ipcps.");
                 goto fail_malloc;
         }
 
-        list_for_each(p, &reg.ipcps) {
+        llist_for_each(p, &reg.ipcps) {
                 struct reg_ipcp * entry;
                 entry = list_entry(p, struct reg_ipcp, next);
                 if (__get_ipcp_info(&(*ipcps)[i], entry) < 0)
@@ -930,9 +897,7 @@ int reg_create_name(const struct name_info * info)
                 goto fail_name;
         }
 
-        list_add(&n->next, __reg_after_name(info->name));
-
-        reg.n_names++;
+        llist_add_at(&n->next, __reg_after_name(info->name), &reg.names);
 
         pthread_mutex_unlock(&reg.mtx);
         return 0;
@@ -961,9 +926,7 @@ int  reg_destroy_name(const char * name)
         __reg_del_name_from_procs(name);
         __reg_del_name_from_progs(name);
 
-        list_del(&n->next);
-
-        reg.n_names--;
+        llist_del(&n->next, &reg.names);
 
         pthread_mutex_unlock(&reg.mtx);
 
@@ -1034,7 +997,7 @@ int reg_get_name_for_hash(char *          buf,
 
         pthread_mutex_lock(&reg.mtx);
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * n = list_entry(p, struct reg_name, next);
                 str_hash(algo, thash, n->info.name);
                 if (memcmp(thash, hash, len) == 0) {
@@ -1076,16 +1039,16 @@ int reg_list_names(name_info_msg_t *** names)
 
         pthread_mutex_lock(&reg.mtx);
 
-        if (reg.n_names == 0)
+        if (llist_is_empty(&reg.names))
                 goto finish;
 
-        *names = malloc(reg.n_names * sizeof(**names));
+        *names = malloc(reg.names.len * sizeof(**names));
         if (*names == NULL) {
                 log_err("Failed to malloc names.");
                 goto fail_malloc;
         }
 
-        list_for_each(p, &reg.names) {
+        llist_for_each(p, &reg.names) {
                 struct reg_name * entry;
                 entry = list_entry(p, struct reg_name, next);
                 (*names)[i] = name_info_s_to_msg(&entry->info);
@@ -1138,8 +1101,7 @@ int reg_prepare_pool(uid_t uid,
                         pthread_mutex_unlock(&reg.mtx);
                         return -1;
                 }
-                list_add(&pool->next, &reg.pools);
-                reg.n_pools++;
+                llist_add(&pool->next, &reg.pools);
         }
 
         reg_pool_ref(pool);
@@ -1170,9 +1132,7 @@ int reg_create_proc(const struct proc_info * info)
 
         __reg_proc_update_names(proc);
 
-        list_add(&proc->next, __reg_after_proc(info->pid));
-
-        reg.n_procs++;
+        llist_add_at(&proc->next, __reg_after_proc(info->pid), &reg.procs);
 
         pthread_cond_broadcast(&reg.cond);
 
@@ -1198,29 +1158,25 @@ int reg_destroy_proc(pid_t pid)
         if (proc != NULL) {
                 if (!is_ouroboros_member_uid(proc->info.uid))
                         pool = __reg_get_pool(proc->info.uid);
-                list_del(&proc->next);
-                reg.n_procs--;
+                llist_del(&proc->next, &reg.procs);
                 reg_proc_destroy(proc);
                 __reg_del_proc_from_names(pid);
                 __reg_cancel_flows_for_proc(pid);
                 if (pool != NULL && reg_pool_unref(pool) == 0) {
-                        list_del(&pool->next);
-                        reg.n_pools--;
+                        llist_del(&pool->next, &reg.pools);
                         reg_pool_destroy(pool);
                 }
         }
 
         spawn = __reg_get_spawned(pid);
         if (spawn != NULL) {
-                list_del(&spawn->next);
-                reg.n_spawned--;
+                llist_del(&spawn->next, &reg.spawned);
                 free(spawn);
         }
 
         ipcp = __reg_get_ipcp(pid);
         if (ipcp != NULL) {
-                list_del(&ipcp->next);
-                reg.n_ipcps--;
+                llist_del(&ipcp->next, &reg.ipcps);
                 reg_ipcp_destroy(ipcp);
         }
 
@@ -1315,9 +1271,7 @@ int reg_create_spawned(pid_t pid)
 
         entry->pid = pid;
 
-        list_add(&entry->next, __reg_after_spawned(pid));
-
-        reg.n_spawned++;
+        llist_add_at(&entry->next, __reg_after_spawned(pid), &reg.spawned);
 
         pthread_mutex_unlock(&reg.mtx);
 
@@ -1487,9 +1441,7 @@ int reg_create_prog(const struct prog_info * info)
                 goto fail_prog;
         }
 
-        list_add(&prog->next, __reg_after_prog(info->name));
-
-        reg.n_progs++;
+        llist_add_at(&prog->next, __reg_after_prog(info->name), &reg.progs);
  exists:
         pthread_mutex_unlock(&reg.mtx);
 
@@ -1517,9 +1469,7 @@ int  reg_destroy_prog(const char * name)
 
         __reg_del_prog_from_names(prog->info.path);
 
-        list_del(&prog->next);
-
-        reg.n_progs--;
+        llist_del(&prog->next, &reg.progs);
 
         pthread_mutex_unlock(&reg.mtx);
 

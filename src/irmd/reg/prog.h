@@ -33,8 +33,7 @@ struct reg_prog {
 
         struct prog_info info;
 
-        struct list_head names;   /* names to listen for       */
-        size_t           n_names; /* number of names in list   */
+        struct llist     names;   /* names to listen for       */
  };
 
 struct reg_prog * reg_prog_create(const struct prog_info * info);

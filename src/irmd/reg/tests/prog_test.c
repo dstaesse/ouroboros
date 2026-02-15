@@ -73,7 +73,7 @@ static int test_reg_prog_add_name(void)
                 goto fail;
         }
 
-        if (prog->n_names != 1) {
+        if (prog->names.len != 1) {
                 printf("n_names not updated.\n");
                 goto fail;
         }
@@ -85,7 +85,7 @@ static int test_reg_prog_add_name(void)
 
         reg_prog_del_name(prog, name);
 
-        if (prog->n_names != 0) {
+        if (!llist_is_empty(&prog->names)) {
                 printf("n_names not updated.\n");
                 goto fail;
         }

@@ -55,12 +55,11 @@ static void __reg_proc_clear_names(struct reg_proc * proc)
 
         assert(proc != NULL);
 
-        list_for_each_safe(p, h, &proc->names) {
+        llist_for_each_safe(p, h, &proc->names) {
                 struct name_entry * entry;
                 entry = list_entry(p, struct name_entry, next);
-                list_del(&entry->next);
+                llist_del(&entry->next, &proc->names);
                 __free_name_entry(entry);
-                proc->n_names--;
         }
 }
 
@@ -85,10 +84,9 @@ struct reg_proc * reg_proc_create(const struct proc_info * info)
         }
 
         list_head_init(&proc->next);
-        list_head_init(&proc->names);
+        llist_init(&proc->names);
 
         proc->info    = *info;
-        proc->n_names = 0;
 
         return proc;
 
@@ -108,9 +106,7 @@ void reg_proc_destroy(struct reg_proc * proc)
 
         assert(list_is_empty(&proc->next));
 
-        assert(proc->n_names == 0);
-
-        assert(list_is_empty(&proc->names));
+        assert(llist_is_empty(&proc->names));
 
         free(proc);
 }
@@ -120,7 +116,7 @@ static struct name_entry * __reg_proc_get_name(const struct reg_proc * proc,
 {
         struct list_head * p;
 
-        list_for_each(p, &proc->names) {
+        llist_for_each(p, &proc->names) {
                 struct name_entry * entry;
                 entry = list_entry(p, struct name_entry, next);
                 if (strcmp(entry->name, name) == 0)
@@ -149,9 +145,7 @@ int reg_proc_add_name(struct reg_proc * proc,
                 goto fail_name;
         }
 
-        list_add(&entry->next, &proc->names);
-
-        proc->n_names++;
+        llist_add(&entry->next, &proc->names);
 
         return 0;
 
@@ -170,11 +164,9 @@ void reg_proc_del_name(struct reg_proc * proc,
         if(entry == NULL)
                 return;
 
-        list_del(&entry->next);
+        llist_del(&entry->next, &proc->names);
 
         __free_name_entry(entry);
-
-        proc->n_names--;
 
         assert(__reg_proc_get_name(proc, name) == NULL);
 }

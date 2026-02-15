@@ -57,10 +57,7 @@ struct edge {
 };
 
 struct graph {
-        struct {
-                struct list_head list;
-                size_t len;
-        } vertices;
+        struct llist     vertices;
 
         pthread_mutex_t  lock;
 };
@@ -88,7 +85,7 @@ static struct vertex * find_vertex_by_addr(struct graph * graph,
 
         assert(graph);
 
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 struct vertex * e = list_entry(p, struct vertex, next);
                 if (e->addr == addr)
                         return e;
@@ -142,7 +139,7 @@ static struct vertex * add_vertex(struct graph * graph,
         vertex->addr = addr;
 
         /* Keep them ordered on address. */
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > addr)
                         break;
@@ -151,7 +148,7 @@ static struct vertex * add_vertex(struct graph * graph,
 
         vertex->index = i;
 
-        list_add_tail(&vertex->next, p);
+        llist_add_tail_at(&vertex->next, p, &graph->vertices);
 
         /* Increase the index of the vertices to the right. */
         list_for_each(p, &vertex->next) {
@@ -159,8 +156,6 @@ static struct vertex * add_vertex(struct graph * graph,
                 if (v->addr > addr)
                         v->index++;
         }
-
-        ++graph->vertices.len;
 
         return vertex;
 }
@@ -174,10 +169,10 @@ static void del_vertex(struct graph *  graph,
         assert(graph != NULL);
         assert(vertex != NULL);
 
-        list_del(&vertex->next);
+        llist_del(&vertex->next, &graph->vertices);
 
         /* Decrease the index of the vertices to the right. */
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > vertex->addr)
                         v->index--;
@@ -189,8 +184,6 @@ static void del_vertex(struct graph *  graph,
         }
 
         free(vertex);
-
-        --graph->vertices.len;
 }
 
 struct graph * graph_create(void)
@@ -206,8 +199,7 @@ struct graph * graph_create(void)
                 return NULL;
         }
 
-        graph->vertices.len = 0;
-        list_head_init(&graph->vertices.list);
+        llist_init(&graph->vertices);
 
         return graph;
 }
@@ -221,7 +213,7 @@ void graph_destroy(struct graph * graph)
 
         pthread_mutex_lock(&graph->lock);
 
-        list_for_each_safe(p, n, &graph->vertices.list) {
+        llist_for_each_safe(p, n, &graph->vertices) {
                 struct vertex * e = list_entry(p, struct vertex, next);
                 del_vertex(graph, e);
         }
@@ -230,7 +222,7 @@ void graph_destroy(struct graph * graph)
 
         pthread_mutex_destroy(&graph->lock);
 
-        assert(graph->vertices.len == 0);
+        assert(llist_is_empty(&graph->vertices));
 
         free(graph);
 }
@@ -371,7 +363,7 @@ static int get_min_vertex(struct graph *   graph,
 
         *v = NULL;
 
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 if (!used[i] && dist[i] < min) {
                         min = dist[i];
                         index = i;
@@ -420,7 +412,7 @@ static int dijkstra(struct graph *    graph,
         memset(*nhops, 0, sizeof(**nhops) * graph->vertices.len);
         memset(*dist, 0, sizeof(**dist) * graph->vertices.len);
 
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
                 (*dist)[i++]  = (v->addr == src) ? 0 : INT_MAX;
         }
@@ -526,7 +518,7 @@ static int graph_routing_table_simple(struct graph *     graph,
         list_head_init(table);
 
         /* Now construct the routing table from the nhops. */
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
 
                 /* This is the src */
@@ -624,7 +616,7 @@ static int graph_routing_table_lfa(struct graph *     graph,
                 addrs[j] = -1;
         }
 
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
 
                 if (v->addr != s_addr)
@@ -650,7 +642,7 @@ static int graph_routing_table_lfa(struct graph *     graph,
         }
 
         /* Loop though all nodes to see if we have a LFA for them. */
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
 
                 if (v->addr == s_addr)
@@ -735,7 +727,7 @@ static int graph_routing_table_ecmp(struct graph *     graph,
 
                 free(nhops);
 
-                list_for_each(h, &graph->vertices.list) {
+                llist_for_each(h, &graph->vertices) {
                         v = list_entry(h, struct vertex, next);
                         if (tmp_dist[v->index] + 1 == (*dist)[v->index]) {
                                 n = malloc(sizeof(*n));
@@ -753,7 +745,7 @@ static int graph_routing_table_ecmp(struct graph *     graph,
 
         list_head_init(table);
         i = 0;
-        list_for_each(p, &graph->vertices.list) {
+        llist_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
                 if (v->addr == s_addr) {
                         ++i;
