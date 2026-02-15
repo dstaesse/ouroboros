@@ -1,0 +1,100 @@
+depends_on:
+  - 00-check-version
+
+matrix:
+  IMAGE:
+    - dstaesse/debian:o7s
+    - dstaesse/ubuntu:o7s
+  COMPILER:
+    - clang
+    - gcc
+
+steps:
+  - name: build
+    image: ${IMAGE}
+    pull: true
+    when:
+      - branch: be
+        event: [push, pull_request]
+      - event: manual
+    commands:
+      - apt-get update -y
+      - apt-get install bash clang -y
+      - apt-get install git protobuf-c-compiler cmake -y
+      - apt-get install libgcrypt20-dev libssl-dev libfuse-dev dnsutils cmake-curses-gui -y
+      - apt-get install libprotobuf-c-dev -y || true
+      - |
+        set -e
+
+        run_build() {
+            mkdir build && cd build
+            CC=${COMPILER} cmake .. "$@"
+            make CFLAGS="${CFLAGS_EXTRA}" -s -j2
+            env CTEST_OUTPUT_ON_FAILURE=1 \
+                make CFLAGS="${CFLAGS_EXTRA}" -s check
+            cd .. && rm -rf build
+        }
+
+        for build_type in Release Debug; do
+            for flags in '' -m32; do
+                echo "--- ${COMPILER} $build_type $flags ---"
+                CFLAGS_EXTRA="$flags"
+                run_build \
+                    -DCMAKE_BUILD_TYPE=$build_type
+            done
+        done
+
+        CFLAGS_EXTRA=""
+
+        for flow_stats in TRUE FALSE; do
+            echo "--- IPCP_FLOW_STATS=$flow_stats ---"
+            run_build \
+                -DIPCP_FLOW_STATS=$flow_stats
+        done
+
+        for disable_fuse in TRUE FALSE; do
+            echo "--- DISABLE_FUSE=$disable_fuse ---"
+            run_build \
+                -DDISABLE_FUSE=$disable_fuse
+        done
+
+        for disable_cf in TRUE FALSE; do
+            for build_type in Release Debug; do
+                echo "--- DISABLE_CONFIGFILE=$disable_cf $build_type ---"
+                run_build \
+                    -DCMAKE_BUILD_TYPE=$build_type \
+                    -DDISABLE_CONFIGFILE=$disable_cf
+            done
+        done
+
+        for disable_ddns in TRUE FALSE; do
+            for build_type in Release Debug; do
+                echo "--- DISABLE_DDNS=$disable_ddns $build_type ---"
+                run_build \
+                    -DCMAKE_BUILD_TYPE=$build_type \
+                    -DDISABLE_DDNS=$disable_ddns
+            done
+        done
+
+        for disable_ssl in TRUE FALSE; do
+            for disable_gc in TRUE FALSE; do
+                for build_type in Release Debug; do
+                    echo "--- OPENSSL=$disable_ssl GCRYPT=$disable_gc $build_type ---"
+                    run_build \
+                        -DCMAKE_BUILD_TYPE=$build_type \
+                        -DDISABLE_OPENSSL=$disable_ssl \
+                        -DDISABLE_LIBGCRYPT=$disable_gc
+                done
+            done
+        done
+
+        for rxm_heap in TRUE FALSE; do
+            for rxm_block in TRUE FALSE; do
+                echo "--- HEAP=$rxm_heap BLOCKING=$rxm_block ---"
+                run_build \
+                    -DRXM_BUFFER_ON_HEAP=$rxm_heap \
+                    -DRXM_BLOCKING=$rxm_block
+            done
+        done
+
+

@@ -1,0 +1,40 @@
+depends_on:
+  - 00-check-version
+
+matrix:
+  IMAGE:
+    - dstaesse/debian:o7s
+    - dstaesse/ubuntu:o7s
+  COMPILER:
+    - clang
+    - gcc
+
+steps:
+  - name: sanitizers
+    image: ${IMAGE}
+    pull: true
+    when:
+      - branch: be
+        event: [push, pull_request]
+      - event: manual
+    commands:
+      - apt-get update -y
+      - apt-get install bash clang -y
+      - apt-get install git protobuf-c-compiler cmake -y
+      - apt-get install libgcrypt20-dev libssl-dev libfuse-dev dnsutils cmake-curses-gui -y
+      - apt-get install libprotobuf-c-dev -y || true
+      - |
+        set -e
+
+        for sanitizer in DebugASan DebugUSan DebugLSan; do
+            echo "--- ${COMPILER} $sanitizer ---"
+            mkdir build && cd build
+            CC=${COMPILER} cmake .. \
+                -DCMAKE_BUILD_TYPE=$sanitizer
+            make -s -j2
+            env CTEST_OUTPUT_ON_FAILURE=1 \
+                make -s check
+            cd .. && rm -rf build
+        done
+
+
