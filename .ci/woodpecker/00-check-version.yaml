@@ -1,0 +1,13 @@
+steps:
+  - name: check-version
+    image: alpine
+    pull: true
+    when:
+      branch: [be]
+      event: [push, pull_request]
+    commands:
+      - |
+        grep -q '$Format:' VERSION || (
+          echo "ERROR: VERSION must contain \$Format placeholder for export-subst"
+          exit 1
+        )
