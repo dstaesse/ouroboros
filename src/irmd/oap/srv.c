@@ -417,8 +417,6 @@ int oap_srv_process(const struct name_info * info,
                 goto fail_kex;
         }
 
-        sk->nid = kcfg.c.nid;
-
         /* Decode incoming header (NID_undef = request, no hash) */
         if (oap_hdr_decode(&peer_hdr, req_buf, NID_undef) < 0) {
                 log_err("Failed to decode OAP header.");
@@ -444,7 +442,6 @@ int oap_srv_process(const struct name_info * info,
         if (do_server_kex(info, &peer_hdr, &kcfg, &local_hdr.kex, sk) < 0)
                 goto fail_kex;
 
-        /* Update cipher NID after negotiation */
         sk->nid = kcfg.c.nid;
 
         /* Build response header with hash of client request */

@@ -332,6 +332,86 @@ static int test_oap_roundtrip_kem_all(void)
         return ret;
 }
 
+static int test_oap_kem_srv_uncfg(int kex)
+{
+        struct oap_test_ctx ctx;
+        const char *        kex_str = kex_nid_to_str(kex);
+
+        memset(&test_cfg, 0, sizeof(test_cfg));
+
+        /* Server: auth only, no KEX configured */
+        test_cfg.srv.auth = true;
+
+        /* Client: requests KEM with server-side encapsulation */
+        test_cfg.cli.kex      = kex;
+        test_cfg.cli.cipher   = NID_aes_256_gcm;
+        test_cfg.cli.kdf      = get_random_kdf();
+        test_cfg.cli.kem_mode = SRV_ENCAP;
+        test_cfg.cli.auth     = false;
+
+        TEST_START("(%s)", kex_str);
+
+        if (oap_test_setup_kem(&ctx, root_ca_crt_ml,
+                               im_ca_crt_ml) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
+                printf("Client and server keys do not match!\n");
+                goto fail_cleanup;
+        }
+
+        if (ctx.cli.nid == NID_undef ||
+            ctx.srv.nid == NID_undef) {
+                printf("Cipher not set in flow.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown_kem(&ctx);
+
+        TEST_SUCCESS("(%s)", kex_str);
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown_kem(&ctx);
+ fail:
+        TEST_FAIL("(%s)", kex_str);
+        return TEST_RC_FAIL;
+}
+
+static int test_oap_kem_srv_uncfg_all(void)
+{
+        int ret = 0;
+        int i;
+
+        for (i = 0; kex_supported_nids[i] != NID_undef; i++) {
+                const char * algo;
+
+                algo = kex_nid_to_str(kex_supported_nids[i]);
+
+                if (!IS_KEM_ALGORITHM(algo))
+                        continue;
+
+                ret |= test_oap_kem_srv_uncfg(kex_supported_nids[i]);
+        }
+
+        return ret;
+}
+
 int oap_test_pqc(int    argc,
                  char **argv)
 {
@@ -345,6 +425,8 @@ int oap_test_pqc(int    argc,
 
         ret |= test_oap_roundtrip_kem_all();
 
+        ret |= test_oap_kem_srv_uncfg_all();
+
         ret |= test_oap_corrupted_request();
         ret |= test_oap_corrupted_response();
         ret |= test_oap_truncated_request();
@@ -352,6 +434,8 @@ int oap_test_pqc(int    argc,
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_roundtrip_kem;
         (void) test_oap_roundtrip_kem_all;
+        (void) test_oap_kem_srv_uncfg;
+        (void) test_oap_kem_srv_uncfg_all;
         (void) test_oap_corrupted_request;
         (void) test_oap_corrupted_response;
         (void) test_oap_truncated_request;
