@@ -118,9 +118,15 @@ int load_kex_config(const char *        name,
                 log_info("Key exchange not configured for %s.", name);
                 return 0;
         }
-
-        if (cfg->c.nid == NID_undef || crypt_nid_to_str(cfg->c.nid) == NULL) {
-                log_err("Invalid cipher NID %d for %s.", cfg->c.nid, name);
+#ifndef HAVE_OPENSSL_PQC
+        if (IS_KEM_ALGORITHM(cfg->x.str)) {
+                log_err("PQC not available, can't use %s for %s.",
+                        cfg->x.str, name);
+                return -ENOTSUP;
+        }
+#endif
+        if (cfg->c.nid == NID_undef) {
+                log_err("Invalid cipher for %s.", name);
                 return -ECRYPT;
         }
 
