@@ -2,9 +2,6 @@ set(HEADERS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/include/ouroboros")
 
 # SOCK_BUF_SIZE is in cmake/config/global.cmake
 
-configure_file("${CMAKE_SOURCE_DIR}/include/ouroboros/version.h.in"
-  "${CMAKE_BINARY_DIR}/include/ouroboros/version.h" @ONLY)
-
 configure_file("${CMAKE_SOURCE_DIR}/include/ouroboros/sockets.h.in"
   "${CMAKE_BINARY_DIR}/include/ouroboros/sockets.h" @ONLY)
 

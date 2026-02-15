@@ -2192,10 +2192,8 @@ static void irm_argparse(int     argc,
                         argc--;
                         argv++;
                 } else if (strcmp(*argv, "--version") == 0) {
-                        printf("Ouroboros version %d.%d.%d\n",
-                               OUROBOROS_VERSION_MAJOR,
-                               OUROBOROS_VERSION_MINOR,
-                               OUROBOROS_VERSION_PATCH);
+                        printf("Ouroboros version %s\n",
+                               OUROBOROS_VERSION_STRING);
                         exit(EXIT_SUCCESS);
 #ifdef HAVE_TOML
                 } else if (strcmp (*argv, "--config") == 0) {

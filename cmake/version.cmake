@@ -3,3 +3,21 @@ set(PACKAGE_VERSION_MINOR 22)
 set(PACKAGE_VERSION_PATCH  0)
 set(PACKAGE_VERSION
   "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}.${PACKAGE_VERSION_PATCH}")
+
+include(utils/GetGitHash)
+get_git_hash(${CMAKE_SOURCE_DIR} ${PACKAGE_VERSION_MAJOR} ${PACKAGE_VERSION_MINOR} ${PACKAGE_VERSION_PATCH} PACKAGE_VERSION_STRING)
+
+configure_file("${CMAKE_SOURCE_DIR}/include/ouroboros/version.h.in"
+  "${CMAKE_BINARY_DIR}/include/ouroboros/version.h" @ONLY)
+
+add_custom_target(version_header ALL
+  COMMAND ${CMAKE_COMMAND}
+    -DGIT_DIR=${CMAKE_SOURCE_DIR}
+    -DINPUT_FILE=${CMAKE_SOURCE_DIR}/include/ouroboros/version.h.in
+    -DOUTPUT_FILE=${CMAKE_BINARY_DIR}/include/ouroboros/version.h
+    -DPACKAGE_VERSION_MAJOR=${PACKAGE_VERSION_MAJOR}
+    -DPACKAGE_VERSION_MINOR=${PACKAGE_VERSION_MINOR}
+    -DPACKAGE_VERSION_PATCH=${PACKAGE_VERSION_PATCH}
+    -P ${CMAKE_SOURCE_DIR}/cmake/utils/GenVersionHeader.cmake
+  COMMENT "Updating git hash in version.h"
+)

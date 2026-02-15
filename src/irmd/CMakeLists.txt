@@ -44,6 +44,8 @@ set(IRMD_SOURCES
 
 add_executable(irmd ${IRMD_SOURCES})
 
+add_dependencies(irmd version_header)
+
 target_include_directories(irmd PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
