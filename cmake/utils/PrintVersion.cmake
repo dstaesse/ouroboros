@@ -1,0 +1,8 @@
+file(STRINGS "${VERSION_HEADER}" lines REGEX "OUROBOROS_VERSION_STRING")
+foreach(line ${lines})
+  if(line MATCHES "define OUROBOROS_VERSION_STRING \"(.*)\"")
+    set(version "${CMAKE_MATCH_1}")
+    message("Ouroboros ${version}")
+    break()
+  endif()
+endforeach()

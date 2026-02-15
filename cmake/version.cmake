@@ -21,3 +21,10 @@ add_custom_target(version_header ALL
     -P ${CMAKE_SOURCE_DIR}/cmake/utils/GenVersionHeader.cmake
   COMMENT "Updating git hash in version.h"
 )
+
+add_custom_target(version
+  COMMAND ${CMAKE_COMMAND}
+    -DVERSION_HEADER=${CMAKE_BINARY_DIR}/include/ouroboros/version.h
+    -P ${CMAKE_SOURCE_DIR}/cmake/utils/PrintVersion.cmake
+  DEPENDS version_header
+)
