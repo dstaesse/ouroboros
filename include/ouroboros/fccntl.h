@@ -1,5 +1,5 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2024
+ * Ouroboros - Copyright (C) 2016 - 2026
  *
  * Flow and FRCT connection control
  *
