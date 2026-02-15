@@ -56,7 +56,7 @@
 #include <string.h>
 
 #define LS_ENTRY_SIZE  104
-#define Lspb           "lspb"
+#define lsdb           "lsdb"
 
 #ifndef CLOCK_REALTIME_COARSE
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
@@ -191,7 +191,7 @@ static struct adjacency * get_adj(const char * path)
         return NULL;
 }
 
-static int lspb_rib_getattr(const char *      path,
+static int lsdb_rib_getattr(const char *      path,
                             struct rib_attr * attr)
 {
         struct adjacency * adj;
@@ -222,7 +222,7 @@ static int lspb_rib_getattr(const char *      path,
         return 0;
 }
 
-static int lspb_rib_read(const char * path,
+static int lsdb_rib_read(const char * path,
                          char *       buf,
                          size_t       len)
 {
@@ -256,7 +256,7 @@ static int lspb_rib_read(const char * path,
         return -1;
 }
 
-static int lspb_rib_readdir(char *** buf)
+static int lsdb_rib_readdir(char *** buf)
 {
         struct list_head * p;
         char               entry[RIB_PATH_LEN + 1];
@@ -311,12 +311,12 @@ static int lspb_rib_readdir(char *** buf)
 }
 
 static struct rib_ops r_ops = {
-        .read    = lspb_rib_read,
-        .readdir = lspb_rib_readdir,
-        .getattr = lspb_rib_getattr
+        .read    = lsdb_rib_read,
+        .readdir = lsdb_rib_readdir,
+        .getattr = lsdb_rib_getattr
 };
 
-static int lspb_add_nb(uint64_t     addr,
+static int lsdb_add_nb(uint64_t     addr,
                        int          fd,
                        enum nb_type type)
 {
@@ -362,7 +362,7 @@ static int lspb_add_nb(uint64_t     addr,
         return 0;
 }
 
-static int lspb_del_nb(uint64_t addr,
+static int lsdb_del_nb(uint64_t addr,
                        int      fd)
 {
         struct list_head * p;
@@ -467,7 +467,7 @@ static void set_pff_modified(bool calc)
         pthread_mutex_unlock(&ls.instances.mtx);
 }
 
-static int lspb_add_link(uint64_t    src,
+static int lsdb_add_link(uint64_t    src,
                          uint64_t    dst,
                          uint64_t    seqno,
                          qosspec_t * qs)
@@ -522,7 +522,7 @@ static int lspb_add_link(uint64_t    src,
         return 0;
 }
 
-static int lspb_del_link(uint64_t src,
+static int lsdb_del_link(uint64_t src,
                          uint64_t dst)
 {
         struct list_head * p;
@@ -601,8 +601,8 @@ static void send_lsm(uint64_t src,
         }
 }
 
-/* replicate the lspb to a mgmt neighbor */
-static void lspb_replicate(int fd)
+/* replicate the lsdb to a mgmt neighbor */
+static void lsdb_replicate(int fd)
 {
         struct list_head * p;
         struct list_head * h;
@@ -610,7 +610,7 @@ static void lspb_replicate(int fd)
 
         list_head_init(&copy);
 
-        /* Lock the lspb, copy the lsms and send outside of lock. */
+        /* Lock the lsdb, copy the lsms and send outside of lock. */
         pthread_rwlock_rdlock(&ls.lock);
 
         llist_for_each(p, &ls.db) {
@@ -619,7 +619,7 @@ static void lspb_replicate(int fd)
                 adj = list_entry(p, struct adjacency, next);
                 cpy = malloc(sizeof(*cpy));
                 if (cpy == NULL) {
-                        log_warn("Failed to replicate full lspb.");
+                        log_warn("Failed to replicate full lsdb.");
                         break;
                 }
 
@@ -799,7 +799,7 @@ static void * lsreader(void * o)
                                   LSU_VAL(msg.s_addr, msg.d_addr, msg.seqno),
                                   ADDR_VAL32(&ls.addr));
 #endif
-                        if (lspb_add_link(msg.s_addr,
+                        if (lsdb_add_link(msg.s_addr,
                                           msg.d_addr,
                                           msg.seqno,
                                           &qs))
@@ -858,20 +858,20 @@ static void handle_event(void *       self,
                 send_lsm(ls.addr, c->conn_info.addr, 0);
                 pthread_cleanup_pop(true);
 
-                if (lspb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_DT))
-                        log_dbg("Failed to add neighbor to Lspb.");
+                if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_DT))
+                        log_dbg("Failed to add neighbor to lsdb.");
 
-                if (lspb_add_link(ls.addr, c->conn_info.addr, 0, &qs))
-                        log_dbg("Failed to add new adjacency to Lspb.");
+                if (lsdb_add_link(ls.addr, c->conn_info.addr, 0, &qs))
+                        log_dbg("Failed to add new adjacency to lsdb.");
                 break;
         case NOTIFY_DT_CONN_DEL:
                 flow_event(c->flow_info.fd, false);
 
-                if (lspb_del_nb(c->conn_info.addr, c->flow_info.fd))
-                        log_dbg("Failed to delete neighbor from Lspb.");
+                if (lsdb_del_nb(c->conn_info.addr, c->flow_info.fd))
+                        log_dbg("Failed to delete neighbor from lsdb.");
 
-                if (lspb_del_link(ls.addr, c->conn_info.addr))
-                        log_dbg("Local link was not in Lspb.");
+                if (lsdb_del_link(ls.addr, c->conn_info.addr))
+                        log_dbg("Local link was not in lsdb.");
                 break;
         case NOTIFY_DT_CONN_QOS:
                 log_dbg("QoS changes currently unsupported.");
@@ -886,15 +886,15 @@ static void handle_event(void *       self,
                 fccntl(c->flow_info.fd, FLOWGFLAGS, &flags);
                 fccntl(c->flow_info.fd, FLOWSFLAGS, flags | FLOWFRNOPART);
                 fset_add(ls.mgmt_set, c->flow_info.fd);
-                if (lspb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_MGMT))
-                        log_warn("Failed to add mgmt neighbor to Lspb.");
-                /* replicate the entire lspb */
-                lspb_replicate(c->flow_info.fd);
+                if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_MGMT))
+                        log_warn("Failed to add mgmt neighbor to lsdb.");
+                /* replicate the entire lsdb */
+                lsdb_replicate(c->flow_info.fd);
                 break;
         case NOTIFY_MGMT_CONN_DEL:
                 fset_del(ls.mgmt_set, c->flow_info.fd);
-                if (lspb_del_nb(c->conn_info.addr, c->flow_info.fd))
-                        log_warn("Failed to delete mgmt neighbor from Lspb.");
+                if (lsdb_del_nb(c->conn_info.addr, c->flow_info.fd))
+                        log_warn("Failed to delete mgmt neighbor from lsdb.");
                 break;
         default:
                 break;
@@ -1079,7 +1079,7 @@ int link_state_init(struct ls_config * conf,
         llist_init(&ls.nbs);
         list_head_init(&ls.instances.list);
 
-        if (rib_reg(Lspb, &r_ops))
+        if (rib_reg(lsdb, &r_ops))
                 goto fail_rib_reg;
 
         return 0;
@@ -1103,7 +1103,7 @@ void link_state_fini(void)
         struct list_head * p;
         struct list_head * h;
 
-        rib_unreg(Lspb);
+        rib_unreg(lsdb);
 
         fset_destroy(ls.mgmt_set);
 
