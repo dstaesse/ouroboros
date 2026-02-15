@@ -23,12 +23,6 @@ set(SHM_PREFIX "ouroboros" CACHE STRING
 set(SHM_LOCKFILE_NAME "/${SHM_PREFIX}.lockfile" CACHE INTERNAL
   "Filename for the POSIX shared memory lockfile")
 
-# FUSE configuration
-if(HAVE_FUSE)
-  set(FUSE_PREFIX "/tmp/ouroboros" CACHE STRING
-    "Mountpoint for RIB filesystem")
-endif()
-
 # Secure memory configuration
 set(IRMD_SECMEM_MAX 1048576 CACHE STRING "IRMd secure heap size")
 set(PROC_SECMEM_MAX 1048576 CACHE STRING "Process secure heap size")

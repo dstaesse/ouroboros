@@ -27,8 +27,9 @@ if(FUSE_PKG_FOUND)
     else()
       message(STATUS "FUSE support enabled")
     endif()
-    # FUSE_PREFIX is set in cmake/config/global.cmake
     set(HAVE_FUSE TRUE CACHE INTERNAL "FUSE filesystem support available")
+    set(FUSE_PREFIX "/tmp/ouroboros" CACHE STRING
+      "Mountpoint for RIB filesystem")
   else()
     message(STATUS "FUSE support disabled by user")
     unset(HAVE_FUSE CACHE)
