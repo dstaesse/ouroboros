@@ -13,9 +13,9 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   oap_test.c
 )
 
-create_test_sourcelist(${PARENT_DIR}_pqc_tests test_suite_pqc.c
-  # PQC-specific tests
-  oap_test_pqc.c
+create_test_sourcelist(${PARENT_DIR}_ml_dsa_tests test_suite_ml_dsa.c
+  # ML-DSA-specific tests
+  oap_test_ml_dsa.c
 )
 
 # OAP test needs io.c compiled with OAP_TEST_MODE
@@ -41,24 +41,24 @@ target_include_directories(${PARENT_DIR}_test PRIVATE
   ${IRMD_BINARY_DIR}
 )
 
-# PQC test executable (ML-DSA)
-add_executable(${PARENT_DIR}_pqc_test ${${PARENT_DIR}_pqc_tests} ${OAP_TEST_SOURCES})
+# ML-DSA test executable
+add_executable(${PARENT_DIR}_ml_dsa_test ${${PARENT_DIR}_ml_dsa_tests} ${OAP_TEST_SOURCES})
 set_source_files_properties(${OAP_TEST_SOURCES}
-  TARGET_DIRECTORY ${PARENT_DIR}_pqc_test
+  TARGET_DIRECTORY ${PARENT_DIR}_ml_dsa_test
   PROPERTIES COMPILE_DEFINITIONS "OAP_TEST_MODE"
 )
 
-disable_test_logging_for_target(${PARENT_DIR}_pqc_test)
-target_link_libraries(${PARENT_DIR}_pqc_test ouroboros-irm)
-target_include_directories(${PARENT_DIR}_pqc_test PRIVATE
+disable_test_logging_for_target(${PARENT_DIR}_ml_dsa_test)
+target_link_libraries(${PARENT_DIR}_ml_dsa_test ouroboros-irm)
+target_include_directories(${PARENT_DIR}_ml_dsa_test PRIVATE
   ${IRMD_SOURCE_DIR}
   ${IRMD_BINARY_DIR}
 )
 
-add_dependencies(build_tests ${PARENT_DIR}_test ${PARENT_DIR}_pqc_test)
+add_dependencies(build_tests ${PARENT_DIR}_test ${PARENT_DIR}_ml_dsa_test)
 
 # Regular tests
 ouroboros_register_tests(TARGET ${PARENT_DIR}_test TESTS ${${PARENT_DIR}_tests})
 
-# PQC tests
-ouroboros_register_tests(TARGET ${PARENT_DIR}_pqc_test TESTS ${${PARENT_DIR}_pqc_tests})
+# ML-DSA tests
+ouroboros_register_tests(TARGET ${PARENT_DIR}_ml_dsa_test TESTS ${${PARENT_DIR}_ml_dsa_tests})

@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2026
  *
- * Unit tests of OAP post-quantum key exchange
+ * Unit tests of OAP ML-KEM/ML-DSA key exchange
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -34,7 +34,7 @@
 #include <ouroboros/random.h>
 #include <test/test.h>
 
-#include <test/certs_pqc.h>
+#include <test/certs/ml_dsa.h>
 
 #include "oap.h"
 #include "common.h"
@@ -412,15 +412,15 @@ static int test_oap_kem_srv_uncfg_all(void)
         return ret;
 }
 
-int oap_test_pqc(int    argc,
-                 char **argv)
+int oap_test_ml_dsa(int    argc,
+                    char **argv)
 {
         int ret = 0;
 
         (void) argc;
         (void) argv;
 
-#ifdef HAVE_OPENSSL_PQC
+#ifdef HAVE_OPENSSL_ML_KEM
         ret |= test_oap_roundtrip_auth_only();
 
         ret |= test_oap_roundtrip_kem_all();

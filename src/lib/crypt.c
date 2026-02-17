@@ -98,7 +98,7 @@ const uint16_t kex_supported_nids[] = {
         NID_ffdhe4096,
         NID_X448,
         NID_secp521r1,
-#ifdef HAVE_OPENSSL_PQC
+#ifdef HAVE_OPENSSL_ML_KEM
         NID_MLKEM512,
         NID_MLKEM768,
         NID_MLKEM1024,

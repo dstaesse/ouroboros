@@ -6,14 +6,15 @@ compute_test_prefix()
 create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   # Add new tests here
   auth_test.c
-  auth_test_pqc.c
+  auth_test_ml_dsa.c
+  auth_test_slh_dsa.c
   bitmap_test.c
   btree_test.c
   crc32_test.c
   crypt_test.c
   hash_test.c
   kex_test.c
-  kex_test_pqc.c
+  kex_test_ml_kem.c
   md5_test.c
   sha3_test.c
   sockets_test.c

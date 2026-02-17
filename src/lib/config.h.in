@@ -25,7 +25,9 @@
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL
 #ifdef HAVE_OPENSSL
-#cmakedefine HAVE_OPENSSL_PQC
+#cmakedefine HAVE_OPENSSL_ML_KEM
+#cmakedefine HAVE_OPENSSL_ML_DSA
+#cmakedefine HAVE_OPENSSL_SLH_DSA
 #define HAVE_ENCRYPTION
 #define SECMEM_GUARD             @SECMEM_GUARD@
 #endif

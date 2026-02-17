@@ -38,7 +38,7 @@
 #include <ouroboros/time.h>
 
 #include <test/test.h>
-#include <test/certs.h>
+#include <test/certs/ecdsa.h>
 
 #include "oap.h"
 #include "common.h"
@@ -526,7 +526,7 @@ static int test_oap_roundtrip_all(void)
         for (i = 0; kex_supported_nids[i] != NID_undef; i++) {
                 const char * algo = kex_nid_to_str(kex_supported_nids[i]);
 
-                /* Skip KEM algorithms - they're tested in oap_test_pqc */
+                /* Skip KEM algorithms - tested in oap_test_ml_dsa */
                 if (IS_KEM_ALGORITHM(algo))
                         continue;
 

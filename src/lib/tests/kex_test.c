@@ -276,7 +276,7 @@ static int test_kex_validate_algo(void)
                 goto fail;
         }
 
-#ifdef HAVE_OPENSSL_PQC
+#ifdef HAVE_OPENSSL_ML_KEM
         if (kex_validate_algo("ML-KEM-768") != 0) {
                 printf("ML-KEM-768 should be valid.\n");
                 goto fail;
@@ -536,7 +536,7 @@ static int test_kex_all(void)
         for (i = 0; kex_supported_nids[i] != NID_undef; i++) {
                 const char * algo = kex_nid_to_str(kex_supported_nids[i]);
 
-                /* KEM tests are in kex_test_pqc.c */
+                /* KEM tests are in kex_test_ml_kem.c */
                 if (IS_KEM_ALGORITHM(algo))
                         continue;
 
@@ -552,7 +552,7 @@ static int test_kex_dhe_corrupted_pubkey_all(void)
         int i;
 
         /* Test corruption for all DHE algorithms */
-        /* KEM error injection tests are in kex_test_pqc.c */
+        /* KEM error injection tests are in kex_test_ml_kem.c */
         for (i = 0; kex_supported_nids[i] != NID_undef; i++) {
                 const char * algo = kex_nid_to_str(kex_supported_nids[i]);
 

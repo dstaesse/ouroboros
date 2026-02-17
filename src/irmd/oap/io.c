@@ -118,7 +118,7 @@ int load_kex_config(const char *        name,
                 log_info("Key exchange not configured for %s.", name);
                 return 0;
         }
-#ifndef HAVE_OPENSSL_PQC
+#ifndef HAVE_OPENSSL_ML_KEM
         if (IS_KEM_ALGORITHM(cfg->x.str)) {
                 log_err("PQC not available, can't use %s for %s.",
                         cfg->x.str, name);

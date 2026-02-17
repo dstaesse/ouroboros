@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef TEST_CERTS_PQC_H
-#define TEST_CERTS_PQC_H
+#ifndef TEST_CERTS_ML_DSA_H
+#define TEST_CERTS_ML_DSA_H
 
 /*
  * ML-DSA-65 certificates for testing post-quantum cryptography
@@ -652,5 +652,5 @@ static __attribute__((unused)) const char * server_crt_ml = \
 "b3t9ma4mb36DrMjKTFFWwtgya56fo+f6AAAAAAAAAAAAAAAACxIYHyQr\n"
 "-----END CERTIFICATE-----\n";
 
-#endif /* TEST_CERTS_PQC_H */
+#endif /* TEST_CERTS_ML_DSA_H */
 

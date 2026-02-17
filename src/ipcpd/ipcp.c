@@ -208,7 +208,7 @@ static int ipcp_rib_read(const char * path,
                          char *       buf,
                          size_t       len)
 {
-        char * entry;
+        const char * entry;
 
         if (len < LAYER_NAME_SIZE + 2) /* trailing \n */
                 return 0;

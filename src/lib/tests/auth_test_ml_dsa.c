@@ -1,7 +1,7 @@
 /*
- * Ouroboros - Copyright (C) 2016 - 2024
+ * Ouroboros - Copyright (C) 2016 - 2026
  *
- * Test of the authentication functions
+ * Test of the ML-DSA-65 authentication functions
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -27,7 +27,7 @@
 #include <ouroboros/random.h>
 #include <ouroboros/utils.h>
 
-#include <test/certs/ecdsa.h>
+#include <test/certs/ml_dsa.h>
 
 #define TEST_MSG_SIZE 1500
 
@@ -59,8 +59,8 @@ static int test_load_free_crt(void)
 
         TEST_START();
 
-        if (crypt_load_crt_str(root_ca_crt_ec, &crt) < 0) {
-                printf("Failed to load certificate string.\n");
+        if (crypt_load_crt_str(root_ca_crt_ml, &crt) < 0) {
+                printf("Failed to load root crt from string.\n");
                 goto fail_load;
         }
 
@@ -69,70 +69,6 @@ static int test_load_free_crt(void)
         TEST_SUCCESS();
 
         return TEST_RC_SUCCESS;
- fail_load:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
-static int test_crypt_get_pubkey_crt(void)
-{
-        void * pk;
-        void * crt;
-
-        TEST_START();
-
-        if (crypt_load_crt_str(signed_server_crt_ec, &crt) < 0) {
-                printf("Failed to load server certificate from string.\n");
-                goto fail_load;
-        }
-
-        if (crypt_get_pubkey_crt(crt, &pk) < 0) {
-                printf("Failed to get public key from certificate.\n");
-                goto fail_get_pubkey;
-        }
-
-        crypt_free_key(pk);
-        crypt_free_crt(crt);
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
-
- fail_get_pubkey:
-        crypt_free_crt(crt);
- fail_load:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
-static int test_check_crt_name(void)
-{
-        void * crt;
-
-        TEST_START();
-
-        if (crypt_load_crt_str(signed_server_crt_ec, &crt) < 0) {
-                printf("Failed to load certificate from string.\n");
-                goto fail_load;
-        }
-
-        if (crypt_check_crt_name(crt, "test-1.unittest.o7s") < 0) {
-                printf("Failed to verify correct name.\n");
-                goto fail_check;
-        }
-
-        if (crypt_check_crt_name(crt, "bogus.name") == 0) {
-                printf("Failed to detect incorrect name.\n");
-                goto fail_check;
-        }
-
-        crypt_free_crt(crt);
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
- fail_check:
-        crypt_free_crt(crt);
  fail_load:
         TEST_FAIL();
         return TEST_RC_FAIL;
@@ -144,7 +80,7 @@ static int test_load_free_privkey(void)
 
         TEST_START();
 
-        if (crypt_load_privkey_str(server_pkp_ec, &key) < 0) {
+        if (crypt_load_privkey_str(server_pkp_ml, &key) < 0) {
                 printf("Failed to load server key pair from string.\n");
                 goto fail_load;
         }
@@ -165,7 +101,7 @@ static int test_load_free_pubkey(void)
 
         TEST_START();
 
-        if (crypt_load_pubkey_str(server_pk_ec, &key) < 0) {
+        if (crypt_load_pubkey_str(server_pk_ml, &key) < 0) {
                 printf("Failed to load server public key from string.\n");
                 goto fail_load;
         }
@@ -176,92 +112,6 @@ static int test_load_free_pubkey(void)
 
         return TEST_RC_SUCCESS;
  fail_load:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
-static int test_crypt_check_pubkey_crt(void)
-{
-        void * pk;
-        void * crt_pk;
-        void * crt;
-
-        TEST_START();
-
-        if (crypt_load_crt_str(signed_server_crt_ec, &crt) < 0) {
-                printf("Failed to load public certificate from string.\n");
-                goto fail_crt;
-        }
-
-        if (crypt_load_pubkey_str(server_pk_ec, &pk) < 0) {
-                printf("Failed to load public key from string.\n");
-                goto fail_pubkey;
-        }
-
-        if (crypt_get_pubkey_crt(crt, &crt_pk) < 0) {
-                printf("Failed to get public key from certificate.\n");
-                goto fail_get_pubkey;
-        }
-
-        if (crypt_cmp_key(pk, crt_pk) != 0) {
-                printf("Public keys do not match .\n");
-                goto fail_check;
-        }
-
-
-        crypt_free_key(crt_pk);
-        crypt_free_key(pk);
-        crypt_free_crt(crt);
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
- fail_check:
-        crypt_free_key(crt_pk);
- fail_get_pubkey:
-        crypt_free_key(pk);
- fail_pubkey:
-        crypt_free_crt(crt);
- fail_crt:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
-static int test_store_add(void)
-{
-        struct auth_ctx * ctx;
-        void *            _root_ca_crt;
-
-        TEST_START();
-
-        ctx = auth_create_ctx();
-        if (ctx == NULL) {
-                printf("Failed to create auth context.\n");
-                goto fail_create;
-        }
-
-        if (crypt_load_crt_str(root_ca_crt_ec, &_root_ca_crt) < 0) {
-                printf("Failed to load root crt from string.\n");
-                goto fail_load;
-        }
-
-        if (auth_add_crt_to_store(ctx, _root_ca_crt) < 0) {
-                printf("Failed to add root crt to auth store.\n");
-                goto fail_add;
-        }
-
-        crypt_free_crt(_root_ca_crt);
-        auth_destroy_ctx(ctx);
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
-
- fail_add:
-        crypt_free_crt(_root_ca_crt);
- fail_load:
-        crypt_free_crt(_root_ca_crt);
- fail_create:
         TEST_FAIL();
         return TEST_RC_FAIL;
 }
@@ -282,22 +132,22 @@ static int test_verify_crt(void)
                 goto fail_create_ctx;
         }
 
-        if (crypt_load_crt_str(server_crt_ec, &_server_crt) < 0) {
+        if (crypt_load_crt_str(server_crt_ml, &_server_crt) < 0) {
                 printf("Failed to load self-signed crt from string.\n");
                 goto fail_load_server_crt;
         }
 
-        if (crypt_load_crt_str(signed_server_crt_ec, &_signed_server_crt) < 0) {
+        if (crypt_load_crt_str(signed_server_crt_ml, &_signed_server_crt) < 0) {
                 printf("Failed to load signed crt from string.\n");
                 goto fail_load_signed_server_crt;
         }
 
-        if (crypt_load_crt_str(root_ca_crt_ec, &_root_ca_crt) < 0) {
+        if (crypt_load_crt_str(root_ca_crt_ml, &_root_ca_crt) < 0) {
                 printf("Failed to load root crt from string.\n");
                 goto fail_load_root_ca_crt;
         }
 
-        if (crypt_load_crt_str(im_ca_crt_ec, &_im_ca_crt) < 0) {
+        if (crypt_load_crt_str(im_ca_crt_ml, &_im_ca_crt) < 0) {
                 printf("Failed to load intermediate crt from string.\n");
                 goto fail_load_im_ca_crt;
         }
@@ -347,7 +197,7 @@ static int test_verify_crt(void)
         return TEST_RC_FAIL;
 }
 
-int test_auth_sign(void)
+static int test_auth_sign(void)
 {
         uint8_t  buf[TEST_MSG_SIZE];
         void *   pkp;
@@ -365,13 +215,13 @@ int test_auth_sign(void)
                 goto fail_init;
         }
 
-        if (crypt_load_privkey_str(server_pkp_ec, &pkp) < 0) {
+        if (crypt_load_privkey_str(server_pkp_ml, &pkp) < 0) {
                 printf("Failed to load server key pair from string.\n");
                 goto fail_init;
         }
 
-        if (crypt_load_pubkey_str(server_pk_ec, &pk) < 0) {
-                printf("Failed to load public key.\n");
+        if (crypt_load_pubkey_str(server_pk_ml, &pk) < 0) {
+                printf("Failed to load public key from string.\n");
                 goto fail_pubkey;
         }
 
@@ -403,7 +253,7 @@ int test_auth_sign(void)
         return TEST_RC_FAIL;
 }
 
-int test_auth_bad_signature(void)
+static int test_auth_bad_signature(void)
 {
         uint8_t  buf[TEST_MSG_SIZE];
         void *   pkp;
@@ -422,13 +272,13 @@ int test_auth_bad_signature(void)
                 goto fail_init;
         }
 
-        if (crypt_load_privkey_str(server_pkp_ec, &pkp) < 0) {
+        if (crypt_load_privkey_str(server_pkp_ml, &pkp) < 0) {
                 printf("Failed to load server key pair from string.\n");
                 goto fail_init;
         }
 
-        if (crypt_load_pubkey_str(server_pk_ec, &pk) < 0) {
-                printf("Failed to load public key.\n");
+        if (crypt_load_pubkey_str(server_pk_ml, &pk) < 0) {
+                printf("Failed to load public key from string.\n");
                 goto fail_pubkey;
         }
 
@@ -450,7 +300,7 @@ int test_auth_bad_signature(void)
         }
 
         if (auth_verify_sig(pk, 0, msg, fake_sig) == 0) {
-                printf("Failed to detect bad signature.\n");
+                printf("Failed to detect bad ML-DSA-65 signature.\n");
                 goto fail_verify;
         }
 
@@ -475,72 +325,30 @@ int test_auth_bad_signature(void)
         return TEST_RC_FAIL;
 }
 
-#define SSC_BUF_SIZE 4096 /* OpenSSL version my return different lengths */
-int test_crt_str(void)
-{
-        char str[SSC_BUF_SIZE];
-        void * crt;
-
-        TEST_START();
-
-        if (crypt_load_crt_str(signed_server_crt_ec, &crt) < 0) {
-                printf("Failed to load certificate from string.\n");
-                goto fail_load;
-        }
-
-        if (crypt_crt_str(crt, str) < 0) {
-                printf("Failed to convert certificate to string.\n");
-                goto fail_to_str;
-        }
-
-        printf("Certificate string:\n%s\n", str);
-
-        crypt_free_crt(crt);
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
-
- fail_to_str:
-        crypt_free_crt(crt);
- fail_load:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
-int auth_test(int     argc,
-              char ** argv)
+int auth_test_ml_dsa(int     argc,
+                     char ** argv)
 {
         int ret = 0;
 
         (void) argc;
         (void) argv;
 
+#ifdef HAVE_OPENSSL_ML_DSA
         ret |= test_auth_create_destroy_ctx();
-#ifdef HAVE_OPENSSL
         ret |= test_load_free_crt();
-        ret |= test_check_crt_name();
-        ret |= test_crypt_get_pubkey_crt();
         ret |= test_load_free_privkey();
         ret |= test_load_free_pubkey();
-        ret |= test_crypt_check_pubkey_crt();
-        ret |= test_store_add();
         ret |= test_verify_crt();
         ret |= test_auth_sign();
         ret |= test_auth_bad_signature();
-        ret |= test_crt_str();
 #else
+        (void) test_auth_create_destroy_ctx;
         (void) test_load_free_crt;
-        (void) test_check_crt_name;
-        (void) test_crypt_get_pubkey_crt;
         (void) test_load_free_privkey;
         (void) test_load_free_pubkey;
-        (void) test_crypt_check_pubkey_crt;
-        (void) test_store_add;
         (void) test_verify_crt;
         (void) test_auth_sign;
         (void) test_auth_bad_signature;
-        (void) test_crt_str;
 
         ret = TEST_RC_SKIP;
 #endif

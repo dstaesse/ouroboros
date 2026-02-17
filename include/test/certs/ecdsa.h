@@ -20,8 +20,8 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#ifndef TEST_CERTS_H
-#define TEST_CERTS_H
+#ifndef TEST_CERTS_ECDSA_H
+#define TEST_CERTS_ECDSA_H
 
 /*
 * Certificates created following the guide

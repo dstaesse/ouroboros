@@ -520,15 +520,15 @@ static int test_kex_kem_truncated_ciphertext_all(void)
         return ret;
 }
 
-int kex_test_pqc(int     argc,
-                 char ** argv)
+int kex_test_ml_kem(int     argc,
+                    char ** argv)
 {
         int ret = 0;
 
         (void) argc;
         (void) argv;
 
-#ifdef HAVE_OPENSSL_PQC
+#ifdef HAVE_OPENSSL_ML_KEM
         ret |= test_kex_load_kem_privkey();
         ret |= test_kex_load_kem_pubkey();
         ret |= test_kex_kem_all();

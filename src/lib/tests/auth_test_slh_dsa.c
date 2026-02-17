@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2026
  *
- * Test of the PQC authentication functions (ML-DSA-65)
+ * Test of the SLH-DSA-SHA2-128s authentication functions
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -27,7 +27,7 @@
 #include <ouroboros/random.h>
 #include <ouroboros/utils.h>
 
-#include <test/certs_pqc.h>
+#include <test/certs/slh_dsa.h>
 
 #define TEST_MSG_SIZE 1500
 
@@ -59,8 +59,8 @@ static int test_load_free_crt(void)
 
         TEST_START();
 
-        if (crypt_load_crt_str(root_ca_crt_ml, &crt) < 0) {
-                printf("Failed to load root crt from string.\n");
+        if (crypt_load_crt_str(root_ca_crt_slh, &crt) < 0) {
+                printf("Failed to load root crt.\n");
                 goto fail_load;
         }
 
@@ -80,8 +80,8 @@ static int test_load_free_privkey(void)
 
         TEST_START();
 
-        if (crypt_load_privkey_str(server_pkp_ml, &key) < 0) {
-                printf("Failed to load server key pair from string.\n");
+        if (crypt_load_privkey_str(server_pkp_slh, &key) < 0) {
+                printf("Failed to load server key pair.\n");
                 goto fail_load;
         }
 
@@ -101,8 +101,8 @@ static int test_load_free_pubkey(void)
 
         TEST_START();
 
-        if (crypt_load_pubkey_str(server_pk_ml, &key) < 0) {
-                printf("Failed to load server public key from string.\n");
+        if (crypt_load_pubkey_str(server_pk_slh, &key) < 0) {
+                printf("Failed to load server public key.\n");
                 goto fail_load;
         }
 
@@ -132,38 +132,42 @@ static int test_verify_crt(void)
                 goto fail_create_ctx;
         }
 
-        if (crypt_load_crt_str(server_crt_ml, &_server_crt) < 0) {
-                printf("Failed to load self-signed crt from string.\n");
+        if (crypt_load_crt_str(server_crt_slh,
+                               &_server_crt) < 0) {
+                printf("Failed to load self-signed crt.\n");
                 goto fail_load_server_crt;
         }
 
-        if (crypt_load_crt_str(signed_server_crt_ml, &_signed_server_crt) < 0) {
-                printf("Failed to load signed crt from string.\n");
+        if (crypt_load_crt_str(signed_server_crt_slh,
+                               &_signed_server_crt) < 0) {
+                printf("Failed to load signed crt.\n");
                 goto fail_load_signed_server_crt;
         }
 
-        if (crypt_load_crt_str(root_ca_crt_ml, &_root_ca_crt) < 0) {
-                printf("Failed to load root crt from string.\n");
+        if (crypt_load_crt_str(root_ca_crt_slh,
+                               &_root_ca_crt) < 0) {
+                printf("Failed to load root crt.\n");
                 goto fail_load_root_ca_crt;
         }
 
-        if (crypt_load_crt_str(im_ca_crt_ml, &_im_ca_crt) < 0) {
-                printf("Failed to load intermediate crt from string.\n");
+        if (crypt_load_crt_str(im_ca_crt_slh,
+                               &_im_ca_crt) < 0) {
+                printf("Failed to load im crt.\n");
                 goto fail_load_im_ca_crt;
         }
 
         if (auth_add_crt_to_store(auth, _root_ca_crt) < 0) {
-                printf("Failed to add root ca crt to auth store.\n");
+                printf("Failed to add root ca crt.\n");
                 goto fail_verify;
         }
 
         if (auth_add_crt_to_store(auth, _im_ca_crt) < 0) {
-                printf("Failed to add intermediate ca crt to auth store.\n");
+                printf("Failed to add im ca crt.\n");
                 goto fail_verify;
         }
 
         if (auth_verify_crt(auth, _signed_server_crt) < 0) {
-                printf("Failed to verify signed crt with ca crt.\n");
+                printf("Failed to verify signed crt.\n");
                 goto fail_verify;
         }
 
@@ -211,17 +215,19 @@ static int test_auth_sign(void)
         msg.len  = sizeof(buf);
 
         if (random_buffer(msg.data, msg.len) < 0) {
-                printf("Failed to generate random message.\n");
+                printf("Failed to gen random message.\n");
                 goto fail_init;
         }
 
-        if (crypt_load_privkey_str(server_pkp_ml, &pkp) < 0) {
-                printf("Failed to load server key pair from string.\n");
+        if (crypt_load_privkey_str(server_pkp_slh,
+                                   &pkp) < 0) {
+                printf("Failed to load server key pair.\n");
                 goto fail_init;
         }
 
-        if (crypt_load_pubkey_str(server_pk_ml, &pk) < 0) {
-                printf("Failed to load public key from string.\n");
+        if (crypt_load_pubkey_str(server_pk_slh,
+                                  &pk) < 0) {
+                printf("Failed to load public key.\n");
                 goto fail_pubkey;
         }
 
@@ -250,6 +256,7 @@ static int test_auth_sign(void)
  fail_pubkey:
         crypt_free_key(pkp);
  fail_init:
+        TEST_FAIL();
         return TEST_RC_FAIL;
 }
 
@@ -268,17 +275,19 @@ static int test_auth_bad_signature(void)
         msg.len  = sizeof(buf);
 
         if (random_buffer(msg.data, msg.len) < 0) {
-                printf("Failed to generate random message.\n");
+                printf("Failed to gen random message.\n");
                 goto fail_init;
         }
 
-        if (crypt_load_privkey_str(server_pkp_ml, &pkp) < 0) {
-                printf("Failed to load server key pair from string.\n");
+        if (crypt_load_privkey_str(server_pkp_slh,
+                                   &pkp) < 0) {
+                printf("Failed to load server key pair.\n");
                 goto fail_init;
         }
 
-        if (crypt_load_pubkey_str(server_pk_ml, &pk) < 0) {
-                printf("Failed to load public key from string.\n");
+        if (crypt_load_pubkey_str(server_pk_slh,
+                                  &pk) < 0) {
+                printf("Failed to load public key.\n");
                 goto fail_pubkey;
         }
 
@@ -289,18 +298,19 @@ static int test_auth_bad_signature(void)
 
         fake_sig.data = malloc(sig.len);
         if (fake_sig.data == NULL) {
-                printf("Failed to allocate memory for fake signature.\n");
+                printf("Failed to alloc fake sig buf.\n");
                 goto fail_malloc;
         }
 
         fake_sig.len = sig.len;
-        if (random_buffer(fake_sig.data, fake_sig.len) < 0) {
-                printf("Failed to generate random fake signature.\n");
+        if (random_buffer(fake_sig.data,
+                          fake_sig.len) < 0) {
+                printf("Failed to gen random fake sig.\n");
                 goto fail_malloc;
         }
 
         if (auth_verify_sig(pk, 0, msg, fake_sig) == 0) {
-                printf("Failed to detect bad ML-DSA-65 signature.\n");
+                printf("Failed to detect bad sig.\n");
                 goto fail_verify;
         }
 
@@ -322,18 +332,19 @@ static int test_auth_bad_signature(void)
  fail_pubkey:
         crypt_free_key(pkp);
  fail_init:
+        TEST_FAIL();
         return TEST_RC_FAIL;
 }
 
-int auth_test_pqc(int     argc,
-                  char ** argv)
+int auth_test_slh_dsa(int     argc,
+                      char ** argv)
 {
         int ret = 0;
 
         (void) argc;
         (void) argv;
 
-#ifdef HAVE_OPENSSL_PQC
+#ifdef HAVE_OPENSSL_SLH_DSA
         ret |= test_auth_create_destroy_ctx();
         ret |= test_load_free_crt();
         ret |= test_load_free_privkey();
