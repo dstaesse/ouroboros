@@ -29,6 +29,10 @@ set(IRMD_MIN_THREADS 8 CACHE STRING
 set(IRMD_ADD_THREADS 8 CACHE STRING
   "Number of extra threads to start when the IRMD faces thread starvation")
 
+# Direct IPC
+set(DISABLE_DIRECT_IPC FALSE CACHE BOOL
+  "Disable direct inter-process communication between local applications")
+
 # Process management
 set(IRMD_PKILL_TIMEOUT 30 CACHE STRING
   "Number of seconds to wait before sending SIGKILL to subprocesses on exit")

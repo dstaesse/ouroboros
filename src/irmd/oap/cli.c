@@ -311,6 +311,9 @@ int oap_cli_prepare(void **                  ctx,
         *req_buf = s->local_hdr.hdr;
         clrbuf(s->local_hdr.hdr);
 
+        /* oap_hdr_encode repoints id into hdr; restore to __id */
+        s->local_hdr.id = s->id;
+
         crypt_free_crt(crt);
         crypt_free_key(pkp);
 

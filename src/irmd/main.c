@@ -86,6 +86,7 @@
 #define TIMESYNC_SLACK     100  /* ms */
 #define OAP_SEEN_TIMER     20   /*  s */
 #define DEALLOC_TIME       300  /*  s */
+#define DIRECT_MPL         1    /*  s */
 
 enum irm_state {
         IRMD_NULL = 0,
@@ -914,13 +915,20 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_oap;
         }
 
-        if (ipcp_flow_alloc_resp(flow, 0, resp_hdr) < 0) {
+        if (reg_flow_is_direct(flow->id)) {
+                if (reg_respond_flow_direct(flow->id, &resp_hdr) < 0) {
+                        log_err("Failed to respond to direct flow.");
+                        goto fail_resp;
+                }
+                log_info("Flow %d accepted (direct) by %d for %s.",
+                         flow->id, flow->n_pid, name);
+        } else if (ipcp_flow_alloc_resp(flow, 0, resp_hdr) < 0) {
                 log_err("Failed to respond to flow allocation.");
                 goto fail_resp;
+        } else {
+                log_info("Flow %d accepted by %d for %s (uid %d).",
+                         flow->id, flow->n_pid, name, flow->uid);
         }
-
-        log_info("Flow %d accepted by %d for %s (uid %d).",
-                 flow->id, flow->n_pid, name, flow->uid);
 
         freebuf(req_hdr);
         freebuf(resp_hdr);
@@ -928,7 +936,8 @@ static int flow_accept(struct flow_info * flow,
         return 0;
 
  fail_oap:
-        ipcp_flow_alloc_resp(flow, err, resp_hdr);
+        if (!reg_flow_is_direct(flow->id))
+                ipcp_flow_alloc_resp(flow, err, resp_hdr);
  fail_wait:
         reg_destroy_flow(flow->id);
  fail_flow:
@@ -1028,7 +1037,7 @@ static int get_ipcp_by_dst(const char *     dst,
                            pid_t *          pid,
                            buffer_t *       hash)
 {
-        ipcp_list_msg_t ** ipcps;
+        ipcp_list_msg_t ** ipcps = NULL;
         int                n;
         int                i;
         int                err = -EIPCP;
@@ -1078,113 +1087,6 @@ static int get_ipcp_by_dst(const char *     dst,
 
         free(ipcps);
 
-        return err;
-}
-
-static int flow_alloc(const char *       dst,
-                      struct flow_info * flow,
-                      buffer_t *         data,
-                      struct timespec *  abstime,
-                      struct crypt_sk *  sk)
-{
-        buffer_t         req_hdr = BUF_INIT;
-        buffer_t         resp_hdr = BUF_INIT;
-        buffer_t         hash = BUF_INIT;
-        struct name_info info;
-        void *           ctx;
-        int              err;
-
-        /* piggyback of user data not yet implemented */
-        assert(data != NULL && BUF_IS_EMPTY(data));
-
-        /* Look up name_info for dst */
-        if (reg_get_name_info(dst, &info) < 0) {
-                log_err("Failed to get name info for %s.", dst);
-                err = -ENAME;
-                goto fail_flow;
-        }
-
-        if (reg_create_flow(flow) < 0) {
-                log_err("Failed to create flow.");
-                err = -EBADF;
-                goto fail_flow;
-        }
-
-        flow->uid = reg_get_proc_uid(flow->n_pid);
-
-        log_info("Allocating flow for %d to %s (uid %d).",
-                 flow->n_pid, dst, flow->uid);
-
-        if (get_ipcp_by_dst(dst, &flow->n_1_pid, &hash) < 0) {
-                log_err("Failed to find IPCP for %s.", dst);
-                err = -EIPCP;
-                goto fail_ipcp;
-        }
-
-        if (reg_prepare_flow_alloc(flow) < 0) {
-                log_err("Failed to prepare flow allocation.");
-                err = -EBADF;
-                goto fail_prepare;
-        }
-
-        if (oap_cli_prepare(&ctx, &info, &req_hdr, *data) < 0) {
-                log_err("Failed to prepare OAP request for %s.", dst);
-                err = -EBADF;
-                goto fail_prepare;
-        }
-
-        if (ipcp_flow_alloc(flow, hash, req_hdr)) {
-                log_err("Flow allocation %d failed.", flow->id);
-                err = -EIPCP;
-                goto fail_alloc;
-        }
-
-        pthread_cleanup_push(__cleanup_flow, flow);
-        pthread_cleanup_push(free, hash.data);
-
-        err = reg_wait_flow_allocated(flow, &resp_hdr, abstime);
-
-        pthread_cleanup_pop(false);
-        pthread_cleanup_pop(false);
-
-        if (err == -ETIMEDOUT) {
-                log_err("Flow allocation timed out.");
-                goto fail_wait;
-        }
-
-        log_dbg("Response for flow %d to %s.", flow->id, dst);
-
-        if (err < 0) {
-                log_warn("Allocation rejected: %s (%d).", dst, err);
-                goto fail_peer;
-        }
-
-        err = oap_cli_complete(ctx, &info, resp_hdr, data, sk);
-        if (err < 0) {
-                log_err("OAP completion failed for %s.", dst);
-                goto fail_complete;
-        }
-
-        freebuf(req_hdr);
-        freebuf(resp_hdr);
-        freebuf(hash);
-
-        return 0;
-
- fail_complete:
-        ctx = NULL; /* freee'd on complete */
- fail_peer:
-        flow->state = FLOW_DEALLOCATED;
- fail_wait:
-        freebuf(resp_hdr);
- fail_alloc:
-        freebuf(req_hdr);
-        oap_ctx_free(ctx);
- fail_prepare:
-        freebuf(hash);
- fail_ipcp:
-        reg_destroy_flow(flow->id);
- fail_flow:
         return err;
 }
 
@@ -1280,6 +1182,194 @@ static int flow_req_arr(struct flow_info * flow,
         return ret;
 }
 
+#ifndef DISABLE_DIRECT_IPC
+static int flow_alloc_direct(const char *       dst,
+                             struct flow_info * flow,
+                             buffer_t *         data,
+                             struct timespec *  abstime,
+                             struct crypt_sk *  sk,
+                             struct name_info * info)
+{
+        struct flow_info acc; /* server side flow */
+        buffer_t         req_hdr = BUF_INIT;
+        buffer_t         resp_hdr = BUF_INIT;
+        void *           ctx;
+        int              err;
+
+        acc.id = wait_for_accept(dst);
+        if (acc.id < 0) {
+                log_dbg("No accepting process for %s.", dst);
+                return -EAGAIN;
+        }
+
+        if (oap_cli_prepare(&ctx, info, &req_hdr, *data) < 0) {
+                log_err("Failed to prepare OAP for %s.", dst);
+                return -EBADF;
+        }
+
+        acc.n_1_pid = flow->n_pid;
+        acc.mpl     = DIRECT_MPL;
+        acc.qs      = flow->qs;
+        acc.state   = FLOW_ALLOCATED;
+
+        err = reg_prepare_flow_direct(&acc, &req_hdr, flow->uid);
+        if (err == -EPERM) {
+                log_dbg("UID mismatch, falling back.");
+                oap_ctx_free(ctx);
+                freebuf(req_hdr);
+                return -EPERM;
+        }
+
+        if (err < 0) {
+                log_err("Failed to prepare direct flow.");
+                oap_ctx_free(ctx);
+                freebuf(req_hdr);
+                return -EBADF;
+        }
+
+        err = reg_wait_flow_direct(acc.id, &resp_hdr, abstime);
+        if (err < 0) {
+                log_err("Timeout waiting for OAP response.");
+                oap_ctx_free(ctx);
+                return -ETIMEDOUT;
+        }
+
+        err = oap_cli_complete(ctx, info, resp_hdr, data, sk);
+        if (err < 0) {
+                log_err("OAP completion failed for %s.", dst);
+                freebuf(resp_hdr);
+                return err;
+        }
+
+        flow->id      = acc.id;
+        flow->n_1_pid = acc.n_pid;
+        flow->mpl     = DIRECT_MPL;
+        flow->state   = FLOW_ALLOCATED;
+
+        log_info("Flow %d allocated (direct) for %d to %s.",
+                 flow->id, flow->n_pid, dst);
+
+        freebuf(resp_hdr);
+
+        return 0;
+}
+#endif /* DISABLE_DIRECT_IPC */
+
+static int flow_alloc(const char *       dst,
+                      struct flow_info * flow,
+                      buffer_t *         data,
+                      struct timespec *  abstime,
+                      struct crypt_sk *  sk)
+{
+        buffer_t         req_hdr = BUF_INIT;
+        buffer_t         resp_hdr = BUF_INIT;
+        buffer_t         hash = BUF_INIT;
+        struct name_info info;
+        void *           ctx;
+        int              err;
+
+        /* piggyback of user data not yet implemented */
+        assert(data != NULL && BUF_IS_EMPTY(data));
+
+        /* Look up name_info for dst */
+        if (reg_get_name_info(dst, &info) < 0) {
+                log_err("Failed to get name info for %s.", dst);
+                err = -ENAME;
+                goto fail_flow;
+        }
+
+        flow->uid = reg_get_proc_uid(flow->n_pid);
+
+        log_info("Allocating flow for %d to %s (uid %d).",
+                 flow->n_pid, dst, flow->uid);
+
+#ifndef DISABLE_DIRECT_IPC
+        err = flow_alloc_direct(dst, flow, data, abstime, sk, &info);
+        if (err == 0)
+                return 0;
+
+        if (err != -EPERM && err != -EAGAIN)
+                goto fail_flow;
+#endif
+        if (reg_create_flow(flow) < 0) {
+                log_err("Failed to create flow.");
+                err = -EBADF;
+                goto fail_flow;
+        }
+
+        if (get_ipcp_by_dst(dst, &flow->n_1_pid, &hash) < 0) {
+                log_err("Failed to find IPCP for %s.", dst);
+                err = -EIPCP;
+                goto fail_ipcp;
+        }
+
+        if (reg_prepare_flow_alloc(flow) < 0) {
+                log_err("Failed to prepare flow allocation.");
+                err = -EBADF;
+                goto fail_prepare;
+        }
+
+        if (oap_cli_prepare(&ctx, &info, &req_hdr, *data) < 0) {
+                log_err("Failed to prepare OAP request for %s.", dst);
+                err = -EBADF;
+                goto fail_prepare;
+        }
+
+        if (ipcp_flow_alloc(flow, hash, req_hdr)) {
+                log_err("Flow allocation %d failed.", flow->id);
+                err = -EIPCP;
+                goto fail_alloc;
+        }
+
+        pthread_cleanup_push(__cleanup_flow, flow);
+        pthread_cleanup_push(free, hash.data);
+
+        err = reg_wait_flow_allocated(flow, &resp_hdr, abstime);
+
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+
+        if (err == -ETIMEDOUT) {
+                log_err("Flow allocation timed out.");
+                goto fail_wait;
+        }
+
+        log_dbg("Response for flow %d to %s.", flow->id, dst);
+
+        if (err < 0) {
+                log_warn("Allocation rejected: %s (%d).", dst, err);
+                goto fail_peer;
+        }
+
+        err = oap_cli_complete(ctx, &info, resp_hdr, data, sk);
+        if (err < 0) {
+                log_err("OAP completion failed for %s.", dst);
+                goto fail_complete;
+        }
+
+        freebuf(req_hdr);
+        freebuf(resp_hdr);
+        freebuf(hash);
+
+        return 0;
+
+ fail_complete:
+        ctx = NULL; /* freee'd on complete */
+ fail_peer:
+        flow->state = FLOW_DEALLOCATED;
+ fail_wait:
+        freebuf(resp_hdr);
+ fail_alloc:
+        freebuf(req_hdr);
+        oap_ctx_free(ctx);
+ fail_prepare:
+        freebuf(hash);
+ fail_ipcp:
+        reg_destroy_flow(flow->id);
+ fail_flow:
+        return err;
+}
+
 static int flow_alloc_reply(struct flow_info * flow,
                             int                response,
                             buffer_t *         data)
@@ -1302,6 +1392,12 @@ static int flow_dealloc(struct flow_info * flow,
                  flow->id, flow->n_pid, ts->tv_sec);
 
         reg_dealloc_flow(flow);
+
+        if (reg_flow_is_direct(flow->id)) {
+                if (flow->state == FLOW_DEALLOCATED)
+                        reg_destroy_flow(flow->id);
+                return 0;
+        }
 
         if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, ts->tv_sec) < 0) {
                 log_err("Failed to request dealloc from %d.", flow->n_1_pid);

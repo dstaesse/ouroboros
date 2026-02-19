@@ -67,6 +67,26 @@ static void update_rtt_stats(double ms)
         client.rtt_m2 += d * (ms - client.rtt_avg);
 }
 
+static double rtt_val(double ms)
+{
+        return ms < 0.1 ? ms * 1000 : ms;
+}
+
+static const char * rtt_unit(double ms)
+{
+        return ms < 0.1 ? "µs" : "ms";
+}
+
+static void print_rtt(int len, int seq,
+                      double ms, const char * suf)
+{
+        printf("%d bytes from %s: seq=%d "
+               "time=%.3f %s%s\n",
+               len, client.s_apn, seq,
+               rtt_val(ms), rtt_unit(ms),
+               suf != NULL ? suf : "");
+}
+
 void * reader(void * o)
 {
         struct timespec timeout = {client.interval / 1000 + 2, 0};
@@ -127,12 +147,9 @@ void * reader(void * o)
                                        (size_t) rtc.tv_nsec / 1000);
                         }
 
-                        printf("%d bytes from %s: seq=%d time=%.3f ms%s\n",
-                               msg_len,
-                               client.s_apn,
-                               ntohl(msg->id),
-                               ms,
-                               id < exp_id ? " [out-of-order]" : "");
+                        print_rtt(msg_len, ntohl(msg->id), ms,
+                                  id < exp_id ?
+                                  " [out-of-order]" : NULL);
                 }
 
                 update_rtt_stats(ms);
@@ -223,16 +240,87 @@ static void print_stats(struct timespec * tic,
         printf("time: %.3f ms\n", ts_diff_us(toc, tic) / 1000.0);
 
         if (client.rcvd > 0) {
+                double a = client.rtt_avg;
+                double f = a < 0.1 ? 1000 : 1;
                 printf("rtt min/avg/max/mdev = %.3f/%.3f/%.3f/",
-                       client.rtt_min,
-                       client.rtt_avg,
-                       client.rtt_max);
+                       client.rtt_min * f, client.rtt_avg * f,
+                       client.rtt_max * f);
                 if (client.rcvd > 1)
-                        printf("%.3f ms\n",
-                               sqrt(client.rtt_m2 / (client.rcvd - 1)));
+                        printf("%.3f %s\n",
+                               sqrt(client.rtt_m2 /
+                               (client.rcvd - 1)) * f,
+                               rtt_unit(a));
                 else
-                        printf("NaN ms\n");
+                        printf("NaN %s\n", rtt_unit(a));
         }
+}
+
+static int flood_busy_ping(int fd)
+{
+        char buf[OPING_BUF_SIZE];
+        struct oping_msg * msg = (struct oping_msg *) buf;
+        struct timespec sent;
+        struct timespec rcvd;
+        double ms;
+        int n;
+
+        memset(buf, 0, client.size);
+
+        fccntl(fd, FLOWSFLAGS,
+               FLOWFRDWR | FLOWFRNOPART | FLOWFRNOBLOCK);
+
+        if (!client.quiet)
+                printf("Pinging %s with %d bytes"
+                       " of data (%u packets,"
+                       " busy-poll):\n\n",
+                       client.s_apn, client.size,
+                       client.count);
+
+        while (!stop && client.sent < client.count) {
+                clock_gettime(CLOCK_MONOTONIC, &sent);
+
+                msg->type = htonl(ECHO_REQUEST);
+                msg->id = htonl(client.sent);
+                msg->tv_sec = sent.tv_sec;
+                msg->tv_nsec = sent.tv_nsec;
+
+                if (flow_write(fd, buf,
+                               client.size) < 0) {
+                        printf("Failed to send "
+                               "packet.\n");
+                        break;
+                }
+
+                ++client.sent;
+
+                do {
+                        n = flow_read(fd, buf,
+                                      OPING_BUF_SIZE);
+                } while (n == -EAGAIN && !stop);
+
+                if (n < 0)
+                        break;
+
+                clock_gettime(CLOCK_MONOTONIC, &rcvd);
+
+                if (ntohl(msg->type) != ECHO_REPLY)
+                        continue;
+
+                ++client.rcvd;
+
+                sent.tv_sec = msg->tv_sec;
+                sent.tv_nsec = msg->tv_nsec;
+                ms = ts_diff_us(&rcvd, &sent) / 1000.0;
+
+                update_rtt_stats(ms);
+
+                if (!client.quiet)
+                        print_rtt(client.size,
+                                  ntohl(msg->id), ms,
+                                  NULL);
+        }
+
+        return 0;
 }
 
 static int flood_ping(int fd)
@@ -283,9 +371,9 @@ static int flood_ping(int fd)
                 update_rtt_stats(ms);
 
                 if (!client.quiet)
-                        printf("%d bytes from %s: seq=%d time=%.3f ms\n",
-                               client.size, client.s_apn,
-                               ntohl(msg->id), ms);
+                        print_rtt(client.size,
+                                  ntohl(msg->id), ms,
+                                  NULL);
         }
 
         return 0;
@@ -337,7 +425,9 @@ static int client_main(void)
 
         clock_gettime(CLOCK_REALTIME, &tic);
 
-        if (client.flood)
+        if (client.flood_busy)
+                flood_busy_ping(fd);
+        else if (client.flood)
                 flood_ping(fd);
         else
                 threaded_ping(fd);

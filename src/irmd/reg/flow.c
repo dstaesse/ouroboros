@@ -80,7 +80,7 @@ void reg_flow_destroy(struct reg_flow * flow)
 
         switch(flow->info.state) {
         case FLOW_ACCEPT_PENDING:
-                clrbuf(flow->data);
+                clrbuf(flow->req_data);
                 /* FALLTHRU */
         default:
                 destroy_rbuffs(flow);
@@ -89,8 +89,10 @@ void reg_flow_destroy(struct reg_flow * flow)
 
         assert(flow->n_rb == NULL);
         assert(flow->n_1_rb == NULL);
-        assert(flow->data.data == NULL);
-        assert(flow->data.len == 0);
+        assert(flow->req_data.data == NULL);
+        assert(flow->req_data.len == 0);
+        assert(flow->rsp_data.data == NULL);
+        assert(flow->rsp_data.len == 0);
 
         assert(list_is_empty(&flow->next));
 
@@ -185,31 +187,4 @@ int reg_flow_update(struct reg_flow *  flow,
         return 0;
  fail:
         return -ENOMEM;
-}
-
-void reg_flow_set_data(struct reg_flow * flow,
-                       const buffer_t *  buf)
-{
-        assert(flow != NULL);
-        assert(buf != NULL);
-        assert(flow->data.data == NULL);
-        assert(flow->data.len == 0);
-
-        flow->data = *buf;
-}
-
-void reg_flow_get_data(struct reg_flow * flow,
-                       buffer_t *        buf)
-{
-        assert(flow != NULL);
-        assert(buf != NULL);
-
-        *buf = flow->data;
-
-        clrbuf(flow->data);
-}
-
-void reg_flow_free_data(struct reg_flow * flow)
-{
-        freebuf(flow->data);
 }

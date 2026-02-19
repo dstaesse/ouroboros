@@ -138,7 +138,10 @@ void * accept_thread(void * o)
 
         (void) o;
 
-        printf("Ouroboros ping server started.\n");
+        printf("Ouroboros ping server started.");
+        if (server.busy)
+                printf(" [busy-poll]");
+        printf("\n");
 
         while (true) {
                 fd = flow_accept(&qs, NULL);
@@ -158,8 +161,52 @@ void * accept_thread(void * o)
                 pthread_mutex_unlock(&server.lock);
 
                 fccntl(fd, FLOWSFLAGS,
-                       FLOWFRNOBLOCK | FLOWFRDWR | FLOWFRNOPART);
+                       FLOWFRNOBLOCK | FLOWFRDWR
+                       | FLOWFRNOPART);
         }
+
+        return (void *) 0;
+}
+
+void * busy_thread(void * o)
+{
+        char buf[OPING_BUF_SIZE];
+        struct oping_msg * msg = (struct oping_msg *) buf;
+        int    fd;
+        int    msg_len;
+
+        (void) o;
+
+        /* Accept a single flow. */
+        fd = flow_accept(NULL, NULL);
+        if (fd < 0) {
+                printf("Failed to accept flow.\n");
+                return (void *) -1;
+        }
+
+        printf("New flow %d (busy-poll).\n", fd);
+
+        fccntl(fd, FLOWSFLAGS,
+               FLOWFRNOBLOCK | FLOWFRDWR
+               | FLOWFRNOPART);
+
+        while (true) {
+                msg_len = flow_read(fd, buf,
+                                    OPING_BUF_SIZE);
+                if (msg_len == -EAGAIN)
+                        continue;
+                if (msg_len < 0)
+                        break;
+
+                if (ntohl(msg->type) != ECHO_REQUEST)
+                        continue;
+
+                msg->type = htonl(ECHO_REPLY);
+
+                flow_write(fd, buf, msg_len);
+        }
+
+        flow_dealloc(fd);
 
         return (void *) 0;
 }
@@ -191,12 +238,21 @@ int server_main(void)
         }
 
         pthread_create(&server.cleaner_pt, NULL, cleaner_thread, NULL);
-        pthread_create(&server.accept_pt, NULL, accept_thread, NULL);
-        pthread_create(&server.server_pt, NULL, server_thread, NULL);
 
-        pthread_join(server.accept_pt, NULL);
+        if (server.busy) {
+                pthread_create(&server.server_pt, NULL,
+                               busy_thread, NULL);
+                pthread_join(server.server_pt, NULL);
+                pthread_cancel(server.cleaner_pt);
+        } else {
+                pthread_create(&server.accept_pt, NULL,
+                               accept_thread, NULL);
+                pthread_create(&server.server_pt, NULL,
+                               server_thread, NULL);
+                pthread_join(server.accept_pt, NULL);
+                pthread_cancel(server.server_pt);
+        }
 
-        pthread_cancel(server.server_pt);
         pthread_cancel(server.cleaner_pt);
 
         fset_destroy(server.flows);

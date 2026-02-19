@@ -485,6 +485,188 @@ static int test_reg_allocate_flow_fail(void)
         return TEST_RC_FAIL;
 }
 
+struct direct_alloc_info {
+        struct flow_info info;
+        buffer_t         rsp;
+        struct timespec  abstime;
+};
+
+static void * test_flow_alloc_direct(void * o)
+{
+        struct direct_alloc_info * dai;
+        buffer_t                   req;
+
+        dai = (struct direct_alloc_info *) o;
+
+        req.data = (uint8_t *) strdup(TEST_DATA);
+        if (req.data == NULL) {
+                printf("Failed to strdup req data.\n");
+                goto fail;
+        }
+        req.len = strlen(TEST_DATA) + 1;
+
+        if (reg_prepare_flow_direct(&dai->info, &req, 0) < 0) {
+                printf("Failed to prepare direct flow.\n");
+                freebuf(req);
+                goto fail;
+        }
+
+        if (reg_wait_flow_direct(dai->info.id, &dai->rsp, &dai->abstime) < 0) {
+                printf("Failed to wait direct flow.\n");
+                goto fail;
+        }
+
+        return (void *) 0;
+ fail:
+        return (void *) -1;
+}
+
+static int test_reg_direct_flow_success(void)
+{
+        pthread_t                thr;
+        struct timespec          abstime;
+        struct timespec          timeo = TIMESPEC_INIT_S(1);
+        buffer_t                 rbuf  = BUF_INIT;
+        buffer_t                 rsp;
+        struct direct_alloc_info dai;
+        void *                   thr_ret;
+
+        struct flow_info info = {
+                .n_pid = TEST_PID,
+                .qs    = qos_raw
+        };
+
+        TEST_START();
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
+        ts_add(&abstime, &timeo, &abstime);
+
+        if (reg_init() < 0) {
+                printf("Failed to init registry.\n");
+                goto fail;
+        }
+
+        if (reg_create_flow(&info) < 0) {
+                printf("Failed to add flow.\n");
+                goto fail;
+        }
+
+        if (reg_prepare_flow_accept(&info) < 0) {
+                printf("Failed to prepare for accept.\n");
+                goto fail;
+        }
+
+        dai.info.id      = info.id;
+        dai.info.n_1_pid = TEST_N_1_PID;
+        dai.info.mpl     = TEST_MPL;
+        dai.info.qs      = qos_data;
+        dai.info.state   = FLOW_ALLOCATED;
+        dai.rsp.len      = 0;
+        dai.rsp.data     = NULL;
+        dai.abstime      = abstime;
+
+        pthread_create(&thr, NULL, test_flow_alloc_direct, &dai);
+
+        if (reg_wait_flow_accepted(&info, &rbuf, &abstime) < 0) {
+                printf("Flow accept failed.\n");
+                pthread_join(thr, NULL);
+                reg_destroy_flow(info.id);
+                reg_fini();
+                goto fail;
+        }
+
+        if (info.state != FLOW_ALLOCATED) {
+                printf("Flow not in allocated state.\n");
+                goto fail;
+        }
+
+        if (rbuf.data == NULL) {
+                printf("req_data not received.\n");
+                goto fail;
+        }
+
+        if (strcmp((char *) rbuf.data, TEST_DATA) != 0) {
+                printf("req_data content mismatch.\n");
+                goto fail;
+        }
+
+        freebuf(rbuf);
+
+        if (!reg_flow_is_direct(info.id)) {
+                printf("Flow not marked direct.\n");
+                goto fail;
+        }
+
+        rsp.data = (uint8_t *) strdup(TEST_DATA2);
+        if (rsp.data == NULL) {
+                printf("Failed to strdup rsp data.\n");
+                goto fail;
+        }
+        rsp.len = strlen(TEST_DATA2) + 1;
+
+        if (reg_respond_flow_direct(info.id, &rsp) < 0) {
+                printf("Failed to respond direct.\n");
+                freebuf(rsp);
+                goto fail;
+        }
+
+        pthread_join(thr, &thr_ret);
+
+        if (thr_ret != (void *) 0) {
+                printf("Allocator thread failed.\n");
+                goto fail;
+        }
+
+        if (dai.rsp.data == NULL) {
+                printf("rsp_data not received.\n");
+                goto fail;
+        }
+
+        if (strcmp((char *) dai.rsp.data, TEST_DATA2) != 0) {
+                printf("rsp_data content mismatch.\n");
+                goto fail;
+        }
+
+        freebuf(dai.rsp);
+
+        reg_dealloc_flow(&info);
+
+        if (info.state != FLOW_DEALLOC_PENDING) {
+                printf("Flow not in dealloc pending.\n");
+                goto fail;
+        }
+
+        info.n_pid = TEST_PID;
+
+        reg_dealloc_flow(&info);
+
+        if (info.state != FLOW_DEALLOC_PENDING) {
+                printf("Same endpoint dealloc changed state.\n");
+                goto fail;
+        }
+
+        info.n_pid = TEST_N_1_PID;
+
+        reg_dealloc_flow(&info);
+
+        if (info.state != FLOW_DEALLOCATED) {
+                printf("Flow not deallocated.\n");
+                goto fail;
+        }
+
+        reg_destroy_flow(info.id);
+
+        reg_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        REG_TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_reg_flow(void) {
         int rc = 0;
 
@@ -493,6 +675,7 @@ static int test_reg_flow(void) {
         rc |= test_reg_accept_flow_success();
         rc |= test_reg_accept_flow_success_no_crypt();
         rc |= test_reg_allocate_flow_fail();
+        rc |= test_reg_direct_flow_success();
 
         return rc;
 }

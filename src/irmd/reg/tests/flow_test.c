@@ -24,10 +24,6 @@
 
 #include <test/test.h>
 
-#include <string.h>
-
-#define TEST_DATA "testpiggybackdata"
-
 static int test_reg_flow_create_destroy(void)
 {
         struct reg_flow * f;
@@ -219,56 +215,6 @@ static int test_reg_flow_assert_fails(void)
         return ret;
 }
 
-static int test_flow_data(void)
-{
-        struct reg_flow * f;
-
-        struct flow_info info = {
-                .id    = 1,
-                .n_pid = 1,
-                .qs    = qos_raw,
-                .state = FLOW_INIT
-        };
-
-        char * data;
-        buffer_t buf;
-        buffer_t rcv = {0, NULL};
-
-        TEST_START();
-
-        data = strdup(TEST_DATA);
-        if (data == NULL) {
-                printf("Failed to strdup data.\n");
-                goto fail;
-        }
-
-        buf.data = (uint8_t *) data;
-        buf.len  = strlen(data);
-
-        f = reg_flow_create(&info);
-        if (f == NULL) {
-                printf("Failed to create flow.\n");
-                goto fail;
-        }
-
-        reg_flow_set_data(f, &buf);
-
-        reg_flow_get_data(f, &rcv);
-
-        freebuf(buf);
-        clrbuf(rcv);
-
-        reg_flow_destroy(f);
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
- fail:
-        free(data);
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
 int flow_test(int     argc,
               char ** argv)
 {
@@ -280,7 +226,6 @@ int flow_test(int     argc,
         ret |= test_reg_flow_create_destroy();
         ret |= test_reg_flow_update();
         ret |= test_reg_flow_assert_fails();
-        ret |= test_flow_data();
 
         return ret;
 }

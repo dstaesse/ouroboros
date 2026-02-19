@@ -74,6 +74,7 @@
 
 #define IRMD_PKILL_TIMEOUT     @IRMD_PKILL_TIMEOUT@
 
+#cmakedefine DISABLE_DIRECT_IPC
 #cmakedefine IRMD_KILL_ALL_PROCESSES
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL

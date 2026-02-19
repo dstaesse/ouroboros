@@ -150,6 +150,19 @@ int   reg_wait_flow_accepting(const char *            name,
 int   reg_respond_accept(struct flow_info * info,
                          buffer_t *         pbuf);
 
+int   reg_prepare_flow_direct(struct flow_info * info,
+                              buffer_t *         pbuf,
+                              uid_t              alloc_uid);
+
+int   reg_respond_flow_direct(int              flow_id,
+                              buffer_t *       pbuf);
+
+int   reg_wait_flow_direct(int                      flow_id,
+                           buffer_t *               pbuf,
+                           const struct timespec *  abstime);
+
+bool  reg_flow_is_direct(int flow_id);
+
 void  reg_dealloc_flow(struct flow_info * info);
 
 void  reg_dealloc_flow_resp(struct flow_info * info);

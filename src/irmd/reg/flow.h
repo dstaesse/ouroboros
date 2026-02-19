@@ -31,6 +31,7 @@
 #include <ouroboros/ssm_rbuff.h>
 #include <ouroboros/utils.h>
 
+#include <stdbool.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -40,10 +41,13 @@ struct reg_flow {
         struct flow_info   info;
         int                response;
 
-        buffer_t           data;
+        buffer_t           req_data;
+        buffer_t           rsp_data;
         struct timespec    t0;
 
         char               name[NAME_SIZE + 1];
+
+        bool               direct;
 
         struct ssm_rbuff * n_rb;
         struct ssm_rbuff * n_1_rb;
@@ -55,13 +59,5 @@ void              reg_flow_destroy(struct reg_flow * flow);
 
 int               reg_flow_update(struct reg_flow *  flow,
                                   struct flow_info * info);
-
-void              reg_flow_set_data(struct reg_flow * flow,
-                                    const buffer_t *  buf);
-
-void              reg_flow_get_data(struct reg_flow * flow,
-                                    buffer_t *        buf);
-
-void              reg_flow_free_data(struct reg_flow * flow);
 
 #endif /* OUROBOROS_IRMD_REG_FLOW_H */

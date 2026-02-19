@@ -72,17 +72,19 @@
 "and reports the Round Trip Time (RTT)\n"                                    \
 "\n"                                                                         \
 "  -l, --listen            Run in server mode\n"                             \
+"      --poll              Server uses polling (lower latency)\n"            \
+"      --busy              Server uses busy-poll (single flow)\n"            \
 "\n"                                                                         \
 "  -c, --count             Number of packets\n"                              \
 "  -d, --duration          Duration of the test (default 1s)\n"              \
 "  -f, --flood             Send back-to-back without waiting\n"              \
+"  -F, --flood-busy        Flood with busy-polling (lower latency)\n"        \
 "  -i, --interval          Interval (default 1000ms)\n"                      \
 "  -n, --server-name       Name of the oping server\n"                       \
-"  -q, --qos               QoS (raw, best, video, voice, data)\n" \
+"  -q, --qos               QoS (raw, best, video, voice, data)\n"            \
 "  -s, --size              Payload size (B, default 64)\n"                   \
 "  -Q, --quiet             Only print final statistics\n"                    \
 "  -D, --timeofday         Print time of day before each line\n"             \
-"      --poll              Server uses polling (lower latency)\n"            \
 "\n"                                                                         \
 "      --help              Display this help text and exit\n"                \
 
@@ -93,6 +95,7 @@ struct {
         int       size;
         bool      timestamp;
         bool      flood;
+        bool      flood_busy;
         qosspec_t qs;
 
         /* stats */
@@ -118,6 +121,7 @@ struct {
 
         bool quiet;
         bool poll;
+        bool busy;
 
         pthread_t cleaner_pt;
         pthread_t accept_pt;
@@ -177,10 +181,12 @@ int main(int     argc,
         client.count     = INT_MAX;
         client.timestamp = false;
         client.flood     = false;
+        client.flood_busy = false;
         client.qs        = qos_raw;
         client.quiet     = false;
         server.quiet     = false;
         server.poll      = false;
+        server.busy      = false;
 
         while (argc > 0) {
                 if ((strcmp(*argv, "-i") == 0 ||
@@ -221,6 +227,9 @@ int main(int     argc,
                 } else if (strcmp(*argv, "-f") == 0 ||
                            strcmp(*argv, "--flood") == 0) {
                         client.flood = true;
+                } else if (strcmp(*argv, "-F") == 0 ||
+                           strcmp(*argv, "--flood-busy") == 0) {
+                        client.flood_busy = true;
                 } else if (strcmp(*argv, "-D") == 0 ||
                            strcmp(*argv, "--timeofday") == 0) {
                         client.timestamp = true;
@@ -230,6 +239,8 @@ int main(int     argc,
                         server.quiet = true;
                 } else if (strcmp(*argv, "--poll") == 0) {
                         server.poll = true;
+                } else if (strcmp(*argv, "--busy") == 0) {
+                        server.busy = true;
                 } else {
                         goto fail;
                 }
