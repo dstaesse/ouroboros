@@ -197,6 +197,8 @@ static void * test_flow_respond_alloc(void * o)
 
         reg_respond_alloc(info, &pbuf, response);
 
+        freebuf(pbuf);
+
         return (void *) 0;
  fail:
         return (void *) -1;
@@ -215,6 +217,8 @@ static void * test_flow_respond_accept(void * o)
         pbuf.len  = strlen((char *) pbuf.data) + 1;
 
         reg_respond_accept(info, &pbuf);
+
+        freebuf(pbuf);
 
         return (void *) 0;
  fail:
