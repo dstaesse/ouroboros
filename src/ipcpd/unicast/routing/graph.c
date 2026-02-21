@@ -160,11 +160,22 @@ static struct vertex * add_vertex(struct graph * graph,
         return vertex;
 }
 
+static void free_edges(struct list_head * edges)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        list_for_each_safe(p, h, edges) {
+                struct edge * e = list_entry(p, struct edge, next);
+                list_del(&e->next);
+                free(e);
+        }
+}
+
 static void del_vertex(struct graph *  graph,
                        struct vertex * vertex)
 {
         struct list_head * p;
-        struct list_head * h;
 
         assert(graph != NULL);
         assert(vertex != NULL);
@@ -178,10 +189,7 @@ static void del_vertex(struct graph *  graph,
                         v->index--;
         }
 
-        list_for_each_safe(p, h, &vertex->edges) {
-                struct edge * e = list_entry(p, struct edge, next);
-                del_edge(e);
-        }
+        free_edges(&vertex->edges);
 
         free(vertex);
 }
@@ -687,7 +695,6 @@ static int graph_routing_table_ecmp(struct graph *     graph,
 {
         struct vertex **       nhops;
         struct list_head *     p;
-        struct list_head *     h;
         size_t                 i;
         struct vertex *        v;
         struct vertex *        src_v;
@@ -727,16 +734,15 @@ static int graph_routing_table_ecmp(struct graph *     graph,
 
                 free(nhops);
 
-                llist_for_each(h, &graph->vertices) {
-                        v = list_entry(h, struct vertex, next);
-                        if (tmp_dist[v->index] + 1 == (*dist)[v->index]) {
+                for (i = 0; i < graph->vertices.len; ++i) {
+                        if (tmp_dist[i] + 1 == (*dist)[i]) {
                                 n = malloc(sizeof(*n));
                                 if (n == NULL) {
                                         free(tmp_dist);
                                         goto fail_src_v;
                                 }
                                 n->nhop = e->nb->addr;
-                                list_add_tail(&n->next, &forwarding[v->index]);
+                                list_add_tail(&n->next, &forwarding[i]);
                         }
                 }
 
@@ -747,36 +753,32 @@ static int graph_routing_table_ecmp(struct graph *     graph,
         i = 0;
         llist_for_each(p, &graph->vertices) {
                 v = list_entry(p, struct vertex, next);
-                if (v->addr == s_addr) {
+                if (v->addr == s_addr || list_is_empty(&forwarding[i])) {
                         ++i;
                         continue;
                 }
 
                 t = malloc(sizeof(*t));
                 if (t == NULL)
-                        goto fail_t;
+                        goto fail_malloc;
 
                 t->dst = v->addr;
 
                 list_head_init(&t->nhops);
-                if (&forwarding[i] != forwarding[i].nxt) {
-                        t->nhops.nxt = forwarding[i].nxt;
-                        t->nhops.prv = forwarding[i].prv;
-                        forwarding[i].prv->nxt = &t->nhops;
-                        forwarding[i].nxt->prv = &t->nhops;
-                }
+                t->nhops.nxt = forwarding[i].nxt;
+                t->nhops.prv = forwarding[i].prv;
+                forwarding[i].prv->nxt = &t->nhops;
+                forwarding[i].nxt->prv = &t->nhops;
 
                 list_add(&t->next, table);
                 ++i;
         }
 
-        free(*dist);
-        *dist = NULL;
         free(forwarding);
 
         return 0;
 
- fail_t:
+ fail_malloc:
         free_routing_table(table);
  fail_src_v:
         free(*dist);
