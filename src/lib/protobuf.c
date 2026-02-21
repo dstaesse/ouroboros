@@ -550,7 +550,7 @@ struct udp4_config udp4_config_msg_to_s(const udp4_config_msg_t * msg)
         return s;
 }
 
-#define IN6_LEN sizeof(struct in6_addr)
+#define IN6_LEN (size_t) sizeof(struct in6_addr)
 udp6_config_msg_t * udp6_config_s_to_msg(const struct udp6_config * s)
 {
         udp6_config_msg_t * msg;
