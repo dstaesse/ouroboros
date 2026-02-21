@@ -820,9 +820,9 @@ int dt_write_packet(uint64_t             dst_addr,
         assert(spb);
         assert(dst_addr != dt.addr);
 
+#ifdef IPCP_FLOW_STATS
         len = ssm_pk_buff_len(spb);
 
-#ifdef IPCP_FLOW_STATS
         if (eid < PROG_RES_FDS) {
                 pthread_mutex_lock(&dt.stat[eid].lock);
 

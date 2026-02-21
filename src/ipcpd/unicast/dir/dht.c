@@ -2798,8 +2798,6 @@ static void do_dht_kv_store(const dht_store_msg_t * store)
         uint8_t *   key;
         time_t      exp;
 
-        (void) key; /* Only in logs, not used with DISABLE_TEST_LOGGING */
-
         assert(store != NULL);
 
         val.data = store->val.data;
@@ -2807,7 +2805,7 @@ static void do_dht_kv_store(const dht_store_msg_t * store)
         key      = store->key.data;
         exp      = store->exp;
 
-        if (dht_kv_store(store->key.data, val, store->exp) < 0) {
+        if (dht_kv_store(key, val, store->exp) < 0) {
                 log_err(KV_FMT " Failed to store.", KV_VAL(key, val));
                 return;
         }
