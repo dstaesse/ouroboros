@@ -506,14 +506,12 @@ void ssm_pool_destroy(struct ssm_pool * pool)
 
         if (getpid() != pool->hdr->pid && kill(pool->hdr->pid, 0) == 0) {
                 ssm_pool_close(pool);
-                free(pool);
                 return;
         }
 
         fn = pool_filename(pool->uid);
         if (fn == NULL) {
                 ssm_pool_close(pool);
-                free(pool);
                 return;
         }
 

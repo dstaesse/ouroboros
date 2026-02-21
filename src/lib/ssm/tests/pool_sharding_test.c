@@ -242,6 +242,8 @@ static int test_fallback_stealing(void)
         ptrs = malloc(total_blocks * sizeof(uint8_t *));
         if (spbs == NULL || ptrs == NULL) {
                 printf("Failed to allocate test arrays.\n");
+                free(spbs);
+                free(ptrs);
                 goto fail_pool;
         }
 
@@ -325,6 +327,9 @@ static int test_multiprocess_sharding(void)
         int                   status;
 
         TEST_START();
+
+        for (i = 0; i < SSM_POOL_SHARDS; i++)
+                children[i] = -1;
 
         pool = ssm_pool_create(getuid(), getgid());
         if (pool == NULL) {
