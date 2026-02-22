@@ -2008,11 +2008,7 @@ int reg_respond_accept(struct flow_info * info,
 
         info->n_pid = flow->info.n_pid;
 
-<<<<<<< HEAD
         flow->req_data = *pbuf;
-=======
-        reg_flow_set_data(flow, pbuf);
->>>>>>> c82f0de4 (irmd: Fix memleak in reg tests)
         clrbuf(*pbuf);
 
         if (reg_flow_update(flow, info) < 0) {
