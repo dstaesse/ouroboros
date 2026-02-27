@@ -30,6 +30,9 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/resource.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 #define TEST_RC_SUCCESS  0
 #define TEST_RC_SKIP     1
@@ -86,6 +89,9 @@ static int __attribute__((unused)) test_assert_fail(int(* testfunc)(void))
 #ifdef DISABLE_TESTS_CORE_DUMPS
                 struct rlimit rl = { .rlim_cur = 0, .rlim_max = 0 };
                 setrlimit(RLIMIT_CORE, &rl);
+#ifdef __linux__
+                prctl(PR_SET_DUMPABLE, 0);
+#endif
 #endif
                 return testfunc(); /* should abort */
         }
