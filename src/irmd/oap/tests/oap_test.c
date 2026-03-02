@@ -1071,6 +1071,74 @@ static int test_oap_replay_packet(void)
         return TEST_RC_FAIL;
 }
 
+/* Server rejects client certificate when root CA is missing from store */
+static int test_oap_missing_root_ca(void)
+{
+        struct oap_test_ctx ctx;
+        void *              im_ca = NULL;
+
+        test_default_cfg();
+
+        TEST_START();
+
+        memset(&ctx, 0, sizeof(ctx));
+
+        strcpy(ctx.srv.info.name, "test-1.unittest.o7s");
+        strcpy(ctx.cli.info.name, "test-1.unittest.o7s");
+
+        if (oap_auth_init() < 0) {
+                printf("Failed to init OAP.\n");
+                goto fail;
+        }
+
+        /* Load intermediate CA but intentionally omit the root CA */
+        if (crypt_load_crt_str(im_ca_crt_ec, &im_ca) < 0) {
+                printf("Failed to load intermediate CA cert.\n");
+                goto fail_fini;
+        }
+
+        ctx.im_ca = im_ca;
+
+        if (oap_auth_add_ca_crt(im_ca) < 0) {
+                printf("Failed to add intermediate CA cert to store.\n");
+                goto fail_fini;
+        }
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_fini;
+        }
+
+        /* Server processes and signs response - succeeds without root CA */
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_teardown;
+        }
+
+        /* Client verifies server certificate against trust store:
+         * should reject because root CA is not in the store */
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client should reject without root CA.\n");
+                goto fail_teardown;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_teardown:
+        oap_test_teardown(&ctx);
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+ fail_fini:
+        crypt_free_crt(im_ca);
+        oap_auth_fini();
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 /* Test that client rejects server with wrong certificate name */
 static int test_oap_server_name_mismatch(void)
 {
@@ -1149,6 +1217,7 @@ int oap_test(int    argc,
         ret |= test_oap_outdated_packet();
         ret |= test_oap_future_packet();
         ret |= test_oap_replay_packet();
+        ret |= test_oap_missing_root_ca();
         ret |= test_oap_server_name_mismatch();
 #else
         (void) test_oap_roundtrip_auth_only;
@@ -1173,6 +1242,7 @@ int oap_test(int    argc,
         (void) test_oap_outdated_packet;
         (void) test_oap_future_packet;
         (void) test_oap_replay_packet;
+        (void) test_oap_missing_root_ca;
         (void) test_oap_server_name_mismatch;
 
         ret = TEST_RC_SKIP;

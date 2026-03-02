@@ -347,6 +347,59 @@ static int test_verify_crt(void)
         return TEST_RC_FAIL;
 }
 
+static int test_verify_crt_missing_root_ca(void)
+{
+        struct auth_ctx * auth;
+        void *            _signed_server_crt;
+        void *            _im_ca_crt;
+
+        TEST_START();
+
+        auth = auth_create_ctx();
+        if (auth == NULL) {
+                printf("Failed to create auth context.\n");
+                goto fail_create_ctx;
+        }
+
+        if (crypt_load_crt_str(signed_server_crt_ec, &_signed_server_crt) < 0) {
+                printf("Failed to load signed crt from string.\n");
+                goto fail_load_signed;
+        }
+
+        if (crypt_load_crt_str(im_ca_crt_ec, &_im_ca_crt) < 0) {
+                printf("Failed to load intermediate crt from string.\n");
+                goto fail_load_im_ca;
+        }
+
+        /* Add only the intermediate CA - root CA is missing */
+        if (auth_add_crt_to_store(auth, _im_ca_crt) < 0) {
+                printf("Failed to add intermediate ca crt to auth store.\n");
+                goto fail_add;
+        }
+
+        if (auth_verify_crt(auth, _signed_server_crt) == 0) {
+                printf("Verification should fail without root CA.\n");
+                goto fail_add;
+        }
+
+        crypt_free_crt(_im_ca_crt);
+        crypt_free_crt(_signed_server_crt);
+        auth_destroy_ctx(auth);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_add:
+        crypt_free_crt(_im_ca_crt);
+ fail_load_im_ca:
+        crypt_free_crt(_signed_server_crt);
+ fail_load_signed:
+        auth_destroy_ctx(auth);
+ fail_create_ctx:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int test_auth_sign(void)
 {
         uint8_t  buf[TEST_MSG_SIZE];
@@ -526,6 +579,7 @@ int auth_test(int     argc,
         ret |= test_crypt_check_pubkey_crt();
         ret |= test_store_add();
         ret |= test_verify_crt();
+        ret |= test_verify_crt_missing_root_ca();
         ret |= test_auth_sign();
         ret |= test_auth_bad_signature();
         ret |= test_crt_str();
@@ -538,6 +592,7 @@ int auth_test(int     argc,
         (void) test_crypt_check_pubkey_crt;
         (void) test_store_add;
         (void) test_verify_crt;
+        (void) test_verify_crt_missing_root_ca;
         (void) test_auth_sign;
         (void) test_auth_bad_signature;
         (void) test_crt_str;
