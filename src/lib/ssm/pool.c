@@ -107,6 +107,8 @@ static const struct ssm_size_class_cfg ssm_pup_cfg[SSM_POOL_MAX_CLASSES] = {
                                                : SSM_PUP_FILE_SIZE)
 #define GET_POOL_CFG(uid)        (IS_GSPP(uid) ? ssm_gspp_cfg : ssm_pup_cfg)
 
+#define NEEDS_CHOWN(uid, gid)    ((uid) != geteuid() || (gid) != getegid())
+
 struct ssm_pool {
         uint8_t *               shm_base;   /* start of blocks           */
         struct _ssm_pool_hdr *  hdr;        /* shared memory header      */
@@ -548,7 +550,7 @@ static struct ssm_pool * __pool_create(const char * name,
         if (flags & O_CREAT) {
                 if (ftruncate(fd, (off_t) file_size) < 0)
                         goto fail_truncate;
-                if (uid != geteuid() && fchown(fd, uid, gid) < 0)
+                if (NEEDS_CHOWN(uid, gid) && fchown(fd, uid, gid) < 0)
                         goto fail_truncate;
         }
 
