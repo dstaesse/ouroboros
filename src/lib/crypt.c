@@ -1094,6 +1094,13 @@ void crypt_secure_malloc_fini(void)
 #endif
 }
 
+void crypt_cleanup(void)
+{
+#ifdef HAVE_OPENSSL
+        openssl_cleanup();
+#endif
+}
+
 void * crypt_secure_malloc(size_t size)
 {
 #ifdef HAVE_OPENSSL

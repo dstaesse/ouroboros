@@ -442,6 +442,7 @@ int oap_test_ml_dsa(int    argc,
 
         ret = TEST_RC_SKIP;
 #endif
+        crypt_cleanup();
 
         return ret;
 }

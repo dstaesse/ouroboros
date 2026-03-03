@@ -183,7 +183,7 @@ int oap_auth_peer(char *                 name,
                   const struct oap_hdr * peer_hdr)
 {
         void *     crt;
-        void *     pk;
+        void *     pk  = NULL;
         buffer_t   sign; /* Signed region */
         uint8_t *  id = peer_hdr->id.data;
 
@@ -244,8 +244,8 @@ int oap_auth_peer(char *                 name,
         return 0;
 
  fail_check_sig:
-        crypt_free_key(pk);
  fail_crt:
+        crypt_free_key(pk);
         crypt_free_crt(crt);
  fail_check:
         return -EAUTH;

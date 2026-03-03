@@ -169,4 +169,6 @@ void    openssl_secure_free(void * ptr,
 void    openssl_secure_clear(void * ptr,
                              size_t size);
 
+void    openssl_cleanup(void);
+
 #endif /* OUROBOROS_LIB_CRYPT_OPENSSL_H */

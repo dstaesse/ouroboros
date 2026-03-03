@@ -358,6 +358,8 @@ int                crypt_check_crt_name(void *       crt,
 int                crypt_get_crt_name(void * crt,
                                      char * name);
 
+void               crypt_cleanup(void);
+
 /* Secure memory allocation for sensitive data (keys, secrets) */
 int                crypt_secure_malloc_init(size_t max);
 

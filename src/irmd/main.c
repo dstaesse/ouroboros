@@ -2416,6 +2416,7 @@ int main(int     argc,
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
         crypt_secure_malloc_fini();
+        crypt_cleanup();
 
         reg_clear();
 

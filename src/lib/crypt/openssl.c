@@ -1878,3 +1878,7 @@ void openssl_secure_clear(void * ptr,
 {
         OPENSSL_cleanse(ptr, size);
 }
+void openssl_cleanup(void)
+{
+        OPENSSL_cleanup();
+}

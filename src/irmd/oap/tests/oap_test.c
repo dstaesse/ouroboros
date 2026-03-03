@@ -1247,5 +1247,7 @@ int oap_test(int    argc,
 
         ret = TEST_RC_SKIP;
 #endif
+        crypt_cleanup();
+
         return ret;
 }
