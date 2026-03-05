@@ -53,13 +53,13 @@ int     irm_bootstrap_ipcp(pid_t                      pid,
                            const struct ipcp_config * conf);
 
 int     irm_connect_ipcp(pid_t        pid,
-                         const char * component,
                          const char * dst,
+                         const char * component,
                          qosspec_t    qs);
 
 int     irm_disconnect_ipcp(pid_t        pid,
-                            const char * component,
-                            const char * dst);
+                            const char * dst,
+                            const char * component);
 
 int     irm_bind_program(const char * prog,
                          const char * name,
