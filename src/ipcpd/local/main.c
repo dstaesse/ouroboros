@@ -236,15 +236,6 @@ static int local_ipcp_flow_alloc_resp(int              fd,
                 return -1;
         }
 
-        if (response < 0) {
-                pthread_rwlock_wrlock(&local_data.lock);
-                if (local_data.in_out[fd] != -1)
-                        local_data.in_out[local_data.in_out[fd]] = fd;
-                local_data.in_out[fd] = -1;
-                pthread_rwlock_unlock(&local_data.lock);
-                return 0;
-        }
-
         pthread_rwlock_rdlock(&local_data.lock);
 
         out_fd = local_data.in_out[fd];
@@ -261,6 +252,12 @@ static int local_ipcp_flow_alloc_resp(int              fd,
         if (out_fd == -1) {
                 log_err("Invalid out_fd.");
                 return -1;
+        }
+
+        if (response < 0) {
+                ipcp_flow_alloc_reply(out_fd, response, mpl, data);
+                log_info("Flow allocation rejected, fds (%d, %d).", out_fd, fd);
+                return 0;
         }
 
         fset_add(local_data.flows, fd);
