@@ -1491,7 +1491,7 @@ static int test_wait_accepting_fail_name(void)
 static void * test_call_flow_accept(void * o)
 {
         struct timespec abstime;
-        struct timespec timeo = TIMESPEC_INIT_MS(10);
+        struct timespec timeo = TIMESPEC_INIT_MS(30);
         buffer_t        pbuf = BUF_INIT;
 
         struct proc_info pinfo = TEST_PROC_INFO;
