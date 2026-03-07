@@ -137,7 +137,7 @@ name_info_msg_t * name_info_s_to_msg(const struct name_info * info)
                 goto fail_msg;
 
         msg->ckey = strdup(info->c.key);
-        if (msg->skey == NULL)
+        if (msg->ckey == NULL)
                 goto fail_msg;
 
         msg->ccrt = strdup(info->c.crt);

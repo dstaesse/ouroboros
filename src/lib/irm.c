@@ -614,7 +614,7 @@ ssize_t irm_list_names(struct name_info ** names)
                 return 0;
         }
 
-        *names = malloc(nr * sizeof(**names));
+        *names = calloc(nr, sizeof(**names));
         if (*names == NULL) {
                 irm_msg__free_unpacked(recv_msg, NULL);
                 return -ENOMEM;
