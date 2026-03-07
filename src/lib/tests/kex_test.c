@@ -106,7 +106,7 @@ static int test_kex_dh_pkp_create_destroy(void)
 {
         struct sec_config kex;
         void *         pkp;
-        uint8_t        buf[MSGBUFSZ];
+        uint8_t        buf[CRYPT_KEY_BUFSZ];
 
         TEST_START();
 
@@ -134,7 +134,7 @@ static int test_kex_get_algo_from_pk(const char * algo)
         void *            pkp;
         buffer_t          pk;
         ssize_t           len;
-        uint8_t           buf[MSGBUFSZ];
+        uint8_t           buf[CRYPT_KEY_BUFSZ];
         char              extracted_algo[256];
 
         TEST_START("(%s)", algo);
@@ -204,8 +204,8 @@ static int test_kex_dhe_derive(const char * algo)
         buffer_t          pk1;
         buffer_t          pk2;
         ssize_t           len;
-        uint8_t           buf1[MSGBUFSZ];
-        uint8_t           buf2[MSGBUFSZ];
+        uint8_t           buf1[CRYPT_KEY_BUFSZ];
+        uint8_t           buf2[CRYPT_KEY_BUFSZ];
         uint8_t           s1[SYMMKEYSZ];
         uint8_t           s2[SYMMKEYSZ];
 
@@ -317,7 +317,7 @@ static int test_kex_dhe_corrupted_pubkey(const char * algo)
         void *            pkp;
         buffer_t          pk;
         ssize_t           len;
-        uint8_t           buf[MSGBUFSZ];
+        uint8_t           buf[CRYPT_KEY_BUFSZ];
         uint8_t           s[SYMMKEYSZ];
 
         TEST_START("(%s)", algo);
@@ -363,8 +363,8 @@ static int test_kex_dhe_wrong_algo(void)
         void *            pkp2;
         buffer_t          pk2;
         ssize_t           len;
-        uint8_t           buf1[MSGBUFSZ];
-        uint8_t           buf2[MSGBUFSZ];
+        uint8_t           buf1[CRYPT_KEY_BUFSZ];
+        uint8_t           buf2[CRYPT_KEY_BUFSZ];
         uint8_t           s[SYMMKEYSZ];
         const char *      algo1 = "X25519";
         const char *      algo2 = "X448";

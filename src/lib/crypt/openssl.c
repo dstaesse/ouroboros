@@ -629,7 +629,7 @@ ssize_t openssl_pkp_create(const char *  algo,
 
                 return (ssize_t) raw.len;
         } else { /* DER encode standard algorithms */
-                pos = pk; /* i2d_PUBKEY increments the pointer, don't use pk! */
+                pos = pk; /* i2d_PUBKEY increments the ptr, don't use pk! */
                 len = i2d_PUBKEY(*pkp, &pos);
                 if (len < 0)
                         goto fail_pubkey;
@@ -666,7 +666,7 @@ static ssize_t __openssl_kem_encap(EVP_PKEY * pub,
 
         /* Get required lengths */
         ret = EVP_PKEY_encapsulate(ctx, NULL, &ct_len, NULL, &secret_len);
-        if (ret != 1 || ct_len > MSGBUFSZ)
+        if (ret != 1 || ct_len > CRYPT_KEY_BUFSZ)
                 goto fail_encap;
 
         /* Allocate buffer for secret */
@@ -1283,24 +1283,14 @@ int openssl_load_privkey_file(const char * path,
 {
         FILE *     fp;
         EVP_PKEY * pkey;
-        unsigned long err;
-        char       errbuf[256];
 
         fp = fopen(path, "r");
-        if (fp == NULL) {
-                fprintf(stderr, "Failed to open %s\n", path);
+        if (fp == NULL)
                 goto fail_file;
-        }
 
         pkey = PEM_read_PrivateKey(fp, NULL, NULL, "");
-        if (pkey == NULL) {
-                err = ERR_get_error();
-                ERR_error_string_n(err, errbuf, sizeof(errbuf));
-                fprintf(stderr,
-                        "OpenSSL error loading privkey from %s: %s\n",
-                        path, errbuf);
+        if (pkey == NULL)
                 goto fail_key;
-        }
 
         fclose(fp);
 
@@ -1442,7 +1432,7 @@ int openssl_load_pubkey_raw_file(const char * path,
                                  buffer_t *   buf)
 {
         FILE *        fp;
-        uint8_t       tmp_buf[MSGBUFSZ];
+        uint8_t       tmp_buf[CRYPT_KEY_BUFSZ];
         size_t        bytes_read;
         const char *  algo;
 
@@ -1453,7 +1443,7 @@ int openssl_load_pubkey_raw_file(const char * path,
         if (fp == NULL)
                 goto fail_file;
 
-        bytes_read = fread(tmp_buf, 1, MSGBUFSZ, fp);
+        bytes_read = fread(tmp_buf, 1, CRYPT_KEY_BUFSZ, fp);
         if (bytes_read == 0)
                 goto fail_read;
 
@@ -1658,24 +1648,32 @@ int openssl_crt_str(const void * crt,
 int openssl_crt_der(const void * crt,
                     buffer_t *   buf)
 {
-        int len;
+        uint8_t * p;
+        int       len;
 
         assert(crt != NULL);
         assert(buf != NULL);
 
-        len = i2d_X509((X509 *) crt, &buf->data);
+        /* Get the size by encoding to NULL */
+        len = i2d_X509((X509 *) crt, NULL);
         if (len < 0)
-                goto fail_der;
+                goto fail_len;
 
+        buf->data = malloc((size_t) len);
+        if (buf->data == NULL)
+                goto fail_malloc;
+
+        p = buf->data; /* i2d_X509 increments p */
+        i2d_X509((X509 *) crt, &p);
         buf->len = (size_t) len;
 
         return 0;
 
- fail_der:
+ fail_malloc:
+ fail_len:
         clrbuf(*buf);
         return -1;
 }
-
 
 void * openssl_auth_create_store(void)
 {

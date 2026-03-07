@@ -33,7 +33,6 @@
 #define MAX_HASH_SIZE    64 /* SHA-512/BLAKE2b max */
 #define KEX_ALGO_BUFSZ   32
 #define KEX_CIPHER_BUFSZ 32
-#define MSGBUFSZ         2048
 
 /*
  * On OSX the OpenSSL NIDs are automatically loaded with evp.h.
@@ -94,6 +93,8 @@
 #define X25519MLKEM768_SKSZ   2432  /* 32 + 2400 */
 #define X448MLKEM1024_PKSZ    1624  /* 56 + 1568 */
 #define X448MLKEM1024_SKSZ    3224  /* 56 + 3168 */
+
+#define CRYPT_KEY_BUFSZ       4096  /* Safe buffer for key material */
 
 #define KEM_MODE_SERVER_ENCAP 0     /* Server encapsulates (default) */
 #define KEM_MODE_CLIENT_ENCAP 1     /* Client encapsulates           */

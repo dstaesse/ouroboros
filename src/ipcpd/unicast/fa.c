@@ -58,12 +58,12 @@
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
-#define TIMEOUT 10 * MILLION /* nanoseconds */
+#define TIMEOUT  10 * MILLION /* nanoseconds */
+#define MSGBUFSZ 32768
 
 #define FLOW_REQ    0
 #define FLOW_REPLY  1
 #define FLOW_UPDATE 2
-#define MSGBUFSZ    2048
 
 #define STAT_FILE_LEN 0
 

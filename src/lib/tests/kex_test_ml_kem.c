@@ -197,8 +197,8 @@ static int test_kex_kem(const char * algo)
         buffer_t          ct;
         ssize_t           len;
         ssize_t           ct_len;
-        uint8_t           buf1[MSGBUFSZ];
-        uint8_t           buf2[MSGBUFSZ];
+        uint8_t           buf1[CRYPT_KEY_BUFSZ];
+        uint8_t           buf2[CRYPT_KEY_BUFSZ];
         uint8_t           s1[SYMMKEYSZ];
         uint8_t           s2[SYMMKEYSZ];
         int               kdf;
@@ -262,8 +262,8 @@ static int test_kex_kem_corrupted_ciphertext(const char * algo)
         buffer_t          ct;
         ssize_t           len;
         ssize_t           ct_len;
-        uint8_t           buf1[MSGBUFSZ];
-        uint8_t           buf2[MSGBUFSZ];
+        uint8_t           buf1[CRYPT_KEY_BUFSZ];
+        uint8_t           buf2[CRYPT_KEY_BUFSZ];
         uint8_t           s1[SYMMKEYSZ];
         uint8_t           s2[SYMMKEYSZ];
         int               kdf;
@@ -334,9 +334,9 @@ static int test_kex_kem_wrong_keypair(const char * algo)
         buffer_t          ct;
         ssize_t           len;
         ssize_t           ct_len;
-        uint8_t           buf1[MSGBUFSZ];
-        uint8_t           buf2[MSGBUFSZ];
-        uint8_t           buf3[MSGBUFSZ];
+        uint8_t           buf1[CRYPT_KEY_BUFSZ];
+        uint8_t           buf2[CRYPT_KEY_BUFSZ];
+        uint8_t           buf3[CRYPT_KEY_BUFSZ];
         uint8_t           s1[SYMMKEYSZ];
         uint8_t           s2[SYMMKEYSZ];
 
@@ -402,8 +402,8 @@ static int test_kex_kem_truncated_ciphertext(const char * algo)
         buffer_t          ct;
         ssize_t           len;
         ssize_t           ct_len;
-        uint8_t           buf1[MSGBUFSZ];
-        uint8_t           buf2[MSGBUFSZ];
+        uint8_t           buf1[CRYPT_KEY_BUFSZ];
+        uint8_t           buf2[CRYPT_KEY_BUFSZ];
         uint8_t           s1[SYMMKEYSZ];
         uint8_t           s2[SYMMKEYSZ];
 

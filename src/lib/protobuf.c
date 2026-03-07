@@ -161,6 +161,8 @@ struct name_info name_info_msg_to_s(const name_info_msg_t * msg)
         assert(msg != NULL);
         assert(strlen(msg->name) <= NAME_SIZE);
 
+        memset(&s, 0, sizeof(s));
+
         strcpy(s.name, msg->name);
         strcpy(s.s.key, msg->skey);
         strcpy(s.s.crt, msg->scrt);

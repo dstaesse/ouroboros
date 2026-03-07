@@ -384,7 +384,7 @@ int oap_srv_process(const struct name_info * info,
         struct oap_hdr        peer_hdr;
         struct oap_hdr        local_hdr;
         struct sec_config     kcfg;
-        uint8_t               kex_buf[MSGBUFSZ];
+        uint8_t               kex_buf[CRYPT_KEY_BUFSZ];
         uint8_t               hash_buf[MAX_HASH_SIZE];
         buffer_t              req_hash = BUF_INIT;
         ssize_t               hash_ret;

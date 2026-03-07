@@ -50,7 +50,7 @@
 struct oap_cli_ctx {
         uint8_t           __id[OAP_ID_SIZE];
         buffer_t          id;
-        uint8_t           kex_buf[MSGBUFSZ];
+        uint8_t           kex_buf[CRYPT_KEY_BUFSZ];
         uint8_t           req_hash[MAX_HASH_SIZE];
         size_t            req_hash_len;
         int               req_md_nid;
