@@ -74,6 +74,42 @@ static int test_crc32(void)
         return ret;
 }
 
+static int test_crc64(void)
+{
+        int ret = 0;
+
+        struct vec_entry vec [] = {
+                { "",          "0000000000000000" },
+                { "123456789", "ae8b14860a799888" },
+                { "0123456789abcdef",
+                               "091485ca7018730e" },
+                { NULL,        NULL               }
+        };
+
+        struct vec_entry * cur = vec;
+
+        TEST_START();
+
+        while (cur->in != NULL) {
+                uint8_t crc[8];
+                char    res[17];
+
+                str_hash(HASH_CRC64, crc, cur->in);
+
+                sprintf(res, HASH_FMT64, HASH_VAL64(crc));
+                if (strcmp(res, cur->out) != 0) {
+                        printf("Hash failed %s != %s.\n", res, cur->out);
+                        ret |= -1;
+                }
+
+                ++cur;
+        }
+
+        TEST_END(ret);
+
+        return ret;
+}
+
 static int test_md5(void)
 {
         int ret = 0;
@@ -193,6 +229,8 @@ int hash_test(int     argc,
         (void) argv;
 
         ret |= test_crc32();
+
+        ret |= test_crc64();
 
         ret |= test_md5();
 

@@ -39,6 +39,7 @@
 #include <ouroboros/md5.h>
 #include <ouroboros/sha3.h>
 #endif
+#include <ouroboros/crc64.h>
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -69,6 +70,8 @@ int hash_len_tbl [] = {
 
 uint16_t hash_len(enum hash_algo algo)
 {
+        if (algo == HASH_CRC64)
+                return CRC64_HASH_LEN;
 #ifdef HAVE_LIBGCRYPT
         return (uint16_t) gcry_md_get_algo_dlen(gcry_algo_tbl[algo]);
 #else
@@ -81,6 +84,13 @@ void mem_hash(enum hash_algo  algo,
               const uint8_t * buf,
               size_t          len)
 {
+        if (algo == HASH_CRC64) {
+                uint64_t crc = 0;
+
+                crc64_nvme(&crc, buf, len);
+                *(uint64_t *) dst = htobe64(crc);
+                return;
+        }
 #ifdef HAVE_LIBGCRYPT
         gcry_md_hash_buffer(gcry_algo_tbl[algo], dst, buf, len);
 #else

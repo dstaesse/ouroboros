@@ -11,6 +11,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   bitmap_test.c
   btree_test.c
   crc32_test.c
+  crc64_test.c
   crypt_test.c
   hash_test.c
   kex_test.c

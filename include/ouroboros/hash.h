@@ -38,6 +38,7 @@ enum hash_algo {
         HASH_SHA3_512 = DIR_HASH_SHA3_512,
         HASH_CRC32,
         HASH_MD5,
+        HASH_CRC64,
 };
 
 #define HASH_FMT32 "%02x%02x%02x%02x"
