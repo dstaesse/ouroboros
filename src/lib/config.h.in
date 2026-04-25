@@ -37,6 +37,8 @@
 
 #cmakedefine                     QOS_DISABLE_CRC
 #cmakedefine                     HAVE_OPENSSL_RNG
+#cmakedefine                     HAVE_PCLMUL
+#cmakedefine                     HAVE_PMULL
 
 #define SHM_LOCKFILE_NAME        "@SHM_LOCKFILE_NAME@"
 #define FLOW_ALLOC_TIMEOUT        @FLOW_ALLOC_TIMEOUT@

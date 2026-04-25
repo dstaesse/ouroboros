@@ -28,6 +28,17 @@ set(SOCKET_TIMEOUT 500 CACHE STRING
 set(QOS_DISABLE_CRC TRUE CACHE BOOL
   "Ignores ber setting on all QoS cubes")
 
+include(utils/CPUUtils)
+detect_pclmul()
+detect_pmull()
+if(HAVE_PCLMUL)
+  message(STATUS "CRC-64/NVMe backend: PCLMUL (x86 SSE4.1+PCLMUL)")
+elseif(HAVE_PMULL)
+  message(STATUS "CRC-64/NVMe backend: PMULL (aarch64 crypto)")
+else()
+  message(STATUS "CRC-64/NVMe backend: byte table (no acceleration)")
+endif()
+
 # Delta-t protocol timers
 set(DELTA_T_MPL 60 CACHE STRING
   "Maximum packet lifetime (s)")
