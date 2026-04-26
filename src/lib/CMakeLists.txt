@@ -17,10 +17,10 @@ protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS
 set(SOURCE_FILES_COMMON
   bitmap.c
   btree.c
-  crc8.c
-  crc16.c
-  crc32.c
-  crc64.c
+  crc/crc8.c
+  crc/crc16.c
+  crc/crc32.c
+  crc/crc64.c
   crypt.c
   hash.c
   lockfile.c
@@ -158,5 +158,6 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ssm/ssm.h.in"
 
 if(BUILD_TESTS)
   add_subdirectory(tests)
+  add_subdirectory(crc/tests)
   add_subdirectory(ssm/tests)
 endif()
