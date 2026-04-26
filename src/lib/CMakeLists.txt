@@ -17,6 +17,8 @@ protobuf_generate_c(IPCP_PROTO_SRCS IPCP_PROTO_HDRS
 set(SOURCE_FILES_COMMON
   bitmap.c
   btree.c
+  crc8.c
+  crc16.c
   crc32.c
   crc64.c
   crypt.c

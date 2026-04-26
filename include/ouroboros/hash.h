@@ -39,6 +39,8 @@ enum hash_algo {
         HASH_CRC32,
         HASH_MD5,
         HASH_CRC64,
+        HASH_CRC8,
+        HASH_CRC16,
 };
 
 #define HASH_FMT32 "%02x%02x%02x%02x"

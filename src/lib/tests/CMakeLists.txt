@@ -10,6 +10,8 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   auth_test_slh_dsa.c
   bitmap_test.c
   btree_test.c
+  crc8_test.c
+  crc16_test.c
   crc32_test.c
   crc64_test.c
   crypt_test.c

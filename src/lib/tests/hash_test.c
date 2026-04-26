@@ -39,6 +39,74 @@ struct vec_entry {
         char * out;
 };
 
+static int test_crc8(void)
+{
+        int ret = 0;
+
+        struct vec_entry vec [] = {
+                { "",          "00" },
+                { "123456789", "df" },
+                { NULL,        NULL }
+        };
+
+        struct vec_entry * cur = vec;
+
+        TEST_START();
+
+        while (cur->in != NULL) {
+                uint8_t crc;
+                char    res[3];
+
+                str_hash(HASH_CRC8, &crc, cur->in);
+
+                sprintf(res, "%02x", crc);
+                if (strcmp(res, cur->out) != 0) {
+                        printf("Hash failed %s != %s.\n", res, cur->out);
+                        ret |= -1;
+                }
+
+                ++cur;
+        }
+
+        TEST_END(ret);
+
+        return ret;
+}
+
+static int test_crc16(void)
+{
+        int ret = 0;
+
+        struct vec_entry vec [] = {
+                { "",          "ffff" },
+                { "123456789", "29b1" },
+                { NULL,        NULL   }
+        };
+
+        struct vec_entry * cur = vec;
+
+        TEST_START();
+
+        while (cur->in != NULL) {
+                uint8_t crc[2];
+                char    res[5];
+
+                str_hash(HASH_CRC16, crc, cur->in);
+
+                sprintf(res, "%02x%02x", crc[0], crc[1]);
+                if (strcmp(res, cur->out) != 0) {
+                        printf("Hash failed %s != %s.\n", res, cur->out);
+                        ret |= -1;
+                }
+
+                ++cur;
+        }
+
+        TEST_END(ret);
+
+        return ret;
+}
+
 static int test_crc32(void)
 {
         int ret = 0;
@@ -227,6 +295,10 @@ int hash_test(int     argc,
 
         (void) argc;
         (void) argv;
+
+        ret |= test_crc8();
+
+        ret |= test_crc16();
 
         ret |= test_crc32();
 
