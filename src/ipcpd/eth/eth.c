@@ -43,6 +43,7 @@
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/bitmap.h>
+#include <ouroboros/crc8.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
@@ -122,7 +123,8 @@
 #define MGMT_EID             0
 #define DIX_EID_SIZE         sizeof(uint16_t)
 #define DIX_LENGTH_SIZE      sizeof(uint16_t)
-#define DIX_HEADER_SIZE      (DIX_EID_SIZE + DIX_LENGTH_SIZE)
+#define DIX_HCS_SIZE         CRC8_HASH_LEN
+#define DIX_HEADER_SIZE      (DIX_EID_SIZE + DIX_LENGTH_SIZE + DIX_HCS_SIZE)
 #define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + DIX_HEADER_SIZE)
 #define MAX_EIDS             (1 << (8 * DIX_EID_SIZE))
 #define ETH_MAX_PACKET_SIZE  (ETH_MTU - DIX_HEADER_SIZE)
@@ -130,7 +132,9 @@
 #elif defined(BUILD_ETH_LLC)
 #define THIS_TYPE            IPCP_ETH_LLC
 #define MGMT_SAP             0x01
-#define LLC_HEADER_SIZE      3
+#define LLC_FIELDS_SIZE      3
+#define LLC_HCS_SIZE         CRC8_HASH_LEN
+#define LLC_HEADER_SIZE      (LLC_FIELDS_SIZE + LLC_HCS_SIZE)
 #define ETH_HEADER_TOT_SIZE  (ETH_HEADER_SIZE + LLC_HEADER_SIZE)
 #define MAX_SAPS             64
 #define ETH_MAX_PACKET_SIZE  (ETH_MTU - LLC_HEADER_SIZE)
@@ -185,6 +189,7 @@ struct eth_frame {
         uint8_t  ssap;
         uint8_t  cf;
 #endif
+        uint8_t  hcs;
         uint8_t  payload;
 } __attribute__((packed));
 
@@ -409,12 +414,18 @@ static int eth_ipcp_send_frame(const uint8_t * dst_addr,
         e_frame->ethertype = eth_data.ethertype;
         e_frame->eid = htons(deid);
         e_frame->length = htons(len);
+        mem_hash(HASH_CRC8, &e_frame->hcs,
+                 (uint8_t *) &e_frame->eid,
+                 DIX_EID_SIZE + DIX_LENGTH_SIZE);
         frame_len = ETH_HEADER_TOT_SIZE + len;
 #elif defined(BUILD_ETH_LLC)
         e_frame->length = htons(LLC_HEADER_SIZE + len);
         e_frame->dsap = dsap;
         e_frame->ssap = ssap;
         e_frame->cf   = cf;
+        mem_hash(HASH_CRC8, &e_frame->hcs,
+                 (uint8_t *) &e_frame->dsap,
+                 LLC_FIELDS_SIZE);
         frame_len = ETH_HEADER_TOT_SIZE + len;
 #endif
 
@@ -718,13 +729,17 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
         qosspec_t         qs;
         buffer_t          data;
 
+        if (len < sizeof(*msg))
+                return -1;
+
         msg = (struct mgmt_msg *) buf;
 
         switch (msg->code) {
         case FLOW_REQ:
                 msg_len = sizeof(*msg) + ipcp_dir_hash_len();
 
-                assert(len >= msg_len);
+                if (len < msg_len)
+                        return -1;
 
                 qs.delay = ntoh32(msg->delay);
                 qs.bandwidth = ntoh64(msg->bandwidth);
@@ -752,8 +767,6 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                 }
                 break;
         case FLOW_REPLY:
-                assert(len >= sizeof(*msg));
-
                 data.data = (uint8_t *) buf + sizeof(*msg);
                 data.len  = len - sizeof(*msg);
 
@@ -769,9 +782,13 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                                      &data);
                 break;
         case NAME_QUERY_REQ:
+                if (len < sizeof(*msg) + ipcp_dir_hash_len())
+                        return -1;
                 eth_ipcp_name_query_req(buf + sizeof(*msg), r_addr);
                 break;
         case NAME_QUERY_REPLY:
+                if (len < sizeof(*msg) + ipcp_dir_hash_len())
+                        return -1;
                 eth_ipcp_name_query_reply(buf + sizeof(*msg), r_addr);
                 break;
         default:
@@ -844,6 +861,8 @@ static void * eth_ipcp_packet_reader(void * o)
         fd_set               fds;
         int                  frame_len;
 #endif
+        size_t               eth_len;
+        uint8_t              hcs;
         struct eth_frame *   e_frame;
         struct mgmt_frame *  frame;
 
@@ -923,17 +942,48 @@ static void * eth_ipcp_packet_reader(void * o)
                 if (e_frame->ethertype != eth_data.ethertype)
                         goto fail_frame;
 
+                if (length > ETH_MTU)
+                        goto fail_frame;
+
                 deid = ntohs(e_frame->eid);
-                if (deid == MGMT_EID) {
 #elif defined (BUILD_ETH_LLC)
                 if (length > 0x05FF) /* DIX */
+                        goto fail_frame;
+
+                if (length < LLC_HEADER_SIZE || length > ETH_MTU)
                         goto fail_frame;
 
                 length -= LLC_HEADER_SIZE;
 
                 dsap = reverse_bits(e_frame->dsap);
                 ssap = reverse_bits(e_frame->ssap);
+#endif
 
+#if defined(HAVE_NETMAP)
+                eth_len = hdr.len;
+#elif defined(HAVE_BPF)
+                eth_len = ((struct bpf_hdr *) buf)->bh_caplen;
+#else
+                eth_len = (size_t) frame_len;
+#endif
+                if (eth_len < ETH_HEADER_TOT_SIZE + (size_t) length)
+                        goto fail_frame;
+
+#if defined(BUILD_ETH_DIX)
+                mem_hash(HASH_CRC8, &hcs,
+                         (uint8_t *) &e_frame->eid,
+                         DIX_EID_SIZE + DIX_LENGTH_SIZE);
+#elif defined(BUILD_ETH_LLC)
+                mem_hash(HASH_CRC8, &hcs,
+                         (uint8_t *) &e_frame->dsap,
+                         LLC_FIELDS_SIZE);
+#endif
+                if (hcs != e_frame->hcs)
+                        goto fail_frame;
+
+#if defined(BUILD_ETH_DIX)
+                if (deid == MGMT_EID) {
+#elif defined (BUILD_ETH_LLC)
                 if (ssap == MGMT_SAP && dsap == MGMT_SAP) {
 #endif
                         ipcp_spb_release(spb); /* No need for the N+1 buffer. */
