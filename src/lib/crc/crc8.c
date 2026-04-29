@@ -34,10 +34,8 @@
 
 #include <ouroboros/crc8.h>
 
-/* Bit-by-bit MSB-first CRC.  The expected use case is header check
- * sequences of a handful of bytes; a 256-byte lookup table would not
- * pay for the extra .rodata footprint at typical input sizes.
- */
+
+ /* Bit-by-bit MSB-first CRC. */
 void crc8_autosar(uint8_t *    crc,
                   const void * buf,
                   size_t       len)

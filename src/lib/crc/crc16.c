@@ -34,10 +34,7 @@
 
 #include <ouroboros/crc16.h>
 
-/* Bit-by-bit MSB-first CRC.  Header-check use case rarely exceeds a
- * few hundred bytes; a 256-entry uint16_t table costs 512 B of
- * .rodata and is easy to add later if profiling demands it.
- */
+/*  Bit-by-bit MSB-first CRC. */
 void crc16_ccitt_false(uint16_t *   crc,
                        const void * buf,
                        size_t       len)

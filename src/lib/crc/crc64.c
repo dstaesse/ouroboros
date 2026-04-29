@@ -34,7 +34,8 @@
 
 #include <ouroboros/crc64.h>
 
-/* Reflected CRC-64/NVMe table.  Polynomial in reflected form:
+/*
+ * Reflected CRC-64/NVMe table. Polynomial in reflected form:
  * 0x9a6c9329ac4bc9b5 (bitrev of 0xad93d23594c93659).
  */
 static const uint64_t crc64_nvme_tab[256] = {
@@ -168,20 +169,28 @@ static const uint64_t crc64_nvme_tab[256] = {
         0x55b4a08fdfd90e51ULL, 0x2ada5047efec8728ULL
 };
 
+static __inline__ uint64_t crc64_nvme_step(uint64_t        c,
+                                           const uint8_t * p,
+                                           size_t          len)
+{
+        size_t n;
+
+        for (n = 0; n < len; n++)
+                c = crc64_nvme_tab[(c ^ p[n]) & 0xff] ^ (c >> 8);
+
+        return c;
+}
+
 void crc64_nvme_table(uint64_t *   crc,
                       const void * buf,
                       size_t       len)
 {
-        size_t n;
+        uint64_t c;
 
-        *crc = *crc ^ 0xffffffffffffffffULL;
+        c = crc64_nvme_step(*crc ^ UINT64_MAX,
+                            (const uint8_t *) buf, len);
 
-        for (n = 0; n < len; n++)
-                *crc = crc64_nvme_tab[(*crc ^ ((uint8_t *) buf)[n])
-                                      & 0xff]
-                        ^ (*crc >> 8);
-
-        *crc = *crc ^ 0xffffffffffffffffULL;
+        *crc = c ^ UINT64_MAX;
 }
 
 #ifdef HAVE_PCLMUL
@@ -189,7 +198,8 @@ void crc64_nvme_table(uint64_t *   crc,
 #include <smmintrin.h>
 #include <wmmintrin.h>
 
-/* Fold-by-16 constants for reflected CRC-64/NVMe. Properties of the
+/*
+ * Fold-by-16 constants for reflected CRC-64/NVMe. Properties of the
  * polynomial; identical between the PCLMUL and PMULL backends.
  *   k3 = bitrev64(x^(128+64) mod P) << 1
  *   k4 = bitrev64(x^(128+0)  mod P) << 1
@@ -209,9 +219,10 @@ static __m128i fold16(__m128i x,
         return _mm_xor_si128(lo, hi);
 }
 
-/* Fold-by-16 over 16-byte chunks; the 128-bit folded state is then
+/*
+ * Fold-by-16 over 16-byte chunks; the 128-bit folded state is then
  * emitted as 16 little-endian bytes and run through the byte-table
- * loop together with any tail (<=15 bytes).  The 16-byte minimum on
+ * loop together with any tail (<=15 bytes). The 16-byte minimum on
  * the bulk loop is why the short-input path uses the table directly.
  */
 __attribute__((target("pclmul,sse4.1")))
@@ -223,7 +234,6 @@ static void crc64_nvme_clmul(uint64_t *   crc,
         uint64_t        seed;
         uint64_t        c;
         size_t          off;
-        size_t          n;
         __m128i         x;
         __m128i         k;
         uint8_t         post[16];
@@ -232,17 +242,14 @@ static void crc64_nvme_clmul(uint64_t *   crc,
         seed = *crc;
 
         if (len < 16) {
-                c = seed ^ 0xffffffffffffffffULL;
-                for (n = 0; n < len; n++)
-                        c = crc64_nvme_tab[(c ^ p[n]) & 0xff]
-                                ^ (c >> 8);
-                *crc = c ^ 0xffffffffffffffffULL;
+                c = crc64_nvme_step(seed ^ UINT64_MAX, p, len);
+                *crc = c ^ UINT64_MAX;
                 return;
         }
 
         x = _mm_loadu_si128((const __m128i *) p);
         x = _mm_xor_si128(x, _mm_cvtsi64_si128((int64_t)
-                          (seed ^ 0xffffffffffffffffULL)));
+                          (seed ^ UINT64_MAX)));
 
         k = _mm_set_epi64x((int64_t) k4_clmul, (int64_t) k3_clmul);
 
@@ -257,14 +264,10 @@ static void crc64_nvme_clmul(uint64_t *   crc,
 
         _mm_storeu_si128((__m128i *) post, x);
 
-        c = 0;
-        for (n = 0; n < 16; n++)
-                c = crc64_nvme_tab[(c ^ post[n]) & 0xff] ^ (c >> 8);
+        c = crc64_nvme_step(0, post, 16);
+        c = crc64_nvme_step(c, p + off, len - off);
 
-        for (n = off; n < len; n++)
-                c = crc64_nvme_tab[(c ^ p[n]) & 0xff] ^ (c >> 8);
-
-        *crc = c ^ 0xffffffffffffffffULL;
+        *crc = c ^ UINT64_MAX;
 }
 
 #endif /* HAVE_PCLMUL */
@@ -304,7 +307,6 @@ static void crc64_nvme_pmull(uint64_t *   crc,
         uint64_t        seed;
         uint64_t        c;
         size_t          off;
-        size_t          n;
         uint64x2_t      x;
         uint64x2_t      k;
         uint64_t        seed_lane[2];
@@ -315,16 +317,13 @@ static void crc64_nvme_pmull(uint64_t *   crc,
         seed = *crc;
 
         if (len < 16) {
-                c = seed ^ 0xffffffffffffffffULL;
-                for (n = 0; n < len; n++)
-                        c = crc64_nvme_tab[(c ^ p[n]) & 0xff]
-                                ^ (c >> 8);
-                *crc = c ^ 0xffffffffffffffffULL;
+                c = crc64_nvme_step(seed ^ UINT64_MAX, p, len);
+                *crc = c ^ UINT64_MAX;
                 return;
         }
 
         x = vld1q_u64((const uint64_t *) p);
-        seed_lane[0] = seed ^ 0xffffffffffffffffULL;
+        seed_lane[0] = seed ^ UINT64_MAX;
         seed_lane[1] = 0;
         x = veorq_u64(x, vld1q_u64(seed_lane));
 
@@ -343,16 +342,11 @@ static void crc64_nvme_pmull(uint64_t *   crc,
 
         vst1q_u8(post, vreinterpretq_u8_u64(x));
 
-        c = 0;
-        for (n = 0; n < 16; n++)
-                c = crc64_nvme_tab[(c ^ post[n]) & 0xff] ^ (c >> 8);
+        c = crc64_nvme_step(0, post, 16);
+        c = crc64_nvme_step(c, p + off, len - off);
 
-        for (n = off; n < len; n++)
-                c = crc64_nvme_tab[(c ^ p[n]) & 0xff] ^ (c >> 8);
-
-        *crc = c ^ 0xffffffffffffffffULL;
+        *crc = c ^ UINT64_MAX;
 }
-
 #endif /* HAVE_PMULL */
 
 void crc64_nvme(uint64_t *   crc,
