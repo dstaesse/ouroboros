@@ -69,5 +69,6 @@ add_subdirectory(src/ipcpd)
 add_subdirectory(src/tools)
 setup_coverage_target()
 include(doc)
+include(tags)
 
 include(install)
