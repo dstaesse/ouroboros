@@ -232,7 +232,7 @@ void ssm_rbuff_close(struct ssm_rbuff * rb)
 }
 
 int ssm_rbuff_write(struct ssm_rbuff * rb,
-                    size_t             idx)
+                    size_t             off)
 {
         size_t acl;
         bool   was_empty;
@@ -261,7 +261,7 @@ int ssm_rbuff_write(struct ssm_rbuff * rb,
 
         was_empty = IS_EMPTY(rb);
 
-        HEAD(rb) = (ssize_t) idx;
+        HEAD(rb) = (ssize_t) off;
         ADVANCE_HEAD(rb);
 
         if (was_empty)
@@ -278,7 +278,7 @@ int ssm_rbuff_write(struct ssm_rbuff * rb,
 }
 
 int ssm_rbuff_write_b(struct ssm_rbuff *      rb,
-                      size_t                  idx,
+                      size_t                  off,
                       const struct timespec * abstime)
 {
         size_t acl;
@@ -316,7 +316,7 @@ int ssm_rbuff_write_b(struct ssm_rbuff *      rb,
 
         if (ret != -ETIMEDOUT && ret != -EFLOWDOWN) {
                 was_empty = IS_EMPTY(rb);
-                HEAD(rb) = (ssize_t) idx;
+                HEAD(rb) = (ssize_t) off;
                 ADVANCE_HEAD(rb);
                 if (was_empty)
                         pthread_cond_broadcast(rb->add);

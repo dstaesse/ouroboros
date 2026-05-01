@@ -1284,7 +1284,7 @@ static int flow_tx_spb(struct flow *        flow,
 
         pthread_rwlock_unlock(&proc.lock);
 
-        idx = ssm_pk_buff_get_idx(spb);
+        idx = ssm_pk_buff_get_off(spb);
 
         pthread_rwlock_rdlock(&proc.lock);
 
@@ -2036,7 +2036,7 @@ int ipcp_flow_write(int                  fd,
 }
 
 static int pool_copy_spb(struct ssm_pool *     src_pool,
-                         ssize_t               src_idx,
+                         ssize_t               src_off,
                          struct ssm_pool *     dst_pool,
                          struct ssm_pk_buff ** dst_spb)
 {
@@ -2044,14 +2044,14 @@ static int pool_copy_spb(struct ssm_pool *     src_pool,
         uint8_t *            ptr;
         size_t               len;
 
-        src = ssm_pool_get(src_pool, src_idx);
+        src = ssm_pool_get(src_pool, src_off);
         len = ssm_pk_buff_len(src);
 
         if (ssm_pool_alloc(dst_pool, len, &ptr, dst_spb) < 0)
                 return -ENOMEM;
 
         memcpy(ptr, ssm_pk_buff_head(src), len);
-        ssm_pool_remove(src_pool, src_idx);
+        ssm_pool_remove(src_pool, src_off);
 
         return 0;
 }
@@ -2061,7 +2061,7 @@ int np1_flow_read(int                   fd,
                   struct ssm_pool *     pool)
 {
         struct flow * flow;
-        ssize_t       idx = -1;
+        ssize_t       off = -1;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
         assert(spb);
@@ -2072,20 +2072,20 @@ int np1_flow_read(int                   fd,
 
         pthread_rwlock_rdlock(&proc.lock);
 
-        idx = ssm_rbuff_read(flow->rx_rb);
-        if (idx < 0) {
+        off = ssm_rbuff_read(flow->rx_rb);
+        if (off < 0) {
                 pthread_rwlock_unlock(&proc.lock);
-                return idx;
+                return off;
         }
 
         pthread_rwlock_unlock(&proc.lock);
 
         if (pool == NULL) {
-                *spb = ssm_pool_get(proc.pool, idx);
+                *spb = ssm_pool_get(proc.pool, off);
         } else {
                 /* Cross-pool copy: PUP -> GSPP */
-                if (pool_copy_spb(pool, idx, proc.pool, spb) < 0) {
-                        ssm_pool_remove(pool, idx);
+                if (pool_copy_spb(pool, off, proc.pool, spb) < 0) {
+                        ssm_pool_remove(pool, off);
                         return -ENOMEM;
                 }
         }
@@ -2100,8 +2100,8 @@ int np1_flow_write(int                  fd,
         struct flow *        flow;
         struct ssm_pk_buff * dst;
         int                  ret;
-        ssize_t              idx;
-        ssize_t              dst_idx;
+        ssize_t              src_off;
+        ssize_t              dst_off;
 
         assert(fd >= 0 && fd < SYS_MAX_FLOWS);
         assert(spb);
@@ -2122,25 +2122,25 @@ int np1_flow_write(int                  fd,
 
         pthread_rwlock_unlock(&proc.lock);
 
-        idx = ssm_pk_buff_get_idx(spb);
+        src_off = ssm_pk_buff_get_off(spb);
 
         if (pool == NULL) {
-                ret = ssm_rbuff_write_b(flow->tx_rb, idx, NULL);
+                ret = ssm_rbuff_write_b(flow->tx_rb, src_off, NULL);
                 if (ret < 0)
                         return ret;
                 ssm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
         } else {
                 /* Cross-pool copy: GSPP -> PUP */
-                if (pool_copy_spb(proc.pool, idx, pool, &dst) < 0)
+                if (pool_copy_spb(proc.pool, src_off, pool, &dst) < 0)
                         return -ENOMEM;
-                dst_idx = ssm_pk_buff_get_idx(dst);
-                ret = ssm_rbuff_write_b(flow->tx_rb, dst_idx, NULL);
+                dst_off = ssm_pk_buff_get_off(dst);
+                ret = ssm_rbuff_write_b(flow->tx_rb, dst_off, NULL);
                 if (ret < 0) {
-                        ssm_pool_remove(pool, dst_idx);
+                        ssm_pool_remove(pool, dst_off);
                         return ret;
                 }
                 ssm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
-                ssm_pool_remove(proc.pool, idx);
+                ssm_pool_remove(proc.pool, src_off);
         }
 
         return 0;
@@ -2154,7 +2154,7 @@ int ipcp_spb_reserve(struct ssm_pk_buff ** spb,
 
 void ipcp_spb_release(struct ssm_pk_buff * spb)
 {
-        ssm_pool_remove(proc.pool, ssm_pk_buff_get_idx(spb));
+        ssm_pool_remove(proc.pool, ssm_pk_buff_get_off(spb));
 }
 
 int ipcp_flow_fini(int fd)
@@ -2229,7 +2229,8 @@ int local_flow_transfer(int               src_fd,
         struct ssm_pk_buff * dst_spb;
         struct ssm_pool *    sp;
         struct ssm_pool *    dp;
-        ssize_t              idx;
+        ssize_t              src_off;
+        ssize_t              dst_off;
         int                  ret;
 
         assert(src_fd >= 0);
@@ -2243,15 +2244,15 @@ int local_flow_transfer(int               src_fd,
 
         pthread_rwlock_rdlock(&proc.lock);
 
-        idx = ssm_rbuff_read(src_flow->rx_rb);
-        if (idx < 0) {
+        src_off = ssm_rbuff_read(src_flow->rx_rb);
+        if (src_off < 0) {
                 pthread_rwlock_unlock(&proc.lock);
-                return idx;
+                return src_off;
         }
 
         if (dst_flow->info.id < 0) {
                 pthread_rwlock_unlock(&proc.lock);
-                ssm_pool_remove(sp, idx);
+                ssm_pool_remove(sp, src_off);
                 return -ENOTALLOC;
         }
 
@@ -2259,23 +2260,23 @@ int local_flow_transfer(int               src_fd,
 
         if (sp == dp) {
                 /* Same pool: zero-copy */
-                ret = ssm_rbuff_write_b(dst_flow->tx_rb, idx, NULL);
+                ret = ssm_rbuff_write_b(dst_flow->tx_rb, src_off, NULL);
                 if (ret < 0)
-                        ssm_pool_remove(sp, idx);
+                        ssm_pool_remove(sp, src_off);
                 else
                         ssm_flow_set_notify(dst_flow->set,
                                             dst_flow->info.id, FLOW_PKT);
         } else {
                 /* Different pools: single copy */
-                if (pool_copy_spb(sp, idx, dp, &dst_spb) < 0) {
-                        ssm_pool_remove(sp, idx);
+                if (pool_copy_spb(sp, src_off, dp, &dst_spb) < 0) {
+                        ssm_pool_remove(sp, src_off);
                         return -ENOMEM;
                 }
 
-                idx = ssm_pk_buff_get_idx(dst_spb);
-                ret = ssm_rbuff_write_b(dst_flow->tx_rb, idx, NULL);
+                dst_off = ssm_pk_buff_get_off(dst_spb);
+                ret = ssm_rbuff_write_b(dst_flow->tx_rb, dst_off, NULL);
                 if (ret < 0)
-                        ssm_pool_remove(dp, idx);
+                        ssm_pool_remove(dp, dst_off);
                 else
                         ssm_flow_set_notify(dst_flow->set,
                                             dst_flow->info.id, FLOW_PKT);

@@ -815,7 +815,7 @@ static void __frcti_rcv(struct frcti *       frcti,
 
         pci = (struct frct_pci *) ssm_pk_buff_head_release(spb, FRCT_PCILEN);
 
-        idx = ssm_pk_buff_get_idx(spb);
+        idx = ssm_pk_buff_get_off(spb);
         seqno = ntoh32(pci->seqno);
         pos = seqno & (RQ_SIZE - 1);
 

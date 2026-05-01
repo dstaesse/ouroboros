@@ -55,10 +55,10 @@ void               ssm_rbuff_fini(struct ssm_rbuff * rb);
 int                ssm_rbuff_mlock(struct ssm_rbuff * rb);
 
 int                ssm_rbuff_write(struct ssm_rbuff * rb,
-                                   size_t             idx);
+                                   size_t             off);
 
 int                ssm_rbuff_write_b(struct ssm_rbuff *      rb,
-                                     size_t                  idx,
+                                     size_t                  off,
                                      const struct timespec * abstime);
 
 ssize_t            ssm_rbuff_read(struct ssm_rbuff * rb);

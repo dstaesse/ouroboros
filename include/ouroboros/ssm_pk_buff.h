@@ -28,7 +28,7 @@
 
 struct ssm_pk_buff;
 
-size_t    ssm_pk_buff_get_idx(struct ssm_pk_buff * spb);
+size_t    ssm_pk_buff_get_off(struct ssm_pk_buff * spb);
 
 uint8_t * ssm_pk_buff_head(struct ssm_pk_buff * spb);
 

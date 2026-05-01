@@ -746,7 +746,7 @@ ssize_t ssm_pool_read(uint8_t **        dst,
 }
 
 struct ssm_pk_buff * ssm_pool_get(struct ssm_pool * pool,
-                                     size_t            off)
+                                  size_t            off)
 {
         struct ssm_pk_buff * blk;
 
@@ -825,7 +825,7 @@ int ssm_pool_remove(struct ssm_pool * pool,
         return 0;
 }
 
-size_t ssm_pk_buff_get_idx(struct ssm_pk_buff * spb)
+size_t ssm_pk_buff_get_off(struct ssm_pk_buff * spb)
 {
         assert(spb != NULL);
 

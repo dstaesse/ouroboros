@@ -261,7 +261,7 @@ static int test_fallback_stealing(void)
 
         /* Free them all - they go to local_shard */
         for (i = 0; i < total_blocks / 2; i++) {
-                size_t off = ssm_pk_buff_get_idx(spbs[i]);
+                size_t off = ssm_pk_buff_get_off(spbs[i]);
                 if (ssm_pool_remove(pool, off) != 0) {
                         printf("Remove %zu failed.\n", i);
                         free(spbs);
@@ -299,7 +299,7 @@ static int test_fallback_stealing(void)
         /* Now all allocated blocks are in use again */
         /* Cleanup - free all allocated blocks */
         for (i = 0; i < total_blocks / 2; i++) {
-                size_t off = ssm_pk_buff_get_idx(spbs[i]);
+                size_t off = ssm_pk_buff_get_off(spbs[i]);
                 ssm_pool_remove(pool, off);
         }
 

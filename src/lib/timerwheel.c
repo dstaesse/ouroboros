@@ -239,7 +239,7 @@ static void timerwheel_move(void)
                                 r->pkt = pci;
                                 ssm_pk_buff_wait_ack(spb);
 #endif
-                                idx = ssm_pk_buff_get_idx(spb);
+                                idx = ssm_pk_buff_get_off(spb);
 
                                 /* Retransmit the copy. */
                                 pci->ackno = hton32(rcv_lwe);

@@ -32,7 +32,7 @@
 
 struct ssm_pool;
 
-/* Pool API: uid = 0 for GSPP (privileged), uid > 0 for PUP (per-user) */
+/* Pool API: uid = 0 for GSPP (privileged), uid > 0 for PUP (per-user). */
 struct ssm_pool *    ssm_pool_create(uid_t uid,
                                      gid_t gid);
 
@@ -46,13 +46,13 @@ int                  ssm_pool_mlock(struct ssm_pool * pool);
 
 void                 ssm_pool_gspp_purge(void);
 
-/* Alloc count bytes, returns block index, a ptr and pk_buff.  */
+/* Alloc count bytes, returns block offset, a ptr and pk_buff. */
 ssize_t              ssm_pool_alloc(struct ssm_pool *    pool,
                                    size_t                count,
                                    uint8_t **            ptr,
                                    struct ssm_pk_buff ** spb);
 
-ssize_t              ssm_pool_alloc_b(struct ssm_pool *        pool,
+ssize_t              ssm_pool_alloc_b(struct ssm_pool *       pool,
                                       size_t                  count,
                                       uint8_t **              ptr,
                                       struct ssm_pk_buff **   spb,
@@ -60,13 +60,13 @@ ssize_t              ssm_pool_alloc_b(struct ssm_pool *        pool,
 
 ssize_t              ssm_pool_read(uint8_t **        dst,
                                    struct ssm_pool * pool,
-                                   size_t            idx);
+                                   size_t            off);
 
 struct ssm_pk_buff * ssm_pool_get(struct ssm_pool * pool,
-                                  size_t            idx);
+                                  size_t            off);
 
 int                  ssm_pool_remove(struct ssm_pool * pool,
-                                     size_t            idx);
+                                     size_t            off);
 
 void                 ssm_pool_reclaim_orphans(struct ssm_pool * pool,
                                               pid_t             pid);
