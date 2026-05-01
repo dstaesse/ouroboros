@@ -51,6 +51,7 @@
 #cmakedefine DISABLE_CORE_LOCK
 #cmakedefine BUILD_CONTAINER
 #cmakedefine IPCP_FLOW_STATS
+#cmakedefine IPCP_ETH_FLOW_STATS
 #cmakedefine IPCP_DEBUG_LOCAL
 #ifdef CONFIG_OUROBOROS_DEBUG
 #cmakedefine DEBUG_PROTO_DHT
