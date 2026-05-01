@@ -165,29 +165,6 @@ static __inline__ void list_add_head(struct _ssm_list_head * head,
         STORE(&head->count, LOAD(&head->count) + 1);
 }
 
-static __inline__ int select_size_class(struct ssm_pool * pool,
-                                        size_t            len)
-{
-        size_t sz;
-        int    i;
-
-        assert(pool != NULL);
-
-        /* Total space needed: header + headspace + data + tailspace */
-        sz = sizeof(struct ssm_pk_buff) + SSM_PK_BUFF_HEADSPACE + len
-             + SSM_PK_BUFF_TAILSPACE;
-
-        for (i = 0; i < SSM_POOL_MAX_CLASSES; i++) {
-                struct _ssm_size_class * sc;
-
-                sc = &pool->hdr->size_classes[i];
-                if (sc->object_size > 0 && sz <= sc->object_size)
-                        return i;
-        }
-
-        return -1;
-}
-
 static __inline__ int find_size_class_for_offset(struct ssm_pool * pool,
                                                  size_t            offset)
 {
@@ -702,7 +679,7 @@ ssize_t ssm_pool_alloc(struct ssm_pool *     pool,
         assert(pool != NULL);
         assert(spb != NULL);
 
-        idx = select_size_class(pool, count);
+        idx = select_size_class(pool->hdr, count);
         if (idx >= 0)
                 return alloc_from_sc(pool, idx, count, ptr, spb);
 
@@ -720,7 +697,7 @@ ssize_t ssm_pool_alloc_b(struct ssm_pool *       pool,
         assert(pool != NULL);
         assert(spb != NULL);
 
-        idx = select_size_class(pool, count);
+        idx = select_size_class(pool->hdr, count);
         if (idx >= 0)
                 return alloc_from_sc_b(pool, idx, count, ptr, spb, abstime);
 

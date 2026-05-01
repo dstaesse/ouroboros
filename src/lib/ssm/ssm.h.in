@@ -164,6 +164,24 @@ struct _ssm_pool_hdr {
         struct _ssm_size_class  size_classes[SSM_POOL_MAX_CLASSES];
 };
 
+#define SSM_PK_BUFF_TOTALSPACE (SSM_PK_BUFF_HEADSPACE + SSM_PK_BUFF_TAILSPACE)
+static __inline__ int select_size_class(struct _ssm_pool_hdr * hdr,
+                                        size_t                 len)
+{
+        size_t sz;
+        int    i;
+
+        sz = sizeof(struct ssm_pk_buff) + SSM_PK_BUFF_TOTALSPACE + len;
+
+        for (i = 0; i < SSM_POOL_MAX_CLASSES; i++) {
+                struct _ssm_size_class * sc = &hdr->size_classes[i];
+                if (sc->object_size > 0 && sz <= sc->object_size)
+                        return i;
+        }
+
+        return -1;
+}
+
 #ifdef __cplusplus
 }
 #endif

@@ -80,19 +80,13 @@ static int test_lazy_distribution(void)
                 goto fail_pool;
         }
 
-        /* Find the first size class with blocks */
-        sc_idx = -1;
-        for (i = 0; i < SSM_POOL_MAX_CLASSES; i++) {
-                if (hdr->size_classes[i].object_count > 0) {
-                        sc_idx = i;
-                        break;
-                }
-        }
-
+        /* Inspect the class that TEST_SIZE allocations will use */
+        sc_idx = select_size_class(hdr, TEST_SIZE);
         if (sc_idx < 0) {
-                printf("No size classes configured.\n");
+                printf("No size class fits TEST_SIZE=%d.\n", TEST_SIZE);
                 for (i = 0; i < SSM_POOL_MAX_CLASSES; i++) {
-                        printf("  Class %d: count=%zu\n", i,
+                        printf("  Class %d: object_size=%zu count=%zu\n", i,
+                               hdr->size_classes[i].object_size,
                                hdr->size_classes[i].object_count);
                 }
                 goto fail_pool;
@@ -137,7 +131,6 @@ static int test_shard_migration(void)
         ssize_t               off;
         int                   shard_idx;
         int                   sc_idx;
-        int                   i;
 
         TEST_START();
 
@@ -149,18 +142,11 @@ static int test_shard_migration(void)
 
         hdr = get_pool_hdr(pool);
 
-        /* Find the first size class with blocks */
-        sc_idx = -1;
-        for (i = 0; i < SSM_POOL_MAX_CLASSES; i++) {
-                if (hdr->size_classes[i].object_count > 0) {
-                        sc_idx = i;
-                        break;
-                }
-        }
-
+        /* Inspect the class that TEST_SIZE allocations will use */
+        sc_idx = select_size_class(hdr, TEST_SIZE);
         if (sc_idx < 0) {
-                printf("No size classes configured.\n");
-                goto fail;
+                printf("No size class fits TEST_SIZE=%d.\n", TEST_SIZE);
+                goto fail_pool;
         }
 
         sc = &hdr->size_classes[sc_idx];
@@ -209,7 +195,6 @@ static int test_fallback_stealing(void)
         size_t                total_free;
         size_t                i;
         int                   sc_idx;
-        int                   c;
 
         TEST_START();
 
@@ -221,18 +206,11 @@ static int test_fallback_stealing(void)
 
         hdr = get_pool_hdr(pool);
 
-        /* Find the first size class with blocks */
-        sc_idx = -1;
-        for (c = 0; c < SSM_POOL_MAX_CLASSES; c++) {
-                if (hdr->size_classes[c].object_count > 0) {
-                        sc_idx = c;
-                        break;
-                }
-        }
-
+        /* Inspect the class that TEST_SIZE allocations will use */
+        sc_idx = select_size_class(hdr, TEST_SIZE);
         if (sc_idx < 0) {
-                printf("No size classes configured.\n");
-                goto fail;
+                printf("No size class fits TEST_SIZE=%d.\n", TEST_SIZE);
+                goto fail_pool;
         }
 
         sc = &hdr->size_classes[sc_idx];
@@ -396,19 +374,14 @@ static int test_multiprocess_sharding(void)
         /* Verify blocks distributed across shards */
         hdr = get_pool_hdr(pool);
 
-        /* Find the first size class with blocks */
-        sc = NULL;
-        for (i = 0; i < SSM_POOL_MAX_CLASSES; i++) {
-                if (hdr->size_classes[i].object_count > 0) {
-                        sc = &hdr->size_classes[i];
-                        break;
-                }
-        }
-
-        if (sc == NULL) {
-                printf("No size classes configured.\n");
+        /* Inspect the class that TEST_SIZE allocations used */
+        i = select_size_class(hdr, TEST_SIZE);
+        if (i < 0) {
+                printf("No size class fits TEST_SIZE=%d.\n", TEST_SIZE);
                 goto fail_pool;
         }
+
+        sc = &hdr->size_classes[i];
 
         /* After children allocate and free, blocks should be in shards
          * (though exact distribution depends on PID values)
