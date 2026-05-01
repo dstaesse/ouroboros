@@ -112,14 +112,14 @@ static int rib_read(const char *            path,
         (void) info;
         (void) offset;
 
-        pthread_rwlock_wrlock(&rib.lock);
+        pthread_rwlock_rdlock(&rib.lock);
 
         list_for_each(p, &rib.reg_comps) {
                 struct reg_comp * r = list_entry(p, struct reg_comp, next);
                 if (strcmp(comp, r->path) == 0) {
-                        int ret = r->ops->read(path + 1, buf, size);
+                        struct rib_ops * ops = r->ops;
                         pthread_rwlock_unlock(&rib.lock);
-                        return ret;
+                        return ops->read(path + 1, buf, size);
                 }
         }
 
@@ -160,19 +160,25 @@ static int rib_readdir(const char *            path,
                         ssize_t           len;
                         ssize_t           i;
                         struct reg_comp * c;
+                        struct rib_ops *  ops;
                         c = list_entry(p, struct reg_comp, next);
 
                         if (strcmp(path + 1, c->path) != 0)
                                 continue;
 
-                        assert(c->ops->readdir != NULL);
+                        ops = c->ops;
 
-                        len = c->ops->readdir(&dir_entries);
+                        assert(ops->readdir != NULL);
+
+                        pthread_rwlock_unlock(&rib.lock);
+
+                        len = ops->readdir(&dir_entries);
                         if (len < 0)
-                                break;
+                                return 0;
                         for (i = 0; i < len; ++i)
                                 filler(buf, dir_entries[i], NULL, 0);
                         freepp(char, dir_entries, len);
+                        return 0;
                 }
         }
 
