@@ -352,13 +352,18 @@ static int udp_ipcp_mgmt_frame(struct __SOCKADDR c_saddr,
         qosspec_t         qs;
         buffer_t          data;
 
+        /* Defence against malformed/corrupted wire input. */
+        if (len < sizeof(*msg))
+                return -1;
+
         msg = (struct mgmt_msg *) buf;
 
         switch (msg->code) {
         case FLOW_REQ:
                 msg_len = sizeof(*msg) + ipcp_dir_hash_len();
 
-                assert(len >= msg_len);
+                if (len < msg_len)
+                        return -1;
 
                 data.len  = len - msg_len;
                 data.data = (uint8_t *) buf + msg_len;
@@ -377,8 +382,6 @@ static int udp_ipcp_mgmt_frame(struct __SOCKADDR c_saddr,
                                          (uint8_t *) (msg + 1), qs,
                                           &data);
         case FLOW_REPLY:
-                assert(len >= sizeof(*msg));
-
                 data.len  = len - sizeof(*msg);
                 data.data = (uint8_t *) buf + sizeof(*msg);
 

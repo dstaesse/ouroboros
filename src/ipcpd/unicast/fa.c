@@ -528,7 +528,8 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
         time_t           mpl = IPCP_UNICAST_MPL;
         int              response;
 
-        assert(len >= sizeof(*msg));
+        if (len < sizeof(*msg))
+                return -EINVAL;
 
         data.data = (uint8_t *) msg + sizeof(*msg);
         data.len  = len - sizeof(*msg);
@@ -572,8 +573,8 @@ static int fa_handle_flow_update(struct fa_msg * msg,
         struct fa_flow * flow;
         int              fd;
 
-        (void) len;
-        assert(len >= sizeof(*msg));
+        if (len < sizeof(*msg))
+                return -EINVAL;
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
