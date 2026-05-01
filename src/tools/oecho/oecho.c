@@ -101,20 +101,20 @@ static int client_main(void)
         fd = flow_alloc("oecho", NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
-                return -1;
+                return 2;
         }
 
         if (flow_write(fd, message, strlen(message) + 1) < 0) {
                 printf("Failed to write packet.\n");
                 flow_dealloc(fd);
-                return -1;
+                return 1;
         }
 
         count = flow_read(fd, buf, BUF_SIZE);
         if (count < 0) {
                 printf("Failed to read packet.\n");
                 flow_dealloc(fd);
-                return -1;
+                return 1;
         }
 
         printf("Server replied with %.*s\n", (int) count, buf);
@@ -126,7 +126,7 @@ static int client_main(void)
 
 int main(int argc, char ** argv)
 {
-        int ret = -1;
+        int ret = 0;
         bool server = false;
 
         argc--;

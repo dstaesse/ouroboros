@@ -96,6 +96,7 @@ struct {
         bool      timestamp;
         bool      flood;
         bool      flood_busy;
+        long      duration;
         qosspec_t qs;
 
         /* stats */
@@ -175,18 +176,19 @@ int main(int     argc,
         argc--;
         argv++;
 
-        client.s_apn     = NULL;
-        client.interval  = 1000;
-        client.size      = 64;
-        client.count     = INT_MAX;
-        client.timestamp = false;
-        client.flood     = false;
+        client.s_apn      = NULL;
+        client.interval   = 1000;
+        client.size       = 64;
+        client.count      = INT_MAX;
+        client.timestamp  = false;
+        client.flood      = false;
         client.flood_busy = false;
-        client.qs        = qos_raw;
-        client.quiet     = false;
-        server.quiet     = false;
-        server.poll      = false;
-        server.busy      = false;
+        client.duration   = 0;
+        client.qs         = qos_raw;
+        client.quiet      = false;
+        server.quiet      = false;
+        server.poll       = false;
+        server.busy       = false;
 
         while (argc > 0) {
                 if ((strcmp(*argv, "-i") == 0 ||
@@ -249,7 +251,9 @@ int main(int     argc,
         }
 
         if (duration > 0) {
-                if (client.interval == 0)
+                if (client.flood || client.flood_busy)
+                        client.duration = duration;
+                else if (client.interval == 0)
                         client.count = duration * 10;
                 else
                         client.count = duration / client.interval;
@@ -298,7 +302,7 @@ int main(int     argc,
         if (ret < 0)
                 exit(EXIT_FAILURE);
 
-        exit(EXIT_SUCCESS);
+        exit(ret);
 
  fail:
         usage();

@@ -98,7 +98,7 @@ int client_main(char * server,
             sigaction(SIGHUP,  &sig_act, NULL) ||
             sigaction(SIGPIPE, &sig_act, NULL)) {
                 printf("Failed to install sighandler.\n");
-                return -1;
+                return 2;
         }
 
         printf("Client started, duration %d, rate %lu b/s, size %d B.\n",
@@ -107,7 +107,7 @@ int client_main(char * server,
         fd = flow_alloc(server, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
-                return -1;
+                return 2;
         }
 
         clock_gettime(CLOCK_REALTIME, &start);

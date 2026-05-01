@@ -185,7 +185,7 @@ int client_main(void)
             sigaction(SIGHUP,  &sig_act, NULL) ||
             sigaction(SIGPIPE, &sig_act, NULL)) {
                 printf("Failed to install sighandler.\n");
-                return -1;
+                return 2;
         }
 
         client.sent = 0;
@@ -196,7 +196,7 @@ int client_main(void)
         fd = flow_alloc(client.server_name, NULL, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
-                return -1;
+                return 2;
         }
 
         if (client.conf.test_type == TEST_TYPE_BI)
@@ -207,7 +207,7 @@ int client_main(void)
         if (flow_write(fd, &client.conf, sizeof(client.conf)) < 0) {
                 printf("Failed to send configuration.\n");
                 flow_dealloc(fd);
-                return -1;
+                return 1;
         }
 
         sleep(1);

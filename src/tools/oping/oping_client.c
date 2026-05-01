@@ -47,6 +47,7 @@ void shutdown_client(int signo, siginfo_t * info, void * c)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
+        case SIGALRM:
                 stop = true;
         default:
                 return;
@@ -284,18 +285,15 @@ static int flood_busy_ping(int fd)
                 msg->tv_sec = sent.tv_sec;
                 msg->tv_nsec = sent.tv_nsec;
 
-                if (flow_write(fd, buf,
-                               client.size) < 0) {
-                        printf("Failed to send "
-                               "packet.\n");
+                if (flow_write(fd, buf, client.size) < 0) {
+                        printf("Failed to send packet.\n");
                         break;
                 }
 
                 ++client.sent;
 
                 do {
-                        n = flow_read(fd, buf,
-                                      OPING_BUF_SIZE);
+                        n = flow_read(fd, buf, OPING_BUF_SIZE);
                 } while (n == -EAGAIN && !stop);
 
                 if (n < 0)
@@ -315,9 +313,7 @@ static int flood_busy_ping(int fd)
                 update_rtt_stats(ms);
 
                 if (!client.quiet)
-                        print_rtt(client.size,
-                                  ntohl(msg->id), ms,
-                                  NULL);
+                        print_rtt(client.size, ntohl(msg->id), ms, NULL);
         }
 
         return 0;
@@ -371,9 +367,7 @@ static int flood_ping(int fd)
                 update_rtt_stats(ms);
 
                 if (!client.quiet)
-                        print_rtt(client.size,
-                                  ntohl(msg->id), ms,
-                                  NULL);
+                        print_rtt(client.size, ntohl(msg->id), ms, NULL);
         }
 
         return 0;
@@ -404,24 +398,33 @@ static int client_main(void)
         if (sigaction(SIGINT,  &sig_act, NULL) ||
             sigaction(SIGTERM, &sig_act, NULL) ||
             sigaction(SIGHUP,  &sig_act, NULL) ||
-            sigaction(SIGPIPE, &sig_act, NULL)) {
+            sigaction(SIGPIPE, &sig_act, NULL) ||
+            sigaction(SIGALRM, &sig_act, NULL)) {
                 printf("Failed to install sighandler.\n");
-                return -1;
+                return 2;
         }
 
         if (client_init()) {
                 printf("Failed to initialize client.\n");
-                return -1;
+                return 2;
         }
 
         fd = flow_alloc(client.s_apn, &client.qs, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow: %d.\n", fd);
                 client_fini();
-                return -1;
+                return 2;
         }
 
         fccntl(fd, FLOWSFLAGS, FLOWFRDWR | FLOWFRNOPART);
+
+        if (client.duration > 0) {
+                struct itimerval it;
+                memset(&it, 0, sizeof(it));
+                it.it_value.tv_sec  = client.duration / 1000;
+                it.it_value.tv_usec = (client.duration % 1000) * 1000;
+                setitimer(ITIMER_REAL, &it, NULL);
+        }
 
         clock_gettime(CLOCK_REALTIME, &tic);
 
@@ -439,5 +442,5 @@ static int client_main(void)
         flow_dealloc(fd);
         client_fini();
 
-        return 0;
+        return client.rcvd == client.sent ? 0 : 1;
 }
