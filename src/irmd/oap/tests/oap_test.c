@@ -32,6 +32,7 @@
 
 #include <ouroboros/crypt.h>
 #include <ouroboros/endian.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/flow.h>
 #include <ouroboros/name.h>
 #include <ouroboros/random.h>
@@ -1053,9 +1054,9 @@ static int test_oap_replay_packet(void)
         freebuf(ctx.req_hdr);
         ctx.req_hdr = saved_req;
 
-        /* Replayed request should fail */
-        if (oap_srv_process_ctx(&ctx) == 0) {
-                printf("Server should reject replayed packet.\n");
+        /* Replay must return -EREPLAY so callers can drop silently. */
+        if (oap_srv_process_ctx(&ctx) != -EREPLAY) {
+                printf("Replayed packet rejection != -EREPLAY.\n");
                 goto fail_cleanup;
         }
 

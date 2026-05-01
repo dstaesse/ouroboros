@@ -393,6 +393,7 @@ int oap_srv_process(const struct name_info * info,
         void *                pkp = NULL;
         void *                crt = NULL;
         int                   req_md_nid;
+        int                   ret;
 
         assert(info != NULL);
         assert(rsp_buf != NULL);
@@ -427,8 +428,13 @@ int oap_srv_process(const struct name_info * info,
 
         id = peer_hdr.id.data; /* Logging */
 
-        if (oap_check_hdr(&peer_hdr) < 0) {
-                log_err_id(id, "OAP header failed replay check.");
+        ret = oap_check_hdr(&peer_hdr);
+        if (ret == -EREPLAY) {
+                log_warn_id(id, "OAP header failed replay check.");
+                goto fail_replay;
+        }
+        if (ret < 0) {
+                log_err_id(id, "OAP header check failed.");
                 goto fail_auth;
         }
 
@@ -490,6 +496,11 @@ int oap_srv_process(const struct name_info * info,
         crypt_free_key(pkp);
  fail_cred:
         return -EAUTH;
+
+ fail_replay:
+        crypt_free_crt(crt);
+        crypt_free_key(pkp);
+        return -EREPLAY;
 
  fail_kex:
         crypt_free_crt(crt);

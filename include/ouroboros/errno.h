@@ -37,5 +37,6 @@
 #ifndef EAUTH /* Exists on BSD */
 #define EAUTH        1009 /* Authentication error            */
 #endif
+#define EREPLAY      1010 /* OAP replay detected             */
 
 #endif /* OUROBOROS_ERRNO_H */

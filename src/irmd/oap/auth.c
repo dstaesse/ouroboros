@@ -174,6 +174,7 @@ int oap_check_hdr(const struct oap_hdr * hdr)
  fail_replay:
         pthread_mutex_unlock(&oap_auth.replay.mtx);
         free(new);
+        return -EREPLAY;
  fail_stamp:
         return -EAUTH;
 }

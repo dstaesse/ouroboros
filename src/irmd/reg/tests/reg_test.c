@@ -489,6 +489,87 @@ static int test_reg_allocate_flow_fail(void)
         return TEST_RC_FAIL;
 }
 
+static int test_reg_respond_alloc_duplicate(void)
+{
+        pthread_t        thr;
+        struct timespec  abstime;
+        struct timespec  timeo = TIMESPEC_INIT_S(1);
+        buffer_t         rbuf  = BUF_INIT;
+        buffer_t         empty = BUF_INIT;
+        struct flow_info dup_info;
+
+        struct flow_info info = {
+                .n_pid = TEST_PID,
+                .qs    = qos_raw
+        };
+
+        struct flow_info n_1_info = {
+                .n_1_pid = TEST_N_1_PID,
+                .qs      = qos_data,
+                .state   = FLOW_ALLOCATED /* RESPONSE SUCCESS */
+        };
+
+        TEST_START();
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeo, &abstime);
+
+        if (reg_init() < 0) {
+                printf("Failed to init registry.\n");
+                goto fail;
+        }
+
+        if (reg_create_flow(&info) < 0) {
+                printf("Failed to add flow.\n");
+                goto fail;
+        }
+
+        info.n_1_pid = TEST_N_1_PID;
+
+        if (reg_prepare_flow_alloc(&info) < 0) {
+                printf("Failed to prepare flow for alloc.\n");
+                goto fail;
+        }
+
+        n_1_info.id  = info.id;
+        n_1_info.mpl = 1;
+
+        pthread_create(&thr, NULL, test_flow_respond_alloc, &n_1_info);
+
+        if (reg_wait_flow_allocated(&info, &rbuf, &abstime) < 0) {
+                printf("Flow allocation failed.\n");
+                pthread_join(thr, NULL);
+                reg_destroy_flow(info.id);
+                reg_fini();
+                goto fail;
+        }
+
+        pthread_join(thr, NULL);
+        freebuf(rbuf);
+
+        /* Duplicate reply on an already-ALLOCATED flow must not assert. */
+        dup_info       = n_1_info;
+        dup_info.state = FLOW_DEALLOCATED;
+
+        if (reg_respond_alloc(&dup_info, &empty, -EREPLAY) != -1) {
+                printf("Duplicate respond_alloc should return -1.\n");
+                goto fail;
+        }
+
+        reg_dealloc_flow(&info);
+        reg_dealloc_flow_resp(&info);
+        reg_destroy_flow(n_1_info.id);
+
+        reg_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        REG_TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 struct direct_alloc_info {
         struct flow_info info;
         buffer_t         rsp;
@@ -679,6 +760,7 @@ static int test_reg_flow(void) {
         rc |= test_reg_accept_flow_success();
         rc |= test_reg_accept_flow_success_no_crypt();
         rc |= test_reg_allocate_flow_fail();
+        rc |= test_reg_respond_alloc_duplicate();
         rc |= test_reg_direct_flow_success();
 
         return rc;

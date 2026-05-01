@@ -1820,7 +1820,11 @@ int reg_respond_alloc(struct flow_info * info,
                 goto fail_flow;
         }
 
-        assert(flow->info.state == FLOW_ALLOC_PENDING);
+        if (flow->info.state != FLOW_ALLOC_PENDING) {
+                log_warn("Flow %d already responded.", info->id);
+                goto fail_flow;
+        }
+
         assert(flow->rsp_data.len == 0);
         assert(flow->rsp_data.data == NULL);
 

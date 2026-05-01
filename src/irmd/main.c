@@ -910,6 +910,10 @@ static int flow_accept(struct flow_info * flow,
         flow->uid = reg_get_proc_uid(flow->n_pid);
 
         err = oap_srv_process(&info, req_hdr, &resp_hdr, data, sk);
+        if (err == -EREPLAY) {
+                log_warn("Dropping replayed alloc request for %s.", name);
+                goto fail_replay;
+        }
         if (err < 0) {
                 log_err("OAP processing failed for %s.", name);
                 goto fail_oap;
@@ -938,6 +942,9 @@ static int flow_accept(struct flow_info * flow,
  fail_oap:
         if (!reg_flow_is_direct(flow->id))
                 ipcp_flow_alloc_resp(flow, err, resp_hdr);
+ fail_replay:
+        freebuf(req_hdr);
+        freebuf(resp_hdr);
  fail_wait:
         reg_destroy_flow(flow->id);
  fail_flow:
