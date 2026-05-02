@@ -24,6 +24,7 @@
 
 #include "config.h"
 
+#include <ouroboros/atomics.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/ssm_pool.h>
@@ -75,26 +76,6 @@ static const struct ssm_size_class_cfg ssm_pup_cfg[SSM_POOL_MAX_CLASSES] = {
 
 #define GET_SHARD_FOR_PID(pid) ((int)((pid) % SSM_POOL_SHARDS))
 
-#define LOAD_RELAXED(ptr)                                                      \
-        (__atomic_load_n(ptr, __ATOMIC_RELAXED))
-
-#define LOAD_ACQUIRE(ptr)                                                      \
-        (__atomic_load_n(ptr, __ATOMIC_ACQUIRE))
-
-#define STORE_RELEASE(ptr, val)                                                \
-        (__atomic_store_n(ptr, val, __ATOMIC_RELEASE))
-
-#define LOAD(ptr)                                                              \
-        (__atomic_load_n(ptr, __ATOMIC_SEQ_CST))
-
-#define STORE(ptr, val)                                                        \
-        (__atomic_store_n(ptr, val, __ATOMIC_SEQ_CST))
-
-#define FETCH_ADD(ptr, val)                                                    \
-        (__atomic_fetch_add(ptr, val, __ATOMIC_SEQ_CST))
-
-#define FETCH_SUB(ptr, val)                                                    \
-        (__atomic_fetch_sub(ptr, val, __ATOMIC_SEQ_CST))
 
 #define SSM_FILE_SIZE (SSM_POOL_TOTAL_SIZE + sizeof(struct _ssm_pool_hdr))
 #define SSM_GSPP_FILE_SIZE (SSM_GSPP_TOTAL_SIZE + sizeof(struct _ssm_pool_hdr))

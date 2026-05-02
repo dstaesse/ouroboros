@@ -37,6 +37,7 @@
 
 #include "config.h"
 
+#include <ouroboros/atomics.h>
 #include <ouroboros/endian.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/errno.h>
@@ -53,12 +54,10 @@
 #include <ouroboros/pthread.h>
 #include <ouroboros/rib.h>
 
-#ifdef IPCP_ETH_FLOW_STATS
-#define LOAD_RELAXED(p)         __atomic_load_n(p, __ATOMIC_RELAXED)
-#define FETCH_ADD_RELAXED(p, v) __atomic_fetch_add(p, v, __ATOMIC_RELAXED)
-#define FETCH_SUB_RELAXED(p, v) __atomic_fetch_sub(p, v, __ATOMIC_RELAXED)
-#else
+#ifndef IPCP_ETH_FLOW_STATS
+#undef  FETCH_ADD_RELAXED
 #define FETCH_ADD_RELAXED(p, v) ((void) 0)
+#undef  FETCH_SUB_RELAXED
 #define FETCH_SUB_RELAXED(p, v) ((void) 0)
 #endif
 
