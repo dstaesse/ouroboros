@@ -180,11 +180,7 @@ static int negotiate_cipher(const struct oap_hdr * peer_hdr,
         cli_rank = crypt_kdf_rank(peer_hdr->kdf_nid);
         srv_rank = crypt_kdf_rank(kcfg->k.nid);
 
-        /*
-         * For client-encap KEM, the KDF is baked into
-         * the ciphertext. The server must use the client's
-         * KDF and can only verify the minimum.
-         */
+        /* Client-encap KEM bakes KDF into ciphertext; verify min. */
         if (OAP_KEX_ROLE(peer_hdr) == KEM_MODE_CLIENT_ENCAP) {
                 if (srv_rank > cli_rank) {
                         log_err_id(id, "Client KDF too weak.");
@@ -388,7 +384,7 @@ int oap_srv_process(const struct name_info * info,
         uint8_t               hash_buf[MAX_HASH_SIZE];
         buffer_t              req_hash = BUF_INIT;
         ssize_t               hash_ret;
-        char                  cli_name[NAME_SIZE + 1]; /* TODO */
+        char                  cli_name[NAME_SIZE + 1];
         uint8_t *             id;
         void *                pkp = NULL;
         void *                crt = NULL;
