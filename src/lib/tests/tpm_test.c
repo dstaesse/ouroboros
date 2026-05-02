@@ -21,7 +21,7 @@
  */
 
 
-#include "tpm.c"
+#include <ouroboros/tpm.h>
 
 #include <test/test.h>
 

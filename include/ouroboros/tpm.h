@@ -24,6 +24,7 @@
 #define OUROBOROS_LIB_TPM_H
 
 #include <stdbool.h>
+#include <sys/types.h>
 
 struct tpm;
 
