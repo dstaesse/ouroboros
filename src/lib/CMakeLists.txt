@@ -39,6 +39,7 @@ set(SOURCE_FILES_COMMON
   ssm/pool.c
   sockets.c
   tpm.c
+  tw.c
   utils.c
 )
 

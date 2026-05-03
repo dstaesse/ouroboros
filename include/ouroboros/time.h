@@ -46,6 +46,12 @@
 #define TS_TO_UINT64(ts)                                                \
         ((uint64_t)(ts).tv_sec * BILLION + (uint64_t)(ts).tv_nsec)
 
+#define UINT64_TO_TS(ns, ts)                                            \
+        do {                                                            \
+                (ts)->tv_sec  = (time_t)((ns) / BILLION);               \
+                (ts)->tv_nsec = (long)((ns) % BILLION);                 \
+        } while (0)
+
 #define TIMEVAL_INIT_S(s)   {(s), 0}
 #define TIMEVAL_INIT_MS(ms) {(ms) / 1000, ((ms) % 1000) * 1000}
 #define TIMEVAL_INIT_US(us) {(us) / MILLION, ((us) % MILLION)}

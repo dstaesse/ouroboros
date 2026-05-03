@@ -19,6 +19,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   sockets_test.c
   time_test.c
   tpm_test.c
+  tw_test.c
   )
 
 add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests})
