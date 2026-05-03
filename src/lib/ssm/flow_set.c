@@ -58,9 +58,9 @@
 #define QUEUESIZE ((SSM_RBUFF_SIZE) * sizeof(struct flowevent))
 
 #define SSM_FSET_FILE_SIZE (SYS_MAX_FLOWS * sizeof(ssize_t)             \
-                            + PROG_MAX_FQUEUES * sizeof(size_t)         \
-                            + PROG_MAX_FQUEUES * sizeof(pthread_cond_t) \
-                            + PROG_MAX_FQUEUES * QUEUESIZE              \
+                            + PROC_MAX_FQUEUES * sizeof(size_t)         \
+                            + PROC_MAX_FQUEUES * sizeof(pthread_cond_t) \
+                            + PROC_MAX_FQUEUES * QUEUESIZE              \
                             + sizeof(pthread_mutex_t))
 
 #define fqueue_ptr(fs, idx) (fs->fqueues + (SSM_RBUFF_SIZE) * idx)
@@ -104,10 +104,10 @@ static struct ssm_flow_set * flow_set_create(pid_t pid,
 
         set->mtable  = shm_base;
         set->heads   = (size_t *) (set->mtable + SYS_MAX_FLOWS);
-        set->conds   = (pthread_cond_t *)(set->heads + PROG_MAX_FQUEUES);
-        set->fqueues = (struct flowevent *) (set->conds + PROG_MAX_FQUEUES);
+        set->conds   = (pthread_cond_t *)(set->heads + PROC_MAX_FQUEUES);
+        set->fqueues = (struct flowevent *) (set->conds + PROC_MAX_FQUEUES);
         set->lock    = (pthread_mutex_t *)
-                (set->fqueues + PROG_MAX_FQUEUES * (SSM_RBUFF_SIZE));
+                (set->fqueues + PROC_MAX_FQUEUES * (SSM_RBUFF_SIZE));
 
         return set;
 
@@ -164,7 +164,7 @@ struct ssm_flow_set * ssm_flow_set_create(pid_t pid)
         if (pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK))
                 goto fail_condattr_set;
 #endif
-        for (i = 0; i < PROG_MAX_FQUEUES; ++i) {
+        for (i = 0; i < PROC_MAX_FQUEUES; ++i) {
                 set->heads[i] = 0;
                 if (pthread_cond_init(&set->conds[i], &cattr))
                         goto fail_init;
@@ -222,7 +222,7 @@ void ssm_flow_set_zero(struct ssm_flow_set * set,
         ssize_t i = 0;
 
         assert(set);
-        assert(idx < PROG_MAX_FQUEUES);
+        assert(idx < PROC_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
@@ -242,7 +242,7 @@ int ssm_flow_set_add(struct ssm_flow_set * set,
 {
         assert(set);
         assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
-        assert(idx < PROG_MAX_FQUEUES);
+        assert(idx < PROC_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
@@ -264,7 +264,7 @@ void ssm_flow_set_del(struct ssm_flow_set * set,
 {
         assert(set);
         assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
-        assert(idx < PROG_MAX_FQUEUES);
+        assert(idx < PROC_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
@@ -282,7 +282,7 @@ int ssm_flow_set_has(struct ssm_flow_set * set,
 
         assert(set);
         assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
-        assert(idx < PROG_MAX_FQUEUES);
+        assert(idx < PROC_MAX_FQUEUES);
 
         pthread_mutex_lock(set->lock);
 
@@ -332,7 +332,7 @@ ssize_t ssm_flow_set_wait(const struct ssm_flow_set * set,
         ssize_t ret = 0;
 
         assert(set);
-        assert(idx < PROG_MAX_FQUEUES);
+        assert(idx < PROC_MAX_FQUEUES);
         assert(fqueue);
 
 #ifndef HAVE_ROBUST_MUTEX

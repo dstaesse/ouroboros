@@ -603,9 +603,9 @@ static int graph_routing_table_lfa(struct graph *     graph,
                                    struct list_head * table,
                                    int **             dist)
 {
-        int *              n_dist[PROG_MAX_FLOWS];
-        uint64_t           addrs[PROG_MAX_FLOWS];
-        int                n_index[PROG_MAX_FLOWS];
+        int *              n_dist[PROC_MAX_FLOWS];
+        uint64_t           addrs[PROC_MAX_FLOWS];
+        int                n_index[PROC_MAX_FLOWS];
         struct list_head * p;
         struct list_head * q;
         struct vertex *    v;
@@ -618,7 +618,7 @@ static int graph_routing_table_lfa(struct graph *     graph,
         if (graph_routing_table_simple(graph, s_addr, table, dist))
                 goto fail_table;
 
-        for (j = 0; j < PROG_MAX_FLOWS; j++) {
+        for (j = 0; j < PROC_MAX_FLOWS; j++) {
                 n_dist[j] = NULL;
                 n_index[j] = -1;
                 addrs[j] = -1;

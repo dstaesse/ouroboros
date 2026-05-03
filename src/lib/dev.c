@@ -655,13 +655,13 @@ static void init(int     argc,
                 gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
         }
 #endif
-        proc.fds = bmp_create(PROG_MAX_FLOWS - PROG_RES_FDS, PROG_RES_FDS);
+        proc.fds = bmp_create(PROC_MAX_FLOWS - PROC_RES_FDS, PROC_RES_FDS);
         if (proc.fds == NULL) {
                 fprintf(stderr, "FATAL: Could not create fd bitmap.\n");
                 goto fail_fds;
         }
 
-        proc.fqueues = bmp_create(PROG_MAX_FQUEUES, 0);
+        proc.fqueues = bmp_create(PROC_MAX_FQUEUES, 0);
         if (proc.fqueues == NULL) {
                 fprintf(stderr, "FATAL: Could not create fqueue bitmap.\n");
                 goto fail_fqueues;
@@ -677,13 +677,13 @@ static void init(int     argc,
                 goto fail_rdrb;
         }
 
-        proc.flows = malloc(sizeof(*proc.flows) * PROG_MAX_FLOWS);
+        proc.flows = malloc(sizeof(*proc.flows) * PROC_MAX_FLOWS);
         if (proc.flows == NULL) {
                 fprintf(stderr, "FATAL: Could not malloc flows.\n");
                 goto fail_flows;
         }
 
-        for (i = 0; i < PROG_MAX_FLOWS; ++i)
+        for (i = 0; i < PROC_MAX_FLOWS; ++i)
                 flow_clear(i);
 
         proc.id_to_fd = malloc(sizeof(*proc.id_to_fd) * SYS_MAX_FLOWS);
@@ -794,7 +794,7 @@ static void fini(void)
 
         pthread_rwlock_wrlock(&proc.lock);
 
-        for (i = 0; i < PROG_MAX_FLOWS; ++i) {
+        for (i = 0; i < PROC_MAX_FLOWS; ++i) {
                 struct flow * flow = &proc.flows[i];
                 if (flow->info.id != -1) {
                         ssize_t idx;
@@ -1337,7 +1337,7 @@ ssize_t flow_write(int          fd,
         if (buf == NULL && count != 0)
                 return -EINVAL;
 
-        if (fd < 0 || fd >= PROG_MAX_FLOWS)
+        if (fd < 0 || fd >= PROC_MAX_FLOWS)
                 return -EBADF;
 
         flow = &proc.flows[fd];
@@ -1446,7 +1446,7 @@ ssize_t flow_read(int    fd,
         bool                 block;
         bool                 partrd;
 
-        if (fd < 0 || fd >= PROG_MAX_FLOWS)
+        if (fd < 0 || fd >= PROC_MAX_FLOWS)
                 return -EBADF;
 
         flow = &proc.flows[fd];

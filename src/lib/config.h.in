@@ -64,9 +64,9 @@
 
 #define PTHREAD_COND_CLOCK  @PTHREAD_COND_CLOCK@
 
-#define PROG_MAX_FLOWS      @PROG_MAX_FLOWS@
-#define PROG_RES_FDS        @PROG_RES_FDS@
-#define PROG_MAX_FQUEUES    @PROG_MAX_FQUEUES@
+#define PROC_MAX_FLOWS      @PROC_MAX_FLOWS@
+#define PROC_RES_FDS        @PROC_RES_FDS@
+#define PROC_MAX_FQUEUES    @PROC_MAX_FQUEUES@
 
 /* Default Delta-t parameters */
 #cmakedefine                FRCT_LINUX_RTT_ESTIMATOR

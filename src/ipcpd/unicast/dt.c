@@ -168,12 +168,12 @@ struct {
                 size_t          f_nhp_pkt[QOS_CUBE_MAX];
                 size_t          f_nhp_bytes[QOS_CUBE_MAX];
                 pthread_mutex_t lock;
-        } stat[PROG_MAX_FLOWS];
+        } stat[PROC_MAX_FLOWS];
 
         size_t             n_flows;
 #endif
         struct bmp *       res_fds;
-        struct comp_info   comps[PROG_RES_FDS];
+        struct comp_info   comps[PROC_RES_FDS];
         pthread_rwlock_t   lock;
 
         pthread_t          listener;
@@ -220,7 +220,7 @@ static int dt_rib_read(const char * path,
         tm = gmtime(&dt.stat[fd].stamp);
         strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
 
-        if (fd >= PROG_RES_FDS) {
+        if (fd >= PROC_RES_FDS) {
                 fccntl(fd, FLOWGRXQLEN, &rxqlen);
                 fccntl(fd, FLOWGTXQLEN, &txqlen);
         }
@@ -296,7 +296,7 @@ static int dt_rib_readdir(char *** buf)
         if (*buf == NULL)
                 goto fail_entries;
 
-        for (i = 0; i < PROG_MAX_FLOWS; ++i) {
+        for (i = 0; i < PROC_MAX_FLOWS; ++i) {
                 pthread_mutex_lock(&dt.stat[i].lock);
 
                 if (dt.stat[i].stamp == 0) {
@@ -514,7 +514,7 @@ static void packet_handler(int                  fd,
 #endif
         } else {
                 dt_pci_shrink(spb);
-                if (dt_pci.eid >= PROG_RES_FDS) {
+                if (dt_pci.eid >= PROC_RES_FDS) {
                         uint8_t ecn = *(head + dt_pci_info.ecn_o);
                         fa_np1_rcv(dt_pci.eid, ecn, spb);
                         return;
@@ -636,13 +636,13 @@ int dt_init(struct dt_config cfg)
                 goto fail_rwlock_init;
         }
 
-        dt.res_fds = bmp_create(PROG_RES_FDS, 0);
+        dt.res_fds = bmp_create(PROC_RES_FDS, 0);
         if (dt.res_fds == NULL)
                 goto fail_res_fds;
 #ifdef IPCP_FLOW_STATS
         memset(dt.stat, 0, sizeof(dt.stat));
 
-        for (i = 0; i < PROG_MAX_FLOWS; ++i)
+        for (i = 0; i < PROC_MAX_FLOWS; ++i)
                 if (pthread_mutex_init(&dt.stat[i].lock, NULL)) {
                         log_err("Failed to init mutex for flow %d.", i);
                         for (j = 0; j < i; ++j)
@@ -662,7 +662,7 @@ int dt_init(struct dt_config cfg)
 
  fail_rib_reg:
 #ifdef IPCP_FLOW_STATS
-        for (i = 0; i < PROG_MAX_FLOWS; ++i)
+        for (i = 0; i < PROC_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&dt.stat[i].lock);
  fail_stat_lock:
 #endif
@@ -691,7 +691,7 @@ void dt_fini(void)
         sprintf(dtstr, "%s.%" PRIu64, DT, dt.addr);
         rib_unreg(dtstr);
 #ifdef IPCP_FLOW_STATS
-        for (i = 0; i < PROG_MAX_FLOWS; ++i)
+        for (i = 0; i < PROC_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&dt.stat[i].lock);
 #endif
         bmp_destroy(dt.res_fds);
@@ -791,7 +791,7 @@ int dt_reg_comp(void * comp,
 
 void dt_unreg_comp(int eid)
 {
-        assert(eid >= 0 && eid < PROG_RES_FDS);
+        assert(eid >= 0 && eid < PROC_RES_FDS);
 
         pthread_rwlock_wrlock(&dt.lock);
 
@@ -823,7 +823,7 @@ int dt_write_packet(uint64_t             dst_addr,
 #ifdef IPCP_FLOW_STATS
         len = ssm_pk_buff_len(spb);
 
-        if (eid < PROG_RES_FDS) {
+        if (eid < PROC_RES_FDS) {
                 pthread_mutex_lock(&dt.stat[eid].lock);
 
                 ++dt.stat[eid].lcl_r_pkt[qc];
@@ -837,7 +837,7 @@ int dt_write_packet(uint64_t             dst_addr,
                 log_dbg("Could not get nhop for " ADDR_FMT32 ".",
                         ADDR_VAL32(&dst_addr));
 #ifdef IPCP_FLOW_STATS
-                if (eid < PROG_RES_FDS) {
+                if (eid < PROC_RES_FDS) {
                         pthread_mutex_lock(&dt.stat[eid].lock);
 
                         ++dt.stat[eid].lcl_r_pkt[qc];
@@ -876,7 +876,7 @@ int dt_write_packet(uint64_t             dst_addr,
 #ifdef IPCP_FLOW_STATS
         pthread_mutex_lock(&dt.stat[fd].lock);
 
-        if (dt_pci.eid < PROG_RES_FDS) {
+        if (dt_pci.eid < PROC_RES_FDS) {
                 ++dt.stat[fd].lcl_w_pkt[qc];
                 dt.stat[fd].lcl_w_bytes[qc] += len;
         }
@@ -891,7 +891,7 @@ int dt_write_packet(uint64_t             dst_addr,
 #ifdef IPCP_FLOW_STATS
         pthread_mutex_lock(&dt.stat[fd].lock);
 
-        if (eid < PROG_RES_FDS) {
+        if (eid < PROC_RES_FDS) {
                 ++dt.stat[fd].lcl_w_pkt[qc];
                 dt.stat[fd].lcl_w_bytes[qc] += len;
         }

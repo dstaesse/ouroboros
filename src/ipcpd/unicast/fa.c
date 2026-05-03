@@ -111,7 +111,7 @@ struct fa_flow {
 
 struct {
         pthread_rwlock_t flows_lock;
-        struct fa_flow   flows[PROG_MAX_FLOWS];
+        struct fa_flow   flows[PROC_MAX_FLOWS];
 #ifdef IPCP_FLOW_STATS
         size_t           n_flows;
 #endif
@@ -145,7 +145,7 @@ static int fa_rib_read(const char * path,
 
         fd = atoi(entry);
 
-        if (fd < 0 || fd >= PROG_MAX_FLOWS)
+        if (fd < 0 || fd >= PROC_MAX_FLOWS)
                 return -1;
 
         if (len < 1536)
@@ -225,7 +225,7 @@ static int fa_rib_readdir(char *** buf)
         if (*buf == NULL)
                 goto fail_entries;
 
-        for (i = 0; i < PROG_MAX_FLOWS; ++i) {
+        for (i = 0; i < PROC_MAX_FLOWS; ++i) {
                 struct fa_flow * flow;
 
                 flow = &fa.flows[i];
@@ -306,7 +306,7 @@ static int eid_to_fd(uint64_t eid)
 
         fd = eid & 0xFFFFFFFF;
 
-        if (fd < 0 || fd >= PROG_MAX_FLOWS)
+        if (fd < 0 || fd >= PROC_MAX_FLOWS)
                 return -1;
 
         flow = &fa.flows[fd];

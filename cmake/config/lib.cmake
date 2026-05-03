@@ -4,11 +4,11 @@
 # Flow limits
 set(SYS_MAX_FLOWS 10240 CACHE STRING
   "Maximum number of total flows for this system")
-set(PROG_MAX_FLOWS 4096 CACHE STRING
+set(PROC_MAX_FLOWS 4096 CACHE STRING
   "Maximum number of flows in an application")
-set(PROG_RES_FDS 64 CACHE STRING
+set(PROC_RES_FDS 64 CACHE STRING
   "Number of reserved flow descriptors per application")
-set(PROG_MAX_FQUEUES 32 CACHE STRING
+set(PROC_MAX_FQUEUES 32 CACHE STRING
   "Maximum number of flow sets per application")
 
 # Threading

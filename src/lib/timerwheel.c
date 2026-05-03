@@ -56,7 +56,7 @@ struct {
         struct list_head rxms[RXMQ_LVLS][RXMQ_SLOTS];
 
         struct list_head acks[ACKQ_SLOTS];
-        bool             map[ACKQ_SLOTS][PROG_MAX_FLOWS];
+        bool             map[ACKQ_SLOTS][PROC_MAX_FLOWS];
 
         size_t           prv_rxm[RXMQ_LVLS]; /* Last processed rxm slots. */
         size_t           prv_ack;            /* Last processed ack slot.  */
