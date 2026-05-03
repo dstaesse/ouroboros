@@ -1118,6 +1118,10 @@ static void * eth_ipcp_packet_reader(void * o)
         fd_set               fds;
         int                  frame_len;
 #endif
+#if defined(HAVE_RAW_SOCKETS)
+        struct sockaddr_ll   src;
+        socklen_t            slen;
+#endif
         size_t               eth_len;
         uint8_t              hcs;
         struct eth_frame *   e_frame;
@@ -1168,8 +1172,10 @@ static void * eth_ipcp_packet_reader(void * o)
                         FETCH_ADD_RELAXED(&eth_data.stat.n_buf_f, 1);
                         continue;
                 }
-                frame_len = recv(eth_data.s_fd, buf,
-                                 ETH_MTU + ETH_HEADER_TOT_SIZE, 0);
+                slen = sizeof(src);
+                frame_len = recvfrom(eth_data.s_fd, buf,
+                                     ETH_MTU + ETH_HEADER_TOT_SIZE, 0,
+                                     (struct sockaddr *) &src, &slen);
     #endif
                 if (frame_len <= 0) {
                         log_dbg("Failed to receive frame.");
@@ -1177,6 +1183,12 @@ static void * eth_ipcp_packet_reader(void * o)
                         FETCH_ADD_RELAXED(&eth_data.stat.n_rcv_f, 1);
                         continue;
                 }
+#endif
+
+#if defined(HAVE_RAW_SOCKETS)
+                /* Drop our own egress. */
+                if (src.sll_pkttype == PACKET_OUTGOING)
+                        goto fail_frame;
 #endif
 
 #if defined(HAVE_BPF) && !defined(HAVE_NETMAP)
@@ -1196,6 +1208,8 @@ static void * eth_ipcp_packet_reader(void * o)
                            e_frame->dst_hwaddr,
                            MAC_SIZE) &&
                     memcmp(br_addr, e_frame->dst_hwaddr, MAC_SIZE)) {
+                        FETCH_ADD_RELAXED(&eth_data.stat.n_bad_id, 1);
+                        goto fail_frame;
                 }
 #endif
                 length = ntohs(e_frame->length);
