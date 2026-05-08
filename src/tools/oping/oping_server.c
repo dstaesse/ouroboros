@@ -237,6 +237,14 @@ int server_main(void)
                 return -1;
         }
 
+        if (pthread_mutex_init(&server.lock, NULL)) {
+                fqueue_destroy(server.fq);
+                fset_destroy(server.flows);
+                return -1;
+        }
+
+        memset(server.times, 0, sizeof(server.times));
+
         pthread_create(&server.cleaner_pt, NULL, cleaner_thread, NULL);
 
         if (server.busy) {
@@ -255,11 +263,13 @@ int server_main(void)
 
         pthread_cancel(server.cleaner_pt);
 
-        fset_destroy(server.flows);
-        fqueue_destroy(server.fq);
-
+        /* Join cancellable threads before tearing down their fset. */
         pthread_join(server.server_pt, NULL);
         pthread_join(server.cleaner_pt, NULL);
+
+        pthread_mutex_destroy(&server.lock);
+        fset_destroy(server.flows);
+        fqueue_destroy(server.fq);
 
         return 0;
 }
