@@ -31,6 +31,7 @@
 #define TEST_N_1_PID  3999
 #define TEST_FAKE_ID  9128349
 #define TEST_MPL      5
+#define TEST_MTU      1400
 #define TEST_PROG     "reg_test" /* own binary for binary check */
 #define TEST_IPCP     "testipcp"
 #define TEST_NAME     "testname"
@@ -266,6 +267,7 @@ static int test_reg_accept_flow_success(void)
 
         n_1_info.id  = info.id;
         n_1_info.mpl = 1;
+        n_1_info.mtu = TEST_MTU;
 
         pthread_create(&thr, NULL, test_flow_respond_accept, &n_1_info);
 
@@ -281,6 +283,11 @@ static int test_reg_accept_flow_success(void)
 
         if (info.state != FLOW_ALLOCATED) {
                 printf("Flow succeeded but not in allocated state.\n");
+                goto fail;
+        }
+
+        if (info.mtu != TEST_MTU) {
+                printf("MTU not propagated.\n");
                 goto fail;
         }
 
@@ -363,6 +370,7 @@ static int test_reg_accept_flow_success_no_crypt(void)
 
         n_1_info.id  = info.id;
         n_1_info.mpl = 1;
+        n_1_info.mtu = TEST_MTU;
 
         pthread_create(&thr, NULL, test_flow_respond_accept, &n_1_info);
 
@@ -378,6 +386,11 @@ static int test_reg_accept_flow_success_no_crypt(void)
 
         if (info.state != FLOW_ALLOCATED) {
                 printf("Flow succeeded but not in allocated state.\n");
+                goto fail;
+        }
+
+        if (info.mtu != TEST_MTU) {
+                printf("MTU not propagated.\n");
                 goto fail;
         }
 
@@ -533,6 +546,7 @@ static int test_reg_respond_alloc_duplicate(void)
 
         n_1_info.id  = info.id;
         n_1_info.mpl = 1;
+        n_1_info.mtu = TEST_MTU;
 
         pthread_create(&thr, NULL, test_flow_respond_alloc, &n_1_info);
 
@@ -546,6 +560,11 @@ static int test_reg_respond_alloc_duplicate(void)
 
         pthread_join(thr, NULL);
         freebuf(rbuf);
+
+        if (info.mtu != TEST_MTU) {
+                printf("MTU not propagated.\n");
+                goto fail;
+        }
 
         /* Duplicate reply on an already-ALLOCATED flow must not assert. */
         dup_info       = n_1_info;

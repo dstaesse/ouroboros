@@ -28,16 +28,20 @@
 #include <ouroboros/ssm_pool.h>
 #include <ouroboros/utils.h>
 
+#include <stdint.h>
+
 int    ipcp_create_r(const struct ipcp_info * info);
 
 int    ipcp_flow_req_arr(const buffer_t * dst,
                          qosspec_t        qs,
                          time_t           mpl,
+                         uint32_t         mtu,
                          const buffer_t * data);
 
 int    ipcp_flow_alloc_reply(int              fd,
                              int              response,
                              time_t           mpl,
+                             uint32_t         mtu,
                              const buffer_t * data);
 
 int    ipcp_flow_read(int                   fd,

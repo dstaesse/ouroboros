@@ -122,6 +122,21 @@ static int test_reg_flow_create_has_mpl(void) {
         return TEST_RC_SUCCESS;
 }
 
+static int test_reg_flow_create_has_mtu(void) {
+        struct flow_info info = {
+                .id      = 1,
+                .n_pid   = 1,
+                .n_1_pid = 0,
+                .mtu     = 1400,
+                .qs      = qos_raw,
+                .state   = FLOW_ALLOC_PENDING
+        };
+
+        reg_flow_create(&info); /* assert fail */
+
+        return TEST_RC_SUCCESS;
+}
+
 static int test_reg_flow_update(void)
 {
         struct reg_flow * f;
@@ -210,6 +225,7 @@ static int test_reg_flow_assert_fails(void)
         ret |= test_assert_fail(test_reg_flow_create_has_n_1_pid);
         ret |= test_assert_fail(test_reg_flow_create_wrong_state);
         ret |= test_assert_fail(test_reg_flow_create_has_mpl);
+        ret |= test_assert_fail(test_reg_flow_create_has_mtu);
         ret |= test_assert_fail(test_reg_flow_update_wrong_id);
 
         return ret;

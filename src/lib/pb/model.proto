@@ -41,6 +41,7 @@ message flow_info_msg {
         required uint32      state      = 5;
         required qosspec_msg qos        = 6;
         required uint32      uid        = 7;
+        required uint32      mtu        = 8; /* Layer MTU (bytes).       */
 }
 
 message name_info_msg {

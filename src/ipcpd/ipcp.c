@@ -363,6 +363,7 @@ static void * acceptloop(void * o)
 int ipcp_wait_flow_req_arr(const uint8_t *  dst,
                            qosspec_t        qs,
                            time_t           mpl,
+                           uint32_t         mtu,
                            const buffer_t * data)
 {
         struct timespec ts = TIMESPEC_INIT_MS(ALLOC_TIMEOUT);
@@ -392,7 +393,7 @@ int ipcp_wait_flow_req_arr(const uint8_t *  dst,
 
         assert(ipcpd.alloc_id == -1);
 
-        fd = ipcp_flow_req_arr(&hash, qs, mpl, data);
+        fd = ipcp_flow_req_arr(&hash, qs, mpl, mtu, data);
         if (fd < 0) {
                 pthread_mutex_unlock(&ipcpd.alloc_lock);
                 log_err("Failed to get fd for flow.");

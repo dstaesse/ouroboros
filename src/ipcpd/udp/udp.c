@@ -47,6 +47,10 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <unistd.h>
+#if defined(__linux__)
+#include <netinet/ip.h>
+#endif
 
 #define FLOW_REQ                 1
 #define FLOW_REPLY               2
@@ -128,6 +132,53 @@ static const char * __inet_ntop(const struct __ADDR * addr,
                                 char *                buf)
 {
         return inet_ntop(__AF, addr, buf, __ADDRSTRLEN);
+}
+
+#if defined(BUILD_IPCP_UDP4)
+#define UDP_MTU_FALLBACK IPCP_UDP4_MTU
+#define UDP_IP_OVERHEAD  28U /* IPv4 + UDP */
+#else
+#define UDP_MTU_FALLBACK IPCP_UDP6_MTU
+#define UDP_IP_OVERHEAD  48U /* IPv6 + UDP */
+#endif
+
+static uint32_t udp_query_mtu(const struct __SOCKADDR * saddr)
+{
+#if defined(__linux__) && (defined(IP_MTU) || defined(IPV6_MTU))
+        int       sock;
+        int       mtu = 0;
+        socklen_t len = sizeof(mtu);
+
+        sock = socket(__AF, SOCK_DGRAM, IPPROTO_UDP);
+        if (sock < 0)
+                return UDP_MTU_FALLBACK;
+
+        if (connect(sock, (const struct sockaddr *) saddr,
+                    sizeof(*saddr)) < 0)
+                goto fallback;
+
+#if defined(BUILD_IPCP_UDP4) && defined(IP_MTU)
+        if (getsockopt(sock, IPPROTO_IP, IP_MTU, &mtu, &len) < 0)
+                goto fallback;
+#elif defined(BUILD_IPCP_UDP6) && defined(IPV6_MTU)
+        if (getsockopt(sock, IPPROTO_IPV6, IPV6_MTU, &mtu, &len) < 0)
+                goto fallback;
+#else
+        goto fallback;
+#endif
+        close(sock);
+
+        if (mtu <= (int) UDP_IP_OVERHEAD)
+                return UDP_MTU_FALLBACK;
+
+        return (uint32_t) mtu - UDP_IP_OVERHEAD;
+
+ fallback:
+        close(sock);
+#else
+        (void) saddr;
+#endif
+        return UDP_MTU_FALLBACK;
 }
 
 static int udp_data_init(void)
@@ -285,7 +336,8 @@ static int udp_ipcp_port_req(struct __SOCKADDR * c_saddr,
 {
         int fd;
 
-        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UDP_MPL, data);
+        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UDP_MPL,
+                                    udp_query_mtu(c_saddr), data);
         if (fd < 0) {
                 log_err("Could not get new flow from IRMd.");
                 return -1;
@@ -332,7 +384,8 @@ static int udp_ipcp_port_alloc_reply(const struct __SOCKADDR * saddr,
 
         pthread_rwlock_unlock(&udp_data.flows_lock);
 
-        if (ipcp_flow_alloc_reply(s_eid, response, mpl, data) < 0) {
+        if (ipcp_flow_alloc_reply(s_eid, response, mpl,
+                                  udp_query_mtu(saddr), data) < 0) {
                 log_err("Failed to reply to flow allocation.");
                 return -1;
         }

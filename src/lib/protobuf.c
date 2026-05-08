@@ -81,6 +81,7 @@ flow_info_msg_t * flow_info_s_to_msg(const struct flow_info * s)
         msg->mpl      = s->mpl;
         msg->state    = s->state;
         msg->uid      = s->uid;
+        msg->mtu      = s->mtu;
         msg->qos      = qos_spec_s_to_msg(&s->qs);
         if (msg->qos == NULL)
                 goto fail_msg;
@@ -107,6 +108,7 @@ struct flow_info flow_info_msg_to_s(const flow_info_msg_t * msg)
         s.mpl     = msg->mpl;
         s.state   = msg->state;
         s.uid     = msg->uid;
+        s.mtu     = msg->mtu;
         s.qs      = qos_spec_msg_to_s(msg->qos);
 
         return s;

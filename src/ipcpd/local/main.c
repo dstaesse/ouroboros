@@ -203,7 +203,8 @@ static int local_ipcp_flow_alloc(int              fd,
                 HASH_VAL32(dst), fd);
         assert(dst);
 
-        out_fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_LOCAL_MPL, data);
+        out_fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_LOCAL_MPL,
+                                        IPCP_LOCAL_MTU, data);
         if (out_fd < 0) {
                 log_dbg("Flow allocation failed: %d", out_fd);
                 return -1;
@@ -255,14 +256,16 @@ static int local_ipcp_flow_alloc_resp(int              fd,
         }
 
         if (response < 0) {
-                ipcp_flow_alloc_reply(out_fd, response, mpl, data);
+                ipcp_flow_alloc_reply(out_fd, response, mpl,
+                                      IPCP_LOCAL_MTU, data);
                 log_info("Flow allocation rejected, fds (%d, %d).", out_fd, fd);
                 return 0;
         }
 
         fset_add(local_data.flows, fd);
 
-        if (ipcp_flow_alloc_reply(out_fd, response, mpl, data) < 0) {
+        if (ipcp_flow_alloc_reply(out_fd, response, mpl,
+                                  IPCP_LOCAL_MTU, data) < 0) {
                 log_err("Failed to reply to allocation");
                 fset_del(local_data.flows, fd);
                 return -1;

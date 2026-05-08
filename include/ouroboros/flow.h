@@ -25,6 +25,7 @@
 
 #include <ouroboros/qos.h>
 
+#include <stdint.h>
 #include <sys/types.h>
 
 #define SYMMKEYSZ 32
@@ -49,6 +50,8 @@ struct flow_info {
         uid_t           uid;   /* 0 = privileged (GSPP), > 0 = PUP uid */
 
         time_t          mpl;
+
+        uint32_t        mtu;   /* n-1 layer MTU in bytes, 0 = unknown */
 
         struct qos_spec qs;
 

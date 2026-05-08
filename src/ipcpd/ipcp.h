@@ -98,6 +98,7 @@ enum ipcp_state ipcp_get_state(void);
 int             ipcp_wait_flow_req_arr(const uint8_t *  dst,
                                        qosspec_t        qs,
                                        time_t           mpl,
+                                       uint32_t         mtu,
                                        const buffer_t * data);
 
 int             ipcp_wait_flow_resp(const int fd);

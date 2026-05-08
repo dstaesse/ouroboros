@@ -242,7 +242,7 @@ static int broadcast_ipcp_join(int             fd,
 
         notifier_event(NOTIFY_DT_CONN_ADD, &conn);
 
-        ipcp_flow_alloc_reply(fd, 0, mpl, &data);
+        ipcp_flow_alloc_reply(fd, 0, mpl, IPCP_BROADCAST_MTU, &data);
 
         return 0;
 }

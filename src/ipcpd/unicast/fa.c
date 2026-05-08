@@ -500,7 +500,8 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         qs.max_gap      = ntoh32(msg->max_gap);
         qs.timeout      = ntoh32(msg->timeout);
 
-        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UNICAST_MPL, &data);
+        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UNICAST_MPL,
+                                    IPCP_UNICAST_MTU, &data);
         if (fd < 0)
                 return fd;
 
@@ -559,7 +560,8 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (ipcp_flow_alloc_reply(fd, response, mpl, &data) < 0) {
+        if (ipcp_flow_alloc_reply(fd, response, mpl,
+                                  IPCP_UNICAST_MTU, &data) < 0) {
                 log_err("Failed to reply for flow allocation on fd %d.", fd);
                 return -EIRMD;
         }

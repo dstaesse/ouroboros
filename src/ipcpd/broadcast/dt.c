@@ -28,7 +28,7 @@
 
 #include "config.h"
 
-#define BROADCAST_MTU    1400 /* FIXME: avoid packet copy. */
+#define BROADCAST_MTU    IPCP_BROADCAST_MTU /* FIXME: avoid packet copy. */
 
 #define DT               "dt"
 #define OUROBOROS_PREFIX DT

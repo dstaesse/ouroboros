@@ -87,6 +87,8 @@
 #define OAP_SEEN_TIMER     20   /*  s */
 #define DEALLOC_TIME       300  /*  s */
 #define DIRECT_MPL         1    /*  s */
+/* bytes; in-process, bounded only by PUP/GSPP. */
+#define DIRECT_MTU         65000
 
 enum irm_state {
         IRMD_NULL = 0,
@@ -1216,6 +1218,7 @@ static int flow_alloc_direct(const char *       dst,
 
         acc.n_1_pid = flow->n_pid;
         acc.mpl     = DIRECT_MPL;
+        acc.mtu     = DIRECT_MTU;
         acc.qs      = flow->qs;
         acc.state   = FLOW_ALLOCATED;
 
@@ -1251,6 +1254,7 @@ static int flow_alloc_direct(const char *       dst,
         flow->id      = acc.id;
         flow->n_1_pid = acc.n_pid;
         flow->mpl     = DIRECT_MPL;
+        flow->mtu     = DIRECT_MTU;
         flow->state   = FLOW_ALLOCATED;
 
         log_info("Flow %d allocated (direct) for %d to %s.",

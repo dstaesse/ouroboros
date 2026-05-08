@@ -46,6 +46,7 @@
 #define IPCP_SCHED_THR_MUL  @IPCP_SCHED_THR_MUL@
 #define PFT_SIZE            @PFT_SIZE@
 #define IPCP_UNICAST_MPL    @IPCP_UNICAST_MPL@
+#define IPCP_UNICAST_MTU    @IPCP_UNICAST_MTU@
 #define CONNMGR_RCV_TIMEOUT @CONNMGR_RCV_TIMEOUT@
 
 #cmakedefine DISABLE_CORE_LOCK
@@ -66,6 +67,8 @@
 #define IPCP_UDP_RD_THR     @IPCP_UDP_RD_THR@
 #define IPCP_UDP_WR_THR     @IPCP_UDP_WR_THR@
 #define IPCP_UDP_MPL        @IPCP_UDP_MPL@
+#define IPCP_UDP4_MTU       @IPCP_UDP4_MTU@
+#define IPCP_UDP6_MTU       @IPCP_UDP6_MTU@
 
 /* eth */
 #cmakedefine HAVE_NETMAP
@@ -80,7 +83,8 @@
 
 /* local */
 #define IPCP_LOCAL_MPL      @IPCP_LOCAL_MPL@
+#define IPCP_LOCAL_MTU      @IPCP_LOCAL_MTU@
 
 /* broadcast */
-/* local */
 #define IPCP_BROADCAST_MPL  @IPCP_BROADCAST_MPL@
+#define IPCP_BROADCAST_MTU  @IPCP_BROADCAST_MTU@

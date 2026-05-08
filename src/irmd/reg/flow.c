@@ -42,6 +42,7 @@ struct reg_flow * reg_flow_create(const struct flow_info * info)
         assert(info->n_pid != 0);
         assert(info->n_1_pid == 0);
         assert(info->mpl == 0);
+        assert(info->mtu == 0);
         assert(info->state == FLOW_INIT);
 
         flow = malloc(sizeof(*flow));
@@ -160,6 +161,7 @@ int reg_flow_update(struct reg_flow *  flow,
                 assert(info->mpl != 0);
 
                 flow->info.mpl = info->mpl;
+                flow->info.mtu = info->mtu;
 
                 if (flow->info.state == FLOW_ALLOC_PENDING)
                         break;

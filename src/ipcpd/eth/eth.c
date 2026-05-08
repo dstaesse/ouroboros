@@ -841,7 +841,8 @@ static int eth_ipcp_req(uint8_t *        r_addr,
 {
         int fd;
 
-        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_ETH_MPL, data);
+        fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_ETH_MPL,
+                                    ETH_MAX_PACKET_SIZE, data);
         if (fd < 0) {
                 log_err("Could not get new flow from IRMd.");
                 return -1;
@@ -913,7 +914,8 @@ static int eth_ipcp_alloc_reply(uint8_t *        r_addr,
 #elif defined(BUILD_ETH_LLC)
         log_dbg("Flow reply, fd %d, SSAP %d, DSAP %d.", fd, ssap, dsap);
 #endif
-        if ((ret = ipcp_flow_alloc_reply(fd, response, mpl, data)) < 0) {
+        if ((ret = ipcp_flow_alloc_reply(fd, response, mpl,
+                                         ETH_MAX_PACKET_SIZE, data)) < 0) {
                 log_err("Failed to reply to flow allocation.");
                 return -1;
         }
