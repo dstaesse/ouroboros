@@ -60,7 +60,7 @@
 #include <errno.h>
 #include <float.h>
 
-#define OPING_BUF_SIZE  1500
+#define OPING_BUF_SIZE  16384
 #define ECHO_REQUEST    0
 #define ECHO_REPLY      1
 #define OPING_MAX_FLOWS 256
@@ -83,6 +83,7 @@
 "  -n, --server-name       Name of the oping server\n"                       \
 "  -q, --qos               QoS (raw, best, video, voice, data)\n"            \
 "  -s, --size              Payload size (B, default 64)\n"                   \
+"  -W, --timeout           Per-packet recv timeout, ms (default 2000)\n"     \
 "  -Q, --quiet             Only print final statistics\n"                    \
 "  -D, --timeofday         Print time of day before each line\n"             \
 "\n"                                                                         \
@@ -93,6 +94,7 @@ struct {
         int       interval;
         uint32_t  count;
         int       size;
+        int       timeout;        /* per-packet recv timeout, ms          */
         bool      timestamp;
         bool      flood;
         bool      flood_busy;
@@ -180,6 +182,7 @@ int main(int     argc,
         client.interval   = 1000;
         client.size       = 64;
         client.count      = INT_MAX;
+        client.timeout    = 2000;
         client.timestamp  = false;
         client.flood      = false;
         client.flood_busy = false;
@@ -217,6 +220,12 @@ int main(int     argc,
                             strcmp(*argv, "--size") == 0) &&
                            argc > 1) {
                         client.size = strtol(*(++argv), &rem, 10);
+                        --argc;
+                } else if ((strcmp(*argv, "-W") == 0 ||
+                            strcmp(*argv, "--timeout") == 0) &&
+                           argc > 1) {
+                        client.timeout = strtol(*(++argv), &rem, 10);
+                        client.timeout *= time_mul(rem);
                         --argc;
                 } else if ((strcmp(*argv, "-q") == 0 ||
                             strcmp(*argv, "--qos") == 0) &&

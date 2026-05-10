@@ -90,7 +90,7 @@ static void print_rtt(int len, int seq,
 
 void * reader(void * o)
 {
-        struct timespec timeout = {client.interval / 1000 + 2, 0};
+        struct timespec timeout;
         struct timespec now = {0, 0};
         struct timespec sent;
 
@@ -100,6 +100,9 @@ void * reader(void * o)
         int                msg_len = 0;
         double             ms      = 0;
         uint32_t           exp_id  = 0;
+
+        timeout.tv_sec  = client.timeout / 1000;
+        timeout.tv_nsec = (client.timeout % 1000) * MILLION;
 
         fccntl(fd, FLOWSRCVTIMEO, &timeout);
 
