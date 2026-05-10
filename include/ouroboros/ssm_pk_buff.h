@@ -28,13 +28,13 @@
 
 struct ssm_pk_buff;
 
-size_t    ssm_pk_buff_get_off(struct ssm_pk_buff * spb);
+size_t    ssm_pk_buff_get_off(const struct ssm_pk_buff * spb);
 
-uint8_t * ssm_pk_buff_head(struct ssm_pk_buff * spb);
+uint8_t * ssm_pk_buff_head(const struct ssm_pk_buff * spb);
 
-uint8_t * ssm_pk_buff_tail(struct ssm_pk_buff * spb);
+uint8_t * ssm_pk_buff_tail(const struct ssm_pk_buff * spb);
 
-size_t    ssm_pk_buff_len(struct ssm_pk_buff * spb);
+size_t    ssm_pk_buff_len(const struct ssm_pk_buff * spb);
 
 uint8_t * ssm_pk_buff_head_alloc(struct ssm_pk_buff * spb,
                                  size_t               size);

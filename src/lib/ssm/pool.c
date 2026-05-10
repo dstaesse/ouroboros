@@ -783,28 +783,28 @@ int ssm_pool_remove(struct ssm_pool * pool,
         return 0;
 }
 
-size_t ssm_pk_buff_get_off(struct ssm_pk_buff * spb)
+size_t ssm_pk_buff_get_off(const struct ssm_pk_buff * spb)
 {
         assert(spb != NULL);
 
         return spb->off;
 }
 
-uint8_t * ssm_pk_buff_head(struct ssm_pk_buff * spb)
+uint8_t * ssm_pk_buff_head(const struct ssm_pk_buff * spb)
 {
         assert(spb != NULL);
 
-        return spb->data + spb->pk_head;
+        return (uint8_t *) spb->data + spb->pk_head;
 }
 
-uint8_t * ssm_pk_buff_tail(struct ssm_pk_buff * spb)
+uint8_t * ssm_pk_buff_tail(const struct ssm_pk_buff * spb)
 {
         assert(spb != NULL);
 
-        return spb->data + spb->pk_tail;
+        return (uint8_t *) spb->data + spb->pk_tail;
 }
 
-size_t ssm_pk_buff_len(struct ssm_pk_buff * spb)
+size_t ssm_pk_buff_len(const struct ssm_pk_buff * spb)
 {
         assert(spb != NULL);
 
