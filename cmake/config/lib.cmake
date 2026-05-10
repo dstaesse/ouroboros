@@ -39,18 +39,17 @@ else()
   message(STATUS "CRC-64/NVMe backend: byte table (no acceleration)")
 endif()
 
-# Delta-t protocol timers
-set(DELTA_T_MPL 60 CACHE STRING
-  "Maximum packet lifetime (s)")
-set(DELTA_T_ACK 10 CACHE STRING
-  "Maximum time to acknowledge a packet (s)")
-set(DELTA_T_RTX 120 CACHE STRING
-  "Maximum time to retransmit a packet (s)")
+# Delta-t protocol timers (Watson bound: 3*MPL + A + R).
+# MPL is reported per IPCP (IPCP_*_MPL); A and R are FRCT-wide.
+set(DELTA_T_ACK 1000 CACHE STRING
+  "Maximum time to acknowledge a packet (ms)")
+set(DELTA_T_RTX 30000 CACHE STRING
+  "Maximum time to retransmit a packet (ms)")
 
 # FRCT configuration
-set(FRCT_REORDER_QUEUE_SIZE 256 CACHE STRING
+set(FRCT_REORDER_QUEUE_SIZE 128 CACHE STRING
   "Size of the reordering queue, must be a power of 2")
-set(FRCT_START_WINDOW 64 CACHE STRING
+set(FRCT_START_WINDOW 128 CACHE STRING
   "Start window, must be a power of 2")
 set(FRCT_LINUX_RTT_ESTIMATOR TRUE CACHE BOOL
   "Use Linux RTT estimator formula instead of the TCP RFC formula")
@@ -59,13 +58,13 @@ set(FRCT_RTO_MDEV_MULTIPLIER 2 CACHE STRING
 set(FRCT_RTO_INC_FACTOR 0 CACHE STRING
   "Divisor for RTO increase after timeout: RTO += RTX >> X, 0: Karn/Partridge")
 set(FRCT_RTO_MIN 250 CACHE STRING
-  "Minimum Retransmission Timeout (RTO) for FRCT (us)")
+  "Hard floor for Retransmission Timeout (RTO) for FRCT (us)")
 set(FRCT_TICK_TIME 5000 CACHE STRING
   "Tick time for FRCT activity (retransmission, acknowledgments) (us)")
+set(FRCT_DEBUG_STDOUT FALSE CACHE BOOL
+  "Print FRCT final counters to stdout at flow teardown")
 
 # Retransmission (RXM) configuration
-set(RXM_BLOCKING TRUE CACHE BOOL
-  "Use blocking writes for retransmission")
 set(RXM_MIN_RESOLUTION 20 CACHE STRING
   "Minimum retransmission delay (ns), as a power to 2")
 set(RXM_WHEEL_MULTIPLIER 4 CACHE STRING
@@ -101,3 +100,4 @@ if(HAVE_FUSE)
     message(STATUS "Application flow statistics disabled")
   endif()
 endif()
+

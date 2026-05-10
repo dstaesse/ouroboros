@@ -88,7 +88,7 @@ message irm_msg {
         repeated ipcp_list_msg ipcps     = 17;
         repeated name_info_msg names     = 18;
         optional timespec_msg timeo      = 19;
-        optional sint32 mpl              = 20;
+        optional sint32 mpl              = 20; /* MPL in ms. */
         optional string comp             = 21;
         optional bytes pk                = 22; /* piggyback */
         optional uint32 timeo_sec        = 23;

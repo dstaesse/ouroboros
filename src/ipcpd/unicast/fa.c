@@ -81,7 +81,7 @@ struct fa_msg {
         uint16_t ece;
         uint8_t  code;
         uint8_t  availability;
-        uint8_t  in_order;
+        uint8_t  service;
 } __attribute__((packed));
 
 struct cmd {
@@ -496,7 +496,7 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         qs.availability = msg->availability;
         qs.loss         = ntoh32(msg->loss);
         qs.ber          = ntoh32(msg->ber);
-        qs.in_order     = msg->in_order;
+        qs.service      = msg->service;
         qs.max_gap      = ntoh32(msg->max_gap);
         qs.timeout      = ntoh32(msg->timeout);
 
@@ -792,7 +792,7 @@ int fa_alloc(int              fd,
         msg->availability = qs.availability;
         msg->loss         = hton32(qs.loss);
         msg->ber          = hton32(qs.ber);
-        msg->in_order     = qs.in_order;
+        msg->service      = qs.service;
         msg->max_gap      = hton32(qs.max_gap);
         msg->timeout      = hton32(qs.timeout);
 

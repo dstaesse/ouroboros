@@ -91,7 +91,7 @@ struct mgmt_msg {
         uint8_t  code;
         /* QoS parameters from spec */
         uint8_t  availability;
-        uint8_t  in_order;
+        uint8_t  service;
 } __attribute__((packed));
 
 struct mgmt_frame {
@@ -271,7 +271,7 @@ static int udp_ipcp_port_alloc(const struct __SOCKADDR * r_saddr,
         msg->availability = qs.availability;
         msg->loss         = hton32(qs.loss);
         msg->ber          = hton32(qs.ber);
-        msg->in_order     = qs.in_order;
+        msg->service      = qs.service;
         msg->max_gap      = hton32(qs.max_gap);
         msg->timeout      = hton32(qs.timeout);
 
@@ -427,7 +427,7 @@ static int udp_ipcp_mgmt_frame(struct __SOCKADDR c_saddr,
                 qs.availability = msg->availability;
                 qs.loss         = ntoh32(msg->loss);
                 qs.ber          = ntoh32(msg->ber);
-                qs.in_order     = msg->in_order;
+                qs.service      = msg->service;
                 qs.max_gap      = ntoh32(msg->max_gap);
                 qs.timeout      = ntoh32(msg->timeout);
 

@@ -100,16 +100,18 @@ int do_connect_ipcp(int     argc,
         }
 
         if (qos != NULL) {
-                if (strcmp(qos, "best") == 0)
-                        qs = qos_best_effort;
-                else if (strcmp(qos, "raw") == 0)
+                if (strcmp(qos, "raw") == 0)
                         qs = qos_raw;
-                else if (strcmp(qos, "video") == 0)
-                        qs = qos_video;
-                else if (strcmp(qos, "voice") == 0)
-                        qs = qos_voice;
-                else if (strcmp(qos, "data") == 0)
-                        qs = qos_data;
+                else if (strcmp(qos, "safe") == 0)
+                        qs = qos_raw_safe;
+                else if (strcmp(qos, "rt") == 0)
+                        qs = qos_rt;
+                else if (strcmp(qos, "rt-safe") == 0)
+                        qs = qos_rt_safe;
+                else if (strcmp(qos, "msg") == 0)
+                        qs = qos_msg;
+                else if (strcmp(qos, "stream") == 0)
+                        qs = qos_stream;
                 else
                         printf("Unknown QoS cube, defaulting to raw.\n");
         }
@@ -126,7 +128,7 @@ int do_connect_ipcp(int     argc,
 
         if (wildcard_match(comp, MGMT) == 0) {
                 component = MGMT_COMP;
-                /* FIXME: move to qos_data when stable */
+                /* FIXME: move to qos_msg when stable */
                 if (irm_connect_ipcp(pid, dst, component, qos_raw))
                         return -1;
         }

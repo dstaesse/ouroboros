@@ -81,7 +81,7 @@
 "  -F, --flood-busy        Flood with busy-polling (lower latency)\n"        \
 "  -i, --interval          Interval (default 1000ms)\n"                      \
 "  -n, --server-name       Name of the oping server\n"                       \
-"  -q, --qos               QoS (raw, best, video, voice, data)\n"            \
+"  -q, --qos               QoS (raw, safe, rt, rt-safe, msg)\n"              \
 "  -s, --size              Payload size (B, default 64)\n"                   \
 "  -W, --timeout           Per-packet recv timeout, ms (default 2000)\n"     \
 "  -Q, --quiet             Only print final statistics\n"                    \
@@ -269,16 +269,16 @@ int main(int     argc,
         }
 
         if (qos != NULL) {
-                if (strcmp(qos, "best") == 0)
-                        client.qs = qos_best_effort;
-                else if (strcmp(qos, "raw") == 0)
+                if (strcmp(qos, "raw") == 0)
                         client.qs = qos_raw;
-                else if (strcmp(qos, "video") == 0)
-                        client.qs = qos_video;
-                else if (strcmp(qos, "voice") == 0)
-                        client.qs = qos_voice;
-                else if (strcmp(qos, "data") == 0)
-                        client.qs = qos_data;
+                else if (strcmp(qos, "safe") == 0)
+                        client.qs = qos_raw_safe;
+                else if (strcmp(qos, "rt") == 0)
+                        client.qs = qos_rt;
+                else if (strcmp(qos, "rt-safe") == 0)
+                        client.qs = qos_rt_safe;
+                else if (strcmp(qos, "msg") == 0)
+                        client.qs = qos_msg;
                 else
                         printf("Unknown QoS cube, defaulting to raw.\n");
         }

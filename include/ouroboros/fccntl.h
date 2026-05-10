@@ -50,6 +50,12 @@
 #define FRCTFRESCNTL  00000002 /* Feedback from receiver */
 #define FRCTFLINGER   00000004 /* Send unsent data       */
 
+/* All user-visible bits (readable via FRCTGFLAGS). */
+#define FRCTFMASK     (FRCTFRTX | FRCTFRESCNTL | FRCTFLINGER)
+
+/* Subset writable via FRCTSFLAGS; FRCTFRTX is fixed at flow_alloc. */
+#define FRCTFSETMASK  (FRCTFRESCNTL | FRCTFLINGER)
+
 /* Flow operations */
 #define FLOWSRCVTIMEO 00000001 /* Set read timeout       */
 #define FLOWGRCVTIMEO 00000002 /* Get read timeout       */
@@ -60,10 +66,17 @@
 #define FLOWGFLAGS    00000007 /* Get flags for flow     */
 #define FLOWGRXQLEN   00000010 /* Get queue length on rx */
 #define FLOWGTXQLEN   00000011 /* Get queue length on tx */
+#define FLOWGMTU      00000012 /* Get per-packet MTU     */
 
 /* FRCT operations */
 #define FRCTSFLAGS    00001000 /* Set flags for FRCT     */
 #define FRCTGFLAGS    00002000 /* Get flags for FRCT     */
+#define FRCTSMAXSDU   00003000 /* Set max recv SDU size  */
+#define FRCTGMAXSDU   00004000 /* Get max recv SDU size  */
+#define FRCTSRRINGSZ  00005000 /* Set stream rcv ring sz */
+#define FRCTGRRINGSZ  00006000 /* Get stream rcv ring sz */
+#define FRCTSRTOMIN   00007000 /* Set RTO floor (ns)     */
+#define FRCTGRTOMIN   00010000 /* Get RTO floor (ns)     */
 
 __BEGIN_DECLS
 

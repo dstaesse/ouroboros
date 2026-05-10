@@ -27,6 +27,7 @@
 #define LOAD_ACQUIRE(p)         (__atomic_load_n(p, __ATOMIC_ACQUIRE))
 #define LOAD(p)                 (__atomic_load_n(p, __ATOMIC_SEQ_CST))
 
+#define STORE_RELAXED(p, v)     (__atomic_store_n(p, v, __ATOMIC_RELAXED))
 #define STORE_RELEASE(p, v)     (__atomic_store_n(p, v, __ATOMIC_RELEASE))
 #define STORE(p, v)             (__atomic_store_n(p, v, __ATOMIC_SEQ_CST))
 

@@ -88,10 +88,6 @@ steps:
             done
         done
 
-        for rxm_block in TRUE FALSE; do
-            echo "--- BLOCKING=$rxm_block ---"
-            run_build \
-                -DRXM_BLOCKING=$rxm_block
-        done
+        run_build
 
 

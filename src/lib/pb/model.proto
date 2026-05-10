@@ -28,7 +28,7 @@ message qosspec_msg {
         required uint32 availability = 3; /* Class of 9s.             */
         required uint32 loss         = 4; /* Packet loss.             */
         required uint32 ber          = 5; /* Bit error rate, ppb.     */
-        required uint32 in_order     = 6; /* In-order delivery.       */
+        required uint32 service      = 6; /* enum qos_service.        */
         required uint32 max_gap      = 7; /* In ms.                   */
         required uint32 timeout      = 8; /* Timeout in ms.           */
 }
@@ -37,7 +37,7 @@ message flow_info_msg {
         required uint32      id         = 1;
         required uint32      n_pid      = 2;
         required uint32      n_1_pid    = 3;
-        required uint32      mpl        = 4;
+        required uint32      mpl        = 4; /* MPL in ms.               */
         required uint32      state      = 5;
         required qosspec_msg qos        = 6;
         required uint32      uid        = 7;

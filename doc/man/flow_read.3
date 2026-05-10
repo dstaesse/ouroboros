@@ -39,8 +39,7 @@ end of the datagram.
 
 On success, \fBflow_write\fR() returns the number of bytes written. On
 failure, a negative value indicating the error will be returned.
-Partial writes needs to be explicitly enabled. Passing a
-NULL pointer for \fIbuf\fR returns 0 with no other effects.
+Passing a NULL pointer for \fIbuf\fR returns 0 with no other effects.
 
 .SH ERRORS
 .B -EINVAL
@@ -62,7 +61,8 @@ The flow has been reported down.
 The flow's peer is unresponsive (flow timed out).
 
 .B -EMSGSIZE
-The buffer was too large to be written.
+The received packet does not fit in the caller's buffer and partial
+reads are disabled (see \fBfccntl\fR(3), \fBFLOWFRNOPART\fR).
 
 .SH ATTRIBUTES
 
@@ -74,10 +74,46 @@ LB|LB|LB
 L|L|L.
 Interface & Attribute & Value
 _
-\fBflow_read\fR() & Thread safety & MT-Safe
+\fBflow_read\fR() & Thread safety & MT-Safe race:fd
 _
-\fBflow_write\fR() & Thread safety & MT-Safe
+\fBflow_write\fR() & Thread safety & MT-Safe race:fd
 .TE
+
+.SH THREAD SAFETY
+Only one thread may call
+.BR flow_read ()
+on a given file descriptor at any time. Partial-read state kept
+across calls assumes a single logical reader; two threads racing
+.BR flow_read ()
+on the same fd is undefined behaviour. Likewise, only one thread
+may call
+.BR flow_write ()
+on a given fd at a time; two writer threads on the same fd is
+undefined behaviour.
+.PP
+Combining a writer thread with a reader thread (one thread calling
+.BR flow_write (),
+another calling
+.BR flow_read ()
+or
+.BR fevent ())
+is permitted and safe. The writer does not need a dedicated reader
+thread \(em when the FRCT send window fills,
+.BR flow_write ()
+drives its own inbound rx draining internally to process incoming
+ACKs and reopen the window, clamped by the caller's
+.BR fccntl (3)
+send-timeout if any.
+.PP
+Monitoring the same fd via
+.BR fevent ()
+from a different thread is well-defined but races: events reported
+by
+.BR fevent ()
+may already have been consumed by the racing
+.BR flow_read (),
+so the second reader may then block. See
+.BR fevent (3).
 
 .SH TERMINOLOGY
 Please see \fBouroboros-glossary\fR(7).

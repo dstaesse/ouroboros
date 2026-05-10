@@ -63,6 +63,11 @@ target_include_directories(operf PRIVATE ${TOOLS_INCLUDE_DIRS})
 target_link_libraries(operf PRIVATE ouroboros-dev)
 install(TARGETS operf RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(oftp oftp/oftp.c)
+target_include_directories(oftp PRIVATE ${TOOLS_INCLUDE_DIRS})
+target_link_libraries(oftp PRIVATE ouroboros-dev)
+install(TARGETS oftp RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(ovpn ovpn/ovpn.c)
   target_include_directories(ovpn PRIVATE ${TOOLS_INCLUDE_DIRS})

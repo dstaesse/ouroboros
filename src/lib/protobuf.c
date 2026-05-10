@@ -759,7 +759,7 @@ qosspec_msg_t * qos_spec_s_to_msg(const struct qos_spec * s)
         msg->availability = s->availability;
         msg->loss         = s->loss;
         msg->ber          = s->ber;
-        msg->in_order     = s->in_order;
+        msg->service      = s->service;
         msg->max_gap      = s->max_gap;
         msg->timeout      = s->timeout;
 
@@ -777,7 +777,7 @@ struct qos_spec qos_spec_msg_to_s(const qosspec_msg_t * msg)
         s.availability = msg->availability;
         s.loss         = msg->loss;
         s.ber          = msg->ber;
-        s.in_order     = msg->in_order;
+        s.service      = msg->service;
         s.max_gap      = msg->max_gap;
         s.timeout      = msg->timeout;
 

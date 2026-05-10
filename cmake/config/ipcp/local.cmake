@@ -2,7 +2,7 @@
 
 set(IPCP_LOCAL_TARGET ipcpd-local)
 
-set(IPCP_LOCAL_MPL 100 CACHE STRING
+set(IPCP_LOCAL_MPL 50 CACHE STRING
   "Default maximum packet lifetime for the Local IPCP, in ms")
 
 set(IPCP_LOCAL_MTU 65000 CACHE STRING

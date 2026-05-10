@@ -151,7 +151,7 @@ static int test_reg_flow_update(void)
         struct flow_info upd = {
                 .id    = 1,
                 .n_pid = 1,
-                .qs    = qos_data,
+                .qs    = qos_msg,
                 .state = FLOW_DEALLOCATED
         };
 
@@ -194,7 +194,7 @@ static int test_reg_flow_update_wrong_id(void)
         struct flow_info upd = {
                 .id    = 2,
                 .n_pid = 1,
-                .qs    = qos_data,
+                .qs    = qos_msg,
                 .state = FLOW_DEALLOCATED
         };
 

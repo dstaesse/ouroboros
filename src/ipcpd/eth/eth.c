@@ -180,7 +180,7 @@ struct mgmt_msg {
         uint32_t delay;
         uint32_t timeout;
         int32_t  response;
-        uint8_t  in_order;
+        uint8_t  service;
 #if defined (BUILD_ETH_DIX)
         uint8_t  code;
         uint8_t  availability;
@@ -766,7 +766,7 @@ static int eth_ipcp_alloc(const uint8_t *  dst_addr,
         msg->availability = qs.availability;
         msg->loss         = hton32(qs.loss);
         msg->ber          = hton32(qs.ber);
-        msg->in_order     = qs.in_order;
+        msg->service      = qs.service;
         msg->max_gap      = hton32(qs.max_gap);
         msg->timeout      = hton32(qs.timeout);
 
@@ -1020,7 +1020,7 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                 qs.availability = msg->availability;
                 qs.loss = ntoh32(msg->loss);
                 qs.ber = ntoh32(msg->ber);
-                qs.in_order = msg->in_order;
+                qs.service = msg->service;
                 qs.max_gap = ntoh32(msg->max_gap);
                 qs.timeout = ntoh32(msg->timeout);
 

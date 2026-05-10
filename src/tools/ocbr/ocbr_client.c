@@ -37,8 +37,11 @@
  */
 
 #include <ouroboros/dev.h>
+#include <ouroboros/qos.h>
 
 #include <signal.h>
+#include <stdlib.h>
+#include <string.h>
 
 volatile bool stop;
 
@@ -86,6 +89,11 @@ int client_main(char * server,
         struct timespec end;
         struct timespec intv = {(gap / BILLION), gap % BILLION};
         int ms;
+        const char * qenv;
+        qosspec_t    qs;
+        qosspec_t *  qsp;
+
+        qsp = NULL;
 
         stop = false;
 
@@ -104,7 +112,29 @@ int client_main(char * server,
         printf("Client started, duration %d, rate %lu b/s, size %d B.\n",
                duration, rate, size);
 
-        fd = flow_alloc(server, NULL, NULL);
+        qenv = getenv("OCBR_QOS");
+        if (qenv != NULL) {
+                if (strcmp(qenv, "raw") == 0)
+                        qs = qos_raw;
+                else if (strcmp(qenv, "safe") == 0)
+                        qs = qos_raw_safe;
+                else if (strcmp(qenv, "rt") == 0)
+                        qs = qos_rt;
+                else if (strcmp(qenv, "rt_safe") == 0)
+                        qs = qos_rt_safe;
+                else if (strcmp(qenv, "msg") == 0)
+                        qs = qos_msg;
+                else if (strcmp(qenv, "stream") == 0)
+                        qs = qos_stream;
+                else {
+                        fprintf(stderr,
+                                "Unknown OCBR_QOS='%s', using raw.\n", qenv);
+                        qs = qos_raw;
+                }
+                qsp = &qs;
+                printf("OCBR_QOS=%s\n", qenv);
+        }
+        fd = flow_alloc(server, qsp, NULL);
         if (fd < 0) {
                 printf("Failed to allocate flow.\n");
                 return 2;

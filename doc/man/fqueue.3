@@ -116,6 +116,27 @@ _
 \fBfevent\fR() & Thread safety & MT-Safe
 .TE
 
+.SH THREAD SAFETY
+.BR fevent ()
+and
+.BR flow_read ()
+on the same fd from distinct threads is well-defined but races:
+events reported by
+.BR fevent ()
+may already have been consumed by the racing
+.BR flow_read (),
+so the reader may then block. Same shape as
+.BR select (2)
++
+.BR read (2)
+from distinct threads. The intended pattern is that the thread
+invoking
+.BR fevent ()
+is the same thread that calls
+.BR flow_read ()
+on the fds returned by
+.BR fqueue_next ().
+
 .SH TERMINOLOGY
 Please see \fBouroboros-glossary\fR(7).
 

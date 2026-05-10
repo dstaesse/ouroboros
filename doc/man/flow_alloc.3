@@ -62,10 +62,60 @@ The \fBflow_dealloc\fR() function will release any resources
 associated with the flow. This call may block and keep reliable flows
 active until all packets are acknowledged.
 
-A \fBqosspec_t\fR specifies the following QoS characteristics of a
-flow:
+A \fBqosspec_t\fR specifies the QoS characteristics of a flow.
+The fields are:
 
-TODO: specify a qosspec_t
+.TP
+\fBdelay\fR (ms)
+Maximum one-way delay.
+.TP
+\fBbandwidth\fR (bits/s)
+Minimum bandwidth.
+.TP
+\fBavailability\fR
+Class of 9s (e.g. 5 = 99.999%).
+.TP
+\fBloss\fR
+Tolerated packet loss; 0 selects reliable delivery.
+.TP
+\fBber\fR
+Tolerated bit error rate (errors per billion bits); 0 enables an
+end-to-end integrity check (corrupted packets are dropped).
+.TP
+\fBservice\fR
+Framing / reliability class: \fBSVC_RAW\fR (0) disables FRCT;
+\fBSVC_MESSAGE\fR (1) preserves SDU boundaries; \fBSVC_STREAM\fR (2) is
+a byte stream with no SDU boundaries. \fBSVC_STREAM\fR requires
+\fIloss\fR = 0; otherwise
+\fBflow_alloc\fR()/\fBflow_accept\fR() returns \fB-EINVAL\fR.
+.TP
+\fBmax_gap\fR (ms)
+Maximum tolerated inter-packet gap. Packets exceeding the gap
+budget are dropped under the real-time cubes.
+.TP
+\fBtimeout\fR (ms)
+Peer-liveness timeout; 0 disables. Only applies when FRCT is
+enabled (service > 0).
+
+.PP
+The library provides predefined cubes:
+
+.TP
+\fBqos_raw\fR
+No guarantees, no integrity check.
+.TP
+\fBqos_raw_safe\fR
+Best-effort with end-to-end integrity (ber = 0).
+.TP
+\fBqos_rt\fR / \fBqos_rt_safe\fR
+Real-time messages, optimised for latency over reliability;
+\fBqos_rt_safe\fR adds an end-to-end integrity check.
+.TP
+\fBqos_msg\fR
+Reliable, SDU-preserving delivery.
+.TP
+\fBqos_stream\fR
+Reliable byte stream; no SDU boundaries are preserved.
 
 .SH RETURN VALUE
 
@@ -117,13 +167,39 @@ _
 \fBflow_dealloc\fR() & Thread safety & MT-Safe
 .TE
 
+.SH NOTES
+The returned file descriptor is subject to a single-reader and
+single-writer discipline \(em at most one thread may call
+.BR flow_read ()
+(or monitor the fd via
+.BR fevent ())
+and at most one thread may call
+.BR flow_write ()
+concurrently. See
+.BR flow_read (3),
+.BR flow_write (3),
+and
+.BR fevent (3)
+for details.
+.PP
+.BR flow_dealloc ()
+must not be called concurrently with any thread that is inside
+.BR flow_read (),
+.BR flow_write (),
+.BR fevent (),
+or any other Ouroboros library call on the same fd; the result is
+undefined behaviour. Applications must serialise teardown with
+in-flight use, e.g. by signalling worker threads to drop the fd
+before calling
+.BR flow_dealloc ().
+
 .SH TERMINOLOGY
 Please see \fBouroboros-glossary\fR(7).
 
 .SH SEE ALSO
 
-.BR fccntl "(3), " flow_read "(3), " fqueue "(3), " fset "(3), " \
-ouroboros (8)
+.BR fccntl "(3), " fevent "(3), " flow_read "(3), " flow_write "(3), " \
+fqueue "(3), " fset "(3), " ouroboros (8)
 
 .SH COLOPHON
 This page is part of the Ouroboros project, found at

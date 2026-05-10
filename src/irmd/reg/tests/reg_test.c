@@ -240,7 +240,7 @@ static int test_reg_accept_flow_success(void)
 
         struct flow_info n_1_info = {
                 .n_1_pid = TEST_N_1_PID,
-                .qs      = qos_data,
+                .qs      = qos_msg,
                 .state   = FLOW_ALLOCATED /* RESPONSE SUCCESS */
         };
 
@@ -343,7 +343,7 @@ static int test_reg_accept_flow_success_no_crypt(void)
 
         struct flow_info n_1_info = {
                 .n_1_pid = TEST_N_1_PID,
-                .qs      = qos_data,
+                .qs      = qos_msg,
                 .state   = FLOW_ALLOCATED /* RESPONSE SUCCESS */
         };
 
@@ -444,7 +444,7 @@ static int test_reg_allocate_flow_fail(void)
 
         struct flow_info n_1_info = {
                 .n_1_pid = TEST_N_1_PID,
-                .qs      = qos_data,
+                .qs      = qos_msg,
                 .state = FLOW_DEALLOCATED /* RESPONSE FAIL */
         };
 
@@ -518,7 +518,7 @@ static int test_reg_respond_alloc_duplicate(void)
 
         struct flow_info n_1_info = {
                 .n_1_pid = TEST_N_1_PID,
-                .qs      = qos_data,
+                .qs      = qos_msg,
                 .state   = FLOW_ALLOCATED /* RESPONSE SUCCESS */
         };
 
@@ -664,7 +664,7 @@ static int test_reg_direct_flow_success(void)
         dai.info.id      = info.id;
         dai.info.n_1_pid = TEST_N_1_PID;
         dai.info.mpl     = TEST_MPL;
-        dai.info.qs      = qos_data;
+        dai.info.qs      = qos_msg;
         dai.info.state   = FLOW_ALLOCATED;
         dai.rsp.len      = 0;
         dai.rsp.data     = NULL;

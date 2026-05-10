@@ -86,7 +86,7 @@
 #define TIMESYNC_SLACK     100  /* ms */
 #define OAP_SEEN_TIMER     20   /*  s */
 #define DEALLOC_TIME       300  /*  s */
-#define DIRECT_MPL         1    /*  s */
+#define DIRECT_MPL         20   /* ms */
 /* bytes; in-process, bounded only by PUP/GSPP. */
 #define DIRECT_MTU         65000
 

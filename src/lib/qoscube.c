@@ -29,15 +29,11 @@
 
 qoscube_t qos_spec_to_cube(qosspec_t qs)
 {
-        if (qs.delay <= qos_voice.delay &&
-            qs.bandwidth <= qos_voice.bandwidth &&
-            qs.availability >= qos_voice.availability &&
-            qs.max_gap <= qos_voice.max_gap)
+        if (qs.delay <= 50 && qs.bandwidth <= 100000
+            && qs.availability >= 5 && qs.max_gap <= 50)
                 return QOS_CUBE_VOICE;
-        else if (qs.delay <= qos_video.delay &&
-                 qs.bandwidth <= qos_video.bandwidth &&
-                 qs.availability >= qos_video.availability &&
-                 qs.max_gap <= qos_video.max_gap)
+        else if (qs.delay <= 100 && qs.availability >= 3
+                 && qs.max_gap <= 100)
                 return QOS_CUBE_VIDEO;
         else
                 return QOS_CUBE_BE;
