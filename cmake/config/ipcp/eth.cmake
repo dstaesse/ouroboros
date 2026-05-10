@@ -10,6 +10,10 @@ set(IPCP_ETH_WR_THR 1 CACHE STRING
   "Number of writer threads in Ethernet IPCP")
 set(IPCP_ETH_QDISC_BYPASS false CACHE BOOL
   "Bypass the Qdisc in the kernel when using raw sockets")
+set(IPCP_ETH_SNDBUF 0 CACHE STRING
+  "Raw socket SO_SNDBUF in bytes; 0 = leave kernel default (wmem_default)")
+set(IPCP_ETH_RCVBUF 0 CACHE STRING
+  "Raw socket SO_RCVBUF in bytes; 0 = leave kernel default (rmem_default)")
 set(IPCP_ETH_LO_MTU 9000 CACHE STRING
   "Restrict Ethernet MTU over loopback interfaces")
 set(IPCP_ETH_MGMT_FRAME_SIZE 9000 CACHE STRING

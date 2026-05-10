@@ -150,8 +150,9 @@
 #define ETH_FRAME_SIZE       (ETH_HEADER_SIZE + ETH_MTU_MAX)
 #endif
 
-#define NAME_QUERY_TIMEO     2000  /* ms */
-#define MGMT_TIMEO           100   /* ms */
+#define NAME_QUERY_TIMEO     1900  /* ms total budget               */
+#define NAME_QUERY_RETRIES   3     /* retransmits, 4 attempts total */
+#define MGMT_TIMEO           100   /* ms                            */
 #define MGMT_FRAME_SIZE      IPCP_ETH_MGMT_FRAME_SIZE
 #define ETH_RIB_PATH         "eth"
 
@@ -270,6 +271,7 @@ struct {
                 size_t n_dlv_f;
                 size_t n_buf_f;
                 size_t n_rcv_f;
+                size_t n_snd_f;
                 size_t kern_rcv;
                 size_t kern_drp;
         } stat;
@@ -426,19 +428,24 @@ static int eth_rib_read(const char * path,
         buf[0] = '\0';
 
         if (strcmp(entry, "summary") == 0) {
-                int rcvbuf = 0;
-                int queued = 0;
-#if defined(HAVE_RAW_SOCKETS) && defined(__linux__)
+                int n;
+#if defined(HAVE_RAW_SOCKETS)
+                int       rcvbuf = 0;
+                int       sndbuf = 0;
+                int       queued = 0;
+                socklen_t optlen = sizeof(rcvbuf);
+#  if defined(__linux__)
                 struct tpacket_stats tp_stats;
                 socklen_t            tp_len = sizeof(tp_stats);
-#endif
-#if defined(HAVE_RAW_SOCKETS)
-                socklen_t optlen = sizeof(rcvbuf);
+#  endif
+
                 getsockopt(eth_data.s_fd, SOL_SOCKET,
                            SO_RCVBUF, &rcvbuf, &optlen);
+                optlen = sizeof(sndbuf);
+                getsockopt(eth_data.s_fd, SOL_SOCKET,
+                           SO_SNDBUF, &sndbuf, &optlen);
                 ioctl(eth_data.s_fd, FIONREAD, &queued);
-#endif
-#if defined(HAVE_RAW_SOCKETS) && defined(__linux__)
+#  if defined(__linux__)
                 if (getsockopt(eth_data.s_fd, SOL_PACKET,
                                PACKET_STATISTICS,
                                &tp_stats, &tp_len) == 0) {
@@ -447,8 +454,9 @@ static int eth_rib_read(const char * path,
                         FETCH_ADD_RELAXED(&eth_data.stat.kern_drp,
                                           tp_stats.tp_drops);
                 }
+#  endif
 #endif
-                sprintf(buf,
+                n = sprintf(buf,
                         "Active flows:                    %20zu\n"
                         "Total frames received:           %20zu\n"
                         "Total frames sent:               %20zu\n"
@@ -458,10 +466,7 @@ static int eth_rib_read(const char * path,
                         "Delivery (N+1) failures:         %20zu\n"
                         "Buffer alloc failures:           %20zu\n"
                         "Frame read failures:             %20zu\n"
-                        "Socket rcvbuf (bytes):           %20d\n"
-                        "Socket queued (bytes):           %20d\n"
-                        "Kernel frames received:          %20zu\n"
-                        "Kernel frames dropped:           %20zu\n",
+                        "Frame send failures:             %20zu\n",
                         LOAD_RELAXED(&eth_data.stat.n_flows),
                         LOAD_RELAXED(&eth_data.stat.n_rcv),
                         LOAD_RELAXED(&eth_data.stat.n_snd),
@@ -471,12 +476,22 @@ static int eth_rib_read(const char * path,
                         LOAD_RELAXED(&eth_data.stat.n_dlv_f),
                         LOAD_RELAXED(&eth_data.stat.n_buf_f),
                         LOAD_RELAXED(&eth_data.stat.n_rcv_f),
-                        rcvbuf,
-                        queued,
+                        LOAD_RELAXED(&eth_data.stat.n_snd_f));
+#if defined(HAVE_RAW_SOCKETS)
+                n += sprintf(buf + n,
+                        "Socket rcvbuf (bytes):           %20d\n"
+                        "Socket sndbuf (bytes):           %20d\n"
+                        "Socket queued (bytes):           %20d\n",
+                        rcvbuf, sndbuf, queued);
+#  if defined(__linux__)
+                n += sprintf(buf + n,
+                        "Kernel frames received:          %20zu\n"
+                        "Kernel frames dropped:           %20zu\n",
                         LOAD_RELAXED(&eth_data.stat.kern_rcv),
                         LOAD_RELAXED(&eth_data.stat.kern_drp));
-
-                return strlen(buf);
+#  endif
+#endif
+                return n;
         }
 
         fd = atoi(entry);
@@ -1175,17 +1190,39 @@ static void * eth_ipcp_packet_reader(void * o)
                         continue;
                 }
                 slen = sizeof(src);
+                /* MSG_DONTWAIT: RD_THR>1 race-loser bails with EAGAIN. */
                 frame_len = recvfrom(eth_data.s_fd, buf,
-                                     ETH_MTU + ETH_HEADER_TOT_SIZE, 0,
+                                     ETH_MTU + ETH_HEADER_TOT_SIZE,
+                                     MSG_DONTWAIT,
                                      (struct sockaddr *) &src, &slen);
     #endif
-                if (frame_len <= 0) {
-                        log_dbg("Failed to receive frame.");
+                if (frame_len == 0) {
                         ipcp_spb_release(spb);
+                        continue; /* Spurious */
+                }
+
+                if (frame_len < 0) {
+                        ipcp_spb_release(spb);
+
+                        if (errno == EAGAIN || errno == EWOULDBLOCK)
+                                continue;
+
+                        log_dbg("Failed to rcv frame: %s.", strerror(errno));
                         FETCH_ADD_RELAXED(&eth_data.stat.n_rcv_f, 1);
                         continue;
                 }
 #endif
+
+#if defined(HAVE_NETMAP)
+                eth_len = hdr.len;
+#elif defined(HAVE_BPF)
+                eth_len = ((struct bpf_hdr *) buf)->bh_caplen;
+#else
+                eth_len = (size_t) frame_len;
+#endif
+                /* Defense in depth: reject before parsing dereferences. */
+                if (eth_len < ETH_HEADER_TOT_SIZE)
+                        goto fail_frame;
 
 #if defined(HAVE_RAW_SOCKETS)
                 /* Drop our own egress. */
@@ -1236,13 +1273,6 @@ static void * eth_ipcp_packet_reader(void * o)
                 ssap = reverse_bits(e_frame->ssap);
 #endif
 
-#if defined(HAVE_NETMAP)
-                eth_len = hdr.len;
-#elif defined(HAVE_BPF)
-                eth_len = ((struct bpf_hdr *) buf)->bh_caplen;
-#else
-                eth_len = (size_t) frame_len;
-#endif
                 if (eth_len < ETH_HEADER_TOT_SIZE + (size_t) length)
                         goto fail_frame;
 
@@ -1421,6 +1451,7 @@ static void * eth_ipcp_packet_writer(void * o)
                                 FETCH_ADD_RELAXED(
                                         &eth_data.fd_to_ef[fd].stat.p_snd_f,
                                         1);
+                                FETCH_ADD_RELAXED(&eth_data.stat.n_snd_f, 1);
                         } else {
                                 FETCH_ADD_RELAXED(
                                         &eth_data.fd_to_ef[fd].stat.p_snd,
@@ -1776,12 +1807,14 @@ static int eth_init_bpf(struct ifreq * ifr)
         return -1;
 }
 #elif defined(HAVE_RAW_SOCKETS)
+#define SOCKOPT()
 static int eth_init_raw_socket(struct ifreq * ifr)
 {
         int idx;
-        int flags;
+        int sndbuf;
+        int rcvbuf;
 #if defined(IPCP_ETH_QDISC_BYPASS)
-        int              qdisc_bypass = 1;
+        int qdisc_bypass = 1;
 #endif /* ENABLE_QDISC_BYPASS */
 
         idx = if_nametoindex(ifr->ifr_name);
@@ -1789,6 +1822,7 @@ static int eth_init_raw_socket(struct ifreq * ifr)
                 log_err("Failed to retrieve interface index.");
                 return -1;
         }
+
         memset(&(eth_data.device), 0, sizeof(eth_data.device));
         eth_data.device.sll_ifindex  = idx;
         eth_data.device.sll_family   = AF_PACKET;
@@ -1805,23 +1839,24 @@ static int eth_init_raw_socket(struct ifreq * ifr)
                 goto fail_socket;
         }
 
-        flags = fcntl(eth_data.s_fd, F_GETFL, 0);
-        if (flags < 0) {
-                log_err("Failed to get flags.");
-                goto fail_device;
-        }
-
-        if (fcntl(eth_data.s_fd, F_SETFL, flags | O_NONBLOCK)) {
-                log_err("Failed to set socket non-blocking.");
-                goto fail_device;
-        }
-
 #if defined(IPCP_ETH_QDISC_BYPASS)
         if (setsockopt(eth_data.s_fd, SOL_PACKET, PACKET_QDISC_BYPASS,
                        &qdisc_bypass, sizeof(qdisc_bypass))) {
                 log_info("Qdisc bypass not supported.");
         }
 #endif
+
+        sndbuf = IPCP_ETH_SNDBUF;
+        if (sndbuf > 0 && setsockopt(eth_data.s_fd, SOL_SOCKET, SO_SNDBUF,
+                                     &sndbuf, sizeof(sndbuf))) {
+                log_info("Failed to set SO_SNDBUF to %d.", sndbuf);
+        }
+
+        rcvbuf = IPCP_ETH_RCVBUF;
+        if (rcvbuf > 0 && setsockopt(eth_data.s_fd, SOL_SOCKET, SO_RCVBUF,
+                                     &rcvbuf, sizeof(rcvbuf))) {
+                log_info("Failed to set SO_RCVBUF to %d.", rcvbuf);
+        }
 
         if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
                  sizeof(eth_data.device)) < 0) {
@@ -1999,12 +2034,14 @@ static int eth_ipcp_unreg(const uint8_t * hash)
 static int eth_ipcp_query(const uint8_t * hash)
 {
         uint8_t            r_addr[MAC_SIZE];
-        struct timespec    timeout = TIMESPEC_INIT_MS(NAME_QUERY_TIMEO);
+        struct timespec    timeout;
         struct dir_query * query;
         int                ret;
+        int                attempt;
         uint8_t *          buf;
         struct mgmt_msg *  msg;
         size_t             len;
+        long               per_ms;
 
         if (shim_data_dir_has(eth_data.shim_data, hash))
                 return 0;
@@ -2024,33 +2061,45 @@ static int eth_ipcp_query(const uint8_t * hash)
 
         memset(r_addr, 0xff, MAC_SIZE);
 
-        query = shim_data_dir_query_create(eth_data.shim_data, hash);
-        if (query == NULL) {
-                free(buf);
-                return -1;
-        }
+        per_ms = NAME_QUERY_TIMEO / (NAME_QUERY_RETRIES + 1);
 
-        if (eth_ipcp_send_frame(r_addr,
+        ret = -1;
+        for (attempt = 0; attempt <= NAME_QUERY_RETRIES; ++attempt) {
+                query = shim_data_dir_query_create(eth_data.shim_data, hash);
+                if (query == NULL) {
+                        ret = -1;
+                        break;
+                }
+
+                if (eth_ipcp_send_frame(r_addr,
 #if defined(BUILD_ETH_DIX)
-                                MGMT_EID,
+                                        MGMT_EID,
 #elif defined(BUILD_ETH_LLC)
-                                reverse_bits(MGMT_SAP),
-                                reverse_bits(MGMT_SAP),
+                                        reverse_bits(MGMT_SAP),
+                                        reverse_bits(MGMT_SAP),
 #endif
-                                buf, len)) {
-                log_err("Failed to send management frame.");
-                shim_data_dir_query_destroy(eth_data.shim_data, query);
-                free(buf);
-                return -1;
-        }
+                                        buf, len)) {
+                        log_err("Failed to send management frame.");
+                        shim_data_dir_query_destroy(eth_data.shim_data,
+                                                    query);
+                        ret = -1;
+                        break;
+                }
 
-        FETCH_ADD_RELAXED(&eth_data.stat.n_mgmt_snd, 1);
+                FETCH_ADD_RELAXED(&eth_data.stat.n_mgmt_snd, 1);
+
+                timeout.tv_sec  = per_ms / 1000;
+                timeout.tv_nsec = (per_ms % 1000) * 1000000L;
+
+                ret = shim_data_dir_query_wait(query, &timeout);
+
+                shim_data_dir_query_destroy(eth_data.shim_data, query);
+
+                if (ret != -ETIMEDOUT)
+                        break;
+        }
 
         free(buf);
-
-        ret = shim_data_dir_query_wait(query, &timeout);
-
-        shim_data_dir_query_destroy(eth_data.shim_data, query);
 
         return ret;
 }

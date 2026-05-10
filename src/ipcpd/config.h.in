@@ -80,6 +80,8 @@
 #define IPCP_ETH_LO_MTU          @IPCP_ETH_LO_MTU@
 #define IPCP_ETH_MGMT_FRAME_SIZE @IPCP_ETH_MGMT_FRAME_SIZE@
 #define IPCP_ETH_MPL             @IPCP_ETH_MPL@
+#define IPCP_ETH_SNDBUF          @IPCP_ETH_SNDBUF@
+#define IPCP_ETH_RCVBUF          @IPCP_ETH_RCVBUF@
 
 /* local */
 #define IPCP_LOCAL_MPL      @IPCP_LOCAL_MPL@
