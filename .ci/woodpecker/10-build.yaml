@@ -88,13 +88,10 @@ steps:
             done
         done
 
-        for rxm_heap in TRUE FALSE; do
-            for rxm_block in TRUE FALSE; do
-                echo "--- HEAP=$rxm_heap BLOCKING=$rxm_block ---"
-                run_build \
-                    -DRXM_BUFFER_ON_HEAP=$rxm_heap \
-                    -DRXM_BLOCKING=$rxm_block
-            done
+        for rxm_block in TRUE FALSE; do
+            echo "--- BLOCKING=$rxm_block ---"
+            run_build \
+                -DRXM_BLOCKING=$rxm_block
         done
 
 

@@ -64,8 +64,6 @@ set(FRCT_TICK_TIME 5000 CACHE STRING
   "Tick time for FRCT activity (retransmission, acknowledgments) (us)")
 
 # Retransmission (RXM) configuration
-set(RXM_BUFFER_ON_HEAP FALSE CACHE BOOL
-  "Store packets for retransmission on the heap instead of in packet buffer")
 set(RXM_BLOCKING TRUE CACHE BOOL
   "Use blocking writes for retransmission")
 set(RXM_MIN_RESOLUTION 20 CACHE STRING

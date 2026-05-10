@@ -15,8 +15,6 @@ set(SSM_PUP_NAME_FMT "/${SSM_PREFIX}.pup.%d" CACHE INTERNAL
 # Packet buffer configuration
 set(SSM_POOL_NAME "/${SHM_PREFIX}.pool" CACHE INTERNAL
     "Name for the main POSIX shared memory pool")
-set(SSM_POOL_BLOCKS 16384 CACHE STRING
-    "Number of blocks in SSM packet pool, must be a power of 2")
 set(SSM_PK_BUFF_HEADSPACE 256 CACHE STRING
     "Bytes of headspace to reserve for future headers")
 set(SSM_PK_BUFF_TAILSPACE 32 CACHE STRING

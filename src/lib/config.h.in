@@ -82,7 +82,6 @@
 #define TICTIME             (@FRCT_TICK_TIME@ * 1000)        /* ns */
 
 /* Retransmission tuning */
-#cmakedefine                RXM_BUFFER_ON_HEAP
 #cmakedefine                RXM_BLOCKING
 
 #define RXMQ_RES            (@RXM_MIN_RESOLUTION@)           /* 2^N ns */
