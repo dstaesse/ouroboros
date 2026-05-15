@@ -272,11 +272,11 @@ static int spb_encrypt(struct flow *        flow,
         if (crypt_encrypt(flow->crypt, in, &out) < 0)
                 goto fail_encrypt;
 
-        head = ssm_pk_buff_head_alloc(spb, flow->headsz);
+        head = ssm_pk_buff_push(spb, flow->headsz);
         if (head == NULL)
                 goto fail_alloc;
 
-        tail = ssm_pk_buff_tail_alloc(spb, flow->tailsz);
+        tail = ssm_pk_buff_push_tail(spb, flow->tailsz);
         if (tail == NULL)
                 goto fail_alloc;
 
@@ -308,8 +308,8 @@ static int spb_decrypt(struct flow *        flow,
                 return -ENOMEM;
 
 
-        head = ssm_pk_buff_head_release(spb, flow->headsz) + flow->headsz;
-        ssm_pk_buff_tail_release(spb, flow->tailsz);
+        head = ssm_pk_buff_pop(spb, flow->headsz) + flow->headsz;
+        ssm_pk_buff_pop_tail(spb, flow->tailsz);
 
         memcpy(head, out.data, out.len);
 
@@ -1245,7 +1245,7 @@ static int chk_crc(struct ssm_pk_buff * spb)
 {
         uint32_t crc;
         uint8_t * head = ssm_pk_buff_head(spb);
-        uint8_t * tail = ssm_pk_buff_tail_release(spb, CRCLEN);
+        uint8_t * tail = ssm_pk_buff_pop_tail(spb, CRCLEN);
 
         mem_hash(HASH_CRC32, &crc, head, tail - head);
 
@@ -1257,7 +1257,7 @@ static int add_crc(struct ssm_pk_buff * spb)
         uint8_t * head;
         uint8_t * tail;
 
-        tail = ssm_pk_buff_tail_alloc(spb, CRCLEN);
+        tail = ssm_pk_buff_push_tail(spb, CRCLEN);
         if (tail == NULL)
                 return -ENOMEM;
 
@@ -1522,7 +1522,7 @@ ssize_t flow_read(int    fd,
         } else {
                 if (partrd) {
                         memcpy(buf, packet, count);
-                        ssm_pk_buff_head_release(spb, n);
+                        ssm_pk_buff_pop(spb, n);
                         pthread_rwlock_wrlock(&proc.lock);
                         flow->part_idx = idx;
 

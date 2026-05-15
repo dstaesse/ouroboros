@@ -139,7 +139,7 @@ static void dt_pci_shrink(struct ssm_pk_buff * spb)
 {
         assert(spb);
 
-        ssm_pk_buff_head_release(spb, dt_pci_info.head_size);
+        ssm_pk_buff_pop(spb, dt_pci_info.head_size);
 }
 
 struct {
@@ -849,7 +849,7 @@ int dt_write_packet(uint64_t             dst_addr,
                 return -EPERM;
         }
 
-        head = ssm_pk_buff_head_alloc(spb, dt_pci_info.head_size);
+        head = ssm_pk_buff_push(spb, dt_pci_info.head_size);
         if (head == NULL) {
                 log_dbg("Failed to allocate DT header.");
                 goto fail_write;

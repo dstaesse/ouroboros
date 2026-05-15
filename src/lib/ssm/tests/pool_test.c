@@ -741,14 +741,14 @@ static int test_ssm_pk_buff_operations(void)
 
         memcpy(head, data, dlen);
 
-        tail = ssm_pk_buff_tail_alloc(spb, 32);
+        tail = ssm_pk_buff_push_tail(spb, 32);
         if (tail == NULL) {
-                printf("Tail_alloc failed.\n");
+                printf("push_tail failed.\n");
                 goto fail_ops;
         }
 
         if (ssm_pk_buff_len(spb) != POOL_256 + 32) {
-                printf("Length after tail_alloc: %zu.\n",
+                printf("Length after push_tail: %zu.\n",
                        ssm_pk_buff_len(spb));
                 goto fail_ops;
         }
@@ -758,14 +758,14 @@ static int test_ssm_pk_buff_operations(void)
                 goto fail_ops;
         }
 
-        tail = ssm_pk_buff_tail_release(spb, 32);
+        tail = ssm_pk_buff_pop_tail(spb, 32);
         if (tail == NULL) {
-                printf("Tail_release failed.\n");
+                printf("pop_tail failed.\n");
                 goto fail_ops;
         }
 
         if (ssm_pk_buff_len(spb) != POOL_256) {
-                printf("Length after tail_release: %zu.\n",
+                printf("Length after pop_tail: %zu.\n",
                        ssm_pk_buff_len(spb));
                 goto fail_ops;
         }

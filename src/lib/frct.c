@@ -700,7 +700,7 @@ static int __frcti_snd(struct frcti *       frcti,
 
         timerwheel_move();
 
-        pci = (struct frct_pci *) ssm_pk_buff_head_alloc(spb, FRCT_PCILEN);
+        pci = (struct frct_pci *) ssm_pk_buff_push(spb, FRCT_PCILEN);
         if (pci == NULL)
                 return -ENOMEM;
 
@@ -813,7 +813,7 @@ static void __frcti_rcv(struct frcti *       frcti,
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
-        pci = (struct frct_pci *) ssm_pk_buff_head_release(spb, FRCT_PCILEN);
+        pci = (struct frct_pci *) ssm_pk_buff_pop(spb, FRCT_PCILEN);
 
         idx = ssm_pk_buff_get_off(spb);
         seqno = ntoh32(pci->seqno);

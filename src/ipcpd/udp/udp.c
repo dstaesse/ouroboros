@@ -605,7 +605,7 @@ static void * udp_ipcp_packet_writer(void * o)
                                 continue;
                         }
 
-                        buf = ssm_pk_buff_head_alloc(spb, OUR_HEADER_LEN);
+                        buf = ssm_pk_buff_push(spb, OUR_HEADER_LEN);
                         if (buf == NULL) {
                                 log_dbg("Failed to allocate header.");
                                 ipcp_spb_release(spb);

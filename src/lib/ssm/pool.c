@@ -811,8 +811,8 @@ size_t ssm_pk_buff_len(const struct ssm_pk_buff * spb)
         return spb->pk_tail - spb->pk_head;
 }
 
-uint8_t * ssm_pk_buff_head_alloc(struct ssm_pk_buff * spb,
-                                 size_t               size)
+uint8_t * ssm_pk_buff_push(struct ssm_pk_buff * spb,
+                           size_t               size)
 {
         assert(spb != NULL);
 
@@ -824,8 +824,8 @@ uint8_t * ssm_pk_buff_head_alloc(struct ssm_pk_buff * spb,
         return spb->data + spb->pk_head;
 }
 
-uint8_t * ssm_pk_buff_tail_alloc(struct ssm_pk_buff * spb,
-                                 size_t               size)
+uint8_t * ssm_pk_buff_push_tail(struct ssm_pk_buff * spb,
+                                size_t               size)
 {
         uint8_t * buf;
 
@@ -841,8 +841,8 @@ uint8_t * ssm_pk_buff_tail_alloc(struct ssm_pk_buff * spb,
         return buf;
 }
 
-uint8_t * ssm_pk_buff_head_release(struct ssm_pk_buff * spb,
-                                   size_t               size)
+uint8_t * ssm_pk_buff_pop(struct ssm_pk_buff * spb,
+                          size_t               size)
 {
         uint8_t * buf;
 
@@ -856,8 +856,8 @@ uint8_t * ssm_pk_buff_head_release(struct ssm_pk_buff * spb,
         return buf;
 }
 
-uint8_t * ssm_pk_buff_tail_release(struct ssm_pk_buff * spb,
-                                   size_t               size)
+uint8_t * ssm_pk_buff_pop_tail(struct ssm_pk_buff * spb,
+                               size_t               size)
 {
         assert(spb != NULL);
         assert(!(size > spb->pk_tail - spb->pk_head));

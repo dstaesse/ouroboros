@@ -36,17 +36,17 @@ uint8_t * ssm_pk_buff_tail(const struct ssm_pk_buff * spb);
 
 size_t    ssm_pk_buff_len(const struct ssm_pk_buff * spb);
 
-uint8_t * ssm_pk_buff_head_alloc(struct ssm_pk_buff * spb,
-                                 size_t               size);
+uint8_t * ssm_pk_buff_push(struct ssm_pk_buff * spb,
+                           size_t               size);
 
-uint8_t * ssm_pk_buff_tail_alloc(struct ssm_pk_buff * spb,
-                                 size_t               size);
+uint8_t * ssm_pk_buff_push_tail(struct ssm_pk_buff * spb,
+                                size_t               size);
 
-uint8_t * ssm_pk_buff_head_release(struct ssm_pk_buff * spb,
-                                   size_t               size);
+uint8_t * ssm_pk_buff_pop(struct ssm_pk_buff * spb,
+                          size_t               size);
 
-uint8_t * ssm_pk_buff_tail_release(struct ssm_pk_buff * spb,
-                                   size_t               size);
+uint8_t * ssm_pk_buff_pop_tail(struct ssm_pk_buff * spb,
+                               size_t               size);
 
 void      ssm_pk_buff_truncate(struct ssm_pk_buff * spb,
                                size_t               len);

@@ -1182,7 +1182,7 @@ static void * eth_ipcp_packet_reader(void * o)
                         FETCH_ADD_RELAXED(&eth_data.stat.n_buf_f, 1);
                         continue;
                 }
-                buf = ssm_pk_buff_head_alloc(spb, ETH_HEADER_TOT_SIZE);
+                buf = ssm_pk_buff_push(spb, ETH_HEADER_TOT_SIZE);
                 if (buf == NULL) {
                         log_dbg("Failed to allocate header.");
                         ipcp_spb_release(spb);
@@ -1347,7 +1347,7 @@ static void * eth_ipcp_packet_reader(void * o)
                         pthread_rwlock_unlock(&eth_data.flows_lock);
 
 #ifndef HAVE_NETMAP
-                        ssm_pk_buff_head_release(spb, ETH_HEADER_TOT_SIZE);
+                        ssm_pk_buff_pop(spb, ETH_HEADER_TOT_SIZE);
                         ssm_pk_buff_truncate(spb, length);
 #else
                         if (ipcp_spb_reserve(&spb, length))
@@ -1418,7 +1418,7 @@ static void * eth_ipcp_packet_writer(void * o)
 
                         len = ssm_pk_buff_len(spb);
 
-                        if (ssm_pk_buff_head_alloc(spb, ETH_HEADER_TOT_SIZE)
+                        if (ssm_pk_buff_push(spb, ETH_HEADER_TOT_SIZE)
                             == NULL) {
                                 log_dbg("Failed to allocate header.");
                                 ipcp_spb_release(spb);
