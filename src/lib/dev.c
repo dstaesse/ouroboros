@@ -873,7 +873,7 @@ static void init(int     argc,
 
         if (crypt_secure_malloc_init(PROC_SECMEM_MAX) < 0) {
                 fprintf(stderr, "FATAL: Could not init secure malloc.\n");
-                goto fail_timerwheel;
+                goto fail_secmem;
         }
 
 #if defined PROC_FLOW_STATS
@@ -889,7 +889,9 @@ static void init(int     argc,
 
 #if defined PROC_FLOW_STATS
  fail_rib_init:
+        crypt_secure_malloc_fini();
 #endif
+ fail_secmem:
         tw_fini();
  fail_timerwheel:
         ssm_flow_set_close(proc.fqset);
@@ -947,6 +949,8 @@ static void fini(void)
 #ifdef PROC_FLOW_STATS
         rib_fini();
 #endif
+        crypt_secure_malloc_fini();
+
         tw_fini();
 
         ssm_flow_set_close(proc.fqset);

@@ -47,8 +47,9 @@ int random_buffer(void * buf,
         gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
         return 0;
 #elif defined(HAVE_OPENSSL_RNG)
-        if (len > 0 && len < INT_MAX)
-                return RAND_bytes((unsigned char *) buf, (int) len);
-        return -1;
+        if (len == 0 || len >= INT_MAX)
+                return -1;
+
+        return RAND_bytes((unsigned char *) buf, (int) len) == 1 ? 0 : -1;
 #endif
 }
