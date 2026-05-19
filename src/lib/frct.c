@@ -588,6 +588,22 @@ static __inline__ bool within(uint32_t seq, uint32_t lo, uint32_t hi)
         return after(seq, lo) && !after(seq, hi);
 }
 
+static __inline__ bool in_window(uint32_t seq, const struct frct_cr * cr)
+{
+        return !before(seq, cr->lwe) && before(seq, cr->rwe);
+}
+
+/* DRF arrival that stays within the current receive epoch. */
+static __inline__ bool same_epoch_drf(uint32_t                 seq,
+                                      uint16_t                 flags,
+                                      const struct frct_cr *   cr)
+{
+        if (cr->lwe == cr->rwe)
+                return false;
+
+        return (flags & FRCT_RXM) || in_window(seq, cr);
+}
+
 /*
  * RACK reorder window R (RFC 8985 §6.2):
  *   R = MIN(reo_wnd_mult * RACK.min_RTT / 4, SRTT)
@@ -3156,7 +3172,10 @@ static enum frct_act rcv_inact_check(struct frcti * frcti,
                 return FRCT_ACTIVE;
 
         if (flags & FRCT_DRF) {
-                /* Release stale rq[] slots before rebasing. */
+                if (same_epoch_drf(seqno, flags, rcv_cr))
+                        return FRCT_ACTIVE;
+
+                /* Bootstrap or fresh epoch: rebase. */
                 release_rq(frcti);
                 STORE_RELEASE(&rcv_cr->lwe, seqno);
                 rcv_cr->rwe = seqno + RQ_SIZE;
@@ -3306,7 +3325,10 @@ static void seqno_rotate(struct frcti * frcti,
         if (snd_cr->seqno != snd_cr->lwe)
                 return;
 
-        random_buffer(&snd_cr->seqno, sizeof(snd_cr->seqno));
+        /* Avoid colliding with peer's current rcv window. */
+        do {
+                random_buffer(&snd_cr->seqno, sizeof(snd_cr->seqno));
+        } while (in_window(snd_cr->seqno, snd_cr));
         STORE_RELEASE(&snd_cr->lwe, snd_cr->seqno);
         STORE_RELAXED(&snd_cr->rwe, snd_cr->lwe + START_WINDOW);
         frcti->rtt_lwe = snd_cr->seqno;
