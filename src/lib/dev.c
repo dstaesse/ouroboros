@@ -1640,15 +1640,21 @@ static ssize_t flow_write_frag(struct flow *     flow,
                                                &spb, dl);
                 else
                         idx = ssm_pool_alloc(proc.pool, clen, &ptr, &spb);
-                if (idx < 0)
+                if (idx < 0) {
+                        if (off > 0)
+                                STAT_BUMP(flow->frcti, sdu_snd_alloc);
                         return off > 0 ? (ssize_t) off : idx;
+                }
 
                 memcpy(ptr, src + off, clen);
 
                 ret = flow_tx_spb(flow, spb, flow_frag_role(i, n),
                                   block, dl);
-                if (ret < 0)
+                if (ret < 0) {
+                        if (off > 0)
+                                STAT_BUMP(flow->frcti, sdu_snd_tx);
                         return off > 0 ? (ssize_t) off : (ssize_t) ret;
+                }
 
                 off += clen;
         }

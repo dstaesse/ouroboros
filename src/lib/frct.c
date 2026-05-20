@@ -192,6 +192,15 @@ struct frcti_stat {
         size_t rxm_due_aged;    /* bail: r->t0 + t_r < now         */
         size_t rxm_arm_fail;    /* rxm_arm: malloc failed          */
         size_t rxm_cancel;      /* entries cancelled at teardown   */
+        size_t rxm_tx_dead;     /* rxm_snd tx into terminal ACL    */
+        size_t tx_drop;         /* frct_tx fail (any cause)        */
+        size_t tx_drop_ack;     /* bare ACK dropped                */
+        size_t tx_drop_sack;    /* SACK dropped                    */
+        size_t tx_drop_ka;      /* keepalive dropped               */
+        size_t tx_drop_rttp;    /* RTT probe/echo dropped          */
+        size_t tx_drop_nack;    /* pre-DRF NACK dropped            */
+        size_t tx_drop_rdv;     /* rendez-vous dropped             */
+        size_t tx_drop_other;   /* anything not matched above      */
         size_t ack_snd;         /* ACK packets sent (bare + SACK)  */
         size_t ack_fire;        /* delayed-ACK timer fires         */
         size_t ack_supp_seqno;  /* fire suppressed: seqno          */
@@ -212,6 +221,9 @@ struct frcti_stat {
         size_t nack_snd;        /* pre-DRF NACKs sent              */
         size_t nack_rcv;        /* pre-DRF NACKs received          */
         size_t tlp_snd;         /* tail loss probes sent           */
+        size_t inact_drop;      /* inactivity drop (NACK on cd)    */
+        size_t drf_rebase;      /* DRF-triggered window rebase     */
+        size_t rq_released;     /* slots cleared by release_rq     */
         size_t rttp_snd;        /* RTT probes sent                 */
         size_t rttp_rcv;        /* RTT probe replies rcvd          */
         size_t rtt_smpl;        /* RTT estimator samples           */
@@ -220,9 +232,12 @@ struct frcti_stat {
         size_t ka_snd;          /* keepalives sent                 */
         size_t ka_rcv;          /* keepalives received             */
         size_t sdu_snd_frag;    /* writes that fragmented          */
+        size_t sdu_snd_alloc;   /* alloc fail truncated SDU send   */
+        size_t sdu_snd_tx;      /* tx fail truncated SDU send      */
         size_t frag_snd;        /* fragments sent: FIRST/MID/LAST  */
         size_t frag_rcv;        /* fragments stashed in rq[]       */
         size_t sdu_reasm;       /* SDUs delivered reassembled      */
+        size_t sdu_sole;        /* SOLE SDUs delivered (n==1)      */
         size_t frag_drop;       /* dropped at malformed run        */
         size_t strm_snd_byte;   /* bytes sent on stream            */
         size_t strm_rcv_byte;   /* bytes copied to ring            */
@@ -488,6 +503,9 @@ static int frct_rib_read(const char * path,
                 "Pre-DRF NACKs sent:              %20zu\n"
                 "Pre-DRF NACKs received:          %20zu\n"
                 "Tail loss probes sent:           %20zu\n"
+                "Inactivity drops (silent):       %20zu\n"
+                "DRF window rebases:              %20zu\n"
+                "rq slots cleared by release_rq:  %20zu\n"
                 "RTT probes sent:                 %20zu\n"
                 "RTT probe replies received:      %20zu\n"
                 "RTT estimator samples:           %20zu\n"
@@ -496,9 +514,12 @@ static int frct_rib_read(const char * path,
                 "Keepalives sent:                 %20zu\n"
                 "Keepalives received:             %20zu\n"
                 "SDU writes fragmented:           %20zu\n"
+                "  alloc fail mid-SDU:            %20zu\n"
+                "  tx fail mid-SDU:               %20zu\n"
                 "Fragments sent:                  %20zu\n"
                 "Fragments received:              %20zu\n"
                 "SDUs delivered reassembled:      %20zu\n"
+                "SDUs delivered (SOLE):           %20zu\n"
                 "Fragments dropped (malformed):   %20zu\n"
                 "Stream bytes sent:               %20zu\n"
                 "Stream bytes received:           %20zu\n"
@@ -513,7 +534,17 @@ static int frct_rib_read(const char * path,
                 "  bail (unowned):                %20zu\n"
                 "  bail (aged):                   %20zu\n"
                 "RXM-arm malloc failures:         %20zu\n"
-                "RXM cancels (teardown):          %20zu\n",
+                "RXM cancels (teardown):          %20zu\n"
+                "RXM tx into dead flow:           %20zu\n"
+                "Tx ring drops (any cause):       %20zu\n"
+                "  ack:                           %20zu\n"
+                "  sack:                          %20zu\n"
+                "  ka:                            %20zu\n"
+                "  rttp:                          %20zu\n"
+                "  nack:                          %20zu\n"
+                "  rdv:                           %20zu\n"
+                "  other:                         %20zu\n",
+                /* Check getattr size below when adding stats. */
                 s.t_mpl, s.t_a, s.t_r,
                 s.srtt, s.mdev, s.rto, s.min_rtt,
                 s.snd_cr.lwe, s.snd_cr.rwe,
@@ -533,11 +564,13 @@ static int frct_rib_read(const char * path,
                 s.stat.sack_snd, s.stat.sack_rcv,
                 s.stat.dsack_snd, s.stat.dsack_rcv, s.stat.dsack_drop,
                 s.stat.nack_snd, s.stat.nack_rcv, s.stat.tlp_snd,
+                s.stat.inact_drop, s.stat.drf_rebase, s.stat.rq_released,
                 s.stat.rttp_snd, s.stat.rttp_rcv, s.stat.rtt_smpl,
                 s.stat.rdv_snd, s.stat.rdv_rcv,
                 s.stat.ka_snd, s.stat.ka_rcv,
-                s.stat.sdu_snd_frag, s.stat.frag_snd, s.stat.frag_rcv,
-                s.stat.sdu_reasm, s.stat.frag_drop,
+                s.stat.sdu_snd_frag, s.stat.sdu_snd_alloc, s.stat.sdu_snd_tx,
+                s.stat.frag_snd, s.stat.frag_rcv,
+                s.stat.sdu_reasm, s.stat.sdu_sole, s.stat.frag_drop,
                 s.stat.strm_snd_byte, s.stat.strm_rcv_byte,
                 s.stat.strm_dlv_byte,
                 s.stat.strm_drop, s.stat.strm_fin_drop,
@@ -546,7 +579,12 @@ static int frct_rib_read(const char * path,
                 s.stat.rxm_due_count,
                 s.stat.rxm_due_acked, s.stat.rxm_due_unowned,
                 s.stat.rxm_due_aged, s.stat.rxm_arm_fail,
-                s.stat.rxm_cancel);
+                s.stat.rxm_cancel,
+                s.stat.rxm_tx_dead, s.stat.tx_drop,
+                s.stat.tx_drop_ack, s.stat.tx_drop_sack,
+                s.stat.tx_drop_ka, s.stat.tx_drop_rttp,
+                s.stat.tx_drop_nack, s.stat.tx_drop_rdv,
+                s.stat.tx_drop_other);
 
         if (written < 0)
                 return 0;
@@ -583,7 +621,7 @@ static int frct_rib_getattr(const char *      path,
         (void) path;
 
         /* Must be >= the sprintf output in frct_rib_read. */
-        attr->size  = 4096;
+        attr->size  = 8192;
         attr->mtime = 0;
 
         return 0;
@@ -726,13 +764,56 @@ static int frct_hcs_check(const struct frct_pci * pci,
         return hcs != ntoh16(pci->hcs);
 }
 
+/* Bump tx_drop plus the per-frame-type counter matching `flags`. */
+static void frct_tx_drop_bump(struct frcti * frcti,
+                              uint16_t       flags)
+{
+        STAT_BUMP(frcti, tx_drop);
+
+        if (flags & FRCT_SACK) {
+                STAT_BUMP(frcti, tx_drop_sack);
+                return;
+        }
+
+        if (flags & FRCT_KA) {
+                STAT_BUMP(frcti, tx_drop_ka);
+                return;
+        }
+
+        if (flags & FRCT_RTTP) {
+                STAT_BUMP(frcti, tx_drop_rttp);
+                return;
+        }
+
+        if (flags & FRCT_NACK) {
+                STAT_BUMP(frcti, tx_drop_nack);
+                return;
+        }
+
+        if (flags & FRCT_RDVS) {
+                STAT_BUMP(frcti, tx_drop_rdv);
+                return;
+        }
+
+        if (flags & FRCT_ACK) {
+                STAT_BUMP(frcti, tx_drop_ack);
+                return;
+        }
+
+        STAT_BUMP(frcti, tx_drop_other);
+}
+
 static int frct_tx(struct frcti * frcti, struct ssm_pk_buff * spb)
 {
         struct flow *           f = frcti_to_flow(frcti);
         const struct frct_pci * pci;
+        const struct timespec * dl = NULL;
+        struct timespec         now;
+        struct timespec         intv = TIMESPEC_INIT_NS(FRCT_TX_TIMEO_NS);
+        struct timespec         deadline;
         uint16_t                flags;
         ssize_t                 idx;
-        int                     ret;
+        int                     ret = -ENOMEM;
 
         pci   = (const struct frct_pci *) ssm_pk_buff_head(spb);
         flags = ntoh16(pci->flags);
@@ -751,7 +832,14 @@ static int frct_tx(struct frcti * frcti, struct ssm_pk_buff * spb)
 
         idx = ssm_pk_buff_get_off(spb);
 
-        ret = ssm_rbuff_write_b(f->tx_rb, idx, NULL);
+        /* DATA blocks; control times out so a full ring can't stall wheel. */
+        if (!(flags & FRCT_DATA)) {
+                clock_gettime(PTHREAD_COND_CLOCK, &now);
+                ts_add(&now, &intv, &deadline);
+                dl = &deadline;
+        }
+
+        ret = ssm_rbuff_write_b(f->tx_rb, idx, dl);
         if (ret < 0)
                 goto fail;
 
@@ -760,8 +848,9 @@ static int frct_tx(struct frcti * frcti, struct ssm_pk_buff * spb)
         return 0;
 
  fail:
+        frct_tx_drop_bump(frcti, flags);
         ssm_pool_remove(proc.pool, ssm_pk_buff_get_off(spb));
-        return -ENOMEM;
+        return ret;
 }
 
 __attribute__((cold))
@@ -1105,6 +1194,7 @@ static void rxm_snd(struct frcti * frcti,
         uint32_t             snd_lwe;
         uint32_t             rcv_lwe;
         size_t               pos;
+        int                  ret;
 
         snd_lwe = LOAD_RELAXED(&frcti->snd_cr.lwe);
         rcv_lwe = LOAD_RELAXED(&frcti->rcv_cr.lwe);
@@ -1141,8 +1231,10 @@ static void rxm_snd(struct frcti * frcti,
         if (spb == NULL)
                 return;
 
-        if (frct_tx(frcti, spb) < 0)
-                frct_mark_flow_down(frcti);
+        /* ETIMEDOUT/ENOMEM: let r-timer drive teardown. */
+        ret = frct_tx(frcti, spb);
+        if (ret == -EFLOWDOWN || ret == -ENOTALLOC)
+                STAT_BUMP(frcti, rxm_tx_dead);
 }
 
 static void rxm_due(void * arg)
@@ -1647,6 +1739,7 @@ static void release_rq(struct frcti * frcti)
                         frct_spb_release_idx(frcti->rcv_slots[i].idx);
 
                 frcti->rcv_slots[i].idx = -1;
+                STAT_BUMP(frcti, rq_released);
         }
 }
 
@@ -1829,17 +1922,27 @@ void frcti_destroy(struct frcti * frcti)
 
 #if defined(PROC_FLOW_STATS) && defined(FRCT_DEBUG_STDOUT)
         printf("[FRCT teardown] pid=%d fd=%d "
-               "frag_snd=%zu rxm_sack=%zu rxm_dup=%zu rxm_snd=%zu "
+               "sdu_snd=%zu sdu_reasm=%zu sdu_sole=%zu "
+               "frag_snd=%zu frag_rcv=%zu frag_drop=%zu "
+               "rxm_snd=%zu rxm_sack=%zu rxm_dup=%zu "
                "rxm_due=%zu acked=%zu unowned=%zu aged=%zu "
-               "cancel=%zu arm_fail=%zu inflight=%u\n",
+               "cancel=%zu arm_fail=%zu inflight=%u "
+               "nack_snd=%zu nack_rcv=%zu inact_drop=%zu "
+               "drf_rebase=%zu rq_released=%zu\n",
                (int) getpid(), frcti->fd,
-               frcti->stat.frag_snd, frcti->stat.rxm_sack,
+               frcti->stat.sdu_snd_frag, frcti->stat.sdu_reasm,
+               frcti->stat.sdu_sole,
+               frcti->stat.frag_snd, frcti->stat.frag_rcv,
+               frcti->stat.frag_drop,
+               frcti->stat.rxm_snd, frcti->stat.rxm_sack,
                frcti->stat.rxm_dupthresh,
-               frcti->stat.rxm_snd,
                frcti->stat.rxm_due_count, frcti->stat.rxm_due_acked,
                frcti->stat.rxm_due_unowned, frcti->stat.rxm_due_aged,
                frcti->stat.rxm_cancel, frcti->stat.rxm_arm_fail,
-               frcti->snd_cr.seqno - frcti->snd_cr.lwe);
+               frcti->snd_cr.seqno - frcti->snd_cr.lwe,
+               frcti->stat.nack_snd, frcti->stat.nack_rcv,
+               frcti->stat.inact_drop,
+               frcti->stat.drf_rebase, frcti->stat.rq_released);
 #endif
 
         release_rq(frcti);
@@ -2509,6 +2612,8 @@ static ssize_t frcti_consume(struct frcti * frcti,
                 ret = (ssize_t) frag_gather(frcti, n, buf);
                 if (n > 1)
                         STAT_BUMP(frcti, sdu_reasm);
+                else
+                        STAT_BUMP(frcti, sdu_sole);
                 goto unlock;
         }
 
@@ -3340,6 +3445,7 @@ static enum frct_act rcv_inact_check(struct frcti * frcti,
                         return FRCT_ACTIVE;
 
                 /* Bootstrap or fresh epoch: rebase. */
+                STAT_BUMP(frcti, drf_rebase);
                 release_rq(frcti);
                 STORE_RELEASE(&rcv_cr->lwe, seqno);
                 rcv_cr->rwe = seqno + RQ_SIZE;
@@ -3805,6 +3911,7 @@ static void frcti_rcv(struct frcti *       frcti,
                         frct_spb_release(spb);
                         return;
                 case FRCT_INACT_DROP:
+                        STAT_BUMP(frcti, inact_drop);
                         goto drop_packet;
                 case FRCT_ACTIVE:
                         /* FALLTHRU */
