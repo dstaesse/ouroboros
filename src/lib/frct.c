@@ -55,11 +55,28 @@
 /* DSACK seqno sanity: reject reports older/farther than one rcv window. */
 #define MAX_DSACK_LAG    RQ_SIZE
 
+/* Signed ns elapsed; negative under concurrent update (no underflow). */
+static __inline__ int64_t ts_age_ns(uint64_t now_ns,
+                                    uint64_t then_ns)
+{
+        return (int64_t)(now_ns - then_ns);
+}
+
+/* True iff strictly more than thr_ns elapsed since then_ns. */
+static __inline__ bool ts_aged_ns(uint64_t now_ns,
+                                  uint64_t then_ns,
+                                  uint64_t thr_ns)
+{
+        return ts_age_ns(now_ns, then_ns) > (int64_t) thr_ns;
+}
+
 /* FRCT r-timer: do not retransmit packet older than t_r (from first send). */
-#define RXM_AGED_OUT(t0, now_ns, t_r) (((now_ns) - (t0)) > (uint64_t) (t_r))
+#define RXM_AGED_OUT(t0, now_ns, t_r) \
+        ts_aged_ns((now_ns), (t0), (uint64_t)(t_r))
 
 /* FRCT a-timer: do not (re)transmit ACK after t_a from last data receive. */
-#define ACK_AGED_OUT(act, now_ns, t_a) (((now_ns) - (act)) > (uint64_t) (t_a))
+#define ACK_AGED_OUT(act, now_ns, t_a) \
+        ts_aged_ns((now_ns), (act), (uint64_t)(t_a))
 
 struct sack_args {
         uint16_t n;
@@ -855,7 +872,7 @@ static __inline__ bool min_rtt_stale(struct frcti * frcti,
         if (mrtt < frcti->min_rtt)
                 return true;
 
-        return (now_ns - frcti->t_min_rtt) > MIN_RTT_WIN_NS;
+        return ts_aged_ns(now_ns, frcti->t_min_rtt, MIN_RTT_WIN_NS);
 }
 
 /* Linux-style windowed-min refresh of RACK.min_RTT. */
@@ -944,10 +961,12 @@ static bool rtt_probe_arm(struct frcti * frcti,
         if (!after(frcti->snd_cr.seqno, frcti->snd_cr.lwe))
                 return false;
 
-        if (now_ns - frcti->t_rcv_rtt <= 2u * (uint64_t) frcti->srtt)
+        if (!ts_aged_ns(now_ns, frcti->t_rcv_rtt,
+                        2u * (uint64_t) frcti->srtt))
                 return false;
 
-        if (now_ns - frcti->t_snd_probe <= (uint64_t) frcti->srtt)
+        if (!ts_aged_ns(now_ns, frcti->t_snd_probe,
+                        (uint64_t) frcti->srtt))
                 return false;
 
         *probe_id = rttp_alloc_probe(frcti, now_ns, nonce);
@@ -1374,7 +1393,7 @@ static void ack_snd(struct frcti * frcti,
                 goto out;
         }
 
-        diff = (time_t)(now_ns - frcti->snd_cr.act);
+        diff = (time_t) ts_age_ns(now_ns, frcti->snd_cr.act);
         if (diff < TICTIME && !frcti->dsack_valid) {
                 pthread_rwlock_unlock(&frcti->lock);
                 STAT_BUMP(frcti, ack_supp_rate);
@@ -1500,8 +1519,8 @@ static void ka_snd(struct frcti * frcti)
         timeo_ns = (time_t)(frcti->qs_timeout) * MILLION;     /* IMM */
         rcv_act  = LOAD_RELAXED(&frcti->rcv_cr.act);
         ka_rcv   = LOAD_RELAXED(&frcti->t_ka_rcv);
-        rcv_idle = (int64_t)(now_ns - (rcv_act > ka_rcv ? rcv_act : ka_rcv));
-        snd_idle = (int64_t)(now_ns - LOAD_RELAXED(&frcti->snd_cr.act));
+        rcv_idle = ts_age_ns(now_ns, rcv_act > ka_rcv ? rcv_act : ka_rcv);
+        snd_idle = ts_age_ns(now_ns, LOAD_RELAXED(&frcti->snd_cr.act));
 
         if (rcv_idle > timeo_ns) {
                 frct_mark_peer_dead(frcti);
@@ -2582,6 +2601,7 @@ static void frcti_rttp_rcv(struct frcti * frcti,
         uint32_t                 echo_id;
         uint8_t                  nonce[RTTP_NONCE_LEN];
         size_t                   ring_pos;
+        int64_t                  elapsed;
         uint64_t                 sample;
 
         if (pkt.len < RTTP_PAYLOAD)
@@ -2613,9 +2633,15 @@ static void frcti_rttp_rcv(struct frcti * frcti,
                 return;
         }
 
-        sample = now_ns - frcti->probes[ring_pos].ts;
+        elapsed = ts_age_ns(now_ns, frcti->probes[ring_pos].ts);
         frcti->probes[ring_pos].ts = 0;
         frcti->t_rcv_rtt = now_ns;
+
+        if (elapsed <= 0) {
+                pthread_rwlock_unlock(&frcti->lock);
+                return;
+        }
+        sample = (uint64_t) elapsed;
 
         /* Clamp probe sample to RTT_CLAMP_MUL * srtt to avoid poisoning. */
         if (frcti->srtt > 0)
@@ -2904,11 +2930,13 @@ static void frcti_ack_rcv(struct frcti *          frcti,
                 frcti->in_recovery = false;
 
         if (rtt_sample_eligible(frcti, p, flags, lwe)) {
-                uint64_t mrtt = now_ns - frcti->snd_slots[p].time;
-                if (!(flags & FRCT_DATA))
-                        STAT_BUMP(frcti, ack_rtt);
-                rtt_update(frcti, mrtt, now_ns);
-                frcti->t_rcv_rtt = now_ns;
+                int64_t mrtt = ts_age_ns(now_ns, frcti->snd_slots[p].time);
+                if (mrtt > 0) {
+                        if (!(flags & FRCT_DATA))
+                                STAT_BUMP(frcti, ack_rtt);
+                        rtt_update(frcti, (time_t) mrtt, now_ns);
+                        frcti->t_rcv_rtt = now_ns;
+                }
         }
 }
 
@@ -3168,7 +3196,7 @@ static enum frct_act rcv_inact_check(struct frcti * frcti,
         struct frct_cr * rcv_cr = &frcti->rcv_cr;
         uint64_t         cd;
 
-        if (now_ns - rcv_cr->act <= rcv_cr->inact)
+        if (!ts_aged_ns(now_ns, rcv_cr->act, rcv_cr->inact))
                 return FRCT_ACTIVE;
 
         if (flags & FRCT_DRF) {
@@ -3188,7 +3216,7 @@ static enum frct_act rcv_inact_check(struct frcti * frcti,
 
         /* Pre-DRF: nudge sender with NACK (rate-limited). */
         cd = frcti->srtt > 0 ? (uint64_t) frcti->srtt : NACK_COOLDOWN_NS;
-        if (now_ns - frcti->t_nack < cd)
+        if (!ts_aged_ns(now_ns, frcti->t_nack, cd))
                 return FRCT_INACT_DROP;
 
         frcti->t_nack = now_ns;
@@ -3252,7 +3280,7 @@ static bool sack_check(struct frcti *     frcti,
         /* srtt/8 gate starved recovery under burst loss; floor to save CPU. */
         min_gap = (uint64_t) SACK_MIN_GAP_NS;
 
-        if (now_ns - frcti->t_snd_sack < min_gap)
+        if (!ts_aged_ns(now_ns, frcti->t_snd_sack, min_gap))
                 return false;
 
         out->dsack = false;
@@ -3319,7 +3347,7 @@ static void seqno_rotate(struct frcti * frcti,
 {
         struct frct_cr * snd_cr = &frcti->snd_cr;
 
-        if (now_ns - snd_cr->act <= snd_cr->inact)
+        if (!ts_aged_ns(now_ns, snd_cr->act, snd_cr->inact))
                 return;
         /* Idle-on-wire ≠ idle e2e: don't orphan in-flight rxm. */
         if (snd_cr->seqno != snd_cr->lwe)
@@ -3350,7 +3378,7 @@ static int frcti_snd(struct frcti *       frcti,
         uint16_t                 pci_flags = 0;
         bool                     rtx;
         uint64_t                 now_ns;
-        uint64_t                 rcv_idle;
+        int64_t                  rcv_idle;
         uint32_t                 probe_id = 0;
         uint8_t                  probe_nonce[RTTP_NONCE_LEN] = { 0 };
         bool                     probe;
@@ -3409,9 +3437,9 @@ static int frcti_snd(struct frcti *       frcti,
         seqno = snd_cr->seqno;
         pci->seqno = hton32(seqno);
 
-        rcv_idle = now_ns - rcv_cr->act;
+        rcv_idle = ts_age_ns(now_ns, rcv_cr->act);
 
-        if (rcv_idle < rcv_cr->inact) {
+        if (rcv_idle < (int64_t) rcv_cr->inact) {
                 pci_flags |= FRCT_FC;
                 pci->window = hton32(frcti_advert_rwe(frcti));
         }
@@ -3424,7 +3452,7 @@ static int frcti_snd(struct frcti *       frcti,
                 frcti->snd_slots[p].time = now_ns;
                 /* Fresh send clears RTX bits. */
                 frcti->snd_slots[p].flags = 0;
-                if (rcv_idle <= (uint64_t) frcti->t_a) {
+                if (rcv_idle <= (int64_t) frcti->t_a) {
                         pci_flags |= FRCT_ACK;
                         pci->ackno = hton32(rcv_cr->lwe);
                         rcv_cr->seqno = rcv_cr->lwe;
