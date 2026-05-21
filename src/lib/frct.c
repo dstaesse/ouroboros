@@ -180,19 +180,21 @@ struct frct_pci {
 /* Stat counters; fold to no-ops without PROC_FLOW_STATS. */
 #ifdef PROC_FLOW_STATS
 struct frcti_stat {
-        size_t rxm_snd;         /* RXM packets sent                */
-        size_t rxm_rcv;         /* RXM packets received            */
-        size_t rxm_fire;        /* tw RXM fires                    */
-        size_t rxm_sack;        /* SACK-driven retransmits         */
-        size_t rxm_rack;        /* RACK fast retransmits           */
+        size_t rxm_rto;         /* RTO-timer driven retransmits    */
+        size_t rxm_rcv;         /* RXM packets received (all)      */
+        size_t rxm_dup_rcv;     /* RXM dups (peer already had it)  */
+        size_t rxm_sack;        /* SACK-mechanism retransmits      */
+        size_t rxm_rack;        /* RACK-driven retransmits         */
         size_t rxm_dupthresh;   /* DupThresh-driven retransmits    */
+        size_t rxm_nack;        /* NACK-pulled retransmits         */
         size_t rxm_due_count;   /* rxm_due entries (pre-bail)      */
         size_t rxm_due_acked;   /* bail: seqno < snd_lwe           */
         size_t rxm_due_unowned; /* bail: slot.rxm replaced         */
         size_t rxm_due_aged;    /* bail: r->t0 + t_r < now         */
+        size_t rxm_due_defer;   /* bail: non-HoL, deferred to HoL  */
         size_t rxm_arm_fail;    /* rxm_arm: malloc failed          */
         size_t rxm_cancel;      /* entries cancelled at teardown   */
-        size_t rxm_tx_dead;     /* rxm_snd tx into terminal ACL    */
+        size_t rxm_tx_dead;     /* RXM tx into terminal flow       */
         size_t tx_drop;         /* frct_tx fail (any cause)        */
         size_t tx_drop_ack;     /* bare ACK dropped                */
         size_t tx_drop_sack;    /* SACK dropped                    */
@@ -366,6 +368,7 @@ struct frcti {
                 /* RFC 8985 §7.2 RACK reorder-window scaling. */
                 uint8_t          reo_wnd_mult;        /* 1..REO_WND_MULT_MAX */
                 uint32_t         dsack_lwe_snap;      /* lwe @ last DSACK */
+                uint64_t         t_last_reo_widen;    /* once-per-RTT gate */
 
                 uint32_t         dup_thresh;          /* RFC 8985         */
                 uint32_t         tlp_high_seq;        /* §7.3: 0 = none   */
@@ -421,6 +424,8 @@ static int frct_rib_read(const char * path,
                 time_t            min_rtt;
                 struct frct_cr    snd_cr;
                 struct frct_cr    rcv_cr;
+                size_t            rx_q_now;
+                size_t            tx_q_now;
                 struct frcti_stat stat;
         } s;
 
@@ -447,6 +452,11 @@ static int frct_rib_read(const char * path,
         s.t_mpl  = frcti->t_mpl;
         s.t_a    = frcti->t_a;
         s.t_r    = frcti->t_r;
+
+        s.rx_q_now = proc.flows[fd].rx_rb != NULL
+                ? ssm_rbuff_queued(proc.flows[fd].rx_rb) : 0;
+        s.tx_q_now = proc.flows[fd].tx_rb != NULL
+                ? ssm_rbuff_queued(proc.flows[fd].tx_rb) : 0;
 
         pthread_rwlock_rdlock(&frcti->lock);
 
@@ -477,12 +487,13 @@ static int frct_rib_read(const char * path,
                 "Receiver right window edge:      %20u\n"
                 "Receiver inactive (ns):          %20lld\n"
                 "Receiver last ack:               %20u\n"
-                "RXM packets sent:                %20zu\n"
+                "RXM (RTO-driven) sent:           %20zu\n"
                 "RXM packets received:            %20zu\n"
-                "RXM timer fires:                 %20zu\n"
-                "RXM (SACK-driven) sent:          %20zu\n"
+                "  duplicates received:           %20zu\n"
+                "RXM (SACK mechanism) sent:       %20zu\n"
                 "RXM (RACK-driven) sent:          %20zu\n"
                 "RXM (DupThresh-driven) sent:     %20zu\n"
+                "RXM (NACK-driven) sent:          %20zu\n"
                 "ACK packets sent:                %20zu\n"
                 "Delayed-ACK timer fires:         %20zu\n"
                 "  suppressed (seqno):            %20zu\n"
@@ -529,10 +540,13 @@ static int frct_rib_read(const char * path,
                 "FRCTI_RCV time (ns):             %20zu\n"
                 "tw_move time (ns):               %20zu\n"
                 "drain_rx_nb calls:               %20zu\n"
+                "RX rbuff queued:                 %20zu\n"
+                "TX rbuff queued:                 %20zu\n"
                 "RXM-due entries:                 %20zu\n"
                 "  bail (acked):                  %20zu\n"
                 "  bail (unowned):                %20zu\n"
                 "  bail (aged):                   %20zu\n"
+                "  bail (defer):                  %20zu\n"
                 "RXM-arm malloc failures:         %20zu\n"
                 "RXM cancels (teardown):          %20zu\n"
                 "RXM tx into dead flow:           %20zu\n"
@@ -553,8 +567,9 @@ static int frct_rib_read(const char * path,
                 s.rcv_cr.lwe, s.rcv_cr.rwe,
                 (long long)(now_ns - s.rcv_cr.act),
                 s.rcv_cr.seqno,
-                s.stat.rxm_snd, s.stat.rxm_rcv, s.stat.rxm_fire,
+                s.stat.rxm_rto, s.stat.rxm_rcv, s.stat.rxm_dup_rcv,
                 s.stat.rxm_sack, s.stat.rxm_rack, s.stat.rxm_dupthresh,
+                s.stat.rxm_nack,
                 s.stat.ack_snd, s.stat.ack_fire,
                 s.stat.ack_supp_seqno, s.stat.ack_supp_inact,
                 s.stat.ack_supp_rate,
@@ -576,9 +591,11 @@ static int frct_rib_read(const char * path,
                 s.stat.strm_drop, s.stat.strm_fin_drop,
                 s.stat.rcv_proc_ns, s.stat.tw_move_ns,
                 s.stat.drain_calls,
+                s.rx_q_now, s.tx_q_now,
                 s.stat.rxm_due_count,
                 s.stat.rxm_due_acked, s.stat.rxm_due_unowned,
-                s.stat.rxm_due_aged, s.stat.rxm_arm_fail,
+                s.stat.rxm_due_aged, s.stat.rxm_due_defer,
+                s.stat.rxm_arm_fail,
                 s.stat.rxm_cancel,
                 s.stat.rxm_tx_dead, s.stat.tx_drop,
                 s.stat.tx_drop_ack, s.stat.tx_drop_sack,
@@ -1224,8 +1241,7 @@ static void rxm_snd(struct frcti * frcti,
 
         pthread_rwlock_unlock(&frcti->lock);
 
-        STAT_BUMP(frcti, rxm_snd);
-        STAT_BUMP(frcti, rxm_fire);
+        STAT_BUMP(frcti, rxm_rto);
 
         spb = rxm_pkt_prepare(pkt, len, rcv_lwe, frcti->stream);
         if (spb == NULL)
@@ -1270,6 +1286,14 @@ static void rxm_due(void * arg)
                 STAT_BUMP(frcti, rxm_due_aged);
                 frct_mark_flow_down(frcti);
                 goto cleanup;
+        }
+
+        /* HoL-only retx; defer at base rto so HoL transitions react. */
+        if (r->seqno != snd_lwe) {
+                STAT_BUMP(frcti, rxm_due_defer);
+                tw_post(&r->tw, now_ns + LOAD_RELAXED(&frcti->rto),
+                        rxm_due, r);
+                return;
         }
 
         rxm_snd(frcti, r->seqno, r->pkt, r->len);
@@ -1857,8 +1881,9 @@ struct frcti * frcti_create(int       fd,
         frcti->sack_n         = 0;
         frcti->dsack_seqno    = 0;
         frcti->dsack_valid    = false;
-        frcti->reo_wnd_mult   = 1;
-        frcti->dsack_lwe_snap = 0;
+        frcti->reo_wnd_mult     = 1;
+        frcti->dsack_lwe_snap   = 0;
+        frcti->t_last_reo_widen = 0;
         /* So the first pre-DRF NACK fires without waiting cooldown. */
         frcti->t_nack         = now_ns - BILLION;
         frcti->in_recovery    = false;
@@ -1924,8 +1949,8 @@ void frcti_destroy(struct frcti * frcti)
         printf("[FRCT teardown] pid=%d fd=%d "
                "sdu_snd=%zu sdu_reasm=%zu sdu_sole=%zu "
                "frag_snd=%zu frag_rcv=%zu frag_drop=%zu "
-               "rxm_snd=%zu rxm_sack=%zu rxm_dup=%zu "
-               "rxm_due=%zu acked=%zu unowned=%zu aged=%zu "
+               "rxm_rto=%zu rxm_sack=%zu rxm_dup=%zu "
+               "rxm_due=%zu acked=%zu unowned=%zu aged=%zu defer=%zu "
                "cancel=%zu arm_fail=%zu inflight=%u "
                "nack_snd=%zu nack_rcv=%zu inact_drop=%zu "
                "drf_rebase=%zu rq_released=%zu\n",
@@ -1934,10 +1959,11 @@ void frcti_destroy(struct frcti * frcti)
                frcti->stat.sdu_sole,
                frcti->stat.frag_snd, frcti->stat.frag_rcv,
                frcti->stat.frag_drop,
-               frcti->stat.rxm_snd, frcti->stat.rxm_sack,
+               frcti->stat.rxm_rto, frcti->stat.rxm_sack,
                frcti->stat.rxm_dupthresh,
                frcti->stat.rxm_due_count, frcti->stat.rxm_due_acked,
                frcti->stat.rxm_due_unowned, frcti->stat.rxm_due_aged,
+               frcti->stat.rxm_due_defer,
                frcti->stat.rxm_cancel, frcti->stat.rxm_arm_fail,
                frcti->snd_cr.seqno - frcti->snd_cr.lwe,
                frcti->stat.nack_snd, frcti->stat.nack_rcv,
@@ -2108,6 +2134,7 @@ static void sack_rxm_snd(struct frcti * frcti,
         const struct frct_pci * pci;
         uint32_t                rcv_lwe;
         uint32_t                seqno;
+        int                     ret;
 
         rcv_lwe = LOAD_RELAXED(&frcti->rcv_cr.lwe);
 
@@ -2125,13 +2152,15 @@ static void sack_rxm_snd(struct frcti * frcti,
         }
 
         STAT_BUMP(frcti, rxm_sack);
-        frct_tx(frcti, spb);
+        ret = frct_tx(frcti, spb);
+        if (ret == -EFLOWDOWN || ret == -ENOTALLOC)
+                STAT_BUMP(frcti, rxm_tx_dead);
 }
 
 /* Additive HoL emit; original snd_slots[hp].rxm stays armed (NewReno). */
-static void fast_rxm_send(struct frcti * frcti,
-                        void *         pkt,
-                        size_t         len)
+static int fast_rxm_send(struct frcti * frcti,
+                         void *         pkt,
+                         size_t         len)
 {
         struct ssm_pk_buff * spb;
         uint32_t             rcv_lwe;
@@ -2140,9 +2169,9 @@ static void fast_rxm_send(struct frcti * frcti,
 
         spb = rxm_pkt_prepare(pkt, len, rcv_lwe, frcti->stream);
         if (spb == NULL)
-                return;
+                return 0;
 
-        frct_tx(frcti, spb);
+        return frct_tx(frcti, spb);
 }
 
 /* PCI bytes survive head_release at receive; just rewind the pointer. */
@@ -2835,12 +2864,15 @@ static void frcti_nack_rcv(struct frcti * frcti)
                         (frcti->snd_slots[hp].flags & ~SND_TLP)
                         | SND_RTX | SND_FAST_RXM;
                 frcti->rtt_lwe = frcti->snd_cr.lwe + 1;
+                STAT_BUMP(frcti, rxm_nack);
         }
 
         pthread_rwlock_unlock(&frcti->lock);
 
         if (pkt_copy != NULL) {
-                fast_rxm_send(frcti, pkt_copy, pkt_len);
+                int ret = fast_rxm_send(frcti, pkt_copy, pkt_len);
+                if (ret == -EFLOWDOWN || ret == -ENOTALLOC)
+                        STAT_BUMP(frcti, rxm_tx_dead);
                 free(pkt_copy);
         }
 }
@@ -3011,15 +3043,14 @@ struct pending {
         size_t   sack_rxm_cnt;
 };
 
-/* Idempotent; only extends when snd_cr.seqno advances past recovery_high. */
+/* RFC 6582 §3.2: seal recovery_high on entry; do not extend on new gaps. */
 static void recovery_enter(struct frcti * frcti)
 {
-        uint32_t hi = frcti->snd_cr.seqno + RTT_QUARANTINE;
+        if (frcti->in_recovery)
+                return;
 
-        if (!frcti->in_recovery || after(hi, frcti->recovery_high)) {
-                frcti->in_recovery   = true;
-                frcti->recovery_high = hi;
-        }
+        frcti->in_recovery   = true;
+        frcti->recovery_high = frcti->snd_cr.seqno + RTT_QUARANTINE;
 }
 
 /* True when cum-ACK clears recovery_high or all in-flight ACKed. */
@@ -3035,14 +3066,12 @@ static bool recovery_exit_reached(struct frcti * frcti,
         return ackno == frcti->snd_cr.seqno;
 }
 
-/* RTT sample gate: Karn + SACK-consume + 4x clamp + don't-seed. */
+/* RTT sample gate: Karn + SACK-consume + don't-seed. */
 static bool rtt_sample_eligible(struct frcti * frcti,
                                 size_t         p,
                                 uint16_t       flags,
                                 uint32_t       lwe)
 {
-        if (frcti->in_recovery)
-                return false;
         if (flags & FRCT_RXM)
                 return false;
         if (frcti->snd_slots[p].flags & (SND_RTX | SND_TLP))
@@ -3268,7 +3297,9 @@ static void sack_queue_rxm(struct frcti *    frcti,
                 if (!rack_ok && frcti->dup_thresh < DUP_THRESH)
                         continue;
 
-                if (!rack_ok)
+                if (rack_ok)
+                        STAT_BUMP(frcti, rxm_rack);
+                else
                         STAT_BUMP(frcti, rxm_dupthresh);
 
                 pending->sack_rxm[cnt].data = malloc(rxm->len);
@@ -3331,13 +3362,23 @@ static bool sack_is_dsack(struct frcti *  frcti,
         return false;
 }
 
-/* RFC 8985 §7.2: grow reo_wnd_mult on DSACK evidence. Caller wrlock. */
-static __inline__ void reo_wnd_on_dsack(struct frcti * frcti)
+/* RFC 8985 §7.2: grow reo_wnd_mult on DSACK; at most once per RTT. */
+static __inline__ void reo_wnd_on_dsack(struct frcti * frcti,
+                                        uint64_t       now_ns)
 {
+        time_t srtt = frcti->srtt;
+
+        /* Snap is unconditional: feeds the per-D-SACK decay clock. */
+        frcti->dsack_lwe_snap = frcti->snd_cr.lwe;
+
+        if (srtt > 0
+            && now_ns - frcti->t_last_reo_widen <= (uint64_t) srtt)
+                return;
+
         if (frcti->reo_wnd_mult < REO_WND_MULT_MAX)
                 frcti->reo_wnd_mult++;
 
-        frcti->dsack_lwe_snap = frcti->snd_cr.lwe;
+        frcti->t_last_reo_widen = now_ns;
 }
 
 /* Caller holds wrlock; retransmits queued for post-unlock emission. */
@@ -3370,7 +3411,7 @@ static void frcti_sack_rcv(struct frcti *   frcti,
 
         if (dsack) {
                 STAT_BUMP(frcti, dsack_rcv);
-                reo_wnd_on_dsack(frcti);
+                reo_wnd_on_dsack(frcti, now_ns);
         }
 
         /* DSACK-only carries no new gap; don't enter recovery. */
@@ -3398,8 +3439,10 @@ static void pending_flush(struct frcti *   frcti,
         }
 
         if (pending->fast_rxm.data != NULL) {
-                fast_rxm_send(frcti, pending->fast_rxm.data,
-                                   pending->fast_rxm.len);
+                int ret = fast_rxm_send(frcti, pending->fast_rxm.data,
+                                        pending->fast_rxm.len);
+                if (ret == -EFLOWDOWN || ret == -ENOTALLOC)
+                        STAT_BUMP(frcti, rxm_tx_dead);
                 free(pending->fast_rxm.data);
         }
 }
@@ -3488,7 +3531,7 @@ static bool rq_accept(struct frcti * frcti,
 
         if (frcti->rcv_slots[pos].idx != -1) {
                 if (flags & FRCT_RXM)
-                        STAT_BUMP(frcti, rxm_rcv);
+                        STAT_BUMP(frcti, rxm_dup_rcv);
                 else
                         STAT_BUMP(frcti, dup_rcv);
                 /* RFC 2883 §4 case 2: in-window dup; sub-range marker. */
@@ -3879,6 +3922,9 @@ static void frcti_rcv(struct frcti *       frcti,
         pkt.data = ssm_pk_buff_head(spb);
         pkt.len  = ssm_pk_buff_len(spb);
 
+        if (flags & FRCT_RXM)
+                STAT_BUMP(frcti, rxm_rcv);
+
         /* Stateless / lock-free dispatches. spb released via ctrl_done. */
         if (flags & FRCT_KA) {
                 frcti_ka_rcv(frcti, pci, now_ns, flags);
@@ -3957,7 +4003,7 @@ static void frcti_rcv(struct frcti *       frcti,
                 /* Bump rcv_cr.seqno to force ack_snd to fire on the dup. */
                 rcv_cr->seqno = seqno;
                 if (flags & FRCT_RXM)
-                        STAT_BUMP(frcti, rxm_rcv);
+                        STAT_BUMP(frcti, rxm_dup_rcv);
                 else
                         STAT_BUMP(frcti, dup_rcv);
                 /* RFC 2883 §4 case 1: dup below cum-ACK. */
