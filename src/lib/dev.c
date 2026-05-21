@@ -1342,10 +1342,10 @@ int fccntl(int fd,
                 new_acc = flow->oflags & FLOWFACCMODE;
 
                 /* Defer EOS emit until after proc.lock is dropped: */
-                /* frcti_stream_fin_snd may block on shm-pool/tx-rb. */
+                /* frcti_fin_snd may block on shm-pool/tx-rb. */
                 if (new_acc == FLOWFRDONLY
                     && old_acc != FLOWFRDONLY
-                    && FRCTI_IS_STREAM(flow->frcti))
+                    && flow->frcti != NULL)
                         emit_eos = true;
 
                 rx_acl = ssm_rbuff_get_acl(flow->rx_rb);
@@ -1457,7 +1457,7 @@ int fccntl(int fd,
         pthread_rwlock_unlock(&proc.lock);
 
         if (emit_eos)
-                frcti_stream_fin_snd(flow->frcti);
+                frcti_fin_snd(flow->frcti);
 
         va_end(l);
 
