@@ -26,6 +26,7 @@
 #define MAX_RDV          (1 * BILLION)   /* ns */
 
 #define MAX_RTO_MUL      8                  /* caps the RTO backoff shift    */
+#define MAX_TLP_PER_EP   2                  /* RFC 8985 §7.3: up to 2 TLPs   */
 #define INITIAL_RTO      (1 * BILLION)      /* RFC 6298 §2.1: 1 s default    */
 #define RTT_BOOT_NS      (10 * MILLION)     /* rtt_hint floor + initial mdev */
 #define SRTT_FLOOR_NS    1000L              /* 1 us; smoothed RTT floor      */
@@ -366,12 +367,13 @@ struct frcti {
                 bool             dsack_valid;
 
                 /* RFC 8985 §7.2 RACK reorder-window scaling. */
-                uint8_t          reo_wnd_mult;        /* 1..REO_WND_MULT_MAX */
+                uint8_t          reo_wnd_mult;        /* REO_WND_MULT_MAX */
                 uint32_t         dsack_lwe_snap;      /* lwe @ last DSACK */
-                uint64_t         t_last_reo_widen;    /* once-per-RTT gate */
+                uint64_t         t_last_reo_widen;    /* once-per-RTT     */
 
                 uint32_t         dup_thresh;          /* RFC 8985         */
                 uint32_t         tlp_high_seq;        /* §7.3: 0 = none   */
+                uint8_t          tlp_count;           /* §7.3 per-episode */
                 uint64_t         t_nack;
                 bool             open;                /* FC window state  */
                 bool             in_recovery;
@@ -1226,8 +1228,9 @@ static void rxm_snd(struct frcti * frcti,
         slot->time  = TS_TO_UINT64(now);
         /* RTO supersedes any pending TLP/fast-rxm on this slot. */
         slot->flags = (slot->flags & ~(SND_FAST_RXM | SND_TLP)) | SND_RTX;
-        /* §7.3: RTO supersedes any outstanding TLP. */
+        /* §7.3: RTO supersedes TLP probes and ends the probe episode. */
         frcti->tlp_high_seq = 0;
+        frcti->tlp_count    = 0;
 
         frcti->rtt_lwe = seqno + 1;
 
@@ -2928,10 +2931,15 @@ static void tlp_due(void * arg)
 
         if (frcti->snd_cr.seqno == frcti->snd_cr.lwe)
                 goto unlock;
+
         if (!before(frcti->snd_cr.seqno, frcti->snd_cr.rwe))
                 goto unlock;        /* FC-blocked: RDV handles it. */
-        /* RFC 8985 §7.3: at most one outstanding TLP per episode. */
+
+        /* RFC 8985 §7.3: one outstanding probe, MAX_TLP_PER_EP per ep. */
         if (frcti->tlp_high_seq != 0)
+                goto unlock;
+
+        if (frcti->tlp_count >= MAX_TLP_PER_EP)
                 goto unlock;
 
         pto = tlp_pto(frcti);
@@ -2949,9 +2957,8 @@ static void tlp_due(void * arg)
                 goto unlock;
 
         /* Cap: if HoL RTO is due, let rxm_due fire instead. */
-        rto_at = rxm->t0
-                 + ((uint64_t) frcti->rto
-                    << LOAD_RELAXED(&frcti->rto_mul));
+        rto_at = rxm->t0 + ((uint64_t) frcti->rto
+                << LOAD_RELAXED(&frcti->rto_mul));
         if (rto_at <= now_ns)
                 goto unlock;
 
@@ -2964,6 +2971,7 @@ static void tlp_due(void * arg)
                 frcti->rtt_lwe = frcti->snd_cr.lwe + 1;
                 /* §7.3 outstanding-probe marker; ack_rcv/rxm_snd clear. */
                 frcti->tlp_high_seq = frcti->snd_cr.seqno;
+                frcti->tlp_count++;
                 STAT_BUMP(frcti, tlp_snd);
         }
 
@@ -2989,8 +2997,10 @@ static int tlp_arm(struct frcti * frcti)
         uint64_t            pto;
         uint64_t            deadline;
 
-        /* §7.3: at most one outstanding TLP per recovery episode. */
+        /* §7.3: one outstanding probe, MAX_TLP_PER_EP per recovery ep. */
         if (LOAD_RELAXED(&frcti->tlp_high_seq) != 0)
+                return 0;
+        if (LOAD_RELAXED(&frcti->tlp_count) >= MAX_TLP_PER_EP)
                 return 0;
         if (__atomic_test_and_set(&frcti->tlp_pending, __ATOMIC_RELAXED))
                 return 0;
@@ -3176,6 +3186,10 @@ static void frcti_ack_rcv(struct frcti *          frcti,
         if (frcti->tlp_high_seq != 0
             && !before(ackno, frcti->tlp_high_seq))
                 frcti->tlp_high_seq = 0;
+
+        /* §7.3: end the probe episode once inflight drains. */
+        if (ackno == frcti->snd_cr.seqno)
+                frcti->tlp_count = 0;
 
         /* RFC 8985 §7.2: halve mult per REO_DECAY_PKTS fresh-ACK'd seqnos. */
         fresh = ackno - frcti->dsack_lwe_snap;
