@@ -90,6 +90,10 @@ void mem_hash(enum hash_algo  algo,
               const uint8_t * buf,
               size_t          len)
 {
+#ifndef HAVE_LIBGCRYPT
+        struct sha3_ctx sha3_ctx;
+        struct md5_ctx md5_ctx;
+#endif
         if (algo == HASH_CRC8) {
                 uint8_t crc = 0;
 
@@ -114,9 +118,6 @@ void mem_hash(enum hash_algo  algo,
 #ifdef HAVE_LIBGCRYPT
         gcry_md_hash_buffer(gcry_algo_tbl[algo], dst, buf, len);
 #else
-        struct sha3_ctx sha3_ctx;
-        struct md5_ctx md5_ctx;
-
         switch (algo) {
         case HASH_CRC32:
                 memset(dst, 0, CRC32_HASH_LEN);
