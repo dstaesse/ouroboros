@@ -2394,26 +2394,31 @@ int main(int     argc,
                 goto fail_irm_init;
         }
 
-        if (irm_init() < 0)
+        if (crypt_secure_malloc_init(IRMD_SECMEM_MAX) < 0) {
+                log_err("Failed to initialize secure memory allocation.");
+                goto fail_secmem;
+        }
+
+        if (irm_init() < 0) {
+                log_err("Failed to initialize IRMd.");
                 goto fail_irm_init;
+        }
 
         if (reg_init() < 0) {
                 log_err("Failed to initialize registry.");
                 goto fail_reg;
         }
 
-        if (crypt_secure_malloc_init(IRMD_SECMEM_MAX) < 0) {
-                log_err("Failed to initialize secure memory allocation.");
-                goto fail_reg;
-        }
-
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
-        if (irm_start() < 0)
+        if (irm_start() < 0) {
+                log_err("Failed to start IRMd.");
                 goto fail_irm_start;
+        }
 
 #ifdef HAVE_TOML
         if (irm_configure(irmd.cfg_file) < 0) {
+                log_err("Failed to load IRMd configuration.");
                 irmd_set_state(IRMD_SHUTDOWN);
                 ret = EXIT_FAILURE;
         }
@@ -2426,14 +2431,15 @@ int main(int     argc,
 
         pthread_sigmask(SIG_UNBLOCK, &sigset, NULL);
 
-        crypt_secure_malloc_fini();
-        crypt_cleanup();
-
         reg_clear();
 
         reg_fini();
 
         irm_fini();
+
+        crypt_secure_malloc_fini();
+
+        crypt_cleanup();
 
         log_info("Ouroboros IPC Resource Manager daemon exited. Bye.");
 
@@ -2446,5 +2452,8 @@ int main(int     argc,
  fail_reg:
         irm_fini();
  fail_irm_init:
+        crypt_secure_malloc_fini();
+        crypt_cleanup();
+ fail_secmem:
         exit(EXIT_FAILURE);
 }
