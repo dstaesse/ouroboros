@@ -1298,13 +1298,13 @@ static void * eth_ipcp_packet_reader(void * o)
                         if (length > MGMT_FRAME_SIZE) {
                                 log_warn("Management frame size %u exceeds %u.",
                                          length, MGMT_FRAME_SIZE);
-                                goto fail_frame;
+                                continue;
                         }
 
                         frame = malloc(sizeof(*frame));
                         if (frame == NULL) {
                                 log_err("Failed to allocate frame.");
-                                goto fail_frame;
+                                continue;
                         }
 
                         memcpy(frame->buf, &e_frame->payload, length);
