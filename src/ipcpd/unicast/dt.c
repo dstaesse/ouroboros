@@ -370,6 +370,12 @@ static struct rib_ops r_ops = {
 };
 
 #ifdef IPCP_FLOW_STATS
+/*
+ * Hold dt.lock + per-stat together: dt_rib_readdir samples n_flows
+ * under rdlock and walks stamps under per-stat; updates must be
+ * atomic w.r.t. that snapshot or the malloc(n_flows) buffer can
+ * overflow.
+ */
 static void stat_used(int      fd,
                       uint64_t addr)
 {
@@ -377,6 +383,7 @@ static void stat_used(int      fd,
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
+        pthread_rwlock_wrlock(&dt.lock);
         pthread_mutex_lock(&dt.stat[fd].lock);
 
         memset(&dt.stat[fd], 0, sizeof(dt.stat[fd]));
@@ -384,12 +391,9 @@ static void stat_used(int      fd,
         dt.stat[fd].stamp = (addr != INVALID_ADDR) ? now.tv_sec : 0;
         dt.stat[fd].addr = addr;
 
-        pthread_mutex_unlock(&dt.stat[fd].lock);
-
-        pthread_rwlock_wrlock(&dt.lock);
-
         (addr != INVALID_ADDR) ? ++dt.n_flows : --dt.n_flows;
 
+        pthread_mutex_unlock(&dt.stat[fd].lock);
         pthread_rwlock_unlock(&dt.lock);
 }
 #endif
