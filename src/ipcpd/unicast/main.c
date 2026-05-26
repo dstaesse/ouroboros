@@ -307,8 +307,8 @@ int main(int    argc,
         ipcp_sigwait();
 
         if (ipcp_get_state() == IPCP_SHUTDOWN) {
-                stop_components();
                 ipcp_stop();
+                stop_components();
                 finalize_components();
         } else {
                 ipcp_stop();
