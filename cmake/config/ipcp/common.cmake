@@ -42,9 +42,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       "Slack value for high resolution timers on Linux systems.")
 endif()
 
-# ipcpd-eth flow statistics (requires FUSE - eth.c relies on
-# IPCP_ETH_FLOW_STATS implying HAVE_FUSE for rib_reg/rib_unreg)
+# Per-flow statistics exposed via the RIB (requires FUSE).
 if(HAVE_FUSE)
+  set(IPCP_FLOW_STATS TRUE CACHE BOOL
+      "Enable per-flow statistics via the RIB")
+  if(IPCP_FLOW_STATS)
+    message(STATUS "IPCP flow statistics enabled")
+  endif()
+
   set(IPCP_ETH_FLOW_STATS FALSE CACHE BOOL
       "Enable ipcpd-eth flow statistics via RIB")
   if(IPCP_ETH_FLOW_STATS)

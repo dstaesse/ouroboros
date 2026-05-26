@@ -179,11 +179,11 @@ struct {
         pthread_t          listener;
 } dt;
 
+#ifdef IPCP_FLOW_STATS
 static int dt_rib_read(const char * path,
                        char *       buf,
                        size_t       len)
 {
-#ifdef IPCP_FLOW_STATS
         int         fd;
         int         i;
         char        str[QOS_BLOCK_LEN + 1];
@@ -270,17 +270,10 @@ static int dt_rib_read(const char * path,
         pthread_mutex_unlock(&dt.stat[fd].lock);
 
         return RIB_FILE_STRLEN;
-#else
-        (void) path;
-        (void) buf;
-        (void) len;
-        return 0;
-#endif
 }
 
 static int dt_rib_readdir(char *** buf)
 {
-#ifdef IPCP_FLOW_STATS
         char   entry[RIB_PATH_LEN + 1];
         size_t i;
         int    idx = 0;
@@ -327,16 +320,11 @@ static int dt_rib_readdir(char *** buf)
  fail_entries:
         pthread_rwlock_unlock(&dt.lock);
         return -ENOMEM;
-#else
-        (void) buf;
-        return 0;
-#endif
 }
 
 static int dt_rib_getattr(const char *      path,
                           struct rib_attr * attr)
 {
-#ifdef IPCP_FLOW_STATS
         int    fd;
         char * entry;
 
@@ -356,10 +344,7 @@ static int dt_rib_getattr(const char *      path,
         }
 
         pthread_mutex_unlock(&dt.stat[fd].lock);
-#else
-        (void) path;
-        (void) attr;
-#endif
+
         return 0;
 }
 
@@ -368,6 +353,7 @@ static struct rib_ops r_ops = {
         .readdir = dt_rib_readdir,
         .getattr = dt_rib_getattr
 };
+#endif /* IPCP_FLOW_STATS */
 
 #ifdef IPCP_FLOW_STATS
 /*
@@ -573,7 +559,9 @@ int dt_init(struct dt_config cfg)
 {
         int              i;
         int              j;
+#ifdef IPCP_FLOW_STATS
         char             dtstr[RIB_NAME_STRLEN + 1];
+#endif
         enum pol_pff     pp;
         struct conn_info info;
 
@@ -655,17 +643,18 @@ int dt_init(struct dt_config cfg)
                 }
 
         dt.n_flows = 0;
-#endif
+
         sprintf(dtstr, "%s." ADDR_FMT32, DT, ADDR_VAL32(&dt.addr));
         if (rib_reg(dtstr, &r_ops)) {
                 log_err("Failed to register RIB.");
                 goto fail_rib_reg;
         }
+#endif
 
         return 0;
 
- fail_rib_reg:
 #ifdef IPCP_FLOW_STATS
+ fail_rib_reg:
         for (i = 0; i < PROC_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&dt.stat[i].lock);
  fail_stat_lock:
@@ -689,12 +678,14 @@ int dt_init(struct dt_config cfg)
 
 void dt_fini(void)
 {
+#ifdef IPCP_FLOW_STATS
         char dtstr[RIB_NAME_STRLEN + 1];
+#endif
         int i;
 
+#ifdef IPCP_FLOW_STATS
         sprintf(dtstr, "%s.%" PRIu64, DT, dt.addr);
         rib_unreg(dtstr);
-#ifdef IPCP_FLOW_STATS
         for (i = 0; i < PROC_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&dt.stat[i].lock);
 #endif

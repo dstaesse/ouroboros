@@ -125,11 +125,11 @@ struct {
         struct psched *  psched;
 } fa;
 
+#ifdef IPCP_FLOW_STATS
 static int fa_rib_read(const char * path,
                        char *       buf,
                        size_t       len)
 {
-#ifdef IPCP_FLOW_STATS
         struct fa_flow * flow;
         int              fd;
         char             r_addrstr[21];
@@ -199,17 +199,10 @@ static int fa_rib_read(const char * path,
         pthread_rwlock_unlock(&fa.flows_lock);
 
         return strlen(buf);
-#else
-        (void) path;
-        (void) buf;
-        (void) len;
-        return 0;
-#endif
 }
 
 static int fa_rib_readdir(char *** buf)
 {
-#ifdef IPCP_FLOW_STATS
         char   entry[RIB_PATH_LEN + 1];
         size_t i;
         int    idx = 0;
@@ -254,16 +247,11 @@ static int fa_rib_readdir(char *** buf)
  fail_entries:
         pthread_rwlock_unlock(&fa.flows_lock);
         return -ENOMEM;
-#else
-        (void) buf;
-        return 0;
-#endif
 }
 
 static int fa_rib_getattr(const char *      path,
                           struct rib_attr * attr)
 {
-#ifdef IPCP_FLOW_STATS
         int              fd;
         char *           entry;
         struct fa_flow * flow;
@@ -286,10 +274,7 @@ static int fa_rib_getattr(const char *      path,
         }
 
         pthread_rwlock_unlock(&fa.flows_lock);
-#else
-        (void) path;
-        (void) attr;
-#endif
+
         return 0;
 }
 
@@ -298,6 +283,7 @@ static struct rib_ops r_ops = {
         .readdir = fa_rib_readdir,
         .getattr = fa_rib_getattr
 };
+#endif /* IPCP_FLOW_STATS */
 
 static int eid_to_fd(uint64_t eid)
 {
@@ -655,8 +641,10 @@ int fa_init(void)
         if (pthread_cond_init(&fa.cond, &cattr))
                 goto fail_cond;
 
+#ifdef IPCP_FLOW_STATS
         if (rib_reg(FA, &r_ops))
                 goto fail_rib_reg;
+#endif
 
         fa.eid = dt_reg_comp(&fa, &fa_post_packet, FA);
         if ((int) fa.eid < 0)
@@ -669,8 +657,10 @@ int fa_init(void)
         return 0;
 
  fail_dt_reg:
+#ifdef IPCP_FLOW_STATS
         rib_unreg(FA);
  fail_rib_reg:
+#endif
         pthread_cond_destroy(&fa.cond);
  fail_cond:
         pthread_condattr_destroy(&cattr);
@@ -684,8 +674,9 @@ int fa_init(void)
 
 void fa_fini(void)
 {
+#ifdef IPCP_FLOW_STATS
         rib_unreg(FA);
-
+#endif
         pthread_cond_destroy(&fa.cond);;
         pthread_mutex_destroy(&fa.mtx);
         pthread_rwlock_destroy(&fa.flows_lock);
