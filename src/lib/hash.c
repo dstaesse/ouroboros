@@ -101,6 +101,7 @@ void mem_hash(enum hash_algo  algo,
                 *(uint8_t *) dst = crc;
                 return;
         }
+
         if (algo == HASH_CRC16) {
                 uint16_t crc = 0;
 
@@ -108,6 +109,7 @@ void mem_hash(enum hash_algo  algo,
                 *(uint16_t *) dst = htobe16(crc);
                 return;
         }
+        
         if (algo == HASH_CRC64) {
                 uint64_t crc = 0;
 
