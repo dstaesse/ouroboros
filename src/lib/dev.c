@@ -1509,16 +1509,13 @@ static int flow_tx_spb(struct flow *        flow,
         else
                 ret = ssm_rbuff_write_b(flow->tx_rb, idx, abstime);
 
-        if (ret < 0) {
-                ssm_pool_remove(proc.pool, idx);
+        if (ret < 0)
                 return ret;
-        }
 
         ssm_flow_set_notify(flow->set, flow->info.id, FLOW_PKT);
         return 0;
 
  enomem:
-        ssm_pool_remove(proc.pool, idx);
         return -ENOMEM;
 }
 
@@ -1581,8 +1578,10 @@ static ssize_t flow_write_stream(struct flow *     flow,
                 memcpy(ptr, src + off, clen);
 
                 ret = flow_tx_spb(flow, spb, 0, block, dl);
-                if (ret < 0)
+                if (ret < 0) {
+                        ssm_pool_remove(proc.pool, idx);
                         return off > 0 ? (ssize_t) off : (ssize_t) ret;
+                }
 
                 off += clen;
         }
@@ -1651,6 +1650,7 @@ static ssize_t flow_write_frag(struct flow *     flow,
                 ret = flow_tx_spb(flow, spb, flow_frag_role(i, n),
                                   block, dl);
                 if (ret < 0) {
+                        ssm_pool_remove(proc.pool, idx);
                         if (off > 0)
                                 STAT_BUMP(flow->frcti, sdu_snd_tx);
                         return off > 0 ? (ssize_t) off : (ssize_t) ret;
@@ -1736,8 +1736,12 @@ ssize_t flow_write(int          fd,
 
         ret = flow_tx_spb(flow, spb, FRCT_FR_SOLE,
                           !(flags & FLOWFWNOBLOCK), dl);
+        if (ret < 0) {
+                ssm_pool_remove(proc.pool, idx);
+                return (ssize_t) ret;
+        }
 
-        return ret < 0 ? (ssize_t) ret : (ssize_t) count;
+        return (ssize_t) count;
 }
 
 static ssize_t flow_rx_spb(struct flow *         flow,
