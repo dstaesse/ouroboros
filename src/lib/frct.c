@@ -3789,6 +3789,15 @@ static int frcti_snd(struct frcti *       frcti,
         return 0;
 }
 
+/* Stream FIN is armed for rxm; needs to be in window. */
+static __inline__ bool stream_fin_blocked(struct frcti * frcti)
+{
+        if (!frcti->stream)
+                return false;
+
+        return !before(frcti->snd_cr.seqno, frcti->snd_cr.lwe + RQ_SIZE);
+}
+
 /*
  * Stream: 0-byte FRCT_FIN DATA so peer's flow_read returns 0 at this
  * byte. Msg: control packet with FRCT_FIN flag, snd_cr.seqno carried
@@ -3806,6 +3815,13 @@ static void frcti_fin_snd(struct frcti * frcti)
         pthread_rwlock_wrlock(&frcti->lock);
 
         already = frcti->snd_fin_sent;
+
+        /* Defer before committing snd_fin_sent; linger loop retries. */
+        if (!already && stream_fin_blocked(frcti)) {
+                pthread_rwlock_unlock(&frcti->lock);
+                return;
+        }
+
         frcti->snd_fin_sent = true;
         fin_seqno = frcti->snd_cr.seqno;
 
