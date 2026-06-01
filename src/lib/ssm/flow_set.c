@@ -299,26 +299,34 @@ void ssm_flow_set_notify(struct ssm_flow_set * set,
                          int                   event)
 {
         struct flowevent * e;
+        ssize_t            idx;
 
         assert(set);
         assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
 
         pthread_mutex_lock(set->lock);
 
-        if (set->mtable[flow_id] == -1) {
+        idx = set->mtable[flow_id];
+        if (idx == -1) {
                 pthread_mutex_unlock(set->lock);
                 return;
         }
 
-        e = fqueue_ptr(set, set->mtable[flow_id]) +
-                set->heads[set->mtable[flow_id]];
+        /* Ring full: drop redundant FLOW_PKT, reserve a slot for ctrl. */
+        if (set->heads[idx] >= SSM_RBUFF_SIZE
+            || (event == FLOW_PKT && set->heads[idx] >= SSM_RBUFF_SIZE - 1)) {
+                pthread_mutex_unlock(set->lock);
+                return;
+        }
+
+        e = fqueue_ptr(set, idx) + set->heads[idx];
 
         e->flow_id = flow_id;
         e->event   = event;
 
-        ++set->heads[set->mtable[flow_id]];
+        ++set->heads[idx];
 
-        pthread_cond_signal(&set->conds[set->mtable[flow_id]]);
+        pthread_cond_signal(&set->conds[idx]);
 
         pthread_mutex_unlock(set->lock);
 }
