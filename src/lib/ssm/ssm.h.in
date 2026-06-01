@@ -83,6 +83,7 @@
 /* Size class configuration */
 #define SSM_POOL_MAX_CLASSES     9
 #define SSM_POOL_SHARDS          @SSM_POOL_SHARDS@
+#define SSM_POOL_RECLAIM_AGE_S   @SSM_POOL_RECLAIM_AGE_S@
 
 /* Internal structures - exposed for testing */
 #ifdef __cplusplus
@@ -125,6 +126,7 @@ struct ssm_pk_buff {
         uint32_t pk_head;       /* Head offset into data       */
         uint32_t pk_tail;       /* Tail offset into data       */
         uint32_t off;           /* Block offset in pool        */
+        uint64_t alloc_ts;      /* CLOCK_MONOTONIC ns at alloc */
         uint8_t  data[];        /* Packet data                 */
 };
 

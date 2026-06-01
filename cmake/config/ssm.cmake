@@ -29,6 +29,8 @@ set(SSM_FLOW_SET_PREFIX "/${SHM_PREFIX}.set." CACHE INTERNAL
 # Number of shards per size class for reducing contention
 set(SSM_POOL_SHARDS 4 CACHE STRING
     "Number of allocator shards per size class")
+set(SSM_POOL_RECLAIM_AGE_S 60 CACHE STRING
+    "Minimum age in seconds before a block is presumed stale and reclaimed")
 
 # Global Shared Packet Pool (GSPP) - for privileged processes
 # Shared by all processes in 'ouroboros' group (~60 MB total)

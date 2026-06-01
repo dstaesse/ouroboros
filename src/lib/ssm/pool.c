@@ -38,9 +38,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+
+static __inline__ uint64_t pool_now_ns(void)
+{
+        struct timespec ts;
+
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+
+        return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+}
 
 /* Global Shared Packet Pool (GSPP) configuration */
 static const struct ssm_size_class_cfg ssm_gspp_cfg[SSM_POOL_MAX_CLASSES] = {
@@ -236,6 +246,7 @@ static void init_size_classes(struct ssm_pool * pool)
 
                         STORE(&blk->refcount, 0);
                         blk->allocator_pid = 0;
+                        blk->alloc_ts      = 0;
                         STORE(&blk->next_offset, 0);
 
                         list_add_head(&sc->shards[0].free_list, blk,
@@ -266,19 +277,31 @@ static size_t reclaim_pid_from_sc(struct _ssm_size_class * sc,
         size_t               i;
         size_t               recovered = 0;
         struct ssm_pk_buff * blk;
+        uint64_t             now;
+        uint64_t             min_age_ns;
 
-        region = (uint8_t *) pool_base + sc->pool_start;
+        region     = (uint8_t *) pool_base + sc->pool_start;
+        now        = pool_now_ns();
+        min_age_ns = (uint64_t) SSM_POOL_RECLAIM_AGE_S * 1000000000ULL;
 
         for (i = 0; i < sc->object_count; ++i) {
                 blk = (struct ssm_pk_buff *)(region + i * sc->object_size);
 
-                if (blk->allocator_pid == pid && LOAD(&blk->refcount) > 0) {
-                        STORE(&blk->refcount, 0);
-                        blk->allocator_pid = 0;
-                        list_add_head(&shard->free_list, blk, pool_base);
-                        FETCH_ADD(&shard->free_count, 1);
-                        recovered++;
-                }
+                if (blk->allocator_pid != pid)
+                        continue;
+
+                if (LOAD(&blk->refcount) == 0)
+                        continue;
+
+                /* Recent: a live consumer may still hold the handoff. */
+                if (now - blk->alloc_ts < min_age_ns)
+                        continue;
+
+                STORE(&blk->refcount, 0);
+                blk->allocator_pid = 0;
+                list_add_head(&shard->free_list, blk, pool_base);
+                FETCH_ADD(&shard->free_count, 1);
+                recovered++;
         }
 
         return recovered;
@@ -339,6 +362,7 @@ static __inline__ ssize_t init_block(struct ssm_pool *        pool,
 {
         STORE(&blk->refcount, 1);
         blk->allocator_pid = getpid();
+        blk->alloc_ts      = pool_now_ns();
         blk->size          = (uint32_t) (sc->object_size -
                                          sizeof(struct ssm_pk_buff));
         blk->pk_head       = SSM_PK_BUFF_HEADSPACE;
