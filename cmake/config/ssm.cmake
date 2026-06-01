@@ -19,18 +19,8 @@ set(SSM_PK_BUFF_HEADSPACE 256 CACHE STRING
     "Bytes of headspace to reserve for future headers")
 set(SSM_PK_BUFF_TAILSPACE 32 CACHE STRING
     "Bytes of tailspace to reserve for future tails")
-# Sized to absorb burst arrivals from fragmented SDUs without
-# overflowing at the eth->FRCT boundary. Must hold at least one
-# full FRCT reorder window plus margin for transient app-thread
-# unavailability; 4x FRCT_REORDER_QUEUE_SIZE leaves comfortable
-# burst headroom. Floor at 1024 for small RQ configs.
-math(EXPR _SSM_RBUFF_DEFAULT "${FRCT_REORDER_QUEUE_SIZE} * 4")
-if(_SSM_RBUFF_DEFAULT LESS 1024)
-    set(_SSM_RBUFF_DEFAULT 1024)
-endif()
-set(SSM_RBUFF_SIZE ${_SSM_RBUFF_DEFAULT} CACHE STRING
-    "Number of blocks in rbuff buffer, must be a power of 2")
-unset(_SSM_RBUFF_DEFAULT)
+set(SSM_RBUFF_SIZE 1024 CACHE STRING
+    "Number of slots in a flow's rbuff ring; must be a power of 2")
 set(SSM_RBUFF_PREFIX "/${SHM_PREFIX}.rbuff." CACHE INTERNAL
     "Prefix for rbuff POSIX shared memory filenames")
 set(SSM_FLOW_SET_PREFIX "/${SHM_PREFIX}.set." CACHE INTERNAL
