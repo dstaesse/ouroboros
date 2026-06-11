@@ -103,8 +103,6 @@ int load_kex_config(const char *        name,
         assert(name != NULL);
         assert(cfg != NULL);
 
-        memset(cfg, 0, sizeof(*cfg));
-
         /* Load encryption config */
         if (!file_exists(path))
                 log_dbg("No encryption %s for %s.", path, name);

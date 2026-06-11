@@ -1183,6 +1183,129 @@ static int test_oap_server_name_mismatch(void)
         return TEST_RC_FAIL;
 }
 
+/* Client requiring auth rejects a response without certificate */
+static int test_oap_cli_requires_srv_auth(void)
+{
+        struct oap_test_ctx ctx;
+
+        test_default_cfg();
+        test_cfg.srv.auth     = NO_AUTH;
+        test_cfg.cli.req_auth = true;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client should reject unauthenticated server.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Server requiring auth rejects a request without certificate */
+static int test_oap_srv_requires_cli_auth(void)
+{
+        struct oap_test_ctx ctx;
+
+        test_default_cfg();
+        test_cfg.srv.req_auth = true;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server should reject unauthenticated client.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Roundtrip succeeds when both sides require and provide auth */
+static int test_oap_mutual_req_auth(void)
+{
+        struct oap_test_ctx ctx;
+
+        test_default_cfg();
+        test_cfg.srv.req_auth = true;
+        test_cfg.cli.auth     = AUTH;
+        test_cfg.cli.req_auth = true;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
+                printf("Client and server keys do not match!\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int oap_test(int    argc,
              char **argv)
 {
@@ -1220,6 +1343,10 @@ int oap_test(int    argc,
         ret |= test_oap_replay_packet();
         ret |= test_oap_missing_root_ca();
         ret |= test_oap_server_name_mismatch();
+
+        ret |= test_oap_cli_requires_srv_auth();
+        ret |= test_oap_srv_requires_cli_auth();
+        ret |= test_oap_mutual_req_auth();
 #else
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_roundtrip_kex_only;
@@ -1245,6 +1372,9 @@ int oap_test(int    argc,
         (void) test_oap_replay_packet;
         (void) test_oap_missing_root_ca;
         (void) test_oap_server_name_mismatch;
+        (void) test_oap_cli_requires_srv_auth;
+        (void) test_oap_srv_requires_cli_auth;
+        (void) test_oap_mutual_req_auth;
 
         ret = TEST_RC_SKIP;
 #endif

@@ -114,18 +114,23 @@ struct sec_config {
                 int          nid;
                 int          mode;
         } x; /* key exchange */
+
         struct {
                 const char * str;
                 int          nid;
         } k; /* kdf */
+
         struct {
                 const char * str;
                 int          nid;
         } c; /* cipher */
+
         struct {
                 const char * str;
                 int          nid;
         } d; /* digest */
+
+        bool req_auth; /* require peer authentication */
 };
 
 /* Helper macros to set sec_config fields consistently */

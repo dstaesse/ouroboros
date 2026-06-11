@@ -20,6 +20,8 @@ set(FLOW_ALLOC_TIMEOUT 20000 CACHE STRING
 # OAP (Ouroboros Authentication Protocol)
 set(OAP_REPLAY_TIMER 20 CACHE STRING
   "OAP replay protection window (s)")
+set(OAP_CLIENT_AUTH_DEFAULT TRUE CACHE BOOL
+  "Client requires the server to authenticate by default (FALSE for testing)")
 set(DEBUG_PROTO_OAP FALSE CACHE BOOL
   "Add Flow allocation protocol message output to IRMd debug logging")
 

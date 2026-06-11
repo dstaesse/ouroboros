@@ -38,6 +38,7 @@ struct test_sec_cfg {
         int  md;        /* Digest NID for signatures */
         int  kem_mode;  /* KEM encapsulation mode (0 for ECDH) */
         bool auth;      /* Use authentication (certificates) */
+        bool req_auth;  /* Require peer authentication */
 };
 
 /* Test configuration - set by each test before running roundtrip */

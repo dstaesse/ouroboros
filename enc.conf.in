@@ -22,7 +22,8 @@
 # cipher=<cipher>      Symmetric cipher algorithm
 # kdf=<hash>           Key derivation function hash algorithm
 # kem_mode=<mode>      KEM encapsulation mode (server or client)
-# none                 Explicitly disable encryption
+# auth=<policy>        Peer authentication policy (required or optional)
+# encryption=none      Explicitly disable encryption
 #
 # Supported KEX algorithms (kex=):
 # --------------------------------
@@ -75,6 +76,20 @@
 #   sha3-512            SHA3-512
 #   blake2b512          BLAKE2b-512
 #   blake2s256          BLAKE2s-256
+#
+# Peer Authentication (auth=):
+# ----------------------------
+#
+#   optional   Accept unauthenticated peers
+#   required   Reject peers that do not present a valid certificate
+#
+# This setting applies to the *peer*: in a client config it requires
+# the server to authenticate; in a server config it requires the
+# client. The defaults mirror the web: a client config defaults to
+# required (the server must authenticate), a server config defaults
+# to optional (client authentication is opt-in). Set auth=required on
+# the server too for mutual authentication. Combine encryption=none
+# with auth=required for authenticated but unencrypted flows.
 #
 # KEM Mode (kem_mode=):
 # ---------------------
@@ -147,4 +162,8 @@ kdf=sha256
 # kdf=sha512
 #
 # Disable encryption:
-# none
+# encryption=none
+#
+# Authentication required, no encryption:
+# encryption=none
+# auth=required

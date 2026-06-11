@@ -36,6 +36,8 @@ int load_srv_kex_config(const struct name_info * info,
 
         memset(cfg, 0, sizeof(*cfg));
 
+        cfg->req_auth = test_cfg.srv.req_auth;
+
         if (test_cfg.srv.kex == NID_undef)
                 return 0;
 
@@ -54,6 +56,8 @@ int load_cli_kex_config(const struct name_info * info,
         (void) info;
 
         memset(cfg, 0, sizeof(*cfg));
+
+        cfg->req_auth = test_cfg.cli.req_auth;
 
         if (test_cfg.cli.kex == NID_undef)
                 return 0;

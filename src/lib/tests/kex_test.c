@@ -44,6 +44,9 @@
 #define KEX_CONFIG_NONE \
         "none\n"
 
+#define KEX_CONFIG_NO_ENC \
+        "encryption=none\n"
+
 #define KEX_CONFIG_WHITESPACE \
         "# Comment line\n" \
         "kex = X448" \
@@ -57,6 +60,25 @@
 #define KEX_CONFIG_DIGEST \
         "kex=X25519\n" \
         "digest=sha384\n"
+
+#define KEX_CONFIG_AUTH \
+        "auth=required\n"
+
+#define KEX_CONFIG_AUTH_INVALID \
+        "auth=mandatory\n"
+
+#define KEX_CONFIG_AUTH_OPTIONAL \
+        "auth=optional\n"
+
+#define KEX_CONFIG_AUTH_THEN_NO_ENC \
+        "auth=required\n" \
+        "digest=sha512\n" \
+        "encryption=none\n"
+
+#define KEX_CONFIG_NO_ENC_THEN_AUTH \
+        "encryption=none\n" \
+        "auth=required\n" \
+        "digest=sha512\n"
 
 /* Test key material for key loading tests */
 #define X25519_PRIVKEY_PEM \
@@ -639,7 +661,8 @@ static int test_kex_parse_config_custom(void)
         return TEST_RC_FAIL;
 }
 
-static int test_kex_parse_config_none(void)
+/* The old bare 'none' keyword must be rejected loudly */
+static int test_kex_parse_config_none_rejected(void)
 {
         struct sec_config kex;
         FILE *         fp;
@@ -654,14 +677,51 @@ static int test_kex_parse_config_none(void)
                 goto fail;
         }
 
-        if (parse_sec_config(&kex, fp) < 0) {
-                printf("Failed to parse 'none' config.\n");
+        if (parse_sec_config(&kex, fp) == 0) {
+                printf("Bare 'none' keyword should be rejected.\n");
                 fclose(fp);
                 goto fail;
         }
 
-        if (kex.x.nid != NID_undef) {
-                printf("'none' keyword should disable encryption.\n");
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_kex_parse_config_no_enc(void)
+{
+        struct sec_config kex;
+        FILE *         fp;
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+
+        fp = FMEMOPEN_STR(KEX_CONFIG_NO_ENC);
+        if (fp == NULL) {
+                printf("Failed to open memory stream.\n");
+                goto fail;
+        }
+
+        if (parse_sec_config(&kex, fp) < 0) {
+                printf("Failed to parse encryption=none config.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (kex.x.nid != NID_undef || kex.c.nid != NID_undef) {
+                printf("encryption=none should disable encryption.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (kex.d.nid != NID_sha256) {
+                printf("encryption=none should keep the digest.\n");
                 fclose(fp);
                 goto fail;
         }
@@ -799,6 +859,202 @@ static int test_kex_parse_config_digest(void)
         return TEST_RC_FAIL;
 }
 
+static int test_kex_parse_config_auth(void)
+{
+        struct sec_config kex;
+        FILE *         fp;
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+
+        fp = FMEMOPEN_STR(KEX_CONFIG_AUTH);
+        if (fp == NULL) {
+                printf("Failed to open memory stream.\n");
+                goto fail;
+        }
+
+        if (parse_sec_config(&kex, fp) < 0) {
+                printf("Failed to parse auth config.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (!kex.req_auth) {
+                printf("auth=required not parsed correctly.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_kex_parse_config_auth_invalid(void)
+{
+        struct sec_config kex;
+        FILE *         fp;
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+
+        fp = FMEMOPEN_STR(KEX_CONFIG_AUTH_INVALID);
+        if (fp == NULL) {
+                printf("Failed to open memory stream.\n");
+                goto fail;
+        }
+
+        if (parse_sec_config(&kex, fp) == 0) {
+                printf("Invalid auth value should be rejected.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* A caller-seeded req_auth survives parsing when no auth= line is set */
+static int test_kex_parse_config_auth_seed(void)
+{
+        struct sec_config kex;
+        FILE *         fp;
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+        kex.req_auth = true;
+
+        fp = FMEMOPEN_STR(KEX_CONFIG_NO_ENC);
+        if (fp == NULL) {
+                printf("Failed to open memory stream.\n");
+                goto fail;
+        }
+
+        if (parse_sec_config(&kex, fp) < 0) {
+                printf("Failed to parse config.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (!kex.req_auth) {
+                printf("Seeded req_auth should survive parsing.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* An explicit auth=optional clears a caller-seeded req_auth */
+static int test_kex_parse_config_auth_optional(void)
+{
+        struct sec_config kex;
+        FILE *         fp;
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+        kex.req_auth = true;
+
+        fp = FMEMOPEN_STR(KEX_CONFIG_AUTH_OPTIONAL);
+        if (fp == NULL) {
+                printf("Failed to open memory stream.\n");
+                goto fail;
+        }
+
+        if (parse_sec_config(&kex, fp) < 0) {
+                printf("Failed to parse auth=optional config.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (kex.req_auth) {
+                printf("auth=optional should clear req_auth.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* encryption=none must not drop auth=required or the digest */
+static int test_kex_parse_config_auth_no_enc(const char * config)
+{
+        struct sec_config kex;
+        FILE *         fp;
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+
+        fp = FMEMOPEN_STR(config);
+        if (fp == NULL) {
+                printf("Failed to open memory stream.\n");
+                goto fail;
+        }
+
+        if (parse_sec_config(&kex, fp) < 0) {
+                printf("Failed to parse auth + encryption=none.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (!kex.req_auth) {
+                printf("encryption=none should not drop required auth.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (kex.x.nid != NID_undef) {
+                printf("encryption=none should disable encryption.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (kex.d.nid != NID_sha512) {
+                printf("encryption=none should keep the digest.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int kex_test(int     argc,
              char ** argv)
 {
@@ -809,7 +1065,14 @@ int kex_test(int     argc,
 
         ret |= test_kex_create_destroy();
         ret |= test_kex_parse_config_empty();
-        ret |= test_kex_parse_config_none();
+        ret |= test_kex_parse_config_none_rejected();
+        ret |= test_kex_parse_config_no_enc();
+        ret |= test_kex_parse_config_auth();
+        ret |= test_kex_parse_config_auth_invalid();
+        ret |= test_kex_parse_config_auth_seed();
+        ret |= test_kex_parse_config_auth_optional();
+        ret |= test_kex_parse_config_auth_no_enc(KEX_CONFIG_AUTH_THEN_NO_ENC);
+        ret |= test_kex_parse_config_auth_no_enc(KEX_CONFIG_NO_ENC_THEN_AUTH);
 #ifdef HAVE_OPENSSL
         ret |= test_kex_parse_config_custom();
         ret |= test_kex_parse_config_whitespace();

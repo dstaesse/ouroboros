@@ -73,6 +73,9 @@ int load_srv_kex_config(const struct name_info * info,
         assert(info != NULL);
         assert(cfg != NULL);
 
+        memset(cfg, 0, sizeof(*cfg));
+
+        /* Client auth stays opt-in (mTLS); enable with auth=required */
         return load_kex_config(info->name, info->s.enc, cfg);
 }
 
@@ -438,6 +441,11 @@ int oap_srv_process(const struct name_info * info,
 
         if (oap_auth_peer(cli_name, &local_hdr, &peer_hdr) < 0) {
                 log_err_id(id, "Failed to authenticate client.");
+                goto fail_auth;
+        }
+
+        if (kcfg.req_auth && peer_hdr.crt.len == 0) {
+                log_err_id(id, "Client did not provide a certificate.");
                 goto fail_auth;
         }
 

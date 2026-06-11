@@ -162,6 +162,7 @@ int parse_sec_config(struct sec_config * cfg,
         char * equals;
         char * key;
         char * value;
+        bool   no_enc = false;
 
         assert(cfg != NULL);
         assert(fp != NULL);
@@ -172,6 +173,7 @@ int parse_sec_config(struct sec_config * cfg,
         SET_KEX_KDF_NID(cfg, NID_sha256);
         SET_KEX_CIPHER_NID(cfg, NID_aes_256_gcm);
         SET_KEX_DIGEST_NID(cfg, NID_sha256);
+        /* req_auth is seeded per-role by the caller; only auth= overrides it */
 
         while (fgets(line, sizeof(line), fp) != NULL) {
                 char * trimmed;
@@ -180,12 +182,10 @@ int parse_sec_config(struct sec_config * cfg,
                 if (line[0] == '#' || line[0] == '\n')
                         continue;
 
-                /* Check for 'none' keyword */
+                /* Bare 'none' keyword replaced by encryption=none */
                 trimmed = trim_whitespace(line);
-                if (strcmp(trimmed, "none") == 0) {
-                        memset(cfg, 0, sizeof(*cfg));
-                        return 0;
-                }
+                if (strcmp(trimmed, "none") == 0)
+                        return -EINVAL;
 
                 /* Find the = separator */
                 equals = strchr(line, '=');
@@ -221,7 +221,28 @@ int parse_sec_config(struct sec_config * cfg,
                         } else {
                                 return -EINVAL;
                         }
+                } else if (strcmp(key, "auth") == 0) {
+                        if (strcmp(value, "required") == 0) {
+                                cfg->req_auth = true;
+                        } else if (strcmp(value, "optional") == 0) {
+                                cfg->req_auth = false;
+                        } else {
+                                return -EINVAL;
+                        }
+                } else if (strcmp(key, "encryption") == 0) {
+                        if (strcmp(value, "none") != 0)
+                                return -EINVAL;
+                        no_enc = true;
+                } else {
+                        return -EINVAL;
                 }
+        }
+
+        if (no_enc) {
+                /* Digest stays: it belongs to the auth axis */
+                CLEAR_KEX_ALGO(cfg);
+                CLEAR_KEX_KDF(cfg);
+                CLEAR_KEX_CIPHER(cfg);
         }
 
         return 0;
