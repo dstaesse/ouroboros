@@ -50,10 +50,16 @@ static bool file_exists(const char * path)
 {
         struct stat s;
 
-        if (stat(path, &s) < 0 && errno == ENOENT) {
+        if (stat(path, &s) == 0)
+                return true;
+
+        if (errno == ENOENT) {
                 log_dbg("File %s does not exist.", path);
                 return false;
         }
+
+        /* Can't stat for another reason; assume present, fail on load */
+        log_warn("Failed to stat %s: %s.", path, strerror(errno));
 
         return true;
 }

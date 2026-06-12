@@ -24,6 +24,7 @@
 #define OUROBOROS_LIB_PTHREAD_H
 
 #include <pthread.h>
+#include <stdio.h>
 
 static int __attribute__((unused)) __timedwait(pthread_cond_t *        cond,
                                                pthread_mutex_t *       mtx,
@@ -46,6 +47,11 @@ static void __attribute__((unused)) __cleanup_rwlock_unlock(void * rwlock)
 static void __attribute__((unused)) __cleanup_mutex_unlock(void * mutex)
 {
         pthread_mutex_unlock((pthread_mutex_t *) mutex);
+}
+
+static void __attribute__((unused)) __cleanup_fclose(void * fp)
+{
+        fclose((FILE *) fp);
 }
 
 #endif /* OUROBOROS_LIB_PTHREAD_H */

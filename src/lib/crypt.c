@@ -265,12 +265,17 @@ int load_sec_config_file(struct sec_config * cfg,
 
         fp = fopen(path, "r");
         if (fp == NULL) {
-                /* File doesn't exist - disable encryption */
-                CLEAR_KEX_ALGO(cfg);
-                return 0;
+                /* Absent config disables encryption; other errors fail */
+                if (errno == ENOENT) {
+                        CLEAR_KEX_ALGO(cfg);
+                        return 0;
+                }
+                return -errno;
         }
 
+        pthread_cleanup_push(__cleanup_fclose, fp);
         ret = parse_sec_config(cfg, fp);
+        pthread_cleanup_pop(0);
 
         fclose(fp);
 
