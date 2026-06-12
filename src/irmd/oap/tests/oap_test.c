@@ -42,6 +42,7 @@
 #include <test/certs/ecdsa.h>
 
 #include "oap.h"
+#include "oap/auth.h"
 #include "common.h"
 
 #include <stdbool.h>
@@ -1075,6 +1076,150 @@ static int test_oap_replay_packet(void)
         return TEST_RC_FAIL;
 }
 
+/* Encode a distinct OAP session ID from an index */
+static void make_id(uint8_t * id,
+                    size_t    idx)
+{
+        memset(id, 0, OAP_ID_SIZE);
+        memcpy(id, &idx, sizeof(idx));
+}
+
+/*
+ * Replay cache fails closed at capacity: a flood is rejected and no genuine
+ * entry is evicted (so it cannot be replayed).
+ */
+static int test_oap_replay_cap(void)
+{
+        struct oap_hdr  h;
+        struct timespec now;
+        uint8_t         id[OAP_ID_SIZE];
+        uint64_t        stamp;
+        size_t          i;
+
+        TEST_START();
+
+        if (oap_auth_init() < 0) {
+                printf("Failed to init OAP.\n");
+                goto fail;
+        }
+
+        clock_gettime(CLOCK_REALTIME, &now);
+        stamp = TS_TO_UINT64(now);
+
+        memset(&h, 0, sizeof(h));
+        h.id.data   = id;
+        h.id.len    = OAP_ID_SIZE;
+        h.timestamp = stamp;
+
+        /* Fill one generation bucket to capacity with distinct IDs */
+        for (i = 0; i < OAP_REPLAY_MAX; i++) {
+                make_id(id, i);
+                if (oap_check_hdr(&h) != 0) {
+                        printf("Distinct header %zu rejected.\n", i);
+                        goto fail_fini;
+                }
+        }
+
+        /* One past capacity fails closed (rejected, not evict-oldest) */
+        make_id(id, OAP_REPLAY_MAX);
+        if (oap_check_hdr(&h) != -EAUTH) {
+                printf("Header past capacity not fail-closed.\n");
+                goto fail_fini;
+        }
+
+        /* No genuine entry was evicted: the oldest still reads as a replay */
+        make_id(id, 0);
+        if (oap_check_hdr(&h) != -EREPLAY) {
+                printf("Genuine entry evicted under flood.\n");
+                goto fail_fini;
+        }
+
+        oap_auth_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_fini:
+        oap_auth_fini();
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Distinct timestamp generations use separate buckets and are detected
+ * independently (covers the multi-generation / rotation path).
+ */
+static int test_oap_replay_generations(void)
+{
+        struct oap_hdr  h;
+        struct timespec now;
+        uint8_t         id[OAP_ID_SIZE];
+        uint64_t        cur;
+        uint64_t        gen_ns;
+        uint64_t        stamp_a;
+        uint64_t        stamp_b;
+
+        TEST_START();
+
+        if (oap_auth_init() < 0) {
+                printf("Failed to init OAP.\n");
+                goto fail;
+        }
+
+        clock_gettime(CLOCK_REALTIME, &now);
+        cur    = TS_TO_UINT64(now);
+        gen_ns = (uint64_t) OAP_REPLAY_TIMER * BILLION;
+
+        /* stamp_a in the current generation, stamp_b one generation older */
+        stamp_a = cur;
+        stamp_b = (cur / gen_ns) * gen_ns - 1;
+
+        memset(&h, 0, sizeof(h));
+        h.id.data = id;
+        h.id.len  = OAP_ID_SIZE;
+        make_id(id, 1);
+
+        /* First sighting in each generation is accepted */
+        h.timestamp = stamp_a;
+        if (oap_check_hdr(&h) != 0) {
+                printf("Gen-A header rejected.\n");
+                goto fail_fini;
+        }
+
+        h.timestamp = stamp_b;
+        if (oap_check_hdr(&h) != 0) {
+                printf("Gen-B header rejected.\n");
+                goto fail_fini;
+        }
+
+        /* Each generation independently detects its own replay */
+        h.timestamp = stamp_a;
+        if (oap_check_hdr(&h) != -EREPLAY) {
+                printf("Gen-A replay not detected.\n");
+                goto fail_fini;
+        }
+
+        h.timestamp = stamp_b;
+        if (oap_check_hdr(&h) != -EREPLAY) {
+                printf("Gen-B replay not detected.\n");
+                goto fail_fini;
+        }
+
+        oap_auth_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_fini:
+        oap_auth_fini();
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 /* Server rejects client certificate when root CA is missing from store */
 static int test_oap_missing_root_ca(void)
 {
@@ -1525,6 +1670,8 @@ int oap_test(int    argc,
         (void) argv;
 
         ret |= test_oap_auth_init_fini();
+        ret |= test_oap_replay_cap();
+        ret |= test_oap_replay_generations();
 
 #ifdef HAVE_OPENSSL
         ret |= test_oap_roundtrip_auth_only();

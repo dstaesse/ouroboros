@@ -30,7 +30,6 @@
 
 #include <ouroboros/crypt.h>
 #include <ouroboros/errno.h>
-#include <ouroboros/list.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/time.h>
@@ -44,38 +43,99 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct oap_replay_entry {
-        struct list_head next;
-        uint64_t         timestamp;
-        uint8_t          id[OAP_ID_SIZE];
+/*
+ * Replay cache: three timestamp-generation hash buckets. A header's bucket
+ * is gen(T) = T / OAP_REPLAY_TIMER, taken mod 3. Staleness bounds a valid T
+ * to generations {G-1, G, G+1} (G is now's generation; a within-slack future
+ * stamp can reach G+1), which are distinct mod 3; the aliasing generation
+ * G-3 is always rejected as too old first. Each bucket is an open-addressed
+ * hash set whose slots are live iff slot.gen == bucket.gen, so a stale bucket
+ * clears in O(1) by bumping its gen. Overflow fails closed (reject), never
+ * evicts, so a flood cannot displace a genuine entry into a replayable state.
+ */
+#define OAP_REPLAY_GENS 3
+
+struct oap_replay_slot {
+        uint64_t gen; /* live iff == bucket gen; 0 = never used */
+        uint64_t ts;
+        uint8_t  id[OAP_ID_SIZE];
+};
+
+struct oap_replay_bucket {
+        uint64_t                 gen;
+        size_t                   count;
+        struct oap_replay_slot * slots;
 };
 
 static struct {
         struct auth_ctx * ca_ctx;
         struct {
-                struct list_head list;
-                pthread_mutex_t  mtx;
+                size_t                   mask; /* slots per bucket - 1 */
+                size_t                   cap;  /* fail-closed threshold */
+                struct oap_replay_bucket bucket[OAP_REPLAY_GENS];
+                pthread_mutex_t          mtx;
         } replay;
 } oap_auth;
 
+/* FNV-1a over id || ts; the table mask reduces it to a slot index. */
+static size_t replay_hash(const uint8_t * id,
+                          uint64_t        ts)
+{
+        uint64_t hh = 14695981039346656037ULL;
+        size_t   i;
+
+        for (i = 0; i < OAP_ID_SIZE; i++) {
+                hh ^= id[i];
+                hh *= 1099511628211ULL;
+        }
+
+        for (i = 0; i < sizeof(ts); i++) {
+                hh ^= (uint8_t) (ts >> (i * 8));
+                hh *= 1099511628211ULL;
+        }
+
+        return (size_t) hh;
+}
+
 int oap_auth_init(void)
 {
+        size_t m = 1;
+        int    i;
+
         oap_auth.ca_ctx = auth_create_ctx();
         if (oap_auth.ca_ctx == NULL) {
                 log_err("Failed to create OAP auth context.");
                 goto fail_ctx;
         }
 
-        list_head_init(&oap_auth.replay.list);
+        while (m < (size_t) OAP_REPLAY_MAX * 2)
+                m <<= 1;
+
+        oap_auth.replay.mask = m - 1;
+        oap_auth.replay.cap  = OAP_REPLAY_MAX;
+
+        for (i = 0; i < OAP_REPLAY_GENS; i++) {
+                struct oap_replay_bucket * b = &oap_auth.replay.bucket[i];
+                b->gen   = 0;
+                b->count = 0;
+                b->slots = calloc(m, sizeof(*b->slots));
+                if (b->slots == NULL) {
+                        log_err("Failed to alloc OAP replay bucket.");
+                        goto fail_bucket;
+                }
+        }
 
         if (pthread_mutex_init(&oap_auth.replay.mtx, NULL)) {
                 log_err("Failed to init OAP replay mutex.");
-                goto fail_mtx;
+                goto fail_bucket;
         }
 
         return 0;
 
- fail_mtx:
+ fail_bucket:
+        for (i = 0; i < OAP_REPLAY_GENS; i++)
+                free(oap_auth.replay.bucket[i].slots);
+
         auth_destroy_ctx(oap_auth.ca_ctx);
  fail_ctx:
         return -1;
@@ -83,16 +143,13 @@ int oap_auth_init(void)
 
 void oap_auth_fini(void)
 {
-        struct list_head * p;
-        struct list_head * h;
+        int i;
 
         pthread_mutex_lock(&oap_auth.replay.mtx);
 
-        list_for_each_safe(p, h, &oap_auth.replay.list) {
-                struct oap_replay_entry * e;
-                e = list_entry(p, struct oap_replay_entry, next);
-                list_del(&e->next);
-                free(e);
+        for (i = 0; i < OAP_REPLAY_GENS; i++) {
+                free(oap_auth.replay.bucket[i].slots);
+                oap_auth.replay.bucket[i].slots = NULL;
         }
 
         pthread_mutex_unlock(&oap_auth.replay.mtx);
@@ -115,14 +172,16 @@ int oap_auth_add_chain_crt(void * crt)
 #define ID_IS_EQUAL(id1, id2) (memcmp(id1, id2, OAP_ID_SIZE) == 0)
 int oap_check_hdr(const struct oap_hdr * hdr)
 {
-        struct list_head *        p;
-        struct list_head *        h;
-        struct timespec           now;
-        struct oap_replay_entry * new;
-        uint64_t                  stamp;
-        uint64_t                  cur;
-        uint8_t *                 id;
-        ssize_t                   delta;
+        struct oap_replay_bucket * b;
+        struct oap_replay_slot *   slots;
+        struct timespec            now;
+        uint64_t                   stamp;
+        uint64_t                   cur;
+        uint64_t                   gen;
+        uint8_t *                  id;
+        size_t                     h;
+        ssize_t                    delta;
+        int                        ret = 0;
 
         assert(hdr != NULL);
 
@@ -136,52 +195,54 @@ int oap_check_hdr(const struct oap_hdr * hdr)
         delta = (ssize_t)(cur - stamp) / MILLION;
         if (delta < -TIMESYNC_SLACK) {
                 log_err_id(id, "OAP header from %zd ms into future.", -delta);
-                goto fail_stamp;
+                return -EAUTH;
         }
 
         if (delta > OAP_REPLAY_TIMER * 1000) {
                 log_err_id(id, "OAP header too old (%zd ms).", delta);
-                goto fail_stamp;
+                return -EAUTH;
         }
 
-        new = malloc(sizeof(*new));
-        if (new == NULL) {
-                log_err_id(id, "Failed to allocate memory for OAP element.");
-                goto fail_stamp;
-        }
+        gen = stamp / ((uint64_t) OAP_REPLAY_TIMER * BILLION);
 
         pthread_mutex_lock(&oap_auth.replay.mtx);
 
-        list_for_each_safe(p, h, &oap_auth.replay.list) {
-                struct oap_replay_entry * e;
-                e = list_entry(p, struct oap_replay_entry, next);
-                if (cur > e->timestamp + OAP_REPLAY_TIMER * BILLION) {
-                        list_del(&e->next);
-                        free(e);
-                        continue;
-                }
+        b = &oap_auth.replay.bucket[gen % OAP_REPLAY_GENS];
 
-                if (e->timestamp == stamp && ID_IS_EQUAL(e->id, id)) {
-                        log_warn_id(id, "OAP header already known.");
-                        goto fail_replay;
-                }
+        /* Rotate a stale bucket in O(1): its old-gen slots become free. */
+        if (b->gen != gen) {
+                b->gen   = gen;
+                b->count = 0;
         }
 
-        memcpy(new->id, id, OAP_ID_SIZE);
-        new->timestamp = stamp;
+        slots = b->slots;
 
-        list_add_tail(&new->next, &oap_auth.replay.list);
+        h = replay_hash(id, stamp) & oap_auth.replay.mask;
+        while (slots[h].gen == gen) {
+                if (slots[h].ts == stamp && ID_IS_EQUAL(slots[h].id, id)) {
+                        log_warn_id(id, "OAP header already known.");
+                        ret = -EREPLAY;
+                        goto out;
+                }
 
+                h = (h + 1) & oap_auth.replay.mask;
+        }
+
+        /* Empty slot found; fail closed when the window is at capacity. */
+        if (b->count >= oap_auth.replay.cap) {
+                log_warn_id(id, "OAP replay cache full; rejecting.");
+                ret = -EAUTH;
+                goto out;
+        }
+
+        slots[h].gen = gen;
+        slots[h].ts  = stamp;
+        memcpy(slots[h].id, id, OAP_ID_SIZE);
+        b->count++;
+ out:
         pthread_mutex_unlock(&oap_auth.replay.mtx);
 
-        return 0;
-
- fail_replay:
-        pthread_mutex_unlock(&oap_auth.replay.mtx);
-        free(new);
-        return -EREPLAY;
- fail_stamp:
-        return -EAUTH;
+        return ret;
 }
 
 int oap_auth_peer(char *                    name,
