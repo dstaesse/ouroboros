@@ -1695,12 +1695,43 @@ int openssl_auth_add_crt_to_store(void * store,
         return ret == 1 ? 0 : -1;
 }
 
-int openssl_verify_crt(void * store,
-                       void * crt)
+void * openssl_auth_create_chain(void)
+{
+        return sk_X509_new_null();
+}
+
+void openssl_auth_destroy_chain(void * chain)
+{
+        sk_X509_pop_free((STACK_OF(X509) *) chain, X509_free);
+}
+
+int openssl_auth_add_crt_to_chain(void * chain,
+                                  void * crt)
+{
+        if (X509_up_ref((X509 *) crt) != 1)
+                goto fail_ref;
+
+        if (sk_X509_push((STACK_OF(X509) *) chain, (X509 *) crt) == 0)
+                goto fail_push;
+
+        return 0;
+ fail_push:
+        X509_free((X509 *) crt);
+ fail_ref:
+        return -1;
+}
+
+int openssl_verify_crt_pin(void * store,
+                           void * untrusted,
+                           void * crt,
+                           void * pin)
 {
         X509_STORE_CTX * ctx;
         X509_STORE *     _store;
         X509*            _crt;
+        STACK_OF(X509) * chain;
+        int              i;
+        int              n;
         int              ret;
 
         _store = (X509_STORE *) store;
@@ -1710,7 +1741,8 @@ int openssl_verify_crt(void * store,
         if (ctx == NULL)
                 goto fail_store_ctx;
 
-        ret = X509_STORE_CTX_init(ctx, _store, _crt, NULL);
+        ret = X509_STORE_CTX_init(ctx, _store, _crt,
+                                  (STACK_OF(X509) *) untrusted);
         if (ret != 1)
                 goto fail_ca;
 
@@ -1718,13 +1750,39 @@ int openssl_verify_crt(void * store,
         if (ret != 1)
                 goto fail_ca;
 
+        /* Peer cert only verifies a signature; gate on sig KU, not role. */
+        if ((X509_get_key_usage(_crt) & KU_DIGITAL_SIGNATURE) == 0)
+                goto fail_ca;
+
+        if (pin != NULL) {
+                chain = X509_STORE_CTX_get0_chain(ctx);
+                if (chain == NULL)
+                        goto fail_ca;
+                n = sk_X509_num(chain);
+                for (i = 1; i < n; i++) /* Skip the leaf */
+                        if (X509_cmp(sk_X509_value(chain, i), pin) == 0)
+                                break;
+                if (i == n)
+                        goto fail_pin;
+        }
+
         X509_STORE_CTX_free(ctx);
 
         return 0;
+ fail_pin:
+        X509_STORE_CTX_free(ctx);
+        return -ENOENT;
  fail_ca:
         X509_STORE_CTX_free(ctx);
  fail_store_ctx:
-        return -1;
+        return -EAUTH;
+}
+
+int openssl_verify_crt(void * store,
+                       void * untrusted,
+                       void * crt)
+{
+        return openssl_verify_crt_pin(store, untrusted, crt, NULL);
 }
 
 static const EVP_MD * select_md(EVP_PKEY * pkey,
@@ -1737,6 +1795,12 @@ static const EVP_MD * select_md(EVP_PKEY * pkey,
                 return NULL; /* Classical requires explicit nid */
 
         return EVP_get_digestbynid(nid);
+}
+
+bool openssl_pk_requires_md(const EVP_PKEY * pk)
+{
+        /* Provider-based (PQC) signatures have an intrinsic digest */
+        return EVP_PKEY_get_id(pk) >= 0;
 }
 
 int openssl_sign(EVP_PKEY * pkp,

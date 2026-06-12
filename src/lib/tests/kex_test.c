@@ -80,6 +80,12 @@
         "auth=required\n" \
         "digest=sha512\n"
 
+#define KEX_CONFIG_CACERT \
+        "cacert=/etc/ouroboros/security/cacert/ca.crt\n"
+
+#define KEX_CONFIG_UNKNOWN_KEY \
+        "autth=required\n"
+
 /* Test key material for key loading tests */
 #define X25519_PRIVKEY_PEM \
         "-----BEGIN PRIVATE KEY-----\n" \
@@ -1055,6 +1061,81 @@ static int test_kex_parse_config_auth_no_enc(const char * config)
         return TEST_RC_FAIL;
 }
 
+static int test_kex_parse_config_cacert(void)
+{
+        struct sec_config kex;
+        FILE *         fp;
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+
+        fp = FMEMOPEN_STR(KEX_CONFIG_CACERT);
+        if (fp == NULL) {
+                printf("Failed to open memory stream.\n");
+                goto fail;
+        }
+
+        if (parse_sec_config(&kex, fp) < 0) {
+                printf("Failed to parse cacert config.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (strcmp(kex.cacert,
+                   "/etc/ouroboros/security/cacert/ca.crt") != 0) {
+                printf("cacert not parsed correctly.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        if (kex.req_auth) {
+                printf("cacert must not imply req_auth.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_kex_parse_config_unknown_key(void)
+{
+        struct sec_config kex;
+        FILE *         fp;
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+
+        fp = FMEMOPEN_STR(KEX_CONFIG_UNKNOWN_KEY);
+        if (fp == NULL) {
+                printf("Failed to open memory stream.\n");
+                goto fail;
+        }
+
+        if (parse_sec_config(&kex, fp) == 0) {
+                printf("Unknown key should be rejected.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int kex_test(int     argc,
              char ** argv)
 {
@@ -1073,6 +1154,8 @@ int kex_test(int     argc,
         ret |= test_kex_parse_config_auth_optional();
         ret |= test_kex_parse_config_auth_no_enc(KEX_CONFIG_AUTH_THEN_NO_ENC);
         ret |= test_kex_parse_config_auth_no_enc(KEX_CONFIG_NO_ENC_THEN_AUTH);
+        ret |= test_kex_parse_config_cacert();
+        ret |= test_kex_parse_config_unknown_key();
 #ifdef HAVE_OPENSSL
         ret |= test_kex_parse_config_custom();
         ret |= test_kex_parse_config_whitespace();

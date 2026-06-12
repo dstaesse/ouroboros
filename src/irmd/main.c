@@ -1895,12 +1895,14 @@ void * irm_sanitize(void * o)
         return (void *) 0;
 }
 
-static int irm_load_store(char * dpath)
+static int irm_load_store(char * dpath,
+                          bool   anchor)
 {
         struct stat     st;
         struct dirent * dent;
         DIR *           dir;
         void *          crt;
+        int             ret;
 
         if (stat(dpath, &st) == -1) {
                 log_dbg("Store directory %s not found.", dpath);
@@ -1944,7 +1946,9 @@ static int irm_load_store(char * dpath)
                         goto fail_file;
                 }
 
-                if (oap_auth_add_ca_crt(crt) < 0) {
+                ret = anchor ? oap_auth_add_ca_crt(crt)
+                             : oap_auth_add_chain_crt(crt);
+                if (ret < 0) {
                         log_err("Failed to add certificate from %s to store.",
                                 path);
                         goto fail_crt_add;
@@ -2088,12 +2092,12 @@ static int irm_init(void)
                 goto fail_oap;
         }
 
-        if (irm_load_store(OUROBOROS_CA_CRT_DIR) < 0) {
+        if (irm_load_store(OUROBOROS_CA_CRT_DIR, true) < 0) {
                 log_err("Failed to load CA certificates.");
                 goto fail_load_store;
         }
 
-        if (irm_load_store(OUROBOROS_CHAIN_DIR) < 0) {
+        if (irm_load_store(OUROBOROS_CHAIN_DIR, false) < 0) {
                 log_err("Failed to load intermediate certificates.");
                 goto fail_load_store;
         }

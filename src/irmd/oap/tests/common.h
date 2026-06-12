@@ -32,13 +32,14 @@
 
 /* Per-side security configuration for tests */
 struct test_sec_cfg {
-        int  kex;       /* KEX algorithm NID */
-        int  cipher;    /* Cipher NID for encryption */
-        int  kdf;       /* KDF NID for key derivation */
-        int  md;        /* Digest NID for signatures */
-        int  kem_mode;  /* KEM encapsulation mode (0 for ECDH) */
-        bool auth;      /* Use authentication (certificates) */
-        bool req_auth;  /* Require peer authentication */
+        int          kex;      /* KEX algorithm NID */
+        int          cipher;   /* Cipher NID for encryption */
+        int          kdf;      /* KDF NID for key derivation */
+        int          md;       /* Digest NID for signatures */
+        int          kem_mode; /* KEM encapsulation mode (0 for ECDH) */
+        bool         auth;     /* Use authentication (certificates) */
+        bool         req_auth; /* Require peer authentication */
+        const char * cacert;   /* Pinned issuing CA path */
 };
 
 /* Test configuration - set by each test before running roundtrip */

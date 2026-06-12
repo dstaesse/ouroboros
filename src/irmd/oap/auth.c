@@ -106,6 +106,11 @@ int oap_auth_add_ca_crt(void * crt)
         return auth_add_crt_to_store(oap_auth.ca_ctx, crt);
 }
 
+int oap_auth_add_chain_crt(void * crt)
+{
+        return auth_add_crt_to_chain(oap_auth.ca_ctx, crt);
+}
+
 #define TIMESYNC_SLACK 100 /* ms */
 #define ID_IS_EQUAL(id1, id2) (memcmp(id1, id2, OAP_ID_SIZE) == 0)
 int oap_check_hdr(const struct oap_hdr * hdr)
@@ -179,16 +184,20 @@ int oap_check_hdr(const struct oap_hdr * hdr)
         return -EAUTH;
 }
 
-int oap_auth_peer(char *                 name,
-                  const struct oap_hdr * local_hdr,
-                  const struct oap_hdr * peer_hdr)
+int oap_auth_peer(char *                    name,
+                  const struct sec_config * cfg,
+                  const struct oap_hdr *    local_hdr,
+                  const struct oap_hdr *    peer_hdr)
 {
         void *     crt;
         void *     pk  = NULL;
+        void *     pin = NULL;
         buffer_t   sign; /* Signed region */
         uint8_t *  id = peer_hdr->id.data;
+        int        ret;
 
         assert(name != NULL);
+        assert(cfg != NULL);
         assert(local_hdr != NULL);
         assert(peer_hdr != NULL);
 
@@ -198,6 +207,10 @@ int oap_auth_peer(char *                 name,
         }
 
         if (peer_hdr->crt.len == 0) {
+                if (cfg->req_auth) {
+                        log_err_id(id, "Peer did not provide a certificate.");
+                        goto fail_check;
+                }
                 log_dbg_id(id, "No crt provided.");
                 name[0] = '\0';
                 return 0;
@@ -217,19 +230,40 @@ int oap_auth_peer(char *                 name,
 
         log_dbg_id(id, "Got public key from crt.");
 
-        if (auth_verify_crt(oap_auth.ca_ctx, crt) < 0) {
-                log_err_id(id, "Failed to verify peer with CA store.");
+        if (cfg->cacert[0] != '\0' &&
+            crypt_load_crt_file(cfg->cacert, &pin) < 0) {
+                log_err_id(id, "Failed to load pinned CA %s.", cfg->cacert);
                 goto fail_crt;
         }
 
+        ret = auth_verify_crt_pin(oap_auth.ca_ctx, crt, pin);
+        if (ret == -ENOENT) {
+                log_err_id(id, "Peer crt not issued by pinned CA %s.",
+                           cfg->cacert);
+                goto fail_pin;
+        }
+
+        if (ret < 0) {
+                log_err_id(id, "Failed to verify peer with CA store.");
+                goto fail_pin;
+        }
+
         log_dbg_id(id, "Successfully verified peer crt.");
+
+        /* Digest pin: peer must sign with the configured digest */
+        if (crypt_pk_requires_md(pk) &&
+            cfg->d.nid != NID_undef && peer_hdr->md_nid != cfg->d.nid) {
+                log_err_id(id, "Peer did not sign with %s.",
+                           md_nid_to_str(cfg->d.nid));
+                goto fail_pin;
+        }
 
         sign = peer_hdr->hdr;
         sign.len -= peer_hdr->sig.len;
 
         if (auth_verify_sig(pk, peer_hdr->md_nid, sign, peer_hdr->sig) < 0) {
                 log_err_id(id, "Failed to verify signature.");
-                goto fail_check_sig;
+                goto fail_pin;
         }
 
         if (crypt_get_crt_name(crt, name) < 0) {
@@ -237,6 +271,8 @@ int oap_auth_peer(char *                 name,
                 name[0] = '\0';
         }
 
+        if (pin != NULL)
+                crypt_free_crt(pin);
         crypt_free_key(pk);
         crypt_free_crt(crt);
 
@@ -244,7 +280,9 @@ int oap_auth_peer(char *                 name,
 
         return 0;
 
- fail_check_sig:
+ fail_pin:
+        if (pin != NULL)
+                crypt_free_crt(pin);
  fail_crt:
         crypt_free_key(pk);
         crypt_free_crt(crt);

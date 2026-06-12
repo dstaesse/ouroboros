@@ -107,6 +107,23 @@ static const char * signed_server_crt_ec = \
 "ktkxoHAFbjQEPQIhAMInHI7lvRmS0IMw1wBF/WlUZWKvhyU/TeMIZfk/JGCS\n"
 "-----END CERTIFICATE-----\n";
 
+/* Valid CA outside the test chain, for cacert= pin mismatch */
+static __attribute__((unused)) const char * other_ca_crt_ec = \
+"-----BEGIN CERTIFICATE-----\n"
+"MIICNjCCAdugAwIBAgIUTZcZ9hKXyCT/VgTw8TD1TB2mzrgwCgYIKoZIzj0EAwIw\n"
+"cDELMAkGA1UEBhMCQkUxDDAKBgNVBAgMA09WTDEOMAwGA1UEBwwFR2hlbnQxDDAK\n"
+"BgNVBAoMA283czEVMBMGA1UECwwMdW5pdHRlc3QubzdzMR4wHAYDVQQDDBVvdGhl\n"
+"ci1jYS51bml0dGVzdC5vN3MwHhcNMjYwNjEyMTU1MjAzWhcNNDYwNjA3MTU1MjAz\n"
+"WjBwMQswCQYDVQQGEwJCRTEMMAoGA1UECAwDT1ZMMQ4wDAYDVQQHDAVHaGVudDEM\n"
+"MAoGA1UECgwDbzdzMRUwEwYDVQQLDAx1bml0dGVzdC5vN3MxHjAcBgNVBAMMFW90\n"
+"aGVyLWNhLnVuaXR0ZXN0Lm83czBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNtu\n"
+"FghMww2kQ6a+Coe6VPzfBRUZlm7y6/RfbRFPvErowOqKLQP+wCs8Rq46VmHCYTbB\n"
+"OlRwzJKcNoSeJ4MNWUqjUzBRMB0GA1UdDgQWBBTmEP8W6fgViKIjw8CpTuQwyuOi\n"
+"kTAfBgNVHSMEGDAWgBTmEP8W6fgViKIjw8CpTuQwyuOikTAPBgNVHRMBAf8EBTAD\n"
+"AQH/MAoGCCqGSM49BAMCA0kAMEYCIQDQOCfFcOJm49R975RBPfVMy0pXGx/YeQcy\n"
+"6WKAeLuTowIhAISdVZ6KxsgkwuswMtDWAkCBujep0XSBGXtXmi4959DH\n"
+"-----END CERTIFICATE-----\n";
+
 /* Self-signed by server test-1.unittest.o7s using its key */
 static __attribute__((unused)) const char * server_crt_ec = \
 "-----BEGIN CERTIFICATE-----\n"

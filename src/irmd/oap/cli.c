@@ -534,14 +534,8 @@ int oap_cli_complete(void *                   ctx,
         }
 
         /* Authenticate server */
-        if (oap_auth_peer(peer, &s->local_hdr, &peer_hdr) < 0) {
+        if (oap_auth_peer(peer, &s->kcfg, &s->local_hdr, &peer_hdr) < 0) {
                 log_err_id(id, "Failed to authenticate server.");
-                goto fail_oap;
-        }
-
-        /* Required peer auth makes sig and name binding mandatory */
-        if (s->kcfg.req_auth && peer_hdr.crt.len == 0) {
-                log_err_id(id, "Server did not provide a certificate.");
                 goto fail_oap;
         }
 

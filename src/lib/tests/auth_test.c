@@ -400,6 +400,98 @@ static int test_verify_crt_missing_root_ca(void)
         return TEST_RC_FAIL;
 }
 
+/* auth_verify_crt_pin: pin must lie in the verified chain (NULL: any) */
+static int test_verify_crt_pin(void)
+{
+        struct auth_ctx * auth;
+        void *            _root_ca_crt;
+        void *            _im_ca_crt;
+        void *            _signed_server_crt;
+        void *            _other_ca_crt;
+
+        TEST_START();
+
+        auth = auth_create_ctx();
+        if (auth == NULL) {
+                printf("Failed to create auth context.\n");
+                goto fail_create_ctx;
+        }
+
+        if (crypt_load_crt_str(root_ca_crt_ec, &_root_ca_crt) < 0) {
+                printf("Failed to load root crt from string.\n");
+                goto fail_load_root_ca;
+        }
+
+        if (crypt_load_crt_str(im_ca_crt_ec, &_im_ca_crt) < 0) {
+                printf("Failed to load intermediate crt from string.\n");
+                goto fail_load_im_ca;
+        }
+
+        if (crypt_load_crt_str(signed_server_crt_ec, &_signed_server_crt) < 0) {
+                printf("Failed to load signed crt from string.\n");
+                goto fail_load_signed;
+        }
+
+        if (crypt_load_crt_str(other_ca_crt_ec, &_other_ca_crt) < 0) {
+                printf("Failed to load out-of-chain crt from string.\n");
+                goto fail_load_other;
+        }
+
+        if (auth_add_crt_to_store(auth, _root_ca_crt) < 0) {
+                printf("Failed to add root ca crt to auth store.\n");
+                goto fail_verify;
+        }
+
+        if (auth_add_crt_to_store(auth, _im_ca_crt) < 0) {
+                printf("Failed to add intermediate ca crt to auth store.\n");
+                goto fail_verify;
+        }
+
+        if (auth_verify_crt_pin(auth, _signed_server_crt, _im_ca_crt) < 0) {
+                printf("Failed to accept pin on intermediate CA.\n");
+                goto fail_verify;
+        }
+
+        if (auth_verify_crt_pin(auth, _signed_server_crt, _root_ca_crt) < 0) {
+                printf("Failed to accept pin on root CA.\n");
+                goto fail_verify;
+        }
+
+        if (auth_verify_crt_pin(auth, _signed_server_crt, _other_ca_crt) == 0) {
+                printf("Failed to reject out-of-chain pin.\n");
+                goto fail_verify;
+        }
+
+        if (auth_verify_crt_pin(auth, _signed_server_crt, NULL) < 0) {
+                printf("Failed to accept NULL (any) pin.\n");
+                goto fail_verify;
+        }
+
+        crypt_free_crt(_other_ca_crt);
+        crypt_free_crt(_signed_server_crt);
+        crypt_free_crt(_im_ca_crt);
+        crypt_free_crt(_root_ca_crt);
+
+        auth_destroy_ctx(auth);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_verify:
+        crypt_free_crt(_other_ca_crt);
+ fail_load_other:
+        crypt_free_crt(_signed_server_crt);
+ fail_load_signed:
+        crypt_free_crt(_im_ca_crt);
+ fail_load_im_ca:
+        crypt_free_crt(_root_ca_crt);
+ fail_load_root_ca:
+        auth_destroy_ctx(auth);
+ fail_create_ctx:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int test_auth_sign(void)
 {
         uint8_t  buf[TEST_MSG_SIZE];
@@ -580,6 +672,7 @@ int auth_test(int     argc,
         ret |= test_store_add();
         ret |= test_verify_crt();
         ret |= test_verify_crt_missing_root_ca();
+        ret |= test_verify_crt_pin();
         ret |= test_auth_sign();
         ret |= test_auth_bad_signature();
         ret |= test_crt_str();
@@ -593,6 +686,7 @@ int auth_test(int     argc,
         (void) test_store_add;
         (void) test_verify_crt;
         (void) test_verify_crt_missing_root_ca;
+        (void) test_verify_crt_pin;
         (void) test_auth_sign;
         (void) test_auth_bad_signature;
         (void) test_crt_str;

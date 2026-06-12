@@ -136,8 +136,23 @@ void    openssl_auth_destroy_store(void * store);
 int     openssl_auth_add_crt_to_store(void * store,
                                       void * crt);
 
+void *  openssl_auth_create_chain(void);
+
+void    openssl_auth_destroy_chain(void * chain);
+
+int     openssl_auth_add_crt_to_chain(void * chain,
+                                      void * crt);
+
 int     openssl_verify_crt(void * store,
+                           void * untrusted,
                            void * crt);
+
+int     openssl_verify_crt_pin(void * store,
+                               void * untrusted,
+                               void * crt,
+                               void * pin);
+
+bool    openssl_pk_requires_md(const EVP_PKEY * pk);
 
 int     openssl_sign(EVP_PKEY * pkp,
                      int        md_nid,

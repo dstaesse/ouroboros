@@ -141,7 +141,8 @@ struct crypt_ctx {
 };
 
 struct auth_ctx {
-        void * store;
+        void * store; /* trusted anchors             */
+        void * chain; /* untrusted build-only interm */
 };
 
 static int parse_kex_value(const char *        value,
@@ -229,6 +230,10 @@ int parse_sec_config(struct sec_config * cfg,
                         } else {
                                 return -EINVAL;
                         }
+                } else if (strcmp(key, "cacert") == 0) {
+                        if (strlen(value) >= sizeof(cfg->cacert))
+                                return -EINVAL;
+                        strcpy(cfg->cacert, value);
                 } else if (strcmp(key, "encryption") == 0) {
                         if (strcmp(value, "none") != 0)
                                 return -EINVAL;
@@ -988,9 +993,15 @@ struct auth_ctx * auth_create_ctx(void)
         ctx->store = openssl_auth_create_store();
         if (ctx->store == NULL)
                 goto fail_store;
+
+        ctx->chain = openssl_auth_create_chain();
+        if (ctx->chain == NULL)
+                goto fail_chain;
 #endif
         return ctx;
 #ifdef HAVE_OPENSSL
+ fail_chain:
+        openssl_auth_destroy_store(ctx->store);
  fail_store:
         free(ctx);
 #endif
@@ -1003,6 +1014,7 @@ void auth_destroy_ctx(struct auth_ctx * ctx)
         if (ctx == NULL)
                 return;
 #ifdef HAVE_OPENSSL
+        openssl_auth_destroy_chain(ctx->chain);
         openssl_auth_destroy_store(ctx->store);
 #endif
         free(ctx);
@@ -1024,16 +1036,58 @@ int auth_add_crt_to_store(struct auth_ctx * ctx,
 #endif
 }
 
-int auth_verify_crt(struct auth_ctx * ctx,
-                    void *            crt)
+int auth_add_crt_to_chain(struct auth_ctx * ctx,
+                          void *            crt)
 {
+        assert(ctx != NULL);
+        assert(crt != NULL);
+
 #ifdef HAVE_OPENSSL
-        return openssl_verify_crt(ctx->store, crt);
+        return openssl_auth_add_crt_to_chain(ctx->chain, crt);
 #else
         (void) ctx;
         (void) crt;
 
         return 0;
+#endif
+}
+
+int auth_verify_crt(struct auth_ctx * ctx,
+                    void *            crt)
+{
+#ifdef HAVE_OPENSSL
+        return openssl_verify_crt(ctx->store, ctx->chain, crt);
+#else
+        (void) ctx;
+        (void) crt;
+
+        return 0;
+#endif
+}
+
+int auth_verify_crt_pin(struct auth_ctx * ctx,
+                        void *            crt,
+                        void *            pin)
+{
+#ifdef HAVE_OPENSSL
+        return openssl_verify_crt_pin(ctx->store, ctx->chain, crt, pin);
+#else
+        (void) ctx;
+        (void) crt;
+        (void) pin;
+
+        return 0;
+#endif
+}
+
+bool crypt_pk_requires_md(const void * pk)
+{
+#ifdef HAVE_OPENSSL
+        return openssl_pk_requires_md((const EVP_PKEY *) pk);
+#else
+        (void) pk;
+
+        return false;
 #endif
 }
 

@@ -439,13 +439,8 @@ int oap_srv_process(const struct name_info * info,
 
         oap_hdr_init(&local_hdr, peer_hdr.id, kex_buf, *data, NID_undef);
 
-        if (oap_auth_peer(cli_name, &local_hdr, &peer_hdr) < 0) {
+        if (oap_auth_peer(cli_name, &kcfg, &local_hdr, &peer_hdr) < 0) {
                 log_err_id(id, "Failed to authenticate client.");
-                goto fail_auth;
-        }
-
-        if (kcfg.req_auth && peer_hdr.crt.len == 0) {
-                log_err_id(id, "Client did not provide a certificate.");
                 goto fail_auth;
         }
 

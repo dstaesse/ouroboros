@@ -100,6 +100,8 @@ int load_kex_config(const char *        name,
                     const char *        path,
                     struct sec_config * cfg)
 {
+        void * pin;
+
         assert(name != NULL);
         assert(cfg != NULL);
 
@@ -110,6 +112,15 @@ int load_kex_config(const char *        name,
         if (load_sec_config_file(cfg, path) < 0) {
                 log_warn("Failed to load %s for %s.", path, name);
                 return -1;
+        }
+
+        if (cfg->cacert[0] != '\0') {
+                if (crypt_load_crt_file(cfg->cacert, &pin) < 0) {
+                        log_err("Failed to load pinned CA %s for %s.",
+                                cfg->cacert, name);
+                        return -EAUTH;
+                }
+                crypt_free_crt(pin);
         }
 
         if (!IS_KEX_ALGO_SET(cfg)) {

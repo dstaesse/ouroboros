@@ -36,9 +36,10 @@
 
 int  oap_check_hdr(const struct oap_hdr * hdr);
 
-int  oap_auth_peer(char *                 name,
-                   const struct oap_hdr * local_hdr,
-                   const struct oap_hdr * peer_hdr);
+int  oap_auth_peer(char *                    name,
+                   const struct sec_config * cfg,
+                   const struct oap_hdr *    local_hdr,
+                   const struct oap_hdr *    peer_hdr);
 
 int  oap_negotiate_cipher(const struct oap_hdr * peer_hdr,
                           struct sec_config *    kcfg);

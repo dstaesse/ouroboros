@@ -37,6 +37,11 @@ int load_srv_kex_config(const struct name_info * info,
         memset(cfg, 0, sizeof(*cfg));
 
         cfg->req_auth = test_cfg.srv.req_auth;
+        if (test_cfg.srv.cacert != NULL)
+                strcpy(cfg->cacert, test_cfg.srv.cacert);
+
+        /* Digest is kept without kex, as in parse_sec_config */
+        SET_KEX_DIGEST_NID(cfg, test_cfg.srv.md);
 
         if (test_cfg.srv.kex == NID_undef)
                 return 0;
@@ -44,7 +49,6 @@ int load_srv_kex_config(const struct name_info * info,
         SET_KEX_ALGO_NID(cfg, test_cfg.srv.kex);
         SET_KEX_CIPHER_NID(cfg, test_cfg.srv.cipher);
         SET_KEX_KDF_NID(cfg, test_cfg.srv.kdf);
-        SET_KEX_DIGEST_NID(cfg, test_cfg.srv.md);
         SET_KEX_KEM_MODE(cfg, test_cfg.srv.kem_mode);
 
         return 0;
@@ -58,6 +62,11 @@ int load_cli_kex_config(const struct name_info * info,
         memset(cfg, 0, sizeof(*cfg));
 
         cfg->req_auth = test_cfg.cli.req_auth;
+        if (test_cfg.cli.cacert != NULL)
+                strcpy(cfg->cacert, test_cfg.cli.cacert);
+
+        /* Digest is kept without kex, as in parse_sec_config */
+        SET_KEX_DIGEST_NID(cfg, test_cfg.cli.md);
 
         if (test_cfg.cli.kex == NID_undef)
                 return 0;
@@ -65,7 +74,6 @@ int load_cli_kex_config(const struct name_info * info,
         SET_KEX_ALGO_NID(cfg, test_cfg.cli.kex);
         SET_KEX_CIPHER_NID(cfg, test_cfg.cli.cipher);
         SET_KEX_KDF_NID(cfg, test_cfg.cli.kdf);
-        SET_KEX_DIGEST_NID(cfg, test_cfg.cli.md);
         SET_KEX_KEM_MODE(cfg, test_cfg.cli.kem_mode);
 
         return 0;

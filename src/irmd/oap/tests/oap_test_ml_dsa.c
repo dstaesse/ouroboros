@@ -237,6 +237,23 @@ static int test_oap_roundtrip_auth_only(void)
         return roundtrip_auth_only(root_ca_crt_ml, im_ca_crt_ml);
 }
 
+/* Digest pin does not apply to PQC: the digest is intrinsic */
+static int test_oap_cli_md_pin_exempts_pqc(void)
+{
+        test_cfg_init(NID_undef, NID_undef, NID_undef, 0, NO_CLI_AUTH);
+        test_cfg.cli.md = NID_sha256;
+
+        return roundtrip_auth_only(root_ca_crt_ml, im_ca_crt_ml);
+}
+
+static int test_oap_srv_md_pin_exempts_pqc(void)
+{
+        test_cfg_init(NID_undef, NID_undef, NID_undef, 0, CLI_AUTH);
+        test_cfg.srv.md = NID_sha256;
+
+        return roundtrip_auth_only(root_ca_crt_ml, im_ca_crt_ml);
+}
+
 static int test_oap_corrupted_request(void)
 {
         test_cfg_init(NID_MLKEM768, NID_aes_256_gcm, get_random_kdf(),
@@ -422,6 +439,8 @@ int oap_test_ml_dsa(int    argc,
 
 #ifdef HAVE_OPENSSL_ML_KEM
         ret |= test_oap_roundtrip_auth_only();
+        ret |= test_oap_cli_md_pin_exempts_pqc();
+        ret |= test_oap_srv_md_pin_exempts_pqc();
 
         ret |= test_oap_roundtrip_kem_all();
 
@@ -432,6 +451,8 @@ int oap_test_ml_dsa(int    argc,
         ret |= test_oap_truncated_request();
 #else
         (void) test_oap_roundtrip_auth_only;
+        (void) test_oap_cli_md_pin_exempts_pqc;
+        (void) test_oap_srv_md_pin_exempts_pqc;
         (void) test_oap_roundtrip_kem;
         (void) test_oap_roundtrip_kem_all;
         (void) test_oap_kem_srv_uncfg;

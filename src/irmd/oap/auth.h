@@ -23,13 +23,16 @@
 #ifndef OUROBOROS_IRMD_OAP_AUTH_H
 #define OUROBOROS_IRMD_OAP_AUTH_H
 
+#include <ouroboros/crypt.h>
+
 #include "hdr.h"
 
 int  oap_check_hdr(const struct oap_hdr * hdr);
 
 /* name is updated with the peer's certificate name if available */
-int  oap_auth_peer(char *                 name,
-                   const struct oap_hdr * local_hdr,
-                   const struct oap_hdr * peer_hdr);
+int  oap_auth_peer(char *                    name,
+                   const struct sec_config * cfg,
+                   const struct oap_hdr *    local_hdr,
+                   const struct oap_hdr *    peer_hdr);
 
 #endif /* OUROBOROS_IRMD_OAP_AUTH_H */

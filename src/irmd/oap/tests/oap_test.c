@@ -45,7 +45,10 @@
 #include "common.h"
 
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #ifdef HAVE_OPENSSL
 #include <openssl/evp.h>
@@ -1306,6 +1309,213 @@ static int test_oap_mutual_req_auth(void)
         return TEST_RC_FAIL;
 }
 
+/* Write a PEM cert to a temp file for cacert= pinning */
+static int write_tmp_crt(const char * pem,
+                         char *       path)
+{
+        FILE * fp;
+        int    fd;
+
+        strcpy(path, "/tmp/oap_test_pin_XXXXXX");
+
+        fd = mkstemp(path);
+        if (fd < 0)
+                return -1;
+
+        fp = fdopen(fd, "w");
+        if (fp == NULL) {
+                close(fd);
+                goto fail_file;
+        }
+
+        if (fputs(pem, fp) == EOF) {
+                fclose(fp);
+                goto fail_file;
+        }
+
+        fclose(fp);
+
+        return 0;
+
+ fail_file:
+        unlink(path);
+        return -1;
+}
+
+/* Client pins the server CA: in-chain accepted, out-of-chain rejected */
+static int test_oap_cli_pin_ca(const char * pem,
+                               bool         expected)
+{
+        struct oap_test_ctx ctx;
+        char                path[32];
+
+        test_default_cfg();
+
+        TEST_START("(%s)", expected ? "match" : "mismatch");
+
+        if (write_tmp_crt(pem, path) < 0) {
+                printf("Failed to write pinned CA file.\n");
+                goto fail;
+        }
+
+        test_cfg.cli.cacert = path;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail_unlink;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if ((oap_cli_complete_ctx(&ctx) == 0) != expected) {
+                printf("Pinned CA gave wrong verdict.\n");
+                goto fail_cleanup;
+        }
+
+        unlink(path);
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail_unlink:
+        unlink(path);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Server pins the client CA: in-chain accepted, out-of-chain rejected */
+static int test_oap_srv_pin_ca(const char * pem,
+                               bool         expected)
+{
+        struct oap_test_ctx ctx;
+        char                path[32];
+
+        test_default_cfg();
+        test_cfg.cli.auth = AUTH;
+
+        TEST_START("(%s)", expected ? "match" : "mismatch");
+
+        if (write_tmp_crt(pem, path) < 0) {
+                printf("Failed to write pinned CA file.\n");
+                goto fail;
+        }
+
+        test_cfg.srv.cacert = path;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail_unlink;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if ((oap_srv_process_ctx(&ctx) == 0) != expected) {
+                printf("Pinned CA gave wrong verdict.\n");
+                goto fail_cleanup;
+        }
+
+        unlink(path);
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail_unlink:
+        unlink(path);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Client rejects a server signature with a different digest */
+static int test_oap_cli_rejects_md_mismatch(void)
+{
+        struct oap_test_ctx ctx;
+
+        test_default_cfg();
+        test_cfg.srv.md = NID_sha384;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client should reject digest mismatch.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Server rejects a client signature with a different digest */
+static int test_oap_srv_rejects_md_mismatch(void)
+{
+        struct oap_test_ctx ctx;
+
+        test_default_cfg();
+        test_cfg.cli.auth = AUTH;
+        test_cfg.cli.md   = NID_sha384;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server should reject digest mismatch.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int oap_test(int    argc,
              char **argv)
 {
@@ -1347,6 +1557,15 @@ int oap_test(int    argc,
         ret |= test_oap_cli_requires_srv_auth();
         ret |= test_oap_srv_requires_cli_auth();
         ret |= test_oap_mutual_req_auth();
+
+        ret |= test_oap_cli_pin_ca(im_ca_crt_ec, true);
+        ret |= test_oap_cli_pin_ca(root_ca_crt_ec, true);
+        ret |= test_oap_cli_pin_ca(other_ca_crt_ec, false);
+        ret |= test_oap_srv_pin_ca(im_ca_crt_ec, true);
+        ret |= test_oap_srv_pin_ca(other_ca_crt_ec, false);
+
+        ret |= test_oap_cli_rejects_md_mismatch();
+        ret |= test_oap_srv_rejects_md_mismatch();
 #else
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_roundtrip_kex_only;
@@ -1375,6 +1594,10 @@ int oap_test(int    argc,
         (void) test_oap_cli_requires_srv_auth;
         (void) test_oap_srv_requires_cli_auth;
         (void) test_oap_mutual_req_auth;
+        (void) test_oap_cli_pin_ca;
+        (void) test_oap_srv_pin_ca;
+        (void) test_oap_cli_rejects_md_mismatch;
+        (void) test_oap_srv_rejects_md_mismatch;
 
         ret = TEST_RC_SKIP;
 #endif

@@ -91,6 +91,19 @@
 # the server too for mutual authentication. Combine encryption=none
 # with auth=required for authenticated but unencrypted flows.
 #
+# Issuer Pinning (cacert=):
+# -------------------------
+#
+#   cacert=<path>   Path to a CA certificate that must be part of the
+#                   peer certificate's verified chain
+#
+# The peer certificate is always validated against the trusted CA
+# store; cacert= further restricts which CA must have issued it: a
+# certificate, if presented, must chain through the pinned CA. Whether
+# a certificate is mandatory is controlled by auth= alone: under
+# auth=optional a peer may still connect without one. The pinned CA
+# must load when the config is read, otherwise flow allocation fails.
+#
 # KEM Mode (kem_mode=):
 # ---------------------
 #

@@ -33,6 +33,7 @@
 #define MAX_HASH_SIZE    64 /* SHA-512/BLAKE2b max */
 #define KEX_ALGO_BUFSZ   32
 #define KEX_CIPHER_BUFSZ 32
+#define CACERT_PATH_BUFSZ 256
 
 /*
  * On OSX the OpenSSL NIDs are automatically loaded with evp.h.
@@ -130,7 +131,8 @@ struct sec_config {
                 int          nid;
         } d; /* digest */
 
-        bool req_auth; /* require peer authentication */
+        bool req_auth;                  /* require peer authentication */
+        char cacert[CACERT_PATH_BUFSZ]; /* pinned issuing CA, "" = any  */
 };
 
 /* Helper macros to set sec_config fields consistently */
@@ -216,8 +218,20 @@ void               auth_destroy_ctx(struct auth_ctx * ctx);
 int                auth_add_crt_to_store(struct auth_ctx * ctx,
                                          void *            crt);
 
+/* Untrusted intermediates: used to build a path, never as trust anchors */
+int                auth_add_crt_to_chain(struct auth_ctx * ctx,
+                                         void *            crt);
+
 int                auth_verify_crt(struct auth_ctx * ctx,
                                    void *            crt);
+
+/* As auth_verify_crt, pin must be in the verified chain (NULL: any) */
+int                auth_verify_crt_pin(struct auth_ctx * ctx,
+                                       void *            crt,
+                                       void *            pin);
+
+/* False for PQC keys: their signature digest is intrinsic */
+bool               crypt_pk_requires_md(const void * pk);
 
 int                auth_sign(void *     pkp,
                              int        md_nid,
