@@ -266,9 +266,13 @@ int oap_auth_peer(char *                    name,
                 goto fail_pin;
         }
 
-        if (crypt_get_crt_name(crt, name) < 0) {
-                log_warn_id(id, "Failed to extract name from certificate.");
-                name[0] = '\0';
+        ret = crypt_get_crt_name(crt, name);
+        if (ret < 0) {
+                if (ret == -ENAME)
+                        log_err_id(id, "Certificate CN too long.");
+                else
+                        log_err_id(id, "No name in certificate.");
+                goto fail_pin;
         }
 
         if (pin != NULL)

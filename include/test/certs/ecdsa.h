@@ -138,5 +138,25 @@ static __attribute__((unused)) const char * server_crt_ec = \
 "gRo=\n"
 "-----END CERTIFICATE-----\n";
 
+/*
+ * Name-confusion fixture: real CN is "attacker.unittest.o7s", but the
+ * O field value is "CN=victim.unittest.o7s" so the oneline subject is
+ * "/O=CN=victim.unittest.o7s/CN=attacker.unittest.o7s". A strstr("CN=")
+ * scan latches onto the decoy. The real CN must win.
+ */
+static __attribute__((unused)) const char * confused_crt_ec = \
+"-----BEGIN CERTIFICATE-----\n"
+"MIIB1jCCAX2gAwIBAgIUCfXJzDQ3Sx5qcyVB9Rb4/FdZ+QowCgYIKoZIzj0EAwIw\n"
+"QTEfMB0GA1UECgwWQ049dmljdGltLnVuaXR0ZXN0Lm83czEeMBwGA1UEAwwVYXR0\n"
+"YWNrZXIudW5pdHRlc3QubzdzMB4XDTI2MDYxNDE5MDcwMVoXDTQ2MDYwOTE5MDcw\n"
+"MVowQTEfMB0GA1UECgwWQ049dmljdGltLnVuaXR0ZXN0Lm83czEeMBwGA1UEAwwV\n"
+"YXR0YWNrZXIudW5pdHRlc3QubzdzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\n"
+"oLwrbLs3diGcjyY2ErvO/U6CoyyKfl/8e1nxBKXHSOkO5xVmFu+EobEQVFvabxE/\n"
+"x4RttKcGJqUe8vlyQexQq6NTMFEwHQYDVR0OBBYEFGBaOBzTsCakjBN61x0ZnHSk\n"
+"04T3MB8GA1UdIwQYMBaAFGBaOBzTsCakjBN61x0ZnHSk04T3MA8GA1UdEwEB/wQF\n"
+"MAMBAf8wCgYIKoZIzj0EAwIDRwAwRAIgFtBeVxlRuI7y9Bo/Dh97ajTbHJXYMkc6\n"
+"ZqflSN3Q/uACIHWoCVn6u6+JjF+Kj9zubFJ49RIQJthSeP8xj7yTeV17\n"
+"-----END CERTIFICATE-----\n";
+
 #endif /* TEST_CERTS_H */
 

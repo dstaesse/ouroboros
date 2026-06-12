@@ -30,6 +30,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/crypt.h>
 #include <ouroboros/hash.h>
+#include <ouroboros/name.h>
 #include <ouroboros/random.h>
 #include <ouroboros/utils.h>
 
@@ -1552,65 +1553,71 @@ void openssl_free_key(EVP_PKEY * key)
 int openssl_check_crt_name(void *       crt,
                            const char * name)
 {
-        char * subj;
-        char * cn;
-        X509 * xcrt;
+        const unsigned char * cn;
+        ASN1_STRING *         val;
+        X509_NAME *           nm;
+        int                   idx;
+        int                   len;
 
-        xcrt = (X509 *) crt;
+        nm = X509_get_subject_name((X509 *) crt);
+        if (nm == NULL)
+                return -1;
 
-        subj = X509_NAME_oneline(X509_get_subject_name(xcrt), NULL, 0);
-        if (subj == NULL)
-                goto fail_subj;
+        idx = X509_NAME_get_index_by_NID(nm, NID_commonName, -1);
+        if (idx < 0)
+                return -1;
 
-        cn = strstr(subj, "CN=");
-        if (cn == NULL)
-                goto fail_cn;
+        val = X509_NAME_ENTRY_get_data(X509_NAME_get_entry(nm, idx));
+        cn  = ASN1_STRING_get0_data(val);
+        len = ASN1_STRING_length(val);
 
-        if (strcmp(cn + 3, name) != 0)
-                goto fail_cn;
+        if (len < 0 || (size_t) len != strlen(name))
+                return -1;
 
-        free(subj);
+        if (memchr(cn, '\0', (size_t) len) != NULL)
+                return -1;
+
+        if (memcmp(cn, name, (size_t) len) != 0)
+                return -1;
 
         return 0;
- fail_cn:
-        free(subj);
- fail_subj:
-        return -1;
 }
 
 int openssl_get_crt_name(void * crt,
                          char * name)
 {
-        char * subj;
-        char * cn;
-        char * end;
-        X509 * xcrt;
+        const unsigned char * cn;
+        ASN1_STRING *         val;
+        X509_NAME *           nm;
+        int                   idx;
+        int                   len;
 
-        xcrt = (X509 *) crt;
+        nm = X509_get_subject_name((X509 *) crt);
+        if (nm == NULL)
+                return -1;
 
-        subj = X509_NAME_oneline(X509_get_subject_name(xcrt), NULL, 0);
-        if (subj == NULL)
-                goto fail_subj;
+        idx = X509_NAME_get_index_by_NID(nm, NID_commonName, -1);
+        if (idx < 0)
+                return -1;
 
-        cn = strstr(subj, "CN=");
-        if (cn == NULL)
-                goto fail_cn;
+        val = X509_NAME_ENTRY_get_data(X509_NAME_get_entry(nm, idx));
+        cn  = ASN1_STRING_get0_data(val);
+        len = ASN1_STRING_length(val);
 
-        cn += 3; /* Skip "CN=" */
+        if (len < 0)
+                return -1;
 
-        /* Find end of CN (comma or slash for next field) */
-        end = strpbrk(cn, ",/");
-        if (end != NULL)
-                *end = '\0';
+        if ((size_t) len > NAME_SIZE)
+                return -ENAME;
 
-        strcpy(name, cn);
-        free(subj);
+        /* Reject an embedded NUL that would truncate the parsed name. */
+        if (memchr(cn, '\0', (size_t) len) != NULL)
+                return -1;
+
+        memcpy(name, cn, (size_t) len);
+        name[len] = '\0';
 
         return 0;
- fail_cn:
-        free(subj);
- fail_subj:
-        return -1;
 }
 
 int openssl_crt_str(const void * crt,

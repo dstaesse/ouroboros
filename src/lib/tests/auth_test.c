@@ -24,10 +24,13 @@
 
 #include <test/test.h>
 #include <ouroboros/crypt.h>
+#include <ouroboros/name.h>
 #include <ouroboros/random.h>
 #include <ouroboros/utils.h>
 
 #include <test/certs/ecdsa.h>
+
+#include <string.h>
 
 #define TEST_MSG_SIZE 1500
 
@@ -123,6 +126,47 @@ static int test_check_crt_name(void)
 
         if (crypt_check_crt_name(crt, "bogus.name") == 0) {
                 printf("Failed to detect incorrect name.\n");
+                goto fail_check;
+        }
+
+        crypt_free_crt(crt);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_check:
+        crypt_free_crt(crt);
+ fail_load:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_crt_name_confusion(void)
+{
+        char   name[NAME_SIZE + 1];
+        void * crt;
+
+        TEST_START();
+
+        if (crypt_load_crt_str(confused_crt_ec, &crt) < 0) {
+                printf("Failed to load name-confusion certificate.\n");
+                goto fail_load;
+        }
+
+        /* Must extract the real CN, not the "CN=" decoy in the O field. */
+        if (crypt_get_crt_name(crt, name) < 0) {
+                printf("Failed to extract name from certificate.\n");
+                goto fail_check;
+        }
+
+        if (strcmp(name, "attacker.unittest.o7s") != 0) {
+                printf("Extracted '%s', expected real CN.\n", name);
+                goto fail_check;
+        }
+
+        /* The decoy name in the O field must never authenticate. */
+        if (crypt_check_crt_name(crt, "victim.unittest.o7s") == 0) {
+                printf("Accepted spoofed name from O field.\n");
                 goto fail_check;
         }
 
@@ -665,6 +709,7 @@ int auth_test(int     argc,
 #ifdef HAVE_OPENSSL
         ret |= test_load_free_crt();
         ret |= test_check_crt_name();
+        ret |= test_crt_name_confusion();
         ret |= test_crypt_get_pubkey_crt();
         ret |= test_load_free_privkey();
         ret |= test_load_free_pubkey();
@@ -679,6 +724,7 @@ int auth_test(int     argc,
 #else
         (void) test_load_free_crt;
         (void) test_check_crt_name;
+        (void) test_crt_name_confusion;
         (void) test_crypt_get_pubkey_crt;
         (void) test_load_free_privkey;
         (void) test_load_free_pubkey;
