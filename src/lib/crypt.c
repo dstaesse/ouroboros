@@ -27,10 +27,14 @@
 #include <config.h>
 
 #include <ouroboros/errno.h>
+#include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
 #include <ouroboros/crypt.h>
 
+#include "crypt/keyrot.h"
+
 #ifdef HAVE_OPENSSL
+#include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include "crypt/openssl.h"
 #endif
@@ -50,18 +54,12 @@ static const struct nid_map cipher_nid_map[] = {
         {NID_aes_192_gcm,       "aes-192-gcm"},
         {NID_aes_256_gcm,       "aes-256-gcm"},
         {NID_chacha20_poly1305, "chacha20-poly1305"},
-        {NID_aes_128_ctr,       "aes-128-ctr"},
-        {NID_aes_192_ctr,       "aes-192-ctr"},
-        {NID_aes_256_ctr,       "aes-256-ctr"},
         {NID_undef,             NULL}
 };
 
 /* Ordered in strength preference, lowest first */
 const uint16_t crypt_supported_nids[] = {
 #ifdef HAVE_OPENSSL
-        NID_aes_128_ctr,
-        NID_aes_192_ctr,
-        NID_aes_256_ctr,
         NID_aes_128_gcm,
         NID_aes_192_gcm,
         NID_aes_256_gcm,
@@ -87,23 +85,23 @@ static const struct nid_map kex_nid_map[] = {
         {NID_undef,            NULL}
 };
 
-/* Ordered in strength preference, lowest first */
+/* Ordered in strength preference, lowest first (NIST SP 800-57 levels) */
 const uint16_t kex_supported_nids[] = {
 #ifdef HAVE_OPENSSL
-        NID_ffdhe2048,
-        NID_X9_62_prime256v1,
-        NID_X25519,
-        NID_ffdhe3072,
-        NID_secp384r1,
-        NID_ffdhe4096,
-        NID_X448,
-        NID_secp521r1,
+        NID_ffdhe2048,        /* FFDHE-2048,  ~112-bit          */
+        NID_X9_62_prime256v1, /* ECDH P-256,   128-bit          */
+        NID_X25519,           /* ECDH X25519,  128-bit          */
+        NID_ffdhe3072,        /* FFDHE-3072,  ~128-bit          */
+        NID_ffdhe4096,        /* FFDHE-4096,  ~152-bit          */
+        NID_secp384r1,        /* ECDH P-384,   192-bit          */
+        NID_X448,             /* ECDH X448,    224-bit          */
+        NID_secp521r1,        /* ECDH P-521,   256-bit          */
 #ifdef HAVE_OPENSSL_ML_KEM
-        NID_MLKEM512,
-        NID_MLKEM768,
-        NID_MLKEM1024,
-        NID_X25519MLKEM768,
-        NID_X448MLKEM1024,
+        NID_MLKEM512,         /* ML-KEM-512,  PQC L1 (~AES-128) */
+        NID_MLKEM768,         /* ML-KEM-768,  PQC L3 (~AES-192) */
+        NID_MLKEM1024,        /* ML-KEM-1024, PQC L5 (~AES-256) */
+        NID_X25519MLKEM768,   /* X25519 + ML-KEM-768,  PQC L3   */
+        NID_X448MLKEM1024,    /* X448 + ML-KEM-1024,   PQC L5   */
 #endif
 #endif
         NID_undef
@@ -137,7 +135,8 @@ const uint16_t md_supported_nids[] = {
 };
 
 struct crypt_ctx {
-        void * ctx;  /* Encryption context */
+        struct keyrot * kr;     /* backend-independent key rotation */
+        void *          cipher; /* backend AEAD cipher context      */
 };
 
 struct auth_ctx {
@@ -623,19 +622,71 @@ int crypt_kex_rank(int nid)
         return -1;
 }
 
-/* Hash length now returned by md_digest() */
-
-int crypt_encrypt(struct crypt_ctx * ctx,
-                  buffer_t           in,
-                  buffer_t *         out)
+/* AEAD primitive: 1:1 backend wrappers used by the data path below. */
+static int crypt_seal(void *          cipher,
+                      const uint8_t * key,
+                      const uint8_t * nonce,
+                      buffer_t        aad,
+                      buffer_t        in,
+                      uint8_t *       out,
+                      uint8_t *       tag)
 {
-        assert(ctx != NULL);
-        assert(ctx->ctx != NULL);
+#ifdef HAVE_OPENSSL
+        return openssl_seal(cipher, key, nonce, aad, in, out, tag);
+#else
+        (void) cipher;
+        (void) key;
+        (void) nonce;
+        (void) aad;
+        (void) in;
+        (void) out;
+        (void) tag;
+
+        return -ECRYPT;
+#endif
+}
+
+static int crypt_open(void *          cipher,
+                      const uint8_t * key,
+                      const uint8_t * nonce,
+                      buffer_t        aad,
+                      buffer_t        in,
+                      const uint8_t * tag,
+                      buffer_t *      out)
+{
+#ifdef HAVE_OPENSSL
+        return openssl_open(cipher, key, nonce, aad, in, tag, out);
+#else
+        (void) cipher;
+        (void) key;
+        (void) nonce;
+        (void) aad;
+        (void) in;
+        (void) tag;
+        (void) out;
+
+        return -ECRYPT;
+#endif
+}
+
+int crypt_oneshot_seal(int             nid,
+                       const uint8_t * key,
+                       const uint8_t * nonce,
+                       buffer_t        aad,
+                       buffer_t        in,
+                       buffer_t *      out)
+{
+        assert(key != NULL);
+        assert(nonce != NULL);
+        assert(out != NULL);
 
 #ifdef HAVE_OPENSSL
-        return openssl_encrypt(ctx->ctx, in, out);
+        return openssl_oneshot_seal(nid, key, nonce, aad, in, out);
 #else
-        (void) ctx;
+        (void) nid;
+        (void) key;
+        (void) nonce;
+        (void) aad;
         (void) in;
         (void) out;
 
@@ -643,22 +694,138 @@ int crypt_encrypt(struct crypt_ctx * ctx,
 #endif
 }
 
-int crypt_decrypt(struct crypt_ctx * ctx,
-                  buffer_t           in,
-                  buffer_t *         out)
+int crypt_oneshot_open(int             nid,
+                       const uint8_t * key,
+                       const uint8_t * nonce,
+                       buffer_t        aad,
+                       buffer_t        in,
+                       buffer_t *      out)
 {
-        assert(ctx != NULL);
-        assert(ctx->ctx != NULL);
+        assert(key != NULL);
+        assert(nonce != NULL);
+        assert(out != NULL);
 
 #ifdef HAVE_OPENSSL
-        return openssl_decrypt(ctx->ctx, in, out);
+        return openssl_oneshot_open(nid, key, nonce, aad, in, out);
 #else
-        (void) ctx;
+        (void) nid;
+        (void) key;
+        (void) nonce;
+        (void) aad;
         (void) in;
         (void) out;
 
         return -ECRYPT;
 #endif
+}
+
+/*
+ * Data-path encrypt: rotate the key, frame selector ‖ ct ‖ tag, seal.
+ * Backend-agnostic: composed from keyrot_*, crypt_seal and crypt_get_tagsz.
+ */
+int crypt_encrypt(struct crypt_ctx * ctx,
+                  buffer_t           in,
+                  buffer_t *         out)
+{
+        uint8_t         nonce[KR_NONCE_LEN];
+        const uint8_t * key;
+        uint8_t *       ct;
+        buffer_t        aad;
+        int             tagsz;
+        int             out_sz;
+
+        assert(ctx != NULL);
+        assert(ctx->kr != NULL);
+
+        tagsz = crypt_get_tagsz(ctx);
+        if (tagsz < 0)
+                return -ECRYPT;
+
+        out->data = malloc(KR_SELECTOR_LEN + in.len + (size_t) tagsz);
+        if (out->data == NULL)
+                goto fail_malloc;
+
+        ct = out->data + KR_SELECTOR_LEN;
+
+        /* keyrot writes the selector into the wire header (== AAD). */
+        if (keyrot_tx_next(ctx->kr, out->data, &key, nonce) != 0)
+                goto fail_encrypt;
+
+        aad.data = out->data;
+        aad.len  = KR_SELECTOR_LEN;
+
+        out_sz = crypt_seal(ctx->cipher, key, nonce, aad, in, ct, ct + in.len);
+        if (out_sz < 0)
+                goto fail_encrypt;
+
+        out->len = KR_SELECTOR_LEN + (size_t) out_sz + (size_t) tagsz;
+
+        return 0;
+ fail_encrypt:
+        free(out->data);
+ fail_malloc:
+        clrbuf(*out);
+        return -ECRYPT;
+}
+
+/*
+ * Data-path decrypt: look up the rotated key from the selector, open, and
+ * commit the replay window only after the tag verifies.
+ */
+int crypt_decrypt(struct crypt_ctx * ctx,
+                  buffer_t           in,
+                  buffer_t *         out)
+{
+        uint8_t         nonce[KR_NONCE_LEN];
+        const uint8_t * key;
+        const uint8_t * tag;
+        struct kr_rx    rx;
+        buffer_t        aad;
+        buffer_t        ct;
+        int             tagsz;
+        int             in_sz;
+
+        assert(ctx != NULL);
+        assert(ctx->kr != NULL);
+
+        tagsz = crypt_get_tagsz(ctx);
+        if (tagsz < 0)
+                return -ECRYPT;
+
+        if (in.len < (size_t) (KR_SELECTOR_LEN + tagsz))
+                return -ECRYPT;
+
+        if (keyrot_rx_lookup(ctx->kr, in.data, &key, nonce, &rx) != 0)
+                return -ECRYPT;
+
+        in_sz = (int) in.len - KR_SELECTOR_LEN - tagsz;
+
+        /* +1 keeps malloc(0) defined for an empty (zero-length) frame. */
+        out->data = malloc((size_t) in_sz + 1);
+        if (out->data == NULL)
+                goto fail_malloc;
+
+        aad.data = in.data;
+        aad.len  = KR_SELECTOR_LEN;
+
+        ct.data = in.data + KR_SELECTOR_LEN;
+        ct.len  = (size_t) in_sz;
+
+        tag = in.data + KR_SELECTOR_LEN + in_sz;
+
+        if (crypt_open(ctx->cipher, key, nonce, aad, ct, tag, out) < 0)
+                goto fail_decrypt;
+
+        /* Commit replay state only after the tag verifies. */
+        if (keyrot_rx_commit(ctx->kr, &rx) != 0)
+                goto fail_decrypt;
+
+        return 0;
+ fail_decrypt:
+        free(out->data);
+ fail_malloc:
+        clrbuf(*out);
+        return -ECRYPT;
 }
 
 struct crypt_ctx * crypt_create_ctx(struct crypt_sk * sk)
@@ -674,16 +841,23 @@ struct crypt_ctx * crypt_create_ctx(struct crypt_sk * sk)
 
         memset(crypt, 0, sizeof(*crypt));
 
+        crypt->kr = keyrot_create(sk->key, sk->epoch, sk->role);
+        if (crypt->kr == NULL)
+                goto fail_kr;
+
 #ifdef HAVE_OPENSSL
-        crypt->ctx = openssl_crypt_create_ctx(sk);
-        if (crypt->ctx == NULL)
-                goto fail_ctx;
+        crypt->cipher = openssl_crypt_create_ctx(sk);
+        if (crypt->cipher == NULL)
+                goto fail_cipher;
 #endif
         return crypt;
+
 #ifdef HAVE_OPENSSL
- fail_ctx:
-        free(crypt);
+ fail_cipher:
+        keyrot_destroy(crypt->kr);
 #endif
+ fail_kr:
+        free(crypt);
  fail_crypt:
         return NULL;
 }
@@ -693,41 +867,68 @@ void crypt_destroy_ctx(struct crypt_ctx * crypt)
         if (crypt == NULL)
                 return;
 
+        keyrot_destroy(crypt->kr);
 #ifdef HAVE_OPENSSL
-        assert(crypt->ctx != NULL);
-        openssl_crypt_destroy_ctx(crypt->ctx);
-#else
-        assert(crypt->ctx == NULL);
+        openssl_crypt_destroy_ctx(crypt->cipher);
 #endif
         free(crypt);
 }
 
-int crypt_get_ivsz(struct crypt_ctx * ctx)
+int crypt_get_headsz(struct crypt_ctx * ctx)
 {
-        if (ctx == NULL)
-                return -EINVAL;
+        assert(ctx != NULL);
+        assert(ctx->kr != NULL);
 
-#ifdef HAVE_OPENSSL
-        assert(ctx->ctx != NULL);
-        return openssl_crypt_get_ivsz(ctx->ctx);
-#else
-        assert(ctx->ctx == NULL);
-        return -ENOTSUP;
-#endif
+        (void) ctx; /* validated only; header size is a constant */
+
+        return KR_SELECTOR_LEN;
+}
+
+int crypt_rekey(struct crypt_ctx * ctx,
+                struct crypt_sk *  sk)
+{
+        assert(ctx != NULL);
+        assert(sk != NULL);
+        assert(ctx->kr != NULL);
+
+        return keyrot_rekey(ctx->kr, sk->key, sk->epoch) == 0 ? 0 : -ECRYPT;
 }
 
 int crypt_get_tagsz(struct crypt_ctx * ctx)
 {
-        if (ctx == NULL)
-                return -EINVAL;
+        assert(ctx != NULL);
+        assert(ctx->cipher != NULL);
 
 #ifdef HAVE_OPENSSL
-        assert(ctx->ctx != NULL);
-        return openssl_crypt_get_tagsz(ctx->ctx);
+        return openssl_crypt_get_tagsz(ctx->cipher);
 #else
-        assert(ctx->ctx == NULL);
+        (void) ctx;
         return -ENOTSUP;
 #endif
+}
+
+int crypt_nodes_left(struct crypt_ctx * ctx)
+{
+        assert(ctx != NULL);
+        assert(ctx->kr != NULL);
+
+        return (int) keyrot_tx_nodes_left(ctx->kr);
+}
+
+int crypt_peer_synced(struct crypt_ctx * ctx)
+{
+        assert(ctx != NULL);
+        assert(ctx->kr != NULL);
+
+        return keyrot_peer_switched(ctx->kr) ? 1 : 0;
+}
+
+void crypt_tx_promote(struct crypt_ctx * ctx)
+{
+        assert(ctx != NULL);
+        assert(ctx->kr != NULL);
+
+        keyrot_tx_promote(ctx->kr);
 }
 
 int crypt_load_privkey_file(const char * path,
@@ -1157,10 +1358,25 @@ ssize_t md_len(int md_nid)
 #endif
 }
 
+int crypt_hkdf_expand(buffer_t key,
+                      buffer_t info,
+                      buffer_t out)
+{
+#ifdef HAVE_OPENSSL
+        return openssl_hkdf_expand(key, info, out) == 0 ? 0 : -ECRYPT;
+#else
+        (void) key;
+        (void) info;
+        (void) out;
+
+        return -ECRYPT;
+#endif
+}
+
 int crypt_secure_malloc_init(size_t max)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_secure_malloc_init(max, SECMEM_GUARD);
+        return openssl_secure_malloc_init(max, SECMEM_MINSIZE);
 #else
         (void) max;
         return 0;

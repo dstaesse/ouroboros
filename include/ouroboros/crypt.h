@@ -28,7 +28,7 @@
 
 #include <assert.h>
 
-#define IVSZ             16
+#define NONCESZ          16
 #define SYMMKEYSZ        32
 #define MAX_HASH_SIZE    64 /* SHA-512/BLAKE2b max */
 #define KEX_ALGO_BUFSZ   32
@@ -102,11 +102,15 @@
 #define IS_KEX_ALGO_SET(cfg)   ((cfg)->x.nid != NID_undef)
 #define IS_KEX_CIPHER_SET(cfg) ((cfg)->c.nid != NID_undef)
 
+/* Flow role: forks the per-direction keys so each end's TX = peer's RX. */
+#define CRYPT_ROLE_INIT 0     /* flow allocator / OAP client */
+#define CRYPT_ROLE_RESP 1     /* flow acceptor  / OAP server */
 
 struct crypt_sk {
         int       nid;
         uint8_t * key;
-        uint8_t   rot_bit; /* Rotation bit to control epoch */
+        uint8_t   epoch;      /* installed batch epoch */
+        uint8_t   role;       /* CRYPT_ROLE_INIT / _RESP */
 };
 
 struct sec_config {
@@ -308,11 +312,15 @@ const char *       md_nid_to_str(uint16_t nid);
 
 uint16_t           md_str_to_nid(const char * kdf);
 
-ssize_t            md_digest(int        md_nid,
-                             buffer_t   in,
-                             uint8_t *  out);
+ssize_t            md_digest(int       md_nid,
+                             buffer_t  in,
+                             uint8_t * out);
 
 ssize_t            md_len(int md_nid);
+
+int                crypt_hkdf_expand(buffer_t key,
+                                     buffer_t info,
+                                     buffer_t out);
 
 int                crypt_encrypt(struct crypt_ctx * ctx,
                                  buffer_t           in,
@@ -322,9 +330,36 @@ int                crypt_decrypt(struct crypt_ctx * ctx,
                                  buffer_t           in,
                                  buffer_t *         out);
 
-int                crypt_get_ivsz(struct crypt_ctx * ctx);
+/* One-shot AEAD over an explicit key/nonce. out = ciphertext ‖ tag. */
+int                crypt_oneshot_seal(int             nid,
+                                     const uint8_t * key,
+                                     const uint8_t * nonce,
+                                     buffer_t        aad,
+                                     buffer_t        in,
+                                     buffer_t *      out);
+
+int                crypt_oneshot_open(int             nid,
+                                     const uint8_t * key,
+                                     const uint8_t * nonce,
+                                     buffer_t        aad,
+                                     buffer_t        in,
+                                     buffer_t *      out);
+
+int                crypt_get_headsz(struct crypt_ctx * ctx);
 
 int                crypt_get_tagsz(struct crypt_ctx * ctx);
+
+int                crypt_rekey(struct crypt_ctx * ctx,
+                               struct crypt_sk *  sk);
+
+/* Nodes remaining in the TX batch (re-key watermark). */
+int                crypt_nodes_left(struct crypt_ctx * ctx);
+
+/* 1 once the peer has been observed on the current generation. */
+int                crypt_peer_synced(struct crypt_ctx * ctx);
+
+/* Switch TX to the installed (new) batch (after peer synced/grace). */
+void               crypt_tx_promote(struct crypt_ctx * ctx);
 
 int                crypt_load_crt_file(const char * path,
                                        void **      crt);

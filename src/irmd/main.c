@@ -1717,6 +1717,13 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
         return ret_msg;
 }
 
+/* Wipe the session key from a reply before its buffers are freed. */
+static void clear_msg_key(irm_msg_t * msg)
+{
+        if (msg != NULL && msg->has_sym_key)
+                crypt_secure_clear(msg->sym_key.data, msg->sym_key.len);
+}
+
 static void * mainloop(void * o)
 {
         int         sfd;
@@ -1728,6 +1735,7 @@ static void * mainloop(void * o)
         while (true) {
                 irm_msg_t *  ret_msg;
                 struct cmd * cmd;
+                bool         had_key;
 
                 pthread_mutex_lock(&irmd.cmd_lock);
 
@@ -1791,6 +1799,9 @@ static void * mainloop(void * o)
 
                 irm_msg__pack(ret_msg, buffer.data);
 
+                had_key = ret_msg->has_sym_key;
+                clear_msg_key(ret_msg);
+
                 irm_msg__free_unpacked(ret_msg, NULL);
 
                 pthread_cleanup_push(__cleanup_close_ptr, &sfd);
@@ -1805,6 +1816,9 @@ static void * mainloop(void * o)
                                         strerror(errno));
                 }
 
+                if (had_key)
+                        crypt_secure_clear(buffer.data, buffer.len);
+
                 pthread_cleanup_pop(true);
                 pthread_cleanup_pop(true);
 
@@ -1812,6 +1826,7 @@ static void * mainloop(void * o)
 
                 continue;
  fail:
+                clear_msg_key(ret_msg);
                 irm_msg__free_unpacked(ret_msg, NULL);
  fail_msg:
                 close(sfd);

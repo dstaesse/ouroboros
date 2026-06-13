@@ -98,7 +98,7 @@ struct flow {
         ssize_t               part_idx;
 
         struct crypt_ctx *    crypt;
-        int                   headsz;  /* IV */
+        int                   headsz;  /* selector */
         int                   tailsz;  /* Tag + CRC */
 
         struct timespec       snd_act;
@@ -296,7 +296,7 @@ static int spb_decrypt(struct flow *        flow,
         in.len  = ssm_pk_buff_len(spb);
 
         if (crypt_decrypt(flow->crypt, in, &out) < 0)
-                return -ENOMEM;
+                return -ECRYPT;
 
 
         head = ssm_pk_buff_pop(spb, flow->headsz) + flow->headsz;
@@ -711,11 +711,10 @@ static int flow_init(struct flow_info * info,
         flow->tailsz   = 0;
 
         if (IS_ENCRYPTED(sk)) {
-                sk->rot_bit = KEY_ROTATION_BIT;
                 flow->crypt = crypt_create_ctx(sk);
                 if (flow->crypt == NULL)
                         goto fail_crypt;
-                flow->headsz = crypt_get_ivsz(flow->crypt);
+                flow->headsz = crypt_get_headsz(flow->crypt);
                 flow->tailsz = crypt_get_tagsz(flow->crypt);
         }
 
@@ -1012,7 +1011,9 @@ int flow_accept(qosspec_t *             qs,
         if (err < 0)
                 return err;
 
-        crypt.key = key;
+        crypt.key        = key;
+        crypt.epoch      = 0;
+        crypt.role       = CRYPT_ROLE_RESP;
 
         err = flow__irm_result_des(&msg, &flow, &crypt);
         if (err < 0)
@@ -1067,7 +1068,9 @@ int flow_alloc(const char *            dst,
 
         clock_gettime(PTHREAD_COND_CLOCK, &t1);
 
-        crypt.key = key;
+        crypt.key        = key;
+        crypt.epoch      = 0;
+        crypt.role       = CRYPT_ROLE_INIT;
 
         err = flow__irm_result_des(&msg, &flow, &crypt);
         if (err < 0)
@@ -1106,7 +1109,9 @@ int flow_join(const char *            dst,
         if (err < 0)
                 return err;
 
-        crypt.key = key;
+        crypt.key        = key;
+        crypt.epoch      = 0;
+        crypt.role       = CRYPT_ROLE_INIT;
 
         err = flow__irm_result_des(&msg, &flow, &crypt);
         if (err < 0)
@@ -2228,7 +2233,8 @@ int np1_flow_alloc(pid_t n_pid,
                    int   flow_id)
 {
         struct flow_info  flow;
-        struct crypt_sk crypt = { .nid = NID_undef, .key = NULL };
+        struct crypt_sk crypt = { .nid = NID_undef, .key = NULL,
+                                  .epoch = 0, .role = CRYPT_ROLE_INIT };
 
         memset(&flow, 0, sizeof(flow));
 
@@ -2321,7 +2327,9 @@ int ipcp_flow_req_arr(const buffer_t * dst,
         if (err < 0)
                 return err;
 
-        crypt.key = key;
+        crypt.key        = key;
+        crypt.epoch      = 0;
+        crypt.role       = CRYPT_ROLE_INIT;
 
         err = flow__irm_result_des(&msg, &flow, &crypt);
         if (err < 0)

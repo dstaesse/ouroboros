@@ -7,6 +7,7 @@ include(dependencies/system/libraries)
 include(dependencies/system/explicit_bzero)
 include(dependencies/system/robustmutex)
 include(dependencies/system/fuse)
+include(dependencies/system/liburcu)
 include(dependencies/system/sysrandom)
 
 # Cryptography

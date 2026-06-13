@@ -22,6 +22,7 @@ set(SOURCE_FILES_COMMON
   crc/crc32.c
   crc/crc64.c
   crypt.c
+  crypt/keyrot.c
   hash.c
   lockfile.c
   logs.c
@@ -90,6 +91,13 @@ endif()
 
 if(HAVE_FUSE)
   target_link_libraries(ouroboros-common PRIVATE Fuse::Fuse)
+endif()
+
+if(HAVE_LIBURCU)
+  target_link_libraries(ouroboros-common PRIVATE Urcu::Urcu)
+  # urcu headers require C99; override the global -std=c89 for this TU only.
+  set_source_files_properties(crypt/keyrot.c PROPERTIES
+    COMPILE_OPTIONS "-std=gnu99")
 endif()
 
 install(TARGETS ouroboros-common

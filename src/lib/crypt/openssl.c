@@ -53,27 +53,14 @@
 
 #define HKDF_INFO_DHE      "o7s-ossl-dhe"
 #define HKDF_INFO_ENCAP    "o7s-ossl-encap"
-#define HKDF_INFO_ROTATION "o7s-key-rotation"
 #define HKDF_SALT_LEN      32 /* SHA-256 output size */
+#define AEAD_NONCE_LEN     12 /* 96-bit deterministic IV (SP 800-38D) */
+#define AEAD_TAG_LEN       16 /* 128-bit AEAD authentication tag */
 
 struct ossl_crypt_ctx {
         EVP_CIPHER_CTX *   evp_ctx;
         const EVP_CIPHER * cipher;
-        int                ivsz;
         int                tagsz;
-
-        struct {
-                uint8_t * cur; /* current key */
-                uint8_t * prv; /* rotated key */
-        } keys;
-
-        struct {
-                uint32_t cntr;  /* counter              */
-                uint32_t mask;  /* phase mask           */
-                uint32_t age;   /* counter within epoch */
-                uint8_t  phase; /* current key phase    */
-                uint8_t  salt[HKDF_SALT_LEN];
-        } rot; /* rotation logic */
 };
 
 struct kdf_info {
@@ -83,17 +70,6 @@ struct kdf_info {
         buffer_t info;
         buffer_t key;
 };
-
-/* Key rotation macros */
-#define HAS_PHASE_BIT_TOGGLED(ctx) \
-        (((ctx)->rot.cntr & (ctx)->rot.mask) != \
-         (((ctx)->rot.cntr - 1) & (ctx)->rot.mask))
-
-#define HAS_GRACE_EXPIRED(ctx) \
-        ((ctx)->rot.age >= ((ctx)->rot.mask >> 1))
-
-#define ROTATION_TOO_RECENT(ctx) \
-        ((ctx)->rot.age < ((ctx)->rot.mask - ((ctx)->rot.mask >> 2)))
 
 /* Convert hash NID to OpenSSL digest name string for HKDF */
 static const char * hash_nid_to_digest_name(int nid)
@@ -145,21 +121,20 @@ static int get_pk_bytes_from_key(EVP_PKEY * key,
 }
 
 /* Derive salt from public key bytes by hashing them */
-static int derive_salt_from_pk_bytes(buffer_t   pk,
-                                     uint8_t *  salt,
-                                     size_t     salt_len)
+static int derive_salt_from_pk_bytes(buffer_t pk,
+                                     buffer_t salt)
 {
         uint8_t  hash[EVP_MAX_MD_SIZE];
         unsigned hash_len;
 
         assert(pk.data != NULL);
-        assert(salt != NULL);
+        assert(salt.data != NULL);
 
         if (EVP_Digest(pk.data, pk.len, hash, &hash_len,
                        EVP_sha256(), NULL) != 1)
                 goto fail_digest;
 
-        memcpy(salt, hash, salt_len < hash_len ? salt_len : hash_len);
+        memcpy(salt.data, hash, salt.len < hash_len ? salt.len : hash_len);
 
         return 0;
  fail_digest:
@@ -167,10 +142,9 @@ static int derive_salt_from_pk_bytes(buffer_t   pk,
 }
 
 /* Derive salt from two public key byte buffers (DHE) in canonical order */
-static int derive_salt_from_pk_bytes_dhe(buffer_t   local,
-                                         buffer_t   remote,
-                                         uint8_t *  salt,
-                                         size_t     salt_len)
+static int derive_salt_from_pk_bytes_dhe(buffer_t local,
+                                         buffer_t remote,
+                                         buffer_t salt)
 {
         uint8_t * concat;
         size_t    concat_len;
@@ -181,7 +155,7 @@ static int derive_salt_from_pk_bytes_dhe(buffer_t   local,
 
         assert(local.data != NULL);
         assert(remote.data != NULL);
-        assert(salt != NULL);
+        assert(salt.data != NULL);
 
         concat_len = local.len + remote.len;
         concat = OPENSSL_malloc(concat_len);
@@ -205,7 +179,7 @@ static int derive_salt_from_pk_bytes_dhe(buffer_t   local,
 
         OPENSSL_free(concat);
 
-        memcpy(salt, hash, salt_len < hash_len ? salt_len : hash_len);
+        memcpy(salt.data, hash, salt.len < hash_len ? salt.len : hash_len);
 
         return 0;
  fail_digest:
@@ -259,117 +233,144 @@ static int derive_key_hkdf(struct kdf_info * ki)
         return -ECRYPT;
 }
 
-/* Key rotation helper functions implementation */
-static int should_rotate_key_rx(struct ossl_crypt_ctx * ctx,
-                                uint8_t                 rx_phase)
+int openssl_hkdf_expand(buffer_t key,
+                        buffer_t info,
+                        buffer_t out)
 {
-        assert(ctx != NULL);
+        EVP_KDF *     kdf;
+        EVP_KDF_CTX * kctx;
+        OSSL_PARAM    params[5];
+        int           mode = EVP_KDF_HKDF_MODE_EXPAND_ONLY;
+        int           idx  = 0;
+        int           ret  = -1;
 
-        /* Phase must have changed */
-        if (rx_phase == ctx->rot.phase)
-                return 0;
+        kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
+        if (kdf == NULL)
+                goto fail_fetch;
 
-        if (ROTATION_TOO_RECENT(ctx))
-                return 0;
+        kctx = EVP_KDF_CTX_new(kdf);
+        if (kctx == NULL)
+                goto fail_ctx;
 
-        return 1;
+        params[idx++] = OSSL_PARAM_construct_utf8_string(
+                "digest", (char *) "SHA256", 0);
+        params[idx++] = OSSL_PARAM_construct_int("mode", &mode);
+        params[idx++] = OSSL_PARAM_construct_octet_string(
+                "key", key.data, key.len);
+        params[idx++] = OSSL_PARAM_construct_octet_string(
+                "info", info.data, info.len);
+        params[idx]   = OSSL_PARAM_construct_end();
+
+        if (EVP_KDF_derive(kctx, out.data, out.len, params) == 1)
+                ret = 0;
+
+        EVP_KDF_CTX_free(kctx);
+ fail_ctx:
+        EVP_KDF_free(kdf);
+ fail_fetch:
+        return ret;
 }
 
-static int rotate_key(struct ossl_crypt_ctx * ctx)
+/* AEAD seal: encrypt in with key/nonce, bind aad, append tag */
+int openssl_seal(struct ossl_crypt_ctx * ctx,
+                 const uint8_t *         key,
+                 const uint8_t *         nonce,
+                 buffer_t                aad,
+                 buffer_t                in,
+                 uint8_t *               out,
+                 uint8_t *               tag)
 {
-        struct kdf_info ki;
-        uint8_t *       tmp;
+        int out_sz;
+        int tmp_sz;
 
         assert(ctx != NULL);
-
-        /* Swap keys - move current to prev */
-        tmp = ctx->keys.prv;
-        ctx->keys.prv = ctx->keys.cur;
-
-        if (tmp != NULL) {
-                /* Reuse old prev_key memory for new key */
-                ctx->keys.cur = tmp;
-        } else {
-                /* First rotation - allocate new memory */
-                ctx->keys.cur = OPENSSL_secure_malloc(SYMMKEYSZ);
-                if (ctx->keys.cur == NULL)
-                        return -ECRYPT;
-        }
-
-        /* Derive new key from previous key using HKDF */
-        ki.secret.data = ctx->keys.prv;
-        ki.secret.len  = SYMMKEYSZ;
-        ki.nid         = NID_sha256;
-        ki.salt.data   = ctx->rot.salt;
-        ki.salt.len    = HKDF_SALT_LEN;
-        ki.info.data   = (uint8_t *) HKDF_INFO_ROTATION;
-        ki.info.len    = strlen(HKDF_INFO_ROTATION);
-        ki.key.data    = ctx->keys.cur;
-        ki.key.len     = SYMMKEYSZ;
-
-        if (derive_key_hkdf(&ki) != 0)
-                return -ECRYPT;
-
-        ctx->rot.age   = 0;
-        ctx->rot.phase = !ctx->rot.phase;
-
-        return 0;
-}
-
-static void cleanup_old_key(struct ossl_crypt_ctx * ctx)
-{
-        assert(ctx != NULL);
-
-        if (ctx->keys.prv == NULL)
-                return;
-
-        if (!HAS_GRACE_EXPIRED(ctx))
-                return;
-
-        OPENSSL_secure_clear_free(ctx->keys.prv, SYMMKEYSZ);
-        ctx->keys.prv = NULL;
-}
-
-static int try_decrypt(struct ossl_crypt_ctx * ctx,
-                       uint8_t *               key,
-                       uint8_t *               iv,
-                       uint8_t *               input,
-                       int                     in_sz,
-                       uint8_t *               out,
-                       int *                   out_sz)
-{
-        uint8_t * tag;
-        int       tmp_sz;
-        int       ret;
-
-        tag = input + in_sz;
+        assert(ctx->tagsz > 0); /* AEAD mandated at ctx creation */
 
         EVP_CIPHER_CTX_reset(ctx->evp_ctx);
 
-        ret = EVP_DecryptInit_ex(ctx->evp_ctx, ctx->cipher, NULL, key, iv);
-        if (ret != 1)
+        if (EVP_EncryptInit_ex(ctx->evp_ctx, ctx->cipher, NULL,
+                               NULL, NULL) != 1)
                 return -1;
 
-        if (ctx->tagsz > 0) {
-                ret = EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_SET_TAG,
-                                          ctx->tagsz, tag);
-                if (ret != 1)
-                        return -1;
-        }
-
-        ret = EVP_DecryptUpdate(ctx->evp_ctx, out, &tmp_sz, input, in_sz);
-        if (ret != 1)
+        /* Pin the AEAD nonce to 96 bits (SP 800-38D deterministic IV). */
+        if (EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                AEAD_NONCE_LEN, NULL) != 1)
                 return -1;
 
-        *out_sz = tmp_sz;
-
-        ret = EVP_DecryptFinal_ex(ctx->evp_ctx, out + tmp_sz, &tmp_sz);
-        if (ret != 1)
+        if (EVP_EncryptInit_ex(ctx->evp_ctx, NULL, NULL,
+                               key, nonce) != 1)
                 return -1;
 
-        *out_sz += tmp_sz;
+        if (EVP_EncryptUpdate(ctx->evp_ctx, NULL, &tmp_sz,
+                              aad.data, (int) aad.len) != 1)
+                return -1;
 
-        return 0;
+        if (EVP_EncryptUpdate(ctx->evp_ctx, out, &out_sz,
+                              in.data, (int) in.len) != 1)
+                return -1;
+
+        if (EVP_EncryptFinal_ex(ctx->evp_ctx, out + out_sz, &tmp_sz) != 1)
+                return -1;
+
+        out_sz += tmp_sz;
+
+        if (EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_GET_TAG,
+                                ctx->tagsz, tag) != 1)
+                return -1;
+
+        return out_sz;
+}
+
+/* AEAD open: decrypt in with key/nonce, verify aad and tag */
+int openssl_open(struct ossl_crypt_ctx * ctx,
+                 const uint8_t *         key,
+                 const uint8_t *         nonce,
+                 buffer_t                aad,
+                 buffer_t                in,
+                 const uint8_t *         tag,
+                 buffer_t *              out)
+{
+        int out_sz;
+        int tmp_sz;
+
+        assert(ctx != NULL);
+        assert(ctx->tagsz > 0); /* AEAD mandated at ctx creation */
+
+        EVP_CIPHER_CTX_reset(ctx->evp_ctx);
+
+        if (EVP_DecryptInit_ex(ctx->evp_ctx, ctx->cipher, NULL,
+                               NULL, NULL) != 1)
+                return -1;
+
+        /* Pin the AEAD nonce to 96 bits (SP 800-38D deterministic IV). */
+        if (EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                AEAD_NONCE_LEN, NULL) != 1)
+                return -1;
+
+        if (EVP_DecryptInit_ex(ctx->evp_ctx, NULL, NULL, key, nonce) != 1)
+                return -1;
+
+        if (EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_SET_TAG,
+                                ctx->tagsz, (void *) tag) != 1)
+                return -1;
+
+        if (EVP_DecryptUpdate(ctx->evp_ctx, NULL, &tmp_sz,
+                              aad.data, (int) aad.len) != 1)
+                return -1;
+
+        if (EVP_DecryptUpdate(ctx->evp_ctx, out->data, &out_sz,
+                              in.data, (int) in.len) != 1)
+                return -1;
+
+        if (EVP_DecryptFinal_ex(ctx->evp_ctx, out->data + out_sz,
+                                &tmp_sz) != 1)
+                return -1;
+
+        out_sz += tmp_sz;
+
+        out->len = (size_t) out_sz;
+
+        return out_sz;
 }
 
 /*
@@ -397,11 +398,14 @@ static int __openssl_dhe_derive(EVP_PKEY * pkp,
         ret = i2d_PUBKEY(pkp, &local_pk.data);
         if (ret <= 0)
                 goto fail_local;
+
         local_pk.len = (size_t) ret;
 
+        ki.salt.len  = HKDF_SALT_LEN;
+        ki.salt.data = salt_buf;
+
         /* Derive salt from both public keys */
-        if (derive_salt_from_pk_bytes_dhe(local_pk, remote_pk, salt_buf,
-                                          HKDF_SALT_LEN) < 0)
+        if (derive_salt_from_pk_bytes_dhe(local_pk, remote_pk, ki.salt) < 0)
                 goto fail_salt;
 
         ctx = EVP_PKEY_CTX_new(pkp, NULL);
@@ -438,8 +442,6 @@ static int __openssl_dhe_derive(EVP_PKEY * pkp,
         ki.info.data   = (uint8_t *) HKDF_INFO_DHE;
         ki.key.len     = SYMMKEYSZ;
         ki.key.data    = s;
-        ki.salt.len    = HKDF_SALT_LEN;
-        ki.salt.data   = salt_buf;
 
         /* Derive symmetric key from shared secret using HKDF */
         ret = derive_key_hkdf(&ki);
@@ -718,13 +720,17 @@ ssize_t openssl_kem_encap(buffer_t   pk,
         EVP_PKEY * pub;
         uint8_t *  pos;
         uint8_t    salt[HKDF_SALT_LEN];
+        buffer_t   salt_b;
         ssize_t    ret;
 
         assert(pk.data != NULL);
         assert(ct != NULL);
         assert(s != NULL);
 
-        if (derive_salt_from_pk_bytes(pk, salt, HKDF_SALT_LEN) < 0)
+        salt_b.len  = HKDF_SALT_LEN;
+        salt_b.data = salt;
+
+        if (derive_salt_from_pk_bytes(pk, salt_b) < 0)
                 goto fail_salt;
 
         pos = pk.data;
@@ -750,13 +756,17 @@ ssize_t openssl_kem_encap_raw(buffer_t   pk,
         EVP_PKEY *   pub;
         const char * algo;
         uint8_t      salt[HKDF_SALT_LEN];
+        buffer_t     salt_b;
         ssize_t      ret;
 
         assert(pk.data != NULL);
         assert(ct != NULL);
         assert(s != NULL);
 
-        if (derive_salt_from_pk_bytes(pk, salt, HKDF_SALT_LEN) < 0)
+        salt_b.len  = HKDF_SALT_LEN;
+        salt_b.data = salt;
+
+        if (derive_salt_from_pk_bytes(pk, salt_b) < 0)
                 goto fail_salt;
 
         algo = __openssl_hybrid_algo_from_len(pk.len);
@@ -790,12 +800,16 @@ int openssl_kem_decap(EVP_PKEY * priv,
         size_t          secret_len;
         int             ret;
         uint8_t         salt[HKDF_SALT_LEN];
+        buffer_t        salt_b;
 
         /* Extract public key bytes from private key */
         if (get_pk_bytes_from_key(priv, &pk) < 0)
                 goto fail_pk;
 
-        if (derive_salt_from_pk_bytes(pk, salt, HKDF_SALT_LEN) < 0)
+        salt_b.len  = HKDF_SALT_LEN;
+        salt_b.data = salt;
+
+        if (derive_salt_from_pk_bytes(pk, salt_b) < 0)
                 goto fail_salt;
 
         ctx = EVP_PKEY_CTX_new(priv, NULL);
@@ -858,13 +872,14 @@ void openssl_pkp_destroy(EVP_PKEY * pkp)
         EVP_PKEY_free(pkp);
 }
 
-int __openssl_get_curve(EVP_PKEY * pub,
-                        char *     algo)
+static int openssl_get_curve(EVP_PKEY * pub,
+                             char *     algo)
 {
         int    ret;
         size_t len = KEX_ALGO_BUFSZ;
 
         ret = EVP_PKEY_get_utf8_string_param(pub, "group", algo, len, &len);
+
         return ret == 1 ? 0 : -ECRYPT;
 }
 
@@ -889,9 +904,10 @@ int openssl_get_algo_from_pk_der(buffer_t pk,
 
         strcpy(algo, type_str);
 
-        if ((IS_EC_GROUP(algo) || IS_DH_GROUP(algo)) &&
-            __openssl_get_curve(pub, algo) < 0)
-                goto fail_pub;
+        if (IS_EC_GROUP(algo) || IS_DH_GROUP(algo)) {
+                if (openssl_get_curve(pub, algo) < 0)
+                        goto fail_pub;
+        }
 
         EVP_PKEY_free(pub);
         return 0;
@@ -949,141 +965,122 @@ int openssl_dhe_derive(EVP_PKEY * pkp,
         return -ECRYPT;
 }
 
-int openssl_encrypt(struct ossl_crypt_ctx * ctx,
-                    buffer_t                in,
-                    buffer_t *              out)
+/* Set up a fresh AEAD cipher ctx for nid: reject non-AEAD / oversized IV. */
+static int ossl_cipher_ctx_init(struct ossl_crypt_ctx * ctx,
+                                int                     nid)
 {
-        uint8_t *  ptr;
-        uint8_t *  iv;
-        int        in_sz;
-        int        out_sz;
-        int        tmp_sz;
-        int        ret;
+        ctx->cipher = EVP_get_cipherbynid(nid);
+        if (ctx->cipher == NULL)
+                return -1;
 
-        assert(ctx != NULL);
+        /* IV must fit the NONCESZ nonce buffer. */
+        if (EVP_CIPHER_get_iv_length(ctx->cipher) > NONCESZ)
+                return -1;
 
-        in_sz = (int) in.len;
+        /* Authenticated encryption is mandatory; reject non-AEAD ciphers. */
+        if ((EVP_CIPHER_flags(ctx->cipher) & EVP_CIPH_FLAG_AEAD_CIPHER) == 0)
+                return -1;
 
-        out->data = malloc(in.len + EVP_MAX_BLOCK_LENGTH + \
-                           ctx->ivsz + ctx->tagsz);
-        if (out->data == NULL)
-                goto fail_malloc;
+        ctx->tagsz = AEAD_TAG_LEN;
 
-        iv  = out->data;
-        ptr = out->data + ctx->ivsz;
-
-        if (random_buffer(iv, ctx->ivsz) < 0)
-                goto fail_encrypt;
-
-        /* Set IV bit 7 to current key phase (KEY_ROTATION_BIT of counter) */
-        if (ctx->rot.cntr & ctx->rot.mask)
-                iv[0] |= 0x80;
-        else
-                iv[0] &= 0x7F;
-
-        EVP_CIPHER_CTX_reset(ctx->evp_ctx);
-
-        ret = EVP_EncryptInit_ex(ctx->evp_ctx, ctx->cipher, NULL,
-                                 ctx->keys.cur, iv);
-        if (ret != 1)
-                goto fail_encrypt;
-
-        ret = EVP_EncryptUpdate(ctx->evp_ctx, ptr, &tmp_sz, in.data, in_sz);
-        if (ret != 1)
-                goto fail_encrypt;
-
-        out_sz = tmp_sz;
-        ret =  EVP_EncryptFinal_ex(ctx->evp_ctx, ptr + tmp_sz, &tmp_sz);
-        if (ret != 1)
-                goto fail_encrypt;
-
-        out_sz += tmp_sz;
-
-        /* For AEAD ciphers, get and append the authentication tag */
-        if (ctx->tagsz > 0) {
-                ret = EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_GET_TAG,
-                                          ctx->tagsz, ptr + out_sz);
-                if (ret != 1)
-                        goto fail_encrypt;
-                out_sz += ctx->tagsz;
-        }
-
-        assert(out_sz >= in_sz);
-
-        out->len = (size_t) out_sz + ctx->ivsz;
-
-        /* Increment packet counter and check for key rotation */
-        ctx->rot.cntr++;
-        ctx->rot.age++;
-
-        if (HAS_PHASE_BIT_TOGGLED(ctx)) {
-                if (rotate_key(ctx) != 0)
-                        goto fail_encrypt;
-        }
-
-        cleanup_old_key(ctx);
+        ctx->evp_ctx = EVP_CIPHER_CTX_new();
+        if (ctx->evp_ctx == NULL)
+                return -1;
 
         return 0;
- fail_encrypt:
+}
+
+/* One-shot AEAD seal over an explicit key/nonce (no keyrot). out = ct ‖ tag. */
+int openssl_oneshot_seal(int             nid,
+                         const uint8_t * key,
+                         const uint8_t * nonce,
+                         buffer_t        aad,
+                         buffer_t        in,
+                         buffer_t *      out)
+{
+        struct ossl_crypt_ctx ctx;
+        int                   out_sz;
+
+        assert(key != NULL);
+        assert(nonce != NULL);
+        assert(out != NULL);
+
+        memset(&ctx, 0, sizeof(ctx));
+
+        if (ossl_cipher_ctx_init(&ctx, nid) < 0)
+                goto fail_cipher;
+
+        out->data = malloc(in.len + EVP_MAX_BLOCK_LENGTH + ctx.tagsz);
+        if (out->data == NULL)
+                goto fail_ctx;
+
+        out_sz = openssl_seal(&ctx, key, nonce, aad, in,
+                              out->data, out->data + in.len);
+        if (out_sz < 0)
+                goto fail_seal;
+
+        out->len = (size_t) out_sz + ctx.tagsz;
+
+        EVP_CIPHER_CTX_free(ctx.evp_ctx);
+
+        return 0;
+
+ fail_seal:
         free(out->data);
- fail_malloc:
+ fail_ctx:
+        EVP_CIPHER_CTX_free(ctx.evp_ctx);
+ fail_cipher:
         clrbuf(*out);
         return -ECRYPT;
 }
 
-int openssl_decrypt(struct ossl_crypt_ctx * ctx,
-                    buffer_t                in,
-                    buffer_t *              out)
+/* One-shot AEAD open; in = ct ‖ tag, verifies aad and tag. */
+int openssl_oneshot_open(int             nid,
+                         const uint8_t * key,
+                         const uint8_t * nonce,
+                         buffer_t        aad,
+                         buffer_t        in,
+                         buffer_t *      out)
 {
-        uint8_t * iv;
-        uint8_t * input;
-        uint8_t   rx_phase;
-        int       out_sz;
-        int       in_sz;
+        struct ossl_crypt_ctx ctx;
+        buffer_t              ct;
+        const uint8_t *       tag;
+        int                   in_sz;
 
-        assert(ctx != NULL);
+        assert(key != NULL);
+        assert(nonce != NULL);
+        assert(out != NULL);
 
-        in_sz = (int) in.len - ctx->ivsz;
-        if (in_sz < ctx->tagsz)
-                return -ECRYPT;
+        memset(&ctx, 0, sizeof(ctx));
 
-        in_sz -= ctx->tagsz;
+        if (ossl_cipher_ctx_init(&ctx, nid) < 0)
+                goto fail_cipher;
 
-        out->data = malloc(in_sz + EVP_MAX_BLOCK_LENGTH);
+        if (in.len < (size_t) ctx.tagsz)
+                goto fail_ctx;
+
+        in_sz = (int) in.len - ctx.tagsz;
+
+        out->data = malloc((size_t) in_sz + EVP_MAX_BLOCK_LENGTH);
         if (out->data == NULL)
-                goto fail_malloc;
+                goto fail_ctx;
 
-        iv    = in.data;
-        input = in.data + ctx->ivsz;
+        ct.data = in.data;
+        ct.len  = (size_t) in_sz;
+        tag     = in.data + in_sz;
 
-        /* Extract phase from IV bit 7 and check for key rotation */
-        rx_phase = (iv[0] & 0x80) ? 1 : 0;
+        if (openssl_open(&ctx, key, nonce, aad, ct, tag, out) < 0)
+                goto fail_open;
 
-        if (should_rotate_key_rx(ctx, rx_phase)) {
-                if (rotate_key(ctx) != 0)
-                        goto fail_decrypt;
-        }
-
-        ctx->rot.cntr++;
-        ctx->rot.age++;
-
-        if (try_decrypt(ctx, ctx->keys.cur, iv, input, in_sz, out->data,
-                        &out_sz) != 0) {
-                if (ctx->keys.prv == NULL)
-                        goto fail_decrypt;
-                if (try_decrypt(ctx, ctx->keys.prv, iv, input, in_sz,
-                                out->data, &out_sz) != 0)
-                        goto fail_decrypt;
-        }
-
-        assert(out_sz <= in_sz);
-
-        out->len = (size_t) out_sz;
+        EVP_CIPHER_CTX_free(ctx.evp_ctx);
 
         return 0;
- fail_decrypt:
+
+ fail_open:
         free(out->data);
- fail_malloc:
+ fail_ctx:
+        EVP_CIPHER_CTX_free(ctx.evp_ctx);
+ fail_cipher:
         clrbuf(*out);
         return -ECRYPT;
 }
@@ -1094,51 +1091,19 @@ struct ossl_crypt_ctx * openssl_crypt_create_ctx(struct crypt_sk * sk)
 
         assert(sk != NULL);
         assert(sk->key != NULL);
-        assert(sk->rot_bit > 0 && sk->rot_bit < 32);
 
         ctx = malloc(sizeof(*ctx));
         if (ctx == NULL)
-                 goto fail_malloc;
+                goto fail_malloc;
 
         memset(ctx, 0, sizeof(*ctx));
 
-        ctx->keys.cur = OPENSSL_secure_malloc(SYMMKEYSZ);
-        if (ctx->keys.cur == NULL)
-                goto fail_key;
-
-        memcpy(ctx->keys.cur, sk->key, SYMMKEYSZ);
-
-        ctx->keys.prv = NULL;
-
-        /* Derive rotation salt from initial shared secret */
-        if (EVP_Digest(sk->key, SYMMKEYSZ, ctx->rot.salt, NULL,
-                       EVP_sha256(), NULL) != 1)
-                goto fail_cipher;
-
-        ctx->cipher = EVP_get_cipherbynid(sk->nid);
-        if (ctx->cipher == NULL)
-                goto fail_cipher;
-
-        ctx->ivsz = EVP_CIPHER_iv_length(ctx->cipher);
-
-        /* Set tag size for AEAD ciphers (GCM, CCM, OCB, ChaCha20-Poly1305) */
-        if (EVP_CIPHER_flags(ctx->cipher) & EVP_CIPH_FLAG_AEAD_CIPHER)
-                ctx->tagsz = 16;  /* Standard AEAD tag length (128 bits) */
-
-        ctx->rot.cntr  = 0;
-        ctx->rot.mask  = (1U << sk->rot_bit);
-        ctx->rot.age   = 0;
-        ctx->rot.phase = 0;
-
-        ctx->evp_ctx = EVP_CIPHER_CTX_new();
-        if (ctx->evp_ctx == NULL)
+        if (ossl_cipher_ctx_init(ctx, sk->nid) < 0)
                 goto fail_cipher;
 
         return ctx;
 
  fail_cipher:
-        OPENSSL_secure_clear_free(ctx->keys.cur, SYMMKEYSZ);
- fail_key:
         free(ctx);
  fail_malloc:
         return NULL;
@@ -1149,21 +1114,8 @@ void openssl_crypt_destroy_ctx(struct ossl_crypt_ctx * ctx)
         if (ctx == NULL)
                 return;
 
-        if (ctx->keys.cur != NULL)
-                OPENSSL_secure_clear_free(ctx->keys.cur, SYMMKEYSZ);
-
-        if (ctx->keys.prv != NULL)
-                OPENSSL_secure_clear_free(ctx->keys.prv, SYMMKEYSZ);
-
         EVP_CIPHER_CTX_free(ctx->evp_ctx);
         free(ctx);
-}
-
-int openssl_crypt_get_ivsz(struct ossl_crypt_ctx * ctx)
-{
-        assert(ctx != NULL);
-
-        return ctx->ivsz;
 }
 
 int openssl_crypt_get_tagsz(struct ossl_crypt_ctx * ctx)
@@ -1937,9 +1889,10 @@ void * openssl_secure_malloc(size_t size)
         return OPENSSL_secure_malloc(size);
 }
 
-void openssl_secure_free(void * ptr)
+void openssl_secure_free(void * ptr,
+                         size_t size)
 {
-        OPENSSL_secure_free(ptr);
+        OPENSSL_secure_clear_free(ptr, size);
 }
 
 void openssl_secure_clear(void * ptr,
@@ -1947,6 +1900,7 @@ void openssl_secure_clear(void * ptr,
 {
         OPENSSL_cleanse(ptr, size);
 }
+
 void openssl_cleanup(void)
 {
         OPENSSL_cleanup();

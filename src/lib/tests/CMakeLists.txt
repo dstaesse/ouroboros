@@ -14,6 +14,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   hash_test.c
   kex_test.c
   kex_test_ml_kem.c
+  keyrot_test.c
   md5_test.c
   sha3_test.c
   sockets_test.c
@@ -23,6 +24,9 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   )
 
 add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests})
+
+target_include_directories(${PARENT_DIR}_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/lib)
 
 disable_test_logging_for_target(${PARENT_DIR}_test)
 target_link_libraries(${PARENT_DIR}_test ouroboros-common)

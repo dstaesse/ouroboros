@@ -25,8 +25,16 @@ set(SHM_LOCKFILE_NAME "/${SHM_PREFIX}.lockfile" CACHE INTERNAL
 
 # Secure memory configuration
 set(IRMD_SECMEM_MAX 1048576 CACHE STRING "IRMd secure heap size")
-set(PROC_SECMEM_MAX 1048576 CACHE STRING "Process secure heap size")
-set(SECMEM_GUARD 32 CACHE STRING "Secure heap min size")
+# ~8 KiB secure heap per encrypted flow (cur+prev node slabs); the total
+# is rounded up to a power of two for the OpenSSL secure-heap allocator.
+set(PROC_SECMEM_FLOWS 512 CACHE STRING
+  "Max concurrent encrypted flows the per-process secure heap is sized for")
+math(EXPR PROC_SECMEM_NEED "${PROC_SECMEM_FLOWS} * 8192")
+set(PROC_SECMEM_MAX 4096)
+while(PROC_SECMEM_MAX LESS PROC_SECMEM_NEED)
+  math(EXPR PROC_SECMEM_MAX "${PROC_SECMEM_MAX} * 2")
+endwhile()
+set(SECMEM_MINSIZE 32 CACHE STRING "Secure heap min alloc size")
 
 # Container/deployment options
 set(BUILD_CONTAINER FALSE CACHE BOOL

@@ -37,7 +37,7 @@
 #cmakedefine HAVE_OPENSSL_ML_DSA
 #cmakedefine HAVE_OPENSSL_SLH_DSA
 #define HAVE_ENCRYPTION
-#define SECMEM_GUARD             @SECMEM_GUARD@
+#define SECMEM_MINSIZE           @SECMEM_MINSIZE@
 #endif
 #define PROC_SECMEM_MAX          @PROC_SECMEM_MAX@
 
@@ -70,6 +70,8 @@
 #cmakedefine PROC_FLOW_STATS
 #endif
 
+#cmakedefine HAVE_LIBURCU
+
 #cmakedefine FRCT_DEBUG_STDOUT
 
 #define PTHREAD_COND_CLOCK  @PTHREAD_COND_CLOCK@
@@ -100,4 +102,8 @@
 #define ACKQ_SLOTS          (@ACK_WHEEL_SLOTS@)
 #define ACKQ_RES            (@ACK_WHEEL_RESOLUTION@)         /* 2^N ns */
 
-#define KEY_ROTATION_BIT    (@KEY_ROTATION_BIT@)             /* Bit for key rotation */
+#define KEY_LEAF_BITS       (@KEY_LEAF_BITS@)       /* pkts/leaf-key = 2^n */
+#define KEY_NODE_BITS       (@KEY_NODE_BITS@)       /* leaf-keys/node = 2^n */
+#define KEY_NODE_COUNT      (@KEY_NODE_COUNT@)      /* node keys/batch N */
+#define KEY_REKEY_WATERMARK (@KEY_REKEY_WATERMARK@) /* node-keys-left trig */
+#define KEY_REPLAY_WINDOW   (@KEY_REPLAY_WINDOW@)   /* rx replay win pkts */

@@ -61,19 +61,43 @@ int     openssl_get_algo_from_pk_der(buffer_t pk,
 int     openssl_get_algo_from_pk_raw(buffer_t pk,
                                      char *   algo);
 
-int     openssl_encrypt(struct ossl_crypt_ctx * ctx,
-                        buffer_t                in,
-                        buffer_t *              out);
+int     openssl_seal(struct ossl_crypt_ctx * ctx,
+                     const uint8_t *         key,
+                     const uint8_t *         nonce,
+                     buffer_t                aad,
+                     buffer_t                in,
+                     uint8_t *               out,
+                     uint8_t *               tag);
 
-int     openssl_decrypt(struct ossl_crypt_ctx * ctx,
-                        buffer_t                in,
-                        buffer_t *              out);
+int     openssl_open(struct ossl_crypt_ctx * ctx,
+                     const uint8_t *         key,
+                     const uint8_t *         nonce,
+                     buffer_t                aad,
+                     buffer_t                in,
+                     const uint8_t *         tag,
+                     buffer_t *              out);
+
+int     openssl_oneshot_seal(int             nid,
+                             const uint8_t * key,
+                             const uint8_t * nonce,
+                             buffer_t        aad,
+                             buffer_t        in,
+                             buffer_t *      out);
+
+int     openssl_oneshot_open(int             nid,
+                             const uint8_t * key,
+                             const uint8_t * nonce,
+                             buffer_t        aad,
+                             buffer_t        in,
+                             buffer_t *      out);
+
+int     openssl_hkdf_expand(buffer_t key,
+                            buffer_t info,
+                            buffer_t out);
 
 struct ossl_crypt_ctx * openssl_crypt_create_ctx(struct crypt_sk * sk);
 
 void                    openssl_crypt_destroy_ctx(struct ossl_crypt_ctx * ctx);
-
-int                     openssl_crypt_get_ivsz(struct ossl_crypt_ctx * ctx);
 
 int                     openssl_crypt_get_tagsz(struct ossl_crypt_ctx * ctx);
 
