@@ -878,10 +878,10 @@ static void frct_mark_flow_down(struct frcti * frcti)
         struct flow * f = frcti_to_flow(frcti);
 
         if (f->rx_rb != NULL)
-                ssm_rbuff_set_acl(f->rx_rb, ACL_FLOWDOWN);
+                ssm_rbuff_set_bits(f->rx_rb, RB_FLOWDOWN);
 
         if (f->tx_rb != NULL)
-                ssm_rbuff_set_acl(f->tx_rb, ACL_FLOWDOWN);
+                ssm_rbuff_set_bits(f->tx_rb, RB_FLOWDOWN);
 }
 
 __attribute__((cold))
@@ -890,7 +890,7 @@ static void frct_mark_peer_dead(struct frcti * frcti)
         struct flow * f = frcti_to_flow(frcti);
 
         if (f->rx_rb != NULL)
-                ssm_rbuff_set_acl(f->rx_rb, ACL_FLOWPEER);
+                ssm_rbuff_set_bits(f->rx_rb, RB_FLOWPEER);
 
         if (proc.fqset != NULL)
                 ssm_flow_set_notify(proc.fqset, f->info.id, FLOW_PEER);

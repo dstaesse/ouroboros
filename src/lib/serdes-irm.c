@@ -174,6 +174,48 @@ int flow__irm_result_des(buffer_t *         buf,
         else
                 memset(sk->key, 0, SYMMKEYSZ);
 
+        sk->epoch = msg->has_generation ? (uint8_t) msg->generation : 0;
+
+        irm_msg__free_unpacked(msg, NULL);
+
+        return 0;
+ fail:
+        irm_msg__free_unpacked(msg, NULL);
+ fail_msg:
+        return err;
+}
+
+int flow_rekey__irm_result_des(buffer_t *        buf,
+                               struct crypt_sk * sk,
+                               bool *            has_key)
+{
+        irm_msg_t * msg;
+        int         err;
+
+        msg = irm_msg__unpack(NULL, buf->len, buf->data);
+        if (msg == NULL) {
+                err = -EIRMD;
+                goto fail_msg;
+        }
+
+        if (!msg->has_result) {
+                err = -EIRMD;
+                goto fail;
+        }
+
+        if (msg->result < 0) {
+                err = msg->result;
+                goto fail;
+        }
+
+        *has_key = msg->has_sym_key && msg->sym_key.len == SYMMKEYSZ;
+        if (*has_key) {
+                memcpy(sk->key, msg->sym_key.data, SYMMKEYSZ);
+                sk->nid   = NID_undef;
+                sk->epoch = msg->has_generation ?
+                            (uint8_t) msg->generation : 0;
+        }
+
         irm_msg__free_unpacked(msg, NULL);
 
         return 0;
@@ -204,6 +246,44 @@ int flow_dealloc__irm_req_ser(buffer_t *               buf,
         msg->timeo = timespec_s_to_msg(timeo);
         if (msg->timeo == NULL)
                 goto fail_msg;
+
+        len = irm_msg__get_packed_size(msg);
+        if (len == 0 || len > buf->len)
+                goto fail_msg;
+
+        buf->len = len;
+
+        irm_msg__pack(msg, buf->data);
+        irm_msg__free_unpacked(msg, NULL);
+
+        return 0;
+
+ fail_msg:
+        irm_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return -ENOMEM;
+}
+
+int flow_update__irm_req_ser(buffer_t *               buf,
+                             const struct flow_info * flow,
+                             bool                     rekey)
+{
+        irm_msg_t * msg;
+        size_t      len;
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        irm_msg__init(msg);
+
+        msg->code      = IRM_MSG_CODE__IRM_FLOW_UPDATE;
+        msg->flow_info = flow_info_s_to_msg(flow);
+        if (msg->flow_info == NULL)
+                goto fail_msg;
+
+        msg->has_rekey = true;
+        msg->rekey     = rekey;
 
         len = irm_msg__get_packed_size(msg);
         if (len == 0 || len > buf->len)
@@ -398,52 +478,6 @@ int ipcp_flow_req_arr__irm_req_ser(buffer_t *               buf,
 
         return 0;
  fail_msg:
-        irm_msg__free_unpacked(msg, NULL);
- fail_malloc:
-        return -ENOMEM;
-}
-
-int ipcp_flow_alloc_reply__irm_msg_ser(buffer_t *               buf,
-                                       const struct flow_info * flow,
-                                       int                      response,
-                                       const buffer_t *         data)
-{
-        irm_msg_t * msg;
-        size_t      len;
-
-        msg = malloc(sizeof(*msg));
-        if (msg == NULL)
-                goto fail_malloc;
-
-        irm_msg__init(msg);
-
-        msg->code      = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
-        msg->flow_info = flow_info_s_to_msg(flow);
-        if (msg->flow_info == NULL)
-                goto fail_msg;
-
-        msg->has_pk       = true;
-        msg->pk.len       = data->len;
-        msg->pk.data      = data->data;
-        msg->has_response = true;
-        msg->response     = response;
-
-        len = irm_msg__get_packed_size(msg);
-        if (len == 0 || len > buf->len)
-                goto fail_msg;
-
-        buf->len = len;
-
-        irm_msg__pack(msg, buf->data);
-
-        /* Don't free * data! */
-        msg->pk.len = 0;
-        msg->pk.data = NULL;
-
-        irm_msg__free_unpacked(msg, NULL);
-
-        return 0;
- fail_msg:
         /* hash/pk are borrowed from the caller; detach before free. */
         msg->hash.len  = 0;
         msg->hash.data = NULL;
@@ -494,6 +528,52 @@ int ipcp_flow_update_arr__irm_req_ser(buffer_t *               buf,
         /* pk.data is borrowed from the caller; detach before free. */
         msg->pk.len  = 0;
         msg->pk.data = NULL;
+        irm_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return -ENOMEM;
+}
+
+int ipcp_flow_alloc_reply__irm_msg_ser(buffer_t *               buf,
+                                       const struct flow_info * flow,
+                                       int                      response,
+                                       const buffer_t *         data)
+{
+        irm_msg_t * msg;
+        size_t      len;
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        irm_msg__init(msg);
+
+        msg->code      = IRM_MSG_CODE__IPCP_FLOW_ALLOC_REPLY;
+        msg->flow_info = flow_info_s_to_msg(flow);
+        if (msg->flow_info == NULL)
+                goto fail_msg;
+
+        msg->has_pk       = true;
+        msg->pk.len       = data->len;
+        msg->pk.data      = data->data;
+        msg->has_response = true;
+        msg->response     = response;
+
+        len = irm_msg__get_packed_size(msg);
+        if (len == 0 || len > buf->len)
+                goto fail_msg;
+
+        buf->len = len;
+
+        irm_msg__pack(msg, buf->data);
+
+        /* Don't free * data! */
+        msg->pk.len = 0;
+        msg->pk.data = NULL;
+
+        irm_msg__free_unpacked(msg, NULL);
+
+        return 0;
+ fail_msg:
         irm_msg__free_unpacked(msg, NULL);
  fail_malloc:
         return -ENOMEM;

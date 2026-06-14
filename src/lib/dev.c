@@ -100,6 +100,9 @@ struct flow {
         struct crypt_ctx *    crypt;
         int                   headsz;  /* selector */
         int                   tailsz;  /* Tag + CRC */
+        struct timespec       rk_grace; /* TX-promote deadline (0 = none) */
+        bool                  rk_wm_inflight; /* re-key trigger in flight */
+        uint32_t              rk_wm_ctr;      /* throttles the consult    */
 
         struct timespec       snd_act;
         struct timespec       rcv_act;
@@ -509,6 +512,66 @@ static void flow_drain_rx_nb(struct flow * flow)
         }
 }
 
+/* TX-promotion grace when the peer's install latency is unknown (raw). */
+#define REKEY_GRACE_MS 1000
+
+/*
+ * Pull a parked re-key seed from the IRMd and install it. Driven from the
+ * data path when RB_REKEY shows on rx_rb. crypt_rekey is concurrency-safe
+ * on its own; proc.lock (rd) only guards against teardown.
+ */
+static void flow_rekey(struct flow * flow)
+{
+        struct flow_info info;
+        struct crypt_sk  sk;
+        struct timespec  now;
+        struct timespec  intv;
+        time_t           ms;
+        uint8_t          key[SYMMKEYSZ];
+        uint8_t          buf[SOCK_BUF_SIZE];
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
+        bool             has_key;
+
+        pthread_rwlock_rdlock(&proc.lock);
+        if (flow->info.id < 0 || flow->crypt == NULL) {
+                pthread_rwlock_unlock(&proc.lock);
+                return;
+        }
+        info = flow->info;
+        pthread_rwlock_unlock(&proc.lock);
+
+        if (flow_update__irm_req_ser(&msg, &info, false) < 0)
+                return;
+
+        if (send_recv_msg(&msg) < 0)
+                return;
+
+        sk.key = key;
+        if (flow_rekey__irm_result_des(&msg, &sk, &has_key) < 0)
+                return;
+
+        if (!has_key)
+                return;
+
+        pthread_rwlock_rdlock(&proc.lock);
+        if (flow->info.id == info.id && flow->crypt != NULL) {
+                if (crypt_rekey(flow->crypt, &sk) == 0) {
+                        /* Hold TX on the old epoch until the peer installs. */
+                        ms = flow->info.mpl > 0 ? flow->info.mpl * 3
+                                                : REKEY_GRACE_MS;
+                        intv.tv_sec  = ms / 1000;
+                        intv.tv_nsec = (ms % 1000) * MILLION;
+                        clock_gettime(PTHREAD_COND_CLOCK, &now);
+                        ts_add(&now, &intv, &flow->rk_grace);
+                }
+                /* Re-arm the watermark even if the install was a no-op. */
+                STORE_RELAXED(&flow->rk_wm_inflight, false);
+        }
+        pthread_rwlock_unlock(&proc.lock);
+
+        crypt_secure_clear(key, SYMMKEYSZ);
+}
+
 /*
  * Wait clamped by caller deadline, next tw expiry, and TICTIME;
  * a clamp-timeout means tw work is due, not caller-deadline.
@@ -531,6 +594,14 @@ static int flow_rx_one(struct flow *     flow,
                 if (rx_rb == NULL) {
                         pthread_rwlock_unlock(&proc.lock);
                         return -EFLOWDOWN;
+                }
+
+                /* Pull a parked re-key before re-blocking (idle reader). */
+                if (flow->crypt != NULL
+                    && (ssm_rbuff_get_flags(rx_rb) & RB_REKEY)) {
+                        pthread_rwlock_unlock(&proc.lock);
+                        flow_rekey(flow);
+                        continue;
                 }
 
                 idx = ssm_rbuff_read_b(rx_rb, &wait_abs);
@@ -593,7 +664,7 @@ static void flow_clear(int fd)
 }
 
 /*
- * Set ACL_FLOWDOWN on rx/tx so any in-flight blocking reads or writes
+ * Set RB_FLOWDOWN on rx/tx so any in-flight blocking reads or writes
  * wake up and drop their proc.lock rdlock. Must run BEFORE flow_fini's
  * wrlock, else the wrlock blocks on those rdlock holders and the
  * in-flight calls never see the FLOWDOWN signal.
@@ -604,9 +675,9 @@ static void flow_quiesce(int fd)
         struct ssm_rbuff * tx_rb = proc.flows[fd].tx_rb;
 
         if (rx_rb != NULL)
-                ssm_rbuff_set_acl(rx_rb, ACL_FLOWDOWN);
+                ssm_rbuff_set_bits(rx_rb, RB_FLOWDOWN);
         if (tx_rb != NULL)
-                ssm_rbuff_set_acl(tx_rb, ACL_FLOWDOWN);
+                ssm_rbuff_set_bits(tx_rb, RB_FLOWDOWN);
 }
 
 static void do_flow_fini(int fd)
@@ -1256,8 +1327,6 @@ int fccntl(int fd,
         va_list           l;
         struct timespec * timeo;
         qosspec_t *       qs;
-        uint32_t          rx_acl;
-        uint32_t          tx_acl;
         size_t *          qlen;
         struct flow *     flow;
         uint16_t          old_acc;
@@ -1353,30 +1422,25 @@ int fccntl(int fd,
                     && flow->frcti != NULL)
                         emit_eos = true;
 
-                rx_acl = ssm_rbuff_get_acl(flow->rx_rb);
-                tx_acl = ssm_rbuff_get_acl(flow->tx_rb);
-                /* Our flow write-only -> peer's read-only. */
+                /* Our flow write-only -> peer's read-only; restore on RDWR. */
                 if (flow->oflags & FLOWFWRONLY)
-                        rx_acl |= ACL_RDONLY;
-                if (flow->oflags & FLOWFRDWR)
-                        rx_acl |= ACL_RDWR;
+                        ssm_rbuff_clr_bits(flow->rx_rb, RB_WR);
+                else
+                        ssm_rbuff_set_bits(flow->rx_rb, RB_WR);
 
                 if (flow->oflags & FLOWFDOWN) {
-                        rx_acl |= ACL_FLOWDOWN;
-                        tx_acl |= ACL_FLOWDOWN;
+                        ssm_rbuff_set_bits(flow->rx_rb, RB_FLOWDOWN);
+                        ssm_rbuff_set_bits(flow->tx_rb, RB_FLOWDOWN);
                         ssm_flow_set_notify(flow->set,
                                             flow->info.id,
                                             FLOW_DOWN);
                 } else {
-                        rx_acl &= ~ACL_FLOWDOWN;
-                        tx_acl &= ~ACL_FLOWDOWN;
+                        ssm_rbuff_clr_bits(flow->rx_rb, RB_FLOWDOWN);
+                        ssm_rbuff_clr_bits(flow->tx_rb, RB_FLOWDOWN);
                         ssm_flow_set_notify(flow->set,
                                             flow->info.id,
                                             FLOW_UP);
                 }
-
-                ssm_rbuff_set_acl(flow->rx_rb, rx_acl);
-                ssm_rbuff_set_acl(flow->tx_rb, tx_acl);
 
                 break;
         case FLOWGFLAGS:
@@ -1667,6 +1731,92 @@ static ssize_t flow_write_frag(struct flow *     flow,
         return (ssize_t) count;
 }
 
+/*
+ * Watermark: re-key when the TX batch is within KEY_REKEY_WATERMARK node
+ * keys of exhaustion (0 disables), ahead of the timer; consult keyrot at
+ * most once per FLOW_WM_CHECK writes.
+ */
+#define FLOW_WM_CHECK (1u << 16)
+
+/*
+ * Switch TX to the freshly installed epoch once the peer is seen on it
+ * (peer_synced) or the install grace has elapsed (breaks the symmetric
+ * wait where neither side sends the new epoch first).
+ */
+static void flow_tx_promote(struct flow *           flow,
+                            const struct timespec * now)
+{
+        if (flow->crypt == NULL)
+                return;
+
+        if (flow->rk_grace.tv_sec == 0 && flow->rk_grace.tv_nsec == 0)
+                return;
+
+        if (!crypt_peer_synced(flow->crypt)
+            && ts_diff_ns(now, &flow->rk_grace) < 0)
+                return;
+
+        crypt_tx_promote(flow->crypt);
+        flow->rk_grace.tv_sec  = 0;
+        flow->rk_grace.tv_nsec = 0;
+}
+
+/*
+ * Ask the IRMd to start an OAP re-key for this flow. The reply carries no
+ * key; the seed arrives later over RB_REKEY. Fired from the write path as
+ * the TX batch nears exhaustion, ahead of the timer.
+ */
+static int flow_rekey_trigger(struct flow * flow)
+{
+        struct flow_info info;
+        uint8_t          buf[SOCK_BUF_SIZE];
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
+
+        pthread_rwlock_rdlock(&proc.lock);
+        if (flow->info.id < 0 || flow->crypt == NULL) {
+                pthread_rwlock_unlock(&proc.lock);
+                return -1;
+        }
+        info = flow->info;
+        pthread_rwlock_unlock(&proc.lock);
+
+        if (flow_update__irm_req_ser(&msg, &info, true) < 0)
+                return -1;
+
+        if (send_recv_msg(&msg) < 0)
+                return -1;
+
+        return 0;
+}
+
+/*
+ * True when the live TX batch has run low and no re-key is in flight.
+ * Advances a throttle so the (locking) keyrot consult runs at most once
+ * per FLOW_WM_CHECK writes.
+ */
+static bool flow_wm_due(struct flow * flow)
+{
+        uint32_t tick;
+
+        if (KEY_REKEY_WATERMARK == 0)
+                return false;
+
+        if (flow->crypt == NULL)
+                return false;
+
+        if (LOAD_RELAXED(&flow->rk_wm_inflight))
+                return false;
+
+        tick = FETCH_ADD_RELAXED(&flow->rk_wm_ctr, 1);
+        if ((tick & (FLOW_WM_CHECK - 1)) != 0)
+                return false;
+
+        if (ssm_rbuff_get_flags(flow->rx_rb) & RB_REKEY)
+                return false;
+
+        return crypt_nodes_left(flow->crypt) <= KEY_REKEY_WATERMARK;
+}
+
 ssize_t flow_write(int          fd,
                    const void * buf,
                    size_t       count)
@@ -1709,6 +1859,19 @@ ssize_t flow_write(int          fd,
 
         if ((flags & FLOWFACCMODE) == FLOWFRDONLY)
                 return -EPERM;
+
+        if (flow->crypt != NULL
+            && (ssm_rbuff_get_flags(flow->rx_rb) & RB_REKEY))
+                flow_rekey(flow);
+
+        flow_tx_promote(flow, &now);
+
+        /* Pre-empt TX key exhaustion; the timer is the backstop. */
+        if (flow_wm_due(flow)) {
+                STORE_RELAXED(&flow->rk_wm_inflight, true);
+                if (flow_rekey_trigger(flow) < 0)
+                        STORE_RELAXED(&flow->rk_wm_inflight, false);
+        }
 
         tw_move_safe();
 
@@ -1784,6 +1947,10 @@ static ssize_t raw_flow_read_pkt(struct flow *     flow,
         ssize_t              idx;
 
         while (true) {
+                if (flow->crypt != NULL
+                    && (ssm_rbuff_get_flags(flow->rx_rb) & RB_REKEY))
+                        flow_rekey(flow);
+
                 if (!block) {
                         idx = ssm_rbuff_read(flow->rx_rb);
                         if (idx < 0)
@@ -1916,6 +2083,16 @@ ssize_t flow_read(int    fd,
         }
 
         pthread_rwlock_unlock(&proc.lock);
+
+        if (flow->crypt != NULL
+            && (ssm_rbuff_get_flags(flow->rx_rb) & RB_REKEY))
+                flow_rekey(flow);
+
+        /* Advance TX off a stale epoch even on recv-mostly (ACK-only) flows. */
+        if (flow->crypt != NULL) {
+                clock_gettime(PTHREAD_COND_CLOCK, &now);
+                flow_tx_promote(flow, &now);
+        }
 
         tw_move_safe();
 
@@ -2101,6 +2278,18 @@ static int fqueue_filter(struct fqueue * fq)
         pthread_rwlock_rdlock(&proc.lock);
 
         while (fq->next < fq->fqsize) {
+                if (fq->fqueue[fq->next].event == FLOW_UPD) {
+                        /* Re-key doorbell: pull internally, never surface. */
+                        fd = proc.id_to_fd[fq->fqueue[fq->next].flow_id].fd;
+                        ++fq->next;
+                        if (fd >= 0) {
+                                pthread_rwlock_unlock(&proc.lock);
+                                flow_rekey(&proc.flows[fd]);
+                                pthread_rwlock_rdlock(&proc.lock);
+                        }
+                        continue;
+                }
+
                 if (fq->fqueue[fq->next].event != FLOW_PKT) {
                         ret = 1;
                         goto out;
@@ -2643,8 +2832,8 @@ int ipcp_flow_fini(int fd)
                 return -1;
         }
 
-        ssm_rbuff_set_acl(proc.flows[fd].rx_rb, ACL_FLOWDOWN);
-        ssm_rbuff_set_acl(proc.flows[fd].tx_rb, ACL_FLOWDOWN);
+        ssm_rbuff_set_bits(proc.flows[fd].rx_rb, RB_FLOWDOWN);
+        ssm_rbuff_set_bits(proc.flows[fd].tx_rb, RB_FLOWDOWN);
 
         ssm_flow_set_notify(proc.flows[fd].set,
                             proc.flows[fd].info.id,

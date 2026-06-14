@@ -24,6 +24,7 @@
 
 #define OUROBOROS_PREFIX "reg/flow"
 
+#include <ouroboros/crypt.h>
 #include <ouroboros/logs.h>
 
 #include "flow.h"
@@ -32,6 +33,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 struct reg_flow * reg_flow_create(const struct flow_info * info)
 {
@@ -78,6 +80,8 @@ static void destroy_rbuffs(struct reg_flow * flow)
 void reg_flow_destroy(struct reg_flow * flow)
 {
         assert(flow != NULL);
+
+        crypt_secure_clear(flow->rk.pending_seed, SYMMKEYSZ);
 
         switch(flow->info.state) {
         case FLOW_ACCEPT_PENDING:

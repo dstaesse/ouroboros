@@ -28,10 +28,12 @@
 
 #include <stdint.h>
 
-#define ACL_RDWR     0000
-#define ACL_RDONLY   0001
-#define ACL_FLOWDOWN 0002
-#define ACL_FLOWPEER 0004
+#define RB_RD       0001 /* read permitted  (0 = no access)        */
+#define RB_WR       0002 /* write permitted (0 = no access)        */
+#define RB_RDWR     (RB_RD | RB_WR)
+#define RB_FLOWDOWN 0004
+#define RB_FLOWPEER 0010
+#define RB_REKEY    0020 /* re-key seed parked (out-of-band signal) */
 
 struct ssm_rbuff;
 
@@ -45,10 +47,13 @@ struct ssm_rbuff * ssm_rbuff_open(pid_t pid,
 
 void               ssm_rbuff_close(struct ssm_rbuff * rb);
 
-void               ssm_rbuff_set_acl(struct ssm_rbuff * rb,
-                                     uint32_t           flags);
+void               ssm_rbuff_set_bits(struct ssm_rbuff * rb,
+                                      uint32_t           bits);
 
-uint32_t           ssm_rbuff_get_acl(struct ssm_rbuff * rb);
+void               ssm_rbuff_clr_bits(struct ssm_rbuff * rb,
+                                      uint32_t           bits);
+
+uint32_t           ssm_rbuff_get_flags(struct ssm_rbuff * rb);
 
 void               ssm_rbuff_fini(struct ssm_rbuff * rb);
 

@@ -25,6 +25,7 @@ The IPC Resource Manager - Registry
 #define OUROBOROS_PREFIX "reg"
 
 #include <ouroboros/bitmap.h>
+#include <ouroboros/crypt.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
@@ -2100,6 +2101,194 @@ bool reg_flow_is_direct(int flow_id)
         pthread_mutex_unlock(&reg.mtx);
 
         return ret;
+}
+
+void reg_flow_set_rekey(int  flow_id,
+                        bool initiator)
+{
+        struct reg_flow * flow;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL) {
+                flow->rk.encrypted = true;
+                flow->rk.initiator = initiator;
+                flow->rk.epoch     = 0;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+}
+
+int reg_flow_get_epoch(int flow_id)
+{
+        struct reg_flow * flow;
+        int               epoch = -1;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL && flow->rk.encrypted)
+                epoch = flow->rk.epoch;
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return epoch;
+}
+
+bool reg_flow_rekey_pending(int flow_id)
+{
+        struct reg_flow * flow;
+        bool              ret = false;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL)
+                ret = flow->rk.has_pending;
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+pid_t reg_flow_get_n_1_pid(int flow_id)
+{
+        struct reg_flow * flow;
+        pid_t             pid = -1;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL)
+                pid = flow->info.n_1_pid;
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return pid;
+}
+
+int reg_flow_snapshot_rekey_due(struct rekey_info * snap,
+                                int                 max)
+{
+        struct list_head * p;
+        int                n = 0;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        llist_for_each(p, &reg.flows) {
+                struct reg_flow * f;
+
+                if (n == max)
+                        break;
+
+                f = list_entry(p, struct reg_flow, next);
+
+                if (f->info.state != FLOW_ALLOCATED || f->direct)
+                        continue;
+
+                if (!f->rk.encrypted || !f->rk.initiator)
+                        continue;
+
+                if (f->rk.in_flight || f->rk.has_pending)
+                        continue;
+
+                f->rk.in_flight = true;
+
+                snap[n].flow_id = f->info.id;
+                snap[n].n_pid   = f->info.n_pid;
+                snap[n].n_1_pid = f->info.n_1_pid;
+                snap[n].epoch   = f->rk.epoch;
+                strcpy(snap[n].name, f->name);
+                ++n;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return n;
+}
+
+void reg_flow_clear_in_flight(int flow_id)
+{
+        struct reg_flow * flow;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL)
+                flow->rk.in_flight = false;
+
+        pthread_mutex_unlock(&reg.mtx);
+}
+
+int reg_flow_store_pending(int             flow_id,
+                           const uint8_t * seed,
+                           uint8_t         epoch)
+{
+        struct reg_flow * flow;
+        int               ret = -ENOENT;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL) {
+                memcpy(flow->rk.pending_seed, seed, SYMMKEYSZ);
+                flow->rk.pending_epoch = epoch;
+                flow->rk.has_pending   = true;
+                flow->rk.in_flight     = false;
+                /* Doorbell raised only after the seed is parked. */
+                if (flow->n_rb != NULL)
+                        ssm_rbuff_set_bits(flow->n_rb, RB_REKEY);
+                ret = 0;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+bool reg_flow_take_pending(int       flow_id,
+                           uint8_t * seed,
+                           uint8_t * epoch)
+{
+        struct reg_flow * flow;
+        bool              ret = false;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL && flow->rk.has_pending) {
+                memcpy(seed, flow->rk.pending_seed, SYMMKEYSZ);
+                *epoch = flow->rk.pending_epoch;
+                flow->rk.epoch = flow->rk.pending_epoch; /* app installed it */
+                flow->rk.has_pending = false;
+                crypt_secure_clear(flow->rk.pending_seed, SYMMKEYSZ);
+                if (flow->n_rb != NULL)
+                        ssm_rbuff_clr_bits(flow->n_rb, RB_REKEY);
+                ret = true;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+void reg_notify_flow(int flow_id,
+                     int event)
+{
+        struct reg_flow * flow;
+        struct reg_proc * proc;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL) {
+                proc = __reg_get_proc(flow->info.n_pid);
+                if (proc != NULL)
+                        ssm_flow_set_notify(proc->set, flow_id, event);
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
 }
 
 int reg_respond_flow_direct(int        flow_id,

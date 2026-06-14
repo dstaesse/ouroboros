@@ -163,6 +163,40 @@ int   reg_wait_flow_direct(int                      flow_id,
 
 bool  reg_flow_is_direct(int flow_id);
 
+/* Per-flow snapshot for the re-key timer */
+struct rekey_info {
+        int     flow_id;
+        pid_t   n_pid;
+        pid_t   n_1_pid;
+        char    name[NAME_SIZE + 1];
+        uint8_t epoch;
+};
+
+void  reg_flow_set_rekey(int  flow_id,
+                         bool initiator);
+
+int   reg_flow_get_epoch(int flow_id);
+
+bool  reg_flow_rekey_pending(int flow_id);
+
+pid_t reg_flow_get_n_1_pid(int flow_id);
+
+int   reg_flow_snapshot_rekey_due(struct rekey_info * snap,
+                                  int                 max);
+
+void  reg_flow_clear_in_flight(int flow_id);
+
+int   reg_flow_store_pending(int             flow_id,
+                             const uint8_t * seed,
+                             uint8_t         epoch);
+
+bool  reg_flow_take_pending(int       flow_id,
+                            uint8_t * seed,
+                            uint8_t * epoch);
+
+void  reg_notify_flow(int flow_id,
+                      int event);
+
 void  reg_dealloc_flow(struct flow_info * info);
 
 void  reg_dealloc_flow_resp(struct flow_info * info);

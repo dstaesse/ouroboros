@@ -34,7 +34,8 @@ enum fqtype {
         FLOW_UP      = (1 << 2),
         FLOW_ALLOC   = (1 << 3),
         FLOW_DEALLOC = (1 << 4),
-        FLOW_PEER    = (1 << 5)
+        FLOW_PEER    = (1 << 5),
+        FLOW_UPD     = (1 << 6)
 };
 
 struct flow_set;

@@ -22,6 +22,8 @@ set(OAP_REPLAY_TIMER 20 CACHE STRING
   "OAP replay protection window (s)")
 set(OAP_REPLAY_MAX 4096 CACHE STRING
   "Maximum entries in the OAP replay cache (bounds memory/CPU under flood)")
+set(OAP_REKEY_TIMER 120 CACHE STRING
+  "Tier-2 re-key interval (s); bounds key age / PCS healing, 0 disables")
 set(OAP_CLIENT_AUTH_DEFAULT TRUE CACHE BOOL
   "Client requires the server to authenticate by default")
 set(DEBUG_PROTO_OAP FALSE CACHE BOOL

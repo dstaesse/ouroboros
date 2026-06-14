@@ -206,10 +206,10 @@ static int test_ssm_rbuff_fill_drain(void)
         return TEST_RC_FAIL;
 }
 
-static int test_ssm_rbuff_acl(void)
+static int test_ssm_rbuff_flags(void)
 {
         struct ssm_rbuff * rb;
-        uint32_t           acl;
+        uint32_t           flags;
 
         TEST_START();
 
@@ -219,16 +219,16 @@ static int test_ssm_rbuff_acl(void)
                 goto fail;
         }
 
-        acl = ssm_rbuff_get_acl(rb);
-        if (acl != ACL_RDWR) {
-                printf("Expected ACL_RDWR, got %u.\n", acl);
+        flags = ssm_rbuff_get_flags(rb);
+        if (flags != RB_RDWR) {
+                printf("Expected RB_RDWR, got %u.\n", flags);
                 goto fail_rb;
         }
 
-        ssm_rbuff_set_acl(rb, ACL_RDONLY);
-        acl = ssm_rbuff_get_acl(rb);
-        if (acl != ACL_RDONLY) {
-                printf("Expected ACL_RDONLY, got %u.\n", acl);
+        ssm_rbuff_clr_bits(rb, RB_WR);
+        flags = ssm_rbuff_get_flags(rb);
+        if (flags != RB_RD) {
+                printf("Expected RB_RD, got %u.\n", flags);
                 goto fail_rb;
         }
 
@@ -237,7 +237,7 @@ static int test_ssm_rbuff_acl(void)
                 goto fail_rb;
         }
 
-        ssm_rbuff_set_acl(rb, ACL_FLOWDOWN);
+        ssm_rbuff_set_bits(rb, RB_FLOWDOWN);
         if (ssm_rbuff_write(rb, 1) != -EFLOWDOWN) {
                 printf("Expected -EFLOWDOWN on FLOWDOWN.\n");
                 goto fail_rb;
@@ -553,7 +553,7 @@ static int test_ssm_rbuff_blocking_flowdown(void)
         clock_gettime(PTHREAD_COND_CLOCK, &now);
         ts_add(&now, &interval, &abs_timeout);
 
-        ssm_rbuff_set_acl(rb, ACL_FLOWDOWN);
+        ssm_rbuff_set_bits(rb, RB_FLOWDOWN);
 
         ret = ssm_rbuff_read_b(rb, &abs_timeout);
         if (ret != -EFLOWDOWN) {
@@ -561,7 +561,7 @@ static int test_ssm_rbuff_blocking_flowdown(void)
                 goto fail_rb;
         }
 
-        ssm_rbuff_set_acl(rb, ACL_RDWR);
+        ssm_rbuff_clr_bits(rb, RB_FLOWDOWN);
 
         for (i = 0; i < SSM_RBUFF_SIZE - 1; ++i) {
                 if (ssm_rbuff_write(rb, i) < 0) {
@@ -573,7 +573,7 @@ static int test_ssm_rbuff_blocking_flowdown(void)
         clock_gettime(PTHREAD_COND_CLOCK, &now);
         ts_add(&now, &interval, &abs_timeout);
 
-        ssm_rbuff_set_acl(rb, ACL_FLOWDOWN);
+        ssm_rbuff_set_bits(rb, RB_FLOWDOWN);
 
         ret = ssm_rbuff_write_b(rb, 999, &abs_timeout);
         if (ret != -EFLOWDOWN) {
@@ -581,7 +581,7 @@ static int test_ssm_rbuff_blocking_flowdown(void)
                 goto fail_rb;
         }
 
-        ssm_rbuff_set_acl(rb, ACL_RDWR);
+        ssm_rbuff_clr_bits(rb, RB_FLOWDOWN);
         while (ssm_rbuff_read(rb) >= 0)
                 ;
 
@@ -664,7 +664,7 @@ int rbuff_test(int     argc,
         ret |= test_ssm_rbuff_write_read();
         ret |= test_ssm_rbuff_read_empty();
         ret |= test_ssm_rbuff_fill_drain();
-        ret |= test_ssm_rbuff_acl();
+        ret |= test_ssm_rbuff_flags();
         ret |= test_ssm_rbuff_open_close();
         ret |= test_ssm_rbuff_threaded();
         ret |= test_ssm_rbuff_blocking();

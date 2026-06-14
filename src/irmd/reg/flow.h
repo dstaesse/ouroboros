@@ -49,6 +49,17 @@ struct reg_flow {
 
         bool               direct;
 
+        /* Tier-2 re-key state (encrypted flows only) */
+        struct {
+                bool    encrypted;     /* flow carries a cipher       */
+                uint8_t epoch;         /* last epoch installed by app */
+                bool    initiator;     /* OAP initiator (role 0)      */
+                bool    in_flight;     /* a re-key is in progress     */
+                uint8_t pending_seed[SYMMKEYSZ];
+                uint8_t pending_epoch;
+                bool    has_pending;   /* new seed awaits app pull    */
+        } rk;
+
         struct ssm_rbuff * n_rb;
         struct ssm_rbuff * n_1_rb;
 };
