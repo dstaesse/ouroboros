@@ -444,6 +444,38 @@ int ipcp_flow_join(const struct flow_info * flow,
         return ret;
 }
 
+int ipcp_flow_update(const struct flow_info * flow,
+                     const buffer_t           data)
+{
+        ipcp_msg_t   msg = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg;
+        int          ret;
+
+        msg.code         = IPCP_MSG_CODE__IPCP_FLOW_UPDATE;
+        msg.has_flow_id  = true;
+        msg.flow_id      = flow->id;
+        msg.has_pk       = true;
+        msg.pk.data      = data.data;
+        msg.pk.len       = data.len;
+
+        recv_msg = send_recv_ipcp_msg(flow->n_1_pid, &msg);
+        if (recv_msg == NULL) {
+                log_err("Did not receive message.");
+                return -EIPCP;
+        }
+
+        if (!recv_msg->has_result) {
+                log_err("Message has no result");
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
 int ipcp_flow_alloc(const struct flow_info * flow,
                     const buffer_t           dst,
                     const buffer_t           data)

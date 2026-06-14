@@ -39,6 +39,7 @@ enum ipcp_msg_code {
         IPCP_CONNECT         = 10;
         IPCP_DISCONNECT      = 11;
         IPCP_REPLY           = 12;
+        IPCP_FLOW_UPDATE     = 13;
 }
 
 message ipcp_msg {

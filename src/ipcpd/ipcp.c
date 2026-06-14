@@ -820,6 +820,33 @@ static void do_flow_dealloc(int          flow_id,
         log_info("Finished deallocating flow %d.", flow_id);
 }
 
+static void do_flow_update(int              flow_id,
+                           const buffer_t * data,
+                           ipcp_msg_t *     ret_msg)
+{
+        int fd;
+
+        if (ipcpd.ops->ipcp_flow_update == NULL) {
+                log_err("Failed to update flow: operation unsupported.");
+                ret_msg->result = -ENOTSUP;
+                return;
+        }
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                ret_msg->result = -EIPCPSTATE;
+                return;
+        }
+
+        fd = np1_flow_fd(flow_id);
+        if (fd < 0) {
+                log_warn("Flow update for unknown flow_id %d.", flow_id);
+                ret_msg->result = -1;
+                return;
+        }
+
+        ret_msg->result = ipcpd.ops->ipcp_flow_update(fd, data);
+}
+
 static void * mainloop(void * o)
 {
         int          sfd;
@@ -917,6 +944,13 @@ static void * mainloop(void * o)
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                         do_flow_dealloc(msg->flow_id, msg->timeo_sec, &ret_msg);
+                        break;
+                case IPCP_MSG_CODE__IPCP_FLOW_UPDATE:
+                        assert(msg->pk.len > 0 ? msg->pk.data != NULL
+                                               : msg->pk.data == NULL);
+                        data.len = msg->pk.len;
+                        data.data = msg->pk.data;
+                        do_flow_update(msg->flow_id, &data, &ret_msg);
                         break;
                 default:
                         ret_msg.result = -1;

@@ -53,6 +53,8 @@ enum irm_msg_code {
         IPCP_FLOW_REQ_ARR     = 25;
         IPCP_FLOW_ALLOC_REPLY = 26;
         IRM_REPLY             = 27;
+        IRM_FLOW_UPDATE       = 28;
+        IPCP_FLOW_UPDATE_ARR  = 29;
 }
 
 message timespec_msg {
@@ -96,4 +98,6 @@ message irm_msg {
         optional sint32 result           = 25;
         optional bytes  sym_key          = 26; /* symmetric encryption key */
         optional sint32 cipher_nid       = 27; /* cipher NID */
+        optional uint32 generation       = 28; /* re-key batch generation */
+        optional bool   rekey            = 29; /* re-key watermark trigger */
 }

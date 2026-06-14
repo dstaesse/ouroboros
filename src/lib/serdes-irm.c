@@ -444,6 +444,56 @@ int ipcp_flow_alloc_reply__irm_msg_ser(buffer_t *               buf,
 
         return 0;
  fail_msg:
+        /* hash/pk are borrowed from the caller; detach before free. */
+        msg->hash.len  = 0;
+        msg->hash.data = NULL;
+        msg->pk.len    = 0;
+        msg->pk.data   = NULL;
+        irm_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return -ENOMEM;
+}
+
+int ipcp_flow_update_arr__irm_req_ser(buffer_t *               buf,
+                                      const struct flow_info * flow,
+                                      const buffer_t *         data)
+{
+        irm_msg_t * msg;
+        size_t      len;
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        irm_msg__init(msg);
+
+        msg->code         = IRM_MSG_CODE__IPCP_FLOW_UPDATE_ARR;
+        msg->flow_info    = flow_info_s_to_msg(flow);
+        if (msg->flow_info == NULL)
+                goto fail_msg;
+
+        msg->has_pk       = true;
+        msg->pk.len       = data->len;
+        msg->pk.data      = data->data;
+
+        len = irm_msg__get_packed_size(msg);
+        if (len == 0 || len > buf->len)
+                goto fail_msg;
+
+        buf->len = len;
+
+        irm_msg__pack(msg, buf->data);
+
+        /* Don't free data! */
+        msg->pk.len  = 0;
+        msg->pk.data = NULL;
+        irm_msg__free_unpacked(msg, NULL);
+
+        return 0;
+ fail_msg:
+        /* pk.data is borrowed from the caller; detach before free. */
+        msg->pk.len  = 0;
+        msg->pk.data = NULL;
         irm_msg__free_unpacked(msg, NULL);
  fail_malloc:
         return -ENOMEM;

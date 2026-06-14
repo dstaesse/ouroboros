@@ -68,6 +68,9 @@ struct ipcp_ops {
                                        const buffer_t * data);
 
         int   (* ipcp_flow_dealloc)(int fd);
+
+        int   (* ipcp_flow_update)(int              fd,
+                                   const buffer_t * data);
 };
 
 int             ipcp_init(int               argc,

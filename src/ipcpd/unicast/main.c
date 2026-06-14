@@ -273,7 +273,8 @@ static struct ipcp_ops unicast_ops = {
         .ipcp_flow_alloc      = fa_alloc,
         .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = fa_alloc_resp,
-        .ipcp_flow_dealloc    = fa_dealloc
+        .ipcp_flow_dealloc    = fa_dealloc,
+        .ipcp_flow_update     = fa_irm_update
 };
 
 int main(int    argc,

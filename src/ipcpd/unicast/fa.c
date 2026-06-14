@@ -37,6 +37,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
+#include <ouroboros/np1_flow.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/random.h>
 #include <ouroboros/pthread.h>
@@ -61,9 +62,10 @@
 #define TIMEOUT  10 * MILLION /* nanoseconds */
 #define MSGBUFSZ 32768
 
-#define FLOW_REQ    0
-#define FLOW_REPLY  1
-#define FLOW_UPDATE 2
+#define FLOW_REQ        0
+#define FLOW_REPLY      1
+#define FLOW_UPDATE     2
+#define FLOW_IRM_UPDATE 3
 
 #define STAT_FILE_LEN 0
 
@@ -585,6 +587,43 @@ static int fa_handle_flow_update(struct fa_msg * msg,
         return 0;
 }
 
+static int fa_handle_flow_irm_update(struct fa_msg * msg,
+                               size_t          len)
+{
+        buffer_t data;
+        int      fd;
+        int      flow_id;
+
+        if (len < sizeof(*msg))
+                return -EINVAL;
+
+        data.data = (uint8_t *) msg + sizeof(*msg);
+        data.len  = len - sizeof(*msg);
+
+        pthread_rwlock_rdlock(&fa.flows_lock);
+
+        fd = eid_to_fd(ntoh64(msg->r_eid));
+
+        pthread_rwlock_unlock(&fa.flows_lock);
+
+        if (fd < 0) {
+                log_err("Flow update for unknown EID %" PRIu64 ".",
+                        ntoh64(msg->r_eid));
+                return -ENOTALLOC;
+        }
+
+        flow_id = np1_flow_id(fd);
+        if (flow_id < 0)
+                return -ENOTALLOC;
+
+        if (ipcp_flow_update_arr(flow_id, &data) < 0) {
+                log_err("Failed to relay flow update on fd %d.", fd);
+                return -EIRMD;
+        }
+
+        return 0;
+}
+
 static void * fa_handle_packet(void * o)
 {
         (void) o;
@@ -611,6 +650,10 @@ static void * fa_handle_packet(void * o)
                         break;
                 case FLOW_UPDATE:
                         if (fa_handle_flow_update(msg, len) < 0)
+                                log_err("Error handling flow update.");
+                        break;
+                case FLOW_IRM_UPDATE:
+                        if (fa_handle_flow_irm_update(msg, len) < 0)
                                 log_err("Error handling flow update.");
                         break;
                 default:
@@ -870,6 +913,44 @@ int fa_alloc_resp(int              fd,
         pthread_rwlock_unlock(&fa.flows_lock);
  fail_alloc_resp:
         return -1;
+}
+
+int fa_irm_update(int              fd,
+            const buffer_t * data)
+{
+        struct fa_msg *      msg;
+        struct ssm_pk_buff * spb;
+        struct fa_flow *     flow;
+        qoscube_t            qc = QOS_CUBE_BE;
+        uint64_t             r_addr;
+
+        flow = &fa.flows[fd];
+
+        if (ipcp_spb_reserve(&spb, sizeof(*msg) + data->len))
+                return -1;
+
+        msg = (struct fa_msg *) ssm_pk_buff_head(spb);
+        memset(msg, 0, sizeof(*msg));
+
+        msg->code     = FLOW_IRM_UPDATE;
+        if (data->len > 0)
+                memcpy(msg + 1, data->data, data->len);
+
+        pthread_rwlock_rdlock(&fa.flows_lock);
+
+        msg->r_eid = hton64(flow->r_eid);
+        msg->s_eid = hton64(flow->s_eid);
+        r_addr     = flow->r_addr;
+
+        pthread_rwlock_unlock(&fa.flows_lock);
+
+        if (dt_write_packet(r_addr, qc, fa.eid, spb)) {
+                log_err("Failed to send flow update packet.");
+                ipcp_spb_release(spb);
+                return -1;
+        }
+
+        return 0;
 }
 
 int fa_dealloc(int fd)

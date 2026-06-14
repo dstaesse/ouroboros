@@ -68,4 +68,7 @@ int   ipcp_flow_dealloc(pid_t  pid,
                         int    flow_id,
                         time_t timeo);
 
+int   ipcp_flow_update(const struct flow_info * flow,
+                       const buffer_t           data);
+
 #endif /* OUROBOROS_IRMD_IPCP_H */

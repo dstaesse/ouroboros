@@ -38,6 +38,9 @@ int    ipcp_flow_req_arr(const buffer_t * dst,
                          uint32_t         mtu,
                          const buffer_t * data);
 
+int    ipcp_flow_update_arr(int              flow_id,
+                            const buffer_t * data);
+
 int    ipcp_flow_alloc_reply(int              fd,
                              int              response,
                              time_t           mpl,

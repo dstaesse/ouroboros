@@ -28,6 +28,8 @@
 #include <ouroboros/list.h>
 #include <ouroboros/utils.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/ipcp-dev.h>
+#include <ouroboros/np1_flow.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
@@ -54,6 +56,7 @@
 
 #define FLOW_REQ                 1
 #define FLOW_REPLY               2
+#define FLOW_IRM_UPDATE          3
 
 #define OUR_HEADER_LEN           sizeof(uint32_t) /* adds eid */
 
@@ -328,6 +331,48 @@ static int udp_ipcp_port_alloc_resp(const struct __SOCKADDR * r_saddr,
         return 0;
 }
 
+static int udp_ipcp_flow_update(int              fd,
+                                const buffer_t * data)
+{
+        struct mgmt_msg * msg;
+        struct __SOCKADDR r_saddr;
+        uint32_t          d_eid;
+
+        msg = malloc(sizeof(*msg) + data->len);
+        if (msg == NULL)
+                return -1;
+
+        memset(msg, 0, sizeof(*msg) + data->len);
+
+        pthread_rwlock_rdlock(&udp_data.flows_lock);
+
+        r_saddr = udp_data.fd_to_uf[fd].r_saddr;
+        d_eid   = (uint32_t) udp_data.fd_to_uf[fd].d_eid;
+
+        pthread_rwlock_unlock(&udp_data.flows_lock);
+
+        msg->eid   = hton32(MGMT_EID);
+        msg->code  = FLOW_IRM_UPDATE;
+        msg->s_eid = hton32(d_eid);
+        msg->d_eid = hton32((uint32_t) fd);
+
+        if (data->len > 0)
+                memcpy(msg + 1, data->data, data->len);
+
+        if (sendto(udp_data.s_fd, msg, sizeof(*msg) + data->len,
+                   SENDTO_FLAGS,
+                   (const struct sockaddr *) &r_saddr,
+                   sizeof(r_saddr)) < 0) {
+                log_err("Failed to send flow update: %s.", strerror(errno));
+                free(msg);
+                return -1;
+        }
+
+        free(msg);
+
+        return 0;
+}
+
 static int udp_ipcp_port_req(struct __SOCKADDR * c_saddr,
                              int                 d_eid,
                              const uint8_t *     dst,
@@ -396,6 +441,37 @@ static int udp_ipcp_port_alloc_reply(const struct __SOCKADDR * saddr,
         return 0;
 }
 
+static int udp_ipcp_flow_update_arr(const uint8_t * buf,
+                                    size_t          len)
+{
+        struct mgmt_msg * msg;
+        buffer_t          data;
+        int               fd;
+        int               flow_id;
+
+        msg = (struct mgmt_msg *) buf;
+
+        fd = (int) ntoh32(msg->s_eid);
+        if (fd < 0 || fd >= SYS_MAX_FLOWS) {
+                log_err("Flow update for invalid eid %d.", fd);
+                return -1;
+        }
+
+        data.len  = len - sizeof(*msg);
+        data.data = (uint8_t *) buf + sizeof(*msg);
+
+        flow_id = np1_flow_id(fd);
+        if (flow_id < 0)
+                return -1;
+
+        if (ipcp_flow_update_arr(flow_id, &data) < 0) {
+                log_err("Failed to relay flow update on fd %d.", fd);
+                return -1;
+        }
+
+        return 0;
+}
+
 static int udp_ipcp_mgmt_frame(struct __SOCKADDR c_saddr,
                                const uint8_t *   buf,
                                size_t            len)
@@ -443,6 +519,8 @@ static int udp_ipcp_mgmt_frame(struct __SOCKADDR c_saddr,
                                                  ntoh32(msg->d_eid),
                                                  ntoh32(msg->response),
                                                  &data);
+        case FLOW_IRM_UPDATE:
+                return udp_ipcp_flow_update_arr(buf, len);
         default:
                 log_err("Unknown message received %d.", msg->code);
                 return -1;
@@ -1196,7 +1274,8 @@ static struct ipcp_ops udp_ops = {
         .ipcp_flow_alloc      = udp_ipcp_flow_alloc,
         .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = udp_ipcp_flow_alloc_resp,
-        .ipcp_flow_dealloc    = udp_ipcp_flow_dealloc
+        .ipcp_flow_dealloc    = udp_ipcp_flow_dealloc,
+        .ipcp_flow_update     = udp_ipcp_flow_update
 };
 
 int main(int    argc,

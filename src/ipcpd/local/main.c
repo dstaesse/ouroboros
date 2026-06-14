@@ -38,6 +38,7 @@
 #include <ouroboros/ipcp.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/local-dev.h>
+#include <ouroboros/np1_flow.h>
 
 #include "ipcp.h"
 #include "np1.h"
@@ -297,6 +298,38 @@ static int local_ipcp_flow_dealloc(int fd)
         return 0;
 }
 
+/* Loopback relay: deliver the update back to the peer end (same IRMd). */
+static int local_ipcp_flow_update(int              fd,
+                                  const buffer_t * data)
+{
+        int out_fd;
+        int out_flow_id;
+
+        pthread_rwlock_rdlock(&local_data.lock);
+
+        out_fd = local_data.in_out[fd];
+
+        pthread_rwlock_unlock(&local_data.lock);
+
+        if (out_fd == -1) {
+                log_err("Flow update on fd %d with no peer.", fd);
+                return -1;
+        }
+
+        out_flow_id = np1_flow_id(out_fd);
+        if (out_flow_id < 0) {
+                log_err("No flow_id for peer fd %d.", out_fd);
+                return -1;
+        }
+
+        if (ipcp_flow_update_arr(out_flow_id, data) < 0) {
+                log_err("Failed to relay flow update to fd %d.", out_fd);
+                return -1;
+        }
+
+        return 0;
+}
+
 static struct ipcp_ops local_ops = {
         .ipcp_bootstrap       = local_ipcp_bootstrap,
         .ipcp_enroll          = NULL,
@@ -308,7 +341,8 @@ static struct ipcp_ops local_ops = {
         .ipcp_flow_alloc      = local_ipcp_flow_alloc,
         .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = local_ipcp_flow_alloc_resp,
-        .ipcp_flow_dealloc    = local_ipcp_flow_dealloc
+        .ipcp_flow_dealloc    = local_ipcp_flow_dealloc,
+        .ipcp_flow_update     = local_ipcp_flow_update
 };
 
 int main(int    argc,

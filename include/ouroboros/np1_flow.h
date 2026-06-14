@@ -36,6 +36,10 @@ int  np1_flow_resp(int flow_id,
 int  np1_flow_dealloc(int    flow_id,
                       time_t timeo);
 
+int  np1_flow_fd(int flow_id);
+
+int  np1_flow_id(int fd);
+
 static const qosspec_t qos_np1 = {
         .service      = SVC_RAW,
         .delay        = UINT32_MAX,

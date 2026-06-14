@@ -31,6 +31,7 @@
 #include <ouroboros/utils.h>
 
 #include <inttypes.h>
+#include <stdbool.h>
 
 int flow_alloc__irm_req_ser(buffer_t *               buf,
                             const struct flow_info * flow,
@@ -51,6 +52,10 @@ int ipcp_flow_req_arr__irm_req_ser(buffer_t *               buf,
                                    const struct flow_info * flow,
                                    const buffer_t *         data);
 
+int ipcp_flow_update_arr__irm_req_ser(buffer_t *               buf,
+                                      const struct flow_info * flow,
+                                      const buffer_t *         data);
+
 int ipcp_flow_alloc_reply__irm_msg_ser(buffer_t *               buf,
                                        const struct flow_info * flow,
                                        int                      response,
@@ -63,6 +68,14 @@ int flow__irm_result_des(buffer_t *         buf,
 int flow_dealloc__irm_req_ser(buffer_t *               buf,
                               const struct flow_info * flow,
                               const struct timespec *  timeo);
+
+int flow_update__irm_req_ser(buffer_t *               buf,
+                             const struct flow_info * flow,
+                             bool                     rekey);
+
+int flow_rekey__irm_result_des(buffer_t *        buf,
+                               struct crypt_sk * sk,
+                               bool *            has_key);
 
 int ipcp_flow_dealloc__irm_req_ser(buffer_t *               buf,
                                    const struct flow_info * info);

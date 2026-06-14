@@ -2282,6 +2282,38 @@ int np1_flow_resp(int flow_id,
         return fd;
 }
 
+int np1_flow_fd(int flow_id)
+{
+        int fd;
+
+        if (flow_id < 0 || flow_id >= SYS_MAX_FLOWS)
+                return -1;
+
+        pthread_rwlock_rdlock(&proc.lock);
+
+        fd = proc.id_to_fd[flow_id].fd;
+
+        pthread_rwlock_unlock(&proc.lock);
+
+        return fd;
+}
+
+int np1_flow_id(int fd)
+{
+        int flow_id;
+
+        if (fd < 0 || fd >= PROC_MAX_FLOWS)
+                return -1;
+
+        pthread_rwlock_rdlock(&proc.lock);
+
+        flow_id = proc.flows[fd].info.id;
+
+        pthread_rwlock_unlock(&proc.lock);
+
+        return flow_id;
+}
+
 int ipcp_create_r(const struct ipcp_info * info)
 {
         uint8_t          buf[SOCK_BUF_SIZE];
@@ -2348,6 +2380,29 @@ int ipcp_flow_req_arr(const buffer_t * dst,
         crypt.nid = NID_undef;
 
         return flow_init(&flow, &crypt, 0);
+}
+
+int ipcp_flow_update_arr(int              flow_id,
+                         const buffer_t * data)
+{
+        struct flow_info flow;
+        uint8_t          buf[SOCK_BUF_SIZE];
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
+        int              err;
+
+        memset(&flow, 0, sizeof(flow));
+
+        flow.id      = flow_id;
+        flow.n_1_pid = getpid();
+
+        if (ipcp_flow_update_arr__irm_req_ser(&msg, &flow, data) < 0)
+                return -ENOMEM;
+
+        err = send_recv_msg(&msg);
+        if (err < 0)
+                return err;
+
+        return irm__irm_result_des(&msg);
 }
 
 int ipcp_flow_alloc_reply(int              fd,

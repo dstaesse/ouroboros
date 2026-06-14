@@ -49,6 +49,7 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
 #include <ouroboros/logs.h>
+#include <ouroboros/np1_flow.h>
 #include <ouroboros/time.h>
 #include <ouroboros/fccntl.h>
 #include <ouroboros/pthread.h>
@@ -160,6 +161,7 @@
 #define FLOW_REPLY           1
 #define NAME_QUERY_REQ       2
 #define NAME_QUERY_REPLY     3
+#define FLOW_IRM_UPDATE      4
 
 struct mgmt_msg {
 #if defined(BUILD_ETH_DIX)
@@ -844,6 +846,58 @@ static int eth_ipcp_alloc_resp(uint8_t *        dst_addr,
         return 0;
 }
 
+static int eth_ipcp_flow_update(int              fd,
+                                const buffer_t * data)
+{
+        struct mgmt_msg * msg;
+        struct ef *       flow;
+        uint8_t *         buf;
+        uint8_t           r_addr[MAC_SIZE];
+        int               ret;
+
+        buf = malloc(sizeof(*msg) + ETH_HEADER_TOT_SIZE + data->len);
+        if (buf == NULL)
+                return -1;
+
+        memset(buf, 0, sizeof(*msg) + ETH_HEADER_TOT_SIZE + data->len);
+
+        msg = (struct mgmt_msg *) (buf + ETH_HEADER_TOT_SIZE);
+
+        msg->code = FLOW_IRM_UPDATE;
+
+        pthread_rwlock_rdlock(&eth_data.flows_lock);
+
+        flow = &eth_data.fd_to_ef[fd];
+#if defined(BUILD_ETH_DIX)
+        msg->seid = htons((uint16_t) fd);
+        msg->deid = htons((uint16_t) flow->r_eid);
+#elif defined(BUILD_ETH_LLC)
+        msg->ssap = flow->sap;
+        msg->dsap = (uint8_t) flow->r_sap;
+#endif
+        memcpy(r_addr, flow->r_addr, MAC_SIZE);
+
+        pthread_rwlock_unlock(&eth_data.flows_lock);
+
+        if (data->len > 0)
+                memcpy(msg + 1, data->data, data->len);
+
+        ret = eth_ipcp_send_frame(r_addr,
+#if defined(BUILD_ETH_DIX)
+                                  MGMT_EID,
+#elif defined(BUILD_ETH_LLC)
+                                  reverse_bits(MGMT_SAP),
+                                  reverse_bits(MGMT_SAP),
+#endif
+                                  buf, sizeof(*msg) + data->len);
+        free(buf);
+
+        if (ret == 0)
+                FETCH_ADD_RELAXED(&eth_data.stat.n_mgmt_snd, 1);
+
+        return ret;
+}
+
 static int eth_ipcp_req(uint8_t *        r_addr,
 #if defined(BUILD_ETH_DIX)
                         uint16_t         r_eid,
@@ -994,6 +1048,44 @@ static int eth_ipcp_name_query_reply(const uint8_t * hash,
         return 0;
 }
 
+static int eth_ipcp_flow_update_arr(const uint8_t * buf,
+                                    size_t          len)
+{
+        struct mgmt_msg * msg;
+        buffer_t          data;
+        int               fd;
+        int               flow_id;
+
+        msg = (struct mgmt_msg *) buf;
+
+        data.data = (uint8_t *) buf + sizeof(*msg);
+        data.len  = len - sizeof(*msg);
+
+        pthread_rwlock_rdlock(&eth_data.flows_lock);
+#if defined(BUILD_ETH_DIX)
+        fd = ntohs(msg->deid);
+#elif defined(BUILD_ETH_LLC)
+        fd = eth_data.ef_to_fd[msg->dsap];
+#endif
+        pthread_rwlock_unlock(&eth_data.flows_lock);
+
+        if (fd < 0 || fd >= SYS_MAX_FLOWS) {
+                log_err("Flow update for unknown endpoint.");
+                return -1;
+        }
+
+        flow_id = np1_flow_id(fd);
+        if (flow_id < 0)
+                return -1;
+
+        if (ipcp_flow_update_arr(flow_id, &data) < 0) {
+                log_err("Failed to relay flow update on fd %d.", fd);
+                return -1;
+        }
+
+        return 0;
+}
+
 static int eth_ipcp_mgmt_frame(const uint8_t * buf,
                                size_t          len,
                                uint8_t *       r_addr)
@@ -1054,6 +1146,9 @@ static int eth_ipcp_mgmt_frame(const uint8_t * buf,
 #endif
                                      ntoh32(msg->response),
                                      &data);
+                break;
+        case FLOW_IRM_UPDATE:
+                eth_ipcp_flow_update_arr(buf, len);
                 break;
         case NAME_QUERY_REQ:
                 if (len < sizeof(*msg) + ipcp_dir_hash_len())
@@ -2289,7 +2384,8 @@ static struct ipcp_ops eth_ops = {
         .ipcp_flow_alloc      = eth_ipcp_flow_alloc,
         .ipcp_flow_join       = NULL,
         .ipcp_flow_alloc_resp = eth_ipcp_flow_alloc_resp,
-        .ipcp_flow_dealloc    = eth_ipcp_flow_dealloc
+        .ipcp_flow_dealloc    = eth_ipcp_flow_dealloc,
+        .ipcp_flow_update     = eth_ipcp_flow_update
 };
 
 int main(int    argc,
