@@ -956,6 +956,8 @@ static int test_ssm_pool_reclaim_orphans(void)
         ssize_t              ret3;
         pid_t                my_pid;
         pid_t                fake_pid = 99999;
+        struct timespec      now;
+        uint64_t             old_ts;
 
         TEST_START();
 
@@ -976,9 +978,15 @@ static int test_ssm_pool_reclaim_orphans(void)
                 goto fail_alloc;
         }
 
-        /* Simulate blocks from another process by changing allocator_pid */
+        /* Simulate blocks leaked by a dead process: foreign pid, aged out. */
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        old_ts = ((uint64_t) now.tv_sec - (SSM_POOL_RECLAIM_AGE_S + 1))
+                 * 1000000000ULL + (uint64_t) now.tv_nsec;
+
         spb1->allocator_pid = fake_pid;
         spb2->allocator_pid = fake_pid;
+        spb1->alloc_ts      = old_ts;
+        spb2->alloc_ts      = old_ts;
         /* Keep spb3 with our pid */
 
         /* Reclaim orphans from fake_pid */
