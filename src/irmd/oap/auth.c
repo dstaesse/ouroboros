@@ -29,6 +29,7 @@
 #define OUROBOROS_PREFIX "irmd/oap"
 
 #include <ouroboros/crypt.h>
+#include <ouroboros/endian.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/pthread.h>
@@ -168,6 +169,195 @@ int oap_auth_add_chain_crt(void * crt)
         return auth_add_crt_to_chain(oap_auth.ca_ctx, crt);
 }
 
+/* HKDF info = LABEL (incl. NUL separator) || request-hash [|| response-hash] */
+#define OAP_BIND_LABEL "o7s-oap-bind"
+#define OAP_KC_LABEL   "o7s-oap-kc"
+#define OAP_HS_LABEL   "o7s-oap-hs"
+
+int oap_resp_hash(int        md_nid,
+                  buffer_t   kex,
+                  buffer_t   data,
+                  buffer_t   crt,
+                  buffer_t * out)
+{
+        buffer_t  cat = BUF_INIT;
+        uint8_t * p;
+        ssize_t   len;
+
+        assert(out != NULL);
+        assert(out->data != NULL);
+
+        cat.len = kex.len + data.len + crt.len;
+        if (cat.len == 0)
+                return -EINVAL;
+
+        cat.data = malloc(cat.len);
+        if (cat.data == NULL)
+                return -ENOMEM;
+
+        p = cat.data;
+        if (kex.len > 0) {
+                memcpy(p, kex.data, kex.len);
+                p += kex.len;
+        }
+
+        if (data.len > 0) {
+                memcpy(p, data.data, data.len);
+                p += data.len;
+        }
+
+        if (crt.len > 0)
+                memcpy(p, crt.data, crt.len);
+
+        len = md_digest(md_nid, cat, out->data);
+
+        freebuf(cat);
+
+        if (len < 0)
+                return -ECRYPT;
+
+        out->len = (size_t) len;
+
+        return 0;
+}
+
+/* HKDF-expand sk->key with info into out; -ECRYPT on failure. */
+static int oap_hkdf_expand(const struct crypt_sk * sk,
+                           buffer_t                info,
+                           uint8_t *               out,
+                           size_t                  outlen)
+{
+        buffer_t prk;
+        buffer_t okm;
+
+        prk.len   = SYMMKEYSZ;
+        prk.data  = sk->key;
+        okm.len   = outlen;
+        okm.data  = out;
+
+        if (crypt_hkdf_expand(prk, info, okm) < 0)
+                return -ECRYPT;
+
+        return 0;
+}
+
+/* info = label || H(req) */
+#define OAP_HS_INFO_SZ (sizeof(OAP_HS_LABEL) + MAX_HASH_SIZE)
+int oap_derive_hs_key(const struct crypt_sk * sk,
+                      buffer_t                req_hash,
+                      uint8_t *               out)
+{
+        uint8_t  info_buf[OAP_HS_INFO_SZ];
+        buffer_t info;
+        size_t   len;
+
+        assert(sk != NULL);
+        assert(req_hash.data != NULL);
+        assert(out != NULL);
+
+        if (req_hash.len == 0 || req_hash.len > MAX_HASH_SIZE)
+                return -EINVAL;
+
+        len = sizeof(OAP_HS_LABEL);
+        memcpy(info_buf, OAP_HS_LABEL, len);
+        memcpy(info_buf + len, req_hash.data, req_hash.len);
+        len += req_hash.len;
+
+        info.len  = len;
+        info.data = info_buf;
+
+        return oap_hkdf_expand(sk, info, out, SYMMKEYSZ);
+}
+
+/* info = label || H(req) || H(resp) || cipher_nid || kdf_nid */
+#define OAP_BIND_INFO_SZ \
+        (sizeof(OAP_BIND_LABEL) + 2 * MAX_HASH_SIZE + 2 * sizeof(uint16_t))
+int oap_bind_session_key(struct crypt_sk * sk,
+                         buffer_t          req_hash,
+                         buffer_t          resp_hash,
+                         int               kdf_nid)
+{
+        uint8_t  info_buf[OAP_BIND_INFO_SZ];
+        uint8_t  tmp[SYMMKEYSZ];
+        uint16_t suite[2];
+        buffer_t info;
+        size_t   len;
+
+        assert(sk != NULL);
+        assert(req_hash.data != NULL);
+        assert(resp_hash.data != NULL);
+
+        if (req_hash.len == 0 || req_hash.len > MAX_HASH_SIZE)
+                return -EINVAL;
+
+        if (resp_hash.len == 0 || resp_hash.len > MAX_HASH_SIZE)
+                return -EINVAL;
+
+        len = sizeof(OAP_BIND_LABEL);
+        memcpy(info_buf, OAP_BIND_LABEL, len);
+        memcpy(info_buf + len, req_hash.data, req_hash.len);
+        len += req_hash.len;
+
+        memcpy(info_buf + len, resp_hash.data, resp_hash.len);
+        len += resp_hash.len;
+
+        suite[0] = hton16((uint16_t) sk->nid);
+        suite[1] = hton16((uint16_t) kdf_nid);
+        memcpy(info_buf + len, suite, sizeof(suite));
+        len += sizeof(suite);
+
+        info.len  = len;
+        info.data = info_buf;
+
+        if (oap_hkdf_expand(sk, info, tmp, SYMMKEYSZ) < 0)
+                return -ECRYPT;
+
+        memcpy(sk->key, tmp, SYMMKEYSZ);
+        crypt_secure_clear(tmp, SYMMKEYSZ);
+
+        return 0;
+}
+
+/* info = label || H(req) || H(resp) */
+#define OAP_KC_INFO_SZ (sizeof(OAP_KC_LABEL) + 2 * MAX_HASH_SIZE)
+int oap_key_confirm_tag(const struct crypt_sk * sk,
+                        buffer_t                req_hash,
+                        buffer_t                resp_hash,
+                        uint8_t *               out,
+                        size_t                  outlen)
+{
+        uint8_t  info_buf[OAP_KC_INFO_SZ];
+        buffer_t info;
+        size_t   len;
+
+        assert(sk != NULL);
+        assert(req_hash.data != NULL);
+        assert(resp_hash.data != NULL);
+        assert(out != NULL);
+
+        if (req_hash.len == 0 || req_hash.len > MAX_HASH_SIZE)
+                return -EINVAL;
+
+        if (resp_hash.len == 0 || resp_hash.len > MAX_HASH_SIZE)
+                return -EINVAL;
+
+        if (outlen > MAX_HASH_SIZE)
+                return -EINVAL;
+
+        len = sizeof(OAP_KC_LABEL);
+        memcpy(info_buf, OAP_KC_LABEL, len);
+        memcpy(info_buf + len, req_hash.data, req_hash.len);
+        len += req_hash.len;
+
+        memcpy(info_buf + len, resp_hash.data, resp_hash.len);
+        len += resp_hash.len;
+
+        info.len  = len;
+        info.data = info_buf;
+
+        return oap_hkdf_expand(sk, info, out, outlen);
+}
+
 #define TIMESYNC_SLACK 100 /* ms */
 #define ID_IS_EQUAL(id1, id2) (memcmp(id1, id2, OAP_ID_SIZE) == 0)
 int oap_check_hdr(const struct oap_hdr * hdr)
@@ -248,12 +438,14 @@ int oap_check_hdr(const struct oap_hdr * hdr)
 int oap_auth_peer(char *                    name,
                   const struct sec_config * cfg,
                   const struct oap_hdr *    local_hdr,
-                  const struct oap_hdr *    peer_hdr)
+                  const struct oap_hdr *    peer_hdr,
+                  const buffer_t *          cached_crt)
 {
         void *     crt;
         void *     pk  = NULL;
         void *     pin = NULL;
-        buffer_t   sign; /* Signed region */
+        buffer_t   crt_der; /* cert source: wire, else cached (re-key) */
+        buffer_t   sign;    /* Signed region                          */
         uint8_t *  id = peer_hdr->id.data;
         int        ret;
 
@@ -267,7 +459,12 @@ int oap_auth_peer(char *                    name,
                 goto fail_check;
         }
 
-        if (peer_hdr->crt.len == 0) {
+        /* Re-key drops the wire cert; fall back to the cached peer cert. */
+        crt_der = peer_hdr->crt;
+        if (crt_der.len == 0 && cached_crt != NULL)
+                crt_der = *cached_crt;
+
+        if (crt_der.len == 0) {
                 if (cfg->a.req) {
                         log_err_id(id, "Peer did not provide a certificate.");
                         goto fail_check;
@@ -277,7 +474,7 @@ int oap_auth_peer(char *                    name,
                 return 0;
         }
 
-        if (crypt_load_crt_der(peer_hdr->crt, &crt) < 0) {
+        if (crypt_load_crt_der(crt_der, &crt) < 0) {
                 log_err_id(id, "Failed to load crt.");
                 goto fail_check;
         }
@@ -291,10 +488,12 @@ int oap_auth_peer(char *                    name,
 
         log_dbg_id(id, "Got public key from crt.");
 
-        if (cfg->a.cacert[0] != '\0' &&
-            crypt_load_crt_file(cfg->a.cacert, &pin) < 0) {
-                log_err_id(id, "Failed to load pinned CA %s.", cfg->a.cacert);
-                goto fail_crt;
+        if (cfg->a.cacert[0] != '\0') {
+                if (crypt_load_crt_file(cfg->a.cacert, &pin) < 0) {
+                        log_err_id(id, "Failed to load pinned CA %s.",
+                                   cfg->a.cacert);
+                        goto fail_crt;
+                }
         }
 
         ret = auth_verify_crt_pin(oap_auth.ca_ctx, crt, pin);
@@ -319,7 +518,9 @@ int oap_auth_peer(char *                    name,
                 goto fail_pin;
         }
 
-        sign = peer_hdr->hdr;
+        /* Sealed responses verify over the reconstructed plaintext. */
+        sign = peer_hdr->sealed_pt.data != NULL ?
+               peer_hdr->sealed_pt : peer_hdr->hdr;
         sign.len -= peer_hdr->sig.len;
 
         if (auth_verify_sig(pk, peer_hdr->md_nid, sign, peer_hdr->sig) < 0) {
@@ -338,6 +539,7 @@ int oap_auth_peer(char *                    name,
 
         if (pin != NULL)
                 crypt_free_crt(pin);
+
         crypt_free_key(pk);
         crypt_free_crt(crt);
 

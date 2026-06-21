@@ -43,6 +43,9 @@
 #define OAP_KEX_IS_RAW_FMT(hdr)  (((hdr)->kex_flags.fmt) == 1)
 
 /*
+ * Plaintext layout (request, and unencrypted/signed response). The
+ * signature covers the whole packet except itself.
+ *
  *  0                   1                   2                   3
  *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ ---+
@@ -83,14 +86,33 @@
  * |                                                               |    |
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |
  * |                                                               |    |
- * +                  req_hash (variable, response only)           +    |
- * |                      H(request) using req md_nid / sha384     |    |
+ * +                  rsp_tag (variable, response only)            +    |
+ * |               key-confirm tag (enc), else H(request)          |    |
  * |                                                               |    |
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ ---+
  * |                                                               |
  * +                     signature (variable)                      +
  * |                  DSA signature over signed region             |
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *
+ * Encrypted response - wire layout. The certificate, application data and
+ * signature are AEAD-sealed - hiding the server identity and the cert/data
+ * sizes; kex and rsp_tag move ahead of the sealed block as cleartext AAD.
+ *
+ *  0                   1                   2                   3
+ *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ ---+
+ * |               fixed header (36 bytes, see above)              |    |
+ * +      id, timestamp, NIDs, crt_len=0, kex_len, data_len=0      +    | AAD
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |
+ * |                      kex_data (variable)                      |    |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |
+ * |               rsp_tag (variable, response only)               |    |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ ---+
+ * |         SEAL( data_len ‖ crt_len ‖ data ‖ crt ‖ sig )         |    |
+ * +             encrypted cert, app data and signature            +    | Sealed
+ * |                     + AEAD tag (128 bits)                     |    | area
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ ---+
  *
  * cipher_nid: NID value for symmetric cipher (0 = none)
  * kdf_nid:    NID value for KDF function (0 = none)
@@ -105,6 +127,11 @@
  * Request:  sig_len = total - 36 - crt_len - kex_len - data_len
  * Response: sig_len = total - 36 - crt_len - kex_len - data_len - hash_len
  *           where hash_len = md_len(req_md_nid / sha384)
+ *
+ * The signed plaintext inside the seal is prefix ‖ data_len ‖ crt_len ‖
+ * data ‖ crt ‖ sig; the cleartext prefix (fixed ‖ kex ‖ rsp_tag) is the
+ * AEAD AAD. Cleartext crt_len/data_len are 0 - the real lengths are sealed,
+ * hiding the cert and data sizes; oap_hdr_unseal reads them to split.
  */
 
 /* Parsed OAP header - buffers pointing to a single memory region */
@@ -120,12 +147,15 @@ struct oap_hdr {
                 bool fmt;   /* Format */
                 bool role;  /* Role   */
         } kex_flags;
+
         buffer_t     id;
         buffer_t     crt;
         buffer_t     kex;
         buffer_t     data;
-        buffer_t     req_hash; /* H(request) - response only */
+        buffer_t     rsp_tag;   /* key-confirm tag / H(req), rsp only       */
         buffer_t     sig;
+        buffer_t     sealed;    /* wire ciphertext ‖ tag (sealed rsp)       */
+        buffer_t     sealed_pt; /* prefix‖lens‖data‖crt‖sig, owned          */
         buffer_t     hdr;
 };
 
@@ -142,12 +172,18 @@ int  oap_hdr_encode(struct oap_hdr *    hdr,
                     void *              pkp,
                     void *              crt,
                     struct sec_config * kcfg,
-                    buffer_t            req_hash,
-                    int                 req_md_nid);
+                    buffer_t            rsp_tag,
+                    int                 req_md_nid,
+                    const uint8_t *     seal_key);
 
 int  oap_hdr_decode(struct oap_hdr * hdr,
                     buffer_t         buf,
-                    int              req_md_nid);
+                    int              req_md_nid,
+                    bool             rekey);
+
+/* Decrypt a sealed response identity block; fills data, crt and sig. */
+int  oap_hdr_unseal(struct oap_hdr * hdr,
+                    const uint8_t *  key);
 
 void debug_oap_hdr_rcv(const struct oap_hdr * hdr);
 

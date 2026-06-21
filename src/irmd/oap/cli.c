@@ -242,11 +242,13 @@ static int do_client_kex_prepare(const char *         server_name,
 int oap_cli_prepare(void **                  ctx,
                     const struct name_info * info,
                     buffer_t *               req_buf,
-                    buffer_t                 data)
+                    buffer_t                 data,
+                    bool                     rekey)
 {
         struct oap_cli_ctx * s;
         void *               pkp = NULL;
         void *               crt = NULL;
+        buffer_t             no_tag = BUF_INIT;
         ssize_t              ret;
 
         assert(ctx != NULL);
@@ -288,6 +290,18 @@ int oap_cli_prepare(void **                  ctx,
                 goto fail_kex;
         }
 
+        /* Re-key forces server-encap: client-encap forfeits FS/PCS. */
+        if (rekey && s->kcfg.x.mode == KEM_MODE_CLIENT_ENCAP) {
+                s->kcfg.x.mode = KEM_MODE_SERVER_ENCAP;
+                log_dbg_id(s->id.data, "Re-key forcing ephemeral server KEX.");
+        }
+
+        /* Re-key omits the cert; the server verifies against its cache. */
+        if (rekey && crt != NULL) {
+                crypt_free_crt(crt);
+                crt = NULL;
+        }
+
         oap_hdr_init(&s->local_hdr, s->id, s->kex_buf, data, s->kcfg.c.nid);
 
         if (do_client_kex_prepare(info->name, s) < 0) {
@@ -296,7 +310,7 @@ int oap_cli_prepare(void **                  ctx,
         }
 
         if (oap_hdr_encode(&s->local_hdr, pkp, crt, &s->kcfg,
-                           (buffer_t) BUF_INIT, NID_undef)) {
+                           no_tag, NID_undef, NULL)) {
                 log_err_id(s->id.data, "Failed to create OAP request header.");
                 goto fail_hdr;
         }
@@ -329,6 +343,7 @@ int oap_cli_prepare(void **                  ctx,
         return 0;
 
  fail_hash:
+        oap_hdr_fini(&s->local_hdr);
  fail_hdr:
         crypt_secure_free(s->key, SYMMKEYSZ);
         crypt_free_key(s->pkp);
@@ -497,12 +512,20 @@ int oap_cli_complete(void *                   ctx,
                      const struct name_info * info,
                      buffer_t                 rsp_buf,
                      buffer_t *               data,
-                     struct crypt_sk *        sk)
+                     struct crypt_sk *        sk,
+                     const buffer_t *         cached_crt,
+                     buffer_t *               peer_crt)
 {
         struct oap_cli_ctx * s = ctx;
         struct oap_hdr       peer_hdr;
         char                 peer[NAME_SIZE + 1];
+        uint8_t              kc_buf[MAX_HASH_SIZE];
+        uint8_t              resp_hash_buf[MAX_HASH_SIZE];
+        uint8_t              hs_key[SYMMKEYSZ];
+        buffer_t             req_hash  = BUF_INIT;
+        buffer_t             resp_hash = BUF_INIT;
         uint8_t *            id;
+        int                  rc;
 
         assert(ctx != NULL);
         assert(info != NULL);
@@ -520,7 +543,7 @@ int oap_cli_complete(void *                   ctx,
         log_dbg_id(id, "Completing OAP for %s.", info->name);
 
         /* Decode response header using client's md_nid for hash length */
-        if (oap_hdr_decode(&peer_hdr, rsp_buf, s->req_md_nid) < 0) {
+        if (oap_hdr_decode(&peer_hdr, rsp_buf, s->req_md_nid, false) < 0) {
                 log_err_id(id, "Failed to decode OAP response header.");
                 goto fail_oap;
         }
@@ -533,20 +556,52 @@ int oap_cli_complete(void *                   ctx,
                 goto fail_oap;
         }
 
-        /* Authenticate server */
-        if (oap_auth_peer(peer, &s->kcfg, &s->local_hdr, &peer_hdr) < 0) {
+        /* Complete key exchange first; the sealed identity needs the secret */
+        if (do_client_kex_complete(s, &peer_hdr, sk) < 0) {
+                log_err_id(id, "Failed to complete key exchange.");
+                goto fail_oap;
+        }
+
+        req_hash.data = s->req_hash;
+        req_hash.len  = s->req_hash_len;
+
+        /* Decrypt the sealed server identity (data+cert+sig) before auth */
+        if (sk->nid != NID_undef && peer_hdr.sealed.data != NULL) {
+                if (oap_derive_hs_key(sk, req_hash, hs_key) < 0) {
+                        log_err_id(id, "Failed to derive handshake key.");
+                        goto fail_oap;
+                }
+
+                rc = oap_hdr_unseal(&peer_hdr, hs_key);
+
+                crypt_secure_clear(hs_key, SYMMKEYSZ);
+
+                if (rc < 0) {
+                        log_err_id(id, "Failed to unseal server identity.");
+                        goto fail_oap;
+                }
+        }
+
+        /* Authenticate server (cert + signature now in cleartext) */
+        if (oap_auth_peer(peer, &s->kcfg, &s->local_hdr, &peer_hdr,
+                          cached_crt) < 0) {
                 log_err_id(id, "Failed to authenticate server.");
                 goto fail_oap;
         }
 
-        /* Verify request hash in authenticated response */
-        if (peer_hdr.req_hash.len == 0) {
-                log_err_id(id, "Response missing req_hash.");
-                goto fail_oap;
+        /* Surface the peer cert so the caller can cache it for re-key. */
+        if (peer_crt != NULL && peer_hdr.crt.len > 0) {
+                peer_crt->data = malloc(peer_hdr.crt.len);
+                if (peer_crt->data == NULL)
+                        goto fail_oap;
+
+                memcpy(peer_crt->data, peer_hdr.crt.data, peer_hdr.crt.len);
+                peer_crt->len = peer_hdr.crt.len;
         }
 
-        if (memcmp(peer_hdr.req_hash.data, s->req_hash, s->req_hash_len) != 0) {
-                log_err_id(id, "Response req_hash mismatch.");
+        /* Response must carry a transcript tag of the expected length */
+        if (peer_hdr.rsp_tag.len != s->req_hash_len) {
+                log_err_id(id, "Response transcript tag mismatch.");
                 goto fail_oap;
         }
 
@@ -557,10 +612,43 @@ int oap_cli_complete(void *                   ctx,
                 goto fail_oap;
         }
 
-        /* Complete key exchange */
-        if (do_client_kex_complete(s, &peer_hdr, sk) < 0) {
-                log_err_id(id, "Failed to complete key exchange.");
-                goto fail_oap;
+        if (sk->nid != NID_undef) {
+                /* Encrypted: bind the key and verify key confirmation */
+                resp_hash.data = resp_hash_buf;
+
+                if (oap_resp_hash(s->req_md_nid, peer_hdr.kex,
+                                  peer_hdr.data, peer_hdr.crt,
+                                  &resp_hash) < 0) {
+                        log_err_id(id, "Failed to hash response.");
+                        goto fail_oap;
+                }
+
+                if (oap_bind_session_key(sk, req_hash, resp_hash,
+                                         s->kcfg.k.nid) < 0) {
+                        log_err_id(id, "Failed to bind session key.");
+                        goto fail_oap;
+                }
+
+                if (oap_key_confirm_tag(sk, req_hash, resp_hash, kc_buf,
+                                        s->req_hash_len) < 0) {
+                        log_err_id(id, "Failed to confirm session key.");
+                        goto fail_oap;
+                }
+
+                if (crypt_ct_cmp(peer_hdr.rsp_tag.data, kc_buf,
+                                 s->req_hash_len) != 0) {
+                        log_err_id(id, "Key confirmation mismatch.");
+                        goto fail_oap;
+                }
+        } else {
+                /* Cleartext path is config-driven, never a wire downgrade */
+                assert(!IS_KEX_ALGO_SET(&s->kcfg));
+                /* Unencrypted: verify request-echo integrity */
+                if (crypt_ct_cmp(peer_hdr.rsp_tag.data, s->req_hash,
+                                 s->req_hash_len) != 0) {
+                        log_err_id(id, "Response tag mismatch.");
+                        goto fail_oap;
+                }
         }
 
         /* Copy piggybacked data from server response */
@@ -571,11 +659,14 @@ int oap_cli_complete(void *                   ctx,
 
         log_info_id(id, "OAP completed for %s.", info->name);
 
+        freebuf(peer_hdr.sealed_pt);
+
         oap_ctx_free(s);
 
         return 0;
 
  fail_oap:
+        freebuf(peer_hdr.sealed_pt);
         oap_ctx_free(s);
         return -ECRYPT;
 }

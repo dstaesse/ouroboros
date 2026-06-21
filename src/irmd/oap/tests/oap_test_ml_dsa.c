@@ -179,6 +179,7 @@ int load_server_kem_pk(const char *        name,
         pk->data = malloc(test_kem_pk_len);
         if (pk->data == NULL)
                 return -1;
+
         memcpy(pk->data, test_kem_pk, test_kem_pk_len);
         pk->len = test_kem_pk_len;
 
@@ -252,6 +253,22 @@ static int test_oap_srv_md_pin_exempts_pqc(void)
         test_cfg.srv.md = NID_sha256;
 
         return roundtrip_auth_only(root_ca_crt_ml, im_ca_crt_ml);
+}
+
+static int test_oap_rekey(void)
+{
+        test_cfg_init(NID_X25519, NID_aes_256_gcm, NID_sha256,
+                      0, NO_CLI_AUTH);
+
+        return roundtrip_rekey(root_ca_crt_ml, im_ca_crt_ml);
+}
+
+static int test_oap_rekey_badcache(void)
+{
+        test_cfg_init(NID_X25519, NID_aes_256_gcm, NID_sha256,
+                      0, NO_CLI_AUTH);
+
+        return roundtrip_rekey_badcache(root_ca_crt_ml, im_ca_crt_ml);
 }
 
 static int test_oap_corrupted_request(void)
@@ -449,10 +466,15 @@ int oap_test_ml_dsa(int    argc,
         ret |= test_oap_corrupted_request();
         ret |= test_oap_corrupted_response();
         ret |= test_oap_truncated_request();
+
+        ret |= test_oap_rekey();
+        ret |= test_oap_rekey_badcache();
 #else
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_cli_md_pin_exempts_pqc;
         (void) test_oap_srv_md_pin_exempts_pqc;
+        (void) test_oap_rekey;
+        (void) test_oap_rekey_badcache;
         (void) test_oap_roundtrip_kem;
         (void) test_oap_roundtrip_kem_all;
         (void) test_oap_kem_srv_uncfg;

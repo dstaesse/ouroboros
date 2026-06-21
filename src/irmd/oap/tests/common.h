@@ -71,6 +71,11 @@ struct oap_test_ctx {
         buffer_t             data;
         void *               root_ca;
         void *               im_ca;
+
+        /* Re-key (tier iii): drop the cert, verify against the cache. */
+        bool                 rekey;
+        buffer_t             srv_crt;  /* client cert cached by server */
+        buffer_t             cli_crt;  /* server cert cached by client */
 };
 
 int  oap_test_setup(struct oap_test_ctx * ctx,
@@ -87,6 +92,12 @@ int  oap_cli_complete_ctx(struct oap_test_ctx * ctx);
 
 int  roundtrip_auth_only(const char * root_ca,
                          const char * im_ca_str);
+
+int  roundtrip_rekey(const char * root_ca,
+                     const char * im_ca_str);
+
+int  roundtrip_rekey_badcache(const char * root_ca,
+                              const char * im_ca_str);
 
 int  roundtrip_kex_only(void);
 

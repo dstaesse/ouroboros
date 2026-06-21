@@ -146,12 +146,12 @@ static int negotiate_cipher(const struct oap_hdr * peer_hdr,
         int       srv_rank;
 
         /* Cipher: select the strongest of client and server */
-        cli_nid = peer_hdr->cipher_str != NULL
-                ? (int) crypt_str_to_nid(peer_hdr->cipher_str)
-                : NID_undef;
+        if (peer_hdr->cipher_str != NULL)
+                cli_nid = (int) crypt_str_to_nid(peer_hdr->cipher_str);
+        else
+                cli_nid = NID_undef;
 
-        if (cli_nid != NID_undef
-            && crypt_cipher_rank(cli_nid) < 0) {
+        if (cli_nid != NID_undef && crypt_cipher_rank(cli_nid) < 0) {
                 log_err_id(id, "Unsupported cipher '%s'.",
                            peer_hdr->cipher_str);
                 return -ENOTSUP;
@@ -162,11 +162,9 @@ static int negotiate_cipher(const struct oap_hdr * peer_hdr,
 
         if (cli_rank > srv_rank) {
                 SET_KEX_CIPHER_NID(kcfg, cli_nid);
-                log_dbg_id(id, "Selected client cipher %s.",
-                           kcfg->c.str);
+                log_dbg_id(id, "Selected client cipher %s.", kcfg->c.str);
         } else if (srv_rank > 0) {
-                log_dbg_id(id, "Selected server cipher %s.",
-                           kcfg->c.str);
+                log_dbg_id(id, "Selected server cipher %s.", kcfg->c.str);
         } else {
                 log_err_id(id, "Encryption requested, no cipher.");
                 return -ECRYPT;
@@ -378,14 +376,24 @@ int oap_srv_process(const struct name_info * info,
                     buffer_t                 req_buf,
                     buffer_t *               rsp_buf,
                     buffer_t *               data,
-                    struct crypt_sk *        sk)
+                    struct crypt_sk *        sk,
+                    bool                     rekey,
+                    const buffer_t *         cached_crt,
+                    buffer_t *               peer_crt)
 {
         struct oap_hdr        peer_hdr;
         struct oap_hdr        local_hdr;
         struct sec_config     kcfg;
         uint8_t               kex_buf[CRYPT_KEY_BUFSZ];
         uint8_t               hash_buf[MAX_HASH_SIZE];
-        buffer_t              req_hash = BUF_INIT;
+        uint8_t               kc_buf[MAX_HASH_SIZE];
+        uint8_t               resp_hash_buf[MAX_HASH_SIZE];
+        uint8_t               hs_key[SYMMKEYSZ];
+        const uint8_t *       seal_key = NULL;
+        buffer_t              req_hash  = BUF_INIT;
+        buffer_t              resp_hash = BUF_INIT;
+        buffer_t              crt_der   = BUF_INIT;
+        buffer_t              rsp_tag   = BUF_INIT;
         ssize_t               hash_ret;
         char                  cli_name[NAME_SIZE + 1];
         uint8_t *             id;
@@ -412,13 +420,19 @@ int oap_srv_process(const struct name_info * info,
                 goto fail_cred;
         }
 
+        /* Re-key omits the cert; the peer verifies against its cache. */
+        if (rekey && crt != NULL) {
+                crypt_free_crt(crt);
+                crt = NULL;
+        }
+
         if (load_srv_kex_config(info, &kcfg) < 0) {
                 log_err("Failed to load KEX config for %s.", info->name);
                 goto fail_kex;
         }
 
         /* Decode incoming header (NID_undef = request, no hash) */
-        if (oap_hdr_decode(&peer_hdr, req_buf, NID_undef) < 0) {
+        if (oap_hdr_decode(&peer_hdr, req_buf, NID_undef, rekey) < 0) {
                 log_err("Failed to decode OAP header.");
                 goto fail_auth;
         }
@@ -439,9 +453,20 @@ int oap_srv_process(const struct name_info * info,
 
         oap_hdr_init(&local_hdr, peer_hdr.id, kex_buf, *data, NID_undef);
 
-        if (oap_auth_peer(cli_name, &kcfg, &local_hdr, &peer_hdr) < 0) {
+        if (oap_auth_peer(cli_name, &kcfg, &local_hdr, &peer_hdr,
+                          cached_crt) < 0) {
                 log_err_id(id, "Failed to authenticate client.");
                 goto fail_auth;
+        }
+
+        /* Surface the peer cert so the caller can cache it for re-key. */
+        if (peer_crt != NULL && peer_hdr.crt.len > 0) {
+                peer_crt->data = malloc(peer_hdr.crt.len);
+                if (peer_crt->data == NULL)
+                        goto fail_auth;
+
+                memcpy(peer_crt->data, peer_hdr.crt.data, peer_hdr.crt.len);
+                peer_crt->len = peer_hdr.crt.len;
         }
 
         if (do_server_kex(info, &peer_hdr, &kcfg, &local_hdr.kex, sk) < 0)
@@ -463,10 +488,58 @@ int oap_srv_process(const struct name_info * info,
                 goto fail_auth;
         }
         req_hash.data = hash_buf;
-        req_hash.len = (size_t) hash_ret;
+        req_hash.len  = (size_t) hash_ret;
 
-        if (oap_hdr_encode(&local_hdr, pkp, crt, &kcfg,
-                           req_hash, req_md_nid) < 0) {
+        rsp_tag = req_hash;
+
+        /* Bind the key to the transcript and confirm it to the client */
+        if (sk->nid != NID_undef) {
+                if (crt != NULL && crypt_crt_der(crt, &crt_der) < 0) {
+                        log_err_id(id, "Failed to serialize cert.");
+                        goto fail_auth;
+                }
+
+                resp_hash.data = resp_hash_buf;
+
+                ret = oap_resp_hash(req_md_nid, local_hdr.kex, *data,
+                                    crt_der, &resp_hash);
+
+                freebuf(crt_der);
+
+                if (ret < 0) {
+                        log_err_id(id, "Failed to hash response.");
+                        goto fail_auth;
+                }
+
+                /* Derive the identity-seal key before bind mutates sk->key */
+                if (oap_derive_hs_key(sk, req_hash, hs_key) < 0) {
+                        log_err_id(id, "Failed to derive handshake key.");
+                        goto fail_auth;
+                }
+
+                seal_key = hs_key;
+
+                if (oap_bind_session_key(sk, req_hash, resp_hash,
+                                         kcfg.k.nid) < 0) {
+                        log_err_id(id, "Failed to bind session key.");
+                        goto fail_auth;
+                }
+
+                if (oap_key_confirm_tag(sk, req_hash, resp_hash, kc_buf,
+                                        (size_t) hash_ret) < 0) {
+                        log_err_id(id, "Failed to confirm session key.");
+                        goto fail_auth;
+                }
+
+                rsp_tag.data = kc_buf;
+        }
+
+        ret = oap_hdr_encode(&local_hdr, pkp, crt, &kcfg,
+                             rsp_tag, req_md_nid, seal_key);
+
+        crypt_secure_clear(hs_key, SYMMKEYSZ);
+
+        if (ret < 0) {
                 log_err_id(id, "Failed to create OAP response header.");
                 goto fail_auth;
         }
@@ -491,6 +564,7 @@ int oap_srv_process(const struct name_info * info,
  fail_data:
         oap_hdr_fini(&local_hdr);
  fail_auth:
+        crypt_secure_clear(hs_key, SYMMKEYSZ);
         crypt_free_crt(crt);
         crypt_free_key(pkp);
  fail_cred:

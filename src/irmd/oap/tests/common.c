@@ -164,13 +164,15 @@ void oap_test_teardown(struct oap_test_ctx * ctx)
         if (ctx->cli.state != NULL) {
                 res.key = ctx->cli.key;
                 oap_cli_complete(ctx->cli.state, &ctx->cli.info, dummy,
-                                 &ctx->data, &res);
+                                 &ctx->data, &res, NULL, NULL);
                 ctx->cli.state = NULL;
         }
 
         freebuf(ctx->data);
         freebuf(ctx->resp_hdr);
         freebuf(ctx->req_hdr);
+        freebuf(ctx->srv_crt);
+        freebuf(ctx->cli_crt);
 
         crypt_free_crt(ctx->im_ca);
         crypt_free_crt(ctx->root_ca);
@@ -182,7 +184,7 @@ void oap_test_teardown(struct oap_test_ctx * ctx)
 int oap_cli_prepare_ctx(struct oap_test_ctx * ctx)
 {
         return oap_cli_prepare(&ctx->cli.state, &ctx->cli.info, &ctx->req_hdr,
-                               ctx->data);
+                               ctx->data, ctx->rekey);
 }
 
 int oap_srv_process_ctx(struct oap_test_ctx * ctx)
@@ -191,7 +193,9 @@ int oap_srv_process_ctx(struct oap_test_ctx * ctx)
         int            ret;
 
         ret = oap_srv_process(&ctx->srv.info, ctx->req_hdr,
-                              &ctx->resp_hdr, &ctx->data, &res);
+                              &ctx->resp_hdr, &ctx->data, &res, ctx->rekey,
+                              ctx->rekey ? &ctx->srv_crt : NULL,
+                              ctx->rekey ? NULL : &ctx->srv_crt);
         if (ret == 0)
                 ctx->srv.nid = res.nid;
 
@@ -204,7 +208,9 @@ int oap_cli_complete_ctx(struct oap_test_ctx * ctx)
         int            ret;
 
         ret = oap_cli_complete(ctx->cli.state, &ctx->cli.info, ctx->resp_hdr,
-                               &ctx->data, &res);
+                               &ctx->data, &res,
+                               ctx->rekey ? &ctx->cli_crt : NULL,
+                               ctx->rekey ? NULL : &ctx->cli_crt);
         ctx->cli.state = NULL;
 
         if (ret == 0)
@@ -255,6 +261,147 @@ int roundtrip_auth_only(const char * root_ca,
         return TEST_RC_FAIL;
 }
 
+int roundtrip_rekey(const char * root_ca,
+                    const char * im_ca_str)
+{
+        struct oap_test_ctx ctx;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca, im_ca_str) < 0)
+                goto fail;
+
+        /* Initial handshake: the client caches the server cert. */
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Initial client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Initial server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Initial client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
+                printf("Initial keys do not match.\n");
+                goto fail_cleanup;
+        }
+
+        if (ctx.cli_crt.len == 0) {
+                printf("Server cert was not cached for re-key.\n");
+                goto fail_cleanup;
+        }
+
+        /* Re-key: cert dropped on the wire, verified against the cache. */
+        freebuf(ctx.req_hdr);
+        freebuf(ctx.resp_hdr);
+        freebuf(ctx.data);
+
+        ctx.rekey = true;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Re-key client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Re-key server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Re-key client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
+                printf("Re-key keys do not match.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+int roundtrip_rekey_badcache(const char * root_ca,
+                             const char * im_ca_str)
+{
+        struct oap_test_ctx ctx;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca, im_ca_str) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Initial client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Initial server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Initial client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (ctx.cli_crt.len == 0) {
+                printf("Server cert was not cached.\n");
+                goto fail_cleanup;
+        }
+
+        /* Corrupt the cached cert: the re-key must fail closed. */
+        ctx.cli_crt.data[ctx.cli_crt.len / 2] ^= 0xFF;
+
+        freebuf(ctx.req_hdr);
+        freebuf(ctx.resp_hdr);
+        freebuf(ctx.data);
+
+        ctx.rekey = true;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Re-key client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Re-key server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Re-key accepted a corrupted cached cert.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int roundtrip_kex_only(void)
 {
         struct name_info cli_info;
@@ -283,14 +430,15 @@ int roundtrip_kex_only(void)
         }
 
         if (oap_cli_prepare(&cli_state, &cli_info, &req_hdr,
-                            data) < 0) {
+                            data, false) < 0) {
                 printf("Client prepare failed.\n");
                 goto fail_cleanup;
         }
 
         res.key = srv_key;
 
-        if (oap_srv_process(&srv_info, req_hdr, &resp_hdr, &data, &res) < 0) {
+        if (oap_srv_process(&srv_info, req_hdr, &resp_hdr, &data, &res,
+                            false, NULL, NULL) < 0) {
                 printf("Server process failed.\n");
                 goto fail_cleanup;
         }
@@ -299,7 +447,8 @@ int roundtrip_kex_only(void)
 
         res.key = cli_key;
 
-        if (oap_cli_complete(cli_state, &cli_info, resp_hdr, &data, &res) < 0) {
+        if (oap_cli_complete(cli_state, &cli_info, resp_hdr, &data, &res,
+                             NULL, NULL) < 0) {
                 printf("Client complete failed.\n");
                 cli_state = NULL;
                 goto fail_cleanup;
@@ -328,7 +477,8 @@ int roundtrip_kex_only(void)
  fail_cleanup:
         if (cli_state != NULL) {
                 res.key = cli_key;
-                oap_cli_complete(cli_state, &cli_info, resp_hdr, &data, &res);
+                oap_cli_complete(cli_state, &cli_info, resp_hdr, &data,
+                                 &res, NULL, NULL);
         }
         freebuf(resp_hdr);
         freebuf(req_hdr);
@@ -408,7 +558,7 @@ int corrupted_response(const char * root_ca,
         res.key = ctx.cli.key;
 
         if (oap_cli_complete(ctx.cli.state, &ctx.cli.info, ctx.resp_hdr,
-                             &ctx.data, &res) == 0) {
+                             &ctx.data, &res, NULL, NULL) == 0) {
                 printf("Client should reject corrupted response.\n");
                 ctx.cli.state = NULL;
                 goto fail_cleanup;

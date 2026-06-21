@@ -49,7 +49,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #ifdef HAVE_OPENSSL
 #include <openssl/evp.h>
@@ -179,6 +178,7 @@ static int test_oap_roundtrip(int kex)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS("(%s)", kex_str);
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -201,6 +201,20 @@ static int test_oap_roundtrip_auth_only(void)
         test_cfg.cli.auth   = NO_AUTH;
 
         return roundtrip_auth_only(root_ca_crt_ec, im_ca_crt_ec);
+}
+
+static int test_oap_rekey(void)
+{
+        test_default_cfg();
+
+        return roundtrip_rekey(root_ca_crt_ec, im_ca_crt_ec);
+}
+
+static int test_oap_rekey_badcache(void)
+{
+        test_default_cfg();
+
+        return roundtrip_rekey_badcache(root_ca_crt_ec, im_ca_crt_ec);
 }
 
 static int test_oap_roundtrip_kex_only(void)
@@ -243,6 +257,7 @@ static int test_oap_piggyback_data(void)
         ctx.data.data = malloc(ctx.data.len);
         if (ctx.data.data == NULL)
                 goto fail_cleanup;
+
         memcpy(ctx.data.data, cli_data_str, ctx.data.len);
 
         if (oap_cli_prepare_ctx(&ctx) < 0)
@@ -293,6 +308,7 @@ static int test_oap_piggyback_data(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -361,6 +377,7 @@ static int test_oap_inflated_length_field(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -405,6 +422,7 @@ static int test_oap_deflated_length_field(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -463,6 +481,7 @@ static int test_oap_nid_without_kex(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -514,6 +533,61 @@ static int test_oap_unsupported_nid(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Client rejects a response whose key-confirmation tag is tampered */
+static int test_oap_key_confirm_mismatch(void)
+{
+        struct oap_test_ctx ctx;
+
+        TEST_START();
+
+        /* Unauthenticated + encrypted: response unsigned, KC is the gate */
+        memset(&test_cfg, 0, sizeof(test_cfg));
+        test_cfg.srv.kex    = NID_X25519;
+        test_cfg.srv.cipher = NID_aes_256_gcm;
+        test_cfg.srv.kdf    = NID_sha256;
+        test_cfg.srv.md     = NID_sha256;
+        test_cfg.srv.auth   = NO_AUTH;
+        test_cfg.cli.kex    = NID_X25519;
+        test_cfg.cli.cipher = NID_aes_256_gcm;
+        test_cfg.cli.kdf    = NID_sha256;
+        test_cfg.cli.md     = NID_sha256;
+        test_cfg.cli.auth   = NO_AUTH;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* The key-confirm tag is the last field of an unsigned response */
+        ctx.resp_hdr.data[ctx.resp_hdr.len - 1] ^= 0xFF;
+
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client accepted a bad key-confirmation tag.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -614,6 +688,7 @@ static int test_oap_cipher_mismatch(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -660,6 +735,7 @@ static int test_oap_srv_enc_cli_none(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -729,6 +805,7 @@ static int test_oap_cli_enc_srv_none(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -738,7 +815,7 @@ static int test_oap_cli_enc_srv_none(void)
         return TEST_RC_FAIL;
 }
 
-/* Client rejects server response with downgraded cipher */
+/* Unauthenticated server: client floor-rejects a downgraded cipher */
 static int test_oap_cli_rejects_downgrade(void)
 {
         struct oap_test_ctx ctx;
@@ -752,7 +829,7 @@ static int test_oap_cli_rejects_downgrade(void)
         test_cfg.srv.cipher = NID_aes_256_gcm;
         test_cfg.srv.kdf    = NID_sha256;
         test_cfg.srv.md     = NID_sha256;
-        test_cfg.srv.auth   = AUTH;
+        test_cfg.srv.auth   = NO_AUTH;
 
         test_cfg.cli.kex    = NID_X25519;
         test_cfg.cli.cipher = NID_aes_256_gcm;
@@ -774,7 +851,7 @@ static int test_oap_cli_rejects_downgrade(void)
         }
 
         /* Tamper: replace cipher NID with weaker one */
-        weak = hton16(NID_aes_128_ctr);
+        weak = hton16(NID_aes_128_gcm);
         memcpy(ctx.resp_hdr.data + OAP_CIPHER_NID_OFFSET,
                &weak, sizeof(weak));
 
@@ -787,6 +864,69 @@ static int test_oap_cli_rejects_downgrade(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Suite binding: a cipher swapped to a higher rank clears the client floor
+ * check, but the bound key commits to the negotiated suite, so the swap must
+ * still fail key confirmation.
+ */
+static int test_oap_cli_rejects_suite_swap(void)
+{
+        struct oap_test_ctx ctx;
+        uint16_t            swap;
+
+        TEST_START();
+
+        memset(&test_cfg, 0, sizeof(test_cfg));
+
+        /* Both AES-128-GCM: a swap to AES-256 outranks the client floor */
+        test_cfg.srv.kex    = NID_X25519;
+        test_cfg.srv.cipher = NID_aes_128_gcm;
+        test_cfg.srv.kdf    = NID_sha256;
+        test_cfg.srv.md     = NID_sha256;
+        test_cfg.srv.auth   = NO_AUTH;
+        test_cfg.cli.kex    = NID_X25519;
+        test_cfg.cli.cipher = NID_aes_128_gcm;
+        test_cfg.cli.kdf    = NID_sha256;
+        test_cfg.cli.md     = NID_sha256;
+        test_cfg.cli.auth   = NO_AUTH;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* Swap the response cipher to a higher-ranked one */
+        swap = hton16(NID_aes_256_gcm);
+        memcpy(ctx.resp_hdr.data + OAP_CIPHER_NID_OFFSET,
+               &swap, sizeof(swap));
+
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client accepted a swapped cipher suite.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -836,6 +976,7 @@ static int test_oap_srv_rejects_weak_kex(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -895,6 +1036,7 @@ static int test_oap_roundtrip_md(int md)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS("(%s)", md_str ? md_str : "default");
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -960,6 +1102,7 @@ static int test_oap_outdated_packet(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -1008,6 +1151,7 @@ static int test_oap_future_packet(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -1067,6 +1211,7 @@ static int test_oap_replay_packet(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -1274,6 +1419,7 @@ static int test_oap_missing_root_ca(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_teardown:
@@ -1322,6 +1468,7 @@ static int test_oap_server_name_mismatch(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -1363,6 +1510,7 @@ static int test_oap_cli_requires_srv_auth(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -1398,6 +1546,7 @@ static int test_oap_srv_requires_cli_auth(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -1445,141 +1594,11 @@ static int test_oap_mutual_req_auth(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
         oap_test_teardown(&ctx);
- fail:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
-/* Write a PEM cert to a temp file for cacert= pinning */
-static int write_tmp_crt(const char * pem,
-                         char *       path)
-{
-        FILE * fp;
-        int    fd;
-
-        strcpy(path, "/tmp/oap_test_pin_XXXXXX");
-
-        fd = mkstemp(path);
-        if (fd < 0)
-                return -1;
-
-        fp = fdopen(fd, "w");
-        if (fp == NULL) {
-                close(fd);
-                goto fail_file;
-        }
-
-        if (fputs(pem, fp) == EOF) {
-                fclose(fp);
-                goto fail_file;
-        }
-
-        fclose(fp);
-
-        return 0;
-
- fail_file:
-        unlink(path);
-        return -1;
-}
-
-/* Client pins the server CA: in-chain accepted, out-of-chain rejected */
-static int test_oap_cli_pin_ca(const char * pem,
-                               bool         expected)
-{
-        struct oap_test_ctx ctx;
-        char                path[32];
-
-        test_default_cfg();
-
-        TEST_START("(%s)", expected ? "match" : "mismatch");
-
-        if (write_tmp_crt(pem, path) < 0) {
-                printf("Failed to write pinned CA file.\n");
-                goto fail;
-        }
-
-        test_cfg.cli.cacert = path;
-
-        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
-                goto fail_unlink;
-
-        if (oap_cli_prepare_ctx(&ctx) < 0) {
-                printf("Client prepare failed.\n");
-                goto fail_cleanup;
-        }
-
-        if (oap_srv_process_ctx(&ctx) < 0) {
-                printf("Server process failed.\n");
-                goto fail_cleanup;
-        }
-
-        if ((oap_cli_complete_ctx(&ctx) == 0) != expected) {
-                printf("Pinned CA gave wrong verdict.\n");
-                goto fail_cleanup;
-        }
-
-        unlink(path);
-        oap_test_teardown(&ctx);
-
-        TEST_SUCCESS();
-        return TEST_RC_SUCCESS;
-
- fail_cleanup:
-        oap_test_teardown(&ctx);
- fail_unlink:
-        unlink(path);
- fail:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
-/* Server pins the client CA: in-chain accepted, out-of-chain rejected */
-static int test_oap_srv_pin_ca(const char * pem,
-                               bool         expected)
-{
-        struct oap_test_ctx ctx;
-        char                path[32];
-
-        test_default_cfg();
-        test_cfg.cli.auth = AUTH;
-
-        TEST_START("(%s)", expected ? "match" : "mismatch");
-
-        if (write_tmp_crt(pem, path) < 0) {
-                printf("Failed to write pinned CA file.\n");
-                goto fail;
-        }
-
-        test_cfg.srv.cacert = path;
-
-        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
-                goto fail_unlink;
-
-        if (oap_cli_prepare_ctx(&ctx) < 0) {
-                printf("Client prepare failed.\n");
-                goto fail_cleanup;
-        }
-
-        if ((oap_srv_process_ctx(&ctx) == 0) != expected) {
-                printf("Pinned CA gave wrong verdict.\n");
-                goto fail_cleanup;
-        }
-
-        unlink(path);
-        oap_test_teardown(&ctx);
-
-        TEST_SUCCESS();
-        return TEST_RC_SUCCESS;
-
- fail_cleanup:
-        oap_test_teardown(&ctx);
- fail_unlink:
-        unlink(path);
  fail:
         TEST_FAIL();
         return TEST_RC_FAIL;
@@ -1616,6 +1635,7 @@ static int test_oap_cli_rejects_md_mismatch(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -1652,6 +1672,151 @@ static int test_oap_srv_rejects_md_mismatch(void)
         oap_test_teardown(&ctx);
 
         TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Naive substring search over raw bytes (memmem is not portable here). */
+static bool buf_contains(const uint8_t * hay,
+                         size_t          hlen,
+                         const uint8_t * needle,
+                         size_t          nlen)
+{
+        size_t i;
+
+        if (nlen == 0 || nlen > hlen)
+                return false;
+
+        for (i = 0; i + nlen <= hlen; i++) {
+                if (memcmp(hay + i, needle, nlen) == 0)
+                        return true;
+        }
+
+        return false;
+}
+
+/* The server certificate must not appear in cleartext on the wire */
+static int test_oap_server_cert_hidden(void)
+{
+        struct oap_test_ctx ctx;
+        void *              crt = NULL;
+        buffer_t            der = BUF_INIT;
+
+        test_default_cfg();
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (crypt_load_crt_str(signed_server_crt_ec, &crt) < 0) {
+                printf("Failed to load server crt.\n");
+                goto fail_cleanup;
+        }
+
+        if (crypt_crt_der(crt, &der) < 0) {
+                printf("Failed to DER-encode server crt.\n");
+                goto fail_crt;
+        }
+
+        if (der.len == 0 || der.len > ctx.resp_hdr.len) {
+                printf("Unexpected cert/response sizes.\n");
+                goto fail_der;
+        }
+
+        if (buf_contains(ctx.resp_hdr.data, ctx.resp_hdr.len,
+                         der.data, der.len)) {
+                printf("Server certificate found in cleartext.\n");
+                goto fail_der;
+        }
+
+        /* The handshake must still complete and agree on a key */
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Client complete failed.\n");
+                goto fail_der;
+        }
+
+        if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
+                printf("Client and server keys do not match!\n");
+                goto fail_der;
+        }
+
+        freebuf(der);
+        crypt_free_crt(crt);
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_der:
+        freebuf(der);
+ fail_crt:
+        crypt_free_crt(crt);
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Tampering the sealed identity block fails the handshake */
+static int test_oap_sealed_tamper(void)
+{
+        struct oap_test_ctx ctx;
+        size_t              pos;
+
+        test_default_cfg();
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (ctx.resp_hdr.len < 64) {
+                printf("Response too short for test.\n");
+                goto fail_cleanup;
+        }
+
+        /* Flip a byte inside the sealed ciphertext, before the AEAD tag */
+        pos = ctx.resp_hdr.len - 32;
+        ctx.resp_hdr.data[pos] ^= 0xFF;
+
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client accepted a tampered identity block.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
@@ -1677,12 +1842,15 @@ int oap_test(int    argc,
         ret |= test_oap_roundtrip_auth_only();
         ret |= test_oap_roundtrip_kex_only();
         ret |= test_oap_piggyback_data();
+        ret |= test_oap_rekey();
+        ret |= test_oap_rekey_badcache();
 
         ret |= test_oap_roundtrip_all();
         ret |= test_oap_roundtrip_md_all();
 
         ret |= test_oap_corrupted_request();
         ret |= test_oap_corrupted_response();
+        ret |= test_oap_key_confirm_mismatch();
         ret |= test_oap_truncated_request();
         ret |= test_oap_inflated_length_field();
         ret |= test_oap_deflated_length_field();
@@ -1693,6 +1861,7 @@ int oap_test(int    argc,
         ret |= test_oap_srv_enc_cli_none();
         ret |= test_oap_cli_enc_srv_none();
         ret |= test_oap_cli_rejects_downgrade();
+        ret |= test_oap_cli_rejects_suite_swap();
         ret |= test_oap_srv_rejects_weak_kex();
 
         ret |= test_oap_outdated_packet();
@@ -1705,14 +1874,12 @@ int oap_test(int    argc,
         ret |= test_oap_srv_requires_cli_auth();
         ret |= test_oap_mutual_req_auth();
 
-        ret |= test_oap_cli_pin_ca(im_ca_crt_ec, true);
-        ret |= test_oap_cli_pin_ca(root_ca_crt_ec, true);
-        ret |= test_oap_cli_pin_ca(other_ca_crt_ec, false);
-        ret |= test_oap_srv_pin_ca(im_ca_crt_ec, true);
-        ret |= test_oap_srv_pin_ca(other_ca_crt_ec, false);
 
         ret |= test_oap_cli_rejects_md_mismatch();
         ret |= test_oap_srv_rejects_md_mismatch();
+
+        ret |= test_oap_server_cert_hidden();
+        ret |= test_oap_sealed_tamper();
 #else
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_roundtrip_kex_only;
@@ -1723,6 +1890,7 @@ int oap_test(int    argc,
         (void) test_oap_roundtrip_md_all;
         (void) test_oap_corrupted_request;
         (void) test_oap_corrupted_response;
+        (void) test_oap_key_confirm_mismatch;
         (void) test_oap_truncated_request;
         (void) test_oap_inflated_length_field;
         (void) test_oap_deflated_length_field;
@@ -1732,19 +1900,23 @@ int oap_test(int    argc,
         (void) test_oap_srv_enc_cli_none;
         (void) test_oap_cli_enc_srv_none;
         (void) test_oap_cli_rejects_downgrade;
+        (void) test_oap_cli_rejects_suite_swap;
         (void) test_oap_srv_rejects_weak_kex;
         (void) test_oap_outdated_packet;
         (void) test_oap_future_packet;
         (void) test_oap_replay_packet;
+        (void) test_oap_replay_generations;
         (void) test_oap_missing_root_ca;
         (void) test_oap_server_name_mismatch;
         (void) test_oap_cli_requires_srv_auth;
         (void) test_oap_srv_requires_cli_auth;
         (void) test_oap_mutual_req_auth;
-        (void) test_oap_cli_pin_ca;
-        (void) test_oap_srv_pin_ca;
         (void) test_oap_cli_rejects_md_mismatch;
         (void) test_oap_srv_rejects_md_mismatch;
+        (void) test_oap_server_cert_hidden;
+        (void) test_oap_sealed_tamper;
+        (void) test_oap_rekey;
+        (void) test_oap_rekey_badcache;
 
         ret = TEST_RC_SKIP;
 #endif

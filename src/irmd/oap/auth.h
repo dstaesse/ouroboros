@@ -29,10 +29,40 @@
 
 int  oap_check_hdr(const struct oap_hdr * hdr);
 
-/* name is set to the peer crt CN, "" if no crt was presented */
+/*
+ * name is set to the peer crt CN, "" if no crt was presented.
+ * cached_crt (or NULL) is the peer cert from the initial handshake, used
+ * to verify a cert-less re-key.
+ */
 int  oap_auth_peer(char *                    name,
                    const struct sec_config * cfg,
                    const struct oap_hdr *    local_hdr,
-                   const struct oap_hdr *    peer_hdr);
+                   const struct oap_hdr *    peer_hdr,
+                   const buffer_t *          cached_crt);
+
+/* Derive the handshake key that seals the response identity block. */
+int  oap_derive_hs_key(const struct crypt_sk * sk,
+                       buffer_t                req_hash,
+                       uint8_t *               out);
+
+/* resp_hash = H(kex || data || crt): binds the server response transcript. */
+int  oap_resp_hash(int        md_nid,
+                   buffer_t   kex,
+                   buffer_t   data,
+                   buffer_t   crt,
+                   buffer_t * out);
+
+/* Fold request + response transcript + negotiated suite into the key. */
+int  oap_bind_session_key(struct crypt_sk * sk,
+                          buffer_t          req_hash,
+                          buffer_t          resp_hash,
+                          int               kdf_nid);
+
+/* Server->client key-confirmation tag derived from the bound key. */
+int  oap_key_confirm_tag(const struct crypt_sk * sk,
+                         buffer_t                req_hash,
+                         buffer_t                resp_hash,
+                         uint8_t *               out,
+                         size_t                  outlen);
 
 #endif /* OUROBOROS_IRMD_OAP_AUTH_H */
