@@ -29,6 +29,7 @@
 
 #include <ouroboros/hash.h>
 
+#include <pthread.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -55,6 +56,8 @@ void log_fini(void);
 
 #define __olog(CLR, LVL, SYSLVL, ...)                                         \
         do {                                                                  \
+                int __cs;                                                     \
+                pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &__cs);        \
                 if (log_syslog) {                                             \
                         syslog(SYSLVL, __VA_ARGS__);                          \
                 } else {                                                      \
@@ -64,10 +67,13 @@ void log_fini(void);
                         printf(CLR_RESET "\n");                               \
                         fflush(stdout);                                       \
                 }                                                             \
+                pthread_setcancelstate(__cs, NULL);                           \
         } while (0)
 
 #define __olog_id(CLR, LVL, SYSLVL, id, fmt, ...)                             \
         do {                                                                  \
+                int __cs;                                                     \
+                pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &__cs);        \
                 if (log_syslog) {                                             \
                         syslog(SYSLVL, "[" HASH_FMT64 "] " fmt,               \
                                HASH_VAL64(id), ## __VA_ARGS__);               \
@@ -79,6 +85,7 @@ void log_fini(void);
                         printf(CLR_RESET "\n");                               \
                         fflush(stdout);                                       \
                 }                                                             \
+                pthread_setcancelstate(__cs, NULL);                           \
         } while (0)
 
 #ifndef OUROBOROS_DISABLE_LOGGING
