@@ -74,8 +74,10 @@ uint16_t hash_len(enum hash_algo algo)
 {
         if (algo == HASH_CRC8)
                 return CRC8_HASH_LEN;
+
         if (algo == HASH_CRC16)
                 return CRC16_HASH_LEN;
+
         if (algo == HASH_CRC64)
                 return CRC64_HASH_LEN;
 #ifdef HAVE_LIBGCRYPT
@@ -163,4 +165,15 @@ void str_hash(enum hash_algo algo,
               const char *   str)
 {
         return mem_hash(algo, dst, (const uint8_t *) str, strlen(str));
+}
+
+uint64_t hash_mix64(uint64_t key)
+{
+        key ^= key >> 33;
+        key *= 0xff51afd7ed558ccdULL;
+        key ^= key >> 33;
+        key *= 0xc4ceb9fe1a85ec53ULL;
+        key ^= key >> 33;
+
+        return key;
 }

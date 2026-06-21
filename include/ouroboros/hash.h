@@ -89,4 +89,7 @@ void     str_hash(enum hash_algo algo,
                   void *         dst,
                   const char *   str);
 
+/* Non-cryptographic finalizer for hashing an integer key to a table index. */
+uint64_t hash_mix64(uint64_t key);
+
 #endif /* OUROBOROS_LIB_HASH_H */

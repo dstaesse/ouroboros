@@ -39,6 +39,11 @@ struct vec_entry {
         char * out;
 };
 
+struct mix_entry {
+        uint64_t in;
+        uint64_t out;
+};
+
 static int test_crc8(void)
 {
         int ret = 0;
@@ -288,6 +293,36 @@ static int test_sha3(void)
         return ret;
 }
 
+static int test_mix64(void)
+{
+        int ret = 0;
+
+        struct mix_entry vec [] = {
+                { 0x0000000000000000ULL, 0x0000000000000000ULL },
+                { 0x123456789abcdefeULL, 0xb1943cfea4f78f08ULL }
+        };
+
+        size_t n = sizeof(vec) / sizeof(vec[0]);
+        size_t i;
+
+        TEST_START();
+
+        for (i = 0; i < n; i++) {
+                uint64_t res = hash_mix64(vec[i].in);
+
+                if (res != vec[i].out) {
+                        printf("Mix failed %016llx != %016llx.\n",
+                               (unsigned long long) res,
+                               (unsigned long long) vec[i].out);
+                        ret |= -1;
+                }
+        }
+
+        TEST_END(ret);
+
+        return ret;
+}
+
 int hash_test(int     argc,
               char ** argv)
 {
@@ -307,6 +342,8 @@ int hash_test(int     argc,
         ret |= test_md5();
 
         ret |= test_sha3();
+
+        ret |= test_mix64();
 
         return ret;
 }
