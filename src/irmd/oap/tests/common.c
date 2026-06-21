@@ -29,7 +29,7 @@
 #include <string.h>
 #include <stdio.h>
 
-int load_srv_kex_config(const struct name_info * info,
+int load_srv_sec_config(const struct name_info * info,
                         struct sec_config *      cfg)
 {
         (void) info;
@@ -54,7 +54,7 @@ int load_srv_kex_config(const struct name_info * info,
         return 0;
 }
 
-int load_cli_kex_config(const struct name_info * info,
+int load_cli_sec_config(const struct name_info * info,
                         struct sec_config *      cfg)
 {
         (void) info;

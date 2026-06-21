@@ -102,7 +102,7 @@ int load_credentials(const char *                  name,
         return -EAUTH;
 }
 
-int load_kex_config(const char *        name,
+int load_sec_config(const char *        name,
                     const char *        path,
                     struct sec_config * cfg)
 {
@@ -111,7 +111,7 @@ int load_kex_config(const char *        name,
         assert(name != NULL);
         assert(cfg != NULL);
 
-        /* Load encryption config */
+        /* Load security config */
         if (!file_exists(path))
                 log_dbg("No encryption %s for %s.", path, name);
 

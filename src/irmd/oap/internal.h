@@ -42,7 +42,7 @@ int  oap_auth_peer(char *                    name,
                    const struct oap_hdr *    peer_hdr);
 
 int  oap_negotiate_cipher(const struct oap_hdr * peer_hdr,
-                          struct sec_config *    kcfg);
+                          struct sec_config *    scfg);
 
 #ifndef OAP_TEST_MODE
 int  load_credentials(const char *                  name,
@@ -50,7 +50,7 @@ int  load_credentials(const char *                  name,
                       void **                       pkp,
                       void **                       crt);
 
-int  load_kex_config(const char *        name,
+int  load_sec_config(const char *        name,
                      const char *        path,
                      struct sec_config * cfg);
 #endif
@@ -60,7 +60,7 @@ int  load_srv_credentials(const struct name_info * info,
                           void **                  pkp,
                           void **                  crt);
 
-int  load_srv_kex_config(const struct name_info * info,
+int  load_srv_sec_config(const struct name_info * info,
                          struct sec_config *      cfg);
 
 int  load_server_kem_keypair(const char *        name,
@@ -70,7 +70,7 @@ int  load_server_kem_keypair(const char *        name,
 extern int load_srv_credentials(const struct name_info * info,
                                 void **                  pkp,
                                 void **                  crt);
-extern int load_srv_kex_config(const struct name_info * info,
+extern int load_srv_sec_config(const struct name_info * info,
                                struct sec_config *      cfg);
 extern int load_server_kem_keypair(const char *        name,
                                    struct sec_config * cfg,
@@ -79,7 +79,7 @@ extern int load_server_kem_keypair(const char *        name,
 
 int  do_server_kex(const struct name_info * info,
                    struct oap_hdr *         peer_hdr,
-                   struct sec_config *      kcfg,
+                   struct sec_config *      scfg,
                    buffer_t *               kex,
                    struct crypt_sk *        sk);
 
@@ -88,7 +88,7 @@ int  load_cli_credentials(const struct name_info * info,
                           void **                  pkp,
                           void **                  crt);
 
-int  load_cli_kex_config(const struct name_info * info,
+int  load_cli_sec_config(const struct name_info * info,
                          struct sec_config *      cfg);
 
 int  load_server_kem_pk(const char *        name,
@@ -98,21 +98,21 @@ int  load_server_kem_pk(const char *        name,
 extern int load_cli_credentials(const struct name_info * info,
                                 void **                  pkp,
                                 void **                  crt);
-extern int load_cli_kex_config(const struct name_info * info,
+extern int load_cli_sec_config(const struct name_info * info,
                                struct sec_config *      cfg);
 extern int load_server_kem_pk(const char *        name,
                               struct sec_config * cfg,
                               buffer_t *          pk);
 #endif
 
-int  oap_client_kex_prepare(struct sec_config * kcfg,
+int  oap_client_kex_prepare(struct sec_config * scfg,
                             buffer_t            server_pk,
                             buffer_t *          kex,
                             uint8_t *           key,
                             void **             ephemeral_pkp);
 
 int  oap_client_kex_complete(const struct oap_hdr * peer_hdr,
-                             struct sec_config *    kcfg,
+                             struct sec_config *    scfg,
                              void *                 pkp,
                              uint8_t *              key);
 

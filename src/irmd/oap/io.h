@@ -32,7 +32,7 @@ int  load_credentials(const char *                  name,
                       void **                       pkp,
                       void **                       crt);
 
-int  load_kex_config(const char *        name,
+int  load_sec_config(const char *        name,
                      const char *        path,
                      struct sec_config * cfg);
 #endif

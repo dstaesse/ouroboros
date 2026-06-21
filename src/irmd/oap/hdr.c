@@ -253,7 +253,7 @@ void oap_hdr_init(struct oap_hdr * hdr,
 /* Write the 36-byte fixed header; stamp is already in network order. */
 static void write_oap_fixed(uint8_t *                 buf,
                             const struct oap_hdr *    hdr,
-                            const struct sec_config * kcfg,
+                            const struct sec_config * scfg,
                             size_t                    crt_len,
                             size_t                    data_len,
                             uint64_t                  stamp)
@@ -272,11 +272,11 @@ static void write_oap_fixed(uint8_t *                 buf,
         memcpy(buf + offset, &v, sizeof(v));
         offset += sizeof(v);
 
-        v = hton16(kcfg->k.nid);
+        v = hton16(scfg->k.nid);
         memcpy(buf + offset, &v, sizeof(v));
         offset += sizeof(v);
 
-        v = hton16(kcfg->d.nid);
+        v = hton16(scfg->d.nid);
         memcpy(buf + offset, &v, sizeof(v));
         offset += sizeof(v);
 
@@ -285,10 +285,10 @@ static void write_oap_fixed(uint8_t *                 buf,
         offset += sizeof(v);
 
         kex_len = (uint16_t) hdr->kex.len;
-        if (hdr->kex.len > 0 && IS_KEM_ALGORITHM(kcfg->x.str)) {
-                if (IS_HYBRID_KEM(kcfg->x.str))
+        if (hdr->kex.len > 0 && IS_KEM_ALGORITHM(scfg->x.str)) {
+                if (IS_HYBRID_KEM(scfg->x.str))
                         kex_len |= OAP_KEX_FMT_BIT;
-                if (kcfg->x.mode == KEM_MODE_CLIENT_ENCAP)
+                if (scfg->x.mode == KEM_MODE_CLIENT_ENCAP)
                         kex_len |= OAP_KEX_ROLE_BIT;
         }
 
@@ -394,7 +394,7 @@ static int oap_seal_body(int             nid,
 static int oap_hdr_encode_sealed(struct oap_hdr *    hdr,
                                  void *              pkp,
                                  void *              crt,
-                                 struct sec_config * kcfg,
+                                 struct sec_config * scfg,
                                  buffer_t            rsp_tag,
                                  int                 req_md_nid,
                                  const uint8_t *     seal_key)
@@ -418,7 +418,7 @@ static int oap_hdr_encode_sealed(struct oap_hdr *    hdr,
                 goto fail_der;
 
         /* Cleartext crt_len/data_len are 0; real lengths prefix the seal. */
-        write_oap_fixed(prefix.data, hdr, kcfg, 0, 0, stamp);
+        write_oap_fixed(prefix.data, hdr, scfg, 0, 0, stamp);
         offset = OAP_HDR_MIN_SIZE;
 
         if (hdr->kex.len != 0)
@@ -433,7 +433,7 @@ static int oap_hdr_encode_sealed(struct oap_hdr *    hdr,
 
         assert((size_t) offset == prefix.len);
 
-        if (oap_seal_body(hdr->nid, seal_key, pkp, kcfg->d.nid,
+        if (oap_seal_body(hdr->nid, seal_key, pkp, scfg->d.nid,
                           prefix, hdr->data, der, &sealed) < 0)
                 goto fail_prefix;
 
@@ -469,7 +469,7 @@ static int oap_hdr_encode_sealed(struct oap_hdr *    hdr,
 int oap_hdr_encode(struct oap_hdr *    hdr,
                    void *              pkp,
                    void *              crt,
-                   struct sec_config * kcfg,
+                   struct sec_config * scfg,
                    buffer_t            rsp_tag,
                    int                 req_md_nid,
                    const uint8_t *     seal_key)
@@ -484,10 +484,10 @@ int oap_hdr_encode(struct oap_hdr *    hdr,
 
         assert(hdr != NULL);
         assert(hdr->id.data != NULL && hdr->id.len == OAP_ID_SIZE);
-        assert(kcfg != NULL);
+        assert(scfg != NULL);
 
         if (seal_key != NULL)
-                return oap_hdr_encode_sealed(hdr, pkp, crt, kcfg, rsp_tag,
+                return oap_hdr_encode_sealed(hdr, pkp, crt, scfg, rsp_tag,
                                              req_md_nid, seal_key);
 
         clock_gettime(CLOCK_REALTIME, &now);
@@ -504,7 +504,7 @@ int oap_hdr_encode(struct oap_hdr *    hdr,
         if (out.data == NULL)
                 goto fail_out;
 
-        write_oap_fixed(out.data, hdr, kcfg, der.len, hdr->data.len, stamp);
+        write_oap_fixed(out.data, hdr, scfg, der.len, hdr->data.len, stamp);
         offset = OAP_HDR_MIN_SIZE;
 
         /* certificate (variable) */
@@ -537,7 +537,7 @@ int oap_hdr_encode(struct oap_hdr *    hdr,
         sign.data = out.data;
         sign.len  = out.len;
 
-        if (pkp != NULL && auth_sign(pkp, kcfg->d.nid, sign, &sig) < 0)
+        if (pkp != NULL && auth_sign(pkp, scfg->d.nid, sign, &sig) < 0)
                 goto fail_sig;
 
         hdr->hdr = out;

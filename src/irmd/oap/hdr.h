@@ -171,7 +171,7 @@ void oap_hdr_fini(struct oap_hdr * oap_hdr);
 int  oap_hdr_encode(struct oap_hdr *    hdr,
                     void *              pkp,
                     void *              crt,
-                    struct sec_config * kcfg,
+                    struct sec_config * scfg,
                     buffer_t            rsp_tag,
                     int                 req_md_nid,
                     const uint8_t *     seal_key);

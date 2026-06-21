@@ -49,7 +49,7 @@
 extern int load_srv_credentials(const struct name_info * info,
                                 void **                  pkp,
                                 void **                  crt);
-extern int load_srv_kex_config(const struct name_info * info,
+extern int load_srv_sec_config(const struct name_info * info,
                                struct sec_config *      cfg);
 extern int load_server_kem_keypair(const char * name,
                                    bool         raw_fmt,
@@ -67,7 +67,7 @@ int load_srv_credentials(const struct name_info * info,
         return load_credentials(info->name, &info->s, pkp, crt);
 }
 
-int load_srv_kex_config(const struct name_info * info,
+int load_srv_sec_config(const struct name_info * info,
                         struct sec_config *      cfg)
 {
         assert(info != NULL);
@@ -76,7 +76,7 @@ int load_srv_kex_config(const struct name_info * info,
         memset(cfg, 0, sizeof(*cfg));
 
         /* Client auth stays opt-in (mTLS); enable with auth=required */
-        return load_kex_config(info->name, info->s.sec, cfg);
+        return load_sec_config(info->name, info->s.sec, cfg);
 }
 
 int load_server_kem_keypair(const char * name,
@@ -138,7 +138,7 @@ static int get_algo_from_peer_key(const struct oap_hdr * peer_hdr,
 }
 
 static int negotiate_cipher(const struct oap_hdr * peer_hdr,
-                            struct sec_config *    kcfg)
+                            struct sec_config *    scfg)
 {
         uint8_t * id = peer_hdr->id.data;
         int       cli_nid;
@@ -158,13 +158,13 @@ static int negotiate_cipher(const struct oap_hdr * peer_hdr,
         }
 
         cli_rank = crypt_cipher_rank(cli_nid);
-        srv_rank = crypt_cipher_rank(kcfg->c.nid);
+        srv_rank = crypt_cipher_rank(scfg->c.nid);
 
         if (cli_rank > srv_rank) {
-                SET_KEX_CIPHER_NID(kcfg, cli_nid);
-                log_dbg_id(id, "Selected client cipher %s.", kcfg->c.str);
+                SET_KEX_CIPHER_NID(scfg, cli_nid);
+                log_dbg_id(id, "Selected client cipher %s.", scfg->c.str);
         } else if (srv_rank > 0) {
-                log_dbg_id(id, "Selected server cipher %s.", kcfg->c.str);
+                log_dbg_id(id, "Selected server cipher %s.", scfg->c.str);
         } else {
                 log_err_id(id, "Encryption requested, no cipher.");
                 return -ECRYPT;
@@ -179,7 +179,7 @@ static int negotiate_cipher(const struct oap_hdr * peer_hdr,
         }
 
         cli_rank = crypt_kdf_rank(peer_hdr->kdf_nid);
-        srv_rank = crypt_kdf_rank(kcfg->k.nid);
+        srv_rank = crypt_kdf_rank(scfg->k.nid);
 
         /* Client-encap KEM bakes KDF into ciphertext; verify min. */
         if (OAP_KEX_ROLE(peer_hdr) == KEM_MODE_CLIENT_ENCAP) {
@@ -187,19 +187,19 @@ static int negotiate_cipher(const struct oap_hdr * peer_hdr,
                         log_err_id(id, "Client KDF too weak.");
                         return -ECRYPT;
                 }
-                SET_KEX_KDF_NID(kcfg, peer_hdr->kdf_nid);
+                SET_KEX_KDF_NID(scfg, peer_hdr->kdf_nid);
         } else if (cli_rank > srv_rank) {
-                SET_KEX_KDF_NID(kcfg, peer_hdr->kdf_nid);
+                SET_KEX_KDF_NID(scfg, peer_hdr->kdf_nid);
                 log_dbg_id(id, "Selected client KDF %s.",
-                           md_nid_to_str(kcfg->k.nid));
+                           md_nid_to_str(scfg->k.nid));
         } else if (srv_rank > 0) {
                 log_dbg_id(id, "Selected server KDF %s.",
-                           md_nid_to_str(kcfg->k.nid));
+                           md_nid_to_str(scfg->k.nid));
         }
 
-        if (IS_KEX_ALGO_SET(kcfg))
+        if (IS_KEX_ALGO_SET(scfg))
                 log_info_id(id, "Negotiated %s + %s.",
-                            kcfg->x.str, kcfg->c.str);
+                            scfg->x.str, scfg->c.str);
         else
                 log_info_id(id, "No key exchange.");
 
@@ -208,7 +208,7 @@ static int negotiate_cipher(const struct oap_hdr * peer_hdr,
 
 static int do_server_kem_decap(const struct name_info * info,
                                const struct oap_hdr *   peer_hdr,
-                               struct sec_config *      kcfg,
+                               struct sec_config *      scfg,
                                struct crypt_sk *        sk)
 {
         buffer_t  ct;
@@ -225,7 +225,7 @@ static int do_server_kem_decap(const struct name_info * info,
         ct.data = peer_hdr->kex.data;
         ct.len  = peer_hdr->kex.len;
 
-        ret = kex_kem_decap(server_pkp, ct, kcfg->k.nid, sk->key);
+        ret = kex_kem_decap(server_pkp, ct, scfg->k.nid, sk->key);
 
         crypt_free_key(server_pkp);
 
@@ -240,7 +240,7 @@ static int do_server_kem_decap(const struct name_info * info,
 }
 
 static int do_server_kem_encap(const struct oap_hdr * peer_hdr,
-                               struct sec_config *    kcfg,
+                               struct sec_config *    scfg,
                                buffer_t *             kex,
                                struct crypt_sk *      sk)
 {
@@ -251,12 +251,12 @@ static int do_server_kem_encap(const struct oap_hdr * peer_hdr,
         client_pk.data = peer_hdr->kex.data;
         client_pk.len  = peer_hdr->kex.len;
 
-        if (IS_HYBRID_KEM(kcfg->x.str))
+        if (IS_HYBRID_KEM(scfg->x.str))
                 ct_len = kex_kem_encap_raw(client_pk, kex->data,
-                                           kcfg->k.nid, sk->key);
+                                           scfg->k.nid, sk->key);
         else
                 ct_len = kex_kem_encap(client_pk, kex->data,
-                                       kcfg->k.nid, sk->key);
+                                       scfg->k.nid, sk->key);
 
         if (ct_len < 0) {
                 log_err_id(id, "Failed to encapsulate KEM.");
@@ -272,26 +272,26 @@ static int do_server_kem_encap(const struct oap_hdr * peer_hdr,
 
 static int do_server_kex_kem(const struct name_info * info,
                              struct oap_hdr *         peer_hdr,
-                             struct sec_config *      kcfg,
+                             struct sec_config *      scfg,
                              buffer_t *               kex,
                              struct crypt_sk *        sk)
 {
         int ret;
 
-        kcfg->x.mode = peer_hdr->kex_flags.role;
+        scfg->x.mode = peer_hdr->kex_flags.role;
 
-        if (kcfg->x.mode == KEM_MODE_CLIENT_ENCAP) {
-                ret = do_server_kem_decap(info, peer_hdr, kcfg, sk);
+        if (scfg->x.mode == KEM_MODE_CLIENT_ENCAP) {
+                ret = do_server_kem_decap(info, peer_hdr, scfg, sk);
                 kex->len = 0;
         } else {
-                ret = do_server_kem_encap(peer_hdr, kcfg, kex, sk);
+                ret = do_server_kem_encap(peer_hdr, scfg, kex, sk);
         }
 
         return ret;
 }
 
 static int do_server_kex_dhe(const struct oap_hdr * peer_hdr,
-                             struct sec_config *    kcfg,
+                             struct sec_config *    scfg,
                              buffer_t *             kex,
                              struct crypt_sk *      sk)
 {
@@ -300,7 +300,7 @@ static int do_server_kex_dhe(const struct oap_hdr * peer_hdr,
         int       ret;
         uint8_t * id = peer_hdr->id.data;
 
-        key_len = kex_pkp_create(kcfg, &epkp, kex->data);
+        key_len = kex_pkp_create(scfg, &epkp, kex->data);
         if (key_len < 0) {
                 log_err_id(id, "Failed to generate key pair.");
                 return -ECRYPT;
@@ -308,9 +308,9 @@ static int do_server_kex_dhe(const struct oap_hdr * peer_hdr,
 
         kex->len = (size_t) key_len;
 
-        log_dbg_id(id, "Generated %s ephemeral keys.", kcfg->x.str);
+        log_dbg_id(id, "Generated %s ephemeral keys.", scfg->x.str);
 
-        ret = kex_dhe_derive(kcfg, epkp, peer_hdr->kex, sk->key);
+        ret = kex_dhe_derive(scfg, epkp, peer_hdr->kex, sk->key);
         if (ret < 0) {
                 log_err_id(id, "Failed to derive secret.");
                 kex_pkp_destroy(epkp);
@@ -324,7 +324,7 @@ static int do_server_kex_dhe(const struct oap_hdr * peer_hdr,
 
 int do_server_kex(const struct name_info * info,
                   struct oap_hdr *         peer_hdr,
-                  struct sec_config *      kcfg,
+                  struct sec_config *      scfg,
                   buffer_t *               kex,
                   struct crypt_sk *        sk)
 {
@@ -336,40 +336,40 @@ int do_server_kex(const struct name_info * info,
 
         /* No KEX data from client */
         if (peer_hdr->kex.len == 0) {
-                if (IS_KEX_ALGO_SET(kcfg)) {
+                if (IS_KEX_ALGO_SET(scfg)) {
                         log_warn_id(id, "KEX requested without info.");
                         return -ECRYPT;
                 }
                 return 0;
         }
 
-        if (negotiate_cipher(peer_hdr, kcfg) < 0)
+        if (negotiate_cipher(peer_hdr, scfg) < 0)
                 return -ECRYPT;
 
         /* Save server's configured KEX before overwriting */
-        srv_kex_nid = kcfg->x.nid;
+        srv_kex_nid = scfg->x.nid;
 
         if (OAP_KEX_ROLE(peer_hdr) != KEM_MODE_CLIENT_ENCAP) {
                 /* Server encapsulation or DHE: extract algo from DER PK */
                 if (get_algo_from_peer_key(peer_hdr, algo_buf) < 0)
                         return -ECRYPT;
 
-                SET_KEX_ALGO(kcfg, algo_buf);
+                SET_KEX_ALGO(scfg, algo_buf);
 
                 /* Reject if client KEX is weaker than server's */
-                if (crypt_kex_rank(kcfg->x.nid)
+                if (crypt_kex_rank(scfg->x.nid)
                     < crypt_kex_rank(srv_kex_nid)) {
                         log_err_id(id, "Client KEX %s too weak.",
-                                   kcfg->x.str);
+                                   scfg->x.str);
                         return -ECRYPT;
                 }
         }
 
         /* Dispatch based on algorithm type */
-        if (IS_KEM_ALGORITHM(kcfg->x.str))
-                return do_server_kex_kem(info, peer_hdr, kcfg, kex, sk);
+        if (IS_KEM_ALGORITHM(scfg->x.str))
+                return do_server_kex_kem(info, peer_hdr, scfg, kex, sk);
         else
-                return do_server_kex_dhe(peer_hdr, kcfg, kex, sk);
+                return do_server_kex_dhe(peer_hdr, scfg, kex, sk);
 }
 
 int oap_srv_process(const struct name_info * info,
@@ -383,7 +383,7 @@ int oap_srv_process(const struct name_info * info,
 {
         struct oap_hdr        peer_hdr;
         struct oap_hdr        local_hdr;
-        struct sec_config     kcfg;
+        struct sec_config     scfg;
         uint8_t               kex_buf[CRYPT_KEY_BUFSZ];
         uint8_t               hash_buf[MAX_HASH_SIZE];
         uint8_t               kc_buf[MAX_HASH_SIZE];
@@ -426,8 +426,8 @@ int oap_srv_process(const struct name_info * info,
                 crt = NULL;
         }
 
-        if (load_srv_kex_config(info, &kcfg) < 0) {
-                log_err("Failed to load KEX config for %s.", info->name);
+        if (load_srv_sec_config(info, &scfg) < 0) {
+                log_err("Failed to load security config for %s.", info->name);
                 goto fail_kex;
         }
 
@@ -453,7 +453,7 @@ int oap_srv_process(const struct name_info * info,
 
         oap_hdr_init(&local_hdr, peer_hdr.id, kex_buf, *data, NID_undef);
 
-        if (oap_auth_peer(cli_name, &kcfg, &local_hdr, &peer_hdr,
+        if (oap_auth_peer(cli_name, &scfg, &local_hdr, &peer_hdr,
                           cached_crt) < 0) {
                 log_err_id(id, "Failed to authenticate client.");
                 goto fail_auth;
@@ -469,10 +469,10 @@ int oap_srv_process(const struct name_info * info,
                 peer_crt->len = peer_hdr.crt.len;
         }
 
-        if (do_server_kex(info, &peer_hdr, &kcfg, &local_hdr.kex, sk) < 0)
+        if (do_server_kex(info, &peer_hdr, &scfg, &local_hdr.kex, sk) < 0)
                 goto fail_kex;
 
-        sk->nid = kcfg.c.nid;
+        sk->nid = scfg.c.nid;
 
         /* Build response header with hash of client request */
         local_hdr.nid = sk->nid;
@@ -520,7 +520,7 @@ int oap_srv_process(const struct name_info * info,
                 seal_key = hs_key;
 
                 if (oap_bind_session_key(sk, req_hash, resp_hash,
-                                         kcfg.k.nid) < 0) {
+                                         scfg.k.nid) < 0) {
                         log_err_id(id, "Failed to bind session key.");
                         goto fail_auth;
                 }
@@ -534,7 +534,7 @@ int oap_srv_process(const struct name_info * info,
                 rsp_tag.data = kc_buf;
         }
 
-        ret = oap_hdr_encode(&local_hdr, pkp, crt, &kcfg,
+        ret = oap_hdr_encode(&local_hdr, pkp, crt, &scfg,
                              rsp_tag, req_md_nid, seal_key);
 
         crypt_secure_clear(hs_key, SYMMKEYSZ);
