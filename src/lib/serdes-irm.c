@@ -176,6 +176,9 @@ int flow__irm_result_des(buffer_t *         buf,
 
         sk->epoch = msg->has_generation ? (uint8_t) msg->generation : 0;
 
+        if (msg->sym_key.len == SYMMKEYSZ)
+                crypt_secure_clear(msg->sym_key.data, msg->sym_key.len);
+
         irm_msg__free_unpacked(msg, NULL);
 
         return 0;
@@ -216,6 +219,7 @@ int flow_rekey__irm_result_des(buffer_t *        buf,
                 sk->epoch = msg->has_generation ?
                             (uint8_t) msg->generation : 0;
                 *initiator = msg->has_rk_initiator && msg->rk_initiator;
+                crypt_secure_clear(msg->sym_key.data, msg->sym_key.len);
         }
 
         irm_msg__free_unpacked(msg, NULL);
