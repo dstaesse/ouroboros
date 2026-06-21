@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #elif defined(HAVE_SYS_RANDOM)
 #include <sys/random.h>
+#include <errno.h>
+#include <stdint.h>
 #elif defined(HAVE_LIBGCRYPT)
 #include <gcrypt.h>
 #elif defined(HAVE_OPENSSL_RNG)
@@ -42,7 +44,21 @@ int random_buffer(void * buf,
         arc4random_buf(buf, len);
         return 0;
 #elif defined(HAVE_SYS_RANDOM)
-        return getrandom(buf, len, GRND_NONBLOCK);
+        size_t  off = 0;
+        ssize_t ret;
+
+        while (off < len) {
+                ret = getrandom((uint8_t *) buf + off, len - off,
+                                GRND_NONBLOCK);
+                if (ret < 0) {
+                        if (errno == EINTR)
+                                continue;
+                        return -1;
+                }
+                off += (size_t) ret;
+        }
+
+        return 0;
 #elif defined(HAVE_LIBGCRYPT)
         gcry_randomize(buf, len, GCRY_STRONG_RANDOM);
         return 0;
