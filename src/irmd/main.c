@@ -488,8 +488,8 @@ static void name_update_sec_paths(struct name_info * info)
 
         assert(info != NULL);
 
-        if (strlen(info->s.enc) == 0)
-                sprintf(info->s.enc, "%s/%s/enc.conf", srv_dir, info->name);
+        if (strlen(info->s.sec) == 0)
+                sprintf(info->s.sec, "%s/%s/sec.conf", srv_dir, info->name);
 
         if (strlen(info->s.crt) == 0)
                 sprintf(info->s.crt, "%s/%s/crt.pem", srv_dir, info->name);
@@ -497,8 +497,8 @@ static void name_update_sec_paths(struct name_info * info)
         if (strlen(info->s.key) == 0)
                 sprintf(info->s.key, "%s/%s/key.pem", srv_dir, info->name);
 
-        if (strlen(info->c.enc) == 0)
-                sprintf(info->c.enc, "%s/%s/enc.conf", cli_dir, info->name);
+        if (strlen(info->c.sec) == 0)
+                sprintf(info->c.sec, "%s/%s/sec.conf", cli_dir, info->name);
 
         if (strlen(info->c.crt) == 0)
                 sprintf(info->c.crt, "%s/%s/crt.pem", cli_dir, info->name);

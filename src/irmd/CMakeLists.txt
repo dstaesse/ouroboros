@@ -7,11 +7,11 @@ if(HAVE_TOML)
   set(INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}")
   configure_file("${CMAKE_SOURCE_DIR}/irmd.conf.in"
     "${CMAKE_BINARY_DIR}/${OUROBOROS_CONFIG_FILE}.example" @ONLY)
-  configure_file("${CMAKE_SOURCE_DIR}/enc.conf.in"
-    "${CMAKE_BINARY_DIR}/enc.conf.example" @ONLY)
+  configure_file("${CMAKE_SOURCE_DIR}/sec.conf.in"
+    "${CMAKE_BINARY_DIR}/sec.conf.example" @ONLY)
   install(FILES "${CMAKE_BINARY_DIR}/${OUROBOROS_CONFIG_FILE}.example"
     DESTINATION "${OUROBOROS_CONFIG_DIR}")
-  install(FILES "${CMAKE_BINARY_DIR}/enc.conf.example"
+  install(FILES "${CMAKE_BINARY_DIR}/sec.conf.example"
     DESTINATION "${OUROBOROS_CONFIG_DIR}")
   install(CODE "
     if(NOT EXISTS \"${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}\")

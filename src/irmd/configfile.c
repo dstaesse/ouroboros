@@ -922,10 +922,10 @@ static int toml_name(toml_table_t * table,
         toml_array_t * progs;
         toml_array_t * args;
         toml_datum_t   lb;
-        toml_datum_t   senc;
+        toml_datum_t   ssec;
         toml_datum_t   scrt;
         toml_datum_t   skey;
-        toml_datum_t   cenc;
+        toml_datum_t   csec;
         toml_datum_t   ccrt;
         toml_datum_t   ckey;
 
@@ -957,8 +957,8 @@ static int toml_name(toml_table_t * table,
                 log_err("Invalid load-balancing policy for %s.", name);
                 return -1;
         }
-        senc = toml_string_in(table, "server_enc_file");
-        if (senc.ok && cp_chk_path(info.s.enc, senc.u.s) < 0)
+        ssec = toml_string_in(table, "server_sec_file");
+        if (ssec.ok && cp_chk_path(info.s.sec, ssec.u.s) < 0)
                 return -1;
 
         scrt = toml_string_in(table, "server_crt_file");
@@ -969,8 +969,8 @@ static int toml_name(toml_table_t * table,
         if (skey.ok && cp_chk_path(info.s.key, skey.u.s) < 0)
                 return -1;
 
-        cenc = toml_string_in(table, "client_enc_file");
-        if (cenc.ok && cp_chk_path(info.c.enc, cenc.u.s) < 0)
+        csec = toml_string_in(table, "client_sec_file");
+        if (csec.ok && cp_chk_path(info.c.sec, csec.u.s) < 0)
                 return -1;
 
         ccrt = toml_string_in(table, "client_crt_file");

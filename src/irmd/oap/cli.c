@@ -98,7 +98,7 @@ int load_cli_kex_config(const struct name_info * info,
         /* A client authenticates the server by default, like an https client */
         cfg->req_auth = OAP_CLIENT_AUTH_DEFAULT;
 
-        return load_kex_config(info->name, info->c.enc, cfg);
+        return load_kex_config(info->name, info->c.sec, cfg);
 }
 
 int load_server_kem_pk(const char *        name,

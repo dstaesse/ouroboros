@@ -51,10 +51,10 @@
 
 #define RR    "round-robin"
 #define SPILL "spillover"
-#define SENC  "<security_dir>/server/<name>/enc.conf"
+#define SSEC  "<security_dir>/server/<name>/sec.conf"
 #define SCRT  "<security_dir>/server/<name>/crt.pem"
 #define SKEY  "<security_dir>/server/<name>/key.pem"
-#define CENC  "<security_dir>/client/<name>/enc.conf"
+#define CSEC  "<security_dir>/client/<name>/sec.conf"
 #define CCRT  "<security_dir>/client/<name>/crt.pem"
 #define CKEY  "<security_dir>/client/<name>/key.pem"
 
@@ -63,10 +63,10 @@ static void usage(void)
         printf("Usage: irm name create\n"
                "                <name>. max %d chars.\n"
                "                [lb LB_POLICY], default: %s\n"
-               "                [sencpath <path>, default: " SENC "]\n"
+               "                [ssecpath <path>, default: " SSEC "]\n"
                "                [scrtpath <path>, default: " SCRT "]\n"
                "                [skeypath <path>, default: " SKEY "]\n"
-               "                [cencpath <path>, default: " CENC "]\n"
+               "                [csecpath <path>, default: " CSEC "]\n"
                "                [ccrtpath <path>, default: " CCRT "]\n"
                "                [ckeypath <path>, default: " CKEY "]\n"
                "\n"
@@ -105,10 +105,10 @@ int do_create_name(int     argc,
 {
         struct name_info info = {};
         char * name = NULL;
-        char * sencpath = NULL;
+        char * ssecpath = NULL;
         char * scrtpath = NULL;
         char * skeypath = NULL;
-        char * cencpath = NULL;
+        char * csecpath = NULL;
         char * ccrtpath = NULL;
         char * ckeypath = NULL;
         char * lb_pol = RR;
@@ -119,14 +119,14 @@ int do_create_name(int     argc,
         while (argc > 0) {
                 if (matches(*argv, "lb") == 0) {
                         lb_pol = *(argv + 1);
-                } else if (matches(*argv, "sencpath") == 0) {
-                        sencpath = *(argv + 1);
+                } else if (matches(*argv, "ssecpath") == 0) {
+                        ssecpath = *(argv + 1);
                 } else if (matches(*argv, "scrtpath") == 0) {
                         scrtpath = *(argv + 1);
                 } else if (matches(*argv, "skeypath") == 0) {
                         skeypath = *(argv + 1);
-                } else if (matches(*argv, "cencpath") == 0) {
-                        cencpath = *(argv + 1);
+                } else if (matches(*argv, "csecpath") == 0) {
+                        csecpath = *(argv + 1);
                 } else if (matches(*argv, "ccrtpath") == 0) {
                         ccrtpath = *(argv + 1);
                 } else if (matches(*argv, "ckeypath") == 0) {
@@ -151,7 +151,7 @@ int do_create_name(int     argc,
 
         strcpy(info.name, name);
 
-        if (sencpath != NULL && cp_chk_path(info.s.enc, sencpath) < 0)
+        if (ssecpath != NULL && cp_chk_path(info.s.sec, ssecpath) < 0)
                 goto fail;
 
         if (scrtpath != NULL && cp_chk_path(info.s.crt, scrtpath) < 0)
@@ -160,7 +160,7 @@ int do_create_name(int     argc,
         if (skeypath != NULL && cp_chk_path(info.s.key, skeypath) < 0)
                 goto fail;
 
-        if (cencpath != NULL && cp_chk_path(info.c.enc, cencpath) < 0)
+        if (csecpath != NULL && cp_chk_path(info.c.sec, csecpath) < 0)
                 goto fail;
 
         if (ccrtpath != NULL && cp_chk_path(info.c.crt, ccrtpath) < 0)

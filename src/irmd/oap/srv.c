@@ -76,7 +76,7 @@ int load_srv_kex_config(const struct name_info * info,
         memset(cfg, 0, sizeof(*cfg));
 
         /* Client auth stays opt-in (mTLS); enable with auth=required */
-        return load_kex_config(info->name, info->s.enc, cfg);
+        return load_kex_config(info->name, info->s.sec, cfg);
 }
 
 int load_server_kem_keypair(const char * name,
