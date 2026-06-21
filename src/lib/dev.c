@@ -347,8 +347,14 @@ static int crc_check(struct ssm_pk_buff * spb,
                      size_t               head_skip)
 {
         uint32_t  crc;
-        uint8_t * head = ssm_pk_buff_head(spb) + head_skip;
-        uint8_t * tail = ssm_pk_buff_pop_tail(spb, CRCLEN);
+        uint8_t * head;
+        uint8_t * tail;
+
+        if (ssm_pk_buff_len(spb) < head_skip + CRCLEN)
+                return 1;
+
+        head = ssm_pk_buff_head(spb) + head_skip;
+        tail = ssm_pk_buff_pop_tail(spb, CRCLEN);
 
         mem_hash(HASH_CRC32, &crc, head, tail - head);
 
