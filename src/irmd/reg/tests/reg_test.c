@@ -771,6 +771,167 @@ static int test_reg_direct_flow_success(void)
         return TEST_RC_FAIL;
 }
 
+/*
+ * Direct-flow re-key: one shared seed is parked for both local apps. The
+ * per-app initiator role is resolved from the verified caller pid (the
+ * allocator is n_1_pid), and the seed is held until both have pulled it.
+ */
+static int test_reg_direct_flow_rekey(void)
+{
+        pthread_t                thr;
+        struct timespec          abstime;
+        struct timespec          timeo = TIMESPEC_INIT_S(1);
+        buffer_t                 rbuf  = BUF_INIT;
+        buffer_t                 rsp;
+        buffer_t                 no_crt = BUF_INIT;
+        struct direct_alloc_info dai;
+        uint8_t                  seed[SYMMKEYSZ];
+        uint8_t                  out[SYMMKEYSZ];
+        uint8_t                  epoch;
+        bool                     initiator;
+        size_t                   i;
+
+        struct flow_info info = {
+                .n_pid = TEST_PID,
+                .qs    = qos_raw
+        };
+
+        TEST_START();
+
+        for (i = 0; i < SYMMKEYSZ; ++i)
+                seed[i] = (uint8_t) i;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
+        ts_add(&abstime, &timeo, &abstime);
+
+        if (reg_init() < 0) {
+                printf("Failed to init registry.\n");
+                goto fail;
+        }
+
+        if (reg_create_flow(&info) < 0) {
+                printf("Failed to add flow.\n");
+                goto fail;
+        }
+
+        if (reg_prepare_flow_accept(&info) < 0) {
+                printf("Failed to prepare for accept.\n");
+                goto fail;
+        }
+
+        dai.info.id      = info.id;
+        dai.info.n_1_pid = TEST_N_1_PID;
+        dai.info.mpl     = TEST_MPL;
+        dai.info.qs      = qos_msg;
+        dai.info.state   = FLOW_ALLOCATED;
+        dai.rsp.len      = 0;
+        dai.rsp.data     = NULL;
+        dai.abstime      = abstime;
+
+        pthread_create(&thr, NULL, test_flow_alloc_direct, &dai);
+
+        if (reg_wait_flow_accepted(&info, &rbuf, &abstime) < 0) {
+                printf("Flow accept failed.\n");
+                pthread_join(thr, NULL);
+                goto fail;
+        }
+
+        freebuf(rbuf);
+
+        rsp.data = (uint8_t *) strdup(TEST_DATA2);
+        if (rsp.data == NULL) {
+                printf("Failed to strdup rsp data.\n");
+                pthread_join(thr, NULL);
+                goto fail;
+        }
+        rsp.len = strlen(TEST_DATA2) + 1;
+
+        if (reg_respond_flow_direct(info.id, &rsp) < 0) {
+                printf("Failed to respond direct.\n");
+                freebuf(rsp);
+                pthread_join(thr, NULL);
+                goto fail;
+        }
+
+        pthread_join(thr, NULL);
+
+        freebuf(dai.rsp);
+
+        if (!reg_flow_is_direct(info.id)) {
+                printf("Flow not marked direct.\n");
+                goto fail;
+        }
+
+        reg_flow_set_rekey(info.id, false, no_crt);
+
+        if (reg_flow_store_pending_direct(info.id, seed, 5) < 0) {
+                printf("Failed to store pending direct seed.\n");
+                goto fail;
+        }
+
+        if (!reg_flow_rekey_pending(info.id)) {
+                printf("Seed not pending after store.\n");
+                goto fail;
+        }
+
+        /* Allocator (n_1_pid) pulls: initiator role, seed still held. */
+        if (reg_flow_take_pending(info.id, 0, TEST_N_1_PID, out,
+                                  &epoch, &initiator) != 0) {
+                printf("Allocator failed to take pending seed.\n");
+                goto fail;
+        }
+
+        if (!initiator || epoch != 5 || memcmp(out, seed, SYMMKEYSZ) != 0) {
+                printf("Allocator got wrong seed/role/epoch.\n");
+                goto fail;
+        }
+
+        if (!reg_flow_rekey_pending(info.id)) {
+                printf("Seed cleared before both apps pulled.\n");
+                goto fail;
+        }
+
+        /* Acceptor (n_pid) pulls: responder role, seed now released. */
+        if (reg_flow_take_pending(info.id, 0, TEST_PID, out,
+                                  &epoch, &initiator) != 0) {
+                printf("Acceptor failed to take pending seed.\n");
+                goto fail;
+        }
+
+        if (initiator || epoch != 5 || memcmp(out, seed, SYMMKEYSZ) != 0) {
+                printf("Acceptor got wrong seed/role/epoch.\n");
+                goto fail;
+        }
+
+        if (reg_flow_rekey_pending(info.id)) {
+                printf("Seed still pending after both pulled.\n");
+                goto fail;
+        }
+
+        if (reg_flow_get_epoch(info.id) != 5) {
+                printf("Flow epoch not advanced.\n");
+                goto fail;
+        }
+
+        info.n_pid = TEST_PID;
+        reg_dealloc_flow(&info);
+
+        info.n_pid = TEST_N_1_PID;
+        reg_dealloc_flow(&info);
+
+        reg_destroy_flow(info.id);
+
+        reg_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        REG_TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_reg_flow(void) {
         int rc = 0;
 
@@ -781,6 +942,7 @@ static int test_reg_flow(void) {
         rc |= test_reg_allocate_flow_fail();
         rc |= test_reg_respond_alloc_duplicate();
         rc |= test_reg_direct_flow_success();
+        rc |= test_reg_direct_flow_rekey();
 
         return rc;
 }
@@ -875,6 +1037,7 @@ static int test_reg_list_ipcps(void)
 
         while (len-- > 0)
                 ipcp_list_msg__free_unpacked(ipcps[len], NULL);
+
         free(ipcps);
 
         for (i = 0; i < 10; i++)
@@ -941,6 +1104,7 @@ static int test_insert_ipcps(void)
 
         while (len-- > 0)
                 ipcp_list_msg__free_unpacked(ipcps[len], NULL);
+
         free(ipcps);
 
         reg_clear();
@@ -1118,6 +1282,7 @@ static int test_reg_list_names(void)
 
         for (i = 0; i < len; i++)
                 name_info_msg__free_unpacked(names[i], NULL);
+
         free(names);
 
         for (i = 0; i < 10; i++) {

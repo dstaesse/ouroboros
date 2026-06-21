@@ -109,6 +109,9 @@ int   reg_get_name_for_hash(char *          buf,
 int   reg_get_name_for_flow_id(char * buf,
                                int    flow_id);
 
+void  reg_set_name_for_flow_id(const char * name,
+                               int          flow_id);
+
 /* TODO don't rely on protobuf here */
 int   reg_list_names(name_info_msg_t *** names);
 
@@ -170,10 +173,15 @@ struct rekey_info {
         pid_t   n_1_pid;
         char    name[NAME_SIZE + 1];
         uint8_t epoch;
+        bool    direct;
 };
 
-void  reg_flow_set_rekey(int  flow_id,
-                         bool initiator);
+void  reg_flow_set_rekey(int      flow_id,
+                         bool     initiator,
+                         buffer_t peer_crt);
+
+int   reg_flow_get_peer_crt(int        flow_id,
+                            buffer_t * crt);
 
 int   reg_flow_get_epoch(int flow_id);
 
@@ -186,16 +194,41 @@ int   reg_flow_snapshot_rekey_due(struct rekey_info * snap,
 
 void  reg_flow_clear_in_flight(int flow_id);
 
+bool  reg_flow_rekey_begin(int flow_id);
+
+bool  reg_flow_rekey_should_yield(int flow_id);
+
 int   reg_flow_store_pending(int             flow_id,
                              const uint8_t * seed,
-                             uint8_t         epoch);
+                             uint8_t         epoch,
+                             bool            initiator);
 
-bool  reg_flow_take_pending(int       flow_id,
+int   reg_flow_store_pending_direct(int             flow_id,
+                                    const uint8_t * seed,
+                                    uint8_t         epoch);
+
+int   reg_flow_take_pending(int       flow_id,
+                            uid_t     uid,
+                            pid_t     cpid,
                             uint8_t * seed,
-                            uint8_t * epoch);
+                            uint8_t * epoch,
+                            bool *    initiator);
+
+bool  reg_flow_rekey_arr_admit(int   flow_id,
+                               pid_t n_1_pid,
+                               bool  is_req);
+
+void  reg_flow_rekey_arr_done(int  flow_id,
+                              bool is_req);
+
+bool  reg_flow_owned_by(int   flow_id,
+                        uid_t uid);
 
 void  reg_notify_flow(int flow_id,
                       int event);
+
+void  reg_notify_flow_peers(int flow_id,
+                            int event);
 
 void  reg_dealloc_flow(struct flow_info * info);
 

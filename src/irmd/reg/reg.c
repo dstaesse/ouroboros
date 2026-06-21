@@ -872,6 +872,7 @@ int reg_list_ipcps(ipcp_list_msg_t *** ipcps)
  fail:
         while (i-- > 0)
                 ipcp_list_msg__free_unpacked((*ipcps)[i], NULL);
+
         free(*ipcps);
  fail_malloc:
         pthread_mutex_unlock(&reg.mtx);
@@ -1033,6 +1034,20 @@ int reg_get_name_for_flow_id(char * buf,
         return f == NULL ? -ENOENT : 0;
 }
 
+void reg_set_name_for_flow_id(const char * name,
+                              int          flow_id)
+{
+        struct reg_flow * f;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        f = __reg_get_flow(flow_id);
+        if (f != NULL)
+                strcpy(f->name, name);
+
+        pthread_mutex_unlock(&reg.mtx);
+}
+
 int reg_list_names(name_info_msg_t *** names)
 {
         struct list_head * p;
@@ -1077,6 +1092,7 @@ int reg_list_names(name_info_msg_t *** names)
  fail:
         while (i-- > 0)
                 name_info_msg__free_unpacked((*names)[i], NULL);
+
         free(*names);
  fail_malloc:
         pthread_mutex_unlock(&reg.mtx);
@@ -2103,10 +2119,21 @@ bool reg_flow_is_direct(int flow_id)
         return ret;
 }
 
-void reg_flow_set_rekey(int  flow_id,
-                        bool initiator)
+void reg_flow_set_rekey(int      flow_id,
+                        bool     initiator,
+                        buffer_t peer_crt)
 {
         struct reg_flow * flow;
+        uint8_t *         crt = NULL;
+
+        /* Copy the cert outside the lock; publish it with rk.encrypted. */
+        if (peer_crt.len > 0) {
+                crt = malloc(peer_crt.len);
+                if (crt != NULL)
+                        memcpy(crt, peer_crt.data, peer_crt.len);
+                else
+                        log_warn("Failed to cache peer cert for re-key.");
+        }
 
         pthread_mutex_lock(&reg.mtx);
 
@@ -2115,9 +2142,47 @@ void reg_flow_set_rekey(int  flow_id,
                 flow->rk.encrypted = true;
                 flow->rk.initiator = initiator;
                 flow->rk.epoch     = 0;
+                if (crt != NULL) {
+                        freebuf(flow->rk.peer_crt);
+                        flow->rk.peer_crt.data = crt;
+                        flow->rk.peer_crt.len  = peer_crt.len;
+                        crt = NULL;
+                }
         }
 
         pthread_mutex_unlock(&reg.mtx);
+
+        free(crt);
+}
+
+int reg_flow_get_peer_crt(int        flow_id,
+                          buffer_t * crt)
+{
+        struct reg_flow * flow;
+        int               ret = -ENOENT;
+
+        assert(crt != NULL);
+
+        clrbuf(*crt);
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL && flow->rk.peer_crt.len > 0) {
+                crt->data = malloc(flow->rk.peer_crt.len);
+                if (crt->data == NULL) {
+                        ret = -ENOMEM;
+                } else {
+                        memcpy(crt->data, flow->rk.peer_crt.data,
+                               flow->rk.peer_crt.len);
+                        crt->len = flow->rk.peer_crt.len;
+                        ret = 0;
+                }
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
 }
 
 int reg_flow_get_epoch(int flow_id)
@@ -2184,10 +2249,14 @@ int reg_flow_snapshot_rekey_due(struct rekey_info * snap,
 
                 f = list_entry(p, struct reg_flow, next);
 
-                if (f->info.state != FLOW_ALLOCATED || f->direct)
+                if (f->info.state != FLOW_ALLOCATED)
                         continue;
 
-                if (!f->rk.encrypted || !f->rk.initiator)
+                if (!f->rk.encrypted)
+                        continue;
+
+                /* Direct flows have no IPCP initiator; either side drives. */
+                if (!f->direct && !f->rk.initiator)
                         continue;
 
                 if (f->rk.in_flight || f->rk.has_pending)
@@ -2199,6 +2268,7 @@ int reg_flow_snapshot_rekey_due(struct rekey_info * snap,
                 snap[n].n_pid   = f->info.n_pid;
                 snap[n].n_1_pid = f->info.n_1_pid;
                 snap[n].epoch   = f->rk.epoch;
+                snap[n].direct  = f->direct;
                 strcpy(snap[n].name, f->name);
                 ++n;
         }
@@ -2221,9 +2291,48 @@ void reg_flow_clear_in_flight(int flow_id)
         pthread_mutex_unlock(&reg.mtx);
 }
 
+/* Test-and-set the in-flight latch; refuse if a re-key is already active. */
+bool reg_flow_rekey_begin(int flow_id)
+{
+        struct reg_flow * flow;
+        bool              ret = false;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL && flow->rk.encrypted) {
+                if (!flow->rk.in_flight && !flow->rk.has_pending) {
+                        flow->rk.in_flight = true;
+                        ret = true;
+                }
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+/* Initiator yields the responder role while driving its own exchange. */
+bool reg_flow_rekey_should_yield(int flow_id)
+{
+        struct reg_flow * flow;
+        bool              ret = false;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL)
+                ret = flow->rk.initiator && flow->rk.in_flight;
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
 int reg_flow_store_pending(int             flow_id,
                            const uint8_t * seed,
-                           uint8_t         epoch)
+                           uint8_t         epoch,
+                           bool            initiator)
 {
         struct reg_flow * flow;
         int               ret = -ENOENT;
@@ -2232,14 +2341,24 @@ int reg_flow_store_pending(int             flow_id,
 
         flow = __reg_get_flow(flow_id);
         if (flow != NULL) {
-                memcpy(flow->rk.pending_seed, seed, SYMMKEYSZ);
-                flow->rk.pending_epoch = epoch;
-                flow->rk.has_pending   = true;
-                flow->rk.in_flight     = false;
-                /* Doorbell raised only after the seed is parked. */
-                if (flow->n_rb != NULL)
-                        ssm_rbuff_set_bits(flow->n_rb, RB_REKEY);
-                ret = 0;
+                /* Exchange done: release the latch regardless of parking. */
+                flow->rk.in_flight = false;
+
+                if (flow->rk.pending_seed == NULL)
+                        flow->rk.pending_seed = crypt_secure_malloc(SYMMKEYSZ);
+
+                if (flow->rk.pending_seed != NULL) {
+                        memcpy(flow->rk.pending_seed, seed, SYMMKEYSZ);
+                        flow->rk.pending_epoch     = epoch;
+                        flow->rk.pending_initiator = initiator;
+                        flow->rk.has_pending       = true;
+                        /* Doorbell raised only after the seed is parked. */
+                        if (flow->n_rb != NULL)
+                                ssm_rbuff_set_bits(flow->n_rb, RB_REKEY);
+                        ret = 0;
+                } else {
+                        ret = -ENOMEM;
+                }
         }
 
         pthread_mutex_unlock(&reg.mtx);
@@ -2247,9 +2366,206 @@ int reg_flow_store_pending(int             flow_id,
         return ret;
 }
 
-bool reg_flow_take_pending(int       flow_id,
-                           uint8_t * seed,
-                           uint8_t * epoch)
+/* Direct re-key: which of the two local apps has pulled the seed. */
+#define RK_N_PID    0x1   /* acceptor (n_pid) pulled the seed    */
+#define RK_N_1_PID  0x2   /* allocator (n_1_pid) pulled the seed */
+#define RK_PID_MASK (RK_N_PID | RK_N_1_PID)
+
+/*
+ * Park a single re-key seed for a direct flow and ring BOTH apps'
+ * doorbells. The seed is the one shared secret; each app pulls it once
+ * (reg_flow_take_pending), so it is held until both have taken it.
+ */
+int reg_flow_store_pending_direct(int             flow_id,
+                                  const uint8_t * seed,
+                                  uint8_t         epoch)
+{
+        struct reg_flow * flow;
+        int               ret = -ENOENT;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow == NULL)
+                goto out;
+
+        /* Exchange done: release the latch regardless of parking. */
+        flow->rk.in_flight = false;
+
+        if (flow->rk.pending_seed == NULL)
+                flow->rk.pending_seed = crypt_secure_malloc(SYMMKEYSZ);
+
+        if (flow->rk.pending_seed == NULL) {
+                ret = -ENOMEM;
+                goto out;
+        }
+
+        memcpy(flow->rk.pending_seed, seed, SYMMKEYSZ);
+        flow->rk.pending_epoch = epoch;
+        flow->rk.has_pending   = true;
+        flow->rk.pulled        = 0;
+
+        /* A departed peer never pulls; treat its side as already done. */
+        if (flow->info.n_pid <= 0)
+                flow->rk.pulled |= RK_N_PID;
+
+        if (flow->info.n_1_pid <= 0)
+                flow->rk.pulled |= RK_N_1_PID;
+
+        if (flow->n_rb != NULL && !(flow->rk.pulled & RK_N_PID))
+                ssm_rbuff_set_bits(flow->n_rb, RB_REKEY);
+
+        if (flow->n_1_rb != NULL && !(flow->rk.pulled & RK_N_1_PID))
+                ssm_rbuff_set_bits(flow->n_1_rb, RB_REKEY);
+
+        ret = 0;
+ out:
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+/* A caller may act on a flow if it is privileged or owns the flow. */
+static bool uid_may_access(uid_t caller,
+                           uid_t owner)
+{
+        return is_ouroboros_member_uid(caller) || caller == owner;
+}
+
+/*
+ * Caller holds reg.mtx. The direct seed is shared by both apps, so the
+ * per-app initiator role is resolved from the verified caller pid (the
+ * allocator is n_1_pid), and the seed is held until both have pulled.
+ */
+static void __take_pending_direct(struct reg_flow * flow,
+                                  pid_t             cpid,
+                                  uint8_t *         seed,
+                                  uint8_t *         epoch,
+                                  bool *            initiator)
+{
+        bool allocator;
+
+        allocator = cpid == flow->info.n_1_pid;
+
+        memcpy(seed, flow->rk.pending_seed, SYMMKEYSZ);
+        *epoch         = flow->rk.pending_epoch;
+        *initiator     = allocator;
+        flow->rk.epoch = flow->rk.pending_epoch;
+
+        if (allocator) {
+                flow->rk.pulled |= RK_N_1_PID;
+                if (flow->n_1_rb != NULL)
+                        ssm_rbuff_clr_bits(flow->n_1_rb, RB_REKEY);
+        } else {
+                flow->rk.pulled |= RK_N_PID;
+                if (flow->n_rb != NULL)
+                        ssm_rbuff_clr_bits(flow->n_rb, RB_REKEY);
+        }
+
+        if ((flow->rk.pulled & RK_PID_MASK) != RK_PID_MASK)
+                return;
+
+        flow->rk.has_pending = false;
+        flow->rk.pulled      = 0;
+        crypt_secure_clear(flow->rk.pending_seed, SYMMKEYSZ);
+}
+
+int reg_flow_take_pending(int       flow_id,
+                          uid_t     uid,
+                          pid_t     cpid,
+                          uint8_t * seed,
+                          uint8_t * epoch,
+                          bool *    initiator)
+{
+        struct reg_flow * flow;
+        int               ret = -ENOENT;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow == NULL || !flow->rk.has_pending)
+                goto out;
+
+        if (!uid_may_access(uid, flow->info.uid)) {
+                ret = -EPERM;
+                goto out;
+        }
+
+        if (flow->direct) {
+                __take_pending_direct(flow, cpid, seed, epoch, initiator);
+                ret = 0;
+                goto out;
+        }
+
+        memcpy(seed, flow->rk.pending_seed, SYMMKEYSZ);
+        *epoch     = flow->rk.pending_epoch;
+        *initiator = flow->rk.pending_initiator;
+        flow->rk.epoch       = flow->rk.pending_epoch;
+        flow->rk.has_pending = false;
+        crypt_secure_clear(flow->rk.pending_seed, SYMMKEYSZ);
+        if (flow->n_rb != NULL)
+                ssm_rbuff_clr_bits(flow->n_rb, RB_REKEY);
+
+        ret = 0;
+ out:
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+/*
+ * Admit a peer-driven re-key arrival before a worker event is allocated:
+ * the flow must exist, carry a cipher, and the update must come from its
+ * own lower IPCP. Coalesces to one queued REQ and one queued RESP per flow
+ * so a flooding peer cannot grow the inbox without bound.
+ */
+bool reg_flow_rekey_arr_admit(int   flow_id,
+                              pid_t n_1_pid,
+                              bool  is_req)
+{
+        struct reg_flow * flow;
+        bool              admit = false;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL && flow->rk.encrypted
+            && flow->info.n_1_pid == n_1_pid) {
+                if (is_req && !flow->rk.req_queued) {
+                        flow->rk.req_queued = true;
+                        admit = true;
+                } else if (!is_req && flow->rk.in_flight
+                           && !flow->rk.resp_queued) {
+                        flow->rk.resp_queued = true;
+                        admit = true;
+                }
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return admit;
+}
+
+void reg_flow_rekey_arr_done(int  flow_id,
+                             bool is_req)
+{
+        struct reg_flow * flow;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL) {
+                if (is_req)
+                        flow->rk.req_queued = false;
+                else
+                        flow->rk.resp_queued = false;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+}
+
+bool reg_flow_owned_by(int   flow_id,
+                       uid_t uid)
 {
         struct reg_flow * flow;
         bool              ret = false;
@@ -2257,35 +2573,52 @@ bool reg_flow_take_pending(int       flow_id,
         pthread_mutex_lock(&reg.mtx);
 
         flow = __reg_get_flow(flow_id);
-        if (flow != NULL && flow->rk.has_pending) {
-                memcpy(seed, flow->rk.pending_seed, SYMMKEYSZ);
-                *epoch = flow->rk.pending_epoch;
-                flow->rk.epoch = flow->rk.pending_epoch; /* app installed it */
-                flow->rk.has_pending = false;
-                crypt_secure_clear(flow->rk.pending_seed, SYMMKEYSZ);
-                if (flow->n_rb != NULL)
-                        ssm_rbuff_clr_bits(flow->n_rb, RB_REKEY);
-                ret = true;
-        }
+        if (flow != NULL)
+                ret = uid_may_access(uid, flow->info.uid);
 
         pthread_mutex_unlock(&reg.mtx);
 
         return ret;
 }
 
+/* Caller holds reg.mtx. */
+static void __notify_proc(pid_t pid,
+                          int   flow_id,
+                          int   event)
+{
+        struct reg_proc * proc;
+
+        proc = __reg_get_proc(pid);
+        if (proc != NULL)
+                ssm_flow_set_notify(proc->set, flow_id, event);
+}
+
 void reg_notify_flow(int flow_id,
                      int event)
 {
         struct reg_flow * flow;
-        struct reg_proc * proc;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL)
+                __notify_proc(flow->info.n_pid, flow_id, event);
+
+        pthread_mutex_unlock(&reg.mtx);
+}
+
+/* Wake both endpoints of a direct flow (acceptor and allocator). */
+void reg_notify_flow_peers(int flow_id,
+                           int event)
+{
+        struct reg_flow * flow;
 
         pthread_mutex_lock(&reg.mtx);
 
         flow = __reg_get_flow(flow_id);
         if (flow != NULL) {
-                proc = __reg_get_proc(flow->info.n_pid);
-                if (proc != NULL)
-                        ssm_flow_set_notify(proc->set, flow_id, event);
+                __notify_proc(flow->info.n_pid, flow_id, event);
+                __notify_proc(flow->info.n_1_pid, flow_id, event);
         }
 
         pthread_mutex_unlock(&reg.mtx);

@@ -100,4 +100,5 @@ message irm_msg {
         optional sint32 cipher_nid       = 27; /* cipher NID */
         optional uint32 generation       = 28; /* re-key batch generation */
         optional bool   rekey            = 29; /* re-key watermark trigger */
+        optional bool   rk_initiator     = 30; /* re-key proof-holder side */
 }

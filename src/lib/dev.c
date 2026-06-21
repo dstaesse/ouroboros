@@ -98,11 +98,14 @@ struct flow {
         ssize_t               part_idx;
 
         struct crypt_ctx *    crypt;
-        int                   headsz;  /* selector */
-        int                   tailsz;  /* Tag + CRC */
-        struct timespec       rk_grace; /* TX-promote deadline (0 = none) */
-        bool                  rk_wm_inflight; /* re-key trigger in flight */
-        uint32_t              rk_wm_ctr;      /* throttles the consult    */
+        int                   headsz;         /* Selector                       */
+        int                   tailsz;         /* Tag + CRC                      */
+
+        struct timespec       rk_grace;       /* TX-promote deadline (0 = none) */
+        struct timespec       rk_attempt;     /* Last re-key attempt (backoff)  */
+        bool                  rk_wm_inflight; /* Re-key trigger in flight       */
+        uint32_t              rk_wm_ctr;      /* Throttles the consult          */
+        bool                  rk_initiator;   /* OAP initiator this re-key      */
 
         struct timespec       snd_act;
         struct timespec       rcv_act;
@@ -300,7 +303,6 @@ static int spb_decrypt(struct flow *        flow,
 
         if (crypt_decrypt(flow->crypt, in, &out) < 0)
                 return -ECRYPT;
-
 
         head = ssm_pk_buff_pop(spb, flow->headsz) + flow->headsz;
         ssm_pk_buff_pop_tail(spb, flow->tailsz);
@@ -515,6 +517,12 @@ static void flow_drain_rx_nb(struct flow * flow)
 /* TX-promotion grace when the peer's install latency is unknown (raw). */
 #define REKEY_GRACE_MS 1000
 
+/* Last-resort promote within N node-keys of exhaustion (< watermark). */
+#define REKEY_PROMOTE_FLOOR 1
+
+/* Throttle re-key retries so a failed attempt can't storm the IRMd. */
+#define REKEY_BACKOFF_NS (250 * MILLION)
+
 /*
  * Pull a parked re-key seed from the IRMd and install it. Driven from the
  * data path when RB_REKEY shows on rx_rb. crypt_rekey is concurrency-safe
@@ -531,12 +539,22 @@ static void flow_rekey(struct flow * flow)
         uint8_t          buf[SOCK_BUF_SIZE];
         buffer_t         msg = {SOCK_BUF_SIZE, buf};
         bool             has_key;
+        bool             initiator = false;
 
         pthread_rwlock_rdlock(&proc.lock);
         if (flow->info.id < 0 || flow->crypt == NULL) {
                 pthread_rwlock_unlock(&proc.lock);
                 return;
         }
+
+        /* Back off so a failed attempt can't storm the IRMd per syscall. */
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+        if (ts_diff_ns(&now, &flow->rk_attempt) < REKEY_BACKOFF_NS) {
+                pthread_rwlock_unlock(&proc.lock);
+                return;
+        }
+
+        flow->rk_attempt = now;
         info = flow->info;
         pthread_rwlock_unlock(&proc.lock);
 
@@ -547,7 +565,7 @@ static void flow_rekey(struct flow * flow)
                 return;
 
         sk.key = key;
-        if (flow_rekey__irm_result_des(&msg, &sk, &has_key) < 0)
+        if (flow_rekey__irm_result_des(&msg, &sk, &has_key, &initiator) < 0)
                 return;
 
         if (!has_key)
@@ -556,6 +574,7 @@ static void flow_rekey(struct flow * flow)
         pthread_rwlock_rdlock(&proc.lock);
         if (flow->info.id == info.id && flow->crypt != NULL) {
                 if (crypt_rekey(flow->crypt, &sk) == 0) {
+                        flow->rk_initiator = initiator;
                         /* Hold TX on the old epoch until the peer installs. */
                         ms = flow->info.mpl > 0 ? flow->info.mpl * 3
                                                 : REKEY_GRACE_MS;
@@ -676,6 +695,7 @@ static void flow_quiesce(int fd)
 
         if (rx_rb != NULL)
                 ssm_rbuff_set_bits(rx_rb, RB_FLOWDOWN);
+
         if (tx_rb != NULL)
                 ssm_rbuff_set_bits(tx_rb, RB_FLOWDOWN);
 }
@@ -1593,8 +1613,10 @@ static __inline__ uint16_t flow_frag_role(size_t i, size_t n)
 {
         if (n == 1)
                 return FRCT_FR_SOLE;
+
         if (i == 0)
                 return FRCT_FR_FIRST;
+
         if (i + 1 == n)
                 return FRCT_FR_LAST;
 
@@ -1682,6 +1704,7 @@ static ssize_t flow_write_frag(struct flow *     flow,
         /* Guard the ceil-divide against size_t overflow. */
         if (count > SIZE_MAX - frag_payload + 1)
                 return -EMSGSIZE;
+
         n = (count + frag_payload - 1) / frag_payload;
 
         /* SDU larger than the FC window can ever offer would deadlock. */
@@ -1739,21 +1762,37 @@ static ssize_t flow_write_frag(struct flow *     flow,
 #define FLOW_WM_CHECK (1u << 16)
 
 /*
- * Switch TX to the freshly installed epoch once the peer is seen on it
- * (peer_synced) or the install grace has elapsed (breaks the symmetric
- * wait where neither side sends the new epoch first).
+ * Switch TX to the freshly installed epoch. The initiator holds the OAP
+ * key-confirm tag and bootstraps after the install grace, which also lets
+ * the peer install the batch first. The responder has no such proof: it
+ * waits for peer_synced (a packet under the new batch), with a last-resort
+ * promote near exhaustion so a silent peer can't stall it.
  */
-static void flow_tx_promote(struct flow *           flow,
-                            const struct timespec * now)
+static void flow_tx_promote(struct flow * flow)
 {
+        struct timespec now;
+        int             nodes_left;
+        bool            promote;
+
         if (flow->crypt == NULL)
                 return;
 
         if (flow->rk_grace.tv_sec == 0 && flow->rk_grace.tv_nsec == 0)
                 return;
 
-        if (!crypt_peer_synced(flow->crypt)
-            && ts_diff_ns(now, &flow->rk_grace) < 0)
+        promote = crypt_peer_synced(flow->crypt);
+
+        if (!promote && flow->rk_initiator) {
+                clock_gettime(PTHREAD_COND_CLOCK, &now);
+                promote = ts_diff_ns(&now, &flow->rk_grace) >= 0;
+        }
+
+        if (!promote && !flow->rk_initiator) {
+                nodes_left = crypt_nodes_left(flow->crypt);
+                promote = nodes_left >= 0 && nodes_left <= REKEY_PROMOTE_FLOOR;
+        }
+
+        if (!promote)
                 return;
 
         crypt_tx_promote(flow->crypt);
@@ -1864,7 +1903,7 @@ ssize_t flow_write(int          fd,
             && (ssm_rbuff_get_flags(flow->rx_rb) & RB_REKEY))
                 flow_rekey(flow);
 
-        flow_tx_promote(flow, &now);
+        flow_tx_promote(flow);
 
         /* Pre-empt TX key exhaustion; the timer is the backstop. */
         if (flow_wm_due(flow)) {
@@ -2089,10 +2128,7 @@ ssize_t flow_read(int    fd,
                 flow_rekey(flow);
 
         /* Advance TX off a stale epoch even on recv-mostly (ACK-only) flows. */
-        if (flow->crypt != NULL) {
-                clock_gettime(PTHREAD_COND_CLOCK, &now);
-                flow_tx_promote(flow, &now);
-        }
+        flow_tx_promote(flow);
 
         tw_move_safe();
 

@@ -187,7 +187,8 @@ int flow__irm_result_des(buffer_t *         buf,
 
 int flow_rekey__irm_result_des(buffer_t *        buf,
                                struct crypt_sk * sk,
-                               bool *            has_key)
+                               bool *            has_key,
+                               bool *            initiator)
 {
         irm_msg_t * msg;
         int         err;
@@ -214,6 +215,7 @@ int flow_rekey__irm_result_des(buffer_t *        buf,
                 sk->nid   = NID_undef;
                 sk->epoch = msg->has_generation ?
                             (uint8_t) msg->generation : 0;
+                *initiator = msg->has_rk_initiator && msg->rk_initiator;
         }
 
         irm_msg__free_unpacked(msg, NULL);

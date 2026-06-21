@@ -70,10 +70,12 @@ static void destroy_rbuffs(struct reg_flow * flow)
 {
         if (flow->n_rb != NULL)
                 ssm_rbuff_destroy(flow->n_rb);
+
         flow->n_rb = NULL;
 
         if (flow->n_1_rb != NULL)
                 ssm_rbuff_destroy(flow->n_1_rb);
+
         flow->n_1_rb = NULL;
 }
 
@@ -81,7 +83,10 @@ void reg_flow_destroy(struct reg_flow * flow)
 {
         assert(flow != NULL);
 
-        crypt_secure_clear(flow->rk.pending_seed, SYMMKEYSZ);
+        if (flow->rk.pending_seed != NULL)
+                crypt_secure_free(flow->rk.pending_seed, SYMMKEYSZ);
+
+        freebuf(flow->rk.peer_crt);
 
         switch(flow->info.state) {
         case FLOW_ACCEPT_PENDING:

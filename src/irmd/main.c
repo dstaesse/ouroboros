@@ -119,7 +119,9 @@ struct rekey_ctx {
 
 enum rekey_evt_type {
         REKEY_INIT = 0,             /* start an exchange for flow_id  */
-        REKEY_RESP                  /* a RESPONSE arrived for flow_id */
+        REKEY_REQ,                  /* a REQUEST arrived for flow_id  */
+        REKEY_RESP,                 /* a RESPONSE arrived for flow_id */
+        REKEY_DIRECT                /* in-process re-key, direct flow */
 };
 
 struct rekey_evt {
@@ -137,7 +139,7 @@ struct {
         char *               cfg_file;     /* configuration file path    */
 #endif
         struct lockfile *    lf;           /* single irmd per system     */
-        struct ssm_pool * gspp;         /* pool for packets        */
+        struct ssm_pool * gspp;            /* pool for packets           */
 
         int                  sockfd;       /* UNIX socket                */
 
@@ -154,11 +156,10 @@ struct {
         pthread_t            acceptor;     /* accept new commands        */
 
         struct {
-                pthread_t        worker;  /* Tier-2 re-key orchestrator */
-                struct list_head inbox;   /* re-key events for worker   */
-                pthread_cond_t   cond;    /* inbox signal condvar       */
-                pthread_mutex_t  lock;    /* inbox lock                 */
-                bool             stop;    /* worker shutdown flag       */
+                pthread_t        worker;  /* Tier-2 re-key orchestrator  */
+                struct list_head inbox;   /* re-key events for worker    */
+                pthread_cond_t   cond;    /* inbox signal condvar        */
+                pthread_mutex_t  mtx;     /* inbox lock                  */
         } rk;
 } irmd;
 
@@ -818,7 +819,8 @@ static int name_unreg(const char * name,
 
 static int get_peer_ids(int     fd,
                         uid_t * uid,
-                        gid_t * gid)
+                        gid_t * gid,
+                        pid_t * pid)
 {
 #if defined(__linux__)
         struct ucred ucred;
@@ -831,9 +833,14 @@ static int get_peer_ids(int     fd,
 
         *uid = ucred.uid;
         *gid = ucred.gid;
+        if (pid != NULL)
+                *pid = ucred.pid;
 #else
         if (getpeereid(fd, uid, gid) < 0)
                 goto fail;
+
+        if (pid != NULL)
+                *pid = -1; /* no portable SO_PEERCRED.pid equivalent */
 #endif
         return 0;
  fail:
@@ -882,6 +889,7 @@ static int flow_accept(struct flow_info * flow,
 {
         buffer_t         req_hdr;
         buffer_t         resp_hdr;
+        buffer_t         peer_crt = BUF_INIT;
         char             name[NAME_SIZE + 1];
         struct name_info info;
         int              err;
@@ -945,7 +953,8 @@ static int flow_accept(struct flow_info * flow,
 
         flow->uid = reg_get_proc_uid(flow->n_pid);
 
-        err = oap_srv_process(&info, req_hdr, &resp_hdr, data, sk);
+        err = oap_srv_process(&info, req_hdr, &resp_hdr, data, sk,
+                              false, NULL, &peer_crt);
         if (err == -EREPLAY) {
                 log_warn("Dropping replayed alloc request for %s.", name);
                 goto fail_replay;
@@ -960,6 +969,8 @@ static int flow_accept(struct flow_info * flow,
                         log_err("Failed to respond to direct flow.");
                         goto fail_resp;
                 }
+                if (sk->nid != NID_undef)
+                        reg_flow_set_rekey(flow->id, false, peer_crt);
                 log_info("Flow %d accepted (direct) by %d for %s.",
                          flow->id, flow->n_pid, name);
         } else if (ipcp_flow_alloc_resp(flow, 0, resp_hdr) < 0) {
@@ -967,11 +978,12 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_resp;
         } else {
                 if (sk->nid != NID_undef)
-                        reg_flow_set_rekey(flow->id, false);
+                        reg_flow_set_rekey(flow->id, false, peer_crt);
                 log_info("Flow %d accepted by %d for %s (uid %d).",
                          flow->id, flow->n_pid, name, flow->uid);
         }
 
+        freebuf(peer_crt);
         freebuf(req_hdr);
         freebuf(resp_hdr);
 
@@ -981,6 +993,7 @@ static int flow_accept(struct flow_info * flow,
         if (!reg_flow_is_direct(flow->id))
                 ipcp_flow_alloc_resp(flow, err, resp_hdr);
  fail_replay:
+        freebuf(peer_crt);
         freebuf(req_hdr);
         freebuf(resp_hdr);
  fail_wait:
@@ -990,6 +1003,7 @@ static int flow_accept(struct flow_info * flow,
 
  fail_resp:
         flow->state = FLOW_NULL;
+        freebuf(peer_crt);
         freebuf(req_hdr);
         freebuf(resp_hdr);
         reg_destroy_flow(flow->id);
@@ -1238,6 +1252,7 @@ static int flow_alloc_direct(const char *       dst,
         struct flow_info acc; /* server side flow */
         buffer_t         req_hdr = BUF_INIT;
         buffer_t         resp_hdr = BUF_INIT;
+        buffer_t         no_crt = BUF_INIT;
         void *           ctx;
         int              err;
 
@@ -1247,7 +1262,7 @@ static int flow_alloc_direct(const char *       dst,
                 return -EAGAIN;
         }
 
-        if (oap_cli_prepare(&ctx, info, &req_hdr, *data) < 0) {
+        if (oap_cli_prepare(&ctx, info, &req_hdr, *data, false) < 0) {
                 log_err("Failed to prepare OAP for %s.", dst);
                 return -EBADF;
         }
@@ -1280,7 +1295,7 @@ static int flow_alloc_direct(const char *       dst,
                 return -ETIMEDOUT;
         }
 
-        err = oap_cli_complete(ctx, info, resp_hdr, data, sk);
+        err = oap_cli_complete(ctx, info, resp_hdr, data, sk, NULL, NULL);
         if (err < 0) {
                 log_err("OAP completion failed for %s.", dst);
                 freebuf(resp_hdr);
@@ -1292,6 +1307,10 @@ static int flow_alloc_direct(const char *       dst,
         flow->mpl     = DIRECT_MPL;
         flow->mtu     = DIRECT_MTU;
         flow->state   = FLOW_ALLOCATED;
+
+        /* Mark encrypted for re-key; the acceptor caches the cert. */
+        if (sk->nid != NID_undef)
+                reg_flow_set_rekey(acc.id, true, no_crt);
 
         log_info("Flow %d allocated (direct) for %d to %s.",
                  flow->id, flow->n_pid, dst);
@@ -1311,6 +1330,7 @@ static int flow_alloc(const char *       dst,
         buffer_t         req_hdr = BUF_INIT;
         buffer_t         resp_hdr = BUF_INIT;
         buffer_t         hash = BUF_INIT;
+        buffer_t         peer_crt = BUF_INIT;
         struct name_info info;
         void *           ctx;
         int              err;
@@ -1344,6 +1364,8 @@ static int flow_alloc(const char *       dst,
                 goto fail_flow;
         }
 
+        reg_set_name_for_flow_id(dst, flow->id);
+
         if (get_ipcp_by_dst(dst, &flow->n_1_pid, &hash) < 0) {
                 log_err("Failed to find IPCP for %s.", dst);
                 err = -EIPCP;
@@ -1356,7 +1378,7 @@ static int flow_alloc(const char *       dst,
                 goto fail_prepare;
         }
 
-        if (oap_cli_prepare(&ctx, &info, &req_hdr, *data) < 0) {
+        if (oap_cli_prepare(&ctx, &info, &req_hdr, *data, false) < 0) {
                 log_err("Failed to prepare OAP request for %s.", dst);
                 err = -EBADF;
                 goto fail_prepare;
@@ -1388,15 +1410,16 @@ static int flow_alloc(const char *       dst,
                 goto fail_peer;
         }
 
-        err = oap_cli_complete(ctx, &info, resp_hdr, data, sk);
+        err = oap_cli_complete(ctx, &info, resp_hdr, data, sk, NULL, &peer_crt);
         if (err < 0) {
                 log_err("OAP completion failed for %s.", dst);
                 goto fail_complete;
         }
 
         if (sk->nid != NID_undef)
-                reg_flow_set_rekey(flow->id, true);
+                reg_flow_set_rekey(flow->id, true, peer_crt);
 
+        freebuf(peer_crt);
         freebuf(req_hdr);
         freebuf(resp_hdr);
         freebuf(hash);
@@ -1404,7 +1427,8 @@ static int flow_alloc(const char *       dst,
         return 0;
 
  fail_complete:
-        ctx = NULL; /* freee'd on complete */
+        freebuf(peer_crt);
+        ctx = NULL; /* free'd on complete */
  fail_peer:
         flow->state = FLOW_DEALLOCATED;
  fail_wait:
@@ -1484,9 +1508,15 @@ static void rekey_post(enum rekey_evt_type type,
 
         evt = malloc(sizeof(*evt));
         if (evt == NULL) {
-                log_err("Failed to post re-key event for flow %d.", flow_id);
+                log_err("Failed to malloc re-key event for flow %d.", flow_id);
+                if (type == REKEY_INIT || type == REKEY_DIRECT)
+                        reg_flow_clear_in_flight(flow_id);
+                else
+                        reg_flow_rekey_arr_done(flow_id, type == REKEY_REQ);
+
                 if (buf != NULL)
                         freebuf(*buf);
+
                 return;
         }
 
@@ -1500,12 +1530,12 @@ static void rekey_post(enum rekey_evt_type type,
                 clrbuf(*buf);
         }
 
-        pthread_mutex_lock(&irmd.rk.lock);
+        pthread_mutex_lock(&irmd.rk.mtx);
 
         list_add_tail(&evt->next, &irmd.rk.inbox);
         pthread_cond_signal(&irmd.rk.cond);
 
-        pthread_mutex_unlock(&irmd.rk.lock);
+        pthread_mutex_unlock(&irmd.rk.mtx);
 }
 
 static void rekey_post_init(int   flow_id,
@@ -1518,6 +1548,18 @@ static void rekey_post_resp(int        flow_id,
                             buffer_t * buf)
 {
         rekey_post(REKEY_RESP, flow_id, 0, buf);
+}
+
+static void rekey_post_req(int        flow_id,
+                           pid_t      n_1_pid,
+                           buffer_t * buf)
+{
+        rekey_post(REKEY_REQ, flow_id, n_1_pid, buf);
+}
+
+static void rekey_post_direct(int flow_id)
+{
+        rekey_post(REKEY_DIRECT, flow_id, 0, NULL);
 }
 
 /* Worker-only: find an in-flight entry by flow_id. */
@@ -1545,6 +1587,18 @@ static void rekey_drop(struct rekey_ctx * e)
         free(e);
 }
 
+/* Resolve a flow's registered name info; < 0 if the flow or name is gone. */
+static int rekey_name_info(int                flow_id,
+                           struct name_info * info)
+{
+        char name[NAME_SIZE + 1];
+
+        if (reg_get_name_for_flow_id(name, flow_id) < 0)
+                return -1;
+
+        return reg_get_name_info(name, info);
+}
+
 /* Flow-update relay payload: a 1-byte type prefix on an opaque body. */
 enum flow_upd_type {
         FLOW_UPD_REKEY_REQ  = 0,
@@ -1567,10 +1621,30 @@ static int flow_upd_wrap(buffer_t *       out,
         return 0;
 }
 
-/*
- * Worker-only: start a fresh OAP exchange over the live flow. Replaces
- * any prior in-flight entry for flow_id (handles flow_id recycling).
- */
+/* Cleanup handlers — the re-key worker is cancelled at shutdown. */
+static void rk_free_evt(void * o)
+{
+        struct rekey_evt * evt = o;
+
+        freebuf(evt->buf);
+        free(evt);
+}
+
+static void rk_freebuf(void * o)
+{
+        freebuf(*(buffer_t *) o);
+}
+
+static void rk_clear_in_flight(void * o)
+{
+        reg_flow_clear_in_flight(*(int *) o);
+}
+
+static void rk_clear_key(void * o)
+{
+        crypt_secure_clear(o, SYMMKEYSZ);
+}
+
 static void rekey_do_initiate(struct list_head * tbl,
                               int                flow_id,
                               pid_t              n_1_pid)
@@ -1581,25 +1655,21 @@ static void rekey_do_initiate(struct list_head * tbl,
         buffer_t           req  = BUF_INIT;
         buffer_t           upd  = BUF_INIT;
         buffer_t           data = BUF_INIT;
-        char               nbuf[NAME_SIZE + 1];
         void *             ctx  = NULL;
         int                ret;
 
         e = rekey_find(tbl, flow_id);
         if (e != NULL)
-                rekey_drop(e);
+                rekey_drop(e); /* Replace in-flight entries */
 
-        if (reg_get_name_for_flow_id(nbuf, flow_id) < 0 ||
-            reg_get_name_info(nbuf, &name) < 0) {
-                log_warn("No name info to re-key flow %d.", flow_id);
-                reg_flow_clear_in_flight(flow_id);
-                return;
+        if (rekey_name_info(flow_id, &name) < 0) {
+                log_err("Failed to get name info to re-key flow %d.", flow_id);
+                goto fail;
         }
 
-        if (oap_cli_prepare(&ctx, &name, &req, data) < 0) {
+        if (oap_cli_prepare(&ctx, &name, &req, data, true) < 0) {
                 log_err("Failed to prepare re-key for flow %d.", flow_id);
-                reg_flow_clear_in_flight(flow_id);
-                return;
+                goto fail;
         }
 
         memset(&info, 0, sizeof(info));
@@ -1611,7 +1681,15 @@ static void rekey_do_initiate(struct list_head * tbl,
                 goto fail_ctx;
         }
 
+        pthread_cleanup_push(rk_clear_in_flight, &flow_id);
+        pthread_cleanup_push(oap_ctx_free, ctx);
+        pthread_cleanup_push(rk_freebuf, &req);
+        pthread_cleanup_push(rk_freebuf, &upd);
         ret = ipcp_flow_update(&info, upd);
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
         freebuf(upd);
         if (ret < 0) {
                 log_err("Failed to send re-key request for flow %d.", flow_id);
@@ -1620,7 +1698,7 @@ static void rekey_do_initiate(struct list_head * tbl,
 
         e = malloc(sizeof(*e));
         if (e == NULL) {
-                log_err("Failed to track re-key for flow %d.", flow_id);
+                log_err("Failed to malloc re-key ctx for flow %d.", flow_id);
                 goto fail_ctx;
         }
 
@@ -1640,8 +1718,9 @@ static void rekey_do_initiate(struct list_head * tbl,
 
  fail_ctx:
         oap_ctx_free(ctx);
-        reg_flow_clear_in_flight(flow_id);
         freebuf(req);
+ fail:
+        reg_flow_clear_in_flight(flow_id);
 }
 
 /* Worker-only: complete the exchange, install the pending seed. */
@@ -1654,7 +1733,7 @@ static void rekey_do_complete(struct list_head * tbl,
         struct crypt_sk    sk;
         uint8_t            kbuf[SYMMKEYSZ];
         buffer_t           data = BUF_INIT;
-        char               name[NAME_SIZE + 1];
+        buffer_t           crt = BUF_INIT;
         uint8_t            newgen;
 
         e = rekey_find(tbl, flow_id);
@@ -1663,24 +1742,36 @@ static void rekey_do_complete(struct list_head * tbl,
                 return;
         }
 
-        if (reg_get_name_for_flow_id(name, flow_id) < 0 ||
-            reg_get_name_info(name, &info) < 0) {
-                log_err("No name info to re-key flow %d.", flow_id);
+        /* A concurrent responder already parked a seed; don't overwrite. */
+        if (reg_flow_rekey_pending(flow_id)) {
+                log_dbg("Re-key already pending for flow %d.", flow_id);
+                goto finish;
+        }
+
+        if (rekey_name_info(flow_id, &info) < 0) {
+                log_err("Failed to get name info to re-key flow %d.", flow_id);
                 goto finish;
         }
 
         sk.key = kbuf;
 
+        reg_flow_get_peer_crt(flow_id, &crt);
+
         /* oap_cli_complete frees the ctx on every path. */
-        if (oap_cli_complete(e->ctx, &info, buf, &data, &sk) < 0) {
-                log_err("Re-key completion failed for flow %d.", flow_id);
+        if (oap_cli_complete(e->ctx, &info, buf, &data, &sk, &crt, NULL) < 0) {
+                log_warn("Failed to complete re-key for flow %d.", flow_id);
                 e->ctx = NULL;
-                goto finish;
+                goto finish_clear;
         }
 
         e->ctx = NULL;
 
-        newgen = data.len == 1 ? *(uint8_t *) data.data : 0;
+        if (data.len != 1) {
+                log_warn("Re-key reply malformed for flow %d.", flow_id);
+                goto finish_clear;
+        }
+
+        newgen = *(uint8_t *) data.data;
 
         if (newgen >= 16) {
                 log_warn("Re-key gen %u out of range for flow %d.",
@@ -1688,7 +1779,7 @@ static void rekey_do_complete(struct list_head * tbl,
                 goto finish_clear;
         }
 
-        if (reg_flow_store_pending(flow_id, kbuf, newgen) < 0)
+        if (reg_flow_store_pending(flow_id, kbuf, newgen, true) < 0)
                 log_warn("Flow %d gone during re-key.", flow_id);
         else
                 reg_notify_flow(flow_id, FLOW_UPD);
@@ -1699,6 +1790,7 @@ static void rekey_do_complete(struct list_head * tbl,
         crypt_secure_clear(kbuf, SYMMKEYSZ);
         freebuf(data);
  finish:
+        freebuf(crt);
         rekey_drop(e);
         reg_flow_clear_in_flight(flow_id);
 }
@@ -1733,7 +1825,7 @@ static int rekey_respond(struct flow_info * flow,
         buffer_t         rsp  = BUF_INIT;
         buffer_t         upd  = BUF_INIT;
         buffer_t         data = BUF_INIT;
-        char             name[NAME_SIZE + 1];
+        buffer_t         crt  = BUF_INIT;
         uint8_t          newgen;
         int              epoch;
         int              err;
@@ -1744,9 +1836,14 @@ static int rekey_respond(struct flow_info * flow,
                 return -EBADF;
         }
 
-        if (reg_get_name_for_flow_id(name, flow->id) < 0 ||
-            reg_get_name_info(name, &info) < 0) {
-                log_err("No name info to re-key flow %d.", flow->id);
+        /* Collision: we are driving our own exchange; let it win. */
+        if (reg_flow_rekey_should_yield(flow->id)) {
+                log_dbg("Yielding to own re-key for flow %d.", flow->id);
+                return 0;
+        }
+
+        if (rekey_name_info(flow->id, &info) < 0) {
+                log_err("Failed to get name info to re-key flow %d.", flow->id);
                 return -ENAME;
         }
 
@@ -1761,17 +1858,19 @@ static int rekey_respond(struct flow_info * flow,
 
         sk.key = kbuf;
 
-        err = oap_srv_process(&info, *pk, &rsp, &data, &sk);
+        reg_flow_get_peer_crt(flow->id, &crt);
+
+        err = oap_srv_process(&info, *pk, &rsp, &data, &sk, true, &crt, NULL);
         if (err < 0) {
                 /* data still points to stack newgen; don't free it. */
-                log_err("Re-key OAP failed for flow %d.", flow->id);
+                log_err("Failed to process re-key OAP for flow %d.", flow->id);
                 goto finish;
         }
 
         /* On success oap_srv_process repointed data to client output. */
         freebuf(data);
 
-        if (reg_flow_store_pending(flow->id, kbuf, newgen) < 0) {
+        if (reg_flow_store_pending(flow->id, kbuf, newgen, false) < 0) {
                 log_warn("Flow %d gone during re-key.", flow->id);
                 err = -EBADF;
                 goto finish;
@@ -1780,9 +1879,17 @@ static int rekey_respond(struct flow_info * flow,
         reg_notify_flow(flow->id, FLOW_UPD);
 
         if (flow_upd_wrap(&upd, FLOW_UPD_REKEY_RESP, &rsp) == 0) {
+                pthread_cleanup_push(rk_clear_key, kbuf);
+                pthread_cleanup_push(rk_freebuf, &rsp);
+                pthread_cleanup_push(rk_freebuf, &crt);
+                pthread_cleanup_push(rk_freebuf, &upd);
                 if (ipcp_flow_update(flow, upd) < 0)
                         log_err("Failed to send re-key response for flow %d.",
                                 flow->id);
+                pthread_cleanup_pop(false);
+                pthread_cleanup_pop(false);
+                pthread_cleanup_pop(false);
+                pthread_cleanup_pop(false);
                 freebuf(upd);
         }
 
@@ -1790,56 +1897,182 @@ static int rekey_respond(struct flow_info * flow,
  finish:
         crypt_secure_clear(kbuf, SYMMKEYSZ);
         freebuf(rsp);
+        freebuf(crt);
 
         return err;
+}
+
+/*
+ * Worker-only: re-key a direct (loopback) flow, the exchange runs in-process:
+ * build a client request, then derive the shared seed, and hand the one seed
+ * to both apps with RB_REKEY.
+ */
+static void rekey_do_direct(int flow_id)
+{
+        struct name_info info;
+        struct crypt_sk  sk;
+        uint8_t          kbuf[SYMMKEYSZ];
+        buffer_t         req  = BUF_INIT;
+        buffer_t         rsp  = BUF_INIT;
+        buffer_t         data = BUF_INIT;
+        buffer_t         crt  = BUF_INIT;
+        void *           ctx  = NULL;
+        uint8_t          newgen;
+        int              epoch;
+
+        epoch = reg_flow_get_epoch(flow_id);
+        if (epoch < 0) {
+                log_warn("Re-key for unknown flow %d.", flow_id);
+                reg_flow_clear_in_flight(flow_id);
+                return;
+        }
+
+        if (rekey_name_info(flow_id, &info) < 0) {
+                log_err("Failed to get name info to re-key flow %d.", flow_id);
+                reg_flow_clear_in_flight(flow_id);
+                return;
+        }
+
+        if (oap_cli_prepare(&ctx, &info, &req, data, true) < 0) {
+                log_err("Failed to prepare re-key for flow %d.", flow_id);
+                reg_flow_clear_in_flight(flow_id);
+                return;
+        }
+
+        newgen    = (uint8_t) ((epoch + 1) & 0x0F);
+        data.data = &newgen;
+        data.len  = 1;
+
+        sk.key = kbuf;
+
+        reg_flow_get_peer_crt(flow_id, &crt);
+
+        if (oap_srv_process(&info, req, &rsp, &data, &sk, true,
+                            &crt, NULL) < 0) {
+                /* data still points to stack newgen; don't free it. */
+                log_err("Failed to process re-key OAP for flow %d.", flow_id);
+                reg_flow_clear_in_flight(flow_id);
+                goto out;
+        }
+
+        /* On success oap_srv_process repointed data to its output. */
+        freebuf(data);
+
+        if (reg_flow_store_pending_direct(flow_id, kbuf, newgen) < 0) {
+                log_warn("Flow %d gone during re-key.", flow_id);
+                reg_flow_clear_in_flight(flow_id);
+                goto out;
+        }
+
+        reg_notify_flow_peers(flow_id, FLOW_UPD);
+
+        log_dbg("Re-key completed (direct) for flow %d (gen %u).",
+                flow_id, newgen);
+ out:
+        crypt_secure_clear(kbuf, SYMMKEYSZ);
+        oap_ctx_free(ctx);
+        freebuf(req);
+        freebuf(rsp);
+        freebuf(crt);
+}
+
+/* Route one snapshot entry to the wire or in-process re-key path. */
+static void rekey_dispatch(struct list_head *        tbl,
+                           const struct rekey_info * ri)
+{
+        if (ri->direct)
+                rekey_do_direct(ri->flow_id);
+        else
+                rekey_do_initiate(tbl, ri->flow_id, ri->n_1_pid);
 }
 
 static int flow_update_arr(struct flow_info * flow,
                            buffer_t *         pk)
 {
         uint8_t type;
+        bool    is_req;
 
         if (pk->len < 1)
                 return -EINVAL;
 
         type = pk->data[0];
 
-        /* Strip the type byte, keeping the malloc base for hand-off. */
-        memmove(pk->data, pk->data + 1, pk->len - 1);
-        pk->len -= 1;
-
         switch (type) {
         case FLOW_UPD_REKEY_REQ:
-                return rekey_respond(flow, pk);
+                is_req = true;
+                break;
         case FLOW_UPD_REKEY_RESP:
-                /* Hand the payload to the worker and take ownership. */
-                rekey_post_resp(flow->id, pk);
-                return 0;
+                is_req = false;
+                break;
         default:
                 log_warn("Unknown flow update type %u.", type);
                 return -EINVAL;
         }
+
+        /* Drop floods/spoofs before allocating a worker event. */
+        if (!reg_flow_rekey_arr_admit(flow->id, flow->n_1_pid, is_req))
+                return 0;
+
+        /* Strip the type byte, keeping the malloc base for hand-off. */
+        memmove(pk->data, pk->data + 1, pk->len - 1);
+        pk->len -= 1;
+
+        /* Defer to worker; an inline RESP send deadlocks loopback. */
+        if (is_req)
+                rekey_post_req(flow->id, flow->n_1_pid, pk);
+        else
+                rekey_post_resp(flow->id, pk);
+
+        return 0;
 }
 
 static int flow_update(struct flow_info * flow,
+                       uid_t              uid,
+                       pid_t              cpid,
                        bool               rekey,
                        struct crypt_sk *  sk,
-                       bool *             has_key)
+                       bool *             has_key,
+                       bool *             initiator)
 {
         uint8_t seed[SYMMKEYSZ];
         uint8_t epoch;
+        int     rc;
 
-        *has_key = false;
+        *has_key   = false;
+        *initiator = false;
 
         if (rekey) {
+                pid_t n_1_pid;
+
+                if (!reg_flow_owned_by(flow->id, uid))
+                        return -EPERM;
+
+                /* Direct flows re-key in-process; no lower IPCP carrier. */
+                if (reg_flow_is_direct(flow->id)) {
+                        if (reg_flow_rekey_begin(flow->id))
+                                rekey_post_direct(flow->id);
+
+                        return 0;
+                }
+
                 /* Watermark re-key: the app can't know its lower IPCP. */
-                pid_t n_1_pid = reg_flow_get_n_1_pid(flow->id);
-                if (n_1_pid > 0)
+                n_1_pid = reg_flow_get_n_1_pid(flow->id);
+                if (n_1_pid <= 0)
+                        return 0;
+
+                /* One exchange per flow; the latch arbitrates collisions. */
+                if (reg_flow_rekey_begin(flow->id))
                         rekey_post_init(flow->id, n_1_pid);
+
                 return 0;
         }
 
-        if (!reg_flow_take_pending(flow->id, seed, &epoch))
+        rc = reg_flow_take_pending(flow->id, uid, cpid, seed, &epoch,
+                                   initiator);
+        if (rc == -EPERM)
+                return -EPERM;
+
+        if (rc != 0)
                 return 0;
 
         memcpy(sk->key, seed, SYMMKEYSZ);
@@ -1854,7 +2087,6 @@ static int flow_update(struct flow_info * flow,
         return 0;
 }
 
-/* Free every parked OAP ctx at worker exit or cancellation. */
 static void rekey_table_cleanup(void * o)
 {
         struct list_head * tbl = o;
@@ -1867,30 +2099,95 @@ static void rekey_table_cleanup(void * o)
         }
 }
 
-/* Pop one event, or NULL if none, draining the inbox under its lock. */
-static struct rekey_evt * rekey_inbox_wait(const struct timespec * deadline)
+static struct rekey_evt * rekey_event_wait(const struct timespec * dl)
 {
         struct rekey_evt * evt = NULL;
-        struct timespec    now;
+        int                ret = 0;
 
-        pthread_mutex_lock(&irmd.rk.lock);
+        pthread_mutex_lock(&irmd.rk.mtx);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &irmd.rk.mtx);
 
-        clock_gettime(PTHREAD_COND_CLOCK, &now);
-
-        while (list_is_empty(&irmd.rk.inbox) && !irmd.rk.stop &&
-               ts_diff_ns(deadline, &now) > 0) {
-                pthread_cond_timedwait(&irmd.rk.cond, &irmd.rk.lock, deadline);
-                clock_gettime(PTHREAD_COND_CLOCK, &now);
-        }
+        while (list_is_empty(&irmd.rk.inbox) && ret != -ETIMEDOUT)
+                ret = -pthread_cond_timedwait(&irmd.rk.cond, &irmd.rk.mtx, dl);
 
         if (!list_is_empty(&irmd.rk.inbox)) {
                 evt = list_first_entry(&irmd.rk.inbox, struct rekey_evt, next);
                 list_del(&evt->next);
         }
 
-        pthread_mutex_unlock(&irmd.rk.lock);
+        pthread_cleanup_pop(true);
 
         return evt;
+}
+
+static struct timespec rekey_deadline(struct list_head * tbl,
+                                      struct timespec    next)
+{
+        struct timespec    deadline = next;
+        struct list_head * p;
+
+        list_for_each(p, tbl) {
+                struct rekey_ctx * e;
+                e = list_entry(p, struct rekey_ctx, next);
+                if (ts_diff_ns(&e->deadline, &deadline) < 0)
+                        deadline = e->deadline;
+        }
+
+        return deadline;
+}
+
+static void rekey_handle_evt(struct list_head * tbl,
+                             struct rekey_evt * evt)
+{
+        struct flow_info rinfo;
+
+        pthread_cleanup_push(rk_free_evt, evt);
+
+        switch (evt->type) {
+        case REKEY_INIT:
+                rekey_do_initiate(tbl, evt->flow_id, evt->n_1_pid);
+                break;
+        case REKEY_REQ:
+                memset(&rinfo, 0, sizeof(rinfo));
+                rinfo.id      = evt->flow_id;
+                rinfo.n_1_pid = evt->n_1_pid;
+                rekey_respond(&rinfo, &evt->buf);
+                reg_flow_rekey_arr_done(evt->flow_id, true);
+                break;
+        case REKEY_RESP:
+                rekey_do_complete(tbl, evt->flow_id, evt->buf);
+                reg_flow_rekey_arr_done(evt->flow_id, false);
+                break;
+        case REKEY_DIRECT:
+                rekey_do_direct(evt->flow_id);
+                break;
+        default:
+                break;
+        }
+
+        pthread_cleanup_pop(true);
+}
+
+/* On the periodic tick, dispatch all flows due for re-keying. */
+static void rekey_run_periodic(struct list_head * tbl,
+                               struct timespec *  next)
+{
+        struct rekey_info snap[REKEY_BATCH];
+        struct timespec   now;
+        int               n;
+        int               i;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+
+        if (ts_diff_ns(next, &now) > 0)
+                return;
+
+        n = reg_flow_snapshot_rekey_due(snap, REKEY_BATCH);
+        for (i = 0; i < n; ++i)
+                rekey_dispatch(tbl, &snap[i]);
+
+        clock_gettime(PTHREAD_COND_CLOCK, next);
+        next->tv_sec += OAP_REKEY_TIMER;
 }
 
 /*
@@ -1912,67 +2209,23 @@ static void * rekey_worker(void * o)
 
         pthread_cleanup_push(rekey_table_cleanup, &table);
 
-        while (!irmd.rk.stop) {
+        while (true) {
                 struct rekey_evt * evt;
-                struct timespec    now;
-                struct timespec    deadline = next;
-                struct list_head * p;
+                struct timespec    deadline;
 
-                /* Wake no later than the soonest in-flight deadline. */
-                list_for_each(p, &table) {
-                        struct rekey_ctx * e;
-                        e = list_entry(p, struct rekey_ctx, next);
-                        if (ts_diff_ns(&e->deadline, &deadline) < 0)
-                                deadline = e->deadline;
-                }
+                deadline = rekey_deadline(&table, next);
 
-                evt = rekey_inbox_wait(&deadline);
+                evt = rekey_event_wait(&deadline);
 
-                if (irmd.rk.stop) {
-                        if (evt != NULL) {
-                                freebuf(evt->buf);
-                                free(evt);
-                        }
-                        break;
-                }
+                if (evt != NULL)
+                        rekey_handle_evt(&table, evt);
 
-                if (evt != NULL) {
-                        switch (evt->type) {
-                        case REKEY_INIT:
-                                rekey_do_initiate(&table, evt->flow_id,
-                                                  evt->n_1_pid);
-                                break;
-                        case REKEY_RESP:
-                                rekey_do_complete(&table, evt->flow_id,
-                                                  evt->buf);
-                                freebuf(evt->buf);
-                                break;
-                        default:
-                                break;
-                        }
-
-                        free(evt);
-                }
-
-                clock_gettime(PTHREAD_COND_CLOCK, &now);
-                if (ts_diff_ns(&next, &now) <= 0) {
-                        struct rekey_info snap[REKEY_BATCH];
-                        int               n;
-                        int               i;
-
-                        n = reg_flow_snapshot_rekey_due(snap, REKEY_BATCH);
-                        for (i = 0; i < n; ++i)
-                                rekey_do_initiate(&table, snap[i].flow_id,
-                                                  snap[i].n_1_pid);
-
-                        clock_gettime(PTHREAD_COND_CLOCK, &next);
-                        next.tv_sec += OAP_REKEY_TIMER;
-                }
+                rekey_run_periodic(&table, &next);
 
                 rekey_reap_expired(&table);
         }
 
-        pthread_cleanup_pop(1);
+        pthread_cleanup_pop(true);
 
         return (void *) 0;
 }
@@ -2048,6 +2301,10 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
         struct timespec     ts = TIMESPEC_INIT_S(0); /* static analysis */
         int                 res;
         bool                has_key = false;
+        bool                initiator = false;
+        uid_t               uid;
+        gid_t               gid;
+        pid_t               cpid;
         irm_msg_t *         ret_msg;
         buffer_t            data;
 
@@ -2114,7 +2371,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
         case IRM_MSG_CODE__IRM_PROC_ANNOUNCE:
                 proc.pid  = msg->pid;
                 strcpy(proc.prog, msg->prog);
-                res = get_peer_ids(fd, &proc.uid, &proc.gid);
+                res = get_peer_ids(fd, &proc.uid, &proc.gid, NULL);
                 if (res < 0)
                         log_err("Failed to get UID/GID for pid %d.", msg->pid);
                 else
@@ -2157,27 +2414,29 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
                 flow = flow_info_msg_to_s(msg->flow_info);
                 sk.key = kbuf;
                 res = flow_accept(&flow, &data, abstime, &sk);
-                if (res == 0) {
-                        ret_msg->flow_info      = flow_info_s_to_msg(&flow);
-                        ret_msg->has_pk         = data.len != 0;
-                        ret_msg->pk.data        = data.data;
-                        ret_msg->pk.len         = data.len;
-                        ret_msg->has_cipher_nid = true;
-                        ret_msg->cipher_nid     = sk.nid;
-                        if (sk.nid != NID_undef) {
-                                hbuf = malloc(SYMMKEYSZ);
-                                if (hbuf == NULL) {
-                                        log_err("Failed to malloc key buf");
-                                        res = -ENOMEM;
-                                        break;
-                                }
+                if (res != 0)
+                        break;
 
-                                memcpy(hbuf, kbuf, SYMMKEYSZ);
-                                ret_msg->sym_key.data = hbuf;
-                                ret_msg->sym_key.len  = SYMMKEYSZ;
-                                ret_msg->has_sym_key  = true;
-                        }
+                ret_msg->flow_info      = flow_info_s_to_msg(&flow);
+                ret_msg->has_pk         = data.len != 0;
+                ret_msg->pk.data        = data.data;
+                ret_msg->pk.len         = data.len;
+                ret_msg->has_cipher_nid = true;
+                ret_msg->cipher_nid     = sk.nid;
+                if (sk.nid == NID_undef)
+                        break;
+
+                hbuf = malloc(SYMMKEYSZ);
+                if (hbuf == NULL) {
+                        log_err("Failed to malloc key buf");
+                        res = -ENOMEM;
+                        break;
                 }
+
+                memcpy(hbuf, kbuf, SYMMKEYSZ);
+                ret_msg->sym_key.data = hbuf;
+                ret_msg->sym_key.len  = SYMMKEYSZ;
+                ret_msg->has_sym_key  = true;
                 break;
         case IRM_MSG_CODE__IRM_FLOW_ALLOC:
                 data.len  = msg->pk.len;
@@ -2188,26 +2447,29 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
                 abstime = abstime == NULL ? &max : abstime;
                 sk.key = kbuf;
                 res = flow_alloc(msg->dst, &flow, &data, abstime, &sk);
-                if (res == 0) {
-                        ret_msg->flow_info      = flow_info_s_to_msg(&flow);
-                        ret_msg->has_pk         = data.len != 0;
-                        ret_msg->pk.data        = data.data;
-                        ret_msg->pk.len         = data.len;
-                        ret_msg->has_cipher_nid = true;
-                        ret_msg->cipher_nid     = sk.nid;
-                        if (sk.nid != NID_undef) {
-                                hbuf = malloc(SYMMKEYSZ);
-                                if (hbuf == NULL) {
-                                        log_err("Failed to malloc key buf");
-                                        res = -ENOMEM;
-                                        break;
-                                }
-                                memcpy(hbuf, kbuf, SYMMKEYSZ);
-                                ret_msg->sym_key.data = hbuf;
-                                ret_msg->sym_key.len  = SYMMKEYSZ;
-                                ret_msg->has_sym_key  = true;
-                        }
+                if (res != 0)
+                        break;
+
+                ret_msg->flow_info      = flow_info_s_to_msg(&flow);
+                ret_msg->has_pk         = data.len != 0;
+                ret_msg->pk.data        = data.data;
+                ret_msg->pk.len         = data.len;
+                ret_msg->has_cipher_nid = true;
+                ret_msg->cipher_nid     = sk.nid;
+                if (sk.nid == NID_undef)
+                        break;
+
+                hbuf = malloc(SYMMKEYSZ);
+                if (hbuf == NULL) {
+                        log_err("Failed to malloc key buf");
+                        res = -ENOMEM;
+                        break;
                 }
+
+                memcpy(hbuf, kbuf, SYMMKEYSZ);
+                ret_msg->sym_key.data = hbuf;
+                ret_msg->sym_key.len  = SYMMKEYSZ;
+                ret_msg->has_sym_key  = true;
                 break;
         case IRM_MSG_CODE__IRM_FLOW_JOIN:
                 assert(msg->pk.len == 0 && msg->pk.data == NULL);
@@ -2257,26 +2519,39 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
                 break;
         case IRM_MSG_CODE__IRM_FLOW_UPDATE:
                 flow = flow_info_msg_to_s(msg->flow_info);
-                sk.key = kbuf;
-                res = flow_update(&flow, msg->rekey, &sk, &has_key);
-                if (res == 0) {
-                        ret_msg->flow_info = flow_info_s_to_msg(&flow);
-                        if (has_key) {
-                                hbuf = malloc(SYMMKEYSZ);
-                                if (hbuf == NULL) {
-                                        log_err("Failed to malloc key buf");
-                                        res = -ENOMEM;
-                                        break;
-                                }
-
-                                memcpy(hbuf, kbuf, SYMMKEYSZ);
-                                ret_msg->sym_key.data   = hbuf;
-                                ret_msg->sym_key.len    = SYMMKEYSZ;
-                                ret_msg->has_sym_key    = true;
-                                ret_msg->has_generation = true;
-                                ret_msg->generation     = sk.epoch;
-                        }
+                if (get_peer_ids(fd, &uid, &gid, &cpid) < 0) {
+                        res = -EPERM;
+                        break;
                 }
+
+                if (cpid <= 0) /* non-Linux: fall back to asserted pid */
+                        cpid = flow.n_pid;
+
+                sk.key = kbuf;
+                res = flow_update(&flow, uid, cpid, msg->rekey, &sk, &has_key,
+                                  &initiator);
+                if (res != 0)
+                        break;
+
+                ret_msg->flow_info = flow_info_s_to_msg(&flow);
+                if (!has_key)
+                        break;
+
+                hbuf = malloc(SYMMKEYSZ);
+                if (hbuf == NULL) {
+                        log_err("Failed to malloc key buf");
+                        res = -ENOMEM;
+                        break;
+                }
+
+                memcpy(hbuf, kbuf, SYMMKEYSZ);
+                ret_msg->sym_key.data   = hbuf;
+                ret_msg->sym_key.len    = SYMMKEYSZ;
+                ret_msg->has_sym_key    = true;
+                ret_msg->has_generation = true;
+                ret_msg->generation     = sk.epoch;
+                ret_msg->has_rk_initiator = true;
+                ret_msg->rk_initiator     = initiator;
                 break;
         default:
                 log_err("Don't know that message code.");
@@ -2640,14 +2915,14 @@ static int irm_init(void)
 
         list_head_init(&irmd.cmds);
 
-        if (pthread_mutex_init(&irmd.rk.lock, NULL)) {
+        if (pthread_mutex_init(&irmd.rk.mtx, NULL)) {
                 log_err("Failed to initialize mutex.");
-                goto fail_rk_lock;
+                goto fail_rk_mtx;
         }
 
         if (pthread_condattr_init(&cattr)) {
                 log_err("Failed to initialize condattr.");
-                goto fail_rk_lock;
+                goto fail_rk_mtx;
         }
 
 #ifndef __APPLE__
@@ -2768,8 +3043,8 @@ static int irm_init(void)
  fail_stat:
         pthread_cond_destroy(&irmd.rk.cond);
  fail_rk_cond:
-        pthread_mutex_destroy(&irmd.rk.lock);
- fail_rk_lock:
+        pthread_mutex_destroy(&irmd.rk.mtx);
+ fail_rk_mtx:
         pthread_cond_destroy(&irmd.cmd_cond);
  fail_cmd_cond:
         pthread_mutex_destroy(&irmd.cmd_lock);
@@ -2818,7 +3093,7 @@ static void irm_fini(void)
 
         pthread_mutex_unlock(&irmd.cmd_lock);
 
-        pthread_mutex_lock(&irmd.rk.lock);
+        pthread_mutex_lock(&irmd.rk.mtx);
 
         list_for_each_safe(p, h, &irmd.rk.inbox) {
                 struct rekey_evt * evt;
@@ -2828,17 +3103,18 @@ static void irm_fini(void)
                 free(evt);
         }
 
-        pthread_mutex_unlock(&irmd.rk.lock);
+        pthread_mutex_unlock(&irmd.rk.mtx);
 
         pthread_mutex_destroy(&irmd.cmd_lock);
         pthread_cond_destroy(&irmd.cmd_cond);
-        pthread_mutex_destroy(&irmd.rk.lock);
+        pthread_mutex_destroy(&irmd.rk.mtx);
         pthread_cond_destroy(&irmd.rk.cond);
         pthread_rwlock_destroy(&irmd.state_lock);
 
 #ifdef HAVE_FUSE
         while (rmdir(FUSE_PREFIX) < 0 && retries-- > 0)
                 nanosleep(&wait, NULL);
+
         if (retries < 0)
                 log_err("Failed to remove " FUSE_PREFIX);
 #endif
@@ -2871,10 +3147,10 @@ static int irm_start(void)
         if (pthread_create(&irmd.acceptor, NULL, acceptloop, NULL))
                 goto fail_acceptor;
 
-        irmd.rk.stop = false;
-        if (OAP_REKEY_TIMER > 0 &&
-            pthread_create(&irmd.rk.worker, NULL, rekey_worker, NULL))
-                goto fail_rekey_worker;
+        if (OAP_REKEY_TIMER > 0) {
+                if (pthread_create(&irmd.rk.worker, NULL, rekey_worker, NULL))
+                        goto fail_rekey_worker;
+        }
 
         log_info("Ouroboros IPC Resource Manager daemon started...");
 
@@ -2923,13 +3199,7 @@ static void irm_sigwait(sigset_t sigset)
 static void irm_stop(void)
 {
         if (OAP_REKEY_TIMER > 0) {
-                pthread_mutex_lock(&irmd.rk.lock);
-
-                irmd.rk.stop = true;
-                pthread_cond_signal(&irmd.rk.cond);
-
-                pthread_mutex_unlock(&irmd.rk.lock);
-
+                pthread_cancel(irmd.rk.worker);
                 pthread_join(irmd.rk.worker, NULL);
         }
 

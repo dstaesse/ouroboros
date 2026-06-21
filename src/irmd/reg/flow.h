@@ -55,9 +55,14 @@ struct reg_flow {
                 uint8_t epoch;         /* last epoch installed by app */
                 bool    initiator;     /* OAP initiator (role 0)      */
                 bool    in_flight;     /* a re-key is in progress     */
-                uint8_t pending_seed[SYMMKEYSZ];
+                bool    req_queued;    /* a peer REQ is in the inbox  */
+                bool    resp_queued;   /* a peer RESP is in the inbox */
+                uint8_t * pending_seed;    /* secure heap; NULL until set */
                 uint8_t pending_epoch;
+                bool    pending_initiator; /* pending seed: oap_cli side */
                 bool    has_pending;   /* new seed awaits app pull    */
+                uint8_t pulled;        /* direct: per-app pull mask   */
+                buffer_t peer_crt;     /* peer cert DER, cached at HS  */
         } rk;
 
         struct ssm_rbuff * n_rb;
