@@ -140,8 +140,13 @@ int load_kex_config(const char *        name,
                 return -ENOTSUP;
         }
 #endif
-        if (cfg->c.nid == NID_undef) {
-                log_err("Invalid cipher for %s.", name);
+        if (crypt_kex_rank(cfg->x.nid) < 1) {
+                log_err("Key exchange not supported for %s.", name);
+                return -ENOTSUP;
+        }
+
+        if (crypt_cipher_rank(cfg->c.nid) < 1) {
+                log_err("Cipher not supported for %s.", name);
                 return -ECRYPT;
         }
 
