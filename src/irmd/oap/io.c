@@ -120,10 +120,10 @@ int load_kex_config(const char *        name,
                 return -1;
         }
 
-        if (cfg->cacert[0] != '\0') {
-                if (crypt_load_crt_file(cfg->cacert, &pin) < 0) {
+        if (cfg->a.cacert[0] != '\0') {
+                if (crypt_load_crt_file(cfg->a.cacert, &pin) < 0) {
                         log_err("Failed to load pinned CA %s for %s.",
-                                cfg->cacert, name);
+                                cfg->a.cacert, name);
                         return -EAUTH;
                 }
                 crypt_free_crt(pin);

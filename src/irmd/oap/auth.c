@@ -268,7 +268,7 @@ int oap_auth_peer(char *                    name,
         }
 
         if (peer_hdr->crt.len == 0) {
-                if (cfg->req_auth) {
+                if (cfg->a.req) {
                         log_err_id(id, "Peer did not provide a certificate.");
                         goto fail_check;
                 }
@@ -291,16 +291,16 @@ int oap_auth_peer(char *                    name,
 
         log_dbg_id(id, "Got public key from crt.");
 
-        if (cfg->cacert[0] != '\0' &&
-            crypt_load_crt_file(cfg->cacert, &pin) < 0) {
-                log_err_id(id, "Failed to load pinned CA %s.", cfg->cacert);
+        if (cfg->a.cacert[0] != '\0' &&
+            crypt_load_crt_file(cfg->a.cacert, &pin) < 0) {
+                log_err_id(id, "Failed to load pinned CA %s.", cfg->a.cacert);
                 goto fail_crt;
         }
 
         ret = auth_verify_crt_pin(oap_auth.ca_ctx, crt, pin);
         if (ret == -ENOENT) {
                 log_err_id(id, "Peer crt not issued by pinned CA %s.",
-                           cfg->cacert);
+                           cfg->a.cacert);
                 goto fail_pin;
         }
 

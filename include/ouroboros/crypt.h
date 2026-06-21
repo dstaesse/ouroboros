@@ -135,8 +135,10 @@ struct sec_config {
                 int          nid;
         } d; /* digest */
 
-        bool req_auth;                  /* require peer authentication */
-        char cacert[CACERT_PATH_BUFSZ]; /* pinned issuing CA, "" = any  */
+        struct {
+                bool req;                       /* require peer auth   */
+                char cacert[CACERT_PATH_BUFSZ]; /* pinned CA, "" = any */
+        } a; /* authentication */
 };
 
 /* Helper macros to set sec_config fields consistently */

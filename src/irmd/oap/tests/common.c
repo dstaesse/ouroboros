@@ -36,9 +36,9 @@ int load_srv_kex_config(const struct name_info * info,
 
         memset(cfg, 0, sizeof(*cfg));
 
-        cfg->req_auth = test_cfg.srv.req_auth;
+        cfg->a.req = test_cfg.srv.req_auth;
         if (test_cfg.srv.cacert != NULL)
-                strcpy(cfg->cacert, test_cfg.srv.cacert);
+                strcpy(cfg->a.cacert, test_cfg.srv.cacert);
 
         /* Digest is kept without kex, as in parse_sec_config */
         SET_KEX_DIGEST_NID(cfg, test_cfg.srv.md);
@@ -61,9 +61,9 @@ int load_cli_kex_config(const struct name_info * info,
 
         memset(cfg, 0, sizeof(*cfg));
 
-        cfg->req_auth = test_cfg.cli.req_auth;
+        cfg->a.req = test_cfg.cli.req_auth;
         if (test_cfg.cli.cacert != NULL)
-                strcpy(cfg->cacert, test_cfg.cli.cacert);
+                strcpy(cfg->a.cacert, test_cfg.cli.cacert);
 
         /* Digest is kept without kex, as in parse_sec_config */
         SET_KEX_DIGEST_NID(cfg, test_cfg.cli.md);

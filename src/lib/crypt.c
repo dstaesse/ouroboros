@@ -173,7 +173,7 @@ int parse_sec_config(struct sec_config * cfg,
         SET_KEX_KDF_NID(cfg, NID_sha256);
         SET_KEX_CIPHER_NID(cfg, NID_aes_256_gcm);
         SET_KEX_DIGEST_NID(cfg, NID_sha256);
-        /* req_auth is seeded per-role by the caller; only auth= overrides it */
+        /* a.req is seeded per-role by the caller; only auth= overrides it */
 
         while (fgets(line, sizeof(line), fp) != NULL) {
                 char * trimmed;
@@ -223,16 +223,16 @@ int parse_sec_config(struct sec_config * cfg,
                         }
                 } else if (strcmp(key, "auth") == 0) {
                         if (strcmp(value, "required") == 0) {
-                                cfg->req_auth = true;
+                                cfg->a.req = true;
                         } else if (strcmp(value, "optional") == 0) {
-                                cfg->req_auth = false;
+                                cfg->a.req = false;
                         } else {
                                 return -EINVAL;
                         }
                 } else if (strcmp(key, "cacert") == 0) {
-                        if (strlen(value) >= sizeof(cfg->cacert))
+                        if (strlen(value) >= sizeof(cfg->a.cacert))
                                 return -EINVAL;
-                        strcpy(cfg->cacert, value);
+                        strcpy(cfg->a.cacert, value);
                 } else if (strcmp(key, "encryption") == 0) {
                         if (strcmp(value, "none") != 0)
                                 return -EINVAL;

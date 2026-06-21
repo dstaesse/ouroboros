@@ -890,7 +890,7 @@ static int test_kex_parse_config_auth(void)
                 goto fail;
         }
 
-        if (!kex.req_auth) {
+        if (!kex.a.req) {
                 printf("auth=required not parsed correctly.\n");
                 fclose(fp);
                 goto fail;
@@ -946,7 +946,7 @@ static int test_kex_parse_config_auth_seed(void)
         TEST_START();
 
         memset(&kex, 0, sizeof(kex));
-        kex.req_auth = true;
+        kex.a.req = true;
 
         fp = FMEMOPEN_STR(KEX_CONFIG_NO_ENC);
         if (fp == NULL) {
@@ -960,7 +960,7 @@ static int test_kex_parse_config_auth_seed(void)
                 goto fail;
         }
 
-        if (!kex.req_auth) {
+        if (!kex.a.req) {
                 printf("Seeded req_auth should survive parsing.\n");
                 fclose(fp);
                 goto fail;
@@ -985,7 +985,7 @@ static int test_kex_parse_config_auth_optional(void)
         TEST_START();
 
         memset(&kex, 0, sizeof(kex));
-        kex.req_auth = true;
+        kex.a.req = true;
 
         fp = FMEMOPEN_STR(KEX_CONFIG_AUTH_OPTIONAL);
         if (fp == NULL) {
@@ -999,7 +999,7 @@ static int test_kex_parse_config_auth_optional(void)
                 goto fail;
         }
 
-        if (kex.req_auth) {
+        if (kex.a.req) {
                 printf("auth=optional should clear req_auth.\n");
                 fclose(fp);
                 goto fail;
@@ -1037,7 +1037,7 @@ static int test_kex_parse_config_auth_no_enc(const char * config)
                 goto fail;
         }
 
-        if (!kex.req_auth) {
+        if (!kex.a.req) {
                 printf("encryption=none should not drop required auth.\n");
                 fclose(fp);
                 goto fail;
@@ -1086,14 +1086,14 @@ static int test_kex_parse_config_cacert(void)
                 goto fail;
         }
 
-        if (strcmp(kex.cacert,
+        if (strcmp(kex.a.cacert,
                    "/etc/ouroboros/security/cacert/ca.crt") != 0) {
                 printf("cacert not parsed correctly.\n");
                 fclose(fp);
                 goto fail;
         }
 
-        if (kex.req_auth) {
+        if (kex.a.req) {
                 printf("cacert must not imply req_auth.\n");
                 fclose(fp);
                 goto fail;
