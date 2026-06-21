@@ -241,6 +241,7 @@ static int test_kex_dhe_derive(const char * algo)
 
         memset(&kex, 0, sizeof(kex));
         SET_KEX_ALGO(&kex, algo);
+        SET_KEX_KDF_NID(&kex, NID_sha256);
 
         len = kex_pkp_create(&kex, &pkp1, buf1);
         if (len < 0) {
@@ -352,6 +353,7 @@ static int test_kex_dhe_corrupted_pubkey(const char * algo)
 
         memset(&kex, 0, sizeof(kex));
         SET_KEX_ALGO(&kex, algo);
+        SET_KEX_KDF_NID(&kex, NID_sha256);
 
         len = kex_pkp_create(&kex, &pkp, buf);
         if (len < 0) {
@@ -403,6 +405,8 @@ static int test_kex_dhe_wrong_algo(void)
         memset(&kex2, 0, sizeof(kex2));
         SET_KEX_ALGO(&kex1, algo1);
         SET_KEX_ALGO(&kex2, algo2);
+        SET_KEX_KDF_NID(&kex1, NID_sha256);
+        SET_KEX_KDF_NID(&kex2, NID_sha256);
 
         if (kex_pkp_create(&kex1, &pkp1, buf1) < 0) {
                 printf("Failed to create first key pair.\n");

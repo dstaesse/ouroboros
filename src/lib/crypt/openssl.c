@@ -31,6 +31,7 @@
 #include <ouroboros/crypt.h>
 #include <ouroboros/hash.h>
 #include <ouroboros/name.h>
+#include <ouroboros/pthread.h>
 #include <ouroboros/random.h>
 #include <ouroboros/utils.h>
 
@@ -79,11 +80,11 @@ static const char * hash_nid_to_digest_name(int nid)
 
         md = EVP_get_digestbynid(nid);
         if (md == NULL)
-                return "SHA256"; /* fallback to SHA-256 */
+                return NULL;
 
         name = EVP_MD_get0_name(md);
         if (name == NULL)
-                return "SHA256"; /* fallback to SHA-256 */
+                return NULL;
 
         return name;
 }
@@ -200,6 +201,8 @@ static int derive_key_hkdf(struct kdf_info * ki)
         int           idx;
 
         digest = hash_nid_to_digest_name(ki->nid);
+        if (digest == NULL)
+                goto fail_fetch;
 
         kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
         if (kdf == NULL)
@@ -446,7 +449,7 @@ static int __openssl_dhe_derive(EVP_PKEY * pkp,
         /* Derive symmetric key from shared secret using HKDF */
         ret = derive_key_hkdf(&ki);
 
-        OPENSSL_free(secret);
+        OPENSSL_clear_free(secret, secret_len);
         EVP_PKEY_CTX_free(ctx);
         OPENSSL_free(local_pk.data);
 
@@ -455,7 +458,7 @@ static int __openssl_dhe_derive(EVP_PKEY * pkp,
 
         return 0;
  fail_derive:
-        OPENSSL_free(secret);
+        OPENSSL_clear_free(secret, secret_len);
  fail_ctx:
         EVP_PKEY_CTX_free(ctx);
  fail_salt:
@@ -627,14 +630,22 @@ ssize_t openssl_pkp_create(const char *  algo,
                 if (raw.len == 0)
                         goto fail_pubkey;
 
+                if (raw.len > CRYPT_KEY_BUFSZ) {
+                        OPENSSL_free(raw.data);
+                        goto fail_pubkey;
+                }
+
                 memcpy(pk, raw.data, raw.len);
                 OPENSSL_free(raw.data);
 
                 return (ssize_t) raw.len;
         } else { /* DER encode standard algorithms */
+                len = i2d_PUBKEY(*pkp, NULL); /* pre-flight length */
+                if (len < 0 || len > CRYPT_KEY_BUFSZ)
+                        goto fail_pubkey;
+
                 pos = pk; /* i2d_PUBKEY increments the ptr, don't use pk! */
-                len = i2d_PUBKEY(*pkp, &pos);
-                if (len < 0)
+                if (i2d_PUBKEY(*pkp, &pos) < 0)
                         goto fail_pubkey;
 
                 return len;
@@ -695,7 +706,7 @@ static ssize_t __openssl_kem_encap(EVP_PKEY * pub,
         /* Derive symmetric key from shared secret using HKDF */
         ret = derive_key_hkdf(&ki);
 
-        OPENSSL_free(secret);
+        OPENSSL_clear_free(secret, secret_len);
         EVP_PKEY_CTX_free(ctx);
 
         if (ret != 0)
@@ -704,7 +715,7 @@ static ssize_t __openssl_kem_encap(EVP_PKEY * pub,
         return (ssize_t) ct_len;
 
  fail_secret:
-        OPENSSL_free(secret);
+        OPENSSL_clear_free(secret, secret_len);
  fail_encap:
         EVP_PKEY_CTX_free(ctx);
  fail_ctx:
@@ -848,7 +859,7 @@ int openssl_kem_decap(EVP_PKEY * priv,
         /* Derive symmetric key from shared secret using HKDF */
         ret = derive_key_hkdf(&ki);
 
-        OPENSSL_free(secret);
+        OPENSSL_clear_free(secret, secret_len);
         EVP_PKEY_CTX_free(ctx);
         OPENSSL_free(pk.data);
 
@@ -858,7 +869,7 @@ int openssl_kem_decap(EVP_PKEY * priv,
         return 0;
 
  fail_secret:
-        OPENSSL_free(secret);
+        OPENSSL_clear_free(secret, secret_len);
  fail_ctx:
         EVP_PKEY_CTX_free(ctx);
  fail_salt:
@@ -1137,7 +1148,12 @@ int openssl_load_crt_file(const char * path,
         if (fp == NULL)
                 goto fail_file;
 
+        pthread_cleanup_push(__cleanup_fclose, fp);
+
         xcrt = PEM_read_X509(fp, NULL, NULL, NULL);
+
+        pthread_cleanup_pop(false);
+
         if (xcrt == NULL)
                 goto fail_crt;
 
@@ -1153,33 +1169,56 @@ int openssl_load_crt_file(const char * path,
         return -1;
 }
 
-int openssl_load_crt_str(const char * str,
-                         void **      crt)
+static void * rd_crt_bio(BIO * bio)
+{
+        return PEM_read_bio_X509(bio, NULL, NULL, NULL);
+}
+
+static void * rd_privkey_bio(BIO * bio)
+{
+        return PEM_read_bio_PrivateKey(bio, NULL, NULL, "");
+}
+
+static void * rd_pubkey_bio(BIO * bio)
+{
+        return PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
+}
+
+/* Decode a PEM object from an in-memory string via rd. */
+static int load_pem_str(const char * str,
+                        void *    (* rd)(BIO *),
+                        void **      out)
 {
         BIO *  bio;
-        X509 * xcrt;
+        void * obj;
 
         bio = BIO_new(BIO_s_mem());
         if (bio == NULL)
                 goto fail_bio;
 
         if (BIO_write(bio, str, strlen(str)) < 0)
-                goto fail_crt;
+                goto fail_obj;
 
-        xcrt = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-        if (xcrt == NULL)
-                goto fail_crt;
+        obj = rd(bio);
+        if (obj == NULL)
+                goto fail_obj;
 
         BIO_free(bio);
 
-        *crt = (void *) xcrt;
+        *out = obj;
 
         return 0;
- fail_crt:
+ fail_obj:
         BIO_free(bio);
  fail_bio:
-        *crt = NULL;
+        *out = NULL;
         return -1;
+}
+
+int openssl_load_crt_str(const char * str,
+                         void **      crt)
+{
+        return load_pem_str(str, rd_crt_bio, crt);
 }
 
 int openssl_load_crt_der(buffer_t buf,
@@ -1241,7 +1280,12 @@ int openssl_load_privkey_file(const char * path,
         if (fp == NULL)
                 goto fail_file;
 
+        pthread_cleanup_push(__cleanup_fclose, fp);
+
         pkey = PEM_read_PrivateKey(fp, NULL, NULL, "");
+
+        pthread_cleanup_pop(false);
+
         if (pkey == NULL)
                 goto fail_key;
 
@@ -1260,30 +1304,7 @@ int openssl_load_privkey_file(const char * path,
 int openssl_load_privkey_str(const char * str,
                              void **      key)
 {
-        BIO *      bio;
-        EVP_PKEY * pkey;
-
-        bio = BIO_new(BIO_s_mem());
-        if (bio == NULL)
-                goto fail_bio;
-
-        if (BIO_write(bio, str, strlen(str)) < 0)
-                goto fail_key;
-
-        pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
-        if (pkey == NULL)
-                goto fail_key;
-
-        BIO_free(bio);
-
-        *key = (void *) pkey;
-
-        return 0;
- fail_key:
-        BIO_free(bio);
- fail_bio:
-        *key = NULL;
-        return -1;
+        return load_pem_str(str, rd_privkey_bio, key);
 }
 
 int openssl_load_pubkey_file(const char * path,
@@ -1296,7 +1317,12 @@ int openssl_load_pubkey_file(const char * path,
         if (fp == NULL)
                 goto fail_file;
 
+        pthread_cleanup_push(__cleanup_fclose, fp);
+
         pkey = PEM_read_PUBKEY(fp, NULL, NULL, NULL);
+
+        pthread_cleanup_pop(false);
+
         if (pkey == NULL)
                 goto fail_key;
 
@@ -1328,7 +1354,12 @@ int openssl_load_pubkey_file_to_der(const char * path,
         if (fp == NULL)
                 goto fail_file;
 
+        pthread_cleanup_push(__cleanup_fclose, fp);
+
         pkey = PEM_read_PUBKEY(fp, NULL, NULL, NULL);
+
+        pthread_cleanup_pop(false);
+
         if (pkey == NULL)
                 goto fail_key;
 
@@ -1355,30 +1386,7 @@ int openssl_load_pubkey_file_to_der(const char * path,
 int openssl_load_pubkey_str(const char * str,
                             void **      key)
 {
-        BIO *      bio;
-        EVP_PKEY * pkey;
-
-        bio = BIO_new(BIO_s_mem());
-        if (bio == NULL)
-                goto fail_bio;
-
-        if (BIO_write(bio, str, strlen(str)) < 0)
-                goto fail_key;
-
-        pkey = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
-        if (pkey == NULL)
-                goto fail_key;
-
-        BIO_free(bio);
-
-        *key = (void *) pkey;
-
-        return 0;
- fail_key:
-        BIO_free(bio);
- fail_bio:
-        *key = NULL;
-        return -1;
+        return load_pem_str(str, rd_pubkey_bio, key);
 }
 
 int openssl_load_pubkey_raw_file(const char * path,
@@ -1396,7 +1404,12 @@ int openssl_load_pubkey_raw_file(const char * path,
         if (fp == NULL)
                 goto fail_file;
 
+        pthread_cleanup_push(__cleanup_fclose, fp);
+
         bytes_read = fread(tmp_buf, 1, CRYPT_KEY_BUFSZ, fp);
+
+        pthread_cleanup_pop(false);
+
         if (bytes_read == 0)
                 goto fail_read;
 
@@ -1438,11 +1451,17 @@ static const char * __openssl_hybrid_algo_from_sk_len(size_t len)
         return NULL;
 }
 
+/* Wipe the raw-key staging buffer if a cancel aborts the read. */
+static void __cleanse_key_buf(void * o)
+{
+        OPENSSL_cleanse(o, CRYPT_KEY_BUFSZ);
+}
+
 int openssl_load_privkey_raw_file(const char * path,
                                   void **      key)
 {
         FILE *       fp;
-        uint8_t      tmp_buf[4096];
+        uint8_t      tmp_buf[CRYPT_KEY_BUFSZ];
         size_t       bytes_read;
         const char * algo;
         EVP_PKEY *   pkey;
@@ -1454,7 +1473,14 @@ int openssl_load_privkey_raw_file(const char * path,
         if (fp == NULL)
                 goto fail_file;
 
+        pthread_cleanup_push(__cleanup_fclose, fp);
+        pthread_cleanup_push(__cleanse_key_buf, tmp_buf);
+
         bytes_read = fread(tmp_buf, 1, sizeof(tmp_buf), fp);
+
+        pthread_cleanup_pop(false);
+        pthread_cleanup_pop(false);
+
         if (bytes_read == 0)
                 goto fail_read;
 
