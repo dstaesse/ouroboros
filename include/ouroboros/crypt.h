@@ -40,7 +40,7 @@
  * Some have a different spelling. This header avoids the double definitions.
  */
 
- #define NID_undef              0
+#define NID_undef              0
 
 /* Cipher NIDs (match OpenSSL values) */
 #define NID_aes_128_gcm        895
@@ -51,7 +51,7 @@
 #define NID_aes_256_ctr        906
 #define NID_chacha20_poly1305  1018
 
- #if !defined (__APPLE__) || !defined ( HAVE_OPENSSL )
+#if !defined (__APPLE__) || !defined ( HAVE_OPENSSL )
 /* KEX algorithm NIDs (match OpenSSL values) */
 #define NID_X9_62_prime256v1   415
 #define NID_secp384r1          715
@@ -397,6 +397,10 @@ int                crypt_load_pubkey_raw_file(const char * path,
 
 int                crypt_load_privkey_raw_file(const char * path,
                                                void **      key);
+
+int                crypt_ct_cmp(const void * a,
+                                const void * b,
+                                size_t       len);
 
 int                crypt_cmp_key(const void * key1,
                                  const void * key2);

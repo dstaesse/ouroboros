@@ -1033,6 +1033,25 @@ int crypt_load_privkey_raw_file(const char * path,
 #endif
 }
 
+int crypt_ct_cmp(const void * a,
+                 const void * b,
+                 size_t       len)
+{
+#ifdef HAVE_OPENSSL
+        return CRYPTO_memcmp(a, b, len);
+#else
+        const volatile uint8_t * pa = a;
+        const volatile uint8_t * pb = b;
+        uint8_t                  d  = 0;
+        size_t                   i;
+
+        for (i = 0; i < len; i++)
+                d |= pa[i] ^ pb[i];
+
+        return d != 0;
+#endif
+}
+
 int crypt_cmp_key(const void * key1,
                   const void * key2)
 {
