@@ -24,14 +24,12 @@
 #define OUROBOROS_PFT_H
 
 #include <stdint.h>
-#include <stdbool.h>
 #include <stdlib.h>
 
 struct pft;
 
 /* Buckets is rounded up to the nearest power of 2 */
-struct pft * pft_create(uint64_t buckets,
-                        bool     hash_key);
+struct pft * pft_create(uint64_t buckets);
 
 void         pft_destroy(struct pft * table);
 

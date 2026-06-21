@@ -38,15 +38,7 @@ int pft_test(int     argc,
         (void) argc;
         (void) argv;
 
-        pft = pft_create(TBL_SIZE, true);
-        if (pft == NULL) {
-                printf("Failed to create.\n");
-                return -1;
-        }
-
-        pft_destroy(pft);
-
-        pft = pft_create(TBL_SIZE, false);
+        pft = pft_create(TBL_SIZE);
         if (pft == NULL) {
                 printf("Failed to create.\n");
                 return -1;

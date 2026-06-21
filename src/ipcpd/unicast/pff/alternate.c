@@ -211,7 +211,7 @@ struct pff_i * alternate_pff_create(void)
         if (pthread_rwlock_init(&tmp->lock, NULL))
                 goto fail_lock;
 
-        tmp->pft = pft_create(PFT_SIZE, false);
+        tmp->pft = pft_create(PFT_SIZE);
         if (tmp->pft == NULL)
                 goto fail_pft;
 

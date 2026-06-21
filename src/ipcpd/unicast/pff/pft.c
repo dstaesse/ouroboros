@@ -43,12 +43,10 @@ struct pft_entry {
 
 struct pft {
         struct list_head * buckets;
-        bool               hash_key;
         uint64_t           buckets_size;
 };
 
-struct pft * pft_create(uint64_t buckets,
-                        bool     hash_key)
+struct pft * pft_create(uint64_t buckets)
 {
         struct pft * tmp;
         unsigned int i;
@@ -69,7 +67,6 @@ struct pft * pft_create(uint64_t buckets,
         if (tmp == NULL)
                 return NULL;
 
-        tmp->hash_key = hash_key;
         tmp->buckets_size = buckets;
 
         tmp->buckets = malloc(buckets * sizeof(*tmp->buckets));
@@ -113,22 +110,10 @@ void pft_flush(struct pft * pft)
         }
 }
 
-static uint64_t hash(uint64_t key)
-{
-        uint64_t res[2];
-
-        mem_hash(HASH_MD5, res, (uint8_t *) &key, sizeof(key));
-
-        return res[0];
-}
-
 static uint64_t calc_key(struct pft * pft,
                          uint64_t     dst)
 {
-        if (pft->hash_key)
-                dst = hash(dst);
-
-        return (dst & (pft->buckets_size - 1));
+        return hash_mix64(dst) & (pft->buckets_size - 1);
 }
 
 int pft_insert(struct pft * pft,

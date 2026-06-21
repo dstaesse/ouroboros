@@ -63,7 +63,7 @@ struct pff_i * simple_pff_create(void)
                 return NULL;
         }
 
-        tmp->pft = pft_create(PFT_SIZE, false);
+        tmp->pft = pft_create(PFT_SIZE);
         if (tmp->pft == NULL) {
                 pthread_rwlock_destroy(&tmp->lock);
                 free(tmp);
