@@ -364,10 +364,7 @@ static int crc_check(struct ssm_pk_buff * spb,
 /* FRCT included here so it can use proc and dev.c statics directly. */
 #include "frct.c"
 
-/*
- * SACK / DATA carry trailer CRC32; HCS protects the headers on every
- * FRCT packet. Decrypt before any check so plaintext is authoritative.
- */
+/* Decrypt before any check so the plaintext is authoritative. */
 static bool invalid_pkt(struct flow *        flow,
                         struct ssm_pk_buff * spb)
 {
@@ -449,10 +446,6 @@ static void compute_wait_deadline(const struct timespec * dl,
                 *out = *dl;
 }
 
-/*
- * proc.lock rdlock held across each iteration so flow_fini's wrlock
- * waits for us to finish; FLOWDOWN already set means we exit promptly.
- */
 static void flow_drain_rx_nb(struct flow * flow)
 {
         ssize_t              idx;
@@ -529,11 +522,7 @@ static void flow_drain_rx_nb(struct flow * flow)
 /* Throttle re-key retries so a failed attempt can't storm the IRMd. */
 #define REKEY_BACKOFF_NS (250 * MILLION)
 
-/*
- * Pull a parked re-key seed from the IRMd and install it. Driven from the
- * data path when RB_REKEY shows on rx_rb. crypt_rekey is concurrency-safe
- * on its own; proc.lock (rd) only guards against teardown.
- */
+/* proc.lock (rd) only guards teardown; crypt_rekey self-synchronises. */
 static void flow_rekey(struct flow * flow)
 {
         struct flow_info info;
@@ -597,10 +586,7 @@ static void flow_rekey(struct flow * flow)
         crypt_secure_clear(key, SYMMKEYSZ);
 }
 
-/*
- * Wait clamped by caller deadline, next tw expiry, and TICTIME;
- * a clamp-timeout means tw work is due, not caller-deadline.
- */
+/* A clamp-timeout means tw work is due, not the caller deadline. */
 static int flow_rx_one(struct flow *     flow,
                        struct timespec * abs)
 {
@@ -688,12 +674,7 @@ static void flow_clear(int fd)
         proc.flows[fd].info.id  = -1;
 }
 
-/*
- * Set RB_FLOWDOWN on rx/tx so any in-flight blocking reads or writes
- * wake up and drop their proc.lock rdlock. Must run BEFORE flow_fini's
- * wrlock, else the wrlock blocks on those rdlock holders and the
- * in-flight calls never see the FLOWDOWN signal.
- */
+/* Order before flow_fini's wrlock, which blocks on rdlock holders. */
 static void flow_quiesce(int fd)
 {
         struct ssm_rbuff * rx_rb = proc.flows[fd].rx_rb;
@@ -1629,12 +1610,6 @@ static __inline__ uint16_t flow_frag_role(size_t i, size_t n)
         return FRCT_FR_MID;
 }
 
-/*
- * Stream-mode write: split buf into chunks of
- * (frag_mtu - PCI - PCI_STREAM) bytes; each chunk goes through the
- * normal tx path. frcti_snd injects the [start,end) extension and
- * advances snd_byte_next under its wrlock. No FFGM/LFGM role bits.
- */
 static ssize_t flow_write_stream(struct flow *     flow,
                                  const void *      buf,
                                  size_t            count,
@@ -1761,18 +1736,8 @@ static ssize_t flow_write_frag(struct flow *     flow,
 }
 
 /*
- * Watermark: re-key when the TX batch is within KEY_REKEY_WATERMARK node
- * keys of exhaustion (0 disables), ahead of the timer; consult keyrot at
- * most once per FLOW_WM_CHECK writes.
- */
-#define FLOW_WM_CHECK (1u << 16)
-
-/*
- * Switch TX to the freshly installed epoch. The initiator holds the OAP
- * key-confirm tag and bootstraps after the install grace, which also lets
- * the peer install the batch first. The responder has no such proof: it
- * waits for peer_synced (a packet under the new batch), with a last-resort
- * promote near exhaustion so a silent peer can't stall it.
+ * Initiator promotes on the install grace (it holds the key-confirm
+ * tag); responder waits for peer_synced, with a near-exhaustion floor.
  */
 static void flow_tx_promote(struct flow * flow)
 {
@@ -1806,11 +1771,7 @@ static void flow_tx_promote(struct flow * flow)
         flow->rk_grace.tv_nsec = 0;
 }
 
-/*
- * Ask the IRMd to start an OAP re-key for this flow. The reply carries no
- * key; the seed arrives later over RB_REKEY. Fired from the write path as
- * the TX batch nears exhaustion, ahead of the timer.
- */
+/* The reply carries no key; the seed arrives later over RB_REKEY. */
 static int flow_rekey_trigger(struct flow * flow)
 {
         struct flow_info info;
@@ -1834,11 +1795,6 @@ static int flow_rekey_trigger(struct flow * flow)
         return 0;
 }
 
-/*
- * True when the live TX batch has run low and no re-key is in flight.
- * Advances a throttle so the (locking) keyrot consult runs at most once
- * per FLOW_WM_CHECK writes.
- */
 static bool flow_wm_due(struct flow * flow)
 {
         uint32_t tick;

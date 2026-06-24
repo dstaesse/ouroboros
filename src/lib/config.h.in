@@ -107,3 +107,4 @@
 #define KEY_NODE_COUNT      (@KEY_NODE_COUNT@)      /* node keys/batch N */
 #define KEY_REKEY_WATERMARK (@KEY_REKEY_WATERMARK@) /* node-keys-left trig */
 #define KEY_REPLAY_WINDOW   (@KEY_REPLAY_WINDOW@)   /* rx replay win pkts */
+#define FLOW_WM_CHECK       (1u << @KEY_REKEY_WM_CHECK_BITS@) /* wm chk/n wr */

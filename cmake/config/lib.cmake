@@ -97,6 +97,8 @@ set(KEY_REKEY_WATERMARK 4 CACHE STRING
   "Re-key when this many node keys remain; 0 disables the count trigger")
 set(KEY_REPLAY_WINDOW 2048 CACHE STRING
   "RX replay window in packets; power of two, >= 128")
+set(KEY_REKEY_WM_CHECK_BITS 16 CACHE STRING
+  "Re-key watermark is consulted once per 2^n flow writes")
 if(NOT KEY_REPLAY_WINDOW MATCHES "^[0-9]+$")
   message(FATAL_ERROR "KEY_REPLAY_WINDOW must be a positive integer")
 endif()
@@ -111,7 +113,7 @@ endif()
 # that leaves a high-rate flow no room to complete the exchange. Production
 # defaults are vast; this guards under-sized (test) geometries.
 if(KEY_REKEY_WATERMARK GREATER 0)
-  set(_rk_wm_check 65536) # FLOW_WM_CHECK in src/lib/dev.c (2^16)
+  math(EXPR _rk_wm_check "1 << ${KEY_REKEY_WM_CHECK_BITS}")
   math(EXPR _rk_lead
     "${KEY_REKEY_WATERMARK} << (${KEY_LEAF_BITS} + ${KEY_NODE_BITS})")
   math(EXPR _rk_min "2 * ${_rk_wm_check}")
