@@ -29,6 +29,7 @@
 #include "config.h"
 
 #include <ouroboros/crypt.h>
+#include <ouroboros/endian.h>
 #include <ouroboros/flow.h>
 #include <ouroboros/name.h>
 #include <ouroboros/random.h>
@@ -50,6 +51,10 @@
 #define NO_CLI_AUTH 0
 #define CLI_ENCAP   KEM_MODE_CLIENT_ENCAP
 #define SRV_ENCAP   KEM_MODE_SERVER_ENCAP
+
+/* Wire constants for inspecting the encoded kex_len field. */
+#define OAP_KEX_LEN_OFFSET 32
+#define OAP_KEX_ROLE_BIT   0x4000 /* bit 14: 1 = client encaps */
 
 extern const uint16_t kex_supported_nids[];
 extern const uint16_t md_supported_nids[];
@@ -520,6 +525,123 @@ static int test_oap_rekey_kem_all(void)
         return ret;
 }
 
+/*
+ * Client-encap bakes the KDF into the ciphertext, so the server cannot
+ * upgrade it: a client KDF weaker than the server floor must be rejected.
+ */
+static int test_oap_kem_kdf_floor(int kex)
+{
+        struct oap_test_ctx ctx;
+        const char *        kex_str = kex_nid_to_str(kex);
+
+        test_cfg_init(kex, NID_aes_256_gcm, NID_sha256,
+                      CLI_ENCAP, NO_CLI_AUTH);
+        test_cfg.srv.kdf = NID_sha512;
+        test_cfg.cli.kdf = NID_sha256;
+
+        TEST_START("(%s)", kex_str);
+
+        if (oap_test_setup_kem(&ctx, root_ca_crt_ml, im_ca_crt_ml) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server accepted a client KDF below its floor.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown_kem(&ctx);
+
+        TEST_SUCCESS("(%s)", kex_str);
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown_kem(&ctx);
+ fail:
+        TEST_FAIL("(%s)", kex_str);
+        return TEST_RC_FAIL;
+}
+
+/*
+ * A client-encap flow re-keys to ephemeral server-encap, so it keeps
+ * forward secrecy. The re-key request must advertise server-encap
+ * (kex_len Role bit clear) rather than re-using client encapsulation.
+ */
+static int test_oap_rekey_kem_forcing(int kex)
+{
+        struct oap_test_ctx ctx;
+        const char *        kex_str = kex_nid_to_str(kex);
+        uint16_t            kex_len;
+
+        test_cfg_init(kex, NID_aes_256_gcm, NID_sha256,
+                      CLI_ENCAP, NO_CLI_AUTH);
+
+        TEST_START("(%s)", kex_str);
+
+        if (oap_test_setup_kem(&ctx, root_ca_crt_ml, im_ca_crt_ml) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Initial client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Initial server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Initial client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        freebuf(ctx.req_hdr);
+        freebuf(ctx.resp_hdr);
+        freebuf(ctx.data);
+
+        ctx.rekey = true;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Re-key client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        memcpy(&kex_len, ctx.req_hdr.data + OAP_KEX_LEN_OFFSET,
+               sizeof(kex_len));
+        kex_len = ntoh16(kex_len);
+
+        if (kex_len & OAP_KEX_ROLE_BIT) {
+                printf("Re-key did not force server-encap KEX.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Re-key server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Re-key client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown_kem(&ctx);
+
+        TEST_SUCCESS("(%s)", kex_str);
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown_kem(&ctx);
+ fail:
+        TEST_FAIL("(%s)", kex_str);
+        return TEST_RC_FAIL;
+}
+
 static int test_oap_kem_srv_uncfg(int kex)
 {
         struct oap_test_ctx ctx;
@@ -625,6 +747,8 @@ int oap_test_ml_dsa(int    argc,
         ret |= test_oap_rekey_badcache_all();
         ret |= test_oap_rekey_srv_badcache_all();
         ret |= test_oap_rekey_kem_all();
+        ret |= test_oap_kem_kdf_floor(NID_MLKEM768);
+        ret |= test_oap_rekey_kem_forcing(NID_MLKEM768);
 #else
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_cli_md_pin_exempts_pqc;
@@ -639,6 +763,8 @@ int oap_test_ml_dsa(int    argc,
         (void) test_oap_roundtrip_kem_all;
         (void) test_oap_rekey_kem;
         (void) test_oap_rekey_kem_all;
+        (void) test_oap_kem_kdf_floor;
+        (void) test_oap_rekey_kem_forcing;
         (void) test_oap_kem_srv_uncfg;
         (void) test_oap_kem_srv_uncfg_all;
         (void) test_oap_corrupted_request;
