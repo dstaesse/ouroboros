@@ -304,7 +304,7 @@ static int test_store_add(void)
  fail_add:
         crypt_free_crt(_root_ca_crt);
  fail_load:
-        crypt_free_crt(_root_ca_crt);
+        auth_destroy_ctx(ctx);
  fail_create:
         TEST_FAIL();
         return TEST_RC_FAIL;
@@ -737,7 +737,8 @@ int auth_test(int     argc,
         (void) test_auth_bad_signature;
         (void) test_crt_str;
 
-        ret = TEST_RC_SKIP;
+        if (ret == 0)
+                ret = TEST_RC_SKIP;
 #endif
         return ret;
 }

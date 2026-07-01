@@ -443,6 +443,57 @@ static int test_kex_dhe_wrong_algo(void)
         return TEST_RC_FAIL;
 }
 
+static int test_kex_dhe_no_kdf(void)
+{
+        struct sec_config kex;
+        void *            pkp1;
+        void *            pkp2;
+        buffer_t          pk2;
+        ssize_t           len;
+        uint8_t           buf1[CRYPT_KEY_BUFSZ];
+        uint8_t           buf2[CRYPT_KEY_BUFSZ];
+        uint8_t           s[SYMMKEYSZ];
+
+        TEST_START();
+
+        memset(&kex, 0, sizeof(kex));
+        SET_KEX_ALGO(&kex, "X25519");
+
+        if (kex_pkp_create(&kex, &pkp1, buf1) < 0) {
+                printf("Failed to create first key pair.\n");
+                goto fail;
+        }
+
+        len = kex_pkp_create(&kex, &pkp2, buf2);
+        if (len < 0) {
+                printf("Failed to create second key pair.\n");
+                goto fail_pkp1;
+        }
+
+        pk2.len  = (size_t) len;
+        pk2.data = buf2;
+
+        /* No KDF configured: derive must fail, not fall back. */
+        if (kex_dhe_derive(&kex, pkp1, pk2, s) == 0) {
+                printf("Derive succeeded without a KDF.\n");
+                goto fail_pkp2;
+        }
+
+        kex_pkp_destroy(pkp2);
+        kex_pkp_destroy(pkp1);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_pkp2:
+        kex_pkp_destroy(pkp2);
+ fail_pkp1:
+        kex_pkp_destroy(pkp1);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_kex_load_dhe_privkey(void)
 {
         void * key;
@@ -1171,6 +1222,7 @@ int kex_test(int     argc,
         ret |= test_kex_validate_algo();
         ret |= test_kex_get_algo_from_pk_all();
         ret |= test_kex_dhe_wrong_algo();
+        ret |= test_kex_dhe_no_kdf();
         ret |= test_kex_dhe_corrupted_pubkey_all();
         ret |= test_kex_load_dhe_privkey();
         ret |= test_kex_load_dhe_pubkey();
@@ -1183,12 +1235,14 @@ int kex_test(int     argc,
         (void) test_kex_all;
         (void) test_kex_validate_algo;
         (void) test_kex_get_algo_from_pk_all;
-        (void) test_kex_dhe_wrong_algo();
+        (void) test_kex_dhe_wrong_algo;
+        (void) test_kex_dhe_no_kdf;
         (void) test_kex_dhe_corrupted_pubkey_all;
         (void) test_kex_load_dhe_privkey;
         (void) test_kex_load_dhe_pubkey;
 
-        ret = TEST_RC_SKIP;
+        if (ret == 0)
+                ret = TEST_RC_SKIP;
 #endif
         return ret;
 }

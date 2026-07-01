@@ -528,6 +528,47 @@ static int test_crypt_headsz(void)
         return TEST_RC_FAIL;
 }
 
+static int test_crypt_ct_cmp(void)
+{
+        uint8_t a[64];
+        uint8_t b[64];
+        size_t  i;
+
+        TEST_START();
+
+        for (i = 0; i < sizeof(a); i++)
+                a[i] = (uint8_t) i;
+
+        memcpy(b, a, sizeof(a));
+
+        if (crypt_ct_cmp(a, b, sizeof(a)) != 0) {
+                printf("Equal buffers should compare equal.\n");
+                goto fail;
+        }
+
+        if (crypt_ct_cmp(a, b, 0) != 0) {
+                printf("Zero length should compare equal.\n");
+                goto fail;
+        }
+
+        for (i = 0; i < sizeof(a); i++) {
+                b[i] ^= 0x01;
+                if (crypt_ct_cmp(a, b, sizeof(a)) == 0) {
+                        printf("Difference at byte %zu not detected.\n", i);
+                        goto fail;
+                }
+
+                b[i] ^= 0x01;
+        }
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int crypt_test(int     argc,
                char ** argv)
 {
@@ -538,6 +579,7 @@ int crypt_test(int     argc,
 
         ret |= test_crypt_create_destroy();
         ret |= test_encrypt_decrypt_all();
+        ret |= test_crypt_ct_cmp();
 #ifdef HAVE_OPENSSL
         ret |= test_cipher_nid_values();
         ret |= test_md_nid_values();
@@ -549,7 +591,8 @@ int crypt_test(int     argc,
         (void) test_aad_tamper_all;
         (void) test_crypt_headsz;
 
-        return TEST_RC_SKIP;
+        if (ret == 0)
+                ret = TEST_RC_SKIP;
 #endif
         return ret;
 }
