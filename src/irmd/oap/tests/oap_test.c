@@ -117,6 +117,13 @@ static void test_default_cfg(void)
         test_cfg.cli.auth   = NO_AUTH;
 }
 
+/* Encrypted, unauthenticated on both sides. */
+static void test_enc_noauth_cfg(void)
+{
+        test_default_cfg();
+        test_cfg.srv.auth = NO_AUTH;
+}
+
 static int test_oap_auth_init_fini(void)
 {
         TEST_START();
@@ -203,37 +210,71 @@ static int test_oap_roundtrip_auth_only(void)
         return roundtrip_auth_only(root_ca_crt_ec, im_ca_crt_ec);
 }
 
-static int test_oap_rekey(void)
+static int test_oap_rekey(bool srv_auth,
+                          bool cli_auth)
 {
         test_default_cfg();
+        test_cfg.srv.auth = srv_auth;
+        test_cfg.cli.auth = cli_auth;
 
-        return roundtrip_rekey(root_ca_crt_ec, im_ca_crt_ec);
+        return roundtrip_rekey(root_ca_crt_ec, im_ca_crt_ec,
+                               srv_auth, cli_auth);
 }
 
-static int test_oap_rekey_badcache(void)
+static int test_oap_rekey_all(void)
+{
+        int ret = 0;
+
+        ret |= test_oap_rekey(AUTH, NO_AUTH);
+        ret |= test_oap_rekey(AUTH, AUTH);
+        ret |= test_oap_rekey(NO_AUTH, AUTH);
+        ret |= test_oap_rekey(NO_AUTH, NO_AUTH);
+
+        return ret;
+}
+
+static int test_oap_rekey_srv_badcache(bool srv_auth)
 {
         test_default_cfg();
+        test_cfg.srv.auth = srv_auth;
+        test_cfg.cli.auth = AUTH;
 
-        return roundtrip_rekey_badcache(root_ca_crt_ec, im_ca_crt_ec);
+        return roundtrip_rekey_srv_badcache(root_ca_crt_ec, im_ca_crt_ec,
+                                            srv_auth);
+}
+
+static int test_oap_rekey_srv_badcache_all(void)
+{
+        int ret = 0;
+
+        ret |= test_oap_rekey_srv_badcache(AUTH);
+        ret |= test_oap_rekey_srv_badcache(NO_AUTH);
+
+        return ret;
+}
+
+static int test_oap_rekey_badcache(bool cli_auth)
+{
+        test_default_cfg();
+        test_cfg.cli.auth = cli_auth;
+
+        return roundtrip_rekey_badcache(root_ca_crt_ec, im_ca_crt_ec,
+                                        cli_auth);
+}
+
+static int test_oap_rekey_badcache_all(void)
+{
+        int ret = 0;
+
+        ret |= test_oap_rekey_badcache(NO_AUTH);
+        ret |= test_oap_rekey_badcache(AUTH);
+
+        return ret;
 }
 
 static int test_oap_roundtrip_kex_only(void)
 {
-        memset(&test_cfg, 0, sizeof(test_cfg));
-
-        /* Server: KEX only, no auth */
-        test_cfg.srv.kex    = NID_X25519;
-        test_cfg.srv.cipher = NID_aes_256_gcm;
-        test_cfg.srv.kdf    = NID_sha256;
-        test_cfg.srv.md     = NID_sha256;
-        test_cfg.srv.auth   = NO_AUTH;
-
-        /* Client: KEX only, no auth */
-        test_cfg.cli.kex    = NID_X25519;
-        test_cfg.cli.cipher = NID_aes_256_gcm;
-        test_cfg.cli.kdf    = NID_sha256;
-        test_cfg.cli.md     = NID_sha256;
-        test_cfg.cli.auth   = NO_AUTH;
+        test_enc_noauth_cfg();
 
         return roundtrip_kex_only();
 }
@@ -434,7 +475,12 @@ static int test_oap_deflated_length_field(void)
 
 /* Header field offsets for byte manipulation */
 #define OAP_CIPHER_NID_OFFSET 24
+#define OAP_KDF_NID_OFFSET    26
+#define OAP_MD_NID_OFFSET     28
 #define OAP_KEX_LEN_OFFSET    32
+
+/* A NID the crypto backend does not recognise; guarded by a test below. */
+#define UNSUPPORTED_NID       9999
 
 /* Server rejects request when cipher NID set but no KEX data provided */
 static int test_oap_nid_without_kex(void)
@@ -443,20 +489,9 @@ static int test_oap_nid_without_kex(void)
         uint16_t            cipher_nid;
         uint16_t            zero = 0;
 
-        TEST_START();
+        test_enc_noauth_cfg();
 
-        /* Configure unsigned KEX-only mode */
-        memset(&test_cfg, 0, sizeof(test_cfg));
-        test_cfg.srv.kex    = NID_X25519;
-        test_cfg.srv.cipher = NID_aes_256_gcm;
-        test_cfg.srv.kdf    = NID_sha256;
-        test_cfg.srv.md     = NID_sha256;
-        test_cfg.srv.auth   = NO_AUTH;
-        test_cfg.cli.kex    = NID_X25519;
-        test_cfg.cli.cipher = NID_aes_256_gcm;
-        test_cfg.cli.kdf    = NID_sha256;
-        test_cfg.cli.md     = NID_sha256;
-        test_cfg.cli.auth   = NO_AUTH;
+        TEST_START();
 
         if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
                 goto fail;
@@ -491,26 +526,44 @@ static int test_oap_nid_without_kex(void)
         return TEST_RC_FAIL;
 }
 
-/* Server rejects OAP request with unsupported cipher NID */
-static int test_oap_unsupported_nid(void)
+/* Guard: the tamper tests below rely on UNSUPPORTED_NID being invalid. */
+static int test_oap_unsupported_nid_undefined(void)
+{
+        TEST_START();
+
+        if (crypt_cipher_rank(UNSUPPORTED_NID) >= 0) {
+                printf("UNSUPPORTED_NID is a valid cipher NID.\n");
+                goto fail;
+        }
+
+        if (crypt_kdf_rank(UNSUPPORTED_NID) >= 0) {
+                printf("UNSUPPORTED_NID is a valid KDF NID.\n");
+                goto fail;
+        }
+
+        if (md_validate_nid(UNSUPPORTED_NID) >= 0) {
+                printf("UNSUPPORTED_NID is a valid digest NID.\n");
+                goto fail;
+        }
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Server rejects a request whose cipher/kdf/digest NID is unsupported */
+static int test_oap_unsupported_nid(size_t       offset,
+                                    const char * label)
 {
         struct oap_test_ctx ctx;
         uint16_t            bad_nid;
 
-        TEST_START();
+        test_enc_noauth_cfg();
 
-        /* Configure unsigned KEX-only mode */
-        memset(&test_cfg, 0, sizeof(test_cfg));
-        test_cfg.srv.kex    = NID_X25519;
-        test_cfg.srv.cipher = NID_aes_256_gcm;
-        test_cfg.srv.kdf    = NID_sha256;
-        test_cfg.srv.md     = NID_sha256;
-        test_cfg.srv.auth   = NO_AUTH;
-        test_cfg.cli.kex    = NID_X25519;
-        test_cfg.cli.cipher = NID_aes_256_gcm;
-        test_cfg.cli.kdf    = NID_sha256;
-        test_cfg.cli.md     = NID_sha256;
-        test_cfg.cli.auth   = NO_AUTH;
+        TEST_START("(%s)", label);
 
         if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
                 goto fail;
@@ -520,27 +573,36 @@ static int test_oap_unsupported_nid(void)
                 goto fail_cleanup;
         }
 
-        /* Tamper: set cipher_nid to unsupported value */
-        bad_nid = hton16(9999);
-        memcpy(ctx.req_hdr.data + OAP_CIPHER_NID_OFFSET, &bad_nid,
-               sizeof(bad_nid));
+        bad_nid = hton16(UNSUPPORTED_NID);
+        memcpy(ctx.req_hdr.data + offset, &bad_nid, sizeof(bad_nid));
 
         if (oap_srv_process_ctx(&ctx) == 0) {
-                printf("Server should reject unsupported cipher NID.\n");
+                printf("Server should reject unsupported %s NID.\n", label);
                 goto fail_cleanup;
         }
 
         oap_test_teardown(&ctx);
 
-        TEST_SUCCESS();
+        TEST_SUCCESS("(%s)", label);
 
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
         oap_test_teardown(&ctx);
  fail:
-        TEST_FAIL();
+        TEST_FAIL("(%s)", label);
         return TEST_RC_FAIL;
+}
+
+static int test_oap_unsupported_nid_all(void)
+{
+        int ret = 0;
+
+        ret |= test_oap_unsupported_nid(OAP_CIPHER_NID_OFFSET, "cipher");
+        ret |= test_oap_unsupported_nid(OAP_KDF_NID_OFFSET, "kdf");
+        ret |= test_oap_unsupported_nid(OAP_MD_NID_OFFSET, "digest");
+
+        return ret;
 }
 
 /* Client rejects a response whose key-confirmation tag is tampered */
@@ -548,20 +610,10 @@ static int test_oap_key_confirm_mismatch(void)
 {
         struct oap_test_ctx ctx;
 
-        TEST_START();
-
         /* Unauthenticated + encrypted: response unsigned, KC is the gate */
-        memset(&test_cfg, 0, sizeof(test_cfg));
-        test_cfg.srv.kex    = NID_X25519;
-        test_cfg.srv.cipher = NID_aes_256_gcm;
-        test_cfg.srv.kdf    = NID_sha256;
-        test_cfg.srv.md     = NID_sha256;
-        test_cfg.srv.auth   = NO_AUTH;
-        test_cfg.cli.kex    = NID_X25519;
-        test_cfg.cli.cipher = NID_aes_256_gcm;
-        test_cfg.cli.kdf    = NID_sha256;
-        test_cfg.cli.md     = NID_sha256;
-        test_cfg.cli.auth   = NO_AUTH;
+        test_enc_noauth_cfg();
+
+        TEST_START();
 
         if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
                 goto fail;
@@ -821,21 +873,9 @@ static int test_oap_cli_rejects_downgrade(void)
         struct oap_test_ctx ctx;
         uint16_t            weak;
 
+        test_enc_noauth_cfg();
+
         TEST_START();
-
-        memset(&test_cfg, 0, sizeof(test_cfg));
-
-        test_cfg.srv.kex    = NID_X25519;
-        test_cfg.srv.cipher = NID_aes_256_gcm;
-        test_cfg.srv.kdf    = NID_sha256;
-        test_cfg.srv.md     = NID_sha256;
-        test_cfg.srv.auth   = NO_AUTH;
-
-        test_cfg.cli.kex    = NID_X25519;
-        test_cfg.cli.cipher = NID_aes_256_gcm;
-        test_cfg.cli.kdf    = NID_sha256;
-        test_cfg.cli.md     = NID_sha256;
-        test_cfg.cli.auth   = NO_AUTH;
 
         if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
                 goto fail;
@@ -884,21 +924,12 @@ static int test_oap_cli_rejects_suite_swap(void)
         struct oap_test_ctx ctx;
         uint16_t            swap;
 
-        TEST_START();
-
-        memset(&test_cfg, 0, sizeof(test_cfg));
-
         /* Both AES-128-GCM: a swap to AES-256 outranks the client floor */
-        test_cfg.srv.kex    = NID_X25519;
+        test_enc_noauth_cfg();
         test_cfg.srv.cipher = NID_aes_128_gcm;
-        test_cfg.srv.kdf    = NID_sha256;
-        test_cfg.srv.md     = NID_sha256;
-        test_cfg.srv.auth   = NO_AUTH;
-        test_cfg.cli.kex    = NID_X25519;
         test_cfg.cli.cipher = NID_aes_128_gcm;
-        test_cfg.cli.kdf    = NID_sha256;
-        test_cfg.cli.md     = NID_sha256;
-        test_cfg.cli.auth   = NO_AUTH;
+
+        TEST_START();
 
         if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
                 goto fail;
@@ -1064,15 +1095,17 @@ static int test_oap_roundtrip_md_all(void)
 /* Timestamp is at offset 16 (after the 16-byte ID) */
 #define OAP_TIMESTAMP_OFFSET 16
 /* Test that packets with outdated timestamps are rejected */
-static int test_oap_outdated_packet(void)
+/* Server rejects a request whose timestamp is outside the replay window */
+static int test_oap_ts_reject(int          delta_sec,
+                              const char * label)
 {
         struct oap_test_ctx ctx;
-        struct timespec     old_ts;
-        uint64_t            old_stamp;
+        struct timespec     ts;
+        uint64_t            stamp;
 
         test_default_cfg();
 
-        TEST_START();
+        TEST_START("(%s)", label);
 
         if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
                 goto fail;
@@ -1087,78 +1120,39 @@ static int test_oap_outdated_packet(void)
                 goto fail_cleanup;
         }
 
-        /* Set timestamp to 30 seconds in the past (> 20s replay timer) */
-        clock_gettime(CLOCK_REALTIME, &old_ts);
-        old_ts.tv_sec -= OAP_REPLAY_TIMER + 10;
-        old_stamp = hton64(TS_TO_UINT64(old_ts));
-        memcpy(ctx.req_hdr.data + OAP_TIMESTAMP_OFFSET, &old_stamp,
-               sizeof(old_stamp));
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += delta_sec;
+        stamp = hton64(TS_TO_UINT64(ts));
+        memcpy(ctx.req_hdr.data + OAP_TIMESTAMP_OFFSET, &stamp,
+               sizeof(stamp));
 
         if (oap_srv_process_ctx(&ctx) == 0) {
-                printf("Server should reject outdated packet.\n");
+                printf("Server should reject %s packet.\n", label);
                 goto fail_cleanup;
         }
 
         oap_test_teardown(&ctx);
 
-        TEST_SUCCESS();
+        TEST_SUCCESS("(%s)", label);
 
         return TEST_RC_SUCCESS;
 
  fail_cleanup:
         oap_test_teardown(&ctx);
  fail:
-        TEST_FAIL();
+        TEST_FAIL("(%s)", label);
         return TEST_RC_FAIL;
 }
 
-/* Test that packets from the future are rejected */
-static int test_oap_future_packet(void)
+static int test_oap_ts_reject_all(void)
 {
-        struct oap_test_ctx ctx;
-        struct timespec     future_ts;
-        uint64_t            future_stamp;
+        int ret = 0;
 
-        test_default_cfg();
+        /* Past the 20s replay window, and past the 100ms future slack. */
+        ret |= test_oap_ts_reject(-(OAP_REPLAY_TIMER + 10), "outdated");
+        ret |= test_oap_ts_reject(1, "future");
 
-        TEST_START();
-
-        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
-                goto fail;
-
-        if (oap_cli_prepare_ctx(&ctx) < 0) {
-                printf("Client prepare failed.\n");
-                goto fail_cleanup;
-        }
-
-        if (ctx.req_hdr.len < OAP_TIMESTAMP_OFFSET + sizeof(uint64_t)) {
-                printf("Request too short for test.\n");
-                goto fail_cleanup;
-        }
-
-        /* Set timestamp to 1 second in the future (> 100ms slack) */
-        clock_gettime(CLOCK_REALTIME, &future_ts);
-        future_ts.tv_sec += 1;
-        future_stamp = hton64(TS_TO_UINT64(future_ts));
-        memcpy(ctx.req_hdr.data + OAP_TIMESTAMP_OFFSET, &future_stamp,
-               sizeof(future_stamp));
-
-        if (oap_srv_process_ctx(&ctx) == 0) {
-                printf("Server should reject future packet.\n");
-                goto fail_cleanup;
-        }
-
-        oap_test_teardown(&ctx);
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
-
- fail_cleanup:
-        oap_test_teardown(&ctx);
- fail:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
+        return ret;
 }
 
 /* Test that replayed packets (same ID + timestamp) are rejected */
@@ -1300,9 +1294,12 @@ static int test_oap_replay_generations(void)
 {
         struct oap_hdr  h;
         struct timespec now;
+        struct timespec wait;
         uint8_t         id[OAP_ID_SIZE];
         uint64_t        cur;
         uint64_t        gen_ns;
+        uint64_t        off;
+        uint64_t        wait_ns;
         uint64_t        stamp_a;
         uint64_t        stamp_b;
 
@@ -1313,9 +1310,20 @@ static int test_oap_replay_generations(void)
                 goto fail;
         }
 
-        clock_gettime(CLOCK_REALTIME, &now);
-        cur    = TS_TO_UINT64(now);
         gen_ns = (uint64_t) OAP_REPLAY_TIMER * BILLION;
+
+        /* Prev-gen stamp flakes on staleness near a generation top. */
+        clock_gettime(CLOCK_REALTIME, &now);
+        cur = TS_TO_UINT64(now);
+        off = cur % gen_ns;
+        if (gen_ns - off < BILLION) {
+                wait_ns      = gen_ns - off + MILLION;
+                wait.tv_sec  = (time_t) (wait_ns / BILLION);
+                wait.tv_nsec = (long) (wait_ns % BILLION);
+                nanosleep(&wait, NULL);
+                clock_gettime(CLOCK_REALTIME, &now);
+                cur = TS_TO_UINT64(now);
+        }
 
         /* stamp_a in the current generation, stamp_b one generation older */
         stamp_a = cur;
@@ -1826,6 +1834,101 @@ static int test_oap_sealed_tamper(void)
         return TEST_RC_FAIL;
 }
 
+/* Cleartext md-only: rsp_tag echoes H(request) and is the sole gate */
+static int test_oap_cleartext_echo_tamper(void)
+{
+        struct oap_test_ctx ctx;
+
+        memset(&test_cfg, 0, sizeof(test_cfg));
+        test_cfg.srv.md   = NID_sha256;
+        test_cfg.srv.auth = NO_AUTH;
+        test_cfg.cli.md   = NID_sha256;
+        test_cfg.cli.auth = NO_AUTH;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* rsp_tag is the trailing field of an unsealed, unsigned response */
+        ctx.resp_hdr.data[ctx.resp_hdr.len - 1] ^= 0xFF;
+
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client accepted a tampered request echo.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Client rejects a response whose session ID does not match the request */
+static int test_oap_response_id_tamper(void)
+{
+        struct oap_test_ctx ctx;
+
+        /* Cleartext md-only: no seal, so the ID check itself must reject. */
+        memset(&test_cfg, 0, sizeof(test_cfg));
+        test_cfg.srv.md   = NID_sha256;
+        test_cfg.srv.auth = NO_AUTH;
+        test_cfg.cli.md   = NID_sha256;
+        test_cfg.cli.auth = NO_AUTH;
+
+        TEST_START();
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* The session ID is the first field of the fixed header. */
+        ctx.resp_hdr.data[0] ^= 0xFF;
+
+        if (oap_cli_complete_ctx(&ctx) == 0) {
+                printf("Client accepted a mismatched response ID.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int oap_test(int    argc,
              char **argv)
 {
@@ -1842,8 +1945,9 @@ int oap_test(int    argc,
         ret |= test_oap_roundtrip_auth_only();
         ret |= test_oap_roundtrip_kex_only();
         ret |= test_oap_piggyback_data();
-        ret |= test_oap_rekey();
-        ret |= test_oap_rekey_badcache();
+        ret |= test_oap_rekey_all();
+        ret |= test_oap_rekey_badcache_all();
+        ret |= test_oap_rekey_srv_badcache_all();
 
         ret |= test_oap_roundtrip_all();
         ret |= test_oap_roundtrip_md_all();
@@ -1855,7 +1959,8 @@ int oap_test(int    argc,
         ret |= test_oap_inflated_length_field();
         ret |= test_oap_deflated_length_field();
         ret |= test_oap_nid_without_kex();
-        ret |= test_oap_unsupported_nid();
+        ret |= test_oap_unsupported_nid_undefined();
+        ret |= test_oap_unsupported_nid_all();
 
         ret |= test_oap_cipher_mismatch();
         ret |= test_oap_srv_enc_cli_none();
@@ -1864,8 +1969,7 @@ int oap_test(int    argc,
         ret |= test_oap_cli_rejects_suite_swap();
         ret |= test_oap_srv_rejects_weak_kex();
 
-        ret |= test_oap_outdated_packet();
-        ret |= test_oap_future_packet();
+        ret |= test_oap_ts_reject_all();
         ret |= test_oap_replay_packet();
         ret |= test_oap_missing_root_ca();
         ret |= test_oap_server_name_mismatch();
@@ -1880,6 +1984,8 @@ int oap_test(int    argc,
 
         ret |= test_oap_server_cert_hidden();
         ret |= test_oap_sealed_tamper();
+        ret |= test_oap_cleartext_echo_tamper();
+        ret |= test_oap_response_id_tamper();
 #else
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_roundtrip_kex_only;

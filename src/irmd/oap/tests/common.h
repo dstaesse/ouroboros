@@ -39,7 +39,6 @@ struct test_sec_cfg {
         int          kem_mode; /* KEM encapsulation mode (0 for ECDH) */
         bool         auth;     /* Use authentication (certificates) */
         bool         req_auth; /* Require peer authentication */
-        const char * cacert;   /* Pinned issuing CA path */
 };
 
 /* Test configuration - set by each test before running roundtrip */
@@ -94,10 +93,17 @@ int  roundtrip_auth_only(const char * root_ca,
                          const char * im_ca_str);
 
 int  roundtrip_rekey(const char * root_ca,
-                     const char * im_ca_str);
+                     const char * im_ca_str,
+                     bool         srv_auth,
+                     bool         cli_auth);
 
 int  roundtrip_rekey_badcache(const char * root_ca,
-                              const char * im_ca_str);
+                              const char * im_ca_str,
+                              bool         cli_auth);
+
+int  roundtrip_rekey_srv_badcache(const char * root_ca,
+                                  const char * im_ca_str,
+                                  bool         srv_auth);
 
 int  roundtrip_kex_only(void);
 

@@ -255,20 +255,66 @@ static int test_oap_srv_md_pin_exempts_pqc(void)
         return roundtrip_auth_only(root_ca_crt_ml, im_ca_crt_ml);
 }
 
-static int test_oap_rekey(void)
+static int test_oap_rekey(bool srv_auth,
+                          bool cli_auth)
 {
         test_cfg_init(NID_X25519, NID_aes_256_gcm, NID_sha256,
-                      0, NO_CLI_AUTH);
+                      0, cli_auth);
+        test_cfg.srv.auth = srv_auth;
 
-        return roundtrip_rekey(root_ca_crt_ml, im_ca_crt_ml);
+        return roundtrip_rekey(root_ca_crt_ml, im_ca_crt_ml,
+                               srv_auth, cli_auth);
 }
 
-static int test_oap_rekey_badcache(void)
+static int test_oap_rekey_all(void)
+{
+        int ret = 0;
+
+        ret |= test_oap_rekey(CLI_AUTH, NO_CLI_AUTH);
+        ret |= test_oap_rekey(CLI_AUTH, CLI_AUTH);
+        ret |= test_oap_rekey(NO_CLI_AUTH, CLI_AUTH);
+        ret |= test_oap_rekey(NO_CLI_AUTH, NO_CLI_AUTH);
+
+        return ret;
+}
+
+static int test_oap_rekey_badcache(bool cli_auth)
 {
         test_cfg_init(NID_X25519, NID_aes_256_gcm, NID_sha256,
-                      0, NO_CLI_AUTH);
+                      0, cli_auth);
 
-        return roundtrip_rekey_badcache(root_ca_crt_ml, im_ca_crt_ml);
+        return roundtrip_rekey_badcache(root_ca_crt_ml, im_ca_crt_ml,
+                                        cli_auth);
+}
+
+static int test_oap_rekey_badcache_all(void)
+{
+        int ret = 0;
+
+        ret |= test_oap_rekey_badcache(NO_CLI_AUTH);
+        ret |= test_oap_rekey_badcache(CLI_AUTH);
+
+        return ret;
+}
+
+static int test_oap_rekey_srv_badcache(bool srv_auth)
+{
+        test_cfg_init(NID_X25519, NID_aes_256_gcm, NID_sha256,
+                      0, CLI_AUTH);
+        test_cfg.srv.auth = srv_auth;
+
+        return roundtrip_rekey_srv_badcache(root_ca_crt_ml, im_ca_crt_ml,
+                                            srv_auth);
+}
+
+static int test_oap_rekey_srv_badcache_all(void)
+{
+        int ret = 0;
+
+        ret |= test_oap_rekey_srv_badcache(CLI_AUTH);
+        ret |= test_oap_rekey_srv_badcache(NO_CLI_AUTH);
+
+        return ret;
 }
 
 static int test_oap_corrupted_request(void)
@@ -361,6 +407,114 @@ static int test_oap_roundtrip_kem_all(void)
 
                 ret |= test_oap_roundtrip_kem(kex_supported_nids[i], SRV_ENCAP);
                 ret |= test_oap_roundtrip_kem(kex_supported_nids[i], CLI_ENCAP);
+        }
+
+        return ret;
+}
+
+/* Re-key over a KEM KEX: forced ephemeral server-encap + cert-drop cache. */
+static int test_oap_rekey_kem(int kex,
+                              int kem_mode)
+{
+        struct oap_test_ctx ctx;
+        const char *        kex_str  = kex_nid_to_str(kex);
+        const char *        mode_str = "srv";
+        uint8_t             key0[SYMMKEYSZ];
+
+        if (kem_mode == CLI_ENCAP)
+                mode_str = "cli";
+
+        test_cfg_init(kex, NID_aes_256_gcm, get_random_kdf(),
+                      kem_mode, NO_CLI_AUTH);
+
+        TEST_START("(%s, %s encaps)", kex_str, mode_str);
+
+        if (oap_test_setup_kem(&ctx, root_ca_crt_ml, im_ca_crt_ml) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Initial client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Initial server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Initial client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
+                printf("Initial keys do not match.\n");
+                goto fail_cleanup;
+        }
+
+        if (ctx.cli_crt.len == 0) {
+                printf("Server cert was not cached for re-key.\n");
+                goto fail_cleanup;
+        }
+
+        memcpy(key0, ctx.cli.key, SYMMKEYSZ);
+
+        freebuf(ctx.req_hdr);
+        freebuf(ctx.resp_hdr);
+        freebuf(ctx.data);
+
+        ctx.rekey = true;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Re-key client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Re-key server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Re-key client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (memcmp(ctx.cli.key, ctx.srv.key, SYMMKEYSZ) != 0) {
+                printf("Re-key keys do not match.\n");
+                goto fail_cleanup;
+        }
+
+        if (memcmp(ctx.cli.key, key0, SYMMKEYSZ) == 0) {
+                printf("Re-key did not produce a fresh key.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown_kem(&ctx);
+
+        TEST_SUCCESS("(%s, %s encaps)", kex_str, mode_str);
+        return TEST_RC_SUCCESS;
+
+ fail_cleanup:
+        oap_test_teardown_kem(&ctx);
+ fail:
+        TEST_FAIL("(%s, %s encaps)", kex_str, mode_str);
+        return TEST_RC_FAIL;
+}
+
+static int test_oap_rekey_kem_all(void)
+{
+        int ret = 0;
+        int i;
+
+        for (i = 0; kex_supported_nids[i] != NID_undef; i++) {
+                const char * algo = kex_nid_to_str(kex_supported_nids[i]);
+
+                if (!IS_KEM_ALGORITHM(algo))
+                        continue;
+
+                ret |= test_oap_rekey_kem(kex_supported_nids[i], SRV_ENCAP);
+                ret |= test_oap_rekey_kem(kex_supported_nids[i], CLI_ENCAP);
         }
 
         return ret;
@@ -467,16 +621,24 @@ int oap_test_ml_dsa(int    argc,
         ret |= test_oap_corrupted_response();
         ret |= test_oap_truncated_request();
 
-        ret |= test_oap_rekey();
-        ret |= test_oap_rekey_badcache();
+        ret |= test_oap_rekey_all();
+        ret |= test_oap_rekey_badcache_all();
+        ret |= test_oap_rekey_srv_badcache_all();
+        ret |= test_oap_rekey_kem_all();
 #else
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_cli_md_pin_exempts_pqc;
         (void) test_oap_srv_md_pin_exempts_pqc;
         (void) test_oap_rekey;
+        (void) test_oap_rekey_all;
         (void) test_oap_rekey_badcache;
+        (void) test_oap_rekey_badcache_all;
+        (void) test_oap_rekey_srv_badcache;
+        (void) test_oap_rekey_srv_badcache_all;
         (void) test_oap_roundtrip_kem;
         (void) test_oap_roundtrip_kem_all;
+        (void) test_oap_rekey_kem;
+        (void) test_oap_rekey_kem_all;
         (void) test_oap_kem_srv_uncfg;
         (void) test_oap_kem_srv_uncfg_all;
         (void) test_oap_corrupted_request;

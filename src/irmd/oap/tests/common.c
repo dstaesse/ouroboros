@@ -37,8 +37,6 @@ int load_srv_sec_config(const struct name_info * info,
         memset(cfg, 0, sizeof(*cfg));
 
         cfg->a.req = test_cfg.srv.req_auth;
-        if (test_cfg.srv.cacert != NULL)
-                strcpy(cfg->a.cacert, test_cfg.srv.cacert);
 
         /* Digest is kept without kex, as in parse_sec_config */
         SET_KEX_DIGEST_NID(cfg, test_cfg.srv.md);
@@ -62,8 +60,6 @@ int load_cli_sec_config(const struct name_info * info,
         memset(cfg, 0, sizeof(*cfg));
 
         cfg->a.req = test_cfg.cli.req_auth;
-        if (test_cfg.cli.cacert != NULL)
-                strcpy(cfg->a.cacert, test_cfg.cli.cacert);
 
         /* Digest is kept without kex, as in parse_sec_config */
         SET_KEX_DIGEST_NID(cfg, test_cfg.cli.md);
@@ -261,17 +257,35 @@ int roundtrip_auth_only(const char * root_ca,
         return TEST_RC_FAIL;
 }
 
+static const char * rekey_mode(bool srv_auth,
+                               bool cli_auth)
+{
+        if (srv_auth && cli_auth)
+                return "mutual";
+
+        if (srv_auth)
+                return "srv-only";
+
+        if (cli_auth)
+                return "cli-only";
+
+        return "none";
+}
+
 int roundtrip_rekey(const char * root_ca,
-                    const char * im_ca_str)
+                    const char * im_ca_str,
+                    bool         srv_auth,
+                    bool         cli_auth)
 {
         struct oap_test_ctx ctx;
+        uint8_t             key0[SYMMKEYSZ];
+        const char *        mode = rekey_mode(srv_auth, cli_auth);
 
-        TEST_START();
+        TEST_START("(%s)", mode);
 
         if (oap_test_setup(&ctx, root_ca, im_ca_str) < 0)
                 goto fail;
 
-        /* Initial handshake: the client caches the server cert. */
         if (oap_cli_prepare_ctx(&ctx) < 0) {
                 printf("Initial client prepare failed.\n");
                 goto fail_cleanup;
@@ -292,10 +306,19 @@ int roundtrip_rekey(const char * root_ca,
                 goto fail_cleanup;
         }
 
-        if (ctx.cli_crt.len == 0) {
+        /* The client caches the server cert only if the server authed. */
+        if (srv_auth && ctx.cli_crt.len == 0) {
                 printf("Server cert was not cached for re-key.\n");
                 goto fail_cleanup;
         }
+
+        /* The server caches the client cert only if the client authed. */
+        if (cli_auth && ctx.srv_crt.len == 0) {
+                printf("Client cert was not cached by the server.\n");
+                goto fail_cleanup;
+        }
+
+        memcpy(key0, ctx.cli.key, SYMMKEYSZ);
 
         /* Re-key: cert dropped on the wire, verified against the cache. */
         freebuf(ctx.req_hdr);
@@ -324,24 +347,36 @@ int roundtrip_rekey(const char * root_ca,
                 goto fail_cleanup;
         }
 
+        if (memcmp(ctx.cli.key, key0, SYMMKEYSZ) == 0) {
+                printf("Re-key did not produce a fresh key.\n");
+                goto fail_cleanup;
+        }
+
+        if (ctx.cli.nid == NID_undef || ctx.srv.nid == NID_undef) {
+                printf("Cipher not set after re-key.\n");
+                goto fail_cleanup;
+        }
+
         oap_test_teardown(&ctx);
 
-        TEST_SUCCESS();
+        TEST_SUCCESS("(%s)", mode);
 
         return TEST_RC_SUCCESS;
  fail_cleanup:
         oap_test_teardown(&ctx);
  fail:
-        TEST_FAIL();
+        TEST_FAIL("(%s)", mode);
         return TEST_RC_FAIL;
 }
 
 int roundtrip_rekey_badcache(const char * root_ca,
-                             const char * im_ca_str)
+                             const char * im_ca_str,
+                             bool         cli_auth)
 {
         struct oap_test_ctx ctx;
+        const char *        mode = rekey_mode(true, cli_auth);
 
-        TEST_START();
+        TEST_START("(%s)", mode);
 
         if (oap_test_setup(&ctx, root_ca, im_ca_str) < 0)
                 goto fail;
@@ -366,7 +401,7 @@ int roundtrip_rekey_badcache(const char * root_ca,
                 goto fail_cleanup;
         }
 
-        /* Corrupt the cached cert: the re-key must fail closed. */
+        /* Corrupt the client's cached server cert: re-key must fail closed. */
         ctx.cli_crt.data[ctx.cli_crt.len / 2] ^= 0xFF;
 
         freebuf(ctx.req_hdr);
@@ -392,13 +427,76 @@ int roundtrip_rekey_badcache(const char * root_ca,
 
         oap_test_teardown(&ctx);
 
-        TEST_SUCCESS();
+        TEST_SUCCESS("(%s)", mode);
 
         return TEST_RC_SUCCESS;
  fail_cleanup:
         oap_test_teardown(&ctx);
  fail:
-        TEST_FAIL();
+        TEST_FAIL("(%s)", mode);
+        return TEST_RC_FAIL;
+}
+
+int roundtrip_rekey_srv_badcache(const char * root_ca,
+                                 const char * im_ca_str,
+                                 bool         srv_auth)
+{
+        struct oap_test_ctx ctx;
+        const char *        mode = rekey_mode(srv_auth, true);
+
+        TEST_START("(%s)", mode);
+
+        if (oap_test_setup(&ctx, root_ca, im_ca_str) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Initial client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) < 0) {
+                printf("Initial server process failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_cli_complete_ctx(&ctx) < 0) {
+                printf("Initial client complete failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (ctx.srv_crt.len == 0) {
+                printf("Client cert was not cached by the server.\n");
+                goto fail_cleanup;
+        }
+
+        /* Corrupt the server's cached client cert: re-key must fail closed. */
+        ctx.srv_crt.data[ctx.srv_crt.len / 2] ^= 0xFF;
+
+        freebuf(ctx.req_hdr);
+        freebuf(ctx.resp_hdr);
+        freebuf(ctx.data);
+
+        ctx.rekey = true;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Re-key client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server accepted a corrupted cached client cert.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS("(%s)", mode);
+
+        return TEST_RC_SUCCESS;
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL("(%s)", mode);
         return TEST_RC_FAIL;
 }
 
