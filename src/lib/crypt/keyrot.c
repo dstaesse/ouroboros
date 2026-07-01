@@ -469,12 +469,28 @@ void keyrot_destroy(struct keyrot * kr)
         free(kr);
 }
 
+/* A dup live epoch shadows straggler RX; epoch is peer-driven. */
+static bool kr_epoch_live(const struct kr_batch * cur,
+                          const struct kr_batch * prev,
+                          uint8_t                 epoch)
+{
+        if (epoch == cur->epoch)
+                return true;
+
+        if (prev == NULL)
+                return false;
+
+        return epoch == prev->epoch;
+}
+
 int keyrot_rekey(struct keyrot * kr,
                  const uint8_t * root,
                  uint8_t         epoch)
 {
         struct kr_batch * nb;
         struct kr_batch * old_prev;
+        struct kr_batch * cur;
+        struct kr_batch * prev;
 
         assert(kr != NULL);
         assert(root != NULL);
@@ -487,6 +503,15 @@ int keyrot_rekey(struct keyrot * kr,
                 return -1;
 
         rcu_wrlock(&kr->guard);
+
+        cur  = rcu_deref(kr->cur);
+        prev = rcu_deref(kr->prev);
+
+        if (kr_epoch_live(cur, prev, epoch)) {
+                rcu_wrunlock(&kr->guard);
+                kr_batch_free(nb);
+                return -1;
+        }
 
         old_prev = kr->prev;
         rcu_assign(kr->prev, kr->cur);

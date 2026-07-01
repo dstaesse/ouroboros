@@ -45,6 +45,13 @@ static const uint8_t SEED_A[SYMMKEYSZ] = {
         0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
 };
 
+static const uint8_t SEED_B[SYMMKEYSZ] = {
+        0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8,
+        0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0,
+        0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8,
+        0xb9, 0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf, 0xc0
+};
+
 static int test_create_destroy(void)
 {
         struct keyrot * kr;
@@ -94,6 +101,90 @@ static int test_epoch_range(void)
         return TEST_RC_FAIL;
 }
 
+/* Epochs of the live batches (cur, prev) must stay unique. */
+static int test_rekey_dup_epoch(void)
+{
+        struct keyrot * a;
+
+        TEST_START();
+
+        a = keyrot_create(SEED_A, 0, 0);
+        if (a == NULL)
+                goto fail;
+
+        if (keyrot_rekey(a, SEED_B, 0) == 0) {
+                printf("Re-key to the current epoch accepted.\n");
+                goto fail_a;
+        }
+
+        if (keyrot_rekey(a, SEED_B, 1) != 0) {
+                printf("Re-key to a fresh epoch refused.\n");
+                goto fail_a;
+        }
+
+        if (keyrot_rekey(a, SEED_A, 1) == 0) {
+                printf("Re-key to the current epoch accepted.\n");
+                goto fail_a;
+        }
+
+        if (keyrot_rekey(a, SEED_A, 0) == 0) {
+                printf("Re-key to the previous epoch accepted.\n");
+                goto fail_a;
+        }
+
+        keyrot_destroy(a);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_a:
+        keyrot_destroy(a);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* The 4-bit wire epoch legitimately wraps 15 -> 0. */
+static int test_rekey_epoch_wrap(void)
+{
+        struct keyrot * a;
+        uint8_t         sel[KR_SELECTOR_LEN];
+        uint8_t         n[KR_NONCE_LEN];
+        const uint8_t * k;
+
+        TEST_START();
+
+        a = keyrot_create(SEED_A, 14, 0);
+        if (a == NULL)
+                goto fail;
+
+        if (keyrot_rekey(a, SEED_B, 15) != 0)
+                goto fail_a;
+
+        if (keyrot_rekey(a, SEED_A, 0) != 0) {
+                printf("Epoch wrap 15 -> 0 refused.\n");
+                goto fail_a;
+        }
+
+        keyrot_tx_promote(a);
+
+        if (keyrot_tx_next(a, sel, &k, n) != 0) {
+                printf("TX failed after epoch wrap.\n");
+                goto fail_a;
+        }
+
+        keyrot_destroy(a);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_a:
+        keyrot_destroy(a);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_tx_deterministic(void)
 {
         struct keyrot * a;
@@ -102,8 +193,9 @@ static int test_tx_deterministic(void)
         uint8_t         selb[KR_SELECTOR_LEN];
         uint8_t         na[KR_NONCE_LEN];
         uint8_t         nb[KR_NONCE_LEN];
-        const uint8_t * ka;
-        const uint8_t * kb;
+        uint8_t         ka[SYMMKEYSZ];
+        const uint8_t * pa;
+        const uint8_t * pb;
 
         TEST_START();
 
@@ -115,16 +207,18 @@ static int test_tx_deterministic(void)
         if (b == NULL)
                 goto fail_a;
 
-        if (keyrot_tx_next(a, sela, &ka, na) != 0)
+        if (keyrot_tx_next(a, sela, &pa, na) != 0)
                 goto fail_b;
 
-        if (keyrot_tx_next(b, selb, &kb, nb) != 0)
+        /* Copy out: pa points into the tcache, pb may reuse the slot. */
+        memcpy(ka, pa, SYMMKEYSZ);
+        if (keyrot_tx_next(b, selb, &pb, nb) != 0)
                 goto fail_b;
 
         if (memcmp(sela, selb, KR_SELECTOR_LEN) != 0)
                 goto fail_b;
 
-        if (memcmp(ka, kb, SYMMKEYSZ) != 0)
+        if (memcmp(ka, pb, SYMMKEYSZ) != 0)
                 goto fail_b;
 
         if (memcmp(na, nb, KR_NONCE_LEN) != 0)
@@ -387,13 +481,6 @@ static int test_random_access(void)
         TEST_FAIL();
         return TEST_RC_FAIL;
 }
-
-static const uint8_t SEED_B[SYMMKEYSZ] = {
-        0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8,
-        0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0,
-        0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8,
-        0xb9, 0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf, 0xc0
-};
 
 /*
  * Look up and commit one within-node counter on epoch 0. Returns 0 on
@@ -873,6 +960,56 @@ static int test_commit_evicted(void)
         return TEST_RC_FAIL;
 }
 
+/* TX fails closed when the tx_epoch batch is evicted, until promote. */
+static int test_tx_fail_closed(void)
+{
+        struct keyrot * b;
+        uint8_t         sel[KR_SELECTOR_LEN];
+        uint8_t         n[KR_NONCE_LEN];
+        const uint8_t * k;
+
+        TEST_START();
+
+        b = keyrot_create(SEED_A, 0, 0);
+        if (b == NULL)
+                goto fail;
+
+        if (keyrot_rekey(b, SEED_B, 1) != 0)
+                goto fail_b;
+
+        if (keyrot_tx_next(b, sel, &k, n) != 0) {
+                printf("TX should keep the old epoch after one re-key.\n");
+                goto fail_b;
+        }
+
+        /* Second re-key without promote evicts the TX epoch-0 batch. */
+        if (keyrot_rekey(b, SEED_A, 2) != 0)
+                goto fail_b;
+
+        if (keyrot_tx_next(b, sel, &k, n) == 0) {
+                printf("TX should fail closed with tx_epoch evicted.\n");
+                goto fail_b;
+        }
+
+        keyrot_tx_promote(b);
+
+        if (keyrot_tx_next(b, sel, &k, n) != 0) {
+                printf("TX should resync after promote.\n");
+                goto fail_b;
+        }
+
+        keyrot_destroy(b);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_b:
+        keyrot_destroy(b);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 /*
  * Concurrency: many TX threads + RX + re-key share one keyrot. The
  * (epoch, counter) the TX side stamps must be globally unique (no AEAD
@@ -1063,6 +1200,8 @@ int keyrot_test(int     argc,
 #ifdef HAVE_OPENSSL
         ret |= test_create_destroy();
         ret |= test_epoch_range();
+        ret |= test_rekey_dup_epoch();
+        ret |= test_rekey_epoch_wrap();
         ret |= test_tx_deterministic();
         ret |= test_selector_layout();
         ret |= test_nodes_left_initial();
@@ -1071,6 +1210,7 @@ int keyrot_test(int     argc,
         ret |= test_random_access();
         ret |= test_peer_switched_commit_only();
         ret |= test_commit_evicted();
+        ret |= test_tx_fail_closed();
         ret |= test_replay_window();
         ret |= test_lookup_no_commit();
         ret |= test_commit_prev_batch();
