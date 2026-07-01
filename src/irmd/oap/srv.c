@@ -400,6 +400,7 @@ int oap_srv_process(const struct name_info * info,
         void *                pkp = NULL;
         void *                crt = NULL;
         int                   req_md_nid;
+        int                   enc_flags = 0;
         int                   ret;
 
         assert(info != NULL);
@@ -425,6 +426,9 @@ int oap_srv_process(const struct name_info * info,
                 crypt_free_crt(crt);
                 crt = NULL;
         }
+
+        if (rekey)
+                enc_flags = OAP_ENC_REKEY;
 
         if (load_srv_sec_config(info, &scfg) < 0) {
                 log_err("Failed to load security config for %s.", info->name);
@@ -535,7 +539,7 @@ int oap_srv_process(const struct name_info * info,
         }
 
         ret = oap_hdr_encode(&local_hdr, pkp, crt, &scfg,
-                             rsp_tag, req_md_nid, seal_key);
+                             rsp_tag, req_md_nid, seal_key, enc_flags);
 
         crypt_secure_clear(hs_key, SYMMKEYSZ);
 

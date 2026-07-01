@@ -250,6 +250,7 @@ int oap_cli_prepare(void **                  ctx,
         void *               crt = NULL;
         buffer_t             no_tag = BUF_INIT;
         ssize_t              ret;
+        int                  enc_flags = 0;
 
         assert(ctx != NULL);
         assert(info != NULL);
@@ -302,6 +303,9 @@ int oap_cli_prepare(void **                  ctx,
                 crt = NULL;
         }
 
+        if (rekey)
+                enc_flags = OAP_ENC_REKEY;
+
         oap_hdr_init(&s->local_hdr, s->id, s->kex_buf, data, s->scfg.c.nid);
 
         if (do_client_kex_prepare(info->name, s) < 0) {
@@ -310,7 +314,7 @@ int oap_cli_prepare(void **                  ctx,
         }
 
         if (oap_hdr_encode(&s->local_hdr, pkp, crt, &s->scfg,
-                           no_tag, NID_undef, NULL)) {
+                           no_tag, NID_undef, NULL, enc_flags)) {
                 log_err_id(s->id.data, "Failed to create OAP request header.");
                 goto fail_hdr;
         }

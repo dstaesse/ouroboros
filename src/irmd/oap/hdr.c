@@ -397,7 +397,8 @@ static int oap_hdr_encode_sealed(struct oap_hdr *    hdr,
                                  struct sec_config * scfg,
                                  buffer_t            rsp_tag,
                                  int                 req_md_nid,
-                                 const uint8_t *     seal_key)
+                                 const uint8_t *     seal_key,
+                                 int                 flags)
 {
         struct timespec now;
         uint64_t        stamp;
@@ -449,7 +450,8 @@ static int oap_hdr_encode_sealed(struct oap_hdr *    hdr,
         free(prefix.data);
         freebuf(der);
 
-        if (oap_hdr_decode(hdr, hdr->hdr, req_md_nid, false) < 0)
+        if (oap_hdr_decode(hdr, hdr->hdr, req_md_nid,
+                           flags & OAP_ENC_REKEY) < 0)
                 goto fail_decode;
 
         return 0;
@@ -472,7 +474,8 @@ int oap_hdr_encode(struct oap_hdr *    hdr,
                    struct sec_config * scfg,
                    buffer_t            rsp_tag,
                    int                 req_md_nid,
-                   const uint8_t *     seal_key)
+                   const uint8_t *     seal_key,
+                   int                 flags)
 {
         struct timespec now;
         uint64_t        stamp;
@@ -488,7 +491,7 @@ int oap_hdr_encode(struct oap_hdr *    hdr,
 
         if (seal_key != NULL)
                 return oap_hdr_encode_sealed(hdr, pkp, crt, scfg, rsp_tag,
-                                             req_md_nid, seal_key);
+                                             req_md_nid, seal_key, flags);
 
         clock_gettime(CLOCK_REALTIME, &now);
         stamp = hton64(TS_TO_UINT64(now));
@@ -550,10 +553,13 @@ int oap_hdr_encode(struct oap_hdr *    hdr,
                         goto fail_realloc;
 
                 memcpy(hdr->hdr.data + offset, sig.data, sig.len);
-                clrbuf(out);
         }
 
-        if (oap_hdr_decode(hdr, hdr->hdr, req_md_nid, false) < 0)
+        /* Ownership moved to hdr->hdr; drop the alias to avoid double-free. */
+        clrbuf(out);
+
+        if (oap_hdr_decode(hdr, hdr->hdr, req_md_nid,
+                           flags & OAP_ENC_REKEY) < 0)
                 goto fail_decode;
 
         freebuf(der);

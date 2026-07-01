@@ -168,13 +168,17 @@ void oap_hdr_init(struct oap_hdr * hdr,
 
 void oap_hdr_fini(struct oap_hdr * oap_hdr);
 
+/* oap_hdr_encode option flags */
+#define OAP_ENC_REKEY (1U << 0) /* signed, cert-less re-key packet */
+
 int  oap_hdr_encode(struct oap_hdr *    hdr,
                     void *              pkp,
                     void *              crt,
                     struct sec_config * scfg,
                     buffer_t            rsp_tag,
                     int                 req_md_nid,
-                    const uint8_t *     seal_key);
+                    const uint8_t *     seal_key,
+                    int                 flags);
 
 int  oap_hdr_decode(struct oap_hdr * hdr,
                     buffer_t         buf,
