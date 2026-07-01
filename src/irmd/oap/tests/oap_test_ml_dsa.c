@@ -454,7 +454,7 @@ int oap_test_ml_dsa(int    argc,
         (void) argc;
         (void) argv;
 
-#ifdef HAVE_OPENSSL_ML_KEM
+#ifdef HAVE_ML
         ret |= test_oap_roundtrip_auth_only();
         ret |= test_oap_cli_md_pin_exempts_pqc();
         ret |= test_oap_srv_md_pin_exempts_pqc();

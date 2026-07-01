@@ -528,7 +528,7 @@ int kex_test_ml_kem(int     argc,
         (void) argc;
         (void) argv;
 
-#ifdef HAVE_OPENSSL_ML_KEM
+#ifdef HAVE_ML
         ret |= test_kex_load_kem_privkey();
         ret |= test_kex_load_kem_pubkey();
         ret |= test_kex_kem_all();

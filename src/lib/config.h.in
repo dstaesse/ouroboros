@@ -33,9 +33,8 @@
 #cmakedefine HAVE_LIBGCRYPT
 #cmakedefine HAVE_OPENSSL
 #ifdef HAVE_OPENSSL
-#cmakedefine HAVE_OPENSSL_ML_KEM
-#cmakedefine HAVE_OPENSSL_ML_DSA
-#cmakedefine HAVE_OPENSSL_SLH_DSA
+#cmakedefine HAVE_ML
+#cmakedefine HAVE_SLH
 #define HAVE_ENCRYPTION
 #define SECMEM_MINSIZE           @SECMEM_MINSIZE@
 #endif

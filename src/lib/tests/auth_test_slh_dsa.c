@@ -344,7 +344,7 @@ int auth_test_slh_dsa(int     argc,
         (void) argc;
         (void) argv;
 
-#ifdef HAVE_OPENSSL_SLH_DSA
+#ifdef HAVE_SLH
         ret |= test_auth_create_destroy_ctx();
         ret |= test_load_free_crt();
         ret |= test_load_free_privkey();

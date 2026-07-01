@@ -305,7 +305,7 @@ static int test_kex_validate_algo(void)
                 goto fail;
         }
 
-#ifdef HAVE_OPENSSL_ML_KEM
+#ifdef HAVE_ML
         if (kex_validate_algo("ML-KEM-768") != 0) {
                 printf("ML-KEM-768 should be valid.\n");
                 goto fail;

@@ -333,7 +333,7 @@ int auth_test_ml_dsa(int     argc,
         (void) argc;
         (void) argv;
 
-#ifdef HAVE_OPENSSL_ML_DSA
+#ifdef HAVE_ML
         ret |= test_auth_create_destroy_ctx();
         ret |= test_load_free_crt();
         ret |= test_load_free_privkey();

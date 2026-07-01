@@ -96,7 +96,7 @@ const uint16_t kex_supported_nids[] = {
         NID_secp384r1,        /* ECDH P-384,   192-bit          */
         NID_X448,             /* ECDH X448,    224-bit          */
         NID_secp521r1,        /* ECDH P-521,   256-bit          */
-#ifdef HAVE_OPENSSL_ML_KEM
+#ifdef HAVE_ML
         NID_MLKEM512,         /* ML-KEM-512,  PQC L1 (~AES-128) */
         NID_MLKEM768,         /* ML-KEM-768,  PQC L3 (~AES-192) */
         NID_MLKEM1024,        /* ML-KEM-1024, PQC L5 (~AES-256) */
