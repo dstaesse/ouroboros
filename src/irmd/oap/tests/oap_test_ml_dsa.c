@@ -47,10 +47,8 @@
 #include <openssl/evp.h>
 #endif
 
-#define CLI_AUTH    1
-#define NO_CLI_AUTH 0
-#define CLI_ENCAP   KEM_MODE_CLIENT_ENCAP
-#define SRV_ENCAP   KEM_MODE_SERVER_ENCAP
+#define CLI_ENCAP KEM_MODE_CLIENT_ENCAP
+#define SRV_ENCAP KEM_MODE_SERVER_ENCAP
 
 /* Wire constants for inspecting the encoded kex_len field. */
 #define OAP_KEX_LEN_OFFSET 32
@@ -246,7 +244,7 @@ static int test_oap_roundtrip_auth_only(void)
 /* Digest pin does not apply to PQC: the digest is intrinsic */
 static int test_oap_cli_md_pin_exempts_pqc(void)
 {
-        test_cfg_init(NID_undef, NID_undef, NID_undef, 0, NO_CLI_AUTH);
+        test_cfg_init(NID_undef, NID_undef, NID_undef, 0, NO_AUTH);
         test_cfg.cli.md = NID_sha256;
 
         return roundtrip_auth_only(root_ca_crt_ml, im_ca_crt_ml);
@@ -254,7 +252,7 @@ static int test_oap_cli_md_pin_exempts_pqc(void)
 
 static int test_oap_srv_md_pin_exempts_pqc(void)
 {
-        test_cfg_init(NID_undef, NID_undef, NID_undef, 0, CLI_AUTH);
+        test_cfg_init(NID_undef, NID_undef, NID_undef, 0, AUTH);
         test_cfg.srv.md = NID_sha256;
 
         return roundtrip_auth_only(root_ca_crt_ml, im_ca_crt_ml);
@@ -275,10 +273,10 @@ static int test_oap_rekey_all(void)
 {
         int ret = 0;
 
-        ret |= test_oap_rekey(CLI_AUTH, NO_CLI_AUTH);
-        ret |= test_oap_rekey(CLI_AUTH, CLI_AUTH);
-        ret |= test_oap_rekey(NO_CLI_AUTH, CLI_AUTH);
-        ret |= test_oap_rekey(NO_CLI_AUTH, NO_CLI_AUTH);
+        ret |= test_oap_rekey(AUTH, NO_AUTH);
+        ret |= test_oap_rekey(AUTH, AUTH);
+        ret |= test_oap_rekey(NO_AUTH, AUTH);
+        ret |= test_oap_rekey(NO_AUTH, NO_AUTH);
 
         return ret;
 }
@@ -296,8 +294,8 @@ static int test_oap_rekey_badcache_all(void)
 {
         int ret = 0;
 
-        ret |= test_oap_rekey_badcache(NO_CLI_AUTH);
-        ret |= test_oap_rekey_badcache(CLI_AUTH);
+        ret |= test_oap_rekey_badcache(NO_AUTH);
+        ret |= test_oap_rekey_badcache(AUTH);
 
         return ret;
 }
@@ -305,7 +303,7 @@ static int test_oap_rekey_badcache_all(void)
 static int test_oap_rekey_srv_badcache(bool srv_auth)
 {
         test_cfg_init(NID_X25519, NID_aes_256_gcm, NID_sha256,
-                      0, CLI_AUTH);
+                      0, AUTH);
         test_cfg.srv.auth = srv_auth;
 
         return roundtrip_rekey_srv_badcache(root_ca_crt_ml, im_ca_crt_ml,
@@ -316,8 +314,8 @@ static int test_oap_rekey_srv_badcache_all(void)
 {
         int ret = 0;
 
-        ret |= test_oap_rekey_srv_badcache(CLI_AUTH);
-        ret |= test_oap_rekey_srv_badcache(NO_CLI_AUTH);
+        ret |= test_oap_rekey_srv_badcache(AUTH);
+        ret |= test_oap_rekey_srv_badcache(NO_AUTH);
 
         return ret;
 }
@@ -325,7 +323,7 @@ static int test_oap_rekey_srv_badcache_all(void)
 static int test_oap_corrupted_request(void)
 {
         test_cfg_init(NID_MLKEM768, NID_aes_256_gcm, get_random_kdf(),
-                      SRV_ENCAP, CLI_AUTH);
+                      SRV_ENCAP, AUTH);
 
         return corrupted_request(root_ca_crt_ml, im_ca_crt_ml);
 }
@@ -333,7 +331,7 @@ static int test_oap_corrupted_request(void)
 static int test_oap_corrupted_response(void)
 {
         test_cfg_init(NID_MLKEM768, NID_aes_256_gcm, get_random_kdf(),
-                      SRV_ENCAP, NO_CLI_AUTH);
+                      SRV_ENCAP, NO_AUTH);
 
         return corrupted_response(root_ca_crt_ml, im_ca_crt_ml);
 }
@@ -341,7 +339,7 @@ static int test_oap_corrupted_response(void)
 static int test_oap_truncated_request(void)
 {
         test_cfg_init(NID_MLKEM768, NID_aes_256_gcm, get_random_kdf(),
-                      SRV_ENCAP, NO_CLI_AUTH);
+                      SRV_ENCAP, NO_AUTH);
 
         return truncated_request(root_ca_crt_ml, im_ca_crt_ml);
 }
@@ -354,7 +352,7 @@ static int test_oap_roundtrip_kem(int kex,
         const char *        mode_str = kem_mode == CLI_ENCAP ? "cli" : "srv";
 
         test_cfg_init(kex, NID_aes_256_gcm, get_random_kdf(),
-                      kem_mode, NO_CLI_AUTH);
+                      kem_mode, NO_AUTH);
 
         TEST_START("(%s, %s encaps)", kex_str, mode_str);
 
@@ -430,7 +428,7 @@ static int test_oap_rekey_kem(int kex,
                 mode_str = "cli";
 
         test_cfg_init(kex, NID_aes_256_gcm, get_random_kdf(),
-                      kem_mode, NO_CLI_AUTH);
+                      kem_mode, NO_AUTH);
 
         TEST_START("(%s, %s encaps)", kex_str, mode_str);
 
@@ -535,7 +533,7 @@ static int test_oap_kem_kdf_floor(int kex)
         const char *        kex_str = kex_nid_to_str(kex);
 
         test_cfg_init(kex, NID_aes_256_gcm, NID_sha256,
-                      CLI_ENCAP, NO_CLI_AUTH);
+                      CLI_ENCAP, NO_AUTH);
         test_cfg.srv.kdf = NID_sha512;
         test_cfg.cli.kdf = NID_sha256;
 
@@ -578,7 +576,7 @@ static int test_oap_rekey_kem_forcing(int kex)
         uint16_t            kex_len;
 
         test_cfg_init(kex, NID_aes_256_gcm, NID_sha256,
-                      CLI_ENCAP, NO_CLI_AUTH);
+                      CLI_ENCAP, NO_AUTH);
 
         TEST_START("(%s)", kex_str);
 

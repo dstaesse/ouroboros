@@ -54,9 +54,6 @@
 #include <openssl/evp.h>
 #endif
 
-#define AUTH    true
-#define NO_AUTH false
-
 extern const uint16_t kex_supported_nids[];
 extern const uint16_t md_supported_nids[];
 

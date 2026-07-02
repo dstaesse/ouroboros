@@ -30,6 +30,9 @@
 
 #include <stdbool.h>
 
+#define AUTH    true
+#define NO_AUTH false
+
 /* Per-side security configuration for tests */
 struct test_sec_cfg {
         int          kex;      /* KEX algorithm NID */
