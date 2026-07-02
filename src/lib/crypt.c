@@ -887,11 +887,17 @@ int crypt_get_headsz(struct crypt_ctx * ctx)
 int crypt_rekey(struct crypt_ctx * ctx,
                 struct crypt_sk *  sk)
 {
+        int ret;
+
         assert(ctx != NULL);
         assert(sk != NULL);
         assert(ctx->kr != NULL);
 
-        return keyrot_rekey(ctx->kr, sk->key, sk->epoch) == 0 ? 0 : -ECRYPT;
+        ret = keyrot_rekey(ctx->kr, sk->key, sk->epoch);
+        if (ret == -EREPLAY)
+                return -EREPLAY;
+
+        return ret == 0 ? 0 : -ECRYPT;
 }
 
 int crypt_get_tagsz(struct crypt_ctx * ctx)

@@ -28,6 +28,7 @@
 
 #ifdef HAVE_OPENSSL
 #include <ouroboros/crypt.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/pthread.h>
 
 #include "crypt/keyrot.h"
@@ -112,8 +113,8 @@ static int test_rekey_dup_epoch(void)
         if (a == NULL)
                 goto fail;
 
-        if (keyrot_rekey(a, SEED_B, 0) == 0) {
-                printf("Re-key to the current epoch accepted.\n");
+        if (keyrot_rekey(a, SEED_B, 0) != -1) {
+                printf("New key to the current epoch not a conflict.\n");
                 goto fail_a;
         }
 
@@ -122,13 +123,23 @@ static int test_rekey_dup_epoch(void)
                 goto fail_a;
         }
 
-        if (keyrot_rekey(a, SEED_A, 1) == 0) {
-                printf("Re-key to the current epoch accepted.\n");
+        if (keyrot_rekey(a, SEED_B, 1) != -EREPLAY) {
+                printf("Same key to the current epoch not a replay.\n");
                 goto fail_a;
         }
 
-        if (keyrot_rekey(a, SEED_A, 0) == 0) {
-                printf("Re-key to the previous epoch accepted.\n");
+        if (keyrot_rekey(a, SEED_A, 1) != -1) {
+                printf("New key to the current epoch not a conflict.\n");
+                goto fail_a;
+        }
+
+        if (keyrot_rekey(a, SEED_A, 0) != -EREPLAY) {
+                printf("Same key to the previous epoch not a replay.\n");
+                goto fail_a;
+        }
+
+        if (keyrot_rekey(a, SEED_B, 0) != -1) {
+                printf("New key to the previous epoch not a conflict.\n");
                 goto fail_a;
         }
 

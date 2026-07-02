@@ -26,6 +26,7 @@
 
 #include <ouroboros/atomics.h>
 #include <ouroboros/crypt.h>
+#include <ouroboros/errno.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/rcu.h>
 
@@ -470,17 +471,17 @@ void keyrot_destroy(struct keyrot * kr)
 }
 
 /* A dup live epoch shadows straggler RX; epoch is peer-driven. */
-static bool kr_epoch_live(const struct kr_batch * cur,
-                          const struct kr_batch * prev,
-                          uint8_t                 epoch)
+static struct kr_batch * kr_live_batch(struct kr_batch * cur,
+                                       struct kr_batch * prev,
+                                       uint8_t           epoch)
 {
         if (epoch == cur->epoch)
-                return true;
+                return cur;
 
-        if (prev == NULL)
-                return false;
+        if (prev != NULL && epoch == prev->epoch)
+                return prev;
 
-        return epoch == prev->epoch;
+        return NULL;
 }
 
 int keyrot_rekey(struct keyrot * kr,
@@ -491,6 +492,8 @@ int keyrot_rekey(struct keyrot * kr,
         struct kr_batch * old_prev;
         struct kr_batch * cur;
         struct kr_batch * prev;
+        struct kr_batch * live;
+        int               ret;
 
         assert(kr != NULL);
         assert(root != NULL);
@@ -507,10 +510,16 @@ int keyrot_rekey(struct keyrot * kr,
         cur  = rcu_deref(kr->cur);
         prev = rcu_deref(kr->prev);
 
-        if (kr_epoch_live(cur, prev, epoch)) {
+        live = kr_live_batch(cur, prev, epoch);
+        if (live != NULL) {
+                /* The first node key identifies the root. */
+                if (crypt_ct_cmp(live->nodes, nb->nodes, SYMMKEYSZ) == 0)
+                        ret = -EREPLAY;
+                else
+                        ret = -1;
                 rcu_wrunlock(&kr->guard);
                 kr_batch_free(nb);
-                return -1;
+                return ret;
         }
 
         old_prev = kr->prev;
