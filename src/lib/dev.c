@@ -2656,23 +2656,24 @@ int ipcp_flow_read(int                   fd,
 
         pthread_rwlock_rdlock(&proc.lock);
 
-        assert(flow->info.id >= 0);
+        if (flow->info.id < 0) {
+                pthread_rwlock_unlock(&proc.lock);
+                return -ENOTALLOC;
+        }
 
         /* Raw flow: deliver the popped pkt directly (no FRCT rq). */
         if (flow->frcti == NULL) {
-                pthread_rwlock_unlock(&proc.lock);
                 idx = flow_rx_spb(flow, spb, false, NULL);
+                pthread_rwlock_unlock(&proc.lock);
                 return idx < 0 ? (int) idx : 0;
         }
 
         while (!FRCTI_PDU_READY(flow->frcti)) {
-                pthread_rwlock_unlock(&proc.lock);
-
                 idx = flow_rx_spb(flow, spb, false, NULL);
-                if (idx < 0)
+                if (idx < 0) {
+                        pthread_rwlock_unlock(&proc.lock);
                         return idx;
-
-                pthread_rwlock_rdlock(&proc.lock);
+                }
 
                 FRCTI_RCV(flow->frcti, *spb);
         }
@@ -2745,9 +2746,12 @@ int np1_flow_read(int                   fd,
 
         flow = &proc.flows[fd];
 
-        assert(flow->info.id >= 0);
-
         pthread_rwlock_rdlock(&proc.lock);
+
+        if (flow->info.id < 0) {
+                pthread_rwlock_unlock(&proc.lock);
+                return -ENOTALLOC;
+        }
 
         off = ssm_rbuff_read(flow->rx_rb);
         if (off < 0) {
