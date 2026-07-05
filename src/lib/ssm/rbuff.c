@@ -74,7 +74,7 @@ struct ssm_rbuff {
         ssize_t *         shm_base;     /* start of shared memory   */
         size_t *          head;         /* start of ringbuffer      */
         size_t *          tail;
-        size_t *          flags;          /* out-of-band flags (RB_*) */
+        size_t *          flags;        /* out-of-band flags (RB_*) */
         pthread_mutex_t * mtx;          /* lock for cond vars only  */
         pthread_cond_t *  add;          /* signal when new data     */
         pthread_cond_t *  del;          /* signal when data removed */

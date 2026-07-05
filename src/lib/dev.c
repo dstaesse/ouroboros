@@ -1739,8 +1739,7 @@ static ssize_t flow_write_frag(struct flow *     flow,
 
                 memcpy(ptr, src + off, clen);
 
-                ret = flow_tx_spb(flow, spb, flow_frag_role(i, n),
-                                  block, dl);
+                ret = flow_tx_spb(flow, spb, flow_frag_role(i, n), block, dl);
                 if (ret < 0) {
                         ssm_pool_remove(proc.pool, idx);
                         if (off > 0)
@@ -2887,19 +2886,13 @@ int ipcp_flow_get_qoscube(int         fd,
         return 0;
 }
 
+/* Not a snapshot: two atomic loads; caller keeps the fd live. */
 size_t ipcp_flow_queued(int fd)
 {
-        size_t q;
-
-        pthread_rwlock_rdlock(&proc.lock);
-
+        assert(fd >= 0 && fd < PROC_MAX_FLOWS);
         assert(proc.flows[fd].info.id >= 0);
 
-        q = ssm_rbuff_queued(proc.flows[fd].tx_rb);
-
-        pthread_rwlock_unlock(&proc.lock);
-
-        return q;
+        return ssm_rbuff_queued(proc.flows[fd].tx_rb);
 }
 
 int local_flow_transfer(int               src_fd,

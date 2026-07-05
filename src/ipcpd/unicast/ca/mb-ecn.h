@@ -29,20 +29,23 @@ void *   mb_ecn_ctx_create(void);
 
 void     mb_ecn_ctx_destroy(void * ctx);
 
-ca_wnd_t mb_ecn_ctx_update_snd(void * ctx,
-                               size_t len);
+time_t   mb_ecn_ctx_update_snd(void *     ctx,
+                               size_t     len,
+                               uint8_t    lecn,
+                               uint64_t * ftag);
 
 bool     mb_ecn_ctx_update_rcv(void *     ctx,
                                size_t     len,
                                uint8_t    ecn,
-                               uint16_t * ece);
+                               uint8_t    cap,
+                               uint16_t * ece,
+                               uint8_t *  fcap);
 
 void     mb_ecn_ctx_update_ece(void *   ctx,
-                               uint16_t ece);
+                               uint16_t ece,
+                               uint8_t  cap);
 
-void     mb_ecn_wnd_wait(ca_wnd_t wnd);
-
-int      mb_ecn_calc_ecn(int       fd,
+int      mb_ecn_calc_ecn(size_t    queued,
                          uint8_t * ecn,
                          qoscube_t qc,
                          size_t    len);

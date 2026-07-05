@@ -30,6 +30,7 @@
 
 #include <ouroboros/errno.h>
 #include <ouroboros/notifier.h>
+#include <ouroboros/time.h>
 
 #include "common/connmgr.h"
 #include "ipcp.h"
@@ -50,7 +51,7 @@ static int qos_prio [] = {
 #endif
 
 struct psched {
-        fset_t *         set[QOS_CUBE_MAX];
+        fset_t *         set[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
         next_packet_fn_t callback;
         read_fn_t        read;
         pthread_t        readers[QOS_CUBE_MAX * IPCP_SCHED_THR_MUL];
@@ -59,23 +60,139 @@ struct psched {
 struct sched_info {
         struct psched * sch;
         qoscube_t       qc;
+        size_t          idx;
 };
+
+/* Map an FD to one reader's set: one FD, one thread (no shared FDs). */
+static size_t fd_set_idx(int fd, qoscube_t qc)
+{
+        return qc + ((size_t) fd % IPCP_SCHED_THR_MUL) * QOS_CUBE_MAX;
+}
 
 static void cleanup_reader(void * o)
 {
         fqueue_destroy((fqueue_t *) o);
 }
 
+/*
+ * Per-reader deadline scheduler: a paced flow is served, then deferred
+ * to its next-send deadline instead of blocking the thread, so it never
+ * stalls its thread-mates.
+ */
+struct dsched {
+        uint64_t deadline[PROC_MAX_FLOWS]; /* absolute ns, per tracked fd   */
+        int      active[PROC_MAX_FLOWS];   /* compact list of tracked fds   */
+        int      posn[PROC_MAX_FLOWS];     /* fd -> active index, -1 = none  */
+        size_t   n;
+};
+
+static void cleanup_dsched(void * o)
+{
+        free(o);
+}
+
+static void dsched_track(struct dsched * d,
+                         int             fd,
+                         uint64_t        deadline)
+{
+        if (d->posn[fd] >= 0)
+                return;
+
+        d->deadline[fd]   = deadline;
+        d->posn[fd]       = (int) d->n;
+        d->active[d->n++] = fd;
+}
+
+static void dsched_untrack(struct dsched * d,
+                           int             fd)
+{
+        int i = d->posn[fd];
+
+        if (i < 0)
+                return;
+
+        d->active[i]          = d->active[--d->n];
+        d->posn[d->active[i]] = i;
+        d->posn[fd]           = -1;
+}
+
+static uint64_t dsched_serve(struct dsched * d,
+                             struct psched * sched,
+                             qoscube_t       qc,
+                             uint64_t        now)
+{
+        struct ssm_pk_buff * spb;
+        uint64_t             dmin = 0;
+        size_t               i;
+        int                  fd;
+        time_t               wait;
+
+        for (i = 0; i < d->n; ) {
+                fd = d->active[i];
+
+                if (d->deadline[fd] > now) {
+                        if (dmin == 0 || d->deadline[fd] < dmin)
+                                dmin = d->deadline[fd];
+                        ++i;
+                        continue;
+                }
+
+                if (sched->read(fd, &spb) < 0) {
+                        dsched_untrack(d, fd);
+                        continue;
+                }
+
+                wait = sched->callback(fd, qc, spb);
+                if (wait == 0)
+                        continue;
+
+                d->deadline[fd] = now + (uint64_t) wait;
+                if (dmin == 0 || d->deadline[fd] < dmin)
+                        dmin = d->deadline[fd];
+                ++i;
+        }
+
+        return dmin;
+}
+
+static void dsched_events(struct dsched * d,
+                          fqueue_t *      fq,
+                          uint64_t        now)
+{
+        int fd;
+
+        while ((fd = fqueue_next(fq)) >= 0) {
+                switch (fqueue_type(fq)) {
+                case FLOW_DEALLOC:
+                        dsched_untrack(d, fd);
+                        notifier_event(NOTIFY_DT_FLOW_DEALLOC, &fd);
+                        break;
+                case FLOW_DOWN:
+                        notifier_event(NOTIFY_DT_FLOW_DOWN, &fd);
+                        break;
+                case FLOW_UP:
+                        notifier_event(NOTIFY_DT_FLOW_UP, &fd);
+                        break;
+                case FLOW_PKT:
+                        dsched_track(d, fd, now);
+                        break;
+                default:
+                        break;
+                }
+        }
+}
+
 static void * packet_reader(void * o)
 {
-        struct psched *       sched;
-        struct ssm_pk_buff *  spb;
-        int                   fd;
-        fqueue_t *            fq;
-        qoscube_t             qc;
+        struct psched * sched;
+        struct dsched * d;
+        fqueue_t *      fq;
+        qoscube_t       qc;
+        size_t          idx;
 
         sched = ((struct sched_info *) o)->sch;
         qc    = ((struct sched_info *) o)->qc;
+        idx   = ((struct sched_info *) o)->idx;
 
         ipcp_lock_to_core();
 
@@ -85,36 +202,50 @@ static void * packet_reader(void * o)
         if (fq == NULL)
                 return (void *) -1;
 
+        d = malloc(sizeof(*d));
+        if (d == NULL) {
+                fqueue_destroy(fq);
+                return (void *) -1;
+        }
+
+        memset(d, 0, sizeof(*d));
+        memset(d->posn, 0xFF, sizeof(d->posn)); /* -1: nothing tracked yet */
+
+        pthread_cleanup_push(cleanup_dsched, d);
         pthread_cleanup_push(cleanup_reader, fq);
 
         while (true) {
-                int ret = fevent(sched->set[qc], fq, NULL);
+                struct timespec   now_ts;
+                struct timespec   to;
+                struct timespec * timeo;
+                uint64_t          now;
+                uint64_t          dmin;
+                uint64_t          delta;
+                int               ret;
+
+                clock_gettime(PTHREAD_COND_CLOCK, &now_ts);
+
+                now = TS_TO_UINT64(now_ts);
+
+                dmin = dsched_serve(d, sched, qc, now);
+
+                if (dmin == 0) {
+                        timeo = NULL;
+                } else {
+                        delta = dmin > now ? dmin - now : 1;
+                        to.tv_sec  = (time_t) (delta / BILLION);
+                        to.tv_nsec = (long) (delta % BILLION);
+                        timeo = &to;
+                }
+
+                ret = fevent(sched->set[idx], fq, timeo);
                 if (ret < 0)
                         continue;
 
-                while ((fd = fqueue_next(fq)) >= 0) {
-                        switch (fqueue_type(fq)) {
-                        case FLOW_DEALLOC:
-                                notifier_event(NOTIFY_DT_FLOW_DEALLOC, &fd);
-                                break;
-                        case FLOW_DOWN:
-                                notifier_event(NOTIFY_DT_FLOW_DOWN, &fd);
-                                break;
-                        case FLOW_UP:
-                                notifier_event(NOTIFY_DT_FLOW_UP, &fd);
-                                break;
-                        case FLOW_PKT:
-                                if (sched->read(fd, &spb) < 0)
-                                        continue;
-
-                                sched->callback(fd, qc, spb);
-                                break;
-                        default:
-                                break;
-                        }
-                }
+                dsched_events(d, fq, now);
         }
 
+        pthread_cleanup_pop(true);
         pthread_cleanup_pop(true);
 
         return (void *) 0;
@@ -137,7 +268,7 @@ struct psched * psched_create(next_packet_fn_t callback,
         psched->callback = callback;
         psched->read     = read;
 
-        for (i = 0; i < QOS_CUBE_MAX; ++i) {
+        for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
                 psched->set[i] = fset_create();
                 if (psched->set[i] == NULL) {
                         for (j = 0; j < i; ++j)
@@ -155,6 +286,7 @@ struct psched * psched_create(next_packet_fn_t callback,
                 }
                 infos[i]->sch = psched;
                 infos[i]->qc  = i % QOS_CUBE_MAX;
+                infos[i]->idx = i;
         }
 
         for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i) {
@@ -196,11 +328,12 @@ struct psched * psched_create(next_packet_fn_t callback,
  fail_sched:
         for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                 pthread_cancel(psched->readers[j]);
+
         for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                 pthread_join(psched->readers[j], NULL);
 #endif
  fail_infos:
-        for (j = 0; j < QOS_CUBE_MAX; ++j)
+        for (j = 0; j < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++j)
                 fset_destroy(psched->set[j]);
  fail_flow_set:
         free(psched);
@@ -219,7 +352,7 @@ void psched_destroy(struct psched * psched)
                 pthread_join(psched->readers[i], NULL);
         }
 
-        for (i = 0; i < QOS_CUBE_MAX; ++i)
+        for (i = 0; i < QOS_CUBE_MAX * IPCP_SCHED_THR_MUL; ++i)
                 fset_destroy(psched->set[i]);
 
         free(psched);
@@ -233,7 +366,7 @@ void psched_add(struct psched * psched,
         assert(psched);
 
         ipcp_flow_get_qoscube(fd, &qc);
-        fset_add(psched->set[qc], fd);
+        fset_add(psched->set[fd_set_idx(fd, qc)], fd);
 }
 
 void psched_del(struct psched * psched,
@@ -244,5 +377,5 @@ void psched_del(struct psched * psched,
         assert(psched);
 
         ipcp_flow_get_qoscube(fd, &qc);
-        fset_del(psched->set[qc], fd);
+        fset_del(psched->set[fd_set_idx(fd, qc)], fd);
 }

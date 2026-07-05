@@ -6,6 +6,7 @@ protobuf_generate_c(DHT_PROTO_SRCS DHT_PROTO_HDRS
 set(UNICAST_SOURCES
   addr-auth.c
   ca.c
+  cap.c
   connmgr.c
   dir.c
   dt.c

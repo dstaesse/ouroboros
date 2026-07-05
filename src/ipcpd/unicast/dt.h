@@ -48,6 +48,7 @@ void dt_unreg_comp(int eid);
 int  dt_write_packet(uint64_t             dst_addr,
                      qoscube_t            qc,
                      uint64_t             eid,
-                     struct ssm_pk_buff * spb);
+                     struct ssm_pk_buff * spb,
+                     uint8_t *            ecn);
 
 #endif /* OUROBOROS_IPCPD_UNICAST_DT_H */

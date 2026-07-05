@@ -26,9 +26,9 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/fqueue.h>
 
-typedef void (* next_packet_fn_t)(int                  fd,
-                                  qoscube_t            qc,
-                                  struct ssm_pk_buff * spb);
+typedef time_t (* next_packet_fn_t)(int                  fd,
+                                    qoscube_t            qc,
+                                    struct ssm_pk_buff * spb);
 
 typedef int (* read_fn_t)(int                   fd,
                           struct ssm_pk_buff ** spb);

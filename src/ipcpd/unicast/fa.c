@@ -31,6 +31,7 @@
 #define FA               "flow-allocator"
 #define OUROBOROS_PREFIX FA
 
+#include <ouroboros/atomics.h>
 #include <ouroboros/endian.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/fqueue.h>
@@ -38,6 +39,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/np1_flow.h>
+#include <ouroboros/qoscube.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/random.h>
 #include <ouroboros/pthread.h>
@@ -81,6 +83,7 @@ struct fa_msg {
         uint32_t max_gap;
         uint32_t timeout;
         uint16_t ece;
+        uint8_t  cap;
         uint8_t  code;
         uint8_t  availability;
         uint8_t  service;
@@ -109,6 +112,8 @@ struct fa_flow {
         uint64_t r_eid;  /* Remote endpoint id               */
         uint64_t r_addr; /* Remote address                   */
         void *   ctx;    /* Congestion avoidance context     */
+        uint64_t fair;   /* SFQ virtual finish tag (bytes)   */
+        uint8_t  l_ecn;  /* Local first-hop mark (relaxed)   */
 };
 
 struct {
@@ -245,6 +250,7 @@ static int fa_rib_readdir(char *** buf)
  fail_entry:
         while (idx-- > 0)
                 free((*buf)[idx]);
+
         free(*buf);
  fail_entries:
         pthread_rwlock_unlock(&fa.flows_lock);
@@ -317,17 +323,20 @@ static uint64_t gen_eid(int fd)
         return ((uint64_t) rnd << 32) + fd;
 }
 
-static void packet_handler(int                  fd,
-                           qoscube_t            qc,
-                           struct ssm_pk_buff * spb)
+static time_t packet_handler(int                  fd,
+                             qoscube_t            qc,
+                             struct ssm_pk_buff * spb)
 {
         struct fa_flow * flow;
         uint64_t         r_addr;
         uint64_t         r_eid;
-        ca_wnd_t         wnd;
+        time_t           wait;
         size_t           len;
+        uint8_t          ecn;
 
         flow = &fa.flows[fd];
+
+        ecn = 0;
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
@@ -337,16 +346,16 @@ static void packet_handler(int                  fd,
         ++flow->p_snd;
         flow->b_snd += len;
 #endif
-        wnd = ca_ctx_update_snd(flow->ctx, len);
+        wait = ca_ctx_update_snd(flow->ctx, len,
+                                 LOAD_RELAXED(&flow->l_ecn), &flow->fair);
 
         r_addr = flow->r_addr;
         r_eid  = flow->r_eid;
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        ca_wnd_wait(wnd);
-
-        if (dt_write_packet(r_addr, qc, r_eid, spb)) {
+        if (dt_write_packet(r_addr, qc, r_eid, spb, &ecn)) {
+                STORE_RELAXED(&flow->l_ecn, ecn);
                 ipcp_spb_release(spb);
                 log_dbg("Failed to forward packet.");
 #ifdef IPCP_FLOW_STATS
@@ -355,8 +364,12 @@ static void packet_handler(int                  fd,
                 flow->b_snd_f += len;
                 pthread_rwlock_unlock(&fa.flows_lock);
 #endif
-                return;
+                return wait;
         }
+
+        STORE_RELAXED(&flow->l_ecn, ecn);
+
+        return wait;
 }
 
 static int fa_flow_init(struct fa_flow * flow)
@@ -370,9 +383,7 @@ static int fa_flow_init(struct fa_flow * flow)
         flow->s_eid  = -1;
         flow->r_addr = INVALID_ADDR;
 
-        flow->ctx = ca_ctx_create();
-        if (flow->ctx == NULL)
-                return -1;
+        /* ctx is acquired once (r_addr, qc) are known (ca_ctx_get). */
 
 #ifdef IPCP_FLOW_STATS
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
@@ -386,7 +397,8 @@ static int fa_flow_init(struct fa_flow * flow)
 
 static void fa_flow_fini(struct fa_flow * flow)
 {
-        ca_ctx_destroy(flow->ctx);
+        if (flow->ctx != NULL)
+                ca_ctx_put(flow->ctx);
 
         memset(flow, 0, sizeof(*flow));
 
@@ -503,6 +515,13 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         flow->r_eid  = ntoh64(msg->s_eid);
         flow->r_addr = ntoh64(msg->s_addr);
 
+        flow->ctx = ca_ctx_get(flow->r_addr, qos_spec_to_cube(qs));
+        if (flow->ctx == NULL) {
+                fa_flow_fini(flow);
+                pthread_rwlock_unlock(&fa.flows_lock);
+                return -ENOMEM;
+        }
+
         pthread_rwlock_unlock(&fa.flows_lock);
 
         return fd;
@@ -580,7 +599,7 @@ static int fa_handle_flow_update(struct fa_msg * msg,
 #ifdef IPCP_FLOW_STATS
         flow->u_rcv++;
 #endif
-        ca_ctx_update_ece(flow->ctx, ntoh16(msg->ece));
+        ca_ctx_update_ece(flow->ctx, ntoh16(msg->ece), msg->cap);
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
@@ -834,7 +853,7 @@ int fa_alloc(int              fd,
         if (data->len > 0)
                 memcpy(ssm_pk_buff_head(spb) + len, data->data, data->len);
 
-        if (dt_write_packet(addr, qc, fa.eid, spb)) {
+        if (dt_write_packet(addr, qc, fa.eid, spb, NULL)) {
                 log_err("Failed to send flow allocation request packet.");
                 ipcp_spb_release(spb);
                 return -1;
@@ -847,6 +866,13 @@ int fa_alloc(int              fd,
         fa_flow_init(flow);
         flow->r_addr = addr;
         flow->s_eid  = eid;
+
+        flow->ctx = ca_ctx_get(addr, qos_spec_to_cube(qs));
+        if (flow->ctx == NULL) {
+                fa_flow_fini(flow);
+                pthread_rwlock_unlock(&fa.flows_lock);
+                return -1;
+        }
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
@@ -890,7 +916,7 @@ int fa_alloc_resp(int              fd,
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (dt_write_packet(flow->r_addr, qc, fa.eid, spb)) {
+        if (dt_write_packet(flow->r_addr, qc, fa.eid, spb, NULL)) {
                 log_err("Failed to send flow allocation response packet.");
                 goto fail_packet;
         }
@@ -944,7 +970,7 @@ int fa_irm_update(int              fd,
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
-        if (dt_write_packet(r_addr, qc, fa.eid, spb)) {
+        if (dt_write_packet(r_addr, qc, fa.eid, spb, NULL)) {
                 log_err("Failed to send flow update packet.");
                 ipcp_spb_release(spb);
                 return -1;
@@ -972,7 +998,8 @@ int fa_dealloc(int fd)
 }
 
 static int fa_update_remote(int      fd,
-                            uint16_t ece)
+                            uint16_t ece,
+                            uint8_t  cap)
 {
         struct fa_msg *      msg;
         struct ssm_pk_buff * spb;
@@ -996,6 +1023,7 @@ static int fa_update_remote(int      fd,
         msg->code  = FLOW_UPDATE;
         msg->r_eid = hton64(flow->r_eid);
         msg->ece   = hton16(ece);
+        msg->cap   = cap;
 
         r_addr = flow->r_addr;
 #ifdef IPCP_FLOW_STATS
@@ -1004,7 +1032,7 @@ static int fa_update_remote(int      fd,
         pthread_rwlock_unlock(&fa.flows_lock);
 
 
-        if (dt_write_packet(r_addr, qc, fa.eid, spb)) {
+        if (dt_write_packet(r_addr, qc, fa.eid, spb, NULL)) {
                 log_err("Failed to send flow update packet.");
                 ipcp_spb_release(spb);
                 return -1;
@@ -1015,11 +1043,13 @@ static int fa_update_remote(int      fd,
 
 void  fa_np1_rcv(uint64_t             eid,
                  uint8_t              ecn,
+                 uint8_t              cap,
                  struct ssm_pk_buff * spb)
 {
         struct fa_flow * flow;
         bool             update;
         uint16_t         ece;
+        uint8_t          fcap;
         int              fd;
         size_t           len;
 
@@ -1041,7 +1071,7 @@ void  fa_np1_rcv(uint64_t             eid,
         ++flow->p_rcv;
         flow->b_rcv += len;
 #endif
-        update = ca_ctx_update_rcv(flow->ctx, len, ecn, &ece);
+        update = ca_ctx_update_rcv(flow->ctx, len, ecn, cap, &ece, &fcap);
 
         pthread_rwlock_unlock(&fa.flows_lock);
 
@@ -1057,5 +1087,5 @@ void  fa_np1_rcv(uint64_t             eid,
         }
 
         if (update)
-                fa_update_remote(eid, ece);
+                fa_update_remote(eid, ece, fcap);
 }

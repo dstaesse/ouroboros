@@ -29,37 +29,39 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
-typedef union {
-        time_t wait;
-} ca_wnd_t;
-
 int      ca_init(enum pol_cong_avoid ca);
 
 void     ca_fini(void);
 
 
 /* OPS */
-void *   ca_ctx_create(void);
+void *   ca_ctx_get(uint64_t  addr,
+                    qoscube_t qc);
 
-void     ca_ctx_destroy(void * ctx);
+void     ca_ctx_put(void * ctx);
 
-ca_wnd_t ca_ctx_update_snd(void * ctx,
-                           size_t len);
+time_t   ca_ctx_update_snd(void *     ctx,
+                           size_t     len,
+                           uint8_t    lecn,
+                           uint64_t * ftag);
 
 bool     ca_ctx_update_rcv(void *     ctx,
                            size_t     len,
                            uint8_t    ecn,
-                           uint16_t * ece);
+                           uint8_t    cap,
+                           uint16_t * ece,
+                           uint8_t *  fcap);
 
 void     ca_ctx_update_ece(void *   ctx,
-                           uint16_t ece);
+                           uint16_t ece,
+                           uint8_t  cap);
 
-void     ca_wnd_wait(ca_wnd_t wnd);
-
-int      ca_calc_ecn(int       fd,
+int      ca_calc_ecn(size_t    queued,
                      uint8_t * ecn,
                      qoscube_t qc,
                      size_t    len);
+
+bool     ca_marks_ecn(void);
 
 ssize_t  ca_print_stats(void * ctx,
                         char * buf,

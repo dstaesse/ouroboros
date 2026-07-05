@@ -50,6 +50,7 @@ int  fa_irm_update(int              fd,
 
 void fa_np1_rcv(uint64_t             eid,
                 uint8_t              ecn,
+                uint8_t              cap,
                 struct ssm_pk_buff * spb);
 
 #endif /* OUROBOROS_IPCPD_UNICAST_FA_H */

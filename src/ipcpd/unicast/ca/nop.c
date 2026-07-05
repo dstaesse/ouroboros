@@ -30,8 +30,8 @@ struct ca_ops nop_ca_ops = {
         .ctx_update_snd = nop_ctx_update_snd,
         .ctx_update_rcv = nop_ctx_update_rcv,
         .ctx_update_ece = nop_ctx_update_ece,
-        .wnd_wait       = nop_wnd_wait,
         .calc_ecn       = nop_calc_ecn,
+        .marks_ecn      = false,
         .print_stats    = NULL
 };
 
@@ -45,51 +45,52 @@ void nop_ctx_destroy(void * ctx)
         (void) ctx;
 }
 
-ca_wnd_t nop_ctx_update_snd(void * ctx,
-                            size_t len)
+time_t nop_ctx_update_snd(void *     ctx,
+                          size_t     len,
+                          uint8_t    lecn,
+                          uint64_t * ftag)
 {
-        ca_wnd_t wnd;
-
         (void) ctx;
         (void) len;
+        (void) lecn;
+        (void) ftag;
 
-        memset(&wnd, 0, sizeof(wnd));
-
-        return wnd;
-}
-
-void nop_wnd_wait(ca_wnd_t wnd)
-{
-        (void) wnd;
+        return 0;
 }
 
 bool nop_ctx_update_rcv(void *     ctx,
                         size_t     len,
                         uint8_t    ecn,
-                        uint16_t * ece)
+                        uint8_t    cap,
+                        uint16_t * ece,
+                        uint8_t *  fcap)
 {
         (void) ctx;
         (void) len;
         (void) ecn;
+        (void) cap;
         (void) ece;
+        (void) fcap;
 
         return false;
 }
 
 void nop_ctx_update_ece(void *   ctx,
-                        uint16_t ece)
+                        uint16_t ece,
+                        uint8_t  cap)
 {
         (void) ctx;
         (void) ece;
+        (void) cap;
 }
 
 
-int nop_calc_ecn(int       fd,
+int nop_calc_ecn(size_t    queued,
                  uint8_t * ecn,
                  qoscube_t qc,
                  size_t    len)
 {
-        (void) fd;
+        (void) queued;
         (void) len;
         (void) ecn;
         (void) qc;

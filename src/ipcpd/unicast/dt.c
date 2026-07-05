@@ -36,6 +36,7 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/ipcp-dev.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/rib.h>
 #ifdef IPCP_FLOW_STATS
@@ -46,6 +47,7 @@
 #include "common/comp.h"
 #include "common/connmgr.h"
 #include "ca.h"
+#include "cap.h"
 #include "ipcp.h"
 #include "dt.h"
 #include "pff.h"
@@ -78,12 +80,14 @@ struct comp_info {
 #define TTL_LEN 1
 #define QOS_LEN 1
 #define ECN_LEN 1
+#define CAP_LEN 1
 
 struct dt_pci {
         uint64_t  dst_addr;
         qoscube_t qc;
         uint8_t   ttl;
         uint8_t   ecn;
+        uint8_t   cap;
         uint64_t  eid;
 };
 
@@ -96,6 +100,7 @@ struct {
         size_t          qc_o;
         size_t          ttl_o;
         size_t          ecn_o;
+        size_t          cap_o;
         size_t          eid_o;
 
         /* Initial TTL value */
@@ -115,6 +120,7 @@ static void dt_pci_ser(uint8_t *       head,
         memcpy(head + dt_pci_info.qc_o, &dt_pci->qc, QOS_LEN);
         memcpy(head + dt_pci_info.ttl_o, &ttl, TTL_LEN);
         memcpy(head + dt_pci_info.ecn_o, &dt_pci->ecn, ECN_LEN);
+        memcpy(head + dt_pci_info.cap_o, &dt_pci->cap, CAP_LEN);
         memcpy(head + dt_pci_info.eid_o, &dt_pci->eid, dt_pci_info.eid_size);
 
 }
@@ -133,6 +139,7 @@ static void dt_pci_des(uint8_t *       head,
         memcpy(&dt_pci->qc, head + dt_pci_info.qc_o, QOS_LEN);
         memcpy(&dt_pci->ttl, head + dt_pci_info.ttl_o, TTL_LEN);
         memcpy(&dt_pci->ecn, head + dt_pci_info.ecn_o, ECN_LEN);
+        memcpy(&dt_pci->cap, head + dt_pci_info.cap_o, CAP_LEN);
         memcpy(&dt_pci->eid, head + dt_pci_info.eid_o, dt_pci_info.eid_size);
 }
 
@@ -301,12 +308,12 @@ static int dt_rib_readdir(char *** buf)
         if (*buf == NULL)
                 goto fail_entries;
 
-        for (i = 0; i < PROC_MAX_FLOWS; ++i) {
+        for (i = 0; i < PROC_MAX_FLOWS && idx < (int) dt.n_flows; ++i) {
                 pthread_mutex_lock(&dt.stat[i].lock);
 
                 if (dt.stat[i].stamp == 0) {
                         pthread_mutex_unlock(&dt.stat[i].lock);
-                        break;
+                        continue; /* n-1 flows start at PROC_RES_FDS */
                 }
 
                 pthread_mutex_unlock(&dt.stat[i].lock);
@@ -328,6 +335,7 @@ static int dt_rib_readdir(char *** buf)
  fail_entry:
         while (idx-- > 0)
                 free((*buf)[idx]);
+
         free(*buf);
  fail_entries:
         pthread_rwlock_unlock(&dt.lock);
@@ -413,6 +421,7 @@ static void handle_event(void *       self,
 #ifdef IPCP_FLOW_STATS
                 stat_used(fd, c->conn_info.addr);
 #endif
+                cap_reset(fd);
                 psched_add(dt.psched, fd);
                 log_dbg("Added fd %d to packet scheduler.", fd);
                 break;
@@ -429,15 +438,17 @@ static void handle_event(void *       self,
         }
 }
 
-static void packet_handler(int                  fd,
-                           qoscube_t            qc,
-                           struct ssm_pk_buff * spb)
+static time_t packet_handler(int                  fd,
+                             qoscube_t            qc,
+                             struct ssm_pk_buff * spb)
 {
         struct dt_pci dt_pci;
         int           ret;
         int           ofd;
         uint8_t *     head;
         size_t        len;
+        size_t        qlen;
+        bool          marks;
 
         len = ssm_pk_buff_len(spb);
 
@@ -456,7 +467,7 @@ static void packet_handler(int                  fd,
                         log_dbg("TTL was zero.");
                         ipcp_spb_release(spb);
                         dt_stat_inc(fd, r_drp, qc, len);
-                        return;
+                        return 0;
                 }
 
                 /* FIXME: Use qoscube from PCI instead of incoming flow. */
@@ -466,10 +477,16 @@ static void packet_handler(int                  fd,
                                 dt_pci.dst_addr);
                         ipcp_spb_release(spb);
                         dt_stat_inc(fd, f_nhp, qc, len);
-                        return;
+                        return 0;
                 }
 
-                (void) ca_calc_ecn(ofd, head + dt_pci_info.ecn_o, qc, len);
+                marks = ca_marks_ecn();
+                qlen  = marks ? ipcp_flow_queued(ofd) : 0;
+
+                (void) ca_calc_ecn(qlen, head + dt_pci_info.ecn_o, qc, len);
+
+                if (marks)
+                        cap_stamp(head + dt_pci_info.cap_o, cap_get(ofd));
 
                 ret = ipcp_flow_write(ofd, spb);
                 if (ret < 0) {
@@ -478,23 +495,27 @@ static void packet_handler(int                  fd,
                                 notifier_event(NOTIFY_DT_FLOW_DOWN, &ofd);
                         ipcp_spb_release(spb);
                         dt_stat_inc(ofd, w_drp, qc, len);
-                        return;
+                        return 0;
                 }
 
                 dt_stat_inc(ofd, snd, qc, len);
+
+                if (marks)
+                        cap_update(ofd, qlen, len);
         } else {
                 dt_pci_shrink(spb);
                 if (dt_pci.eid >= PROC_RES_FDS) {
                         uint8_t ecn = *(head + dt_pci_info.ecn_o);
-                        fa_np1_rcv(dt_pci.eid, ecn, spb);
-                        return;
+                        uint8_t cap = *(head + dt_pci_info.cap_o);
+                        fa_np1_rcv(dt_pci.eid, ecn, cap, spb);
+                        return 0;
                 }
 
                 if (dt.comps[dt_pci.eid].post_packet == NULL) {
                         log_err("No registered component on eid %" PRIu64 ".",
                                 dt_pci.eid);
                         ipcp_spb_release(spb);
-                        return;
+                        return 0;
                 }
                 dt_stat_inc(fd, lcl_r, qc, len);
                 dt_stat_inc(dt_pci.eid, snd, qc, len);
@@ -502,6 +523,8 @@ static void packet_handler(int                  fd,
                 dt.comps[dt_pci.eid].post_packet(dt.comps[dt_pci.eid].comp,
                                                  spb);
         }
+
+        return 0;
 }
 
 static void * dt_conn_handle(void * o)
@@ -560,8 +583,14 @@ int dt_init(struct dt_config cfg)
         dt_pci_info.qc_o      = dt_pci_info.addr_size;
         dt_pci_info.ttl_o     = dt_pci_info.qc_o + QOS_LEN;
         dt_pci_info.ecn_o     = dt_pci_info.ttl_o + TTL_LEN;
-        dt_pci_info.eid_o     = dt_pci_info.ecn_o + ECN_LEN;
+        dt_pci_info.cap_o     = dt_pci_info.ecn_o + ECN_LEN;
+        dt_pci_info.eid_o     = dt_pci_info.cap_o + CAP_LEN;
         dt_pci_info.head_size = dt_pci_info.eid_o + dt_pci_info.eid_size;
+
+        if (cap_init() < 0) {
+                log_err("Failed to init capacity estimator.");
+                goto fail_cap;
+        }
 
         if (connmgr_comp_init(COMPID_DT, &info)) {
                 log_err("Failed to register with connmgr.");
@@ -642,6 +671,8 @@ int dt_init(struct dt_config cfg)
  fail_routing:
         connmgr_comp_fini(COMPID_DT);
  fail_connmgr_comp_init:
+        cap_fini();
+ fail_cap:
         return -1;
 }
 
@@ -671,6 +702,8 @@ void dt_fini(void)
         routing_fini();
 
         connmgr_comp_fini(COMPID_DT);
+
+        cap_fini();
 }
 
 int dt_start(void)
@@ -773,13 +806,16 @@ void dt_unreg_comp(int eid)
 int dt_write_packet(uint64_t             dst_addr,
                     qoscube_t            qc,
                     uint64_t             eid,
-                    struct ssm_pk_buff * spb)
+                    struct ssm_pk_buff * spb,
+                    uint8_t *            ecn)
 {
         struct dt_pci dt_pci;
         int           fd;
         int           ret;
         uint8_t *     head;
         size_t        len;
+        size_t        qlen;
+        bool          marks;
 
         assert(spb);
         assert(dst_addr != dt.addr);
@@ -813,8 +849,18 @@ int dt_write_packet(uint64_t             dst_addr,
         dt_pci.qc       = qc;
         dt_pci.eid      = eid;
         dt_pci.ecn      = 0;
+        dt_pci.cap      = 0;
 
-        (void) ca_calc_ecn(fd, &dt_pci.ecn, qc, len);
+        marks = ca_marks_ecn();
+        qlen  = marks ? ipcp_flow_queued(fd) : 0;
+
+        (void) ca_calc_ecn(qlen, &dt_pci.ecn, qc, len);
+
+        if (marks)
+                dt_pci.cap = cap_get(fd);
+
+        if (ecn != NULL)
+                *ecn = dt_pci.ecn;
 
         dt_pci_ser(head, &dt_pci);
 
@@ -828,14 +874,19 @@ int dt_write_packet(uint64_t             dst_addr,
 #ifdef IPCP_FLOW_STATS
         if (dt_pci.eid < PROC_RES_FDS)
                 dt_stat_inc(fd, lcl_w, qc, len);
+
         dt_stat_inc(fd, snd, qc, len);
 #endif
+        if (marks)
+                cap_update(fd, qlen, len);
+
         return 0;
 
  fail_write:
 #ifdef IPCP_FLOW_STATS
         if (eid < PROC_RES_FDS)
                 dt_stat_inc(fd, lcl_w, qc, len);
+
         dt_stat_inc(fd, w_drp, qc, len);
 #endif
         return -1;

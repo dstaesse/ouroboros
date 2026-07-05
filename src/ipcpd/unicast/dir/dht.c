@@ -2238,7 +2238,7 @@ static int dht_send_msg(dht_msg_t * msg,
 
         dht_msg__pack(msg, ssm_pk_buff_head(spb));
 
-        if (dt_write_packet(addr, QOS_CUBE_BE, dht.eid, spb) < 0) {
+        if (dt_write_packet(addr, QOS_CUBE_BE, dht.eid, spb, NULL) < 0) {
                 log_warn("%s write failed", DHT_CODE(msg));
                 goto fail_send;
         }
