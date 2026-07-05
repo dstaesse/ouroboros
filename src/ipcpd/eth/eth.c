@@ -1942,15 +1942,22 @@ static int eth_init_raw_socket(struct ifreq * ifr)
 #endif
 
         sndbuf = IPCP_ETH_SNDBUF;
-        if (sndbuf > 0 && setsockopt(eth_data.s_fd, SOL_SOCKET, SO_SNDBUF,
-                                     &sndbuf, sizeof(sndbuf))) {
-                log_info("Failed to set SO_SNDBUF to %d.", sndbuf);
+        if (sndbuf > 0) {
+                /* Never below one frame or sendto() cannot fit an SDU. */
+                sndbuf = MAX(sndbuf, (int) (ETH_HEADER_TOT_SIZE + ETH_MTU));
+                if (setsockopt(eth_data.s_fd, SOL_SOCKET, SO_SNDBUF,
+                               &sndbuf, sizeof(sndbuf)))
+                        log_info("Failed to set SO_SNDBUF to %d.", sndbuf);
         }
 
         rcvbuf = IPCP_ETH_RCVBUF;
-        if (rcvbuf > 0 && setsockopt(eth_data.s_fd, SOL_SOCKET, SO_RCVBUF,
-                                     &rcvbuf, sizeof(rcvbuf))) {
-                log_info("Failed to set SO_RCVBUF to %d.", rcvbuf);
+        if (rcvbuf > 0) {
+                /* SO_RCVBUFFORCE bypasses rmem_max; SO_RCVBUF is fallback. */
+                if (setsockopt(eth_data.s_fd, SOL_SOCKET, SO_RCVBUFFORCE,
+                               &rcvbuf, sizeof(rcvbuf))
+                    && setsockopt(eth_data.s_fd, SOL_SOCKET, SO_RCVBUF,
+                                  &rcvbuf, sizeof(rcvbuf)))
+                        log_info("Failed to set SO_RCVBUF to %d.", rcvbuf);
         }
 
         if (bind(eth_data.s_fd, (struct sockaddr *) &eth_data.device,
