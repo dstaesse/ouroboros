@@ -850,9 +850,10 @@ static void init(int     argc,
                  char ** argv,
                  char ** envp)
 {
-        struct proc_info info;
-        char * prog = argv[0];
-        int    i;
+        struct proc_info     info;
+        char *               prog = argv[0];
+        int                  i;
+        pthread_rwlockattr_t attr;
 #ifdef PROC_FLOW_STATS
         char   procstr[32];
 #endif
@@ -937,7 +938,16 @@ static void init(int     argc,
                 goto fail_cond;
         }
 
-        if (pthread_rwlock_init(&proc.lock, NULL) < 0) {
+        /* Writer-preferred: FRCT readers must not starve flow accept. */
+        if (pthread_rwlockattr_init(&attr) != 0) {
+                fprintf(stderr, "FATAL: Could not init rwlock attributes.\n");
+                goto fail_rwlock_attr;
+        }
+#if defined(__GLIBC__)
+        pthread_rwlockattr_setkind_np(
+                &attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+#endif
+        if (pthread_rwlock_init(&proc.lock, &attr) != 0) {
                 fprintf(stderr, "FATAL: Could not initialize flow lock.\n");
                 goto fail_flow_lock;
         }
@@ -967,6 +977,8 @@ static void init(int     argc,
                 }
         }
 #endif
+        pthread_rwlockattr_destroy(&attr);
+
         return;
 
 #if defined PROC_FLOW_STATS
@@ -980,6 +992,8 @@ static void init(int     argc,
  fail_fqset:
         pthread_rwlock_destroy(&proc.lock);
  fail_flow_lock:
+        pthread_rwlockattr_destroy(&attr);
+ fail_rwlock_attr:
         pthread_cond_destroy(&proc.cond);
  fail_cond:
         pthread_mutex_destroy(&proc.mtx);
