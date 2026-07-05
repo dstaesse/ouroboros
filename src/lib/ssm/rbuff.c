@@ -242,6 +242,15 @@ void ssm_rbuff_close(struct ssm_rbuff * rb)
         rbuff_destroy(rb);
 }
 
+/* Cancel cleanup for a blocked reader: unlock mtx AND drop the n_users ref. */
+static void __cleanup_rbuff_reader(void * o)
+{
+        struct ssm_rbuff * rb = (struct ssm_rbuff *) o;
+
+        pthread_mutex_unlock(rb->mtx);
+        __atomic_fetch_sub(&rb->n_users, 1, __ATOMIC_SEQ_CST);
+}
+
 int ssm_rbuff_write(struct ssm_rbuff * rb,
                     size_t             off)
 {
@@ -318,7 +327,7 @@ int ssm_rbuff_write_b(struct ssm_rbuff *      rb,
 
         robust_mutex_lock(rb->mtx);
 
-        pthread_cleanup_push(__cleanup_mutex_unlock, rb->mtx);
+        pthread_cleanup_push(__cleanup_rbuff_reader, rb);
 
         while (IS_FULL(rb) && ret != -ETIMEDOUT) {
                 flags = __atomic_load_n(rb->flags, __ATOMIC_SEQ_CST);
@@ -417,7 +426,7 @@ ssize_t ssm_rbuff_read_b(struct ssm_rbuff *      rb,
 
         robust_mutex_lock(rb->mtx);
 
-        pthread_cleanup_push(__cleanup_mutex_unlock, rb->mtx);
+        pthread_cleanup_push(__cleanup_rbuff_reader, rb);
 
         while (IS_EMPTY(rb) &&
                idx != -ETIMEDOUT &&
@@ -483,12 +492,14 @@ void ssm_rbuff_fini(struct ssm_rbuff * rb)
 
         robust_mutex_lock(rb->mtx);
 
-        pthread_cleanup_push(__cleanup_mutex_unlock, rb->mtx);
+        pthread_cleanup_push(__cleanup_rbuff_reader, rb);
 
         while (!IS_EMPTY(rb))
                 robust_wait(rb->del, rb->mtx, NULL);
 
-        pthread_cleanup_pop(true);
+        pthread_cleanup_pop(false);
+
+        pthread_mutex_unlock(rb->mtx);
 
         __atomic_fetch_sub(&rb->n_users, 1, __ATOMIC_SEQ_CST);
 }

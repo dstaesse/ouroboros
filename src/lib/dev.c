@@ -615,7 +615,12 @@ static int flow_rx_one(struct flow *     flow,
                         continue;
                 }
 
+                pthread_cleanup_push(__cleanup_rwlock_unlock, &proc.lock);
+
                 idx = ssm_rbuff_read_b(rx_rb, &wait_abs);
+
+                pthread_cleanup_pop(false);
+
                 if (idx == -ETIMEDOUT) {
                         pthread_rwlock_unlock(&proc.lock);
                         if (deadline_passed(abs))
