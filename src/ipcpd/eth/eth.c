@@ -83,6 +83,7 @@
 #include <linux/if_ether.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <linux/sockios.h>
 #endif
 
 #ifdef __FreeBSD__
@@ -437,6 +438,7 @@ static int eth_rib_read(const char * path,
                 int       queued = 0;
                 socklen_t optlen = sizeof(rcvbuf);
 #  if defined(__linux__)
+                int                  outq = 0;
                 struct tpacket_stats tp_stats;
                 socklen_t            tp_len = sizeof(tp_stats);
 #  endif
@@ -448,6 +450,7 @@ static int eth_rib_read(const char * path,
                            SO_SNDBUF, &sndbuf, &optlen);
                 ioctl(eth_data.s_fd, FIONREAD, &queued);
 #  if defined(__linux__)
+                ioctl(eth_data.s_fd, SIOCOUTQ, &outq);
                 if (getsockopt(eth_data.s_fd, SOL_PACKET,
                                PACKET_STATISTICS,
                                &tp_stats, &tp_len) == 0) {
@@ -483,12 +486,14 @@ static int eth_rib_read(const char * path,
                 n += sprintf(buf + n,
                         "Socket rcvbuf (bytes):           %20d\n"
                         "Socket sndbuf (bytes):           %20d\n"
-                        "Socket queued (bytes):           %20d\n",
+                        "Socket ingress (bytes):          %20d\n",
                         rcvbuf, sndbuf, queued);
 #  if defined(__linux__)
                 n += sprintf(buf + n,
+                        "Socket egress (bytes):           %20d\n"
                         "Kernel frames received:          %20zu\n"
                         "Kernel frames dropped:           %20zu\n",
+                        outq,
                         LOAD_RELAXED(&eth_data.stat.kern_rcv),
                         LOAD_RELAXED(&eth_data.stat.kern_drp));
 #  endif
@@ -576,6 +581,7 @@ static int eth_rib_readdir(char *** buf)
  fail_entry:
         while (idx-- > 0)
                 free((*buf)[idx]);
+
         free(*buf);
  fail_entries:
         pthread_rwlock_unlock(&eth_data.flows_lock);
