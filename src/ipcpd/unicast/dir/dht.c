@@ -3471,6 +3471,8 @@ static void value_list_destroy(struct list_head * vl)
 #define MUST_REPLICATE(v, now) ((now)->tv_sec > (v)->t_repl + dht.t_repl)
 #define MUST_REPUBLISH(v, now) /* Close to expiry deadline */ \
         (((v)->t_exp - (now)->tv_sec) < (DHT_N_REPUB * dht.t_repl))
+/* A local value must be (re)stored if near expiry or never stored. */
+#define MUST_STORE_LVAL(v, now) (MUST_REPUBLISH(v, now) || (v)->t_repl == 0)
 static void dht_entry_get_repl_lists(const struct dht_entry * e,
                                      struct list_head *       repl,
                                      struct list_head *       rebl,
@@ -3492,7 +3494,7 @@ static void dht_entry_get_repl_lists(const struct dht_entry * e,
 
         llist_for_each(p, &e->lvals) {
                 struct val_entry * v = list_entry(p, struct val_entry, next);
-                if (MUST_REPLICATE(v, now) && MUST_REPUBLISH(v, now)) {
+                if (MUST_REPLICATE(v, now) && MUST_STORE_LVAL(v, now)) {
                         /* Add expire time here, to allow creating val_entry */
                         n = val_entry_create(v->val, now->tv_sec + dht.t_exp);
                         if (n == NULL)
@@ -3781,6 +3783,9 @@ static void * work(void * o)
         intv = MAX(1, intv / n);
 
         log_dbg("DHT worker starting %ld seconds interval.", intv * n);
+
+        /* Flush names registered before we had peers to store them. */
+        dht_kv_replicate();
 
         while (true) {
                 int i = 0;
