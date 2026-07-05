@@ -1597,6 +1597,7 @@ static ssize_t dht_kv_get_contacts(const uint8_t *       key,
  fail_contact:
         while (i-- > 0)
                 dht_contact_msg__free_unpacked((*msgs)[i], NULL);
+
         free(*msgs);
         *msgs = NULL;
  fail_msgs:
@@ -1763,6 +1764,7 @@ static int split_bucket(struct bucket * b)
  fail_child:
         while (i-- > 0)
                 bucket_destroy(b->children[i]);
+
         return -1;
 }
 
@@ -2849,6 +2851,7 @@ static dht_msg_t * do_dht_kv_find_node_req(const dht_find_req_msg_t * req)
  fail_msg:
         while (len-- > 0)
                 dht_contact_msg__free_unpacked(contacts[len], NULL);
+
         free(contacts);
  fail_contacts:
         return NULL;
@@ -2953,6 +2956,7 @@ static dht_msg_t * do_dht_kv_find_value_req(const dht_find_req_msg_t * req)
  fail_vals:
         while (n_contacts-- > 0)
                 dht_contact_msg__free_unpacked(contacts[n_contacts], NULL);
+
         free(contacts);
  fail_contacts:
         return NULL;
@@ -3312,6 +3316,42 @@ static int emergency_peer(struct list_head * pl)
         return -ENOMEM;
 }
 
+static bool __dht_kv_bucket_has_addr(struct bucket * b,
+                                     uint64_t        addr)
+{
+        struct list_head * p;
+        size_t             i;
+
+        assert(b != NULL);
+
+        if (*b->children != NULL)
+                for (i = 0; i < (1L << DHT_BETA); ++i)
+                        if (__dht_kv_bucket_has_addr(b->children[i], addr))
+                                return true;
+
+        llist_for_each(p, &b->contacts) {
+                struct contact * c;
+                c = list_entry(p, struct contact, next);
+                if (c->addr == addr)
+                        return true;
+        }
+
+        return false;
+}
+
+static bool dht_kv_knows_peer(void)
+{
+        bool found;
+
+        pthread_rwlock_rdlock(&dht.db.lock);
+
+        found = __dht_kv_bucket_has_addr(dht.db.contacts.root, dht.peer);
+
+        pthread_rwlock_unlock(&dht.db.lock);
+
+        return found;
+}
+
 static int dht_kv_seed_bootstrap_peer(void)
 {
         struct list_head pl;
@@ -3322,6 +3362,9 @@ static int dht_kv_seed_bootstrap_peer(void)
                 log_dbg("No-one to contact.");
                 return 0;
         }
+
+        if (dht_kv_knows_peer())
+                return 0;
 
         if (emergency_peer(&pl) < 0) {
                 log_err("Could not create emergency peer.");
@@ -3338,7 +3381,8 @@ static int dht_kv_seed_bootstrap_peer(void)
 
         peer_list_destroy(&pl);
 
-        return 0;
+        /* Sent, but not bootstrapped until the peer is in the DHT. */
+        return -EAGAIN;
  fail_query:
         peer_list_destroy(&pl);
  fail_peer:
