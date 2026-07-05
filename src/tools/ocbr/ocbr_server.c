@@ -50,7 +50,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 
-#define THREADS_SIZE 10
+#define THREADS_SIZE 64
 
 pthread_t       listen_thread;
 pthread_t       threads[THREADS_SIZE];
