@@ -98,14 +98,14 @@ struct flow {
         ssize_t               part_idx;
 
         struct crypt_ctx *    crypt;
-        int                   headsz;         /* Selector                       */
-        int                   tailsz;         /* Tag + CRC                      */
+        int                   headsz;         /* Selector                  */
+        int                   tailsz;         /* Tag + CRC                 */
 
-        struct timespec       rk_grace;       /* TX-promote deadline (0 = none) */
-        struct timespec       rk_attempt;     /* Last re-key attempt (backoff)  */
-        bool                  rk_wm_inflight; /* Re-key trigger in flight       */
-        uint32_t              rk_wm_ctr;      /* Throttles the consult          */
-        bool                  rk_initiator;   /* OAP initiator this re-key      */
+        struct timespec       rk_grace;       /* TX-promote deadline       */
+        struct timespec       rk_attempt;     /* Last re-key attempt       */
+        bool                  rk_wm_inflight; /* Re-key trigger in flight  */
+        uint32_t              rk_wm_ctr;      /* Throttles the consult     */
+        bool                  rk_initiator;   /* OAP initiator this re-key */
 
         struct timespec       snd_act;
         struct timespec       rcv_act;

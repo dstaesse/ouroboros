@@ -1857,6 +1857,7 @@ struct frcti * frcti_create(int       fd,
              / SACK_BLOCK_SIZE;
         if (bb > SACK_MAX_BLOCKS)
                 bb = SACK_MAX_BLOCKS;
+
         frcti->sack_n_max = (uint16_t) bb;
 
         frcti->max_rcv_sdu = FRCT_MAX_SDU;
@@ -2062,6 +2063,7 @@ int frcti_set_rcv_ring_sz(struct frcti * frcti,
 
         if (!frcti->stream)
                 return -ENOTSUP;
+
         if (!stream_ring_sz_ok(frcti, n))
                 return -EINVAL;
 
@@ -2998,8 +3000,10 @@ static int tlp_arm(struct frcti * frcti)
         /* §7.3: one outstanding probe, MAX_TLP_PER_EP per recovery ep. */
         if (LOAD_RELAXED(&frcti->tlp_high_seq) != 0)
                 return 0;
+
         if (LOAD_RELAXED(&frcti->tlp_count) >= MAX_TLP_PER_EP)
                 return 0;
+
         if (__atomic_test_and_set(&frcti->tlp_pending, __ATOMIC_RELAXED))
                 return 0;
 
@@ -3082,15 +3086,20 @@ static bool rtt_sample_eligible(struct frcti * frcti,
 {
         if (flags & FRCT_RXM)
                 return false;
+
         if (frcti->snd_slots[p].flags & (SND_RTX | SND_TLP))
                 return false;
+
         if (LOAD_ACQUIRE(&frcti->snd_slots[p].rxm) == NULL)
                 return false;
+
         if (before(lwe, frcti->rtt_lwe))
                 return false;
+
         /* Don't seed srtt from a cum-ACK; let probes seed. */
         if (frcti->srtt == 0)
                 return false;
+
         return true;
 }
 
@@ -3584,6 +3593,7 @@ static bool sack_check(struct frcti *     frcti,
         n = dsack_consume(frcti, out->blocks);
         if (n == 1)
                 out->dsack = true;
+
         n += sack_blocks_build(frcti, out->blocks + n,
                                frcti->sack_n_max - n);
 
@@ -3646,6 +3656,7 @@ static void seqno_rotate(struct frcti * frcti,
 
         if (!ts_aged_ns(now_ns, snd_cr->act, snd_cr->inact))
                 return;
+
         /* Idle-on-wire ≠ idle e2e: don't orphan in-flight rxm. */
         if (snd_cr->seqno != snd_cr->lwe)
                 return;
@@ -3709,9 +3720,6 @@ static int frcti_snd(struct frcti *       frcti,
 
         memset(pci, 0, FRCT_PCILEN);
 
-        if (frcti->stream)
-                spci = FRCT_SPCI(pci);
-
         clock_gettime(PTHREAD_COND_CLOCK, &now);
         now_ns = TS_TO_UINT64(now);
 
@@ -3727,6 +3735,8 @@ static int frcti_snd(struct frcti *       frcti,
                 STAT_BUMP(frcti, frag_snd);
 
         if (frcti->stream) {
+                spci = FRCT_SPCI(pci);
+
                 if (flags & FRCT_FIN)
                         pci_flags |= FRCT_FIN;
 
