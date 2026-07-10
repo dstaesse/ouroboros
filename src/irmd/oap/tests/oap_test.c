@@ -269,6 +269,76 @@ static int test_oap_rekey_badcache_all(void)
         return ret;
 }
 
+/* Absent sec config (ENOENT) clears the KEX; a re-key must fail closed. */
+static int test_oap_cli_rejects_rekey_no_kex(void)
+{
+        struct oap_test_ctx ctx;
+
+        TEST_START();
+
+        test_enc_noauth_cfg();
+        test_cfg.cli.kex = NID_undef;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        ctx.rekey = true;
+
+        if (oap_cli_prepare_ctx(&ctx) == 0) {
+                printf("Client prepared a re-key without KEX.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_oap_srv_rejects_rekey_no_kex(void)
+{
+        struct oap_test_ctx ctx;
+
+        TEST_START();
+
+        test_enc_noauth_cfg();
+        test_cfg.cli.kex = NID_undef;
+        test_cfg.srv.kex = NID_undef;
+
+        if (oap_test_setup(&ctx, root_ca_crt_ec, im_ca_crt_ec) < 0)
+                goto fail;
+
+        /* First-contact plaintext request, replayed as a re-key. */
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        ctx.rekey = true;
+
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server accepted a re-key without KEX.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown(&ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_cleanup:
+        oap_test_teardown(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_oap_roundtrip_kex_only(void)
 {
         test_enc_noauth_cfg();
@@ -1945,6 +2015,8 @@ int oap_test(int    argc,
         ret |= test_oap_rekey_all();
         ret |= test_oap_rekey_badcache_all();
         ret |= test_oap_rekey_srv_badcache_all();
+        ret |= test_oap_cli_rejects_rekey_no_kex();
+        ret |= test_oap_srv_rejects_rekey_no_kex();
 
         ret |= test_oap_roundtrip_all();
         ret |= test_oap_roundtrip_md_all();
@@ -1990,6 +2062,8 @@ int oap_test(int    argc,
         (void) test_oap_rekey_all;
         (void) test_oap_rekey_badcache_all;
         (void) test_oap_rekey_srv_badcache_all;
+        (void) test_oap_cli_rejects_rekey_no_kex;
+        (void) test_oap_srv_rejects_rekey_no_kex;
         (void) test_oap_roundtrip;
         (void) test_oap_roundtrip_all;
         (void) test_oap_roundtrip_md;

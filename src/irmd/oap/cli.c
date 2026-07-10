@@ -291,6 +291,13 @@ int oap_cli_prepare(void **                  ctx,
                 goto fail_kex;
         }
 
+        /* A re-keyed flow is encrypted; absent config must fail closed. */
+        if (rekey && !IS_KEX_ALGO_SET(&s->scfg)) {
+                log_err_id(s->id.data, "Refusing re-key without KEX for %s.",
+                           info->name);
+                goto fail_kex;
+        }
+
         /* Re-key forces server-encap: client-encap forfeits FS/PCS. */
         if (rekey && s->scfg.x.mode == KEM_MODE_CLIENT_ENCAP) {
                 s->scfg.x.mode = KEM_MODE_SERVER_ENCAP;

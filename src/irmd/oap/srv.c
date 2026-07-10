@@ -473,6 +473,12 @@ int oap_srv_process(const struct name_info * info,
                 peer_crt->len = peer_hdr.crt.len;
         }
 
+        /* A re-keyed flow is encrypted; refuse a plaintext re-key. */
+        if (rekey && peer_hdr.kex.len == 0) {
+                log_err_id(id, "Re-key request without KEX.");
+                goto fail_kex;
+        }
+
         if (do_server_kex(info, &peer_hdr, &scfg, &local_hdr.kex, sk) < 0)
                 goto fail_kex;
 
