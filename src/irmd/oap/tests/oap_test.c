@@ -1987,6 +1987,9 @@ int oap_test(int    argc,
         (void) test_oap_roundtrip_auth_only;
         (void) test_oap_roundtrip_kex_only;
         (void) test_oap_piggyback_data;
+        (void) test_oap_rekey_all;
+        (void) test_oap_rekey_badcache_all;
+        (void) test_oap_rekey_srv_badcache_all;
         (void) test_oap_roundtrip;
         (void) test_oap_roundtrip_all;
         (void) test_oap_roundtrip_md;
@@ -1999,14 +2002,15 @@ int oap_test(int    argc,
         (void) test_oap_deflated_length_field;
         (void) test_oap_nid_without_kex;
         (void) test_oap_unsupported_nid;
+        (void) test_oap_unsupported_nid_undefined;
+        (void) test_oap_unsupported_nid_all;
         (void) test_oap_cipher_mismatch;
         (void) test_oap_srv_enc_cli_none;
         (void) test_oap_cli_enc_srv_none;
         (void) test_oap_cli_rejects_downgrade;
         (void) test_oap_cli_rejects_suite_swap;
         (void) test_oap_srv_rejects_weak_kex;
-        (void) test_oap_outdated_packet;
-        (void) test_oap_future_packet;
+        (void) test_oap_ts_reject_all;
         (void) test_oap_replay_packet;
         (void) test_oap_replay_generations;
         (void) test_oap_missing_root_ca;
@@ -2018,6 +2022,8 @@ int oap_test(int    argc,
         (void) test_oap_srv_rejects_md_mismatch;
         (void) test_oap_server_cert_hidden;
         (void) test_oap_sealed_tamper;
+        (void) test_oap_cleartext_echo_tamper;
+        (void) test_oap_response_id_tamper;
         (void) test_oap_rekey;
         (void) test_oap_rekey_badcache;
 
