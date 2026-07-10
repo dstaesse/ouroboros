@@ -627,8 +627,8 @@ int dt_init(struct dt_config cfg)
         for (i = 0; i < PROC_MAX_FLOWS; ++i)
                 pthread_mutex_destroy(&dt.stat[i].lock);
  fail_stat_lock:
-#endif
         bmp_destroy(dt.res_fds);
+#endif
  fail_res_fds:
         pthread_rwlock_destroy(&dt.lock);
  fail_rwlock_init:
