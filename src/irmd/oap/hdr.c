@@ -292,9 +292,9 @@ static void write_oap_fixed(uint8_t *                 buf,
                         kex_len |= OAP_KEX_ROLE_BIT;
         }
 
-        kex_len = hton16(kex_len);
-        memcpy(buf + offset, &kex_len, sizeof(kex_len));
-        offset += sizeof(kex_len);
+        v = hton16(kex_len);
+        memcpy(buf + offset, &v, sizeof(v));
+        offset += sizeof(v);
 
         v = hton16((uint16_t) data_len);
         memcpy(buf + offset, &v, sizeof(v));
