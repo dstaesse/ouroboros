@@ -2954,7 +2954,7 @@ static dht_msg_t * do_dht_kv_find_value_req(const dht_find_req_msg_t * req)
  fail_msg:
         freebufs(vals, n_vals);
  fail_vals:
-        while (n_contacts-- > 0)
+        while (contacts != NULL && n_contacts-- > 0)
                 dht_contact_msg__free_unpacked(contacts[n_contacts], NULL);
 
         free(contacts);
