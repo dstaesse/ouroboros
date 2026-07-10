@@ -107,6 +107,7 @@ static struct name_entry * __reg_prog_get_name(const struct reg_prog * prog,
         llist_for_each(p, &prog->names) {
                 struct name_entry * entry;
                 entry = list_entry(p, struct name_entry, next);
+                assert(entry->name != NULL);
                 if (strcmp(entry->name, name) == 0)
                         return entry;
         }
@@ -128,7 +129,7 @@ int reg_prog_add_name(struct reg_prog * prog,
         }
 
         entry->name = strdup(name);
-        if (entry == NULL) {
+        if (entry->name == NULL) {
                 log_err("Failed to strdup name.");
                 goto fail_name;
         }

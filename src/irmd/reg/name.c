@@ -157,6 +157,8 @@ static struct prog_entry * __reg_name_get_prog(const struct reg_name * name,
         llist_for_each(p, &name->progs) {
                 struct prog_entry * entry;
                 entry = list_entry(p, struct prog_entry, next);
+                assert(entry->exec != NULL);
+                assert(entry->exec[0] != NULL);
                 if (strcmp(entry->exec[0], prog) == 0)
                         return entry;
         }

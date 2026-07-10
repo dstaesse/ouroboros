@@ -119,6 +119,7 @@ static struct name_entry * __reg_proc_get_name(const struct reg_proc * proc,
         llist_for_each(p, &proc->names) {
                 struct name_entry * entry;
                 entry = list_entry(p, struct name_entry, next);
+                assert(entry->name != NULL);
                 if (strcmp(entry->name, name) == 0)
                         return entry;
         }
@@ -140,7 +141,7 @@ int reg_proc_add_name(struct reg_proc * proc,
         }
 
         entry->name = strdup(name);
-        if (entry == NULL) {
+        if (entry->name == NULL) {
                 log_err("Failed to strdup name.");
                 goto fail_name;
         }
