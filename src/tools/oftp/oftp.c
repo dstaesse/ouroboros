@@ -65,9 +65,11 @@ static void apply_rto_min_env(int fd)
         env = getenv("OFTP_FRCT_RTO_MIN");
         if (env == NULL)
                 return;
+
         v = strtol(env, NULL, 10);
         if (v <= 0)
                 return;
+
         if (fccntl(fd, FRCTSRTOMIN, (time_t) v) < 0)
                 fprintf(stderr,
                         "oftp: failed to set RTO_MIN=%ld ns\n", v);
@@ -81,9 +83,11 @@ static void apply_stream_ring_sz_env(int fd)
         env = getenv("OFTP_FRCT_STREAM_RING_SZ");
         if (env == NULL)
                 return;
+
         v = strtol(env, NULL, 10);
         if (v <= 0)
                 return;
+
         if (fccntl(fd, FRCTSRRINGSZ, (size_t) v) < 0)
                 fprintf(stderr,
                         "oftp: failed to set STREAM_RING_SZ=%ld\n", v);
@@ -301,7 +305,7 @@ static int server_main(const char * outpath)
         fd = flow_accept(&qs, NULL);
         if (fd < 0) {
                 fprintf(stderr, "flow_accept failed: %d\n", fd);
-                if (out != stdout)
+                if (outpath != NULL)
                         fclose(out);
                 return 1;
         }
@@ -311,7 +315,7 @@ static int server_main(const char * outpath)
                         "oftp: rejecting non-stream flow (service=%u)\n",
                         qs.service);
                 flow_dealloc(fd);
-                if (out != stdout) {
+                if (outpath != NULL) {
                         fclose(out);
                         unlink(outpath);
                 }
@@ -325,7 +329,7 @@ static int server_main(const char * outpath)
 
         flow_dealloc(fd);
 
-        if (out != stdout) {
+        if (outpath != NULL) {
                 fclose(out);
                 /* Drop the half-written file on abort/interrupt. */
                 if (rc != 0)
@@ -358,7 +362,7 @@ static int client_main(const char * name,
         fd = flow_alloc(name, &qs, NULL);
         if (fd < 0) {
                 fprintf(stderr, "flow_alloc failed: %d\n", fd);
-                if (in != stdin)
+                if (inpath != NULL)
                         fclose(in);
                 return 2;
         }
@@ -370,7 +374,7 @@ static int client_main(const char * name,
 
         flow_dealloc(fd);
 
-        if (in != stdin)
+        if (inpath != NULL)
                 fclose(in);
 
         return rc;
