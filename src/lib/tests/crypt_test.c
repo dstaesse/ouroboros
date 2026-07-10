@@ -51,12 +51,20 @@ static int test_crypt_create_destroy(void)
         memset(key, 0, sizeof(key));
 
         ctx = crypt_create_ctx(&sk);
+#ifdef HAVE_OPENSSL
         if (ctx == NULL) {
                 printf("Failed to initialize cryptography.\n");
                 goto fail;
         }
 
         crypt_destroy_ctx(ctx);
+#else
+        if (ctx != NULL) {
+                printf("Created cipher context without a backend.\n");
+                crypt_destroy_ctx(ctx);
+                goto fail;
+        }
+#endif
 
         TEST_SUCCESS();
 
