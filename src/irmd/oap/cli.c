@@ -385,26 +385,9 @@ static int do_client_kex_complete_kem(struct oap_cli_ctx *   s,
         struct sec_config * scfg    = &s->scfg;
         uint8_t *           id      = s->id.data;
         uint8_t             key_buf[SYMMKEYSZ];
+        buffer_t            ct;
 
-        if (scfg->x.mode == KEM_MODE_SERVER_ENCAP) {
-                buffer_t ct;
-
-                if (peer_hdr->kex.len == 0) {
-                        log_err_id(id, "Server did not send KEM CT.");
-                        return -ECRYPT;
-                }
-
-                ct.data = peer_hdr->kex.data;
-                ct.len  = peer_hdr->kex.len;
-
-                if (kex_kem_decap(s->pkp, ct, scfg->k.nid, key_buf) < 0) {
-                        log_err_id(id, "Failed to decapsulate KEM.");
-                        return -ECRYPT;
-                }
-
-                log_dbg_id(id, "Client decapsulated server CT.");
-
-        } else if (scfg->x.mode == KEM_MODE_CLIENT_ENCAP) {
+        if (scfg->x.mode == KEM_MODE_CLIENT_ENCAP) {
                 /* Key already derived during prepare */
                 memcpy(sk->key, s->key, SYMMKEYSZ);
                 sk->nid = scfg->c.nid;
@@ -412,6 +395,22 @@ static int do_client_kex_complete_kem(struct oap_cli_ctx *   s,
                             scfg->c.str);
                 return 0;
         }
+
+        /* KEM_MODE_SERVER_ENCAP */
+        if (peer_hdr->kex.len == 0) {
+                log_err_id(id, "Server did not send KEM CT.");
+                return -ECRYPT;
+        }
+
+        ct.data = peer_hdr->kex.data;
+        ct.len  = peer_hdr->kex.len;
+
+        if (kex_kem_decap(s->pkp, ct, scfg->k.nid, key_buf) < 0) {
+                log_err_id(id, "Failed to decapsulate KEM.");
+                return -ECRYPT;
+        }
+
+        log_dbg_id(id, "Client decapsulated server CT.");
 
         memcpy(sk->key, key_buf, SYMMKEYSZ);
         sk->nid = scfg->c.nid;
