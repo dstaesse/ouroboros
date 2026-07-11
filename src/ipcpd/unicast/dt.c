@@ -158,6 +158,7 @@ struct {
         struct pff *       pff[QOS_CUBE_MAX];
         struct routing_i * routing[QOS_CUBE_MAX];
 #ifdef IPCP_FLOW_STATS
+        /* Flow stats use lock-free atomics; stamp is the validity flag. */
         struct {
                 time_t          stamp;
                 uint64_t        addr;
@@ -175,7 +176,6 @@ struct {
                 size_t          w_drp_bytes[QOS_CUBE_MAX];
                 size_t          f_nhp_pkt[QOS_CUBE_MAX];
                 size_t          f_nhp_bytes[QOS_CUBE_MAX];
-                pthread_mutex_t lock;
         } stat[PROC_MAX_FLOWS];
 
         size_t             n_flows;
@@ -187,10 +187,6 @@ struct {
         pthread_t          listener;
 } dt;
 
-/*
- * Flow stats are lock-free relaxed atomics on the data path; the per-flow
- * lock still guards the stamp/addr/n_flows lifecycle (see stat_used).
- */
 #ifdef IPCP_FLOW_STATS
 #define dt_stat_inc(idx, name, qc, len) \
         do { \
@@ -211,6 +207,8 @@ static int dt_rib_read(const char * path,
         char        tmstr[RIB_TM_STRLEN];
         size_t      rxqlen = 0;
         size_t      txqlen = 0;
+        time_t      stamp;
+        uint64_t    addr;
         struct tm * tm;
 
         /* NOTE: we may need stronger checks. */
@@ -224,19 +222,18 @@ static int dt_rib_read(const char * path,
 
         buf[0] = '\0';
 
-        pthread_mutex_lock(&dt.stat[fd].lock);
-
-        if (dt.stat[fd].stamp == 0) {
-                pthread_mutex_unlock(&dt.stat[fd].lock);
+        stamp = LOAD_ACQUIRE(&dt.stat[fd].stamp);
+        if (stamp == 0)
                 return 0;
-        }
 
-        if (dt.stat[fd].addr == dt.addr)
+        addr = LOAD_RELAXED(&dt.stat[fd].addr);
+
+        if (addr == dt.addr)
                 sprintf(addrstr, "%s", dt.comps[fd].name);
         else
-                sprintf(addrstr, ADDR_FMT32, ADDR_VAL32(&dt.stat[fd].addr));
+                sprintf(addrstr, ADDR_FMT32, ADDR_VAL32(&addr));
 
-        tm = gmtime(&dt.stat[fd].stamp);
+        tm = gmtime(&stamp);
         strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
 
         if (fd >= PROC_RES_FDS) {
@@ -286,8 +283,6 @@ static int dt_rib_read(const char * path,
                 strcat(buf, str);
         }
 
-        pthread_mutex_unlock(&dt.stat[fd].lock);
-
         return RIB_FILE_STRLEN;
 }
 
@@ -309,14 +304,8 @@ static int dt_rib_readdir(char *** buf)
                 goto fail_entries;
 
         for (i = 0; i < PROC_MAX_FLOWS && idx < (int) dt.n_flows; ++i) {
-                pthread_mutex_lock(&dt.stat[i].lock);
-
-                if (dt.stat[i].stamp == 0) {
-                        pthread_mutex_unlock(&dt.stat[i].lock);
+                if (LOAD_RELAXED(&dt.stat[i].stamp) == 0)
                         continue; /* n-1 flows start at PROC_RES_FDS */
-                }
-
-                pthread_mutex_unlock(&dt.stat[i].lock);
 
                 sprintf(entry, "%zu", i);
 
@@ -347,23 +336,22 @@ static int dt_rib_getattr(const char *      path,
 {
         int    fd;
         char * entry;
+        time_t stamp;
 
         entry = strstr(path, RIB_SEPARATOR) + 1;
         assert(entry);
 
         fd = atoi(entry);
 
-        pthread_mutex_lock(&dt.stat[fd].lock);
+        stamp = LOAD_ACQUIRE(&dt.stat[fd].stamp);
 
-        if (dt.stat[fd].stamp != -1) {
+        if (stamp != -1) {
                 attr->size  = RIB_FILE_STRLEN;
-                attr->mtime = dt.stat[fd].stamp;
+                attr->mtime = stamp;
         } else {
                 attr->size  = 0;
                 attr->mtime = 0;
         }
-
-        pthread_mutex_unlock(&dt.stat[fd].lock);
 
         return 0;
 }
@@ -374,30 +362,45 @@ static struct rib_ops r_ops = {
         .getattr = dt_rib_getattr
 };
 
-/*
- * Hold dt.lock + per-stat together: dt_rib_readdir samples n_flows
- * under rdlock and walks stamps under per-stat; updates must be
- * atomic w.r.t. that snapshot or the malloc(n_flows) buffer can
- * overflow.
- */
 static void stat_used(int      fd,
                       uint64_t addr)
 {
         struct timespec now;
+        int             i;
 
         clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
         pthread_rwlock_wrlock(&dt.lock);
-        pthread_mutex_lock(&dt.stat[fd].lock);
 
-        memset(&dt.stat[fd], 0, sizeof(dt.stat[fd]));
+        STORE_RELEASE(&dt.stat[fd].stamp, 0);
 
-        dt.stat[fd].stamp = (addr != INVALID_ADDR) ? now.tv_sec : 0;
-        dt.stat[fd].addr = addr;
+        /* Don't memset: incremented without locks in fast path. */
+        for (i = 0; i < QOS_CUBE_MAX; ++i) {
+                STORE_RELAXED(&dt.stat[fd].snd_pkt[i], 0);
+                STORE_RELAXED(&dt.stat[fd].snd_bytes[i], 0);
+                STORE_RELAXED(&dt.stat[fd].rcv_pkt[i], 0);
+                STORE_RELAXED(&dt.stat[fd].rcv_bytes[i], 0);
+                STORE_RELAXED(&dt.stat[fd].lcl_r_pkt[i], 0);
+                STORE_RELAXED(&dt.stat[fd].lcl_r_bytes[i], 0);
+                STORE_RELAXED(&dt.stat[fd].lcl_w_pkt[i], 0);
+                STORE_RELAXED(&dt.stat[fd].lcl_w_bytes[i], 0);
+                STORE_RELAXED(&dt.stat[fd].r_drp_pkt[i], 0);
+                STORE_RELAXED(&dt.stat[fd].r_drp_bytes[i], 0);
+                STORE_RELAXED(&dt.stat[fd].w_drp_pkt[i], 0);
+                STORE_RELAXED(&dt.stat[fd].w_drp_bytes[i], 0);
+                STORE_RELAXED(&dt.stat[fd].f_nhp_pkt[i], 0);
+                STORE_RELAXED(&dt.stat[fd].f_nhp_bytes[i], 0);
+        }
 
-        (addr != INVALID_ADDR) ? ++dt.n_flows : --dt.n_flows;
+        STORE_RELAXED(&dt.stat[fd].addr, addr);
 
-        pthread_mutex_unlock(&dt.stat[fd].lock);
+        if (addr != INVALID_ADDR) {
+                STORE_RELEASE(&dt.stat[fd].stamp, now.tv_sec);
+                ++dt.n_flows;
+        } else {
+                --dt.n_flows;
+        }
+
         pthread_rwlock_unlock(&dt.lock);
 }
 #else
@@ -632,14 +635,6 @@ int dt_init(struct dt_config cfg)
 #ifdef IPCP_FLOW_STATS
         memset(dt.stat, 0, sizeof(dt.stat));
 
-        for (i = 0; i < PROC_MAX_FLOWS; ++i)
-                if (pthread_mutex_init(&dt.stat[i].lock, NULL)) {
-                        log_err("Failed to init mutex for flow %d.", i);
-                        for (j = 0; j < i; ++j)
-                                pthread_mutex_destroy(&dt.stat[j].lock);
-                        goto fail_stat_lock;
-                }
-
         dt.n_flows = 0;
 
         sprintf(dtstr, "%s." ADDR_FMT32, DT, ADDR_VAL32(&dt.addr));
@@ -653,9 +648,6 @@ int dt_init(struct dt_config cfg)
 
 #ifdef IPCP_FLOW_STATS
  fail_rib_reg:
-        for (i = 0; i < PROC_MAX_FLOWS; ++i)
-                pthread_mutex_destroy(&dt.stat[i].lock);
- fail_stat_lock:
         bmp_destroy(dt.res_fds);
 #endif
  fail_res_fds:
@@ -686,8 +678,6 @@ void dt_fini(void)
 #ifdef IPCP_FLOW_STATS
         sprintf(dtstr, "%s.%" PRIu64, DT, dt.addr);
         rib_unreg(dtstr);
-        for (i = 0; i < PROC_MAX_FLOWS; ++i)
-                pthread_mutex_destroy(&dt.stat[i].lock);
 #endif
         bmp_destroy(dt.res_fds);
 
