@@ -457,7 +457,7 @@ static int toml_congestion(toml_table_t *      table,
         if (congestion.ok) {
                 if (strcmp(congestion.u.s, "none") == 0)
                         conf->cong_avoid = CA_NONE;
-                else if (strcmp(congestion.u.s, "lfa") == 0)
+                else if (strcmp(congestion.u.s, "mb-ecn") == 0)
                         conf->cong_avoid = CA_MB_ECN;
                 else
                         conf->cong_avoid = CA_INVALID;
