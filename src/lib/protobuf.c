@@ -362,6 +362,8 @@ dt_config_msg_t * dt_config_s_to_msg(const struct dt_config * s)
         msg->addr_size    = s->addr_size;
         msg->eid_size     = s->eid_size;
         msg->max_ttl      = s->max_ttl;
+        msg->has_max_rtt  = true;
+        msg->max_rtt      = s->max_rtt;
         msg->routing      = routing_config_s_to_msg(&s->routing);
         if (msg->routing == NULL)
                 goto fail_routing;
@@ -381,6 +383,7 @@ struct dt_config dt_config_msg_to_s(const dt_config_msg_t * msg)
         s.addr_size    = msg->addr_size;
         s.eid_size     = msg->eid_size;
         s.max_ttl      = msg->max_ttl;
+        s.max_rtt      = msg->has_max_rtt ? msg->max_rtt : 200; /* ms       */
         s.routing      = routing_config_msg_to_s(msg->routing);
 
         return s;

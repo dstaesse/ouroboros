@@ -29,7 +29,11 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
-int      ca_init(enum pol_cong_avoid ca);
+/* Buffer a policy's ca_print_stats output must fit in. */
+#define CA_STATS_STRLEN 2048
+
+int      ca_init(enum pol_cong_avoid ca,
+                 uint32_t            rtt_ms);
 
 void     ca_fini(void);
 
@@ -55,6 +59,13 @@ bool     ca_ctx_update_rcv(void *     ctx,
 void     ca_ctx_update_ece(void *   ctx,
                            uint16_t ece,
                            uint8_t  cap);
+
+bool     ca_ctx_hb_due(void *   ctx,
+                       uint64_t now);
+
+void     ca_ctx_rtt(void *   ctx,
+                    uint64_t now,
+                    uint64_t rtt);
 
 int      ca_calc_ecn(size_t    queued,
                      uint8_t * ecn,

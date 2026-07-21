@@ -124,9 +124,10 @@ enum pol_cong_avoid {
 
 struct dt_config {
         struct {
-                uint8_t addr_size;
-                uint8_t eid_size;
-                uint8_t max_ttl;
+                uint8_t  addr_size;
+                uint8_t  eid_size;
+                uint8_t  max_ttl;
+                uint16_t max_rtt; /* Declared max layer RTT (ms)       */
         };
         struct routing_config routing; /* Routing policy */
 };
@@ -135,6 +136,7 @@ static const struct dt_config default_dt_config = {
         .addr_size = 4,
         .eid_size  = 8,
         .max_ttl   = 60,
+        .max_rtt   = 200,
         .routing = {
                 .pol = ROUTING_LINK_STATE,
                 .ls = {

@@ -46,6 +46,14 @@ struct ca_ops {
                                     uint16_t ece,
                                     uint8_t  cap);
 
+        /* Optional, can be NULL: heartbeat pacing + RTT feedback. */
+        bool     (* ctx_hb_due)(void *   ctx,
+                                uint64_t now);
+
+        void     (* ctx_rtt)(void *   ctx,
+                             uint64_t now,
+                             uint64_t rtt);
+
         int      (* calc_ecn)(size_t    queued,
                               uint8_t * ecn,
                               qoscube_t qc,

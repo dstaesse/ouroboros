@@ -42,6 +42,7 @@ message dt_config_msg {
         required uint32 eid_size            = 2;
         required uint32 max_ttl             = 3;
         required routing_config_msg routing = 4;
+        optional uint32 max_rtt             = 5;
 }
 
 message dir_dht_config_msg {

@@ -44,7 +44,7 @@ static int test_ca_init_fini(enum pol_cong_avoid pol,
 {
         TEST_START("(%s)", name);
 
-        if (ca_init(pol) < 0) {
+        if (ca_init(pol, 100) < 0) {
                 printf("Failed to init ca for %s.\n", name);
                 goto fail;
         }
@@ -74,7 +74,7 @@ static int test_ca_init_invalid(void)
 {
         TEST_START();
 
-        if (ca_init(CA_INVALID) == 0) {
+        if (ca_init(CA_INVALID, 100) == 0) {
                 printf("Init accepted an invalid policy.\n");
                 ca_fini();
                 goto fail;
@@ -96,7 +96,7 @@ static int test_ca_ctx_share(enum pol_cong_avoid pol,
 
         TEST_START("(%s)", name);
 
-        if (ca_init(pol) < 0) {
+        if (ca_init(pol, 100) < 0) {
                 printf("Failed to init ca for %s.\n", name);
                 goto fail;
         }
@@ -162,7 +162,7 @@ static int test_ca_ctx_distinct(void)
 
         TEST_START();
 
-        if (ca_init(CA_NONE) < 0) {
+        if (ca_init(CA_NONE, 100) < 0) {
                 printf("Failed to init ca.\n");
                 goto fail;
         }
@@ -226,7 +226,7 @@ static int test_ca_ctx_refcount(void)
 
         TEST_START();
 
-        if (ca_init(CA_NONE) < 0) {
+        if (ca_init(CA_NONE, 100) < 0) {
                 printf("Failed to init ca.\n");
                 goto fail;
         }
@@ -283,7 +283,7 @@ static int test_ca_ctx_recreate(void)
 
         TEST_START();
 
-        if (ca_init(CA_NONE) < 0) {
+        if (ca_init(CA_NONE, 100) < 0) {
                 printf("Failed to init ca.\n");
                 goto fail;
         }
@@ -340,7 +340,7 @@ static int test_ca_fini_drains(void)
 
         TEST_START();
 
-        if (ca_init(CA_NONE) < 0) {
+        if (ca_init(CA_NONE, 100) < 0) {
                 printf("Failed to init ca.\n");
                 goto fail;
         }

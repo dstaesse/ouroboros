@@ -32,17 +32,18 @@
 #define OUROBOROS_PREFIX FA
 
 #include <ouroboros/atomics.h>
-#include <ouroboros/endian.h>
-#include <ouroboros/logs.h>
-#include <ouroboros/fqueue.h>
-#include <ouroboros/errno.h>
 #include <ouroboros/dev.h>
+#include <ouroboros/endian.h>
+#include <ouroboros/errno.h>
+#include <ouroboros/fqueue.h>
 #include <ouroboros/ipcp-dev.h>
+#include <ouroboros/logs.h>
 #include <ouroboros/np1_flow.h>
-#include <ouroboros/qoscube.h>
-#include <ouroboros/rib.h>
-#include <ouroboros/random.h>
 #include <ouroboros/pthread.h>
+#include <ouroboros/qoscube.h>
+#include <ouroboros/random.h>
+#include <ouroboros/rib.h>
+#include <ouroboros/time.h>
 
 #include "addr-auth.h"
 #include "dir.h"
@@ -68,6 +69,10 @@
 #define FLOW_REPLY      1
 #define FLOW_UPDATE     2
 #define FLOW_IRM_UPDATE 3
+#define FLOW_HB         4
+#define FLOW_ACK        5
+
+#define HB_ID_LEN       16   /* 128-bit unguessable heartbeat nonce   */
 
 #define STAT_FILE_LEN 0
 
@@ -87,11 +92,28 @@ struct fa_msg {
         uint8_t  code;
         uint8_t  availability;
         uint8_t  service;
+        uint8_t  hb_id[HB_ID_LEN]; /* heartbeat / ack nonce           */
 } __attribute__((packed));
 
 struct cmd {
         struct list_head     next;
         struct ssm_pk_buff * spb;
+};
+
+#define HB_TBL_TTL (4ULL * BILLION)  /* drop unanswered heartbeats  */
+#define HB_TBL_MAX 1024              /* cap outstanding heartbeats  */
+#define HB_BUCKETS 256               /* nonce hash buckets (pow2)   */
+
+/* RIB flow entry: the CA stats string plus the flow header. */
+#define FA_RIB_STRLEN (CA_STATS_STRLEN + 512)
+
+/* Outstanding heartbeat: send time kept locally, keyed by the nonce. */
+struct hb_ent {
+        uint8_t          id[HB_ID_LEN];
+        uint64_t         s_eid;    /* originating flow (fd-reuse guard) */
+        uint64_t         t_snd;    /* send timestamp (ns)               */
+        struct list_head hnext;    /* nonce hash bucket chain           */
+        struct list_head qnext;    /* expiry FIFO, oldest at head       */
 };
 
 struct fa_flow {
@@ -129,6 +151,11 @@ struct {
         pthread_mutex_t  mtx;
         pthread_t        worker;
 
+        struct list_head hb_bkt[HB_BUCKETS]; /* nonce hash buckets    */
+        struct list_head hb_q;   /* expiry FIFO, oldest at head       */
+        size_t           n_hbs;
+        pthread_mutex_t  hb_mtx;
+
         struct psched *  psched;
 } fa;
 
@@ -143,7 +170,7 @@ static int fa_rib_read(const char * path,
         char             s_eidstr[21];
         char             r_eidstr[21];
         char             tmstr[RIB_TM_STRLEN];
-        char             castr[1024];
+        char             castr[CA_STATS_STRLEN];
         char *           entry;
         struct tm *      tm;
 
@@ -155,7 +182,7 @@ static int fa_rib_read(const char * path,
         if (fd < 0 || fd >= PROC_MAX_FLOWS)
                 return -1;
 
-        if (len < 1536)
+        if (len < FA_RIB_STRLEN)
                 return 0;
 
         flow = &fa.flows[fd];
@@ -176,7 +203,7 @@ static int fa_rib_read(const char * path,
         tm = gmtime(&flow->stamp);
         strftime(tmstr, sizeof(tmstr), RIB_TM_FORMAT, tm);
 
-        ca_print_stats(flow->ctx, castr, 1024);
+        ca_print_stats(flow->ctx, castr, CA_STATS_STRLEN);
 
         sprintf(buf,
                 "Flow established at:             %20s\n"
@@ -274,7 +301,7 @@ static int fa_rib_getattr(const char *      path,
         pthread_rwlock_rdlock(&fa.flows_lock);
 
         if (flow->stamp != 0) {
-                attr->size  = 1536;
+                attr->size  = FA_RIB_STRLEN;
                 attr->mtime = flow->stamp;
         } else {
                 attr->size  = 0;
@@ -323,13 +350,129 @@ static uint64_t gen_eid(int fd)
         return ((uint64_t) rnd << 32) + fd;
 }
 
+/* The nonce is uniformly random, so its low word is a fine hash. */
+static size_t fa_hb_hash(const uint8_t * id)
+{
+        uint32_t h;
+
+        memcpy(&h, id, sizeof(h));
+
+        return h & (HB_BUCKETS - 1);
+}
+
+/* Record an outstanding heartbeat; expire stale entries as we go. */
+static void fa_hb_record(const uint8_t * id,
+                         uint64_t        s_eid,
+                         uint64_t        t_snd)
+{
+        struct hb_ent *    ent;
+        struct list_head * p;
+        struct list_head * h;
+
+        ent = malloc(sizeof(*ent));
+        if (ent == NULL)
+                return;
+
+        memcpy(ent->id, id, HB_ID_LEN);
+        ent->s_eid = s_eid;
+        ent->t_snd = t_snd;
+
+        pthread_mutex_lock(&fa.hb_mtx);
+
+        /* The FIFO is time-ordered; stop at the first fresh entry. */
+        list_for_each_safe(p, h, &fa.hb_q) {
+                struct hb_ent * e = list_entry(p, struct hb_ent, qnext);
+                if (t_snd - e->t_snd <= HB_TBL_TTL)
+                        break;
+                list_del(&e->hnext);
+                list_del(&e->qnext);
+                free(e);
+                fa.n_hbs--;
+        }
+
+        if (fa.n_hbs >= HB_TBL_MAX) {
+                pthread_mutex_unlock(&fa.hb_mtx);
+                free(ent);
+                return;
+        }
+
+        list_add(&ent->hnext, &fa.hb_bkt[fa_hb_hash(id)]);
+        list_add_tail(&ent->qnext, &fa.hb_q);
+        fa.n_hbs++;
+
+        pthread_mutex_unlock(&fa.hb_mtx);
+}
+
+/* Consume a heartbeat nonce, returning the flow and send time it maps to. */
+static int fa_hb_match(const uint8_t * id,
+                       uint64_t *      s_eid,
+                       uint64_t *      t_snd)
+{
+        struct list_head * bkt;
+        struct list_head * p;
+        struct list_head * h;
+
+        pthread_mutex_lock(&fa.hb_mtx);
+
+        bkt = &fa.hb_bkt[fa_hb_hash(id)];
+        list_for_each_safe(p, h, bkt) {
+                struct hb_ent * e = list_entry(p, struct hb_ent, hnext);
+                if (memcmp(e->id, id, HB_ID_LEN) == 0) {
+                        *s_eid = e->s_eid;
+                        *t_snd = e->t_snd;
+                        list_del(&e->hnext);
+                        list_del(&e->qnext);
+                        free(e);
+                        fa.n_hbs--;
+                        pthread_mutex_unlock(&fa.hb_mtx);
+                        return 0;
+                }
+        }
+
+        pthread_mutex_unlock(&fa.hb_mtx);
+
+        return -1;
+}
+
+/* Send a bare control message (heartbeat or ack) carrying only a nonce. */
+static int fa_send_ctrl(uint64_t        r_addr,
+                        uint8_t         code,
+                        const uint8_t * id)
+{
+        struct fa_msg *      msg;
+        struct ssm_pk_buff * spb;
+        qoscube_t            qc = QOS_CUBE_BE;
+
+        if (ipcp_spb_reserve(&spb, sizeof(*msg)))
+                return -1;
+
+        msg = (struct fa_msg *) ssm_pk_buff_head(spb);
+        memset(msg, 0, sizeof(*msg));
+
+        msg->code   = code;
+        msg->s_addr = hton64(addr_auth_address());
+        memcpy(msg->hb_id, id, HB_ID_LEN);
+
+        if (dt_write_packet(r_addr, qc, fa.eid, spb, NULL)) {
+                ipcp_spb_release(spb);
+                return -1;
+        }
+
+        return 0;
+}
+
 static time_t packet_handler(int                  fd,
                              qoscube_t            qc,
                              struct ssm_pk_buff * spb)
 {
         struct fa_flow * flow;
+        struct timespec  tv;
+        uint64_t         now;
         uint64_t         r_addr;
         uint64_t         r_eid;
+        uint64_t         s_eid;
+        bool             hb;
+        uint8_t          nonce[HB_ID_LEN];
         time_t           wait;
         size_t           len;
         uint8_t          ecn;
@@ -337,6 +480,9 @@ static time_t packet_handler(int                  fd,
         flow = &fa.flows[fd];
 
         ecn = 0;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &tv);
+        now = TS_TO_UINT64(tv);
 
         pthread_rwlock_wrlock(&fa.flows_lock);
 
@@ -349,10 +495,17 @@ static time_t packet_handler(int                  fd,
         wait = ca_ctx_update_snd(flow->ctx, len,
                                  LOAD_RELAXED(&flow->l_ecn), &flow->fair);
 
+        hb     = ca_ctx_hb_due(flow->ctx, now);
         r_addr = flow->r_addr;
         r_eid  = flow->r_eid;
+        s_eid  = flow->s_eid;
 
         pthread_rwlock_unlock(&fa.flows_lock);
+
+        if (hb && random_buffer(nonce, HB_ID_LEN) == 0) {
+                fa_hb_record(nonce, s_eid, now);
+                fa_send_ctrl(r_addr, FLOW_HB, nonce);
+        }
 
         if (dt_write_packet(r_addr, qc, r_eid, spb, &ecn)) {
                 STORE_RELAXED(&flow->l_ecn, ecn);
@@ -500,6 +653,9 @@ static int fa_handle_flow_req(struct fa_msg * msg,
         qs.max_gap      = ntoh32(msg->max_gap);
         qs.timeout      = ntoh32(msg->timeout);
 
+        /* Ack the seed nonce now: a clean RTT, before any accept delay. */
+        fa_send_ctrl(ntoh64(msg->s_addr), FLOW_ACK, msg->hb_id);
+
         fd = ipcp_wait_flow_req_arr(dst, qs, IPCP_UNICAST_MPL,
                                     IPCP_UNICAST_MTU, &data);
         if (fd < 0)
@@ -606,6 +762,49 @@ static int fa_handle_flow_update(struct fa_msg * msg,
         return 0;
 }
 
+/* Heartbeat: reflect the nonce straight back to the sender's address. */
+static int fa_handle_flow_hb(struct fa_msg * msg,
+                             size_t          len)
+{
+        if (len < sizeof(*msg))
+                return -EINVAL;
+
+        return fa_send_ctrl(ntoh64(msg->s_addr), FLOW_ACK, msg->hb_id);
+}
+
+/* Ack: the reflected nonce yields an RTT sample for its path. */
+static int fa_handle_flow_ack(struct fa_msg * msg,
+                              size_t          len)
+{
+        struct timespec  tv;
+        struct fa_flow * flow;
+        uint64_t         now;
+        uint64_t         t_snd;
+        uint64_t         s_eid;
+        int              fd;
+
+        if (len < sizeof(*msg))
+                return -EINVAL;
+
+        if (fa_hb_match(msg->hb_id, &s_eid, &t_snd) < 0)
+                return 0;  /* unknown or stale nonce */
+
+        clock_gettime(PTHREAD_COND_CLOCK, &tv);
+        now = TS_TO_UINT64(tv);
+
+        pthread_rwlock_wrlock(&fa.flows_lock);
+
+        fd = eid_to_fd(s_eid);
+        if (fd >= 0 && now > t_snd) {
+                flow = &fa.flows[fd];
+                ca_ctx_rtt(flow->ctx, now, now - t_snd);
+        }
+
+        pthread_rwlock_unlock(&fa.flows_lock);
+
+        return 0;
+}
+
 static int fa_handle_flow_irm_update(struct fa_msg * msg,
                                size_t          len)
 {
@@ -675,6 +874,14 @@ static void * fa_handle_packet(void * o)
                         if (fa_handle_flow_irm_update(msg, len) < 0)
                                 log_err("Error handling flow update.");
                         break;
+                case FLOW_HB:
+                        if (fa_handle_flow_hb(msg, len) < 0)
+                                log_err("Error handling heartbeat.");
+                        break;
+                case FLOW_ACK:
+                        if (fa_handle_flow_ack(msg, len) < 0)
+                                log_err("Error handling heartbeat ack.");
+                        break;
                 default:
                         log_warn("Recieved unknown flow allocation message.");
                         break;
@@ -687,24 +894,28 @@ static void * fa_handle_packet(void * o)
 int fa_init(void)
 {
         pthread_condattr_t cattr;
+        size_t             i;
 
-        if (pthread_rwlock_init(&fa.flows_lock, NULL))
+        if (pthread_rwlock_init(&fa.flows_lock, NULL) != 0)
                 goto fail_rwlock;
 
-        if (pthread_mutex_init(&fa.mtx, NULL))
+        if (pthread_mutex_init(&fa.mtx, NULL) != 0)
                 goto fail_mtx;
 
-        if (pthread_condattr_init(&cattr))
+        if (pthread_mutex_init(&fa.hb_mtx, NULL) != 0)
+                goto fail_hb_mtx;
+
+        if (pthread_condattr_init(&cattr) != 0)
                 goto fail_cattr;
 
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        if (pthread_cond_init(&fa.cond, &cattr))
+        if (pthread_cond_init(&fa.cond, &cattr) != 0)
                 goto fail_cond;
 
 #ifdef IPCP_FLOW_STATS
-        if (rib_reg(FA, &r_ops))
+        if (rib_reg(FA, &r_ops) != 0)
                 goto fail_rib_reg;
 #endif
 
@@ -713,6 +924,11 @@ int fa_init(void)
                 goto fail_dt_reg;
 
         list_head_init(&fa.cmds);
+        for (i = 0; i < HB_BUCKETS; i++)
+                list_head_init(&fa.hb_bkt[i]);
+
+        list_head_init(&fa.hb_q);
+        fa.n_hbs = 0;
 
         pthread_condattr_destroy(&cattr);
 
@@ -727,6 +943,8 @@ int fa_init(void)
  fail_cond:
         pthread_condattr_destroy(&cattr);
  fail_cattr:
+        pthread_mutex_destroy(&fa.hb_mtx);
+ fail_hb_mtx:
         pthread_mutex_destroy(&fa.mtx);
  fail_mtx:
         pthread_rwlock_destroy(&fa.flows_lock);
@@ -736,10 +954,20 @@ int fa_init(void)
 
 void fa_fini(void)
 {
+        struct list_head * p;
+        struct list_head * h;
+
 #ifdef IPCP_FLOW_STATS
         rib_unreg(FA);
 #endif
+        list_for_each_safe(p, h, &fa.hb_q) {
+                struct hb_ent * e = list_entry(p, struct hb_ent, qnext);
+                list_del(&e->qnext);
+                free(e);
+        }
+
         pthread_cond_destroy(&fa.cond);;
+        pthread_mutex_destroy(&fa.hb_mtx);
         pthread_mutex_destroy(&fa.mtx);
         pthread_rwlock_destroy(&fa.flows_lock);
 }
@@ -822,6 +1050,8 @@ int fa_alloc(int              fd,
         qoscube_t            qc = QOS_CUBE_BE;
         size_t               len;
         uint64_t             eid;
+        struct timespec      tv;
+        uint8_t              nonce[HB_ID_LEN];
 
         addr = dir_query(dst);
         if (addr == 0)
@@ -848,6 +1078,13 @@ int fa_alloc(int              fd,
         msg->service      = qs.service;
         msg->max_gap      = hton32(qs.max_gap);
         msg->timeout      = hton32(qs.timeout);
+
+        /* Seed an early RTT sample: peer acks this nonce on arrival. */
+        if (random_buffer(nonce, HB_ID_LEN) == 0) {
+                memcpy(msg->hb_id, nonce, HB_ID_LEN);
+                clock_gettime(PTHREAD_COND_CLOCK, &tv);
+                fa_hb_record(nonce, eid, TS_TO_UINT64(tv));
+        }
 
         memcpy(msg + 1, dst, ipcp_dir_hash_len());
         if (data->len > 0)

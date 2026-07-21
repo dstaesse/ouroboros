@@ -67,7 +67,7 @@ static int initialize_components(struct ipcp_config * conf)
 
         log_info("IPCP got address %" PRIu64 ".", addr_auth_address());
 
-        if (ca_init(conf->unicast.cong_avoid)) {
+        if (ca_init(conf->unicast.cong_avoid, conf->unicast.dt.max_rtt)) {
                 log_err("Failed to initialize congestion avoidance.");
                 goto fail_ca;
         }

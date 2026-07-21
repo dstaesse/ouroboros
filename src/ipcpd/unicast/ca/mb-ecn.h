@@ -25,6 +25,8 @@
 
 #include "ops.h"
 
+void     mb_ecn_init(uint32_t rtt_ms);
+
 void *   mb_ecn_ctx_create(void);
 
 void     mb_ecn_ctx_destroy(void * ctx);
@@ -44,6 +46,13 @@ bool     mb_ecn_ctx_update_rcv(void *     ctx,
 void     mb_ecn_ctx_update_ece(void *   ctx,
                                uint16_t ece,
                                uint8_t  cap);
+
+bool     mb_ecn_ctx_hb_due(void *   ctx,
+                           uint64_t now);
+
+void     mb_ecn_ctx_rtt(void *   ctx,
+                        uint64_t now,
+                        uint64_t rtt);
 
 int      mb_ecn_calc_ecn(size_t    queued,
                          uint8_t * ecn,

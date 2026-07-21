@@ -477,6 +477,7 @@ static int toml_dt(toml_table_t *     table,
         toml_datum_t addr;
         toml_datum_t eid;
         toml_datum_t ttl;
+        toml_datum_t max_rtt;
 
         addr = toml_int_in(table, "addr_size");
         if (addr.ok)
@@ -489,6 +490,10 @@ static int toml_dt(toml_table_t *     table,
         ttl = toml_int_in(table, "max_ttl");
         if (ttl.ok)
                 conf->max_ttl = ttl.u.i;
+
+        max_rtt = toml_int_in(table, "max_rtt");
+        if (max_rtt.ok)
+                conf->max_rtt = max_rtt.u.i;
 
         if (toml_routing(table, conf) < 0) {
                 log_err("Invalid routing option.");

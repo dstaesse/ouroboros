@@ -40,14 +40,24 @@
 #include <stdio.h>
 
 /*
- * The sender paces with a token bucket at a rate driven by Δt-scaled
- * AIMD: each step changes the rate proportional to elapsed wall-clock
- * time, so the per-second dynamics do not depend on how often packets
- * arrive. The receiver's averaging window and the sender's feedback
- * staleness both stretch with the flow's byte rate, so a slow flow
- * is measured and controlled like a fast one; CA_RATE_MIN only
- * bounds those horizons (window <= CA_TW_ABSMAX, TTL ~8 s). There
- * is no per-flow timer; the control runs on packet sends.
+ * Multi-bit ECN congestion avoidance: a rate-based controller. The
+ * sender paces a token bucket at a rate steered by graded ECN
+ * feedback, so the backoff is proportional to the congestion. A
+ * backlogged flow ramps in slow start to find the path capacity, then
+ * settles into AIMD around its fair share. There is no sliding window
+ * and no per-flow timer; the control runs on sends.
+ *
+ * Every rate step is scaled by elapsed wall-clock time (Δt), not by
+ * packet count, so the per-second dynamics are RTT-independent. The
+ * receiver's averaging window and the sender's feedback staleness both
+ * stretch with the flow's byte rate, so a slow flow is measured and
+ * controlled like a fast one; CA_RATE_MIN only bounds those horizons
+ * (window <= CA_TW_ABSMAX, TTL ~8 s).
+ *
+ * The ramp clock ss_tc = 2 * RTT holds slow-start overshoot near 1.65x
+ * (e^1/2): it seeds from the declared max_rtt and then tracks the
+ * heartbeat's measured RTT. Feedback silence past the staleness horizon
+ * leaves slow start; a sustained run of it restarts at the floor.
  *
  * The floor and the AI slope scale with the path: forwarders stamp
  * their measured link capacity into the PCI (cap.c), the receiver
@@ -77,12 +87,17 @@
 #define CA_PROBE_TC  (8ULL * BILLION)     /* proportional probe TC 8s   */
 #define CA_ECE_REF   (16 << CA_SHFT)      /* full congestion: ecn 16    */
 #define CA_MD_KD_DIV 4                    /* one-sided lead gain 1/4    */
-/* Must stay >= 1 ms: the MD term scales by dtc / MILLION (truncates).  */
-#define CA_DT_CTRL   (BILLION / 1000)
+#define CA_DT_CTRL   (BILLION / 1000)     /* min rate-update spacing    */
 #define CA_DT_CAP    (BILLION / 20)       /* idle-resume Δt clamp 50ms  */
 /* Floor of the rate-relative feedback staleness (ctx->ece_ttl). */
 #define CA_ECE_TTL   ((1 << CA_TW_GAP_SHFT) * CA_TW_INIT)
-#define CA_SS_TC     (BILLION / 50)
+#define CA_SS_RTT_MUL 2                   /* ss_tc = 2 * layer RTT      */
+#define CA_SS_TC_MIN (BILLION / 1000)     /* ramp floor 1 ms            */
+#define CA_SS_TC_MAX (4ULL * BILLION)     /* ramp ceiling 4 s           */
+#define CA_HB_MIN    (40 * MILLION)       /* heartbeat interval floor   */
+#define CA_HB_LOSS   4                    /* stale horizons -> restart  */
+#define CA_RTT_SHFT  2                    /* ss_tc EWMA weight 1/4      */
+#define CA_SS_RTT_DEF 200                 /* default layer RTT (ms)     */
 #define CA_WASH_BKT  (BILLION / 32)       /* washout bucket ~31 ms      */
 #define CA_WASH_SHFT 2                    /* damp 1/4 of bucket change  */
 
@@ -126,30 +141,28 @@ struct mb_ecn_ctx {
         uint16_t tx_ece;      /* congestion reported from downstream  */
         uint16_t tx_ecp;      /* previous tx_ece (rise detection)     */
         uint8_t  tx_loc;      /* local first-hop ecn mark (fallback)  */
-        uint8_t  tx_cap;      /* path capacity code fed back to us    */
         bool     tx_cav;      /* past slow start                      */
+        bool     ai_hold;     /* freeze AI after loss until clear     */
         uint64_t rate;        /* paced send rate (bytes/s)            */
         uint64_t rate_min;    /* capacity-derived rate floor (B/s)    */
         uint64_t ai_rate;     /* additive-increase slope (B/s^2)      */
         uint64_t ece_ttl;     /* how long feedback stays valid (ns)   */
+        uint64_t ss_tc;       /* slow-start time constant (ns)        */
         uint64_t r_bkt;       /* rate snapshot at last washout bucket */
         uint64_t wash_acc;    /* washout bucket time accumulator (ns) */
+        uint64_t dec_acc;     /* sub-ms decrease time carried (ns)    */
         uint64_t inv_rate;    /* fixed-point 1/rate for pacing        */
         uint64_t vt;          /* virtual service clock (bytes)        */
         uint64_t lead;        /* pacer lead of last send (bytes)      */
         uint64_t last_ts;     /* last clock advance (ns)              */
         uint64_t last_ctrl;   /* last rate update (ns)                */
-        uint64_t last_fb;     /* last feedback applied (ns)           */
+        uint64_t last_fb;     /* last congestion feedback (ns)        */
+        uint64_t last_sig;    /* last liveness signal, incl. hb (ns)  */
+        uint64_t n_fb;        /* feedback updates received            */
+        uint64_t last_hb;     /* last heartbeat emitted (ns)          */
+        uint64_t last_res;    /* last resume from idle (ns)           */
         uint64_t last_loc;    /* last local mark seen (ns)            */
         uint64_t last_cap;    /* last capacity applied (ns)           */
-
-        uint64_t n_ctrl;      /* control steps taken                  */
-        uint64_t t_ctrl;      /* wall time covered by steps (ns)      */
-        uint64_t t_bank;      /* increase time banked in steps (ns)   */
-        uint64_t n_fb;        /* feedback updates received            */
-        uint64_t n_ttl;       /* feedback aged out (TTL)              */
-        uint64_t n_cap;       /* capacity updates applied             */
-        uint64_t ss_peak;     /* peak rate in slow start (bytes/s)    */
 
         uint64_t snd_byt;     /* bytes offered this window (capped)   */
         uint64_t snd_win;     /* utilisation window start (ns)        */
@@ -158,7 +171,22 @@ struct mb_ecn_ctx {
         bool     backlogged;  /* offered load keeps the pacer busy    */
         bool     src_limited; /* rate held at offered-load ceiling    */
         bool     started;     /* a real send has occurred             */
+
+        /* Diagnostics only, read by mb_ecn_print_stats. */
+        uint8_t  tx_cap;      /* path capacity code fed back to us    */
+        uint64_t n_ctrl;      /* control steps taken                  */
+        uint64_t t_ctrl;      /* wall time covered by steps (ns)      */
+        uint64_t t_bank;      /* increase time banked in steps (ns)   */
+        uint64_t n_ttl;       /* feedback aged out (TTL)              */
+        uint64_t n_cap;       /* capacity updates applied             */
+        uint64_t n_loss;      /* signal-loss cuts (collapse)          */
+        uint64_t n_rtt;       /* heartbeat RTT samples folded         */
+        uint64_t ss_peak;     /* peak rate in slow start (bytes/s)    */
 };
+
+/* Layer slow-start time constant (ns), from the declared RTT. */
+static uint64_t mb_ecn_ss_tc = (uint64_t) CA_SS_RTT_MUL *
+                               CA_SS_RTT_DEF * MILLION;
 
 struct ca_ops mb_ecn_ca_ops = {
         .ctx_create     = mb_ecn_ctx_create,
@@ -166,6 +194,8 @@ struct ca_ops mb_ecn_ca_ops = {
         .ctx_update_snd = mb_ecn_ctx_update_snd,
         .ctx_update_rcv = mb_ecn_ctx_update_rcv,
         .ctx_update_ece = mb_ecn_ctx_update_ece,
+        .ctx_hb_due     = mb_ecn_ctx_hb_due,
+        .ctx_rtt        = mb_ecn_ctx_rtt,
         .calc_ecn       = mb_ecn_calc_ecn,
         .marks_ecn      = true,
         .print_stats    = mb_ecn_print_stats
@@ -190,6 +220,21 @@ static uint64_t mb_ecn_ece_ttl(uint64_t rate)
         return ttl > (uint64_t) CA_ECE_TTL ? ttl : (uint64_t) CA_ECE_TTL;
 }
 
+/* Derive the layer slow-start slope from the declared RTT (ms). */
+void mb_ecn_init(uint32_t rtt_ms)
+{
+        uint64_t tc;
+
+        if (rtt_ms == 0)          /* unspecified: safe default */
+                rtt_ms = CA_SS_RTT_DEF;
+
+        tc = (uint64_t) CA_SS_RTT_MUL * rtt_ms * MILLION;
+        if (tc < (uint64_t) CA_SS_TC_MIN)
+                tc = CA_SS_TC_MIN;
+
+        mb_ecn_ss_tc = tc;
+}
+
 void * mb_ecn_ctx_create(void)
 {
         struct timespec     now;
@@ -209,6 +254,7 @@ void * mb_ecn_ctx_create(void)
         ctx->rate      = CA_RATE_INIT;
         ctx->rate_min  = CA_RATE_MIN;
         ctx->ai_rate   = CA_AI_RATE;
+        ctx->ss_tc     = mb_ecn_ss_tc;
         ctx->ece_ttl   = mb_ecn_ece_ttl(CA_RATE_INIT);
         ctx->r_bkt     = CA_RATE_INIT;
         ctx->inv_rate  = mb_ecn_rate_inv(CA_RATE_INIT);
@@ -218,6 +264,7 @@ void * mb_ecn_ctx_create(void)
         ctx->last_ts   = t;
         ctx->last_ctrl = t;
         ctx->last_fb   = t;
+        ctx->last_sig  = t;
         ctx->last_loc  = t;
         ctx->last_cap  = t;
 
@@ -252,7 +299,7 @@ static void mb_ecn_slow_start(struct mb_ecn_ctx * ctx,
                               uint64_t            dta)
 {
         if (ctx->backlogged)
-                ctx->rate += ctx->rate * dta / CA_SS_TC;
+                ctx->rate += ctx->rate * dta / ctx->ss_tc;
 
         ctx->r_bkt = ctx->rate;
 }
@@ -264,11 +311,18 @@ static void mb_ecn_increase(struct mb_ecn_ctx * ctx,
         if (!ctx->backlogged)
                 return;
 
+        /* After a loss, hold until a clean signal drains the queue. */
+        if (ctx->ai_hold)
+                return;
+
         ctx->rate += ctx->ai_rate * dta / BILLION;
         ctx->rate += ctx->rate * dta / CA_PROBE_TC;
 }
 
-/* Multiplicative decrease: proportional cut plus a one-sided lead. */
+/*
+ * Multiplicative decrease: cut proportional to mark x elapsed time,
+ * plus a one-sided lead that cuts extra while the mark is rising.
+ */
 static void mb_ecn_decrease(struct mb_ecn_ctx * ctx,
                             uint64_t            dtc)
 {
@@ -281,19 +335,21 @@ static void mb_ecn_decrease(struct mb_ecn_ctx * ctx,
         m = ctx->tx_ece > 0 ? ctx->tx_ece
                             : (uint16_t) (ctx->tx_loc << CA_SHFT);
         if (m == 0) {
-                ctx->tx_ecp = 0;
+                ctx->dec_acc = 0;      /* unmarked time is not banked */
+                ctx->tx_ecp  = 0;
                 return;
         }
 
         mark = MIN(m, CA_ECE_REF);
-        rise = 0;
-        if (m > ctx->tx_ecp)
-                rise = MIN(m - ctx->tx_ecp, CA_ECE_REF);
 
-        cut = ctx->rate * rise / (CA_ECE_REF * CA_MD_KD_DIV);
+        /* One-sided lead: cut extra while the mark is still rising. */
+        rise = m > ctx->tx_ecp ? MIN(m - ctx->tx_ecp, CA_ECE_REF) : 0;
+        cut  = ctx->rate * rise / (CA_ECE_REF * CA_MD_KD_DIV);
 
-        /* Honest elapsed ms, so a starved sender still cuts. */
-        dtm = dtc / MILLION;
+        /* Honest elapsed ms; the sub-ms remainder carries over. */
+        ctx->dec_acc += dtc;
+        dtm = ctx->dec_acc / MILLION;
+        ctx->dec_acc -= dtm * MILLION;
         if (mark * dtm >= CA_ECE_REF * 500)
                 cut += ctx->rate / 2;
         else
@@ -428,10 +484,14 @@ static void mb_ecn_win(struct mb_ecn_ctx * ctx,
 {
         uint64_t elapsed = t - ctx->snd_win;
         uint64_t offered;
+        bool     was = ctx->backlogged;
 
         offered = ctx->snd_byt * BILLION / elapsed;
 
         ctx->backlogged = offered * CA_USE_DEN >= ctx->snd_r0 * CA_USE_NUM;
+
+        if (!was && ctx->backlogged)   /* resume: fresh liveness baseline */
+                ctx->last_res = t;
 
         mb_ecn_offered(ctx, offered, elapsed);
 
@@ -444,9 +504,50 @@ static void mb_ecn_win(struct mb_ecn_ctx * ctx,
 }
 
 /* Age out congestion, local-mark and capacity signals once stale. */
+/* Heartbeat interval: ~1 RTT, floored so fast links don't over-probe. */
+static uint64_t mb_ecn_t_hb(const struct mb_ecn_ctx * ctx)
+{
+        uint64_t t = ctx->ss_tc >> 1;
+
+        return t > (uint64_t) CA_HB_MIN ? t : CA_HB_MIN;
+}
+
+/* Feedback collapsed while backlogged: halve like an RTO, stay in AIMD. */
+static void mb_ecn_loss(struct mb_ecn_ctx * ctx,
+                        uint64_t            t)
+{
+        ctx->rate -= ctx->rate / 2;
+        if (ctx->rate < (uint64_t) CA_RATE_MIN)
+                ctx->rate = CA_RATE_MIN;
+
+        ctx->r_bkt    = ctx->rate;
+        ctx->inv_rate = mb_ecn_rate_inv(ctx->rate);
+        ctx->ece_ttl  = mb_ecn_ece_ttl(ctx->rate);
+        ctx->last_sig = t;
+        ctx->ai_hold  = true;
+        ctx->n_loss++;
+}
+
 static void mb_ecn_age(struct mb_ecn_ctx * ctx,
                        uint64_t            t)
 {
+        uint64_t ttl = ctx->ece_ttl;
+        uint64_t ref = ctx->last_sig > ctx->last_res
+                       ? ctx->last_sig : ctx->last_res;
+        uint64_t gap = t - ref;
+
+        /*
+         * Sustained silence while backlogged is feedback collapse: cut
+         * the rate in half and stay in AIMD, so a recovering flow climbs
+         * back additively instead of re-ramping. Repeated silence decays
+         * it geometrically toward the floor.
+         */
+        if (ctx->backlogged && ctx->n_fb + ctx->n_rtt > 0
+            && gap > (uint64_t) CA_HB_LOSS * ttl) {
+                mb_ecn_loss(ctx, t);
+                return;
+        }
+
         if (t - ctx->last_fb > ctx->ece_ttl) {
                 if (ctx->tx_ece > 0)
                         ctx->n_ttl++;
@@ -505,14 +606,19 @@ static time_t mb_ecn_snd(struct mb_ecn_ctx * ctx,
 
         /* Lazy warm-up seed: packet #1 is never an idle resume. */
         if (!ctx->started) {
-                ctx->started = true;
-                ctx->last_ts = t;
-                ctx->snd_win = t;
-                ctx->snd_r0  = ctx->rate;
+                ctx->started  = true;
+                ctx->last_ts  = t;
+                ctx->last_res = t;
+                ctx->snd_win  = t;
+                ctx->snd_r0   = ctx->rate;
         }
 
         dt = t - ctx->last_ts;
         ctx->last_ts = t;
+
+        /* Idle gap clears backlog before aging: no false loss on resume. */
+        if (dt > (uint64_t) CA_DT_CAP)
+                ctx->backlogged = false;
 
         mb_ecn_age(ctx, t);
 
@@ -520,9 +626,6 @@ static time_t mb_ecn_snd(struct mb_ecn_ctx * ctx,
         ctx->snd_byt += len;
         if (ctx->snd_byt > (uint64_t) CA_SND_BYT_MAX)
                 ctx->snd_byt = CA_SND_BYT_MAX;
-
-        if (dt > (uint64_t) CA_DT_CAP)
-                ctx->backlogged = false;
 
         if (t - ctx->snd_win >= (uint64_t) CA_SND_WIN)
                 mb_ecn_win(ctx, t);
@@ -683,8 +786,14 @@ static void mb_ecn_ece(struct mb_ecn_ctx * ctx,
         uint64_t tgt;
 
         ctx->tx_ece  = ece;
-        ctx->tx_cav  = true;
-        ctx->last_fb = t;
+        ctx->tx_cav  = true;   /* closed-loop feedback: leave slow start */
+
+        /* A clean (unsaturated) signal means the queue drained: resume. */
+        if (ece < (uint16_t) CA_ECE_REF)
+                ctx->ai_hold = false;
+
+        ctx->last_fb  = t;
+        ctx->last_sig = t;
         ctx->n_fb++;
 
         /* Scale the floor and AI slope to the path bottleneck. */
@@ -730,6 +839,44 @@ void mb_ecn_ctx_update_ece(void *   _ctx,
         mb_ecn_ece(ctx, ece, cap, TS_TO_UINT64(now));
 }
 
+/* Due when the path stayed quiet for a heartbeat interval; arms the gap. */
+bool mb_ecn_ctx_hb_due(void *   _ctx,
+                       uint64_t now)
+{
+        struct mb_ecn_ctx * ctx  = _ctx;
+        uint64_t            t_hb = mb_ecn_t_hb(ctx);
+        uint64_t            last;
+
+        last = ctx->last_sig > ctx->last_hb ? ctx->last_sig : ctx->last_hb;
+        if (now - last < t_hb)
+                return false;
+
+        ctx->last_hb = now;
+
+        return true;
+}
+
+/* Fold a heartbeat RTT sample into the ramp clock; also counts as life. */
+void mb_ecn_ctx_rtt(void *   _ctx,
+                    uint64_t now,
+                    uint64_t rtt)
+{
+        struct mb_ecn_ctx * ctx = _ctx;
+        uint64_t            tgt;
+
+        tgt = (uint64_t) CA_SS_RTT_MUL * rtt;
+        if (tgt < (uint64_t) CA_SS_TC_MIN)   /* track the true RTT both  */
+                tgt = CA_SS_TC_MIN;          /* ways: overshoot ~e^{1/2} */
+
+        if (tgt > (uint64_t) CA_SS_TC_MAX)   /* at the real RTT, not the */
+                tgt = CA_SS_TC_MAX;          /* declared worst case      */
+
+        ctx->ss_tc += (tgt >> CA_RTT_SHFT) - (ctx->ss_tc >> CA_RTT_SHFT);
+
+        ctx->last_sig = now;   /* liveness only: never ages the ece signal */
+        ctx->n_rtt++;
+}
+
 int  mb_ecn_calc_ecn(size_t    queued,
                      uint8_t * ecn,
                      qoscube_t qc,
@@ -762,7 +909,7 @@ ssize_t  mb_ecn_print_stats(void * _ctx,
         int                 code;
         uint16_t            m;
 
-        if (len < 1024)
+        if (len < CA_STATS_STRLEN)
                 return 0;
 
         /* No signal seen: the rate is unconstrained drift, not a target. */
@@ -776,6 +923,9 @@ ssize_t  mb_ecn_print_stats(void * _ctx,
         if (!ctx->tx_cav) {
                 regime = "Slow start";
                 code   = 0;
+        } else if (ctx->ai_hold) {
+                regime = "Loss recovery";
+                code   = 4;
         } else if (ctx->src_limited) {
                 regime = "Source limited";
                 code   = 3;
@@ -803,7 +953,10 @@ ssize_t  mb_ecn_print_stats(void * _ctx,
                 "Path capacity (bytes/s):         %20" PRIu64 "\n"
                 "Capacity rate floor (bytes/s):   %20" PRIu64 "\n"
                 "Capacity updates (count):        %20" PRIu64 "\n"
-                "Slow start peak rate (bytes/s):  %20" PRIu64 "\n",
+                "Slow start peak rate (bytes/s):  %20" PRIu64 "\n"
+                "Signal-loss cuts (count):        %20" PRIu64 "\n"
+                "Heartbeat RTT samples (count):   %20" PRIu64 "\n"
+                "Ramp time constant (ns):         %20" PRIu64 "\n",
                 "Multi-bit ECN",
                 ctx->tx_ece,
                 ctx->rx_ece,
@@ -812,7 +965,8 @@ ssize_t  mb_ecn_print_stats(void * _ctx,
                 ctx->n_ctrl, ctx->t_ctrl, ctx->t_bank,
                 ctx->n_fb, ctx->n_ttl,
                 cap_dec(ctx->tx_cap), ctx->rate_min, ctx->n_cap,
-                peak);
+                peak,
+                ctx->n_loss, ctx->n_rtt, ctx->ss_tc);
 
         return strlen(buf);
 }

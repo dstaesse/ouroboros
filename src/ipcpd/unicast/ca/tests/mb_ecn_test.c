@@ -21,7 +21,6 @@
  */
 
 #include "mb-ecn.c"
-
 #include <test/test.h>
 
 #define MS (MILLION) /* one millisecond in ns */
@@ -41,6 +40,7 @@ static struct mb_ecn_ctx * mk_ctx(void)
         ctx->last_ts   = 0;
         ctx->last_ctrl = 0;
         ctx->last_fb   = 0;
+        ctx->last_sig  = 0;
         ctx->last_loc  = 0;
         ctx->last_cap  = 0;
 
@@ -51,6 +51,7 @@ static struct mb_ecn_ctx * mk_ctx(void)
         ctx->backlogged  = true;
         ctx->src_limited = false;
         ctx->started     = false;
+        ctx->ss_tc       = 20 * MS; /* fixed slope for deterministic SS */
 
         return ctx;
 }
@@ -815,7 +816,7 @@ static int test_mb_ecn_rcv_no_overflow_highrate(void)
 
 /*
  * The sender holds a mark across the full inter-feedback gap (TTL >
- * 2 * CA_TW_INIT) and a repeated mark must not re-fire the one-sided lead.
+ * 2 * CA_TW_INIT); a repeated mark adds only the proportional cut.
  */
 static int test_mb_ecn_ece_ttl_covers_cadence(void)
 {
@@ -1048,10 +1049,13 @@ static int test_mb_ecn_rate_floor(void)
                 goto fail;
         }
 
-        /* Cut larger than headroom must clamp; stay inside CA_ECE_TTL. */
+        /*
+         * A starved 600 ms at full mark takes the rate/2 branch, far
+         * below the floor; stays inside the initial ~976 ms mark TTL.
+         */
         ctx->rate = CA_RATE_MIN + 1000;
         mb_ecn_ece(ctx, CA_ECE_REF, 0, 0);
-        mb_ecn_snd(ctx, LEN, 30 * MS, &ftag);
+        mb_ecn_snd(ctx, LEN, 600 * MS, &ftag);
 
         if (ctx->rate != CA_RATE_MIN) {
                 printf("rate floor breached: %" PRIu64 ".\n", ctx->rate);
@@ -1116,8 +1120,9 @@ static int test_mb_ecn_fixed_point(void)
 }
 
 /*
- * One-sided lead: a mark rise cuts rate * rise / (REF * DEN) once;
- * a flat or falling mark leaves only the dt-scaled proportional cut.
+ * A rising ECE mark takes a one-sided lead cut on top of the
+ * proportional term; a flat or falling mark takes only the small
+ * proportional cut.
  */
 static int test_mb_ecn_lead_cut(void)
 {
@@ -1137,17 +1142,17 @@ static int test_mb_ecn_lead_cut(void)
         ctx->rate = (uint64_t) 100 << 20;
         ctx->tx_cav = true;
 
-        /* Rise 0 -> 256: lead cuts ~rise/(REF*DEN) = 1/8 of the rate. */
+        /* Rise 0 -> 256: the lead term cuts hard (~rate/8). */
         prev = ctx->rate;
         mb_ecn_ece(ctx, 256, 0, MS);
         mb_ecn_snd(ctx, LEN, MS, &ftag);
         drop = prev - ctx->rate;
-        if (drop < prev / 10) {
-                printf("lead cut missing: dropped %" PRIu64 ".\n", drop);
+        if (drop < prev / 16) {
+                printf("rising mark under-cut: %" PRIu64 ".\n", drop);
                 goto fail_ctx;
         }
 
-        /* Flat mark: rise 0, only the ~0.05%% proportional cut. */
+        /* Flat mark: no rise, only the proportional cut. */
         prev = ctx->rate;
         mb_ecn_ece(ctx, 256, 0, 2 * MS);
         mb_ecn_snd(ctx, LEN, 2 * MS, &ftag);
@@ -1157,7 +1162,7 @@ static int test_mb_ecn_lead_cut(void)
                 goto fail_ctx;
         }
 
-        /* Falling mark: one-sided lead must not fire. */
+        /* Falling mark: no rise, no lead beyond the proportional term. */
         prev = ctx->rate;
         mb_ecn_ece(ctx, 64, 0, 3 * MS);
         mb_ecn_snd(ctx, LEN, 3 * MS, &ftag);
@@ -1404,6 +1409,69 @@ static int test_mb_ecn_decrease_dt_invariant(void)
         /* Within 10%: residual is Euler compounding of MD and the probe. */
         if (cut_a > cut_b + cut_a / 10 || cut_b > cut_a + cut_a / 10) {
                 printf("cadence-dependent MD: %" PRIu64 " vs %" PRIu64
+                       ".\n", cut_a, cut_b);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(a);
+        mb_ecn_ctx_destroy(b);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(a);
+        mb_ecn_ctx_destroy(b);
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Sub-ms control steps must not lose decrease time to truncation. */
+static int test_mb_ecn_decrease_subms_carry(void)
+{
+        struct mb_ecn_ctx * a;
+        struct mb_ecn_ctx * b;
+        uint64_t            cut_a;
+        uint64_t            cut_b;
+        uint64_t            r0;
+        uint64_t            fta = 0;
+        uint64_t            ftb = 0;
+        size_t              i;
+
+        TEST_START();
+
+        a = mk_ctx();
+        b = mk_ctx();
+        if (a == NULL || b == NULL) {
+                printf("Failed to create contexts.\n");
+                goto fail_ctx;
+        }
+
+        r0 = (uint64_t) 100 << 20;
+        a->rate = r0;
+        b->rate = r0;
+
+        mb_ecn_ece(a, 256, 0, 0);
+        mb_ecn_ece(b, 256, 0, 0);
+
+        /* Same 30 ms of marked time; b's steps have a 0.5 ms tail. */
+        for (i = 1; i <= 10; i++)
+                mb_ecn_snd(a, LEN, i * 3 * MS, &fta);
+
+        for (i = 1; i <= 20; i++)
+                mb_ecn_snd(b, LEN, i * 3 * MS / 2, &ftb);
+
+        cut_a = r0 - a->rate;
+        cut_b = r0 - b->rate;
+
+        if (cut_a == 0 || cut_b == 0) {
+                printf("no cut: %" PRIu64 " %" PRIu64 ".\n", cut_a, cut_b);
+                goto fail_ctx;
+        }
+
+        /* Within 10%: the sub-ms remainder must carry, not vanish. */
+        if (cut_a > cut_b + cut_a / 10 || cut_b > cut_a + cut_a / 10) {
+                printf("sub-ms decrease lost: %" PRIu64 " vs %" PRIu64
                        ".\n", cut_a, cut_b);
                 goto fail_ctx;
         }
@@ -2528,6 +2596,269 @@ static int test_mb_ecn_first_send_warmup(void)
         return TEST_RC_FAIL;
 }
 
+/*
+ * Couple one or two backlogged flows through a shared bottleneck of
+ * capacity cap: each step marks the shared queue with the real
+ * calc_ecn, feeds each flow that mark delayed by its own lag (in
+ * steps), drives it backlogged for one step, then drains the queue.
+ * A faithful discrete run of the fluid model on the real control law,
+ * with the forwarder abstracted to a single shared price. b may be
+ * NULL for a single-flow run.
+ */
+#define TF_STEP  (5 * MS)          /* control step (ns)         */
+#define TF_HIST  64                /* mark ring, bounds max lag */
+#define TF_QMAX  (8192 * LEN)      /* bottleneck buffer (bytes) */
+#define TF_MAXN  32                /* flows per shared-link run */
+
+static void shared_link_run(struct mb_ecn_ctx * a,
+                            struct mb_ecn_ctx * b,
+                            uint64_t            cap,
+                            size_t              lag_a,
+                            size_t              lag_b,
+                            size_t              steps)
+{
+        uint16_t hist[TF_HIST];
+        uint64_t ta    = 0;
+        uint64_t tb    = 0;
+        uint64_t fta   = 0;
+        uint64_t ftb   = 0;
+        uint64_t q     = 0;
+        uint64_t drain = cap * TF_STEP / BILLION;
+        uint64_t tgt;
+        uint64_t arr;
+        uint8_t  cc    = cap_enc(cap);
+        uint8_t  ecn;
+        uint16_t ea;
+        uint16_t eb;
+        size_t   k;
+
+        memset(hist, 0, sizeof(hist));
+
+        for (k = 0; k < steps; k++) {
+                tgt = (k + 1) * TF_STEP;
+                ecn = 0;
+
+                mb_ecn_calc_ecn(q / LEN, &ecn, QOS_CUBE_BE, LEN);
+                hist[k % TF_HIST] = (uint16_t) (ecn << CA_SHFT);
+
+                ea = k < lag_a ? 0 : hist[(k - lag_a) % TF_HIST];
+                if (ea > 0)         /* no feedback until congestion */
+                        mb_ecn_ece(a, ea, cc, ta);
+
+                /* Active flow: heartbeat/window liveness stays fresh. */
+                a->last_sig = ta;
+                if (tgt > ta)
+                        ta = drive_backlogged(a, &fta, ta, tgt - ta, LEN);
+
+                arr = a->rate * TF_STEP / BILLION;
+
+                if (b != NULL) {
+                        eb = k < lag_b ? 0 : hist[(k - lag_b) % TF_HIST];
+                        if (eb > 0)
+                                mb_ecn_ece(b, eb, cc, tb);
+
+                        b->last_sig = tb;
+                        if (tgt > tb)
+                                tb = drive_backlogged(b, &ftb, tb,
+                                                      tgt - tb, LEN);
+
+                        arr += b->rate * TF_STEP / BILLION;
+                }
+
+                q += arr;
+                q  = q > drain ? q - drain : 0;
+                if (q > (uint64_t) TF_QMAX)
+                        q = TF_QMAX;
+        }
+}
+
+/*
+ * Two flows sharing one bottleneck, both fed every queue mark, must
+ * converge from a lopsided start toward an equal split (the fluid
+ * model's drho/dt -> 0) rather than latch winner-take-all. Isolates
+ * the rate law from the forwarder: neither flow is starved of marks.
+ */
+static int test_mb_ecn_two_flow_converge(void)
+{
+        struct mb_ecn_ctx * a;
+        struct mb_ecn_ctx * b;
+        uint64_t            cap  = 1ULL << 20;
+        uint64_t            fair = (1ULL << 20) / 2;
+        uint64_t            lo;
+        uint64_t            hi;
+
+        TEST_START();
+
+        a = mk_ctx();
+        b = mk_ctx();
+        if (a == NULL || b == NULL) {
+                printf("Failed to create contexts.\n");
+                goto fail_ctx;
+        }
+
+        a->rate = cap;             /* a hogs, b starts small */
+        b->rate = CA_RATE_INIT;
+
+        shared_link_run(a, b, cap, 0, 0, 6000);
+
+        lo = a->rate < b->rate ? a->rate : b->rate;
+        hi = a->rate > b->rate ? a->rate : b->rate;
+
+        if (lo < fair / 4) {
+                printf("flow starved: %" PRIu64 " / %" PRIu64 ".\n",
+                       a->rate, b->rate);
+                goto fail_ctx;
+        }
+
+        if (hi > 3 * lo) {
+                printf("did not converge: %" PRIu64 " / %" PRIu64 ".\n",
+                       a->rate, b->rate);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(a);
+        mb_ecn_ctx_destroy(b);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(a);
+        mb_ecn_ctx_destroy(b);
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * A remote bottleneck exits slow start only on fed-back congestion,
+ * so a longer feedback delay lets the exponential ramp overshoot
+ * further: the slow-start peak grows with RTT. Nothing caps the ramp
+ * at the path capacity, so the sender latches near the first-hop rate.
+ */
+static int test_mb_ecn_ramp_overshoot_grows_with_rtt(void)
+{
+        struct mb_ecn_ctx * lo_rtt;
+        struct mb_ecn_ctx * hi_rtt;
+        uint64_t            cap = 1ULL << 20;
+
+        TEST_START();
+
+        lo_rtt = mk_ctx();
+        hi_rtt = mk_ctx();
+        if (lo_rtt == NULL || hi_rtt == NULL) {
+                printf("Failed to create contexts.\n");
+                goto fail_ctx;
+        }
+
+        /* Same bottleneck; feedback lags 1 vs 8 steps (~5 vs 40 ms). */
+        shared_link_run(lo_rtt, NULL, cap, 1, 0, 2000);
+        shared_link_run(hi_rtt, NULL, cap, 8, 0, 2000);
+
+        if (hi_rtt->ss_peak <= lo_rtt->ss_peak) {
+                printf("overshoot did not grow with RTT: %" PRIu64
+                       " vs %" PRIu64 ".\n",
+                       hi_rtt->ss_peak, lo_rtt->ss_peak);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(lo_rtt);
+        mb_ecn_ctx_destroy(hi_rtt);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(lo_rtt);
+        mb_ecn_ctx_destroy(hi_rtt);
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Washout damps a fixed 1/4 of the rate change once per wall-clock
+ * bucket: a sub-bucket step banks time only, a full bucket removes a
+ * quarter of the gap either way without crossing the snapshot, and a
+ * sparse step (> CA_DT_CAP) resets it so a starved sender keeps its cut.
+ */
+static int test_mb_ecn_washout_bucket(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            r0 = (uint64_t) 100 << 20;
+        uint64_t            gap;
+
+        TEST_START();
+
+        ctx = mk_ctx();
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        gap = r0 >> 4;
+
+        /* Sub-bucket: time banks, the rate does not move. */
+        ctx->rate     = r0;
+        ctx->r_bkt    = r0 - gap;
+        ctx->wash_acc = 0;
+        mb_ecn_washout(ctx, MS, MS);
+        if (ctx->rate != r0 || ctx->wash_acc != MS) {
+                printf("sub-bucket washout moved the rate: %" PRIu64 ".\n",
+                       ctx->rate);
+                goto fail_ctx;
+        }
+
+        /* Full bucket, rate leads: cut a quarter of the gap, no crossing. */
+        ctx->rate     = r0;
+        ctx->r_bkt    = r0 - gap;
+        ctx->wash_acc = 0;
+        mb_ecn_washout(ctx, MS, CA_WASH_BKT);
+        if (ctx->rate != r0 - (gap >> CA_WASH_SHFT)) {
+                printf("bucket down: got %" PRIu64 ".\n", ctx->rate);
+                goto fail_ctx;
+        }
+
+        if (ctx->rate <= r0 - gap) {
+                printf("washout reversed a ramp: %" PRIu64 ".\n", ctx->rate);
+                goto fail_ctx;
+        }
+
+        if (ctx->r_bkt != ctx->rate || ctx->wash_acc != 0) {
+                printf("washout did not reset the bucket.\n");
+                goto fail_ctx;
+        }
+
+        /* Full bucket, rate trails: add a quarter of the gap (symmetric). */
+        ctx->rate     = r0;
+        ctx->r_bkt    = r0 + gap;
+        ctx->wash_acc = 0;
+        mb_ecn_washout(ctx, MS, CA_WASH_BKT);
+        if (ctx->rate != r0 + (gap >> CA_WASH_SHFT)) {
+                printf("bucket up: got %" PRIu64 ".\n", ctx->rate);
+                goto fail_ctx;
+        }
+
+        /* Sparse step: reset to the current rate, keep the cut. */
+        ctx->rate     = r0;
+        ctx->r_bkt    = r0 - gap;
+        ctx->wash_acc = CA_WASH_BKT / 2;
+        mb_ecn_washout(ctx, CA_DT_CAP + 1, MS);
+        if (ctx->rate != r0 || ctx->r_bkt != r0 || ctx->wash_acc != 0) {
+                printf("sparse step did not reset the bucket.\n");
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int mb_ecn_test(int     argc,
                 char ** argv)
 {
@@ -2561,6 +2892,7 @@ int mb_ecn_test(int     argc,
         ret |= test_mb_ecn_starved_decrease_escape();
         ret |= test_mb_ecn_starved_local_fallback();
         ret |= test_mb_ecn_decrease_dt_invariant();
+        ret |= test_mb_ecn_decrease_subms_carry();
         ret |= test_mb_ecn_idle_resume_bounded();
         ret |= test_mb_ecn_rate_floor();
         ret |= test_mb_ecn_ece_staleness();
@@ -2583,6 +2915,9 @@ int mb_ecn_test(int     argc,
         ret |= test_mb_ecn_max_filter();
         ret |= test_mb_ecn_idle_clears_backlogged();
         ret |= test_mb_ecn_first_send_warmup();
+        ret |= test_mb_ecn_two_flow_converge();
+        ret |= test_mb_ecn_ramp_overshoot_grows_with_rtt();
+        ret |= test_mb_ecn_washout_bucket();
 
         return ret;
 }

@@ -595,7 +595,7 @@ int dt_init(struct dt_config cfg)
                 goto fail_cap;
         }
 
-        if (connmgr_comp_init(COMPID_DT, &info)) {
+        if (connmgr_comp_init(COMPID_DT, &info) != 0) {
                 log_err("Failed to register with connmgr.");
                 goto fail_connmgr_comp_init;
         }

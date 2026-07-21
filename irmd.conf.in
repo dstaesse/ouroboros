@@ -113,6 +113,7 @@ autobind=true           # Defaults to false.
 # addr_size=4           # Defaults to 4 (32-bit addresses).
 # eid_size=8            # Defaults to 8 (64-bit endpoint IDs, only accepted option).
 # max_ttl=60            # Defaults to 60 (max 255).
+# max_rtt=200           # Defaults to 200 (max 65535).
 # addr-auth="flat"      # Defaults to flat (currently only option).
 # routing="lfa"         # Defaults to link-state (options: link-state, lfa, ecmp).
 # ls_t_recalc=4         # Forwarding Function update interval (s) (Default 4).

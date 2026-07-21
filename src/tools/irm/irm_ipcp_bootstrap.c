@@ -105,7 +105,8 @@ static char * usage_str = \
         "    [Data Transfer Constants]\n"
         "        [addr <address size> (default: %d)]\n"
         "        [eid <eid size> (default: %d)]\n"
-        "        [ttl <max time-to-live>, default: %d)]\n\n"
+        "        [ttl <max time-to-live>, default: %d)]\n"
+        "        [rtt <max layer RTT in ms> (default: %d)]\n\n"
         "if DIRECTORY_POLICY == " DHT_DIR "\n"
         "        [dht_alpha <search factor> (default: %u)]\n"
         "        [dht_k <replication factor> (default: %u)]\n"
@@ -152,7 +153,7 @@ static void usage(void)
                /* unicast */
                FLAT_RANDOM, DHT_DIR, SHA3_256, LINK_STATE, MB_ECN_CA,
                /* dt */
-               DT(addr_size), DT(eid_size), DT(max_ttl),
+               DT(addr_size), DT(eid_size), DT(max_ttl), DT(max_rtt),
                /* dht */
                DHT(alpha), DHT(k), DHT(t_expire),
                DHT(t_refresh), DHT(t_replicate),
@@ -184,6 +185,7 @@ int do_bootstrap_ipcp(int     argc,
         uint8_t                 addr_size      = DT(addr_size);
         uint8_t                 eid_size       = DT(eid_size);
         uint8_t                 max_ttl        = DT(max_ttl);
+        uint16_t                max_rtt        = DT(max_rtt);
         struct routing_config   routing        = default_routing_config;
         enum pol_addr_auth      addr_auth_type = UNI(addr_auth_type);
         enum pol_cong_avoid     cong_avoid     = UNI(cong_avoid);
@@ -250,6 +252,8 @@ int do_bootstrap_ipcp(int     argc,
                         eid_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "ttl") == 0) {
                         max_ttl = atoi(*(argv + 1));
+                } else if (matches(*argv, "rtt") == 0) {
+                        max_rtt = atoi(*(argv + 1));
                 } else if (matches(*argv, "port") == 0) {
                         port4 = atoi(*(argv + 1));
                         port6 = port4;
@@ -422,6 +426,7 @@ int do_bootstrap_ipcp(int     argc,
                                 conf.unicast.dt.addr_size    = addr_size;
                                 conf.unicast.dt.eid_size     = eid_size;
                                 conf.unicast.dt.max_ttl      = max_ttl;
+                                conf.unicast.dt.max_rtt      = max_rtt;
                                 conf.unicast.dt.routing      = routing;
                                 conf.unicast.addr_auth_type  = addr_auth_type;
                                 conf.unicast.cong_avoid      = cong_avoid;

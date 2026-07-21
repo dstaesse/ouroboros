@@ -58,7 +58,8 @@ struct {
 #endif
 } ca;
 
-int ca_init(enum pol_cong_avoid pol)
+int ca_init(enum pol_cong_avoid pol,
+            uint32_t            rtt_ms)
 {
 #ifndef IPCP_CA_PER_FLOW
         size_t i;
@@ -71,6 +72,7 @@ int ca_init(enum pol_cong_avoid pol)
         case CA_MB_ECN:
                 log_dbg("Using multi-bit ECN.");
                 ca.ops = &mb_ecn_ca_ops;
+                mb_ecn_init(rtt_ms);
                 break;
         default:
                 return -1;
@@ -214,6 +216,29 @@ void ca_ctx_update_ece(void *   _ctx,
         struct ca_ctx * ctx = _ctx;
 
         return ca.ops->ctx_update_ece(ctx->pol, ece, cap);
+}
+
+bool ca_ctx_hb_due(void *   _ctx,
+                   uint64_t now)
+{
+        struct ca_ctx * ctx = _ctx;
+
+        if (ca.ops->ctx_hb_due == NULL)
+                return false;
+
+        return ca.ops->ctx_hb_due(ctx->pol, now);
+}
+
+void ca_ctx_rtt(void *   _ctx,
+                uint64_t now,
+                uint64_t rtt)
+{
+        struct ca_ctx * ctx = _ctx;
+
+        if (ca.ops->ctx_rtt == NULL)
+                return;
+
+        ca.ops->ctx_rtt(ctx->pol, now, rtt);
 }
 
 int  ca_calc_ecn(size_t    queued,
