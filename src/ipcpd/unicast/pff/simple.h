@@ -52,6 +52,10 @@ void           simple_pff_flush(struct pff_i * pff_i);
 int            simple_pff_nhop(struct pff_i * pff_i,
                                uint64_t       addr);
 
+int            simple_pff_flow_state_change(struct pff_i * pff_i,
+                                            int            fd,
+                                            bool           up);
+
 extern struct pff_ops simple_pff_ops;
 
 #endif /* OUROBOROS_IPCPD_UNICAST_SIMPLE_PFF_H */

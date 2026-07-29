@@ -91,6 +91,43 @@ void pft_destroy(struct pft * pft)
         free(pft);
 }
 
+void pft_del_fd(struct pft * pft,
+                int          fd)
+{
+        unsigned int       i;
+        struct list_head * p;
+        struct list_head * h;
+        struct pft_entry * entry;
+        size_t             j;
+        size_t             n;
+
+        assert(pft);
+
+        for (i = 0; i < pft->buckets_size; i++) {
+                list_for_each_safe(p, h, &(pft->buckets[i])) {
+                        entry = list_entry(p, struct pft_entry, next);
+
+                        n = 0;
+                        for (j = 0; j < entry->len; j++) {
+                                if (entry->fds[j] != fd)
+                                        entry->fds[n++] = entry->fds[j];
+                        }
+
+                        if (n == entry->len)
+                                continue;
+
+                        if (n > 0) {
+                                entry->len = n;
+                                continue;
+                        }
+
+                        list_del(&entry->next);
+                        free(entry->fds);
+                        free(entry);
+                }
+        }
+}
+
 void pft_flush(struct pft * pft)
 {
         unsigned int       i;

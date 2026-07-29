@@ -35,6 +35,9 @@ void         pft_destroy(struct pft * table);
 
 void         pft_flush(struct pft * table);
 
+void         pft_del_fd(struct pft * table,
+                        int          fd);
+
 /* Passes ownership of the block of memory */
 int          pft_insert(struct pft * pft,
                         uint64_t     dst,

@@ -47,7 +47,7 @@ struct pff_ops simple_pff_ops = {
         .del               = simple_pff_del,
         .flush             = simple_pff_flush,
         .nhop              = simple_pff_nhop,
-        .flow_state_change = NULL
+        .flow_state_change = simple_pff_flow_state_change
 };
 
 struct pff_i * simple_pff_create(void)
@@ -168,6 +168,24 @@ void simple_pff_flush(struct pff_i * pff_i)
         assert(pff_i);
 
         pft_flush(pff_i->pft);
+}
+
+int simple_pff_flow_state_change(struct pff_i * pff_i,
+                                 int            fd,
+                                 bool           up)
+{
+        assert(pff_i);
+
+        if (up)
+                return 0;
+
+        pthread_rwlock_wrlock(&pff_i->lock);
+
+        pft_del_fd(pff_i->pft, fd);
+
+        pthread_rwlock_unlock(&pff_i->lock);
+
+        return 0;
 }
 
 int simple_pff_nhop(struct pff_i * pff_i,

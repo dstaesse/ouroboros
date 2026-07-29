@@ -49,7 +49,7 @@ struct pff_ops multipath_pff_ops = {
         .del               = multipath_pff_del,
         .flush             = multipath_pff_flush,
         .nhop              = multipath_pff_nhop,
-        .flow_state_change = NULL
+        .flow_state_change = multipath_pff_flow_state_change
 };
 
 struct pff_i * multipath_pff_create(void)
@@ -168,6 +168,24 @@ void multipath_pff_flush(struct pff_i * pff_i)
         assert(pff_i);
 
         pft_flush(pff_i->pft);
+}
+
+int multipath_pff_flow_state_change(struct pff_i * pff_i,
+                                    int            fd,
+                                    bool           up)
+{
+        assert(pff_i);
+
+        if (up)
+                return 0;
+
+        pthread_rwlock_wrlock(&pff_i->lock);
+
+        pft_del_fd(pff_i->pft, fd);
+
+        pthread_rwlock_unlock(&pff_i->lock);
+
+        return 0;
 }
 
 int multipath_pff_nhop(struct pff_i * pff_i,
