@@ -30,6 +30,7 @@
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
 #include <ouroboros/pthread.h>
+#include <ouroboros/qos.h>
 
 #include "connmgr.h"
 #include "ipcp.h"
@@ -123,7 +124,6 @@ static int add_comp_conn(enum comp_id       id,
 static void * flow_acceptor(void * o)
 {
         int              fd;
-        qosspec_t        qs;
         struct conn_info rcv_info;
         struct conn_info fail_info;
         struct timespec  timeo = TIMESPEC_INIT_MS(CONNMGR_RCV_TIMEOUT);
@@ -134,7 +134,8 @@ static void * flow_acceptor(void * o)
         memset(&fail_info, 0, sizeof(fail_info));
 
         while (true) {
-                int id;
+                qosspec_t qs = qos_raw;
+                int       id;
 
                 fd = flow_accept(&qs, NULL);
                 if (fd < 0) {
