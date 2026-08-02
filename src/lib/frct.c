@@ -193,6 +193,8 @@ struct frcti_stat {
         size_t rxm_due_unowned; /* bail: slot.rxm replaced         */
         size_t rxm_due_aged;    /* bail: r->t0 + t_r < now         */
         size_t rxm_due_defer;   /* bail: non-HoL, deferred to HoL  */
+        size_t rxm_fast_skip;   /* SACK skips: slot has FAST_RXM   */
+        size_t rxm_fast_stuck;  /* those skips with age > rto      */
         size_t rxm_arm_fail;    /* rxm_arm: malloc failed          */
         size_t rxm_cancel;      /* entries cancelled at teardown   */
         size_t rxm_tx_dead;     /* RXM tx into terminal flow       */
@@ -549,6 +551,8 @@ static int frct_rib_read(const char * path,
                 "  bail (unowned):                %20zu\n"
                 "  bail (aged):                   %20zu\n"
                 "  bail (defer):                  %20zu\n"
+                "  skip (fast-rxm set):           %20zu\n"
+                "  skip (stuck past rto):         %20zu\n"
                 "RXM-arm malloc failures:         %20zu\n"
                 "RXM cancels (teardown):          %20zu\n"
                 "RXM tx into dead flow:           %20zu\n"
@@ -597,6 +601,7 @@ static int frct_rib_read(const char * path,
                 s.stat.rxm_due_count,
                 s.stat.rxm_due_acked, s.stat.rxm_due_unowned,
                 s.stat.rxm_due_aged, s.stat.rxm_due_defer,
+                s.stat.rxm_fast_skip, s.stat.rxm_fast_stuck,
                 s.stat.rxm_arm_fail,
                 s.stat.rxm_cancel,
                 s.stat.rxm_tx_dead, s.stat.tx_drop,
@@ -1949,10 +1954,13 @@ void frcti_destroy(struct frcti * frcti)
         printf("[FRCT teardown] pid=%d fd=%d "
                "sdu_snd=%zu sdu_reasm=%zu sdu_sole=%zu "
                "frag_snd=%zu frag_rcv=%zu frag_drop=%zu "
-               "rxm_rto=%zu rxm_sack=%zu rxm_dup=%zu "
+               "rxm_rto=%zu rxm_sack=%zu rxm_rack=%zu rxm_dup=%zu "
                "rxm_due=%zu acked=%zu unowned=%zu aged=%zu defer=%zu "
+               "fast_skip=%zu fast_stuck=%zu "
                "cancel=%zu arm_fail=%zu inflight=%u "
                "nack_snd=%zu nack_rcv=%zu inact_drop=%zu "
+               "tlp_snd=%zu sack_snd=%zu sack_rcv=%zu ack_supp=%zu "
+               "out_rcv=%zu rqo_rcv=%zu dup_rcv=%zu rxm_dup_rcv=%zu "
                "drf_rebase=%zu rq_released=%zu\n",
                (int) getpid(), frcti->fd,
                frcti->stat.sdu_snd_frag, frcti->stat.sdu_reasm,
@@ -1960,14 +1968,19 @@ void frcti_destroy(struct frcti * frcti)
                frcti->stat.frag_snd, frcti->stat.frag_rcv,
                frcti->stat.frag_drop,
                frcti->stat.rxm_rto, frcti->stat.rxm_sack,
-               frcti->stat.rxm_dupthresh,
+               frcti->stat.rxm_rack, frcti->stat.rxm_dupthresh,
                frcti->stat.rxm_due_count, frcti->stat.rxm_due_acked,
                frcti->stat.rxm_due_unowned, frcti->stat.rxm_due_aged,
                frcti->stat.rxm_due_defer,
+               frcti->stat.rxm_fast_skip, frcti->stat.rxm_fast_stuck,
                frcti->stat.rxm_cancel, frcti->stat.rxm_arm_fail,
                frcti->snd_cr.seqno - frcti->snd_cr.lwe,
                frcti->stat.nack_snd, frcti->stat.nack_rcv,
                frcti->stat.inact_drop,
+               frcti->stat.tlp_snd, frcti->stat.sack_snd,
+               frcti->stat.sack_rcv, frcti->stat.ack_supp_seqno,
+               frcti->stat.out_rcv, frcti->stat.rqo_rcv,
+               frcti->stat.dup_rcv, frcti->stat.rxm_dup_rcv,
                frcti->stat.drf_rebase, frcti->stat.rq_released);
 #endif
 
@@ -2932,9 +2945,6 @@ static void tlp_due(void * arg)
         if (frcti->snd_cr.seqno == frcti->snd_cr.lwe)
                 goto unlock;
 
-        if (!before(frcti->snd_cr.seqno, frcti->snd_cr.rwe))
-                goto unlock;        /* FC-blocked: RDV handles it. */
-
         /* RFC 8985 §7.3: one outstanding probe, MAX_TLP_PER_EP per ep. */
         if (frcti->tlp_high_seq != 0)
                 goto unlock;
@@ -2967,10 +2977,10 @@ static void tlp_due(void * arg)
                 memcpy(pkt_copy, rxm->pkt, rxm->len);
                 pkt_len = rxm->len;
                 frcti->snd_slots[hp].time   = now_ns;
-                frcti->snd_slots[hp].flags |= SND_TLP | SND_FAST_RXM;
+                frcti->snd_slots[hp].flags |= SND_TLP;
                 frcti->rtt_lwe = frcti->snd_cr.lwe + 1;
-                /* §7.3 outstanding-probe marker; ack_rcv/rxm_snd clear. */
-                frcti->tlp_high_seq = frcti->snd_cr.seqno;
+                /* Probe is the HoL: any cum-ACK resolves the episode. */
+                frcti->tlp_high_seq = frcti->snd_cr.lwe + 1;
                 frcti->tlp_count++;
                 STAT_BUMP(frcti, tlp_snd);
         }
@@ -3191,8 +3201,10 @@ static void frcti_ack_rcv(struct frcti *          frcti,
 
         /* §7.3: cum-ACK past the probed seqno resolves the TLP. */
         if (frcti->tlp_high_seq != 0
-            && !before(ackno, frcti->tlp_high_seq))
+            && !before(ackno, frcti->tlp_high_seq)) {
                 frcti->tlp_high_seq = 0;
+                frcti->tlp_count    = 0;
+        }
 
         /* §7.3: end the probe episode once inflight drains. */
         if (ackno == frcti->snd_cr.seqno)
@@ -3306,8 +3318,22 @@ static void sack_queue_rxm(struct frcti *    frcti,
                 if (rxm == NULL)
                         continue;
 
-                if (frcti->snd_slots[kp].flags & SND_FAST_RXM)
-                        continue;
+                /*
+                 * A fast-retx still outstanding after its own RTO is
+                 * presumed lost; clear the flag so RACK can repair it
+                 * again instead of stranding it until the HoL timer.
+                 */
+                if (frcti->snd_slots[kp].flags & SND_FAST_RXM) {
+                        if (!ts_aged_ns(now_ns,
+                                        frcti->snd_slots[kp].time,
+                                        LOAD_RELAXED(&frcti->rto))) {
+                                STAT_BUMP(frcti, rxm_fast_skip);
+                                continue;
+                        }
+
+                        STAT_BUMP(frcti, rxm_fast_stuck);
+                        frcti->snd_slots[kp].flags &= ~SND_FAST_RXM;
+                }
 
                 if (RXM_AGED_OUT(rxm->t0, now_ns, frcti->t_r))
                         continue;
@@ -3596,10 +3622,6 @@ static bool sack_check(struct frcti *     frcti,
 
         n += sack_blocks_build(frcti, out->blocks + n,
                                frcti->sack_n_max - n);
-
-        if (!out->dsack
-            && rcv_cr->lwe == frcti->sack_lwe && n == frcti->sack_n)
-                return false;
 
         out->n   = n;
         out->ack = rcv_cr->lwe;
