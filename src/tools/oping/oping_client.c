@@ -193,8 +193,6 @@ void * writer(void * o)
         pthread_cleanup_push(free, buf);
 
         while (!stop && client.sent < client.count) {
-                nanosleep(&wait, NULL);
-
                 clock_gettime(CLOCK_MONOTONIC, &now);
 
                 msg->type = htonl(ECHO_REQUEST);
@@ -206,6 +204,8 @@ void * writer(void * o)
                         printf("Failed to send packet.\n");
                         stop = true;
                 }
+
+                nanosleep(&wait, NULL);
         }
 
         pthread_cleanup_pop(true);
