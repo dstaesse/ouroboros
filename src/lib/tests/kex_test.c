@@ -105,6 +105,9 @@ extern const uint16_t kex_supported_nids[];
 int parse_sec_config(struct sec_config * cfg,
                      FILE *              fp);
 
+int crypt_load_sec_config(struct sec_config * cfg,
+                          FILE *              fp);
+
 static int test_kex_create_destroy(void)
 {
         struct sec_config cfg;
@@ -1191,6 +1194,38 @@ static int test_kex_parse_config_unknown_key(void)
         return TEST_RC_FAIL;
 }
 
+#ifndef HAVE_OPENSSL
+/* A present security config must be refused without a backend. */
+static int test_kex_load_config_enotsup(void)
+{
+        struct sec_config kex;
+        FILE *            fp;
+
+        TEST_START();
+
+        fp = FMEMOPEN_STR(KEX_CONFIG_CUSTOM);
+        if (fp == NULL) {
+                printf("Failed to open config stream.\n");
+                goto fail;
+        }
+
+        if (crypt_load_sec_config(&kex, fp) != -ENOTSUP) {
+                printf("Loaded a config without a crypto backend.\n");
+                fclose(fp);
+                goto fail;
+        }
+
+        fclose(fp);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+#endif
+
 int kex_test(int     argc,
              char ** argv)
 {
@@ -1200,6 +1235,7 @@ int kex_test(int     argc,
         (void) argv;
 
         ret |= test_kex_create_destroy();
+#ifdef HAVE_OPENSSL
         ret |= test_kex_parse_config_empty();
         ret |= test_kex_parse_config_none_rejected();
         ret |= test_kex_parse_config_no_enc();
@@ -1211,7 +1247,6 @@ int kex_test(int     argc,
         ret |= test_kex_parse_config_auth_no_enc(KEX_CONFIG_NO_ENC_THEN_AUTH);
         ret |= test_kex_parse_config_cacert();
         ret |= test_kex_parse_config_unknown_key();
-#ifdef HAVE_OPENSSL
         ret |= test_kex_parse_config_custom();
         ret |= test_kex_parse_config_whitespace();
         ret |= test_kex_parse_config_cipher();
@@ -1227,6 +1262,18 @@ int kex_test(int     argc,
         ret |= test_kex_load_dhe_privkey();
         ret |= test_kex_load_dhe_pubkey();
 #else
+        ret |= test_kex_load_config_enotsup();
+
+        (void) test_kex_parse_config_empty;
+        (void) test_kex_parse_config_none_rejected;
+        (void) test_kex_parse_config_no_enc;
+        (void) test_kex_parse_config_auth;
+        (void) test_kex_parse_config_auth_invalid;
+        (void) test_kex_parse_config_auth_seed;
+        (void) test_kex_parse_config_auth_optional;
+        (void) test_kex_parse_config_auth_no_enc;
+        (void) test_kex_parse_config_cacert;
+        (void) test_kex_parse_config_unknown_key;
         (void) test_kex_parse_config_custom;
         (void) test_kex_parse_config_whitespace;
         (void) test_kex_parse_config_cipher;
@@ -1240,9 +1287,6 @@ int kex_test(int     argc,
         (void) test_kex_dhe_corrupted_pubkey_all;
         (void) test_kex_load_dhe_privkey;
         (void) test_kex_load_dhe_pubkey;
-
-        if (ret == 0)
-                ret = TEST_RC_SKIP;
 #endif
         return ret;
 }

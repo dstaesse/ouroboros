@@ -252,6 +252,23 @@ int parse_sec_config(struct sec_config * cfg,
         return 0;
 }
 
+/*
+ * Not in header, but non-static for unit testing. Without a crypto
+ * backend a present security config is refused.
+ */
+int crypt_load_sec_config(struct sec_config * cfg,
+                          FILE *              fp)
+{
+        assert(cfg != NULL);
+        assert(fp != NULL);
+
+#ifndef HAVE_OPENSSL
+        return -ENOTSUP;
+#endif
+
+        return parse_sec_config(cfg, fp);
+}
+
 /* Parse key exchange config from file */
 int load_sec_config_file(struct sec_config * cfg,
                          const char *        path)
@@ -273,7 +290,9 @@ int load_sec_config_file(struct sec_config * cfg,
         }
 
         pthread_cleanup_push(__cleanup_fclose, fp);
-        ret = parse_sec_config(cfg, fp);
+
+        ret = crypt_load_sec_config(cfg, fp);
+
         pthread_cleanup_pop(0);
 
         fclose(fp);
@@ -830,6 +849,11 @@ int crypt_decrypt(struct crypt_ctx * ctx,
 
 struct crypt_ctx * crypt_create_ctx(struct crypt_sk * sk)
 {
+#ifndef HAVE_OPENSSL
+        (void) sk;
+
+        return NULL; /* nothing to seal with */
+#else
         struct crypt_ctx * crypt;
 
         if (crypt_validate_nid(sk->nid) != 0)
@@ -845,21 +869,19 @@ struct crypt_ctx * crypt_create_ctx(struct crypt_sk * sk)
         if (crypt->kr == NULL)
                 goto fail_kr;
 
-#ifdef HAVE_OPENSSL
         crypt->cipher = openssl_crypt_create_ctx(sk);
         if (crypt->cipher == NULL)
                 goto fail_cipher;
-#endif
+
         return crypt;
 
-#ifdef HAVE_OPENSSL
  fail_cipher:
         keyrot_destroy(crypt->kr);
-#endif
  fail_kr:
         free(crypt);
  fail_crypt:
         return NULL;
+#endif
 }
 
 void crypt_destroy_ctx(struct crypt_ctx * crypt)
@@ -947,7 +969,7 @@ int crypt_load_privkey_file(const char * path,
 #else
         (void) path;
 
-        return 0;
+        return -ENOTSUP;
 #endif
 }
 
@@ -961,7 +983,7 @@ int crypt_load_privkey_str(const char * str,
 #else
         (void) str;
 
-        return 0;
+        return -ENOTSUP;
 #endif
 }
 
@@ -975,7 +997,7 @@ int crypt_load_pubkey_str(const char * str,
 #else
         (void) str;
 
-        return 0;
+        return -ENOTSUP;
 #endif
 }
 
@@ -989,7 +1011,7 @@ int crypt_load_pubkey_file(const char * path,
 #else
         (void) path;
 
-        return 0;
+        return -ENOTSUP;
 #endif
 }
 
@@ -1194,7 +1216,7 @@ int crypt_check_crt_name(void *       crt,
         (void) crt;
         (void) name;
 
-        return 0;
+        return -ENOTSUP;
 #endif
 }
 
@@ -1292,7 +1314,7 @@ int auth_verify_crt(struct auth_ctx * ctx,
         (void) ctx;
         (void) crt;
 
-        return 0;
+        return -ENOTSUP;
 #endif
 }
 
@@ -1307,7 +1329,7 @@ int auth_verify_crt_pin(struct auth_ctx * ctx,
         (void) crt;
         (void) pin;
 
-        return 0;
+        return -ENOTSUP;
 #endif
 }
 
@@ -1354,7 +1376,7 @@ int auth_verify_sig(void *   pk,
         (void) msg;
         (void) sig;
 
-        return 0;
+        return -ENOTSUP;
 #endif
 }
 

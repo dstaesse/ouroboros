@@ -364,6 +364,22 @@ static int test_crypt_aad_tamper(int nid)
                 goto fail_rx;
         }
 
+        enc.data[5] ^= 0x01;
+
+        if (crypt_decrypt(rx, enc, &dec) < 0) {
+                printf("Decryption failed after a rejected packet.\n");
+                freebuf(enc);
+                goto fail_rx;
+        }
+
+        if (dec.len != in.len || memcmp(dec.data, in.data, in.len) != 0) {
+                printf("Decrypted data mismatch after rejection.\n");
+                freebuf(dec);
+                freebuf(enc);
+                goto fail_rx;
+        }
+
+        freebuf(dec);
         freebuf(enc);
 
         crypt_destroy_ctx(rx);

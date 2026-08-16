@@ -37,6 +37,7 @@
 
 #include <openssl/evp.h>
 #include <openssl/bio.h>
+#include <openssl/crypto.h>
 #include <openssl/ec.h>
 #include <openssl/err.h>
 #include <openssl/kdf.h>
@@ -58,11 +59,38 @@
 #define AEAD_NONCE_LEN     12 /* 96-bit deterministic IV (SP 800-38D) */
 #define AEAD_TAG_LEN       16 /* 128-bit AEAD authentication tag */
 
+/*
+ * Holds only the cipher identity, which is fixed at creation. A flow's
+ * context is sealed and opened by several threads at once, so nothing
+ * here may carry per-packet state.
+ */
 struct ossl_crypt_ctx {
-        EVP_CIPHER_CTX *   evp_ctx;
         const EVP_CIPHER * cipher;
         int                tagsz;
 };
+
+/*
+ * Per-thread AEAD context. A key covers 2^KEY_LEAF_BITS packets, so
+ * the key schedule is worth keeping between them; only the nonce
+ * changes. Thread-local, so concurrent sealers share nothing, and a
+ * miss costs no more than a full install.
+ */
+struct ossl_aead {
+        EVP_CIPHER_CTX *   evp;
+        const EVP_CIPHER * cipher; /* NULL when the state is unusable */
+        uint8_t            key[SYMMKEYSZ];
+        size_t             keylen;
+};
+
+struct ossl_aead_tls {
+        struct ossl_aead seal;
+        struct ossl_aead open;
+};
+
+static struct {
+        pthread_key_t  key;
+        pthread_once_t once;
+} aead_g = { 0, PTHREAD_ONCE_INIT };
 
 struct kdf_info {
         buffer_t secret;
@@ -274,6 +302,117 @@ int openssl_hkdf_expand(buffer_t key,
         return ret;
 }
 
+static void aead_tls_free(void * p)
+{
+        struct ossl_aead_tls * t = p;
+        if (t == NULL)
+                return;
+
+        EVP_CIPHER_CTX_free(t->seal.evp);
+        EVP_CIPHER_CTX_free(t->open.evp);
+
+        crypt_secure_clear(t->seal.key, SYMMKEYSZ);
+        crypt_secure_clear(t->open.key, SYMMKEYSZ);
+
+        free(t);
+}
+
+static void aead_tls_init(void)
+{
+        pthread_key_create(&aead_g.key, aead_tls_free);
+}
+
+static struct ossl_aead_tls * aead_tls_get(void)
+{
+        struct ossl_aead_tls * t;
+
+        pthread_once(&aead_g.once, aead_tls_init);
+
+        t = pthread_getspecific(aead_g.key);
+        if (t != NULL)
+                return t;
+
+        t = malloc(sizeof(*t));
+        if (t == NULL)
+                return NULL;
+
+        memset(t, 0, sizeof(*t));
+
+        if (pthread_setspecific(aead_g.key, t) != 0) {
+                free(t);
+                return NULL;
+        }
+
+        return t;
+}
+
+/* Install cipher and key; the nonce is set per packet by the caller. */
+static int aead_install(EVP_CIPHER_CTX *   evp,
+                        const EVP_CIPHER * cipher,
+                        const uint8_t *    key,
+                        bool               enc)
+{
+        EVP_CIPHER_CTX_reset(evp);
+
+        if (enc) {
+                if (EVP_EncryptInit_ex(evp, cipher, NULL, NULL, NULL) != 1)
+                        return -1;
+        } else {
+                if (EVP_DecryptInit_ex(evp, cipher, NULL, NULL, NULL) != 1)
+                        return -1;
+        }
+
+        /* Pin the AEAD nonce to 96 bits (SP 800-38D deterministic IV). */
+        if (EVP_CIPHER_CTX_ctrl(evp, EVP_CTRL_AEAD_SET_IVLEN,
+                                AEAD_NONCE_LEN, NULL) != 1)
+                return -1;
+
+        if (enc) {
+                if (EVP_EncryptInit_ex(evp, NULL, NULL, key, NULL) != 1)
+                        return -1;
+        } else {
+                if (EVP_DecryptInit_ex(evp, NULL, NULL, key, NULL) != 1)
+                        return -1;
+        }
+
+        return 0;
+}
+
+/* This thread's context for cipher/key, ready to take a nonce. */
+static EVP_CIPHER_CTX * aead_ctx(struct ossl_aead * a,
+                                 const EVP_CIPHER * cipher,
+                                 const uint8_t *    key,
+                                 bool               enc)
+{
+        int keylen;
+
+        keylen = EVP_CIPHER_get_key_length(cipher);
+        if (keylen <= 0 || (size_t) keylen > SYMMKEYSZ)
+                return NULL;
+
+        /* Compare the bytes: a cache slot can be reused for a new key. */
+        if (a->cipher == cipher && a->keylen == (size_t) keylen
+            && CRYPTO_memcmp(a->key, key, a->keylen) == 0)
+                return a->evp;
+
+        if (a->evp == NULL) {
+                a->evp = EVP_CIPHER_CTX_new();
+                if (a->evp == NULL)
+                        return NULL;
+        }
+
+        a->cipher = NULL;
+        if (aead_install(a->evp, cipher, key, enc) < 0)
+                return NULL;
+
+        memcpy(a->key, key, (size_t) keylen);
+
+        a->keylen = (size_t) keylen;
+        a->cipher = cipher;
+
+        return a->evp;
+}
+
 /* AEAD seal: encrypt in with key/nonce, bind aad, append tag */
 int openssl_seal(struct ossl_crypt_ctx * ctx,
                  const uint8_t *         key,
@@ -283,45 +422,45 @@ int openssl_seal(struct ossl_crypt_ctx * ctx,
                  uint8_t *               out,
                  uint8_t *               tag)
 {
-        int out_sz;
-        int tmp_sz;
+        struct ossl_aead_tls * tls;
+        EVP_CIPHER_CTX *       evp;
+        int                    out_sz;
+        int                    tmp_sz;
 
         assert(ctx != NULL);
         assert(ctx->tagsz > 0); /* AEAD mandated at ctx creation */
 
-        EVP_CIPHER_CTX_reset(ctx->evp_ctx);
+        tls = aead_tls_get();
+        if (tls == NULL)
+                goto fail;
 
-        if (EVP_EncryptInit_ex(ctx->evp_ctx, ctx->cipher, NULL,
-                               NULL, NULL) != 1)
-                return -1;
+        evp = aead_ctx(&tls->seal, ctx->cipher, key, true);
+        if (evp == NULL)
+                goto fail;
 
-        /* Pin the AEAD nonce to 96 bits (SP 800-38D deterministic IV). */
-        if (EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_SET_IVLEN,
-                                AEAD_NONCE_LEN, NULL) != 1)
-                return -1;
+        if (EVP_EncryptInit_ex(evp, NULL, NULL, NULL, nonce) != 1)
+                goto fail_evp;
 
-        if (EVP_EncryptInit_ex(ctx->evp_ctx, NULL, NULL,
-                               key, nonce) != 1)
-                return -1;
+        if (EVP_EncryptUpdate(evp, NULL, &tmp_sz, aad.data, (int) aad.len) != 1)
+                goto fail_evp;
 
-        if (EVP_EncryptUpdate(ctx->evp_ctx, NULL, &tmp_sz,
-                              aad.data, (int) aad.len) != 1)
-                return -1;
+        if (EVP_EncryptUpdate(evp, out, &out_sz, in.data, (int) in.len) != 1)
+                goto fail_evp;
 
-        if (EVP_EncryptUpdate(ctx->evp_ctx, out, &out_sz,
-                              in.data, (int) in.len) != 1)
-                return -1;
-
-        if (EVP_EncryptFinal_ex(ctx->evp_ctx, out + out_sz, &tmp_sz) != 1)
-                return -1;
+        if (EVP_EncryptFinal_ex(evp, out + out_sz, &tmp_sz) != 1)
+                goto fail_evp;
 
         out_sz += tmp_sz;
 
-        if (EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_GET_TAG,
+        if (EVP_CIPHER_CTX_ctrl(evp, EVP_CTRL_AEAD_GET_TAG,
                                 ctx->tagsz, tag) != 1)
-                return -1;
+                goto fail_evp;
 
         return out_sz;
+ fail_evp:
+        tls->seal.cipher = NULL; /* state unknown; install afresh */
+ fail:
+        return -1;
 }
 
 /* AEAD open: decrypt in with key/nonce, verify aad and tag */
@@ -333,47 +472,50 @@ int openssl_open(struct ossl_crypt_ctx * ctx,
                  const uint8_t *         tag,
                  buffer_t *              out)
 {
-        int out_sz;
-        int tmp_sz;
+        struct ossl_aead_tls * tls;
+        EVP_CIPHER_CTX *       evp;
+        int                    out_sz;
+        int                    tmp_sz;
 
         assert(ctx != NULL);
         assert(ctx->tagsz > 0); /* AEAD mandated at ctx creation */
 
-        EVP_CIPHER_CTX_reset(ctx->evp_ctx);
+        tls = aead_tls_get();
+        if (tls == NULL)
+                goto fail;
 
-        if (EVP_DecryptInit_ex(ctx->evp_ctx, ctx->cipher, NULL,
-                               NULL, NULL) != 1)
-                return -1;
+        evp = aead_ctx(&tls->open, ctx->cipher, key, false);
+        if (evp == NULL)
+                goto fail;
 
-        /* Pin the AEAD nonce to 96 bits (SP 800-38D deterministic IV). */
-        if (EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_SET_IVLEN,
-                                AEAD_NONCE_LEN, NULL) != 1)
-                return -1;
+        if (EVP_DecryptInit_ex(evp, NULL, NULL, NULL, nonce) != 1)
+                goto fail_evp;
 
-        if (EVP_DecryptInit_ex(ctx->evp_ctx, NULL, NULL, key, nonce) != 1)
-                return -1;
-
-        if (EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_AEAD_SET_TAG,
+        if (EVP_CIPHER_CTX_ctrl(evp, EVP_CTRL_AEAD_SET_TAG,
                                 ctx->tagsz, (void *) tag) != 1)
-                return -1;
+                goto fail_evp;
 
-        if (EVP_DecryptUpdate(ctx->evp_ctx, NULL, &tmp_sz,
-                              aad.data, (int) aad.len) != 1)
-                return -1;
+        if (EVP_DecryptUpdate(evp, NULL, &tmp_sz, aad.data, (int) aad.len) != 1)
+                goto fail_evp;
 
-        if (EVP_DecryptUpdate(ctx->evp_ctx, out->data, &out_sz,
+        if (EVP_DecryptUpdate(evp, out->data, &out_sz,
                               in.data, (int) in.len) != 1)
-                return -1;
+                goto fail_evp;
 
-        if (EVP_DecryptFinal_ex(ctx->evp_ctx, out->data + out_sz,
-                                &tmp_sz) != 1)
-                return -1;
+        /* A failed verify leaves defined state; keep the key cached. */
+        if (EVP_DecryptFinal_ex(evp, out->data + out_sz, &tmp_sz) != 1)
+                goto fail_verify;
 
         out_sz += tmp_sz;
 
         out->len = (size_t) out_sz;
 
         return out_sz;
+ fail_evp:
+        tls->open.cipher = NULL; /* state unknown; install afresh */
+ fail_verify:
+ fail:
+        return -1;
 }
 
 /*
@@ -994,10 +1136,6 @@ static int ossl_cipher_ctx_init(struct ossl_crypt_ctx * ctx,
 
         ctx->tagsz = AEAD_TAG_LEN;
 
-        ctx->evp_ctx = EVP_CIPHER_CTX_new();
-        if (ctx->evp_ctx == NULL)
-                return -1;
-
         return 0;
 }
 
@@ -1023,7 +1161,7 @@ int openssl_oneshot_seal(int             nid,
 
         out->data = malloc(in.len + EVP_MAX_BLOCK_LENGTH + ctx.tagsz);
         if (out->data == NULL)
-                goto fail_ctx;
+                goto fail_cipher;
 
         out_sz = openssl_seal(&ctx, key, nonce, aad, in,
                               out->data, out->data + in.len);
@@ -1032,14 +1170,10 @@ int openssl_oneshot_seal(int             nid,
 
         out->len = (size_t) out_sz + ctx.tagsz;
 
-        EVP_CIPHER_CTX_free(ctx.evp_ctx);
-
         return 0;
 
  fail_seal:
         free(out->data);
- fail_ctx:
-        EVP_CIPHER_CTX_free(ctx.evp_ctx);
  fail_cipher:
         clrbuf(*out);
         return -ECRYPT;
@@ -1068,13 +1202,13 @@ int openssl_oneshot_open(int             nid,
                 goto fail_cipher;
 
         if (in.len < (size_t) ctx.tagsz)
-                goto fail_ctx;
+                goto fail_cipher;
 
         in_sz = (int) in.len - ctx.tagsz;
 
         out->data = malloc((size_t) in_sz + EVP_MAX_BLOCK_LENGTH);
         if (out->data == NULL)
-                goto fail_ctx;
+                goto fail_cipher;
 
         ct.data = in.data;
         ct.len  = (size_t) in_sz;
@@ -1083,14 +1217,10 @@ int openssl_oneshot_open(int             nid,
         if (openssl_open(&ctx, key, nonce, aad, ct, tag, out) < 0)
                 goto fail_open;
 
-        EVP_CIPHER_CTX_free(ctx.evp_ctx);
-
         return 0;
 
  fail_open:
         free(out->data);
- fail_ctx:
-        EVP_CIPHER_CTX_free(ctx.evp_ctx);
  fail_cipher:
         clrbuf(*out);
         return -ECRYPT;
@@ -1125,7 +1255,6 @@ void openssl_crypt_destroy_ctx(struct ossl_crypt_ctx * ctx)
         if (ctx == NULL)
                 return;
 
-        EVP_CIPHER_CTX_free(ctx->evp_ctx);
         free(ctx);
 }
 
