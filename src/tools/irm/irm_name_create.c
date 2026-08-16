@@ -117,6 +117,11 @@ int do_create_name(int     argc,
         --argc;
 
         while (argc > 0) {
+                if (argc < 2) {
+                        usage();
+                        return -1;
+                }
+
                 if (matches(*argv, "lb") == 0) {
                         lb_pol = *(argv + 1);
                 } else if (matches(*argv, "ssecpath") == 0) {

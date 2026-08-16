@@ -57,13 +57,23 @@ int do_unbind_program(int     argc,
         char * name = NULL;
         char * prog = NULL;
 
+        if (argc < 1) {
+                usage();
+                return -1;
+        }
+
+        prog = *argv;
+        ++argv;
+        --argc;
+
         while (argc > 0) {
+                if (argc < 2) {
+                        usage();
+                        return -1;
+                }
+
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                        ++argv;
-                        --argc;
-                } else if (matches(*argv, "program") == 0) {
-                        prog = *(argv + 1);
                         ++argv;
                         --argc;
                 } else {

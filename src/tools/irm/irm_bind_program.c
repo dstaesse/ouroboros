@@ -67,17 +67,22 @@ int do_bind_program(int     argc,
         int      ret   = 0;
         char *   temp  = NULL;
 
+        if (argc < 1) {
+                usage();
+                return -1;
+        }
+
+        temp = realpath(*argv, NULL);
+        if (temp != NULL)
+                *argv = temp;
+        prog = *argv;
+        ++argv;
+        --argc;
+
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                         ++argv;
-                        --argc;
-                } else if (matches(*argv, "program") == 0) {
-                        ++argv;
-                        temp = realpath(*argv, NULL);
-                        if (temp != NULL)
-                                *argv = temp;
-                        prog = *argv;
                         --argc;
                 } else if (strcmp(*argv, "auto") == 0) {
                         flags |= BIND_AUTO;

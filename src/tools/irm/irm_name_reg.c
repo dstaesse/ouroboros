@@ -80,6 +80,11 @@ int do_reg_name(int     argc,
         --argc;
 
         while (argc > 0) {
+                if (argc < 2) {
+                        usage();
+                        return -1;
+                }
+
                 if (matches(*argv, "layer") == 0) {
                         layers[layers_len++] = *(argv + 1);
                         if (layers_len > MAX_LAYERS) {

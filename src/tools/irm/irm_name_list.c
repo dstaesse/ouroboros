@@ -49,6 +49,12 @@
 #define RR    "round-robin"
 #define SPILL "spillover"
 
+static void usage(void)
+{
+        printf("Usage: irm name list\n"
+               "           [name <name>]\n");
+}
+
 static char * str_pol(enum pol_balance p)
 {
         switch(p) {
@@ -70,7 +76,12 @@ int do_list_name(int     argc,
         ssize_t            i;
 
         while (argc > 0) {
-                if (matches(*argv, "list") == 0) {
+                if (argc < 2) {
+                        usage();
+                        return -1;
+                }
+
+                if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
                 } else {
                         printf("\"%s\" is unknown, try \"irm "

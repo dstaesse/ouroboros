@@ -78,8 +78,8 @@ static int do_cmd(const char * argv0,
         const struct cmd * c;
 
         for (c = cmds; c->cmd; ++c)
-                if (!matches(argv0, c->cmd))
-                        return c->func(argc, argv);
+                if (matches(argv0, c->cmd) == 0)
+                        return c->func(argc - 1, argv + 1);
 
         fprintf(stderr, "\"%s\" is unknown, try \"irm unbind help\".\n", argv0);
 

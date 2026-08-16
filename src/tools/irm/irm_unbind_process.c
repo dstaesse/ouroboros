@@ -58,13 +58,18 @@ int do_unbind_process(int     argc,
         pid_t  pid  = -1;
         char * name = NULL;
 
+        if (argc < 1) {
+                usage();
+                return -1;
+        }
+
+        pid = strtol(*argv, NULL, 10);
+        ++argv;
+        --argc;
+
         while (argc > 1) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                        ++argv;
-                        --argc;
-                } else if (matches(*argv, "process") == 0) {
-                        pid = strtol(*(argv + 1), NULL, 10);
                         ++argv;
                         --argc;
                 } else {

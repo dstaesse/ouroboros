@@ -63,13 +63,18 @@ int do_unbind_ipcp(int     argc,
         ssize_t                 len;
         ssize_t                 i;
 
+        if (argc < 1) {
+                usage();
+                return -1;
+        }
+
+        ipcp = *argv;
+        ++argv;
+        --argc;
+
         while (argc > 0) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                        ++argv;
-                        --argc;
-                } else if (matches(*argv, "ipcp") == 0) {
-                        ipcp = *(argv + 1);
                         ++argv;
                         --argc;
                 } else {

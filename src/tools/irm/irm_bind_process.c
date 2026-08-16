@@ -61,18 +61,22 @@ int do_bind_process(int     argc,
         char * name = NULL;
         char * t;
 
+        if (argc < 1) {
+                usage();
+                return -1;
+        }
+
+        pid = strtol(*argv, &t, 10);
+        if (*argv == t || *t != '\0' || kill(pid, 0)) {
+                printf("\"%s\" is not a valid process id.\n", *argv);
+                return -1;
+        }
+        ++argv;
+        --argc;
+
         while (argc > 1) {
                 if (matches(*argv, "name") == 0) {
                         name = *(argv + 1);
-                        ++argv;
-                        --argc;
-                } else if (matches(*argv, "process") == 0) {
-                        pid = strtol(*(argv + 1), &t, 10);
-                        if (*(argv + 1) == t || *t != '\0' || kill(pid, 0)) {
-                                printf("\"%s\" is not a valid process id.\n",
-                                       *(argv + 1));
-                                return -1;
-                        }
                         ++argv;
                         --argc;
                 } else {
