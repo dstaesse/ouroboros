@@ -878,9 +878,15 @@ static void handle_event(void *       self,
                 break;
         case NOTIFY_DT_CONN_UP:
                 flow_event(c->flow_info.fd, true);
+
+                if (lsdb_add_link(ls.addr, c->conn_info.addr, 0, &qs) < 0)
+                        log_dbg("Failed to re-add adjacency to lsdb.");
                 break;
         case NOTIFY_DT_CONN_DOWN:
                 flow_event(c->flow_info.fd, false);
+
+                if (lsdb_del_link(ls.addr, c->conn_info.addr) < 0)
+                        log_dbg("Local link was not in lsdb.");
                 break;
         case NOTIFY_MGMT_CONN_ADD:
                 fccntl(c->flow_info.fd, FLOWGFLAGS, &flags);
