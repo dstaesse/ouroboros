@@ -135,6 +135,7 @@ static uint64_t dsched_serve(struct dsched * d,
         uint64_t             dmin = 0;
         size_t               i;
         int                  fd;
+        int                  ret;
         time_t               wait;
         bool                 served;
 
@@ -151,7 +152,13 @@ static uint64_t dsched_serve(struct dsched * d,
                                 continue;
                         }
 
-                        if (sched->read(fd, &spb) < 0) {
+                        ret = sched->read(fd, &spb);
+                        if (ret == -EAGAIN) { /* empty now, keep it */
+                                ++i;
+                                continue;
+                        }
+
+                        if (ret < 0) {
                                 dsched_untrack(d, fd);
                                 continue;
                         }
