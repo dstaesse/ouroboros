@@ -3512,7 +3512,7 @@ static int dht_kv_next_values(uint8_t *          key,
         struct timespec    now;
         struct list_head * p;
         struct list_head * h;
-        struct dht_entry * e = NULL;
+        struct dht_entry * e;
 
         assert(key != NULL);
         assert(repl != NULL);
@@ -3525,20 +3525,19 @@ static int dht_kv_next_values(uint8_t *          key,
 
         pthread_rwlock_rdlock(&dht.db.lock);
 
-        if (llist_is_empty(&dht.db.kv.ll))
-                goto no_entries;
-
         llist_for_each_safe(p, h, &dht.db.kv.ll) {
                 e = list_entry(p, struct dht_entry, next);
-                if (IS_CLOSER(e->key, key))
+                if (!IS_CLOSER(key, e->key))
                         continue;  /* Already processed */
+
+                memcpy(key, e->key, dht.id.len);
+
+                dht_entry_get_repl_lists(e, repl, rebl, &now);
+
+                if (!list_is_empty(repl) || !list_is_empty(rebl))
+                        break;
         }
 
-        if (e != NULL) {
-                memcpy(key, e->key, dht.id.len);
-                dht_entry_get_repl_lists(e, repl, rebl, &now);
-        }
- no_entries:
         pthread_rwlock_unlock(&dht.db.lock);
 
         return list_is_empty(repl) && list_is_empty(rebl) ? -ENOENT : 0;

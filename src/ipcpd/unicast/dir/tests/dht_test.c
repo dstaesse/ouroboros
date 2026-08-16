@@ -796,6 +796,68 @@ static int test_dht_kv_get_values(void)
         return TEST_RC_FAIL;
 }
 
+static int test_dht_kv_next_values(void)
+{
+        struct list_head repl;
+        struct list_head rebl;
+        uint8_t *        key;
+        size_t           n;
+        size_t           i;
+
+        TEST_START();
+
+        list_head_init(&repl);
+        list_head_init(&rebl);
+
+        if (dht_init(&test_dht_config) < 0) {
+                printf("Failed to create dht.\n");
+                goto fail_init;
+        }
+
+        if (fill_store_with_random_values(NULL, sizeof(uint64_t), 3) < 0) {
+                printf("Failed to fill store with random values.\n");
+                goto fail_fill;
+        }
+
+        key = dht_dup_key(dht.id.data);
+        if (key == NULL) {
+                printf("Failed to duplicate DHT ID.\n");
+                goto fail_fill;
+        }
+
+        n = 0;
+
+        for (i = 0; i < 5; ++i) {
+                if (dht_kv_next_values(key, &repl, &rebl) < 0)
+                        break;
+
+                ++n;
+                value_list_destroy(&repl);
+                value_list_destroy(&rebl);
+        }
+
+        if (n != 3) {
+                printf("Failed to visit each entry once (%zu != 3).\n", n);
+                goto fail_next;
+        }
+
+        free(key);
+
+        dht_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_next:
+        free(key);
+ fail_fill:
+        dht_fini();
+ fail_init:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_dht_kv_find_node_req_msg(void)
 {
         dht_msg_t * msg;
@@ -1894,6 +1956,7 @@ int dht_test(int     argc,
         rc |= test_dht_kv_contact_list();
         rc |= test_dht_kv_update_bucket();
         rc |= test_dht_kv_get_values();
+        rc |= test_dht_kv_next_values();
         rc |= test_dht_kv_find_node_req_msg();
         rc |= test_dht_kv_find_node_rsp_msg();
         rc |= test_dht_kv_find_node_rsp_msg_contacts();
