@@ -88,10 +88,12 @@ int client_main(char * server,
         struct timespec start;
         struct timespec end;
         struct timespec intv = {(gap / BILLION), gap % BILLION};
-        int ms;
-        const char * qenv;
-        qosspec_t    qs;
-        qosspec_t *  qsp;
+        int             ms;
+        ssize_t         rc;
+        int             werr = 0;
+        const char *    qenv;
+        qosspec_t       qs;
+        qosspec_t *     qsp;
 
         qsp = NULL;
 
@@ -147,7 +149,9 @@ int client_main(char * server,
                         ts_add(&end, &intv, &end);
                         memcpy(buf, &seqnr, sizeof(seqnr));
 
-                        if (flow_write(fd, buf, size) < 0) {
+                        rc = flow_write(fd, buf, size);
+                        if (rc < 0) {
+                                werr = (int) rc;
                                 stop = true;
                                 continue;
                         }
@@ -165,7 +169,10 @@ int client_main(char * server,
         } else { /* flood */
                 while (!stop) {
                         clock_gettime(CLOCK_REALTIME, &end);
-                        if (flow_write(fd, buf, size) < 0) {
+
+                        rc = flow_write(fd, buf, size);
+                        if (rc < 0) {
+                                werr = (int) rc;
                                 stop = true;
                                 continue;
                         }
@@ -182,6 +189,10 @@ int client_main(char * server,
         clock_gettime(CLOCK_REALTIME, &end);
 
         ms = ts_diff_ms(&end, &start);
+
+        /* Codes at or above 1000 are ouroboros errno.h values. */
+        if (werr != 0)
+                printf("Send ended on write error %d.\n", werr);
 
         printf("sent statistics: "
                "%9ld packets, %12ld bytes in %9d ms, %4.4f Mb/s\n",
