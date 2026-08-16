@@ -33,6 +33,7 @@ struct ca_ops {
         time_t   (* ctx_update_snd)(void *     ctx,
                                     size_t     len,
                                     uint8_t    lecn,
+                                    size_t     flows,
                                     uint64_t * ftag);
 
         bool     (* ctx_update_rcv)(void *     ctx,
@@ -54,10 +55,11 @@ struct ca_ops {
                              uint64_t now,
                              uint64_t rtt);
 
+        /* queued and mean are bytes; their ratio is packets. */
         int      (* calc_ecn)(size_t    queued,
                               uint8_t * ecn,
                               qoscube_t qc,
-                              size_t    len);
+                              size_t    mean);
 
         /* True if calc_ecn inspects the queue; gates the lookup. */
         bool        marks_ecn;

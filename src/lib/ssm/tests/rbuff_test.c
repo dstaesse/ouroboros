@@ -34,6 +34,9 @@
 #include <ouroboros/errno.h>
 #include <ouroboros/time.h>
 
+/* Mirrors TXQ_MIN_SLOTS in ssm/rbuff.c; keep in sync. */
+#define FLOOR_SLOTS 4
+
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -652,6 +655,389 @@ static int test_ssm_rbuff_threaded(void)
         return TEST_RC_FAIL;
 }
 
+static int test_ssm_rbuff_limit_off(void)
+{
+        struct ssm_rbuff * rb;
+        size_t             i;
+
+        TEST_START();
+
+        rb = ssm_rbuff_create(getpid(), 11);
+        if (rb == NULL) {
+                printf("Failed to create rbuff.\n");
+                goto fail;
+        }
+
+        if (ssm_rbuff_get_limit(rb) != SSM_RBUFF_SIZE - 1) {
+                printf("Expected default limit %d, got %zu.\n",
+                       SSM_RBUFF_SIZE - 1, ssm_rbuff_get_limit(rb));
+                goto fail_rb;
+        }
+
+        for (i = 0; i < SSM_RBUFF_SIZE - 1; ++i) {
+                if (ssm_rbuff_write(rb, i) < 0) {
+                        printf("Failed to write at index %zu.\n", i);
+                        goto fail_rb;
+                }
+        }
+
+        if (ssm_rbuff_write(rb, 999) != -EAGAIN) {
+                printf("Expected -EAGAIN on physically full buffer.\n");
+                goto fail_rb;
+        }
+
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_rb:
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_ssm_rbuff_limit_slow(void)
+{
+        struct ssm_rbuff * rb;
+        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    delay = {0, 10 * MILLION};
+        size_t             limit;
+        size_t             i;
+
+        TEST_START();
+
+        rb = ssm_rbuff_create(getpid(), 12);
+        if (rb == NULL) {
+                printf("Failed to create rbuff.\n");
+                goto fail;
+        }
+
+        ssm_rbuff_set_txq_target(rb, &dfl);
+
+        for (i = 0; i < 32; ++i) {
+                if (ssm_rbuff_write_b(rb, i, NULL) < 0) {
+                        printf("Failed to write at index %zu.\n", i);
+                        goto fail_rb;
+                }
+                nanosleep(&delay, NULL);
+
+                if (ssm_rbuff_read(rb) < 0) {
+                        printf("Failed to read at index %zu.\n", i);
+                        goto fail_rb;
+                }
+        }
+
+        limit = ssm_rbuff_get_limit(rb);
+        if (limit > FLOOR_SLOTS) {
+                printf("Expected limit near the floor, got %zu.\n", limit);
+                goto fail_rb;
+        }
+
+        ssm_rbuff_destroy(rb);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_rb:
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_ssm_rbuff_limit_fast(void)
+{
+        struct ssm_rbuff * rb;
+        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        size_t             limit;
+        size_t             i;
+
+        TEST_START();
+
+        rb = ssm_rbuff_create(getpid(), 13);
+        if (rb == NULL) {
+                printf("Failed to create rbuff.\n");
+                goto fail;
+        }
+
+        ssm_rbuff_set_txq_target(rb, &dfl);
+
+        for (i = 0; i < 200; ++i) {
+                if (ssm_rbuff_write_b(rb, i, NULL) < 0) {
+                        printf("Failed to write at index %zu.\n", i);
+                        goto fail_rb;
+                }
+
+                if (ssm_rbuff_read(rb) < 0) {
+                        printf("Failed to read at index %zu.\n", i);
+                        goto fail_rb;
+                }
+        }
+
+        limit = ssm_rbuff_get_limit(rb);
+        if (limit != SSM_RBUFF_SIZE - 1) {
+                printf("Expected limit %d, got %zu.\n",
+                       SSM_RBUFF_SIZE - 1, limit);
+                goto fail_rb;
+        }
+
+        ssm_rbuff_destroy(rb);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_rb:
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_ssm_rbuff_limit_floor(void)
+{
+        struct ssm_rbuff * rb;
+        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    interval = {0, 50 * MILLION};
+        struct timespec    now;
+        struct timespec    abs_timeout;
+        size_t             limit;
+        int                ret = 0;
+        size_t             i;
+
+        TEST_START();
+
+        rb = ssm_rbuff_create(getpid(), 14);
+        if (rb == NULL) {
+                printf("Failed to create rbuff.\n");
+                goto fail;
+        }
+
+        ssm_rbuff_set_txq_target(rb, &dfl);
+
+        clock_gettime(PTHREAD_COND_CLOCK, &now);
+        ts_add(&now, &interval, &abs_timeout);
+
+        for (i = 0; i < SSM_RBUFF_SIZE; ++i) {
+                ret = ssm_rbuff_write_b(rb, i, &abs_timeout);
+                if (ret == -ETIMEDOUT)
+                        break;
+
+                if (ret < 0) {
+                        printf("Write failed at index %zu: %d.\n", i, ret);
+                        goto fail_rb;
+                }
+        }
+
+        if (ret != -ETIMEDOUT) {
+                printf("Expected the limiter to block the ring.\n");
+                goto fail_rb;
+        }
+
+        limit = ssm_rbuff_get_limit(rb);
+        if (limit > FLOOR_SLOTS) {
+                printf("Expected floor limit, got %zu.\n", limit);
+                goto fail_rb;
+        }
+
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_rb:
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_ssm_rbuff_txq_target(void)
+{
+        struct ssm_rbuff * rb;
+        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    delay = {0, 5 * MILLION};
+        struct timespec    small = {0, 2 * MILLION};
+        struct timespec    big   = {0, 200 * MILLION};
+        struct timespec    def;
+        struct timespec    got;
+        size_t             limit_small;
+        size_t             limit_big;
+        size_t             i;
+
+        TEST_START();
+
+        rb = ssm_rbuff_create(getpid(), 15);
+        if (rb == NULL) {
+                printf("Failed to create rbuff.\n");
+                goto fail;
+        }
+
+        /* A fresh ring is unlimited; rx rings must not inherit a bound. */
+        ssm_rbuff_get_txq_target(rb, &got);
+        if (got.tv_sec != 0 || got.tv_nsec != 0) {
+                printf("A new ring is not unlimited.\n");
+                goto fail_rb;
+        }
+
+        ssm_rbuff_set_txq_target(rb, &dfl);
+        ssm_rbuff_get_txq_target(rb, &def);
+
+        ssm_rbuff_set_txq_target(rb, &small);
+
+        for (i = 0; i < 64; ++i) {
+                if (ssm_rbuff_write_b(rb, i, NULL) < 0) {
+                        printf("Failed to write at index %zu.\n", i);
+                        goto fail_rb;
+                }
+                nanosleep(&delay, NULL);
+
+                if (ssm_rbuff_read(rb) < 0) {
+                        printf("Failed to read at index %zu.\n", i);
+                        goto fail_rb;
+                }
+        }
+
+        limit_small = ssm_rbuff_get_limit(rb);
+
+        ssm_rbuff_set_txq_target(rb, &big);
+
+        for (i = 0; i < 64; ++i) {
+                if (ssm_rbuff_write_b(rb, i, NULL) < 0) {
+                        printf("Failed to write at index %zu.\n", i);
+                        goto fail_rb;
+                }
+                nanosleep(&delay, NULL);
+
+                if (ssm_rbuff_read(rb) < 0) {
+                        printf("Failed to read at index %zu.\n", i);
+                        goto fail_rb;
+                }
+        }
+
+        limit_big = ssm_rbuff_get_limit(rb);
+        if (limit_big <= limit_small) {
+                printf("Expected a larger target to grow the limit: "
+                       "%zu -> %zu.\n", limit_small, limit_big);
+                goto fail_rb;
+        }
+
+        ssm_rbuff_set_txq_target(rb, &dfl);
+        ssm_rbuff_get_txq_target(rb, &got);
+
+        if (got.tv_sec != def.tv_sec || got.tv_nsec != def.tv_nsec) {
+                printf("NULL did not restore the default target.\n");
+                goto fail_rb;
+        }
+
+        ssm_rbuff_destroy(rb);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_rb:
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+static int test_ssm_rbuff_write_over_limit(void)
+{
+        struct ssm_rbuff * rb;
+        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    age = {0, 20 * 1000};
+        size_t             count;
+        int                ret = 0;
+
+        TEST_START();
+
+        rb = ssm_rbuff_create(getpid(), 16);
+        if (rb == NULL) {
+                printf("Failed to create rbuff.\n");
+                goto fail;
+        }
+
+        ssm_rbuff_set_txq_target(rb, &dfl);
+
+        for (count = 0; count < SSM_RBUFF_SIZE; ++count) {
+                ret = ssm_rbuff_write(rb, count);
+                if (ret == -EAGAIN)
+                        break;
+
+                if (ret < 0) {
+                        printf("Write failed at index %zu: %d.\n", count, ret);
+                        goto fail_rb;
+                }
+
+                /* Age the seed sample past the estimator's dt floor. */
+                if (count == 16)
+                        nanosleep(&age, NULL);
+        }
+
+        if (ret != -EAGAIN) {
+                printf("Expected the limiter to reject a write.\n");
+                goto fail_rb;
+        }
+
+        if (count >= SSM_RBUFF_SIZE / 2) {
+                printf("Expected -EAGAIN well before a full ring, "
+                       "got %zu writes.\n", count);
+                goto fail_rb;
+        }
+
+        if (ssm_rbuff_queued(rb) != count) {
+                printf("Queued %zu does not match write count %zu.\n",
+                       ssm_rbuff_queued(rb), count);
+                goto fail_rb;
+        }
+
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_rb:
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int rbuff_test(int     argc,
                char ** argv)
 {
@@ -670,6 +1056,12 @@ int rbuff_test(int     argc,
         ret |= test_ssm_rbuff_blocking();
         ret |= test_ssm_rbuff_blocking_timeout();
         ret |= test_ssm_rbuff_blocking_flowdown();
+        ret |= test_ssm_rbuff_limit_off();
+        ret |= test_ssm_rbuff_limit_slow();
+        ret |= test_ssm_rbuff_limit_fast();
+        ret |= test_ssm_rbuff_limit_floor();
+        ret |= test_ssm_rbuff_txq_target();
+        ret |= test_ssm_rbuff_write_over_limit();
 
         return ret;
 }

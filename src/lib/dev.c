@@ -27,6 +27,7 @@
 #endif
 
 #include "config.h"
+#include "cap.h"
 #include "ssm.h"
 #include "poa/poa.h"
 
@@ -60,6 +61,7 @@
 #include <ouroboros/ssm_flow_set.h>
 #include <ouroboros/ssm_pool.h>
 #include <ouroboros/ssm_rbuff.h>
+#include <ouroboros/time.h>
 #include <ouroboros/tw.h>
 #include <ouroboros/utils.h>
 
@@ -85,6 +87,7 @@
 #define DONE_PART -2
 
 #define CRCLEN    (sizeof(uint32_t))
+#define FLOW_AVG_SHIFT 3
 #define SECMEMSZ  16384
 #define MSGBUFSZ  2048
 
@@ -123,7 +126,13 @@ struct flow {
 
         struct frcti *        frcti;
 
+        /* Mean written packet size (bytes), EWMA over the send path. */
+        size_t                mean_len;
+
         struct poa_flow *     poa;   /* NULL for shared memory flows */
+
+        /* Egress capacity estimator; armed by the IPCP, else NULL. */
+        struct cap_est *      cap;
 };
 
 struct flow_set {
@@ -730,6 +739,8 @@ static void do_flow_fini(int fd)
 
         crypt_destroy_ctx(proc.flows[fd].crypt);
 
+        free(proc.flows[fd].cap);
+
         flow_clear(fd);
 }
 
@@ -768,6 +779,7 @@ static int flow_init(struct flow_info * info,
                      struct poa_flow *  pf)
 {
         struct timespec now;
+        struct timespec txq;
         struct flow *   flow;
         int             fd;
         int             err = -ENOMEM;
@@ -794,6 +806,11 @@ static int flow_init(struct flow_info * info,
                 flow->tx_rb = ssm_rbuff_open(info->n_1_pid, info->id);
                 if (flow->tx_rb == NULL)
                         goto fail_tx_rb;
+
+                txq.tv_sec  = SSM_RBUFF_TXQ_DELAY / 1000;
+                txq.tv_nsec = (SSM_RBUFF_TXQ_DELAY % 1000) * MILLION;
+
+                ssm_rbuff_set_txq_target(flow->tx_rb, &txq);
 
                 flow->set = ssm_flow_set_open(info->n_1_pid);
                 if (flow->set == NULL)
@@ -1475,6 +1492,25 @@ int fccntl(int fd,
                         goto einval;
                 *maxp = flow_user_mtu(flow, flow->info.mtu);
                 break;
+        case FLOWSTXQDLY:
+                timeo = va_arg(l, struct timespec *);
+                if (timeo == NULL)
+                        goto einval;
+
+                if (flow->tx_rb == NULL)
+                        goto eperm;
+
+                ssm_rbuff_set_txq_target(flow->tx_rb, timeo);
+                break;
+        case FLOWGTXQDLY:
+                timeo = va_arg(l, struct timespec *);
+                if (timeo == NULL)
+                        goto einval;
+
+                if (flow->tx_rb == NULL)
+                        goto eperm;
+                ssm_rbuff_get_txq_target(flow->tx_rb, timeo);
+                break;
         case FLOWSFLAGS:
                 old_acc = flow->oflags & FLOWFACCMODE;
                 flow->oflags = va_arg(l, uint32_t);
@@ -1609,6 +1645,25 @@ int fccntl(int fd,
         return -EPERM;
 }
 
+/*
+ * The ring counts slots, so the queue is only bytes if we know what a
+ * packet weighs. Ordered so the unsigned arithmetic cannot wrap.
+ */
+static void flow_mean_len_update(struct flow * flow,
+                                 size_t        len)
+{
+        size_t avg = LOAD_RELAXED(&flow->mean_len);
+
+        if (avg == 0) {
+                STORE_RELAXED(&flow->mean_len, len);
+                return;
+        }
+
+        avg = avg + (len >> FLOW_AVG_SHIFT) - (avg >> FLOW_AVG_SHIFT);
+
+        STORE_RELAXED(&flow->mean_len, avg == 0 ? 1 : avg);
+}
+
 static int flow_tx_spb(struct flow *        flow,
                        struct ssm_pk_buff * spb,
                        uint16_t             flags,
@@ -1642,6 +1697,8 @@ static int flow_tx_spb(struct flow *        flow,
 
         if (flow->poa != NULL)
                 return poa_flow_tx(flow->poa, spb, block, abstime);
+
+        flow_mean_len_update(flow, ssm_pk_buff_len(spb));
 
         if (!block)
                 ret = ssm_rbuff_write(flow->tx_rb, idx);
@@ -2941,25 +2998,92 @@ size_t ipcp_flow_queued(int fd)
         if (proc.flows[fd].poa != NULL)
                 return poa_flow_qlen(proc.flows[fd].poa);
 
-        return ssm_rbuff_queued(proc.flows[fd].tx_rb);
+        return ssm_rbuff_queued(proc.flows[fd].tx_rb)
+                * LOAD_RELAXED(&proc.flows[fd].mean_len);
 }
 
-int ipcp_flow_queue_id(int fd)
+size_t ipcp_flow_mean_len(int fd)
 {
-        int qid;
+        assert(fd >= 0 && fd < PROC_MAX_FLOWS);
+        assert(proc.flows[fd].info.id >= 0);
+
+        if (proc.flows[fd].poa != NULL)
+                return poa_flow_mean_len(proc.flows[fd].poa);
+
+        return LOAD_RELAXED(&proc.flows[fd].mean_len);
+}
+
+/* An update racing the arm seeds one bogus window; the filter absorbs. */
+int ipcp_flow_cap_arm(int fd)
+{
+        struct flow *    flow;
+        struct cap_est * e;
 
         assert(fd >= 0 && fd < PROC_MAX_FLOWS);
         assert(proc.flows[fd].info.id >= 0);
 
-        if (proc.flows[fd].poa == NULL)
-                return fd;
+        flow = &proc.flows[fd];
+        if (flow->poa != NULL) {
+                cap_clear(poa_flow_cap_est(flow->poa));
+                return 0;
+        }
 
-        /* An unidentified PoA answers for itself, never for an fd. */
-        qid = poa_flow_qid(proc.flows[fd].poa);
-        if (qid < 0 || qid >= POA_MAX_POAS)
-                return fd;
+        e = flow->cap;
+        if (e != NULL) {
+                cap_clear(e);
+                return 0;
+        }
 
-        return PROC_MAX_FLOWS + qid;
+        if (posix_memalign((void **) &e, CAP_ALIGN, sizeof(*e)) != 0)
+                return -ENOMEM;
+
+        cap_clear(e);
+
+        STORE_RELEASE(&flow->cap, e);
+
+        return 0;
+}
+
+void ipcp_flow_cap_update(int    fd,
+                          size_t qlen,
+                          size_t len)
+{
+        struct flow *    flow;
+        struct cap_est * e;
+
+        assert(fd >= 0 && fd < PROC_MAX_FLOWS);
+        assert(proc.flows[fd].info.id >= 0);
+
+        flow = &proc.flows[fd];
+        if (flow->poa != NULL) {
+                cap_update(poa_flow_cap_est(flow->poa), qlen, len);
+                return;
+        }
+
+        e = LOAD_ACQUIRE(&flow->cap);
+        if (e == NULL)
+                return;
+
+        cap_update(e, qlen, len);
+}
+
+uint64_t ipcp_flow_cap(int fd)
+{
+        struct flow *    flow;
+        struct cap_est * e;
+
+        assert(fd >= 0 && fd < PROC_MAX_FLOWS);
+        assert(proc.flows[fd].info.id >= 0);
+
+        flow = &proc.flows[fd];
+        if (flow->poa != NULL)
+                return cap_rate(poa_flow_cap_est(flow->poa));
+
+        e = LOAD_ACQUIRE(&flow->cap);
+        if (e == NULL)
+                return 0;
+
+        return cap_rate(e);
 }
 
 int local_flow_transfer(int               src_fd,
@@ -3028,4 +3152,5 @@ int local_flow_transfer(int               src_fd,
         return ret;
 }
 
+#include "cap.c"
 #include "poa/poa.c"

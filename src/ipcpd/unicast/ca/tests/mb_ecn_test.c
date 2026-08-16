@@ -21,6 +21,7 @@
  */
 
 #include "mb-ecn.c"
+
 #include <test/test.h>
 
 #define MS (MILLION) /* one millisecond in ns */
@@ -121,48 +122,123 @@ static int test_mb_ecn_ctx_create_destroy(void)
         return TEST_RC_FAIL;
 }
 
+/* The pricing window derives from the declared RTT. */
+static int test_mb_ecn_init_window(void)
+{
+        TEST_START();
+
+        /* A fabric RTT lands on the floor, not below it. */
+        mb_ecn_init(1);
+
+        if (mb_ecn_tw != CA_TW_MIN) {
+                printf("fabric window %" PRIu64 ".\n", mb_ecn_tw);
+                goto fail;
+        }
+
+        /* A WAN RTT caps the window. */
+        mb_ecn_init(200);
+
+        if (mb_ecn_tw != CA_TW) {
+                printf("wan window %" PRIu64 ".\n", mb_ecn_tw);
+                goto fail;
+        }
+
+        /* An unspecified RTT takes the default and caps the window. */
+        mb_ecn_init(0);
+
+        if (mb_ecn_tw != CA_TW) {
+                printf("default window %" PRIu64 ".\n", mb_ecn_tw);
+                goto fail;
+        }
+
+        mb_ecn_init(CA_SS_RTT_DEF);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        mb_ecn_init(CA_SS_RTT_DEF);
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* Queue depth (packets) that reads as full congestion. */
+#define FULL_PKTS (CA_MARK_KNEE << ((CA_ECE_REF >> CA_SHFT) / 4))
+
 static int test_mb_ecn_calc_ecn(void)
 {
         uint8_t ecn;
 
         TEST_START();
 
-        /* A queue below one ECN quantum marks nothing. */
+        /* One packet in the queue is the floor: it marks nothing. */
         ecn = 0;
-        mb_ecn_calc_ecn(CA_MARK_Q - 1, &ecn, QOS_CUBE_BE, 0);
+
+        mb_ecn_calc_ecn(1400, &ecn, QOS_CUBE_BE, 1400);
+
         if (ecn != 0) {
-                printf("Sub-quantum queue marked %u.\n", ecn);
+                printf("Single packet marked %u.\n", ecn);
                 goto fail;
         }
 
-        /* Queue depth maps to ecn = queued / CA_MARK_Q. */
+        /* An unknown mean packet size cannot mark. */
         ecn = 0;
-        mb_ecn_calc_ecn(5 * CA_MARK_Q, &ecn, QOS_CUBE_BE, 0);
-        if (ecn != 5) {
-                printf("Expected ecn 5, got %u.\n", ecn);
+
+        mb_ecn_calc_ecn(1400, &ecn, QOS_CUBE_BE, 0);
+
+        if (ecn != 0) {
+                printf("Unknown mean marked %u.\n", ecn);
                 goto fail;
         }
 
-        /* MAX keeps the larger value; a smaller mark cannot raise it. */
+        /* Each doubling of the queue adds 4. */
+        ecn = 0;
+
+        mb_ecn_calc_ecn(2 * 1400, &ecn, QOS_CUBE_BE, 1400);
+
+        if (ecn != 4) {
+                printf("Expected ecn 4 at 2 packets, got %u.\n", ecn);
+                goto fail;
+        }
+
+        /* FULL_PKTS packets is full congestion. */
+        ecn = 0;
+
+        mb_ecn_calc_ecn(FULL_PKTS * 1400, &ecn, QOS_CUBE_BE, 1400);
+
+        if (ecn != (CA_ECE_REF >> CA_SHFT)) {
+                printf("Expected ecn %u at full, got %u.\n",
+                       CA_ECE_REF >> CA_SHFT, ecn);
+                goto fail;
+        }
+
+        /* The same packet count marks the same at any packet size. */
+        ecn = 0;
+
+        mb_ecn_calc_ecn(FULL_PKTS * 200, &ecn, QOS_CUBE_BE, 200);
+
+        if (ecn != (CA_ECE_REF >> CA_SHFT)) {
+                printf("Size dependence: exp %u, got %u.\n",
+                       CA_ECE_REF >> CA_SHFT, ecn);
+                goto fail;
+        }
+
+        /* MAX keeps the larger value; a smaller mark cannot lower it. */
         ecn = 0x80;
-        mb_ecn_calc_ecn(CA_MARK_Q, &ecn, QOS_CUBE_BE, 0);
+
+        mb_ecn_calc_ecn(2 * 1400, &ecn, QOS_CUBE_BE, 1400);
+
         if (ecn != 0x80) {
                 printf("Expected ecn 0x80, got 0x%x.\n", ecn);
                 goto fail;
         }
 
         ecn = 3;
-        mb_ecn_calc_ecn(4 * CA_MARK_Q, &ecn, QOS_CUBE_BE, 0);
-        if (ecn != 4) {
-                printf("Expected ecn 4, got %u.\n", ecn);
-                goto fail;
-        }
 
-        /* A queue past 255 quanta saturates, it does not wrap to a low mark. */
-        ecn = 0;
-        mb_ecn_calc_ecn(256 * CA_MARK_Q, &ecn, QOS_CUBE_BE, 0);
-        if (ecn != 255) {
-                printf("Deep queue wrapped: exp 255, got %u.\n", ecn);
+        mb_ecn_calc_ecn(4 * 1400, &ecn, QOS_CUBE_BE, 1400);
+
+        if (ecn != 8) {
+                printf("Expected ecn 8, got %u.\n", ecn);
                 goto fail;
         }
 
@@ -201,56 +277,6 @@ static int test_mb_ecn_rcv_onset_immediate(void)
 
         if (mb_ecn_rcv(ctx, LEN, 4, 0, &ece, &fcap, 2 * MS)) {
                 printf("Mid-window packet updated.\n");
-                goto fail_ctx;
-        }
-
-        mb_ecn_ctx_destroy(ctx);
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
- fail_ctx:
-        mb_ecn_ctx_destroy(ctx);
- fail:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
-/* A 50% duty mark square wave emits the time mean, not the last peak. */
-static int test_mb_ecn_rcv_window_mean(void)
-{
-        struct mb_ecn_ctx * ctx;
-        uint16_t            ece;
-        uint8_t             fcap;
-        size_t              upd;
-        size_t              i;
-
-        TEST_START();
-
-        ctx = mk_ctx();
-        if (ctx == NULL) {
-                printf("Failed to create context.\n");
-                goto fail;
-        }
-
-        mb_ecn_rcv(ctx, LEN, 8, 0, &ece, &fcap, MS);
-
-        /* The byte trigger closes every ~32 packets: two windows. */
-        upd = 0;
-        for (i = 1; i <= 68; i++) {
-                time_t ecn = (i & 1) ? 8 : 0;
-                time_t t   = MS + i * MS;
-                if (mb_ecn_rcv(ctx, LEN, ecn, 0, &ece, &fcap, t))
-                        upd++;
-        }
-
-        if (upd != 2) {
-                printf("%zu updates in two windows.\n", upd);
-                goto fail_ctx;
-        }
-
-        if (ece < 120 || ece > 136) {
-                printf("window mean: exp ~128, got %u.\n", ece);
                 goto fail_ctx;
         }
 
@@ -466,7 +492,7 @@ static int test_mb_ecn_rcv_gap_restart(void)
         mb_ecn_rcv(ctx, LEN, 6, 0, &ece, &fcap, MS);
         mb_ecn_rcv(ctx, LEN, 6, 0, &ece, &fcap, 2 * MS);
 
-        t = 2 * MS + 10 * CA_TW_INIT;
+        t = 2 * MS + 10 * CA_TW;
         if (!mb_ecn_rcv(ctx, LEN, 5, 0, &ece, &fcap, t)) {
                 printf("gap restart did not update.\n");
                 goto fail_ctx;
@@ -477,7 +503,7 @@ static int test_mb_ecn_rcv_gap_restart(void)
                 goto fail_ctx;
         }
 
-        t += 10 * CA_TW_INIT;
+        t += 10 * CA_TW;
         if (!mb_ecn_rcv(ctx, LEN, 0, 0, &ece, &fcap, t) || ece != 0) {
                 printf("gap with clean packet did not end: %u.\n", ece);
                 goto fail_ctx;
@@ -500,6 +526,67 @@ static int test_mb_ecn_rcv_gap_restart(void)
         return TEST_RC_FAIL;
 }
 
+/*
+ * At a floored layer RTT, rx_tw sits at CA_TW_MIN, so 4 * rx_tw is
+ * well under CA_ECE_TTL. A gap in that band must still close the
+ * window as a diluted average, not restart fresh: a fresh restart
+ * always emits the raw undiluted mark (ecn << CA_SHFT), so an ece
+ * that low pins the CA_ECE_TTL floor in mb_ecn_rcv_fresh.
+ */
+static int test_mb_ecn_rcv_gap_floor(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint16_t            ece;
+        uint8_t             fcap;
+        uint64_t            t;
+
+        TEST_START();
+
+        mb_ecn_init(2);
+
+        ctx = mk_ctx();
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        if (ctx->rx_tw != CA_TW_MIN) {
+                printf("window not floored: %" PRIu64 ".\n", ctx->rx_tw);
+                goto fail_ctx;
+        }
+
+        /* Onset, then a second packet inside the window: mark banked. */
+        mb_ecn_rcv(ctx, LEN, 8, 0, &ece, &fcap, MS);
+        mb_ecn_rcv(ctx, LEN, 8, 0, &ece, &fcap, 2 * MS);
+
+        /* 20 ms gap: past 4 * rx_tw (16 ms), well under CA_ECE_TTL. */
+
+        t = 2 * MS + 20 * MS;
+        if (!mb_ecn_rcv(ctx, LEN, 8, 0, &ece, &fcap, t)) {
+                printf("window did not close.\n");
+                goto fail_ctx;
+        }
+
+        /* A fresh restart would emit the raw mark 8 << CA_SHFT, undiluted. */
+        if (ece >= (8 << CA_SHFT)) {
+                printf("gap read as a fresh onset: ece %u.\n", ece);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+        mb_ecn_init(CA_SS_RTT_DEF);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        mb_ecn_init(CA_SS_RTT_DEF);
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 /* Max marks at max gaps: exact ceiling, no overflow past the edge. */
 static int test_mb_ecn_rcv_accum_bounds(void)
 {
@@ -518,14 +605,14 @@ static int test_mb_ecn_rcv_accum_bounds(void)
 
         mb_ecn_rcv(ctx, LEN, 15, 0, &ece, &fcap, MS);
 
-        /* Two packets at dt just under CA_TW_INIT straddle the boundary. */
-        t = MS + CA_TW_INIT - 1;
+        /* Two packets at dt just under CA_TW straddle the boundary. */
+        t = MS + CA_TW - 1;
         if (mb_ecn_rcv(ctx, LEN, 15, 0, &ece, &fcap, t)) {
                 printf("update before the window closed.\n");
                 goto fail_ctx;
         }
 
-        t += CA_TW_INIT - 1;
+        t += CA_TW - 1;
         if (!mb_ecn_rcv(ctx, LEN, 15, 0, &ece, &fcap, t)) {
                 printf("no update at the window boundary.\n");
                 goto fail_ctx;
@@ -548,86 +635,8 @@ static int test_mb_ecn_rcv_accum_bounds(void)
         return TEST_RC_FAIL;
 }
 
-/* Scale-free density: the window holds ~CA_N_TARGET packets at any rate. */
-static int test_mb_ecn_rcv_window_holds_target(void)
-{
-        struct mb_ecn_ctx * ctx;
-        uint16_t            ece;
-        uint8_t             fcap;
-        uint16_t            last_ece;
-        uint64_t            rates[4];
-        uint64_t            ia;
-        uint64_t            t;
-        size_t              closes;
-        size_t              since;
-        size_t              count;
-        size_t              ri;
-
-        TEST_START();
-
-        rates[0] = 5000000;
-        rates[1] = 10000000;
-        rates[2] = 50000000;
-        rates[3] = 100000000;
-
-        ctx = NULL;
-        for (ri = 0; ri < 4; ri++) {
-                ia = 8000ULL * BILLION / rates[ri];
-                t = 0;
-                closes = 0;
-                since = 0;
-                count = 0;
-                last_ece = 0;
-
-                ctx = mk_ctx();
-                if (ctx == NULL) {
-                        printf("Failed to create context.\n");
-                        goto fail;
-                }
-
-                /* Warm past the ramp from CA_TW_INIT, then time one gap. */
-                while (closes < 42) {
-                        t += ia;
-                        since++;
-                        if (!mb_ecn_rcv(ctx, LEN, 8, 0, &ece, &fcap, t))
-                                continue;
-                        closes++;
-                        if (closes == 41) {
-                                since = 0;
-                        } else if (closes == 42) {
-                                count = since - 1;
-                                last_ece = ece;
-                        }
-                }
-
-                if (count < 8 || count > 32) {
-                        printf("rate %" PRIu64 ": %zu pkts/window.\n",
-                               rates[ri], count);
-                        goto fail_ctx;
-                }
-
-                if (last_ece < 224 || last_ece > 288) {
-                        printf("rate %" PRIu64 ": ece %u ~256.\n",
-                               rates[ri], last_ece);
-                        goto fail_ctx;
-                }
-
-                mb_ecn_ctx_destroy(ctx);
-                ctx = NULL;
-        }
-
-        TEST_SUCCESS();
-
-        return TEST_RC_SUCCESS;
- fail_ctx:
-        mb_ecn_ctx_destroy(ctx);
- fail:
-        TEST_FAIL();
-        return TEST_RC_FAIL;
-}
-
 /*
- * The window floors at CA_TW_MIN, tracks the rate below the old knee,
+ * The window floors at CA_TW, tracks the rate below the knee,
  * and only a pathological fold hits the CA_TW_ABSMAX ceiling.
  */
 static int test_mb_ecn_rcv_window_clip_bounds(void)
@@ -641,7 +650,7 @@ static int test_mb_ecn_rcv_window_clip_bounds(void)
 
         TEST_START();
 
-        /* 1 GbE is above the high knee: the window floors at CA_TW_MIN. */
+        /* 1 GbE is above the high knee: the window floors at CA_TW. */
         ctx = mk_ctx();
         if (ctx == NULL) {
                 printf("Failed to create context.\n");
@@ -657,15 +666,15 @@ static int test_mb_ecn_rcv_window_clip_bounds(void)
                         closes++;
         }
 
-        if (ctx->rx_tw != CA_TW_MIN) {
+        if (ctx->rx_tw != CA_TW) {
                 printf("high-rate window: exp %" PRIu64 ", got %" PRIu64
-                       ".\n", (uint64_t) CA_TW_MIN, ctx->rx_tw);
+                       ".\n", (uint64_t) CA_TW, ctx->rx_tw);
                 goto fail_ctx;
         }
 
         mb_ecn_ctx_destroy(ctx);
 
-        /* 1 Mbps: past the old knee, ~16 pkts = 16 * 8 ms = 131 ms. */
+        /* 1 Mbps: below the knee, ~16 pkts = 16 * 8 ms = 131 ms. */
         ctx = mk_ctx();
         if (ctx == NULL) {
                 printf("Failed to create context.\n");
@@ -697,7 +706,7 @@ static int test_mb_ecn_rcv_window_clip_bounds(void)
         }
 
         mb_ecn_rcv(ctx, 10, 8, 0, &ece, &fcap, MS);
-        mb_ecn_rcv(ctx, 10, 8, 0, &ece, &fcap, MS + CA_TW_INIT);
+        mb_ecn_rcv(ctx, 10, 8, 0, &ece, &fcap, MS + CA_TW);
 
         if (ctx->rx_tw != CA_TW_ABSMAX) {
                 printf("window ceiling breached: %" PRIu64 ".\n",
@@ -782,9 +791,9 @@ static int test_mb_ecn_rcv_no_overflow_highrate(void)
         /* Open a window, then inject a maximal byte count and span. */
         mb_ecn_rcv(ctx, LEN, 15, 0, &ece, &fcap, 0);
         ctx->rx_byt = CA_RATE_MAX / 8;
-        ctx->rx_ts  = 2 * CA_TW_INIT - 2;
+        ctx->rx_ts  = 2 * CA_TW - 2;
 
-        ok = mb_ecn_rcv(ctx, LEN, 15, 0, &ece, &fcap, 2 * CA_TW_INIT - 1);
+        ok = mb_ecn_rcv(ctx, LEN, 15, 0, &ece, &fcap, 2 * CA_TW - 1);
 
         if (!ok) {
                 printf("max-window close did not fire.\n");
@@ -797,7 +806,7 @@ static int test_mb_ecn_rcv_no_overflow_highrate(void)
         }
 
         /* A wrapped numerator drives rx_tw to MAX; it must descend. */
-        if (ctx->rx_tw >= CA_TW_INIT || ctx->rx_tw < CA_TW_MIN) {
+        if (ctx->rx_tw > CA_TW || ctx->rx_tw < CA_TW) {
                 printf("window %" PRIu64 " did not descend.\n", ctx->rx_tw);
                 goto fail_ctx;
         }
@@ -816,7 +825,7 @@ static int test_mb_ecn_rcv_no_overflow_highrate(void)
 
 /*
  * The sender holds a mark across the full inter-feedback gap (TTL >
- * 2 * CA_TW_INIT); a repeated mark adds only the proportional cut.
+ * 2 * CA_TW); a repeated mark adds only the proportional cut.
  */
 static int test_mb_ecn_ece_ttl_covers_cadence(void)
 {
@@ -840,10 +849,10 @@ static int test_mb_ecn_ece_ttl_covers_cadence(void)
         mb_ecn_ece(ctx, 100, 0, MS);
         mb_ecn_snd(ctx, LEN, MS, &ftag);
 
-        /* Sends between feedbacks spaced 2 * CA_TW_INIT + 5 ms apart. */
+        /* Sends between feedbacks spaced 2 * CA_TW + 5 ms apart. */
         t = MS;
         for (i = 0; i < 4; i++) {
-                t += (2 * CA_TW_INIT + 5 * MS) / 4;
+                t += (2 * CA_TW + 5 * MS) / 4;
                 mb_ecn_snd(ctx, LEN, t, &ftag);
                 if (ctx->tx_ece == 0) {
                         printf("mark cleared inside the feedback gap.\n");
@@ -949,10 +958,8 @@ static int test_mb_ecn_dt_scaling_invariant(void)
         mb_ecn_ece(b, 0, 0, 0);
         a->rate = (uint64_t) 10 << 20;
         b->rate = (uint64_t) 10 << 20;
-        a->r_bkt = a->rate;
-        b->r_bkt = b->rate;
 
-        /* a: one 30 ms step (under one washout bucket, so it stays out). */
+        /* a: one 30 ms step. */
         mb_ecn_snd(a, LEN, 30 * MS, &fta);
 
         /* b: thirty 1 ms steps over the same 30 ms. */
@@ -1022,6 +1029,66 @@ static int test_mb_ecn_multiplicative_decrease(void)
                 }
 
                 prev = ctx->rate;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* The hold releases on any unsaturated mark, including above REF. */
+static int test_mb_ecn_ai_hold_release(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            r0 = (uint64_t) 100 << 20;
+
+        TEST_START();
+
+        ctx = mk_ctx();
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        /* A saturated mark keeps the hold: the queue has not drained. */
+        ctx->ai_hold = true;
+
+        mb_ecn_ece(ctx, CA_ECE_MAX, 0, MS);
+
+        if (!ctx->ai_hold) {
+                printf("saturated feedback released the hold.\n");
+                goto fail_ctx;
+        }
+
+        /* A standing mark of 20 flows is unsaturated: release. */
+        ctx->ai_hold = true;
+
+        mb_ecn_ece(ctx, 22 << CA_SHFT, 0, 2 * MS);
+
+        if (ctx->ai_hold) {
+                printf("unsaturated feedback held the increase.\n");
+                goto fail_ctx;
+        }
+
+        /* The decrease still scales with the mark saturated at CA_ECE_MAX. */
+        ctx->rate    = r0;
+        ctx->tx_cav  = true;
+        ctx->tx_ece  = CA_ECE_MAX;
+        ctx->tx_ecp  = CA_ECE_MAX;
+        ctx->dec_acc = 0;
+
+        mb_ecn_decrease(ctx, MILLION);
+
+        if (ctx->rate > r0 - r0 / 700) {
+                printf("clamped decrease too weak: %" PRIu64 ".\n", ctx->rate);
+                goto fail_ctx;
         }
 
         mb_ecn_ctx_destroy(ctx);
@@ -1119,17 +1186,15 @@ static int test_mb_ecn_fixed_point(void)
         return TEST_RC_FAIL;
 }
 
-/*
- * A rising ECE mark takes a one-sided lead cut on top of the
- * proportional term; a flat or falling mark takes only the small
- * proportional cut.
- */
-static int test_mb_ecn_lead_cut(void)
+/* The lead is two-sided: it cuts on a rise and gives back on a fall. */
+static int test_mb_ecn_lead_symmetric(void)
 {
         struct mb_ecn_ctx * ctx;
-        uint64_t            prev;
+        uint64_t            r0 = (uint64_t) 100 << 20;
+        uint64_t            net;
         uint64_t            drop;
-        uint64_t            ftag = 0;
+        uint64_t            gain;
+        uint64_t            kd2;
 
         TEST_START();
 
@@ -1139,36 +1204,81 @@ static int test_mb_ecn_lead_cut(void)
                 goto fail;
         }
 
-        ctx->rate = (uint64_t) 100 << 20;
         ctx->tx_cav = true;
 
-        /* Rise 0 -> 256: the lead term cuts hard (~rate/8). */
-        prev = ctx->rate;
-        mb_ecn_ece(ctx, 256, 0, MS);
-        mb_ecn_snd(ctx, LEN, MS, &ftag);
-        drop = prev - ctx->rate;
-        if (drop < prev / 16) {
-                printf("rising mark under-cut: %" PRIu64 ".\n", drop);
+        /* Rise of one reference: cut rate / CA_MD_KD_DIV, no more. */
+        ctx->rate    = r0;
+        ctx->tx_ece  = CA_ECE_REF;
+        ctx->tx_ecp  = 0;
+        ctx->dec_acc = 0;
+
+        mb_ecn_decrease(ctx, 0);
+
+        drop = r0 - ctx->rate;
+        if (drop != r0 / CA_MD_KD_DIV) {
+                printf("rise cut %" PRIu64 ", want %" PRIu64 ".\n",
+                       drop, r0 / CA_MD_KD_DIV);
                 goto fail_ctx;
         }
 
-        /* Flat mark: no rise, only the proportional cut. */
-        prev = ctx->rate;
-        mb_ecn_ece(ctx, 256, 0, 2 * MS);
-        mb_ecn_snd(ctx, LEN, 2 * MS, &ftag);
-        drop = prev - ctx->rate;
-        if (drop > prev / 100) {
-                printf("flat mark over-cut: dropped %" PRIu64 ".\n", drop);
+        /* Fall of one reference: give the same fraction back. */
+        ctx->rate    = r0;
+        ctx->tx_ece  = 1;
+        ctx->tx_ecp  = CA_ECE_REF + 1;
+        ctx->dec_acc = 0;
+
+        mb_ecn_decrease(ctx, 0);
+
+        gain = ctx->rate - r0;
+        if (gain != r0 / CA_MD_KD_DIV) {
+                printf("fall boost %" PRIu64 ", want %" PRIu64 ".\n",
+                       gain, r0 / CA_MD_KD_DIV);
                 goto fail_ctx;
         }
 
-        /* Falling mark: no rise, no lead beyond the proportional term. */
-        prev = ctx->rate;
-        mb_ecn_ece(ctx, 64, 0, 3 * MS);
-        mb_ecn_snd(ctx, LEN, 3 * MS, &ftag);
-        drop = prev > ctx->rate ? prev - ctx->rate : 0;
-        if (drop > prev / 100) {
-                printf("falling mark cut: dropped %" PRIu64 ".\n", drop);
+        /* A collapse from deep saturation is clamped to the same. */
+        ctx->rate    = r0;
+        ctx->tx_ece  = 1;
+        ctx->tx_ecp  = 255 << CA_SHFT;
+        ctx->dec_acc = 0;
+
+        mb_ecn_decrease(ctx, 0);
+
+        gain = ctx->rate - r0;
+        if (gain != r0 / CA_MD_KD_DIV) {
+                printf("unclamped fall boost %" PRIu64 ".\n", gain);
+                goto fail_ctx;
+        }
+
+        /* A cycle that stays marked nets out: no standing bias. */
+        ctx->rate    = r0;
+        ctx->tx_ecp  = 4 << CA_SHFT;
+        ctx->tx_ece  = 12 << CA_SHFT;
+        ctx->dec_acc = 0;
+
+        mb_ecn_decrease(ctx, 0);
+
+        ctx->tx_ece  = 4 << CA_SHFT;
+        ctx->dec_acc = 0;
+
+        mb_ecn_decrease(ctx, 0);
+
+        net = ctx->rate > r0 ? ctx->rate - r0 : r0 - ctx->rate;
+        /*
+         * The two lead steps compound to (1 - x)(1 + x), x = 1 /
+         * (2 * CA_MD_KD_DIV), so net ~= r0 / (4 * CA_MD_KD_DIV^2).
+         * Band it a factor of 2 either side so a materially weaker
+         * gain (e.g. KD off by a factor of 4) fails the floor.
+         */
+        kd2 = (uint64_t) CA_MD_KD_DIV * CA_MD_KD_DIV;
+        if (net > r0 / (2 * kd2)) {
+                printf("cycle bias %" PRIu64 " of %" PRIu64 ".\n", net, r0);
+                goto fail_ctx;
+        }
+
+        if (net < r0 / (8 * kd2)) {
+                printf("lead gain weaker than expected: net %" PRIu64
+                       " of %" PRIu64 ".\n", net, r0);
                 goto fail_ctx;
         }
 
@@ -1722,8 +1832,6 @@ static int test_mb_ecn_probe_scale_invariant(void)
         mb_ecn_ece(b, 0, 0, 0);
         a->rate = (uint64_t) 10 << 20;
         b->rate = (uint64_t) 1000 << 20;
-        a->r_bkt = a->rate;
-        b->r_bkt = b->rate;
         a->backlogged = true;
         b->backlogged = true;
         ra0 = a->rate;
@@ -1787,8 +1895,8 @@ static int test_mb_ecn_probe_time_constant(void)
 
         /* Clean path, out of slow start, backlogged, below the ceiling. */
         mb_ecn_ece(ctx, 0, 0, 0);
+
         ctx->rate = (uint64_t) 1 << 30;
-        ctx->r_bkt = ctx->rate;
         ctx->backlogged = true;
         r0 = ctx->rate;
 
@@ -1799,11 +1907,10 @@ static int test_mb_ecn_probe_time_constant(void)
                 mb_ecn_ece(ctx, 0, 0, t);
         }
 
-        /* Washout damps the probe to ~4/3 TC, so 8 s -> ~2.12x. */
+        /* Undamped probe: 8 s at TC 8 s is one full e-fold, ~2.72x. */
         ratio = (double) ctx->rate / r0;
-        if (ratio < 2.0 || ratio > 2.25) {
-                printf("probe TC off: exp ~2.12, got %.3fx over 8 s.\n",
-                       ratio);
+        if (ratio < 2.6 || ratio > 2.85) {
+                printf("probe TC off: exp ~2.72, got %.3fx over 8 s.\n", ratio);
                 goto fail_ctx;
         }
 
@@ -1851,7 +1958,7 @@ static int test_mb_ecn_rcv_cap_window_min(void)
         mb_ecn_rcv(ctx, LEN, 8, 40, &ece, &fcap, 2 * MS);
         mb_ecn_rcv(ctx, LEN, 8, 36, &ece, &fcap, 3 * MS);
 
-        t = 3 * MS + CA_TW_INIT;
+        t = 3 * MS + CA_TW;
         if (!mb_ecn_rcv(ctx, LEN, 8, 0, &ece, &fcap, t)) {
                 printf("Window did not close.\n");
                 goto fail_ctx;
@@ -1865,7 +1972,7 @@ static int test_mb_ecn_rcv_cap_window_min(void)
         /* The next window starts unknown; follow the adapted rx_tw. */
         upd = false;
         for (i = 0; i < 128 && !upd; i++) {
-                t += CA_TW_INIT;
+                t += CA_TW;
                 upd = mb_ecn_rcv(ctx, LEN, 8, 0, &ece, &fcap, t);
         }
 
@@ -1920,7 +2027,7 @@ static int test_mb_ecn_rcv_cap_onset_fresh(void)
         mb_ecn_rcv(ctx, LEN, 4, 50, &ece, &fcap, 2 * MS);
 
         /* A gap restart must not fold in the stale window min. */
-        t = 2 * MS + 5 * CA_TW_INIT;
+        t = 2 * MS + 5 * CA_TW;
         if (!mb_ecn_rcv(ctx, LEN, 4, 90, &ece, &fcap, t)) {
                 printf("Gap restart did not update.\n");
                 goto fail_ctx;
@@ -1970,7 +2077,7 @@ static int test_mb_ecn_ece_cap_derives_rates(void)
                 goto fail_ctx;
         }
 
-        if (ctx->ai_rate != ctx->rate_min) {
+        if (ctx->ai_rate != 2 * ctx->rate_min) {
                 printf("AI slope did not track the floor.\n");
                 goto fail_ctx;
         }
@@ -2162,8 +2269,8 @@ static int test_mb_ecn_ctrl_per_ctx_ai(void)
 
         /* Leave slow start; raise the slope as capacity would. */
         mb_ecn_ece(ctx, 0, 0, 0);
+
         ctx->rate    = (uint64_t) 10 << 20;
-        ctx->r_bkt   = ctx->rate;
         ctx->ai_rate = 16 * CA_AI_RATE;
 
         want  = ctx->rate + ctx->ai_rate * (30 * MS) / BILLION;
@@ -2407,15 +2514,15 @@ static int test_mb_ecn_backlogged_paced(void)
 }
 
 /*
- * A source-limited flow is capped to the next quarter-log2 headroom
- * above the offered estimate, and NOT re-floored to a high capacity
- * rate_min.
+ * A source-limited flow is capped to the backlog level above the
+ * offered estimate, and NOT re-floored to a high capacity rate_min.
  */
 static int test_mb_ecn_source_limited_ceiling(void)
 {
         struct mb_ecn_ctx * ctx;
         uint64_t            ftag = 0;
         uint64_t            t = 10 * MS;
+        uint64_t            expect;
 
         TEST_START();
 
@@ -2439,14 +2546,46 @@ static int test_mb_ecn_source_limited_ceiling(void)
 
         mb_ecn_snd(ctx, LEN, t + 2 * MS, &ftag);
 
-        if (ctx->rate != ((uint64_t) 2 << 20)) {
+        expect = 1398101;              /* (1 << 20) * 4 / 3, truncated */
+        if (ctx->rate != expect) {
                 printf("ceiling: exp %" PRIu64 ", got %" PRIu64 ".\n",
-                       (uint64_t) 2 << 20, ctx->rate);
+                       expect, ctx->rate);
                 goto fail_ctx;
         }
 
         if (!ctx->src_limited) {
                 printf("ceiling bound but src_limited not set.\n");
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        /* Non-power-of-two case: verify the exact level, not a step. */
+
+        ctx = mk_ctx();
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        ctx->tx_cav     = true;
+        ctx->started    = true;
+        ctx->backlogged = false;
+        ctx->rate       = (uint64_t) 100 << 20;
+        ctx->inv_rate   = mb_ecn_rate_inv(ctx->rate);
+        ctx->rate_min   = (uint64_t) 50 << 20;
+        ctx->snd_rate   = (uint64_t) 303 << 12;
+        ctx->snd_r0     = ctx->rate;
+        ctx->snd_win    = t;
+        ctx->last_ts    = t;
+        ctx->last_ctrl  = t;
+
+        mb_ecn_snd(ctx, LEN, t + 2 * MS, &ftag);
+
+        expect = 1654784;              /* (303 << 12) * 4 / 3, exact   */
+        if (ctx->rate != expect) {
+                printf("exact ceiling: exp %" PRIu64 ", got %" PRIu64
+                       ".\n", expect, ctx->rate);
                 goto fail_ctx;
         }
 
@@ -2526,6 +2665,7 @@ static int test_mb_ecn_idle_clears_backlogged(void)
 
         ctx->started    = true;
         ctx->backlogged = true;
+        ctx->rate       = snd_rate;
         ctx->snd_rate   = snd_rate;
         ctx->snd_win    = t;
         ctx->last_ts    = t;
@@ -2638,7 +2778,7 @@ static void shared_link_run(struct mb_ecn_ctx * a,
                 tgt = (k + 1) * TF_STEP;
                 ecn = 0;
 
-                mb_ecn_calc_ecn(q / LEN, &ecn, QOS_CUBE_BE, LEN);
+                mb_ecn_calc_ecn(q, &ecn, QOS_CUBE_BE, LEN);
                 hist[k % TF_HIST] = (uint16_t) (ecn << CA_SHFT);
 
                 ea = k < lag_a ? 0 : hist[(k - lag_a) % TF_HIST];
@@ -2775,16 +2915,14 @@ static int test_mb_ecn_ramp_overshoot_grows_with_rtt(void)
 }
 
 /*
- * Washout damps a fixed 1/4 of the rate change once per wall-clock
- * bucket: a sub-bucket step banks time only, a full bucket removes a
- * quarter of the gap either way without crossing the snapshot, and a
- * sparse step (> CA_DT_CAP) resets it so a starved sender keeps its cut.
+ * Flows sharing a context offer bytes together but each may send at
+ * rate, so the window must be shared out before the backlog level is
+ * read. Four flows offering two thirds of a share each stay below it.
  */
-static int test_mb_ecn_washout_bucket(void)
+static int test_mb_ecn_shared_ctx_offered_per_flow(void)
 {
         struct mb_ecn_ctx * ctx;
-        uint64_t            r0 = (uint64_t) 100 << 20;
-        uint64_t            gap;
+        uint64_t            rate = 1000000;
 
         TEST_START();
 
@@ -2794,56 +2932,148 @@ static int test_mb_ecn_washout_bucket(void)
                 goto fail;
         }
 
-        gap = r0 >> 4;
+        ctx->rate      = rate;
+        ctx->snd_flows = 4;
+        ctx->snd_r0    = rate;
+        ctx->snd_win   = 0;
+        ctx->snd_byt   = 4 * rate * 2 / 3;
 
-        /* Sub-bucket: time banks, the rate does not move. */
-        ctx->rate     = r0;
-        ctx->r_bkt    = r0 - gap;
-        ctx->wash_acc = 0;
-        mb_ecn_washout(ctx, MS, MS);
-        if (ctx->rate != r0 || ctx->wash_acc != MS) {
-                printf("sub-bucket washout moved the rate: %" PRIu64 ".\n",
-                       ctx->rate);
+        mb_ecn_win(ctx, BILLION);
+
+        if (ctx->backlogged) {
+                printf("aggregate load read as one flow's backlog.\n");
                 goto fail_ctx;
         }
 
-        /* Full bucket, rate leads: cut a quarter of the gap, no crossing. */
-        ctx->rate     = r0;
-        ctx->r_bkt    = r0 - gap;
-        ctx->wash_acc = 0;
-        mb_ecn_washout(ctx, MS, CA_WASH_BKT);
-        if (ctx->rate != r0 - (gap >> CA_WASH_SHFT)) {
-                printf("bucket down: got %" PRIu64 ".\n", ctx->rate);
+        /* The close left a fresh window; a full share each clears it. */
+        ctx->snd_byt = 4 * rate;
+
+        mb_ecn_win(ctx, 2 * BILLION);
+
+        if (!ctx->backlogged) {
+                printf("per-flow share did not read as backlogged.\n");
                 goto fail_ctx;
         }
 
-        if (ctx->rate <= r0 - gap) {
-                printf("washout reversed a ramp: %" PRIu64 ".\n", ctx->rate);
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * A join or a leave opens a fresh window, so none divides the bytes
+ * one population offered by the count of another. An unchanged count
+ * leaves the running window alone.
+ */
+static int test_mb_ecn_flow_count_restarts_window(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            rate = 1000000;
+
+        TEST_START();
+
+        ctx = mk_ctx();
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        ctx->rate      = rate;
+        ctx->snd_flows = 2;
+        ctx->snd_win   = MS;
+        ctx->snd_byt   = 12345;
+        ctx->snd_r0    = 7;
+
+        mb_ecn_flows(ctx, 5, 8 * MS);
+
+        if (ctx->snd_flows != 5 || ctx->snd_byt != 0
+            || ctx->snd_win != 8 * MS || ctx->snd_r0 != rate) {
+                printf("count change left a stale window: flows=%zu "
+                       "byt=%" PRIu64 " win=%" PRIu64 " r0=%" PRIu64
+                       ".\n", ctx->snd_flows, ctx->snd_byt,
+                       ctx->snd_win, ctx->snd_r0);
                 goto fail_ctx;
         }
 
-        if (ctx->r_bkt != ctx->rate || ctx->wash_acc != 0) {
-                printf("washout did not reset the bucket.\n");
+        ctx->snd_byt = 999;
+
+        mb_ecn_flows(ctx, 5, 20 * MS);
+
+        if (ctx->snd_byt != 999 || ctx->snd_win != 8 * MS) {
+                printf("unchanged count restarted the window.\n");
                 goto fail_ctx;
         }
 
-        /* Full bucket, rate trails: add a quarter of the gap (symmetric). */
-        ctx->rate     = r0;
-        ctx->r_bkt    = r0 + gap;
-        ctx->wash_acc = 0;
-        mb_ecn_washout(ctx, MS, CA_WASH_BKT);
-        if (ctx->rate != r0 + (gap >> CA_WASH_SHFT)) {
-                printf("bucket up: got %" PRIu64 ".\n", ctx->rate);
+        /* An empty context still measures a single sender. */
+        mb_ecn_flows(ctx, 0, 30 * MS);
+
+        if (ctx->snd_flows != 1) {
+                printf("zero flows did not floor at one: %zu.\n",
+                       ctx->snd_flows);
                 goto fail_ctx;
         }
 
-        /* Sparse step: reset to the current rate, keep the cut. */
-        ctx->rate     = r0;
-        ctx->r_bkt    = r0 - gap;
-        ctx->wash_acc = CA_WASH_BKT / 2;
-        mb_ecn_washout(ctx, CA_DT_CAP + 1, MS);
-        if (ctx->rate != r0 || ctx->r_bkt != r0 || ctx->wash_acc != 0) {
-                printf("sparse step did not reset the bucket.\n");
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * The ceiling must land where a window of the delivered rate reads
+ * backlogged again: a context clamped above that level can never
+ * leave the clamp, and loses its capacity floor with it.
+ */
+static int test_mb_ecn_ceiling_clears_backlog(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            x = 1 << 20;
+
+        TEST_START();
+
+        ctx = mk_ctx();
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        ctx->backlogged = false;
+        ctx->snd_rate   = x;
+        ctx->rate       = 100 * x;
+        ctx->rate_min   = CA_RATE_MIN;
+
+        mb_ecn_ceiling(ctx);
+
+        if (ctx->rate >= 100 * x) {
+                printf("ceiling did not bind: %" PRIu64 ".\n", ctx->rate);
+                goto fail_ctx;
+        }
+
+        /* One window delivering x, with the pacer deferring nothing. */
+        ctx->snd_r0    = ctx->rate;
+        ctx->snd_flows = 1;
+        ctx->snd_win   = 0;
+        ctx->snd_byt   = x;
+        ctx->snd_pac   = 0;
+
+        mb_ecn_win(ctx, BILLION);
+
+        if (!ctx->backlogged) {
+                printf("clamped at %" PRIu64 " cannot clear on %" PRIu64
+                       ".\n", ctx->snd_r0, x);
                 goto fail_ctx;
         }
 
@@ -2868,15 +3098,15 @@ int mb_ecn_test(int     argc,
         (void) argv;
 
         ret |= test_mb_ecn_ctx_create_destroy();
+        ret |= test_mb_ecn_init_window();
         ret |= test_mb_ecn_calc_ecn();
         ret |= test_mb_ecn_rcv_onset_immediate();
-        ret |= test_mb_ecn_rcv_window_mean();
         ret |= test_mb_ecn_rcv_rate_independent();
         ret |= test_mb_ecn_rcv_size_fair();
         ret |= test_mb_ecn_rcv_release_exact_zero();
         ret |= test_mb_ecn_rcv_gap_restart();
+        ret |= test_mb_ecn_rcv_gap_floor();
         ret |= test_mb_ecn_rcv_accum_bounds();
-        ret |= test_mb_ecn_rcv_window_holds_target();
         ret |= test_mb_ecn_rcv_window_clip_bounds();
         ret |= test_mb_ecn_rcv_slow_window();
         ret |= test_mb_ecn_rcv_no_overflow_highrate();
@@ -2885,8 +3115,9 @@ int mb_ecn_test(int     argc,
         ret |= test_mb_ecn_dt_scaling_invariant();
         ret |= test_mb_ecn_probe_scale_invariant();
         ret |= test_mb_ecn_multiplicative_decrease();
+        ret |= test_mb_ecn_ai_hold_release();
         ret |= test_mb_ecn_fixed_point();
-        ret |= test_mb_ecn_lead_cut();
+        ret |= test_mb_ecn_lead_symmetric();
         ret |= test_mb_ecn_slow_start_local_brake();
         ret |= test_mb_ecn_slow_start_clean_ramp();
         ret |= test_mb_ecn_starved_decrease_escape();
@@ -2917,7 +3148,9 @@ int mb_ecn_test(int     argc,
         ret |= test_mb_ecn_first_send_warmup();
         ret |= test_mb_ecn_two_flow_converge();
         ret |= test_mb_ecn_ramp_overshoot_grows_with_rtt();
-        ret |= test_mb_ecn_washout_bucket();
+        ret |= test_mb_ecn_shared_ctx_offered_per_flow();
+        ret |= test_mb_ecn_flow_count_restarts_window();
+        ret |= test_mb_ecn_ceiling_clears_backlog();
 
         return ret;
 }

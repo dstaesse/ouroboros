@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2026
  *
- * Link capacity estimation
+ * Link capacity codes
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -23,21 +23,7 @@
 #ifndef OUROBOROS_IPCPD_UNICAST_CAP_H
 #define OUROBOROS_IPCPD_UNICAST_CAP_H
 
-#include <stddef.h>
 #include <stdint.h>
-
-int      cap_init(void);
-
-void     cap_fini(void);
-
-/* Account an egress packet; qlen is sampled before the write. */
-void     cap_update(int    fd,
-                    size_t qlen,
-                    size_t len);
-
-uint8_t  cap_get(int fd);
-
-void     cap_reset(int fd);
 
 /* Quarter-log2 capacity code: ~2^(c / 4) bytes/s, 0 = unknown. */
 uint8_t  cap_enc(uint64_t rate);

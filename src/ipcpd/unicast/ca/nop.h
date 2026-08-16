@@ -32,6 +32,7 @@ void     nop_ctx_destroy(void * ctx);
 time_t   nop_ctx_update_snd(void *     ctx,
                             size_t     len,
                             uint8_t    lecn,
+                            size_t     flows,
                             uint64_t * ftag);
 
 bool     nop_ctx_update_rcv(void *     ctx,
@@ -48,7 +49,7 @@ void     nop_ctx_update_ece(void *   ctx,
 int      nop_calc_ecn(size_t    queued,
                       uint8_t * ecn,
                       qoscube_t qc,
-                      size_t    len);
+                      size_t    mean);
 
 extern struct ca_ops nop_ca_ops;
 

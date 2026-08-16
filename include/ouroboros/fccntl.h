@@ -67,6 +67,8 @@
 #define FLOWGRXQLEN   00000010 /* Get queue length on rx */
 #define FLOWGTXQLEN   00000011 /* Get queue length on tx */
 #define FLOWGMTU      00000012 /* Get per-packet MTU     */
+#define FLOWSTXQDLY   00000013 /* Set tx queueing delay  */
+#define FLOWGTXQDLY   00000014 /* Get tx queueing delay  */
 
 /* FRCT operations */
 #define FRCTSFLAGS    00001000 /* Set flags for FRCT     */

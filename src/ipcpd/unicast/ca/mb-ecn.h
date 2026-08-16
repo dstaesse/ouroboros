@@ -34,6 +34,7 @@ void     mb_ecn_ctx_destroy(void * ctx);
 time_t   mb_ecn_ctx_update_snd(void *     ctx,
                                size_t     len,
                                uint8_t    lecn,
+                               size_t     flows,
                                uint64_t * ftag);
 
 bool     mb_ecn_ctx_update_rcv(void *     ctx,
@@ -57,7 +58,7 @@ void     mb_ecn_ctx_rtt(void *   ctx,
 int      mb_ecn_calc_ecn(size_t    queued,
                          uint8_t * ecn,
                          qoscube_t qc,
-                         size_t    len);
+                         size_t    mean);
 
 ssize_t  mb_ecn_print_stats(void * ctx,
                             char * buf,

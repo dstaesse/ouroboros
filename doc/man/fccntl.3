@@ -76,6 +76,16 @@ buffer. Takes a \fBsize_t \fIqlen\fR * as third argument.
 \fBFLOWGTXQLEN\fR   - get the current number of packets in the transmit
 buffer. Takes a \fBsize_t \fIqlen\fR * as third argument.
 
+\fBFLOWSTXQDLY\fR   - set the target queueing delay for the transmit
+occupancy limiter. Takes a \fBstruct timespec * \fItimeo\fR as third
+argument. A zero delay leaves the ring unlimited, bounded only by its
+slot count. The build-time default is applied when the flow is
+created.
+
+\fBFLOWGTXQDLY\fR   - retrieve the current target queueing delay for
+the transmit occupancy limiter. Takes a \fBstruct timespec * \fItimeo\fR
+as third argument.
+
 \fBFRCTSFLAGS\fR    - set the current flow flags. Takes an \fBuint16_t
 \fIflags\fR as third argument. Supported flags are:
 
@@ -106,7 +116,8 @@ An invalid argument was passed.
 .B -EPERM
 Operation not permitted. This is returned when requesting the value of
 a timeout (FLOWGSNDTIMEO or FLOWGRCVTIMEO) when no such timeout was
-set.
+set, or when FLOWSTXQDLY/FLOWGTXQDLY is used on a flow with no
+transmit occupancy ring.
 
 .B -EBADF
 Invalid flow descriptor passed.

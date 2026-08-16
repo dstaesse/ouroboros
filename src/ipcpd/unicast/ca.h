@@ -67,10 +67,14 @@ void     ca_ctx_rtt(void *   ctx,
                     uint64_t now,
                     uint64_t rtt);
 
+/*
+ * Marks congestion from the egress queue. Both queued and mean are
+ * in bytes, so their ratio is the queue depth in packets.
+ */
 int      ca_calc_ecn(size_t    queued,
                      uint8_t * ecn,
                      qoscube_t qc,
-                     size_t    len);
+                     size_t    mean);
 
 bool     ca_marks_ecn(void);
 

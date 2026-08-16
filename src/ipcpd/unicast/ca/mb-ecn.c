@@ -43,90 +43,152 @@
  * Multi-bit ECN congestion avoidance: a rate-based controller. The
  * sender paces a token bucket at a rate steered by graded ECN
  * feedback, so the backoff is proportional to the congestion. A
- * backlogged flow ramps in slow start to find the path capacity, then
- * settles into AIMD around its fair share. There is no sliding window
- * and no per-flow timer; the control runs on sends.
+ * backlogged flow ramps in slow start to find the path capacity,
+ * then settles into AIMD around its fair share. There is no sliding
+ * window and no per-flow timer; the control runs on sends.
  *
- * Every rate step is scaled by elapsed wall-clock time (Δt), not by
- * packet count, so the per-second dynamics are RTT-independent. The
- * receiver's averaging window and the sender's feedback staleness both
- * stretch with the flow's byte rate, so a slow flow is measured and
- * controlled like a fast one; CA_RATE_MIN only bounds those horizons
- * (window <= CA_TW_ABSMAX, TTL ~8 s).
+ * Rate law, per control step of dt seconds (r bytes/s, m the mark
+ * in ece units, m_ref = CA_ECE_REF, ai the additive slope):
  *
- * The ramp clock ss_tc = 2 * RTT holds slow-start overshoot near 1.65x
- * (e^1/2): it seeds from the declared max_rtt and then tracks the
- * heartbeat's measured RTT. Feedback silence past the staleness horizon
- * leaves slow start; a sustained run of it restarts at the floor.
+ *   slow start   dr = r * dt / ss_tc
+ *   increase     dr = (ai + r / T_probe) * dt
+ *   decrease     dr = -r * (min(m, CA_ECE_MAX) / m_ref) * dt + L,
+ *                cut capped at r/2
+ *   lead         L = -dm * r / (m_ref * CA_MD_KD_DIV)
  *
- * The floor and the AI slope scale with the path: forwarders stamp
- * their measured link capacity into the PCI (cap.c), the receiver
- * feeds the path MIN back with the ece, and the sender derives
- * rate_min = ai_rate = C / 32, clamped to [CA_RATE_MIN, CA_RMIN_MAX],
- * falling back to those defaults when the signal goes stale.
+ * dm is the mark's step since the last decrease, clamped to
+ * +-m_ref. On a rise L joins the cut before the r/2 cap; on a
+ * fall it returns after that cap, bounded on its own to
+ * +-r / CA_MD_KD_DIV, so a full cut is never handed back in one
+ * step.
+ *
+ * Every step scales by elapsed wall-clock time, not by packet
+ * count, so the per-second dynamics are RTT-independent.
+ *
+ * Pacer: a virtual clock vt advances at r; a packet's start tag is
+ * max(tag, vt) and it waits (tag - vt) / r.
+ *
+ * Receiver: ece is the time integral of ecn over a pricing window,
+ * ece = integral(ecn dt) / T. The window is a per-layer constant so
+ * every flow prices one bottleneck alike; it stretches only for a
+ * flow too slow to fill it with samples.
+ *
+ * Marking (mb_ecn_calc_ecn): ecn is the quarter-log2 of the queue
+ * measured in mark units U (U = CA_MARK_KNEE * mean), so the mark is
+ * a log-scale queue depth. Equilibrium is where increase balances
+ * decrease:
+ *
+ *   ecn* = (m_ref / 32) * (ai * n / C + 1 / T_probe) = n + 2
+ *
+ * for n backlogged flows, i.e. a standing queue of 2^((n+2)/4) * U.
+ * This is the zero-delay fixpoint; feedback delay raises the real
+ * standing queue above it.
  */
 
+/* ECE fixed point */
 #define CA_SHFT      5                    /* ece fixed point: 32 * ecn  */
-#define CA_TW_MIN    (1ULL << 20)         /* min mean window ~1.05 ms   */
-#define CA_TW_INIT   (1ULL << 26)         /* initial mean window ~67ms  */
+
+/* Receiver averaging window */
+#define CA_TW        (1ULL << 26)         /* pricing window ~67 ms      */
+#define CA_TW_MIN    (4ULL * MILLION)     /* pricing window floor 4 ms  */
+#define CA_TW_RTT_MUL 2                   /* T_w = 2 * layer RTT        */
 #define CA_TW_ABSMAX (1ULL << 32)         /* window ceiling ~4.3 s      */
 /* Quiet horizon, in windows (1 << shift): gap restart and the TTLs.    */
 #define CA_TW_GAP_SHFT 2
-#define CA_N_TARGET  16                   /* target packets per window  */
-#define CA_RX_WBYTES (CA_N_TARGET * 1000ULL) /* target bytes/window     */
+#define CA_RX_WBYTES 16000ULL             /* 16 pkts x 1000 B a window  */
 #define CA_RX_WCLOSE (2 * CA_RX_WBYTES)   /* byte-triggered early close */
 #define CA_TW_SM_SHFT 2                   /* window EWMA weight 1/4     */
-#define CA_MARK_Q    4                    /* mark quantum (packets)     */
 
+/* Congestion marking */
+#define CA_MARK_KNEE 1                    /* mark onset (packets)       */
+
+/* Rate machine */
 #define CA_RATE_MIN  (1ULL << 13)         /* 8 KiB/s rate floor         */
 #define CA_RATE_INIT (1ULL << 16)         /* slow start seed 64 KiB/s   */
 /* Rate cap; also keeps rate * dt and rate * rise below 2^64. */
 #define CA_RATE_MAX  (1ULL << 37)
 #define CA_INV_SHFT  32                   /* reciprocal-rate fixp       */
-#define CA_AI_RATE   (1ULL << 16)         /* 64 KiB/s^2 additive inc    */
+#define CA_AI_RATE   (1ULL << 17)         /* 128 KiB/s^2 additive inc   */
 #define CA_PROBE_TC  (8ULL * BILLION)     /* proportional probe TC 8s   */
 #define CA_ECE_REF   (16 << CA_SHFT)      /* full congestion: ecn 16    */
-#define CA_MD_KD_DIV 4                    /* one-sided lead gain 1/4    */
+/* Decrease saturation, and the level below which the hold clears. */
+#define CA_ECE_MAX   (2 * CA_ECE_REF)     /* ecn 32                     */
+#define CA_MD_KD_DIV 16                   /* lead gain 1/16             */
+
+/* Control cadence */
 #define CA_DT_CTRL   (BILLION / 1000)     /* min rate-update spacing    */
 #define CA_DT_CAP    (BILLION / 20)       /* idle-resume Δt clamp 50ms  */
-/* Floor of the rate-relative feedback staleness (ctx->ece_ttl). */
-#define CA_ECE_TTL   ((1 << CA_TW_GAP_SHFT) * CA_TW_INIT)
+#define CA_IDLE_PKTS 4                    /* idle: gap over 4 packets   */
+/* Feedback staleness floor; ctx->ece_ttl rides above it by rate. */
+#define CA_ECE_TTL   (1ULL << 28)         /* ~268 ms                    */
+
+/* Slow start */
 #define CA_SS_RTT_MUL 2                   /* ss_tc = 2 * layer RTT      */
 #define CA_SS_TC_MIN (BILLION / 1000)     /* ramp floor 1 ms            */
 #define CA_SS_TC_MAX (4ULL * BILLION)     /* ramp ceiling 4 s           */
+#define CA_RTT_SHFT  2                    /* ss_tc EWMA weight 1/4      */
+#define CA_SS_TC_GRW 1                    /* ramp climb cap 2x a sample */
+#define CA_SS_RTT_DEF 200                 /* default layer RTT (ms)     */
+
+/* Heartbeat */
 #define CA_HB_MIN    (40 * MILLION)       /* heartbeat interval floor   */
 #define CA_HB_LOSS   4                    /* stale horizons -> restart  */
-#define CA_RTT_SHFT  2                    /* ss_tc EWMA weight 1/4      */
-#define CA_SS_RTT_DEF 200                 /* default layer RTT (ms)     */
-#define CA_WASH_BKT  (BILLION / 32)       /* washout bucket ~31 ms      */
-#define CA_WASH_SHFT 2                    /* damp 1/4 of bucket change  */
 
+/* Path capacity */
 #define CA_CAP_SHFT   5                   /* floor = capacity / 32      */
 #define CA_CAP_SM_SHFT 1                  /* capacity EWMA weight 1/2   */
 /* Outlives ece_ttl 16x: onset-fresh fcap re-seeds each episode. */
 #define CA_CAP_TTL_SHFT 4
 #define CA_RMIN_MAX  (1ULL << 32)         /* derived floor ceiling      */
 
-#define CA_SND_WIN     CA_TW_INIT         /* sender util window ~67ms   */
+/* Sender utilisation */
+#define CA_SND_WIN   (1ULL << 26)         /* sender util window ~67 ms  */
 #define CA_USE_NUM     3                  /* backlogged: offered >=     */
 #define CA_USE_DEN     4                  /*   3/4 * window-start rate  */
-#define CA_HDRM_MARKS  4                  /* ceiling ~2x offered load   */
 #define CA_SND_DEC_SHFT 4                 /* offered max-filter 1/16    */
 #define CA_SND_DEC_CAP 16                 /* bound gapped-close decay   */
 #define CA_SND_BYT_MAX (1ULL << 33)       /* offered-byte saturation    */
+#define CA_PAC_DEN     4                  /* backlogged: 1/4 deferred   */
 
 /*
  * Retuning invariants (pinned by the unit tests):
- * - (1 << CA_TW_GAP_SHFT) * CA_TW_INIT > S * BILLION / CA_RATE_MIN, or
+ * - (1 << CA_TW_GAP_SHFT) * CA_TW > S * BILLION / CA_RATE_MIN, or
  *   a floor-rate flow's onset restart-loops (S ~ one MTU; both ns).
  * - CA_RX_WBYTES * BILLION / CA_RATE_MIN < CA_TW_ABSMAX: the
  *   floor-rate window must clear the ceiling.
+ * - CA_TW < CA_RX_WBYTES * BILLION / CA_RATE_MIN: at the rate
+ *   floor the sample budget, not the horizon, sizes the window.
+ * - CA_TW << CA_TW_GAP_SHFT <= CA_ECE_TTL: the estimator must
+ *   not call a gap fresh that the sender still counts as live.
+ * - CA_ECE_TTL > S * BILLION / CA_RATE_MIN: the idle cap clears a
+ *   floor-rate flow's inter-send gap, so pacing never reads as idle.
+ * - CA_DT_CAP < CA_ECE_TTL: the idle clamp needs the TTL above it,
+ *   or every slow flow reads idle on every send.
  * - CA_RATE_MAX * CA_DT_CAP, the folded lead * inv_rate at
  *   CA_RATE_MIN, and owed * BILLION (owed clamped in mb_ecn_snd) all
  *   keep the pacer arithmetic below 2^64.
- * - CA_DT_CTRL < CA_WASH_BKT < CA_DT_CAP: control cadence under the
- *   washout bucket under the sparse-step cutoff.
  * - CA_RATE_MIN <= CA_RATE_INIT and CA_RMIN_MAX < CA_RATE_MAX.
+ * - cap_enc(16 * mean) - cap_enc(mean) == CA_ECE_REF >> CA_SHFT: a
+ *   queue of 16 packets is what reads as full congestion.
+ * - CA_MD_KD_DIV sets the lead gain. The term acts both ways (cut on
+ *   a rise, give back on a fall), which cancels the DC bias a
+ *   one-sided term would rectify into a standing rate difference
+ *   between flows pricing one queue; that is what lets the gain run
+ *   at 1/16 instead of the deadzone below 1/8.
+ * - T_w = clamp(CA_TW_RTT_MUL * RTT, CA_TW_MIN, CA_TW) scales only
+ *   the receiver pricing window; CA_ECE_TTL, CA_SND_WIN, CA_DT_CAP
+ *   and CA_DT_CTRL are absolute and must not be derived from it.
+ * - The gap-restart horizon is floored at CA_ECE_TTL, so a
+ *   floor-rate flow's inter-packet gap never reads as an onset.
+ * - The ai_hold release threshold equals the decrease saturation
+ *   clamp: a standing mark that is a legal equilibrium must be able
+ *   to clear the hold.
+ *
+ * Structural invariants (not exercised by the unit tests):
+ * - CA_MARK_KNEE <= 4: the full decrease range must fit the ring
+ *   (SSM_RBUFF_SIZE, not visible from this file).
+ * - ecn* = 2 + n holds for n <= 29 (the decrease clamp) and only
+ *   with live capacity feedback.
  */
 
 struct mb_ecn_ctx {
@@ -148,8 +210,6 @@ struct mb_ecn_ctx {
         uint64_t ai_rate;     /* additive-increase slope (B/s^2)      */
         uint64_t ece_ttl;     /* how long feedback stays valid (ns)   */
         uint64_t ss_tc;       /* slow-start time constant (ns)        */
-        uint64_t r_bkt;       /* rate snapshot at last washout bucket */
-        uint64_t wash_acc;    /* washout bucket time accumulator (ns) */
         uint64_t dec_acc;     /* sub-ms decrease time carried (ns)    */
         uint64_t inv_rate;    /* fixed-point 1/rate for pacing        */
         uint64_t vt;          /* virtual service clock (bytes)        */
@@ -159,12 +219,15 @@ struct mb_ecn_ctx {
         uint64_t last_fb;     /* last congestion feedback (ns)        */
         uint64_t last_sig;    /* last liveness signal, incl. hb (ns)  */
         uint64_t n_fb;        /* feedback updates received            */
+        uint64_t n_rtt;       /* heartbeat RTT samples folded         */
         uint64_t last_hb;     /* last heartbeat emitted (ns)          */
         uint64_t last_res;    /* last resume from idle (ns)           */
         uint64_t last_loc;    /* last local mark seen (ns)            */
         uint64_t last_cap;    /* last capacity applied (ns)           */
 
         uint64_t snd_byt;     /* bytes offered this window (capped)   */
+        size_t   snd_flows;   /* flows sharing the ctx, >= 1          */
+        uint64_t snd_pac;     /* bytes the pacer held back this win   */
         uint64_t snd_win;     /* utilisation window start (ns)        */
         uint64_t snd_r0;      /* rate at window start                 */
         uint64_t snd_rate;    /* max-filter of offered rate (B/s)     */
@@ -180,13 +243,15 @@ struct mb_ecn_ctx {
         uint64_t n_ttl;       /* feedback aged out (TTL)              */
         uint64_t n_cap;       /* capacity updates applied             */
         uint64_t n_loss;      /* signal-loss cuts (collapse)          */
-        uint64_t n_rtt;       /* heartbeat RTT samples folded         */
         uint64_t ss_peak;     /* peak rate in slow start (bytes/s)    */
 };
 
 /* Layer slow-start time constant (ns), from the declared RTT. */
 static uint64_t mb_ecn_ss_tc = (uint64_t) CA_SS_RTT_MUL *
                                CA_SS_RTT_DEF * MILLION;
+
+/* Layer pricing window (ns), from the declared RTT. */
+static uint64_t mb_ecn_tw = CA_TW;
 
 struct ca_ops mb_ecn_ca_ops = {
         .ctx_create     = mb_ecn_ctx_create,
@@ -224,6 +289,8 @@ static uint64_t mb_ecn_ece_ttl(uint64_t rate)
 void mb_ecn_init(uint32_t rtt_ms)
 {
         uint64_t tc;
+        uint64_t rtt;
+        uint64_t tw;
 
         if (rtt_ms == 0)          /* unspecified: safe default */
                 rtt_ms = CA_SS_RTT_DEF;
@@ -233,6 +300,17 @@ void mb_ecn_init(uint32_t rtt_ms)
                 tc = CA_SS_TC_MIN;
 
         mb_ecn_ss_tc = tc;
+
+        rtt = (uint64_t) rtt_ms * MILLION;
+
+        tw = (uint64_t) CA_TW_RTT_MUL * rtt;
+        if (tw < CA_TW_MIN)
+                tw = CA_TW_MIN;
+
+        if (tw > CA_TW)
+                tw = CA_TW;
+
+        mb_ecn_tw = tw;
 }
 
 void * mb_ecn_ctx_create(void)
@@ -256,11 +334,10 @@ void * mb_ecn_ctx_create(void)
         ctx->ai_rate   = CA_AI_RATE;
         ctx->ss_tc     = mb_ecn_ss_tc;
         ctx->ece_ttl   = mb_ecn_ece_ttl(CA_RATE_INIT);
-        ctx->r_bkt     = CA_RATE_INIT;
         ctx->inv_rate  = mb_ecn_rate_inv(CA_RATE_INIT);
         ctx->rx_ts     = t;
         ctx->rx_win    = t;
-        ctx->rx_tw     = CA_TW_INIT;
+        ctx->rx_tw     = mb_ecn_tw;
         ctx->last_ts   = t;
         ctx->last_ctrl = t;
         ctx->last_fb   = t;
@@ -271,6 +348,7 @@ void * mb_ecn_ctx_create(void)
         /* snd_win/last_ts re-seeded lazily on the first real send. */
         ctx->snd_r0     = CA_RATE_INIT;
         ctx->snd_rate   = CA_RATE_INIT;
+        ctx->snd_flows  = 1;
         ctx->backlogged = true;
 
         return (void *) ctx;
@@ -300,8 +378,6 @@ static void mb_ecn_slow_start(struct mb_ecn_ctx * ctx,
 {
         if (ctx->backlogged)
                 ctx->rate += ctx->rate * dta / ctx->ss_tc;
-
-        ctx->r_bkt = ctx->rate;
 }
 
 /* Additive increase plus a rate-independent proportional probe. */
@@ -321,16 +397,18 @@ static void mb_ecn_increase(struct mb_ecn_ctx * ctx,
 
 /*
  * Multiplicative decrease: cut proportional to mark x elapsed time,
- * plus a one-sided lead that cuts extra while the mark is rising.
+ * plus a lead term on the mark's step, clamped and acting both ways.
  */
 static void mb_ecn_decrease(struct mb_ecn_ctx * ctx,
                             uint64_t            dtc)
 {
         uint64_t dtm;
         uint64_t mark;
-        uint64_t rise;
+        uint64_t step;
+        uint64_t lead;
         uint64_t cut;
         uint16_t m;
+        bool     up;
 
         m = ctx->tx_ece > 0 ? ctx->tx_ece
                             : (uint16_t) (ctx->tx_loc << CA_SHFT);
@@ -340,13 +418,20 @@ static void mb_ecn_decrease(struct mb_ecn_ctx * ctx,
                 return;
         }
 
-        mark = MIN(m, CA_ECE_REF);
+        mark = MIN(m, CA_ECE_MAX);
 
-        /* One-sided lead: cut extra while the mark is still rising. */
-        rise = m > ctx->tx_ecp ? MIN(m - ctx->tx_ecp, CA_ECE_REF) : 0;
-        cut  = ctx->rate * rise / (CA_ECE_REF * CA_MD_KD_DIV);
+        /* Lead on the mark step; the clamp bounds it to rate/KD. */
+        up   = m > ctx->tx_ecp;
+        step = up ? m - ctx->tx_ecp : ctx->tx_ecp - m;
+        step = MIN(step, CA_ECE_REF);
+        lead = ctx->rate * step / (CA_ECE_REF * CA_MD_KD_DIV);
 
-        /* Honest elapsed ms; the sub-ms remainder carries over. */
+        cut = up ? lead : 0;
+
+        /*
+         * Bank the remainder: at a 1 ms control cadence, truncating
+         * to whole milliseconds would drop up to half of every cut.
+         */
         ctx->dec_acc += dtc;
         dtm = ctx->dec_acc / MILLION;
         ctx->dec_acc -= dtm * MILLION;
@@ -359,42 +444,16 @@ static void mb_ecn_decrease(struct mb_ecn_ctx * ctx,
                 cut = ctx->rate / 2;
 
         ctx->rate -= cut;
+
+        if (!up)
+                ctx->rate += lead;
+
         ctx->tx_ecp = m;
-}
-
-/*
- * Washout: once per wall-clock bucket, damp a fixed fraction of the
- * rate change over that bucket. Bucketed (not per-step) so it stays
- * cadence-independent; bounded so it cannot reverse a ramp. A sparse
- * step resets it, so a starved sender keeps its cut.
- */
-static void mb_ecn_washout(struct mb_ecn_ctx * ctx,
-                           uint64_t            dtc,
-                           uint64_t            dta)
-{
-        if (dtc > (uint64_t) CA_DT_CAP) {
-                ctx->r_bkt = ctx->rate;
-                ctx->wash_acc = 0;
-                return;
-        }
-
-        ctx->wash_acc += dta;
-        if (ctx->wash_acc < (uint64_t) CA_WASH_BKT)
-                return;
-
-        if (ctx->rate > ctx->r_bkt)
-                ctx->rate -= (ctx->rate - ctx->r_bkt) >> CA_WASH_SHFT;
-        else
-                ctx->rate += (ctx->r_bkt - ctx->rate) >> CA_WASH_SHFT;
-
-        ctx->r_bkt = ctx->rate;
-        ctx->wash_acc = 0;
 }
 
 /* Offered-load ceiling backstop while source-limited. */
 static void mb_ecn_ceiling(struct mb_ecn_ctx * ctx)
 {
-        unsigned code;
         uint64_t hi;
 
         if (ctx->backlogged) {
@@ -402,22 +461,16 @@ static void mb_ecn_ceiling(struct mb_ecn_ctx * ctx)
                 return;
         }
 
-        code = (unsigned) cap_enc(ctx->snd_rate) + CA_HDRM_MARKS;
-        if (code > UINT8_MAX)          /* keep the cast lossless */
-                code = UINT8_MAX;
-
-        hi = cap_dec((uint8_t) code);
-        if (hi > CA_RATE_MAX)
-                hi = CA_RATE_MAX;
-
+        /* Land on the backlog level; a ceiling above it never clears. */
+        hi = ctx->snd_rate > CA_RATE_MAX / CA_USE_DEN * CA_USE_NUM
+             ? (uint64_t) CA_RATE_MAX
+             : ctx->snd_rate * CA_USE_DEN / CA_USE_NUM;
         if (hi < CA_RATE_MIN)
                 hi = CA_RATE_MIN;
 
         ctx->src_limited = ctx->rate > hi;
-        if (ctx->src_limited) {
-                ctx->rate  = hi;
-                ctx->r_bkt = ctx->rate;
-        }
+        if (ctx->src_limited)
+                ctx->rate = hi;
 }
 
 static void mb_ecn_ctrl(struct mb_ecn_ctx * ctx,
@@ -436,7 +489,6 @@ static void mb_ecn_ctrl(struct mb_ecn_ctx * ctx,
         if (ctx->tx_cav) {
                 mb_ecn_increase(ctx, dta);
                 mb_ecn_decrease(ctx, dtc);
-                mb_ecn_washout(ctx, dtc, dta);
         } else {
                 mb_ecn_slow_start(ctx, dta);
         }
@@ -475,6 +527,34 @@ static void mb_ecn_offered(struct mb_ecn_ctx * ctx,
                 ctx->snd_rate -= (ctx->snd_rate - offered) >> CA_SND_DEC_SHFT;
 }
 
+/* Open a fresh utilisation window at t. */
+static void mb_ecn_win_open(struct mb_ecn_ctx * ctx,
+                            uint64_t            t)
+{
+        ctx->snd_win = t;
+        ctx->snd_byt = 0;
+        ctx->snd_pac = 0;
+        ctx->snd_r0  = ctx->rate;
+}
+
+/*
+ * Note the flow count; a window spanning two populations measures
+ * neither, so a change opens a fresh one.
+ */
+static void mb_ecn_flows(struct mb_ecn_ctx * ctx,
+                         size_t              flows,
+                         uint64_t            t)
+{
+        size_t n = flows > 0 ? flows : 1;
+
+        if (n == ctx->snd_flows)
+                return;
+
+        ctx->snd_flows = n;
+
+        mb_ecn_win_open(ctx, t);
+}
+
 /*
  * Close the utilisation window: set backlogged from the level test,
  * fold offered into the max filter, then reset the window.
@@ -486,9 +566,20 @@ static void mb_ecn_win(struct mb_ecn_ctx * ctx,
         uint64_t offered;
         bool     was = ctx->backlogged;
 
-        offered = ctx->snd_byt * BILLION / elapsed;
+        /*
+         * snd_byt is the whole ctx's offered bytes but rate is what one
+         * flow may send, so share it out before either is compared.
+         */
+        offered = ctx->snd_byt * BILLION / elapsed / ctx->snd_flows;
 
-        ctx->backlogged = offered * CA_USE_DEN >= ctx->snd_r0 * CA_USE_NUM;
+        /*
+         * Offered load is counted past the pacer, so it cannot tell a
+         * quiet source from one the pacer is holding back, and idle
+         * flows on the context drag it down. A window the pacer had to
+         * defer is rate-limited whatever the bytes say.
+         */
+        ctx->backlogged = offered * CA_USE_DEN >= ctx->snd_r0 * CA_USE_NUM
+                          || ctx->snd_pac * CA_PAC_DEN >= ctx->snd_byt;
 
         if (!was && ctx->backlogged)   /* resume: fresh liveness baseline */
                 ctx->last_res = t;
@@ -498,9 +589,7 @@ static void mb_ecn_win(struct mb_ecn_ctx * ctx,
         if (ctx->backlogged)
                 ctx->src_limited = false;
 
-        ctx->snd_win = t;
-        ctx->snd_byt = 0;
-        ctx->snd_r0  = ctx->rate;
+        mb_ecn_win_open(ctx, t);
 }
 
 /* Age out congestion, local-mark and capacity signals once stale. */
@@ -520,7 +609,6 @@ static void mb_ecn_loss(struct mb_ecn_ctx * ctx,
         if (ctx->rate < (uint64_t) CA_RATE_MIN)
                 ctx->rate = CA_RATE_MIN;
 
-        ctx->r_bkt    = ctx->rate;
         ctx->inv_rate = mb_ecn_rate_inv(ctx->rate);
         ctx->ece_ttl  = mb_ecn_ece_ttl(ctx->rate);
         ctx->last_sig = t;
@@ -602,6 +690,7 @@ static time_t mb_ecn_snd(struct mb_ecn_ctx * ctx,
 {
         uint64_t dt;
         uint64_t dtc;
+        uint64_t idle;
         uint64_t s;
 
         /* Lazy warm-up seed: packet #1 is never an idle resume. */
@@ -616,8 +705,16 @@ static time_t mb_ecn_snd(struct mb_ecn_ctx * ctx,
         dt = t - ctx->last_ts;
         ctx->last_ts = t;
 
-        /* Idle gap clears backlog before aging: no false loss on resume. */
-        if (dt > (uint64_t) CA_DT_CAP)
+        /*
+         * Idle gap clears backlog before aging: no false loss on resume.
+         * Measured against the pacer's own spacing, so a flow paced
+         * slower than CA_DT_CAP per packet does not read as idle on
+         * every send, and bounded by the staleness horizon.
+         */
+        idle = CA_IDLE_PKTS * len * BILLION / ctx->rate;
+        idle = MAX(idle, (uint64_t) CA_DT_CAP);
+        idle = MIN(idle, (uint64_t) CA_ECE_TTL);
+        if (dt > idle)
                 ctx->backlogged = false;
 
         mb_ecn_age(ctx, t);
@@ -643,6 +740,9 @@ static time_t mb_ecn_snd(struct mb_ecn_ctx * ctx,
         s = *ftag > ctx->vt ? *ftag : ctx->vt;
         *ftag = s + len;
 
+        if (s > ctx->vt)
+                ctx->snd_pac += len;
+
         ctx->lead = s - ctx->vt;
 
         /* Reciprocal pacing; folded so any lead * rate stays in range. */
@@ -656,6 +756,7 @@ static time_t mb_ecn_snd(struct mb_ecn_ctx * ctx,
 time_t mb_ecn_ctx_update_snd(void *     _ctx,
                              size_t     len,
                              uint8_t    lecn,
+                             size_t     flows,
                              uint64_t * ftag)
 {
         struct timespec     now;
@@ -666,22 +767,32 @@ time_t mb_ecn_ctx_update_snd(void *     _ctx,
 
         t = TS_TO_UINT64(now);
 
+        mb_ecn_flows(ctx, flows, t);
+
         mb_ecn_loc(ctx, lecn, t);
 
         return mb_ecn_snd(ctx, len, t, ftag);
 }
 
-/* Estimator idle, or a gap past ~4 current windows: restart fresh. */
+/* Estimator idle, or a quiet gap past the horizon: restart fresh. */
 static bool mb_ecn_rcv_fresh(const struct mb_ecn_ctx * ctx,
                              uint64_t                  dt)
 {
+        uint64_t gap;
+
         if (ctx->rx_ece == 0 && ctx->rx_acc == 0)
                 return true;
 
-        return dt > ctx->rx_tw << CA_TW_GAP_SHFT;
+        gap = ctx->rx_tw << CA_TW_GAP_SHFT;
+
+        return dt > MAX(gap, (uint64_t) CA_ECE_TTL);
 }
 
-/* Size the next averaging window to ~CA_N_TARGET packets at this rate. */
+/*
+ * Size the next averaging window to ~16 packets at this rate, floored
+ * at the price horizon: a flow fast enough to fill the horizon
+ * integrates over CA_TW, a slower one stretches for its samples.
+ */
 static void mb_ecn_resize(struct mb_ecn_ctx * ctx,
                           uint64_t            win)
 {
@@ -692,8 +803,8 @@ static void mb_ecn_resize(struct mb_ecn_ctx * ctx,
         else
                 ctx->rx_tw -= (ctx->rx_tw - tw) >> CA_TW_SM_SHFT;
 
-        if (ctx->rx_tw < CA_TW_MIN)
-                ctx->rx_tw = CA_TW_MIN;
+        if (ctx->rx_tw < mb_ecn_tw)
+                ctx->rx_tw = mb_ecn_tw;
 
         if (ctx->rx_tw > CA_TW_ABSMAX)
                 ctx->rx_tw = CA_TW_ABSMAX;
@@ -731,18 +842,15 @@ static bool mb_ecn_rcv(struct mb_ecn_ctx * ctx,
         /* Dwell clamp: one packet weighs at most one window of mark. */
         ctx->rx_acc += ecn * MIN(dt, ctx->rx_tw);
         ctx->rx_byt += len;
+
         ctx->rx_cap  = cap_min(ctx->rx_cap, cap);
-
-        *ece = ctx->rx_ece;
-
         win = t - ctx->rx_win;
         if (win < ctx->rx_tw) {
                 /* Early close once 2x target bytes arrive (speed-up). */
-                if (ctx->rx_byt < CA_RX_WCLOSE)
+                if (ctx->rx_byt < CA_RX_WCLOSE || win < mb_ecn_tw) {
+                        *ece = ctx->rx_ece;
                         return false;
-
-                if (win < CA_TW_MIN)
-                        return false;
+                }
         }
 
         /* Time-integral mean over the actual window elapsed (never rx_tw). */
@@ -788,8 +896,8 @@ static void mb_ecn_ece(struct mb_ecn_ctx * ctx,
         ctx->tx_ece  = ece;
         ctx->tx_cav  = true;   /* closed-loop feedback: leave slow start */
 
-        /* A clean (unsaturated) signal means the queue drained: resume. */
-        if (ece < (uint16_t) CA_ECE_REF)
+        /* An unsaturated signal means the queue drained: resume. */
+        if (ece < (uint16_t) CA_ECE_MAX)
                 ctx->ai_hold = false;
 
         ctx->last_fb  = t;
@@ -812,7 +920,7 @@ static void mb_ecn_ece(struct mb_ecn_ctx * ctx,
                         ctx->rate_min -= (ctx->rate_min - tgt)
                                          >> CA_CAP_SM_SHFT;
 
-                ctx->ai_rate  = ctx->rate_min;
+                ctx->ai_rate  = 2 * ctx->rate_min;
                 ctx->tx_cap   = cap;
                 ctx->last_cap = t;
                 ctx->n_cap++;
@@ -871,6 +979,15 @@ void mb_ecn_ctx_rtt(void *   _ctx,
         if (tgt > (uint64_t) CA_SS_TC_MAX)   /* at the real RTT, not the */
                 tgt = CA_SS_TC_MAX;          /* declared worst case      */
 
+        /*
+         * A control packet stuck behind a stalled reader returns an RTT
+         * worth seconds on a path worth milliseconds. Cap how far one
+         * sample carries the ramp, so a stall costs a step and a rise
+         * that holds still arrives within a few samples.
+         */
+        if (tgt > ctx->ss_tc << CA_SS_TC_GRW)
+                tgt = ctx->ss_tc << CA_SS_TC_GRW;
+
         ctx->ss_tc += (tgt >> CA_RTT_SHFT) - (ctx->ss_tc >> CA_RTT_SHFT);
 
         ctx->last_sig = now;   /* liveness only: never ages the ece signal */
@@ -880,16 +997,28 @@ void mb_ecn_ctx_rtt(void *   _ctx,
 int  mb_ecn_calc_ecn(size_t    queued,
                      uint8_t * ecn,
                      qoscube_t qc,
-                     size_t    len)
+                     size_t    mean)
 {
-        size_t  q;
-        uint8_t mark;
+        uint64_t u;
+        int      q;
+        uint8_t  mark;
 
-        (void) len;
         (void) qc;
 
-        /* Saturate: a queue past 255 quanta must not wrap to a low mark. */
-        q = queued / CA_MARK_Q;
+        if (queued == 0 || mean == 0)
+                return 0;
+
+        u = (uint64_t) CA_MARK_KNEE * mean;
+
+        /*
+         * Difference of two quarter-log2 codes is a log-scale ratio:
+         * the same queue in units of U marks the same on any link.
+         */
+        q = (int) cap_enc(queued) - (int) cap_enc(u);
+        if (q <= 0)
+                return 0;
+
+        /* Saturate: a deeper queue must not wrap to a low mark. */
         mark = q > 255 ? (uint8_t) 255 : (uint8_t) q;
 
         if (mark > *ecn)

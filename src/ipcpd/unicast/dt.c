@@ -424,7 +424,8 @@ static void handle_event(void *       self,
 #ifdef IPCP_FLOW_STATS
                 stat_used(fd, c->conn_info.addr);
 #endif
-                cap_reset(fd);
+                if (ipcp_flow_cap_arm(fd) < 0)
+                        log_warn("Failed to arm capacity estimator.");
                 psched_add(dt.psched, fd);
                 log_dbg("Added fd %d to packet scheduler.", fd);
                 break;
@@ -451,6 +452,8 @@ static time_t packet_handler(int                  fd,
         uint8_t *     head;
         size_t        len;
         size_t        qlen;
+        size_t        mlen;
+        uint8_t       lcap;
         bool          marks;
 
         len = ssm_pk_buff_len(spb);
@@ -485,11 +488,13 @@ static time_t packet_handler(int                  fd,
 
                 marks = ca_marks_ecn();
                 qlen  = marks ? ipcp_flow_queued(ofd) : 0;
+                mlen  = marks ? ipcp_flow_mean_len(ofd) : 0;
+                lcap  = marks ? cap_enc(ipcp_flow_cap(ofd)) : 0;
 
-                (void) ca_calc_ecn(qlen, head + dt_pci_info.ecn_o, qc, len);
+                (void) ca_calc_ecn(qlen, head + dt_pci_info.ecn_o, qc, mlen);
 
                 if (marks)
-                        cap_stamp(head + dt_pci_info.cap_o, cap_get(ofd));
+                        cap_stamp(head + dt_pci_info.cap_o, lcap);
 
                 ret = ipcp_flow_write(ofd, spb);
                 if (ret < 0) {
@@ -504,7 +509,7 @@ static time_t packet_handler(int                  fd,
                 dt_stat_inc(ofd, snd, qc, len);
 
                 if (marks)
-                        cap_update(ofd, qlen, len);
+                        ipcp_flow_cap_update(ofd, qlen, len);
         } else {
                 dt_pci_shrink(spb);
                 if (dt_pci.eid >= PROC_RES_FDS) {
@@ -590,11 +595,6 @@ int dt_init(struct dt_config cfg)
         dt_pci_info.eid_o     = dt_pci_info.cap_o + CAP_LEN;
         dt_pci_info.head_size = dt_pci_info.eid_o + dt_pci_info.eid_size;
 
-        if (cap_init() < 0) {
-                log_err("Failed to init capacity estimator.");
-                goto fail_cap;
-        }
-
         if (connmgr_comp_init(COMPID_DT, &info) != 0) {
                 log_err("Failed to register with connmgr.");
                 goto fail_connmgr_comp_init;
@@ -663,8 +663,6 @@ int dt_init(struct dt_config cfg)
  fail_routing:
         connmgr_comp_fini(COMPID_DT);
  fail_connmgr_comp_init:
-        cap_fini();
- fail_cap:
         return -1;
 }
 
@@ -692,8 +690,6 @@ void dt_fini(void)
         routing_fini();
 
         connmgr_comp_fini(COMPID_DT);
-
-        cap_fini();
 }
 
 int dt_start(void)
@@ -805,6 +801,8 @@ int dt_write_packet(uint64_t             dst_addr,
         uint8_t *     head;
         size_t        len;
         size_t        qlen;
+        size_t        mlen;
+        uint8_t       lcap;
         bool          marks;
 
         assert(spb);
@@ -843,11 +841,12 @@ int dt_write_packet(uint64_t             dst_addr,
 
         marks = ca_marks_ecn();
         qlen  = marks ? ipcp_flow_queued(fd) : 0;
+        mlen  = marks ? ipcp_flow_mean_len(fd) : 0;
+        lcap  = marks ? cap_enc(ipcp_flow_cap(fd)) : 0;
 
-        (void) ca_calc_ecn(qlen, &dt_pci.ecn, qc, len);
+        (void) ca_calc_ecn(qlen, &dt_pci.ecn, qc, mlen);
 
-        if (marks)
-                dt_pci.cap = cap_get(fd);
+        dt_pci.cap = lcap;
 
         if (ecn != NULL)
                 *ecn = dt_pci.ecn;
@@ -856,7 +855,7 @@ int dt_write_packet(uint64_t             dst_addr,
 
         ret = ipcp_flow_write(fd, spb);
         if (ret < 0) {
-                log_dbg("Failed to write packet to fd %d.", fd);
+                log_dbg("Failed to write packet to fd %d: %d.", fd, ret);
                 if (ret == -EFLOWDOWN)
                         notifier_event(NOTIFY_DT_FLOW_DOWN, &fd);
                 goto fail_write;
@@ -868,7 +867,7 @@ int dt_write_packet(uint64_t             dst_addr,
         dt_stat_inc(fd, snd, qc, len);
 #endif
         if (marks)
-                cap_update(fd, qlen, len);
+                ipcp_flow_cap_update(fd, qlen, len);
 
         return 0;
 

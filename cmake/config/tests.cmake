@@ -15,3 +15,9 @@ if(DISABLE_TESTS_CORE_DUMPS)
 else()
   message(STATUS "Core dumps in tests enabled")
 endif()
+
+set(MB_ECN_LAB_FULL FALSE CACHE BOOL
+  "Run the full mb-ecn lab rate sweep, up to 10 Gb/s")
+if(MB_ECN_LAB_FULL)
+  message(STATUS "Full mb-ecn lab rate sweep enabled")
+endif()

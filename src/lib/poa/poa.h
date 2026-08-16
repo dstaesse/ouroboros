@@ -34,6 +34,8 @@
 #include <ouroboros/time.h>
 #include <ouroboros/utils.h>
 
+#include "../cap.h"
+
 #include <errno.h>
 #include <limits.h>
 #include <poll.h>
@@ -191,9 +193,6 @@ struct poa {
 
         time_t                 mpl;
 
-        /* Identifies the transmit queue the flows on this PoA share. */
-        int                    qid;
-
         /* Mean sent packet size (bytes), EWMA over the send path. */
         size_t                 avg_len;
         /* Cost of one packet in the queue, in the transport's terms. */
@@ -203,6 +202,9 @@ struct poa {
         /* Last queue depth read, and when, in the transport's terms. */
         size_t                 q_cache;
         uint64_t               q_time;
+
+        /* Capacity estimator of the queue the flows on this PoA share. */
+        struct cap_est         cap;
 
         /* Queued management frames, capped; poas.mgmt_mtx guards. */
         size_t                 n_mgmt;
@@ -245,7 +247,7 @@ size_t            poa_flow_qlen(const struct poa_flow * pf);
 
 size_t            poa_flow_qpkts(const struct poa_flow * pf);
 
-int               poa_flow_qid(const struct poa_flow * pf);
+struct cap_est *  poa_flow_cap_est(struct poa_flow * pf);
 
 size_t            poa_flow_mean_len(const struct poa_flow * pf);
 

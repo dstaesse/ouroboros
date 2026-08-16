@@ -48,11 +48,13 @@ void nop_ctx_destroy(void * ctx)
 time_t nop_ctx_update_snd(void *     ctx,
                           size_t     len,
                           uint8_t    lecn,
+                          size_t     flows,
                           uint64_t * ftag)
 {
         (void) ctx;
         (void) len;
         (void) lecn;
+        (void) flows;
         (void) ftag;
 
         return 0;
@@ -88,10 +90,10 @@ void nop_ctx_update_ece(void *   ctx,
 int nop_calc_ecn(size_t    queued,
                  uint8_t * ecn,
                  qoscube_t qc,
-                 size_t    len)
+                 size_t    mean)
 {
         (void) queued;
-        (void) len;
+        (void) mean;
         (void) ecn;
         (void) qc;
 

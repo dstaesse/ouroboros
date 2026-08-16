@@ -48,6 +48,7 @@
 #cmakedefine                     HAVE_PMULL
 
 #define SHM_LOCKFILE_NAME        "@SHM_LOCKFILE_NAME@"
+#define SSM_RBUFF_TXQ_DELAY       @SSM_RBUFF_TXQ_DELAY@ /* ms */
 #define FLOW_ALLOC_TIMEOUT        @FLOW_ALLOC_TIMEOUT@
 
 #define TPM_DEBUG_REPORT_INTERVAL @TPM_DEBUG_REPORT_INTERVAL@

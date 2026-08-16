@@ -71,13 +71,25 @@ int     ipcp_flow_fini(int fd);
 int     ipcp_flow_get_qoscube(int         fd,
                               qoscube_t * cube);
 
+/* Bytes queued in the transmit path of the flow. */
 size_t  ipcp_flow_queued(int fd);
 
+/* Mean size of a packet written to the flow, bytes. */
+size_t  ipcp_flow_mean_len(int fd);
+
 /*
- * Identifies the transmit queue behind the flow. Flows attached to
- * one point of attachment share a queue and answer the same id.
+ * Capacity estimator of the transmit queue behind the flow.
+ * Flows attached to one point of attachment share a queue and
+ * share the estimator. Armed by the IPCP; unarmed flows read 0.
  */
-int     ipcp_flow_queue_id(int fd);
+int     ipcp_flow_cap_arm(int fd);
+
+void    ipcp_flow_cap_update(int    fd,
+                             size_t qlen,
+                             size_t len);
+
+/* Estimated capacity of the transmit queue (bytes/s), 0 = unknown. */
+uint64_t ipcp_flow_cap(int fd);
 
 int     ipcp_spb_reserve(struct ssm_pk_buff ** spb,
                          size_t                len);

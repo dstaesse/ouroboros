@@ -194,7 +194,7 @@ time_t ca_ctx_update_snd(void *     _ctx,
 {
         struct ca_ctx * ctx = _ctx;
 
-        return ca.ops->ctx_update_snd(ctx->pol, len, lecn, ftag);
+        return ca.ops->ctx_update_snd(ctx->pol, len, lecn, ctx->refs, ftag);
 }
 
 bool ca_ctx_update_rcv(void *     _ctx,
@@ -244,9 +244,9 @@ void ca_ctx_rtt(void *   _ctx,
 int  ca_calc_ecn(size_t    queued,
                  uint8_t * ecn,
                  qoscube_t qc,
-                 size_t    len)
+                 size_t    mean)
 {
-        return ca.ops->calc_ecn(queued, ecn, qc, len);
+        return ca.ops->calc_ecn(queued, ecn, qc, mean);
 }
 
 bool ca_marks_ecn(void)

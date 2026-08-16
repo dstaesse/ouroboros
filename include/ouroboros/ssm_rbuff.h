@@ -55,12 +55,23 @@ void               ssm_rbuff_clr_bits(struct ssm_rbuff * rb,
 
 uint32_t           ssm_rbuff_get_flags(struct ssm_rbuff * rb);
 
+size_t             ssm_rbuff_get_limit(struct ssm_rbuff * rb);
+
+void               ssm_rbuff_set_txq_target(struct ssm_rbuff *      rb,
+                                            const struct timespec * ts);
+
+void               ssm_rbuff_get_txq_target(struct ssm_rbuff * rb,
+                                            struct timespec *  ts);
+
 void               ssm_rbuff_fini(struct ssm_rbuff * rb);
 
 int                ssm_rbuff_mlock(struct ssm_rbuff * rb);
 
 int                ssm_rbuff_write(struct ssm_rbuff * rb,
                                    size_t             off);
+
+int                ssm_rbuff_write_prio(struct ssm_rbuff * rb,
+                                        size_t             off);
 
 int                ssm_rbuff_write_b(struct ssm_rbuff *      rb,
                                      size_t                  off,

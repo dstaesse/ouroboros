@@ -1678,9 +1678,9 @@ size_t poa_flow_mean_len(const struct poa_flow * pf)
         return LOAD_RELAXED(&pf->poa->avg_len);
 }
 
-int poa_flow_qid(const struct poa_flow * pf)
+struct cap_est * poa_flow_cap_est(struct poa_flow * pf)
 {
-        return pf->poa->qid;
+        return &pf->poa->cap;
 }
 
 void poa_flow_ready(struct poa_flow * pf)
@@ -1830,7 +1830,6 @@ static struct poa * poa_create(enum poa_type          type,
         poa->ops    = ops;
         poa->mpl    = ops->mpl;
         poa->n_eids = n_eids;
-        poa->qid    = -1;
 
         return poa;
 
@@ -2213,30 +2212,15 @@ void poa_fini(void)
         pthread_mutex_destroy(&poas.mtx);
 }
 
-/*
- * Lowest queue id no attached PoA holds; detaching frees it by
- * leaving the list. Caller holds poas.lock.
- */
-static int poa_qid_alloc(void)
+static size_t poa_count(void)
 {
         struct list_head * p;
-        bool               used[POA_MAX_POAS];
-        int                i;
+        size_t             n = 0;
 
-        memset(used, 0, sizeof(used));
+        list_for_each(p, &poas.list)
+                n++;
 
-        list_for_each(p, &poas.list) {
-                struct poa * poa = list_entry(p, struct poa, next);
-
-                if (poa->qid >= 0 && poa->qid < POA_MAX_POAS)
-                        used[poa->qid] = true;
-        }
-
-        for (i = 0; i < POA_MAX_POAS; i++)
-                if (!used[i])
-                        return i;
-
-        return -1;
+        return n;
 }
 
 static int poa_add(const struct poa_spec * spec,
@@ -2275,8 +2259,7 @@ static int poa_add(const struct poa_spec * spec,
 
         pthread_rwlock_wrlock(&poas.lock);
 
-        poa->qid = poa_qid_alloc();
-        if (poa->qid < 0) {
+        if (poa_count() >= POA_MAX_POAS) {
                 pthread_rwlock_unlock(&poas.lock);
                 goto fail_start;
         }
